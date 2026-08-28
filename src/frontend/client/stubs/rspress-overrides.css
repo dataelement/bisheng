@@ -252,6 +252,22 @@ body {
 .bs-swatch:hover .bs-swatch-usage {
   opacity: 1;
 }
+/* Dual-VALUE swatch: a strip that must show several palettes at once (the
+   brand strips render blue AND green together) can't bind the runtime vars
+   like GrayStrip does — instead each swatch carries its literal light/dark
+   values as custom properties (--bs-sw-l/-d, plus fg and accent pairs) and
+   these indirections pick the current mode's one. The -d vars fall back to
+   the light value, so a swatch with no dark hex (brand `muted`) just stays. */
+.bs-swatch {
+  --bs-sw-bg: var(--bs-sw-l);
+  --bs-sw-fg: var(--bs-sw-fg-l);
+  --bs-sw-ac: var(--bs-sw-ac-l);
+}
+.dark .bs-swatch {
+  --bs-sw-bg: var(--bs-sw-d, var(--bs-sw-l));
+  --bs-sw-fg: var(--bs-sw-fg-d, var(--bs-sw-fg-l));
+  --bs-sw-ac: var(--bs-sw-ac-d, var(--bs-sw-ac-l));
+}
 /* Dual-theme hex label: only the CURRENT theme's value is shown; flips with
    the .dark class instantly (pure CSS, no re-render). */
 .bs-hex-dark {

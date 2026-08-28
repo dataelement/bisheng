@@ -1,12 +1,12 @@
+import { Segmented } from "@bisheng/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { MessageItem, MessageReadState } from "~/api/message";
-import { deleteMessageApi, getMessageListApi, markAllMessageReadApi, markMessageReadApi } from "~/api/message";
+import { getMessageListApi, markAllMessageReadApi, markMessageReadApi } from "~/api/message";
 import { NotificationSeverity } from "~/common";
 import { ExpandableSearchField } from "~/components/ui/ExpandableSearchField";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
-import { cn } from "~/utils";
 import { NotificationRow, type ApprovalCenterTarget } from "./NotificationRow";
 
 const PAGE_SIZE = 20;
@@ -28,16 +28,19 @@ export interface NotificationPaneProps {
 /**
  * The 通知 section of the 消息与审批 dialog.
  *
- * 未读消息 / 已读消息 are server-side lists (the backend filters by this user's read records) —
- * we never hide rows client-side to fake a state change. Approval to-dos are excluded by the
- * backend's `notify` tab, so a pending approval only ever appears under 我的审批-待我处理.
+ * One mixed list — read and unread rows live together (unread carries the red dot).
+ * Read state is authoritative on the server; marking read flips the row in place, it is
+ * never hidden client-side. Approval to-dos are excluded by the backend's `notify` tab,
+ * so a pending approval only ever appears under 我的审批-待我处理.
  */
 export function NotificationPane({ open, onOpenApprovalCenter, onUnreadMaybeChanged }: NotificationPaneProps) {
   const localize = useLocalize();
   const { i18n } = useTranslation();
   const { showToast } = useToastContext();
 
-  const [readState, setReadState] = useState<MessageReadState>("unread");
+  // 所有 / 未读 filter — 所有 is the mixed list (unread carries the red dot),
+  // 未读 narrows to what still needs a look. Both keep the 全部已读 action.
+  const [readState, setReadState] = useState<Extract<MessageReadState, "all" | "unread">>("all");
   const [notifications, setNotifications] = useState<MessageItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -45,7 +48,6 @@ export function NotificationPane({ open, onOpenApprovalCenter, onUnreadMaybeChan
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
-  const [isTouchMobile, setIsTouchMobile] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   const formatTime = (createdAt: string) =>
@@ -56,19 +58,6 @@ export function NotificationPane({ open, onOpenApprovalCenter, onUnreadMaybeChan
       hour: "2-digit",
       minute: "2-digit",
     });
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const detect = () => {
-      const narrowViewport = window.matchMedia("(max-width: 768px)").matches;
-      const hoverCapable = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
-      const touchCapable = navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches;
-      setIsTouchMobile(narrowViewport && (touchCapable || !hoverCapable));
-    };
-    detect();
-    window.addEventListener("resize", detect);
-    return () => window.removeEventListener("resize", detect);
-  }, []);
 
   const load = useCallback(
     async (nextPage: number, append: boolean) => {
@@ -91,7 +80,7 @@ export function NotificationPane({ open, onOpenApprovalCenter, onUnreadMaybeChan
         if (!append) setLoading(false);
       }
     },
-    [readState, searchQuery],
+    [searchQuery, readState],
   );
 
   useEffect(() => {
@@ -112,7 +101,12 @@ export function NotificationPane({ open, onOpenApprovalCenter, onUnreadMaybeChan
   const handleMarkRead = async (id: number) => {
     try {
       await markMessageReadApi([id]);
-      setNotifications((prev) => prev.filter((n) => Number(n.id) !== id));
+      // 所有: flip the row in place; 未读: the row no longer belongs to the filter.
+      setNotifications((prev) =>
+        readState === "unread"
+          ? prev.filter((n) => Number(n.id) !== id)
+          : prev.map((n) => (Number(n.id) === id ? { ...n, is_read: true } : n)),
+      );
       onUnreadMaybeChanged?.();
     } catch {
       showToast({ message: localize("com_notifications_toast_operation_failed"), severity: NotificationSeverity.INFO });
@@ -133,39 +127,26 @@ export function NotificationPane({ open, onOpenApprovalCenter, onUnreadMaybeChan
     }
   };
 
-  const handleDelete = async (id: number) => {
-    try {
-      await deleteMessageApi(id);
-      setNotifications((prev) => prev.filter((n) => Number(n.id) !== id));
-      showToast({ message: localize("com_notifications_toast_deleted"), severity: NotificationSeverity.SUCCESS });
-      onUnreadMaybeChanged?.();
-    } catch {
-      showToast({ message: localize("com_notifications_toast_delete_failed"), severity: NotificationSeverity.INFO });
-    }
-  };
-
-  const tabs: MessageReadState[] = ["unread", "read"];
+  const hasUnread = notifications.some((n) => !n.is_read);
 
   return (
-    <div className="flex min-h-0 flex-col bg-white">
-      {/* Status tabs mirror 我的审批's 待我处理 / 已处理 structure; the search box sits below them. */}
-      <div className="flex gap-2 px-5 pb-2 pt-3">
-        {tabs.map((state) => (
-          <button
-            key={state}
-            type="button"
-            className={cn(
-              "h-auto whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none transition-colors fine-pointer:hover:text-text-1",
-              readState === state ? "border-[#212121] font-medium text-text-1" : "font-normal text-text-3",
-            )}
-            onClick={() => setReadState(state)}
-          >
-            {state === "unread" ? localize("com_notifications_tab_unread") : localize("com_notifications_tab_read")}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex items-center gap-3 px-5 pb-2 pt-1">
+    // Layout (padding + centered 720px column) is owned by SettingsPage so the pane
+    // reads as one block, same as the 账号信息 / 通用 sections.
+    <div className="flex min-h-0 flex-1 flex-col bg-white">
+      <div className="flex w-full items-center gap-3 pb-4">
+        {/* 所有 / 未读 — design-system Segmented (medium = 32px, matching the
+            search field and 全部已读 beside it). */}
+        <Segmented
+          size="medium"
+          options={[
+            { value: "all", label: localize("com_ui_all_proper") },
+            { value: "unread", label: localize("com_notifications_tab_unread") },
+          ]}
+          value={readState}
+          onChange={(next) => setReadState(next as typeof readState)}
+          // Extra 108px on top of the row's gap-3 — 120px total against the search field.
+          className="mr-[108px]"
+        />
         <ExpandableSearchField
           alwaysExpanded
           showClearButton
@@ -173,23 +154,24 @@ export function NotificationPane({ open, onOpenApprovalCenter, onUnreadMaybeChan
           onChange={setSearchQuery}
           placeholder={localize("com_notifications_search_placeholder")}
           expandedWidthClassName="w-full"
+          // The field root is shrink-0 by default; let it flex so the 全部已读 button
+          // beside it keeps its place instead of being pushed out of the row.
+          containerClassName="min-w-0 flex-1 shrink"
         />
-        {/* 全部已读 is a list action of 未读消息 only — it never touches approval tasks. */}
-        {readState === "unread" && (
-          <button
-            type="button"
-            disabled={markingAll || notifications.length === 0}
-            onClick={handleMarkAllRead}
-            className="h-8 shrink-0 rounded-md border border-transparent bg-fill-1 px-3 text-[14px] font-normal leading-none text-text-2 transition-colors hover:bg-[#f0f0f0] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {localize("com_notifications_mark_all_read")}
-          </button>
-        )}
+        {/* 全部已读 clears notification read state only — it never touches approval tasks. */}
+        <button
+          type="button"
+          disabled={markingAll || !hasUnread}
+          onClick={handleMarkAllRead}
+          className="h-8 shrink-0 rounded-md border border-transparent bg-fill-1 px-3 text-[14px] font-normal leading-none text-text-2 transition-colors hover:bg-[#f0f0f0] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {localize("com_notifications_mark_all_read")}
+        </button>
       </div>
 
       <div
         ref={listRef}
-        className="scrollbar-os min-h-0 flex-1 overflow-y-auto px-2 pb-3"
+        className="scrollbar-os -mx-3 min-h-0 flex-1 overflow-y-auto pb-3"
         onScroll={(e) => handleScroll(e.currentTarget)}
       >
         {loading ? (
@@ -202,16 +184,14 @@ export function NotificationPane({ open, onOpenApprovalCenter, onUnreadMaybeChan
           </div>
         ) : (
           <>
-            <div className="divide-y divide-border-base">
+            <div className="flex flex-col gap-2">
               {notifications.map((notification) => (
                 <NotificationRow
                   key={notification.id}
                   notification={notification}
-                  isTouchMobile={isTouchMobile}
                   formatTime={formatTime}
                   onOpenApprovalCenter={onOpenApprovalCenter}
                   onMarkRead={handleMarkRead}
-                  onDelete={handleDelete}
                 />
               ))}
             </div>

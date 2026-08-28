@@ -217,14 +217,14 @@ describe("SpaceDetail UI — F027 infinite-scroll guards", () => {
     expect(src).toMatch(/hasMore:\s*boolean/);
   });
 
-  it("renders <LoadMore> sentinel guarded by hasMore in both card and list views", () => {
-    // Two occurrences — one in card-grid container, one in list-table container.
-    const matches = src.match(/\{hasMore\s*&&\s*\(\s*<LoadMore/g) || [];
-    expect(matches.length).toBeGreaterThanOrEqual(2);
+  it("renders the <LoadMore> sentinel through a shared bottom status", () => {
+    expect(src).toMatch(/const\s+listBottomStatus[\s\S]{0,800}?<LoadMore/);
+    expect(src).toMatch(/onLoad=\{onLoadMore\}/);
+    expect(src).toMatch(/footer=\{listBottomStatus\}/);
   });
 
-  it("LoadMore triggers onPageChange(currentPage + 1)", () => {
-    expect(src).toMatch(/onLoad=\{\(\)\s*=>\s*onPageChange\(currentPage\s*\+\s*1\)\}/);
+  it("LoadMore calls the KnowledgeSpaceContent onLoadMore prop", () => {
+    expect(src).toMatch(/onLoad=\{onLoadMore\}/);
   });
 });
 

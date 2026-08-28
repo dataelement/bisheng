@@ -444,7 +444,7 @@ export default function Subscription() {
                 覆盖频道页、广场页，以及无频道/无订阅的发现空页（!channelsResolving），
                 加载中（channelsResolving 且非广场）暂不显示。 */}
             {!isH5 && (showChannelSquare || !channelsResolving) ? (
-                <div className="absolute top-5 z-20" style={{ right: `${detailPaneWidth + 40}px` }}>
+                <div className="absolute top-5 z-20 flex h-10 items-center" style={{ right: `${detailPaneWidth + 40}px` }}>
                     <ChannelSquareTabs
                         active={showChannelSquare ? "square" : "channel"}
                         onChannelClick={handleSquareBack}

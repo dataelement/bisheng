@@ -293,7 +293,7 @@ export function RelateDocumentPanel({
                             value={keyword}
                             onChange={(e) => setKeyword(e.target.value)}
                             placeholder={localize("com_knowledge.version.search_placeholder")}
-                            className="h-8 flex-1 rounded-md border-border-base text-[12px] bg-white"
+                            className="flex-1"
                         />
                         <Button
                             type="button"

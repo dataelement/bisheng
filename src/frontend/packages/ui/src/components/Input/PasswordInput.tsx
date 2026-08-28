@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { Outlined } from 'bisheng-icons';
 import cn from '../../utils/cn';
 import { FIELD_ACTION } from './shared';
 import { Input, type InputProps } from './Input';
@@ -11,15 +12,15 @@ import { Input, type InputProps } from './Input';
  * form's alignment (§4.2). Combined with `allowClear` the suffix carries the
  * two actions the spec allows, and no more.
  *
- * The two icons come in as props: the icon package has no eye glyph yet, and
- * the library contract forbids drawing one here. Pass the app's own pair
- * (see the docs page) until `bisheng-icons` ships one.
+ * The toggle icons default to the icon package's Eye / EyeClose (基础-图标规范:
+ * bisheng-icons is the single source); the props stay for the rare field that
+ * needs a different glyph.
  */
 export interface PasswordInputProps extends Omit<InputProps, 'type' | 'suffix'> {
-  /** Shown while the value is masked — clicking it reveals the text. */
-  revealIcon: React.ReactNode;
-  /** Shown while the value is visible — clicking it masks the text again. */
-  hideIcon: React.ReactNode;
+  /** Shown while the value is masked — clicking it reveals the text. Default: `Outlined.Eye`. */
+  revealIcon?: React.ReactNode;
+  /** Shown while the value is visible — clicking it masks the text again. Default: `Outlined.EyeClose`. */
+  hideIcon?: React.ReactNode;
   /** Accessible name of the toggle while masked (caller-supplied copy). */
   revealLabel?: string;
   /** Accessible name of the toggle while revealed. */
@@ -67,7 +68,7 @@ export const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputPro
             onMouseDown={(event) => event.preventDefault()}
             onClick={toggle}
           >
-            {visible ? hideIcon : revealIcon}
+            {visible ? hideIcon ?? <Outlined.EyeClose /> : revealIcon ?? <Outlined.Eye />}
           </button>
         }
         {...props}

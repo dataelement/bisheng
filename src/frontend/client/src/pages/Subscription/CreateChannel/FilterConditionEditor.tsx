@@ -1,3 +1,4 @@
+import { Radio, RadioGroup } from "@bisheng/ui";
 import { useLocalize } from "~/hooks";
 import { RefreshCcw, SquarePlus, X } from "lucide-react";
 import { useRef, useState, type KeyboardEvent } from "react";
@@ -113,7 +114,7 @@ function KeywordTagInput({ keywords, onChange }: KeywordTagInputProps) {
 
     return (
         <div
-            className="min-h-[32px] w-full rounded-md border border-border-base bg-white px-[8px] py-[3px] flex flex-wrap items-center gap-[4px] cursor-text focus-within:border-[#DDDDDD] focus-within:ring-2 focus-within:ring-[#F1F5F9]"
+            className="min-h-[32px] w-full rounded-md border border-border-base bg-white px-[8px] py-[3px] flex flex-wrap items-center gap-[4px] cursor-text focus-within:border-border-deep focus-within:shadow-focus"
             onClick={() => inputRef.current?.focus()}
         >
             {keywords.map((kw, idx) => (
@@ -282,32 +283,22 @@ export function FilterConditionEditor({
                             className="flex items-start gap-[4px]"
                         >
                             {/* 包含 / 不包含 切换 */}
-                            <div className="mt-0 flex flex-shrink-0 rounded-md bg-fill-1 p-[3px]">
-                                <button
-                                    type="button"
-                                    onClick={() => updateCondition(condIndex, { include: true })}
-                                    className={cn(
-                                        "whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors",
-                                        cond.include
-                                            ? "bg-blue-500/15 text-blue-500 font-medium"
-                                            : "bg-transparent text-text-3 hover:bg-fill-2"
-                                    )}
-                                >
+                            <RadioGroup
+                                variant="button"
+                                value={cond.include ? "include" : "exclude"}
+                                aria-label={localize("com_subscription.set_article_filter_conditions")}
+                                className="shrink-0"
+                                onValueChange={(value) =>
+                                    updateCondition(condIndex, { include: value === "include" })
+                                }
+                            >
+                                <Radio value="include">
                                     {localize("com_subscription.includes")}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => updateCondition(condIndex, { include: false })}
-                                    className={cn(
-                                        "whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors",
-                                        !cond.include
-                                            ? "bg-blue-500/15 text-blue-500 font-medium"
-                                            : "bg-transparent text-text-3 hover:bg-fill-2"
-                                    )}
-                                >
+                                </Radio>
+                                <Radio value="exclude">
                                     {localize("com_subscription.excludes")}
-                                </button>
-                            </div>
+                                </Radio>
+                            </RadioGroup>
 
                             {/* 关键词 Tag 输入 */}
                             <div className="flex-1 min-w-0">

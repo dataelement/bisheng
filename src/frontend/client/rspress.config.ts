@@ -1,3 +1,5 @@
+import { execSync } from 'child_process';
+import * as fs from 'fs';
 import * as path from 'path';
 import { defineConfig } from 'rspress/config';
 import { pluginPreview } from '@rspress/plugin-preview';
@@ -15,6 +17,51 @@ import autoprefixer from 'autoprefixer';
  * Run: `npm run dev:docs` (cwd: src/frontend/client).
  */
 const clientSrc = path.join(__dirname, 'src');
+
+/**
+ * Build stamp — the site is a static artifact (deploy-docs.sh rsyncs doc_build/ to
+ * the dev server), so we need a way to tell how old a deploy is. Surfaced by the
+ * component-index widget as a data attribute (devtools only, never page copy);
+ * never assume a page on :3000 is live.
+ */
+const git = (cmd: string) => {
+  try {
+    return execSync(cmd, { cwd: __dirname, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  } catch {
+    return 'unknown';
+  }
+};
+const docsBuild = {
+  time: new Date().toLocaleString('zh-CN', { hour12: false }),
+  sha: git('git rev-parse --short HEAD'),
+  branch: git('git rev-parse --abbrev-ref HEAD'),
+};
+
+/**
+ * Which components @bisheng/ui publicly exports, read from its entry at build time.
+ *
+ * The 组件总览 「已迁库」 badge derives itself from this list: a demo page declares
+ * WHICH component it documents (`component:` front matter) and the table decides
+ * whether that component is in the library. Identity is stable, status is not —
+ * so the badge can neither claim a migration the library does not back, nor go
+ * missing because someone forgot to edit front matter after moving a component.
+ *
+ * Read at config load, so a component moving in/out of the library needs a dev
+ * server restart to show up — same as the sidebar it sits next to.
+ */
+const uiComponents = (() => {
+  try {
+    const entry = fs.readFileSync(path.join(__dirname, '../packages/ui/src/index.ts'), 'utf8');
+    // Both export forms point at the component dir: `from './components/Toast'`
+    // and `from './components/Button/Button'`.
+    const names = [...entry.matchAll(/from '\.\/components\/([A-Za-z0-9]+)/g)].map((m) => m[1]);
+    return [...new Set(names)].sort();
+  } catch {
+    // Never break the docs build over a badge; the table just stops claiming
+    // anything is migrated.
+    return [];
+  }
+})();
 
 export default defineConfig({
   // Docs live with the component library: src/frontend/packages/ui/docs
@@ -55,8 +102,10 @@ export default defineConfig({
     nav: [
       // activeMatch drives the selected state: 组件 owns /components/*,
       // 文档 owns every other doc route (home included).
-      { text: '文档', link: '/基础-字体规范', activeMatch: '^/(?!components/)' },
-      { text: '组件', link: '/components/button', activeMatch: '^/components/' },
+      // Each tab lands on its own section home, never on a particular page:
+      // 文档 -> the site home (docs/index.md), 组件 -> 组件总览 (components/index.mdx).
+      { text: '文档', link: '/', activeMatch: '^/(?!components/)' },
+      { text: '组件', link: '/components/', activeMatch: '^/components/' },
     ],
     sidebar: {
       // 组件 section — component demos
@@ -80,14 +129,27 @@ export default defineConfig({
           ],
         },
         {
+          text: '导航 Navigation',
+          items: [
+            { text: '面包屑 Breadcrumb', link: '/components/breadcrumb' },
+            { text: '标签页 Tabs', link: '/components/tabs' },
+          ],
+        },
+        {
           text: '数据录入 Data Entry',
           items: [
             { text: '输入框 Input', link: '/components/input' },
+            { text: '复选框 Checkbox', link: '/components/checkbox' },
+            { text: '单选框 Radio', link: '/components/radio' },
+            { text: '开关 Switch', link: '/components/switch' },
           ],
         },
         {
           text: '数据展示 Data Display',
           items: [
+            { text: '分段控制器 Segmented', link: '/components/segmented' },
+            { text: '徽标 Badge', link: '/components/badge' },
+            { text: '标签 Tag', link: '/components/tag' },
             { text: '文字提示 Tooltip', link: '/components/tooltip' },
             { text: '气泡卡片 Popover', link: '/components/popover' },
           ],
@@ -129,6 +191,14 @@ export default defineConfig({
           items: [
             { text: '按钮 Button', link: '/组件-Button按钮' },
             { text: '输入框 Input', link: '/组件-Input输入框' },
+            { text: '复选框 Checkbox', link: '/组件-Checkbox复选框' },
+            { text: '单选框 Radio', link: '/组件-Radio单选框' },
+            { text: '开关 Switch', link: '/组件-Switch开关' },
+            { text: '标签页 Tabs', link: '/组件-Tabs标签页' },
+            { text: '分段控制器 Segmented', link: '/组件-Segmented分段控制器' },
+            { text: '徽标 Badge', link: '/组件-Badge徽标' },
+            { text: '标签 Tag', link: '/组件-Tag标签' },
+            { text: '加载 Loading', link: '/组件-Loading加载' },
             { text: '文字提示 Tooltip', link: '/组件-Tooltip文字提示' },
             { text: '气泡卡片 Popover', link: '/组件-Popover气泡卡片' },
             { text: '面包屑 Breadcrumb', link: '/组件-Breadcrumb面包屑' },
@@ -151,9 +221,15 @@ export default defineConfig({
       // (restores document flow so the sticky nav works — see file header).
       preEntry: [
         'regenerator-runtime/runtime',
+        // globalStyles below loads the app's style.css, which no longer carries the
+        // design tokens — they live in @bisheng/ui now. Load them here too, or every
+        // color / type custom property on the docs site resolves to nothing.
+        path.join(__dirname, '../packages/ui/src/styles/tokens.css'),
         path.join(__dirname, 'stubs/rspress-overrides.css'),
       ],
       define: {
+        __DOCS_BUILD__: JSON.stringify(docsBuild),
+        __UI_COMPONENTS__: JSON.stringify(uiComponents),
         // vite injects these globals (vite.config define); app code reached via
         // the `~/utils` barrel reads them at module scope — must exist here too.
         __APP_ENV__: JSON.stringify({ BASE_URL: '/workspace', BISHENG_HOST: '/admin' }),
@@ -173,6 +249,9 @@ export default defineConfig({
       alias: {
         '~': clientSrc,
         '@': clientSrc,
+        // Docs-site-only React widgets (not app code, not shipped in the app
+        // bundle) — e.g. the generated component index on /components/.
+        '@docs-site': path.join(__dirname, 'docs-site'),
         // Spec pages (packages/ui/docs/*.mdx) live outside this project, so a
         // bare `bisheng-icons` import resolves from the docs dir and misses the
         // package installed here. Alias it to the local install so spec mdx can

@@ -1,4 +1,4 @@
-import { Button } from "@bisheng/ui";
+import { Button, Radio, RadioGroup } from "@bisheng/ui";
 import type { ComponentProps } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { ResourceType, SelectedSubject, SubjectType } from "~/api/permission";
@@ -9,7 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/Dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/Tabs";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import {
@@ -18,8 +17,6 @@ import {
   PERMISSION_DIALOG_CONTENT_CLASS,
   PERMISSION_FOOTER_ACTIONS_CLASS,
   PERMISSION_FOOTER_LABEL_CLASS,
-  SUBJECT_TAB_LIST_CLASS,
-  SUBJECT_TAB_TRIGGER_CLASS,
 } from "./permissionDialogStyles";
 import { RelationSelect, type RelationModelOption } from "./RelationSelect";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
@@ -121,31 +118,30 @@ export function PermissionDraftPickerDialog({
             {localize("com_unified_permission.add_authorization")}
           </DialogTitle>
         </DialogHeader>
-        <Tabs
-          value={subjectType}
-          onValueChange={handleSubjectTypeChange}
-          className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden"
-        >
+        <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="flex items-center gap-3">
-            <TabsList className={SUBJECT_TAB_LIST_CLASS}>
-              <TabsTrigger value="user" className={SUBJECT_TAB_TRIGGER_CLASS}>
+            <RadioGroup
+              variant="button"
+              value={subjectType}
+              aria-label={localize("com_unified_permission.authorization")}
+              onValueChange={handleSubjectTypeChange}
+            >
+              <Radio value="user">
                 {localize("com_permission.subject_user")}
-              </TabsTrigger>
-              <TabsTrigger
+              </Radio>
+              <Radio
                 value="department"
-                className={SUBJECT_TAB_TRIGGER_CLASS}
                 disabled={!canAddNonUserSubjects}
               >
                 {localize("com_permission.subject_department")}
-              </TabsTrigger>
-              <TabsTrigger
+              </Radio>
+              <Radio
                 value="user_group"
-                className={SUBJECT_TAB_TRIGGER_CLASS}
                 disabled={!canAddNonUserSubjects}
               >
                 {localize("com_permission.subject_user_group")}
-              </TabsTrigger>
-            </TabsList>
+              </Radio>
+            </RadioGroup>
             {subjectType === "department" && (
               <label className={INCLUDE_CHILDREN_LABEL_CLASS}>
                 <Checkbox
@@ -157,25 +153,30 @@ export function PermissionDraftPickerDialog({
               </label>
             )}
           </div>
-          <TabsContent value="user" className="mt-3 min-h-0 flex-1 overflow-hidden p-0">
-            <SubjectSearchUser
-              {...searchProps}
-              grantUserTreeChildrenApi={searchApi?.grantUserTreeChildrenApi}
-              grantUserTreeSearchApi={searchApi?.grantUserTreeSearchApi}
-            />
-          </TabsContent>
-          <TabsContent value="department" className="mt-3 min-h-0 flex-1 overflow-hidden p-0">
-            <SubjectSearchDepartment
-              {...searchProps}
-              includeChildren={includeChildren}
-              grantDepartmentChildrenApi={searchApi?.grantDepartmentChildrenApi}
-              grantDepartmentSearchApi={searchApi?.grantDepartmentSearchApi}
-            />
-          </TabsContent>
-          <TabsContent value="user_group" className="mt-3 min-h-0 flex-1 overflow-hidden p-0">
-            <SubjectSearchUserGroup {...searchProps} grantUserGroupsApi={searchApi?.grantUserGroupsApi} />
-          </TabsContent>
-        </Tabs>
+          <div className="mt-3 min-h-0 flex-1 overflow-hidden">
+            {subjectType === "user" && (
+              <SubjectSearchUser
+                {...searchProps}
+                grantUserTreeChildrenApi={searchApi?.grantUserTreeChildrenApi}
+                grantUserTreeSearchApi={searchApi?.grantUserTreeSearchApi}
+              />
+            )}
+            {subjectType === "department" && (
+              <SubjectSearchDepartment
+                {...searchProps}
+                includeChildren={includeChildren}
+                grantDepartmentChildrenApi={searchApi?.grantDepartmentChildrenApi}
+                grantDepartmentSearchApi={searchApi?.grantDepartmentSearchApi}
+              />
+            )}
+            {subjectType === "user_group" && (
+              <SubjectSearchUserGroup
+                {...searchProps}
+                grantUserGroupsApi={searchApi?.grantUserGroupsApi}
+              />
+            )}
+          </div>
+        </div>
         {/* Mobile stacks the relation picker above a full-width action pair, with
             the divider directly above the buttons — matching the resource grant
             dialog. Desktop keeps both on one bordered row. */}

@@ -83,6 +83,21 @@ function clampKnowledgeQuotaGbDisplay(raw: string): string {
   const clamped = Math.max(KB_SPACE_FILE_GB_MIN, Math.min(KB_SPACE_FILE_GB_MAX, r))
   return Number.isInteger(clamped) ? String(clamped) : clamped.toFixed(1)
 }
+
+/** Info-source subscription quota (per user, deduped across a user's own channels); integer, inclusive bounds. */
+const INFO_SOURCE_SUBSCRIBE_MIN = 0
+const INFO_SOURCE_SUBSCRIBE_MAX = 10000
+const INFO_SOURCE_SUBSCRIBE_DEFAULT = "200"
+
+function normalizeInfoSourceSubscribeCount(raw: string): number | null {
+  const t = raw.trim()
+  // Integer only: no sign, no decimal point, no other characters.
+  if (!/^\d+$/.test(t)) return null
+  const n = Number(t)
+  if (!Number.isFinite(n)) return null
+  if (n < INFO_SOURCE_SUBSCRIBE_MIN || n > INFO_SOURCE_SUBSCRIBE_MAX) return null
+  return n
+}
 /** 工作台四项（首页 / 应用 / 订阅 / 知识空间）新建角色默认全开，与 PRD 一致 */
 const DEFAULT_ENABLED_MENU_IDS = [
   WORKBENCH_PARENT_ID,
@@ -114,6 +129,8 @@ export default function Roles() {
   const [quotaFileGb, setQuotaFileGb] = useState("500")
   const [quotaChannelUnlimited, setQuotaChannelUnlimited] = useState(false)
   const [quotaChannelCount, setQuotaChannelCount] = useState("10")
+  const [quotaInfoSourceUnlimited, setQuotaInfoSourceUnlimited] = useState(false)
+  const [quotaInfoSourceCount, setQuotaInfoSourceCount] = useState(INFO_SOURCE_SUBSCRIBE_DEFAULT)
   const [quotaSpaceSubscribeUnlimited, setQuotaSpaceSubscribeUnlimited] = useState(false)
   const [quotaSpaceSubscribeCount, setQuotaSpaceSubscribeCount] = useState("100")
   const [menuIds, setMenuIds] = useState<string[]>([])
@@ -180,6 +197,8 @@ export default function Roles() {
     quotaFileGbVal: string,
     quotaChannelUnlimitedVal: boolean,
     quotaChannelCountVal: string,
+    quotaInfoSourceUnlimitedVal: boolean,
+    quotaInfoSourceCountVal: string,
     quotaSpaceSubscribeUnlimitedVal: boolean,
     quotaSpaceSubscribeCountVal: string,
     menuIdsVal: string[],
@@ -192,6 +211,8 @@ export default function Roles() {
     quotaFileGbVal,
     quotaChannelUnlimitedVal,
     quotaChannelCountVal,
+    quotaInfoSourceUnlimitedVal,
+    quotaInfoSourceCountVal,
     quotaSpaceSubscribeUnlimitedVal,
     quotaSpaceSubscribeCountVal,
     menuIds: [...menuIdsVal].sort(),
@@ -237,6 +258,8 @@ export default function Roles() {
     setQuotaFileGb("500")
     setQuotaChannelUnlimited(false)
     setQuotaChannelCount("10")
+    setQuotaInfoSourceUnlimited(false)
+    setQuotaInfoSourceCount(INFO_SOURCE_SUBSCRIBE_DEFAULT)
     setQuotaSpaceSubscribeUnlimited(false)
     setQuotaSpaceSubscribeCount("100")
     setWorkbenchApprovalMode(false)
@@ -245,7 +268,9 @@ export default function Roles() {
     setIsMenuLoading(false)
     setMenuLoadFailed(false)
     setInitialEditSnapshot(
-      buildEditSnapshot("", nextDepartmentId, false, "500", false, "10", false, "100", nextMenuIds, false, false)
+      buildEditSnapshot(
+        "", nextDepartmentId, false, "500", false, "10", false, INFO_SOURCE_SUBSCRIBE_DEFAULT, false, "100", nextMenuIds, false, false
+      )
     )
     setEditOpen(true)
   }
@@ -254,6 +279,7 @@ export default function Roles() {
     role: ROLE,
     fileLimit: number,
     channelLimit: number,
+    infoSourceLimit: number,
     spaceSubscribeLimit: number
   ) => {
     setIsMenuLoading(true)
@@ -283,6 +309,8 @@ export default function Roles() {
         fileLimit > 0 ? formatKnowledgeSpaceGbInput(fileLimit) : "500",
         channelLimit === -1,
         channelLimit >= 0 ? String(channelLimit) : "10",
+        infoSourceLimit === -1,
+        infoSourceLimit >= 0 ? String(infoSourceLimit) : INFO_SOURCE_SUBSCRIBE_DEFAULT,
         spaceSubscribeLimit === -1,
         spaceSubscribeLimit >= 0 ? String(spaceSubscribeLimit) : "100",
         ids,
@@ -301,17 +329,20 @@ export default function Roles() {
     const rawFile = qc.knowledge_space_file
     const fileLimit = typeof rawFile === "number" ? rawFile : Number(rawFile ?? -1)
     const channelLimit = Number(qc.channel ?? 10)
+    const infoSourceLimit = Number(qc.info_source_subscribe ?? 200)
     const spaceSubscribeLimit = Number(qc.knowledge_space_subscribe ?? 100)
     setQuotaFileUnlimited(fileLimit === -1)
     setQuotaFileGb(fileLimit > 0 ? formatKnowledgeSpaceGbInput(fileLimit) : "500")
     setQuotaChannelUnlimited(channelLimit === -1)
     setQuotaChannelCount(channelLimit >= 0 ? String(channelLimit) : "10")
+    setQuotaInfoSourceUnlimited(infoSourceLimit === -1)
+    setQuotaInfoSourceCount(infoSourceLimit >= 0 ? String(infoSourceLimit) : INFO_SOURCE_SUBSCRIBE_DEFAULT)
     setQuotaSpaceSubscribeUnlimited(spaceSubscribeLimit === -1)
     setQuotaSpaceSubscribeCount(spaceSubscribeLimit >= 0 ? String(spaceSubscribeLimit) : "100")
     setMenuIds([])
     setMenuLoadFailed(false)
     setEditOpen(true)
-    await loadRoleMenus(role, fileLimit, channelLimit, spaceSubscribeLimit)
+    await loadRoleMenus(role, fileLimit, channelLimit, infoSourceLimit, spaceSubscribeLimit)
   }
 
   const buildQuotaConfig = (): Record<string, unknown> => {
@@ -322,6 +353,9 @@ export default function Roles() {
       ? -1
       : (normalizeKnowledgeSpaceFileGb(quotaFileGb) ?? KB_SPACE_FILE_GB_MIN)
     base.channel = quotaChannelUnlimited ? -1 : Math.max(0, Number(quotaChannelCount || 0))
+    base.info_source_subscribe = quotaInfoSourceUnlimited
+      ? -1
+      : (normalizeInfoSourceSubscribeCount(quotaInfoSourceCount) ?? Number(INFO_SOURCE_SUBSCRIBE_DEFAULT))
     base.knowledge_space_subscribe = quotaSpaceSubscribeUnlimited
       ? -1
       : Math.max(0, Number(quotaSpaceSubscribeCount || 0))
@@ -337,6 +371,10 @@ export default function Roles() {
     if (isSaving || !roleName.trim() || isMenuLoading || menuLoadFailed) return
     if (!quotaFileUnlimited && normalizeKnowledgeSpaceFileGb(quotaFileGb) === null) {
       message({ variant: "error", description: t("system.knowledgeSpaceFileQuotaInvalid") })
+      return
+    }
+    if (!quotaInfoSourceUnlimited && normalizeInfoSourceSubscribeCount(quotaInfoSourceCount) === null) {
+      message({ variant: "error", description: t("system.infoSourceSubscribeQuotaInvalid") })
       return
     }
     setIsSaving(true)
@@ -503,6 +541,8 @@ export default function Roles() {
       quotaFileGb,
       quotaChannelUnlimited,
       quotaChannelCount,
+      quotaInfoSourceUnlimited,
+      quotaInfoSourceCount,
       quotaSpaceSubscribeUnlimited,
       quotaSpaceSubscribeCount,
       menuIds,
@@ -519,6 +559,8 @@ export default function Roles() {
     quotaFileGb,
     quotaChannelUnlimited,
     quotaChannelCount,
+    quotaInfoSourceUnlimited,
+    quotaInfoSourceCount,
     quotaSpaceSubscribeUnlimited,
     quotaSpaceSubscribeCount,
     menuIds,
@@ -807,6 +849,32 @@ export default function Roles() {
             </div>
 
             <div className="rounded-md border p-3">
+              <Label>{t("system.infoSourceSubscribeQuotaLimit")}</Label>
+              <p className="mt-1 text-xs text-muted-foreground">{t("system.infoSourceSubscribeQuotaLimitDesc")}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <Checkbox
+                  checked={quotaInfoSourceUnlimited}
+                  onCheckedChange={(v) => setQuotaInfoSourceUnlimited(Boolean(v))}
+                />
+                <span className="text-sm">{t("system.unlimited")}</span>
+                {!quotaInfoSourceUnlimited && (
+                  <Input
+                    type="number"
+                    min={INFO_SOURCE_SUBSCRIBE_MIN}
+                    max={INFO_SOURCE_SUBSCRIBE_MAX}
+                    step={1}
+                    value={quotaInfoSourceCount}
+                    onChange={(e) => setQuotaInfoSourceCount(e.target.value)}
+                    className="w-[120px]"
+                  />
+                )}
+              </div>
+              {!quotaInfoSourceUnlimited && normalizeInfoSourceSubscribeCount(quotaInfoSourceCount) === null && (
+                <p className="mt-1 text-xs text-destructive">{t("system.infoSourceSubscribeQuotaInvalid")}</p>
+              )}
+            </div>
+
+            <div className="rounded-md border p-3">
               <Label>{t("system.spaceSubscribeQuotaLimit")}</Label>
               <p className="mt-1 text-xs text-muted-foreground">{t("system.spaceSubscribeQuotaLimitDesc")}</p>
               <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -847,8 +915,9 @@ export default function Roles() {
                       const rawF = qc.knowledge_space_file
                       const fileLimit = typeof rawF === "number" ? rawF : Number(rawF ?? -1)
                       const channelLimit = Number(qc.channel ?? 10)
+                      const infoSourceLimit = Number(qc.info_source_subscribe ?? 200)
                       const spaceSubscribeLimit = Number(qc.knowledge_space_subscribe ?? 100)
-                      void loadRoleMenus(activeRole, fileLimit, channelLimit, spaceSubscribeLimit)
+                      void loadRoleMenus(activeRole, fileLimit, channelLimit, infoSourceLimit, spaceSubscribeLimit)
                     }}
                   >
                     {t("retry")}

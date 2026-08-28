@@ -2,6 +2,18 @@ import { FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
 import i18next from "i18next";
 import { knowledgeUploadCapabilities } from "./knowledgeUploadCapabilities";
 
+/**
+ * Which semantic color a file's status tag speaks in (组件-Tag标签.md §3.1),
+ * shared by the desktop list row, the card and the H5 row so the same state
+ * cannot come out grey in one view and red in another.
+ *
+ * `approving` is not `brand`: 审批中 is one of the two colors the design system
+ * freezes to blue in BOTH brand themes (色彩规范 §4). The hand-rolled pills this
+ * replaced used `bg-blue-50`, which turns green under the green theme — exactly
+ * what that exception exists to prevent.
+ */
+export type KnowledgeStatusTone = "default" | "danger" | "approving";
+
 /** List/card: only folders and successfully parsed files are clickable; violation files stay grayed out. */
 export function isKnowledgeItemPreviewable(file: KnowledgeFile): boolean {
     if (file.type === FileType.FOLDER) return true;

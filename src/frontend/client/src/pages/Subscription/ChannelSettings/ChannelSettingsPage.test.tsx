@@ -301,7 +301,7 @@ describe("ChannelSettingsPage", () => {
     expect(mockReplaceRows).toHaveBeenCalledWith([]);
 
     fireEvent.click(
-      screen.getByRole("button", { name: "com_permission.subject_department" }),
+      screen.getByRole("radio", { name: "com_permission.subject_department" }),
     );
     expect(
       screen.getByRole("img", { name: "com_subscription.no_data" }),

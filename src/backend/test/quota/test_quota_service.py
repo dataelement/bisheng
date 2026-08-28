@@ -494,6 +494,33 @@ class TestValidateQuotaConfig:
         with pytest.raises(QuotaConfigInvalidError):
             QuotaService.validate_quota_config({"storage_gb": "1"})
 
+    def test_info_source_subscribe_bounded_int(self):
+        """info_source_subscribe: integer within [0, 10000]; default 200."""
+        from bisheng.role.domain.services.quota_service import DEFAULT_ROLE_QUOTA, QuotaService
+
+        assert DEFAULT_ROLE_QUOTA["info_source_subscribe"] == 200
+        QuotaService.validate_quota_config({"info_source_subscribe": 0})
+        QuotaService.validate_quota_config({"info_source_subscribe": 200})
+        QuotaService.validate_quota_config({"info_source_subscribe": 10000})
+
+    def test_info_source_subscribe_invalid_type_or_range(self):
+        """Rejects negative (incl. -1), > 10000, decimal, string and bool."""
+        from bisheng.common.errcode.role import QuotaConfigInvalidError
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({"info_source_subscribe": -1})
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({"info_source_subscribe": -5})
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({"info_source_subscribe": 10001})
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({"info_source_subscribe": 1.5})
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({"info_source_subscribe": "200"})
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({"info_source_subscribe": True})
+
 
 def _make_tenant_obj(tenant_id, parent_tenant_id=None):
     t = MagicMock()

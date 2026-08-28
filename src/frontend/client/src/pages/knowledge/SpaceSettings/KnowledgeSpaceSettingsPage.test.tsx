@@ -553,9 +553,8 @@ describe("KnowledgeSpaceSettingsPage", () => {
         name: "com_unified_permission.add_authorization",
       }),
     );
-    fireEvent.mouseDown(
-      screen.getByRole("tab", { name: "com_permission.subject_department" }),
-      { button: 0, ctrlKey: false },
+    fireEvent.click(
+      screen.getByRole("radio", { name: "com_permission.subject_department" }),
     );
     fireEvent.click(await screen.findByText("select-department"));
     fireEvent.click(
@@ -610,21 +609,21 @@ describe("KnowledgeSpaceSettingsPage", () => {
 
     expect(
       (
-        screen.getByRole("tab", {
+        screen.getByRole("radio", {
           name: "com_permission.subject_department",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
     expect(
       (
-        screen.getByRole("tab", {
+        screen.getByRole("radio", {
           name: "com_permission.subject_user_group",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
     expect(
       (
-        screen.getByRole("tab", {
+        screen.getByRole("radio", {
           name: "com_permission.subject_user",
         }) as HTMLButtonElement
       ).disabled,

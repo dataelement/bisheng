@@ -143,11 +143,8 @@ export function GeneralSection() {
     ];
 
     return (
+        // The section title is rendered by SettingsPage's unified pane header.
         <section className="flex flex-col gap-4">
-            <h3 className="text-[14px] font-semibold leading-5 text-[#212121]">
-                {localize("com_settings_general")}
-            </h3>
-
             <StorageSection />
 
             {fontSizeAvailable && (

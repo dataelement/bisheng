@@ -1,6 +1,8 @@
+import { Button } from "@bisheng/ui";
 import { useLocalize } from "~/hooks";
 import { sanitizeHtml } from "~/utils/sanitizeHtml";
 import { Outlined } from "bisheng-icons";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useEffect, useState } from "react";
 import { Article } from "~/api/channels";
 import { useArticleShare } from "../hooks/useArticleShare";
@@ -197,6 +199,11 @@ export function ArticleCard({
     const sensitiveViolated = article.sensitiveReview?.violated === true;
     const canViewArticle = article.sensitiveReview?.can_view !== false;
 
+    // Library icon button (default × text × small) with the card's own tint
+    // (text-3, whole-card hover → text-1) and the H5 compact bare-icon look.
+    const cardActionBtnClassName =
+        "text-text-3 group-hover:text-text-1 max-[767px]:h-5 max-[767px]:w-5 max-[767px]:rounded-none max-[767px]:text-text-3 max-[767px]:hover:bg-transparent max-[767px]:[&_svg]:size-3.5";
+
     // Shared meta row (source favicon + name + separator + time)
     const metaRow = (
         <div className="flex items-center gap-2 text-xs text-text-3">
@@ -243,28 +250,46 @@ export function ArticleCard({
                             {showArticleActions && canViewArticle && (
                                 <div className="absolute right-0 flex items-center gap-1 max-[767px]:static max-[767px]:gap-2">
                                     {hasKnowledge && (
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); setShowKnowledgeModal(true); }}
-                                            className="flex size-8 cursor-pointer items-center justify-center rounded-full text-text-3 transition-colors group-hover:text-text-1 hover:bg-[#f7f7f7] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-text-3 max-[767px]:hover:bg-transparent"
-                                            title={localize("com_subscription.add_to_knowledge_space")}
-                                        >
-                                            <Outlined.AddToKnowledgeBase className="size-3.5" />
-                                        </button>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    color="default"
+                                                    variant="text"
+                                                    size="small"
+                                                    iconOnly
+                                                    aria-label={localize("com_subscription.add_to_knowledge_space")}
+                                                    onClick={(e) => { e.stopPropagation(); setShowKnowledgeModal(true); }}
+                                                    className={cardActionBtnClassName}
+                                                >
+                                                    <Outlined.AddToKnowledgeBase />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>{localize("com_subscription.add_to_knowledge_space")}</TooltipContent>
+                                        </Tooltip>
                                     )}
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleShare(article);
-                                            const shareText = localize("com_subscription.reading_article_share", { title: article.title, url: article.url });
-                                            copyText(shareText)
-                                                .then(() => showToast({ message: localize("com_subscription.share_link_copied"), severity: NotificationSeverity.SUCCESS }))
-                                                .catch(() => showToast({ message: localize("com_subscription.copy_failed_retry"), severity: NotificationSeverity.ERROR }));
-                                        }}
-                                        className="flex size-8 cursor-pointer items-center justify-center rounded-full text-text-3 transition-colors group-hover:text-text-1 hover:bg-[#f7f7f7] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-text-3 max-[767px]:hover:bg-transparent"
-                                        title={localize("com_subscription.share")}
-                                    >
-                                        <Outlined.Share className="size-3.5" />
-                                    </button>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                color="default"
+                                                variant="text"
+                                                size="small"
+                                                iconOnly
+                                                aria-label={localize("com_subscription.share")}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleShare(article);
+                                                    const shareText = localize("com_subscription.reading_article_share", { title: article.title, url: article.url });
+                                                    copyText(shareText)
+                                                        .then(() => showToast({ message: localize("com_subscription.share_link_copied"), severity: NotificationSeverity.SUCCESS }))
+                                                        .catch(() => showToast({ message: localize("com_subscription.copy_failed_retry"), severity: NotificationSeverity.ERROR }));
+                                                }}
+                                                className={cardActionBtnClassName}
+                                            >
+                                                <Outlined.Share />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>{localize("com_subscription.share")}</TooltipContent>
+                                    </Tooltip>
                                 </div>
                             )}
                         </div>

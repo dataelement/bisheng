@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { FileType, SpaceRole, updateFileEncoding, type KnowledgeFile } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
@@ -56,6 +56,7 @@ interface FileListViewProps {
     /** Keyword hit by the active search; matching substring in the file name is highlighted. */
     highlightKeyword?: string;
     onScroll?: React.UIEventHandler<HTMLDivElement>;
+    footer?: ReactNode;
     /** Extra spacing reserved below the last row (e.g. to clear a floating bottom dock). */
     bottomSpacing?: number;
     onOpenApprovalDetail?: (requestId: number) => void;
@@ -98,6 +99,7 @@ export function FileListView({
     highlightedTagIds,
     highlightKeyword,
     onScroll,
+    footer,
     bottomSpacing = 0,
     onOpenApprovalDetail,
     onPreviewPendingUpload,
@@ -213,6 +215,7 @@ export function FileListView({
                         currentUserId={currentUserId}
                     />
                 ))}
+                {footer}
                 {bottomSpacing > 0 && <div style={{ height: bottomSpacing }} aria-hidden />}
             </div>
 

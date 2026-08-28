@@ -2,7 +2,7 @@ import { Outlined } from "bisheng-icons";
 import { useState, useEffect, useRef, type MouseEvent } from "react";
 import { Button } from "~/components/ui/Button";
 import { Checkbox } from "~/components/ui/Checkbox";
-import { Input } from "~/components/ui/Input";
+import { SearchInput } from "@bisheng/ui";
 import { truncateName, type InformationSource } from "~/api/channels";
 import { cn } from "~/utils";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
@@ -15,7 +15,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 // the app's base path and fingerprints it — no env-var lookup at render time.
 import wechatCopyLinkGuide from "./wechat-copy-link-guide.png";
 
-const MAX_SOURCES = 200;
 const MAX_NAME_DISPLAY = 20;
 
 /**
@@ -244,7 +243,7 @@ export function AddSourceDropdown({
                         <Outlined.Plus className="size-4 flex-shrink-0 text-text-3" />
                         <span className="flex-1 text-left text-[14px] text-text-3">{localize("com_subscription.add_official_accounts_and_webpages")}</span>
                         <span className="flex-shrink-0 text-[12px] text-text-3">
-                            {sources.length}/{MAX_SOURCES}
+                            {localize("com_subscription.channel_selected_sources_count", { 0: sources.length })}
                         </span>
                     </div>
                     {sources.length > 0 && (
@@ -317,7 +316,7 @@ export function AddSourceDropdown({
                 <div className="flex items-center gap-2 h-[46px]">
                     <div className="flex-1" />
                     <span className="flex-shrink-0 text-[12px] text-text-3">
-                        {mgr.pendingSources.length}/{MAX_SOURCES}
+                        {localize("com_subscription.channel_selected_sources_count", { 0: mgr.pendingSources.length })}
                     </span>
                 </div>
             )}
@@ -333,35 +332,23 @@ export function AddSourceDropdown({
                     )}
                 >
                     <div className="flex shrink-0 items-center gap-2 border-b border-border-base pb-0 mb-2">
-                        <div className="relative flex-1 rounded-lg m-1">
-                            <Outlined.Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
-                            <Input
-                                value={inputValue}
-                                onChange={(e) => setInputValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                        // Submit, not just "set the keyword": pressing Enter
-                                        // again on an unchanged link has to retry it.
-                                        mgr.submitSearch(inputValue.trim());
-                                    }
-                                }}
-                                placeholder={localize("com_subscription.enter_official_account")}
-                                className="pl-9 pr-9 h-10 text-[14px] border-none bg-white w-full  rounded-none"
-                                autoFocus
-                            />
-                            {inputValue && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setInputValue("");
-                                        mgr.handleClearSearch();
-                                    }}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-3 hover:text-text-2"
-                                >
-                                    <Outlined.Close className="size-4" />
-                                </button>
-                            )}
-                        </div>
+                        {/* Spec SearchInput in `borderless` form — the panel draws the
+                            chrome, so the field shows no border and no focus ring (design
+                            call, 2026-08-25). onClear also resets the manager's search
+                            state, which the built-in clear alone would not do. Enter
+                            submits (not just sets the keyword) so an unchanged link can
+                            be retried. */}
+                        <SearchInput
+                            borderless
+                            className="m-1 flex-1"
+                            value={inputValue}
+                            onChange={(e) => setInputValue(e.target.value)}
+                            onSearch={() => mgr.submitSearch(inputValue.trim())}
+                            placeholder={localize("com_subscription.enter_official_account")}
+                            clearLabel={localize("com_ui_clear")}
+                            onClear={() => mgr.handleClearSearch()}
+                            autoFocus
+                        />
                     </div>
                     {/* 仅非搜索时显示 Tab；搜索时混合展示，类型在名称后 */}
                     {!mgr.isSearchMode && (
@@ -480,7 +467,7 @@ export function AddSourceDropdown({
                                     <div className="">
                                         {displayList.map((source) => {
                                             const sel = mgr.selectedIds.has(source.id);
-                                            const dis = !sel && mgr.isAtLimit;
+                                            const dis = !sel && mgr.isSourceQuotaBlocked(source.id);
                                             return (
                                                 <div
                                                     key={source.id}
@@ -545,8 +532,15 @@ export function AddSourceDropdown({
                         )}
                     </div>
                     {mgr.viewMode === "list" && (
-                        <div className="relative z-[1] flex shrink-0 items-center justify-between border-t border-border-base bg-white px-4 py-3 touch-mobile:flex-col touch-mobile:items-stretch touch-mobile:gap-2">
-                            <span className="text-[12px] text-text-3">{localize("com_subscription.total_channel_sources")}{mgr.pendingSources.length}/{MAX_SOURCES}
+                        <div className="relative z-[221] flex shrink-0 items-center justify-between border-t border-border-base bg-white px-4 py-3 touch-mobile:flex-col touch-mobile:items-stretch touch-mobile:gap-2">
+                            <span className="flex flex-col gap-0.5 text-[12px] text-text-3">
+                                <span>{localize("com_subscription.channel_selected_sources_count", { 0: mgr.pendingSources.length })}</span>
+                                <span>
+                                    {localize("com_subscription.info_source_quota_usage", {
+                                        0: mgr.sourceQuotaUsed,
+                                        1: mgr.sourceQuotaLimit === -1 ? localize("com_storage_quota.unlimited") : mgr.sourceQuotaLimit,
+                                    })}
+                                </span>
                             </span>
                             <div className="flex gap-2 touch-mobile:w-full">
                                 <Button

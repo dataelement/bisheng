@@ -1,4 +1,4 @@
-import { Button } from "@bisheng/ui";
+import { Button, Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { FileSearch, GitBranch, History } from "lucide-react";
 import { useState } from "react";
@@ -14,6 +14,7 @@ import { useInlineRename } from "../hooks/useInlineRename";
 import {
     formatTimeCard,
     getKnowledgeApprovalStatusLabel,
+    type KnowledgeStatusTone,
     isKnowledgeApprovalRejected,
     isKnowledgeItemPreviewable,
     isKnowledgeItemUploading,
@@ -50,12 +51,6 @@ const renderHighlightedName = (text: string, keyword?: string) => {
             : part
     );
 };
-
-type Tone = { bg: string; text: string; dot: string };
-
-const NEUTRAL_TONE: Tone = { bg: "bg-[#f2f4f7]", text: "text-[#6b7785]", dot: "bg-[#6b7785]" };
-const ERROR_TONE: Tone = { bg: "bg-[#fff2f0]", text: "text-[#f53f3f]", dot: "bg-[#f53f3f]" };
-const INFO_TONE: Tone = { bg: "bg-blue-50", text: "text-blue-500", dot: "bg-blue-500" };
 
 /**
  * Status pill shown on the right of the row, before the action buttons
@@ -140,36 +135,36 @@ const StatusBadge = ({ file, onOpenApprovalDetail }: {
     if (status === FileStatus.SUCCESS && !approvalStatusLabel) return null;
 
     let label: string;
-    let tone: Tone;
+    let tone: KnowledgeStatusTone;
     if (approvalStatusLabel) {
         label = approvalStatusLabel;
-        tone = isKnowledgeApprovalRejected(file) ? ERROR_TONE : INFO_TONE;
+        // `finalize_failed` lands in `approving` blue with the rest of the
+        // non-rejected approval labels — that is what this row painted before
+        // the migration. It reads like a failure and probably wants `danger`;
+        // left alone here so the migration changes no state's meaning.
+        tone = isKnowledgeApprovalRejected(file) ? "danger" : "approving";
     } else {
-        const config: Record<string, { label: string; tone: Tone }> = {
-            [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), tone: NEUTRAL_TONE },
-            [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), tone: NEUTRAL_TONE },
-            [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), tone: NEUTRAL_TONE },
-            [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), tone: NEUTRAL_TONE },
-            [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), tone: ERROR_TONE },
-            [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), tone: ERROR_TONE },
-            [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), tone: ERROR_TONE },
+        const config: Record<string, { label: string; tone: KnowledgeStatusTone }> = {
+            [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), tone: "default" },
+            [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), tone: "default" },
+            [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), tone: "default" },
+            [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), tone: "default" },
+            [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), tone: "danger" },
+            [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), tone: "danger" },
+            [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), tone: "danger" },
         };
         const item = config[status] || config[FileStatus.WAITING];
         label = item.label;
         tone = item.tone;
     }
 
+    // 组件-Tag标签.md §5 — the status form: a dot the color of the text, in
+    // front of one word. `small` is the list-row rung. The row lays its
+    // children out in a flex line, so the tag keeps its own width.
     const pill = (
-        <div
-            className={cn(
-                "inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-[4px] px-2 text-xs leading-5",
-                tone.bg,
-                tone.text,
-            )}
-        >
-            <span className={cn("size-1 shrink-0 rounded-full", tone.dot)} />
+        <Tag size="small" dot color={tone} className="shrink-0 whitespace-nowrap">
             {label}
-        </div>
+        </Tag>
     );
 
     // Queueing carries no actionable reason — skip the tooltip there.
@@ -446,6 +441,13 @@ export function FileListRow({
         onPreview?.();
     };
 
+    // The whole row is a selection target; only the name (and rename input /
+    // action buttons, which stop propagation) opts out and opens the detail.
+    const handleRowClick = () => {
+        if (!isSelectable || isCreating || isRenaming) return;
+        onSelect(!isSelected);
+    };
+
     const showEncoding = shougangEnabled && !isFolder;
 
     return (
@@ -457,9 +459,11 @@ export function FileListRow({
             onDragLeave={isFolder && !isUploadingFolderPlaceholder ? onFolderDragLeave : undefined}
             onDrop={isFolder && !isUploadingFolderPlaceholder ? onFolderDrop : undefined}
             onContextMenu={handleRowContextMenu}
+            onClick={handleRowClick}
             className={cn(
                 // Zebra base (Figma 13198:75866) — selection / drag-over / hover paint over it.
                 "group relative flex h-14 items-center gap-2 px-4 transition-colors",
+                isSelectable && !isCreating && "cursor-pointer",
                 index % 2 === 1 ? "bg-[#fbfbfb]" : "bg-white",
                 isFolderDragOver && "bg-blue-100",
                 !isSelected && !isFolderDragOver && "hover:bg-fill-1",
@@ -472,6 +476,9 @@ export function FileListRow({
             <Checkbox
                 checked={isSelected}
                 onCheckedChange={onSelect}
+                // The row's own click also toggles selection — without this the
+                // two handlers would cancel each other out on a checkbox click.
+                onClick={(e) => e.stopPropagation()}
                 disabled={!isSelectable}
                 className={cn(
                     "size-4 shrink-0",
@@ -485,7 +492,6 @@ export function FileListRow({
                     "relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded",
                     isUploadingFolderPlaceholder && "opacity-50",
                 )}
-                onClick={handleOpen}
             >
                 <FileIconRenderer file={file} isFolder={isFolder} iconClassName="size-8 shrink-0" thumbBordered transparentBg />
             </div>
@@ -500,7 +506,7 @@ export function FileListRow({
                         onBlur={handleRenameSubmit}
                         onKeyDown={handleKeyDown}
                         onClick={(e) => e.stopPropagation()}
-                        className="h-7 w-full rounded border border-[#DDDDDD] bg-white px-2 text-sm font-normal shadow-[0_0_0_2px_#F1F5F9] outline-none"
+                        className="h-7 w-full rounded border border-border-deep bg-white px-2 text-sm font-normal shadow-focus outline-none"
                     />
                 ) : (
                     <>
@@ -518,7 +524,13 @@ export function FileListRow({
                                         : "cursor-default text-text-3",
                                     isUploadingFolderPlaceholder && "opacity-50",
                                 )}
-                                onClick={(e) => { e.stopPropagation(); handleOpen(); }}
+                                // A name that can't open anything falls through to the
+                                // row's select-toggle instead of dead-ending the click.
+                                onClick={(e) => {
+                                    if (!namePreviewable || isUploadingFolderPlaceholder) return;
+                                    e.stopPropagation();
+                                    handleOpen();
+                                }}
                             >
                                 {renderHighlightedName(file.name, highlightKeyword)}
                             </span>
@@ -595,7 +607,11 @@ export function FileListRow({
             {/* The action slot keeps its width even when a row has one button or
                 none, so status pills line up down the column. 73px = two 32px
                 action buttons + the 9px divider between them. */}
-            <div className="flex min-w-[73px] shrink-0 items-center justify-end">
+            {/* stopPropagation: opening a row menu must not toggle the row's selection. */}
+            <div
+                className="flex min-w-[73px] shrink-0 items-center justify-end"
+                onClick={(e) => e.stopPropagation()}
+            >
                 {pendingUpload && (canDecidePending || canWithdrawPending) && (
                     <PendingUploadApprovalActions
                         requestId={pendingUpload.requestId}
