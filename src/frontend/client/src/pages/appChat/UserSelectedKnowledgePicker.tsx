@@ -128,7 +128,8 @@ export default function UserSelectedKnowledgePicker({
                     ...groups.publicSpaces,
                     ...groups.departmentSpaces,
                     ...groups.teamSpaces,
-                    ...groups.personalSpaces,
+                    // 问答/对话选库不展示『我的收藏』系统个人库
+                    ...groups.personalSpaces.filter((space) => !space.isFavorite),
                 ].map(mapSpace).filter((item) => !keyword || item.source_name.toLowerCase().includes(keyword.toLowerCase()));
                 setSpaceList(spaces);
             })
