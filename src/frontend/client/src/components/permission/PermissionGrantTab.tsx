@@ -186,7 +186,6 @@ export function PermissionGrantTab({
     EMPTY_GRANTED_SUBJECT_IDS
   );
   const [submitting, setSubmitting] = useState(false);
-  const [userTreeBulkLoading, setUserTreeBulkLoading] = useState(false);
   const includeChildren = includeChildrenProp ?? internalIncludeChildren;
   const handleIncludeChildrenChange = onIncludeChildrenChange ?? setInternalIncludeChildren;
   const effectiveSubjectType = normalizeSubjectType(fixedSubjectType ?? subjectType);
@@ -342,7 +341,6 @@ export function PermissionGrantTab({
   };
 
   const handleUserTreeBulkLoadingChange = useCallback((loading: boolean) => {
-    setUserTreeBulkLoading(loading);
     onBulkLoadingChange?.(loading);
   }, [onBulkLoadingChange]);
 
@@ -401,12 +399,7 @@ export function PermissionGrantTab({
   const selectedSummaryText = selectedSubjectList.map((subject) => subject.name).join("、");
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
-      {userTreeBulkLoading && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center rounded-[6px] bg-black/10">
-          <Loader2 className="size-8 animate-spin text-primary" />
-        </div>
-      )}
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {!fixedSubjectType && (
         <div className="flex items-center gap-3">
           <div className="flex w-fit gap-1 rounded-md bg-gray-100 p-1">
