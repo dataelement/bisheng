@@ -19,7 +19,14 @@ interface BatchCategoryModalProps {
     spaceId: string;
     fileIds: string[];
     fileCategoryGroups: PortalFileCategoryGroupOption[];
-    onSaved?: () => void;
+    /**
+     * Called after a successful save with the ids the backend actually
+     * updated (files with no parseable file_encoding are skipped and
+     * excluded here) plus the applied category/subcategory, so the caller
+     * can patch those files' display fields in place immediately instead of
+     * waiting on a background list refresh.
+     */
+    onSaved?: (updatedFileIds: string[], applied: { fileCategoryCode: string; fileSubcategoryCode: string }) => void;
 }
 
 /** Batch-update the classification (category / subcategory) of the selected files. */
@@ -61,7 +68,10 @@ export function BatchCategoryModal({
             } else {
                 showToast({ message: localize("com_knowledge.batch_category_success"), status: "success" });
             }
-            onSaved?.();
+            onSaved?.(
+                result.updated_file_ids.map(String),
+                { fileCategoryCode: selected.parentCode ?? "", fileSubcategoryCode: selected.code },
+            );
             setSelected(null);
             onClose();
         } catch {

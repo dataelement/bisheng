@@ -18,7 +18,14 @@ interface BatchBusinessDomainModalProps {
     spaceId: string;
     fileIds: string[];
     businessDomainOptions: BusinessDomainOptionItem[];
-    onSaved?: () => void;
+    /**
+     * Called after a successful save with the ids the backend actually
+     * updated (files with no parseable file_encoding are skipped and
+     * excluded here) plus the applied business domain code, so the caller
+     * can patch those files' display fields in place immediately instead of
+     * waiting on a background list refresh.
+     */
+    onSaved?: (updatedFileIds: string[], businessDomainCode: string) => void;
 }
 
 /** Batch-update the business domain of the selected files. */
@@ -59,7 +66,7 @@ export function BatchBusinessDomainModal({
             } else {
                 showToast({ message: localize("com_knowledge.batch_business_domain_success"), status: "success" });
             }
-            onSaved?.();
+            onSaved?.(result.updated_file_ids.map(String), code);
             setCode("");
             onClose();
         } catch {
