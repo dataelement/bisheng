@@ -91,7 +91,16 @@ export function LibraryTagPicker({
                         onKeyDown={(event) => event.stopPropagation()}
                     />
                 </div>
-                <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+                <div
+                    className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain"
+                    // Nested in EditTagsModal's Dialog: the portaled popover sits
+                    // outside react-remove-scroll's shard, so wheel is preventDefault'd
+                    // at document. Dragging the scrollbar still works; drive scrollTop
+                    // here so the mouse wheel can move the tag list.
+                    onWheel={(event) => {
+                        event.currentTarget.scrollTop += event.deltaY;
+                    }}
+                >
                     {loading && (
                         <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.loading")}</span>
                     )}
