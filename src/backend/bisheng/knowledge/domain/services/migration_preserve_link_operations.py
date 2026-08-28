@@ -25,6 +25,7 @@ from typing import Any
 from sqlmodel import col, select
 
 from bisheng.core.database import get_async_db_session
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_migration import (
     KnowledgeMigrationBatch,
     KnowledgeMigrationFile,
@@ -156,6 +157,24 @@ class PreserveLinkMigrationOperations:
                     )
                 ).all()
             )
+            # Publishing addresses the target by folder ids, not by the display
+            # path the unit carries for the UI. Resolve the planned folder to
+            # its real level path; a unit landing at the space root has none.
+            target_file_level_path = ""
+            if unit_row.planned_target_folder_id:
+                folder = (
+                    await session.exec(
+                        select(KnowledgeFile).where(
+                            KnowledgeFile.id == int(unit_row.planned_target_folder_id)
+                        )
+                    )
+                ).first()
+                if folder is None:
+                    raise PreserveLinkContextError(
+                        f"target folder {unit_row.planned_target_folder_id} no longer exists"
+                    )
+                target_file_level_path = f"{folder.file_level_path or ''}/{int(folder.id)}"
+
         if not file_rows:
             raise PreserveLinkContextError(f"migration unit {unit_id} has no files")
 
@@ -172,8 +191,8 @@ class PreserveLinkMigrationOperations:
             "document_id": int(unit_row.source_document_id),
             "source_entry_id": int(primary.source_file_id),
             "target_space_id": int(batch.target_space_id),
-            "target_file_level_path": str(unit_row.planned_target_path_snapshot or ""),
-            "target_level": _target_level_from_path(unit_row.planned_target_path_snapshot),
+            "target_file_level_path": target_file_level_path,
+            "target_level": _target_level_from_path(target_file_level_path),
             "target_document_id": _merge_target_document_id(unit_row.overwrite_unit_key),
         }
 
