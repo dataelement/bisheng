@@ -427,9 +427,12 @@ class TestMembershipRewrite:
 
         insert = next(call for call in calls if call[0] == "insert")
         delete_call = next(call for call in calls if call[0] == "delete")
+        es_update = next(call for call in calls if call[0] == "es:update_by_query")
         assert len(insert[1][0]) == 2
         assert {row["chunk_index"] for row in insert[1][0]} == {0, 1}
+        assert {row["embedding_model_id"] for row in insert[1][0]} == {"7"}
         assert delete_call[2]["expr"] == "pk in [1, 2, 3]"
+        assert es_update[2]["script"]["params"]["embedding_model_id"] == "7"
         assert asserted_models == [7]
 
     async def test_delete_validates_bound_embedding_model(self):
