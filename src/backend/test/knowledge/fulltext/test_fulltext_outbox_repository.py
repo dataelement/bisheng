@@ -321,6 +321,11 @@ async def test_same_auto_repair_fingerprint_is_exhausted_but_new_source_version_
             error_type=None,
             now=now + timedelta(minutes=1),
         )
+        repaired = await session.get(KnowledgeFulltextOutbox, row.id)
+        assert repaired.status == KnowledgeFulltextOutboxStatus.PENDING.value
+        assert repaired.retry_count == 0
+        assert repaired.next_retry_at == now + timedelta(minutes=1)
+        assert repaired.error_summary is None
         assert await repository.request_auto_repair(
             outbox_id=row.id,
             revision=1,
@@ -337,6 +342,113 @@ async def test_same_auto_repair_fingerprint_is_exhausted_but_new_source_version_
             error_type="KnowledgeFulltextChunkCorruptedError",
             now=now,
         ) == "requested"
+    finally:
+        await session.close()
+        await engine.dispose()
+
+
+async def test_failed_auto_repair_is_terminal_instead_of_being_redispatched_forever():
+    engine, session = await make_session()
+    now = datetime(2026, 8, 13, 18, 0, 0)
+    try:
+        repository = KnowledgeFulltextOutboxRepositoryImpl(session)
+        row = await repository.request_sync(
+            aggregate_type=KnowledgeFulltextAggregateType.FILE,
+            aggregate_id=7,
+            knowledge_id=9,
+            desired_action=KnowledgeFulltextDesiredAction.SYNC_CURRENT,
+            trigger_type="historical_backfill",
+            tenant_id=1,
+            max_retries=8,
+        )
+        await session.commit()
+        assert await repository.request_auto_repair(
+            outbox_id=row.id,
+            revision=1,
+            lease_owner=None,
+            fingerprint="a" * 64,
+            error_type="KnowledgeFulltextChunkCorruptedError",
+            now=now,
+        ) == "requested"
+        assert await repository.claim_auto_repair(
+            outbox_id=row.id,
+            fingerprint="a" * 64,
+            lease_owner="repair-worker",
+            now=now,
+            lease_until=now + timedelta(minutes=12),
+        ) is not None
+
+        assert await repository.finish_auto_repair(
+            outbox_id=row.id,
+            fingerprint="a" * 64,
+            lease_owner="repair-worker",
+            success=False,
+            error_type="KnowledgeFulltextAutoRepairPhysicalSourceMissing",
+            now=now + timedelta(minutes=1),
+        )
+
+        failed = await session.get(KnowledgeFulltextOutbox, row.id)
+        assert failed.status == KnowledgeFulltextOutboxStatus.FAILED.value
+        assert failed.retry_count == failed.max_retries
+        assert failed.next_retry_at is None
+        assert failed.lease_owner is None
+        assert failed.lease_until is None
+        assert failed.error_summary == "KnowledgeFulltextAutoRepairExhausted:repair_exhausted"
+        assert failed.payload_snapshot["fulltext_auto_repair"]["state"] == "exhausted"
+        assert failed.payload_snapshot["fulltext_auto_repair"]["error_type"] == (
+            "KnowledgeFulltextAutoRepairPhysicalSourceMissing"
+        )
+        assert await repository.list_auto_repair_candidates(now=now + timedelta(hours=1), limit=100) == []
+    finally:
+        await session.close()
+        await engine.dispose()
+
+
+async def test_successful_auto_repair_keeps_an_already_applied_revision_successful():
+    engine, session = await make_session()
+    now = datetime(2026, 8, 13, 18, 0, 0)
+    try:
+        repository = KnowledgeFulltextOutboxRepositoryImpl(session)
+        row = KnowledgeFulltextOutbox(
+            tenant_id=1,
+            aggregate_type="file",
+            aggregate_id=7,
+            knowledge_id=9,
+            desired_action="sync_current",
+            desired_revision=1,
+            applied_revision=1,
+            trigger_type="parse_finalized",
+            status="failed",
+            retry_count=8,
+            max_retries=8,
+            lease_owner="repair-worker",
+            lease_until=now + timedelta(minutes=12),
+            error_summary="KnowledgeFulltextAutoRepairProcessing:repair_processing",
+            payload_snapshot={
+                "fulltext_auto_repair": {
+                    "fingerprint": "a" * 64,
+                    "state": "processing",
+                    "repair_owner": "repair-worker",
+                }
+            },
+        )
+        session.add(row)
+        await session.commit()
+
+        assert await repository.finish_auto_repair(
+            outbox_id=row.id,
+            fingerprint="a" * 64,
+            lease_owner="repair-worker",
+            success=True,
+            error_type=None,
+            now=now + timedelta(minutes=1),
+        )
+
+        repaired = await session.get(KnowledgeFulltextOutbox, row.id)
+        assert repaired.status == KnowledgeFulltextOutboxStatus.SUCCESS.value
+        assert repaired.retry_count == 0
+        assert repaired.next_retry_at is None
+        assert repaired.error_summary is None
     finally:
         await session.close()
         await engine.dispose()

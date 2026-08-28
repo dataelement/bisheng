@@ -953,7 +953,9 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             raise ValueError(
                 f"writer is bound to tenant {self.tenant_id}, got {request.tenant_id}"
             )
-        snapshot = self._assert_writable()
+        snapshot = self._assert_writable(
+            embedding_model_id=self.schema_spec.embedding_model_id
+        )
         knowledge_ids = validate_knowledge_ids(request.knowledge_ids, allow_empty=True)
 
         if not knowledge_ids:
@@ -1025,6 +1027,7 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             row.pop(SHARED_MILVUS_PK_FIELD, None)
             row["knowledge_ids"] = [int(k) for k in knowledge_ids]
             row["membership_generation"] = int(request.membership_generation)
+            row["embedding_model_id"] = str(self.schema_spec.embedding_model_id)
             new_rows.append(row)
 
         # Insert one row per canonical chunk, then remove every old PK. A
@@ -1037,12 +1040,14 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         script = {
             "source": (
                 "ctx._source.metadata.knowledge_ids = params.knowledge_ids; "
-                "ctx._source.metadata.membership_generation = params.membership_generation"
+                "ctx._source.metadata.membership_generation = params.membership_generation; "
+                "ctx._source.metadata.embedding_model_id = params.embedding_model_id"
             ),
             "lang": "painless",
             "params": {
                 "knowledge_ids": [int(k) for k in knowledge_ids],
                 "membership_generation": int(request.membership_generation),
+                "embedding_model_id": str(self.schema_spec.embedding_model_id),
             },
         }
         es_index = self._es_index(snapshot)
@@ -1062,7 +1067,9 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             raise ValueError(
                 f"writer is bound to tenant {self.tenant_id}, got {request.tenant_id}"
             )
-        snapshot = self._assert_writable()
+        snapshot = self._assert_writable(
+            embedding_model_id=self.schema_spec.embedding_model_id
+        )
         expr = self._doc_expr(
             tenant_id=request.tenant_id,
             canonical_document_id=request.canonical_document_id,

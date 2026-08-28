@@ -22,6 +22,7 @@ from bisheng.knowledge.domain.contracts.retrieval_scope import (
     CanonicalGenerationConstraint,
 )
 from bisheng.knowledge.domain.contracts.shared_space_storage import (
+    ContentDeleteRequest,
     MembershipUpdateRequest,
 )
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
@@ -362,7 +363,14 @@ class TestMembershipRewrite:
     async def test_retry_converges_duplicate_canonical_chunks(self):
         writer = object.__new__(sss.MilvusEsSharedSpaceStorageWriter)
         writer.tenant_id = 1
-        writer._assert_writable = lambda: _snapshot()
+        writer.schema_spec = sss.SharedStoreSchemaSpec(
+            embedding_model_id=7,
+            dimension=1024,
+        )
+        asserted_models = []
+        writer._assert_writable = lambda **kwargs: (
+            asserted_models.append(kwargs.get("embedding_model_id")) or _snapshot()
+        )
         writer._check_membership_limits = lambda _ids: None
         writer._conf = lambda: _conf()
         writer.es_client = SimpleNamespace(
@@ -419,9 +427,36 @@ class TestMembershipRewrite:
 
         insert = next(call for call in calls if call[0] == "insert")
         delete_call = next(call for call in calls if call[0] == "delete")
+        es_update = next(call for call in calls if call[0] == "es:update_by_query")
         assert len(insert[1][0]) == 2
         assert {row["chunk_index"] for row in insert[1][0]} == {0, 1}
+        assert {row["embedding_model_id"] for row in insert[1][0]} == {"7"}
         assert delete_call[2]["expr"] == "pk in [1, 2, 3]"
+        assert es_update[2]["script"]["params"]["embedding_model_id"] == "7"
+        assert asserted_models == [7]
+
+    async def test_delete_validates_bound_embedding_model(self):
+        async def noop(*_args, **_kwargs):
+            return None
+
+        writer = object.__new__(sss.MilvusEsSharedSpaceStorageWriter)
+        writer.tenant_id = 1
+        writer.schema_spec = sss.SharedStoreSchemaSpec(
+            embedding_model_id=7,
+            dimension=1024,
+        )
+        asserted_models = []
+        writer._assert_writable = lambda **kwargs: (
+            asserted_models.append(kwargs.get("embedding_model_id")) or _snapshot()
+        )
+        writer._run_milvus = noop
+        writer._run_es = noop
+
+        await writer.delete_content(
+            ContentDeleteRequest(tenant_id=1, canonical_document_id=8)
+        )
+
+        assert asserted_models == [7]
 
 
 class TestSharedCollectionBootstrap:

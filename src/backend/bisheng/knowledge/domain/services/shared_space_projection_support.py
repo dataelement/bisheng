@@ -119,6 +119,14 @@ async def load_shared_content_chunks_from_legacy(
             )
             collection = vector_store.col
             output_fields = [field.name for field in collection.schema.fields]
+            if "document_id" not in output_fields:
+                logger.debug(
+                    "skip non-legacy collection while loading shared projection "
+                    "chunks file_id=%s knowledge_id=%s",
+                    content_file.id,
+                    knowledge.id,
+                )
+                continue
             expr = f"document_id == {int(content_file.id)}"
             rows: list[dict] = []
             if hasattr(collection, "query_iterator"):
