@@ -1393,6 +1393,16 @@ class SharedSpaceStorageReader:
         """Dense ANN search with membership pre-filter. Returns Top-K hits."""
         self._assert_readable()
         params = dict(search_params or {"metric_type": "L2", "params": {"ef": 64}})
+        hnsw_params = dict(params.get("params") or {})
+        try:
+            configured_ef = int(hnsw_params.get("ef", 64))
+        except (TypeError, ValueError):
+            configured_ef = 64
+        # Milvus HNSW requires ef to be greater than the requested Top-K.
+        # Workstation retrieval deliberately over-fetches up to 100+ chunks,
+        # so a fixed ef=64 makes an otherwise valid shared-store query fail.
+        hnsw_params["ef"] = max(configured_ef, int(limit) + 1)
+        params["params"] = hnsw_params
         results = await asyncio.to_thread(
             self.collection.search,
             data=[list(vector)],
