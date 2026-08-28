@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS user (
     -- F049: SSO-synced job grade flag (0/1); grant-subject candidate queries
     -- filter on it, so the column has to exist here or those suites fail on a
     -- missing column.
-    job_grade INTEGER NOT NULL DEFAULT 0
+    is_hidden INTEGER NOT NULL DEFAULT 0
 )"""
 
 TABLE_GROUP = """\

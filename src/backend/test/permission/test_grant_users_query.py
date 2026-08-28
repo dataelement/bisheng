@@ -25,8 +25,8 @@ async def engine():
             text(
                 'CREATE TABLE "user" ('
                 "user_id INTEGER PRIMARY KEY, user_name VARCHAR(256) NOT NULL, "
-                # F049: grant-subject queries filter leadership users (job_grade=1) out.
-                "job_grade INTEGER NOT NULL DEFAULT 0, "
+                # Grant-subject queries withhold users flagged is_hidden=1.
+                "is_hidden INTEGER NOT NULL DEFAULT 0, "
                 'external_id VARCHAR(128), "delete" INTEGER NOT NULL DEFAULT 0)'
             )
         )
@@ -56,10 +56,12 @@ async def engine():
                 "(4, 'DisabledMember', 'd', 0), (5, 'Deleted', 'e', 1), (6, 'MultiDept', 'f', 0)"
             )
         )
-        # Leadership user: job_grade=1 must never appear among grant candidates.
+        # Hidden user: is_hidden=1 must never appear among grant candidates,
+        # unless the caller is a super admin (include_hidden).
         await conn.execute(
             text(
-                "INSERT INTO \"user\" (user_id, user_name, external_id, \"delete\", job_grade) VALUES (7, 'Leader', 'g', 0, 1)"
+                "INSERT INTO \"user\" (user_id, user_name, external_id, \"delete\", is_hidden) "
+                "VALUES (7, 'Hidden', 'g', 0, 1)"
             )
         )
         await conn.execute(
@@ -126,3 +128,36 @@ async def test_normal_resource_candidates_only_require_active_tenant_membership(
         )
 
     assert [item["user_id"] for item in result] == [6, 2, 1]
+
+
+async def test_hidden_users_are_withheld_from_ordinary_callers(engine):
+    with (
+        patch("bisheng.core.database.get_async_db_session", lambda: _session_factory(engine)),
+        patch.object(UserDepartmentDao, "aget_by_user_ids", AsyncMock(return_value=[])),
+        patch.object(DepartmentDao, "aget_by_ids", AsyncMock(return_value=[])),
+    ):
+        result = await resource_permission._list_knowledge_space_grant_users(
+            tenant_id=1,
+            keyword="",
+            page=1,
+            page_size=50,
+        )
+
+    assert 7 not in [item["user_id"] for item in result]
+
+
+async def test_hidden_users_are_visible_to_super_admins(engine):
+    with (
+        patch("bisheng.core.database.get_async_db_session", lambda: _session_factory(engine)),
+        patch.object(UserDepartmentDao, "aget_by_user_ids", AsyncMock(return_value=[])),
+        patch.object(DepartmentDao, "aget_by_ids", AsyncMock(return_value=[])),
+    ):
+        result = await resource_permission._list_knowledge_space_grant_users(
+            tenant_id=1,
+            keyword="",
+            page=1,
+            page_size=50,
+            include_hidden=True,
+        )
+
+    assert [item["user_id"] for item in result] == [7, 6, 2, 1]

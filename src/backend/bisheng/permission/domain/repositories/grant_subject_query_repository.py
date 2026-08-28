@@ -7,10 +7,11 @@ from sqlmodel import col, select
 from bisheng.core import database as database_module
 from bisheng.core.context import tenant as tenant_context
 
-#: Users with this job_grade flag are leadership users, which must not be
-#: offered as grant subjects. Only an explicit upstream ``jobGrade=1`` is
-#: stored as 1; every other user carries 0.
-_LEADER_JOB_GRADE = 1
+#: ``user.is_hidden`` value marking a person who must not be offered as a
+#: grant subject. Only an explicit upstream ``jobGrade=1`` is stored as 1;
+#: every other user carries 0. Super admins see them anyway — see
+#: ``include_hidden`` on :meth:`GrantSubjectQueryRepository.list_users`.
+_HIDDEN_USER = 1
 
 
 @dataclass(frozen=True)
@@ -108,7 +109,10 @@ class GrantSubjectQueryRepository:
         page: int,
         page_size: int,
         restrict_dept_path: str | None = None,
+        include_hidden: bool = False,
     ) -> list[dict]:
+        """List grantable users. ``include_hidden`` is the super-admin escape
+        hatch: hidden users are withheld from everyone else's picker."""
         from bisheng.database.models.department import (
             Department,
             DepartmentDao,
@@ -131,14 +135,11 @@ class GrantSubjectQueryRepository:
                 )
                 statement = (
                     select(User.user_id, User.user_name, User.external_id)
-                    .where(
-                        User.delete == 0,
-                        active_member,
-                        # Leadership users (job_grade=1) are never grantable.
-                        User.job_grade != _LEADER_JOB_GRADE,
-                    )
+                    .where(User.delete == 0, active_member)
                     .order_by(User.user_id.desc())
                 )
+                if not include_hidden:
+                    statement = statement.where(User.is_hidden != _HIDDEN_USER)
                 if restrict_dept_path is not None:
                     in_subtree = (
                         select(UserDepartment.id)

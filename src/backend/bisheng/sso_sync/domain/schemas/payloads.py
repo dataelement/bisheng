@@ -21,7 +21,7 @@ See spec.md §5.1 / §5.2. Field semantics:
 
 from typing import List, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from bisheng.sso_sync.domain.constants import SSO_SOURCE, WECOM_SOURCE
 
@@ -39,22 +39,27 @@ class UserAttrsDTO(BaseModel):
     """Soft user attributes pushed alongside SSO login. All fields optional
     because the upstream HR system may not populate every attribute."""
 
-    #: Gateway pushes ``jobGrade`` in camelCase; keep snake_case internally.
+    #: Gateway pushes camelCase; keep snake_case internally.
     model_config = ConfigDict(populate_by_name=True)
 
     name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
-    job_grade: Optional[int] = Field(
+    #: Upstream still calls this ``jobGrade`` for historical reasons, but it
+    #: carries no grade — it is a 0/1 marker for the few people who must stay
+    #: out of grant-subject pickers. Both spellings are accepted so a gateway
+    #: sending snake_case keeps working.
+    is_hidden: Optional[int] = Field(
         default=None,
-        alias="jobGrade",
-        description="Upstream HR job grade flag (0/1); stored as ``user.job_grade``.",
+        validation_alias=AliasChoices("jobGrade", "job_grade", "is_hidden"),
+        serialization_alias="jobGrade",
+        description="Hide-user flag (0/1) from upstream ``jobGrade``; stored as ``user.is_hidden``.",
     )
 
-    @field_validator("job_grade", mode="before")
+    @field_validator("is_hidden", mode="before")
     @classmethod
-    def _coerce_job_grade(cls, v):
-        """Normalize jobGrade to a 0/1 flag: only an explicit 1 becomes 1;
+    def _coerce_is_hidden(cls, v):
+        """Normalize the upstream flag to 0/1: only an explicit 1 becomes 1;
         anything else (0, other numbers, unparseable strings) becomes 0."""
         if v is None:
             return None

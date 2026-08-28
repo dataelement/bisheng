@@ -110,6 +110,7 @@ class GrantSubjectQueryService:
                 keyword=keyword,
                 page=page,
                 page_size=page_size,
+                include_hidden=login_user.is_admin(),
             )
         if subject_type == "user_group":
             return await self.list_user_groups(
@@ -259,6 +260,7 @@ class GrantSubjectQueryService:
         page: int,
         page_size: int,
         restrict_dept_path: str | None = None,
+        include_hidden: bool = False,
     ) -> list[dict]:
         return await self.repository.list_users(
             tenant_id=tenant_id,
@@ -266,6 +268,7 @@ class GrantSubjectQueryService:
             page=page,
             page_size=page_size,
             restrict_dept_path=restrict_dept_path,
+            include_hidden=include_hidden,
         )
 
     async def list_departments_children(
@@ -370,6 +373,7 @@ class GrantSubjectQueryService:
             page=page,
             page_size=page_size,
             restrict_dept_path=restrict_path,
+            include_hidden=login_user.is_admin(),
         )
 
     async def query_resource_departments(

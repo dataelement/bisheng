@@ -391,28 +391,6 @@ export type CreationGrantSubjectsQuery =
   | CreationGrantDepartmentSearchQuery
   | CreationGrantDepartmentPathTreeQuery;
 
-export async function searchUsers(
-  name: string,
-  params?: { page?: number; pageSize?: number },
-  config?: { signal?: AbortSignal }
-): Promise<{ data: { user_id: number; user_name: string }[]; total: number }> {
-  const res = await request.get(`/api/v1/user/list`, {
-    params: {
-      name,
-      page_num: params?.page ?? 1,
-      page_size: params?.pageSize ?? 50,
-    },
-    ...withPermissionRequestOptions(config),
-  });
-  const data = unwrap<any>(res);
-  const rows = data?.data ?? data?.list ?? data?.records ?? data;
-  const list = Array.isArray(rows) ? rows : [];
-  return {
-    data: list,
-    total: Number(data?.total ?? list.length),
-  };
-}
-
 export async function getResourceGrantUsers(
   resourceType: ResourceType,
   resourceId: string,

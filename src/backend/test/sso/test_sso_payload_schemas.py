@@ -21,20 +21,20 @@ from bisheng.sso_sync.domain.schemas.payloads import (
 
 
 class TestUserAttrsDTO:
-    def test_job_grade_only_explicit_one_is_stored_as_one(self):
-        assert UserAttrsDTO.model_validate({"jobGrade": 1}).job_grade == 1
-        assert UserAttrsDTO.model_validate({"jobGrade": "1"}).job_grade == 1
-        assert UserAttrsDTO.model_validate({"jobGrade": True}).job_grade == 1
+    def test_hidden_flag_only_explicit_one_is_stored_as_one(self):
+        assert UserAttrsDTO.model_validate({"jobGrade": 1}).is_hidden == 1
+        assert UserAttrsDTO.model_validate({"jobGrade": "1"}).is_hidden == 1
+        assert UserAttrsDTO.model_validate({"jobGrade": True}).is_hidden == 1
 
-    def test_job_grade_everything_else_is_zero(self):
-        assert UserAttrsDTO.model_validate({"jobGrade": 0}).job_grade == 0
-        assert UserAttrsDTO.model_validate({"jobGrade": 2}).job_grade == 0
-        assert UserAttrsDTO.model_validate({"jobGrade": "A1"}).job_grade == 0
-        assert UserAttrsDTO.model_validate({"jobGrade": ""}).job_grade == 0
-        assert UserAttrsDTO.model_validate({"jobGrade": False}).job_grade == 0
+    def test_hidden_flag_everything_else_is_zero(self):
+        assert UserAttrsDTO.model_validate({"jobGrade": 0}).is_hidden == 0
+        assert UserAttrsDTO.model_validate({"jobGrade": 2}).is_hidden == 0
+        assert UserAttrsDTO.model_validate({"jobGrade": "A1"}).is_hidden == 0
+        assert UserAttrsDTO.model_validate({"jobGrade": ""}).is_hidden == 0
+        assert UserAttrsDTO.model_validate({"jobGrade": False}).is_hidden == 0
 
-    def test_job_grade_absent_stays_none(self):
-        assert UserAttrsDTO.model_validate({}).job_grade is None
+    def test_hidden_flag_absent_stays_none(self):
+        assert UserAttrsDTO.model_validate({}).is_hidden is None
 
 
 class TestLoginSyncRequest:

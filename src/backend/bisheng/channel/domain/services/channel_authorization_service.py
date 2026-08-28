@@ -793,6 +793,7 @@ class ChannelAuthorizationService:
             page=page,
             page_size=page_size,
             restrict_dept_path=None,
+            include_hidden=login_user.is_admin(),
         )
 
     # F038: lazy variants. Channels are never department-scoped, so restrict_root_path

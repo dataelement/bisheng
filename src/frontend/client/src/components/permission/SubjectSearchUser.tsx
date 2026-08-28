@@ -2,7 +2,6 @@ import { Checkbox } from "~/components/ui/Checkbox";
 import {
   getCreationGrantSubjects,
   getResourceGrantUsers,
-  searchUsers,
 } from "~/api/permission";
 import type { GrantUser, ResourceType, SelectedSubject } from "~/api/permission";
 import { User as UserIcon, Search } from "lucide-react";
@@ -87,13 +86,10 @@ export function SubjectSearchUser({
         if (signal.aborted) return [];
         return Array.isArray(rows) ? rows : [];
       }
-      const res = await searchUsers(
-        name,
-        { page: pageNum, pageSize: PAGE_SIZE },
-        { signal },
-      );
-      if (signal.aborted) return [];
-      return res.data || [];
+      // No resource context and not a creation flow: there is nothing to scope
+      // the candidate list to. Deliberately no fall back to the raw user list —
+      // that endpoint does not withhold users flagged `is_hidden`.
+      return [];
     },
     [creationGrantSubjectsApi, grantUsersApi, mode, resourceId, resourceType],
   );
