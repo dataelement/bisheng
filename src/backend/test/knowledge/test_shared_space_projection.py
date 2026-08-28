@@ -295,6 +295,85 @@ async def test_chunk_loader_falls_back_to_original_space_after_publish_move():
     assert chunks[0].vector == [0.1, 0.2]
 
 
+async def test_chunk_loader_selects_current_generation_and_deduplicates():
+    content_file = KnowledgeFile(
+        id=100,
+        tenant_id=TENANT,
+        knowledge_id=20,
+        original_knowledge_id=10,
+        desired_content_generation=1,
+        file_name="doc.pdf",
+    )
+    collection = SimpleNamespace(
+        schema=SimpleNamespace(
+            fields=[
+                SimpleNamespace(name=name)
+                for name in (
+                    "pk",
+                    "document_id",
+                    "chunk_index",
+                    "text",
+                    "vector",
+                    "user_metadata",
+                )
+            ]
+        ),
+        query=lambda **_kwargs: [
+            {
+                "document_id": 100,
+                "chunk_index": 0,
+                "text": "stale zero",
+                "vector": [0.0],
+                "user_metadata": {"content_generation": 0},
+            },
+            {
+                "document_id": 100,
+                "chunk_index": 0,
+                "text": "current zero",
+                "vector": [1.0],
+                "user_metadata": {"content_generation": 1},
+            },
+            {
+                "document_id": 100,
+                "chunk_index": 1,
+                "text": "current one",
+                "vector": [2.0],
+                "user_metadata": {"content_generation": 1},
+            },
+            {
+                "document_id": 100,
+                "chunk_index": 0,
+                "text": "current zero",
+                "vector": [1.0],
+                "user_metadata": {"content_generation": 1},
+            },
+            {
+                "document_id": 100,
+                "chunk_index": 1,
+                "text": "current one",
+                "vector": [2.0],
+                "user_metadata": {"content_generation": 1},
+            },
+        ],
+    )
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aquery_by_id",
+            new=AsyncMock(return_value=SimpleNamespace(id=10)),
+        ),
+        patch(
+            "bisheng.knowledge.domain.knowledge_rag.KnowledgeRag."
+            "init_knowledge_milvus_vectorstore_sync",
+            return_value=SimpleNamespace(col=collection),
+        ),
+    ):
+        chunks = await load_shared_content_chunks_from_legacy(content_file)
+
+    assert [chunk.chunk_index for chunk in chunks] == [0, 1]
+    assert [chunk.text for chunk in chunks] == ["current zero", "current one"]
+
+
 async def test_content_generation_requeue_resets_exhausted_retry_state(
     async_db_session: AsyncSession,
 ):

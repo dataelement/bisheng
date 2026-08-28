@@ -511,17 +511,34 @@ class KnowledgeDocumentProjectionService:
                 "shared content chunk loader is unavailable"
             )
         chunks = await self.shared_content_chunk_loader(content_file)
-        source_file_id = int(content_file.id)
         if not chunks:
-            tried_file_ids = {source_file_id}
-            for candidate in entries:
+            tried_file_ids = {int(content_file.id)}
+            original_knowledge_id = int(
+                content_file.original_knowledge_id or 0
+            )
+            entry_type_priority = {
+                KnowledgeFileEntryType.PUBLISH.value: 0,
+                KnowledgeFileEntryType.MANAGER.value: 1,
+                KnowledgeFileEntryType.SHARE.value: 2,
+            }
+            candidates = sorted(
+                entries,
+                key=lambda candidate: (
+                    0
+                    if original_knowledge_id
+                    and int(candidate.knowledge_id) == original_knowledge_id
+                    else 1,
+                    entry_type_priority.get(str(candidate.entry_type), 99),
+                    int(candidate.id),
+                ),
+            )
+            for candidate in candidates:
                 candidate_id = int(candidate.id)
                 if candidate_id in tried_file_ids:
                     continue
                 tried_file_ids.add(candidate_id)
                 chunks = await self.shared_content_chunk_loader(candidate)
                 if chunks:
-                    source_file_id = candidate_id
                     logger.info(
                         "shared content projection recovered chunks from active entry "
                         "tenant_id=%s document_id=%s content_file_id=%s "

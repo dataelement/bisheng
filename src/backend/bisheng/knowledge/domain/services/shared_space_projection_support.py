@@ -151,22 +151,94 @@ async def load_shared_content_chunks_from_legacy(
 
             if not rows:
                 continue
-            chunks: list[SharedContentChunk] = []
+
+            desired_generation = int(
+                content_file.desired_content_generation or 0
+            )
+
+            def row_generation(row: dict) -> int | None:
+                user_metadata = row.get("user_metadata")
+                if not isinstance(user_metadata, dict):
+                    return None
+                value = user_metadata.get("content_generation")
+                try:
+                    return int(value) if value is not None else None
+                except (TypeError, ValueError):
+                    return None
+
+            generations = {
+                generation
+                for row in rows
+                if (generation := row_generation(row)) is not None
+            }
+            selected_generation = (
+                desired_generation
+                if desired_generation in generations
+                else max(generations, default=None)
+            )
+            if selected_generation is not None:
+                rows = [
+                    row
+                    for row in rows
+                    if row_generation(row) == selected_generation
+                ]
+
+            chunks_by_index: dict[int, SharedContentChunk] = {}
+            corrupted = False
             for offset, row in enumerate(rows):
                 metadata = {
                     key: value
                     for key, value in row.items()
                     if key not in {"pk", "text", "vector"}
                 }
-                chunks.append(
-                    SharedContentChunk(
-                        chunk_index=int(row.get("chunk_index", offset) or offset),
-                        text=str(row.get("text", "")),
-                        vector=row.get("vector"),
-                        metadata=metadata,
-                    )
+                raw_chunk_index = row.get("chunk_index")
+                chunk_index = (
+                    offset
+                    if raw_chunk_index is None
+                    else int(raw_chunk_index)
                 )
-            return sorted(chunks, key=lambda chunk: chunk.chunk_index)
+                chunk = SharedContentChunk(
+                    chunk_index=chunk_index,
+                    text=str(row.get("text", "")),
+                    vector=row.get("vector"),
+                    metadata=metadata,
+                )
+                existing = chunks_by_index.get(chunk_index)
+                if existing is None:
+                    chunks_by_index[chunk_index] = chunk
+                    continue
+                existing_vector = (
+                    tuple(existing.vector)
+                    if existing.vector is not None
+                    else None
+                )
+                chunk_vector = (
+                    tuple(chunk.vector) if chunk.vector is not None else None
+                )
+                existing_sparse = tuple(
+                    sorted((existing.sparse_vector or {}).items())
+                )
+                chunk_sparse = tuple(sorted((chunk.sparse_vector or {}).items()))
+                if (
+                    existing.text != chunk.text
+                    or existing_vector != chunk_vector
+                    or existing_sparse != chunk_sparse
+                ):
+                    corrupted = True
+                    break
+            indexes = sorted(chunks_by_index)
+            if corrupted or indexes != list(range(len(indexes))):
+                logger.warning(
+                    "skip corrupted legacy chunk source file_id=%s knowledge_id=%s "
+                    "generation=%s rows=%s unique_indexes=%s",
+                    content_file.id,
+                    knowledge.id,
+                    selected_generation,
+                    len(rows),
+                    len(indexes),
+                )
+                continue
+            return [chunks_by_index[index] for index in indexes]
         return []
 
     return await asyncio.to_thread(_load)
