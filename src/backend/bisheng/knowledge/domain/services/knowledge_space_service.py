@@ -7932,7 +7932,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 space_level=None,
                 discovery_scope="public_and_department",
             )
-            return (file, spaces) if spaces else (None, [])
+            if spaces:
+                return file, spaces
+            if decision.source == DepartmentFileAccessSource.APPROVAL_GRANT:
+                # Clinic spaces are stored as team spaces with a department
+                # binding, so the legacy public/department discovery scope can
+                # omit them even after a file-view grant has been approved.
+                space = await KnowledgeDao.aquery_by_id(int(space_id))
+                if (
+                    space is not None
+                    and int(space.type) == KnowledgeTypeEnum.SPACE.value
+                    and int(getattr(space, "tenant_id", 0) or 0)
+                    == int(self.login_user.tenant_id)
+                ):
+                    return file, [space]
+            return None, []
 
         if decision.status == DepartmentFileAccessStatus.NOT_APPLICABLE:
             space = await KnowledgeDao.aquery_by_id(int(space_id))
