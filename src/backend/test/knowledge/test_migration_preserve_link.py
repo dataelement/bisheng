@@ -407,3 +407,27 @@ async def test_normal_mode_listing_is_untouched():
 
     assert repository.calls[0] == {"level": "public", "levels": None}
     assert page.data[0]["selectable"] is True
+
+
+@pytest.mark.parametrize(
+    ("target_path", "expected_user"),
+    [
+        # A root target has no folder id, so the parent is the space itself.
+        ("", "knowledge_space:20"),
+        (None, "knowledge_space:20"),
+        # "/" is truthy but holds no id — this produced a malformed "folder:"
+        # that OpenFGA rejects, failing every unit in a batch.
+        ("/", "knowledge_space:20"),
+        ("/8", "folder:8"),
+        ("/8/900", "folder:900"),
+    ],
+)
+def test_publish_parent_falls_back_to_the_space_without_a_folder_id(
+    target_path,
+    expected_user,
+):
+    from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+        publish_parent_user,
+    )
+
+    assert publish_parent_user(target_path, 20) == expected_user
