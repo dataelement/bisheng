@@ -291,6 +291,35 @@ Scope:
 - 仅处理真实文件、解析成功、未处理完成的文件：`file_type = FILE`、`status = SUCCESS`、`similar_status != 2`
 - 跳过没有有效 `simhash` 或没有有效前三段 `file_encoding` 的文件
 
+### `repair_false_positive_simhash_duplicates.py`
+
+修复跨文件 SimHash 撞号导致的"100% 相似文档"误报（根因未定位，见
+`bisheng/knowledge/rag/pipeline/transformer/simhash.py` 里的 `[simhash.diag]`
+诊断日志）。自动筛选同一个 `simhash` 下 `md5`（真实内容）互不相同的文件数
+达到阈值（默认 3）的可疑分组，逐个重新读取文件内容并按解析管线同款逻辑
+重算 SimHash；只写回 `knowledgefile.simhash` 一个字段，`status`、
+`split_rule` 等其余数据不动。重算失败的文件把 SimHash 清成算法自身定义的
+空文本零值（`"0"*16`，全仓库既有的"无有效 SimHash"占位），不留错误值。
+不论重算成功与否，都会清掉该文件在 `knowledge_file_similarity_candidate`
+里的候选记录（作为来源和作为候选两个方向都清），避免界面上继续挂着错误
+的"相似文档"提示。默认 dry-run，`--apply` 才写库；严格串行，不做任何并发。
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/repair_false_positive_simhash_duplicates.py
+PYTHONPATH=./ .venv/bin/python scripts/repair_false_positive_simhash_duplicates.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/repair_false_positive_simhash_duplicates.py --apply --limit 50
+PYTHONPATH=./ .venv/bin/python scripts/repair_false_positive_simhash_duplicates.py --apply --min-distinct-content 5
+
+bash scripts/repair_false_positive_simhash_duplicates.sh --apply
+```
+
+说明：
+
+- `--min-distinct-content`：判定"可疑"的最小 distinct md5 数，默认 3，跟排查时用的 SQL 阈值一致。
+- `--limit`：最多处理多少个命中文件，用于先小批量验证。
+- 每个文件重算前后都会打印一行 `file_id/outcome/old_simhash/new_simhash`，方便核对。
+- 不重跑标签、分类、业务域、解析状态等任何其他字段，也不触发重新解析。
+
 ### `backfill_knowledge_fulltext.py`
 
 将当前存量可索引文件提交给既有全文索引 Outbox/Worker 链路。脚本只扫描 MySQL 当前事实并创建
