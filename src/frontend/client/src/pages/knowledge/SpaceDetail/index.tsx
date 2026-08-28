@@ -1258,11 +1258,35 @@ export function KnowledgeSpaceContent({
         setIsBatchSettingBusinessDomain(true);
     };
 
-    // Both category and business-domain batch edits are routed through
-    // file_encoding, so there is no incremental patch to apply here (unlike
-    // tags) — just clear the selection and pull the fresh encoding/labels.
-    const handleBatchClassificationSaved = () => {
+    // Patch the display fields in place (mirrors how tag-increment patches
+    // file.tags) so the list reflects the change immediately, instead of
+    // relying solely on the cross-component dispatchKnowledgeSpaceFilesRefresh
+    // event to trigger a re-fetch. The dispatch still fires afterward as a
+    // background reconciliation in case anything else is listening.
+    const handleBatchCategorySaved = (
+        updatedFileIds: string[],
+        applied: { fileCategoryCode: string; fileSubcategoryCode: string },
+    ) => {
         setSelectedFiles(new Set());
+        if (updatedFileIds.length > 0) {
+            const updatedIdSet = new Set(updatedFileIds);
+            setFiles((prev) => prev.map((file) => (
+                updatedIdSet.has(file.id)
+                    ? { ...file, fileSubcategoryCode: applied.fileSubcategoryCode }
+                    : file
+            )));
+        }
+        dispatchKnowledgeSpaceFilesRefresh(space.id);
+    };
+
+    const handleBatchBusinessDomainSaved = (updatedFileIds: string[], businessDomainCode: string) => {
+        setSelectedFiles(new Set());
+        if (updatedFileIds.length > 0) {
+            const updatedIdSet = new Set(updatedFileIds);
+            setFiles((prev) => prev.map((file) => (
+                updatedIdSet.has(file.id) ? { ...file, businessDomainCode } : file
+            )));
+        }
         dispatchKnowledgeSpaceFilesRefresh(space.id);
     };
 
@@ -2037,7 +2061,7 @@ export function KnowledgeSpaceContent({
                 spaceId={space.id}
                 fileIds={Array.from(selectedFiles)}
                 fileCategoryGroups={fileCategoryGroups ?? DEFAULT_PORTAL_FILE_CATEGORY_GROUPS}
-                onSaved={handleBatchClassificationSaved}
+                onSaved={handleBatchCategorySaved}
             />
 
             <BatchBusinessDomainModal
@@ -2046,7 +2070,7 @@ export function KnowledgeSpaceContent({
                 spaceId={space.id}
                 fileIds={Array.from(selectedFiles)}
                 businessDomainOptions={businessDomainOptions}
-                onSaved={handleBatchClassificationSaved}
+                onSaved={handleBatchBusinessDomainSaved}
             />
 
             <Dialog open={!!violationFile} onOpenChange={(open) => {
