@@ -1348,7 +1348,7 @@ export function KnowledgeSpaceContent({
     // Called after tags are saved successfully — patch tags in place only.
     // Do not trigger a parent list reload here: portal reloadFiles clears search
     // state, and useFileManager already keeps search params on loadFiles.
-    const handleTagsSaved = (tags?: FileTag[], context?: { fileIds?: string[] }) => {
+    const handleTagsSaved = (tags?: FileTag[], context?: { fileIds?: string[]; mode?: "increment" | "overwrite" }) => {
         const savedFileId = editingTagsFileId;
         const batchFileIds = context?.fileIds ?? [];
         setEditingTagsFileId(null);
@@ -1362,7 +1362,17 @@ export function KnowledgeSpaceContent({
             return;
         }
 
-        if (batchFileIds.length > 0 && tags && tags.length > 0) {
+        if (batchFileIds.length === 0) return;
+
+        if (context?.mode === "overwrite") {
+            // Overwrite replaces each file's whole tag set (possibly with an
+            // empty one), which an in-place merge can't express correctly —
+            // pull the fresh state instead of trying to patch it.
+            dispatchKnowledgeSpaceFilesRefresh(space.id);
+            return;
+        }
+
+        if (tags && tags.length > 0) {
             const batchIdSet = new Set(batchFileIds);
             setFiles((prev) => prev.map((file) => {
                 if (!batchIdSet.has(file.id)) return file;

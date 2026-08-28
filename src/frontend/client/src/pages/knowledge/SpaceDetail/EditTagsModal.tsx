@@ -37,8 +37,11 @@ interface EditTagsModalProps {
      * Called after tags are saved successfully so parent can refresh.
      * In single-file mode the updated tag list is passed so the parent can
      * patch that file's tags in place instead of refetching the whole list.
+     * ``mode`` is only meaningful in batch mode: "increment" means ``tags``
+     * were appended to whatever the file already had; "overwrite" means
+     * ``tags`` is now the file's *entire* tag set and must replace, not merge.
      */
-    onSaved?: (tags?: FileTag[], context?: { fileIds?: string[] }) => void;
+    onSaved?: (tags?: FileTag[], context?: { fileIds?: string[]; mode?: "increment" | "overwrite" }) => void;
     spaceId: string;
     /** Single file edit — mutually exclusive with fileIds */
     fileId?: string | null;
@@ -748,14 +751,21 @@ export function EditTagsModal({
                         review_tag_ids: reviewTagIds,
                     });
                 }
-                showToast({ message: localize("com_knowledge.batch_add_tags_success"), status: "success" });
+                showToast({
+                    message: localize(
+                        tagEditMode === "overwrite"
+                            ? "com_knowledge.batch_overwrite_tags_success"
+                            : "com_knowledge.batch_add_tags_success",
+                    ),
+                    status: "success",
+                });
                 const addedTags = buildSavedFileTags(
                     resolvedIds,
                     spaceTags,
                     tagMetaRef,
                     selectedReviewTagIdsRef.current,
                 );
-                onSaved?.(addedTags, { fileIds });
+                onSaved?.(addedTags, { fileIds, mode: tagEditMode });
             } else if (fileId) {
                 await updateFileTagsApi(spaceId, fileId, approvedTagIds, reviewTagIds);
                 showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
@@ -847,7 +857,7 @@ export function EditTagsModal({
             >
                 <DialogHeader className="h-auto shrink-0 space-y-0 border-b border-[#EBECF0] px-6 py-4 text-left touch-mobile:px-4 touch-mobile:pt-6 touch-mobile:pb-4">
                     <DialogTitle className="text-[16px] leading-6 font-medium text-[#212121]">
-                        {isBatchMode ? localize("com_knowledge.batch_add_tags") : localize("com_knowledge.edit_tags")}
+                        {isBatchMode ? localize("com_knowledge.batch_edit_tags") : localize("com_knowledge.edit_tags")}
                     </DialogTitle>
                     <button
                         type="button"

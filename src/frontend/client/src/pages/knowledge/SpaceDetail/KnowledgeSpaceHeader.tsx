@@ -381,7 +381,7 @@ export function KnowledgeSpaceHeader({
                         {isAdmin && !hasFoldersSelected && (
                             <DropdownMenuItem onClick={onBatchTag} className="cursor-pointer">
                                 <Tag className="mr-2 size-4" />
-                                {localize("com_knowledge.batch_add_tags")}
+                                {localize("com_knowledge.batch_edit_tags")}
                             </DropdownMenuItem>
                         )}
                         {isAdmin && !hasFoldersSelected && onBatchCategory && (
