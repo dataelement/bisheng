@@ -1886,6 +1886,10 @@
     "channel_permission_management": "メンバー管理",
     "organization_grant_unsubscribe_blocked": "このチャンネルは部署/ユーザーグループ経由で付与されているため、現在購読解除できません。"
   },
+  "com_ui": {
+    "system_notice_acknowledge": "承知しました",
+    "system_notice_title": "システム通知"
+  },
   "com_unified_permission": {
     "access_and_share": "アクセスと共有",
     "add_authorization": "権限を追加",

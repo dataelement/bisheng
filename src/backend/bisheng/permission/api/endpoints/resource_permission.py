@@ -635,6 +635,7 @@ async def _list_knowledge_space_grant_users(
     page: int,
     page_size: int,
     restrict_dept_path: str | None = None,
+    include_hidden: bool = False,
 ) -> list[dict]:
     return await GrantSubjectQueryService().list_users(
         tenant_id=tenant_id,
@@ -642,6 +643,7 @@ async def _list_knowledge_space_grant_users(
         page=page,
         page_size=page_size,
         restrict_dept_path=restrict_dept_path,
+        include_hidden=include_hidden,
     )
 
 

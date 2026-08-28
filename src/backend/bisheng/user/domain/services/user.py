@@ -14,7 +14,6 @@ from bisheng.common.errcode.user import (
     UserForbiddenError,
     UserNameTooLongError,
     UserNoRoleForLoginError,
-    UserNoWebMenuForLoginError,
     UserPasswordExpireError,
     UserPasswordMaxTryError,
     UserPasswordStrengthError,
@@ -379,9 +378,10 @@ class UserService:
         role_ids: list[int] | None = None,
         is_department_admin: bool | None = None,
     ) -> UnifiedResponseModel | None:
-        """无角色且非部门/用户组管理员时拒绝登录；有角色但生效菜单既不包含工作台也不包含管理后台时拒绝登录。
+        """Reject users without any role or delegated administrator access.
 
-        需审批模式下角色可仅勾选一级菜单（workstation/admin）而无二级项，仍视为有菜单权限，允许登录。
+        Role holders without an effective page menu must remain authenticated so
+        the frontend can render its stable no-permission page.
         """
         # Pre-tenant-context check: any role/dept/group access across all tenants
         # qualifies for login. Without bypass, every DAO below trips
@@ -407,13 +407,6 @@ class UserService:
 
             if is_department_admin:
                 return None
-
-            if not await LoginUser.user_has_workbench_or_admin_effective_menu(
-                db_user,
-                role_ids=resolved_role_ids,
-                is_department_admin=is_department_admin,
-            ):
-                return UserNoWebMenuForLoginError.return_resp()
             return None
 
     @classmethod

@@ -2,15 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import or_
 from sqlmodel import col, select
 
 from bisheng.core import database as database_module
 from bisheng.core.context import tenant as tenant_context
 
-#: Job grades starting with this prefix are leadership grades, which must not be
-#: offered as grant subjects. Upstream guarantees the uppercase prefix.
-_LEADER_JOB_GRADE_PREFIX = "A"
+#: ``user.is_hidden`` value marking a person who must not be offered as a
+#: grant subject. Only an explicit upstream ``jobGrade=1`` is stored as 1;
+#: every other user carries 0. Super admins see them anyway — see
+#: ``include_hidden`` on :meth:`GrantSubjectQueryRepository.list_users`.
+_HIDDEN_USER = 1
 
 
 @dataclass(frozen=True)
@@ -108,7 +109,10 @@ class GrantSubjectQueryRepository:
         page: int,
         page_size: int,
         restrict_dept_path: str | None = None,
+        include_hidden: bool = False,
     ) -> list[dict]:
+        """List grantable users. ``include_hidden`` is the super-admin escape
+        hatch: hidden users are withheld from everyone else's picker."""
         from bisheng.database.models.department import (
             Department,
             DepartmentDao,
@@ -131,17 +135,11 @@ class GrantSubjectQueryRepository:
                 )
                 statement = (
                     select(User.user_id, User.user_name, User.external_id)
-                    .where(
-                        User.delete == 0,
-                        active_member,
-                        # Leadership grades are never grantable; unset job_grade is.
-                        or_(
-                            User.job_grade.is_(None),
-                            ~User.job_grade.like(f"{_LEADER_JOB_GRADE_PREFIX}%"),
-                        ),
-                    )
+                    .where(User.delete == 0, active_member)
                     .order_by(User.user_id.desc())
                 )
+                if not include_hidden:
+                    statement = statement.where(User.is_hidden != _HIDDEN_USER)
                 if restrict_dept_path is not None:
                     in_subtree = (
                         select(UserDepartment.id)
@@ -214,6 +212,7 @@ class GrantSubjectQueryRepository:
         page: int,
         page_size: int,
         restrict_root_path: str | None = None,
+        include_hidden: bool = False,
     ) -> dict:
         """F038 user tree: direct primary-department members of ``department_id``.
 
@@ -255,12 +254,13 @@ class GrantSubjectQueryRepository:
                         UserDepartment.is_primary == 1,
                         User.delete == 0,
                         active_member,
-                        # User.job_grade != _LEADER_JOB_GRADE,
                     )
                     .order_by(User.user_id.desc())
                     .offset(max(0, (page - 1) * page_size))
                     .limit(page_size + 1)
                 )
+                if not include_hidden:
+                    statement = statement.where(User.is_hidden != _HIDDEN_USER)
                 rows = list((await session.exec(statement)).all())
 
         has_more = len(rows) > page_size
@@ -284,6 +284,7 @@ class GrantSubjectQueryRepository:
         keyword: str,
         limit: int = 50,
         restrict_root_path: str | None = None,
+        include_hidden: bool = False,
     ) -> dict:
         """F038 user tree search: username match, results keep the full ancestor
         department path (decision mirrors ``search_departments``' pruned tree),
@@ -321,12 +322,13 @@ class GrantSubjectQueryRepository:
                     .where(
                         User.delete == 0,
                         active_member,
-                        # User.job_grade != _LEADER_JOB_GRADE,
                         User.user_name.like(f"%{keyword}%"),
                     )
                     .order_by(User.user_id.desc())
                     .limit(limit + 1)
                 )
+                if not include_hidden:
+                    statement = statement.where(User.is_hidden != _HIDDEN_USER)
                 if scope.positive_prefix is not None:
                     in_subtree = (
                         select(UserDepartment.id)

@@ -11,6 +11,7 @@ import { useAuthContext, useLocalize } from "~/hooks";
 import { useNotificationCount } from "~/hooks/useNotificationCount";
 import { useNotificationsFromUrl } from "~/hooks/useNotificationsFromUrl";
 import { cn } from "~/utils";
+import { getRectScale, getRectViewport } from "~/utils/fontSize";
 
 /** 左侧窄栏仅头像 = PC；会话历史抽屉内整行 = 移动端，菜单内容与 PC 一致 */
 export type UserPopMenuVariant = "rail" | "drawer";
@@ -212,11 +213,23 @@ export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
             const el = triggerRef.current;
             if (!el) return;
             const r = el.getBoundingClientRect();
-            const marginX = 8;
-            const marginBottom = 8;
             // 与视口：左缘 8px；底缘 8px（side=top + sideOffset 将菜单底侧锚到视口底上方）
-            setMenuAlignOffset(marginX - Math.round(r.left));
-            setMenuSideOffset(Math.round(r.top - (window.innerHeight - marginBottom)));
+            //
+            // Every term below has to be quoted in the units the rect above is
+            // quoted in, because Radix adds these offsets straight onto that
+            // rect. Which units those are is engine-dependent — on the engines
+            // that bake the page zoom into getBoundingClientRect they are
+            // physical pixels, on the older ones they are CSS pixels — so the
+            // window and the 8px margins are converted through the same factor
+            // the popup compensation already measures. Reaching for a viewport
+            // in CSS pixels instead is what pushed the menu off the bottom of
+            // the window on the browsers where the rect carries the zoom.
+            const rectScale = getRectScale();
+            const marginX = 8 * rectScale;
+            const marginBottom = 8 * rectScale;
+            const viewport = getRectViewport();
+            setMenuAlignOffset(Math.round(marginX - r.left));
+            setMenuSideOffset(Math.round(r.top - (viewport.height - marginBottom)));
         };
         measure();
         window.addEventListener("resize", measure);

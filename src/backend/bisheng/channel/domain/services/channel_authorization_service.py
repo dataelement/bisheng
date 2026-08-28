@@ -793,6 +793,7 @@ class ChannelAuthorizationService:
             page=page,
             page_size=page_size,
             restrict_dept_path=None,
+            include_hidden=login_user.is_admin(),
         )
 
     # F038: department-tree user picker. Channels are never department-scoped, so
@@ -816,6 +817,7 @@ class ChannelAuthorizationService:
             restrict_root_path=None,
             user_page=user_page,
             user_page_size=user_page_size,
+            include_hidden=login_user.is_admin(),
         )
 
     async def search_grant_user_tree(self, channel_id: str, login_user: UserPayload, keyword: str, limit: int = 50):
@@ -828,6 +830,7 @@ class ChannelAuthorizationService:
             keyword=keyword,
             limit=limit,
             restrict_root_path=None,
+            include_hidden=login_user.is_admin(),
         )
 
     # F038: lazy variants. Channels are never department-scoped, so restrict_root_path

@@ -113,6 +113,7 @@ class GrantSubjectQueryService:
                     keyword=keyword,
                     page=page,
                     page_size=page_size,
+                    include_hidden=login_user.is_admin(),
                 )
             if operation == "tree_children":
                 return await self.list_user_tree_children(
@@ -120,11 +121,13 @@ class GrantSubjectQueryService:
                     parent_id=parent_id,
                     user_page=page,
                     user_page_size=page_size,
+                    include_hidden=login_user.is_admin(),
                 )
             return await self.search_users_tree(
                 tenant_id=tenant_id,
                 keyword=keyword,
                 limit=limit,
+                include_hidden=login_user.is_admin(),
             )
         if subject_type == "user_group":
             return await self.list_user_groups(
@@ -294,6 +297,7 @@ class GrantSubjectQueryService:
         page: int,
         page_size: int,
         restrict_dept_path: str | None = None,
+        include_hidden: bool = False,
     ) -> list[dict]:
         return await self.repository.list_users(
             tenant_id=tenant_id,
@@ -301,6 +305,7 @@ class GrantSubjectQueryService:
             page=page,
             page_size=page_size,
             restrict_dept_path=restrict_dept_path,
+            include_hidden=include_hidden,
         )
 
     async def list_departments_children(
@@ -324,6 +329,7 @@ class GrantSubjectQueryService:
         restrict_root_path: str | None = None,
         user_page: int = 1,
         user_page_size: int = 100,
+        include_hidden: bool = False,
     ) -> dict:
         """F038 user tree: one layer = child departments (navigation) + the
         direct primary-department users of ``parent_id`` (leaves). The root
@@ -343,6 +349,7 @@ class GrantSubjectQueryService:
                 page=user_page,
                 page_size=user_page_size,
                 restrict_root_path=restrict_root_path,
+                include_hidden=include_hidden,
             )
         return {
             "departments": departments,
@@ -357,12 +364,14 @@ class GrantSubjectQueryService:
         keyword: str,
         limit: int = 50,
         restrict_root_path: str | None = None,
+        include_hidden: bool = False,
     ) -> dict:
         return await self.repository.search_users_tree(
             tenant_id=tenant_id,
             keyword=keyword,
             limit=limit,
             restrict_root_path=restrict_root_path,
+            include_hidden=include_hidden,
         )
 
     async def search_departments(
@@ -454,6 +463,7 @@ class GrantSubjectQueryService:
             page=page,
             page_size=page_size,
             restrict_dept_path=restrict_path,
+            include_hidden=login_user.is_admin(),
         )
 
     async def query_resource_user_tree_children(
@@ -475,6 +485,7 @@ class GrantSubjectQueryService:
             restrict_root_path=restrict_path,
             user_page=user_page,
             user_page_size=user_page_size,
+            include_hidden=login_user.is_admin(),
         )
 
     async def query_resource_user_tree_search(
@@ -494,6 +505,7 @@ class GrantSubjectQueryService:
             keyword=keyword,
             limit=limit,
             restrict_root_path=restrict_path,
+            include_hidden=login_user.is_admin(),
         )
 
     async def query_resource_departments(

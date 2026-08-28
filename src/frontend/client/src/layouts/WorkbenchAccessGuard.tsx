@@ -46,7 +46,7 @@ export default function WorkbenchAccessGuard() {
       return;
     }
 
-    navigate('/404', { replace: true });
+    navigate('/menu-unavailable', { replace: true });
   }, [navigate, user]);
 
   return null;

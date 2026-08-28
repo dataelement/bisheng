@@ -117,7 +117,7 @@
   },
   "src/api/permission.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 8
+      "count": 7
     }
   },
   "src/api/quota.ts": {
@@ -2365,9 +2365,6 @@
     },
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
     },
     "react-hooks/exhaustive-deps": {
       "count": 2

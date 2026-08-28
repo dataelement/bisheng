@@ -39,6 +39,21 @@ FORWARDABLE_ACTION_CODES: set[str] = {
     "knowledge_space_deleted",
 }
 
+# Scenarios whose approval notifications stay inside BiSheng and are never
+# mirrored to E+.
+#
+# The action codes above are shared across scenarios — a file-change approval
+# and a menu-access approval both notify with `approval_task_pending` — so a
+# scenario can only be excluded by name, not by pruning the whitelist. File
+# changes fire on every upload / rename / move / delete in a governed space,
+# which is routine editing traffic rather than something a person needs pushed
+# to them outside the product; the in-app message and the file page are where it
+# belongs. A notification whose scenario cannot be determined is still
+# forwarded — that side of the doubt keeps existing scenarios working.
+NON_FORWARDABLE_SCENARIO_CODES: set[str] = {
+    "knowledge_space_file_change_request",
+}
+
 
 _TEMPLATES: dict[str, dict[str, str]] = {
     "request_channel": {

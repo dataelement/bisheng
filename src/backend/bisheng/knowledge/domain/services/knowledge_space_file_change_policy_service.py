@@ -285,10 +285,7 @@ class KnowledgeSpaceFileChangePolicyService:
                 page_size=page_size,
             )
         return KnowledgeSpaceFileChangeSettingsResp(
-            data=[
-                self._setting_response(row=row, policy=policy, scenario_enabled=scenario_enabled)
-                for row in rows
-            ],
+            data=[self._setting_response(row=row, policy=policy, scenario_enabled=scenario_enabled) for row in rows],
             total=total,
         )
 
@@ -323,6 +320,25 @@ class KnowledgeSpaceFileChangePolicyService:
                 return self._setting_response(row=row, policy=policy, scenario_enabled=scenario_enabled)
 
     @staticmethod
+    def _default_approval_required(policy: KnowledgeSpaceFileChangePolicy | None) -> bool:
+        """Whether a space with no explicit per-space setting requires approval.
+
+        Under ``all_spaces`` the admin has said "every space, current and future,
+        goes through approval, no need to configure them one by one" — there is no
+        per-space list to fill in, so the default must be ON or the scope would
+        mean nothing.
+
+        Under ``per_space`` the admin has taken responsibility for choosing, and a
+        space they have not chosen yet must not gate its own editors on their
+        behalf: every upload / rename / move / delete in it would queue for an
+        approval nobody asked for, and the space's owner would have to notice and
+        turn it off. Default OFF, so the list shows what the space will actually
+        do rather than what it would do if someone got round to it.
+        """
+        scope = getattr(policy, "scope", None) or KnowledgeSpaceFileChangePolicyScope.PER_SPACE
+        return scope == KnowledgeSpaceFileChangePolicyScope.ALL_SPACES
+
+    @staticmethod
     def _setting_response(
         *,
         row: KnowledgeSpaceFileChangeSettingRow,
@@ -331,13 +347,13 @@ class KnowledgeSpaceFileChangePolicyService:
     ) -> KnowledgeSpaceFileChangeSettingResp:
         auth_type = row.space.auth_type
         auth_type_value = auth_type.value if isinstance(auth_type, AuthTypeEnum) else str(auth_type)
-        # A space without an explicit per-space setting defaults to REQUIRING
-        # approval (for both the all_spaces and per_space scopes). Approval is
-        # only skipped when the user has explicitly turned the space's switch OFF
-        # (an explicit per-space value), which always wins over the default.
-        default_required = True
+        # A space with no explicit per-space setting falls back to the scope's
+        # default (see _default_approval_required). An explicit per-space value
+        # always wins over it.
         approval_required = (
-            default_required if row.setting is None else bool(row.setting.approval_required)
+            KnowledgeSpaceFileChangePolicyService._default_approval_required(policy)
+            if row.setting is None
+            else bool(row.setting.approval_required)
         )
         # The Approval Center scenario switch, the build-UI switch (policy.enabled)
         # and the space's own switch must ALL be ON for approval to apply; if any
@@ -390,11 +406,10 @@ class KnowledgeSpaceFileChangePolicyService:
         setting = await repository.get_setting(tenant_id=tenant_id, space_id=space_id)
         if setting is not None:
             return bool(setting.approval_required)
-        # No explicit per-space setting: a space defaults to REQUIRING approval
-        # (for both the all_spaces and per_space scopes). Approval is only skipped
-        # when the user has explicitly turned the space's switch OFF (a stored
-        # per-space setting with approval_required=False, handled above).
-        return True
+        # No explicit per-space setting: fall back to the scope's default. This
+        # MUST agree with what the settings list shows for the same space, or the
+        # console and the runtime disagree about a space nobody has configured.
+        return self._default_approval_required(policy)
 
     @staticmethod
     async def _require_space(

@@ -5,7 +5,11 @@ import logging
 
 from bisheng.common.services.config_service import settings
 from bisheng.common.services.metric_log import emit_metric
-from bisheng.notification.external._payload import FORWARDABLE_ACTION_CODES, build_textcard
+from bisheng.notification.external._payload import (
+    FORWARDABLE_ACTION_CODES,
+    NON_FORWARDABLE_SCENARIO_CODES,
+    build_textcard,
+)
 from bisheng.notification.external.cofco_eplus_client import CofcoEPlusClient
 from bisheng.user.domain.models.user import UserDao
 
@@ -128,6 +132,19 @@ def maybe_forward_external(message) -> None:
         )
         return
 
+    # Parsed before resolving recipients: an excluded scenario must not cost a
+    # user lookup per receiver, and must not emit recipient skip metrics for a
+    # message that was never going to be sent.
+    applicant_name, resource_name, reason, scenario_code = _extract_payload_fields(message)
+    if scenario_code and scenario_code in NON_FORWARDABLE_SCENARIO_CODES:
+        logger.info(
+            "forward.skipped message_id=%s action_code=%s scenario_code=%s reason=scenario_not_forwarded",
+            message.id,
+            action_code,
+            scenario_code,
+        )
+        return
+
     # InboxMessage.receiver is List[int] — resolve each to an E+ employee ID
     resolved_eids: list[str] = []
     for uid in message.receiver or []:
@@ -149,7 +166,6 @@ def maybe_forward_external(message) -> None:
     if not resolved_eids:
         return
 
-    applicant_name, resource_name, reason, scenario_code = _extract_payload_fields(message)
     triggered_at = message.create_time.strftime("%Y-%m-%d %H:%M")
 
     textcard = build_textcard(

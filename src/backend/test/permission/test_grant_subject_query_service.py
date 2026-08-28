@@ -84,7 +84,30 @@ async def test_user_candidates_tenant_scoped(repository, monkeypatch):
         page=2,
         page_size=25,
         restrict_dept_path=None,
+        include_hidden=False,
     )
+
+
+async def test_super_admin_sees_hidden_user_candidates(repository, monkeypatch):
+    """Hidden users are withheld from ordinary pickers but not from a super
+    admin's — the flag is a business-side courtesy, not an access control."""
+    monkeypatch.setattr(
+        "bisheng.permission.domain.services.grant_subject_query_service.get_current_tenant_id",
+        lambda: 5,
+    )
+    service = GrantSubjectQueryService(repository)
+
+    await service.query_creation_subjects(
+        resource_type="knowledge_space",
+        subject_type="user",
+        operation="list",
+        login_user=SimpleNamespace(user_id=1, is_admin=lambda: True),
+        keyword="Ali",
+        page=2,
+        page_size=25,
+    )
+
+    assert repository.list_users.await_args.kwargs["include_hidden"] is True
 
 
 @pytest.mark.parametrize(
@@ -422,6 +445,7 @@ async def test_resource_user_candidates_keep_department_space_scope(repository):
         page=1,
         page_size=20,
         restrict_dept_path="/10/",
+        include_hidden=False,
     )
 
 
