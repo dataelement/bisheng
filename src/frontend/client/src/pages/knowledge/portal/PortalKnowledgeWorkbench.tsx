@@ -2135,11 +2135,39 @@ export default function PortalKnowledgeWorkbench() {
                 setSelectedFile(null);
                 setActivePanel(null);
                 setAiDrawerOpen(false);
+                setSummaryExpanded(false);
                 return;
             }
+            // Normal file-list / tree click opens the AI chat drawer by default.
+            // Search-result previews keep it closed (see handleOpenSourceFile).
             setSelectedFile(file);
+            setActivePanel(null);
+            setAiDrawerOpen(true);
+            setSummaryExpanded(false);
         },
         [],
+    );
+
+    const handleSelectSpace = useCallback(
+        (space: KnowledgeSpace) => {
+            setActiveSpace(space);
+            setSearchParams(
+                (prev: URLSearchParams) => {
+                    const next = new URLSearchParams(prev);
+                    next.set("spaceId", String(space.id));
+                    next.delete("folderId");
+                    next.delete("folderName");
+                    next.delete("fileId");
+                    next.delete("fileName");
+                    next.delete("documentId");
+                    next.delete("name");
+                    next.delete("openNonce");
+                    return next;
+                },
+                { replace: true },
+            );
+        },
+        [setActiveSpace, setSearchParams],
     );
 
     const sourceSpaceFromActive = useMemo(() => {
@@ -2863,7 +2891,7 @@ export default function PortalKnowledgeWorkbench() {
                         onCollapseSidebar={() => setSpaceSidebarCollapsed(true)}
                         onToggleGroup={(groupKey) => setExpandedGroups((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }))}
                         onOpenCreateSpace={handleOpenCreateSpace}
-                        onSelectSpace={setActiveSpace}
+                        onSelectSpace={handleSelectSpace}
                         onSpaceMenuOpenChange={(spaceId, open) => {
                             setSpaceMenuOpenId(open ? spaceId : null);
                             // 打开菜单时才按需查询该空间的操作权限（懒查询）
