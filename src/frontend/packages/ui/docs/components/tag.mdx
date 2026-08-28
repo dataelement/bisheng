@@ -1,0 +1,237 @@
+---
+status: done
+component: Tag
+---
+
+# 标签 Tag
+
+给一个对象**贴一个词**：它是什么类型、处在什么状态、属于哪个分类。贴的是「属性」，不是操作——要触发动作用[按钮](/components/button)，要说「有多少 / 有没有新的」用[徽标](/components/badge)。组件库 `@bisheng/ui` 导出 **`Tag`**。规范全文见「文档 → 组件规范 → 标签 Tag」。
+
+**壳把规范写死的部分**：只有**浅底深字**一种画法，没有描边款、实底款、灰底款；圆角 4px（带头像时切胶囊）；两档高度 20 / 24，字号 12、字重 400——选中态也不加粗（加粗会让标签变宽跳位）；展示型**没有悬停态**（变色暗示可点，点了没反应就是骗了一次）；可关闭的 × 点了立即移除、不弹二次确认；可选中标签固定灰底起步、选中变品牌 7% 底，且不与语义色组合；状态点跟字同色、**不做呼吸动画**；触屏上可选中标签统一升到 24px、热区 ≥44px。这些没有 prop。产品口径：**一个对象最多贴 3 个**，多出来的收进详情。
+
+## 语义色
+
+按「贴什么」选色，**一种语义全站只用一个色**：「已完成」到哪都是绿的，不许这页绿那页蓝。普通分类词一律 `default` 灰——颜色没有语义就只剩装饰，读者会去猜「蓝比绿高级吗」。
+
+```tsx
+import React from 'react';
+import { Tag } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+    <Tag>知识库</Tag>
+    <Tag color="brand">推荐</Tag>
+    <Tag color="success">已完成</Tag>
+    <Tag color="warning">待处理</Tag>
+    <Tag color="danger">已驳回</Tag>
+  </div>
+);
+```
+
+## 两处固定例外
+
+`approving`（审批中蓝）与 `skill`（技能紫）是色板里仅有的两个**不随蓝⇄绿主题切换**的标签色（见「文档 → 设计规范 → 色彩 Color」§4）。它们不是 `brand` 的别名：`brand` 会跟着主题变绿，而这两个不会。**业务不得再新增固定色**——需要新的固定色是改规范，不是加一个 prop。
+
+```tsx
+import React from 'react';
+import { Tag } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+    <Tag color="approving">审批中</Tag>
+    <Tag color="skill">技能</Tag>
+  </div>
+);
+```
+
+## 两档尺寸
+
+默认 `medium`（24px）：卡片、详情页头、筛选面板。`small`（20px）给表格单元格、列表行内、输入框内的已选项——32px 输入框里放 20px 标签，上下各留 6px 才不顶边。**同一组标签用同一档**：一行里 20 和 24 混着放，参差比什么都显眼。
+
+```tsx
+import React from 'react';
+import { Tag } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 12, justifyItems: 'start' }}>
+    <div style={{ display: 'flex', gap: 8 }}>
+      <Tag size="small">知识库</Tag>
+      <Tag size="small" color="success">已完成</Tag>
+    </div>
+    <div style={{ display: 'flex', gap: 8 }}>
+      <Tag>知识库</Tag>
+      <Tag color="success">已完成</Tag>
+    </div>
+  </div>
+);
+```
+
+## 状态点
+
+列表里每行都要标状态、要一眼扫过去时，用 `dot`：一个小圆点顶在词前面，**颜色跟字走**，所以选好 `color` 就够了，不必再决定一次点是什么色。点随档 4 / 6px。列表这种场景用 `small`——知识空间的文件列表画的就是这个。
+
+```tsx
+import React from 'react';
+import { Tag } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 12, justifyItems: 'start' }}>
+    <Tag size="small" dot>未启动</Tag>
+    <Tag size="small" dot color="brand">解析中</Tag>
+    <Tag size="small" dot color="success">已完成</Tag>
+    <Tag size="small" dot color="warning">待处理</Tag>
+    <Tag size="small" dot color="danger">失败</Tag>
+  </div>
+);
+```
+
+## 可关闭
+
+已选项、筛选条件、已上传文件用它。点 × **立即移除、不弹确认**——移除已选项本来就可逆，再选一次就回来了；真不可逆的（删除标签定义）是按钮走二次确认。这类场景**一律 default 灰**：它们是用户自己挑的，不需要颜色再说一遍。`closeLabel` 是 × 的无障碍名称，文案由调用方给。
+
+```tsx
+import React from 'react';
+import { Tag } from '@bisheng/ui';
+
+export default () => {
+  const [items, setItems] = React.useState(['产品手册', '接口文档', '常见问题']);
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, minHeight: 24 }}>
+      {items.map((item) => (
+        <Tag
+          key={item}
+          closable
+          closeLabel={`移除 ${item}`}
+          onClose={() => setItems((prev) => prev.filter((i) => i !== item))}
+        >
+          {item}
+        </Tag>
+      ))}
+      {items.length === 0 && <span style={{ fontSize: 12, color: 'rgb(var(--text-3))' }}>都移除了，刷新页面重来</span>}
+    </div>
+  );
+};
+```
+
+## 可选中
+
+筛选面板、兴趣挑选用它：点一下切换，**切换即生效**，可多选。选中态已经占用了颜色这一层信号，所以可选中标签**不与语义色组合**——传了 `color` 也不生效。键盘 Space / Enter 同样切换。
+
+```tsx
+import React from 'react';
+import { Tag } from '@bisheng/ui';
+
+const OPTIONS = ['运行中', '已完成', '已停止', '草稿'];
+
+export default () => {
+  const [checked, setChecked] = React.useState(['运行中']);
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {OPTIONS.map((option) => (
+        <Tag
+          key={option}
+          checkable
+          checked={checked.includes(option)}
+          onChange={(next) =>
+            setChecked((prev) => (next ? [...prev, option] : prev.filter((i) => i !== option)))
+          }
+        >
+          {option}
+        </Tag>
+      ))}
+    </div>
+  );
+};
+```
+
+## 前缀 icon 与头像
+
+`icon` 跟随档位 12 / 14px，颜色跟文字走；**同一组标签要么都带 icon 要么都不带**。前缀位只有一个：`dot` / `icon` / `avatar` 三选一，优先级 `avatar` > `dot` > `icon`。`avatar` 把标签切成胶囊——头像是圆的，方角包圆像漏了一角——并固定用灰底：一张脸加一个语义色是在一个小方块里说两件事。两者二选一，别同时挂。
+
+```tsx
+import React from 'react';
+import { Tag } from '@bisheng/ui';
+import { Outlined } from 'bisheng-icons';
+
+const Face = () => (
+  <span
+    style={{
+      display: 'inline-flex',
+      width: '100%',
+      height: '100%',
+      background: 'rgb(var(--brand-500))',
+      color: '#fff',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: 10,
+    }}
+  >
+    张
+  </span>
+);
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+    <Tag icon={<Outlined.Skill />} color="skill">技能</Tag>
+    <Tag icon={<Outlined.Check />} color="success">已通过</Tag>
+    <Tag avatar={<Face />}>张三</Tag>
+    <Tag avatar={<Face />} closable closeLabel="移除 张三">张三</Tag>
+  </div>
+);
+```
+
+## 定宽截断
+
+默认不限宽、不截断。只有定宽的列（表格）才传 `maxWidth`：文字省略号截断，**并且只在真的溢出时**才挂 Tooltip 显示全文。让标签换行去撑高表格行，整张表的节奏就全乱了。
+
+```tsx
+import React from 'react';
+import { Tag } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+    <Tag maxWidth={80}>短标签</Tag>
+    <Tag maxWidth={80}>很长很长的标签文字</Tag>
+  </div>
+);
+```
+
+## 禁用
+
+展示型与可关闭标签变灰、× 点不动；可选中标签停止切换，**已选中的禁用项保留品牌字色**——不然用户看不出自己之前挑了哪些。
+
+```tsx
+import React from 'react';
+import { Tag } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+    <Tag disabled>知识库</Tag>
+    <Tag color="success" disabled>已完成</Tag>
+    <Tag closable disabled closeLabel="移除 产品手册">产品手册</Tag>
+    <Tag checkable disabled>未选中</Tag>
+    <Tag checkable defaultChecked disabled>已选中</Tag>
+  </div>
+);
+```
+
+## API
+
+| 属性 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `children` | `ReactNode` | — | 标签的词，2～6 个字，名词或状态词。文案由调用方给 |
+| `size` | `'small' \| 'medium'` | `'medium'` | 20 / 24px 两档。同一组标签用同一档 |
+| `color` | `'default' \| 'brand' \| 'success' \| 'warning' \| 'danger' \| 'approving' \| 'skill'` | `'default'` | 后两个是仅有的固定例外色（审批中蓝 / 技能紫），不随蓝⇄绿主题切换。`checkable` 与 `avatar` 下不生效 |
+| `dot` | `boolean` | `false` | 词前面加一个状态点，随档 4 / 6px，颜色跟字走。优先于 `icon`，`avatar` 存在时不生效 |
+| `icon` | `ReactNode` | — | 前缀 icon，随档 12 / 14px，跟文字色走。`dot` / `avatar` 存在时不生效 |
+| `avatar` | `ReactNode` | — | 前缀头像，14 / 16px 裁圆；标签跟着切胶囊并固定灰底 |
+| `closable` | `boolean` | `false` | 右侧 × 移除自己。**在 `checkable` 上不生效**（button 套 button 是非法 HTML） |
+| `onClose` | `(e: MouseEvent) => void` | — | 点 × 触发，立即移除、不弹二次确认 |
+| `closeLabel` | `string` | `'Remove'` | × 的无障碍名称，如「移除 产品手册」 |
+| `checkable` | `boolean` | `false` | 点一下切换选中。渲染为 `<button aria-pressed>` |
+| `checked` / `defaultChecked` / `onChange` | `boolean` / `boolean` / `(checked: boolean) => void` | — / `false` / — | 受控 / 非受控选中态 |
+| `maxWidth` | `number` | — | 定宽列才传：省略号截断，**且只在真的溢出时**才挂 Tooltip |
+| `disabled` | `boolean` | `false` | 变灰并停止交互；选中的禁用项保留品牌字色 |
+| `className` | `string` | — | 落在标签本体 |
+
+以下几件事组件已经替业务页决定了，不开 prop：只有浅底深字一款（没有描边 / 实底 / 灰底）、圆角 4px（带头像时胶囊）、字重恒为 400、展示型不响应悬停、可选中固定灰底起步且选中恒为品牌 7% 底、状态点跟字同色且不做动画、触屏上可选中标签升到 medium 并扩出 ≥44px 热区。标签之间的间距由使用方的容器给，组件不带外边距。

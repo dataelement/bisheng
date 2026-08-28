@@ -1,0 +1,190 @@
+---
+status: done
+component: Badge
+---
+
+# 徽标 Badge
+
+只回答两个问题：**有没有新的**、**有多少**。它贴在入口或文字旁边，本身不承载内容——要说「这是什么 / 什么状态」（包括列表里那种小圆点 + 一个词的状态）用[标签](/components/tag)，判别表在「文档 → 组件规范 → 徽标 Badge」§1。组件库 `@bisheng/ui` 导出 **`Badge`**。规范全文见「文档 → 组件规范 → 徽标 Badge」。
+
+**壳把规范写死的部分**：只有一档尺寸（数字 16px、圆点 6px），不随宿主放大；数字圆角一律 full——**一位数是正圆，两位起拉成胶囊**，挂角款和行内款同一个值；数字**原样显示、不折算**（没有 99+），位数多了胶囊自己变宽；等宽数字，9→10 不抖；挂角款自带 1px 页面底色描边，压在彩色图标或头像上也看得清；传 0 什么都不渲染（`showZero` 例外）；徽标不可点、无悬停、无焦点、出现消失不加转场——点击全归宿主。这些没有 prop。
+
+## 挂角：数字与红点
+
+给徽标传 `children`，它就挂在这个宿主的右上角；不传就是行内的独立数字（见下一节）。挂角款默认 `danger` 实底白字——**红底白字全站只表示「等你处理」**，报数量的地方别用它。`dot` 只说「有新的」，不说几个。
+
+```tsx
+import React from 'react';
+import { Badge, Button } from '@bisheng/ui';
+import { Outlined } from 'bisheng-icons';
+
+export default () => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
+    <Badge count={3}>
+      <Outlined.Bell size={24} />
+    </Badge>
+    <Badge count={128}>
+      <Outlined.Bell size={24} />
+    </Badge>
+    <Badge dot>
+      <Outlined.Bell size={24} />
+    </Badge>
+    <Badge count={5}>
+      <Button variant="outlined">待审批</Button>
+    </Badge>
+  </div>
+);
+```
+
+## 行内红点
+
+行里没有可挂的东西（没有图标、没有头像）时，红点不传 `children`，自己占一列——通知列表的未读标记就是这个。红点**恒为 danger**，`color` 在这一款上没有意义：红点的全部意思就是「有新的」。
+
+```tsx
+import React from 'react';
+import { Badge } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 8, maxWidth: 420 }}>
+    {[
+      { text: '@admin 通过了你对「应急管理」的审批申请', unread: true },
+      { text: '@admin 通过了你对「测试」的审批申请', unread: false },
+    ].map((item) => (
+      <div key={item.text} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <span style={{ flex: 1, fontSize: 14 }}>{item.text}</span>
+        {item.unread && <Badge dot className="mt-2" />}
+      </div>
+    ))}
+  </div>
+);
+```
+
+## 独立数字
+
+不传 `children` 就是行内款：页签、菜单项后面报条目数。它默认 `brand`（品牌 5% 透明底 + 品牌字），因为它只是**告诉你有多少**，不催人做事。[标签页](/components/tabs) 的计数徽标画的就是这个。
+
+```tsx
+import React from 'react';
+import { Badge, Tabs } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 24, justifyItems: 'start' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      全部频道 <Badge count={12} />
+    </span>
+    <Tabs
+      items={[
+        { key: 'all', label: '全部', badge: 12 },
+        { key: 'mine', label: '我的', badge: 3 },
+        { key: 'archived', label: '已归档' },
+      ]}
+    />
+  </div>
+);
+```
+
+## 0 不显示
+
+计数原样传进来即可，**不必自己判空**：0 和不传都不渲染。只有「0 本身就是结果」（筛选结果数）才显式开 `showZero`——未读数为 0 时还挂个灰圈，是在提醒一件不存在的事。
+
+```tsx
+import React from 'react';
+import { Badge } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      未读 <Badge count={0} />（不渲染）
+    </span>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      筛选结果 <Badge count={0} showZero />
+    </span>
+  </div>
+);
+```
+
+## 圆形宿主与微调
+
+宿主是头像或圆形图标按钮时传 `circle`，徽标中心收到圆周上，不再飘在圆外的空白里。宿主的图形没有撑满自己的盒子时，用 `offset={[x, y]}` 按 px 微调，正数向右 / 向下。
+
+```tsx
+import React from 'react';
+import { Badge } from '@bisheng/ui';
+
+const Avatar = () => (
+  <span
+    style={{
+      display: 'inline-flex',
+      width: 32,
+      height: 32,
+      borderRadius: '50%',
+      background: 'rgb(var(--brand-500))',
+      color: '#fff',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: 12,
+    }}
+  >
+    张
+  </span>
+);
+
+export default () => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
+    <Badge dot circle>
+      <Avatar />
+    </Badge>
+    <Badge count={9} circle>
+      <Avatar />
+    </Badge>
+    <Badge count={9} circle offset={[-2, 2]}>
+      <Avatar />
+    </Badge>
+  </div>
+);
+```
+
+## 禁用
+
+宿主点不了，红点还亮着就是在催人做一件做不了的事。宿主 disabled 时给徽标传 `disabled`，它一起变灰。
+
+```tsx
+import React from 'react';
+import { Badge, Button } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
+    <Badge count={5}>
+      <Button variant="outlined">待审批</Button>
+    </Badge>
+    <Badge count={5} disabled>
+      <Button variant="outlined" disabled>
+        待审批
+      </Button>
+    </Badge>
+  </div>
+);
+```
+
+## 无障碍
+
+挂角徽标对读屏是**装饰**（`aria-hidden`）：数字念在宿主上更完整，宿主自己写合并描述，如 `aria-label="通知，3 条未读"`。
+
+## API
+
+| 属性 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `children` | `ReactNode` | — | 宿主。**传了就是挂角款，不传就是行内的独立数字**——两者只差一个宿主，没有第二个开关 |
+| `count` | `number` | — | 有多少。原样显示，不折算、不截断；`0` 与不传都不渲染 |
+| `dot` | `boolean` | `false` | 只说「有新的」，不说几个。有宿主就挂角，没宿主就行内独立占一列；恒为 danger 色。`count` 显示时它不生效 |
+| `color` | `'danger' \| 'brand'` | 红点与挂角数字 `danger` / 独立数字 `brand` | 按语义选，不按位置选：红底白字只表示「等你处理」 |
+| `showZero` | `boolean` | `false` | 让 `0` 显示出来。只给「0 本身就是结果」的场合（筛选结果数） |
+| `circle` | `boolean` | `false` | 宿主是圆的（头像、圆形图标按钮），徽标中心收到圆周上 |
+| `offset` | `[number, number]` | — | 挂角款按 px 微调，正数向右 / 向下 |
+| `disabled` | `boolean` | `false` | 随宿主一起变灰 |
+| `className` | `string` | — | 挂角款落在外层包裹，其余落在徽标本体 |
+| `badgeClassName` | `string` | — | 任何款式下都落在徽标本体 |
+
+以下几件事组件已经替业务页决定了，不开 prop：尺寸恒为 16px / 6px（徽标不随宿主长大）、数字不做 `99+` 折算、徽标不可点也不响应悬停与焦点（点击全归宿主）、出现消失不加转场。要「点徽标清未读」，把它接在宿主上。
+
+**状态点不在这里**：一行「运行中 / 失败」说的是这个对象**是什么状态**，是贴在它身上的属性，归 [标签](/components/tag) 的 `dot` 款。
