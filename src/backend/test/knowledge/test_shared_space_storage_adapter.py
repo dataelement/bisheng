@@ -8,7 +8,7 @@ change") is asserted throughout.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -616,7 +616,7 @@ class TestCreateDeleteRoutingGuards:
         assert knowledge.collection_name is not None
         assert knowledge.collection_name != "col_space_shared_1"
 
-    def test_delete_skips_shared_store_when_routed(self):
+    def test_delete_skips_actual_shared_store_when_routed(self):
         from bisheng.api.services import knowledge_imp
 
         knowledge = SimpleNamespace(
@@ -635,6 +635,7 @@ class TestCreateDeleteRoutingGuards:
         ), patch.object(knowledge_imp, "KnowledgeRag") as rag:
             knowledge_imp.delete_vector_files([1, 2], knowledge)
             rag.init_knowledge_milvus_vectorstore_sync.assert_not_called()
+            rag.init_knowledge_es_vectorstore_sync.assert_not_called()
 
         with patch(
             "bisheng.knowledge.rag.shared_space_storage.get_shared_storage_conf",
@@ -642,3 +643,65 @@ class TestCreateDeleteRoutingGuards:
         ), patch.object(knowledge_imp, "KnowledgeRag") as rag:
             knowledge_imp.delete_vector_files([1, 2], knowledge)
             rag.init_knowledge_milvus_vectorstore_sync.assert_called_once()
+
+    def test_delete_cleans_legacy_staging_stores_after_shared_cutover(self):
+        from bisheng.api.services import knowledge_imp
+
+        knowledge = SimpleNamespace(
+            id=33,
+            type=KnowledgeTypeEnum.SPACE.value,
+            tenant_id=1,
+            collection_name="col_legacy_33",
+            index_name="idx_legacy_33",
+        )
+        milvus = SimpleNamespace(col=MagicMock())
+        es = SimpleNamespace(client=MagicMock())
+        es.client.indices.exists.return_value = True
+        with patch(
+            "bisheng.knowledge.rag.shared_space_storage.get_shared_storage_conf",
+            return_value=_conf(),
+        ), patch(
+            "bisheng.knowledge.rag.shared_space_storage.load_tenant_routing_snapshot",
+            return_value=_snapshot(),
+        ), patch.object(knowledge_imp, "KnowledgeRag") as rag:
+            rag.init_knowledge_milvus_vectorstore_sync.return_value = milvus
+            rag.init_knowledge_es_vectorstore_sync.return_value = es
+
+            knowledge_imp.delete_vector_files([1, 2], knowledge)
+
+        milvus.col.delete.assert_called_once_with(
+            expr="document_id in [1, 2]", timeout=10
+        )
+        es.client.delete_by_query.assert_called_once_with(
+            index="idx_legacy_33",
+            query={"terms": {"metadata.document_id": [1, 2]}},
+        )
+
+    def test_delete_protects_shared_collection_but_cleans_legacy_index(self):
+        from bisheng.api.services import knowledge_imp
+
+        knowledge = SimpleNamespace(
+            id=33,
+            type=KnowledgeTypeEnum.SPACE.value,
+            tenant_id=1,
+            collection_name="col_space_shared_1",
+            index_name="idx_legacy_33",
+        )
+        es = SimpleNamespace(client=MagicMock())
+        es.client.indices.exists.return_value = True
+        with patch(
+            "bisheng.knowledge.rag.shared_space_storage.get_shared_storage_conf",
+            return_value=_conf(),
+        ), patch(
+            "bisheng.knowledge.rag.shared_space_storage.load_tenant_routing_snapshot",
+            return_value=_snapshot(),
+        ), patch.object(knowledge_imp, "KnowledgeRag") as rag:
+            rag.init_knowledge_es_vectorstore_sync.return_value = es
+
+            knowledge_imp.delete_vector_files([1, 2], knowledge)
+
+        rag.init_knowledge_milvus_vectorstore_sync.assert_not_called()
+        es.client.delete_by_query.assert_called_once_with(
+            index="idx_legacy_33",
+            query={"terms": {"metadata.document_id": [1, 2]}},
+        )
