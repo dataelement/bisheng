@@ -647,6 +647,10 @@ export function ArticleList({
                                     onChannelSelect={onChannelSelect}
                                     onCreateChannel={onCreateChannel}
                                     onChannelSquare={onGoChannelSquare}
+                                    // Browse mode (full-width pane): title on the pane's absolute
+                                    // midpoint. Reading mode (detail open): flex centering that
+                                    // truncates to the space between the side groups.
+                                    absoluteCenterTitle={isGridMode}
                                     infoContent={
                                         <div className="space-y-1.5 text-sm text-gray-800">
                                             <div><span className="text-gray-400">{localize("com_subscription.channel_name_colon")}</span>

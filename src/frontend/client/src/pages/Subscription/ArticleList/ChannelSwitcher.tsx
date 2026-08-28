@@ -18,6 +18,10 @@ interface ChannelSwitcherProps {
     onChannelSquare?: () => void;
     /** Channel info shown in a tooltip when hovering the title (PC variant only). */
     infoContent?: ReactNode;
+    /** PC only: center the title on the pane's absolute midpoint (browse mode, no
+     *  article open). When false, it centers between its flex neighbours instead
+     *  (reading mode, where the narrowed pane needs exact-truncation). */
+    absoluteCenterTitle?: boolean;
     /** "default" = PC top-title popover. "mobile" = H5 below-titlebar fixed panel + backdrop. */
     variant?: "default" | "mobile";
     /** Mobile: CSS `top` for the dropdown panel (just under the H5 title bar). */
@@ -49,6 +53,7 @@ export function ChannelSwitcher({
     onCreateChannel,
     onChannelSquare,
     infoContent,
+    absoluteCenterTitle = false,
     variant = "default",
     mobileTopOffset,
     open: openProp,
@@ -275,7 +280,7 @@ export function ChannelSwitcher({
     }
 
     return (
-        <div className="flex h-10 w-full min-w-0 items-center gap-6">
+        <div className="relative flex h-10 w-full min-w-0 items-center gap-6">
             {/* Borderless 切换频道 + 创建频道 group. -ml-2 cancels the buttons' own px-2
                 so their labels sit optically flush with the 40px content edge. */}
             <div className="-ml-2 flex shrink-0 items-center gap-1">
@@ -323,15 +328,24 @@ export function ChannelSwitcher({
                     </button>
                 ) : null}
             </div>
-            {/* Centered channel-name title — a real flex sibling (24px gaps via the row's
-                gap-6), so it truncates to exactly the space its neighbours leave. Info
-                tooltip is scoped to the name; the name itself is not clickable —
-                switching lives on the left button. */}
-            <div className="flex min-w-0 flex-1 justify-center">
+            {/* Channel-name title. Info tooltip is scoped to the name; the name itself
+                is not clickable — switching lives on the left button.
+                Two centering modes (per design):
+                - pane full width (no article open): ABSOLUTE center of the content pane,
+                  clamped so it still cannot overlap the side groups;
+                - article detail open (narrow pane): a flex sibling with 24px gaps that
+                  truncates to exactly the space its neighbours leave. */}
+            <div
+                className={cn(
+                    absoluteCenterTitle
+                        ? "pointer-events-none absolute left-1/2 top-1/2 flex max-w-[clamp(96px,calc(100%-480px),600px)] -translate-x-1/2 -translate-y-1/2"
+                        : "flex min-w-0 flex-1 justify-center",
+                )}
+            >
                 <Tooltip open={Boolean(infoContent) && infoOpen && !open} onOpenChange={setInfoOpen}>
                     <TooltipTrigger asChild>
                         <span
-                            className="max-w-full truncate text-[32px] font-bold leading-[40px] text-text-1"
+                            className="pointer-events-auto max-w-full truncate text-[32px] font-bold leading-[40px] text-text-1"
                             style={{ fontFamily: SERIF_FONT_STACK }}
                             onMouseEnter={() => setInfoOpen(true)}
                             onMouseLeave={() => setInfoOpen(false)}
@@ -346,9 +360,10 @@ export function ChannelSwitcher({
                     ) : null}
                 </Tooltip>
             </div>
+            {absoluteCenterTitle ? <div className="min-w-0 flex-1" aria-hidden /> : null}
             {/* Invisible clone of the persistent 频道/广场 toggle (overlaid at the row's
                 right edge by Subscription/index): reserves exactly its width, so the
-                title keeps a real 24px gap to it and never slides underneath. */}
+                flex-mode title keeps a real 24px gap to it and never slides underneath. */}
             <div className="invisible shrink-0" aria-hidden>
                 <ChannelSquareTabs active="channel" />
             </div>

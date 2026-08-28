@@ -250,7 +250,7 @@ export function ChannelDiscoveryHome({
         // 创建频道 action remains (nothing to switch to).
         return (
             <div className="shrink-0 px-10 pt-5 pb-4">
-                <div className="flex h-10 w-full min-w-0 items-center gap-6">
+                <div className="relative flex h-10 w-full min-w-0 items-center gap-6">
                     {/* -ml-2 cancels the button's own px-2 so the label sits optically
                         flush with the 40px content edge (same as the channel page). */}
                     <button
@@ -261,12 +261,15 @@ export function ChannelDiscoveryHome({
                         <Outlined.Plus className="size-4 shrink-0" />
                         <span>{localize("com_subscription.create_channel")}</span>
                     </button>
+                    {/* Absolute pane-midpoint centering — the discovery page never opens a
+                        side detail pane, so the title always sits on the true center. */}
                     <h1
-                        className="min-w-0 flex-1 truncate text-center text-[32px] font-bold leading-[40px] text-text-1"
+                        className="pointer-events-none absolute left-1/2 top-1/2 max-w-[clamp(96px,calc(100%-480px),600px)] -translate-x-1/2 -translate-y-1/2 truncate text-[32px] font-bold leading-[40px] text-text-1"
                         style={{ fontFamily: SERIF_FONT_STACK }}
                     >
                         {menuNames.channel}
                     </h1>
+                    <div className="min-w-0 flex-1" aria-hidden />
                     {/* Invisible clone of the persistent 频道/广场 toggle (overlaid at the
                         row's right edge by Subscription/index) — reserves its width so the
                         centered title keeps a real 24px gap to it. */}
