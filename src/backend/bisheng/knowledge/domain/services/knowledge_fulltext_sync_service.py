@@ -88,13 +88,11 @@ class KnowledgeFulltextSyncService:
 
         document = None
         if action == KnowledgeFulltextProjectionAction.UPSERT:
-            index_name = await self.source_repository.get_knowledge_index_name(snapshot.knowledge_id)
-            if not index_name:
+            chunk_source = await self.source_repository.get_chunk_source(snapshot)
+            if chunk_source is None:
                 raise KnowledgeFulltextProjectionNotReadyError("knowledge RAG index is not ready")
             chunks = await self.chunk_repository.list_all(
-                index_name=index_name,
-                file_id=file_id,
-                knowledge_id=snapshot.knowledge_id,
+                source=chunk_source,
             )
             rebuilt = self.rebuild_service.rebuild(
                 chunks,
