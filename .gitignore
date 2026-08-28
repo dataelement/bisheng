@@ -9,6 +9,7 @@ yarn-error.log*
 lerna-debug.log*
 qdrant_storage
 autogen_coding/
+.coaligne/
 
 # Mac
 .DS_Store
