@@ -257,6 +257,7 @@ export default function PortalKnowledgeWorkbench() {
     const [folderDraft, setFolderDraft] = useState("新建文件夹");
     const [activePanel, setActivePanel] = useState<PanelKey | null>(null);
     const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
+    const [openAiAfterDeepLinkRestore, setOpenAiAfterDeepLinkRestore] = useState(false);
     const [summaryExpanded, setSummaryExpanded] = useState(false);
     const [tagModalOpen, setTagModalOpen] = useState(false);
     const [permissionOpen, setPermissionOpen] = useState(false);
@@ -459,6 +460,30 @@ export default function PortalKnowledgeWorkbench() {
         preview.loading,
         restoringDeepLinkKey,
         selectedFile,
+    ]);
+
+    // Parent-driven "进入知识库" file deep links should open the AI drawer once restore finishes,
+    // regardless of whether the file lives at the root or inside a sub-folder.
+    useEffect(() => {
+        if (!openAiAfterDeepLinkRestore) return;
+        if (!portalDeepLinkTarget?.fileId || isDeepLinkRestoring) return;
+        if (
+            !selectedFile ||
+            String(selectedFile.id) !== portalDeepLinkTarget.fileId ||
+            String(selectedFile.spaceId) !== portalDeepLinkTarget.spaceId
+        ) {
+            return;
+        }
+        setAiDrawerOpen(true);
+        setActivePanel(null);
+        setOpenAiAfterDeepLinkRestore(false);
+    }, [
+        openAiAfterDeepLinkRestore,
+        isDeepLinkRestoring,
+        portalDeepLinkTarget,
+        selectedFile,
+        setActivePanel,
+        setAiDrawerOpen,
     ]);
 
     useEffect(() => {
@@ -1464,6 +1489,7 @@ export default function PortalKnowledgeWorkbench() {
                     next.set("openNonce", openNonce);
                     return next;
                 }, { replace: true });
+                setOpenAiAfterDeepLinkRestore(true);
             }
         };
         window.addEventListener("message", handlePortalMessage);
@@ -2285,6 +2311,7 @@ export default function PortalKnowledgeWorkbench() {
         setSelectedFile(null);
         setActivePanel(null);
         setAiDrawerOpen(false);
+        setOpenAiAfterDeepLinkRestore(false);
         setSummaryExpanded(false);
         setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
         // Deep-link open used to leave searchMode with a single-file result set.
