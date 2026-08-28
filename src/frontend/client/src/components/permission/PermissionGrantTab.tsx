@@ -27,6 +27,7 @@ import { RelationModelOption, RelationSelect } from "./RelationSelect";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
 import { SubjectSearchUserTree } from "./SubjectSearchUserTree";
+import { Loader2 } from "lucide-react";
 
 const SUBJECT_TYPES: SubjectType[] = ["user", "department"];
 const DEFAULT_MODELS: RelationModelOption[] = [
@@ -144,6 +145,7 @@ interface PermissionGrantTabProps {
   allowedSubjectTypes?: SubjectType[];
   grantSubjectScopeSpaceId?: string;
   permissionApi?: PermissionGrantApiAdapter;
+  onBulkLoadingChange?: (loading: boolean) => void;
 }
 
 const DEFAULT_PERMISSION_API: PermissionGrantApiAdapter = {
@@ -169,6 +171,7 @@ export function PermissionGrantTab({
   allowedSubjectTypes,
   grantSubjectScopeSpaceId,
   permissionApi,
+  onBulkLoadingChange,
 }: PermissionGrantTabProps) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
@@ -337,6 +340,10 @@ export function PermissionGrantTab({
     setSelectedDepartmentSummary([]);
   };
 
+  const handleUserTreeBulkLoadingChange = useCallback((loading: boolean) => {
+    onBulkLoadingChange?.(loading);
+  }, [onBulkLoadingChange]);
+
   const loadKnowledgeSpaceDepartments = useCallback(
     (config?: { signal?: AbortSignal }) =>
       getKnowledgeSpaceGrantDepartments(grantSubjectScopeResourceId || resourceId, config),
@@ -438,6 +445,7 @@ export function PermissionGrantTab({
             loadDepartments={grantSubjectScopeResourceId ? loadKnowledgeSpaceDepartments : undefined}
             grantDepartmentsApi={activePermissionApi.getGrantDepartments}
             grantUsersApi={activePermissionApi.getGrantUsers}
+            onBulkLoadingChange={handleUserTreeBulkLoadingChange}
           />
         )}
         {effectiveSubjectType === "user" && !usesKnowledgeUserTree && (

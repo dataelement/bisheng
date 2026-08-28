@@ -413,9 +413,9 @@ const SortableHeader = ({
     return (
         <TableHead
             className={cn(
-                "group sticky top-0 my-2 cursor-pointer select-none overflow-visible bg-[#F3F4F6] p-0 pr-3",
+                "group sticky top-0 cursor-pointer select-none overflow-visible bg-[#F3F4F6] p-0 pr-3",
                 "transition-colors hover:bg-[#f2f3f5]",
-                isSticky && "z-20"
+                isSticky ? "z-30" : "z-20"
             )}
             style={{
                 width,
@@ -434,7 +434,7 @@ const SortableHeader = ({
         >
             <div
                 className={cn(
-                    "flex min-w-0 items-center gap-1.5 pl-3",
+                    "flex h-full min-w-0 items-center gap-1.5 pl-3",
                     leadingBorder && "border-l",
                     headerAlignEnd && "w-full justify-end"
                 )}
@@ -508,7 +508,7 @@ function FileTableHeader({
             <TableRow className="hover:bg-transparent border-none">
                 {/* 复选框列 — 左侧固定 */}
                 <TableHead
-                    className="sticky left-0 top-0 z-20 bg-[#F3F4F6] p-0 text-center"
+                    className="sticky left-0 top-0 z-30 bg-[#F3F4F6] p-0 text-center"
                     style={{ width: columnWidths.checkbox, minWidth: columnWidths.checkbox, maxWidth: columnWidths.checkbox }}
                 >
                     <div className="flex h-full items-center justify-center">
@@ -551,7 +551,7 @@ function FileTableHeader({
                 {/* 状态（移至文件大小原位置） */}
                 {showStatusColumn && (
                     <TableHead
-                        className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                        className="sticky top-0 z-20 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                         style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
                     >
                         <div className="flex items-center gap-1.5 border-l pl-3">
@@ -563,7 +563,7 @@ function FileTableHeader({
                 {shougangEnabled && enableEncodingClassification && (
                     <>
                         <TableHead
-                            className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                            className="sticky top-0 z-20 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                             style={{
                                 width: columnWidths.fileType,
                                 minWidth: columnWidths.fileType,
@@ -576,7 +576,7 @@ function FileTableHeader({
                             <ResizeHandle columnKey="fileType" onResizeStart={onResizeStart} />
                         </TableHead>
                         <TableHead
-                            className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                            className="sticky top-0 z-20 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                             style={{
                                 width: columnWidths.businessDomain,
                                 minWidth: columnWidths.businessDomain,
@@ -593,7 +593,7 @@ function FileTableHeader({
 
                 {/* 标签 — 不排序 */}
                 <TableHead
-                    className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    className="sticky top-0 z-20 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                     style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
                 >
                     <div className="flex items-center gap-1.5 border-l pl-3">
@@ -604,7 +604,7 @@ function FileTableHeader({
                 {/* 文件编码 — 仅 shougang 模式显示 */}
                 {shougangEnabled && (
                     <TableHead
-                        className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                        className="sticky top-0 z-20 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                         style={{
                             width: columnWidths.fileEncoding,
                             minWidth: columnWidths.fileEncoding,
@@ -620,7 +620,7 @@ function FileTableHeader({
 
                 {/* 入库方式 */}
                 <TableHead
-                    className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    className="sticky top-0 z-20 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                     style={{
                         width: columnWidths.ingestMethod,
                         minWidth: columnWidths.ingestMethod,
@@ -635,7 +635,7 @@ function FileTableHeader({
 
                 {/* 上传人 */}
                 <TableHead
-                    className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    className="sticky top-0 z-20 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                     style={{ width: columnWidths.uploader, minWidth: columnWidths.uploader, maxWidth: columnWidths.uploader }}
                 >
                     <div className="flex items-center gap-1.5 border-l pl-3">
@@ -646,7 +646,7 @@ function FileTableHeader({
 
                 {/* 原始上传人 */}
                 <TableHead
-                    className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    className="sticky top-0 z-20 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                     style={{
                         width: columnWidths.originalUploader,
                         minWidth: columnWidths.originalUploader,
@@ -661,7 +661,7 @@ function FileTableHeader({
 
                 {/* 更新人 */}
                 <TableHead
-                    className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    className="sticky top-0 z-20 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                     style={{ width: columnWidths.updater, minWidth: columnWidths.updater, maxWidth: columnWidths.updater }}
                 >
                     <div className="flex items-center gap-1.5 border-l pl-3">
@@ -695,22 +695,14 @@ function FileTableHeader({
                 >
                     {localize("com_knowledge.file_size")}</SortableHeader>
 
-                {/* 当前页文件总数统计（含子文件夹） */}
                 <TableHead
-                    className="sticky top-0 bg-[#F3F4F6] p-0 text-right font-normal text-[15px] text-[#545A60]"
+                    className="relative bg-[#F3F4F6] p-0 text-right font-normal text-[15px] text-[#545A60]"
                     style={{ width: columnWidths.totalCount, minWidth: columnWidths.totalCount, maxWidth: columnWidths.totalCount }}
                 >
                     <div className="flex h-full items-center justify-end border-l pl-3 pr-3">
-                        共计 {totalFileCount} 文件
+                        操作
                     </div>
                 </TableHead>
-
-                {/* 行末锚点列（零宽）— 与 tbody 列结构保持一致，避免首屏出现多余空白 */}
-                <TableHead
-                    className="border-none bg-[#F3F4F6] p-0"
-                    style={{ width: 0, minWidth: 0, maxWidth: 0 }}
-                />
-
             </TableRow>
         </TableHeader>
     );

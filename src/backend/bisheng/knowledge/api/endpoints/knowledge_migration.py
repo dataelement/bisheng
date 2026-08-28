@@ -25,12 +25,13 @@ async def list_migration_spaces(
     purpose: Literal["source", "target"] = "source",
     keyword: str | None = None,
     space_level: str | None = None,
+    preserve_link: bool = False,
+    source_level: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     service: KnowledgeMigrationService = Depends(get_knowledge_migration_service),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    del purpose
     return resp_200(
         await service.list_spaces(
             login_user,
@@ -38,6 +39,9 @@ async def list_migration_spaces(
             space_level=space_level,
             page=page,
             page_size=page_size,
+            purpose=purpose,
+            preserve_link=preserve_link,
+            source_level=source_level,
         )
     )
 

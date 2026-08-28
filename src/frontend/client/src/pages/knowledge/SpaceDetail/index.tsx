@@ -42,6 +42,8 @@ import {
 import store from "~/store";
 import { SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
+import { BatchCategoryModal } from "./BatchCategoryModal";
+import { BatchBusinessDomainModal } from "./BatchBusinessDomainModal";
 import { FileCard } from "./FileCard";
 import { FilePublishDialog } from "./FilePublishDialog";
 import { FileShareDialog } from "./FileShareDialog";
@@ -65,6 +67,7 @@ import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarList
 import { cn, getFullWidthLength } from "~/utils";
 import type { PortalFileCategoryGroupOption, PortalFileCategoryOption } from "../portal/types";
 import type { BusinessDomainOptionItem } from "../portal/uploadMetadata";
+import { DEFAULT_PORTAL_FILE_CATEGORY_GROUPS } from "../portal/constants";
 
 const WEB_LINK_DUPLICATE_ERROR_CODES = new Set([18021, 18023]);
 
@@ -264,6 +267,8 @@ export function KnowledgeSpaceContent({
     const [editingTagsFileId, setEditingTagsFileId] = useState<string | null>(null);
     const [violationFile, setViolationFile] = useState<KnowledgeFile | null>(null);
     const [isBatchTagging, setIsBatchTagging] = useState(false);
+    const [isBatchCategorying, setIsBatchCategorying] = useState(false);
+    const [isBatchSettingBusinessDomain, setIsBatchSettingBusinessDomain] = useState(false);
     const [contextMenuOpen, setContextMenuOpen] = useState(false);
     const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
 
@@ -1245,6 +1250,46 @@ export function KnowledgeSpaceContent({
         setIsBatchTagging(true);
     };
 
+    const handleBatchCategory = () => {
+        setIsBatchCategorying(true);
+    };
+
+    const handleBatchBusinessDomain = () => {
+        setIsBatchSettingBusinessDomain(true);
+    };
+
+    // Patch the display fields in place (mirrors how tag-increment patches
+    // file.tags) so the list reflects the change immediately, instead of
+    // relying solely on the cross-component dispatchKnowledgeSpaceFilesRefresh
+    // event to trigger a re-fetch. The dispatch still fires afterward as a
+    // background reconciliation in case anything else is listening.
+    const handleBatchCategorySaved = (
+        updatedFileIds: string[],
+        applied: { fileCategoryCode: string; fileSubcategoryCode: string },
+    ) => {
+        setSelectedFiles(new Set());
+        if (updatedFileIds.length > 0) {
+            const updatedIdSet = new Set(updatedFileIds);
+            setFiles((prev) => prev.map((file) => (
+                updatedIdSet.has(file.id)
+                    ? { ...file, fileSubcategoryCode: applied.fileSubcategoryCode }
+                    : file
+            )));
+        }
+        dispatchKnowledgeSpaceFilesRefresh(space.id);
+    };
+
+    const handleBatchBusinessDomainSaved = (updatedFileIds: string[], businessDomainCode: string) => {
+        setSelectedFiles(new Set());
+        if (updatedFileIds.length > 0) {
+            const updatedIdSet = new Set(updatedFileIds);
+            setFiles((prev) => prev.map((file) => (
+                updatedIdSet.has(file.id) ? { ...file, businessDomainCode } : file
+            )));
+        }
+        dispatchKnowledgeSpaceFilesRefresh(space.id);
+    };
+
     const handleSingleDownload = async (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
         const isFolder = file?.type === FileType.FOLDER;
@@ -1327,7 +1372,7 @@ export function KnowledgeSpaceContent({
     // Called after tags are saved successfully — patch tags in place only.
     // Do not trigger a parent list reload here: portal reloadFiles clears search
     // state, and useFileManager already keeps search params on loadFiles.
-    const handleTagsSaved = (tags?: FileTag[], context?: { fileIds?: string[] }) => {
+    const handleTagsSaved = (tags?: FileTag[], context?: { fileIds?: string[]; mode?: "increment" | "overwrite" }) => {
         const savedFileId = editingTagsFileId;
         const batchFileIds = context?.fileIds ?? [];
         setEditingTagsFileId(null);
@@ -1341,7 +1386,17 @@ export function KnowledgeSpaceContent({
             return;
         }
 
-        if (batchFileIds.length > 0 && tags && tags.length > 0) {
+        if (batchFileIds.length === 0) return;
+
+        if (context?.mode === "overwrite") {
+            // Overwrite replaces each file's whole tag set (possibly with an
+            // empty one), which an in-place merge can't express correctly —
+            // pull the fresh state instead of trying to patch it.
+            dispatchKnowledgeSpaceFilesRefresh(space.id);
+            return;
+        }
+
+        if (tags && tags.length > 0) {
             const batchIdSet = new Set(batchFileIds);
             setFiles((prev) => prev.map((file) => {
                 if (!batchIdSet.has(file.id)) return file;
@@ -1655,6 +1710,8 @@ export function KnowledgeSpaceContent({
                 onBatchDownload={handleBatchDownload}
                 canBatchDownload={canBatchDownload}
                 onBatchTag={handleBatchTag}
+                onBatchCategory={enableEncodingClassification ? handleBatchCategory : undefined}
+                onBatchBusinessDomain={enableEncodingClassification ? handleBatchBusinessDomain : undefined}
                 onBatchRetry={handleBatchRetry}
                 onBatchDelete={handleBatchDelete}
                 canBatchDelete={canBatchDelete}
@@ -1996,6 +2053,24 @@ export function KnowledgeSpaceContent({
                         ? (displayFiles.find(f => f.id === editingTagsFileId)?.tags || [])
                         : []
                 }
+            />
+
+            <BatchCategoryModal
+                open={isBatchCategorying}
+                onClose={() => setIsBatchCategorying(false)}
+                spaceId={space.id}
+                fileIds={Array.from(selectedFiles)}
+                fileCategoryGroups={fileCategoryGroups ?? DEFAULT_PORTAL_FILE_CATEGORY_GROUPS}
+                onSaved={handleBatchCategorySaved}
+            />
+
+            <BatchBusinessDomainModal
+                open={isBatchSettingBusinessDomain}
+                onClose={() => setIsBatchSettingBusinessDomain(false)}
+                spaceId={space.id}
+                fileIds={Array.from(selectedFiles)}
+                businessDomainOptions={businessDomainOptions}
+                onSaved={handleBatchBusinessDomainSaved}
             />
 
             <Dialog open={!!violationFile} onOpenChange={(open) => {

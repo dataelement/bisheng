@@ -21,6 +21,7 @@ import {
     addSpaceTagApi,
     updateFileTagsApi,
     batchUpdateTagsApi,
+    batchOverwriteTagsApi,
     getKnowledgeSpaceReviewTagVisibilityApi,
     recommendFileTagsApi,
     resolveSpaceTagAddHint,
@@ -37,8 +38,11 @@ interface EditTagsModalProps {
      * Called after tags are saved successfully so parent can refresh.
      * In single-file mode the updated tag list is passed so the parent can
      * patch that file's tags in place instead of refetching the whole list.
+     * ``mode`` is only meaningful in batch mode: "increment" means ``tags``
+     * were appended to whatever the file already had; "overwrite" means
+     * ``tags`` is now the file's *entire* tag set and must replace, not merge.
      */
-    onSaved?: (tags?: FileTag[], context?: { fileIds?: string[] }) => void;
+    onSaved?: (tags?: FileTag[], context?: { fileIds?: string[]; mode?: "increment" | "overwrite" }) => void;
     spaceId: string;
     /** Single file edit — mutually exclusive with fileIds */
     fileId?: string | null;
@@ -333,6 +337,11 @@ export function EditTagsModal({
     };
 
     const isBatchMode = !!(fileIds && fileIds.length > 0);
+    // Batch mode only: whether saving appends to each file's existing tags
+    // ("increment") or replaces each file's tag set entirely ("overwrite").
+    // Single-file edit is always a full replace (update_file_tags), so this
+    // choice has no meaning outside batch mode.
+    const [tagEditMode, setTagEditMode] = useState<"increment" | "overwrite">("increment");
     const recommendedTags = useMemo(() => spaceTagsToRecommendedItems(spaceTags), [spaceTags]);
     const boundLibraryTagNameCount = countBoundLibraryTagNamesForLimit(spaceTags, recommendedTags);
 
@@ -343,6 +352,7 @@ export function EditTagsModal({
     useEffect(() => {
         if (!isOpen || !spaceId) return;
         setInputValue("");
+        setTagEditMode("increment");
         syncSelectedTagIds(new Set(initialTagIds));
         syncSelectedReviewTagIds(new Set());
         tagMetaRef.current = new Map();
@@ -745,19 +755,34 @@ export function EditTagsModal({
                 selectedReviewTagIdsRef.current,
             );
             if (isBatchMode && fileIds) {
-                await batchUpdateTagsApi(spaceId, {
-                    file_ids: fileIds.map(Number),
-                    tag_ids: approvedTagIds,
-                    review_tag_ids: reviewTagIds,
+                if (tagEditMode === "overwrite") {
+                    await batchOverwriteTagsApi(spaceId, {
+                        file_ids: fileIds.map(Number),
+                        tag_ids: approvedTagIds,
+                        review_tag_ids: reviewTagIds,
+                    });
+                } else {
+                    await batchUpdateTagsApi(spaceId, {
+                        file_ids: fileIds.map(Number),
+                        tag_ids: approvedTagIds,
+                        review_tag_ids: reviewTagIds,
+                    });
+                }
+                showToast({
+                    message: localize(
+                        tagEditMode === "overwrite"
+                            ? "com_knowledge.batch_overwrite_tags_success"
+                            : "com_knowledge.batch_add_tags_success",
+                    ),
+                    status: "success",
                 });
-                showToast({ message: localize("com_knowledge.batch_add_tags_success"), status: "success" });
                 const addedTags = buildSavedFileTags(
                     resolvedIds,
                     spaceTags,
                     tagMetaRef,
                     selectedReviewTagIdsRef.current,
                 );
-                onSaved?.(addedTags, { fileIds });
+                onSaved?.(addedTags, { fileIds, mode: tagEditMode });
             } else if (fileId) {
                 await updateFileTagsApi(spaceId, fileId, approvedTagIds, reviewTagIds);
                 showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
@@ -873,7 +898,7 @@ export function EditTagsModal({
             >
                 <DialogHeader className="h-auto shrink-0 space-y-0 border-b border-[#EBECF0] px-6 py-4 text-left touch-mobile:px-4 touch-mobile:pt-6 touch-mobile:pb-4">
                     <DialogTitle className="text-[16px] leading-6 font-medium text-[#212121]">
-                        {isBatchMode ? localize("com_knowledge.batch_add_tags") : localize("com_knowledge.edit_tags")}
+                        {isBatchMode ? localize("com_knowledge.batch_edit_tags") : localize("com_knowledge.edit_tags")}
                     </DialogTitle>
                     <button
                         type="button"
@@ -888,6 +913,34 @@ export function EditTagsModal({
                     data-testid="edit-tags-dialog-body"
                     className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-6 pt-5 pb-5 touch-mobile:px-4 touch-mobile:pt-5 touch-mobile:pb-5"
                 >
+                {isBatchMode && (
+                    <div className="flex items-center gap-3 pb-1 text-[13px] text-[#4E5969]">
+                        <span className="shrink-0">{localize("com_knowledge.batch_tag_mode_label")}</span>
+                        <div className="flex overflow-hidden rounded-[6px] border border-[#EBECF0]">
+                            {(["increment", "overwrite"] as const).map((mode) => (
+                                <button
+                                    key={mode}
+                                    type="button"
+                                    data-testid={`batch-tag-mode-${mode}`}
+                                    onClick={() => setTagEditMode(mode)}
+                                    className={`px-3 py-1 text-[13px] transition-colors ${tagEditMode === mode
+                                        ? "bg-primary/10 text-primary font-medium"
+                                        : "bg-white text-[#4E5969] hover:bg-[#F2F3F5]"
+                                        }`}
+                                >
+                                    {mode === "increment"
+                                        ? localize("com_knowledge.batch_tag_mode_increment")
+                                        : localize("com_knowledge.batch_tag_mode_overwrite")}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                {isBatchMode && tagEditMode === "overwrite" && (
+                    <div className="flex items-start gap-0.5 pb-1 text-[12px] leading-5 text-[#F53F3F]">
+                        <span>{localize("com_knowledge.batch_tag_mode_overwrite_hint")}</span>
+                    </div>
+                )}
                 {reviewTagEnabled && (
                     <div className="flex items-start gap-0.5 text-[12px] leading-5 text-[#F53F3F]">
                         <span className="shrink-0">***</span>

@@ -2209,6 +2209,76 @@ export async function batchUpdateTagsApi(
 }
 
 /**
+ * Batch overwrite tags for files — replaces each file's tag set instead of appending.
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/batch-tag-overwrite
+ */
+export async function batchOverwriteTagsApi(
+    space_id: string,
+    data: { file_ids: number[]; tag_ids: number[]; review_tag_ids?: number[] }
+): Promise<void> {
+    return withKnowledgeMutationLog(
+        "batch-overwrite-tags",
+        {
+            method: "POST",
+            space_id,
+            file_ids: data.file_ids,
+            tag_ids: data.tag_ids,
+            review_tag_ids: data.review_tag_ids,
+        },
+        async () => {
+            await request.post(`/api/v1/knowledge/space/${space_id}/files/batch-tag-overwrite`, {
+                file_ids: data.file_ids,
+                tag_ids: data.tag_ids,
+                review_tag_ids: data.review_tag_ids ?? [],
+            });
+        }
+    );
+}
+
+/**
+ * Batch update file classification (category / subcategory).
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/batch-category
+ */
+export async function batchUpdateFileCategoryApi(
+    space_id: string,
+    data: { file_ids: number[]; file_category_code?: string | null; file_subcategory_code?: string | null }
+): Promise<{ updated_file_ids: number[]; skipped: { file_id: number; reason: string }[] }> {
+    return withKnowledgeMutationLog(
+        "batch-update-file-category",
+        { method: "POST", space_id, file_ids: data.file_ids },
+        async () => {
+            const res = await request.post(`/api/v1/knowledge/space/${space_id}/files/batch-category`, {
+                file_ids: data.file_ids,
+                file_category_code: data.file_category_code ?? null,
+                file_subcategory_code: data.file_subcategory_code ?? null,
+            }) as any;
+            return res?.data ?? { updated_file_ids: [], skipped: [] };
+        }
+    );
+}
+
+/**
+ * Batch update file business domain.
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/batch-business-domain
+ */
+export async function batchUpdateFileBusinessDomainApi(
+    space_id: string,
+    data: { file_ids: number[]; business_domain_code: string }
+): Promise<{ updated_file_ids: number[]; skipped: { file_id: number; reason: string }[] }> {
+    return withKnowledgeMutationLog(
+        "batch-update-file-business-domain",
+        { method: "POST", space_id, file_ids: data.file_ids },
+        async () => {
+            const res = await request.post(`/api/v1/knowledge/space/${space_id}/files/batch-business-domain`, {
+                file_ids: data.file_ids,
+                business_domain_code: data.business_domain_code,
+            }) as any;
+            return res?.data ?? { updated_file_ids: [], skipped: [] };
+        }
+    );
+}
+
+/**
  * Subscribe to a space
  * POST /api/v1/knowledge/space/{space_id}/subscribe
  */

@@ -8,7 +8,7 @@ change") is asserted throughout.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -17,7 +17,17 @@ from bisheng.knowledge.domain.contracts.errors import (
     SharedStorageContractError,
     SharedStorageErrorCode,
 )
-from bisheng.knowledge.domain.contracts.retrieval_scope import BackendQueryFilter
+from bisheng.knowledge.domain.contracts.retrieval_scope import (
+    BackendQueryFilter,
+    CanonicalGenerationConstraint,
+)
+from bisheng.knowledge.domain.contracts.shared_space_storage import (
+    ContentDeleteRequest,
+    ContentProjectionIdentity,
+    ContentUpsertRequest,
+    MembershipUpdateRequest,
+    SharedContentChunk,
+)
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
     KnowledgeSpaceSharedStorageRouting,
@@ -163,6 +173,8 @@ class TestSharedSpaceStorageReader:
                 {
                     "canonical_document_id": 10,
                     "canonical_version_id": 100,
+                    "content_generation": 4,
+                    "membership_generation": 5,
                     "chunk_index": 0,
                     "text": "hello",
                 },
@@ -180,6 +192,8 @@ class TestSharedSpaceStorageReader:
                                 "metadata": {
                                     "canonical_document_id": 10,
                                     "canonical_version_id": 100,
+                                    "content_generation": 4,
+                                    "membership_generation": 5,
                                     "chunk_index": 0,
                                 },
                             },
@@ -206,6 +220,7 @@ class TestSharedSpaceStorageReader:
         assert len(hits) == 1
         assert hits[0].canonical_document_id == 10
         assert hits[0].score == pytest.approx(0.42)
+        assert hits[0].content_generation == 4
 
     async def test_es_search_returns_canonical_hits(self):
         reader = self._reader()
@@ -296,6 +311,31 @@ class TestESQueryRendering:
         assert "ARRAY_CONTAINS(knowledge_ids, 11)" in expr
         assert "canonical_document_id in [10, 11]" in expr
 
+    def test_generation_constraints_are_pushed_to_both_backends(self):
+        constraint = CanonicalGenerationConstraint(
+            canonical_document_id=10,
+            canonical_version_id=100,
+            content_generation=4,
+            membership_generation=5,
+        )
+        filter_ = BackendQueryFilter(
+            tenant_id=1,
+            requested_space_ids=(11,),
+            routing_version=3,
+            generation_constraints=(constraint,),
+        )
+
+        expr = SharedSpaceStorageReader._full_expr(filter_)
+        es_filter = SharedSpaceStorageReader._es_bool_filter(filter_)
+
+        assert "content_generation == 4" in expr
+        assert "membership_generation == 5" in expr
+        generation_bool = es_filter[-1]["bool"]
+        assert generation_bool["minimum_should_match"] == 1
+        terms = generation_bool["should"][0]["bool"]["filter"]
+        assert {"term": {"metadata.content_generation": 4}} in terms
+        assert {"term": {"metadata.membership_generation": 5}} in terms
+
 
 class TestSchemaFingerprint:
     def test_fingerprint_stable_for_same_spec(self):
@@ -320,6 +360,162 @@ class TestSchemaFingerprint:
                     index_params={"index_type": "HNSW"}, knowledge_ids_max_capacity=4096)
         other = sss.SharedStoreSchemaSpec(dimension=768, **{k: v for k, v in base.items() if k != "dimension"})
         assert sss.SharedStoreSchemaSpec(**base).fingerprint() != other.fingerprint()
+
+
+class TestMembershipRewrite:
+    async def test_retry_converges_duplicate_canonical_chunks(self):
+        writer = object.__new__(sss.MilvusEsSharedSpaceStorageWriter)
+        writer.tenant_id = 1
+        writer.schema_spec = sss.SharedStoreSchemaSpec(
+            embedding_model_id=7,
+            dimension=1024,
+        )
+        asserted_models = []
+        writer._assert_writable = lambda **kwargs: (
+            asserted_models.append(kwargs.get("embedding_model_id")) or _snapshot()
+        )
+        writer._check_membership_limits = lambda _ids: None
+        writer._conf = lambda: _conf()
+        writer.es_client = SimpleNamespace(
+            indices=SimpleNamespace(refresh=lambda **_kwargs: None)
+        )
+        calls = []
+
+        async def milvus(method, *args, **kwargs):
+            calls.append((method, args, kwargs))
+            if method == "query":
+                return [
+                    {
+                        "pk": 1,
+                        "canonical_version_id": 9,
+                        "content_generation": 2,
+                        "membership_generation": 1,
+                        "chunk_index": 0,
+                        "knowledge_ids": [10],
+                    },
+                    {
+                        "pk": 2,
+                        "canonical_version_id": 9,
+                        "content_generation": 2,
+                        "membership_generation": 2,
+                        "chunk_index": 0,
+                        "knowledge_ids": [10],
+                    },
+                    {
+                        "pk": 3,
+                        "canonical_version_id": 9,
+                        "content_generation": 2,
+                        "membership_generation": 2,
+                        "chunk_index": 1,
+                        "knowledge_ids": [10],
+                    },
+                ]
+            return None
+
+        async def es(method, *args, **kwargs):
+            calls.append((f"es:{method}", args, kwargs))
+
+        writer._run_milvus = milvus
+        writer._run_es = es
+
+        await writer.update_membership(
+            MembershipUpdateRequest(
+                tenant_id=1,
+                canonical_document_id=8,
+                knowledge_ids=(10, 20),
+                membership_generation=3,
+                content_generation=2,
+            )
+        )
+
+        insert = next(call for call in calls if call[0] == "insert")
+        delete_call = next(call for call in calls if call[0] == "delete")
+        es_update = next(call for call in calls if call[0] == "es:update_by_query")
+        assert len(insert[1][0]) == 2
+        assert {row["chunk_index"] for row in insert[1][0]} == {0, 1}
+        assert {row["embedding_model_id"] for row in insert[1][0]} == {"7"}
+        assert delete_call[2]["expr"] == "pk in [1, 2, 3]"
+        assert es_update[2]["script"]["params"]["embedding_model_id"] == "7"
+        assert asserted_models == [7]
+
+    async def test_delete_validates_bound_embedding_model(self):
+        async def noop(*_args, **_kwargs):
+            return None
+
+        writer = object.__new__(sss.MilvusEsSharedSpaceStorageWriter)
+        writer.tenant_id = 1
+        writer.schema_spec = sss.SharedStoreSchemaSpec(
+            embedding_model_id=7,
+            dimension=1024,
+        )
+        asserted_models = []
+        writer._assert_writable = lambda **kwargs: (
+            asserted_models.append(kwargs.get("embedding_model_id")) or _snapshot()
+        )
+        writer._run_milvus = noop
+        writer._run_es = noop
+
+        await writer.delete_content(
+            ContentDeleteRequest(tenant_id=1, canonical_document_id=8)
+        )
+
+        assert asserted_models == [7]
+
+
+class TestContentRewrite:
+    async def test_complete_milvus_generation_still_removes_stale_es_chunks(self):
+        writer = object.__new__(sss.MilvusEsSharedSpaceStorageWriter)
+        writer.tenant_id = 1
+        writer.schema_spec = sss.SharedStoreSchemaSpec(
+            embedding_model_id=7,
+            dimension=4,
+        )
+        writer._assert_writable = lambda **_kwargs: _snapshot()
+        writer._check_membership_limits = lambda _ids: None
+        writer._conf = lambda: _conf()
+        writer._current_membership_generation = AsyncMock(return_value=3)
+        calls = []
+
+        async def milvus(method, *args, **kwargs):
+            calls.append((method, args, kwargs))
+            if method == "query":
+                return [{"chunk_index": 0}, {"chunk_index": 1}]
+            return None
+
+        async def es(method, *args, **kwargs):
+            calls.append((f"es:{method}", args, kwargs))
+
+        writer._run_milvus = milvus
+        writer._run_es = es
+
+        await writer.upsert_content(
+            ContentUpsertRequest(
+                identity=ContentProjectionIdentity(
+                    tenant_id=1,
+                    canonical_document_id=8,
+                    canonical_version_id=9,
+                    content_file_id=10,
+                    content_generation=2,
+                    embedding_model_id="7",
+                ),
+                knowledge_ids=(10,),
+                chunks=(
+                    SharedContentChunk(chunk_index=0, text="first", vector=[0.1] * 4),
+                    SharedContentChunk(chunk_index=1, text="second", vector=[0.2] * 4),
+                ),
+            )
+        )
+
+        deletes = [call for call in calls if call[0] == "es:delete_by_query"]
+        assert deletes[0][2]["query"]["bool"]["must_not"] == [
+            {"terms": {"metadata.chunk_index": [0, 1]}}
+        ]
+        assert {
+            "term": {"metadata.content_generation": 2}
+        } in deletes[0][2]["query"]["bool"]["filter"]
+        assert {
+            "range": {"metadata.content_generation": {"lt": 2}}
+        } in deletes[1][2]["query"]["bool"]["filter"]
 
 
 class TestSharedCollectionBootstrap:

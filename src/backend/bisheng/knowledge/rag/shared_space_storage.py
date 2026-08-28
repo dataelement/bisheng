@@ -665,6 +665,12 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             self._embedding_model_validator(int(str(embedding_model_id)), snapshot)
             return
         if embedding_model_id is None:
+            if snapshot.embedding_model_id is not None:
+                raise SharedStorageContractError(
+                    SharedStorageErrorCode.EMBEDDING_MODEL_MISMATCH,
+                    "embedding model is required for shared content writes",
+                    tenant_id=self.tenant_id,
+                )
             return
         if snapshot.embedding_model_id is not None and int(str(embedding_model_id)) != int(
             snapshot.embedding_model_id
@@ -909,6 +915,26 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
                 )
             await self._run_es("index", **es_kwargs)
 
+        stale_same_gen_query = self._es_doc_query(
+            tenant_id=identity.tenant_id,
+            canonical_document_id=identity.canonical_document_id,
+            canonical_version_id=identity.canonical_version_id,
+            content_generation=identity.content_generation,
+        )
+        if expected_indexes:
+            stale_same_gen_query["bool"]["must_not"] = [
+                {
+                    "terms": {
+                        "metadata.chunk_index": sorted(expected_indexes)
+                    }
+                }
+            ]
+        await self._run_es(
+            "delete_by_query",
+            index=es_index,
+            query=stale_same_gen_query,
+        )
+
         # 3) delete the old generation now that the new one is durable
         await self._run_milvus("delete", expr=older_gen_expr)
         await self._run_es(
@@ -947,7 +973,9 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             raise ValueError(
                 f"writer is bound to tenant {self.tenant_id}, got {request.tenant_id}"
             )
-        snapshot = self._assert_writable()
+        snapshot = self._assert_writable(
+            embedding_model_id=self.schema_spec.embedding_model_id
+        )
         knowledge_ids = validate_knowledge_ids(request.knowledge_ids, allow_empty=True)
 
         if not knowledge_ids:
@@ -997,15 +1025,33 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             return
 
         old_pks = [int(item[SHARED_MILVUS_PK_FIELD]) for item in existing]
-        new_rows = []
+        deduplicated: dict[tuple[int, int, int], dict[str, Any]] = {}
         for item in existing:
+            identity = (
+                int(item.get("canonical_version_id") or 0),
+                int(item.get("content_generation") or 0),
+                int(item.get("chunk_index") or 0),
+            )
+            current = deduplicated.get(identity)
+            if current is None or (
+                int(item.get("membership_generation") or 0),
+                int(item.get(SHARED_MILVUS_PK_FIELD) or 0),
+            ) > (
+                int(current.get("membership_generation") or 0),
+                int(current.get(SHARED_MILVUS_PK_FIELD) or 0),
+            ):
+                deduplicated[identity] = item
+        new_rows = []
+        for item in deduplicated.values():
             row = dict(item)
             row.pop(SHARED_MILVUS_PK_FIELD, None)
             row["knowledge_ids"] = [int(k) for k in knowledge_ids]
             row["membership_generation"] = int(request.membership_generation)
+            row["embedding_model_id"] = str(self.schema_spec.embedding_model_id)
             new_rows.append(row)
 
-        # write the rewritten rows first, then drop the old ones by pk
+        # Insert one row per canonical chunk, then remove every old PK. A
+        # retry after a crash between these calls converges duplicates too.
         await self._run_milvus("insert", new_rows)
         await self._run_milvus(
             "delete", expr=f"{SHARED_MILVUS_PK_FIELD} in {old_pks}"
@@ -1014,12 +1060,14 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         script = {
             "source": (
                 "ctx._source.metadata.knowledge_ids = params.knowledge_ids; "
-                "ctx._source.metadata.membership_generation = params.membership_generation"
+                "ctx._source.metadata.membership_generation = params.membership_generation; "
+                "ctx._source.metadata.embedding_model_id = params.embedding_model_id"
             ),
             "lang": "painless",
             "params": {
                 "knowledge_ids": [int(k) for k in knowledge_ids],
                 "membership_generation": int(request.membership_generation),
+                "embedding_model_id": str(self.schema_spec.embedding_model_id),
             },
         }
         es_index = self._es_index(snapshot)
@@ -1039,7 +1087,9 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             raise ValueError(
                 f"writer is bound to tenant {self.tenant_id}, got {request.tenant_id}"
             )
-        snapshot = self._assert_writable()
+        snapshot = self._assert_writable(
+            embedding_model_id=self.schema_spec.embedding_model_id
+        )
         expr = self._doc_expr(
             tenant_id=request.tenant_id,
             canonical_document_id=request.canonical_document_id,
@@ -1100,7 +1150,7 @@ def build_shared_space_components_for_tenant(
         knowledge_ids_max_capacity=conf.knowledge_ids_max_capacity,
     )
     alias = _ensure_shared_milvus_connection()
-    name = shared_collection_name(tenant_id, conf)
+    name = snapshot.collection_name or shared_collection_name(tenant_id, conf)
     if not utility.has_collection(name, using=alias):
         raise SharedStorageContractError(
             SharedStorageErrorCode.SCHEMA_FINGERPRINT_MISMATCH,
@@ -1149,6 +1199,8 @@ def build_shared_space_components_for_tenant(
 _READER_OUTPUT_FIELDS = [
     "canonical_document_id",
     "canonical_version_id",
+    "content_generation",
+    "membership_generation",
     "chunk_index",
     "text",
 ]
@@ -1225,6 +1277,16 @@ class SharedSpaceStorageReader:
         if filter_.canonical_version_ids:
             ids = ", ".join(str(int(v)) for v in filter_.canonical_version_ids)
             expr += f" and canonical_version_id in [{ids}]"
+        if filter_.generation_constraints:
+            generation_expr = " or ".join(
+                "(canonical_document_id == "
+                f"{int(item.canonical_document_id)} and canonical_version_id == "
+                f"{int(item.canonical_version_id)} and content_generation == "
+                f"{int(item.content_generation)} and membership_generation == "
+                f"{int(item.membership_generation)})"
+                for item in filter_.generation_constraints
+            )
+            expr += f" and ({generation_expr})"
         return expr
 
     @staticmethod
@@ -1250,6 +1312,51 @@ class SharedSpaceStorageReader:
                     }
                 }
             )
+        if filter_.generation_constraints:
+            clauses.append(
+                {
+                    "bool": {
+                        "minimum_should_match": 1,
+                        "should": [
+                            {
+                                "bool": {
+                                    "filter": [
+                                        {
+                                            "term": {
+                                                "metadata.canonical_document_id": int(
+                                                    item.canonical_document_id
+                                                )
+                                            }
+                                        },
+                                        {
+                                            "term": {
+                                                "metadata.canonical_version_id": int(
+                                                    item.canonical_version_id
+                                                )
+                                            }
+                                        },
+                                        {
+                                            "term": {
+                                                "metadata.content_generation": int(
+                                                    item.content_generation
+                                                )
+                                            }
+                                        },
+                                        {
+                                            "term": {
+                                                "metadata.membership_generation": int(
+                                                    item.membership_generation
+                                                )
+                                            }
+                                        },
+                                    ]
+                                }
+                            }
+                            for item in filter_.generation_constraints
+                        ],
+                    }
+                }
+            )
         return clauses
 
     @staticmethod
@@ -1257,7 +1364,11 @@ class SharedSpaceStorageReader:
         hits: list[CanonicalChunkHit] = []
         for row in rows:
             entity = getattr(row, "entity", row)
-            get = entity.get if hasattr(entity, "get") else (lambda k, d=None: getattr(entity, k, d))
+            get = (
+                entity.get
+                if hasattr(entity, "get")
+                else (lambda key, default=None, item=entity: getattr(item, key, default))
+            )
             hits.append(
                 CanonicalChunkHit(
                     canonical_document_id=CanonicalDocumentId(int(get("canonical_document_id"))),
@@ -1265,6 +1376,8 @@ class SharedSpaceStorageReader:
                     chunk_index=int(get("chunk_index", 0) or 0),
                     score=float(getattr(row, "distance", getattr(row, "score", 0.0)) or 0.0),
                     text=get("text"),
+                    content_generation=int(get("content_generation", 0) or 0),
+                    membership_generation=int(get("membership_generation", 0) or 0),
                 )
             )
         return hits
@@ -1309,7 +1422,14 @@ class SharedSpaceStorageReader:
                     "filter": self._es_bool_filter(filter_),
                 }
             },
-            "_source": ["metadata.canonical_document_id", "metadata.canonical_version_id", "metadata.chunk_index", "text"],
+            "_source": [
+                "metadata.canonical_document_id",
+                "metadata.canonical_version_id",
+                "metadata.content_generation",
+                "metadata.membership_generation",
+                "metadata.chunk_index",
+                "text",
+            ],
         }
         kwargs: dict[str, Any] = {"index": snapshot.index_name or shared_index_name(self.tenant_id), "body": body}
         if (
@@ -1336,6 +1456,8 @@ class SharedSpaceStorageReader:
                     chunk_index=int(metadata.get("chunk_index", 0) or 0),
                     score=float(row.get("_score", 0.0) or 0.0),
                     text=source.get("text"),
+                    content_generation=int(metadata.get("content_generation", 0) or 0),
+                    membership_generation=int(metadata.get("membership_generation", 0) or 0),
                 )
             )
         return hits

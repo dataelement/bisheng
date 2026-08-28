@@ -19,6 +19,29 @@ class KnowledgeFulltextChunk(StrictSchema):
     text: str
 
 
+class KnowledgeFulltextChunkSource(StrictSchema):
+    index_name: str
+    file_id: int = Field(gt=0)
+    knowledge_id: int = Field(gt=0)
+    tenant_id: int | None = Field(default=None, gt=0)
+    canonical_document_id: int | None = Field(default=None, gt=0)
+    canonical_version_id: int | None = Field(default=None, gt=0)
+    content_generation: int | None = Field(default=None, ge=0)
+    routing: str | None = None
+
+    @property
+    def shared(self) -> bool:
+        return all(
+            value is not None
+            for value in (
+                self.tenant_id,
+                self.canonical_document_id,
+                self.canonical_version_id,
+                self.content_generation,
+            )
+        )
+
+
 class KnowledgeFulltextRebuiltContent(StrictSchema):
     content: str
     chunk_count: int = Field(ge=1)
@@ -52,6 +75,7 @@ class KnowledgeFulltextEngagementBulkResult(StrictSchema):
 
 class KnowledgeFulltextFileSnapshot(StrictSchema):
     file_id: int
+    tenant_id: int = Field(default=1, gt=0)
     knowledge_id: int
     file_type: str
     status: str
@@ -59,6 +83,7 @@ class KnowledgeFulltextFileSnapshot(StrictSchema):
     logical_document_id: int | None = None
     document_version_id: int | None = None
     content_file_id: int | None = None
+    content_generation: int = Field(default=0, ge=0)
     is_primary_version: bool = True
     file_name: str
     alias_name: str | None = None

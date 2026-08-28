@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type DragEvent, type SetStateAction } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { useRecoilValue } from "recoil";
@@ -18,6 +18,7 @@ import {
     deleteSpaceApi,
     downloadWatermarkedKnowledgeFileApi,
     getFilePreviewApi,
+    getFolderParentPathApi,
     getPortalFilePreviewApi,
     getPublicSpaceFilePermissionsApi,
     getSpaceChildrenApi,
@@ -2134,12 +2135,151 @@ export default function PortalKnowledgeWorkbench() {
                 setSelectedFile(null);
                 setActivePanel(null);
                 setAiDrawerOpen(false);
+                setSummaryExpanded(false);
                 return;
             }
+            // Normal file-list / tree click opens the AI chat drawer by default.
+            // Search-result previews keep it closed (see handleOpenSourceFile).
             setSelectedFile(file);
+            setActivePanel(null);
+            setAiDrawerOpen(true);
+            setSummaryExpanded(false);
         },
         [],
     );
+
+    const handleSelectSpace = useCallback(
+        (space: KnowledgeSpace) => {
+            setActiveSpace(space);
+            setSearchParams(
+                (prev: URLSearchParams) => {
+                    const next = new URLSearchParams(prev);
+                    next.set("spaceId", String(space.id));
+                    next.delete("folderId");
+                    next.delete("folderName");
+                    next.delete("fileId");
+                    next.delete("fileName");
+                    next.delete("documentId");
+                    next.delete("name");
+                    next.delete("openNonce");
+                    return next;
+                },
+                { replace: true },
+            );
+        },
+        [setActiveSpace, setSearchParams],
+    );
+
+    const sourceSpaceFromActive = useMemo(() => {
+        if (selectedFile && activeSpace && String(selectedFile.spaceId) === String(activeSpace.id)) {
+            return activeSpace;
+        }
+        return null;
+    }, [activeSpace, selectedFile]);
+
+    const { data: sourceSpaceInfo } = useQuery<KnowledgeSpace>({
+        queryKey: ["portalSelectedFileSpaceInfo", selectedFile?.spaceId],
+        queryFn: async () => {
+            const spaceId = selectedFile?.spaceId;
+            if (!spaceId) throw new Error("spaceId is required");
+            return getSpaceInfoApi(spaceId);
+        },
+        enabled: Boolean(selectedFile?.spaceId) && !sourceSpaceFromActive,
+        staleTime: 5 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,
+        placeholderData: (prev: KnowledgeSpace | undefined) => prev,
+    });
+
+    const { data: selectedFileParentPath } = useQuery<Array<{ id: string; name: string }>>({
+        queryKey: ["portalSelectedFileParentPath", selectedFile?.spaceId, selectedFile?.id],
+        queryFn: async () => {
+            const spaceId = selectedFile?.spaceId;
+            const fileId = selectedFile?.id;
+            if (!spaceId || !fileId) return [];
+            return getFolderParentPathApi(spaceId, fileId);
+        },
+        enabled: Boolean(selectedFile?.spaceId && selectedFile?.id),
+        staleTime: 5 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,
+        placeholderData: (prev: Array<{ id: string; name: string }> | undefined) => prev,
+    });
+
+    const sourceSpace = sourceSpaceFromActive ?? sourceSpaceInfo;
+
+    const documentPath = useMemo(() => {
+        const root = "全部知识库";
+        if (selectedFile && sourceSpace) {
+            const levelLabel = (() => {
+                switch (sourceSpace.spaceLevel) {
+                    case SpaceLevel.PUBLIC:
+                        return "公共知识库";
+                    case SpaceLevel.DEPARTMENT:
+                        return "部门知识库";
+                    case SpaceLevel.TEAM:
+                    case SpaceLevel.TEAM_KS:
+                        return "团队/科室知识库";
+                    case SpaceLevel.PERSONAL:
+                        return "个人知识库";
+                    default:
+                        return undefined;
+                }
+            })();
+            const folderNames = selectedFileParentPath?.map((item: { id: string; name: string }) => item.name) ?? [];
+            const names = [root, levelLabel, sourceSpace.name, ...folderNames].filter(Boolean);
+            return names.join("/");
+        }
+        const names = [root, activeGroup?.title, activeSpace?.name].filter(Boolean);
+        return names.join("/");
+    }, [activeGroup?.title, activeSpace?.name, selectedFile, selectedFileParentPath, sourceSpace]);
+
+    // Keep the URL in sync with the currently previewed file so that back navigation
+    // returns to the file's real folder instead of the entry position.
+    useEffect(() => {
+        if (!selectedFile?.spaceId || !selectedFile?.id || isFolder(selectedFile)) return;
+        const spaceId = String(selectedFile.spaceId);
+        const fileId = String(selectedFile.id);
+        const fileName = selectedFile.name;
+        const parentFolders = selectedFileParentPath ?? [];
+        const deepestFolder = parentFolders[parentFolders.length - 1];
+        const folderId = deepestFolder?.id || currentFolderId || "";
+        const folderName = deepestFolder?.name || currentFolderNode?.file.name || "";
+        if (
+            portalDeepLinkTarget &&
+            portalDeepLinkTarget.spaceId === spaceId &&
+            portalDeepLinkTarget.folderId === folderId &&
+            portalDeepLinkTarget.fileId === fileId &&
+            portalDeepLinkTarget.fileName === fileName
+        ) {
+            return;
+        }
+        setSearchParams(
+            (prev: URLSearchParams) => {
+                const next = new URLSearchParams(prev);
+                next.set("spaceId", spaceId);
+                if (folderId) {
+                    next.set("folderId", folderId);
+                    next.set("folderName", folderName);
+                } else {
+                    next.delete("folderId");
+                    next.delete("folderName");
+                }
+                next.set("fileId", fileId);
+                next.set("fileName", fileName);
+                next.delete("documentId");
+                next.delete("name");
+                next.delete("openNonce");
+                return next;
+            },
+            { replace: true },
+        );
+    }, [
+        currentFolderId,
+        currentFolderNode?.file.name,
+        portalDeepLinkTarget,
+        selectedFile,
+        selectedFileParentPath,
+        setSearchParams,
+    ]);
 
     const handleBackToFileList = useCallback(() => {
         setSelectedFile(null);
@@ -2154,14 +2294,37 @@ export default function PortalKnowledgeWorkbench() {
         setSearchTagIds([]);
         // Early back during tag-review deep link must not stick on the restore overlay.
         setRestoringDeepLinkKey(null);
-        // Folder children may still be loading / wiped by a late root refresh — refetch.
-        const folderId = currentFolderIdRef.current;
-        if (!folderId) return;
-        const folderNode = findTreeNode(treeNodes, folderId);
-        if (!folderNode?.loaded || folderNode.loading) {
-            void reloadFilesRef.current();
+
+        // Return to the file's actual folder location instead of the entry position.
+        // If the file sits in a sub-folder, jump to the deepest folder that contains it.
+        const file = selectedFile;
+        if (!file?.spaceId) return;
+        const spaceId = String(file.spaceId);
+        const parentFolders = selectedFileParentPath ?? [];
+        const deepestFolder = parentFolders[parentFolders.length - 1];
+        const folderId = deepestFolder?.id || file.parentId;
+        const folderName = deepestFolder?.name;
+        if (sourceSpace && activeSpace && String(sourceSpace.id) !== String(activeSpace.id)) {
+            setActiveSpace(sourceSpace);
         }
-    }, [treeNodes]);
+        setSearchParams((prev: URLSearchParams) => {
+            const next = new URLSearchParams(prev);
+            next.set("spaceId", spaceId);
+            if (folderId) {
+                next.set("folderId", folderId);
+                if (folderName) next.set("folderName", folderName);
+            } else {
+                next.delete("folderId");
+                next.delete("folderName");
+            }
+            next.delete("fileId");
+            next.delete("fileName");
+            next.delete("documentId");
+            next.delete("name");
+            next.delete("openNonce");
+            return next;
+        });
+    }, [activeSpace, selectedFile, selectedFileParentPath, setActiveSpace, setSearchParams, sourceSpace]);
 
     // 从"我的收藏"只读面板打开源文件：#4 原地预览——不切换 activeSpace（不跳转到源知识空间），
     // 以携带源空间 id 的合成文件项触发预览流程。预览/下载按 selectedFile.spaceId(源空间) 定位、
@@ -2698,14 +2861,7 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [editingSpace, queryClient, showToast]);
 
-    const documentPath = useMemo(() => {
-        const names = [
-            "全部知识库",
-            activeGroup?.title,
-            activeSpace?.name,
-        ].filter(Boolean);
-        return names.join("/");
-    }, [activeGroup?.title, activeSpace?.name]);
+
     const aiContextLabel = currentFolderId ? "文件夹" : "知识库";
     const handleWorkbenchDrag = useCallback((event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
@@ -2735,7 +2891,7 @@ export default function PortalKnowledgeWorkbench() {
                         onCollapseSidebar={() => setSpaceSidebarCollapsed(true)}
                         onToggleGroup={(groupKey) => setExpandedGroups((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }))}
                         onOpenCreateSpace={handleOpenCreateSpace}
-                        onSelectSpace={setActiveSpace}
+                        onSelectSpace={handleSelectSpace}
                         onSpaceMenuOpenChange={(spaceId, open) => {
                             setSpaceMenuOpenId(open ? spaceId : null);
                             // 打开菜单时才按需查询该空间的操作权限（懒查询）
@@ -2992,6 +3148,7 @@ export default function PortalKnowledgeWorkbench() {
                         ? false
                         : isSystemAdmin
                 }
+                isSystemAdmin={isSystemAdmin}
                 onViewCreatedSpace={() => setCreateDrawerOpen(false)}
                 onManageEditingSpaceMembers={() => {
                     setCreateDrawerOpen(false);

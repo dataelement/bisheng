@@ -55,6 +55,24 @@ PermissionSnapshotLoader = Callable[
 ]
 
 
+def publish_parent_user(target_file_level_path: str | None, target_space_id: int) -> str:
+    """The `parent` tuple subject for a file published into a target location.
+
+    The last folder id in the path is the parent; with no folder id the space
+    itself is. Testing the raw string for truthiness is not enough — a path
+    like "/" is truthy but holds no id, and yielded a malformed "folder:" that
+    OpenFGA rejects, which fails the publish and every unit of a batch with it.
+    """
+    folder_ids = [
+        part
+        for part in str(target_file_level_path or "").split("/")
+        if part.isdigit() and int(part) > 0
+    ]
+    if folder_ids:
+        return f"folder:{folder_ids[-1]}"
+    return f"knowledge_space:{int(target_space_id)}"
+
+
 class KnowledgeDocumentDistributionError(RuntimeError):
     """Raised when a publish/share lifecycle invariant would be violated."""
 
@@ -378,10 +396,29 @@ class KnowledgeDocumentDistributionService:
             await self.session.rollback()
             raise KnowledgeDocumentDistributionError("source canonical document has changed")
 
+        if (
+            source_file.reference_document_id == int(document.id)
+            and source_file.entry_type == KnowledgeFileEntryType.MANAGER.value
+            and source_file.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+        ):
+            await self._commit()
+            return CanonicalManagerSnapshot(
+                document_id=int(document.id),
+                manager_file_id=int(source_file.id),
+                manager_space_id=int(source_file.knowledge_id),
+                original_uploader_id=source_file.original_uploader_id,
+                original_knowledge_id=source_file.original_knowledge_id,
+            )
+
         source_file.reference_document_id = int(document.id)
         source_file.entry_type = KnowledgeFileEntryType.MANAGER.value
         source_file.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
         source_file.projection_status = KnowledgeFileProjectionStatus.PENDING.value
+        source_file.projection_retry_count = 0
+        source_file.projection_next_retry_at = None
+        source_file.projection_lease_owner = None
+        source_file.projection_lease_until = None
+        source_file.projection_last_error = None
         source_file.desired_content_generation = document.content_generation
         source_file.applied_content_generation = 0
         source_file.desired_entry_generation += 1
@@ -1507,10 +1544,9 @@ class KnowledgeDocumentDistributionService:
             manager = await self._prepare_manager_permission_transition(command)
             manager_target_parent = TupleOperation(
                 action="write",
-                user=(
-                    f"folder:{command.target_file_level_path.rstrip('/').split('/')[-1]}"
-                    if command.target_file_level_path
-                    else f"knowledge_space:{command.target_space_id}"
+                user=publish_parent_user(
+                    command.target_file_level_path,
+                    command.target_space_id,
                 ),
                 relation="parent",
                 object=f"knowledge_file:{command.source_entry_id}",

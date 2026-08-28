@@ -49,6 +49,8 @@ type PortalDialogsProps = {
     pendingCreateLevel: SpaceLevel;
     showSuccessManageMembers?: boolean | ((spaceLevel: SpaceLevel) => boolean);
     canEditDepartmentBinding?: boolean;
+    /** 平台系统管理员；透传给创建/编辑抽屉，控制门户发现开关。 */
+    isSystemAdmin?: boolean;
     onViewCreatedSpace: () => void;
     onManageEditingSpaceMembers: () => void;
     uploadDialogProps: ComponentProps<typeof PortalUploadDialog>;
@@ -93,6 +95,7 @@ export function PortalDialogs({
     pendingCreateLevel,
     showSuccessManageMembers,
     canEditDepartmentBinding = false,
+    isSystemAdmin = false,
     onViewCreatedSpace,
     onManageEditingSpaceMembers,
     uploadDialogProps,
@@ -202,6 +205,7 @@ export function PortalDialogs({
                 showApprovalReason
                 showSuccessManageMembers={showSuccessManageMembers}
                 canEditDepartmentBinding={canEditDepartmentBinding}
+                isSystemAdmin={isSystemAdmin}
                 onViewSpace={onViewCreatedSpace}
                 onManageMembers={onManageEditingSpaceMembers}
             />

@@ -125,6 +125,15 @@ class KnowledgeMigrationBatch(SQLModelSerializable, table=True):
         default=True,
         sa_column=Column(Boolean, nullable=False, server_default=text("1")),
     )
+    preserve_link: bool = Field(
+        default=False,
+        sa_column=Column(
+            Boolean,
+            nullable=False,
+            server_default=text("0"),
+            comment="Publish each unit up one level and leave a shortcut at the source",
+        ),
+    )
     status: str = Field(
         default=KnowledgeMigrationBatchStatus.PREFLIGHT_QUEUED.value,
         sa_column=Column(String(32), nullable=False, server_default=text("'preflight_queued'")),

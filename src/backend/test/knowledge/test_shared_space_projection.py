@@ -50,6 +50,7 @@ from bisheng.knowledge.domain.services.knowledge_version_service import (
 )
 from bisheng.knowledge.domain.services.shared_space_projection_support import (
     aggregate_active_knowledge_ids,
+    load_shared_content_chunks_from_legacy,
     resolve_shared_space_storage_enabled,
 )
 from test.fakes.shared_storage_fakes import FakeSharedSpaceStorageWriter
@@ -174,6 +175,7 @@ def _service(
         shared_storage_writer=writer,
         shared_storage_enabled=enabled,
         shared_content_chunk_loader=chunk_loader,
+        shared_embedding_model_id="4",
         lease_seconds=30,
         max_retry_seconds=60,
     )
@@ -228,6 +230,171 @@ class TestActiveKnowledgeIdsAggregation:
             )
         ]
         assert aggregate_active_knowledge_ids(entries) == ()
+
+
+async def test_chunk_loader_falls_back_to_original_space_after_publish_move():
+    content_file = KnowledgeFile(
+        id=100,
+        tenant_id=TENANT,
+        knowledge_id=20,
+        original_knowledge_id=10,
+        file_name="doc.pdf",
+    )
+    legacy_fields = [
+        SimpleNamespace(name=name)
+        for name in ("pk", "document_id", "text", "vector")
+    ]
+    current_collection = SimpleNamespace(
+        schema=SimpleNamespace(
+            fields=[
+                SimpleNamespace(name=name)
+                for name in ("pk", "canonical_document_id", "text", "vector")
+            ]
+        ),
+        query=lambda **_kwargs: pytest.fail("shared collection must be skipped"),
+    )
+    original_collection = SimpleNamespace(
+        schema=SimpleNamespace(fields=legacy_fields),
+        query=lambda **_kwargs: [
+            {
+                "pk": 1,
+                "document_id": 100,
+                "text": "from original",
+                "vector": [0.1, 0.2],
+            }
+        ],
+    )
+    spaces = {
+        20: SimpleNamespace(id=20),
+        10: SimpleNamespace(id=10),
+    }
+
+    def vector_store(_user_id, *, knowledge):
+        collection = (
+            current_collection
+            if knowledge.id == 20
+            else original_collection
+        )
+        return SimpleNamespace(col=collection)
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aquery_by_id",
+            new=AsyncMock(side_effect=lambda space_id: spaces.get(space_id)),
+        ),
+        patch(
+            "bisheng.knowledge.domain.knowledge_rag.KnowledgeRag."
+            "init_knowledge_milvus_vectorstore_sync",
+            side_effect=vector_store,
+        ),
+    ):
+        chunks = await load_shared_content_chunks_from_legacy(content_file)
+
+    assert len(chunks) == 1
+    assert chunks[0].text == "from original"
+    assert chunks[0].vector == [0.1, 0.2]
+
+
+async def test_chunk_loader_selects_current_generation_and_deduplicates():
+    content_file = KnowledgeFile(
+        id=100,
+        tenant_id=TENANT,
+        knowledge_id=20,
+        original_knowledge_id=10,
+        desired_content_generation=1,
+        file_name="doc.pdf",
+    )
+    collection = SimpleNamespace(
+        schema=SimpleNamespace(
+            fields=[
+                SimpleNamespace(name=name)
+                for name in (
+                    "pk",
+                    "document_id",
+                    "chunk_index",
+                    "text",
+                    "vector",
+                    "user_metadata",
+                )
+            ]
+        ),
+        query=lambda **_kwargs: [
+            {
+                "document_id": 100,
+                "chunk_index": 0,
+                "text": "stale zero",
+                "vector": [0.0],
+                "user_metadata": {"content_generation": 0},
+            },
+            {
+                "document_id": 100,
+                "chunk_index": 0,
+                "text": "current zero",
+                "vector": [1.0],
+                "user_metadata": {"content_generation": 1},
+            },
+            {
+                "document_id": 100,
+                "chunk_index": 1,
+                "text": "current one",
+                "vector": [2.0],
+                "user_metadata": {"content_generation": 1},
+            },
+            {
+                "document_id": 100,
+                "chunk_index": 0,
+                "text": "current zero",
+                "vector": [1.0],
+                "user_metadata": {"content_generation": 1},
+            },
+            {
+                "document_id": 100,
+                "chunk_index": 1,
+                "text": "current one",
+                "vector": [2.0],
+                "user_metadata": {"content_generation": 1},
+            },
+        ],
+    )
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aquery_by_id",
+            new=AsyncMock(return_value=SimpleNamespace(id=10)),
+        ),
+        patch(
+            "bisheng.knowledge.domain.knowledge_rag.KnowledgeRag."
+            "init_knowledge_milvus_vectorstore_sync",
+            return_value=SimpleNamespace(col=collection),
+        ),
+    ):
+        chunks = await load_shared_content_chunks_from_legacy(content_file)
+
+    assert [chunk.chunk_index for chunk in chunks] == [0, 1]
+    assert [chunk.text for chunk in chunks] == ["current zero", "current one"]
+
+
+async def test_content_generation_requeue_resets_exhausted_retry_state(
+    async_db_session: AsyncSession,
+):
+    await _seed_shared_world(async_db_session)
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    entry = await repository.find_by_id(100)
+    entry.projection_status = KnowledgeFileProjectionStatus.FAILED.value
+    entry.projection_retry_count = 8
+    entry.projection_last_error = "retry_exhausted:test"
+    async_db_session.add(entry)
+    await async_db_session.commit()
+
+    assert await repository.mark_document_entries_content_generation(
+        DOCUMENT_ID, 5
+    ) == 3
+    await async_db_session.commit()
+
+    entry = await repository.find_by_id(100)
+    assert entry.projection_status == KnowledgeFileProjectionStatus.PENDING.value
+    assert entry.projection_retry_count == 0
+    assert entry.projection_last_error is None
 
 
 # ---------------------------------------------------------------------------
@@ -289,6 +456,57 @@ class TestSharedDualProjection:
         assert writer.calls == ["update_membership"]
         assert loader.loaded == []
         legacy_writer.assert_not_awaited()
+
+    async def test_fulltext_repair_can_force_rewrite_converged_shared_content(
+        self, async_db_session: AsyncSession
+    ):
+        await _seed_shared_world(async_db_session)
+        writer = FakeSharedSpaceStorageWriter()
+        loader = _chunk_loader(_two_chunks())
+        service = _service(async_db_session, writer, chunk_loader=loader)
+
+        await service.process_entry(
+            tenant_id=TENANT,
+            entry_id=100,
+            lease_owner="initial",
+        )
+        writer.calls.clear()
+        loader.loaded.clear()
+
+        result = await service.process_entry(
+            tenant_id=TENANT,
+            entry_id=101,
+            lease_owner="fulltext-repair",
+            force_content_upsert=True,
+        )
+
+        assert result.status == "ready"
+        assert writer.calls == ["upsert_content", "update_membership"]
+        assert loader.loaded == [CONTENT_FILE_ID]
+
+    async def test_content_upsert_falls_back_to_active_entry_chunks(
+        self, async_db_session: AsyncSession
+    ):
+        await _seed_shared_world(async_db_session)
+        writer = FakeSharedSpaceStorageWriter()
+        loaded: list[int] = []
+
+        async def loader(source_file: KnowledgeFile):
+            loaded.append(int(source_file.id))
+            return _two_chunks() if int(source_file.id) == 101 else []
+
+        service = _service(async_db_session, writer, chunk_loader=loader)
+        result = await service.process_entry(
+            tenant_id=TENANT,
+            entry_id=101,
+            lease_owner="fulltext-repair-fallback",
+            force_content_upsert=True,
+        )
+
+        assert result.status == "ready"
+        assert loaded == [CONTENT_FILE_ID, 101]
+        assert writer.calls == ["upsert_content", "update_membership"]
+        assert writer.chunk_count(TENANT, DOCUMENT_ID) == 2
 
     async def test_share_withdraw_reaggregates_membership_without_content(
         self, async_db_session: AsyncSession
