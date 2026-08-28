@@ -240,16 +240,21 @@ async def test_chunk_loader_falls_back_to_original_space_after_publish_move():
         original_knowledge_id=10,
         file_name="doc.pdf",
     )
-    fields = [
+    legacy_fields = [
         SimpleNamespace(name=name)
         for name in ("pk", "document_id", "text", "vector")
     ]
     current_collection = SimpleNamespace(
-        schema=SimpleNamespace(fields=fields),
-        query=lambda **_kwargs: [],
+        schema=SimpleNamespace(
+            fields=[
+                SimpleNamespace(name=name)
+                for name in ("pk", "canonical_document_id", "text", "vector")
+            ]
+        ),
+        query=lambda **_kwargs: pytest.fail("shared collection must be skipped"),
     )
     original_collection = SimpleNamespace(
-        schema=SimpleNamespace(fields=fields),
+        schema=SimpleNamespace(fields=legacy_fields),
         query=lambda **_kwargs: [
             {
                 "pk": 1,
@@ -288,6 +293,29 @@ async def test_chunk_loader_falls_back_to_original_space_after_publish_move():
     assert len(chunks) == 1
     assert chunks[0].text == "from original"
     assert chunks[0].vector == [0.1, 0.2]
+
+
+async def test_content_generation_requeue_resets_exhausted_retry_state(
+    async_db_session: AsyncSession,
+):
+    await _seed_shared_world(async_db_session)
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    entry = await repository.find_by_id(100)
+    entry.projection_status = KnowledgeFileProjectionStatus.FAILED.value
+    entry.projection_retry_count = 8
+    entry.projection_last_error = "retry_exhausted:test"
+    async_db_session.add(entry)
+    await async_db_session.commit()
+
+    assert await repository.mark_document_entries_content_generation(
+        DOCUMENT_ID, 5
+    ) == 3
+    await async_db_session.commit()
+
+    entry = await repository.find_by_id(100)
+    assert entry.projection_status == KnowledgeFileProjectionStatus.PENDING.value
+    assert entry.projection_retry_count == 0
+    assert entry.projection_last_error is None
 
 
 # ---------------------------------------------------------------------------

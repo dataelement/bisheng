@@ -429,7 +429,9 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             .values(
                 desired_content_generation=generation,
                 projection_status=KnowledgeFileProjectionStatus.PENDING.value,
+                projection_retry_count=0,
                 projection_next_retry_at=None,
+                projection_last_error=None,
             )
         )
         await self.session.flush()

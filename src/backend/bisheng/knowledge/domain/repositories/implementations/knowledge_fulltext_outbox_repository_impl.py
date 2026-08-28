@@ -571,6 +571,23 @@ class KnowledgeFulltextOutboxRepositoryImpl(KnowledgeFulltextOutboxRepository):
         repair["lease_until"] = None
         payload["fulltext_auto_repair"] = repair
         row.payload_snapshot = payload
+        if success:
+            row.status = (
+                KnowledgeFulltextOutboxStatus.PENDING.value
+                if row.desired_revision > row.applied_revision
+                else KnowledgeFulltextOutboxStatus.SUCCESS.value
+            )
+            row.retry_count = 0
+            row.next_retry_at = now if row.desired_revision > row.applied_revision else None
+            row.error_summary = None
+        else:
+            repair["state"] = "exhausted"
+            payload["fulltext_auto_repair"] = repair
+            row.payload_snapshot = payload
+            row.status = KnowledgeFulltextOutboxStatus.FAILED.value
+            row.retry_count = row.max_retries
+            row.next_retry_at = None
+            row.error_summary = "KnowledgeFulltextAutoRepairExhausted:repair_exhausted"
         if row.lease_owner == lease_owner:
             row.lease_owner = None
             row.lease_until = None

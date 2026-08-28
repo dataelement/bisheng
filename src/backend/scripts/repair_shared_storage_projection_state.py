@@ -19,6 +19,7 @@ import asyncio
 import json
 import os
 import sys
+from datetime import datetime
 
 _BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _BACKEND_ROOT not in sys.path:
@@ -97,46 +98,52 @@ async def _run(args: argparse.Namespace) -> int:
                 )
                 return 2
 
+            missing_manager_stmt = (
+                select(
+                    KnowledgeDocument.id,
+                    KnowledgeDocument.primary_version_id,
+                    KnowledgeFile.id,
+                    KnowledgeFile.knowledge_id,
+                )
+                .join(
+                    KnowledgeDocumentVersion,
+                    KnowledgeDocumentVersion.id
+                    == KnowledgeDocument.primary_version_id,
+                )
+                .join(
+                    KnowledgeFile,
+                    KnowledgeFile.id
+                    == KnowledgeDocumentVersion.knowledge_file_id,
+                )
+                .join(Knowledge, Knowledge.id == KnowledgeFile.knowledge_id)
+                .where(
+                    KnowledgeDocument.tenant_id == args.tenant_id,
+                    KnowledgeDocument.lifecycle_status
+                    == KnowledgeDocumentLifecycleStatus.ACTIVE.value,
+                    Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                    KnowledgeFile.file_type == FileType.FILE.value,
+                    KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+                    col(KnowledgeFile.deleted_at).is_(None),
+                    ~exists(
+                        select(manager_alias.id).where(
+                            manager_alias.reference_document_id
+                            == KnowledgeDocument.id,
+                            manager_alias.entry_type
+                            == KnowledgeFileEntryType.MANAGER.value,
+                            manager_alias.entry_status
+                            == KnowledgeFileEntryStatus.ACTIVE.value,
+                        )
+                    ),
+                )
+            )
+            if args.created_after is not None:
+                missing_manager_stmt = missing_manager_stmt.where(
+                    KnowledgeFile.create_time >= args.created_after
+                )
             missing_managers = list(
                 (
                     await session.execute(
-                        select(
-                            KnowledgeDocument.id,
-                            KnowledgeDocument.primary_version_id,
-                            KnowledgeFile.id,
-                            KnowledgeFile.knowledge_id,
-                        )
-                        .join(
-                            KnowledgeDocumentVersion,
-                            KnowledgeDocumentVersion.id
-                            == KnowledgeDocument.primary_version_id,
-                        )
-                        .join(
-                            KnowledgeFile,
-                            KnowledgeFile.id
-                            == KnowledgeDocumentVersion.knowledge_file_id,
-                        )
-                        .join(Knowledge, Knowledge.id == KnowledgeFile.knowledge_id)
-                        .where(
-                            KnowledgeDocument.tenant_id == args.tenant_id,
-                            KnowledgeDocument.lifecycle_status
-                            == KnowledgeDocumentLifecycleStatus.ACTIVE.value,
-                            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-                            KnowledgeFile.file_type == FileType.FILE.value,
-                            KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
-                            col(KnowledgeFile.deleted_at).is_(None),
-                            ~exists(
-                                select(manager_alias.id).where(
-                                    manager_alias.reference_document_id
-                                    == KnowledgeDocument.id,
-                                    manager_alias.entry_type
-                                    == KnowledgeFileEntryType.MANAGER.value,
-                                    manager_alias.entry_status
-                                    == KnowledgeFileEntryStatus.ACTIVE.value,
-                                )
-                            ),
-                        )
-                        .order_by(KnowledgeDocument.id)
+                        missing_manager_stmt.order_by(KnowledgeDocument.id)
                     )
                 ).all()
             )
@@ -231,6 +238,11 @@ async def _run(args: argparse.Namespace) -> int:
             "mode": "apply" if args.apply_managers or args.requeue_failed else "dry-run",
             "tenant_id": args.tenant_id,
             "projection_max_retries": int(conf.projection_max_retries),
+            "created_after": (
+                args.created_after.isoformat()
+                if args.created_after is not None
+                else None
+            ),
             "missing_manager_count": len(missing_managers),
             "missing_managers": [
                 {
@@ -273,6 +285,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tenant-id", type=int, required=True)
     parser.add_argument("--sample-limit", type=int, default=100)
+    parser.add_argument(
+        "--created-after",
+        type=datetime.fromisoformat,
+        help="Only repair current physical files created at or after this ISO timestamp",
+    )
     parser.add_argument("--apply-managers", action="store_true")
     parser.add_argument("--requeue-failed", action="store_true")
     args = parser.parse_args()
