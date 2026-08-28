@@ -13,11 +13,13 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ReviewTablePanel } from "./tagConsole/ReviewTablePanel"
+import { TagBlacklistPanel } from "./tagConsole/TagBlacklistPanel"
 import { TagFeatureToggles } from "./tagConsole/TagFeatureToggles"
 import { TagLibraryPanel } from "./tagConsole/TagLibraryPanel"
 import { TagTablePanel } from "./tagConsole/TagTablePanel"
 import {
     INITIAL_SELECTION,
+    selectBlacklistEntry,
     selectLibrary,
     selectReviewEntry,
     type TagConsoleSelection,
@@ -86,12 +88,15 @@ export default function KnowledgeTagLibraryPage() {
                     pendingCount={pendingCount}
                     onSelectLibrary={(libraryId) => setSelection((prev) => selectLibrary(prev, libraryId))}
                     onSelectReviewEntry={() => setSelection(selectReviewEntry())}
+                    onSelectBlacklistEntry={() => setSelection(selectBlacklistEntry())}
                     onLibrariesChanged={handleLibrariesChanged}
                     refreshToken={libraryRefreshToken}
                 />
 
                 {selection.mode === "review" ? (
                     <ReviewTablePanel libraries={libraries} onReviewed={handleTagsChanged} />
+                ) : selection.mode === "blacklist" ? (
+                    <TagBlacklistPanel />
                 ) : (
                     <TagTablePanel
                         selectedLibraryIds={selection.selectedLibraryIds}

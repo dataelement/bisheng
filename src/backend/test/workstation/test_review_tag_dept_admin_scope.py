@@ -458,6 +458,14 @@ async def test_reject_passes_scope_to_repository():
             "bisheng.knowledge.domain.services.tag_library_tag_service.TagLibraryTagService.invalidate_link_b_tenant_catalog_cache_async",
             new=AsyncMock(),
         ),
+        patch(
+            "bisheng.knowledge.domain.services.tag_blacklist_service.TagBlacklistService.ensure_can_insert_async",
+            new=AsyncMock(),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.tag_blacklist_service.TagBlacklistService.add_names_async",
+            new=AsyncMock(),
+        ),
     ):
         await service.approve_or_reject_review_tag(data, tenant_id=1)
 

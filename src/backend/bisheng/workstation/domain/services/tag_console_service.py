@@ -12,7 +12,6 @@ from bisheng.common.errcode.knowledge import (
 )
 from bisheng.common.errcode.tag import ReviewTagNotFoundError
 from bisheng.common.errcode.workstation import (
-    TagConsoleActionNotApplicableError,
     TagConsoleBatchTooLargeError,
     TagConsolePageParamsError,
     TagConsoleRejectReasonRequiredError,
@@ -22,9 +21,11 @@ from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagResourceTyp
 from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
     KnowledgeSpaceTagLibraryService,
 )
+from bisheng.knowledge.domain.services.tag_blacklist_service import TAG_BLACKLIST_MAX, TagBlacklistService
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.workstation.domain.repositories.tag_console_repository import (
+    PENDING_STATUS,
     REJECTED_STATUS,
     SOURCE_REVIEW,
     SOURCE_TAG,
@@ -36,6 +37,10 @@ from bisheng.workstation.domain.schemas.tag_console_schema import (
     MAX_PAGE_SIZE,
     TagConsoleBatchFailure,
     TagConsoleBatchResult,
+    TagConsoleBlacklistCreateReq,
+    TagConsoleBlacklistItem,
+    TagConsoleBlacklistSearchReq,
+    TagConsoleBlacklistSearchResp,
     TagConsoleCreateReq,
     TagConsoleFilter,
     TagConsoleItem,
@@ -72,7 +77,7 @@ class TagConsoleService:
         self.tags_service = tags_service
 
     @staticmethod
-    def _validate_page(req: TagConsoleFilter) -> None:
+    def _validate_page(req: TagConsoleFilter | TagConsoleBlacklistSearchReq) -> None:
         if req.page < 1 or req.page_size < 1 or req.page_size > MAX_PAGE_SIZE:
             raise TagConsolePageParamsError()
 
@@ -479,10 +484,20 @@ class TagConsoleService:
         items: list[TagConsoleReviewRef],
         reject_reason: str,
         tenant_id: int,
+        *,
+        skip_blacklist: bool = False,
     ) -> TagConsoleBatchResult:
         if not (reject_reason or "").strip():
             raise TagConsoleRejectReasonRequiredError()
-        return await self._batch_review(items, tenant_id, approve=False, reject_reason=reject_reason.strip())
+        if not skip_blacklist:
+            await TagBlacklistService.ensure_can_insert_async([item.name for item in items])
+        return await self._batch_review(
+            items,
+            tenant_id,
+            approve=False,
+            reject_reason=reject_reason.strip(),
+            skip_blacklist=skip_blacklist,
+        )
 
     async def _batch_review(
         self,
@@ -493,6 +508,7 @@ class TagConsoleService:
         target_library_id: int | None = None,
         reject_reason: str | None = None,
         ack_similar: bool = False,
+        skip_blacklist: bool = False,
     ) -> TagConsoleBatchResult:
         scope = await self._review_scope_or_full()
         self._validate_batch(items)
@@ -517,11 +533,19 @@ class TagConsoleService:
             if not rows:
                 result.failed.append(TagConsoleBatchFailure(name=item.name, reason="标签不存在或已被处理"))
                 continue
-            if any(row.review_status == REJECTED_STATUS for row in rows):
-                # The underlying flow only looks at pending rows and would report
-                # a bare "tag not found"; say what is actually wrong instead.
-                raise TagConsoleActionNotApplicableError()
-            knowledge_id = self._resolve_knowledge_id(rows, scope, spaces_by_review_tag)
+            pending_rows = [
+                row
+                for row in rows
+                if int(getattr(row, "review_status", PENDING_STATUS) or PENDING_STATUS) == PENDING_STATUS
+            ]
+            # Same name may have an older rejected row (soft-delete). Acting on
+            # the new pending proposal must not fail the whole batch.
+            if not pending_rows:
+                result.failed.append(
+                    TagConsoleBatchFailure(name=item.name, reason="该标签的当前状态不支持此操作")
+                )
+                continue
+            knowledge_id = self._resolve_knowledge_id(pending_rows, scope, spaces_by_review_tag)
             if approve and knowledge_id is None:
                 # Logged, not silent: this rejects the whole item while still
                 # returning HTTP 200, which is invisible in the access log.
@@ -548,6 +572,7 @@ class TagConsoleService:
                 "tag_library_id": target_library_id,
                 "knowledge_id": knowledge_id,
                 "ack_similar": ack_similar if approve else False,
+                "skip_blacklist": skip_blacklist if not approve else False,
             }
             if reject_reason is not None:
                 payload["reject_reason"] = reject_reason
@@ -669,3 +694,55 @@ class TagConsoleService:
         for library_id in sorted(set(library_ids)):
             await TagLibraryTagService.sync_library_name_lists(library_id)
         await TagLibraryTagService.invalidate_link_b_tenant_catalog_cache_async(tenant_id)
+
+    async def preview_blacklist(self, names: list[str]) -> dict:
+        await self._ensure_can_manage_tags()
+        preview = await TagBlacklistService.preview_insert_async(names)
+        return {
+            "count": preview.count,
+            "limit": preview.limit,
+            "new_count": preview.new_count,
+            "would_exceed": preview.would_exceed,
+        }
+
+    async def list_blacklist(self, req: TagConsoleBlacklistSearchReq) -> TagConsoleBlacklistSearchResp:
+        self._validate_page(req)
+        await self._ensure_can_manage_tags()
+        rows, total, count = await TagBlacklistService.search_async(
+            keyword=req.keyword,
+            page=req.page,
+            page_size=req.page_size,
+        )
+        return TagConsoleBlacklistSearchResp(
+            data=[
+                TagConsoleBlacklistItem(
+                    id=int(row.id),
+                    name=row.name,
+                    user_id=int(row.user_id or 0),
+                    create_time=row.create_time,
+                )
+                for row in rows
+                if row.id is not None
+            ],
+            total=total,
+            count=count,
+            limit=TAG_BLACKLIST_MAX,
+        )
+
+    async def delete_blacklist(self, blacklist_id: int) -> bool:
+        await self._ensure_can_manage_tags()
+        await TagBlacklistService.delete_async(int(blacklist_id))
+        return True
+
+    async def add_blacklist(self, req: TagConsoleBlacklistCreateReq) -> TagConsoleBlacklistItem:
+        await self._ensure_can_manage_tags()
+        row = await TagBlacklistService.add_name_async(
+            req.name,
+            user_id=int(getattr(self.login_user, "user_id", 0) or 0),
+        )
+        return TagConsoleBlacklistItem(
+            id=int(row.id),
+            name=row.name,
+            user_id=int(row.user_id or 0),
+            create_time=row.create_time,
+        )

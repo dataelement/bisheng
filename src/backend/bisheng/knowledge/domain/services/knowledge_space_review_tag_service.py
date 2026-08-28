@@ -19,6 +19,7 @@ from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import (
     AUTO_TAG_MAX_AI_TAGS_PER_FILE,
     KnowledgeSpaceAutoTagService,
 )
+from bisheng.knowledge.domain.services.tag_blacklist_service import TagBlacklistService
 from bisheng.knowledge.domain.services.tag_library_tag_service import (
     LINK_B_PROMPT_CATALOG_LIMIT,
     TagLibraryTagService,
@@ -137,6 +138,8 @@ class KnowledgeSpaceReviewTagService:
             library_ids = KnowledgeSpaceAutoTagService._resolve_library_ids(knowledge)
             manual_tags, ai_tags = KnowledgeSpaceAutoTagService._collect_library_tags(library_ids)
             tags_list = list(dict.fromkeys(tag for tag in manual_tags + ai_tags if tag))
+            blacklist_catalog = KnowledgeSpaceAutoTagService._blacklist_catalog()
+            tags_list = TagBlacklistService.filter_unblocked_names(tags_list, blacklist_catalog)
 
             catalog = TagLibraryTagService.load_link_b_tenant_catalog_sync(
                 db_file.tenant_id,
@@ -148,6 +151,12 @@ class KnowledgeSpaceReviewTagService:
             tenant_pending_names = [(tag.name or "").strip() for tag in pending_catalog if (tag.name or "").strip()][
                 :LINK_B_PROMPT_CATALOG_LIMIT
             ]
+            tenant_library_names = TagBlacklistService.filter_unblocked_names(
+                tenant_library_names, blacklist_catalog
+            )
+            tenant_pending_names = TagBlacklistService.filter_unblocked_names(
+                tenant_pending_names, blacklist_catalog
+            )
 
             selected = cls._invoke_llm(
                 llm,
@@ -157,6 +166,7 @@ class KnowledgeSpaceReviewTagService:
                 tenant_library_names=tenant_library_names,
                 tenant_pending_names=tenant_pending_names,
             )
+            selected = TagBlacklistService.filter_unblocked_names(selected, blacklist_catalog)
             if not selected:
                 logger.info(
                     "review_tag_no_llm_output space_id={} file_id={}",

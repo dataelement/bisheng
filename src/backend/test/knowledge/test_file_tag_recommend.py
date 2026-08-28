@@ -18,6 +18,12 @@ from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import (
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
 
+@pytest.fixture(autouse=True)
+def _empty_tag_blacklist():
+    with patch.object(KnowledgeSpaceAutoTagService, "_blacklist_catalog", return_value=[]):
+        yield
+
+
 def _space_file(**kwargs) -> KnowledgeFile:
     defaults = dict(
         id=2,

@@ -20,6 +20,7 @@ import { BatchApproveLibraryPickerDialog, BatchResultDialog, RejectReasonDialog 
 import { TagFilterBar } from "./TagFilterBar"
 import { TagReviewDialog } from "./TagReviewDialog"
 import { TagSourceIcon } from "./TagSourceIcon"
+import { confirmRejectSkipBlacklist } from "./tagBlacklistConfirm"
 import {
     buildSearchParams,
     EMPTY_FILTERS,
@@ -161,10 +162,14 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
     }
 
     const handleReject = async (reason: string, items: TagConsoleReviewRef[]) => {
+        const decision = await confirmRejectSkipBlacklist(items.map((item) => item.name), t)
+        if (!decision) return
         setSaving(true)
         setRejectOpen(false)
         setReviewTarget(null)
-        finishBatch(await captureAndAlertRequestErrorHoc(batchRejectTagConsoleApi(items, reason)))
+        finishBatch(await captureAndAlertRequestErrorHoc(
+            batchRejectTagConsoleApi(items, reason, decision.skipBlacklist),
+        ))
     }
 
     const { libraries: approvableLibraries, loading: loadingLibraries } = useApprovableLibraries()

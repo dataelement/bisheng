@@ -245,6 +245,7 @@ export async function approveOrRejectReviewTagApi(data: {
   tag_library_id?: number
   knowledge_id?: number
   ack_similar?: boolean
+  skip_blacklist?: boolean
 }): Promise<boolean> {
   return await axios.post("/api/v1/workstation/tags/approve_or_reject", data)
 }
@@ -443,11 +444,54 @@ export async function batchApproveTagConsoleApi(
 export async function batchRejectTagConsoleApi(
   items: TagConsoleReviewRef[],
   rejectReason: string,
+  skipBlacklist = false,
 ): Promise<TagConsoleBatchResult> {
   return await axios.post("/api/v1/workstation/tags/console/review/batch-reject", {
     items,
     reject_reason: rejectReason,
+    skip_blacklist: skipBlacklist,
   })
+}
+
+export interface TagBlacklistItem {
+  id: number
+  name: string
+  user_id?: number
+  create_time?: string | null
+}
+
+export interface TagBlacklistSearchResp {
+  data: TagBlacklistItem[]
+  total: number
+  count: number
+  limit: number
+}
+
+export interface TagBlacklistPreviewResp {
+  count: number
+  limit: number
+  new_count: number
+  would_exceed: boolean
+}
+
+export async function searchTagBlacklistApi(params: {
+  keyword?: string
+  page?: number
+  page_size?: number
+}): Promise<TagBlacklistSearchResp> {
+  return await axios.get("/api/v1/workstation/tags/console/blacklist", { params })
+}
+
+export async function previewTagBlacklistApi(names: string[]): Promise<TagBlacklistPreviewResp> {
+  return await axios.post("/api/v1/workstation/tags/blacklist/preview", { names })
+}
+
+export async function addTagBlacklistApi(name: string): Promise<TagBlacklistItem> {
+  return await axios.post("/api/v1/workstation/tags/console/blacklist", { name })
+}
+
+export async function deleteTagBlacklistApi(id: number): Promise<boolean> {
+  return await axios.delete(`/api/v1/workstation/tags/console/blacklist/${id}`)
 }
 
 export async function getTagConsolePendingCountApi(): Promise<{ pending_count: number }> {
