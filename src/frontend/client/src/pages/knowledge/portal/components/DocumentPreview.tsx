@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Download, FileText, Loader2, ShieldCheck, SquarePen } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, FileText, Loader2, Pencil, ShieldCheck, SquarePen } from "lucide-react";
 // import { Share2 } from "lucide-react";
 import type { KnowledgeFile } from "~/api/knowledge";
 import FilePreview from "../../FilePreview";
@@ -38,6 +38,7 @@ interface DocumentPreviewProps {
     summaryExpanded: boolean;
     canEditTags: boolean;
     onOpenTags: () => void;
+    onOpenEditInfo: () => void;
     // onOpenShare: () => void;
     onDownload: () => void;
     canDownload: boolean;
@@ -54,6 +55,7 @@ export function DocumentPreview({
     summaryExpanded,
     canEditTags,
     onOpenTags,
+    onOpenEditInfo,
     // onOpenShare,
     onDownload,
     canDownload,
@@ -77,6 +79,11 @@ export function DocumentPreview({
                             <div className={s.docPath}>{documentPath}</div>
                         </div>
                         <div className={s.docActions} data-testid="portal-document-actions">
+                            {canEditTags ? (
+                                <button type="button" className={s.iconAction} title="修改信息" aria-label="修改信息" onClick={onOpenEditInfo}>
+                                    <Pencil size={16} />
+                                </button>
+                            ) : null}
                             {canEditTags ? (
                                 <button type="button" className={s.iconAction} title="编辑标签" aria-label="编辑标签" onClick={onOpenTags}>
                                     <SquarePen size={16} />

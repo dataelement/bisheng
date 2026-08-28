@@ -33,6 +33,7 @@ interface PortalPreviewWorkspaceProps {
     onUpdateEncoding: (newEncoding: string, fileSubcategoryCode?: string | null) => void | Promise<void>;
     onOpenPermission: () => void;
     onOpenTags: () => void;
+    onOpenEditInfo: () => void;
     onPanelChange: (panel: PanelKey | null) => void;
     onToggleSummary: () => void;
 }
@@ -62,6 +63,7 @@ export function PortalPreviewWorkspace({
     onUpdateEncoding,
     onOpenPermission,
     onOpenTags,
+    onOpenEditInfo,
     onPanelChange,
     onToggleSummary,
 }: PortalPreviewWorkspaceProps) {
@@ -79,6 +81,7 @@ export function PortalPreviewWorkspace({
                         summaryExpanded={summaryExpanded}
                         canEditTags={canEditTags}
                         onOpenTags={onOpenTags}
+                        onOpenEditInfo={onOpenEditInfo}
                         // onOpenShare={() => setActivePanel("share")}
                         onDownload={onDownload}
                         canDownload={canDownload}
