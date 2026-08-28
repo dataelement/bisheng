@@ -380,6 +380,134 @@ class LLMService:
         return config
 
     @classmethod
+    async def _clear_stale_model_refs_from_system_configs(
+        cls,
+        deleted_model_ids: set[int],
+        tenant_id: int | None = None,
+    ) -> None:
+        """Null out references to deleted models across the 5 system configs.
+
+        Without this, deleting an LLM server (or removing a model from one)
+        leaves the knowledge/assistant/evaluation/workflow/workbench config
+        rows pointing at a ``model_id`` that no longer exists. The next
+        GET sanitises the response so the UI picker hides the dead entry,
+        but the persisted row still carries the stale id, and any
+        write-time ``avalidate_system_model_refs`` call (and any consumer
+        that bypasses the sanitiser) trips a 19802 "model deleted" on the
+        next update. The frontend's knowledge-base picker was the canary:
+        it kept showing the dropped model and rejected saves with the
+        same 19802.
+        """
+        if not deleted_model_ids:
+            return
+        target = _resolve_tenant_id(tenant_id)
+        deleted_set = {int(mid) for mid in deleted_model_ids if mid}
+
+        # --- knowledge_llm ------------------------------------------------
+        try:
+            knowledge_llm, _, _ = await cls.aget_knowledge_llm_with_meta(target)
+        except Exception:
+            knowledge_llm = None
+        if knowledge_llm is not None:
+            changed = False
+            if knowledge_llm.embedding_model_id in deleted_set:
+                knowledge_llm.embedding_model_id = None
+                changed = True
+            if knowledge_llm.source_model_id in deleted_set:
+                knowledge_llm.source_model_id = None
+                changed = True
+            if knowledge_llm.extract_title_model_id in deleted_set:
+                knowledge_llm.extract_title_model_id = None
+                changed = True
+            if knowledge_llm.qa_similar_model_id in deleted_set:
+                knowledge_llm.qa_similar_model_id = None
+                changed = True
+            if knowledge_llm.asr_model_id in deleted_set:
+                knowledge_llm.asr_model_id = None
+                changed = True
+            if changed:
+                await cls._base_update_llm_config(
+                    data=knowledge_llm.model_dump(),
+                    key=ConfigKeyEnum.KNOWLEDGE_LLM,
+                    tenant_id=target,
+                )
+
+        # --- assistant_llm ------------------------------------------------
+        try:
+            assistant_llm, _, _ = await cls.aget_assistant_llm_with_meta(target)
+        except Exception:
+            assistant_llm = None
+        if assistant_llm is not None:
+            changed = False
+            if assistant_llm.auto_llm and assistant_llm.auto_llm.model_id in deleted_set:
+                assistant_llm.auto_llm = None
+                changed = True
+            if assistant_llm.llm_list:
+                filtered = [
+                    item for item in assistant_llm.llm_list
+                    if item.model_id not in deleted_set
+                ]
+                if len(filtered) != len(assistant_llm.llm_list):
+                    assistant_llm.llm_list = filtered
+                    changed = True
+            if changed:
+                await cls._base_update_llm_config(
+                    data=assistant_llm.model_dump(),
+                    key=ConfigKeyEnum.ASSISTANT_LLM,
+                    tenant_id=target,
+                )
+
+        # --- evaluation_llm + workflow_llm (both EvaluationLLMConfig) -----
+        for cfg_key in (ConfigKeyEnum.EVALUATION_LLM, ConfigKeyEnum.WORKFLOW_LLM):
+            try:
+                cfg, _, _ = await cls._aget_typed_with_meta(
+                    cfg_key, EvaluationLLMConfig, target,
+                )
+            except Exception:
+                continue
+            if cfg is not None and cfg.model_id in deleted_set:
+                cfg.model_id = None
+                await cls._base_update_llm_config(
+                    data=cfg.model_dump(),
+                    key=cfg_key,
+                    tenant_id=target,
+                )
+
+        # --- workbench_llm (WorkbenchModelConfig) -------------------------
+        try:
+            workbench_llm, _, _ = await cls.aget_workbench_llm_with_meta(target)
+        except Exception:
+            workbench_llm = None
+        if workbench_llm is not None:
+            changed = False
+            if workbench_llm.linsight_default_model_id is not None and (
+                _coerce_model_id(workbench_llm.linsight_default_model_id) in deleted_set
+            ):
+                workbench_llm.linsight_default_model_id = None
+                changed = True
+            if workbench_llm.models is not None:
+                filtered = [
+                    m for m in workbench_llm.models
+                    if _coerce_model_id(m.id) not in deleted_set
+                ]
+                if len(filtered) != len(workbench_llm.models):
+                    workbench_llm.models = filtered
+                    changed = True
+            for field_name in ("embedding_model", "asr_model", "tts_model", "chat_title_llm"):
+                ws_model = getattr(workbench_llm, field_name)
+                if ws_model is None:
+                    continue
+                if _coerce_model_id(ws_model.id) in deleted_set:
+                    setattr(workbench_llm, field_name, None)
+                    changed = True
+            if changed:
+                await cls._base_update_llm_config(
+                    data=workbench_llm.model_dump(),
+                    key=ConfigKeyEnum.LINSIGHT_LLM,
+                    tenant_id=target,
+                )
+
+    @classmethod
     async def get_all_llm(
         cls,
         only_shared: bool = False,
@@ -691,7 +819,29 @@ class LLMService:
         with bypass_tenant_filter():
             pre = await LLMDao.aget_server_by_id(server_id)
 
+        # Capture the model ids we're about to drop so we can null out
+        # any system-config rows that still reference them. Without this
+        # step the knowledge/assistant/evaluation/workflow/workbench
+        # defaults keep pointing at a model that no longer exists, and
+        # the next ``update_*_llm`` write (or any direct consumer) trips
+        # ``LlmModelConfigDeletedError`` (10009) / 19802.
+        with bypass_tenant_filter():
+            models_to_drop = await LLMDao.aget_model_by_server_ids([server_id])
+        deleted_model_ids = {one.id for one in models_to_drop if one.id is not None}
+        tenant_id = getattr(pre, "tenant_id", None) if pre is not None else None
+
         await LLMDao.adelete_server_by_id(server_id, operator=login_user)
+
+        if deleted_model_ids:
+            try:
+                await cls._clear_stale_model_refs_from_system_configs(
+                    deleted_model_ids, tenant_id=tenant_id,
+                )
+            except Exception:
+                logger.exception(
+                    "cleanup system-config refs after delete_llm_server failed: server_id=%s",
+                    server_id,
+                )
 
         if pre is not None:
             await _write_llm_audit(
@@ -878,7 +1028,26 @@ class LLMService:
             list(model_dict.values()),
             operator=login_user,
         )
+        # ``update_server_with_models`` deletes any model not in the new
+        # list; gather those ids before the post-update read so we can
+        # clear stale references in the system-config rows. ``set_default_model``
+        # already auto-fills empty slots on *new* models, so the only
+        # cleanup required here is the orphans we just dropped.
         new_server_info = await cls.get_one_llm(db_server.id, operator=login_user)
+        new_model_ids = {one.id for one in new_server_info.models if one.id is not None}
+        deleted_model_ids = {
+            mid for mid in old_model_dict.keys() if mid not in new_model_ids
+        }
+        if deleted_model_ids:
+            try:
+                await cls._clear_stale_model_refs_from_system_configs(
+                    deleted_model_ids, tenant_id=exist_server.tenant_id,
+                )
+            except Exception:
+                logger.exception(
+                    "cleanup system-config refs after update_llm_server failed: server_id=%s",
+                    exist_server.id,
+                )
         if hasattr(server, "share_to_children") and exist_server.tenant_id == ROOT_TENANT_ID:
             await _write_llm_audit(
                 login_user,
