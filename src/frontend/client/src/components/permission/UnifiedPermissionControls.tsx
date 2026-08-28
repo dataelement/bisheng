@@ -159,6 +159,7 @@ export function SettingsFooter({
         color="default"
         variant="outlined"
         size="medium"
+        className="max-[768px]:flex-1"
         onClick={onCancel}
       >
         {cancelLabel}
@@ -167,6 +168,7 @@ export function SettingsFooter({
         color="primary"
         variant="solid"
         size="medium"
+        className="max-[768px]:flex-1"
         loading={submitting}
         disabled={disabled}
         onClick={onSubmit}
