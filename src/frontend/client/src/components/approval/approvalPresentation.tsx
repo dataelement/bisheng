@@ -1,3 +1,4 @@
+import { Tag } from "@bisheng/ui";
 import { useLocalize } from "~/hooks";
 import { type TranslationKeys } from "~/hooks/useLocalize";
 import { cn } from "~/utils";
@@ -24,34 +25,58 @@ export function formatTime(ts?: string | Date | null): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-export function StatusBadge({ status, instanceStatus, scope, localize }: { status?: string | null; instanceStatus?: string | null; scope: "task" | "instance"; localize: ReturnType<typeof useLocalize> }) {
+/**
+ * Which semantic color an approval status speaks in (组件-Tag标签.md §3.1).
+ * `pending` takes `approving`, the frozen blue exception (色彩规范 §4) — the
+ * hand-rolled `#e8f3ff / #165dff` pill this replaced was that exact blue, and
+ * the token is what keeps it blue when the product runs the green theme.
+ */
+export type ApprovalTone = "default" | "success" | "warning" | "danger" | "approving";
+
+export function StatusBadge({ status, instanceStatus, scope, localize, size = "small" }: {
+  status?: string | null;
+  instanceStatus?: string | null;
+  scope: "task" | "instance";
+  localize: ReturnType<typeof useLocalize>;
+  /** §4 — `medium` for the detail header, `small` everywhere it rides inside a row. */
+  size?: "small" | "medium";
+}) {
+  // Every 审批 status tag carries the dot (designer's call, 2026-08-28) — the
+  // list, the detail header and the progress nodes alike, so one status reads the
+  // same wherever it appears. Hence no `dot` prop: it is not a per-call-site
+  // choice.
+
   const s = String(status || "").toLowerCase();
   const is = String(instanceStatus || "").toLowerCase();
   // Task scope: if my task is approved but instance execution failed, surface the failure.
   const effective = scope === "task" && s === "approved" && is === "execute_failed" ? "execute_failed" : s;
-  const TASK_MAP: Record<string, { text: string; cls: string }> = {
-    pending:        { text: localize("com_approval_task_badge_pending"),    cls: "bg-[#e8f3ff] text-[#165dff]" },
-    approved:       { text: localize("com_approval_task_badge_approved"),   cls: "bg-[#e8ffea] text-[#00b42a]" },
-    rejected:       { text: localize("com_approval_task_badge_rejected"),   cls: "bg-[#fff2f0] text-[#f53f3f]" },
-    cancelled:      { text: localize("com_approval_status_cancelled"),      cls: "bg-fill-1 text-text-3" },
-    skipped:        { text: localize("com_approval_status_skipped"),        cls: "bg-fill-1 text-text-3" },
-    execute_failed: { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
-    exception:      { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
+  const TASK_MAP: Record<string, { text: string; tone: ApprovalTone }> = {
+    pending:        { text: localize("com_approval_task_badge_pending"),    tone: "approving" },
+    approved:       { text: localize("com_approval_task_badge_approved"),   tone: "success" },
+    rejected:       { text: localize("com_approval_task_badge_rejected"),   tone: "danger" },
+    cancelled:      { text: localize("com_approval_status_cancelled"),      tone: "default" },
+    skipped:        { text: localize("com_approval_status_skipped"),        tone: "default" },
+    execute_failed: { text: localize("com_approval_badge_exception"),       tone: "warning" },
+    exception:      { text: localize("com_approval_badge_exception"),       tone: "warning" },
   };
-  const INSTANCE_MAP: Record<string, { text: string; cls: string }> = {
-    pending:        { text: localize("com_approval_status_pending"),        cls: "bg-[#e8f3ff] text-[#165dff]" },
-    approved:       { text: localize("com_approval_status_approved"),       cls: "bg-[#e8ffea] text-[#00b42a]" },
-    executed:       { text: localize("com_approval_status_approved"),       cls: "bg-[#e8ffea] text-[#00b42a]" },
-    rejected:       { text: localize("com_approval_status_rejected"),       cls: "bg-[#fff2f0] text-[#f53f3f]" },
-    withdrawn:      { text: localize("com_approval_status_withdrawn"),      cls: "bg-fill-1 text-text-3" },
-    cancelled:      { text: localize("com_approval_status_cancelled"),      cls: "bg-fill-1 text-text-3" },
-    skipped:        { text: localize("com_approval_status_skipped"),        cls: "bg-fill-1 text-text-3" },
-    execute_failed: { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
-    exception:      { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
+  const INSTANCE_MAP: Record<string, { text: string; tone: ApprovalTone }> = {
+    pending:        { text: localize("com_approval_status_pending"),        tone: "approving" },
+    approved:       { text: localize("com_approval_status_approved"),       tone: "success" },
+    executed:       { text: localize("com_approval_status_approved"),       tone: "success" },
+    rejected:       { text: localize("com_approval_status_rejected"),       tone: "danger" },
+    withdrawn:      { text: localize("com_approval_status_withdrawn"),      tone: "default" },
+    cancelled:      { text: localize("com_approval_status_cancelled"),      tone: "default" },
+    skipped:        { text: localize("com_approval_status_skipped"),        tone: "default" },
+    execute_failed: { text: localize("com_approval_badge_exception"),       tone: "warning" },
+    exception:      { text: localize("com_approval_badge_exception"),       tone: "warning" },
   };
   const MAP = scope === "instance" ? INSTANCE_MAP : TASK_MAP;
-  const { text, cls } = MAP[effective] ?? MAP[s] ?? { text: status ?? "--", cls: "bg-fill-1 text-text-3" };
-  return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[12px] font-medium", cls)}>{text}</span>;
+  const { text, tone } = MAP[effective] ?? MAP[s] ?? { text: status ?? "--", tone: "default" as ApprovalTone };
+  return (
+    <Tag size={size} dot color={tone} className="shrink-0 whitespace-nowrap">
+      {text}
+    </Tag>
+  );
 }
 
 export function TimelineStep({ action, operatorName, createTime, detail, localize, isLast }: {

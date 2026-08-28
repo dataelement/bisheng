@@ -1,4 +1,4 @@
-import { Tabs } from "@bisheng/ui";
+import { Tabs, Tag } from "@bisheng/ui";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   decideApprovalTaskApi,
@@ -358,9 +358,9 @@ export function ApprovalPane({
                               <span className={cn("line-clamp-1 text-[14px] text-text-primary", selectedTaskId === id ? "font-medium" : "font-normal")}>{formatTitle(item.scenario_code, item.business_name, localize)}</span>
                               <div className="flex shrink-0 items-center gap-1">
                                 {item.grant_revoked && (
-                                  <span className="rounded-full bg-fill-1 px-2 py-0.5 text-[12px] font-medium text-text-3">
+                                  <Tag size="small" className="shrink-0 whitespace-nowrap">
                                     {localize("com_approval_grant_revoked")}
-                                  </span>
+                                  </Tag>
                                 )}
                                 <StatusBadge status={item.status} instanceStatus={item.instance_status} scope="task" localize={localize} />
                               </div>
@@ -383,9 +383,9 @@ export function ApprovalPane({
                               <span className={cn("line-clamp-1 text-[14px] text-text-primary", selectedInstanceId === id ? "font-medium" : "font-normal")}>{formatTitle(item.scenario_code, item.business_name, localize)}</span>
                               <div className="flex shrink-0 items-center gap-1">
                                 {item.grant_revoked && (
-                                  <span className="rounded-full bg-fill-1 px-2 py-0.5 text-[12px] font-medium text-text-3">
+                                  <Tag size="small" className="shrink-0 whitespace-nowrap">
                                     {localize("com_approval_grant_revoked")}
-                                  </span>
+                                  </Tag>
                                 )}
                                 <StatusBadge status={item.status} scope="instance" localize={localize} />
                               </div>

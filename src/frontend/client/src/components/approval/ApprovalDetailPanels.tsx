@@ -1,3 +1,4 @@
+import { Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import type { ApprovalInstanceDetail, ApprovalTaskDetail } from "~/api/approval";
 import { useLocalize } from "~/hooks";
@@ -7,6 +8,7 @@ import {
   DETAIL_INTERNAL_KEYS,
   InfoGrid,
   StatusBadge,
+  type ApprovalTone,
   TimelineStep,
   formatSerialNo,
   formatTime,
@@ -49,7 +51,9 @@ export function DetailHeader({ title, status, instanceStatus, scope, serialNo, s
             {/* Same line box as the list column's section heading (text-base/leading-8 at pt-4),
                 so both titles sit on one line across the two columns. */}
             <h3 className="min-w-0 flex-1 text-base font-semibold leading-8 text-text-primary">{title || "--"}</h3>
-            <StatusBadge status={status} instanceStatus={instanceStatus} scope={scope} localize={localize} />
+            {/* §4 — one object's status, meant to be seen from across the page,
+                so the medium rung; the dot comes from StatusBadge itself. */}
+            <StatusBadge status={status} instanceStatus={instanceStatus} scope={scope} localize={localize} size="medium" />
           </div>
           <p className="mt-1.5 text-[13px] text-text-3">
             {serialNo} · {scenarioName || "--"} · {formatTime(createTime)}
@@ -148,12 +152,12 @@ export function TaskDetailPanel({ detail, localize, onBack }: { detail: Approval
                 s === "approved" ? "bg-[#00b42a]" : s === "rejected" ? "bg-[#f53f3f]" :
                 (s === "cancelled" || s === "skipped") ? "bg-fill-4" : "bg-blue-500";
               const isLast = i === nodes.length - 1 && !hasTrailingLogs;
-              const nodeBadgeMap: Record<string, { text: string; cls: string }> = {
-                approved:  { text: localize("com_approval_status_approved"),  cls: "bg-[#e8ffea] text-[#00b42a]" },
-                rejected:  { text: localize("com_approval_status_rejected"),  cls: "bg-[#fff2f0] text-[#f53f3f]" },
-                pending:   { text: localize("com_approval_status_pending"),   cls: "bg-[#e8f3ff] text-[#165dff]" },
-                skipped:   { text: localize("com_approval_status_skipped"),   cls: "bg-fill-1 text-text-3" },
-                cancelled: { text: localize("com_approval_status_cancelled"), cls: "bg-fill-1 text-text-3" },
+              const nodeBadgeMap: Record<string, { text: string; tone: ApprovalTone }> = {
+                approved:  { text: localize("com_approval_status_approved"),  tone: "success" },
+                rejected:  { text: localize("com_approval_status_rejected"),  tone: "danger" },
+                pending:   { text: localize("com_approval_status_pending"),   tone: "approving" },
+                skipped:   { text: localize("com_approval_status_skipped"),   tone: "default" },
+                cancelled: { text: localize("com_approval_status_cancelled"), tone: "default" },
               };
               return (
                 <div key={node.node_code ?? node.task_id ?? i} className="flex gap-3">
@@ -167,9 +171,9 @@ export function TaskDetailPanel({ detail, localize, onBack }: { detail: Approval
                         {node.node_name || "--"}
                       </span>
                       {!isNotStarted && nodeBadgeMap[s] && (
-                        <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", nodeBadgeMap[s].cls)}>
+                        <Tag size="small" dot color={nodeBadgeMap[s].tone} className="shrink-0 whitespace-nowrap">
                           {nodeBadgeMap[s].text}
-                        </span>
+                        </Tag>
                       )}
                     </div>
                     {matchedTasks.length > 0 && (
@@ -321,12 +325,12 @@ export function RequestDetailPanel({ detail, localize, onBack }: { detail: Appro
                 s === "approved" ? "bg-[#00b42a]" : s === "rejected" ? "bg-[#f53f3f]" :
                 (s === "cancelled" || s === "skipped") ? "bg-fill-4" : "bg-blue-500";
               const isLast = i === nodes.length - 1 && !hasTrailingLogs;
-              const nodeBadgeMap: Record<string, { text: string; cls: string }> = {
-                approved:  { text: localize("com_approval_status_approved"),  cls: "bg-[#e8ffea] text-[#00b42a]" },
-                rejected:  { text: localize("com_approval_status_rejected"),  cls: "bg-[#fff2f0] text-[#f53f3f]" },
-                pending:   { text: localize("com_approval_status_pending"),   cls: "bg-[#e8f3ff] text-[#165dff]" },
-                skipped:   { text: localize("com_approval_status_skipped"),   cls: "bg-fill-1 text-text-3" },
-                cancelled: { text: localize("com_approval_status_cancelled"), cls: "bg-fill-1 text-text-3" },
+              const nodeBadgeMap: Record<string, { text: string; tone: ApprovalTone }> = {
+                approved:  { text: localize("com_approval_status_approved"),  tone: "success" },
+                rejected:  { text: localize("com_approval_status_rejected"),  tone: "danger" },
+                pending:   { text: localize("com_approval_status_pending"),   tone: "approving" },
+                skipped:   { text: localize("com_approval_status_skipped"),   tone: "default" },
+                cancelled: { text: localize("com_approval_status_cancelled"), tone: "default" },
               };
               return (
                 <div key={node.node_code ?? node.task_id ?? i} className="flex gap-3">
@@ -340,10 +344,13 @@ export function RequestDetailPanel({ detail, localize, onBack }: { detail: Appro
                       <span className={cn("text-[14px] font-medium", isNotStarted ? "text-text-3" : "text-text-primary")}>
                         {node.node_name || "--"}
                       </span>
+                      {/* No dot on this one: the timeline already draws a colored
+                          marker for the node, and two dots on one line read as
+                          two separate signals (组件-Tag标签.md §5). */}
                       {!isNotStarted && nodeBadgeMap[s] && (
-                        <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", nodeBadgeMap[s].cls)}>
+                        <Tag size="small" dot color={nodeBadgeMap[s].tone} className="shrink-0 whitespace-nowrap">
                           {nodeBadgeMap[s].text}
-                        </span>
+                        </Tag>
                       )}
                     </div>
                     {/* Per-approver entries */}
