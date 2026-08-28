@@ -135,7 +135,12 @@ def test_portal_telemetry_recorder_is_best_effort(monkeypatch):
 async def test_portal_home_event_counts(monkeypatch):
     class FakeEsClient:
         async def search(self, **kwargs):
-            assert kwargs["index"] == "base_telemetry_events"
+            if kwargs["index"] == "mid_realtime_qa_question_fact":
+                assert kwargs["body"]["query"]["bool"]["filter"] == [
+                    {"terms": {"qa_type": ["expert", "smart"]}},
+                ]
+                return {"aggregations": {"qa_count": {"value": 8}}}
+
             query = kwargs["body"]["query"]["bool"]
             assert query["filter"] == [
                 {
@@ -148,14 +153,24 @@ async def test_portal_home_event_counts(monkeypatch):
                     }
                 }
             ]
+            must_not = query["must_not"]
             excluded_fields = {
                 item["bool"]["filter"][1]["exists"]["field"]
-                for item in query["must_not"]
+                for item in must_not
+                if "exists" in item["bool"]["filter"][1]
             }
             assert excluded_fields == {
                 "event_data.portal_document_read_content_stat_schema_version",
                 "event_data.portal_favorite_content_stat_schema_version",
             }
+            assert {
+                "bool": {
+                    "filter": [
+                        {"term": {"event_type": "portal_qa"}},
+                        {"term": {"event_data.portal_qa_scene": "smart_qa"}},
+                    ]
+                }
+            } in must_not
             return {
                 "aggregations": {
                     "by_event_type": {
@@ -175,15 +190,11 @@ async def test_portal_home_event_counts(monkeypatch):
         "bisheng.common.telemetry.portal_event_service.get_statistics_es_connection",
         fake_get_statistics_es_connection,
     )
-    monkeypatch.setattr(
-        "bisheng.common.telemetry.portal_event_service.telemetry_service.index_name",
-        "base_telemetry_events",
-    )
 
     assert await PortalTelemetryEventService.count_home_events() == {
         "read_count": 11,
         "favorite_count": 3,
-        "qa_count": 5,
+        "qa_count": 13,
     }
 
 
@@ -198,11 +209,7 @@ async def test_portal_document_read_counts_by_space_ids(monkeypatch):
             assert not any("event_data.portal_document_read_source_app" in item.get("term", {}) for item in filters)
             assert {"terms": {"event_data.portal_document_read_space_id": [12, 13]}} in filters
             assert body["query"]["bool"]["must_not"] == [
-                {
-                    "exists": {
-                        "field": "event_data.portal_document_read_content_stat_schema_version"
-                    }
-                }
+                {"exists": {"field": "event_data.portal_document_read_content_stat_schema_version"}}
             ]
             terms = body["aggs"]["by_file"]["terms"]
             assert terms["field"] == "event_data.portal_document_read_file_id"

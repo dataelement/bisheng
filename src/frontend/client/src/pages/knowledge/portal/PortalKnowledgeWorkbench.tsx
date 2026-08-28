@@ -257,6 +257,7 @@ export default function PortalKnowledgeWorkbench() {
     const [folderDraft, setFolderDraft] = useState("新建文件夹");
     const [activePanel, setActivePanel] = useState<PanelKey | null>(null);
     const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
+    const [openAiAfterDeepLinkRestore, setOpenAiAfterDeepLinkRestore] = useState(false);
     const [summaryExpanded, setSummaryExpanded] = useState(false);
     const [tagModalOpen, setTagModalOpen] = useState(false);
     const [permissionOpen, setPermissionOpen] = useState(false);
@@ -459,6 +460,30 @@ export default function PortalKnowledgeWorkbench() {
         preview.loading,
         restoringDeepLinkKey,
         selectedFile,
+    ]);
+
+    // Parent-driven "进入知识库" file deep links should open the AI drawer once restore finishes,
+    // regardless of whether the file lives at the root or inside a sub-folder.
+    useEffect(() => {
+        if (!openAiAfterDeepLinkRestore) return;
+        if (!portalDeepLinkTarget?.fileId || isDeepLinkRestoring) return;
+        if (
+            !selectedFile ||
+            String(selectedFile.id) !== portalDeepLinkTarget.fileId ||
+            String(selectedFile.spaceId) !== portalDeepLinkTarget.spaceId
+        ) {
+            return;
+        }
+        setAiDrawerOpen(true);
+        setActivePanel(null);
+        setOpenAiAfterDeepLinkRestore(false);
+    }, [
+        openAiAfterDeepLinkRestore,
+        isDeepLinkRestoring,
+        portalDeepLinkTarget,
+        selectedFile,
+        setActivePanel,
+        setAiDrawerOpen,
     ]);
 
     useEffect(() => {
@@ -1464,6 +1489,7 @@ export default function PortalKnowledgeWorkbench() {
                     next.set("openNonce", openNonce);
                     return next;
                 }, { replace: true });
+                setOpenAiAfterDeepLinkRestore(true);
             }
         };
         window.addEventListener("message", handlePortalMessage);
@@ -2135,11 +2161,39 @@ export default function PortalKnowledgeWorkbench() {
                 setSelectedFile(null);
                 setActivePanel(null);
                 setAiDrawerOpen(false);
+                setSummaryExpanded(false);
                 return;
             }
+            // Normal file-list / tree click opens the AI chat drawer by default.
+            // Search-result previews keep it closed (see handleOpenSourceFile).
             setSelectedFile(file);
+            setActivePanel(null);
+            setAiDrawerOpen(true);
+            setSummaryExpanded(false);
         },
         [],
+    );
+
+    const handleSelectSpace = useCallback(
+        (space: KnowledgeSpace) => {
+            setActiveSpace(space);
+            setSearchParams(
+                (prev: URLSearchParams) => {
+                    const next = new URLSearchParams(prev);
+                    next.set("spaceId", String(space.id));
+                    next.delete("folderId");
+                    next.delete("folderName");
+                    next.delete("fileId");
+                    next.delete("fileName");
+                    next.delete("documentId");
+                    next.delete("name");
+                    next.delete("openNonce");
+                    return next;
+                },
+                { replace: true },
+            );
+        },
+        [setActiveSpace, setSearchParams],
     );
 
     const sourceSpaceFromActive = useMemo(() => {
@@ -2204,10 +2258,60 @@ export default function PortalKnowledgeWorkbench() {
         return names.join("/");
     }, [activeGroup?.title, activeSpace?.name, selectedFile, selectedFileParentPath, sourceSpace]);
 
+    // Keep the URL in sync with the currently previewed file so that back navigation
+    // returns to the file's real folder instead of the entry position.
+    useEffect(() => {
+        if (!selectedFile?.spaceId || !selectedFile?.id || isFolder(selectedFile)) return;
+        const spaceId = String(selectedFile.spaceId);
+        const fileId = String(selectedFile.id);
+        const fileName = selectedFile.name;
+        const parentFolders = selectedFileParentPath ?? [];
+        const deepestFolder = parentFolders[parentFolders.length - 1];
+        const folderId = deepestFolder?.id || currentFolderId || "";
+        const folderName = deepestFolder?.name || currentFolderNode?.file.name || "";
+        if (
+            portalDeepLinkTarget &&
+            portalDeepLinkTarget.spaceId === spaceId &&
+            portalDeepLinkTarget.folderId === folderId &&
+            portalDeepLinkTarget.fileId === fileId &&
+            portalDeepLinkTarget.fileName === fileName
+        ) {
+            return;
+        }
+        setSearchParams(
+            (prev: URLSearchParams) => {
+                const next = new URLSearchParams(prev);
+                next.set("spaceId", spaceId);
+                if (folderId) {
+                    next.set("folderId", folderId);
+                    next.set("folderName", folderName);
+                } else {
+                    next.delete("folderId");
+                    next.delete("folderName");
+                }
+                next.set("fileId", fileId);
+                next.set("fileName", fileName);
+                next.delete("documentId");
+                next.delete("name");
+                next.delete("openNonce");
+                return next;
+            },
+            { replace: true },
+        );
+    }, [
+        currentFolderId,
+        currentFolderNode?.file.name,
+        portalDeepLinkTarget,
+        selectedFile,
+        selectedFileParentPath,
+        setSearchParams,
+    ]);
+
     const handleBackToFileList = useCallback(() => {
         setSelectedFile(null);
         setActivePanel(null);
         setAiDrawerOpen(false);
+        setOpenAiAfterDeepLinkRestore(false);
         setSummaryExpanded(false);
         setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
         // Deep-link open used to leave searchMode with a single-file result set.
@@ -2814,7 +2918,7 @@ export default function PortalKnowledgeWorkbench() {
                         onCollapseSidebar={() => setSpaceSidebarCollapsed(true)}
                         onToggleGroup={(groupKey) => setExpandedGroups((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }))}
                         onOpenCreateSpace={handleOpenCreateSpace}
-                        onSelectSpace={setActiveSpace}
+                        onSelectSpace={handleSelectSpace}
                         onSpaceMenuOpenChange={(spaceId, open) => {
                             setSpaceMenuOpenId(open ? spaceId : null);
                             // 打开菜单时才按需查询该空间的操作权限（懒查询）
