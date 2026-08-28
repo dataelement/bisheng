@@ -975,6 +975,53 @@ async def get_grant_subject_users(
     return resp_200(data)
 
 
+# F038 department-tree user picker: one browse layer = child departments +
+# the direct primary-department users of the expanded node; search keeps the
+# full ancestor path and attaches matched users to their primary department.
+@router.get("/resources/{resource_type}/{resource_id}/grant-subjects/users/tree/children")
+async def get_grant_subject_user_tree_children(
+    resource_type: str,
+    resource_id: str,
+    parent_id: int | None = Query(None),
+    user_page: int = Query(1, ge=1),
+    user_page_size: int = Query(100, ge=1, le=500),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        data = await GrantSubjectQueryService().query_resource_user_tree_children(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            login_user=login_user,
+            parent_id=parent_id,
+            user_page=user_page,
+            user_page_size=user_page_size,
+        )
+    except BaseErrorCode as error:
+        return error.__class__.return_resp(msg=error.message)
+    return resp_200(data)
+
+
+@router.get("/resources/{resource_type}/{resource_id}/grant-subjects/users/tree/search")
+async def search_grant_subject_user_tree(
+    resource_type: str,
+    resource_id: str,
+    keyword: str = "",
+    limit: int = Query(50, ge=1, le=200),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        data = await GrantSubjectQueryService().query_resource_user_tree_search(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            login_user=login_user,
+            keyword=keyword,
+            limit=limit,
+        )
+    except BaseErrorCode as error:
+        return error.__class__.return_resp(msg=error.message)
+    return resp_200(data)
+
+
 # F038/T012: the eager full-tree ``GET .../grant-subjects/departments`` was
 # removed — the grant picker uses the lazy ``…/departments/{children,search,
 # {id}/path-tree}`` endpoints below instead, so a large org tree never loads at

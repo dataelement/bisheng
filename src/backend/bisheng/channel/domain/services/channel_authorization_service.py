@@ -795,6 +795,41 @@ class ChannelAuthorizationService:
             restrict_dept_path=None,
         )
 
+    # F038: department-tree user picker. Channels are never department-scoped, so
+    # restrict_root_path is always None — same tenant-subtree scope as the legacy
+    # flat list, just organized by department layer / pruned search tree.
+    async def list_grant_user_tree_children(
+        self,
+        channel_id: str,
+        login_user: UserPayload,
+        parent_id: int | None = None,
+        user_page: int = 1,
+        user_page_size: int = 100,
+    ):
+        await self._require_manage_access(channel_id, login_user)
+        tenant_id = await self._resolve_channel_tenant(channel_id, login_user)
+        if tenant_id is None:
+            return {"departments": [], "users": [], "has_more_users": False}
+        return await self.grant_subject_query_service.list_user_tree_children(
+            tenant_id=tenant_id,
+            parent_id=parent_id,
+            restrict_root_path=None,
+            user_page=user_page,
+            user_page_size=user_page_size,
+        )
+
+    async def search_grant_user_tree(self, channel_id: str, login_user: UserPayload, keyword: str, limit: int = 50):
+        await self._require_manage_access(channel_id, login_user)
+        tenant_id = await self._resolve_channel_tenant(channel_id, login_user)
+        if tenant_id is None:
+            return {"roots": [], "total_matches": 0, "truncated": False}
+        return await self.grant_subject_query_service.search_users_tree(
+            tenant_id=tenant_id,
+            keyword=keyword,
+            limit=limit,
+            restrict_root_path=None,
+        )
+
     # F038: lazy variants. Channels are never department-scoped, so restrict_root_path
     # is always None — same tenant-subtree scope as the legacy full-tree list, just one
     # layer / pruned tree at a time. Reuses the permission module's shared helpers.

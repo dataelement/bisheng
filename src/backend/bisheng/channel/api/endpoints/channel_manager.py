@@ -222,6 +222,36 @@ async def list_channel_grant_users(
     return resp_200(data=result)
 
 
+# F038: department-tree user picker — one browse layer = child departments +
+# the direct primary-department users of the expanded node; search keeps the
+# full ancestor path and attaches matched users to their primary department.
+@router.get("/{channel_id}/grant-subjects/users/tree/children")
+async def list_channel_grant_user_tree_children(
+    channel_id: str,
+    parent_id: int | None = Query(None, description="None → root layer; else direct children of this internal id"),
+    user_page: int = Query(1, ge=1),
+    user_page_size: int = Query(100, ge=1, le=500),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
+):
+    result = await authorization_service.list_grant_user_tree_children(
+        channel_id, login_user, parent_id, user_page, user_page_size
+    )
+    return resp_200(data=result)
+
+
+@router.get("/{channel_id}/grant-subjects/users/tree/search")
+async def search_channel_grant_user_tree(
+    channel_id: str,
+    keyword: str = Query("", description="Username keyword"),
+    limit: int = Query(50, ge=1, le=200, description="Max matches"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
+):
+    result = await authorization_service.search_grant_user_tree(channel_id, login_user, keyword, limit)
+    return resp_200(data=result)
+
+
 # F038/T012: the eager full-tree ``GET /{channel_id}/grant-subjects/departments``
 # was removed — the channel picker uses the lazy children/search/path-tree routes
 # below so a large org tree never loads at once.

@@ -16,7 +16,9 @@ from bisheng.permission.domain.repositories.grant_subject_query_repository impor
 _CREATION_RESOURCE_TYPES = frozenset({"knowledge_space", "channel"})
 _VALID_SUBJECT_TYPES = frozenset({"user", "department", "user_group"})
 _VALID_OPERATIONS = {
-    "user": frozenset({"list"}),
+    # F038: "tree_children"/"tree_search" back the department-tree user picker
+    # (department nodes for navigation, primary-department users as leaves).
+    "user": frozenset({"list", "tree_children", "tree_search"}),
     "user_group": frozenset({"list"}),
     "department": frozenset({"children", "search", "path_tree"}),
 }
@@ -105,11 +107,24 @@ class GrantSubjectQueryService:
         await self.require_creation_management_access(resource_type)
 
         if subject_type == "user":
-            return await self.list_users(
+            if operation == "list":
+                return await self.list_users(
+                    tenant_id=tenant_id,
+                    keyword=keyword,
+                    page=page,
+                    page_size=page_size,
+                )
+            if operation == "tree_children":
+                return await self.list_user_tree_children(
+                    tenant_id=tenant_id,
+                    parent_id=parent_id,
+                    user_page=page,
+                    user_page_size=page_size,
+                )
+            return await self.search_users_tree(
                 tenant_id=tenant_id,
                 keyword=keyword,
-                page=page,
-                page_size=page_size,
+                limit=limit,
             )
         if subject_type == "user_group":
             return await self.list_user_groups(
@@ -251,6 +266,26 @@ class GrantSubjectQueryService:
         if user_group_ids and not await self.repository.user_groups_exist_in_tenant(user_group_ids, tenant_id):
             raise PermissionDeniedError()
 
+        # A department knowledge space can only grant access within its own
+        # organization subtree. The picker is intentionally not treated as a
+        # security boundary: validate the submitted subjects again here.
+        restrict_path = await self.repository.resolve_department_space_path(
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )
+        if restrict_path is False:
+            raise PermissionDeniedError()
+        if restrict_path is not None:
+            # Department-scoped spaces deliberately do not expose user groups
+            # because a group cannot be constrained to the space subtree.
+            if user_group_ids or not await self.repository.grant_subjects_exist_in_department_scope(
+                user_ids=user_ids,
+                department_ids=department_ids,
+                tenant_id=tenant_id,
+                restrict_root_path=restrict_path,
+            ):
+                raise PermissionDeniedError()
+
     async def list_users(
         self,
         *,
@@ -278,6 +313,55 @@ class GrantSubjectQueryService:
         return await self.repository.list_departments_children(
             tenant_id=tenant_id,
             parent_id=parent_id,
+            restrict_root_path=restrict_root_path,
+        )
+
+    async def list_user_tree_children(
+        self,
+        *,
+        tenant_id: int,
+        parent_id: int | None = None,
+        restrict_root_path: str | None = None,
+        user_page: int = 1,
+        user_page_size: int = 100,
+    ) -> dict:
+        """F038 user tree: one layer = child departments (navigation) + the
+        direct primary-department users of ``parent_id`` (leaves). The root
+        layer (``parent_id`` is ``None``) never has users of its own — a bare
+        tenant root isn't a real department members can belong to.
+        """
+        departments = await self.list_departments_children(
+            tenant_id=tenant_id,
+            parent_id=parent_id,
+            restrict_root_path=restrict_root_path,
+        )
+        users_page = {"items": [], "has_more": False}
+        if parent_id is not None:
+            users_page = await self.repository.list_department_direct_users(
+                tenant_id=tenant_id,
+                department_id=parent_id,
+                page=user_page,
+                page_size=user_page_size,
+                restrict_root_path=restrict_root_path,
+            )
+        return {
+            "departments": departments,
+            "users": users_page["items"],
+            "has_more_users": users_page["has_more"],
+        }
+
+    async def search_users_tree(
+        self,
+        *,
+        tenant_id: int,
+        keyword: str,
+        limit: int = 50,
+        restrict_root_path: str | None = None,
+    ) -> dict:
+        return await self.repository.search_users_tree(
+            tenant_id=tenant_id,
+            keyword=keyword,
+            limit=limit,
             restrict_root_path=restrict_root_path,
         )
 
@@ -370,6 +454,46 @@ class GrantSubjectQueryService:
             page=page,
             page_size=page_size,
             restrict_dept_path=restrict_path,
+        )
+
+    async def query_resource_user_tree_children(
+        self,
+        *,
+        resource_type: str,
+        resource_id: str,
+        login_user: UserPayload,
+        parent_id: int | None = None,
+        user_page: int = 1,
+        user_page_size: int = 100,
+    ) -> dict:
+        tenant_id, restrict_path, empty = await self._resource_query_context(resource_type, resource_id, login_user)
+        if empty:
+            return {"departments": [], "users": [], "has_more_users": False}
+        return await self.list_user_tree_children(
+            tenant_id=tenant_id,
+            parent_id=parent_id,
+            restrict_root_path=restrict_path,
+            user_page=user_page,
+            user_page_size=user_page_size,
+        )
+
+    async def query_resource_user_tree_search(
+        self,
+        *,
+        resource_type: str,
+        resource_id: str,
+        login_user: UserPayload,
+        keyword: str,
+        limit: int = 50,
+    ) -> dict:
+        tenant_id, restrict_path, empty = await self._resource_query_context(resource_type, resource_id, login_user)
+        if empty:
+            return dict(_EMPTY_TREE)
+        return await self.search_users_tree(
+            tenant_id=tenant_id,
+            keyword=keyword,
+            limit=limit,
+            restrict_root_path=restrict_path,
         )
 
     async def query_resource_departments(

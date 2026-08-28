@@ -384,12 +384,29 @@ export interface CreationGrantDepartmentPathTreeQuery extends CreationGrantSubje
   departmentId: number;
 }
 
+export interface CreationGrantUserTreeChildrenQuery extends CreationGrantSubjectQueryBase {
+  subjectType: "user";
+  operation: "tree_children";
+  parentId?: number | null;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface CreationGrantUserTreeSearchQuery extends CreationGrantSubjectQueryBase {
+  subjectType: "user";
+  operation: "tree_search";
+  keyword: string;
+  limit?: number;
+}
+
 export type CreationGrantSubjectsQuery =
   | CreationGrantUserQuery
   | CreationGrantUserGroupQuery
   | CreationGrantDepartmentChildrenQuery
   | CreationGrantDepartmentSearchQuery
-  | CreationGrantDepartmentPathTreeQuery;
+  | CreationGrantDepartmentPathTreeQuery
+  | CreationGrantUserTreeChildrenQuery
+  | CreationGrantUserTreeSearchQuery;
 
 export async function searchUsers(
   name: string,
@@ -441,6 +458,50 @@ export async function getKnowledgeSpaceGrantUsers(
   return getResourceGrantUsers("knowledge_space", resourceId, params, config);
 }
 
+// ── Lazy grant-user tree (F038) ───────────────────────
+// Department-tree user picker: one browse layer = child departments
+// (navigation) + the direct primary-department users of the expanded node
+// (leaves); search keeps the full ancestor path and attaches matched users to
+// their primary department node. Mirrors the department tree below.
+
+export async function getResourceGrantUserTreeChildren(
+  resourceType: ResourceType,
+  resourceId: string,
+  parentId: number | null,
+  params?: { userPage?: number; userPageSize?: number },
+  config?: { signal?: AbortSignal }
+): Promise<GrantUserTreeChildrenResult> {
+  const res = await request.get(
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/users/tree/children`,
+    {
+      params: {
+        parent_id: parentId ?? undefined,
+        user_page: params?.userPage ?? 1,
+        user_page_size: params?.userPageSize ?? 100,
+      },
+      ...withPermissionRequestOptions(config),
+    }
+  );
+  return unwrap<GrantUserTreeChildrenResult>(res) ?? EMPTY_USER_TREE_CHILDREN;
+}
+
+export async function searchResourceGrantUserTree(
+  resourceType: ResourceType,
+  resourceId: string,
+  keyword: string,
+  limit = 50,
+  config?: { signal?: AbortSignal }
+): Promise<GrantDepartmentSearchResult> {
+  const res = await request.get(
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/users/tree/search`,
+    {
+      params: { keyword, limit },
+      ...withPermissionRequestOptions(config),
+    }
+  );
+  return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
+}
+
 // ── Lazy grant-department tree (F038) ────────────────
 // Browse one visible layer / server search / locate-by-id, so a large org tree
 // is never loaded at once. Same authorization scope as the full-tree endpoint
@@ -462,6 +523,10 @@ export interface GrantDepartmentNode {
   has_children?: boolean;
   matched?: boolean;
   children?: GrantDepartmentNode[];
+  /** F038 user-tree only: direct primary-department members attached as leaves
+   * (populated by the user-tree search endpoint; absent for department-only
+   * browsing/search responses). */
+  users?: GrantUser[];
 }
 
 export interface GrantDepartmentSearchResult {
@@ -470,10 +535,24 @@ export interface GrantDepartmentSearchResult {
   truncated: boolean;
 }
 
+/** F038 user-tree browse layer: child departments (navigation) + the direct
+ * primary-department users of the expanded node (leaves), one page at a time. */
+export interface GrantUserTreeChildrenResult {
+  departments: GrantDepartmentNode[];
+  users: GrantUser[];
+  has_more_users: boolean;
+}
+
 const EMPTY_DEPARTMENT_SEARCH_RESULT: GrantDepartmentSearchResult = {
   roots: [],
   total_matches: 0,
   truncated: false,
+};
+
+const EMPTY_USER_TREE_CHILDREN: GrantUserTreeChildrenResult = {
+  departments: [],
+  users: [],
+  has_more_users: false,
 };
 
 export function getCreationGrantSubjects(
@@ -492,10 +571,24 @@ export function getCreationGrantSubjects(
   query: CreationGrantDepartmentSearchQuery | CreationGrantDepartmentPathTreeQuery,
   config?: PermissionRequestConfig,
 ): Promise<GrantDepartmentSearchResult>;
+export function getCreationGrantSubjects(
+  query: CreationGrantUserTreeChildrenQuery,
+  config?: PermissionRequestConfig,
+): Promise<GrantUserTreeChildrenResult>;
+export function getCreationGrantSubjects(
+  query: CreationGrantUserTreeSearchQuery,
+  config?: PermissionRequestConfig,
+): Promise<GrantDepartmentSearchResult>;
 export async function getCreationGrantSubjects(
   query: CreationGrantSubjectsQuery,
   config?: PermissionRequestConfig,
-): Promise<GrantUser[] | GrantUserGroup[] | GrantDepartmentNode[] | GrantDepartmentSearchResult> {
+): Promise<
+  | GrantUser[]
+  | GrantUserGroup[]
+  | GrantDepartmentNode[]
+  | GrantDepartmentSearchResult
+  | GrantUserTreeChildrenResult
+> {
   const params: Record<string, string | number> = {
     resource_type: query.resourceType,
     subject_type: query.subjectType,
@@ -516,7 +609,13 @@ export async function getCreationGrantSubjects(
     && (query.operation === "search" || query.operation === "path_tree")) {
     return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
   }
-  if (query.subjectType === "user") return unwrapArray<GrantUser>(res);
+  if (query.subjectType === "user") {
+    if (query.operation === "list") return unwrapArray<GrantUser>(res);
+    if (query.operation === "tree_children") {
+      return unwrap<GrantUserTreeChildrenResult>(res) ?? EMPTY_USER_TREE_CHILDREN;
+    }
+    return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
+  }
   if (query.subjectType === "user_group") return unwrapArray<GrantUserGroup>(res);
   return unwrapArray<GrantDepartmentNode>(res);
 }

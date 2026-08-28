@@ -4,6 +4,7 @@ import type {
   GrantDepartmentSearchResult,
   GrantItem,
   GrantUser,
+  GrantUserTreeChildrenResult,
   InitialPermissionResult,
   InitialPermissionsPayload,
   PermissionEntry,
@@ -428,6 +429,58 @@ export async function searchChannelGrantSubjectsDepartmentsApi(
         },
     );
     // Fail safe on a `data:null` envelope (parity with the resource-scoped twin).
+    return (
+        unwrapChannelPermissionPayload<GrantDepartmentSearchResult>(res) ?? {
+            roots: [],
+            total_matches: 0,
+            truncated: false,
+        }
+    );
+}
+
+// F038: department-tree user picker — one browse layer = child departments +
+// the direct primary-department users of the expanded node; search keeps the
+// full ancestor path and attaches matched users to their primary department.
+
+export async function getChannelGrantSubjectsUserTreeChildrenApi(
+    channelId: string,
+    parentId: number | null,
+    params?: { userPage?: number; userPageSize?: number },
+    config?: ChannelPermissionRequestConfig
+): Promise<GrantUserTreeChildrenResult> {
+    const res = await request.get(
+        `/api/v1/channel/manager/${channelId}/grant-subjects/users/tree/children`,
+        {
+            params: {
+                parent_id: parentId ?? undefined,
+                user_page: params?.userPage ?? 1,
+                user_page_size: params?.userPageSize ?? 100,
+            },
+            ...withChannelPermissionRequestOptions(config),
+        },
+    );
+    return (
+        unwrapChannelPermissionPayload<GrantUserTreeChildrenResult>(res) ?? {
+            departments: [],
+            users: [],
+            has_more_users: false,
+        }
+    );
+}
+
+export async function searchChannelGrantSubjectsUserTreeApi(
+    channelId: string,
+    keyword: string,
+    limit = 50,
+    config?: ChannelPermissionRequestConfig
+): Promise<GrantDepartmentSearchResult> {
+    const res = await request.get(
+        `/api/v1/channel/manager/${channelId}/grant-subjects/users/tree/search`,
+        {
+            params: { keyword, limit },
+            ...withChannelPermissionRequestOptions(config),
+        },
+    );
     return (
         unwrapChannelPermissionPayload<GrantDepartmentSearchResult>(res) ?? {
             roots: [],

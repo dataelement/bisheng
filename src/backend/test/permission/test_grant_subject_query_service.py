@@ -55,6 +55,7 @@ def repository():
         departments_exist_in_tenant=AsyncMock(return_value=True),
         user_groups_exist_in_tenant=AsyncMock(return_value=True),
         resolve_department_space_path=AsyncMock(return_value=None),
+        grant_subjects_exist_in_department_scope=AsyncMock(return_value=True),
     )
     return repo
 
@@ -240,6 +241,60 @@ async def test_validate_resource_grants_rejects_subject_moved_out_of_resource_te
     repository.users_exist_in_tenant.assert_awaited_once_with({999}, 5)
 
 
+async def test_validate_resource_grants_rejects_subject_outside_department_space(repository):
+    repository.resolve_department_space_path.return_value = "1/10"
+    repository.grant_subjects_exist_in_department_scope.return_value = False
+    service = GrantSubjectQueryService(repository)
+
+    with patch(
+        "bisheng.permission.domain.services.permission_service.PermissionService._resolve_resource_tenant",
+        new=AsyncMock(return_value=5),
+    ):
+        with pytest.raises(PermissionDeniedError):
+            await service.validate_resource_grants(
+                resource_type="knowledge_space",
+                resource_id="11",
+                grants=[
+                    AuthorizeGrantItem(
+                        subject_type="user",
+                        subject_id=8,
+                        relation="viewer",
+                    )
+                ],
+            )
+
+    repository.grant_subjects_exist_in_department_scope.assert_awaited_once_with(
+        user_ids={8},
+        department_ids=set(),
+        tenant_id=5,
+        restrict_root_path="1/10",
+    )
+
+
+async def test_validate_resource_grants_rejects_user_groups_for_department_space(repository):
+    repository.resolve_department_space_path.return_value = "1/10"
+    service = GrantSubjectQueryService(repository)
+
+    with patch(
+        "bisheng.permission.domain.services.permission_service.PermissionService._resolve_resource_tenant",
+        new=AsyncMock(return_value=5),
+    ):
+        with pytest.raises(PermissionDeniedError):
+            await service.validate_resource_grants(
+                resource_type="knowledge_space",
+                resource_id="11",
+                grants=[
+                    AuthorizeGrantItem(
+                        subject_type="user_group",
+                        subject_id=20,
+                        relation="viewer",
+                    )
+                ],
+            )
+
+    repository.grant_subjects_exist_in_department_scope.assert_not_awaited()
+
+
 async def test_group_owner_rejected(repository, monkeypatch):
     monkeypatch.setattr(
         "bisheng.permission.domain.services.grant_subject_query_service.get_current_tenant_id",
@@ -313,7 +368,7 @@ async def test_default_creation_model_validation_reads_domain_store(repository, 
             "permissions": [],
             "permissions_explicit": False,
             "is_system": True,
-        }
+        },
     ]
 
     with patch(

@@ -28,7 +28,8 @@ import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup";
 import type { PermissionDraftRow } from "./usePermissionDraft";
 
 export interface PermissionDraftSearchApi {
-  grantUsersApi?: ComponentProps<typeof SubjectSearchUser>["grantUsersApi"];
+  grantUserTreeChildrenApi?: ComponentProps<typeof SubjectSearchUser>["grantUserTreeChildrenApi"];
+  grantUserTreeSearchApi?: ComponentProps<typeof SubjectSearchUser>["grantUserTreeSearchApi"];
   grantDepartmentChildrenApi?: ComponentProps<typeof SubjectSearchDepartment>["grantDepartmentChildrenApi"];
   grantDepartmentSearchApi?: ComponentProps<typeof SubjectSearchDepartment>["grantDepartmentSearchApi"];
   grantUserGroupsApi?: ComponentProps<typeof SubjectSearchUserGroup>["grantUserGroupsApi"];
@@ -157,7 +158,11 @@ export function PermissionDraftPickerDialog({
             )}
           </div>
           <TabsContent value="user" className="mt-3 min-h-0 flex-1 overflow-hidden p-0">
-            <SubjectSearchUser {...searchProps} grantUsersApi={searchApi?.grantUsersApi} />
+            <SubjectSearchUser
+              {...searchProps}
+              grantUserTreeChildrenApi={searchApi?.grantUserTreeChildrenApi}
+              grantUserTreeSearchApi={searchApi?.grantUserTreeSearchApi}
+            />
           </TabsContent>
           <TabsContent value="department" className="mt-3 min-h-0 flex-1 overflow-hidden p-0">
             <SubjectSearchDepartment

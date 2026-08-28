@@ -206,6 +206,187 @@ class GrantSubjectQueryRepository:
             for user in users
         ]
 
+    async def list_department_direct_users(
+        self,
+        *,
+        tenant_id: int,
+        department_id: int,
+        page: int,
+        page_size: int,
+        restrict_root_path: str | None = None,
+    ) -> dict:
+        """F038 user tree: direct primary-department members of ``department_id``.
+
+        Mirrors ``list_users``' tenant/leadership/active-membership filters, but
+        scoped to a single department (not the whole tenant/subtree) so the tree
+        never shows a member twice under different nodes.
+        """
+        from bisheng.database.models.department import Department, UserDepartment
+        from bisheng.database.models.tenant import UserTenant
+        from bisheng.user.domain.models.user import User
+
+        with tenant_context.bypass_tenant_filter():
+            async with database_module.get_async_db_session() as session:
+                scope = await self._resolve_department_scope(session, tenant_id, restrict_root_path)
+                if scope is None:
+                    return {"items": [], "has_more": False}
+                dept = (
+                    await session.exec(
+                        select(Department).where(Department.id == department_id, Department.status == "active")
+                    )
+                ).first()
+                if dept is None or not _in_scope(dept, scope):
+                    return {"items": [], "has_more": False}
+
+                active_member = (
+                    select(UserTenant.id)
+                    .where(
+                        UserTenant.user_id == User.user_id,
+                        UserTenant.tenant_id == tenant_id,
+                        UserTenant.status == "active",
+                    )
+                    .exists()
+                )
+                statement = (
+                    select(User.user_id, User.user_name, User.external_id)
+                    .join(UserDepartment, UserDepartment.user_id == User.user_id)
+                    .where(
+                        UserDepartment.department_id == department_id,
+                        UserDepartment.is_primary == 1,
+                        User.delete == 0,
+                        active_member,
+                        # User.job_grade != _LEADER_JOB_GRADE,
+                    )
+                    .order_by(User.user_id.desc())
+                    .offset(max(0, (page - 1) * page_size))
+                    .limit(page_size + 1)
+                )
+                rows = list((await session.exec(statement)).all())
+
+        has_more = len(rows) > page_size
+        rows = rows[:page_size]
+        return {
+            "items": [
+                {
+                    "user_id": int(row.user_id),
+                    "user_name": row.user_name,
+                    "external_id": getattr(row, "external_id", None),
+                }
+                for row in rows
+            ],
+            "has_more": has_more,
+        }
+
+    async def search_users_tree(
+        self,
+        *,
+        tenant_id: int,
+        keyword: str,
+        limit: int = 50,
+        restrict_root_path: str | None = None,
+    ) -> dict:
+        """F038 user tree search: username match, results keep the full ancestor
+        department path (decision mirrors ``search_departments``' pruned tree),
+        with matched users attached as leaves on their primary department node.
+
+        Users with no primary department, or whose primary department falls
+        outside the resource's authorizable scope, cannot be placed in the tree
+        and are dropped from the result (same visibility boundary as browsing).
+        """
+        from bisheng.database.models.department import Department, DepartmentDao, UserDepartment, UserDepartmentDao
+        from bisheng.database.models.tenant import UserTenant
+        from bisheng.user.domain.models.user import User
+
+        keyword = (keyword or "").strip()
+        if not keyword:
+            return {"roots": [], "total_matches": 0, "truncated": False}
+        limit = max(1, min(limit, 200))
+        with tenant_context.bypass_tenant_filter():
+            async with database_module.get_async_db_session() as session:
+                scope = await self._resolve_department_scope(session, tenant_id, restrict_root_path)
+                if scope is None:
+                    return {"roots": [], "total_matches": 0, "truncated": False}
+
+                active_member = (
+                    select(UserTenant.id)
+                    .where(
+                        UserTenant.user_id == User.user_id,
+                        UserTenant.tenant_id == tenant_id,
+                        UserTenant.status == "active",
+                    )
+                    .exists()
+                )
+                statement = (
+                    select(User.user_id, User.user_name, User.external_id)
+                    .where(
+                        User.delete == 0,
+                        active_member,
+                        # User.job_grade != _LEADER_JOB_GRADE,
+                        User.user_name.like(f"%{keyword}%"),
+                    )
+                    .order_by(User.user_id.desc())
+                    .limit(limit + 1)
+                )
+                if scope.positive_prefix is not None:
+                    in_subtree = (
+                        select(UserDepartment.id)
+                        .join(Department, Department.id == UserDepartment.department_id)
+                        .where(
+                            UserDepartment.user_id == User.user_id,
+                            # A user is represented only under the primary
+                            # department. Filtering by any secondary
+                            # membership here would consume a search slot and
+                            # later drop the user when the primary department
+                            # is outside the resource scope.
+                            UserDepartment.is_primary == 1,
+                            Department.path.like(f"{scope.positive_prefix}%"),
+                            Department.status == "active",
+                        )
+                        .exists()
+                    )
+                    statement = statement.where(in_subtree)
+                users = list((await session.exec(statement)).all())
+                truncated = len(users) > limit
+                users = users[:limit]
+                if not users:
+                    return {"roots": [], "total_matches": 0, "truncated": False}
+
+                user_ids = [int(user.user_id) for user in users]
+                department_rows = await UserDepartmentDao.aget_by_user_ids(user_ids)
+                primary_rows = [row for row in department_rows if int(getattr(row, "is_primary", 0) or 0) == 1]
+                primary_dept_by_user = {int(row.user_id): int(row.department_id) for row in primary_rows}
+                dept_ids = sorted(set(primary_dept_by_user.values()))
+                departments = await DepartmentDao.aget_by_ids(dept_ids) if dept_ids else []
+                seed_departments = [item for item in departments if _in_scope(item, scope)]
+                roots = await self._build_pruned(session, seed_departments, set(), scope, Department)
+
+        node_by_id: dict[int, dict] = {}
+
+        def _collect(nodes: list[dict]) -> None:
+            for node in nodes:
+                node.setdefault("users", [])
+                node_by_id[node["id"]] = node
+                _collect(node["children"])
+
+        _collect(roots)
+
+        placed = 0
+        for user in users:
+            dept_id = primary_dept_by_user.get(int(user.user_id))
+            node = node_by_id.get(dept_id) if dept_id is not None else None
+            if node is None:
+                continue
+            node["users"].append(
+                {
+                    "user_id": int(user.user_id),
+                    "user_name": user.user_name,
+                    "external_id": getattr(user, "external_id", None),
+                }
+            )
+            placed += 1
+
+        return {"roots": roots, "total_matches": placed, "truncated": truncated}
+
     async def _resolve_department_scope(
         self, session, tenant_id: int, restrict_root_path: str | None
     ) -> _GrantDeptScope | None:
@@ -506,6 +687,77 @@ class GrantSubjectQueryRepository:
                 )
         return {int(item.id) for item in rows if _in_scope(item, scope)} == department_ids
 
+    async def grant_subjects_exist_in_department_scope(
+        self,
+        *,
+        user_ids: set[int],
+        department_ids: set[int],
+        tenant_id: int,
+        restrict_root_path: str,
+    ) -> bool:
+        """Check grant subjects against a department-space boundary.
+
+        Departments must be within the space subtree. Users must have their
+        *primary* department in that subtree, which is the same placement rule
+        used by the user authorization tree. User groups cannot be safely
+        scoped by a department subtree and are handled by the service layer.
+        """
+        from bisheng.database.models.department import Department, UserDepartment
+
+        with tenant_context.bypass_tenant_filter():
+            async with database_module.get_async_db_session() as session:
+                scope = await self._resolve_department_scope(session, tenant_id, restrict_root_path)
+                if scope is None:
+                    return False
+
+                if department_ids:
+                    department_rows = list(
+                        (
+                            await session.exec(
+                                select(Department).where(
+                                    col(Department.id).in_(department_ids),
+                                    Department.status == "active",
+                                )
+                            )
+                        ).all()
+                    )
+                    if {int(item.id) for item in department_rows if _in_scope(item, scope)} != department_ids:
+                        return False
+
+                if user_ids:
+                    user_rows = (
+                        await session.exec(
+                            select(UserDepartment.user_id)
+                            .join(Department, Department.id == UserDepartment.department_id)
+                            .where(
+                                col(UserDepartment.user_id).in_(user_ids),
+                                UserDepartment.is_primary == 1,
+                                Department.status == "active",
+                            )
+                        )
+                    ).all()
+                    scoped_user_ids = {int(row[0] if isinstance(row, tuple) else row) for row in user_rows}
+                    if scoped_user_ids != user_ids:
+                        return False
+
+                    primary_departments = list(
+                        (
+                            await session.exec(
+                                select(Department)
+                                .join(UserDepartment, UserDepartment.department_id == Department.id)
+                                .where(
+                                    col(UserDepartment.user_id).in_(user_ids),
+                                    UserDepartment.is_primary == 1,
+                                    Department.status == "active",
+                                )
+                            )
+                        ).all()
+                    )
+                    if any(not _in_scope(department, scope) for department in primary_departments):
+                        return False
+
+        return True
+
     async def user_groups_exist_in_tenant(self, group_ids: set[int], tenant_id: int) -> bool:
         from bisheng.database.models.group import Group
         from bisheng.database.models.tenant import Tenant
@@ -749,8 +1001,7 @@ class GrantSubjectQueryRepository:
                     )
                 ).all()
                 subjects.update(
-                    f"department:{int(row[0] if isinstance(row, tuple) else row)}#member"
-                    for row in department_ids
+                    f"department:{int(row[0] if isinstance(row, tuple) else row)}#member" for row in department_ids
                 )
 
                 group_rows = (

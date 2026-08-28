@@ -5,8 +5,9 @@ import { useParams } from "react-router-dom";
 import {
   getChannelGrantSubjectsDepartmentChildrenApi,
   getChannelGrantSubjectsUserGroupsApi,
-  getChannelGrantSubjectsUsersApi,
+  getChannelGrantSubjectsUserTreeChildrenApi,
   searchChannelGrantSubjectsDepartmentsApi,
+  searchChannelGrantSubjectsUserTreeApi,
 } from "~/api/channels";
 import type { SubjectType } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
@@ -69,8 +70,32 @@ export function ChannelSettingsPage() {
     () =>
       isEditMode
         ? {
-            grantUsersApi: (_resourceType, resourceId, params, config) =>
-              getChannelGrantSubjectsUsersApi(resourceId, params, config),
+            grantUserTreeChildrenApi: (
+              _resourceType,
+              resourceId,
+              parentId,
+              params,
+              config,
+            ) =>
+              getChannelGrantSubjectsUserTreeChildrenApi(
+                resourceId,
+                parentId,
+                params,
+                config,
+              ),
+            grantUserTreeSearchApi: (
+              _resourceType,
+              resourceId,
+              keyword,
+              limit,
+              config,
+            ) =>
+              searchChannelGrantSubjectsUserTreeApi(
+                resourceId,
+                keyword,
+                limit,
+                config,
+              ),
             grantDepartmentChildrenApi: (
               _resourceType,
               resourceId,

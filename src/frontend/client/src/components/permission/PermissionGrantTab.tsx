@@ -7,7 +7,8 @@ import {
   getResourceGrantDepartmentChildren,
   searchResourceGrantDepartments,
   getResourceGrantUserGroups,
-  getResourceGrantUsers,
+  getResourceGrantUserTreeChildren,
+  searchResourceGrantUserTree,
   getResourcePermissions,
 } from "~/api/permission";
 import type {
@@ -46,7 +47,8 @@ export interface PermissionGrantApiAdapter {
   getPermissions: typeof getResourcePermissions;
   authorize: typeof authorizeResource;
   getGrantableRelationModels: typeof getGrantableRelationModels;
-  getGrantUsers?: typeof getResourceGrantUsers;
+  getGrantUserTreeChildren?: typeof getResourceGrantUserTreeChildren;
+  searchGrantUserTree?: typeof searchResourceGrantUserTree;
   getGrantDepartmentChildren?: typeof getResourceGrantDepartmentChildren;
   searchGrantDepartments?: typeof searchResourceGrantDepartments;
   getGrantUserGroups?: typeof getResourceGrantUserGroups;
@@ -143,7 +145,8 @@ const DEFAULT_PERMISSION_API: PermissionGrantApiAdapter = {
   getPermissions: getResourcePermissions,
   authorize: authorizeResource,
   getGrantableRelationModels,
-  getGrantUsers: getResourceGrantUsers,
+  getGrantUserTreeChildren: getResourceGrantUserTreeChildren,
+  searchGrantUserTree: searchResourceGrantUserTree,
   getGrantDepartmentChildren: getResourceGrantDepartmentChildren,
   searchGrantDepartments: searchResourceGrantDepartments,
   getGrantUserGroups: getResourceGrantUserGroups,
@@ -401,7 +404,8 @@ export function PermissionGrantTab({
             resourceType={resourceType}
             resourceId={resourceId}
             disabledIds={grantedSubjectIds.user}
-            grantUsersApi={activePermissionApi.getGrantUsers}
+            grantUserTreeChildrenApi={activePermissionApi.getGrantUserTreeChildren}
+            grantUserTreeSearchApi={activePermissionApi.searchGrantUserTree}
           />
         )}
         {subjectType === "department" && (
