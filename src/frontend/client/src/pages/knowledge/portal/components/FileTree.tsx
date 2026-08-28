@@ -1,7 +1,10 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
+import { useCallback } from "react";
 import { ChevronDown, ChevronRight, Loader2, MoreHorizontal, Send, Shield } from "lucide-react";
 import { FileStatus, type KnowledgeFile } from "~/api/knowledge";
 import LegacyFileIcon from "~/components/ui/icon/File";
+import { useToastContext } from "~/Providers";
+import { isKnowledgeFileLockedByPublishApproval, notifyKnowledgeFileApprovalLocked } from "../knowledgeUtils";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -76,6 +79,10 @@ export function FileTree({
     onToggleFolder,
     onLoadMoreChildren,
 }: FileTreeProps) {
+    const { showToast } = useToastContext();
+    const handleHoverLock = useCallback(() => {
+        notifyKnowledgeFileApprovalLocked(showToast);
+    }, [showToast]);
     const renderFileRow = (file: KnowledgeFile, depth: number, node?: PortalFileTreeNode) => {
         const selected = isFolder(file) ? selectedFolderIds.has(file.id) : selectedFileIds.has(file.id);
         const active = selectedFileId === file.id;
@@ -85,6 +92,8 @@ export function FileTree({
         const showPublishAction = !isFolder(file) && canShowPublishFile(file);
         const showPermissionAction = permissionEntryIds.has(file.id);
         const showMoreMenu = showPublishAction || showPermissionAction;
+        // Active publish approval locks every action except download (none here).
+        const fileLocked = isKnowledgeFileLockedByPublishApproval(file);
         return (
             <div
                 key={file.id}
@@ -167,6 +176,14 @@ export function FileTree({
                 ) : countText ? <span className={s.folderCount}>{countText}</span> : null}
                 {!isFolder(file) && label ? <span className={getStatusClassName(file)}>{label}</span> : null}
                 {showMoreMenu ? (
+                    fileLocked ? (
+                        <span
+                            className="inline-flex cursor-not-allowed items-center justify-center opacity-50"
+                            onMouseEnter={handleHoverLock}
+                        >
+                            <MoreHorizontal size={14} />
+                        </span>
+                    ) : (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <button
@@ -205,6 +222,7 @@ export function FileTree({
                             ) : null}
                         </DropdownMenuContent>
                     </DropdownMenu>
+                    )
                 ) : null}
             </div>
         );

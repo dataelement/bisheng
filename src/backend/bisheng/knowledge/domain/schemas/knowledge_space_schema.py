@@ -1276,6 +1276,10 @@ class KnowledgeSpaceFileResponse(KnowledgeFileRead):
     approval_status: str | None = Field(None, description="Approval status for pending uploads")
     approval_reason: str | None = Field(None, description="Approval or safety reject reason")
     is_pending_approval: bool = Field(default=False, description="Whether the file is still pending approval")
+    has_pending_publish_approval: bool = Field(
+        default=False,
+        description="Whether the file has an active publish approval; UI locks every action except download",
+    )
     # Version management fields (populated by list_space_children when version feature is enabled)
     version_no: int | None = Field(default=None, description="Primary version number for multi-version docs")
     is_multi_version: bool = Field(default=False, description="Whether this file's logical document has >1 version")

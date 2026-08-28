@@ -28,6 +28,30 @@ export function isKnowledgeApprovalRejected(file: KnowledgeFile): boolean {
     return file.approvalStatus === "rejected" || file.approvalStatus === "sensitive_rejected";
 }
 
+/** Toast text for hovering a locked control on a file with a running publish approval. */
+export const KNOWLEDGE_FILE_APPROVAL_LOCK_TOAST = "该文件正在审批中，无法操作";
+
+/** A file with an active publish approval locks every action except download. */
+export function isKnowledgeFileLockedByPublishApproval(
+    file: Pick<KnowledgeFile, "type" | "hasPendingPublishApproval">,
+): boolean {
+    return file.type !== FileType.FOLDER && Boolean(file.hasPendingPublishApproval);
+}
+
+let lastApprovalLockToastAt = 0;
+/**
+ * Fire the approval-lock toast, throttled to once per 2s so sweeping the
+ * cursor across several locked controls in a row does not spam toasts.
+ */
+export function notifyKnowledgeFileApprovalLocked(
+    showToast: (options: { message: string; status?: "error" | "success" | "warning" | "info" }) => void,
+): void {
+    const now = Date.now();
+    if (now - lastApprovalLockToastAt < 2000) return;
+    lastApprovalLockToastAt = now;
+    showToast({ message: KNOWLEDGE_FILE_APPROVAL_LOCK_TOAST, status: "warning" });
+}
+
 export {
     isWebLinkKnowledgeFile,
     resolveWebLinkDisplayName,

@@ -41,7 +41,7 @@ import {
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole, updateFileEncoding } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTime, getKnowledgeApprovalStatusLabel, getKnowledgeIngestMethodLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeFileReparseRetryable } from "../knowledgeUtils";
+import { formatTime, getKnowledgeApprovalStatusLabel, getKnowledgeIngestMethodLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeFileLockedByPublishApproval, isKnowledgeItemPreviewable, isKnowledgeFileReparseRetryable, notifyKnowledgeFileApprovalLocked } from "../knowledgeUtils";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
@@ -1126,6 +1126,29 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
 // ============================================================
 // 行组件
 // ============================================================
+/** Wraps a locked control: stays visible but inert, and explains the lock on hover. */
+function ApprovalLockGuard({
+    locked,
+    onHoverLock,
+    className,
+    children,
+}: {
+    locked: boolean;
+    onHoverLock: () => void;
+    className?: string;
+    children: React.ReactNode;
+}) {
+    if (!locked) return <>{children}</>;
+    return (
+        <span
+            className={cn("inline-flex cursor-not-allowed", className)}
+            onMouseEnter={onHoverLock}
+        >
+            {children}
+        </span>
+    );
+}
+
 function FileRow({
     file,
     isSelected,
@@ -1246,8 +1269,14 @@ function FileRow({
     retryActionLabel?: string;
 }) {
     const localize = useLocalize();
+    const { showToast } = useToastContext();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const isFolder = file.type === FileType.FOLDER;
+    // Active publish approval locks every action except download.
+    const fileLocked = isKnowledgeFileLockedByPublishApproval(file);
+    const handleHoverLock = useCallback(() => {
+        notifyKnowledgeFileApprovalLocked(showToast);
+    }, [showToast]);
     const isReadonlyDistributionEntry = (
         file.entryType === "share"
         || file.entryType === "publish"
@@ -1307,17 +1336,25 @@ function FileRow({
     // disabled:pointer-events-none lets the wrapper title tooltip show on hover.
     const encodingSelectClassName = "h-8 w-full min-w-0 rounded border border-[#dee2ec] bg-white px-2 text-sm text-[#4e5969] outline-none transition-colors focus:border-[#165dff] disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-[#f7f8fa] disabled:text-[#86909c]";
     const editTagsButton = canEditTags ? (
-        <button
-            type="button"
-            title={localize("com_knowledge.edit_tags")}
-            onClick={(e) => {
-                e.stopPropagation();
-                onEditTags();
-            }}
-            className="hidden cursor-pointer items-center justify-center text-[#165dff] transition-colors hover:text-[#165dff]/80 group-hover:flex"
-        >
-            <PencilLineIcon className="size-3.5" />
-        </button>
+        <ApprovalLockGuard locked={fileLocked} onHoverLock={handleHoverLock}>
+            <button
+                type="button"
+                title={localize("com_knowledge.edit_tags")}
+                disabled={fileLocked}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onEditTags();
+                }}
+                className={cn(
+                    "hidden items-center justify-center transition-colors group-hover:flex",
+                    fileLocked
+                        ? "cursor-not-allowed text-[#c9cdd4]"
+                        : "cursor-pointer text-[#165dff] hover:text-[#165dff]/80",
+                )}
+            >
+                <PencilLineIcon className="size-3.5" />
+            </button>
+        </ApprovalLockGuard>
     ) : undefined;
     const [rowHovered, setRowHovered] = useState(false);
     const showHoverActions = rowHovered || moreMenuOpen;
@@ -1343,12 +1380,23 @@ function FileRow({
                 </button>
             )}
             {showMoreMenu && (
-                <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
-                    <DropdownMenuTrigger asChild>
-                        <button type="button" className={FILE_ROW_ACTION_BTN_CLASS}>
+                fileLocked ? (
+                    <ApprovalLockGuard locked onHoverLock={handleHoverLock}>
+                        <button
+                            type="button"
+                            className={cn(FILE_ROW_ACTION_BTN_CLASS, "cursor-not-allowed opacity-50")}
+                            disabled
+                        >
                             <MoreVertical className="size-4" />
                         </button>
-                    </DropdownMenuTrigger>
+                    </ApprovalLockGuard>
+                ) : (
+                    <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+                        <DropdownMenuTrigger asChild>
+                            <button type="button" className={FILE_ROW_ACTION_BTN_CLASS}>
+                                <MoreVertical className="size-4" />
+                            </button>
+                        </DropdownMenuTrigger>
                     <DropdownMenuContent
                         align="end"
                         className={cn("w-32", knowledgeSpaceDropdownSurfaceClassName)}
@@ -1465,7 +1513,8 @@ function FileRow({
                             </DropdownMenuItem>
                         )}
                     </DropdownMenuContent>
-                </DropdownMenu>
+                    </DropdownMenu>
+                )
             )}
         </>
     ) : null;
@@ -1628,32 +1677,46 @@ function FileRow({
                                         <span className="truncate">{file.name}</span>
                                     </div>
                                     {canRenameContent && (onAcceptAlias || onRejectAlias) && (
-                                        <div className="flex shrink-0 items-center gap-1">
-                                            {onAcceptAlias && (
-                                                <button
-                                                    type="button"
-                                                    className="h-5 rounded bg-[#165dff] px-1.5 text-xs font-medium text-white hover:bg-[#4080ff] transition-colors"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onAcceptAlias();
-                                                    }}
-                                                >
-                                                    替换
-                                                </button>
-                                            )}
-                                            {onRejectAlias && (
-                                                <button
-                                                    type="button"
-                                                    className="h-5 rounded border border-[#165dff] px-1.5 text-xs font-medium text-[#165dff] hover:bg-[#f2f3ff] transition-colors"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onRejectAlias();
-                                                    }}
-                                                >
-                                                    放弃
-                                                </button>
-                                            )}
-                                        </div>
+                                        <ApprovalLockGuard locked={fileLocked} onHoverLock={handleHoverLock}>
+                                            <div className="flex shrink-0 items-center gap-1">
+                                                {onAcceptAlias && (
+                                                    <button
+                                                        type="button"
+                                                        disabled={fileLocked}
+                                                        className={cn(
+                                                            "h-5 rounded px-1.5 text-xs font-medium text-white transition-colors",
+                                                            fileLocked
+                                                                ? "cursor-not-allowed bg-[#a8bbf5]"
+                                                                : "bg-[#165dff] hover:bg-[#4080ff]",
+                                                        )}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onAcceptAlias();
+                                                        }}
+                                                    >
+                                                        替换
+                                                    </button>
+                                                )}
+                                                {onRejectAlias && (
+                                                    <button
+                                                        type="button"
+                                                        disabled={fileLocked}
+                                                        className={cn(
+                                                            "h-5 rounded border px-1.5 text-xs font-medium transition-colors",
+                                                            fileLocked
+                                                                ? "cursor-not-allowed border-[#e5e6eb] text-[#c9cdd4]"
+                                                                : "border-[#165dff] text-[#165dff] hover:bg-[#f2f3ff]",
+                                                        )}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onRejectAlias();
+                                                        }}
+                                                    >
+                                                        放弃
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </ApprovalLockGuard>
                                     )}
                                 </div>
                             )}
@@ -1712,23 +1775,29 @@ function FileRow({
                         {isFolder ? (
                             <span className="truncate block">{EMPTY_FIELD_PLACEHOLDER}</span>
                         ) : canEditEncoding ? (
-                            <PortalFileCategoryDropdown
-                                groups={fileCategoryGroups}
-                                value={encodingDraft?.fileSubcategoryCode ?? file.fileSubcategoryCode}
-                                fallbackParentCode={selectedFileCategoryCode}
-                                disabled={savingEncoding}
-                                variant="fileTable"
-                                ariaLabel={`修改${file.name}文件分类`}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={(option) => {
-                                    if (!option) return;
-                                    void onEncodingPartChange?.(
-                                        file,
-                                        { fileCategoryCode: option.parentCode },
-                                        option.code,
-                                    );
-                                }}
-                            />
+                            <ApprovalLockGuard
+                                locked={fileLocked}
+                                onHoverLock={handleHoverLock}
+                                className="block w-full min-w-0"
+                            >
+                                <PortalFileCategoryDropdown
+                                    groups={fileCategoryGroups}
+                                    value={encodingDraft?.fileSubcategoryCode ?? file.fileSubcategoryCode}
+                                    fallbackParentCode={selectedFileCategoryCode}
+                                    disabled={savingEncoding || fileLocked}
+                                    variant="fileTable"
+                                    ariaLabel={`修改${file.name}文件分类`}
+                                    onClick={(event) => event.stopPropagation()}
+                                    onChange={(option) => {
+                                        if (!option) return;
+                                        void onEncodingPartChange?.(
+                                            file,
+                                            { fileCategoryCode: option.parentCode },
+                                            option.code,
+                                        );
+                                    }}
+                                />
+                            </ApprovalLockGuard>
                         ) : (
                             <span
                                 className="truncate block"
@@ -1746,33 +1815,42 @@ function FileRow({
                             <span className="truncate block">{EMPTY_FIELD_PLACEHOLDER}</span>
                         ) : canEditEncoding ? (
                             // Wrap disabled select so hover tooltip still works (native title on :disabled is unreliable).
-                            <span
-                                className={cn("block w-full min-w-0", isBusinessDomainLocked && "cursor-not-allowed")}
-                                title={isBusinessDomainLocked ? "文档解析中无法更改" : undefined}
+                            <ApprovalLockGuard
+                                locked={fileLocked}
+                                onHoverLock={handleHoverLock}
+                                className="block w-full min-w-0"
                             >
-                                <select
-                                    className={encodingSelectClassName}
-                                    aria-label={`修改${file.name}业务域类型 当前业务域：${selectedBusinessDomainCode || "未识别"}`}
-                                    value={selectedBusinessDomainCode}
-                                    disabled={savingEncoding || isBusinessDomainLocked}
-                                    onClick={(event) => event.stopPropagation()}
-                                    onChange={(event) => void onEncodingPartChange?.(file, { businessDomainCode: event.currentTarget.value })}
+                                <span
+                                    className={cn(
+                                        "block w-full min-w-0",
+                                        (isBusinessDomainLocked || fileLocked) && "cursor-not-allowed",
+                                    )}
+                                    title={isBusinessDomainLocked ? "文档解析中无法更改" : undefined}
                                 >
-                                    {!selectedBusinessDomainCode ? (
-                                        <option value="" disabled>{EMPTY_FIELD_PLACEHOLDER}</option>
-                                    ) : null}
-                                    {selectedBusinessDomainCode && !hasCurrentBusinessDomainOption ? (
-                                        <option value={selectedBusinessDomainCode}>
-                                            {fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions)}
-                                        </option>
-                                    ) : null}
-                                    {businessDomainOptions.map((option) => (
-                                        <option key={option.code} value={option.code}>
-                                            {option.code} / {option.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </span>
+                                    <select
+                                        className={encodingSelectClassName}
+                                        aria-label={`修改${file.name}业务域类型 当前业务域：${selectedBusinessDomainCode || "未识别"}`}
+                                        value={selectedBusinessDomainCode}
+                                        disabled={savingEncoding || isBusinessDomainLocked || fileLocked}
+                                        onClick={(event) => event.stopPropagation()}
+                                        onChange={(event) => void onEncodingPartChange?.(file, { businessDomainCode: event.currentTarget.value })}
+                                    >
+                                        {!selectedBusinessDomainCode ? (
+                                            <option value="" disabled>{EMPTY_FIELD_PLACEHOLDER}</option>
+                                        ) : null}
+                                        {selectedBusinessDomainCode && !hasCurrentBusinessDomainOption ? (
+                                            <option value={selectedBusinessDomainCode}>
+                                                {fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions)}
+                                            </option>
+                                        ) : null}
+                                        {businessDomainOptions.map((option) => (
+                                            <option key={option.code} value={option.code}>
+                                                {option.code} / {option.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </span>
+                            </ApprovalLockGuard>
                         ) : (
                             <span className="truncate block" title={selectedBusinessDomainCode ? fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions) : EMPTY_FIELD_PLACEHOLDER}>
                                 {selectedBusinessDomainCode ? fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions) : EMPTY_FIELD_PLACEHOLDER}
@@ -1830,17 +1908,25 @@ function FileRow({
                                     {fileEncodingText}
                                 </span>
                                 {canEditEncoding && (
-                                    <button
-                                        type="button"
-                                        title={localize("com_knowledge.file_encoding_edit_title")}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onEditEncoding?.(file);
-                                        }}
-                                        className="hidden cursor-pointer items-center justify-center text-[#165dff] transition-colors hover:text-[#165dff]/80 group-hover:flex"
-                                    >
-                                        <PencilLineIcon className="size-3.5" />
-                                    </button>
+                                    <ApprovalLockGuard locked={fileLocked} onHoverLock={handleHoverLock}>
+                                        <button
+                                            type="button"
+                                            title={localize("com_knowledge.file_encoding_edit_title")}
+                                            disabled={fileLocked}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onEditEncoding?.(file);
+                                            }}
+                                            className={cn(
+                                                "hidden items-center justify-center transition-colors group-hover:flex",
+                                                fileLocked
+                                                    ? "cursor-not-allowed text-[#c9cdd4]"
+                                                    : "cursor-pointer text-[#165dff] hover:text-[#165dff]/80",
+                                            )}
+                                        >
+                                            <PencilLineIcon className="size-3.5" />
+                                        </button>
+                                    </ApprovalLockGuard>
                                 )}
                             </>
                         ) : (
