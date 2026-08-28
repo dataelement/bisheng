@@ -315,28 +315,75 @@ def _reflect(conn, method: str, table_name: str) -> list:
     an already-migrated DaMeng schema.
     """
     last_result: list = []
-    for candidate in (table_name, table_name.upper(), table_name.lower()):
+    last_error: Exception | None = None
+    succeeded = False
+    for candidate in dict.fromkeys((table_name, table_name.upper(), table_name.lower())):
         try:
             result = getattr(inspect(conn), method)(candidate)
-        except Exception:
+        except Exception as exc:
+            last_error = exc
             continue
+        succeeded = True
         if result:
             return result
         last_result = result
+    if not succeeded and last_error is not None:
+        raise last_error
     return last_result
 
 
+_DM_COLUMN_METADATA_SQL = sa.text(
+    """
+    SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH, CHAR_LENGTH, NULLABLE
+    FROM SYS.ALL_TAB_COLUMNS
+    WHERE UPPER(OWNER) = UPPER(SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA'))
+      AND UPPER(TABLE_NAME) = UPPER(:table_name)
+      AND UPPER(COLUMN_NAME) = UPPER(:column_name)
+    """
+)
+
+
+def _dm_column_metadata(conn, table_name: str, column_name: str) -> dict | None:
+    """Read one current-schema DM8 column without privileged system tables.
+
+    dmSQLAlchemy 2.0.12 joins ``SYS.SYSCOLUMNS`` while implementing
+    ``Inspector.get_columns()``. Normal application accounts cannot select
+    that global catalog table. ``SYS.ALL_TAB_COLUMNS`` is already scoped to
+    objects visible to the current account and provides all metadata needed by
+    BiSheng's migration guards.
+    """
+    row = (
+        conn.execute(
+            _DM_COLUMN_METADATA_SQL,
+            {"table_name": table_name, "column_name": column_name},
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        return None
+    return {str(key).lower(): value for key, value in row.items()}
+
+
 def table_exists(conn, table_name: str) -> bool:
-    for candidate in (table_name, table_name.upper(), table_name.lower()):
+    last_error: Exception | None = None
+    succeeded = False
+    for candidate in dict.fromkeys((table_name, table_name.upper(), table_name.lower())):
         try:
             if inspect(conn).has_table(candidate):
                 return True
-        except Exception:
+            succeeded = True
+        except Exception as exc:
+            last_error = exc
             continue
+    if not succeeded and last_error is not None:
+        raise last_error
     return False
 
 
 def column_exists(conn, table_name: str, column_name: str) -> bool:
+    if get_dialect_name(conn) == "dm":
+        return _dm_column_metadata(conn, table_name, column_name) is not None
     cols = [c["name"].lower() for c in _reflect(conn, "get_columns", table_name)]
     return column_name.lower() in cols
 
@@ -348,6 +395,9 @@ def index_exists(conn, table_name: str, index_name: str) -> bool:
 
 def get_column_type(conn, table_name: str, column_name: str) -> str | None:
     """Return the SQLAlchemy type class name in lowercase, e.g. 'longtext', 'clob', 'varchar'."""
+    if get_dialect_name(conn) == "dm":
+        column = _dm_column_metadata(conn, table_name, column_name)
+        return str(column["data_type"]).lower() if column is not None else None
     for c in _reflect(conn, "get_columns", table_name):
         if c["name"].lower() == column_name.lower():
             return type(c["type"]).__name__.lower()
@@ -355,6 +405,9 @@ def get_column_type(conn, table_name: str, column_name: str) -> str | None:
 
 
 def is_column_nullable(conn, table_name: str, column_name: str) -> bool:
+    if get_dialect_name(conn) == "dm":
+        column = _dm_column_metadata(conn, table_name, column_name)
+        return column is not None and str(column["nullable"]).upper() == "Y"
     for c in _reflect(conn, "get_columns", table_name):
         if c["name"].lower() == column_name.lower():
             return bool(c.get("nullable", False))
@@ -392,6 +445,12 @@ def name_sort_clauses(dialect_name: str, col: str = "name") -> list:
 
 def get_version_num_length(conn) -> int | None:
     """Return the character length of alembic_version.version_num, or None."""
+    if get_dialect_name(conn) == "dm":
+        column = _dm_column_metadata(conn, "alembic_version", "version_num")
+        if column is None:
+            return None
+        length = column.get("char_length") or column.get("data_length")
+        return int(length) if length is not None else None
     for c in _reflect(conn, "get_columns", "alembic_version"):
         if c["name"].lower() == "version_num":
             return getattr(c["type"], "length", None)

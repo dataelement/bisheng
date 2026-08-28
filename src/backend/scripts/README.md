@@ -2,6 +2,37 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Diagnostic Scripts
+
+### `diagnose_dm_column_reflection.py`
+
+Read-only comparison of DM8 catalog metadata, SQLAlchemy
+`Inspector.get_columns()`, and BiSheng's shared `column_exists()` helper. Use it
+when Alembic reports that a column already exists after the helper reported it
+missing.
+
+Run inside an API or worker container from `/app`; the default target is
+`knowledge.metadata_fields`:
+
+```bash
+cd /app
+/app/.venv/bin/python scripts/diagnose_dm_column_reflection.py
+```
+
+Specify another target or override the schema inferred from `database_url`:
+
+```bash
+/app/.venv/bin/python scripts/diagnose_dm_column_reflection.py \
+  --schema BISHENG \
+  --table knowledge \
+  --column metadata_fields
+```
+
+The script never writes to the database. Exit `0` means reflection found the
+column, exit `2` confirms a catalog/reflection mismatch, exit `3` means the
+column is absent from the DM catalog, and exit `4` means the diagnostic itself
+failed.
+
 ## Export Scripts
 
 ### `export_daily_chat_messages.py`
