@@ -530,6 +530,7 @@ export type BsConfig = {
     displayName: string;
     /** Optional admin-configured intro shown under the name in model pickers. */
     description?: string;
+    visual?: boolean;
   }>;
   voiceInput: {
     enabled: boolean;

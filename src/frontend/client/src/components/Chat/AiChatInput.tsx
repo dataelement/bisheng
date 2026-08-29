@@ -318,6 +318,16 @@ const AiChatInput = memo(
         const kbDisabled = !!disabled;
         const toolsDisabled = !!disabled;
         const filesDisabled = !!disabled;
+        const supportsVision = modelOptions?.some(
+            (model) => String(model.id) === String(modelValue) && model.visual
+        );
+        const fileAccept = buildChatAccept({
+            enableMedia: !!envConfig?.enable_media_upload,
+            enableEtl4lm: !!bsConfig?.enable_etl4lm,
+            enableVision: !isLingsi && !!supportsVision,
+            includeOfd: !isLingsi,
+            taskMode,
+        });
 
         const navigate = useNavigate();
 
@@ -349,6 +359,11 @@ const AiChatInput = memo(
             const trimmed = text.trim();
             // Workbench: uploaded files require accompanying text before send.
             if (!trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading || filesParsing) return;
+            // The selected model may have changed since these files were attached.
+            if (chatFiles?.some((file) => !isFileNameAccepted(file.name || file.filename || '', fileAccept))) {
+                showToast({ message: localize('com_ui_upload_file_type_error'), status: 'error' });
+                return;
+            }
             // Pass files through to parent. The local first-frame poster is a blob
             // that this component revokes on the very next line, and it outranks
             // the server cover in the message bubble — so it stops here, and the
@@ -372,7 +387,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText]);
+        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, fileAccept, onSend, chatFiles, setText, showToast, localize]);
 
         const handleKeyDown = useCallback(
             (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -465,20 +480,11 @@ const AiChatInput = memo(
                         "+" menu; keep the picker trigger hidden here. */}
                     {showUpload && (() => {
                         const InputFilesAny = InputFiles as any;
-                        const accept = buildChatAccept({
-                            enableMedia: !!envConfig?.enable_media_upload,
-                            enableEtl4lm: !!bsConfig?.enable_etl4lm,
-                            includeOfd: !isLingsi,
-                            // Task mode also takes data/config/source files: it has a
-                            // workspace and a code interpreter to use them with. Daily
-                            // chat has neither, and would fail the turn on parse.
-                            taskMode,
-                        });
                         return <InputFilesAny
                             ref={inputFilesRef}
                             v={""}
                             showVoice={showVoice}
-                            accepts={accept}
+                            accepts={fileAccept}
                             disabled={filesDisabled}
                             hideTrigger
                             hideList
