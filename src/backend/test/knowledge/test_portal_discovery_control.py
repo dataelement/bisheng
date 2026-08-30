@@ -43,6 +43,14 @@ from bisheng.permission.domain.services.fine_grained_permission_service import (
 )
 
 
+class _UnauthorizedTestError(Exception):
+    """conftest 会预 mock http_error，测试里用真实异常类替换服务模块上的 UnAuthorizedError。"""
+
+    def __init__(self, msg: str = "", **_kwargs) -> None:
+        super().__init__(msg)
+        self.message = msg
+
+
 def test_scope_model_has_fail_closed_portal_discovery_column() -> None:
     column = KnowledgeSpaceScope.__table__.c.portal_discovery_enabled
 
@@ -294,6 +302,25 @@ async def test_update_endpoint_forwards_switch_and_returns_authoritative_info() 
     assert response.data["portal_discovery_enabled"] is True
 
 
+@pytest.mark.asyncio
+async def test_update_endpoint_does_not_reread_after_unauthorized_switch() -> None:
+    service = Mock()
+    service.update_knowledge_space = AsyncMock(
+        side_effect=_UnauthorizedTestError("仅系统管理员可以配置门户公开范围")
+    )
+    service.get_space_info = AsyncMock()
+
+    with pytest.raises(_UnauthorizedTestError) as exc_info:
+        await update_space(
+            space_id=10,
+            req=KnowledgeSpaceUpdateReq(portal_discovery_enabled=True),
+            svc=service,
+        )
+
+    assert "仅系统管理员可以配置门户公开范围" in exc_info.value.message
+    service.get_space_info.assert_not_awaited()
+
+
 @pytest.mark.parametrize(
     ("scope", "binding", "expected"),
     [
@@ -360,7 +387,7 @@ def test_portal_discovery_kind_uses_persisted_scope_and_binding(
 @pytest.mark.asyncio
 async def test_update_switch_reuses_edit_permission_and_persists_authoritative_value() -> None:
     login_user = Mock(user_id=7, user_name="管理员", tenant_id=1)
-    login_user.is_admin.return_value = False
+    login_user.is_admin.return_value = True
     service = KnowledgeSpaceService(request=Mock(headers={}), login_user=login_user)
     scope = KnowledgeSpaceScope(
         id=1,
@@ -386,6 +413,10 @@ async def test_update_switch_reuses_edit_permission_and_persists_authoritative_v
 
     with (
         patch.object(service, "_require_permission_id", new_callable=AsyncMock) as require_permission,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service._require_not_write_frozen",
+            new_callable=AsyncMock,
+        ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
             new_callable=AsyncMock,
@@ -423,9 +454,102 @@ async def test_update_switch_reuses_edit_permission_and_persists_authoritative_v
 
 
 @pytest.mark.asyncio
+async def test_non_admin_switch_update_is_rejected_and_scope_row_unchanged() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.execute(
+            sa.text(
+                "CREATE TABLE knowledge_space_scope ("
+                "id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, space_id INTEGER NOT NULL, "
+                "level VARCHAR(32) NOT NULL, owner_type VARCHAR(64) NOT NULL, owner_id INTEGER NOT NULL, "
+                "created_by INTEGER NOT NULL DEFAULT 0, create_time DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "update_time DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "portal_discovery_enabled BOOLEAN NOT NULL DEFAULT 0)"
+            )
+        )
+        await connection.execute(
+            sa.text(
+                "INSERT INTO knowledge_space_scope "
+                "(id, tenant_id, space_id, level, owner_type, owner_id, portal_discovery_enabled) "
+                "VALUES (1, 1, 10, 'public', 'tenant_root_department', 1, 0)"
+            )
+        )
+
+    login_user = Mock(user_id=8, user_name="空间编辑", tenant_id=1)
+    login_user.is_admin.return_value = False
+    space = Knowledge(
+        id=10,
+        name="公共知识库",
+        type=KnowledgeTypeEnum.SPACE.value,
+        user_id=8,
+        tenant_id=1,
+    )
+
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        service = KnowledgeSpaceService(request=Mock(headers={}), login_user=login_user)
+        service.knowledge_space_scope_repo = KnowledgeSpaceScopeRepositoryImpl(session)
+
+        with (
+            patch.object(service, "_require_permission_id", new_callable=AsyncMock) as require_permission,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service._require_not_write_frozen",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.UnAuthorizedError",
+                _UnauthorizedTestError,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+                new_callable=AsyncMock,
+                return_value=space,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+                new_callable=AsyncMock,
+                return_value=space,
+            ) as update_space,
+        ):
+            with pytest.raises(_UnauthorizedTestError) as exc_info:
+                await service.update_knowledge_space(
+                    space_id=10,
+                    description="本不该写入",
+                    portal_discovery_enabled=True,
+                )
+
+            assert "仅系统管理员可以配置门户公开范围" in exc_info.value.message
+            require_permission.assert_not_awaited()
+            update_space.assert_not_awaited()
+
+            enabled = (
+                await session.execute(
+                    sa.text(
+                        "SELECT portal_discovery_enabled FROM knowledge_space_scope WHERE space_id = 10"
+                    )
+                )
+            ).scalar_one()
+            assert int(enabled) == 0
+
+            await service.update_knowledge_space(space_id=10, description="其它设置")
+            require_permission.assert_awaited_once_with("knowledge_space", 10, "edit_space")
+            update_space.assert_awaited_once()
+
+            enabled_again = (
+                await session.execute(
+                    sa.text(
+                        "SELECT portal_discovery_enabled FROM knowledge_space_scope WHERE space_id = 10"
+                    )
+                )
+            ).scalar_one()
+            assert int(enabled_again) == 0
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_update_switch_repository_failure_keeps_value_and_records_failed_audit() -> None:
     login_user = Mock(user_id=7, user_name="管理员", tenant_id=1)
-    login_user.is_admin.return_value = False
+    login_user.is_admin.return_value = True
     service = KnowledgeSpaceService(
         request=Mock(headers={"X-Request-ID": "request-1"}),
         login_user=login_user,
@@ -453,6 +577,10 @@ async def test_update_switch_repository_failure_keeps_value_and_records_failed_a
 
     with (
         patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service._require_not_write_frozen",
+            new_callable=AsyncMock,
+        ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
             new_callable=AsyncMock,

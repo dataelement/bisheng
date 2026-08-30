@@ -46,6 +46,7 @@ from bisheng.knowledge.domain.contracts.identifiers import (
 from bisheng.knowledge.domain.contracts.retrieval_scope import (
     BackendQueryFilter,
     CanonicalChunkHit,
+    CanonicalGenerationConstraint,
     EntryRef,
     KnowledgeRetrievalScopeResolver,
     MappedEntryHit,
@@ -313,6 +314,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         *,
         canonical_document_ids: Sequence[CanonicalDocumentId] | None = None,
         canonical_version_ids: Sequence[CanonicalVersionId] | None = None,
+        generation_constraints: Sequence[CanonicalGenerationConstraint] | None = None,
     ) -> BackendQueryFilter:
         settings = self._require_enabled()
         if int(scope.routing_version) != settings.routing_version:
@@ -334,7 +336,69 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
             routing_version=scope.routing_version,
             canonical_document_ids=_dedupe_optional(canonical_document_ids),
             canonical_version_ids=_dedupe_optional(canonical_version_ids),
+            generation_constraints=tuple(generation_constraints or ()),
         )
+
+    async def resolve_current_generation_constraints(
+        self,
+        scope: RetrievalScope,
+        canonical_document_ids: Sequence[CanonicalDocumentId],
+    ) -> tuple[CanonicalGenerationConstraint, ...]:
+        """Resolve exact current shared projection identities for Top-K candidates."""
+        self._require_enabled()
+        document_ids = sorted({int(item) for item in canonical_document_ids if int(item) > 0})
+        if not document_ids:
+            return ()
+
+        documents = await self._load_documents(int(scope.tenant_id), document_ids)
+        entries = await self.file_repository.find_active_entries_for_documents_any_space(
+            tenant_id=int(scope.tenant_id),
+            document_ids=document_ids,
+        )
+        entries_by_document: dict[int, list[KnowledgeFile]] = {}
+        for entry in entries:
+            entries_by_document.setdefault(int(entry.reference_document_id or 0), []).append(entry)
+
+        requested_spaces = {int(space_id) for space_id in scope.requested_space_ids}
+        explicit_entries = {
+            int(entry_id)
+            for ids in scope.explicit_entry_ids_by_space.values()
+            for entry_id in ids
+        }
+        constraints: list[CanonicalGenerationConstraint] = []
+        for document_id in document_ids:
+            document = documents.get(document_id)
+            if (
+                document is None
+                or document.lifecycle_status != KnowledgeDocumentLifecycleStatus.ACTIVE.value
+                or document.primary_version_id is None
+            ):
+                continue
+            document_entries = entries_by_document.get(document_id, [])
+            requested_entries = [
+                entry
+                for entry in document_entries
+                if int(entry.knowledge_id) in requested_spaces
+                and (not explicit_entries or int(entry.id) in explicit_entries)
+            ]
+            if not requested_entries:
+                continue
+            for entry in requested_entries:
+                self._require_projection_ready(entry)
+            content_generation = int(document.content_generation or 0)
+            membership_generation = max(
+                [content_generation]
+                + [int(entry.desired_entry_generation or 0) for entry in document_entries]
+            )
+            constraints.append(
+                CanonicalGenerationConstraint(
+                    canonical_document_id=CanonicalDocumentId(document_id),
+                    canonical_version_id=CanonicalVersionId(int(document.primary_version_id)),
+                    content_generation=content_generation,
+                    membership_generation=membership_generation,
+                )
+            )
+        return tuple(constraints)
 
     async def resolve_explicit_canonical_constraints(
         self,
@@ -415,6 +479,10 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
             document_ids=document_ids,
             space_ids=list(space_order),
         )
+        all_entries_by_document = await self._load_all_active_entries(
+            tenant_id=int(scope.tenant_id),
+            document_ids=document_ids,
+        )
 
         mapped: list[MappedEntryHit] = []
         seen_chunks: set[tuple[int, int]] = set()
@@ -429,6 +497,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
                 documents.get(document_id),
                 hit,
                 entries_by_document.get(document_id, []),
+                all_entries=all_entries_by_document.get(document_id, []),
                 space_ids=space_order,
             )
             if not candidates:
@@ -493,12 +562,30 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
             grouped.setdefault(int(row.reference_document_id or 0), []).append(row)
         return grouped
 
+    async def _load_all_active_entries(
+        self,
+        *,
+        tenant_id: int,
+        document_ids: list[int],
+    ) -> dict[int, list[KnowledgeFile]]:
+        rows = await self.file_repository.find_active_entries_for_documents_any_space(
+            tenant_id=tenant_id,
+            document_ids=document_ids,
+        )
+        grouped: dict[int, list[KnowledgeFile]] = {}
+        for row in rows:
+            if int(row.tenant_id or 0) != tenant_id:
+                continue
+            grouped.setdefault(int(row.reference_document_id or 0), []).append(row)
+        return grouped
+
     def _final_document_check(
         self,
         document: KnowledgeDocument | None,
         hit: CanonicalChunkHit,
         entries: list[KnowledgeFile],
         *,
+        all_entries: list[KnowledgeFile],
         space_ids: dict[int, int],
     ) -> list[KnowledgeFile]:
         """Structural F059 checks on document + entry rows.
@@ -517,6 +604,11 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
             # Entry must point at the current primary version (spec 3.5.5);
             # hits on superseded versions are stale, not errors.
             return []
+        if (
+            hit.content_generation is None
+            or int(hit.content_generation) != int(document.content_generation or 0)
+        ):
+            return []
         candidates = [
             entry
             for entry in entries
@@ -524,6 +616,17 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
             and entry.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
             and entry.entry_type in _ENTRY_TYPE_PRIORITY
         ]
+        for entry in candidates:
+            self._require_projection_ready(entry)
+        current_membership_generation = max(
+            [int(document.content_generation or 0)]
+            + [int(entry.desired_entry_generation or 0) for entry in all_entries]
+        )
+        if (
+            hit.membership_generation is None
+            or int(hit.membership_generation) != current_membership_generation
+        ):
+            return []
         return sorted(candidates, key=lambda entry: int(entry.id))
 
     async def _select_and_authorize_entry(
@@ -583,6 +686,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
                     chunk_index=int(hit.chunk_index),
                     score=float(hit.score),
                     text=hit.text,
+                    document_name=entry.file_name,
                     entry_selection_rule=rule,
                 ),
                 entry,

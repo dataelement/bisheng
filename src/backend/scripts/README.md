@@ -434,6 +434,56 @@ python scripts/resync_tag_library_name_lists.py
 - 只改标签库那三个字段，不新增或删除任何 `tag` 行。
 - 需要带 `TagLibraryTagService.sync_library_name_lists` 的版本才能 `--apply`。
 
+### 公共标签库合并到「通用标签库」
+
+把其它**公共**标签库里的正式标签归属到「通用标签库」，并把全部知识空间绑定到该库。
+**不改 `tag.id`**（文件关联 `taglink` 不用动），**不改待审核表**，也不删除源标签库。
+
+必须按顺序跑三个脚本。工作目录均为 `src/backend`。脚本会绕过租户过滤器；连哪套库由当前 `config` 决定。备份是数据库内的 `*_bak` 表，不是文件。
+
+#### 1. `backup_tag_library_migration.py`
+
+把三张表整表复制为 `原表名_bak`：`tag_bak`、`knowledge_tag_library_link_bak`、`knowledge_space_tag_library_bak`。默认 dry-run，`--apply` 才建表。备份表已存在时必须加 `--force` 才会先删后重建。
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/backup_tag_library_migration.py
+PYTHONPATH=./ .venv/bin/python scripts/backup_tag_library_migration.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/backup_tag_library_migration.py --apply --force
+bash scripts/backup_tag_library_migration.sh --apply
+```
+
+#### 2. `rollback_tag_library_migration.py`
+
+回滚时对每张表：现表改名为 `原表名_ori`，再把 `原表名_bak` 改回原名。默认 dry-run。若上次回滚留下了 `_ori`，加 `--force` 先删掉再改名。
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/rollback_tag_library_migration.py
+PYTHONPATH=./ .venv/bin/python scripts/rollback_tag_library_migration.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/rollback_tag_library_migration.py --apply --force
+bash scripts/rollback_tag_library_migration.sh --apply
+```
+
+回滚后 `_bak` 不再存在（已改回原名），`_ori` 里是迁移后的那份数据，确认无误后可手工 `DROP TABLE`。回滚只能做一次，除非再次备份。
+
+#### 3. `migrate_tags_to_general_library.py`
+
+每个租户必须已有一座名为「通用标签库」的公共库。将其余公共库的 `tag.business_id` 改到通用库；给所有 `type=知识空间` 的库补上通用库绑定，并去掉其它公共库绑定。默认 dry-run。
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/migrate_tags_to_general_library.py
+PYTHONPATH=./ .venv/bin/python scripts/migrate_tags_to_general_library.py --tenant 1
+PYTHONPATH=./ .venv/bin/python scripts/migrate_tags_to_general_library.py --apply
+bash scripts/migrate_tags_to_general_library.sh --apply
+```
+
+说明：
+
+- 先跑备份 `--apply`，再迁移 dry-run，确认输出后再迁移 `--apply`。
+- 同名标签并入同一座库时**不会合并**（id 保持不变），dry-run 会打印警告。
+- 并入后超过 999 行会拒绝执行。
+- 私有库（`owner_knowledge_id` 非空）的标签和绑定不动。
+- 源库留空壳，便于待审行继续指向原 `business_id`；待审清完后再手工删库。
+
 ### `merge_duplicate_approved_tags.py`
 
 合并**审核通过时产生的重复标签行**。修复前，通过一个标签会写两次：一次把标签名注册进审核人选的标签库（提报者记成审核人、无审核留痕、无文件关联），一次把审核记录搬进 `tag` 但标签库取的是提出该标签的库。结果一次通过留下两行，落在两个不同的标签库里。

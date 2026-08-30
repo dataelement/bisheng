@@ -11871,6 +11871,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
                 raise PersonalSpaceProtectedError()
             await self._require_permission_id("knowledge_space", space_id, "delete_space")
+            # B5.2: tenant-routed shared-storage SPACE must not be deleted while
+            # it holds active MANAGER entries that are the canonical content
+            # owner for documents distributed to other spaces. Deleting the
+            # manager would orphan the shared-store content projection (risk R7:
+            # shared store lifecycle is not per-space).
+            #
+            # Checked here rather than after the free-space branch below: that
+            # branch hands the delete to a Celery task and returns, so the caller
+            # was told the delete succeeded and only found out otherwise when the
+            # space reappeared in the list. One indexed LIMIT 1 up front buys an
+            # honest error instead.
+            await self._require_no_active_shared_managers(space)
             if migrate_free_space:
                 decision = await FreeSpaceMigrationService.pre_delete_guard(space)
                 if decision.action == "block":
@@ -11905,13 +11917,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         original_member_ids = [member.user_id for member in original_members]
 
         if not force:
-            # B5.2: tenant-routed shared-storage SPACE must not be deleted
-            # while it holds active MANAGER entries that are the canonical
-            # content owner for documents distributed to other spaces.
-            # Deleting the manager would orphan the shared-store content
-            # projection (risk R7: shared store lifecycle is not per-space).
-            await self._require_no_active_shared_managers(space)
-
             if self.knowledge_space_retirement_service is None:
                 raise KnowledgeDocumentStateConflictError(msg="知识库退役服务不可用")
             await self.knowledge_space_retirement_service.retire(
@@ -12216,6 +12221,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await _require_not_write_frozen(int(getattr(space, "tenant_id", None) or DEFAULT_TENANT_ID))
         if getattr(space, "is_favorite", False):
             raise FavoriteSpaceProtectedError()
+
+        # 门户发现开关只允许平台系统管理员改；非 admin 只要带该字段就整单拒绝，避免其它字段先写库。
+        if portal_discovery_enabled is not None and not self.login_user.is_admin():
+            raise UnAuthorizedError(msg="仅系统管理员可以配置门户公开范围")
 
         rebind_scope = None
         target_department = None

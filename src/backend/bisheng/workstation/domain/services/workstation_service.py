@@ -32,6 +32,10 @@ from bisheng.core.database import get_async_db_session
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessageDao
+from bisheng.knowledge.domain.contracts.errors import (
+    SharedStorageContractError,
+    SharedStorageErrorCode,
+)
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
@@ -1599,6 +1603,8 @@ class WorkStationService(BaseService):
         max_token: int,
         login_user: UserPayload,
         file_ids_by_space: Optional[dict[int, list[int]]] = None,
+        request: Request | None = None,
+        department_file_view_access_service=None,
     ) -> tuple[list[str], Optional[list[Document]], list[dict]]:
         """Retrieve globally ranked chunks with bounded fan-out and graceful fallback."""
         failures: list[dict] = []
@@ -1610,6 +1616,101 @@ class WorkStationService(BaseService):
                 organization_knowledge_ids=use_knowledge_param.organization_knowledge_ids or [],
                 knowledge_space_ids=use_knowledge_param.knowledge_space_ids or [],
             )
+            if space_ids:
+                from bisheng.knowledge.domain.repositories.implementations import (
+                    knowledge_document_repository_impl as document_repositories,
+                    knowledge_document_version_repository_impl as version_repositories,
+                    knowledge_file_repository_impl as file_repositories,
+                )
+                from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
+                    KnowledgeSpaceChatService,
+                )
+
+                shared_service = KnowledgeSpaceChatService(request, login_user)
+                if await shared_service._is_shared_storage_active(space_ids):
+                    if request is None:
+                        raise SharedStorageContractError(
+                            SharedStorageErrorCode.RETRIEVAL_BACKEND_UNAVAILABLE,
+                            "shared SPACE retrieval requires request context",
+                        )
+                    shared_service.department_file_view_access_service = (
+                        department_file_view_access_service
+                    )
+                    kb_filters = None
+                    if file_ids_by_space is not None:
+                        kb_filters = {
+                            space_id: {
+                                "file_ids": cls._get_allowed_file_ids_for_space(
+                                    file_ids_by_space,
+                                    space_id,
+                                )
+                                or []
+                            }
+                            for space_id in space_ids
+                        }
+                    async with get_async_db_session() as session:
+                        shared_service.file_repo = (
+                            file_repositories.KnowledgeFileRepositoryImpl(session)
+                        )
+                        shared_service.doc_repo = (
+                            document_repositories.KnowledgeDocumentRepositoryImpl(session)
+                        )
+                        shared_service.version_repo = (
+                            version_repositories.KnowledgeDocumentVersionRepositoryImpl(
+                                session
+                            )
+                        )
+                        shared_chunks = await shared_service.aretrieve_chunks(
+                            query=question,
+                            knowledge_base_ids=space_ids,
+                            kb_filters=kb_filters,
+                            top_k=cls._KB_CANDIDATE_LIMIT,
+                            max_content=max_token,
+                        )
+
+                    shared_docs: list[Document] = []
+                    for _, doc in shared_chunks:
+                        metadata = doc.metadata or {}
+                        doc.metadata = metadata
+                        metadata['retrieval_source'] = 'shared_space'
+                        metadata['retrieval_score'] = float(metadata.get('score', 0.0) or 0.0)
+                        shared_docs.append(doc)
+
+                    rank_lists = [(shared_docs, 1.0)]
+                    if organization_ids:
+                        _, organization_docs, organization_failures = await cls.queryChunksFromDB(
+                            question=question,
+                            use_knowledge_param=UseKnowledgeBaseParam(
+                                knowledge_space_ids=[],
+                                organization_knowledge_ids=organization_ids,
+                            ),
+                            max_token=max_token,
+                            login_user=login_user,
+                            request=request,
+                            department_file_view_access_service=(
+                                department_file_view_access_service
+                            ),
+                        )
+                        failures.extend(organization_failures)
+                        rank_lists.append((list(organization_docs or []), 1.0))
+
+                    candidates = cls._global_rrf_merge(
+                        rank_lists,
+                        limit=cls._KB_CANDIDATE_LIMIT,
+                    )
+                    ranked_docs = await cls._rerank_retrieval_candidates(
+                        question=question,
+                        candidates=candidates,
+                    )
+                    formatted_results, finally_docs = cls._truncate_ranked_documents_by_chars(
+                        ranked_docs,
+                        max_token,
+                    )
+                    return (
+                        formatted_results,
+                        finally_docs,
+                        cls._deduplicate_knowledge_failures(failures),
+                    )
             knowledge_rows = await cls._load_retrieval_knowledge_rows(
                 organization_ids=organization_ids,
                 space_ids=space_ids,
@@ -1683,6 +1784,8 @@ class WorkStationService(BaseService):
                 f' failures={len(failures)}'
             )
             return formatted_results, finally_docs, failures
+        except SharedStorageContractError:
+            raise
         except Exception as exc:
             logger.exception(f'queryChunksFromDB error: {exc}')
             return [], None, cls._deduplicate_knowledge_failures(failures)

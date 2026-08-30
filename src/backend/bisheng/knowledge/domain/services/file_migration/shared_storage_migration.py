@@ -143,15 +143,17 @@ class SharedStorageMigrationCoordinator:
         return progress
 
     async def rollback_tenant(self, tenant_id: int) -> SharedStorageMigrationProgress:
-        """Roll back a failed migration: unfreeze writes, revert routing."""
+        """Roll back a failed migration: revert routing, then unfreeze writes."""
         progress = SharedStorageMigrationProgress(
             tenant_id=tenant_id,
             started_at=datetime.now(timezone.utc),
             phase=MIGRATION_STATE_FAILED,
         )
         try:
+            switched = KnowledgeSpaceSharedStorageRoutingDao.switch_to_legacy(tenant_id)
+            if not switched:
+                raise RuntimeError(f"routing row missing for tenant {tenant_id}")
             unfreeze_tenant_writes(tenant_id)
-            KnowledgeSpaceSharedStorageRoutingDao.switch_to_legacy(tenant_id)
             logger.info("shared_storage_migration_rollback tenant=%s", tenant_id)
         except Exception:
             logger.exception("shared_storage_migration_rollback_failed tenant=%s", tenant_id)

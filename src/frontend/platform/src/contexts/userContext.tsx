@@ -1,5 +1,6 @@
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { resolveRoutePermissions } from "@/routes";
+import { resolveNoAdminConsoleAction } from "@/routes/standalone";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import i18next from "i18next";
 import { ReactNode, createContext, useLayoutEffect, useState } from "react";
@@ -169,30 +170,42 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     || web_menu.some((k: string) => adminMenuKeys.has(k))
                 )
             if (!canAccessPlatform) {
-                // Check if the user can at least access the workspace client.
-                // If neither platform nor workspace is accessible, redirect to /403
-                // to avoid a back-and-forth redirect loop between the two apps.
-                const canAccessWorkspace =
-                    res.has_workbench
-                    ?? (
-                        web_menu.includes('workstation')
-                        || web_menu.includes('frontend')
-                    )
-                if (!canAccessWorkspace) {
+                // 已登录运营岗: 白名单 iframe 留下; 其它 standalone 进 403; 有壳管理页仍踢走.
+                // 未登录仍走下面踢走/403, 不把无 session 的人留在 iframe.
+                const noAdminAction = res.user_id
+                    ? resolveNoAdminConsoleAction(location.pathname, BASE_URL)
+                    : "kick"
+                if (noAdminAction === "allow-standalone") {
+                    // fall through: 不 replace workspace, 也不按 web_menu 滤 iframe
+                } else if (noAdminAction === "standalone-403") {
                     history.pushState(null, '', BASE_URL + '/403')
                     return
+                } else {
+                    // Check if the user can at least access the workspace client.
+                    // If neither platform nor workspace is accessible, redirect to /403
+                    // to avoid a back-and-forth redirect loop between the two apps.
+                    const canAccessWorkspace =
+                        res.has_workbench
+                        ?? (
+                            web_menu.includes('workstation')
+                            || web_menu.includes('frontend')
+                        )
+                    if (!canAccessWorkspace) {
+                        history.pushState(null, '', BASE_URL + '/403')
+                        return
+                    }
+                    toast({
+                        variant: 'error',
+                        description: i18next.t('menu.noAdminConsoleAccess'),
+                    })
+                    // Hard-navigate to the workspace client. Must NOT use history.back()
+                    // here: under the SSO flow the previous history entry is the IdP /
+                    // portal page, so "going back" silently re-triggers SSO and produces
+                    // an infinite redirect loop for non-admin users. replace() also drops
+                    // the un-usable platform URL from history.
+                    window.location.replace(getWorkspaceClientUrl('/'))
+                    return
                 }
-                toast({
-                    variant: 'error',
-                    description: i18next.t('menu.noAdminConsoleAccess'),
-                })
-                // Hard-navigate to the workspace client. Must NOT use history.back()
-                // here: under the SSO flow the previous history entry is the IdP /
-                // portal page, so "going back" silently re-triggers SSO and produces
-                // an infinite redirect loop for non-admin users. replace() also drops
-                // the un-usable platform URL from history.
-                window.location.replace(getWorkspaceClientUrl('/'))
-                return
             }
 
             const pathName = location.pathname.replace(BASE_URL, '');

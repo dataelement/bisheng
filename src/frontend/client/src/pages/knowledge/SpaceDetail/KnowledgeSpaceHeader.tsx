@@ -291,36 +291,37 @@ export function KnowledgeSpaceHeader({
             )}
 
             {showViewModeTabs && viewMode === "card" && (
-                <>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button
-                                variant="outline"
-                                className="inline-flex h-9 w-9 min-h-9 min-w-9 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-gray-700"
-                            >
-                                <SingleIconButtonSortGlyph className="size-4 shrink-0" aria-hidden />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
-                            <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.sort_field")}</div>
-                            <DropdownMenuItem onClick={() => onSort(SortType.NAME)}>
-                                {localize("com_knowledge.sort_by_name_label")}
-                                {sortBy === SortType.NAME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onSort(SortType.TYPE)}>
-                                {localize("com_knowledge.sort_by_type_label")}
-                                {sortBy === SortType.TYPE && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onSort(SortType.UPDATE_TIME)}>
-                                {localize("com_knowledge.sort_by_update_time_label")}
-                                {sortBy === SortType.UPDATE_TIME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                    <span className="ml-2 text-sm text-[#86909c]">
-                        共计 {totalFileCount} 文件
-                    </span>
-                </>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="outline"
+                            className="inline-flex h-9 w-9 min-h-9 min-w-9 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-gray-700"
+                        >
+                            <SingleIconButtonSortGlyph className="size-4 shrink-0" aria-hidden />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
+                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.sort_field")}</div>
+                        <DropdownMenuItem onClick={() => onSort(SortType.NAME)}>
+                            {localize("com_knowledge.sort_by_name_label")}
+                            {sortBy === SortType.NAME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onSort(SortType.TYPE)}>
+                            {localize("com_knowledge.sort_by_type_label")}
+                            {sortBy === SortType.TYPE && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onSort(SortType.UPDATE_TIME)}>
+                            {localize("com_knowledge.sort_by_update_time_label")}
+                            {sortBy === SortType.UPDATE_TIME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            )}
+
+            {showViewModeTabs && (
+                <span className="ml-2 text-sm text-[#86909c]">
+                    共计 {totalFileCount} 文件
+                </span>
             )}
         </div>
     );

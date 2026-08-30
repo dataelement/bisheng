@@ -56,8 +56,8 @@ from bisheng.workstation.domain.services.workstation_tags_service import WorkSta
 class TagConsoleService:
     """Reads for the console's library mode.
 
-    Tag Console 库管理门禁独立于门户标签审核 scope：仅超管 / 租户管理员 /
-    部门管理员可进入。库 admin/creator 即使能审标签，也不能获得全租户库管理权。
+    Tag Console 库管理门禁独立于门户标签审核 scope: 仅超管 / 运营岗 / 租户管理员 /
+    部门管理员可进入. 库 admin/creator 即使能审标签, 也不能获得全租户库管理权.
     控制台内审核子能力仍委托 ``WorkStationTagsService``（走 ReviewTagScope）。
     """
 
@@ -77,14 +77,12 @@ class TagConsoleService:
             raise TagConsolePageParamsError()
 
     async def _ensure_can_manage_tags(self) -> None:
-        """仅放行超管 / RBAC admin / 子租户管理员 / 部门管理员。"""
+        """仅放行超管 / RBAC admin / 运营岗 / 子租户管理员 / 部门管理员."""
         from bisheng.common.errcode.tag import ReviewTagPermissionDeniedError
+        from bisheng.user.domain.services.platform_operator import can_platform_operate
 
         login_user = self.login_user
-        if bool(getattr(login_user, "is_global_super", False)):
-            return
-        is_admin_fn = getattr(login_user, "is_admin", None)
-        if callable(is_admin_fn) and is_admin_fn():
+        if can_platform_operate(login_user):
             return
 
         has_tenant_admin = getattr(login_user, "has_tenant_admin", None)

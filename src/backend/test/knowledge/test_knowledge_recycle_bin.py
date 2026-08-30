@@ -7,11 +7,20 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from bisheng.common.errcode.knowledge import KnowledgeRecycleForbiddenError
-from bisheng.knowledge.domain.models.knowledge_file import FileType
+from bisheng.common.errcode.knowledge import (
+    KnowledgeRecycleForbiddenError,
+    KnowledgeRecycleTaskError,
+)
+from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+from bisheng.knowledge.domain.models.knowledge_document_version import (
+    KnowledgeDocumentVersion,
+)
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
 from bisheng.knowledge.domain.services.knowledge_recycle_service import (
     DEFAULT_RETENTION_DAYS,
     KnowledgeRecycleService,
+    _apply_canonical_purge_plan,
+    _plan_canonical_purge,
 )
 from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 
@@ -164,6 +173,63 @@ def test_build_minio_deletion_snapshots_includes_object_keys():
             "user_metadata": {"pdf_preview_object_name": "preview/99-pdf.pdf"},
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_canonical_purge_rejects_partial_primary_version_chain(
+    async_db_session,
+):
+    files = [
+        KnowledgeFile(
+            id=file_id,
+            tenant_id=1,
+            knowledge_id=10,
+            file_name=f"v{index}.pdf",
+            file_type=FileType.FILE.value,
+        )
+        for index, file_id in enumerate((901, 902), start=1)
+    ]
+    document = KnowledgeDocument(
+        id=800,
+        tenant_id=1,
+        knowledge_id=10,
+        primary_version_id=811,
+    )
+    versions = [
+        KnowledgeDocumentVersion(
+            id=811,
+            document_id=800,
+            knowledge_file_id=901,
+            version_no=1,
+            is_primary=True,
+        ),
+        KnowledgeDocumentVersion(
+            id=812,
+            document_id=800,
+            knowledge_file_id=902,
+            version_no=2,
+            is_primary=False,
+        ),
+    ]
+    async_db_session.add_all([*files, document, *versions])
+    await async_db_session.commit()
+
+    with pytest.raises(KnowledgeRecycleTaskError):
+        await _plan_canonical_purge(async_db_session, [901])
+
+    version_ids, document_ids = await _plan_canonical_purge(
+        async_db_session,
+        [901, 902],
+    )
+    assert version_ids == [811, 812]
+    assert document_ids == [800]
+    await _apply_canonical_purge_plan(
+        async_db_session,
+        version_ids=version_ids,
+        document_ids=document_ids,
+    )
+    await async_db_session.commit()
+    assert await async_db_session.get(KnowledgeDocument, 800) is None
 
 
 @pytest.mark.asyncio

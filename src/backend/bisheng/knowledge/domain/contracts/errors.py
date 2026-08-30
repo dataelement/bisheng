@@ -57,6 +57,8 @@ class SharedStorageErrorCode(str, Enum):
     PERMISSION_DENIED = "permission_denied"
     #: Explicitly referenced entry cannot be resolved to a visible entry.
     ENTRY_REF_NOT_RESOLVABLE = "entry_ref_not_resolvable"
+    #: Shared retrieval dependencies or the mandatory dense backend are unavailable.
+    RETRIEVAL_BACKEND_UNAVAILABLE = "retrieval_backend_unavailable"
 
 
 class SharedStorageContractError(RuntimeError):

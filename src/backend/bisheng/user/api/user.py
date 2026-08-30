@@ -187,18 +187,11 @@ async def get_admins(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         raise HTTPException(status_code=500, detail="User information failed")
 
 
-_PORTAL_ADMIN_ROLE_NAMES = frozenset({"管理员", "系统管理员", "admin"})
-
-
 def _user_info_role_label(role, role_names: list[str] | None):
-    """AdminRole 仍返回 admin；若持有门户管理员角色名则下发该名。"""
-    if role == "admin":
-        return "admin"
-    for name in role_names or []:
-        text = str(name).strip()
-        if text in _PORTAL_ADMIN_ROLE_NAMES or text.lower() == "admin":
-            return text
-    return role
+    """AdminRole 仍返回 admin; 运营岗下发「平台管理员」; 门户整页管理员名仍下发该名."""
+    from bisheng.user.domain.services.platform_operator import resolve_user_info_role_label
+
+    return resolve_user_info_role_label(role, role_names)
 
 
 @router.get("/user/info")
@@ -220,7 +213,10 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         is_department_admin=is_department_admin,
     )
     # AdminRole 仍下发 admin；持有「管理员」等门户角色名时下发该名，供 Portal isPortalAdmin。
-    role = _user_info_role_label(role, getattr(login_user, "role_names", None))
+    from bisheng.user.domain.services.platform_operator import collect_user_info_role_names
+
+    role_names = collect_user_info_role_names(login_user)
+    role = _user_info_role_label(role, role_names)
     menu_approval_mode = await login_user.compute_menu_approval_mode(db_user)
     department_projection = await UserService.get_primary_department_name_projection(user_id)
 
@@ -278,6 +274,7 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
             is_child_admin=is_child_admin,
             leaf_tenant_id=leaf_tenant_id,
             leaf_tenant_name=leaf_tenant_name,
+            role_names=role_names,
             **entry,
         )
     )

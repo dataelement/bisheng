@@ -21,12 +21,17 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeRecycleOriginalPathGoneError,
     KnowledgeRecycleOverwriteRequiredError,
     KnowledgeRecycleRetentionInvalidError,
+    KnowledgeRecycleTaskError,
     KnowledgeRecycleTargetPathNotFoundError,
 )
 from bisheng.common.models.config import ConfigDao
 from bisheng.common.schemas.api import PageData
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+from bisheng.knowledge.domain.models.knowledge_document_version import (
+    KnowledgeDocumentVersion,
+)
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileDao
 from bisheng.knowledge.domain.models.knowledge_recycle_item import KnowledgeRecycleItem
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum, KnowledgeSpaceScopeDao
@@ -61,6 +66,120 @@ _SPACE_LEVEL_LABELS = {
     KnowledgeSpaceLevelEnum.TEAM_KS.value: "团队/科室知识库",
     KnowledgeSpaceLevelEnum.PERSONAL.value: "个人知识库",
 }
+
+
+async def _plan_canonical_purge(
+    session,
+    file_ids: Sequence[int],
+) -> tuple[list[int], list[int]]:
+    """Validate and plan canonical rows before physical files are purged."""
+    normalized_ids = sorted({int(item) for item in file_ids})
+    if not normalized_ids:
+        return [], []
+    pending_versions = list(
+        (
+            await session.execute(
+                select(KnowledgeDocumentVersion).where(
+                    col(KnowledgeDocumentVersion.knowledge_file_id).in_(
+                        normalized_ids
+                    )
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_document: dict[int, list[KnowledgeDocumentVersion]] = {}
+    for version in pending_versions:
+        by_document.setdefault(int(version.document_id), []).append(version)
+
+    version_ids: list[int] = []
+    document_ids: list[int] = []
+    purge_set = set(normalized_ids)
+    for document_id, selected_versions in by_document.items():
+        chain = list(
+            (
+                await session.execute(
+                    select(KnowledgeDocumentVersion).where(
+                        KnowledgeDocumentVersion.document_id == document_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        chain_file_ids = {int(version.knowledge_file_id) for version in chain}
+        document = await session.get(KnowledgeDocument, document_id)
+        selected_version_ids = {
+            int(version.id) for version in selected_versions if version.id is not None
+        }
+        primary_selected = (
+            document is not None
+            and document.primary_version_id is not None
+            and int(document.primary_version_id) in selected_version_ids
+        )
+        if primary_selected and not chain_file_ids.issubset(purge_set):
+            raise KnowledgeRecycleTaskError(
+                msg=(
+                    "主版本所属的完整版本链未全部进入本次清理，已拒绝物理删除: "
+                    f"document_id={document_id}"
+                )
+            )
+        if not primary_selected:
+            version_ids.extend(
+                int(version.id) for version in selected_versions if version.id is not None
+            )
+            continue
+
+        remaining_entry = (
+            await session.execute(
+                select(KnowledgeFile.id)
+                .where(
+                    KnowledgeFile.reference_document_id == document_id,
+                    col(KnowledgeFile.id).not_in(sorted(purge_set)),
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if remaining_entry is not None:
+            raise KnowledgeRecycleTaskError(
+                msg=(
+                    "文档仍有未进入回收清理的发布或分享入口，已拒绝物理删除: "
+                    f"document_id={document_id} entry_id={remaining_entry}"
+                )
+            )
+        version_ids.extend(
+            int(version.id) for version in chain if version.id is not None
+        )
+        document_ids.append(document_id)
+
+    return sorted(set(version_ids)), sorted(set(document_ids))
+
+
+async def _apply_canonical_purge_plan(
+    session,
+    *,
+    version_ids: Sequence[int],
+    document_ids: Sequence[int],
+) -> None:
+    if document_ids:
+        await session.execute(
+            update(KnowledgeDocument)
+            .where(col(KnowledgeDocument.id).in_(list(document_ids)))
+            .values(primary_version_id=None, predecessor_logic_file_id=None)
+        )
+    if version_ids:
+        await session.execute(
+            delete(KnowledgeDocumentVersion).where(
+                col(KnowledgeDocumentVersion.id).in_(list(version_ids))
+            )
+        )
+    if document_ids:
+        await session.execute(
+            delete(KnowledgeDocument).where(
+                col(KnowledgeDocument.id).in_(list(document_ids))
+            )
+        )
 
 
 class KnowledgeRecycleService:
@@ -507,13 +626,12 @@ class KnowledgeRecycleService:
             )
             file_ids = [int(i.file_id) for i in all_items]
             knowledge_ids = {int(i.knowledge_id) for i in all_items}
+            await _plan_canonical_purge(session, file_ids)
 
         # Hard-delete vectors + minio + DB rows via existing celery path per knowledge
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
         for kid in knowledge_ids:
-            kids_files = [fid for fid, item in zip(file_ids, all_items) if int(item.knowledge_id) == kid]
-            # regroup properly
             kids_files = [int(i.file_id) for i in all_items if int(i.knowledge_id) == kid]
             if not kids_files:
                 continue
@@ -527,6 +645,15 @@ class KnowledgeRecycleService:
             )
 
         async with get_async_db_session() as session:
+            version_ids, document_ids = await _plan_canonical_purge(
+                session,
+                file_ids,
+            )
+            await _apply_canonical_purge_plan(
+                session,
+                version_ids=version_ids,
+                document_ids=document_ids,
+            )
             await request_file_delete_intents(
                 session,
                 [

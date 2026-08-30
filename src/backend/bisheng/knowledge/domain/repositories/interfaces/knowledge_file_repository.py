@@ -72,6 +72,15 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         """
         ...
 
+    async def find_active_entries_for_documents_any_space(
+        self,
+        *,
+        tenant_id: int,
+        document_ids: list[int],
+    ) -> list[KnowledgeFile]:
+        """Active manager/publish/share entries across all spaces for generation checks."""
+        ...
+
     async def find_entry_in_space_for_update(
         self,
         document_id: int,
@@ -121,6 +130,7 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         *,
         now: datetime,
         limit: int,
+        max_retries: int | None = None,
     ) -> list[KnowledgeFile]:
         """Return due F059 projection rows using the complete retry predicate."""
         ...
@@ -132,6 +142,7 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         lease_owner: str,
         lease_until: datetime,
         now: datetime,
+        max_retries: int | None = None,
     ) -> KnowledgeFile | None:
         """Atomically claim or take over an expired projection lease."""
         ...

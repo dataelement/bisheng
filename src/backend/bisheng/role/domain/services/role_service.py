@@ -34,6 +34,11 @@ from bisheng.role.domain.schemas.role_schema import (
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.models.user_role import UserRole
+from bisheng.user.domain.services.platform_operator import (
+    PLATFORM_OPERATOR_ROLE_NAME,
+    is_platform_operator_role_name,
+    strip_platform_operator_admin_menus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +48,39 @@ SYSTEM_PRESET_CREATOR_NAME = '系统预设'
 
 class RoleService:
     """Stateless service for role CRUD operations."""
+
+    @classmethod
+    def _canonical_role_name(cls, role_name: str) -> str:
+        """保留名统一成精确四字, 避免首尾空格绕过唯一性."""
+        if is_platform_operator_role_name(role_name):
+            return PLATFORM_OPERATOR_ROLE_NAME
+        return role_name
+
+    @classmethod
+    async def _ensure_platform_operator_name_available(
+        cls,
+        tenant_id: int,
+        role_name: str,
+        exclude_role_id: Optional[int] = None,
+    ) -> None:
+        """保留名在租户内跨 department / role_type 唯一, 冲突则 24002."""
+        if not is_platform_operator_role_name(role_name):
+            return
+        existing = await RoleDao.aget_role_by_exact_name_in_tenant(
+            tenant_id=tenant_id,
+            role_name=PLATFORM_OPERATOR_ROLE_NAME,
+            exclude_id=exclude_role_id,
+        )
+        if existing:
+            raise RoleNameDuplicateError()
+
+    @classmethod
+    def _reject_platform_operator_rename(cls, role, new_name: Optional[str]) -> None:
+        """已有「平台管理员」行禁止改名, 24004."""
+        if not is_platform_operator_role_name(getattr(role, "role_name", None)):
+            return
+        if new_name is not None and str(new_name).strip() != PLATFORM_OPERATOR_ROLE_NAME:
+            raise RoleBuiltinProtectedError()
 
     # ── Create ──
 
@@ -64,12 +102,14 @@ class RoleService:
 
         # Determine role_type
         role_type = 'global' if login_user.is_admin() else 'tenant'
+        role_name = cls._canonical_role_name(req.role_name)
+        await cls._ensure_platform_operator_name_available(login_user.tenant_id, role_name)
 
         # Check duplicate name (AC-09)
         existing = await RoleDao.aget_role_by_name(
             tenant_id=login_user.tenant_id,
             role_type=role_type,
-            role_name=req.role_name,
+            role_name=role_name,
             department_id=req.department_id,
         )
         if existing:
@@ -82,7 +122,7 @@ class RoleService:
         await cls._ensure_create_scope(login_user, req.department_id)
 
         role = Role(
-            role_name=req.role_name,
+            role_name=role_name,
             role_type=role_type,
             department_id=req.department_id,
             quota_config=req.quota_config,
@@ -114,10 +154,12 @@ class RoleService:
             QuotaService.validate_role_quota_config(req.quota_config)
 
         role_type = 'global' if login_user.is_admin() else 'tenant'
+        role_name = cls._canonical_role_name(req.role_name)
+        await cls._ensure_platform_operator_name_available(login_user.tenant_id, role_name)
         existing = await RoleDao.aget_role_by_name(
             tenant_id=login_user.tenant_id,
             role_type=role_type,
-            role_name=req.role_name,
+            role_name=role_name,
             department_id=req.department_id,
         )
         if existing:
@@ -128,9 +170,9 @@ class RoleService:
 
         await cls._ensure_create_scope(login_user, req.department_id)
 
-        menu_ids = cls._normalize_menu_ids(req.menu_ids or [])
+        menu_ids = cls._normalize_menu_ids(req.menu_ids or [], role_name=role_name)
         role = Role(
-            role_name=req.role_name,
+            role_name=role_name,
             role_type=role_type,
             department_id=req.department_id,
             quota_config=req.quota_config,
@@ -359,6 +401,7 @@ class RoleService:
 
         await cls._check_role_permission(login_user)
         await cls._ensure_role_mutation_access(role, login_user)
+        cls._reject_platform_operator_rename(role, req.role_name)
 
         # Validate quota_config (AC-10c)
         if req.quota_config is not None:
@@ -366,11 +409,15 @@ class RoleService:
 
         # Check duplicate name if changing name (AC-09)
         if req.role_name and req.role_name != role.role_name:
+            target_name = cls._canonical_role_name(req.role_name)
+            await cls._ensure_platform_operator_name_available(
+                login_user.tenant_id, target_name, exclude_role_id=role_id,
+            )
             target_department_id = req.department_id if 'department_id' in req.model_fields_set else role.department_id
             existing = await RoleDao.aget_role_by_name(
                 tenant_id=login_user.tenant_id,
                 role_type=role.role_type,
-                role_name=req.role_name,
+                role_name=target_name,
                 department_id=target_department_id,
             )
             if existing and existing.id != role_id:
@@ -382,7 +429,7 @@ class RoleService:
 
         # Apply updates
         if req.role_name is not None:
-            role.role_name = req.role_name
+            role.role_name = cls._canonical_role_name(req.role_name)
         if req.quota_config is not None:
             role.quota_config = req.quota_config
         if req.remark is not None:
@@ -409,16 +456,21 @@ class RoleService:
 
         await cls._check_role_permission(login_user)
         await cls._ensure_role_mutation_access(role, login_user)
+        cls._reject_platform_operator_rename(role, req.role_name)
 
         if req.quota_config is not None:
             QuotaService.validate_role_quota_config(req.quota_config)
 
         if req.role_name and req.role_name != role.role_name:
+            target_name = cls._canonical_role_name(req.role_name)
+            await cls._ensure_platform_operator_name_available(
+                login_user.tenant_id, target_name, exclude_role_id=role_id,
+            )
             target_department_id = req.department_id if 'department_id' in req.model_fields_set else role.department_id
             existing = await RoleDao.aget_role_by_name(
                 tenant_id=login_user.tenant_id,
                 role_type=role.role_type,
-                role_name=req.role_name,
+                role_name=target_name,
                 department_id=target_department_id,
             )
             if existing and existing.id != role_id:
@@ -427,7 +479,10 @@ class RoleService:
         if req.department_id is not None:
             await cls._validate_department(req.department_id)
 
-        menu_ids = cls._normalize_menu_ids(req.menu_ids or [])
+        menu_ids = cls._normalize_menu_ids(
+            req.menu_ids or [],
+            role_name=cls._canonical_role_name(req.role_name) if req.role_name else role.role_name,
+        )
 
         async with get_async_db_session() as session:
             result = await session.exec(select(Role).where(Role.id == role_id))
@@ -436,7 +491,7 @@ class RoleService:
                 raise RoleNotFoundError()
 
             if req.role_name is not None:
-                db_role.role_name = req.role_name
+                db_role.role_name = cls._canonical_role_name(req.role_name)
             if req.quota_config is not None:
                 db_role.quota_config = req.quota_config
             if req.remark is not None:
@@ -469,6 +524,9 @@ class RoleService:
         role = await RoleDao.aget_role_by_id(role_id)
         if not role:
             raise RoleNotFoundError()
+
+        if is_platform_operator_role_name(role.role_name):
+            raise RoleBuiltinProtectedError()
 
         # Permission check (AC-06 equivalent)
         if not login_user.is_admin() and role.role_type == 'global':
@@ -504,7 +562,7 @@ class RoleService:
         await cls._check_role_permission(login_user)
         await cls._ensure_role_mutation_access(role, login_user)
 
-        normalized = cls._normalize_menu_ids(menu_ids)
+        normalized = cls._normalize_menu_ids(menu_ids, role_name=role.role_name)
         async with get_async_db_session() as session:
             result = await session.exec(select(Role).where(Role.id == role_id))
             db_role = result.first()
@@ -762,8 +820,8 @@ class RoleService:
             logger.warning('Failed to validate department %d: %s', department_id, e)
 
     @classmethod
-    def _normalize_menu_ids(cls, menu_ids: List[str]) -> List[str]:
-        """Deduplicate menu keys; strip system_config (reserved for super-admin / dept-admin)."""
+    def _normalize_menu_ids(cls, menu_ids: List[str], role_name: Optional[str] = None) -> List[str]:
+        """Deduplicate menu keys; strip system_config; 运营岗再丢掉管理端 key."""
         out: list[str] = []
         for menu_id in menu_ids:
             s = str(menu_id)
@@ -771,7 +829,7 @@ class RoleService:
                 continue
             if s not in out:
                 out.append(s)
-        return out
+        return strip_platform_operator_admin_menus(role_name, out)
 
     @classmethod
     async def _replace_menu_access_in_session(

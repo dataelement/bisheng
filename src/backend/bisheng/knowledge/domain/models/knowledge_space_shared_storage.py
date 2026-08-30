@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Field, Session, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -34,6 +35,7 @@ class KnowledgeSpaceSharedStorageRoutingBase(SQLModelSerializable):
             nullable=False,
             server_default=text("1"),
             index=True,
+            unique=True,
             comment="Tenant ID (one row per tenant)",
         ),
     )
@@ -158,7 +160,14 @@ class KnowledgeSpaceSharedStorageRoutingDao:
                 return row
             row = KnowledgeSpaceSharedStorageRouting(tenant_id=int(tenant_id))
             session.add(row)
-            session.commit()
+            try:
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+                winner = cls._get_by_tenant(session, tenant_id)
+                if winner is None:
+                    raise
+                return winner
             session.refresh(row)
             return row
 

@@ -110,6 +110,9 @@ async def _advance_manager_projection_after_parse(
     from bisheng.knowledge.domain.services.knowledge_document_permission_activation_service import (
         KnowledgeDocumentPermissionActivationService,
     )
+    from bisheng.knowledge.rag.shared_space_storage import (
+        resolve_space_shared_routing,
+    )
 
     async with get_async_db_session() as session:
         file_repository = KnowledgeFileRepositoryImpl(session)
@@ -118,13 +121,24 @@ async def _advance_manager_projection_after_parse(
             file_record is None
             or int(file_record.tenant_id or 0) != int(tenant_id)
             or file_record.status != KnowledgeFileStatus.SUCCESS.value
-            or file_record.reference_document_id is None
-            or file_record.entry_type
-            != KnowledgeFileEntryType.MANAGER.value
-            or file_record.entry_status
-            != KnowledgeFileEntryStatus.ACTIVE.value
         ):
             return False
+        is_active_manager = (
+            file_record.reference_document_id is not None
+            and file_record.entry_type == KnowledgeFileEntryType.MANAGER.value
+            and file_record.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+        )
+        if not is_active_manager:
+            knowledge = await session.get(Knowledge, int(file_record.knowledge_id))
+            if (
+                knowledge is None
+                or resolve_space_shared_routing(
+                    tenant_id=int(tenant_id),
+                    knowledge_type=int(knowledge.type),
+                )
+                is None
+            ):
+                return False
         document_repository = KnowledgeDocumentRepositoryImpl(session)
         version_repository = (
             KnowledgeDocumentVersionRepositoryImpl(session)
@@ -140,6 +154,12 @@ async def _advance_manager_projection_after_parse(
                 )
             ),
         )
+        if not is_active_manager:
+            snapshot = await service.normalize_manager(
+                tenant_id=int(tenant_id),
+                source_file_id=int(file_record.id),
+            )
+            file_record.reference_document_id = int(snapshot.document_id)
         await service.touch_manager_content(
             tenant_id=int(tenant_id),
             document_id=int(file_record.reference_document_id),

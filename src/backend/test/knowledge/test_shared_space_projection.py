@@ -50,6 +50,7 @@ from bisheng.knowledge.domain.services.knowledge_version_service import (
 )
 from bisheng.knowledge.domain.services.shared_space_projection_support import (
     aggregate_active_knowledge_ids,
+    load_shared_content_chunks_from_legacy,
     resolve_shared_space_storage_enabled,
 )
 from test.fakes.shared_storage_fakes import FakeSharedSpaceStorageWriter
@@ -174,6 +175,7 @@ def _service(
         shared_storage_writer=writer,
         shared_storage_enabled=enabled,
         shared_content_chunk_loader=chunk_loader,
+        shared_embedding_model_id="4",
         lease_seconds=30,
         max_retry_seconds=60,
     )
@@ -228,6 +230,64 @@ class TestActiveKnowledgeIdsAggregation:
             )
         ]
         assert aggregate_active_knowledge_ids(entries) == ()
+
+
+async def test_chunk_loader_falls_back_to_original_space_after_publish_move():
+    content_file = KnowledgeFile(
+        id=100,
+        tenant_id=TENANT,
+        knowledge_id=20,
+        original_knowledge_id=10,
+        file_name="doc.pdf",
+    )
+    fields = [
+        SimpleNamespace(name=name)
+        for name in ("pk", "document_id", "text", "vector")
+    ]
+    current_collection = SimpleNamespace(
+        schema=SimpleNamespace(fields=fields),
+        query=lambda **_kwargs: [],
+    )
+    original_collection = SimpleNamespace(
+        schema=SimpleNamespace(fields=fields),
+        query=lambda **_kwargs: [
+            {
+                "pk": 1,
+                "document_id": 100,
+                "text": "from original",
+                "vector": [0.1, 0.2],
+            }
+        ],
+    )
+    spaces = {
+        20: SimpleNamespace(id=20),
+        10: SimpleNamespace(id=10),
+    }
+
+    def vector_store(_user_id, *, knowledge):
+        collection = (
+            current_collection
+            if knowledge.id == 20
+            else original_collection
+        )
+        return SimpleNamespace(col=collection)
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aquery_by_id",
+            new=AsyncMock(side_effect=lambda space_id: spaces.get(space_id)),
+        ),
+        patch(
+            "bisheng.knowledge.domain.knowledge_rag.KnowledgeRag."
+            "init_knowledge_milvus_vectorstore_sync",
+            side_effect=vector_store,
+        ),
+    ):
+        chunks = await load_shared_content_chunks_from_legacy(content_file)
+
+    assert len(chunks) == 1
+    assert chunks[0].text == "from original"
+    assert chunks[0].vector == [0.1, 0.2]
 
 
 # ---------------------------------------------------------------------------
