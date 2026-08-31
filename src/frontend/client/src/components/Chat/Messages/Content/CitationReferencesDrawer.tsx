@@ -68,7 +68,11 @@ function SourceTypeBadge({ preview, type }: { preview: CitationPreview | null; t
     <div
       className={cn(
         'inline-flex h-[18px] min-w-[16px] items-center justify-center rounded-md px-1 text-[12px] font-normal leading-[18px]',
-        isWeb ? 'bg-[#F7F3FF] text-[#7224D9]' : 'bg-blue-50 text-blue-600',
+        // Same two source colors as the citation badge (组件-Badge徽标.md §2),
+        // read from the tokens rather than re-typed as hex. This chip says WHAT
+        // the source is, so it is a Tag by the 判别表 — migrating the markup is
+        // still pending; the color drift is not worth keeping until then.
+        isWeb ? 'bg-citation-web-tint text-citation-web' : 'bg-blue-50 text-blue-600',
       )}
     >
       {isWeb ? '网页' : '文档'}

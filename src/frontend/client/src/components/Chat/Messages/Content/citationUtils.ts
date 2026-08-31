@@ -207,18 +207,6 @@ export function transformPrivateCitations(content: string) {
   return { transformedContent, citationMap };
 }
 
-export function getCitationClassName(type?: string) {
-  switch (type?.toLowerCase()) {
-    case 'web':
-    case 'websearch':
-      return 'bg-[#F7F3FF] text-[#7224D9] transition-colors duration-150 hover:bg-[#EDE4FF] data-[state=open]:bg-[#EDE4FF]';
-    case 'knowledgesearch':
-      return 'bg-blue-50 text-blue-600 transition-colors duration-150 hover:bg-blue-100 data-[state=open]:bg-blue-100';
-    default:
-      return 'bg-blue-50 text-blue-600 transition-colors duration-150 hover:bg-blue-100 data-[state=open]:bg-blue-100';
-  }
-}
-
 export function normalizeCitationType(type?: string) {
   const normalizedType = type?.toLowerCase();
   if (normalizedType === 'web' || normalizedType === 'websearch') {
