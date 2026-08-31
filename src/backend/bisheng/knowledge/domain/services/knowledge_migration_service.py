@@ -85,9 +85,13 @@ class CeleryKnowledgeMigrationTaskDispatcher:
 
 
 def require_system_admin(login_user: Any):
-    """只接受后端 AdminRole. 不接受账号名或展示角色旁路."""
-    is_admin = getattr(login_user, "is_admin", None)
-    if login_user is None or not callable(is_admin) or not bool(is_admin()):
+    """接受后端 AdminRole 或运营岗「平台管理员」.
+
+    不接受账号名 / 展示角色旁路; 不得把运营岗写进 is_admin().
+    """
+    from bisheng.user.domain.services.platform_operator import can_platform_operate
+
+    if not can_platform_operate(login_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="System administrator access required",

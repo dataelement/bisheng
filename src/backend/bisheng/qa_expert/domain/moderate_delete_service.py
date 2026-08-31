@@ -7,8 +7,9 @@ import logging
 from dataclasses import dataclass
 from typing import Literal
 
+from bisheng.common.errcode.points import PointsPermissionDeniedError
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
-from bisheng.points.domain.services.points_auth import require_platform_admin
+from bisheng.points.domain.services.points_auth import is_platform_super_admin
 from bisheng.points.domain.services.points_pending_deduct_service import PointsPendingDeductService
 from bisheng.qa_expert.domain.repositories import (
     AnswerRepository,
@@ -70,7 +71,8 @@ class ModerateDeleteService:
         扣分失败不回滚删除, 写入 point_pending_deduct 供 Beat 补扣.
         删回答时级联硬删其下评论，扣分仅针对回答作者。
         """
-        require_platform_admin(operator)
+        if not is_platform_super_admin(operator):
+            raise PointsPermissionDeniedError()
         if target_type not in ("question", "answer", "comment"):
             raise PermissionDeniedError(message="unsupported target_type")
         if int(target_id) <= 0:
