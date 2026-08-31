@@ -468,6 +468,10 @@ class GrantSubjectQueryService:
             tenant_id = get_current_tenant_id()
         if tenant_id is None or not await self.repository.is_active_tenant(int(tenant_id)):
             return None, None, True
+        if bool(getattr(login_user, "is_global_super", False)):
+            # Global super admins pick grant subjects tenant-wide, unscoped by any
+            # department a knowledge space happens to be bound to.
+            return int(tenant_id), None, False
         restrict_path = await self.repository.resolve_department_space_path(
             resource_type=resource_type,
             resource_id=resource_id,

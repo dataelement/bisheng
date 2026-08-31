@@ -446,7 +446,10 @@ class ResourceAuthorizationService:
         try:
             if int(grant.subject_id) == int(login_user.user_id):
                 raise PermissionDeniedError(msg="不能修改自己的权限")
-            await self._validate_department_space_grants(resource_type, resource_id, [grant])
+            if not bool(getattr(login_user, "is_global_super", False)):
+                # Global super admins invite across departments; everyone else stays
+                # scoped to the knowledge space's bound department subtree.
+                await self._validate_department_space_grants(resource_type, resource_id, [grant])
             from bisheng.permission.domain.services.grant_subject_query_service import (
                 GrantSubjectQueryService,
             )
@@ -563,7 +566,10 @@ class ResourceAuthorizationService:
         if any(item.relation == "owner" and item.subject_type != "user" for item in request.grants):
             raise PermissionDeniedError(msg="部门或用户组无法成为所有者")
 
-        await self._validate_department_space_grants(resource_type, resource_id, request.grants)
+        if not bool(getattr(login_user, "is_global_super", False)):
+            # Global super admins grant across departments; everyone else stays
+            # scoped to the knowledge space's bound department subtree.
+            await self._validate_department_space_grants(resource_type, resource_id, request.grants)
         if resource_type == "knowledge_space" and request.grants:
             from bisheng.permission.domain.services.grant_subject_query_service import (
                 GrantSubjectQueryService,
