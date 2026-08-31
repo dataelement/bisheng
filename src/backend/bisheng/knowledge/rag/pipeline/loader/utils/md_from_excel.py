@@ -42,7 +42,7 @@ def xls_to_xlsx(xls_path):
         return xlsx_path
 
     except Exception as e:
-        logger.exception(f'xls_to_xlsx error: ')
+        logger.exception(f"xls_to_xlsx error: ")
         return None
 
 
@@ -55,6 +55,39 @@ def remove_characters(s, chars_to_remove=["\n", "\r"]):
     for char in chars_to_remove:
         s = s.replace(char, "")
     return s.strip()
+
+
+SENTINEL_ROW = 1 << 30
+
+
+def extract_sheet_images(sheet_obj, image_dir: str, sheet_index: int) -> dict:
+    """Extract embedded images of a worksheet into the flat staging ``image_dir``.
+
+    Returns a mapping of 0-based row index -> list of markdown image lines.
+    Images are placed at their anchor row; images without a usable anchor fall
+    back to a sentinel row so they are appended at the end of the sheet content.
+    Callers rewrite the local paths to their final storage URLs afterwards.
+    """
+    result = {}
+    images = getattr(sheet_obj, "_images", None) or []
+    for img_idx, image in enumerate(images):
+        try:
+            data = image._data()
+        except Exception as e:
+            logger.warning("skip unreadable image {} in sheet {}: {}", img_idx, sheet_obj.title, e)
+            continue
+        ext = (getattr(image, "format", None) or "png").lower()
+        filename = f"excel_s{sheet_index}_img{img_idx}.{ext}"
+        try:
+            with open(os.path.join(image_dir, filename), "wb") as f:
+                f.write(data)
+        except Exception as e:
+            logger.warning("skip unsavable image {} in sheet {}: {}", img_idx, sheet_obj.title, e)
+            continue
+        from_row = getattr(getattr(getattr(image, "anchor", None), "_from", None), "row", None)
+        row = from_row if isinstance(from_row, int) else SENTINEL_ROW
+        result.setdefault(row, []).append(f"![{filename}]({image_dir}/{filename})")
+    return result
 
 
 def unmerge_and_read_sheet(sheet_obj):
@@ -82,7 +115,7 @@ def unmerge_and_read_sheet(sheet_obj):
         row_empty = True
 
         for c_idx, cell in enumerate(row):
-            value = merged_map.get((r_idx+1, c_idx+1), cell.value)
+            value = merged_map.get((r_idx + 1, c_idx + 1), cell.value)
             row_data.append(value)
 
             if value is not None and str(value).strip() != "":
@@ -113,10 +146,10 @@ def unmerge_and_read_sheet(sheet_obj):
 
 
 def generate_markdown_table_string(
-        header_rows_list_of_lists,
-        data_rows_list_of_lists,
-        num_columns,
-        separator_placement_index=1,
+    header_rows_list_of_lists,
+    data_rows_list_of_lists,
+    num_columns,
+    separator_placement_index=1,
 ):
     """
     Generate from new rulesMarkdownTable String
@@ -129,12 +162,7 @@ def generate_markdown_table_string(
         pre_separator_header = header_rows_list_of_lists[:separator_placement_index]
         for row_values in pre_separator_header:
             md_lines.append(
-                "| "
-                + " | ".join(
-                    remove_characters(str(v)) if v is not None else ""
-                    for v in row_values
-                )
-                + " |"
+                "| " + " | ".join(remove_characters(str(v)) if v is not None else "" for v in row_values) + " |"
             )
 
         # Insert below the header in the first rowMarkdownSeparator
@@ -144,38 +172,32 @@ def generate_markdown_table_string(
         post_separator_header = header_rows_list_of_lists[separator_placement_index:]
         for row_values in post_separator_header:
             md_lines.append(
-                "| "
-                + " | ".join(
-                    remove_characters(str(v)) if v is not None else ""
-                    for v in row_values
-                )
-                + " |"
+                "| " + " | ".join(remove_characters(str(v)) if v is not None else "" for v in row_values) + " |"
             )
 
     # Always process data rows
     for row_values in data_rows_list_of_lists:
         md_lines.append(
-            "| "
-            + " | ".join(
-                remove_characters(str(v)) if v is not None else "" for v in row_values
-            )
-            + " |"
+            "| " + " | ".join(remove_characters(str(v)) if v is not None else "" for v in row_values) + " |"
         )
 
     return "\n".join(md_lines)
 
 
 def process_dataframe_to_markdown_files(
-        df,
-        sheet_index: str,
-        num_header_rows,
-        rows_per_markdown,
-        output_dir,
-        append_header=True,
+    df,
+    sheet_index: str,
+    num_header_rows,
+    rows_per_markdown,
+    output_dir,
+    append_header=True,
+    image_lines_by_row=None,
 ):
     """
     - append_header=True: Tekan num_header_rows Separate the header and data.
     - append_header=False: All content is treated as data, table header is empty, ignored num_header_rows。
+    - image_lines_by_row: optional mapping of original df row index -> markdown
+      image lines to append to the chunk containing that row.
     """
     if df.empty:
         logger.warning(f"  feed '{sheet_index}' DataDataFrameEmpty, skippingMarkdownBuat")
@@ -193,41 +215,48 @@ def process_dataframe_to_markdown_files(
         append_header = False
 
     # --- Core Logic Modified: According to append_header Decide how to split the data ---
+    original_row_indices = []
     if append_header:
         # Handle header index outliers based on user rules
         if start_header_idx >= rows:
             logger.warning(
-                f"Table Header Start Row {start_header_idx} Total lines exceeded {rows}. The first row will be used as the table header.")
+                f"Table Header Start Row {start_header_idx} Total lines exceeded {rows}. The first row will be used as the table header."
+            )
             start_header_idx, end_header_idx = 0, 0
         elif end_header_idx >= rows:
             logger.warning(
-                f"Table Header End Row {end_header_idx} Total lines exceeded {rows}. will be truncated to the last line.")
+                f"Table Header End Row {end_header_idx} Total lines exceeded {rows}. will be truncated to the last line."
+            )
             end_header_idx = rows - 1
 
         # Make sure the index is legitimate
-        if start_header_idx < 0: start_header_idx = 0
-        if end_header_idx < start_header_idx: end_header_idx = start_header_idx
+        if start_header_idx < 0:
+            start_header_idx = 0
+        if end_header_idx < start_header_idx:
+            end_header_idx = start_header_idx
 
         try:
             header_slice = slice(start_header_idx, end_header_idx + 1)
             header_block_df = df.iloc[header_slice]
-            data_block_df = df.drop(df.index[header_slice]).reset_index(drop=True)
+            data_block_source = df.drop(df.index[header_slice])
+            original_row_indices = data_block_source.index.tolist()
+            data_block_df = data_block_source.reset_index(drop=True)
             header_rows_as_lists = header_block_df.values.tolist()
         except Exception as e:
             logger.error(
-                f"  At Source '{sheet_index}' Index by header in [{start_header_idx}, {end_header_idx}] Error Splitting Data: {e}Skip")
+                f"  At Source '{sheet_index}' Index by header in [{start_header_idx}, {end_header_idx}] Error Splitting Data: {e}Skip"
+            )
             return
     else:
         # when append_header are False , everything is treated as data and the header list is empty
         header_rows_as_lists = []
+        original_row_indices = df.index.tolist()
         data_block_df = df.reset_index(drop=True)
 
     # --- Subsequent pagination logic ---
     if data_block_df.empty:
         if append_header and not header_block_df.empty:
-            markdown_content = generate_markdown_table_string(
-                header_rows_as_lists, [], num_columns
-            )
+            markdown_content = generate_markdown_table_string(header_rows_as_lists, [], num_columns)
             # BUG FIX: Use zfill for proper padding. This is file '000' for the sheet.
             file_name = f"{str(sheet_index).zfill(2)}000.md"
             file_path = os.path.join(output_dir, file_name)
@@ -240,8 +269,11 @@ def process_dataframe_to_markdown_files(
         return
 
     num_data_rows_total = len(data_block_df)
-    num_files_to_create = math.ceil(num_data_rows_total / rows_per_markdown) if rows_per_markdown > 0 else (
-        1 if num_data_rows_total > 0 else 0)
+    num_files_to_create = (
+        math.ceil(num_data_rows_total / rows_per_markdown)
+        if rows_per_markdown > 0
+        else (1 if num_data_rows_total > 0 else 0)
+    )
 
     for i in range(num_files_to_create):
         start_idx = i * rows_per_markdown
@@ -256,9 +288,20 @@ def process_dataframe_to_markdown_files(
             final_header_for_chunk = [current_data_chunk_as_lists[0]]
             final_data_for_chunk = current_data_chunk_as_lists[1:]
 
-        markdown_content = generate_markdown_table_string(
-            final_header_for_chunk, final_data_for_chunk, num_columns
-        )
+        markdown_content = generate_markdown_table_string(final_header_for_chunk, final_data_for_chunk, num_columns)
+
+        # Append embedded-image lines anchored to rows inside this chunk;
+        # images anchored beyond the data range ride on the last chunk
+        if image_lines_by_row:
+            chunk_rows = original_row_indices[start_idx:end_idx]
+            image_lines = [line for row in chunk_rows for line in image_lines_by_row.get(row, [])]
+            if i == num_files_to_create - 1:
+                covered_rows = set(original_row_indices)
+                for row in sorted(image_lines_by_row):
+                    if row not in covered_rows:
+                        image_lines.extend(image_lines_by_row[row])
+            if image_lines:
+                markdown_content += "\n" + "\n".join(image_lines)
 
         # BUG FIX: Use zfill for proper 2-digit sheet and 3-digit file padding.
         file_name = f"{str(sheet_index).zfill(2)}{str(i).zfill(3)}.md"
@@ -267,9 +310,7 @@ def process_dataframe_to_markdown_files(
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(markdown_content)
-            logger.debug(
-                f"  Sudah disimpan'{file_path}' (incl.  {len(current_data_chunk_as_lists)} Row Raw Data)"
-            )
+            logger.debug(f"  Sudah disimpan'{file_path}' (incl.  {len(current_data_chunk_as_lists)} Row Raw Data)")
         except Exception as e:
             logger.debug(f"  Save file '{file_path}' Error during: {e}")
 
@@ -283,11 +324,16 @@ def is_list_of_lists_empty(data_list):
     # Use any() and generator expressions for efficient judgment
     # any(row) Check for non-empty lines
     # any(cell is not None and cell != '' for cell in row) Check if there are non-empty cells in the row
-    return not any(any(cell is not None and str(cell).strip() != '' for cell in row) for row in data_list)
+    return not any(any(cell is not None and str(cell).strip() != "" for cell in row) for row in data_list)
 
 
 def excel_file_to_markdown(
-        excel_path, num_header_rows, rows_per_markdown, output_dir, append_header=True
+    excel_path,
+    num_header_rows,
+    rows_per_markdown,
+    output_dir,
+    append_header=True,
+    image_dir=None,
 ):
     logger.debug(f"\nStart ProcessingExcelDocumentation:'{excel_path}'")
     try:
@@ -300,12 +346,26 @@ def excel_file_to_markdown(
     for sheet_name in workbook.sheetnames:
         logger.debug(f"\n  (In work)ExcelWorksheet'{sheet_name}'...")
         sheet_obj = workbook[sheet_name]
+
+        # Extract embedded images before reading cells so image-only sheets
+        # are not silently dropped.
+        image_lines_by_row = None
+        if image_dir:
+            image_lines_by_row = extract_sheet_images(sheet_obj, image_dir, sheet_index)
+
         unmerged_data_list_of_lists = unmerge_and_read_sheet(sheet_obj)
         logger.debug(f"\n  <read all data>Excel<UNK>'{sheet_name}'...{len(unmerged_data_list_of_lists)}")
 
         # Using the new decision function
         if is_list_of_lists_empty(unmerged_data_list_of_lists):
-            logger.debug(f"  Worksheet '{sheet_name}' Empty or no valid data, skipping.")
+            if image_lines_by_row:
+                # Image-only sheet: still emit its images as a markdown file.
+                file_path = os.path.join(output_dir, f"{str(sheet_index).zfill(2)}000.md")
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write("\n".join(line for _row in sorted(image_lines_by_row) for line in image_lines_by_row[_row]))
+                sheet_index += 1
+            else:
+                logger.debug(f"  Worksheet '{sheet_name}' Empty or no valid data, skipping.")
             continue
 
         df = pd.DataFrame(unmerged_data_list_of_lists)
@@ -321,6 +381,7 @@ def excel_file_to_markdown(
             rows_per_markdown,
             output_dir,
             append_header=append_header,
+            image_lines_by_row=image_lines_by_row,
         )
         sheet_index += 1
 
@@ -330,13 +391,13 @@ def excel_file_to_markdown(
 
 
 def csv_file_to_markdown(
-        csv_path,
-        num_header_rows,
-        rows_per_markdown,
-        output_dir,
-        csv_encoding="utf-8",
-        csv_delimiter=",",
-        append_header=True,
+    csv_path,
+    num_header_rows,
+    rows_per_markdown,
+    output_dir,
+    csv_encoding="utf-8",
+    csv_delimiter=",",
+    append_header=True,
 ):
     logger.debug(f"\nStart ProcessingCSVDocumentation:'{csv_path}'")
     try:
@@ -376,16 +437,20 @@ def csv_file_to_markdown(
 
 
 def convert_file_to_markdown(
-        input_file_path,
-        num_header_rows,
-        rows_per_markdown,
-        base_output_dir="output_markdown_files",
-        csv_encoding="utf-8",
-        csv_delimiter=",",
-        append_header=True,
+    input_file_path,
+    num_header_rows,
+    rows_per_markdown,
+    base_output_dir="output_markdown_files",
+    csv_encoding="utf-8",
+    csv_delimiter=",",
+    append_header=True,
+    image_dir=None,
 ):
     """
     will be Excel OR CSV Convert files to multiple Markdown files.
+
+    ``image_dir``: optional flat staging dir; when set, embedded images of the
+    Excel sheets are extracted there and referenced from the markdown output.
     """
     if not os.path.exists(input_file_path):
         logger.debug(f"Error: Input file '{input_file_path}' Nothing found.")
@@ -407,6 +472,7 @@ def convert_file_to_markdown(
             rows_per_markdown,
             base_output_dir,
             append_header,
+            image_dir=image_dir,
         )
     elif file_extension == ".csv":
         csv_file_to_markdown(
@@ -425,11 +491,11 @@ def convert_file_to_markdown(
 
 
 def handler(
-        cache_dir,
-        file_name: str,
-        header_rows: List[int] = [0, 1],
-        data_rows: int = 12,
-        append_header=True,
+    cache_dir,
+    file_name: str,
+    header_rows: List[int] = [0, 1],
+    data_rows: int = 12,
+    append_header=True,
 ):
     """
     The main function that handles file conversions.

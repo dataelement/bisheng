@@ -9,22 +9,33 @@ from bisheng.knowledge.rag.pipeline.loader.utils.md_from_excel import convert_fi
 
 
 class ExcelLoader(BaseBishengLoader):
-    def __init__(self, header_rows: List[int] = None, data_rows: int = 12, append_header=True,
-                 *args, **kwargs):
+    def __init__(
+        self,
+        header_rows: List[int] = None,
+        data_rows: int = 12,
+        append_header=True,
+        retain_images: bool = True,
+        *args,
+        **kwargs,
+    ):
         super(ExcelLoader, self).__init__(*args, **kwargs)
         self.header_rows = header_rows or [0, 1]
         self.data_rows = data_rows
         self.append_header = append_header
+        self.retain_images = retain_images
         self.max_chunk_limit = 10000
 
     def load(self) -> List[Document]:
         md_file_path = os.path.join(self.tmp_dir, "chunk_md")
 
-        convert_file_to_markdown(input_file_path=self.file_path,
-                                 num_header_rows=self.header_rows,
-                                 rows_per_markdown=self.data_rows,
-                                 base_output_dir=md_file_path,
-                                 append_header=self.append_header)
+        convert_file_to_markdown(
+            input_file_path=self.file_path,
+            num_header_rows=self.header_rows,
+            rows_per_markdown=self.data_rows,
+            base_output_dir=md_file_path,
+            append_header=self.append_header,
+            image_dir=self.ensure_local_image_dir() if self.retain_images else None,
+        )
 
         files = sorted([f for f in os.listdir(md_file_path) if f.endswith(".md")])
 
@@ -35,6 +46,8 @@ class ExcelLoader(BaseBishengLoader):
             full_file_name = f"{md_file_path}/{file_name}"
             with open(full_file_name, "r", encoding="utf-8") as f:
                 content = f.read()
+                if self.retain_images:
+                    content = self.rewrite_local_image_refs(content)
                 one_metadata = self.file_metadata.copy()
                 one_metadata["chunk_index"] = chunk_index
                 one_metadata["bbox"] = ""

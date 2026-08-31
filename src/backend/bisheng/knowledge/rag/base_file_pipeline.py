@@ -160,6 +160,7 @@ class BaseFilePipeline(BasePipeline):
             ],
             data_rows=self.file_split_rule.excel_rule.slice_length,
             append_header=self.file_split_rule.excel_rule.append_header,
+            retain_images=self.file_split_rule.retain_images == 1,
         )
 
     def _init_txt_loader(self) -> BaseBishengLoader:
