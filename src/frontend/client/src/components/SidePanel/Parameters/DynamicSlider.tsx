@@ -148,13 +148,8 @@ function DynamicSlider({
                 disabled={readonly}
                 value={selectedValue ?? defaultValue}
                 onChange={() => ({})}
-                className={cn(
-                  defaultTextProps,
-                  cn(
-                    optionText,
-                    'reset-rc-number-input reset-rc-number-input-text-right h-auto w-12 border-0 group-hover/temp:border-gray-200',
-                  ),
-                )}
+                className="h-auto w-12 border-0 bg-transparent"
+                inputClassName="reset-rc-number-input reset-rc-number-input-text-right"
               />
             )}
           </div>

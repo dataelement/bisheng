@@ -34,20 +34,20 @@ export default function SyncSpaceItem({ space, onDelete }: Props) {
     }
 
     return (
-        <div className="flex items-center justify-between rounded-md px-2 py-1.5 text-[13px] hover:bg-[#F7F8FA]">
+        <div className="flex items-center justify-between rounded-md px-2 py-1.5 text-[13px] hover:bg-fill-1">
             <div className="flex min-w-0 items-center gap-1">
                 {hasFolder ? (
-                    <FolderClosedIcon className="size-4 shrink-0 text-[#86909C]" />
+                    <FolderClosedIcon className="size-4 shrink-0 text-text-3" />
                 ) : (
-                    <ChannelNotebookOneIcon className="size-4 shrink-0 text-[#86909C]" />
+                    <ChannelNotebookOneIcon className="size-4 shrink-0 text-text-3" />
                 )}
                 {hasFolder && pathParents && (
-                    <span className="truncate text-[#86909C]" title={pathParents}>
+                    <span className="truncate text-text-3" title={pathParents}>
                         {pathParents} /
                     </span>
                 )}
                 <span
-                    className="truncate font-medium text-[#1D2129]"
+                    className="truncate font-medium text-text-1"
                     title={pathLeaf}
                 >
                     {pathLeaf || "—"}
@@ -56,7 +56,7 @@ export default function SyncSpaceItem({ space, onDelete }: Props) {
             <button
                 type="button"
                 onClick={onDelete}
-                className="shrink-0 px-1 text-[13px] text-[#86909C] hover:text-[#F53F3F]"
+                className="shrink-0 px-1 text-[13px] text-text-3 hover:text-[#F53F3F]"
             >
                 {localize?.("com_subscription.delete") || "删除"}
             </button>

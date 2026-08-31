@@ -442,7 +442,7 @@ export function PermissionListTab({
     <>
       <div className="flex h-full min-h-0 flex-col">
         <div className="relative shrink-0">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
           <input
             type="search"
             value={searchQuery}

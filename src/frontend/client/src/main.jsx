@@ -45,6 +45,10 @@ import 'regenerator-runtime/runtime';
 import { createRoot } from 'react-dom/client';
 import './locales/i18n';
 import App from './App';
+// Design tokens (the CSS custom properties every semantic Tailwind class reads)
+// come from the component library — ONE definition shared with @bisheng/ui's own
+// components. Must load before style.css, which only carries client-only vars.
+import '@bisheng/ui/tokens.css';
 import './style.css';
 import './mobile.css';
 import { ApiErrorBoundaryProvider } from './hooks/ApiErrorBoundaryContext';

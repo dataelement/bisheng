@@ -314,3 +314,7 @@ docs-ui-refactor/
 # Packaged Linsight skill bundles (scripts/pack_linsight_skill.sh output)
 /dist/
 .pnpm-store/
+# Design-context file some tooling drops at the root; the design SSOT is
+# packages/ui/docs (entry: root AGENTS.md §4), so a second unmaintained copy
+# only invites the two to disagree.
+.impeccable.md

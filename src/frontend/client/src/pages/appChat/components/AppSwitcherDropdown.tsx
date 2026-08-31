@@ -54,17 +54,17 @@ export function AppSwitcherDropdown() {
       <PopoverContent
         align="start"
         sideOffset={6}
-        className="w-[240px] p-0 bg-white shadow-[0px_4px_16px_rgba(0,0,0,0.08)] border border-[#ebecf0] rounded-lg flex flex-col overflow-hidden"
+        className="w-[240px] p-0 bg-white shadow-[0px_4px_16px_rgba(0,0,0,0.08)] border border-border-base rounded-lg flex flex-col overflow-hidden"
       >
         {/* Search input */}
         <div className="px-[12px] pt-[12px] pb-[8px] shrink-0">
-          <div className="flex items-center gap-[6px] h-[28px] px-[8px] border border-[#ebecf0] rounded-md focus-within:border-[#DDDDDD] focus-within:shadow-[0_0_0_2px_#F1F5F9] transition-[border-color,box-shadow]">
+          <div className="flex items-center gap-[6px] h-[28px] px-[8px] border border-border-base rounded-md focus-within:border-border-deep focus-within:shadow-focus transition-[border-color,box-shadow]">
             <Search size={14} className="text-[#a9aeb8] shrink-0" />
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={localize('com_app_search_by_name')}
-              className="flex-1 bg-transparent border-none outline-none text-[13px] text-[#212121] placeholder:text-[#a9aeb8]"
+              className="flex-1 bg-transparent border-none outline-none text-[13px] text-text-1 placeholder:text-[#a9aeb8]"
               autoFocus
             />
           </div>
@@ -93,8 +93,8 @@ export function AppSwitcherDropdown() {
                   key={app.id}
                   onClick={() => switchApp(app)}
                   className={cn(
-                    'w-full flex items-center justify-between h-[32px] px-[4px] py-[5px] rounded-md transition-colors group cursor-pointer text-left fine-pointer:hover:bg-[#f2f3f5]',
-                    isActive && 'bg-[#f2f3f5]'
+                    'w-full flex items-center justify-between h-[32px] px-[4px] py-[5px] rounded-md transition-colors group cursor-pointer text-left fine-pointer:hover:bg-fill-2',
+                    isActive && 'bg-fill-2'
                   )}
                 >
                   <div className="flex items-center gap-[8px] min-w-0 flex-1">
@@ -105,7 +105,7 @@ export function AppSwitcherDropdown() {
                       id={app.id as any}
                       flowType={String(app.flow_type || app.type)}
                     />
-                    <span className="text-[14px] text-[#212121] leading-[22px] truncate">
+                    <span className="text-[14px] text-text-1 leading-[22px] truncate">
                       {app.name}
                     </span>
                   </div>

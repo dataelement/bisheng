@@ -12,20 +12,37 @@ export const overlay = (hex) => {
 
 export const mono = 'ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace';
 
+{/* A swatch with `darkHex` renders ONE strip that flips with the .dark class:
+    bg / fg / accent go through the --bs-sw-* indirection in
+    rspress-overrides.css (a strip showing several palettes at once — blue AND
+    green — can't bind the runtime --brand-* vars the way GrayStrip binds the
+    gray ramp). Swatches without darkHex keep the plain literal path. */}
 export const Strip = ({ title, swatches }) => (
   <div style={{ marginBottom: 24 }}>
     {title && <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 500, color: 'rgb(var(--text-1))' }}>{title}</div>}
     <div style={{ display: 'flex' }}>
       {swatches.map((s) => {
         const fg = s.fg || overlay(s.hex);
+        const style = s.darkHex
+          ? {
+              background: 'var(--bs-sw-bg)',
+              color: 'var(--bs-sw-fg)',
+              '--bs-sw-l': s.bg || s.hex,
+              '--bs-sw-d': s.darkHex,
+              '--bs-sw-fg-l': fg,
+              '--bs-sw-fg-d': s.fgDark || overlay(s.darkHex),
+              '--bs-sw-ac-l': s.accent || fg,
+              '--bs-sw-ac-d': s.darkAccent || s.accent || fg,
+            }
+          : { background: s.bg || s.hex, color: fg };
         return (
-          <div key={s.label} className="bs-swatch" style={{ background: s.bg || s.hex, color: fg }}>
-            {s.usage ? <span className="bs-swatch-usage" style={{ color: fg }}>{s.usage}</span> : <span />}
+          <div key={s.label} className="bs-swatch" style={style}>
+            {s.usage ? <span className="bs-swatch-usage">{s.usage}</span> : <span />}
             <div>
               <div style={{ fontSize: 13, lineHeight: 1.25, fontWeight: s.primary ? 500 : 400 }}>{s.label}</div>
               <div style={{ marginTop: 4, fontSize: 11, lineHeight: 1, fontFamily: mono, opacity: 0.8 }}>{s.value || s.hex}</div>
             </div>
-            {s.primary && <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: s.accent || fg }} />}
+            {s.primary && <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: s.darkHex ? 'var(--bs-sw-ac)' : (s.accent || fg) }} />}
           </div>
         );
       })}
@@ -33,19 +50,33 @@ export const Strip = ({ title, swatches }) => (
   </div>
 );
 
+{/* One strip per theme; each swatch flips 浅⇄深 with the site's dark toggle
+    (深色阶 = Arco 官方深色算法,档位语义不变、深浅方向反转,50 最深)。muted 暂无
+    深色取值 → darkHex undefined,深色下沿用浅色值(--bs-sw-d 回退)。 */}
 export const BrandStrips = () => (
   <div>
-    {['blue', 'green'].map((theme) => (
+    {[['blue', '蓝'], ['green', '绿']].map(([theme, name]) => (
       <Strip
         key={theme}
-        title={theme === 'blue' ? '蓝' : '绿'}
-        swatches={[...BRAND_STEPS, 'muted'].map((step) => ({
-          label: step,
-          hex: BRAND[theme][step],
-          primary: step === BRAND.main,
-          accent: BRAND[theme][BRAND.accentStep],
-          usage: BRAND.role[step],
-        }))}
+        title={name}
+        swatches={[...BRAND_STEPS, 'muted'].map((step) => {
+          const darkHex = BRAND[`${theme}Dark`][step];
+          return {
+            label: step,
+            hex: BRAND[theme][step],
+            darkHex,
+            value: darkHex ? (
+              <>
+                <span className="bs-hex-light">{BRAND[theme][step]}</span>
+                <span className="bs-hex-dark">{darkHex}</span>
+              </>
+            ) : undefined,
+            primary: step === BRAND.main,
+            accent: BRAND[theme][BRAND.accentStep],
+            darkAccent: BRAND[`${theme}Dark`][BRAND.accentStep],
+            usage: BRAND.role[step],
+          };
+        })}
       />
     ))}
   </div>
@@ -93,6 +124,9 @@ export const SemanticTable = () => {
   );
 };
 
+{/* 功能色只有一套色板(不随蓝绿主题),所以底色直接绑运行时变量——色带随当前
+    明暗模式实时翻转,双色值标签跟灰阶色带同一套 bs-hex-light/dark 切换。tint 的
+    文字用 --text-1(深浅互补,两种模式都读得清);其余档沿用按浅色值算的反色。 */}
 export const FunctionalStrips = () => (
   <div>
     {FUNCTIONAL.map((fn) => (
@@ -100,11 +134,24 @@ export const FunctionalStrips = () => (
         key={fn.name}
         title={fn.label}
         swatches={[
-          { label: '主色', hex: fn.main, primary: true, accent: fn.active },
-          { label: 'hover', hex: fn.hover },
-          { label: 'active', hex: fn.active },
-          { label: 'tint 浅底', hex: fn.tint },
-        ]}
+          ['主色', '', fn.main, fn.dark.main, true],
+          ['hover', '-hover', fn.hover, fn.dark.hover, false],
+          ['active', '-active', fn.active, fn.dark.active, false],
+          ['tint 色底', '-tint', fn.tint, fn.dark.tint, false],
+        ].map(([label, suffix, hex, darkHex, primary]) => ({
+          label,
+          hex,
+          value: (
+            <>
+              <span className="bs-hex-light">{hex}</span>
+              <span className="bs-hex-dark">{darkHex}</span>
+            </>
+          ),
+          bg: `rgb(var(${fn.cssVar}${suffix}))`,
+          fg: suffix === '-tint' ? 'rgb(var(--text-1))' : undefined,
+          primary,
+          accent: `rgb(var(${fn.cssVar}-active))`,
+        }))}
       />
     ))}
   </div>
@@ -139,9 +186,10 @@ export const TagRow = () => (
 ### 1.2 使用规则
 
 - 品牌色始终跟随主题（蓝 / 绿），业务中不写死品牌色的具体色值。
+- **深色模式**整体切换到深色色阶（Arco 官方深色算法：主色提亮同时保饱和，蓝 `#3C7EFF` / 绿 `#3CB062`）；档位语义不变、深浅方向随灰阶一并反转（50 最深、900 最浅），业务照常写同一套类名，两种模式自动成立。
 - **列表 / 菜单选中态**统一用品牌主色的浅色透明底（约 7%）。
 - **按钮品牌三态**：常态用主色，悬停变浅一档，按下加深一档（具体档位见「组件 → Button」）。
-- **固定例外**：审批中标签恒为蓝色、应用中心置顶图标用弱化的品牌色，二者均不随主题切换。
+- **固定例外**：审批中标签恒为蓝色、应用中心置顶图标用弱化的品牌色、溯源角标的「网页来源」恒为紫色（与技能标签同一支紫，token `--citation-web*`），三者均不随主题切换。
 
 ## 2. 中性色 Neutral
 
@@ -163,7 +211,8 @@ export const TagRow = () => (
 
 <FunctionalStrips />
 
-- **成功 / 警告 / 危险**各含主色及其悬停、按下、浅底四态；浅底用于标签、提示条等大面积背景。
+- **成功 / 警告 / 危险**各含主色及其悬停、按下、色底四态；色底用于标签、提示条等大面积背景。
+- 四态均有深色取值（与品牌色同一深色算法；上方色带随当前明暗模式实时展示，标签并列两套色值）。深色下 tint 是**深而饱和的色底**而非浅色块，主文字色在其上直接可读。
 - 链接色、信息色等同品牌色，跟随主题。
 
 ## 4. 标签色 Extended

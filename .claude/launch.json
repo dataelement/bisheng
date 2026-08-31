@@ -1,0 +1,27 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "client",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "cwd": "src/frontend/client",
+      "port": 4001
+    },
+    {
+      "name": "platform",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["start", "--", "--host", "0.0.0.0"],
+      "cwd": "src/frontend/platform",
+      "port": 3001
+    },
+    {
+      "name": "docs",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev:ui"],
+      "cwd": "src/frontend",
+      "port": 3000,
+      "autoPort": true
+    }
+  ]
+}

@@ -111,7 +111,13 @@ ApprovalCenterService.decide_task()
 
 | 文件 | 职责 |
 |------|------|
-| `src/frontend/client/src/components/approval/ApprovalCenterDialog.tsx` | 审批中心弹窗（我的审批 + 我的申请 + 时间线） |
+| `src/frontend/client/src/components/messageApproval/MessageApprovalDialog.tsx` | 「消息与审批」统一弹窗外壳（导航栏：我的审批 / 我的申请 / 通知 + 徽标） |
+| `src/frontend/client/src/components/approval/ApprovalPane.tsx` | 我的审批 / 我的申请 列表 + 详情 + 同意/拒绝/撤回/撤销授权 |
+| `src/frontend/client/src/components/approval/ApprovalDetailPanels.tsx` | 任务详情 / 实例详情面板（基础信息、业务内容、进度时间轴） |
+| `src/frontend/client/src/components/approval/approvalPresentation.tsx` | 审批公共展示层（状态徽章、时间轴节点、信息网格、格式化） |
+| `src/frontend/client/src/components/messageApproval/NotificationPane.tsx` | 通知区：未读/已读页签（服务端过滤）+ 搜索 + 全部已读 |
+| `src/frontend/client/src/components/messageApproval/NotificationRow.tsx` | 单条通知；仅在用户主动打开时置已读，不做 hover / 曝光自动已读 |
+| `src/frontend/client/src/components/messageApproval/notificationContent.ts` | 站内信 payload 解析（action_code、业务对象、审批深链） |
 | `src/frontend/client/src/api/approval.ts` | 审批 API 封装，含 `ApprovalApiError`（非 200 自动抛出） |
 | `src/frontend/client/src/pages/MenuUnavailablePage.tsx` | 无权限占位页 + 申请入口 |
 | `src/frontend/client/src/layouts/MenuApprovalPluginGate.tsx` | 菜单审批路由守卫 |
@@ -198,6 +204,7 @@ uv run celery -A bisheng.worker.main worker -l info -c 100 -P threads -n default
 ### 用户端（`/approval`）
 ```
 GET  /approval/my-tasks                        # 我的待办（审批人视角）
+GET  /approval/my-tasks/pending-count          # 待我处理数量（徽标），返回 {"count": n}；必须声明在 {task_id} 之前
 GET  /approval/my-tasks/{task_id}              # 任务详情
 POST /approval/tasks/{task_id}/decision        # 同意/拒绝
 GET  /approval/my-requests                     # 我的申请（申请人视角）
@@ -251,6 +258,10 @@ POST   /approval/admin/exceptions/{exception_id}/cancel      # 取消审批（�
 | 异常产生（route_missing/approver_empty） | 管理员（AdminRole） | `ApprovalGate._notify_admins_of_exception()` / `ApprovalNotificationService.notify_admins()` |
 | 异常取消 | 申请人 | `ApprovalExceptionService.cancel_exception_api()` |
 
+> **待办类通知不进通知列表**：`approval_task_pending` / `request_menu_access` / `request_channel` /
+> `request_knowledge_space`（`MessageService.APPROVAL_TODO_ACTION_CODES`）只属于【我的审批-待我处理】。
+> `/message/list?tab=notify` 与未读数 `notify` 都会排除它们，`全部已读` 也不会把它们置为已读。
+>
 > 注：申请人侧"通过"通知是在**最后节点 finalize** 时发的（即审批通过即通知），不等 outbox 业务真正执行完。若要"业务执行成功"的精确通知，需在 `execute_outbox` 成功回调里补。
 
 ---

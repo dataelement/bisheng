@@ -8,10 +8,10 @@ import {
     type MovedEntry,
     type MoveResult,
 } from "~/api/knowledge";
+import { toast } from "@bisheng/ui";
+
 import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
-
-import { showMoveUndoToast } from "../components/moveUndoToast";
 
 type Localize = ReturnType<typeof useLocalize>;
 
@@ -244,11 +244,15 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
                 const message = targetFolderName
                     ? localize("com_knowledge.move_undo_toast", { 0: targetFolderName })
                     : localize("com_knowledge.move_success", { 0: movedCount });
-                showMoveUndoToast({
-                    message,
-                    actionLabel: localize("com_knowledge.move_undo"),
-                    onAction: () => {
-                        void undoMove(movedEntries);
+                // The shared toast owns the action slot now (轻提示规范 §5.2),
+                // so the standalone undo toast is gone. Lifetime is doubled
+                // automatically because there is an action button (§6).
+                toast.success(message, {
+                    action: {
+                        label: localize("com_knowledge.move_undo"),
+                        onClick: () => {
+                            void undoMove(movedEntries);
+                        },
                     },
                 });
             }

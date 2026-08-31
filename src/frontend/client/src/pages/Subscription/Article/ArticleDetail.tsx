@@ -211,8 +211,9 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
         : true;
     return (
         <div className="flex px-4 pt-5 flex-col h-full">
-            {/* Top Toolbar */}
-            <div className="border-b border-black pb-4">
+            {/* Top Toolbar — closed by a newspaper-style thick-thin double rule:
+                2px bottom border here + the 1px sibling line below. */}
+            <div className="border-b-2 border-text-2 pb-4">
                 {/* Mobile-only back button; the article title is intentionally hidden here
                     (it already appears inside the article content). */}
                 {isNarrowShell && onBack ? (
@@ -221,7 +222,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                             type="button"
                             onClick={onBack}
                             aria-label={localize("com_ui_go_back")}
-                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] text-[#4E5969] hover:bg-[#F7F8FA]"
+                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border-base text-text-2 hover:bg-fill-1"
                         >
                             <ArrowLeft className="size-4" />
                         </button>
@@ -234,19 +235,19 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                             onClick={() => window.open(article.url)}
                             className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
                         >
-                            <Outlined.ViewOnNewTab className="size-3.5 text-[#999] transition-colors group-hover:text-[#333]" />{localize("com_subscription.original_webpage")}</button>
+                            <Outlined.ViewOnNewTab className="size-3.5 text-text-3 transition-colors group-hover:text-[#333]" />{localize("com_subscription.original_webpage")}</button>
 
                         <button
                             className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
                             onClick={() => handleShare(article)}
                         >
-                            <Outlined.Share className="size-3.5 text-[#999] transition-colors group-hover:text-[#333]" />{localize("com_subscription.share")}</button>
+                            <Outlined.Share className="size-3.5 text-text-3 transition-colors group-hover:text-[#333]" />{localize("com_subscription.share")}</button>
 
                         {hasKnowledge && <button
                             className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
                             onClick={() => setShowKnowledgeModal(true)}
                         >
-                            <Outlined.AddToKnowledgeBase className="size-3.5 text-[#999] transition-colors group-hover:text-[#333]" />{localize("com_subscription.add_to_knowledge_space")}</button>}
+                            <Outlined.AddToKnowledgeBase className="size-3.5 text-text-3 transition-colors group-hover:text-[#333]" />{localize("com_subscription.add_to_knowledge_space")}</button>}
 
                         {!isNarrowShell && (!screenFull || (showFullScreenBtn && aiAssistantOpen)) ? (
                             <button
@@ -257,16 +258,16 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                                         onFullScreen?.();
                                 }}
                             >
-                                <Outlined.FullScreen className="size-3.5 text-[#999] transition-colors group-hover:text-[#333]" />{localize("com_subscription.fullscreen")}
+                                <Outlined.FullScreen className="size-3.5 text-text-3 transition-colors group-hover:text-[#333]" />{localize("com_subscription.fullscreen")}
                             </button>
                         ) : null}
 
                         <div className="ml-auto flex gap-3 items-center">
                             {screenFull && <div className="flex items-center text-[12px]">
                                 <img className="size-4 mr-1.5" src={article.sourceAvatar} alt="" />
-                                <span className="text-[#212121]">{article.sourceName}</span>
+                                <span className="text-text-1">{article.sourceName}</span>
                                 <span className="text-[#e5e6eb] mx-2">|</span>
-                                <span className="text-[#999]">{formatTime(article.publishedAt || '', true)}</span>
+                                <span className="text-text-3">{formatTime(article.publishedAt || '', true)}</span>
                             </div>}
                             {/* Mobile keeps the toolbar AI button (opens the full-screen overlay);
                                 PC uses the bottom AI dock instead. */}
@@ -282,13 +283,15 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                     </div>
                 </div>
             </div>
+            {/* Thin second line of the double rule, 2px below the 2px one. */}
+            <div aria-hidden className="mt-[2px] shrink-0 border-b border-text-2" />
 
             {/* Iframe Content Area */}
             <div className="flex-1 bg-white relative">
                 {loading ? (
-                    <div className="flex items-center justify-center h-full text-[#86909c] text-sm">{localize("com_subscription.loading")}</div>
+                    <div className="flex items-center justify-center h-full text-text-3 text-sm">{localize("com_subscription.loading")}</div>
                 ) : !articleHtml ? (
-                    <div className="flex items-center justify-center h-full text-[#86909c] text-sm">{localize("com_subscription.no_content")}</div>
+                    <div className="flex items-center justify-center h-full text-text-3 text-sm">{localize("com_subscription.no_content")}</div>
                 ) : (
                     <iframe
                         ref={iframeRef}
@@ -301,7 +304,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                 {showBackTop && (
                     <button
                         onClick={handleBackToTop}
-                        className="absolute bottom-32 right-8 size-10 bg-white shadow-lg border border-[#e5e6eb] rounded-full flex items-center justify-center text-[#4e5969] hover:text-[#333] transition-all animate-in fade-in slide-in-from-bottom-4"
+                        className="absolute bottom-32 right-8 size-10 bg-white shadow-lg border border-border-base rounded-full flex items-center justify-center text-text-2 hover:text-[#333] transition-all animate-in fade-in slide-in-from-bottom-4"
                     >
                         <ArrowUp className="size-5" />
                     </button>

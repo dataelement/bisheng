@@ -1,0 +1,26 @@
+---
+outline: false
+---
+
+import { ComponentIndex } from '@docs-site/ComponentIndex';
+
+# 组件总览
+
+组件库的实时 demo 页。每个组件页用 `@rspress/plugin-preview` 直接渲染**真实组件**——已迁入组件库的从 `@bisheng/ui` 导入（如 Button），尚未迁库的从 `src/frontend/client/src/components/ui/` 导入。所见即业务页所得，组件代码一改，这里同步变。
+
+规范正文（定义、取值、状态矩阵、迁移台账）在顶部导航「文档」；组件页以演示为主，只穿插最要紧的使用规则。
+
+## 组件清单
+
+{/*
+本页只留读者内容：一段导语 + 自生成的组件清单。
+
+下表不是手写的：组件名、链接、分组由 client/docs-site/ComponentIndex.tsx 在构建时从
+siteData.pages + 侧边栏配置算出，只有「状态」一列读各页 front matter；页面漏挂侧边栏、
+侧边栏指向不存在的页，都会在表下直接报出来。永远不要手写这张表。
+
+作者向的内容（新建 demo 页的步骤、front matter 约定、demo 书写约定）在
+《文档撰写规范》§5.1 / §5.2（元-文档撰写规范.md，route.exclude 排除在站点外）。
+*/}
+
+<ComponentIndex />

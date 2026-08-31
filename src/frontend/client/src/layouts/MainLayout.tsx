@@ -4,7 +4,7 @@ import { Filled, Outlined } from 'bisheng-icons';
 import { X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import KeepAlive from 'react-activation';
-import { matchPath, NavLink, useLocation, useOutlet } from 'react-router-dom';
+import { matchPath, Navigate, NavLink, useLocation, useOutlet } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { usePrefersMobileLayout, useScrollRevealRef } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
@@ -60,24 +60,24 @@ function SidebarItem({ icon, activeIcon, to, active, label, showLabel = false, o
       to={to}
       onClick={handleClick}
       className={cn(
-        'flex cursor-pointer rounded-lg transition-colors hover:bg-[#f2f3f5]',
+        'flex cursor-pointer rounded-lg transition-colors hover:bg-fill-2',
         showLabel
           ? 'mx-2 h-[44px] items-center justify-start gap-2 px-2 py-2'
           : 'w-14 flex-col items-center justify-center gap-0.5 py-2',
       )}
     >
       {React.cloneElement((active && activeIcon ? activeIcon : icon) as React.ReactElement, {
-        className: cn(showLabel ? 'size-4' : 'size-5', active ? 'text-blue-500' : 'text-[#818181]'),
+        className: cn(showLabel ? 'size-4' : 'size-5', active ? 'text-blue-500' : 'text-text-3'),
       })}
       {showLabel ? (
-        <span className={cn('text-[14px] leading-[20px]', active ? 'text-blue-500' : 'text-[#212121]')}>
+        <span className={cn('text-[14px] leading-[20px]', active ? 'text-blue-500' : 'text-text-1')}>
           {label}
         </span>
       ) : (
         <span
           className={cn(
-            'max-w-full break-words text-center text-[10px] leading-[18px]',
-            active ? 'font-medium text-blue-500' : 'text-[#818181]',
+            'max-w-full break-words text-center text-caption-sm',
+            active ? 'font-medium text-blue-500' : 'text-text-3',
           )}
         >
           {label}
@@ -249,14 +249,14 @@ function Sidebar({
                   alt={localize('com_nav_home')}
                 />
               ) : (
-                <div className="size-8 shrink-0 rounded-md bg-[#F2F3F5]" aria-hidden />
+                <div className="size-8 shrink-0 rounded-md bg-fill-2" aria-hidden />
               )}
               {onCloseMobileApps ? (
                 <button
                   type="button"
                   onClick={onCloseMobileApps}
                   aria-label={localize('com_nav_close_sidebar')}
-                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-text-2 hover:bg-fill-1"
                 >
                   <X className="size-4" />
                 </button>
@@ -297,13 +297,13 @@ function Sidebar({
             <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer" className="mb-2">
               <div
                 title={localize('com_nav_admin_panel')}
-                className="rounded-lg p-3 transition-colors hover:bg-[#f2f3f5]"
+                className="rounded-lg p-3 transition-colors hover:bg-fill-2"
               >
-                <Outlined.DeviceDesktopExchange className="size-5 text-[#818181]" />
+                <Outlined.DeviceDesktopExchange className="size-5 text-text-3" />
               </div>
             </a>
             {/* Divider only makes sense alongside the admin-panel entry; hide both together. */}
-            <div className="mb-4 w-full h-px bg-[#ececec]" />
+            <div className="mb-4 w-full h-px bg-fill-3" />
           </>
         )}
 
@@ -315,7 +315,7 @@ function Sidebar({
 }
 
 export default function MainLayout() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const outlet = useOutlet();
   const { user, logout, isUserLoading } = useAuthContext();
   const localize = useLocalize();
@@ -336,6 +336,7 @@ export default function MainLayout() {
   );
   const isAppChatRoute = /^\/app(\/|$)/.test(pathname);
   const isChannelRoute = /^\/channel(\/|$)/.test(pathname);
+  const isSettingsRoute = /^\/settings(\/|$)/.test(pathname);
   const isKnowledgeSettingsRoute = Boolean(
     matchPath({ path: '/knowledge/create', end: true }, pathForMatch) ||
     matchPath({ path: '/knowledge/space/:spaceId/settings', end: true }, pathForMatch),
@@ -346,6 +347,7 @@ export default function MainLayout() {
     isChannelRoute ||
     isKnowledgeSettingsRoute ||
     isAppChatRoute ||
+    isSettingsRoute ||
     (isAppsArea && !isAppsExploreRoute);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
   const isChatHomeRoute = /^\/(c|linsight)(\/|$)/.test(pathname);
@@ -354,7 +356,7 @@ export default function MainLayout() {
   const [systemMenuOpen, setSystemMenuOpen] = useRecoilState(store.mobileSystemMenuOpenState);
   // 移动端：所有主功能页(应用会话 / apps / channel / knowledge / 主站会话 / 无权限占位页)都隐藏
   // MainLayout 左栏,点页面内菜单按钮触发系统主菜单整页右滑露出。
-  const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute || isChatHomeRoute || isMenuUnavailableRoute);
+  const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute || isChatHomeRoute || isMenuUnavailableRoute || isSettingsRoute);
   /** H5: 系统主菜单露出 — 子页面顶栏菜单触发,内容向右滑出 w-16,点击页面其它位置或导航即关闭 */
   const systemMenuRevealing = systemMenuOpen && isMobile && shouldHideSidebarOnMobileAppsArea;
 
@@ -430,6 +432,20 @@ export default function MainLayout() {
     return null;
   }
 
+  // Legacy dialog deep links now land on the settings page. External notification cards
+  // still point at `/?open-notifications=1&message-id=X` (backend _payload.py), and older
+  // flows used `?open-settings=<section>` — both redirect instead of opening dialogs.
+  if (!isSettingsRoute) {
+    const legacyParams = new URLSearchParams(search);
+    if (legacyParams.get('open-notifications') === '1') {
+      return <Navigate to="/settings/notifications" replace />;
+    }
+    const legacySettingsSection = legacyParams.get('open-settings');
+    if (legacySettingsSection) {
+      return <Navigate to={`/settings/${legacySettingsSection === 'general' ? 'general' : 'account'}`} replace />;
+    }
+  }
+
   // Track last visited path per sidebar section.
   // Runs synchronously before Sidebar renders in the same cycle.
   if (/^\/(c|linsight)(\/|$)/.test(pathname)) lastSectionPaths.home = pathname;
@@ -453,13 +469,14 @@ export default function MainLayout() {
     if (/^\/(apps|app)(\/|$)/.test(pathname)) return 'apps_tab';
     if (/^\/channel(\/|$)/.test(pathname)) return 'channel_tab';
     if (pathname.startsWith('/knowledge')) return 'knowledge_tab';
+    if (isSettingsRoute) return 'settings_tab';
     return 'other';
   })();
 
   return (
     <div
       className={cn(
-        'relative flex w-screen bg-[#F8F8F8]',
+        'relative flex w-screen bg-fill-1',
         isMobile ? 'min-h-[100dvh] overflow-x-clip' : 'h-[100dvh] overflow-hidden',
       )}
     >
@@ -543,7 +560,7 @@ export default function MainLayout() {
                     type="button"
                     aria-label={localize('com_nav_open_sidebar')}
                     onClick={() => setSystemMenuOpen(true)}
-                    className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
+                    className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
                   >
                     <Outlined.SidebarMenu className="size-5" />
                   </button>
@@ -598,12 +615,12 @@ export default function MainLayout() {
                     type="button"
                     aria-label={localize('com_nav_open_sidebar')}
                     onClick={() => setSystemMenuOpen(true)}
-                    className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
+                    className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
                   >
                     <Outlined.SidebarMenu className="size-5" />
                   </button>
                   {/* Centered title — same style as the chat / knowledge / subscription headers. */}
-                  <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-[#212121]">
+                  <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-text-1">
                     {menuNames.apps}
                   </span>
                   <div className="min-w-0 flex-1" aria-hidden />

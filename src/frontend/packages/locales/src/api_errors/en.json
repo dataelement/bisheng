@@ -105,6 +105,7 @@
   "10802": "Failed to add provider. All models failed to initialize",
   "10803": "Failed to add provider. Some models failed to initialize",
   "10810": "Please configure the workbench embedding model.",
+  "10811": "The daily mode default model must be one of the configured workbench chat models. Please select again.",
   "10900": "Knowledge base name already exists",
   "10901": "Embedding model required",
   "10902": "Summary model invalid. Reconfigure in system model settings: {{exception}}",

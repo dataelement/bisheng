@@ -6,6 +6,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
 import { useConfirm } from "~/Providers";
@@ -18,8 +19,11 @@ interface ChannelActionsMenuProps {
     channel: Channel;
     onChannelSelect: (channel: Channel | null) => void;
     onChannelSettings?: (channel: Channel) => void;
-    /** "default" = PC labels (频道设置/成员管理/解散频道).
-     *  "mobile" = H5 labels (编辑频道/权限管理/删除频道). */
+    /** 创建频道 entry pinned at the top of the menu (divider below). Mobile-only by
+     *  convention — on PC, creation lives on the header button next to 切换频道. */
+    onCreateChannel?: () => void;
+    /** "default" = PC labels (频道设置/解散频道).
+     *  "mobile" = H5 labels (频道设置/删除频道). */
     variant?: "default" | "mobile";
     /** Mobile only: 分享 menu item — copies the share link. */
     onShare?: () => void;
@@ -41,6 +45,7 @@ export function ChannelActionsMenu({
     channel,
     onChannelSelect,
     onChannelSettings,
+    onCreateChannel,
     variant = "default",
     onShare,
     onOpenSourceFilter,
@@ -111,8 +116,8 @@ export function ChannelActionsMenu({
         || canUnsubscribe,
     );
     const permissionsResolving = !isChannelDetailFetched && !Array.isArray(listChannel.actions);
-    const itemCls = "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] text-sm leading-[22px] text-[#212121]";
-    const iconCls = "size-4 text-[#4E5969]";
+    const itemCls = "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] text-sm leading-[22px] text-text-1";
+    const iconCls = "size-4 text-text-2";
 
     return (
         <DropdownMenu>
@@ -122,8 +127,8 @@ export function ChannelActionsMenu({
                     disabled={disabled || permissionsResolving || !hasMenuItem}
                     className={cn(
                         isMobile
-                            ? "inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
-                            : "inline-flex size-8 items-center justify-center rounded-md border border-[#EBECF0] bg-white text-[#4e5969] outline-none transition-colors fine-pointer:hover:bg-[#F7F8FA]",
+                            ? "inline-flex size-5 shrink-0 items-center justify-center text-text-1"
+                            : "inline-flex size-8 items-center justify-center rounded-md border border-border-base bg-white text-text-2 outline-none transition-colors fine-pointer:hover:bg-fill-1",
                         (disabled || permissionsResolving || !hasMenuItem) && "pointer-events-none opacity-20",
                         triggerClassName,
                     )}
@@ -137,6 +142,17 @@ export function ChannelActionsMenu({
                 sideOffset={isMobile ? 6 : undefined}
                 className={cn("z-[120] border-none p-2 shadow-[0px_2px_8px_rgba(0,23,66,0.1)]", isMobile ? "w-[180px]" : "w-[160px]")}
             >
+                {onCreateChannel ? (
+                    <>
+                        <DropdownMenuItem className={itemCls} onClick={onCreateChannel}>
+                            <Outlined.Plus className={iconCls} />
+                            {localize("com_subscription.create_channel")}
+                        </DropdownMenuItem>
+                        {/* mx-0 keeps the divider as wide as the menu items (the base
+                            separator insets an extra mx-2); light border tone. */}
+                        <DropdownMenuSeparator className="mx-0 bg-border-base" />
+                    </>
+                ) : null}
                 {isMobile && onShare ? (
                     <DropdownMenuItem className={itemCls} onClick={onShare}>
                         <Outlined.Share className={iconCls} />

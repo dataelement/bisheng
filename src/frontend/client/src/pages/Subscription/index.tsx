@@ -86,7 +86,7 @@ export default function Subscription() {
     // True while the H5 channel-switcher dropdown is open — greys out the persistent
     // 频道/广场 tab, matching the header's left/right action buttons.
     const mobileChannelDropdownOpen = useRecoilValue(subscriptionMobileChannelDropdownOpenState);
-    const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
+    const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-text-1 hover:bg-fill-1";
 
     const channelPluginGate = useMemo((): "loading" | "enabled" | "disabled" => {
         if (isUserLoading) return "loading";
@@ -444,7 +444,7 @@ export default function Subscription() {
                 覆盖频道页、广场页，以及无频道/无订阅的发现空页（!channelsResolving），
                 加载中（channelsResolving 且非广场）暂不显示。 */}
             {!isH5 && (showChannelSquare || !channelsResolving) ? (
-                <div className="absolute top-5 z-20" style={{ right: `${detailPaneWidth + 40}px` }}>
+                <div className="absolute top-5 z-20 flex h-10 items-center" style={{ right: `${detailPaneWidth + 40}px` }}>
                     <ChannelSquareTabs
                         active={showChannelSquare ? "square" : "channel"}
                         onChannelClick={handleSquareBack}
@@ -542,7 +542,7 @@ export default function Subscription() {
                                 }}
                             />
                         ) : channelsResolving ? (
-                            <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center text-[#86909c]">
+                            <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center text-text-3">
                                 {isH5 ? (
                                     <div className="absolute inset-x-0 top-0 z-10 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
                                         {/* Match the loaded ArticleList header: safe-area+8px top
@@ -556,7 +556,7 @@ export default function Subscription() {
                                             >
                                                 <Outlined.SidebarMenu className="size-5" />
                                             </button>
-                                            <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[16px] font-medium leading-6 text-[#212121]">
+                                            <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[16px] font-medium leading-6 text-text-1">
                                                 {menuNames.channel}
                                             </h1>
                                         </div>
