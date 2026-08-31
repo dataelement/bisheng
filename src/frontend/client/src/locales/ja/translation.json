@@ -489,6 +489,20 @@
     "saveToKnowledgeFailed": "ナレッジスペースへの保存に失敗しました。後でもう一度お試しください",
     "downloadAs": "{{format}} 形式でダウンロード"
   },
+  "com_message": {
+    "choose_model": "モデルを選択",
+    "model_busy_suffix": " · サービス混雑中",
+    "rate_limit_busy_desc": "現在のモデルは一時的に混雑しています。再試行するか、別のモデルに切り替えて続行できます。",
+    "rate_limit_recovered_desc": "現在のモデルは復旧しました。このリクエストを再試行できます。",
+    "rate_limit_recovered_title": "モデルサービスが復旧しました",
+    "rate_limit_recovering_desc": "現在のモデルの応答が遅くなっています。システムが復旧を確認していますので、しばらくお待ちください。",
+    "rate_limit_title": "モデルサービスが混雑しています",
+    "still_busy_desc": "モデルを切り替えて続行することをおすすめします。入力内容と既存の進捗は保持されます。",
+    "still_busy_title": "現在のモデルはまだ復旧していません",
+    "switch_model": "モデルを切り替える",
+    "switch_rejected": "選択したモデルは現在利用できません。別のモデルを選択してください。",
+    "try_later": "後でもう一度試す"
+  },
   "com_message_content_copied": "内容をコピーしました",
   "com_notifications_approved": "承認済み",
   "com_notifications_rejected": "却下済み",

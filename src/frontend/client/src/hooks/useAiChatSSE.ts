@@ -60,7 +60,16 @@ export interface SSESubmission {
     onError: (
         error: string,
         errorCode?: number,
-        meta?: { errorType?: string; errorDetail?: string },
+        meta?: {
+            errorType?: string;
+            errorDetail?: string;
+            executionId?: string;
+            attemptId?: string;
+            recoverySubjectId?: string;
+            modelId?: string | number;
+            rateLimitState?: "recovering" | "busy" | "normal";
+            resumeMode?: string;
+        },
     ) => void;
     onStart: () => void;
     onEnd: () => void;
@@ -429,6 +438,23 @@ export function openChatStream(
                         : typeof payload.exception === "string"
                             ? payload.exception
                             : undefined,
+                executionId: typeof payload.execution_id === "string" ? payload.execution_id : undefined,
+                attemptId: typeof payload.attempt_id === "string" ? payload.attempt_id : undefined,
+                recoverySubjectId:
+                    typeof payload.recovery_subject_id === "string"
+                        ? payload.recovery_subject_id
+                        : undefined,
+                modelId:
+                    typeof payload.model_id === "string" || typeof payload.model_id === "number"
+                        ? payload.model_id
+                        : undefined,
+                rateLimitState:
+                    payload.rate_limit_state === "normal"
+                    || payload.rate_limit_state === "recovering"
+                    || payload.rate_limit_state === "busy"
+                        ? payload.rate_limit_state
+                        : undefined,
+                resumeMode: typeof payload.resume_mode === "string" ? payload.resume_mode : undefined,
             });
         } catch {
             // Non-JSON payload — the stream dropped rather than the backend

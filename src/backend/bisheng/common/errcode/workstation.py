@@ -62,6 +62,13 @@ class ChatFileParseError(BaseErrorCode):
     Msg: str = "File parsing failed, please try again later"
 
 
+class ModelRecoveryRejectedError(BaseErrorCode):
+    """The original request can no longer be safely retried."""
+
+    Code: int = 12048
+    Msg: str = "The original request cannot be retried"
+
+
 # --- F028: Conversation export / import to knowledge space (12060-12079) ---
 
 

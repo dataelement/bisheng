@@ -18,6 +18,8 @@ from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.utils import get_request_ip
 from bisheng.workstation.domain.schemas import WorkstationConversation, WorkstationMessage
 
+_background_tasks: set[asyncio.Task] = set()
+
 
 def custom_json_serializer(obj):
     if isinstance(obj, datetime):
@@ -68,7 +70,7 @@ async def final_message(
     text: str,
     error: bool,
     model_name: str,
-    source_document: list[Document] = None,
+    source_document: list[Document] | None = None,
 ):
     response_message = await ChatMessageDao.ainsert_one(
         ChatMessage(
@@ -85,7 +87,7 @@ async def final_message(
         )
     )
     if source_document:
-        asyncio.create_task(
+        _source_document_task = asyncio.create_task(
             process_source_document(
                 source_document=source_document,
                 chat_id=conversation.chat_id,
@@ -93,6 +95,8 @@ async def final_message(
                 answer=text,
             )
         )
+        _background_tasks.add(_source_document_task)
+        _source_document_task.add_done_callback(_background_tasks.discard)
 
     msg = json.dumps(
         {
@@ -241,7 +245,10 @@ def _normalise_agent_message_content(content: dict) -> dict:
     if not isinstance(content, dict):
         return content
     if "events" in content and isinstance(content.get("events"), list):
-        return {"msg": content.get("msg", ""), "events": content["events"]}
+        normalized = {"msg": content.get("msg", ""), "events": content["events"]}
+        if isinstance(content.get("segments"), list):
+            normalized["segments"] = content["segments"]
+        return normalized
 
     steps = content.get("steps") or []
     segments = content.get("thinking_segments") or []

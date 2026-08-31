@@ -1,6 +1,8 @@
 import asyncio
 import json
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
@@ -40,6 +42,19 @@ from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.department.domain.services.department_flow_service import DepartmentFlowService
 from bisheng.llm.domain import LLMService
+from bisheng.llm.domain.services.model_rate_limit import (
+    ClaimedAttempt,
+    ModelCallContext,
+    ModelCallEntry,
+    ModelCallResumeMode,
+    ModelRateLimitService,
+    RateLimitObservation,
+    RecoveryCommand,
+)
+from bisheng.llm.domain.services.model_recovery_service import (
+    ModelRecoveryService,
+    RecoveryNotAllowedError,
+)
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
 
@@ -54,6 +69,172 @@ from .chat_helpers import (
 )
 from .constants import VISUAL_MODEL_FILE_TYPES
 from .workstation_service import WorkStationService
+
+
+def build_daily_model_call_context(
+    *,
+    tenant_id: int,
+    user_id: int,
+    model_id: int,
+    execution_id: str,
+    attempt_id: str,
+    question_message_id: int,
+    action=None,
+) -> ModelCallContext:
+    """Bind a daily model call to its persisted question without storing content."""
+    return ModelCallContext(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        model_id=model_id,
+        entry=ModelCallEntry.DAILY,
+        execution_id=execution_id,
+        attempt_id=attempt_id,
+        subject_type="chat_message",
+        subject_id=str(question_message_id),
+        resume_mode=ModelCallResumeMode.CHECKPOINT,
+        action=action,
+    )
+
+
+def build_daily_rate_limit_sse(observation: RateLimitObservation) -> str:
+    """Expose only the stable recovery contract, never provider diagnostics."""
+    return LLMRateLimitError(
+        execution_id=observation.execution_id,
+        attempt_id=observation.attempt_id,
+        error_type=observation.error_type,
+        rate_limit_state=(
+            observation.rate_limit_state.value if observation.rate_limit_state is not None else None
+        ),
+        busy_until=observation.busy_until.isoformat() if observation.busy_until is not None else None,
+        status_version=observation.status_version,
+        recovery_subject_id=observation.subject_id,
+        model_id=observation.model_id,
+    ).to_sse_event_instance_str()
+
+
+@dataclass(frozen=True, slots=True)
+class DailyChatRecoveryResult:
+    should_execute: bool
+    payload: Any | None
+    attempt: ClaimedAttempt
+
+
+DailyPortFactory = Callable[[UserPayload], Any]
+
+
+class DailyChatRecoveryService:
+    """Claim an idempotent recovery attempt before invoking the daily adapter."""
+
+    def __init__(
+        self,
+        *,
+        recovery_service: Any | None = None,
+        port_factory: DailyPortFactory | None = None,
+    ) -> None:
+        self._recovery_service = recovery_service or ModelRecoveryService()
+        self._port_factory = port_factory or self._build_default_port
+
+    @staticmethod
+    def _build_default_port(login_user: UserPayload):
+        return DailyChatRecoveryPort(login_user)
+
+    async def recover(
+        self,
+        command: RecoveryCommand,
+        *,
+        login_user: UserPayload,
+    ) -> DailyChatRecoveryResult:
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        port = self._port_factory(login_user)
+        tenant_id = get_current_tenant_id() or login_user.tenant_id
+        attempt = await self._recovery_service.claim_recovery(
+            command,
+            tenant_id=tenant_id,
+            user_id=login_user.user_id,
+            entry=ModelCallEntry.DAILY,
+            subject_type="chat_message",
+            resume_mode=ModelCallResumeMode.CHECKPOINT,
+            port=port,
+        )
+        payload = await port.resume_attempt(attempt) if attempt.should_execute else None
+        return DailyChatRecoveryResult(
+            should_execute=attempt.should_execute,
+            payload=payload,
+            attempt=attempt,
+        )
+
+
+class DailyChatRecoveryPort:
+    """Daily-chat authorization boundary; checkpoint resume lands in T019."""
+
+    def __init__(self, login_user: UserPayload, request: Request | None = None) -> None:
+        self._login_user = login_user
+        self._request = request
+        self._message: ChatMessage | None = None
+
+    async def ensure_subject_access(self, execution) -> None:
+        try:
+            message_id = int(execution.subject_id)
+        except (TypeError, ValueError) as exc:
+            raise RecoveryNotAllowedError("daily execution subject is invalid") from exc
+        message = await ChatMessageDao.aget_message_by_id(message_id)
+        if message is None or message.user_id != self._login_user.user_id:
+            raise RecoveryNotAllowedError("daily execution subject is unavailable")
+        try:
+            extra = json.loads(message.extra or "{}")
+            recovery_request = extra["recovery_request"]
+            if str(message.id) != execution.execution_id:
+                raise RecoveryNotAllowedError("daily recovery identity does not match")
+            execution.active_model_id = int(recovery_request["model"])
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise RecoveryNotAllowedError("daily recovery metadata is unavailable") from exc
+        self._message = message
+
+    async def ensure_target_model(self, execution, model_id: int, *, allow_busy: bool = False) -> None:
+        if not allow_busy:
+            states = await ModelRateLimitService().list_model_states(
+                self._login_user.tenant_id,
+                [model_id],
+            )
+            if states[model_id].rate_limit_state.value != "normal":
+                raise RecoveryNotAllowedError("target model is rate limited")
+
+    async def resume_attempt(self, attempt: ClaimedAttempt):
+        if self._message is None:
+            raise RecoveryNotAllowedError("daily execution subject was not authorized")
+        try:
+            content = json.loads(self._message.message or "{}")
+            extra = json.loads(self._message.extra or "{}")
+            recovery_request = extra["recovery_request"]
+            query = content.get("query", "")
+        except (KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise RecoveryNotAllowedError("daily recovery metadata is unavailable") from exc
+
+        data = APIChatCompletion(
+            clientTimestamp=str(int(time.time() * 1000)),
+            conversationId=self._message.chat_id,
+            model=str(attempt.model_id),
+            text=query,
+            tools=recovery_request.get("tools"),
+            use_knowledge_base=recovery_request.get("use_knowledge_base"),
+            files=recovery_request.get("files"),
+        )
+        request = self._request or Request({"type": "http", "method": "POST", "path": "/"})
+        return await _agent_stream_chat_completion(
+            request,
+            data,
+            self._login_user,
+            recovery_attempt=attempt,
+            recovery_message=self._message,
+        )
+
+
+async def ensure_daily_checkpoint_pending(agent, config) -> None:
+    """Fail closed unless LangGraph reports a resumable pending node."""
+    state = await agent.aget_state(config)
+    if not state.next:
+        raise RecoveryNotAllowedError("daily checkpoint has no pending node")
 
 
 async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: int):
@@ -1211,6 +1392,8 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
     # not at upload time (see promote_chat_attachments).
     await promote_chat_attachments(data.files, login_user.user_id)
 
+    attempt_id = str(uuid4())
+
     # Always insert a brand-new question row — Agent flow has no regenerate.
     message = await ChatMessageDao.ainsert_one(
         ChatMessage(
@@ -1221,7 +1404,18 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
             is_bot=False,
             sender="User",
             files=json.dumps(data.files) if data.files else None,
-            extra="{}",
+            extra=json.dumps(
+                {
+                    "recovery_request": {
+                        "model": data.model,
+                        "tools": [tool.model_dump() for tool in (data.tools or [])],
+                        "use_knowledge_base": (
+                            data.use_knowledge_base.model_dump() if data.use_knowledge_base else None
+                        ),
+                        "files": data.files or [],
+                    },
+                }
+            ),
             message=json.dumps(
                 {"query": data.text or "", "files": data.files or []},
                 ensure_ascii=False,
@@ -1230,6 +1424,7 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
             source=0,
         )
     )
+    execution_id = str(message.id)
 
     bisheng_llm = await LLMService.get_bisheng_llm(
         model_id=data.model,
@@ -1238,7 +1433,16 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
         app_type=ApplicationTypeEnum.DAILY_CHAT,
         user_id=login_user.user_id,
     )
-    return ws_config, conversation, message, bisheng_llm, model_info, is_new_conversation
+    return (
+        ws_config,
+        conversation,
+        message,
+        bisheng_llm,
+        model_info,
+        is_new_conversation,
+        execution_id,
+        attempt_id,
+    )
 
 
 # Parser failures that recover on their own (the OCR service is throttled or
@@ -1309,6 +1513,9 @@ async def _agent_stream_chat_completion(
     request: Request,
     data: APIChatCompletion,
     login_user: UserPayload,
+    *,
+    recovery_attempt: ClaimedAttempt | None = None,
+    recovery_message: ChatMessage | None = None,
 ):
     """v2.5 LangGraph ReAct Agent chat completion.
 
@@ -1330,9 +1537,38 @@ async def _agent_stream_chat_completion(
     """
     start_time = time.time()
     try:
-        ws_config, conversation, message, bisheng_llm, model_info, is_new_conv = await _agent_initialize_chat(
-            data, login_user
-        )
+        if recovery_attempt is None:
+            (
+                ws_config,
+                conversation,
+                message,
+                bisheng_llm,
+                model_info,
+                is_new_conv,
+                execution_id,
+                attempt_id,
+            ) = await _agent_initialize_chat(data, login_user)
+        else:
+            if recovery_message is None:
+                raise ValueError("recovery message is required")
+            ws_config = await WorkStationService.aget_config()
+            model_info = next((model for model in ws_config.models if model.id == recovery_attempt.model_id), None)
+            if model_info is None:
+                raise ValueError("recovery model is unavailable")
+            conversation = await MessageSessionDao.async_get_one(recovery_message.chat_id)
+            if conversation is None:
+                raise ConversationNotFoundError()
+            message = recovery_message
+            bisheng_llm = await LLMService.get_bisheng_llm(
+                model_id=recovery_attempt.model_id,
+                app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                app_type=ApplicationTypeEnum.DAILY_CHAT,
+                user_id=login_user.user_id,
+            )
+            is_new_conv = False
+            execution_id = recovery_attempt.execution_id
+            attempt_id = recovery_attempt.attempt_id
         conversation_id = conversation.chat_id
     except (BaseErrorCode, ValueError) as exc:
         error_response = exc if isinstance(exc, BaseErrorCode) else ServerError(message=str(exc))
@@ -1370,7 +1606,21 @@ async def _agent_stream_chat_completion(
         inflight_tool_idx: dict[str, int] = {}
         error_flag = False
         error_msg = ""
+        rate_limit_observation: RateLimitObservation | None = None
         citation_collector = CitationRegistryCollector()
+        rate_limit_service = ModelRateLimitService()
+        call_context = build_daily_model_call_context(
+            tenant_id=login_user.tenant_id,
+            user_id=login_user.user_id,
+            model_id=int(data.model),
+            execution_id=execution_id,
+            attempt_id=attempt_id,
+            question_message_id=message.id,
+            action=recovery_attempt.action if recovery_attempt is not None else None,
+        )
+        model_id = int(data.model)
+        model_states = await rate_limit_service.list_model_states(login_user.tenant_id, [model_id])
+        observed_status_version = model_states[model_id].status_version
 
         def close_thinking() -> int | None:
             """Finalise the open thinking event (if any). Returns its duration
@@ -1424,6 +1674,10 @@ async def _agent_stream_chat_completion(
             inflight_tool_idx.clear()
 
         def build_answer_row(db_content: dict) -> ChatMessage:
+            extra = {}
+            if error_flag:
+                extra["error"] = True
+                extra["error_msg"] = error_msg
             return ChatMessage(
                 user_id=conversation.user_id,
                 chat_id=conversation_id,
@@ -1437,7 +1691,7 @@ async def _agent_stream_chat_completion(
                 message=json.dumps(db_content, ensure_ascii=False, default=str),
                 category="agent_answer",
                 sender=model_info.displayName,
-                extra=json.dumps({"error": True, "error_msg": error_msg}) if error_flag else "{}",
+                extra=json.dumps(extra),
                 source=0,
             )
 
@@ -1476,16 +1730,18 @@ async def _agent_stream_chat_completion(
 
         # Emit first so the client can add the sidebar placeholder before any
         # streaming content arrives. onCreated hook in useAiChat keys on this.
-        yield user_message(message.id, conversation_id, "User", data.text or "")
+        if recovery_attempt is None:
+            yield user_message(message.id, conversation_id, "User", data.text or "")
         yield _sse_resp("processing", "begin", "", conversation_id)
-        yield _sse_resp(
-            "question",
-            "over",
-            {"query": data.text or "", "files": data.files or []},
-            conversation_id,
-            message_id=message.id,
-            is_bot=False,
-        )
+        if recovery_attempt is None:
+            yield _sse_resp(
+                "question",
+                "over",
+                {"query": data.text or "", "files": data.files or []},
+                conversation_id,
+                message_id=message.id,
+                is_bot=False,
+            )
 
         try:
             # ---- Step 1: resolve user-selected KBs ----
@@ -1642,6 +1898,8 @@ async def _agent_stream_chat_completion(
                 from langchain_core.runnables import RunnableConfig
                 from langgraph.prebuilt import ToolNode, create_react_agent
 
+                from bisheng.linsight.domain.services.checkpointer import make_checkpointer
+
                 # Wrap tools in a ToolNode whose error handler feeds tool
                 # failures back to the model as observations, so a single tool
                 # error never aborts the whole agent stream
@@ -1655,17 +1913,29 @@ async def _agent_stream_chat_completion(
                     bisheng_llm,
                     tool_node,
                     prompt=sys_prompt,  # may be None
+                    checkpointer=make_checkpointer(namespace="daily"),
                 )
 
                 tool_meta_map = {t.name: _build_tool_meta(t) for t in langchain_tools}
                 visible_tool_run_ids: set[str] = set()
                 ignored_tool_run_ids: set[str] = set()
                 max_iter = await _get_agent_max_iterations()
+                graph_config = RunnableConfig(
+                    recursion_limit=max_iter,
+                    configurable={
+                        "thread_id": execution_id,
+                        "checkpoint_ns": "daily-agent-v1",
+                    },
+                )
+                graph_input = {"messages": llm_messages}
+                if recovery_attempt is not None:
+                    await ensure_daily_checkpoint_pending(agent, graph_config)
+                    graph_input = None
 
                 async for ev in agent.astream_events(
-                    {"messages": llm_messages},
+                    graph_input,
                     version="v2",
-                    config=RunnableConfig(recursion_limit=max_iter),
+                    config=graph_config,
                 ):
                     et = ev.get("event", "")
                     name = ev.get("name", "") or ""
@@ -1891,8 +2161,13 @@ async def _agent_stream_chat_completion(
             yield exc.to_sse_event_instance_str()
         except Exception as exc:
             error_flag = True
-            error_msg = str(exc)
             logger.exception("Agent chat execution error")
+            rate_limit_observation = await rate_limit_service.observe_call_failure(call_context, exc)
+            if rate_limit_observation is not None:
+                error_msg = ""
+                yield build_daily_rate_limit_sse(rate_limit_observation)
+            else:
+                error_msg = str(exc)
             # The classified type + the raw provider text ride along in `data`
             # so the bubble can render the same title/explanation/"view details"
             # card task mode uses, instead of a bare "服务器错误".
@@ -1905,10 +2180,11 @@ async def _agent_stream_chat_completion(
             }
             # Upstream LLM throttling (RPM/TPM/burst) → friendly "service busy"
             # copy instead of dumping the raw provider 500 on the user.
-            if error_type == ErrorType.RATE_LIMIT:
-                yield LLMRateLimitError(**classified).to_sse_event_instance_str()
-            else:
-                yield ServerError(exception=exc, **classified).to_sse_event_instance_str()
+            if rate_limit_observation is None:
+                if error_type == ErrorType.RATE_LIMIT:
+                    yield LLMRateLimitError(**classified).to_sse_event_instance_str()
+                else:
+                    yield ServerError(exception=exc, **classified).to_sse_event_instance_str()
         except (asyncio.CancelledError, GeneratorExit):
             # The stream was torn down mid-flight — client navigated away, gateway
             # read timeout, worker restart. Neither is an `Exception`, so without
@@ -1922,6 +2198,14 @@ async def _agent_stream_chat_completion(
         # Finalise any dangling thinking / tool events (e.g. stream interrupted
         # mid-reasoning or mid-tool).
         finalise_dangling_events()
+
+        # A provider throttle is a page-local status, not a bot answer. The
+        # original question remains available for an explicit recovery call.
+        if rate_limit_observation is not None:
+            return
+
+        if not error_flag:
+            await rate_limit_service.observe_call_success(call_context, observed_status_version)
 
         # Persist agent_answer — new unified shape is `{msg, events}`.
         db_content: dict = {"msg": final_msg, "events": events}

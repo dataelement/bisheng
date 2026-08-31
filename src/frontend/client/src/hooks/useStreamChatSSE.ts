@@ -16,6 +16,7 @@
  */
 import { useEffect, useRef } from "react";
 import { SSE } from "sse.js";
+import { translateApiErrorMessage } from "~/api/request";
 
 export interface StreamChatSSESubmission {
     /** SSE endpoint URL (absolute) */
@@ -32,9 +33,28 @@ export interface StreamChatSSESubmission {
     /** Called when the stream ends (type: "end") with final full text */
     onFinal: (text: string, messageId?: string | number) => void;
     /** Called on connection or parse errors */
-    onError: (error: string) => void;
+    onError: (error: string, meta?: StreamRateLimitMetadata) => void;
     /** Called when the SSE lifecycle is fully done */
     onEnd: () => void;
+}
+
+export interface StreamRateLimitMetadata {
+    errorType?: string;
+    executionId?: string;
+    attemptId?: string;
+    recoverySubjectId?: string;
+    modelId?: string | number;
+    rateLimitState?: "recovering" | "busy" | "normal";
+    resumeMode?: string;
+}
+
+export function createStreamEndGuard(onEnd: () => void): () => void {
+    let ended = false;
+    return () => {
+        if (ended) return;
+        ended = true;
+        onEnd();
+    };
 }
 
 /**
@@ -45,6 +65,7 @@ export default function useStreamChatSSE(
     submission: StreamChatSSESubmission | null
 ) {
     const sseRef = useRef<any>(null);
+    const endRef = useRef<(() => void) | null>(null);
 
     useEffect(() => {
         if (!submission) return;
@@ -55,6 +76,8 @@ export default function useStreamChatSSE(
         // Accumulators
         let reasoningText = "";
         let contentText = "";
+        const safeEnd = createStreamEndGuard(onEnd);
+        endRef.current = safeEnd;
 
         const buildFullText = (): string => {
             if (reasoningText) {
@@ -84,7 +107,7 @@ export default function useStreamChatSSE(
                     // (backend end event) so the caller can swap out the temporary
                     // placeholder id and feedback/like targets the right row.
                     onFinal(buildFullText(), data?.message?.message_id);
-                    onEnd();
+                    safeEnd();
                     return;
                 }
 
@@ -110,32 +133,52 @@ export default function useStreamChatSSE(
             console.error("[StreamChatSSE] SSE error event, raw data:", e?.data);
             try {
                 const data = JSON.parse(e.data);
-                // Try multiple fields to find the error message
                 const errorMsg =
-                    data?.data?.exception ||
+                    translateApiErrorMessage(data) ||
+                    data?.status_message ||
                     data?.message ||
                     data?.detail ||
-                    data?.status_message ||
                     data?.text ||
                     data?.error ||
                     (typeof data === "string" ? data : JSON.stringify(data));
-                onError(errorMsg);
+                const payload = data?.data ?? {};
+                onError(errorMsg, {
+                    errorType: typeof payload.error_type === "string" ? payload.error_type : undefined,
+                    executionId: typeof payload.execution_id === "string" ? payload.execution_id : undefined,
+                    attemptId: typeof payload.attempt_id === "string" ? payload.attempt_id : undefined,
+                    recoverySubjectId:
+                        typeof payload.recovery_subject_id === "string"
+                            ? payload.recovery_subject_id
+                            : undefined,
+                    modelId:
+                        typeof payload.model_id === "string" || typeof payload.model_id === "number"
+                            ? payload.model_id
+                            : undefined,
+                    rateLimitState:
+                        payload.rate_limit_state === "normal"
+                        || payload.rate_limit_state === "recovering"
+                        || payload.rate_limit_state === "busy"
+                            ? payload.rate_limit_state
+                            : undefined,
+                    resumeMode: typeof payload.resume_mode === "string" ? payload.resume_mode : undefined,
+                });
             } catch {
                 console.error("[StreamChatSSE] Could not parse error data");
                 onError(e?.data || "Connection error");
             }
-            onEnd();
+            safeEnd();
         });
 
-        sse.addEventListener("cancel", () => {
-            onEnd();
-        });
+        sse.addEventListener("cancel", safeEnd);
+        sse.addEventListener("abort", safeEnd);
 
         sse.stream();
 
         return () => {
             sse.close();
+            safeEnd();
             sseRef.current = null;
+            if (endRef.current === safeEnd) endRef.current = null;
         };
     }, [submission]);
 
@@ -145,6 +188,8 @@ export default function useStreamChatSSE(
             sseRef.current.close();
             sseRef.current = null;
         }
+        endRef.current?.();
+        endRef.current = null;
     };
 
     return { abort };

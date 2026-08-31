@@ -260,6 +260,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
         stopGenerating,
         clearConversation,
         regenerate,
+        recoverRateLimitedMessage,
     } = useChannelChat(articleDocId);
 
     useChatModelMemo(user, bsConfig as any);
@@ -365,6 +366,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                         emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                         onPresetClick={(q) => setInputText(q)}
                         onRegenerate={regenerate}
+                        onRecover={recoverRateLimitedMessage}
                     />
                     {/* White gradient where messages meet the input — text appears to fade out. */}
                     <div
@@ -534,6 +536,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                             emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                             onPresetClick={(q) => setInputText(q)}
                             onRegenerate={regenerate}
+                            onRecover={recoverRateLimitedMessage}
                         />
                     </div>
                 </div>

@@ -90,6 +90,12 @@ export type LinsightInfo = {
         error_code?: number;
         error_type?: string;
         detail?: string;
+        execution_id?: string;
+        attempt_id?: string;
+        recovery_subject_id?: string;
+        model_id?: string | number;
+        rate_limit_state?: 'recovering' | 'busy' | 'normal';
+        resume_mode?: string;
     };
     summary: string;
     file_list: any[];
@@ -137,6 +143,12 @@ export type LinsightRoundSnapshot = {
         error_code?: number;
         error_type?: string;
         detail?: string;
+        execution_id?: string;
+        attempt_id?: string;
+        recovery_subject_id?: string;
+        model_id?: string | number;
+        rate_limit_state?: 'recovering' | 'busy' | 'normal';
+        resume_mode?: string;
     };
 };
 
@@ -316,4 +328,3 @@ export const taskModeSkillsState = atomFamily<TaskModeSkill[], string>({
     key: 'taskModeSkillsState',
     default: [],
 });
-

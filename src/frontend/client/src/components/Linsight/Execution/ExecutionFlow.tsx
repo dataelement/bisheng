@@ -21,6 +21,8 @@ import { useLinsightWebSocket } from '~/hooks/Websocket';
 import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
 import { useAutoScroll } from '~/hooks/useAutoScroll';
 import { useLocalize } from '~/hooks';
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import { resolveDisplayedModelRateLimitState } from '~/hooks/queries/endpoints/modelRateLimitPolling';
 import { BreathingRow } from './BreathingRow';
 import { ClarifyCard } from './ClarifyCard';
 import { ConversationRound } from './ConversationRound';
@@ -57,6 +59,13 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     const { stop, sendInput } = useLinsightWebSocket(versionId);
 
     const linsight = getLinsight(versionId);
+    const rateLimitInfo = linsight?.taskErrorInfo;
+    const { data: bsConfig } = useGetBsConfig();
+    const displayedRateLimitState = resolveDisplayedModelRateLimitState(
+        bsConfig?.models,
+        rateLimitInfo?.model_id,
+        rateLimitInfo?.rate_limit_state,
+    );
     // On reload, session-level steps come back inside the "执行准备" pseudo-task;
     // lift them out so the rebuilt view matches the live one (inline + IntentRow).
     const { tasks, sessionSteps } = splitSessionPseudoTask<ExecTask>(
@@ -215,16 +224,18 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                     {/* error / terminated banners */}
                     {linsight?.taskError && (
                         <ChatErrorCard
-                            errorType={linsight.taskErrorInfo?.error_type}
-                            detail={linsight.taskErrorInfo?.detail}
+                            errorType={rateLimitInfo?.error_type}
+                            detail={rateLimitInfo?.detail}
                             fallbackMessage={linsight.taskError}
-                            // Transient errors show a Retry — re-run this round via the
-                            // same continueConversation path as the follow-up input
-                            // (same SV + agent thread). Off on share/history/no-question.
                             onRetry={
                                 isSharePage || readOnly || !linsight?.question
                                     ? undefined
                                     : () => continueConversation(versionId, linsight.question)
+                            }
+                            rateLimitState={
+                                rateLimitInfo?.error_type === 'rate_limit'
+                                    ? displayedRateLimitState
+                                    : undefined
                             }
                         />
                     )}

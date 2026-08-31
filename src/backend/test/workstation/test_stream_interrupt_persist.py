@@ -21,6 +21,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion
+from bisheng.llm.domain.services.model_rate_limit import RateLimitObservation
+from bisheng.llm.domain.services.model_rate_limit_state import ModelRateLimitState
 from bisheng.workstation.domain.services import chat_service
 
 
@@ -36,7 +38,7 @@ def _data() -> APIChatCompletion:
     return APIChatCompletion(
         clientTimestamp="2026-07-29T00:00:00Z",
         conversationId="chat-1",
-        model="m1",
+        model="17",
         text="创盈芯投资可行性分析",
     )
 
@@ -55,7 +57,7 @@ def stream_env(monkeypatch: pytest.MonkeyPatch):
     ws_config = SimpleNamespace(systemPrompt="")
     model_info = SimpleNamespace(displayName="qwen3.7-plus")
 
-    state = {"chunks": ["前半段答案", "后半段答案"], "after": None}
+    state = {"chunks": ["前半段答案", "后半段答案"], "after": None, "observation": None}
 
     class _LLM:
         async def astream(self, _messages):
@@ -67,8 +69,31 @@ def stream_env(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         chat_service,
         "_agent_initialize_chat",
-        AsyncMock(return_value=(ws_config, conversation, message, _LLM(), model_info, False)),
+        AsyncMock(
+            return_value=(
+                ws_config,
+                conversation,
+                message,
+                _LLM(),
+                model_info,
+                False,
+                "execution-1",
+                "attempt-1",
+            )
+        ),
     )
+
+    class _RateLimitService:
+        async def list_model_states(self, _tenant_id, model_ids):
+            return {model_id: SimpleNamespace(status_version=0) for model_id in model_ids}
+
+        async def observe_call_failure(self, _context, _exc):
+            return state["observation"]
+
+        async def observe_call_success(self, _context, _observed_status_version):
+            return None
+
+    monkeypatch.setattr(chat_service, "ModelRateLimitService", _RateLimitService)
     monkeypatch.setattr(chat_service, "_resolve_user_kb_selection", AsyncMock(return_value=[]))
     monkeypatch.setattr(chat_service, "_prepare_tools", AsyncMock(return_value=([], [])))
     monkeypatch.setattr(chat_service, "_process_agent_files", AsyncMock(return_value=("", [])))
@@ -149,10 +174,29 @@ async def test_completed_stream_persists_exactly_once(stream_env):
     rows = _answer_rows(stream_env.inserted)
     assert len(rows) == 1
     assert json.loads(rows[0].message)["msg"] == "前半段答案后半段答案"
-    assert rows[0].extra == "{}"
+    assert json.loads(rows[0].extra) == {}
     chat_service.ChatMessageDao.insert_one.assert_not_called()
     # The terminal sentinel the frontend keys on for onEnd() still lands.
     assert any('"final": true' in c for c in chunks)
+
+
+async def test_rate_limit_does_not_persist_a_bot_answer(stream_env):
+    stream_env.state["after"] = RuntimeError("provider throttled")
+    stream_env.state["observation"] = RateLimitObservation(
+        execution_id="101",
+        attempt_id="attempt-1",
+        error_type="rate_limit",
+        rate_limit_state=ModelRateLimitState.BUSY,
+        busy_until=None,
+        status_version=2,
+        subject_id="101",
+        model_id=17,
+    )
+
+    chunks = await _drain(await chat_service._agent_stream_chat_completion(MagicMock(), _data(), MagicMock()))
+
+    assert _answer_rows(stream_env.inserted) == []
+    assert any("rate_limit" in chunk for chunk in chunks)
 
 
 async def test_interrupt_after_completion_does_not_double_insert(stream_env):

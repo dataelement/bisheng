@@ -3,6 +3,7 @@
  * Uses the stream-format SSE endpoint (shared with file/folder chat).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRecoilValue } from "recoil";
 import { v4 } from "uuid";
 import type { ChatMessage } from "~/api/chatApi";
@@ -15,12 +16,20 @@ import useStreamChatSSE, {
     type StreamChatSSESubmission,
 } from "~/hooks/useStreamChatSSE";
 import store from "~/store";
+import {
+    buildModelRecoveryRequest,
+    type ModelRecoveryCommand,
+    type ModelRecoveryResponse,
+} from "~/api/modelRecovery";
+import { closeSupersededRateLimitRecoveries } from "~/hooks/useModelRateLimitRecovery";
+import { observeModelRateLimitEvent } from "~/hooks/queries/endpoints/modelRateLimitPolling";
 
 /**
  * Hook for channel article AI chat.
  * @param articleDocId - ES article document ID; empty string disables the hook.
  */
 export default function useChannelChat(articleDocId: string) {
+    const queryClient = useQueryClient();
     const chatModel = useRecoilValue(store.chatModel);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
@@ -30,6 +39,9 @@ export default function useChannelChat(articleDocId: string) {
 
     const messagesRef = useRef<ChatMessage[]>([]);
     messagesRef.current = messages;
+    const recoveryResolverRef = useRef<((response: ModelRecoveryResponse) => void) | null>(null);
+    const recoveryAcceptedRef = useRef(true);
+    const recoveryErrorTypeRef = useRef<string | undefined>();
 
     // SSE lifecycle
     const { abort: abortSSE } = useStreamChatSSE(sseSubmission);
@@ -54,9 +66,11 @@ export default function useChannelChat(articleDocId: string) {
     const buildSubmission = useCallback(
         (
             payload: Record<string, any>,
-            responseMessageId: string
+            responseMessageId: string,
+            sseUrl = getChannelSSEUrl(),
+            recoveryCommand?: ModelRecoveryCommand,
         ): StreamChatSSESubmission => ({
-            sseUrl: getChannelSSEUrl(),
+            sseUrl,
             payload,
             onStart: () => {
                 setIsStreaming(true);
@@ -67,7 +81,10 @@ export default function useChannelChat(articleDocId: string) {
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) {
+                    if (
+                        idx >= 0
+                        && (!recoveryCommand || msgs[idx].attemptId === recoveryCommand.attemptId)
+                    ) {
                         msgs[idx] = { ...msgs[idx], text: fullText };
                     }
                     return msgs;
@@ -79,29 +96,49 @@ export default function useChannelChat(articleDocId: string) {
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) {
+                    if (
+                        idx >= 0
+                        && (!recoveryCommand || msgs[idx].attemptId === recoveryCommand.attemptId)
+                    ) {
                         // Swap the temporary placeholder id for the real persisted
                         // ChatMessage id so like/dislike targets the right row before a reload.
                         msgs[idx] = {
                             ...msgs[idx],
                             text: fullText,
                             ...(realMessageId != null && { messageId: String(realMessageId) }),
+                            error: false,
+                            unfinished: false,
+                            rateLimitState: 'normal',
                         };
                     }
                     return msgs;
                 });
             },
-            onError: (error) => {
+            onError: (error, meta) => {
+                observeModelRateLimitEvent(queryClient, meta);
+                recoveryAcceptedRef.current = false;
+                recoveryErrorTypeRef.current = meta?.errorType;
                 setMessages((prev) => {
                     const msgs = [...prev];
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) {
+                    if (
+                        idx >= 0
+                        && (!recoveryCommand || !meta?.attemptId || meta.attemptId === recoveryCommand.attemptId)
+                    ) {
                         msgs[idx] = {
                             ...msgs[idx],
-                            text: error || "An error occurred, please try again",
+                            errorText: error,
                             error: true,
+                            errorType: meta?.errorType,
+                            executionId: meta?.executionId ?? recoveryCommand?.executionId,
+                            attemptId: meta?.attemptId ?? recoveryCommand?.attemptId,
+                            recoverySubjectId: meta?.recoverySubjectId ?? recoveryCommand?.subjectId,
+                            modelId: meta?.modelId ?? msgs[idx].modelId,
+                            rateLimitState: meta?.rateLimitState,
+                            resumeMode: meta?.resumeMode,
+                            unfinished: meta?.errorType === 'rate_limit',
                         };
                     }
                     return msgs;
@@ -110,9 +147,59 @@ export default function useChannelChat(articleDocId: string) {
             onEnd: () => {
                 setIsStreaming(false);
                 setSseSubmission(null);
+                if (recoveryCommand && recoveryResolverRef.current) {
+                    recoveryResolverRef.current({
+                        execution_id: recoveryCommand.executionId,
+                        attempt_id: recoveryCommand.attemptId,
+                        accepted: recoveryAcceptedRef.current,
+                        error_type: recoveryErrorTypeRef.current,
+                    });
+                    recoveryResolverRef.current = null;
+                }
             },
         }),
-        []
+        [queryClient]
+    );
+
+    const recoverRateLimitedMessage = useCallback(
+        (command: ModelRecoveryCommand): Promise<ModelRecoveryResponse> => {
+            const responseMessage = messagesRef.current.find(
+                (message) => message.executionId === command.executionId,
+            );
+            if (!responseMessage || isStreaming || !articleDocId) {
+                return Promise.resolve({
+                    execution_id: command.executionId,
+                    attempt_id: command.attemptId,
+                    accepted: false,
+                });
+            }
+            const request = buildModelRecoveryRequest({ entry: 'channel' }, command);
+            const baseUrl = (__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
+            recoveryAcceptedRef.current = true;
+            recoveryErrorTypeRef.current = undefined;
+            setMessages((previous) => previous.map((message) => (
+                message.executionId === command.executionId
+                    ? {
+                        ...message,
+                        attemptId: command.attemptId,
+                        error: false,
+                        errorText: undefined,
+                        unfinished: true,
+                    }
+                    : message
+            )));
+            setIsStreaming(true);
+            setSseSubmission(buildSubmission(
+                request.body,
+                responseMessage.messageId,
+                `${baseUrl}${request.url}`,
+                command,
+            ));
+            return new Promise((resolve) => {
+                recoveryResolverRef.current = resolve;
+            });
+        },
+        [articleDocId, buildSubmission, isStreaming],
     );
 
     // --- Send a message ---
@@ -142,7 +229,11 @@ export default function useChannelChat(articleDocId: string) {
                 error: false,
             };
 
-            setMessages((prev) => [...prev, userMessage, initialResponse]);
+            setMessages((prev) => [
+                ...closeSupersededRateLimitRecoveries(prev),
+                userMessage,
+                initialResponse,
+            ]);
 
             const payload = {
                 article_doc_id: articleDocId,
@@ -220,5 +311,6 @@ export default function useChannelChat(articleDocId: string) {
         stopGenerating,
         clearConversation,
         regenerate,
+        recoverRateLimitedMessage,
     };
 }

@@ -239,6 +239,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     sendMessage,
     stopGenerating,
     regenerate,
+    recoverRateLimitedMessage,
   } = useAiChat(conversationId, false, shareToken);
 
   // ── F028: workstation conversation export / import-to-knowledge ──
@@ -708,6 +709,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           allowExport
                           contentWidthClassName="w-full max-w-[800px] mx-auto px-4 touch-mobile:max-w-full"
                           onRegenerate={regenerate}
+                          onRecover={recoverRateLimitedMessage}
                           onOpenCitationPanel={onOpenCitationPanel}
                           activeCitationMessageId={activeCitationMessageId}
                           onOpenWorkspace={taskArtifacts.openWorkspace}

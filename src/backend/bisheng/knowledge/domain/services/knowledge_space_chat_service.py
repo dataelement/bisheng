@@ -3,6 +3,7 @@ import json
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
+from uuid import uuid4
 
 from fastapi import HTTPException, Request
 from langchain_core.documents import Document
@@ -26,6 +27,7 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
+from bisheng.common.errcode.workstation import LLMRateLimitError
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.constants import MessageCategory
@@ -41,6 +43,13 @@ from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 from bisheng.llm.domain import LLMService
+from bisheng.llm.domain.services.model_rate_limit import (
+    ClaimedAttempt,
+    ModelCallContext,
+    ModelCallEntry,
+    ModelCallResumeMode,
+    ModelRateLimitService,
+)
 from bisheng.llm.domain.utils import extract_reasoning_content
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.utils import generate_uuid
@@ -127,7 +136,12 @@ class KnowledgeSpaceChatService:
         return f"space_{knowledge_id}_folder_{folder_id}"
 
     async def chat_single_file(
-        self, knowledge_id: int, file_id: int, query: str, model_id: int
+        self,
+        knowledge_id: int,
+        file_id: int,
+        query: str,
+        model_id: int,
+        call_context: ModelCallContext | None = None,
     ) -> AsyncIterator[ChatResponse]:
         """Single file RAG query"""
         # Verify file exists and is a file
@@ -171,132 +185,94 @@ class KnowledgeSpaceChatService:
         )
         es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
         es_retriever = es_vector.as_retriever(search_kwargs={"filter": [{"term": {"metadata.document_id": file_id}}]})
-        async for one in self.space_rag(session, vector_retriever, es_retriever, query, model_id, None):
+        async for one in self.space_rag(
+            session,
+            vector_retriever,
+            es_retriever,
+            query,
+            model_id,
+            None,
+            recovery_metadata={"mode": "file", "space_id": knowledge_id, "file_id": file_id},
+            call_context=call_context,
+        ):
             yield one
 
-    async def space_rag(
-        self, session, vector_retriever, es_retriever, query: str, model_id: int, tags: Any = None
+    async def recover_attempt(
+        self,
+        attempt: ClaimedAttempt,
+        question_message: ChatMessage,
     ) -> AsyncIterator[ChatResponse]:
-        llm, space_conf = await self.get_space_llm_config(model_id=model_id)
+        try:
+            question = json.loads(question_message.message or "{}")
+            extra = json.loads(question_message.extra or "{}")
+            recovery = extra["recovery_request"]
+        except (KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise NotFoundError(msg="Knowledge chat recovery metadata is unavailable") from exc
+        context = ModelCallContext(
+            tenant_id=self.login_user.tenant_id,
+            user_id=self.login_user.user_id,
+            model_id=attempt.model_id,
+            entry=ModelCallEntry.KNOWLEDGE,
+            execution_id=attempt.execution_id,
+            attempt_id=attempt.attempt_id,
+            subject_type="chat_message",
+            subject_id=str(question_message.id),
+            resume_mode=ModelCallResumeMode.READ_ONLY_REINVOKE,
+            action=attempt.action,
+        )
+        if recovery.get("mode") == "file":
+            async for event in self.chat_single_file(
+                int(recovery["space_id"]),
+                int(recovery["file_id"]),
+                str(question.get("query", "")),
+                attempt.model_id,
+                call_context=context,
+            ):
+                yield event
+            return
+        if recovery.get("mode") == "folder":
+            async for event in self.chat_folder(
+                int(recovery["space_id"]),
+                int(recovery.get("folder_id", 0)),
+                str(recovery["chat_id"]),
+                str(question.get("query", "")),
+                attempt.model_id,
+                question.get("tags"),
+                recovery.get("selected_ids"),
+                call_context=context,
+            ):
+                yield event
+            return
+        raise NotFoundError(msg="Knowledge chat recovery mode is unavailable")
 
+    async def space_rag(
+        self,
+        session,
+        vector_retriever,
+        es_retriever,
+        query: str,
+        model_id: int,
+        tags: Any = None,
+        recovery_metadata: dict[str, Any] | None = None,
+        call_context: ModelCallContext | None = None,
+    ) -> AsyncIterator[ChatResponse]:
         retriever_tool = KnowledgeRetrieverTool(
             vector_retriever=vector_retriever,
             elastic_retriever=es_retriever,
-            max_content=space_conf.max_chunk_size,
+            max_content=(await self.get_space_llm_config(model_id=model_id))[1].max_chunk_size,
             sort_by_source_and_index=True,
         )
         finally_docs: list[Document] = await retriever_tool.ainvoke(query)
-        logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
-        file_content, citation_items = await self._prepare_rag_citation_context(finally_docs)
-
-        prompt_service = await get_prompt_manager()
-
-        if space_conf.system_prompt:
-            inputs = [
-                SystemMessage(content=space_conf.system_prompt.format(cur_date=datetime.now().strftime("%Y-%m-%d"))),
-                HumanMessage(
-                    content=space_conf.user_prompt.format(retrieved_file_content=file_content, question=query)
-                ),
-            ]
-        else:
-            prompt_obj = prompt_service.render_prompt(
-                namespace="knowledge_space",
-                prompt_name="rag_prompt",
-                cur_date=datetime.now().strftime("%Y-%m-%d"),
-                retrieved_file_content=file_content,
-                question=query,
-            )
-            inputs = [SystemMessage(content=prompt_obj.prompt.system), HumanMessage(content=prompt_obj.prompt.user)]
-        answer = ""
-        reasoning_content = ""
-        history = await self.get_history(chat_id=session.chat_id, limit=4)
-        if history:
-            history.append(inputs[1])
-            history.insert(0, inputs[0])
-            inputs = history
-
-        logger.info(
-            "space_rag llm inputs | chat_id={} model_id={} retrieved_chunks={} | messages={}",
-            session.chat_id,
+        async for event in self._render_rag_response(
+            session,
+            finally_docs,
+            query,
             model_id,
-            len(finally_docs),
-            [{"role": m.type, "content": m.content} for m in inputs],
-        )
-
-        async for one in llm.astream(inputs):
-            chunk_reasoning_content = extract_reasoning_content(one)
-            yield ChatResponse(
-                category=MessageCategory.STREAM,
-                message={
-                    "content": one.content,
-                    "reasoning_content": chunk_reasoning_content,
-                },
-                type="stream",
-            )
-            reasoning_content += chunk_reasoning_content
-            answer += one.content
-        messages = [
-            ChatMessage(
-                category=MessageCategory.QUESTION,
-                message=json.dumps(
-                    {
-                        "query": query,
-                        "tags": tags,
-                        "model_id": model_id,
-                    },
-                    ensure_ascii=False,
-                ),
-                chat_id=session.chat_id,
-                flow_id=session.flow_id,
-                user_id=self.login_user.user_id,
-                type="end",
-                is_bot=False,
-            ),
-            ChatMessage(
-                category=MessageCategory.ANSWER,
-                message=json.dumps({"content": answer, "reasoning_content": reasoning_content}, ensure_ascii=False),
-                chat_id=session.chat_id,
-                flow_id=session.flow_id,
-                user_id=self.login_user.user_id,
-                type="end",
-                is_bot=True,
-            ),
-        ]
-        await ChatMessageDao.ainsert_batch(messages)
-        cited_items = select_registry_items_for_persistence(citation_items, answer)
-        await save_message_citations(
-            message_id=messages[1].id,
-            items=cited_items,
-            chat_id=session.chat_id,
-            flow_id=session.flow_id,
-        )
-        if not session.name:
-            title_task = asyncio.create_task(
-                self.generate_conversation(
-                    user_id=self.login_user.user_id,
-                    chat_id=session.chat_id,
-                    question=query,
-                    answer=answer,
-                )
-            )
-            _background_tasks.add(title_task)
-            title_task.add_done_callback(_background_tasks.discard)
-
-        yield ChatResponse(
-            category=MessageCategory.STREAM,
-            message={
-                "content": answer,
-                "reasoning_content": reasoning_content,
-                # Real persisted answer ChatMessage id: the client renders the
-                # streamed answer under a temporary placeholder id; sending the
-                # real id on the end event lets it swap in immediately so
-                # like/dislike writes to the right row (previously a like clicked
-                # before a page refresh was lost, since it hit the placeholder id).
-                "message_id": messages[1].id,
-            },
-            citations=cited_items,
-            type="end",
-        )
+            tags,
+            recovery_metadata=recovery_metadata,
+            call_context=call_context,
+        ):
+            yield event
 
     @staticmethod
     async def generate_conversation(user_id: int, chat_id: str, question: str, answer: str | None = None):
@@ -586,6 +562,8 @@ class KnowledgeSpaceChatService:
         query: str,
         model_id: int,
         tags: Any = None,
+        call_context: ModelCallContext | None = None,
+        recovery_metadata: dict[str, Any] | None = None,
     ) -> AsyncIterator[ChatResponse]:
         """F029: prompt rendering + LLM streaming, given pre-fetched docs.
 
@@ -593,6 +571,47 @@ class KnowledgeSpaceChatService:
         ``_retrieve_and_filter`` while reusing the unchanged prompt + stream path.
         """
         llm, space_conf = await self.get_space_llm_config(model_id=model_id)
+        history = await self.get_history(chat_id=session.chat_id, limit=4)
+        if call_context is not None and history:
+            # Recovery reuses the last persisted user question; do not include it
+            # twice when rebuilding the prompt.
+            history = history[:-1]
+        if call_context is None:
+            attempt_id = str(uuid4())
+            question_message = await ChatMessageDao.ainsert_one(
+                ChatMessage(
+                    category=MessageCategory.QUESTION,
+                    message=json.dumps(
+                        {"query": query, "tags": tags, "model_id": model_id},
+                        ensure_ascii=False,
+                    ),
+                    extra=json.dumps(
+                        {
+                            "recovery_request": recovery_metadata or {},
+                        }
+                    ),
+                    chat_id=session.chat_id,
+                    flow_id=session.flow_id,
+                    user_id=self.login_user.user_id,
+                    type="end",
+                    is_bot=False,
+                )
+            )
+            execution_id = str(question_message.id)
+            call_context = ModelCallContext(
+                tenant_id=self.login_user.tenant_id,
+                user_id=self.login_user.user_id,
+                model_id=model_id,
+                entry=ModelCallEntry.KNOWLEDGE,
+                execution_id=execution_id,
+                attempt_id=attempt_id,
+                subject_type="chat_message",
+                subject_id=str(question_message.id),
+                resume_mode=ModelCallResumeMode.READ_ONLY_REINVOKE,
+            )
+        rate_limit_service = ModelRateLimitService()
+        states = await rate_limit_service.list_model_states(self.login_user.tenant_id, [model_id])
+        observed_status_version = states[model_id].status_version
         logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
         file_content, citation_items = await self._prepare_rag_citation_context(finally_docs)
 
@@ -616,7 +635,6 @@ class KnowledgeSpaceChatService:
             inputs = [SystemMessage(content=prompt_obj.prompt.system), HumanMessage(content=prompt_obj.prompt.user)]
         answer = ""
         reasoning_content = ""
-        history = await self.get_history(chat_id=session.chat_id, limit=4)
         if history:
             history.append(inputs[1])
             history.insert(0, inputs[0])
@@ -630,49 +648,52 @@ class KnowledgeSpaceChatService:
             [{"role": m.type, "content": m.content} for m in inputs],
         )
 
-        async for one in llm.astream(inputs):
-            chunk_reasoning_content = extract_reasoning_content(one)
-            yield ChatResponse(
-                category=MessageCategory.STREAM,
-                message={
-                    "content": one.content,
-                    "reasoning_content": chunk_reasoning_content,
-                },
-                type="stream",
-            )
-            reasoning_content += chunk_reasoning_content
-            answer += one.content
-        messages = [
-            ChatMessage(
-                category=MessageCategory.QUESTION,
-                message=json.dumps(
-                    {
-                        "query": query,
-                        "tags": tags,
-                        "model_id": model_id,
+        try:
+            async for one in llm.astream(inputs):
+                chunk_reasoning_content = extract_reasoning_content(one)
+                yield ChatResponse(
+                    category=MessageCategory.STREAM,
+                    message={
+                        "content": one.content,
+                        "reasoning_content": chunk_reasoning_content,
                     },
-                    ensure_ascii=False,
+                    type="stream",
+                )
+                reasoning_content += chunk_reasoning_content
+                answer += one.content
+        except Exception as exc:
+            observation = await rate_limit_service.observe_call_failure(call_context, exc)
+            if observation is None:
+                raise
+            raise LLMRateLimitError(
+                execution_id=observation.execution_id,
+                attempt_id=observation.attempt_id,
+                error_type="rate_limit",
+                rate_limit_state=(
+                    observation.rate_limit_state.value if observation.rate_limit_state is not None else None
                 ),
-                chat_id=session.chat_id,
-                flow_id=session.flow_id,
-                user_id=self.login_user.user_id,
-                type="end",
-                is_bot=False,
-            ),
+                busy_until=(observation.busy_until.isoformat() if observation.busy_until is not None else None),
+                status_version=observation.status_version,
+                recovery_subject_id=observation.subject_id,
+                model_id=observation.model_id,
+            ) from exc
+
+        answer_message = await ChatMessageDao.ainsert_one(
             ChatMessage(
                 category=MessageCategory.ANSWER,
                 message=json.dumps({"content": answer, "reasoning_content": reasoning_content}, ensure_ascii=False),
+                extra="{}",
                 chat_id=session.chat_id,
                 flow_id=session.flow_id,
                 user_id=self.login_user.user_id,
                 type="end",
                 is_bot=True,
-            ),
-        ]
-        await ChatMessageDao.ainsert_batch(messages)
+            )
+        )
+        await rate_limit_service.observe_call_success(call_context, observed_status_version)
         cited_items = select_registry_items_for_persistence(citation_items, answer)
         await save_message_citations(
-            message_id=messages[1].id,
+            message_id=answer_message.id,
             items=cited_items,
             chat_id=session.chat_id,
             flow_id=session.flow_id,
@@ -699,7 +720,7 @@ class KnowledgeSpaceChatService:
                 # real id on the end event lets it swap in immediately so
                 # like/dislike writes to the right row (previously a like clicked
                 # before a page refresh was lost, since it hit the placeholder id).
-                "message_id": messages[1].id,
+                "message_id": answer_message.id,
             },
             citations=cited_items,
             type="end",
@@ -740,6 +761,7 @@ class KnowledgeSpaceChatService:
         model_id: int,
         tags: list[dict] | None = None,
         selected_ids: list[int] | None = None,
+        call_context: ModelCallContext | None = None,
     ) -> AsyncIterator[ChatResponse]:
         """Folder RAG query.
 
@@ -797,7 +819,21 @@ class KnowledgeSpaceChatService:
             max_content=space_conf.max_chunk_size,
         )
 
-        async for one in self._render_rag_response(session, finally_docs, query, model_id, tags):
+        async for one in self._render_rag_response(
+            session,
+            finally_docs,
+            query,
+            model_id,
+            tags,
+            call_context=call_context,
+            recovery_metadata={
+                "mode": "folder",
+                "space_id": knowledge_id,
+                "folder_id": folder_id,
+                "chat_id": chat_id,
+                "selected_ids": selected_ids or [],
+            },
+        ):
             yield one
 
     async def get_space_llm_config(self, model_id: int) -> tuple[BaseChatModel, KnowledgeSpaceConfig]:

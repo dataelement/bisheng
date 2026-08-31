@@ -1,12 +1,30 @@
 import json
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from bisheng.database.models.message import ChatMessage
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.user.domain.models.user import UserDao
+
+
+class WorkstationModelRateLimitState(StrEnum):
+    NORMAL = "normal"
+    RECOVERING = "recovering"
+    BUSY = "busy"
+
+
+class WorkstationModelRateLimitProjection(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    rate_limit_state: WorkstationModelRateLimitState = Field(
+        default=WorkstationModelRateLimitState.NORMAL,
+        serialization_alias="rateLimitState",
+    )
+    busy_until: datetime | None = Field(default=None, serialization_alias="busyUntil")
+    status_version: int = Field(default=0, serialization_alias="statusVersion")
 
 
 class WorkstationMessage(BaseModel):

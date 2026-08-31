@@ -43,6 +43,10 @@ from bisheng.linsight.domain.services.stream_event_mapper import StreamEventMapp
 from bisheng.linsight.domain.services.tool_loop_middleware import LinsightToolLoopError
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.linsight.domain.services.workspace_backend import UPLOADS_DIR
+from bisheng.llm.domain.services.model_rate_limit import (
+    ModelRateLimitService,
+)
+from bisheng.llm.domain.services.model_rate_limit_state import ModelRateLimitState
 from bisheng.tool.domain.services.tool import ToolServices
 from bisheng_langchain.linsight.const import TaskStatus
 from bisheng_langchain.linsight.event import BaseEvent, ExecStep, GenerateSubTask, NeedUserInput, TaskEnd, TaskStart
@@ -1875,7 +1879,12 @@ class LinsightWorkflowTask:
             logger.warning("Error converging unfinished task rows: {}", e)
 
     async def _handle_task_failure(
-        self, session_model: LinsightSessionVersion, error_msg: str, *, exc: Exception | None = None
+        self,
+        session_model: LinsightSessionVersion,
+        error_msg: str,
+        *,
+        exc: Exception | None = None,
+        extra_payload: dict[str, object] | None = None,
     ):
         """Processing task failed.
 
@@ -1889,12 +1898,15 @@ class LinsightWorkflowTask:
         """
         classified = classify_for_event(exc if exc is not None else error_msg)
         session_model.status = SessionVersionStatusEnum.FAILED
-        session_model.output_result = {
+        session_output: dict[str, object] = {
             "error_message": error_msg,
             "error_code": classified.error_code,
             "error_type": classified.error_type,
             "detail": classified.detail,
         }
+        if extra_payload:
+            session_output.update(extra_payload)
+        session_model.output_result = session_output
         await self._state_manager.set_session_version_info(session_model)
         # F035 Track J: still land a (failed) task turn in the unified stream so the
         # conversation isn't left with a dangling question; extra points to the SV
@@ -1906,15 +1918,18 @@ class LinsightWorkflowTask:
 
         # error_message event: keep ``error`` for backward compatibility (old
         # clients display it raw); new fields drive the classified friendly card.
+        event_payload: dict[str, object] = {
+            "error": error_msg,
+            "error_code": classified.error_code,
+            "error_type": classified.error_type,
+            "detail": classified.detail,
+        }
+        if extra_payload:
+            event_payload.update(extra_payload)
         await self._state_manager.push_message(
             MessageData(
                 event_type=MessageEventType.ERROR_MESSAGE,
-                data={
-                    "error": error_msg,
-                    "error_code": classified.error_code,
-                    "error_type": classified.error_type,
-                    "detail": classified.detail,
-                },
+                data=event_payload,
             )
         )
         system_config = await settings.aget_all_config()
@@ -1927,8 +1942,31 @@ class LinsightWorkflowTask:
         """Processing execution error"""
         try:
             session_model = await LinsightSessionVersionDao.get_by_id(self.session_version_id)
+            extra_payload = None
+            classified_error = classify_for_event(error)
+            if (
+                classified_error.error_type == "rate_limit"
+                and session_model.tenant_id is not None
+                and session_model.model
+            ):
+                model_id = int(session_model.model)
+                states = await ModelRateLimitService().list_model_states(
+                    int(session_model.tenant_id),
+                    [model_id],
+                )
+                model_state = states[model_id]
+                if model_state.rate_limit_state is not ModelRateLimitState.NORMAL:
+                    extra_payload = {
+                        "rate_limit_state": model_state.rate_limit_state.value,
+                        "model_id": model_id,
+                    }
             # Pass the exception object (not just str) so the classifier can unwrap
             # TaskExecutionError -> original provider cause for a precise error_type.
-            await self._handle_task_failure(session_model, str(error), exc=error)
+            await self._handle_task_failure(
+                session_model,
+                str(error),
+                exc=error,
+                extra_payload=extra_payload,
+            )
         except Exception as e:
             logger.error(f"Processing execution error failed: session_version_id={self.session_version_id}, error={e}")

@@ -40,6 +40,23 @@ from loguru import logger
 
 from bisheng.common.services.llm_error_classifier import Behavior, classify_behavior
 
+StatusVersionReader = Callable[[], Awaitable[int | None]]
+FailureObserver = Callable[[Exception], Awaitable[None]]
+SuccessObserver = Callable[[int | None], Awaitable[None]]
+
+
+async def _no_status_version() -> int | None:
+    return None
+
+
+async def _ignore_failure(_exc: Exception) -> None:
+    return None
+
+
+async def _ignore_success(_observed_version: int | None) -> None:
+    return None
+
+
 # Synthetic reply substituted for a degraded subagent step. Read by the PARENT
 # planner as a control note ("this leg failed — continue with what you have"),
 # NOT as a valid finding. Kept bilingual + instruction-flavored so it works
@@ -308,6 +325,9 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         turn_limit: int = 115,
         soft_landing_turns: int = 8,
         budget_sink: dict | None = None,
+        status_version_reader: StatusVersionReader = _no_status_version,
+        failure_observer: FailureObserver = _ignore_failure,
+        success_observer: SuccessObserver = _ignore_success,
     ) -> None:
         super().__init__()
         self.tools = []  # registers no extra tools
@@ -324,6 +344,9 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         # delegation shares one ``max_degrade`` allowance. Bucket it on ``_budget_key``
         # when touching this next.
         self._degrade_count = 0
+        self._status_version_reader = status_version_reader
+        self._failure_observer = failure_observer
+        self._success_observer = success_observer
         # Turn budget, bucketed per graph RUN rather than per middleware instance:
         #
         #   - main graph → exactly one bucket. One compiled Pregel loop, one allowance;
@@ -550,6 +573,31 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         )
         return AIMessage(content=_DEGRADE_MESSAGE)
 
+    async def _read_status_version(self) -> int | None:
+        try:
+            return await self._status_version_reader()
+        except Exception:
+            logger.opt(exception=True).warning(
+                "[linsight-resilience] rate-limit status read failed; preserving model-call behavior"
+            )
+            return None
+
+    async def _observe_failure(self, exc: Exception) -> None:
+        try:
+            await self._failure_observer(exc)
+        except Exception:
+            logger.opt(exception=True).warning(
+                "[linsight-resilience] rate-limit failure observation failed; preserving retry behavior"
+            )
+
+    async def _observe_success(self, observed_version: int | None) -> None:
+        try:
+            await self._success_observer(observed_version)
+        except Exception:
+            logger.opt(exception=True).warning(
+                "[linsight-resilience] rate-limit success observation failed; preserving model result"
+            )
+
     async def awrap_model_call(
         self,
         request: ModelRequest,
@@ -563,9 +611,11 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         exc_attempts = 0
         trunc_attempts = 0
         while True:
+            observed_status_version = await self._read_status_version()
             try:
                 response = await handler(current)
             except Exception as exc:
+                await self._observe_failure(exc)
                 behavior = classify_behavior(exc)
                 if behavior is Behavior.FAIL_FAST:
                     logger.warning(f"[linsight-resilience] fail-fast ({type(exc).__name__}): {exc}")
@@ -584,6 +634,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
                 return self._degrade_or_raise(exc)
             # One greppable diagnostic line per model call (finish_reason / tokens /
             # tool-call arg keys) — the only observability for task-mode calls.
+            await self._observe_success(observed_status_version)
             _log_call_diagnostics(response, is_subagent=self.is_subagent)
             # L2 truncation guard: a length-truncated tool call → nudge + retry.
             if trunc_attempts < self.truncation_retry_limit and _is_truncated_tool_call(response):
@@ -640,7 +691,13 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
 
 
 def build_resilience_middleware(
-    linsight_conf, *, is_subagent: bool, budget_sink: dict | None = None
+    linsight_conf,
+    *,
+    is_subagent: bool,
+    budget_sink: dict | None = None,
+    status_version_reader: StatusVersionReader = _no_status_version,
+    failure_observer: FailureObserver = _ignore_failure,
+    success_observer: SuccessObserver = _ignore_success,
 ) -> LinsightModelResilienceMiddleware:
     """Construct a middleware instance from ``LinsightConf`` (one per graph).
 
@@ -661,4 +718,7 @@ def build_resilience_middleware(
         turn_limit=turn_limit,
         soft_landing_turns=getattr(linsight_conf, "soft_landing_turns", 8),
         budget_sink=budget_sink,
+        status_version_reader=status_version_reader,
+        failure_observer=failure_observer,
+        success_observer=success_observer,
     )

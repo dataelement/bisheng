@@ -20,7 +20,10 @@ def create_celery_app():
     bootstrap_approval_scenarios()
     set_logger_config(settings.logger_conf)
     # loop = app_ctx.get_event_loop()
-    bisheng_celery = Celery("bisheng", include=["bisheng.worker"])
+    bisheng_celery = Celery(
+        "bisheng",
+        include=["bisheng.worker", "bisheng.worker.model_rate_limit"],
+    )
     bisheng_celery.config_from_object("bisheng.worker.config")
     return bisheng_celery
 

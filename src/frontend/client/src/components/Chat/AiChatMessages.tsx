@@ -22,6 +22,7 @@ import store from "~/store";
 import HeaderTitle from "./HeaderTitle";
 import { QueryKeys } from "~/types/chat";
 import type { ConversationData } from "~/types/chat/queries";
+import type { ModelRecoveryCommand, ModelRecoveryResponse } from "~/api/modelRecovery";
 
 interface AiChatMessagesProps {
     messages: ChatMessage[];
@@ -58,6 +59,7 @@ interface AiChatMessagesProps {
     contentWidthClassName?: string;
     onPresetClick?: (question: string) => void;
     onRegenerate?: (parentMessageId: string) => void;
+    onRecover?: (command: ModelRecoveryCommand) => Promise<ModelRecoveryResponse>;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
     /** F035: open the task-mode workspace drawer (entry rendered in HeaderTitle) */
@@ -81,6 +83,7 @@ function MessageTreeNode({
     totalMessages,
     currentIndex,
     onRegenerate,
+    onRecover,
     knowledgeChatLayout,
     allowExport,
     allowFeedback,
@@ -93,6 +96,7 @@ function MessageTreeNode({
     totalMessages: number;
     currentIndex: number;
     onRegenerate?: (parentMessageId: string) => void;
+    onRecover?: (command: ModelRecoveryCommand) => Promise<ModelRecoveryResponse>;
     onPreviewFile?: (file: ArtifactFile) => void;
     knowledgeChatLayout?: boolean;
     allowExport?: boolean;
@@ -137,6 +141,7 @@ function MessageTreeNode({
                         ? () => onRegenerate?.(message.parentMessageId)
                         : undefined
                 }
+                onRecover={onRecover}
                 siblingIdx={siblingIdx}
                 siblingCount={siblings.length}
                 setSiblingIdx={setSiblingIdx}
@@ -155,6 +160,7 @@ function MessageTreeNode({
                     totalMessages={totalMessages}
                     currentIndex={currentIndex + 1}
                     onRegenerate={onRegenerate}
+                    onRecover={onRecover}
                     knowledgeChatLayout={knowledgeChatLayout}
                     allowExport={allowExport}
                     allowFeedback={allowFeedback}
@@ -185,6 +191,7 @@ export default function AiChatMessages({
     contentWidthClassName,
     onPresetClick,
     onRegenerate,
+    onRecover,
     onOpenCitationPanel,
     activeCitationMessageId,
     onOpenWorkspace,
@@ -424,6 +431,7 @@ export default function AiChatMessages({
                                             ? () => onRegenerate?.(message.parentMessageId)
                                             : undefined
                                     }
+                                    onRecover={onRecover}
                                     knowledgeChatLayout={knowledgeChatLayout}
                                     allowExport={allowExport}
                                     allowFeedback={allowFeedback}
@@ -442,6 +450,7 @@ export default function AiChatMessages({
                                 totalMessages={messages.length}
                                 currentIndex={0}
                                 onRegenerate={onRegenerate}
+                                onRecover={onRecover}
                                 knowledgeChatLayout={knowledgeChatLayout}
                                 allowExport={allowExport}
                                 allowFeedback={allowFeedback}

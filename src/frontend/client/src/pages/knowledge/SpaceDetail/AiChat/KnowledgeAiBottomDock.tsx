@@ -223,6 +223,7 @@ export function KnowledgeAiBottomDock({
         deleteSession,
         renameSession,
         regenerate,
+        recoverRateLimitedMessage,
     } = useFolderChat(spaceId, folderId);
 
     // Empty-state hint depends on whether the panel is opened at space root or in a folder.
@@ -383,6 +384,7 @@ export function KnowledgeAiBottomDock({
                         emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                         onPresetClick={() => { }}
                         onRegenerate={regenerate}
+                        onRecover={recoverRateLimitedMessage}
                     />
                     <div
                         aria-hidden
@@ -616,6 +618,7 @@ export function KnowledgeAiBottomDock({
                                     emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                                     onPresetClick={() => { }}
                                     onRegenerate={regenerate}
+                                    onRecover={recoverRateLimitedMessage}
                                 />
                             </div>
                         </div>

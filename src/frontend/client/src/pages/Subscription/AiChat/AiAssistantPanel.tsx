@@ -92,6 +92,7 @@ export function AiAssistantPanel({
         stopGenerating,
         clearConversation,
         regenerate,
+        recoverRateLimitedMessage,
     } = activeChat;
 
     const { data: bsConfig } = useGetBsConfig();
@@ -208,6 +209,7 @@ export function AiAssistantPanel({
                 emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                 onPresetClick={(q) => setInputText(q)}
                 onRegenerate={regenerate}
+                onRecover={recoverRateLimitedMessage}
             />
 
             {/* Input Area */}

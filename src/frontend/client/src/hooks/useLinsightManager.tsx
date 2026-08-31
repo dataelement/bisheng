@@ -128,6 +128,19 @@ export const useLinsightManager = () => {
             files: files?.map(file => ({ ...file, file_name: decodeURIComponent(file.original_filename) })) || [],
             tasks: customTask ? tasks : buildTaskTree(tasks),
             taskError: 'failed' === status ? output_result?.error_message : '',
+            taskErrorInfo: 'failed' === status && output_result?.error_type
+                ? {
+                    error_code: output_result.error_code,
+                    error_type: output_result.error_type,
+                    detail: output_result.detail,
+                    execution_id: output_result.execution_id,
+                    attempt_id: output_result.attempt_id,
+                    recovery_subject_id: output_result.recovery_subject_id,
+                    model_id: output_result.model_id,
+                    rate_limit_state: output_result.rate_limit_state,
+                    resume_mode: output_result.resume_mode,
+                }
+                : undefined,
             file_list: output_result?.final_files || [],
             sop: 'sop_generation_failed' === status ? '' : sop,
             sopError: 'sop_generation_failed' === status ? sop : '',

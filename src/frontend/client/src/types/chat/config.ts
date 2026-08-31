@@ -530,6 +530,9 @@ export type BsConfig = {
     displayName: string;
     /** Optional admin-configured intro shown under the name in model pickers. */
     description?: string;
+    rateLimitState?: 'normal' | 'recovering' | 'busy';
+    busyUntil?: string | null;
+    statusVersion?: number;
   }>;
   voiceInput: {
     enabled: boolean;

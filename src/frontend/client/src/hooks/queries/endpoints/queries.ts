@@ -5,6 +5,9 @@ import { useRecoilValue } from 'recoil';
 import { getKnowledgeStatusApi } from '~/api';
 import { BsConfig, QueryKeys, TEndpointsConfig, TStartupConfig, dataService } from '~/types/chat';
 import store from '~/store';
+import { getModelRateLimitRefetchInterval } from './modelRateLimitPolling';
+
+export { getModelRateLimitRefetchInterval } from './modelRateLimitPolling';
 
 const externalUrlRE = /^(?:https?:|data:|blob:|\/\/)/i;
 
@@ -94,6 +97,7 @@ export const useGetBsConfig = (
       // key, so one fetch covers all consumers.
       refetchOnMount: false,
       staleTime: 5 * 60 * 1000,
+      refetchInterval: getModelRateLimitRefetchInterval,
       ...config,
       enabled: (config?.enabled ?? true) === true && queriesEnabled,
     },

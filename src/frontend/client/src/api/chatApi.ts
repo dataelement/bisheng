@@ -141,6 +141,15 @@ export interface ChatMessage {
         renderable — overwriting `text` would destroy it. */
     errorText?: string;
     unfinished?: boolean;
+    /** Stable server-owned identity for all attempts of one logical answer. */
+    executionId?: string;
+    /** Active attempt accepted by the server; stale stream events are ignored. */
+    attemptId?: string;
+    /** Existing question record used to reconstruct a user-triggered recovery. */
+    recoverySubjectId?: string;
+    modelId?: string | number;
+    rateLimitState?: "recovering" | "busy" | "normal";
+    resumeMode?: string;
     isCreatedByUser?: boolean;
     createdAt?: string;
     children?: ChatMessage[];
@@ -286,6 +295,7 @@ function mapAgentResponseItem(row: any): ChatMessage {
         citations: Array.isArray(row.citations) ? row.citations : null,
         liked: row.liked,
     };
+    applyRecoveryMetadata(base, row.extra);
 
     if (category === "question" && raw && typeof raw === "object") {
         base.text = raw.query ?? "";
@@ -492,6 +502,40 @@ export interface StreamHistoryItem {
     [key: string]: any;
 }
 
+export function applyRecoveryMetadata(message: ChatMessage, rawExtra: unknown): void {
+    let extra = rawExtra;
+    if (typeof extra === "string") {
+        try {
+            extra = JSON.parse(extra);
+        } catch {
+            extra = null;
+        }
+    }
+    if (!extra || typeof extra !== "object") return;
+    const metadata = extra as Record<string, unknown>;
+    if (typeof metadata.execution_id === "string") message.executionId = metadata.execution_id;
+    if (typeof metadata.attempt_id === "string") message.attemptId = metadata.attempt_id;
+    if (typeof metadata.recovery_subject_id === "string") {
+        message.recoverySubjectId = metadata.recovery_subject_id;
+    }
+    if (typeof metadata.model_id === "string" || typeof metadata.model_id === "number") {
+        message.modelId = metadata.model_id;
+    }
+    if (
+        metadata.rate_limit_state === "normal"
+        || metadata.rate_limit_state === "recovering"
+        || metadata.rate_limit_state === "busy"
+    ) {
+        message.rateLimitState = metadata.rate_limit_state;
+    }
+    if (typeof metadata.unfinished === "boolean") message.unfinished = metadata.unfinished;
+    if (metadata.error_type === "rate_limit") {
+        message.error = true;
+        message.errorType = "rate_limit";
+    }
+    if (typeof metadata.resume_mode === "string") message.resumeMode = metadata.resume_mode;
+}
+
 /** Parse a stream-format history item → ChatMessage */
 export function parseStreamHistoryItem(raw: StreamHistoryItem): ChatMessage {
     let displayText = "";
@@ -523,7 +567,7 @@ export function parseStreamHistoryItem(raw: StreamHistoryItem): ChatMessage {
         displayText = raw.message || "";
     }
 
-    return {
+    const message: ChatMessage = {
         messageId: String(raw.id),
         parentMessageId: "",
         conversationId: raw.chat_id || "",
@@ -535,6 +579,8 @@ export function parseStreamHistoryItem(raw: StreamHistoryItem): ChatMessage {
         flow_name: raw.flow_name,
         liked: raw.liked,
     };
+    applyRecoveryMetadata(message, raw.extra);
+    return message;
 }
 
 // =====================================================================

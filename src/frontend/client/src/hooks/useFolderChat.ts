@@ -9,6 +9,7 @@
  *  5. Sessions can be switched/deleted
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRecoilValue } from "recoil";
 import { v4 } from "uuid";
 import type { ChatMessage, FolderSession } from "~/api/chatApi";
@@ -24,6 +25,13 @@ import useStreamChatSSE, {
     type StreamChatSSESubmission,
 } from "~/hooks/useStreamChatSSE";
 import store from "~/store";
+import {
+    buildModelRecoveryRequest,
+    type ModelRecoveryCommand,
+    type ModelRecoveryResponse,
+} from "~/api/modelRecovery";
+import { closeSupersededRateLimitRecoveries } from "~/hooks/useModelRateLimitRecovery";
+import { observeModelRateLimitEvent } from "~/hooks/queries/endpoints/modelRateLimitPolling";
 
 /**
  * Remembers the last active chat id per (space, folder), surviving unmount within
@@ -50,6 +58,7 @@ export default function useFolderChat(
     spaceId: string,
     folderId?: string
 ) {
+    const queryClient = useQueryClient();
     const chatModel = useRecoilValue(store.chatModel);
     const [sessions, setSessions] = useState<FolderSession[]>([]);
     const [activeChatId, setActiveChatId] = useState<string>("");
@@ -62,6 +71,9 @@ export default function useFolderChat(
 
     const messagesRef = useRef<ChatMessage[]>([]);
     messagesRef.current = messages;
+    const recoveryResolverRef = useRef<((response: ModelRecoveryResponse) => void) | null>(null);
+    const recoveryAcceptedRef = useRef(true);
+    const recoveryErrorTypeRef = useRef<string | undefined>();
 
     // Flag to skip history loading when creating a session mid-send
     const skipHistoryLoadRef = useRef(false);
@@ -137,9 +149,11 @@ export default function useFolderChat(
     const buildSubmission = useCallback(
         (
             payload: Record<string, any>,
-            responseMessageId: string
+            responseMessageId: string,
+            sseUrl = getFolderChatSSEUrl(spaceId),
+            recoveryCommand?: ModelRecoveryCommand,
         ): StreamChatSSESubmission => ({
-            sseUrl: getFolderChatSSEUrl(spaceId),
+            sseUrl,
             payload,
             onStart: () => setIsStreaming(true),
             onMessage: (fullText) => {
@@ -148,7 +162,10 @@ export default function useFolderChat(
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) msgs[idx] = { ...msgs[idx], text: fullText };
+                    if (
+                        idx >= 0
+                        && (!recoveryCommand || msgs[idx].attemptId === recoveryCommand.attemptId)
+                    ) msgs[idx] = { ...msgs[idx], text: fullText };
                     return msgs;
                 });
             },
@@ -158,29 +175,49 @@ export default function useFolderChat(
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) {
+                    if (
+                        idx >= 0
+                        && (!recoveryCommand || msgs[idx].attemptId === recoveryCommand.attemptId)
+                    ) {
                         // Swap the temporary placeholder id for the real persisted
                         // ChatMessage id so like/dislike targets the right row before a reload.
                         msgs[idx] = {
                             ...msgs[idx],
                             text: fullText,
                             ...(realMessageId != null && { messageId: String(realMessageId) }),
+                            error: false,
+                            unfinished: false,
+                            rateLimitState: 'normal',
                         };
                     }
                     return msgs;
                 });
             },
-            onError: (error) => {
+            onError: (error, meta) => {
+                observeModelRateLimitEvent(queryClient, meta);
+                recoveryAcceptedRef.current = false;
+                recoveryErrorTypeRef.current = meta?.errorType;
                 setMessages((prev) => {
                     const msgs = [...prev];
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) {
+                    if (
+                        idx >= 0
+                        && (!recoveryCommand || !meta?.attemptId || meta.attemptId === recoveryCommand.attemptId)
+                    ) {
                         msgs[idx] = {
                             ...msgs[idx],
-                            text: error || "An error occurred, please try again",
+                            errorText: error,
                             error: true,
+                            errorType: meta?.errorType,
+                            executionId: meta?.executionId ?? recoveryCommand?.executionId,
+                            attemptId: meta?.attemptId ?? recoveryCommand?.attemptId,
+                            recoverySubjectId: meta?.recoverySubjectId ?? recoveryCommand?.subjectId,
+                            modelId: meta?.modelId ?? msgs[idx].modelId,
+                            rateLimitState: meta?.rateLimitState,
+                            resumeMode: meta?.resumeMode,
+                            unfinished: meta?.errorType === 'rate_limit',
                         };
                     }
                     return msgs;
@@ -189,9 +226,62 @@ export default function useFolderChat(
             onEnd: () => {
                 setIsStreaming(false);
                 setSseSubmission(null);
+                if (recoveryCommand && recoveryResolverRef.current) {
+                    recoveryResolverRef.current({
+                        execution_id: recoveryCommand.executionId,
+                        attempt_id: recoveryCommand.attemptId,
+                        accepted: recoveryAcceptedRef.current,
+                        error_type: recoveryErrorTypeRef.current,
+                    });
+                    recoveryResolverRef.current = null;
+                }
             },
         }),
-        [spaceId]
+        [spaceId, queryClient]
+    );
+
+    const recoverRateLimitedMessage = useCallback(
+        (command: ModelRecoveryCommand): Promise<ModelRecoveryResponse> => {
+            const responseMessage = messagesRef.current.find(
+                (message) => message.executionId === command.executionId,
+            );
+            if (!responseMessage || isStreaming || !activeChatId) {
+                return Promise.resolve({
+                    execution_id: command.executionId,
+                    attempt_id: command.attemptId,
+                    accepted: false,
+                });
+            }
+            const request = buildModelRecoveryRequest(
+                { entry: 'knowledge', spaceId },
+                command,
+            );
+            const baseUrl = (__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
+            recoveryAcceptedRef.current = true;
+            recoveryErrorTypeRef.current = undefined;
+            setMessages((previous) => previous.map((message) => (
+                message.executionId === command.executionId
+                    ? {
+                        ...message,
+                        attemptId: command.attemptId,
+                        error: false,
+                        errorText: undefined,
+                        unfinished: true,
+                    }
+                    : message
+            )));
+            setIsStreaming(true);
+            setSseSubmission(buildSubmission(
+                request.body,
+                responseMessage.messageId,
+                `${baseUrl}${request.url}`,
+                command,
+            ));
+            return new Promise((resolve) => {
+                recoveryResolverRef.current = resolve;
+            });
+        },
+        [activeChatId, buildSubmission, isStreaming, spaceId],
     );
 
     // --- Create a new session ---
@@ -322,7 +412,11 @@ export default function useFolderChat(
                 error: false,
             };
 
-            setMessages((prev) => [...prev, userMessage, initialResponse]);
+            setMessages((prev) => [
+                ...closeSupersededRateLimitRecoveries(prev),
+                userMessage,
+                initialResponse,
+            ]);
 
             // Build payload per API spec. `selected_ids`, when present, replaces
             // folder_id as the answering scope server-side; a tag still only narrows
@@ -429,5 +523,6 @@ export default function useFolderChat(
         switchSession,
         deleteSession,
         renameSession,
+        recoverRateLimitedMessage,
     };
 }

@@ -29,6 +29,10 @@ interface ChatErrorCardProps {
         ExecutionFlow via continueConversation and on daily chat via regenerate;
         omitted on /c and history views. */
     onRetry?: () => void;
+    retrying?: boolean;
+    rateLimitState?: 'normal' | 'recovering' | 'busy';
+    onSwitchModel?: () => void;
+    onLater?: () => void;
 }
 
 // error_type values that have their own localized copy; anything else (or a
@@ -70,19 +74,43 @@ export function isTransientErrorType(errorType?: string): boolean {
     return !!errorType && TRANSIENT_TYPES.has(errorType);
 }
 
-export function ChatErrorCard({ errorType, detail, fallbackMessage, onRetry }: ChatErrorCardProps) {
+export function ChatErrorCard({
+    errorType,
+    detail,
+    fallbackMessage,
+    onRetry,
+    retrying,
+    rateLimitState,
+    onSwitchModel,
+    onLater,
+}: ChatErrorCardProps) {
     const localize = useLocalize();
     const [showDetail, setShowDetail] = useState(false);
 
+    const isRecoveryRejected = errorType === 'recovery_rejected';
     const key = errorType && KNOWN_TYPES.has(errorType) ? errorType : 'unknown';
-    const title = localize(`com_linsight_error_title_${key}`);
-    const desc = localize(`com_linsight_error_desc_${key}`);
-    const hint = localize(`com_linsight_error_hint_${key}`);
-    const rawDetail = detail || fallbackMessage || '';
+    const title = isRecoveryRejected
+        ? (fallbackMessage || '')
+        : localize(`com_linsight_error_title_${key}`);
+    const desc = isRecoveryRejected ? '' : localize(`com_linsight_error_desc_${key}`);
+    const hint = isRecoveryRejected ? '' : localize(`com_linsight_error_hint_${key}`);
+    const rawDetail = detail || (isRecoveryRejected ? '' : fallbackMessage) || '';
 
     // Transient → calm neutral notice (with retry where the surface wires it).
     if (TRANSIENT_TYPES.has(key)) {
-        return <ServiceBusyNotice title={title} desc={desc} detail={rawDetail} onRetry={onRetry} />;
+        const isRateLimit = key === 'rate_limit';
+        return (
+            <ServiceBusyNotice
+                title={title}
+                desc={desc}
+                detail={isRateLimit ? undefined : rawDetail}
+                onRetry={onRetry}
+                retrying={retrying}
+                rateLimitState={isRateLimit ? (rateLimitState ?? 'busy') : undefined}
+                onSwitchModel={isRateLimit ? onSwitchModel : undefined}
+                onLater={isRateLimit ? onLater : undefined}
+            />
+        );
     }
 
     // Terminal / unknown → the informative (red) failure card.

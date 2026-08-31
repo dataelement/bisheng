@@ -4,6 +4,7 @@
  * Uses useStreamChatSSE for streaming (shared with channel/folder chat).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRecoilValue } from "recoil";
 import { v4 } from "uuid";
 import type { ChatMessage } from "~/api/chatApi";
@@ -12,6 +13,13 @@ import useStreamChatSSE, {
     type StreamChatSSESubmission,
 } from "~/hooks/useStreamChatSSE";
 import store from "~/store";
+import {
+    buildModelRecoveryRequest,
+    type ModelRecoveryCommand,
+    type ModelRecoveryResponse,
+} from "~/api/modelRecovery";
+import { closeSupersededRateLimitRecoveries } from "~/hooks/useModelRateLimitRecovery";
+import { observeModelRateLimitEvent } from "~/hooks/queries/endpoints/modelRateLimitPolling";
 
 /**
  * Hook for single-file Q&A chat in a knowledge space.
@@ -19,6 +27,7 @@ import store from "~/store";
  * @param fileId  - File ID within the space; empty string disables the hook.
  */
 export default function useFileChat(spaceId: string, fileId: string) {
+    const queryClient = useQueryClient();
     const chatModel = useRecoilValue(store.chatModel);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
@@ -28,6 +37,9 @@ export default function useFileChat(spaceId: string, fileId: string) {
 
     const messagesRef = useRef<ChatMessage[]>([]);
     messagesRef.current = messages;
+    const recoveryResolverRef = useRef<((response: ModelRecoveryResponse) => void) | null>(null);
+    const recoveryAcceptedRef = useRef(true);
+    const recoveryErrorTypeRef = useRef<string | undefined>();
 
     const enabled = !!spaceId && !!fileId;
 
@@ -50,9 +62,11 @@ export default function useFileChat(spaceId: string, fileId: string) {
     const buildSubmission = useCallback(
         (
             payload: Record<string, any>,
-            responseMessageId: string
+            responseMessageId: string,
+            sseUrl = getFileChatSSEUrl(spaceId, fileId),
+            recoveryCommand?: ModelRecoveryCommand,
         ): StreamChatSSESubmission => ({
-            sseUrl: getFileChatSSEUrl(spaceId, fileId),
+            sseUrl,
             payload,
             onStart: () => setIsStreaming(true),
             onMessage: (fullText) => {
@@ -61,7 +75,10 @@ export default function useFileChat(spaceId: string, fileId: string) {
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) msgs[idx] = { ...msgs[idx], text: fullText };
+                    if (
+                        idx >= 0
+                        && (!recoveryCommand || msgs[idx].attemptId === recoveryCommand.attemptId)
+                    ) msgs[idx] = { ...msgs[idx], text: fullText };
                     return msgs;
                 });
             },
@@ -71,29 +88,49 @@ export default function useFileChat(spaceId: string, fileId: string) {
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) {
+                    if (
+                        idx >= 0
+                        && (!recoveryCommand || msgs[idx].attemptId === recoveryCommand.attemptId)
+                    ) {
                         // Swap the temporary placeholder id for the real persisted
                         // ChatMessage id so like/dislike targets the right row before a reload.
                         msgs[idx] = {
                             ...msgs[idx],
                             text: fullText,
                             ...(realMessageId != null && { messageId: String(realMessageId) }),
+                            error: false,
+                            unfinished: false,
+                            rateLimitState: 'normal',
                         };
                     }
                     return msgs;
                 });
             },
-            onError: (error) => {
+            onError: (error, meta) => {
+                observeModelRateLimitEvent(queryClient, meta);
+                recoveryAcceptedRef.current = false;
+                recoveryErrorTypeRef.current = meta?.errorType;
                 setMessages((prev) => {
                     const msgs = [...prev];
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) {
+                    if (
+                        idx >= 0
+                        && (!recoveryCommand || !meta?.attemptId || meta.attemptId === recoveryCommand.attemptId)
+                    ) {
                         msgs[idx] = {
                             ...msgs[idx],
-                            text: error || "An error occurred, please try again",
+                            errorText: error,
                             error: true,
+                            errorType: meta?.errorType,
+                            executionId: meta?.executionId ?? recoveryCommand?.executionId,
+                            attemptId: meta?.attemptId ?? recoveryCommand?.attemptId,
+                            recoverySubjectId: meta?.recoverySubjectId ?? recoveryCommand?.subjectId,
+                            modelId: meta?.modelId ?? msgs[idx].modelId,
+                            rateLimitState: meta?.rateLimitState,
+                            resumeMode: meta?.resumeMode,
+                            unfinished: meta?.errorType === 'rate_limit',
                         };
                     }
                     return msgs;
@@ -102,9 +139,62 @@ export default function useFileChat(spaceId: string, fileId: string) {
             onEnd: () => {
                 setIsStreaming(false);
                 setSseSubmission(null);
+                if (recoveryCommand && recoveryResolverRef.current) {
+                    recoveryResolverRef.current({
+                        execution_id: recoveryCommand.executionId,
+                        attempt_id: recoveryCommand.attemptId,
+                        accepted: recoveryAcceptedRef.current,
+                        error_type: recoveryErrorTypeRef.current,
+                    });
+                    recoveryResolverRef.current = null;
+                }
             },
         }),
-        [spaceId, fileId]
+        [spaceId, fileId, queryClient]
+    );
+
+    const recoverRateLimitedMessage = useCallback(
+        (command: ModelRecoveryCommand): Promise<ModelRecoveryResponse> => {
+            const responseMessage = messagesRef.current.find(
+                (message) => message.executionId === command.executionId,
+            );
+            if (!responseMessage || isStreaming) {
+                return Promise.resolve({
+                    execution_id: command.executionId,
+                    attempt_id: command.attemptId,
+                    accepted: false,
+                });
+            }
+            const request = buildModelRecoveryRequest(
+                { entry: 'knowledge', spaceId },
+                command,
+            );
+            const baseUrl = (__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
+            recoveryAcceptedRef.current = true;
+            recoveryErrorTypeRef.current = undefined;
+            setMessages((previous) => previous.map((message) => (
+                message.executionId === command.executionId
+                    ? {
+                        ...message,
+                        attemptId: command.attemptId,
+                        error: false,
+                        errorText: undefined,
+                        unfinished: true,
+                    }
+                    : message
+            )));
+            setIsStreaming(true);
+            setSseSubmission(buildSubmission(
+                request.body,
+                responseMessage.messageId,
+                `${baseUrl}${request.url}`,
+                command,
+            ));
+            return new Promise((resolve) => {
+                recoveryResolverRef.current = resolve;
+            });
+        },
+        [buildSubmission, isStreaming, spaceId],
     );
 
     // --- Send a message ---
@@ -134,7 +224,11 @@ export default function useFileChat(spaceId: string, fileId: string) {
                 error: false,
             };
 
-            setMessages((prev) => [...prev, userMessage, initialResponse]);
+            setMessages((prev) => [
+                ...closeSupersededRateLimitRecoveries(prev),
+                userMessage,
+                initialResponse,
+            ]);
             // Lock input immediately — don't wait for SSE open event
             setIsStreaming(true);
             setSseSubmission(
@@ -211,5 +305,6 @@ export default function useFileChat(spaceId: string, fileId: string) {
         stopGenerating,
         clearConversation,
         regenerate,
+        recoverRateLimitedMessage,
     };
 }

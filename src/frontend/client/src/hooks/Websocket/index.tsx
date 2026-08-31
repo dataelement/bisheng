@@ -1,17 +1,20 @@
 // @ts-strict-ignore
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { getLinsightSessionVersionList, userInputLinsightEvent, userStopLinsightEvent } from "~/api/linsight";
 import { SopStatus } from "~/store/linsight";
 import { useToastContext } from "~/Providers";
 import { toggleNav } from "~/utils";
 import { useLinsightManager } from "../useLinsightManager";
 import { MockWebSocket } from "./mock";
+import { observeModelRateLimitEvent } from "~/hooks/queries/endpoints/modelRateLimitPolling";
 const MOCK = false
 
 // 每个会话单独分配一个 WebSocket实例
 const connections: Record<string, WebSocket> = {};
 
 export const useLinsightWebSocket = (versionId) => {
+    const queryClient = useQueryClient();
     const { getLinsight, updateLinsight } = useLinsightManager()
     const { showToast } = useToastContext();
     const maxRetryCountRef = useRef(5);
@@ -348,6 +351,11 @@ export const useLinsightWebSocket = (versionId) => {
                     break;
                 case 'error_message':
                     console.error(taskData.data.error, id, activeVersionIdRef.current)
+                    observeModelRateLimitEvent(queryClient, {
+                        errorType: taskData.data.error_type,
+                        modelId: taskData.data.model_id,
+                        rateLimitState: taskData.data.rate_limit_state,
+                    });
                     if (id === activeVersionIdRef.current) {
                         updateLinsight(id, {
                             taskError: taskData.data.error,
@@ -357,6 +365,12 @@ export const useLinsightWebSocket = (versionId) => {
                                 error_code: taskData.data.error_code,
                                 error_type: taskData.data.error_type,
                                 detail: taskData.data.detail,
+                                execution_id: taskData.data.execution_id,
+                                attempt_id: taskData.data.attempt_id,
+                                recovery_subject_id: taskData.data.recovery_subject_id,
+                                model_id: taskData.data.model_id,
+                                rate_limit_state: taskData.data.rate_limit_state,
+                                resume_mode: taskData.data.resume_mode,
                             },
                             status: SopStatus.Stoped
                         })
@@ -388,7 +402,7 @@ export const useLinsightWebSocket = (versionId) => {
         websocket.onerror = (error) => {
             console.error(`WebSocket error for session ${id}:`, error);
         };
-    }, [])
+    }, [queryClient])
 
 
     useEffect(() => {
@@ -400,7 +414,7 @@ export const useLinsightWebSocket = (versionId) => {
             connect(task.versionId, { type: 'init' });
             maxRetryCountRef.current = 3;
         }
-    }, [task])
+    }, [task, connect])
 
     const stop = useCallback(() => {
         if (MOCK) {
@@ -475,4 +489,3 @@ export const useLinsightWebSocket = (versionId) => {
 
     return { stop, sendInput };
 };
-

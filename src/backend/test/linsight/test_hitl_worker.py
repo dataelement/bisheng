@@ -109,6 +109,16 @@ def test_encode_queue_item_resume():
     }
 
 
+def test_encode_queue_item_continue_uses_existing_protocol():
+    item = encode_queue_item("svid-1", continue_question="retry the original question")
+    assert item == {
+        "session_version_id": "svid-1",
+        "resume": False,
+        "user_input": None,
+        "continue_question": "retry the original question",
+    }
+
+
 def test_parse_queue_item_legacy_string_is_new_task():
     # Backward compat: a bare session_version_id string == resume=False.
     parsed = parse_queue_item("svid-legacy")

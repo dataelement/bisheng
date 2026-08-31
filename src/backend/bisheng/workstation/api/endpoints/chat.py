@@ -1,7 +1,9 @@
 import asyncio
 from typing import Union
 
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Body, Request, Response
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion
 from bisheng.api.v1.schemas import resp_200
@@ -9,6 +11,11 @@ from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.core.context.tenant import bypass_tenant_filter_if
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSessionDao
+from bisheng.llm.domain.services.model_rate_limit import RecoveryAction, RecoveryCommand
+from bisheng.llm.domain.services.model_recovery_service import (
+    RecoveryNotAllowedError,
+    build_recovery_rejected_sse,
+)
 from bisheng.workstation.domain.schemas import WorkstationMessage
 from bisheng.workstation.domain.services.chat_helpers import (
     _convert_legacy_message,
@@ -17,10 +24,21 @@ from bisheng.workstation.domain.services.chat_helpers import (
     _is_new_format,
 )
 
-from ...domain.services.chat_service import stream_chat_completion
+from ...domain.services.chat_service import (
+    DailyChatRecoveryPort,
+    DailyChatRecoveryService,
+    stream_chat_completion,
+)
 from ..dependencies import LoginUserDep, ShareLink, ShareLinkDep
 
 router = APIRouter()
+
+
+class DailyChatRecoveryRequest(BaseModel):
+    attempt_id: str
+    subject_id: str
+    action: RecoveryAction
+    target_model_id: int | None = None
 
 
 @router.post("/gen_title")
@@ -103,3 +121,34 @@ async def chat_completions(
     login_user=LoginUserDep,
 ):
     return await stream_chat_completion(request, data, login_user)
+
+
+@router.post("/chat/executions/{execution_id}/recover")
+async def recover_chat_execution(
+    execution_id: str,
+    data: DailyChatRecoveryRequest,
+    request: Request,
+    login_user=LoginUserDep,
+):
+    command = RecoveryCommand(
+        execution_id=execution_id,
+        attempt_id=data.attempt_id,
+        subject_id=data.subject_id,
+        action=data.action,
+        target_model_id=data.target_model_id,
+    )
+    try:
+        result = await DailyChatRecoveryService(
+            port_factory=lambda user: DailyChatRecoveryPort(user, request),
+        ).recover(command, login_user=login_user)
+    except RecoveryNotAllowedError:
+        return StreamingResponse(
+            iter([build_recovery_rejected_sse(command)]),
+            media_type="text/event-stream",
+        )
+    if isinstance(result.payload, Response):
+        return result.payload
+    return StreamingResponse(
+        iter([build_recovery_rejected_sse(result.attempt)]),
+        media_type="text/event-stream",
+    )

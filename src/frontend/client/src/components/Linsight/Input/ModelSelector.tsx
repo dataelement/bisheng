@@ -11,6 +11,8 @@ import { useEffect, useMemo } from 'react';
 import { getLinsightModelConfig } from '~/api/linsight';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import { ModelAvailabilityOption, WorkbenchModelOption } from '~/components/Chat/ModelAvailabilityOption';
+import { getTaskDefaultModelId, getUniqueWorkbenchModels } from './modelSelectorHelpers';
 
 interface ModelSelectorProps {
     value: string;
@@ -30,67 +32,38 @@ export function ModelSelector({ value, disabled = false, onChange }: ModelSelect
 
     // Dedup by model id — multiple LLM servers can expose the same model.
     const options = useMemo(() => {
-        const models = (bsConfig as any)?.models || [];
-        const seen = new Set<string>();
-        return models.filter((opt: any) => {
-            // Radix <SelectItem> throws when its value is an empty string.
-            // A stale / mis-configured workbench model can carry a blank id
-            // (older backends don't sanitize it out), so drop those here —
-            // never render <SelectItem value="">, which crashes the page.
-            if (opt?.id == null || String(opt.id) === "") return false;
-            const id = String(opt.id);
-            if (seen.has(id)) return false;
-            seen.add(id);
-            return true;
-        });
+        const models: WorkbenchModelOption[] = bsConfig?.models || [];
+        return getUniqueWorkbenchModels(models);
     }, [bsConfig]);
 
     const defaultId = useMemo(() => {
-        if (options.length === 0) return '';
-        const adminDefault = linsightModelCfg?.linsight_default_model_id;
-        if (adminDefault != null && options.some((opt: any) => String(opt.id) === String(adminDefault))) {
-            return String(adminDefault);
-        }
-        return String(options[0].id);
+        return getTaskDefaultModelId(options, linsightModelCfg?.linsight_default_model_id);
     }, [options, linsightModelCfg]);
 
     // Apply the default when nothing is selected yet, or repair an invalid value.
     useEffect(() => {
         if (!defaultId) return;
-        const valid = value && options.some((opt: any) => String(opt.id) === String(value));
+        const valid = value && options.some((opt) => String(opt.id) === String(value));
         if (!valid) onChange(defaultId);
     }, [defaultId, value, options, onChange]);
 
     const label = useMemo(() => {
-        const current = options.find((opt: any) => String(opt.id) === String(value));
-        return current?.displayName ?? current?.name ?? '';
+        return options.find((opt) => String(opt.id) === String(value));
     }, [options, value]);
 
     if (options.length === 0) return null;
 
     return (
         <Select value={String(value)} disabled={disabled} onValueChange={onChange}>
-            <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(40vw,220px)] max-md:max-w-[min(40vw,140px)] gap-1 overflow-hidden border-none bg-transparent px-2 text-text-2 shadow-none outline-none hover:bg-black/5 focus:ring-0">
-                <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-normal">
-                    {label}
-                </span>
+            <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(40vw,220px)] max-md:max-w-[min(40vw,140px)] gap-1 overflow-hidden border-none bg-transparent px-2 text-text-2 shadow-none outline-none hover:bg-fill-1 focus:ring-0">
+                {label ? <ModelAvailabilityOption model={label} showDescription={false} /> : null}
             </SelectTrigger>
             {/* Mirrors AiModelSelect: `auto` skips the trigger-width floor so the
                 popup fits the longest option between the clamps. */}
             <SelectContent auto className="bg-white w-auto min-w-[100px] max-w-[240px]">
-                {options.map((opt: any) => (
+                {options.map((opt) => (
                     <SelectItem key={String(opt.id)} value={String(opt.id)} textValue={opt.displayName ?? opt.name}>
-                        <div className="flex min-w-0 items-center py-0.5">
-                            <span className="shrink-0 text-slate-700">{opt.displayName ?? opt.name}</span>
-                            {opt.description && (
-                                <>
-                                    <span className="mx-1.5 h-3 w-px shrink-0 bg-fill-3" />
-                                    <span className="min-w-0 truncate text-xs font-normal text-text-3">
-                                        {opt.description}
-                                    </span>
-                                </>
-                            )}
-                        </div>
+                        <ModelAvailabilityOption model={opt} />
                     </SelectItem>
                 ))}
             </SelectContent>

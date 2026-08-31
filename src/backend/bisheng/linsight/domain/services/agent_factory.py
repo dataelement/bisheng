@@ -748,6 +748,35 @@ async def create_linsight_agent(
 
     svid = svid or session_model.id
     model = await _resolve_model(session_model, model_id)
+    from bisheng.llm.domain.services.model_rate_limit import (
+        ModelCallContext,
+        ModelCallEntry,
+        ModelCallResumeMode,
+        ModelRateLimitCallObserver,
+    )
+
+    rate_limit_observer_kwargs: dict = {}
+    tenant_id = getattr(session_model, "tenant_id", None)
+    effective_model_id = model_id or getattr(session_model, "model", None)
+    if tenant_id is not None and effective_model_id is not None:
+        rate_limit_observer = ModelRateLimitCallObserver(
+            ModelCallContext(
+                tenant_id=int(tenant_id),
+                user_id=int(session_model.user_id or 0),
+                model_id=int(effective_model_id),
+                entry=ModelCallEntry.TASK,
+                execution_id=str(svid),
+                attempt_id=f"{svid}:model-call",
+                subject_type="linsight_session_version",
+                subject_id=str(svid),
+                resume_mode=ModelCallResumeMode.CONTINUE,
+            )
+        )
+        rate_limit_observer_kwargs = {
+            "status_version_reader": rate_limit_observer.read_status_version,
+            "failure_observer": rate_limit_observer.observe_failure,
+            "success_observer": rate_limit_observer.observe_success,
+        }
 
     if backend is None:
         backend = _default_backend(svid, file_dir)
@@ -779,7 +808,12 @@ async def create_linsight_agent(
     # client-side ValueError for video, and silent mojibake for docx/xlsx.
     has_code_interpreter = any(getattr(t, "name", None) == CODE_INTERPRETER_TOOL for t in tools)
     middlewares: list = [
-        build_resilience_middleware(linsight_conf, is_subagent=False, budget_sink=turn_budget_sink),
+        build_resilience_middleware(
+            linsight_conf,
+            is_subagent=False,
+            budget_sink=turn_budget_sink,
+            **rate_limit_observer_kwargs,
+        ),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
         *build_binary_guards(has_code_interpreter),
     ]
@@ -846,7 +880,11 @@ async def create_linsight_agent(
     # continue with the remaining steps (Layer B partial-result win).
     researcher = _build_researcher_subagent(tools)
     researcher["middleware"] = [
-        build_resilience_middleware(linsight_conf, is_subagent=True),
+        build_resilience_middleware(
+            linsight_conf,
+            is_subagent=True,
+            **rate_limit_observer_kwargs,
+        ),
         # Same tool-loop breaker on the subagent's own graph (its tool calls run in
         # a separate subgraph the main-graph middleware never wraps).
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=True),

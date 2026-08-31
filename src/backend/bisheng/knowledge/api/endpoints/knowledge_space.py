@@ -1,13 +1,16 @@
+import json
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, Query, Request
 from loguru import logger
+from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import SSEResponse, resp_200
+from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_space_chat_service,
     get_knowledge_space_creation_application_service,
@@ -54,10 +57,73 @@ from bisheng.knowledge.domain.services.knowledge_space_creation_application_serv
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
 )
+from bisheng.llm.domain.services.model_rate_limit import (
+    ModelCallEntry,
+    ModelCallResumeMode,
+    ModelRateLimitService,
+    RecoveryAction,
+    RecoveryCommand,
+)
+from bisheng.llm.domain.services.model_recovery_service import (
+    ModelRecoveryService,
+    RecoveryNotAllowedError,
+    build_recovery_rejected_sse,
+)
 from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 router = APIRouter(prefix="/knowledge/space", tags=["knowledge_space"])
+
+
+class KnowledgeChatRecoveryRequest(BaseModel):
+    attempt_id: str
+    subject_id: str
+    action: RecoveryAction
+    target_model_id: int | None = None
+
+
+class KnowledgeChatRecoveryPort:
+    def __init__(self, space_id: int, service: KnowledgeSpaceChatService) -> None:
+        self._space_id = space_id
+        self._service = service
+        self.question: ChatMessage | None = None
+
+    async def ensure_subject_access(self, execution) -> None:
+        try:
+            message = await ChatMessageDao.aget_message_by_id(int(execution.subject_id))
+        except (TypeError, ValueError) as exc:
+            raise RecoveryNotAllowedError("knowledge execution subject is invalid") from exc
+        if message is None or message.user_id != self._service.login_user.user_id:
+            raise RecoveryNotAllowedError("knowledge execution subject is unavailable")
+        try:
+            extra = json.loads(message.extra or "{}")
+            recovery = extra["recovery_request"]
+            content = json.loads(message.message or "{}")
+            if str(message.id) != execution.execution_id:
+                raise RecoveryNotAllowedError("knowledge recovery identity does not match")
+            execution.active_model_id = int(content["model_id"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RecoveryNotAllowedError("knowledge recovery metadata is unavailable") from exc
+        if int(recovery.get("space_id", 0)) != self._space_id:
+            raise RecoveryNotAllowedError("knowledge execution belongs to another space")
+        if recovery.get("mode") == "file":
+            await self._service._require_file_view_permission(self._space_id, int(recovery["file_id"]))
+        else:
+            folder_id = int(recovery.get("folder_id", 0))
+            if folder_id:
+                await self._service._require_folder_view_permission(self._space_id, folder_id)
+            else:
+                await self._service._require_space_view_permission(self._space_id)
+        self.question = message
+
+    async def ensure_target_model(self, execution, model_id: int, *, allow_busy: bool = False) -> None:
+        if not allow_busy:
+            states = await ModelRateLimitService().list_model_states(
+                self._service.login_user.tenant_id,
+                [model_id],
+            )
+            if states[model_id].rate_limit_state.value != "normal":
+                raise RecoveryNotAllowedError("target model is rate limited")
 
 
 def _resource_payload(resource: Any) -> dict | None:
@@ -495,9 +561,7 @@ async def upload_folder(
         items=items,
         parent_id=req.parent_id,
     )
-    return resp_200(
-        [_mutation_item_payload(item, result) for item, result in zip(items, results, strict=True)]
-    )
+    return resp_200([_mutation_item_payload(item, result) for item, result in zip(items, results, strict=True)])
 
 
 @router.put("/{space_id}/folders/{folder_id}")
@@ -554,10 +618,7 @@ async def add_file(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
     change_service=Depends(get_knowledge_space_file_change_service),
 ) -> Any:
-    items = [
-        {"input_id": upload_id, "type": "file", "upload_id": upload_id}
-        for upload_id in req.upload_ids
-    ]
+    items = [{"input_id": upload_id, "type": "file", "upload_id": upload_id} for upload_id in req.upload_ids]
     results = await _request_item_changes(
         owner_service=svc,
         change_service=change_service,
@@ -566,9 +627,7 @@ async def add_file(
         items=items,
         parent_id=req.parent_id,
     )
-    return resp_200(
-        [_mutation_item_payload(item, result) for item, result in zip(items, results, strict=True)]
-    )
+    return resp_200([_mutation_item_payload(item, result) for item, result in zip(items, results, strict=True)])
 
 
 @router.post("/{space_id}/web-links")
@@ -639,10 +698,7 @@ async def move_file_folder(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
     change_service=Depends(get_knowledge_space_file_change_service),
 ) -> Any:
-    items = [
-        {"input_id": str(item.id), "id": item.id, "type": item.type}
-        for item in req.items
-    ]
+    items = [{"input_id": str(item.id), "id": item.id, "type": item.type} for item in req.items]
     results = await _request_item_changes(
         owner_service=svc,
         change_service=change_service,
@@ -712,10 +768,7 @@ async def batch_delete(
 ) -> Any:
     items = [
         *({"input_id": str(resource_id), "id": resource_id, "type": "file"} for resource_id in req.file_ids),
-        *(
-            {"input_id": str(resource_id), "id": resource_id, "type": "folder"}
-            for resource_id in req.folder_ids
-        ),
+        *({"input_id": str(resource_id), "id": resource_id, "type": "folder"} for resource_id in req.folder_ids),
     ]
     results = await _request_item_changes(
         owner_service=svc,
@@ -738,10 +791,7 @@ async def batch_rename(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
     change_service=Depends(get_knowledge_space_file_change_service),
 ) -> Any:
-    items = [
-        {"input_id": str(item.id), "id": item.id, "type": item.type, "name": item.name}
-        for item in req.items
-    ]
+    items = [{"input_id": str(item.id), "id": item.id, "type": item.type, "name": item.name} for item in req.items]
     results = await _request_item_changes(
         owner_service=svc,
         change_service=change_service,
@@ -930,5 +980,60 @@ async def chat_folder(
         except Exception as e:
             logger.exception("chat_folder error")
             yield ServerError(exception=e).to_sse_event_instance_str()
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.post("/{space_id}/chat/executions/{execution_id}/recover")
+async def recover_knowledge_chat(
+    space_id: int,
+    execution_id: str,
+    req: KnowledgeChatRecoveryRequest,
+    svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+) -> Any:
+    port = KnowledgeChatRecoveryPort(space_id, svc)
+    recovery_service = ModelRecoveryService()
+    command = RecoveryCommand(
+        execution_id=execution_id,
+        attempt_id=req.attempt_id,
+        subject_id=req.subject_id,
+        action=req.action,
+        target_model_id=req.target_model_id,
+    )
+    try:
+        claimed = await recovery_service.claim_recovery(
+            command,
+            tenant_id=svc.login_user.tenant_id,
+            user_id=svc.login_user.user_id,
+            entry=ModelCallEntry.KNOWLEDGE,
+            subject_type="chat_message",
+            resume_mode=ModelCallResumeMode.READ_ONLY_REINVOKE,
+            port=port,
+        )
+    except BaseErrorCode:
+        return StreamingResponse(
+            iter([build_recovery_rejected_sse(command)]),
+            media_type="text/event-stream",
+        )
+    if not claimed.should_execute:
+        return StreamingResponse(
+            iter([build_recovery_rejected_sse(claimed)]),
+            media_type="text/event-stream",
+        )
+    if port.question is None:
+        return StreamingResponse(
+            iter([build_recovery_rejected_sse(command)]),
+            media_type="text/event-stream",
+        )
+
+    async def event_stream():
+        try:
+            async for event in svc.recover_attempt(claimed, port.question):
+                yield SSEResponse(data=event).to_string()
+        except BaseErrorCode as exc:
+            yield exc.to_sse_event_instance_str()
+        except Exception as exc:
+            logger.exception("knowledge chat recovery failed")
+            yield ServerError(exception=exc).to_sse_event_instance_str()
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

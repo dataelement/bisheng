@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Body, Depends, Request
+from loguru import logger
 
 from bisheng.api.v1.schemas import (
     KnowledgeSpaceConfig,
@@ -10,11 +11,72 @@ from bisheng.api.v1.schemas import (
 )
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.services.config_service import settings as bisheng_settings
+from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.llm.domain.services.model_rate_limit import ModelRateLimitService
+from bisheng.llm.domain.services.model_rate_limit_state import (
+    ModelRateLimitState,
+    ModelRateLimitView,
+)
+from bisheng.workstation.domain.schemas.workstation_schema import WorkstationModelRateLimitProjection
 from bisheng.workstation.domain.services import WorkStationService
 
 from ..dependencies import LoginUserDep
 
 router = APIRouter()
+
+
+async def project_workstation_model_states(
+    models: list[dict],
+    *,
+    tenant_id: int,
+    rate_limit_service=None,
+) -> list[dict]:
+    if not models:
+        return []
+
+    projected = [dict(model) for model in models]
+    model_ids: list[int] = []
+    for model in projected:
+        try:
+            model_id = int(model["id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if model_id not in model_ids:
+            model_ids.append(model_id)
+
+    states: dict[int, ModelRateLimitView] = {}
+    if model_ids:
+        service = rate_limit_service or ModelRateLimitService()
+        try:
+            states = await service.list_model_states(tenant_id, model_ids)
+        except Exception as exc:
+            logger.warning(
+                "F051 workstation model state projection failed: tenant_id={} error_type={}",
+                tenant_id,
+                type(exc).__name__,
+            )
+
+    for model in projected:
+        try:
+            model_id = int(model["id"])
+        except (KeyError, TypeError, ValueError):
+            model_id = 0
+        state = states.get(
+            model_id,
+            ModelRateLimitView(
+                model_id=model_id,
+                rate_limit_state=ModelRateLimitState.NORMAL,
+                busy_until=None,
+                status_version=0,
+            ),
+        )
+        projection = WorkstationModelRateLimitProjection(
+            rate_limit_state=state.rate_limit_state,
+            busy_until=state.busy_until,
+            status_version=state.status_version,
+        )
+        model.update(projection.model_dump(mode="json", by_alias=True))
+    return projected
 
 
 @router.get("/config", summary="Get workbench configuration", response_model=UnifiedResponseModel)
@@ -27,14 +89,18 @@ async def get_config(request: Request, login_user=LoginUserDep):
     # follows whichever loader_provider is actually selected and configured.
     knowledge_conf = await bisheng_settings.async_get_knowledge()
     ret = ret.model_dump(exclude_unset=True) if ret else {}
+    models = ret.get("models")
+    if isinstance(models, list):
+        tenant_id = get_current_tenant_id() or login_user.tenant_id
+        ret["models"] = await project_workstation_model_states(models, tenant_id=tenant_id)
     ret["linsightConfig"] = linsight_config.model_dump() if linsight_config else {}
     ret["enable_etl4lm"] = knowledge_conf.image_parser_enabled
     linsight_invitation_code = (await bisheng_settings.aget_all_config()).get("linsight_invitation_code", None)
     ret["linsight_invitation_code"] = linsight_invitation_code if linsight_invitation_code else False
     ret["linsight_cache_dir"] = "./"
     ret["waiting_list_url"] = (await bisheng_settings.aget_linsight_conf()).waiting_list_url
-    # 首钢部署专属命名空间：整段透传给前端 (deployment_label / portal_admin_url 等),
-    # 同时基于 prefix 派生 enabled 标志,供文件编码 (FileTable) 等功能门控使用。
+    # Forward the Shougang deployment namespace (for example deployment_label
+    # and portal_admin_url), and derive the feature gate from its prefix.
     shougang_raw = (await bisheng_settings.aget_all_config()).get("shougang", None)
     if isinstance(shougang_raw, dict):
         prefix = shougang_raw.get("prefix")
@@ -42,8 +108,8 @@ async def get_config(request: Request, login_user=LoginUserDep):
         ret["shougang"] = {**shougang_raw, "enabled": enabled}
     else:
         ret["shougang"] = None
-    # 知识空间目录树展示开关：透传给前端 sidebar (KnowledgeSpaceItem) 做门控。
-    # 缺省视为 true；中粮场内部署设 false 时只展示空间、不展开文件夹树。
+    # Forward the knowledge-space directory-tree gate to KnowledgeSpaceItem.
+    # Default to true; the COFCO deployment disables folder expansion.
     ks_raw = (await bisheng_settings.aget_all_config()).get("knowledge_space", None)
     tree_display = True
     if isinstance(ks_raw, dict):
@@ -53,19 +119,15 @@ async def get_config(request: Request, login_user=LoginUserDep):
     # Sourced from tenant-level config (WORKSTATION_KNOWLEDGE_SPACE / WORKSTATION_SUBSCRIPTION),
     # a different source than the YAML-derived tree_structured_directory_display above.
     # Already tenant-inherited via aresolve; empty string => client falls back to its
-    # localized default ("AI 助手").
+    # localized default assistant label.
     ks_assistant_cfg = await WorkStationService.get_knowledge_space_config()
     sub_assistant_cfg = await WorkStationService.get_subscription_config()
     ret["knowledge_space"]["assistant_name"] = (ks_assistant_cfg.assistant_name or "") if ks_assistant_cfg else ""
     ret["subscription"] = {"assistant_name": (sub_assistant_cfg.assistant_name or "") if sub_assistant_cfg else ""}
     # Sidebar entry names for the knowledge-space / subscription modules; the home and
     # app-center ones ride along in the daily config dump above. Empty => client i18n default.
-    ret["knowledge_space"]["menu_display_name"] = (
-        (ks_assistant_cfg.menu_display_name or "") if ks_assistant_cfg else ""
-    )
-    ret["subscription"]["menu_display_name"] = (
-        (sub_assistant_cfg.menu_display_name or "") if sub_assistant_cfg else ""
-    )
+    ret["knowledge_space"]["menu_display_name"] = (ks_assistant_cfg.menu_display_name or "") if ks_assistant_cfg else ""
+    ret["subscription"]["menu_display_name"] = (sub_assistant_cfg.menu_display_name or "") if sub_assistant_cfg else ""
     return resp_200(data=ret)
 
 

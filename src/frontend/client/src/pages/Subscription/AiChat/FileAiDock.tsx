@@ -249,6 +249,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
         stopGenerating,
         clearConversation,
         regenerate,
+        recoverRateLimitedMessage,
     } = useFileChat(spaceId, fileId);
 
     useChatModelMemo(user, bsConfig as any);
@@ -343,6 +344,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                         emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                         onPresetClick={(q) => setInputText(q)}
                         onRegenerate={regenerate}
+                        onRecover={recoverRateLimitedMessage}
                     />
                     <div
                         aria-hidden
@@ -496,6 +498,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                                 emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                                 onPresetClick={(q) => setInputText(q)}
                                 onRegenerate={regenerate}
+                                onRecover={recoverRateLimitedMessage}
                             />
                         </div>
                     </div>

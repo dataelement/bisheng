@@ -50,9 +50,11 @@ from langgraph.checkpoint.base import (
     RunnableConfig,
 )
 
-_CKPT_DATA_KEY = "linsight:ckpt:data:{thread_id}:{checkpoint_ns}:{checkpoint_id}"
-_CKPT_IDX_KEY = "linsight:ckpt:idx:{thread_id}:{checkpoint_ns}"
-_CKPT_WRITE_KEY = "linsight:ckpt:write:{thread_id}:{checkpoint_ns}:{checkpoint_id}:{task_id_b64}:{idx}"
+_CKPT_DATA_KEY = "{namespace}:ckpt:data:{thread_id}:{checkpoint_ns}:{checkpoint_id}"
+_CKPT_IDX_KEY = "{namespace}:ckpt:idx:{thread_id}:{checkpoint_ns}"
+_CKPT_WRITE_KEY = (
+    "{namespace}:ckpt:write:{thread_id}:{checkpoint_ns}:{checkpoint_id}:{task_id_b64}:{idx}"
+)
 _DEFAULT_TTL = 7 * 24 * 3600  # 7 days
 
 
@@ -63,9 +65,12 @@ class PlainRedisCheckpointer(BaseCheckpointSaver):
     Checkpoint serialization uses langgraph's built-in JsonPlusSerializer.
     """
 
-    def __init__(self, ttl_seconds: int = _DEFAULT_TTL) -> None:
+    def __init__(self, ttl_seconds: int = _DEFAULT_TTL, *, namespace: str = "linsight") -> None:
         super().__init__(serde=JsonPlusSerializer())
         self._ttl = ttl_seconds
+        if not namespace or ":" in namespace:
+            raise ValueError("checkpoint namespace must be a non-empty key segment")
+        self._namespace = namespace
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -86,10 +91,19 @@ class PlainRedisCheckpointer(BaseCheckpointSaver):
         return base64.urlsafe_b64decode(encoded + "=" * padding).decode()
 
     def _ckpt_key(self, thread_id: str, checkpoint_ns: str, checkpoint_id: str) -> str:
-        return _CKPT_DATA_KEY.format(thread_id=thread_id, checkpoint_ns=checkpoint_ns, checkpoint_id=checkpoint_id)
+        return _CKPT_DATA_KEY.format(
+            namespace=self._namespace,
+            thread_id=thread_id,
+            checkpoint_ns=checkpoint_ns,
+            checkpoint_id=checkpoint_id,
+        )
 
     def _idx_key(self, thread_id: str, checkpoint_ns: str) -> str:
-        return _CKPT_IDX_KEY.format(thread_id=thread_id, checkpoint_ns=checkpoint_ns)
+        return _CKPT_IDX_KEY.format(
+            namespace=self._namespace,
+            thread_id=thread_id,
+            checkpoint_ns=checkpoint_ns,
+        )
 
     def _write_key(
         self,
@@ -100,6 +114,7 @@ class PlainRedisCheckpointer(BaseCheckpointSaver):
         idx: int,
     ) -> str:
         return _CKPT_WRITE_KEY.format(
+            namespace=self._namespace,
             thread_id=thread_id,
             checkpoint_ns=checkpoint_ns,
             checkpoint_id=checkpoint_id,
@@ -109,6 +124,7 @@ class PlainRedisCheckpointer(BaseCheckpointSaver):
 
     def _write_scan_pattern(self, thread_id: str, checkpoint_ns: str, checkpoint_id: str) -> str:
         return _CKPT_WRITE_KEY.format(
+            namespace=self._namespace,
             thread_id=thread_id,
             checkpoint_ns=checkpoint_ns,
             checkpoint_id=checkpoint_id,
@@ -359,10 +375,14 @@ class PlainRedisCheckpointer(BaseCheckpointSaver):
         asyncio.get_event_loop().run_until_complete(self.aput_writes(config, writes, task_id, task_path))
 
 
-def make_checkpointer(ttl_seconds: int = _DEFAULT_TTL) -> PlainRedisCheckpointer:
+def make_checkpointer(
+    ttl_seconds: int = _DEFAULT_TTL,
+    *,
+    namespace: str = "linsight",
+) -> PlainRedisCheckpointer:
     """Factory used by Track B.
 
     Inject into ``create_deep_agent(checkpointer=make_checkpointer())``.
     Redis connection is resolved lazily on first call via ``get_redis_client()``.
     """
-    return PlainRedisCheckpointer(ttl_seconds=ttl_seconds)
+    return PlainRedisCheckpointer(ttl_seconds=ttl_seconds, namespace=namespace)
