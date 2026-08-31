@@ -43,7 +43,7 @@ export function PaginationBar({ currentPage, pageSize, total, onPageChange }: Pa
 
     if (isH5) {
         return (
-            <div className="ml-auto flex min-w-0 items-center justify-end gap-3 whitespace-nowrap text-[12px] text-[#4e5969]">
+            <div className="ml-auto flex min-w-0 items-center justify-end gap-3 whitespace-nowrap text-[12px] text-text-2">
                 <div className="shrink-0">
                     {localize("com_knowledge.total_prefix")}{" "}
                     <span className="text-blue-500">{total}</span> {localize("com_knowledge.items_comma")}
@@ -65,7 +65,7 @@ export function PaginationBar({ currentPage, pageSize, total, onPageChange }: Pa
                             </PaginationLink>
                         </PaginationItem>
                         <PaginationItem>
-                            <span className="px-2 text-[12px] text-[#4e5969]">
+                            <span className="px-2 text-[12px] text-text-2">
                                 {currentPage}/{totalPages}
                             </span>
                         </PaginationItem>
@@ -89,7 +89,7 @@ export function PaginationBar({ currentPage, pageSize, total, onPageChange }: Pa
     }
 
     return (
-        <div className="flex items-center gap-4 text-[14px] text-[#4e5969]">
+        <div className="flex items-center gap-4 text-[14px] text-text-2">
             <div className="flex items-center gap-1">
                 <span>
                     {localize("com_knowledge.total_prefix")}{" "}

@@ -22,6 +22,8 @@ export const ROLE_QUOTA_DEFAULT_FILE_GB = "500"
 export const ROLE_QUOTA_DEFAULT_CHANNEL = "10"
 export const ROLE_QUOTA_DEFAULT_SPACE_SUBSCRIBE = "100"
 export const ROLE_QUOTA_DEFAULT_SPACE_CREATE = "50"
+// Deduped across a user's own channels; the backend default is 200.
+export const ROLE_QUOTA_DEFAULT_INFO_SOURCE = "200"
 
 export interface RoleQuotaState {
   fileUnlimited: boolean
@@ -32,6 +34,8 @@ export interface RoleQuotaState {
   spaceSubscribeCount: string
   spaceCreateUnlimited: boolean
   spaceCreateCount: string
+  infoSourceUnlimited: boolean
+  infoSourceCount: string
 }
 
 type QuotaConfig = Record<string, unknown> | null | undefined
@@ -74,6 +78,15 @@ function toCountValue(unlimited: boolean, count: string): number {
   return unlimited ? -1 : Math.max(0, Number(count || 0))
 }
 
+/** Info-source subscription quota: integer, inclusive [0, 10000] — the same
+ * range the backend's role-quota validator enforces. */
+export function normalizeInfoSourceSubscribeCount(raw: string): number | null {
+  const n = Number(String(raw).trim())
+  if (!Number.isInteger(n)) return null
+  if (n < 0 || n > 10000) return null
+  return n
+}
+
 export function createDefaultRoleQuota(): RoleQuotaState {
   return {
     fileUnlimited: false,
@@ -84,6 +97,8 @@ export function createDefaultRoleQuota(): RoleQuotaState {
     spaceSubscribeCount: ROLE_QUOTA_DEFAULT_SPACE_SUBSCRIBE,
     spaceCreateUnlimited: false,
     spaceCreateCount: ROLE_QUOTA_DEFAULT_SPACE_CREATE,
+    infoSourceUnlimited: false,
+    infoSourceCount: ROLE_QUOTA_DEFAULT_INFO_SOURCE,
   }
 }
 
@@ -96,6 +111,7 @@ export function parseRoleQuota(quotaConfig: QuotaConfig): RoleQuotaState {
   const channel = readCountQuota(qc.channel, ROLE_QUOTA_DEFAULT_CHANNEL)
   const spaceSubscribe = readCountQuota(qc.knowledge_space_subscribe, ROLE_QUOTA_DEFAULT_SPACE_SUBSCRIBE)
   const spaceCreate = readCountQuota(qc.knowledge_space, ROLE_QUOTA_DEFAULT_SPACE_CREATE)
+  const infoSource = readCountQuota(qc.info_source_subscribe, ROLE_QUOTA_DEFAULT_INFO_SOURCE)
 
   return {
     fileUnlimited: fileLimit === -1,
@@ -106,6 +122,8 @@ export function parseRoleQuota(quotaConfig: QuotaConfig): RoleQuotaState {
     spaceSubscribeCount: spaceSubscribe.count,
     spaceCreateUnlimited: spaceCreate.unlimited,
     spaceCreateCount: spaceCreate.count,
+    infoSourceUnlimited: infoSource.unlimited,
+    infoSourceCount: infoSource.count,
   }
 }
 
@@ -127,6 +145,7 @@ export function buildRoleQuotaConfig(
     channel: toCountValue(state.channelUnlimited, state.channelCount),
     knowledge_space_subscribe: toCountValue(state.spaceSubscribeUnlimited, state.spaceSubscribeCount),
     knowledge_space: toCountValue(state.spaceCreateUnlimited, state.spaceCreateCount),
+    info_source_subscribe: toCountValue(state.infoSourceUnlimited, state.infoSourceCount),
   }
 }
 
@@ -134,6 +153,9 @@ export function buildRoleQuotaConfig(
 export function validateRoleQuota(state: RoleQuotaState): string | null {
   if (!state.fileUnlimited && normalizeKnowledgeSpaceFileGb(state.fileGb) === null) {
     return "system.knowledgeSpaceFileQuotaInvalid"
+  }
+  if (!state.infoSourceUnlimited && normalizeInfoSourceSubscribeCount(state.infoSourceCount) === null) {
+    return "system.infoSourceSubscribeQuotaInvalid"
   }
   return null
 }
@@ -149,6 +171,8 @@ export function serializeRoleQuotaSnapshot(state: RoleQuotaState): (string | boo
     state.spaceSubscribeCount,
     state.spaceCreateUnlimited,
     state.spaceCreateCount,
+    state.infoSourceUnlimited,
+    state.infoSourceCount,
   ]
 }
 

@@ -499,6 +499,13 @@ class ChannelService:
 
         bisheng_information_client = await get_bisheng_information_client()
         if channel_data.source_list:
+            # Role/tenant quota on deduped subscribed info sources (`info_source_subscribe`,
+            # default 200; 0 = adding sources prohibited). Checked before the external
+            # subscribe call so a limit error aborts creation without side effects,
+            # mirroring the channel-count gate above.
+            await QuotaService.check_info_source_subscribe_limit(
+                login_user.user_id, login_user.tenant_id, channel_data.source_list, login_user=login_user
+            )
             # A source already present in the local channel_info_source table has been
             # subscribed before. The row and the information-service subscription share a
             # lifecycle (both created on first subscribe, both removed together by the
@@ -1939,6 +1946,12 @@ class ChannelService:
                 source_list_changed = True
 
             if to_add_sources:
+                # Enforce the `info_source_subscribe` quota before subscribing; deduped
+                # against the operator's existing sources, so swapping sources within
+                # this channel does not consume extra slots.
+                await QuotaService.check_info_source_subscribe_limit(
+                    login_user.user_id, login_user.tenant_id, to_add_sources, login_user=login_user
+                )
                 # Subscribe only sources not already subscribed (missing from
                 # channel_info_source). Already-subscribed sources are skipped.
                 existing_add = await self.channel_info_source_repository.find_by_ids(to_add_sources)

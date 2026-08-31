@@ -113,7 +113,7 @@ export function GuestConvoItem({ conv, isActive, onClick, onRename, onDelete }: 
           <input
             ref={inputRef}
             type="text"
-            className="w-full rounded bg-white px-1 text-[14px] leading-tight focus-visible:outline-none text-[#212121]"
+            className="w-full rounded bg-white px-1 text-[14px] leading-tight focus-visible:outline-none text-text-1"
             value={titleInput ?? ''}
             onChange={(e) => setTitleInput(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -121,7 +121,7 @@ export function GuestConvoItem({ conv, isActive, onClick, onRename, onDelete }: 
           />
           <div className="flex gap-1 shrink-0">
             <button onClick={cancelRename}>
-              <X className="h-4 w-4 transition-colors duration-200 ease-in-out hover:opacity-70 text-[#4e5969]" />
+              <X className="h-4 w-4 transition-colors duration-200 ease-in-out hover:opacity-70 text-text-2" />
             </button>
             <button onClick={submitRename}>
               <Check className="h-4 w-4 transition-colors duration-200 ease-in-out hover:opacity-70 text-blue-500" />
@@ -138,7 +138,7 @@ export function GuestConvoItem({ conv, isActive, onClick, onRename, onDelete }: 
           }}
         >
           <TodayItemIcon className="size-[24px] shrink-0 text-[#6B778D]" />
-          <span className="text-[#212121] text-[14px] leading-[20px] font-['PingFang_SC:Regular',sans-serif] truncate">
+          <span className="text-text-1 text-[14px] leading-[20px] font-['PingFang_SC:Regular',sans-serif] truncate">
             {conv.title}
           </span>
         </div>
@@ -163,7 +163,7 @@ export function GuestConvoItem({ conv, isActive, onClick, onRename, onDelete }: 
                 <Menu.MenuButton
                   id={`guest-convo-menu-${conv.id}`}
                   className={cn(
-                    'z-30 inline-flex h-4 w-4 items-center justify-center gap-2 rounded-md border-none p-0 text-sm font-medium transition-all duration-200 ease-in-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 text-[#86909c] hover:text-[#1d2129]',
+                    'z-30 inline-flex h-4 w-4 items-center justify-center gap-2 rounded-md border-none p-0 text-sm font-medium transition-all duration-200 ease-in-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 text-text-3 hover:text-text-1',
                     isActive
                       ? 'opacity-100'
                       : 'opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 data-[open]:opacity-100 coarse-pointer:opacity-100',

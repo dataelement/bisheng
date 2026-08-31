@@ -5,6 +5,9 @@ import openpyxl
 import pandas as pd
 from loguru import logger
 
+from bisheng.common.errcode.knowledge import KnowledgeFileDamagedError
+from bisheng.knowledge.rag.pipeline.loader.utils.xlsx_repair import repair_xlsx_styles
+
 
 def xls_to_xlsx(xls_path):
     if not xls_path.lower().endswith(".xls"):
@@ -446,6 +449,36 @@ def is_list_of_lists_empty(data_list):
     return not any(any(cell is not None and str(cell).strip() != "" for cell in row) for row in data_list)
 
 
+def _load_workbook_with_style_repair(excel_path: str):
+    """Open a workbook, retrying once on a repaired copy when styles are the blocker.
+
+    openpyxl rejects a handful of style constructs Excel and WPS write happily
+    (see ``xlsx_repair``), and refuses the whole workbook over them — a 28 MB
+    customer file with 18 populated sheets was unreadable for three empty
+    ``<fill/>`` elements. The retry only ever runs after a real failure, and only
+    when the repair actually changed something, so a workbook that opens today
+    takes exactly the path it takes today.
+    """
+    try:
+        return openpyxl.load_workbook(excel_path, data_only=True, read_only=False)
+    except Exception as first_error:
+        repaired_path = repair_xlsx_styles(excel_path)
+        if repaired_path is None:
+            raise
+        logger.warning(
+            "excel load failed ({}), retrying on a style-repaired copy of {}",
+            first_error,
+            os.path.basename(excel_path),
+        )
+        try:
+            return openpyxl.load_workbook(repaired_path, data_only=True, read_only=False)
+        except Exception:
+            # Report the ORIGINAL failure: the repaired copy is our artefact, and
+            # its error would send whoever reads the log after the wrong file.
+            logger.opt(exception=True).warning("style-repaired copy still unreadable")
+            raise first_error from None
+
+
 def excel_file_to_markdown(
     excel_path,
     num_header_rows,
@@ -457,10 +490,15 @@ def excel_file_to_markdown(
 ):
     logger.debug(f"\nStart ProcessingExcelDocumentation:'{excel_path}'")
     try:
-        workbook = openpyxl.load_workbook(excel_path, data_only=True, read_only=False)
+        workbook = _load_workbook_with_style_repair(excel_path)
     except Exception as e:
-        logger.debug(f"Error: Unable to loadExcelDoc. '{excel_path}'Reason: {e}")
-        return
+        # Was `logger.debug(...); return`, which made an unopenable workbook look
+        # like a workbook with no content: the loader returned zero documents, the
+        # caller marked the file parsed successfully, and nothing was ever
+        # indexed. The debug level meant the reason never even reached the log
+        # file. A file we cannot open is a parse failure and must say so.
+        logger.exception(f"Unable to load Excel doc '{excel_path}'")
+        raise KnowledgeFileDamagedError(exception=e)
 
     sheet_index = 0
     for sheet_name in workbook.sheetnames:

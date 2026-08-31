@@ -28,7 +28,7 @@ const SelectTrigger = React.forwardRef<
     {children}
     {
       showIcon && <SelectPrimitive.Icon asChild>
-        <Outlined.Down className="h-4 w-4 min-w-4 text-[#999] group-data-[state=open]:rotate-180" />
+        <Outlined.Down className="h-4 w-4 min-w-4 text-text-3 group-data-[state=open]:rotate-180" />
       </SelectPrimitive.Icon>
     }
   </SelectPrimitive.Trigger>
@@ -130,7 +130,7 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex w-full cursor-default select-none items-center rounded-md py-[5px] pl-2 pr-8 text-sm outline-none focus:bg-[#F2F3F5] dark:focus:bg-gray-700 focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      "relative flex w-full cursor-default select-none items-center rounded-md py-[5px] pl-2 pr-8 text-sm outline-none focus:bg-fill-2 dark:focus:bg-gray-700 focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       className
     )}
     {...props}

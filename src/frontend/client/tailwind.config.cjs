@@ -1,62 +1,25 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- CommonJS Tailwind config: require() is the only import form available here */
 // const { fontFamily } = require('tailwindcss/defaultTheme');
 const plugin = require('tailwindcss/plugin');
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  // 基础-多端适配原则.md §1: hover states are disabled on touch APP-WIDE — every
-  // `hover:` utility compiles wrapped in a hover-capable media query. Press
-  // feedback on touch comes from `active:` styles instead (no sticky hover).
-  // NOTE: components must keep using plain `hover:` (never a custom variant),
-  // so tailwind-merge can still dedupe business-page hover overrides.
-  future: {
-    hoverOnlyWhenSupported: true,
-  },
+  // The design system (type scale, semantic colors, radius/shadow/z tiers, the
+  // motion keyframes, `darkMode`, `hoverOnlyWhenSupported` and the pointer
+  // variants) comes from @bisheng/ui — ONE definition shared with the library's
+  // own components, so a token can no longer mean two things in two configs.
+  // Anything below is client-only: keep app-specific keys here, and add a
+  // cross-app one to the preset instead of re-declaring it here.
+  presets: [require('@bisheng/ui/tailwind-preset')],
   // packages/ui is source-shipped: its classes must be scanned here too,
   // or shared components (e.g. @bisheng/ui Button) lose their styles.
   content: ['./src/**/*.{js,jsx,ts,tsx}', '../packages/ui/src/**/*.{ts,tsx}'],
-  // darkMode: 'class',
-  darkMode: ['class'],
   theme: {
-    fontFamily: {
-      // font-family-base / font-family-mono in docs-ui-refactor/基础-字体规范.md §1.
-      // Pure system stack, kept in sync with the global body/html rule in src/style.css
-      // (that hardcoded rule is what actually sets the app-wide font; this config only
-      // affects explicit font-sans / font-mono usages).
-      sans: [
-        '-apple-system',
-        'BlinkMacSystemFont',
-        '"Segoe UI"',
-        'Roboto',
-        '"PingFang SC"',
-        '"Hiragino Sans GB"',
-        '"Microsoft YaHei"',
-        '"Noto Sans CJK SC"',
-        'sans-serif',
-      ],
-      mono: ['ui-monospace', '"SF Mono"', '"Cascadia Mono"', 'Consolas', '"Liberation Mono"', 'monospace'],
-    },
     // fontFamily: {
     //   sans: ['Söhne', 'sans-serif'],
     //   mono: ['Söhne Mono', 'monospace'],
     // },
     extend: {
-      // Semantic type scale (docs-ui-refactor/基础-字体规范.md §2/§7) — MUST live in
-      // `extend` so Tailwind's default text-xs/sm/base/... classes stay available
-      // (900+ existing usages). Values reference semantic CSS vars defined in
-      // src/style.css :root, which remap under 768px for the mobile ladder, so
-      // classNames never change per breakpoint. Each entry carries its own
-      // font-weight (400 body tier / 500 heading tier) — no extra font-medium needed.
-      fontSize: {
-        caption: ['var(--text-caption)', { lineHeight: 'var(--leading-caption)', fontWeight: '400' }],
-        'body-sm': ['var(--text-body-sm)', { lineHeight: 'var(--leading-body-sm)', fontWeight: '400' }],
-        body: ['var(--text-body)', { lineHeight: 'var(--leading-body)', fontWeight: '400' }],
-        h4: ['var(--text-h4)', { lineHeight: 'var(--leading-h4)', fontWeight: '500' }],
-        h3: ['var(--text-h3)', { lineHeight: 'var(--leading-h3)', fontWeight: '500' }],
-        h2: ['var(--text-h2)', { lineHeight: 'var(--leading-h2)', fontWeight: '500' }],
-        h1: ['var(--text-h1)', { lineHeight: 'var(--leading-h1)', fontWeight: '500' }],
-        display: ['var(--text-display)', { lineHeight: 'var(--leading-display)', fontWeight: '500' }],
-        metric: ['var(--text-metric)', { lineHeight: 'var(--leading-metric)', fontWeight: '500' }],
-      },
       width: {
         authPageWidth: '370px',
       },
@@ -160,78 +123,7 @@ module.exports = {
           800: '#06373e',
           900: '#031f29',
         },
-        // Brand accent palette — re-pointed to CSS variables so the whole app's
-        // existing `blue-*` utilities follow a single switchable theme (blue ⇄ green).
-        // Channel-triplet form keeps Tailwind's `/<alpha>` opacity modifiers working.
-        // Defaults (in style.css) match Tailwind's stock blue, so appearance is unchanged.
-        'blue-main': 'rgb(var(--brand-main) / <alpha-value>)',
-        blue: {
-          50: 'rgb(var(--brand-50) / <alpha-value>)',
-          100: 'rgb(var(--brand-100) / <alpha-value>)',
-          200: 'rgb(var(--brand-200) / <alpha-value>)',
-          300: 'rgb(var(--brand-300) / <alpha-value>)',
-          400: 'rgb(var(--brand-400) / <alpha-value>)',
-          500: 'rgb(var(--brand-500) / <alpha-value>)',
-          600: 'rgb(var(--brand-600) / <alpha-value>)',
-          700: 'rgb(var(--brand-700) / <alpha-value>)',
-          800: 'rgb(var(--brand-800) / <alpha-value>)',
-          900: 'rgb(var(--brand-900) / <alpha-value>)',
-        },
         'brand-purple': '#ab68ff',
-        // Button semantic tokens (docs-ui-refactor/组件-Button按钮.md §5.1) —
-        // RGB-channel vars defined in src/style.css :root; channel form keeps
-        // `/<alpha>` modifiers working. Neutral fill ramp is shared Arco grays.
-        'btn-gray-text': 'rgb(var(--btn-gray-text) / <alpha-value>)',
-        'btn-gray-solid-bg': 'rgb(var(--btn-gray-solid-bg) / <alpha-value>)',
-        'btn-gray-border': 'rgb(var(--btn-gray-border) / <alpha-value>)',
-        'btn-fill-1': 'rgb(var(--btn-fill-1) / <alpha-value>)',
-        'btn-fill-2': 'rgb(var(--btn-fill-2) / <alpha-value>)',
-        'btn-fill-3': 'rgb(var(--btn-fill-3) / <alpha-value>)',
-        'btn-fill-4': 'rgb(var(--btn-fill-4) / <alpha-value>)',
-        'btn-danger': 'rgb(var(--btn-danger) / <alpha-value>)',
-        'btn-danger-hover': 'rgb(var(--btn-danger-hover) / <alpha-value>)',
-        'btn-danger-active': 'rgb(var(--btn-danger-active) / <alpha-value>)',
-        'btn-disabled-bg': 'rgb(var(--btn-disabled-bg) / <alpha-value>)',
-        'btn-disabled-text': 'rgb(var(--btn-disabled-text) / <alpha-value>)',
-        'btn-disabled-border': 'rgb(var(--btn-disabled-border) / <alpha-value>)',
-        // Arco color tokens (docs-ui-refactor/基础-色彩规范.md §2/§3/§7) — semantic
-        // layer only; the --arco-gray-* primitives are intentionally NOT wired so
-        // components can't bypass the semantic names. RGB-channel vars live in
-        // src/style.css :root; channel form keeps `/<alpha>` modifiers working.
-        // Classes: text-text-1…4 / bg-fill-1…4 / border-border-base|-deep /
-        // bg-success|warning|danger(+-hover/-active/-tint). "border-base" because
-        // the plain `border` color key is taken by shadcn below. success/warning/
-        // danger never follow the blue⇄green brand theme.
-        'text-1': 'rgb(var(--text-1) / <alpha-value>)',
-        'text-2': 'rgb(var(--text-2) / <alpha-value>)',
-        'text-3': 'rgb(var(--text-3) / <alpha-value>)',
-        'text-4': 'rgb(var(--text-4) / <alpha-value>)',
-        'fill-1': 'rgb(var(--fill-1) / <alpha-value>)',
-        'fill-2': 'rgb(var(--fill-2) / <alpha-value>)',
-        'fill-3': 'rgb(var(--fill-3) / <alpha-value>)',
-        'fill-4': 'rgb(var(--fill-4) / <alpha-value>)',
-        'border-base': 'rgb(var(--border-base) / <alpha-value>)',
-        'border-deep': 'rgb(var(--border-deep) / <alpha-value>)',
-        // Page surface (bg-bg-page): white in light, #121212 in dark.
-        'bg-page': 'rgb(var(--bg-page) / <alpha-value>)',
-        success: {
-          DEFAULT: 'rgb(var(--success) / <alpha-value>)',
-          hover: 'rgb(var(--success-hover) / <alpha-value>)',
-          active: 'rgb(var(--success-active) / <alpha-value>)',
-          tint: 'rgb(var(--success-tint) / <alpha-value>)',
-        },
-        warning: {
-          DEFAULT: 'rgb(var(--warning) / <alpha-value>)',
-          hover: 'rgb(var(--warning-hover) / <alpha-value>)',
-          active: 'rgb(var(--warning-active) / <alpha-value>)',
-          tint: 'rgb(var(--warning-tint) / <alpha-value>)',
-        },
-        danger: {
-          DEFAULT: 'rgb(var(--danger) / <alpha-value>)',
-          hover: 'rgb(var(--danger-hover) / <alpha-value>)',
-          active: 'rgb(var(--danger-active) / <alpha-value>)',
-          tint: 'rgb(var(--danger-tint) / <alpha-value>)',
-        },
         'presentation': 'var(--presentation)',
         'text-primary': 'var(--text-primary)',
         'text-secondary': 'var(--text-secondary)',
@@ -295,9 +187,6 @@ module.exports = {
         },
       },
       borderRadius: {
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
         // Tailwind's ladder ends at 3xl (24px); the spec's largest container
         // step is 32px (design-token.cjs RADIUS) — extend so it has a class.
         '4xl': '2rem',
@@ -317,12 +206,6 @@ module.exports = {
         '@media (min-width: 576px) and (max-width: 768px)',
       );
       addVariant('lt-576', '@media (max-width: 575px)');
-      // Primary input: mouse + hover vs touch / coarse pointer (for hover-only controls).
-      addVariant('fine-pointer', '@media (hover: hover) and (pointer: fine)');
-      addVariant(
-        'coarse-pointer',
-        '@media not ((hover: hover) and (pointer: fine))',
-      );
     }),
     // require('@tailwindcss/typography'),
   ],

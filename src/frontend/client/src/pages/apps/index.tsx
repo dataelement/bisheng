@@ -1,10 +1,10 @@
-import { LayoutGrid } from 'lucide-react';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type UIEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
 import { AppSearchBar } from './components/AppSearchBar';
+import { EmptyStateIllustration } from '~/components/illustrations';
 import { useAppCenter } from './hooks/useAppCenter';
 import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from '~/hooks';
 import { ChannelBlocksArrowsIcon } from '~/components/icons/channels';
@@ -18,9 +18,14 @@ export default function AppCenter() {
     const {
         apps,
         loading,
+        loadingMore,
+        loadError,
+        loadMoreError,
+        hasMore,
         searchQuery,
         setSearchQuery,
         fetchApps,
+        loadMore,
         togglePin,
         continueChat,
         shareApp,
@@ -30,17 +35,31 @@ export default function AppCenter() {
     // title, so the page must drop its inline big title to avoid a duplicate.
     const isMobileLayout = usePrefersMobileLayout();
     const appLastOriginKey = 'app-last-origin';
+    const mainRef = useRef<HTMLElement | null>(null);
     const appGridRef = useRef<HTMLDivElement | null>(null);
+    const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+    const loadMoreLockRef = useRef(false);
     const [isMainScrolling, setIsMainScrolling] = useState(false);
     const mainScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const handleMainScroll = () => {
+    const triggerLoadMore = useCallback(() => {
+        if (loadMoreLockRef.current || loading || loadingMore || loadMoreError || !hasMore) return;
+        loadMoreLockRef.current = true;
+        loadMore();
+    }, [hasMore, loadMore, loadMoreError, loading, loadingMore]);
+
+    const handleMainScroll = (event: UIEvent<HTMLElement>) => {
         setIsMainScrolling(true);
         if (mainScrollTimerRef.current) clearTimeout(mainScrollTimerRef.current);
         mainScrollTimerRef.current = setTimeout(() => {
             setIsMainScrolling(false);
             mainScrollTimerRef.current = null;
         }, 600);
+
+        const node = event.currentTarget;
+        if (node.scrollTop + node.clientHeight >= node.scrollHeight - 240) {
+            triggerLoadMore();
+        }
     };
 
     useEffect(() => {
@@ -48,6 +67,11 @@ export default function AppCenter() {
             if (mainScrollTimerRef.current) clearTimeout(mainScrollTimerRef.current);
         };
     }, []);
+
+    useEffect(() => {
+        if (!loadingMore) loadMoreLockRef.current = false;
+    }, [loadingMore]);
+
     const [appGridCols, setAppGridCols] = useState(() => {
         if (typeof window === 'undefined') return 3;
         const width = window.innerWidth;
@@ -91,7 +115,22 @@ export default function AppCenter() {
         const observer = new ResizeObserver(update);
         observer.observe(el);
         return () => observer.disconnect();
-    }, [isMobileLayout]);
+    }, [apps.length, isMobileLayout]);
+
+    useEffect(() => {
+        const root = mainRef.current;
+        const target = loadMoreSentinelRef.current;
+        if (!root || !target) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) triggerLoadMore();
+            },
+            { root, rootMargin: '240px 0px', threshold: 0 },
+        );
+        observer.observe(target);
+        return () => observer.disconnect();
+    }, [apps.length, triggerLoadMore]);
 
     // Initial fetch
     useEffect(() => {
@@ -115,7 +154,7 @@ export default function AppCenter() {
             className="flex shrink-0 items-center justify-center gap-[6px] rounded-lg px-[10px] py-[6px] transition-colors fine-pointer:hover:bg-gray-50"
         >
             <ChannelBlocksArrowsIcon className="size-4 text-blue-500" />
-            <span className="font-['PingFang_SC'] text-[#212121] text-[12px] leading-[20px] whitespace-nowrap">
+            <span className="font-['PingFang_SC'] text-text-1 text-[12px] leading-[20px] whitespace-nowrap">
                 {localize('com_app.explore_more')}
             </span>
         </Link>
@@ -176,40 +215,64 @@ export default function AppCenter() {
             {/* 内容区域：flex-1 内滚动，PC 窄屏与移动端一致用 scroll-on-scroll。
                 滚动区占满整宽（滚动条贴最右），内容居中约束在 1000px */}
             <main
+                ref={mainRef}
                 className="relative flex min-h-0 w-full flex-1 flex-col items-center overflow-x-hidden overflow-y-auto scroll-on-scroll"
                 onScroll={handleMainScroll}
                 data-scrolling={isMainScrolling ? 'true' : 'false'}
             >
                 <div className="flex w-full max-w-[1000px] flex-1 flex-col items-start gap-[14px]">
                     {loading ? (
-                        <div className="flex w-full flex-1 items-center justify-center">
+                        <div className="flex w-full flex-1 flex-col items-center justify-center gap-3 text-text-3">
                             <LoadingIcon className="size-20 text-primary" />
+                            <span className="text-sm">{localize('com_list_loading')}</span>
+                        </div>
+                    ) : loadError ? (
+                        <div className="flex w-full flex-1 items-center justify-center text-text-3">
+                            <p className="text-[14px] font-normal">{localize('com_list_load_failed')}</p>
                         </div>
                     ) : apps.length === 0 ? (
                         // Empty state: fill the region and place content via flex spacers at a
                         // region-relative height (not viewport vh): ~40% on mobile, ~45% on PC.
                         <div className="w-full flex-1 flex flex-col items-center">
                             <div className="flex-[8] md:flex-[9]" aria-hidden />
-                            <AppEmptyState />
+                            {searchQuery ? (
+                                <>
+                                    <EmptyStateIllustration className="size-[120px] mb-4" />
+                                    <p className="text-[14px] font-normal text-text-3">{localize('com_list_no_results')}</p>
+                                </>
+                            ) : (
+                                <AppEmptyState />
+                            )}
                             <div className="flex-[12] md:flex-[11]" aria-hidden />
                         </div>
                     ) : (
-                        <div
-                            ref={appGridRef}
-                            className="grid w-full relative items-start gap-4"
-                            style={{ gridTemplateColumns: `repeat(${appGridCols}, minmax(0, 1fr))` }}
-                        >
-                            {apps.map((agent) => (
-                                <AgentCard
-                                    key={agent.id}
-                                    agent={agent}
-                                    isPinned={!!agent.is_pinned}
-                                    onTogglePin={togglePin}
-                                    onStartChat={continueChat}
-                                    onShare={shareApp}
-                                />
-                            ))}
-                        </div>
+                        <>
+                            <div
+                                ref={appGridRef}
+                                className="grid w-full relative items-start gap-4"
+                                style={{ gridTemplateColumns: `repeat(${appGridCols}, minmax(0, 1fr))` }}
+                            >
+                                {apps.map((agent) => (
+                                    <AgentCard
+                                        key={agent.id}
+                                        agent={agent}
+                                        isPinned={!!agent.is_pinned}
+                                        onTogglePin={togglePin}
+                                        onStartChat={continueChat}
+                                        onShare={shareApp}
+                                    />
+                                ))}
+                            </div>
+                            <div ref={loadMoreSentinelRef} className="flex h-12 w-full items-center justify-center text-[12px] text-text-4">
+                                {loadingMore
+                                    ? localize('com_list_loading_more')
+                                    : loadMoreError
+                                        ? localize('com_list_load_failed')
+                                        : !hasMore
+                                            ? localize('com_list_all_loaded')
+                                            : ''}
+                            </div>
+                        </>
                     )}
                 </div>
             </main>

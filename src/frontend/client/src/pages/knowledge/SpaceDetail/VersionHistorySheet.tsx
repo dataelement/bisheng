@@ -146,7 +146,7 @@ function ActionButton({ label, onClick, disabled, className, children }: ActionB
                     disabled={disabled}
                     onClick={onClick}
                     className={cn(
-                        "inline-flex size-7 items-center justify-center rounded-sm border border-[#ECECEC] bg-white text-[#4e5969]",
+                        "inline-flex size-7 items-center justify-center rounded-[4px] border border-border-base bg-white text-text-2",
                         "transition-colors hover:bg-[#f7f7f7] disabled:cursor-not-allowed disabled:opacity-40",
                         className,
                     )}
@@ -195,9 +195,9 @@ function VersionTableRow({
     const anyPending = setPrimaryPending || deletePending;
 
     return (
-        <tr className="border-b border-[#F2F3F5] last:border-b-0 hover:bg-[#FAFAFA]">
+        <tr className="border-b border-fill-2 last:border-b-0 hover:bg-[#FAFAFA]">
             {/* Version */}
-            <td className="px-4 py-3 text-sm text-[#1d2129] whitespace-nowrap">
+            <td className="px-4 py-3 text-sm text-text-1 whitespace-nowrap">
                 <div className="flex items-center gap-2">
                     <span className="font-medium">V{version.version_no}</span>
                     {version.is_primary && (
@@ -210,25 +210,25 @@ function VersionTableRow({
 
             {/* Original file name */}
             <td className="max-w-[200px] px-4 py-3">
-                <span className="block truncate text-sm text-[#1d2129]" title={version.original_file_name}>
+                <span className="block truncate text-sm text-text-1" title={version.original_file_name}>
                     {version.original_file_name}
                 </span>
             </td>
 
             {/* File encoding (doc_code per version) */}
             <td className="max-w-[180px] px-4 py-3">
-                <span className="block truncate text-sm text-[#4e5969]" title={version.file_code ?? undefined}>
+                <span className="block truncate text-sm text-text-2" title={version.file_code ?? undefined}>
                     {version.file_code ?? "—"}
                 </span>
             </td>
 
             {/* Uploader */}
-            <td className="px-4 py-3 text-sm text-[#4e5969] whitespace-nowrap">
+            <td className="px-4 py-3 text-sm text-text-2 whitespace-nowrap">
                 {version.uploader_name ?? "—"}
             </td>
 
             {/* Upload time */}
-            <td className="px-4 py-3 text-sm text-[#4e5969] whitespace-nowrap">
+            <td className="px-4 py-3 text-sm text-text-2 whitespace-nowrap">
                 {version.upload_time ? version.upload_time.replace("T", " ").slice(0, 16) : "—"}
             </td>
 
@@ -294,8 +294,8 @@ interface InfoColumnProps {
 function InfoColumn({ label, value }: InfoColumnProps) {
     return (
         <div className="flex-1 min-w-0">
-            <p className="text-xs text-[#86909c] mb-1">{label}</p>
-            <p className="truncate text-sm font-medium text-[#1d2129]" title={value ?? undefined}>
+            <p className="text-xs text-text-3 mb-1">{label}</p>
+            <p className="truncate text-sm font-medium text-text-1" title={value ?? undefined}>
                 {value ?? "—"}
             </p>
         </div>
@@ -398,13 +398,13 @@ export function VersionHistorySheet({
             >
                 {/* Header */}
                 <DialogHeader className="relative shrink-0 px-6 pt-5 pb-3 text-left">
-                    <DialogTitle className="text-base font-semibold text-[#1d2129]">
+                    <DialogTitle className="text-base font-semibold text-text-1">
                         {localize("com_knowledge.version.history_title")}
                     </DialogTitle>
                     <button
                         type="button"
                         onClick={() => onOpenChange(false)}
-                        className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] transition-colors hover:bg-[#F2F3F5]"
+                        className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-fill-2"
                         aria-label={localize("com_knowledge.close") || "Close"}
                     >
                         <X className="size-4" />
@@ -414,7 +414,7 @@ export function VersionHistorySheet({
                 {/* Body */}
                 <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
                     {/* 3-column info panel */}
-                    <div className="mb-4 flex gap-6 rounded-lg border border-[#EBECF0] bg-[#F7F8FA] px-4 py-3">
+                    <div className="mb-4 flex gap-6 rounded-lg border border-border-base bg-fill-1 px-4 py-3">
                         <InfoColumn
                             label={localize("com_knowledge.version.history_label_doc")}
                             value={headerTitle}
@@ -432,36 +432,36 @@ export function VersionHistorySheet({
                     {/* Table */}
                     {isLoading ? (
                         <div className="flex h-32 items-center justify-center">
-                            <Loader2 className="size-6 animate-spin text-[#86909c]" />
+                            <Loader2 className="size-6 animate-spin text-text-3" />
                         </div>
                     ) : sortedVersions.length === 0 ? (
-                        <div className="flex h-32 items-center justify-center text-sm text-[#86909c]">
+                        <div className="flex h-32 items-center justify-center text-sm text-text-3">
                             —
                         </div>
                     ) : (
-                        <div className="overflow-x-auto rounded-lg border border-[#EBECF0]">
+                        <div className="overflow-x-auto rounded-lg border border-border-base">
                             <table className="w-full min-w-[720px] border-collapse text-sm">
                                 <thead>
-                                    <tr className="border-b border-[#EBECF0] bg-[#FAFAFA]">
-                                        <th className="px-4 py-2.5 text-left text-xs font-medium text-[#86909c]">
+                                    <tr className="border-b border-border-base bg-[#FAFAFA]">
+                                        <th className="px-4 py-2.5 text-left text-xs font-medium text-text-3">
                                             {localize("com_knowledge.version.history_col_version")}
                                         </th>
-                                        <th className="px-4 py-2.5 text-left text-xs font-medium text-[#86909c]">
+                                        <th className="px-4 py-2.5 text-left text-xs font-medium text-text-3">
                                             {localize("com_knowledge.version.history_col_filename")}
                                         </th>
-                                        <th className="px-4 py-2.5 text-left text-xs font-medium text-[#86909c]">
+                                        <th className="px-4 py-2.5 text-left text-xs font-medium text-text-3">
                                             {localize("com_knowledge.version.history_col_file_encoding")}
                                         </th>
-                                        <th className="px-4 py-2.5 text-left text-xs font-medium text-[#86909c]">
+                                        <th className="px-4 py-2.5 text-left text-xs font-medium text-text-3">
                                             {localize("com_knowledge.version.history_col_uploader")}
                                         </th>
-                                        <th className="px-4 py-2.5 text-left text-xs font-medium text-[#86909c]">
+                                        <th className="px-4 py-2.5 text-left text-xs font-medium text-text-3">
                                             {localize("com_knowledge.version.history_col_upload_time")}
                                         </th>
-                                        <th className="px-4 py-2.5 text-left text-xs font-medium text-[#86909c]">
+                                        <th className="px-4 py-2.5 text-left text-xs font-medium text-text-3">
                                             {localize("com_knowledge.version.history_col_parse_status")}
                                         </th>
-                                        <th className="px-4 py-2.5 text-left text-xs font-medium text-[#86909c]">
+                                        <th className="px-4 py-2.5 text-left text-xs font-medium text-text-3">
                                             {localize("com_knowledge.version.history_col_actions")}
                                         </th>
                                     </tr>
@@ -487,7 +487,7 @@ export function VersionHistorySheet({
                 </div>
 
                 {/* Footer */}
-                <div className="shrink-0 flex justify-end gap-2 border-t border-[#e5e6eb] px-6 py-3">
+                <div className="shrink-0 flex justify-end gap-2 border-t border-border-base px-6 py-3">
                     <Button
                         type="button"
                         variant="outline"

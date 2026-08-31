@@ -69,7 +69,9 @@ const PromptName: React.FC<Props> = ({ name, onSave }) => {
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               ref={inputRef}
-              className="flex w-full max-w-none rounded-lg text-2xl font-bold transition duration-200"
+              size="large"
+              className="w-full max-w-none"
+              inputClassName="text-2xl font-bold"
               style={{
                 whiteSpace: 'nowrap',
                 textOverflow: 'ellipsis',

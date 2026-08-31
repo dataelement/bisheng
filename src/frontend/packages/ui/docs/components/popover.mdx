@@ -1,0 +1,187 @@
+---
+status: draft
+statusNote: 组件未落地，本页只是样式标本
+---
+
+# 气泡卡片 Popover
+
+挨着触发元素弹出的白底小卡片，装结构化内容——标题、多行文字、链接、按钮、轻量表单。**组件尚未落地**——本页按规范搭出目标样式与手感（基座 Radix HoverCard / Popover），供设计验收后再进实现窗口。规范全文见「文档 → 组件规范 → 气泡卡片 Popover」；与 Tooltip 的判定见「组件规范 → 文字提示 Tooltip §2」。
+
+## 样式标本 Anatomy
+
+白底（跟随暗色主题）+ 1px 描边 + 浮层投影档，圆角 12px（弹窗 16px，Popover 小一号），内边距 16px（弹窗 20px，轻一档），宽度随内容、最大 320px。从上到下三段各自可选：标题（14/22 · 500 · 一级文字色）、正文（14/22 常规 · 二级文字色）、操作区（small 24px 按钮 · 间距 8px · 右对齐、主按钮最右）。
+
+```tsx
+import { Button } from '@bisheng/ui';
+
+const card: React.CSSProperties = {
+  display: 'inline-block',
+  maxWidth: 320,
+  padding: 16,
+  borderRadius: 12,
+  background: 'rgb(var(--bg-page))',
+  border: '1px solid rgb(var(--border-base))',
+  boxShadow: '0 2px 16px -2px rgba(0, 23, 66, 0.10)',
+};
+
+export default () => (
+  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 32, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={card}>
+        <div style={{ fontSize: 14, lineHeight: '22px', fontWeight: 500, color: 'rgb(var(--text-1))' }}>
+          清理知识库缓存
+        </div>
+        <div style={{ marginTop: 8, fontSize: 14, lineHeight: '22px', color: 'rgb(var(--text-2))' }}>
+          将清空本地已解析的文档切片缓存，下次检索时自动重建，历史会话不受影响。
+        </div>
+        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <Button color="default" variant="outlined" size="small">取消</Button>
+          <Button color="primary" variant="solid" size="small">清理</Button>
+        </div>
+      </div>
+      <span style={{ fontSize: 12, color: 'rgb(var(--text-3))' }}>完整三段：标题 + 正文 + 操作区</span>
+    </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={card}>
+        <div style={{ fontSize: 14, lineHeight: '22px', color: 'rgb(var(--text-2))' }}>
+          支持 pdf / docx / xlsx / md，单文件不超过 200MB。
+        </div>
+      </div>
+      <span style={{ fontSize: 12, color: 'rgb(var(--text-3))' }}>只有正文——再减到一句纯文本就该回 Tooltip</span>
+    </div>
+  </div>
+);
+```
+
+## 悬停触发（默认）
+
+与 Tooltip 同一手感：指针进入 **100ms** 后出现；指针可以移进卡片操作，移出触发元素与卡片后关闭；不自动超时消失。典型场景是信息卡——悬停头像出用户信息卡：
+
+```tsx
+import * as HoverCard from '@radix-ui/react-hover-card';
+
+const card: React.CSSProperties = {
+  maxWidth: 320,
+  padding: 16,
+  borderRadius: 12,
+  background: 'rgb(var(--bg-page))',
+  border: '1px solid rgb(var(--border-base))',
+  boxShadow: '0 2px 16px -2px rgba(0, 23, 66, 0.10)',
+};
+
+export default () => (
+  <HoverCard.Root openDelay={100} closeDelay={150}>
+    <HoverCard.Trigger asChild>
+      <button
+        type="button"
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: '50%',
+          border: 'none',
+          cursor: 'pointer',
+          background: 'rgb(var(--brand-500))',
+          color: '#fff',
+          fontSize: 14,
+        }}
+        aria-label="查看用户信息"
+      >
+        毕
+      </button>
+    </HoverCard.Trigger>
+    <HoverCard.Portal>
+      <HoverCard.Content side="top" sideOffset={4} style={card}>
+        <div style={{ fontSize: 14, lineHeight: '22px', fontWeight: 500, color: 'rgb(var(--text-1))' }}>
+          毕昇 · 知识库管理员
+        </div>
+        <div style={{ marginTop: 8, fontSize: 14, lineHeight: '22px', color: 'rgb(var(--text-2))' }}>
+          负责产品知识空间的文档审核与目录维护，最近活跃于 3 天前。
+        </div>
+        <HoverCard.Arrow width={11} height={6} style={{ fill: 'rgb(var(--bg-page))' }} />
+      </HoverCard.Content>
+    </HoverCard.Portal>
+  </HoverCard.Root>
+);
+```
+
+## 点击触发（含输入 / 多选时）
+
+内容里有输入框或多选操作时改点击触发——悬停型移出即关，输入一半手一滑内容就丢。点击型焦点进卡片，Tab 在卡片内移动；点外部、按 ESC、或再点一次触发元素关闭，关闭后焦点回到触发元素：
+
+```tsx
+import { useState } from 'react';
+import * as Popover from '@radix-ui/react-popover';
+import { Button } from '@bisheng/ui';
+
+const card: React.CSSProperties = {
+  width: 240,
+  padding: 16,
+  borderRadius: 12,
+  background: 'rgb(var(--bg-page))',
+  border: '1px solid rgb(var(--border-base))',
+  boxShadow: '0 2px 16px -2px rgba(0, 23, 66, 0.10)',
+};
+
+const OPTIONS = ['已发布', '审核中', '草稿', '已下线'];
+
+export default () => {
+  const [picked, setPicked] = useState<string[]>(['已发布']);
+  return (
+    <Popover.Root>
+      <Popover.Trigger asChild>
+        <Button color="default" variant="outlined" size="small">
+          筛选状态{picked.length ? ` · ${picked.length}` : ''}
+        </Button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content side="bottom" align="start" sideOffset={4} style={card}>
+          <div style={{ fontSize: 14, lineHeight: '22px', fontWeight: 500, color: 'rgb(var(--text-1))' }}>
+            按状态筛选
+          </div>
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {OPTIONS.map((name) => (
+              <label
+                key={name}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 14,
+                  lineHeight: '22px',
+                  color: 'rgb(var(--text-2))',
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={picked.includes(name)}
+                  onChange={(e) =>
+                    setPicked(e.target.checked ? [...picked, name] : picked.filter((n) => n !== name))
+                  }
+                />
+                {name}
+              </label>
+            ))}
+          </div>
+          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <Button color="default" variant="outlined" size="small" onClick={() => setPicked([])}>
+              重置
+            </Button>
+            <Popover.Close asChild>
+              <Button color="primary" variant="solid" size="small">确定</Button>
+            </Popover.Close>
+          </div>
+          <Popover.Arrow width={11} height={6} style={{ fill: 'rgb(var(--bg-page))' }} />
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+};
+```
+
+## 本页与规范的差距（给实现窗口）
+
+- demo 直接用 Radix 原语手拼样式；正式封装对外只暴一个组件，`trigger="hover" | "click"` 两档、默认 `hover`，hover 档时序与 Tooltip 共用同一组常量。
+- 箭头目前只做同底色填充，**描边未接**（Radix Arrow 是纯三角 SVG，带描边箭头需要 stroke 裁切处理，落地时解决）；深色模式下投影不明显，全靠这圈描边勾轮廓。
+- 触屏降级（`coarse-pointer` 下 hover 档自动走 click）与 z-index 阶梯（Popover ≥ 弹窗层、< Tooltip 层）待封装时接线。
+- 「一次只开一个」「不从 Popover 里再弹 Popover」是使用约束，由评审把关，组件不强拦。

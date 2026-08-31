@@ -52,12 +52,12 @@ function RecommendationCard({ entry, disabled, onLink }: RecommendationCardProps
         : `当前主版本 V${entry.current_primary_version_no ?? 1}`;
 
     return (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-[#EBECF0] bg-white px-4 py-3 hover:border-blue-500 hover:bg-[#F4F8FF] transition-colors group">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border-base bg-white px-4 py-3 hover:border-blue-500 hover:bg-[#F4F8FF] transition-colors group">
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 mb-1">
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <p className="min-w-0 cursor-default truncate text-[14px] font-medium text-[#1d2129]">
+                            <p className="min-w-0 cursor-default truncate text-[14px] font-medium text-text-1">
                                 {entry.title}
                             </p>
                         </TooltipTrigger>
@@ -73,9 +73,9 @@ function RecommendationCard({ entry, disabled, onLink }: RecommendationCardProps
                         {localize("com_knowledge.version.similarity_label")} {(entry.similarity * 100).toFixed(0)}%
                     </span>
                 </div>
-                <p className="text-[12px] text-[#86909c] mb-0.5">{versionLine}</p>
+                <p className="text-[12px] text-text-3 mb-0.5">{versionLine}</p>
                 {uploadTimeDisplay && (
-                    <p className="text-[12px] text-[#86909c]">{entry.title} · {uploadTimeDisplay}</p>
+                    <p className="text-[12px] text-text-3">{entry.title} · {uploadTimeDisplay}</p>
                 )}
             </div>
             <Button
@@ -105,10 +105,10 @@ interface SearchResultRowProps {
 function SearchResultRow({ entry, disabled, onLink }: SearchResultRowProps) {
     const localize = useLocalize();
     return (
-        <div className="flex items-center justify-between gap-3 border-b border-[#F2F3F5] px-3 py-2.5 last:border-b-0 hover:bg-[#FAFAFA]">
+        <div className="flex items-center justify-between gap-3 border-b border-fill-2 px-3 py-2.5 last:border-b-0 hover:bg-[#FAFAFA]">
             <div className="min-w-0 flex-1">
-                <p className="truncate text-sm text-[#1d2129]">{entry.title}</p>
-                <div className="mt-0.5 flex items-center gap-2 text-xs text-[#86909c]">
+                <p className="truncate text-sm text-text-1">{entry.title}</p>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-text-3">
                     <span>V{entry.current_primary_version_no ?? 1}</span>
                     {entry.doc_code && <span>{entry.doc_code}</span>}
                     {entry.primary_uploader_name && <span>{entry.primary_uploader_name}</span>}
@@ -214,14 +214,14 @@ export function RelateDocumentPanel({
     return (
         <div className={cn("flex flex-col gap-5 h-full", className)}>
             {/* ── Section 1: Current file ─────────────────────────────── */}
-            <section className="rounded-lg border border-[#EBECF0] bg-[#FAFAFA] px-4 py-3 flex items-start justify-between shrink-0">
+            <section className="rounded-lg border border-border-base bg-[#FAFAFA] px-4 py-3 flex items-start justify-between shrink-0">
                 <div className="flex-1 min-w-0 pr-4">
-                    <p className="text-[12px] text-[#86909c] mb-1">
+                    <p className="text-[12px] text-text-3 mb-1">
                         {localize("com_knowledge.version.section_current_file")}
                     </p>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <p className="truncate text-[16px] font-medium text-[#1d2129] mb-1">
+                            <p className="truncate text-[16px] font-medium text-text-1 mb-1">
                                 {file.name}
                             </p>
                         </TooltipTrigger>
@@ -233,7 +233,7 @@ export function RelateDocumentPanel({
                             {file.name}
                         </TooltipContent>
                     </Tooltip>
-                    <p className="text-[12px] text-[#86909c]">
+                    <p className="text-[12px] text-text-3">
                         当前主版本 V{file.version_no ?? 1} · 上传人 {file.user_name ?? "未知"}
                     </p>
                 </div>
@@ -245,27 +245,27 @@ export function RelateDocumentPanel({
             </section>
 
             {/* ── Sections 2 & 3: Recommendations and Search ──────────── */}
-            <div className="shrink-0 flex flex-col rounded-lg border border-[#EBECF0] bg-white">
+            <div className="shrink-0 flex flex-col rounded-lg border border-border-base bg-white">
                 {/* ── Section 2: Recommendations ──────────────────────────── */}
-                <section className="p-4 border-b border-[#EBECF0]">
-                    <h3 className="mb-0.5 text-[14px] font-medium text-[#1d2129]">
+                <section className="p-4 border-b border-border-base">
+                    <h3 className="mb-0.5 text-[14px] font-medium text-text-1">
                         {localize("com_knowledge.version.section_recommendations")}
                     </h3>
-                    <p className="mb-3 text-[12px] text-[#86909c]">
+                    <p className="mb-3 text-[12px] text-text-3">
                         {localize("com_knowledge.version.section_recommendations_subtitle_merge")}
                     </p>
                     {candidatesLoading ? (
-                        <div className="flex h-16 items-center justify-center border border-[#EBECF0] bg-[#FAFAFA] rounded-md">
-                            <Loader2 className="size-5 animate-spin text-[#86909c]" />
+                        <div className="flex h-16 items-center justify-center border border-border-base bg-[#FAFAFA] rounded-md">
+                            <Loader2 className="size-5 animate-spin text-text-3" />
                         </div>
                     ) : candidates.length === 0 ? (
-                        <div className="flex h-[72px] items-center justify-center border border-[#EBECF0] bg-[#FAFAFA] rounded-md">
-                            <p className="text-[14px] text-[#86909c]">
+                        <div className="flex h-[72px] items-center justify-center border border-border-base bg-[#FAFAFA] rounded-md">
+                            <p className="text-[14px] text-text-3">
                                 {localize("com_knowledge.version.no_recommendations")}
                             </p>
                         </div>
                     ) : (
-                        <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto scrollbar-on-scroll border border-[#EBECF0] bg-[#FAFAFA] rounded-md p-2">
+                        <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto scrollbar-on-scroll border border-border-base bg-[#FAFAFA] rounded-md p-2">
                             {candidates.map((entry) => (
                                 <RecommendationCard
                                     key={entry.target_document_id}
@@ -280,10 +280,10 @@ export function RelateDocumentPanel({
 
                 {/* ── Section 3: Search existing documents ────────────────── */}
                 <section className="p-4">
-                    <h3 className="mb-0.5 text-[14px] font-medium text-[#1d2129]">
+                    <h3 className="mb-0.5 text-[14px] font-medium text-text-1">
                         {localize("com_knowledge.version.section_search")}
                     </h3>
-                    <p className="mb-3 text-[12px] text-[#86909c]">
+                    <p className="mb-3 text-[12px] text-text-3">
                         {localize("com_knowledge.version.section_search_subtitle")}
                     </p>
                     {/* Search input + button row */}
@@ -293,13 +293,13 @@ export function RelateDocumentPanel({
                             value={keyword}
                             onChange={(e) => setKeyword(e.target.value)}
                             placeholder={localize("com_knowledge.version.search_placeholder")}
-                            className="h-8 flex-1 rounded-md border-[#EBECF0] text-[12px] bg-white"
+                            className="flex-1"
                         />
                         <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="h-8 rounded-md px-4 text-[12px] text-[#4e5969] bg-white border-[#EBECF0]"
+                            className="h-8 rounded-md px-4 text-[12px] text-text-2 bg-white border-border-base"
                         >
                             <Search className="mr-1.5 size-4" />
                             {localize("com_knowledge.version.search_button")}
@@ -309,19 +309,19 @@ export function RelateDocumentPanel({
                     {/* Search results or placeholder */}
                     {!hasSearched ? (
                         // Centered placeholder hint when no keyword has been entered
-                        <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-[#EBECF0] bg-[#FAFAFA]">
-                            <p className="text-[14px] text-[#c9cdd4]">
+                        <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-border-base bg-[#FAFAFA]">
+                            <p className="text-[14px] text-text-4">
                                 {localize("com_knowledge.version.search_placeholder")}
                             </p>
                         </div>
                     ) : (
-                        <div className="rounded-md border border-[#EBECF0] bg-white">
+                        <div className="rounded-md border border-border-base bg-white">
                             {searchLoading ? (
                                 <div className="flex h-16 items-center justify-center">
-                                    <Loader2 className="size-5 animate-spin text-[#86909c]" />
+                                    <Loader2 className="size-5 animate-spin text-text-3" />
                                 </div>
                             ) : searchResults.length === 0 ? (
-                                <p className="px-3 py-4 text-[14px] text-[#86909c]">
+                                <p className="px-3 py-4 text-[14px] text-text-3">
                                     {localize("com_knowledge.version.no_search_results")}
                                 </p>
                             ) : (
@@ -342,12 +342,12 @@ export function RelateDocumentPanel({
             </div>
 
             {/* ── Section 4: Skip linking (不关联) ─────────────────────── */}
-            <section className="mt-auto shrink-0 rounded-lg border border-dashed border-[#EBECF0] bg-white px-4 py-3 flex items-center justify-between">
+            <section className="mt-auto shrink-0 rounded-lg border border-dashed border-border-base bg-white px-4 py-3 flex items-center justify-between">
                 <div>
-                    <h3 className="mb-1 text-[14px] font-medium text-[#1d2129]">
+                    <h3 className="mb-1 text-[14px] font-medium text-text-1">
                         {localize("com_knowledge.version.section_dismiss")}
                     </h3>
-                    <p className="text-[12px] text-[#86909c]">
+                    <p className="text-[12px] text-text-3">
                         {localize("com_knowledge.version.section_dismiss_subtitle")}
                     </p>
                 </div>
@@ -357,7 +357,7 @@ export function RelateDocumentPanel({
                     size="sm"
                     disabled={isDismissing || isLinking}
                     onClick={() => dismissMutation.mutate()}
-                    className="h-8 shrink-0 rounded-md px-4 text-[12px] text-[#4e5969]"
+                    className="h-8 shrink-0 rounded-md px-4 text-[12px] text-text-2"
                 >
                     <Check className="mr-1.5 size-4" />
                     {localize("com_knowledge.version.btn_dismiss")}

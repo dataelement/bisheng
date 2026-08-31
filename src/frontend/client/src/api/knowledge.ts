@@ -322,6 +322,15 @@ export interface UploadFileResponse {
     repeat: boolean;
     repeat_file_name: string | null;
     repeat_update_time: string | null;
+    /**
+     * Set when the space already holds a file with this name. The check is
+     * space-wide and name-only in practice: the backend compares
+     * `md5 OR file_name`, but `KnowledgeFile.md5` stores the upload's uuid
+     * object name, never a content hash, so the md5 branch can't match.
+     */
+    repeat?: boolean;
+    repeat_file_name?: string | null;
+    repeat_update_time?: string | null;
 }
 
 // ─────────────────────────────────────────────
@@ -1215,7 +1224,7 @@ export async function deleteSpaceApi(space_id: string): Promise<void> {
 export async function getFolderParentPathApi(
     spaceId: string,
     folderId: string
-     
+
 ): Promise<Array<{ id: string; name: string }>> {
     const res = await request.get<ApiResponse<any>>(
         `/api/v1/knowledge/space/${spaceId}/folders/${folderId}/parent`

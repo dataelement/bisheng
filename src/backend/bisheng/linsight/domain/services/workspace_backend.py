@@ -109,6 +109,16 @@ UPLOADS_DIR = "uploads"
 OUTPUT_DIR = "output"
 SCRATCH_DIR = "scratch"
 MANIFEST_NAME = "manifest.json"
+# Where the platform copies this run's skill bundles at task start (canonical
+# name: ``skill_provisioning.WORKSPACE_SKILLS_DIR``, duplicated here as a literal
+# so a storage backend does not pull in the domain-service import chain — the
+# same trade-off ``domain/utils.SKILLS_ZONE`` already makes).
+SKILLS_DIR = "skills"
+
+# Marker prefix on the refusal returned for any model write into ``skills/``.
+# Exported so tests (and any future tool-layer guard) can assert on the refusal
+# without pinning the whole sentence.
+SKILLS_READONLY_ERROR_PREFIX = "[read-only]"
 
 # Extensions deepagents' ``_EXTENSION_TO_FILE_TYPE`` classifies as ``image`` — the
 # ONE multimodal shape mainstream OpenAI-compatible endpoints accept. Reading one
@@ -150,6 +160,41 @@ _CHAR_PAGE_NOTICE = (
     "{total} pages of {size} characters each. Use offset/limit to page through it — "
     "offset counts pages, not source lines.]\n"
 )
+
+
+def _is_skills_path(rel_path: str) -> bool:
+    """True when a workspace-relative path lands inside the provisioned skills subtree.
+
+    The separator is part of the test on purpose: a root-level ``skills-notes.md``
+    is an ordinary file the agent may write, and a bare ``startswith`` would
+    silently refuse it.
+    """
+    return rel_path == SKILLS_DIR or rel_path.startswith(SKILLS_DIR + "/")
+
+
+def _skills_readonly_error(file_path: str) -> str:
+    """Refusal text for a model write into ``skills/``.
+
+    Bilingual and routed, same contract as the binary-read hint: the model has to
+    learn both that this path is closed and where the write actually belongs,
+    otherwise it retries the same call or invents another way in.
+
+    Why this is a hard refusal rather than a prompt line: the bundle is
+    platform-provided content the model is meant to OBEY. A run was observed
+    overwriting ``skills/bisheng-pptx/SKILL.md`` with a doc it made up (inventing a
+    ``bisheng_pptx`` module that does not exist), reading its own fabrication back
+    a step later, and following it to a text file named ``.pptx``. The rewritten
+    copy is also what lands in the session snapshot, so the investigation
+    afterwards reads the invention and blames the skill.
+    """
+    return (
+        f"{SKILLS_READONLY_ERROR_PREFIX} `{file_path}` 属于平台提供的技能包，只读，不能写入或修改。"
+        f"技能怎么做以它自带的 SKILL.md 为准（用 read_file 读，需要时传 limit=1000 一次读完）；"
+        f"产出请写到 output/ 下，中间结果写 scratch/。\n"
+        f"{SKILLS_READONLY_ERROR_PREFIX} `{file_path}` is inside a platform-provided skill bundle and is "
+        f"read-only. Its SKILL.md is the source of truth for how the skill works — read it, do not rewrite "
+        f"it. Write deliverables under output/ and intermediate files under scratch/."
+    )
 
 
 @dataclass
@@ -557,6 +602,9 @@ class WorkspaceBackend(FilesystemBackend):
     # -- write --------------------------------------------------------------
     def write(self, file_path: str, content) -> WriteResult:
         rel = self._ws_rel(file_path)
+        if _is_skills_path(rel):
+            logger.warning("[linsight-skills-readonly] svid={} refused write to {}", self.svid, rel)
+            return WriteResult(error=_skills_readonly_error(file_path))
         data = self._to_bytes(content)
         # cache first (fast local), then write-through to MinIO (truth).
         self._cache_write(rel, data)
@@ -619,6 +667,10 @@ class WorkspaceBackend(FilesystemBackend):
         replace_all: bool = False,
     ) -> EditResult:
         rel = self._ws_rel(file_path)
+        # ``aedit`` delegates here, so this single guard covers both surfaces.
+        if _is_skills_path(rel):
+            logger.warning("[linsight-skills-readonly] svid={} refused edit of {}", self.svid, rel)
+            return EditResult(error=_skills_readonly_error(file_path))
         data = self._materialize(rel)
         if data is None:
             return EditResult(error=self._not_found_error(file_path))
@@ -781,6 +833,9 @@ class WorkspaceBackend(FilesystemBackend):
     # -- async surface (write-through truth uses real async MinIO) ----------
     async def awrite(self, file_path: str, content) -> WriteResult:
         rel = self._ws_rel(file_path)
+        if _is_skills_path(rel):
+            logger.warning("[linsight-skills-readonly] svid={} refused write to {}", self.svid, rel)
+            return WriteResult(error=_skills_readonly_error(file_path))
         data = self._to_bytes(content)
         await asyncio.to_thread(self._cache_write, rel, data)
         await self.minio.put_object(
