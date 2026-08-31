@@ -7,6 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.shougang_portal_course.domain.models.portal_course import (
     PortalCourse,
+    PortalCourseCatalog,
     PortalCourseMediaCleanup,
     PortalCourseVideo,
     PortalCourseVideoProgress,
@@ -21,6 +22,7 @@ async def course_session():
         poolclass=StaticPool,
     )
     tables = [
+        PortalCourseCatalog.__table__,
         PortalCourse.__table__,
         PortalCourseVideo.__table__,
         PortalCourseVideoProgress.__table__,

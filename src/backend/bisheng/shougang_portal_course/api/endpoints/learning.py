@@ -41,9 +41,7 @@ async def get_course_progress(
             user_id=login_user.user_id,
             course_id=course_id,
         )
-    return resp_200(
-        {"items": [item.model_dump(mode="json", exclude_none=True) for item in items]}
-    )
+    return resp_200({"items": [item.model_dump(mode="json", exclude_none=True) for item in items]})
 
 
 @router.put("/videos/{video_id}/progress")
@@ -65,8 +63,7 @@ async def report_video_progress(
             break
         except IntegrityError:
             logger.warning(
-                "portal course progress write conflict tenant_id=%s user_id=%s "
-                "video_id=%s attempt=%s",
+                "portal course progress write conflict tenant_id=%s user_id=%s video_id=%s attempt=%s",
                 _tenant_id(login_user),
                 login_user.user_id,
                 video_id,

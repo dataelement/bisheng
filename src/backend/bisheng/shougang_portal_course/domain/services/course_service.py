@@ -4,14 +4,21 @@ import json
 from datetime import datetime
 
 from bisheng.common.errcode.portal_course import (
+    PortalCourseCatalogNotFoundError,
+    PortalCourseExternalUrlRequiredError,
     PortalCourseNotFoundError,
     PortalCourseNotPublishableError,
     PortalCourseSourceInvalidError,
     PortalCourseVideoNotFoundError,
+    PortalCourseVideoNotSupportedError,
 )
 from bisheng.shougang_portal_course.domain.models.portal_course import (
     PortalCourse,
+    PortalCourseCatalog,
     PortalCourseVideo,
+)
+from bisheng.shougang_portal_course.domain.repositories.catalog_repository import (
+    PortalCourseCatalogRepository,
 )
 from bisheng.shougang_portal_course.domain.repositories.portal_course_repository import (
     PortalCourseRepository,
@@ -50,6 +57,7 @@ class PortalCourseService:
 
     def __init__(self, session):
         self.repository = PortalCourseRepository(session)
+        self.catalog_repository = PortalCourseCatalogRepository(session)
 
     async def create_course(
         self,
@@ -59,15 +67,29 @@ class PortalCourseService:
         payload: CourseCreate,
     ) -> PortalCourse:
         if payload.enabled:
-            raise PortalCourseNotPublishableError()
+            if payload.course_type == "external":
+                if not payload.external_url:
+                    raise PortalCourseExternalUrlRequiredError()
+            else:
+                raise PortalCourseNotPublishableError()
+        catalog_id = await self._validated_catalog_id(
+            tenant_id=tenant_id,
+            catalog_id=payload.catalog_id,
+        )
         course = PortalCourse(
             tenant_id=tenant_id,
+            catalog_id=catalog_id,
+            course_type=payload.course_type,
+            external_url=payload.external_url if payload.course_type == "external" else "",
+            external_id=payload.external_id if payload.course_type == "external" else None,
+            cover_url=payload.cover_url or "",
+            source_updated_at=payload.source_updated_at,
             name=payload.name,
             instructor=payload.instructor,
             organization=payload.organization,
             description=payload.description,
             tags_json=serialize_tags(payload.tags),
-            enabled=False,
+            enabled=bool(payload.enabled and payload.course_type == "external" and payload.external_url),
             show_on_home=payload.show_on_home,
             sort_order=payload.sort_order,
             create_user=user_id,
@@ -89,15 +111,32 @@ class PortalCourseService:
         )
         if course is None:
             raise PortalCourseNotFoundError()
-        if payload.enabled is True:
-            playable = await self.repository.count_playable_videos(
+
+        fields = payload.model_fields_set
+        next_type = payload.course_type if "course_type" in fields else self._course_type(course)
+        next_url = course.external_url or ""
+        if next_type == "local":
+            next_url = ""
+        elif "external_url" in fields:
+            next_url = payload.external_url or ""
+
+        if next_type == "external" and self._course_type(course) != "external":
+            videos = await self.repository.list_videos(
                 tenant_id=tenant_id,
                 course_id=course_id,
             )
-            if playable < 1:
-                raise PortalCourseNotPublishableError()
+            if videos:
+                raise PortalCourseVideoNotSupportedError()
 
-        fields = payload.model_fields_set
+        next_enabled = payload.enabled if "enabled" in fields else course.enabled
+        if next_enabled:
+            await self._assert_publishable(
+                tenant_id=tenant_id,
+                course_id=course_id,
+                course_type=next_type,
+                external_url=next_url,
+            )
+
         for field in (
             "name",
             "instructor",
@@ -109,8 +148,23 @@ class PortalCourseService:
         ):
             if field in fields:
                 setattr(course, field, getattr(payload, field))
+        if "catalog_id" in fields:
+            course.catalog_id = await self._validated_catalog_id(
+                tenant_id=tenant_id,
+                catalog_id=payload.catalog_id,
+            )
         if "tags" in fields and payload.tags is not None:
             course.tags_json = serialize_tags(payload.tags)
+        if "external_id" in fields:
+            course.external_id = payload.external_id if next_type == "external" else None
+        if "cover_url" in fields:
+            course.cover_url = payload.cover_url or ""
+        if "source_updated_at" in fields:
+            course.source_updated_at = payload.source_updated_at
+        if next_type != "external":
+            course.external_id = None
+        course.course_type = next_type
+        course.external_url = next_url
         course.update_time = datetime.now()
         await self.repository.add(course)
         return course
@@ -129,6 +183,7 @@ class PortalCourseService:
         )
         if course is None:
             raise PortalCourseNotFoundError()
+        self._reject_videos_on_external(course)
         video = PortalCourseVideo(
             tenant_id=tenant_id,
             course_id=course_id,
@@ -200,6 +255,7 @@ class PortalCourseService:
         )
         if course is None:
             raise PortalCourseNotFoundError()
+        self._reject_videos_on_external(course)
         video = PortalCourseVideo(
             id=video_id,
             tenant_id=tenant_id,
@@ -397,6 +453,14 @@ class PortalCourseService:
         await self.repository.delete_course(tenant_id=tenant_id, course_id=course_id)
         return cleanup_jobs
 
+    async def delete_courses(self, *, tenant_id: int, course_ids: list[str]) -> list[str]:
+        cleanup_jobs: list[str] = []
+        for course_id in course_ids:
+            cleanup_jobs.extend(
+                await self.delete_course(tenant_id=tenant_id, course_id=course_id)
+            )
+        return cleanup_jobs
+
     async def update_course_order(self, *, tenant_id: int, payload: OrderUpdate) -> None:
         for item in payload.items:
             course = await self.repository.get_course(
@@ -424,6 +488,7 @@ class PortalCourseService:
         )
         if course is None:
             raise PortalCourseNotFoundError()
+        self._reject_videos_on_external(course)
         for item in payload.items:
             video = await self.repository.get_video(
                 tenant_id=tenant_id,
@@ -444,11 +509,19 @@ class PortalCourseService:
         home_only: bool = False,
         media_service=None,
         include_videos: bool = False,
+        catalog_ids: list[str] | None = None,
+        keyword: str | None = None,
     ) -> list[CourseRead]:
         courses = await self.repository.list_courses(
             tenant_id=tenant_id,
             public_only=public_only,
             home_only=home_only,
+            catalog_ids=catalog_ids,
+            keyword=keyword,
+        )
+        catalog_map = await self._catalog_map(
+            tenant_id=tenant_id,
+            catalog_ids=[course.catalog_id for course in courses if course.catalog_id],
         )
         return [
             await self._to_read(
@@ -457,6 +530,7 @@ class PortalCourseService:
                 public_only=public_only,
                 media_service=media_service,
                 include_videos=include_videos,
+                catalog=catalog_map.get(course.catalog_id) if course.catalog_id else None,
             )
             for course in courses
         ]
@@ -476,13 +550,55 @@ class PortalCourseService:
         )
         if course is None:
             raise PortalCourseNotFoundError()
+        catalog = None
+        if course.catalog_id:
+            catalog = await self.catalog_repository.get_catalog(
+                tenant_id=tenant_id,
+                catalog_id=course.catalog_id,
+                include_deleted=True,
+            )
         return await self._to_read(
             course,
             tenant_id=tenant_id,
             public_only=public_only,
             media_service=media_service,
             include_videos=True,
+            catalog=catalog,
         )
+
+    async def _validated_catalog_id(
+        self,
+        *,
+        tenant_id: int,
+        catalog_id: str | None,
+    ) -> str | None:
+        if not catalog_id:
+            return None
+        catalog = await self.catalog_repository.get_catalog(
+            tenant_id=tenant_id,
+            catalog_id=catalog_id,
+        )
+        if catalog is None:
+            raise PortalCourseCatalogNotFoundError()
+        return catalog.id
+
+    async def _catalog_map(
+        self,
+        *,
+        tenant_id: int,
+        catalog_ids: list[str],
+    ) -> dict[str, PortalCourseCatalog]:
+        unique_ids = list(dict.fromkeys(catalog_ids))
+        result: dict[str, PortalCourseCatalog] = {}
+        for catalog_id in unique_ids:
+            catalog = await self.catalog_repository.get_catalog(
+                tenant_id=tenant_id,
+                catalog_id=catalog_id,
+                include_deleted=True,
+            )
+            if catalog is not None:
+                result[catalog.id] = catalog
+        return result
 
     async def _to_read(
         self,
@@ -492,6 +608,7 @@ class PortalCourseService:
         public_only: bool,
         media_service,
         include_videos: bool,
+        catalog: PortalCourseCatalog | None = None,
     ) -> CourseRead:
         videos = await self.repository.list_videos(
             tenant_id=tenant_id,
@@ -529,14 +646,50 @@ class PortalCourseService:
             instructor=course.instructor,
             organization=course.organization,
             description=course.description,
-            total_duration_seconds=sum(
-                video.duration_seconds for video in videos if video.enabled
-            ),
+            total_duration_seconds=sum(video.duration_seconds for video in videos if video.enabled),
             video_count=len(videos),
             sort_order=course.sort_order,
             created_at=course.create_time,
             updated_at=course.update_time,
             enabled=None if public_only else course.enabled,
             show_on_home=None if public_only else course.show_on_home,
+            catalog_id=course.catalog_id,
+            catalog_name=None if catalog is None else catalog.name,
+            catalog_name_path=None if catalog is None else catalog.catalog_name_path,
+            course_type=self._course_type(course),
+            external_url=course.external_url or None,
+            external_id=course.external_id,
+            cover_url=course.cover_url or None,
+            source_updated_at=course.source_updated_at,
             videos=video_reads if include_videos else None,
         )
+
+    @staticmethod
+    def _course_type(course: PortalCourse) -> str:
+        if course.course_type == "external":
+            return "external"
+        return "local"
+
+    @classmethod
+    def _reject_videos_on_external(cls, course: PortalCourse) -> None:
+        if cls._course_type(course) == "external":
+            raise PortalCourseVideoNotSupportedError()
+
+    async def _assert_publishable(
+        self,
+        *,
+        tenant_id: int,
+        course_id: str,
+        course_type: str,
+        external_url: str,
+    ) -> None:
+        if course_type == "external":
+            if not (external_url or "").strip():
+                raise PortalCourseExternalUrlRequiredError()
+            return
+        playable = await self.repository.count_playable_videos(
+            tenant_id=tenant_id,
+            course_id=course_id,
+        )
+        if playable < 1:
+            raise PortalCourseNotPublishableError()

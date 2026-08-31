@@ -1,3 +1,4 @@
+import json
 import os
 from contextlib import asynccontextmanager
 
@@ -45,8 +46,9 @@ def handle_http_exception(req: Request, exc: Exception) -> ORJSONResponse:
 
 
 def handle_request_validation_error(req: Request, exc: RequestValidationError) -> ORJSONResponse:
-    msg = {"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "status_message": exc.errors()}
-    logger.error(f"{req.method} {req.url} {str(exc.errors())[:100]}")
+    errors = json.loads(json.dumps(exc.errors(), default=str))
+    msg = {"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "status_message": errors}
+    logger.error(f"{req.method} {req.url} {str(errors)[:100]}")
     return ORJSONResponse(content=msg)
 
 

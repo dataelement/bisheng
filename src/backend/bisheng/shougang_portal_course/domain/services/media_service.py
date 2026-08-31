@@ -182,9 +182,7 @@ class PortalCourseMediaService:
             payload = json.loads(stdout)
             format_data = payload["format"]
             format_names = {
-                item.strip().lower()
-                for item in str(format_data.get("format_name", "")).split(",")
-                if item.strip()
+                item.strip().lower() for item in str(format_data.get("format_name", "")).split(",") if item.strip()
             }
             duration = float(format_data["duration"])
             streams = payload["streams"]
@@ -285,14 +283,9 @@ class PortalCourseMediaService:
             if self.max_bytes == MAX_MEDIA_BYTES:
                 self.ensure_size(total)
             probe = self.probe(temp_path)
-            object_name = (
-                f"portal-course/{tenant_id}/{course_id}/{video_id}/"
-                f"{uuid.uuid4().hex}.{probe.extension}"
-            )
+            object_name = f"portal-course/{tenant_id}/{course_id}/{video_id}/{uuid.uuid4().hex}.{probe.extension}"
             try:
-                provisional_job_id = (
-                    await before_store(object_name) if before_store is not None else None
-                )
+                provisional_job_id = await before_store(object_name) if before_store is not None else None
                 await self.storage.put_object(
                     bucket_name=self.storage.bucket,
                     object_name=object_name,
@@ -301,17 +294,14 @@ class PortalCourseMediaService:
                 )
             except Exception as exc:
                 logger.warning(
-                    "portal course media store failed tenant_id=%s course_id=%s "
-                    "video_id=%s error_type=%s",
+                    "portal course media store failed tenant_id=%s course_id=%s video_id=%s error_type=%s",
                     tenant_id,
                     course_id,
                     video_id,
                     type(exc).__name__,
                 )
                 raise PortalCourseSourceReplaceError() from exc
-            original_name = os.path.basename(
-                str(getattr(upload, "filename", "") or "video").replace("\\", "/")
-            )[:255]
+            original_name = os.path.basename(str(getattr(upload, "filename", "") or "video").replace("\\", "/"))[:255]
             return UploadedMedia(
                 object_name=object_name,
                 original_filename=original_name,

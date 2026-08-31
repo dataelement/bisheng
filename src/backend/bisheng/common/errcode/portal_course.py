@@ -44,3 +44,48 @@ class PortalCourseProbeFailedError(BaseErrorCode):
 class PortalCourseSourceReplaceError(BaseErrorCode):
     Code: int = 25009
     Msg: str = "视频来源保存或替换失败"
+
+
+class PortalCourseCatalogNotFoundError(BaseErrorCode):
+    Code: int = 25010
+    Msg: str = "课程目录不存在"
+
+
+class PortalCourseCatalogParentInvalidError(BaseErrorCode):
+    Code: int = 25011
+    Msg: str = "课程目录父节点无效"
+
+
+class PortalCourseCatalogInUseError(BaseErrorCode):
+    Code: int = 25012
+    Msg: str = "课程目录下仍有子目录或课程无法删除"
+
+
+class PortalCourseCatalogNameDuplicateError(BaseErrorCode):
+    Code: int = 25013
+    Msg: str = "同一父目录下名称不能重复"
+
+
+class PortalCourseCatalogImportError(BaseErrorCode):
+    Code: int = 25014
+    Msg: str = "课程目录导入失败"
+
+
+class PortalCourseCatalogDepthExceededError(BaseErrorCode):
+    Code: int = 25015
+    Msg: str = "课程目录层级不能超过 8 级"
+
+
+class PortalCourseVideoNotSupportedError(BaseErrorCode):
+    Code: int = 25016
+    Msg: str = "第三方课程不支持配置视频"
+
+
+class PortalCourseExternalUrlRequiredError(BaseErrorCode):
+    Code: int = 25017
+    Msg: str = "第三方课程需要配置有效链接"
+
+
+class PortalCourseImportError(BaseErrorCode):
+    Code: int = 25018
+    Msg: str = "第三方课程导入失败"

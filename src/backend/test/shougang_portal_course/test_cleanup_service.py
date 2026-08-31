@@ -110,16 +110,11 @@ def test_worker_and_beat_registration_are_stable():
     from bisheng.core.config.settings import CeleryConf
 
     config = CeleryConf()
-    assert config.task_routers["bisheng.worker.portal_course.*"] == {
-        "queue": "celery"
-    }
+    assert config.task_routers["bisheng.worker.portal_course.*"] == {"queue": "celery"}
     assert config.beat_schedule["scan_portal_course_media_cleanup"]["task"] == (
         "bisheng.worker.portal_course.tasks.scan_portal_course_media_cleanup"
     )
     assert config.beat_schedule["scan_portal_course_media_cleanup"]["schedule"] == 60.0
-    scan_source = (
-        Path(__file__).parents[2]
-        / "bisheng/worker/portal_course/tasks.py"
-    ).read_text(encoding="utf-8")
+    scan_source = (Path(__file__).parents[2] / "bisheng/worker/portal_course/tasks.py").read_text(encoding="utf-8")
     assert "claim_cleanup_jobs" in scan_source
     assert "list_due_cleanup_refs" not in scan_source
