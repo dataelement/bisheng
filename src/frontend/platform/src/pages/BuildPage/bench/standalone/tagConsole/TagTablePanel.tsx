@@ -188,7 +188,7 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                             <th className="px-3 py-3 font-medium">{t("build.tagName", "标签名称")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.sourceLibrary", "标签来源库")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.sourceKnowledge", "标签来源知识")}</th>
-                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.submitter", "提报者")}</th>
+                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.submitter", "创建者")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.reviewer", "审核者")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.markedCount", "已标识知识数")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.createDate", "创建日期")}</th>
