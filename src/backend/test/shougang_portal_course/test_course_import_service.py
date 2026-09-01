@@ -4,6 +4,7 @@ from datetime import datetime
 from io import BytesIO
 
 import openpyxl
+import pytest
 
 from bisheng.shougang_portal_course.domain.schemas.portal_course_schema import CatalogCreate
 from bisheng.shougang_portal_course.domain.services.catalog_service import (
@@ -30,6 +31,21 @@ def _course_workbook(*rows: tuple) -> bytes:
     return output.getvalue()
 
 
+def _catalog_workbook(*rows: tuple) -> bytes:
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "课程目录"
+    headers = ["目录ID", "上级目录ID", "上级目录", "目录名称", "描述", "排序", "是否公开"]
+    for col, header in enumerate(headers, start=1):
+        sheet.cell(row=1, column=col, value=header)
+    for row_idx, row in enumerate(rows, start=2):
+        for col_idx, value in enumerate(row, start=1):
+            sheet.cell(row=row_idx, column=col_idx, value=value)
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
 def test_template_headers_match_import_format():
     workbook = openpyxl.load_workbook(BytesIO(PortalCourseImportService.build_template()))
     sheet = workbook["第三方课程"]
@@ -38,14 +54,12 @@ def test_template_headers_match_import_format():
     assert "填写说明" in workbook.sheetnames
 
 
-def test_split_catalog_path_supports_dot_space_and_arrows():
-    assert PortalCourseImportService.split_catalog_path(
-        "D-通用能力培训类. F-微课件. DF22-微课大赛"
-    ) == ["D-通用能力培训类", "F-微课件", "DF22-微课大赛"]
-    assert PortalCourseImportService.split_catalog_path("安全生产->消防安全") == [
-        "安全生产",
-        "消防安全",
-    ]
+def test_rejects_catalog_path_in_course_import():
+    with pytest.raises(ValueError, match="单个目录名称"):
+        PortalCourseImportService._optional_catalog_name(
+            2,
+            "D-通用能力培训类. F-微课件. DF22-微课大赛",
+        )
 
 
 async def test_import_creates_and_upserts_by_external_id(course_session):
@@ -74,7 +88,8 @@ async def test_import_creates_and_upserts_by_external_id(course_session):
                 "YX123456",
                 "7分钟带你了解财务报告",
                 "赵晨露",
-                "D-通用能力培训类. F-微课件. DF22-微课大赛",
+                "",
+                "DF22-微课大赛",
                 "2025/4/8",
                 "业财融合",
                 "https://example.com/cover.jpg",
@@ -108,6 +123,7 @@ async def test_import_creates_and_upserts_by_external_id(course_session):
                 "财务报告进阶",
                 "赵晨露",
                 "",
+                "",
                 "2025/5/1",
                 "更新简介",
                 "",
@@ -134,6 +150,7 @@ async def test_preview_flags_missing_catalog_and_force_uncategorizes(course_sess
             "A1",
             "安全课",
             "王老师",
+            "",
             "不存在目录",
             "",
             "",
@@ -166,9 +183,84 @@ async def test_import_rejects_missing_name(course_session):
         tenant_id=1,
         user_id=7,
         content=_course_workbook(
-            ("A1", "", "王老师", "", "", "", "", "", "https://learn.example.com/a1")
+            ("A1", "", "王老师", "", "", "", "", "", "", "https://learn.example.com/a1")
         ),
     )
     assert result.success == 0
     assert result.failed == 1
     assert any("课程名称不能为空" in item for item in result.errors)
+
+
+async def test_import_assigns_catalog_by_external_id(course_session):
+    catalog_service = PortalCourseCatalogService(course_session)
+    external_catalog_id = "CAT-1001"
+    imported = await catalog_service.import_excel(
+        tenant_id=1,
+        user_id=7,
+        content=_catalog_workbook((external_catalog_id, "", "", "安全生产", "公司级", 1, "是")),
+    )
+    assert imported.failed == 0
+    service = PortalCourseImportService(course_session)
+    result = await service.import_excel(
+        tenant_id=1,
+        user_id=7,
+        content=_course_workbook(
+            (
+                "B1",
+                "安全课",
+                "王老师",
+                external_catalog_id,
+                "错误名称",
+                "",
+                "",
+                "",
+                "",
+                "https://learn.example.com/b1",
+            )
+        ),
+    )
+    assert result.failed == 0
+    courses = await PortalCourseService(course_session).repository.list_courses(
+        tenant_id=1,
+        public_only=False,
+    )
+    catalog = await catalog_service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id=external_catalog_id,
+    )
+    assert catalog is not None
+    assert courses[0].catalog_id == catalog.id
+
+
+async def test_import_assigns_catalog_by_id(course_session):
+    catalog_service = PortalCourseCatalogService(course_session)
+    catalog = await catalog_service.create_catalog(
+        tenant_id=1,
+        user_id=7,
+        payload=CatalogCreate(name="安全生产"),
+    )
+    service = PortalCourseImportService(course_session)
+    result = await service.import_excel(
+        tenant_id=1,
+        user_id=7,
+        content=_course_workbook(
+            (
+                "B1",
+                "安全课",
+                "王老师",
+                catalog.id,
+                "错误路径",
+                "",
+                "",
+                "",
+                "",
+                "https://learn.example.com/b1",
+            )
+        ),
+    )
+    assert result.failed == 0
+    courses = await PortalCourseService(course_session).repository.list_courses(
+        tenant_id=1,
+        public_only=False,
+    )
+    assert courses[0].catalog_id == catalog.id

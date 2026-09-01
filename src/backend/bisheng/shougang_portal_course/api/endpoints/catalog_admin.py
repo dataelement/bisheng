@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -88,7 +89,12 @@ async def download_catalog_template(
     return StreamingResponse(
         BytesIO(data),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": ("attachment; filename=portal_course_catalog_template.xlsx")},
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="course-catalog-import-template.xlsx"; '
+                f"filename*=UTF-8''{quote('课程目录导入模板.xlsx', safe='')}"
+            )
+        },
     )
 
 

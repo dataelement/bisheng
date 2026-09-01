@@ -404,6 +404,7 @@ class CatalogUpdate(BaseModel):
 
 class CatalogRead(BaseModel):
     id: str
+    external_id: str | None = None
     name: str
     description: str
     parent_id: str | None = None

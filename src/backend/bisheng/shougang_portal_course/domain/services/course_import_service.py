@@ -31,6 +31,7 @@ EXCEL_HEADERS = [
     "课程ID",
     "课程名称",
     "主讲人",
+    "目录ID",
     "课程目录",
     "更新日期",
     "课程简介",
@@ -41,16 +42,19 @@ EXCEL_HEADERS = [
 SHEET_NAME = "第三方课程"
 MAX_IMPORT_ROWS = 2000
 MAX_EXTERNAL_ID_LENGTH = 128
+MAX_CATALOG_ID_LENGTH = 128
+MAX_CATALOG_NAME_LENGTH = 200
 MAX_NAME_LENGTH = 200
 MAX_INSTRUCTOR_LENGTH = 100
 _TAG_SPLIT = re.compile(r"[,，;；、|]+")
-_PATH_SEPARATORS = (". ", "->", "/", ".")
+_CATALOG_PATH_SEPARATORS = (". ", "->", "/", ".")
 
 ParsedRow = tuple[
     int,
     str | None,
     str,
     str,
+    str | None,
     str | None,
     datetime | None,
     str,
@@ -84,7 +88,8 @@ class PortalCourseImportService:
             "YX123456",
             "7分钟带你了解财务报告——助力业财融合",
             "赵晨露",
-            "D-通用能力培训类. F-微课件. DF22-微课大赛",
+            "CAT-1001",
+            "DF22-微课大赛",
             "2025/4/8",
             "围绕业财融合场景，拆解合并报表与母公司报表差异。",
             "https://example.com/cover.jpg",
@@ -93,7 +98,7 @@ class PortalCourseImportService:
         )
         for col_idx, value in enumerate(example, start=1):
             sheet.cell(row=2, column=col_idx, value=value)
-        widths = [18, 42, 14, 42, 14, 48, 36, 18, 42]
+        widths = [18, 42, 14, 36, 42, 14, 48, 36, 18, 42]
         for idx, width in enumerate(widths, start=1):
             sheet.column_dimensions[chr(64 + idx)].width = width
         PortalCourseImportService._write_instruction_sheet(workbook.create_sheet("填写说明"))
@@ -107,7 +112,7 @@ class PortalCourseImportService:
         issues = list(parse_issues)
         valid = 0
         for row in parsed_rows:
-            row_issues = self._row_catalog_issues(row[0], row[4], catalogs)
+            row_issues = self._row_catalog_issues(row[0], row[4], row[5], catalogs)
             if row_issues:
                 issues.extend(row_issues)
             else:
@@ -128,8 +133,8 @@ class PortalCourseImportService:
         success = 0
         failed = len(parse_issues)
         for row in parsed_rows:
-            row_idx, external_id, name, instructor, catalog_path, source_updated_at, description, cover_url, tags, external_url = row
-            catalog_issues = self._row_catalog_issues(row_idx, catalog_path, catalogs)
+            row_idx, external_id, name, instructor, catalog_id_value, catalog_name, source_updated_at, description, cover_url, tags, external_url = row
+            catalog_issues = self._row_catalog_issues(row_idx, catalog_id_value, catalog_name, catalogs)
             catalog_id = None
             if catalog_issues:
                 if not force or any(not issue.recoverable for issue in catalog_issues):
@@ -137,7 +142,7 @@ class PortalCourseImportService:
                     failed += 1
                     continue
             else:
-                catalog_id = self._resolve_catalog_id(catalog_path, catalogs)
+                catalog_id = self._resolve_catalog_ref(catalog_id_value, catalog_name, catalogs)
             try:
                 await self._upsert_row(
                     tenant_id=tenant_id,
@@ -223,19 +228,21 @@ class PortalCourseImportService:
     @staticmethod
     def _row_catalog_issues(
         row_idx: int,
-        catalog_path: str | None,
+        catalog_id: str | None,
+        catalog_name: str | None,
         catalogs: list[PortalCourseCatalog],
     ) -> list[CourseImportIssue]:
-        if not catalog_path:
+        if not catalog_id and not catalog_name:
             return []
         try:
-            PortalCourseImportService._resolve_catalog_id(catalog_path, catalogs)
-        except LookupError:
+            PortalCourseImportService._resolve_catalog_ref(catalog_id, catalog_name, catalogs)
+        except LookupError as exc:
+            label = catalog_id or catalog_name or str(exc)
             return [
                 CourseImportIssue(
                     row=row_idx,
                     code="missing_catalog",
-                    message=f"第 {row_idx} 行: 课程目录「{catalog_path}」不存在",
+                    message=f"第 {row_idx} 行: 课程目录「{label}」不存在",
                     recoverable=True,
                 )
             ]
@@ -251,55 +258,31 @@ class PortalCourseImportService:
         return []
 
     @staticmethod
-    def _resolve_catalog_id(
-        catalog_path: str | None,
+    def _resolve_catalog_ref(
+        catalog_id: str | None,
+        catalog_name: str | None,
         catalogs: list[PortalCourseCatalog],
     ) -> str | None:
-        if not catalog_path:
-            return None
-        parts = PortalCourseImportService.split_catalog_path(catalog_path)
-        parent_id = None
-        current = None
-        for name in parts:
-            matches = [
-                item
-                for item in catalogs
-                if item.parent_id == parent_id and item.name == name
-            ]
-            if len(matches) > 1:
-                raise ValueError(f"课程目录「{name}」不唯一")
-            if not matches:
-                current = None
-                break
-            current = matches[0]
-            parent_id = current.id
-        if current is not None:
-            return current.id
-        if len(parts) == 1:
-            name_matches = [item for item in catalogs if item.name == parts[0]]
-            if len(name_matches) == 1:
-                return name_matches[0].id
-            if len(name_matches) > 1:
-                raise ValueError(f"课程目录「{parts[0]}」不唯一")
-        normalized = "->".join(parts)
-        path_matches = [item for item in catalogs if item.catalog_name_path == normalized]
-        if len(path_matches) == 1:
-            return path_matches[0].id
-        if len(path_matches) > 1:
-            raise ValueError(f"课程目录「{catalog_path}」不唯一")
-        raise LookupError(catalog_path)
+        if catalog_id:
+            for item in catalogs:
+                if item.external_id == catalog_id or item.id == catalog_id:
+                    return item.id
+            raise LookupError(catalog_id)
+        return PortalCourseImportService._resolve_catalog_name(catalog_name, catalogs)
 
     @staticmethod
-    def split_catalog_path(value: str) -> list[str]:
-        text = value.strip()
-        if not text:
-            return []
-        for separator in _PATH_SEPARATORS:
-            if separator in text:
-                parts = [part.strip() for part in text.split(separator) if part.strip()]
-                if len(parts) > 1:
-                    return parts
-        return [text]
+    def _resolve_catalog_name(
+        catalog_name: str | None,
+        catalogs: list[PortalCourseCatalog],
+    ) -> str | None:
+        if not catalog_name:
+            return None
+        matches = [item for item in catalogs if item.name == catalog_name]
+        if len(matches) > 1:
+            raise ValueError(f"课程目录「{catalog_name}」不唯一")
+        if not matches:
+            raise LookupError(catalog_name)
+        return matches[0].id
 
     @classmethod
     def _parse_import_workbook(cls, content: bytes) -> tuple[list[ParsedRow], list[CourseImportIssue], int]:
@@ -348,7 +331,7 @@ class PortalCourseImportService:
     @classmethod
     def _parse_import_row(cls, row_idx: int, row: tuple) -> ParsedRow:
         values = list(row or ())
-        while len(values) < 9:
+        while len(values) < 10:
             values.append(None)
         external_id = cls._optional_text(values[0], field="课程ID", row_idx=row_idx, max_length=MAX_EXTERNAL_ID_LENGTH)
         name = cls._required_text(values[1], field="课程名称", row_idx=row_idx, max_length=MAX_NAME_LENGTH)
@@ -358,24 +341,47 @@ class PortalCourseImportService:
             row_idx=row_idx,
             max_length=MAX_INSTRUCTOR_LENGTH,
         ) or ""
-        catalog_path = cls._optional_text(values[3], field="课程目录", row_idx=row_idx, max_length=1000)
-        source_updated_at = cls._parse_date(row_idx, values[4])
-        description = str(values[5]).strip() if values[5] is not None else ""
-        cover_url = cls._optional_url(row_idx, values[6], field="课程封面")
-        tags = cls._parse_tags(values[7])
-        external_url = cls._optional_url(row_idx, values[8], field="课程链接")
+        catalog_id = cls._optional_catalog_id(row_idx, values[3])
+        catalog_name = cls._optional_catalog_name(row_idx, values[4])
+        source_updated_at = cls._parse_date(row_idx, values[5])
+        description = str(values[6]).strip() if values[6] is not None else ""
+        cover_url = cls._optional_url(row_idx, values[7], field="课程封面")
+        tags = cls._parse_tags(values[8])
+        external_url = cls._optional_url(row_idx, values[9], field="课程链接")
         return (
             row_idx,
             external_id,
             name,
             instructor,
-            catalog_path,
+            catalog_id,
+            catalog_name,
             source_updated_at,
             description,
             cover_url,
             tags,
             external_url,
         )
+
+    @staticmethod
+    def _optional_catalog_id(row_idx: int, value: object) -> str | None:
+        return PortalCourseImportService._optional_text(
+            value,
+            field="目录ID",
+            row_idx=row_idx,
+            max_length=MAX_CATALOG_ID_LENGTH,
+        )
+
+    @staticmethod
+    def _optional_catalog_name(row_idx: int, value: object) -> str | None:
+        text = str(value).strip() if value is not None else ""
+        if not text:
+            return None
+        if len(text) > MAX_CATALOG_NAME_LENGTH:
+            raise ValueError(f"第 {row_idx} 行: 课程目录不能超过 {MAX_CATALOG_NAME_LENGTH} 字")
+        for separator in _CATALOG_PATH_SEPARATORS:
+            if separator in text:
+                raise ValueError(f"第 {row_idx} 行: 课程目录请填写单个目录名称，不要填写路径")
+        return text
 
     @staticmethod
     def _required_text(value: object, *, field: str, row_idx: int, max_length: int) -> str:
@@ -442,11 +448,12 @@ class PortalCourseImportService:
             "1. 请使用「第三方课程」工作表导入. 表头不可修改.",
             "2. 课程ID 为第三方平台中的课程 ID，字符串. 填写后重复导入会按该 ID 更新已有课程.",
             "3. 课程名称为必填. 课程链接填写后课程会自动启用；留空则导入为未启用.",
-            "4. 课程目录填写完整路径，层级用「. 」(点+空格)、-> 或 / 分隔. 例如：D-通用能力培训类. F-微课件. DF22-微课大赛.",
-            "5. 目录必须已在课程目录中存在. 预检失败时可选择强行导入，找不到的目录会改为未分类.",
-            "6. 更新日期示例 2025/4/8. 课程封面填写 http(s) 图片链接，不要嵌入图片.",
-            "7. 多个标签用逗号、顿号或分号分隔.",
-            f"8. 单次最多导入 {MAX_IMPORT_ROWS} 行.",
+            "4. 目录ID 选填，填写外部系统目录编号，与「课程目录」导入模板中的目录ID一致，优先于课程目录名称.",
+            "5. 课程目录填写单个目录名称，不要填写完整路径或多级路径.",
+            "6. 目录必须已在课程目录中存在. 预检失败时可选择强行导入，找不到的目录会改为未分类.",
+            "7. 更新日期示例 2025/4/8. 课程封面填写 http(s) 图片链接，不要嵌入图片.",
+            "8. 多个标签用逗号、顿号或分号分隔.",
+            f"9. 单次最多导入 {MAX_IMPORT_ROWS} 行.",
         ]
         sheet.column_dimensions["A"].width = 96
         for idx, line in enumerate(lines, start=1):

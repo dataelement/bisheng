@@ -272,7 +272,7 @@ async def test_course_list_nav_keyword_keeps_matching_ancestors(course_session):
     assert child.catalog_name_path == "安全生产->消防安全"
 
 
-def _catalog_workbook(*rows: tuple[str, str, str, int, str]) -> bytes:
+def _catalog_workbook(*rows: tuple) -> bytes:
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     for col, header in enumerate(EXCEL_HEADERS, start=1):
@@ -291,8 +291,8 @@ async def test_excel_import_empty_parent_goes_to_root_and_upserts(course_session
         tenant_id=1,
         user_id=7,
         content=_catalog_workbook(
-            ("", "安全生产", "公司级", 1, "是"),
-            ("", "消防安全", "消防专题", 2, "是"),
+            ("", "", "", "安全生产", "公司级", 1, "是"),
+            ("", "", "", "消防安全", "消防专题", 2, "是"),
         ),
     )
     assert result.failed == 0
@@ -306,7 +306,7 @@ async def test_excel_import_empty_parent_goes_to_root_and_upserts(course_session
     updated = await service.import_excel(
         tenant_id=1,
         user_id=7,
-        content=_catalog_workbook(("", "安全生产", "更新后的简介", 3, "否")),
+        content=_catalog_workbook(("", "", "", "安全生产", "更新后的简介", 3, "否")),
     )
     assert updated.failed == 0
     tree = await service.list_read_models(tenant_id=1, public_only=False, as_tree=True)
@@ -322,8 +322,8 @@ async def test_excel_import_uses_parent_name_not_path(course_session):
         tenant_id=1,
         user_id=7,
         content=_catalog_workbook(
-            ("安全生产", "消防安全", "消防专题", 1, "是"),
-            ("", "安全生产", "公司级", 1, "是"),
+            ("", "", "安全生产", "消防安全", "消防专题", 1, "是"),
+            ("", "", "", "安全生产", "公司级", 1, "是"),
         ),
     )
     assert result.failed == 0
@@ -341,7 +341,7 @@ async def test_excel_import_missing_parent_fails_row(course_session):
     result = await service.import_excel(
         tenant_id=1,
         user_id=7,
-        content=_catalog_workbook(("不存在", "消防安全", "消防专题", 1, "是")),
+        content=_catalog_workbook(("", "", "不存在", "消防安全", "消防专题", 1, "是")),
     )
     assert result.success == 0
     assert result.failed == 1
@@ -353,9 +353,9 @@ async def test_excel_preview_flags_missing_parent_as_recoverable(course_session)
     preview = await service.preview_excel(
         tenant_id=1,
         content=_catalog_workbook(
-            ("不存在", "消防安全", "消防专题", 1, "是"),
-            ("", "安全生产", "公司级", 1, "是"),
-            ("安全生产", "应急管理", "应急", 2, "是"),
+            ("", "", "不存在", "消防安全", "消防专题", 1, "是"),
+            ("", "", "", "安全生产", "公司级", 1, "是"),
+            ("", "", "安全生产", "应急管理", "应急", 2, "是"),
         ),
     )
     assert preview.total == 3
@@ -373,8 +373,8 @@ async def test_excel_force_import_puts_missing_parent_under_root(course_session)
         user_id=7,
         force=True,
         content=_catalog_workbook(
-            ("不存在", "消防安全", "消防专题", 1, "是"),
-            ("消防安全", "灭火器使用", "实操", 1, "是"),
+            ("", "", "不存在", "消防安全", "消防专题", 1, "是"),
+            ("", "", "消防安全", "灭火器使用", "实操", 1, "是"),
         ),
     )
     assert result.failed == 0
@@ -391,4 +391,152 @@ async def test_template_headers_match_import_format():
     sheet = workbook["课程目录"]
     headers = [cell.value for cell in next(sheet.iter_rows(max_row=1))]
     assert headers == EXCEL_HEADERS
+    assert headers[0] == "目录ID"
+    assert headers[1] == "上级目录ID"
     assert "目录路径" not in headers
+
+
+async def test_excel_import_uses_catalog_id_to_create_and_update(course_session):
+    service = PortalCourseCatalogService(course_session)
+    catalog_id = "CAT-1001"
+    created = await service.import_excel(
+        tenant_id=1,
+        user_id=7,
+        content=_catalog_workbook(
+            (catalog_id, "", "", "安全生产", "公司级", 1, "是"),
+        ),
+    )
+    assert created.failed == 0
+    assert created.success == 1
+    item = await service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id=catalog_id,
+    )
+    assert item is not None
+    assert item.id != catalog_id
+    assert len(item.id) == 32
+    assert item.external_id == catalog_id
+    assert item.name == "安全生产"
+
+    updated = await service.import_excel(
+        tenant_id=1,
+        user_id=7,
+        content=_catalog_workbook(
+            (catalog_id, "", "", "安全培训", "更新简介", 4, "否"),
+        ),
+    )
+    assert updated.failed == 0
+    item = await service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id=catalog_id,
+    )
+    assert item is not None
+    assert item.name == "安全培训"
+    assert item.description == "更新简介"
+    assert item.order_index == 4
+    assert item.opened is False
+
+
+async def test_excel_import_uses_parent_id_over_parent_name(course_session):
+    service = PortalCourseCatalogService(course_session)
+    result = await service.import_excel(
+        tenant_id=1,
+        user_id=7,
+        content=_catalog_workbook(
+            ("CAT-ROOT", "", "", "安全生产", "公司级", 1, "是"),
+            ("CAT-OTHER", "", "", "设备操作", "其他根目录", 2, "是"),
+            ("CAT-CHILD", "CAT-ROOT", "设备操作", "消防安全", "消防专题", 1, "是"),
+        ),
+    )
+    assert result.failed == 0
+    child = await service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id="CAT-CHILD",
+    )
+    root = await service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id="CAT-ROOT",
+    )
+    assert child is not None
+    assert root is not None
+    assert child.parent_id == root.id
+    assert child.catalog_name_path == "安全生产->消防安全"
+
+
+async def test_excel_import_parent_id_from_later_row(course_session):
+    service = PortalCourseCatalogService(course_session)
+    result = await service.import_excel(
+        tenant_id=1,
+        user_id=7,
+        content=_catalog_workbook(
+            ("CAT-CHILD", "CAT-ROOT", "", "消防安全", "消防专题", 1, "是"),
+            ("CAT-ROOT", "", "", "安全生产", "公司级", 1, "是"),
+        ),
+    )
+    assert result.failed == 0
+    assert result.success == 2
+    child = await service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id="CAT-CHILD",
+    )
+    root = await service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id="CAT-ROOT",
+    )
+    assert child is not None
+    assert root is not None
+    assert child.parent_id == root.id
+
+
+async def test_excel_import_missing_parent_id_fails_row(course_session):
+    service = PortalCourseCatalogService(course_session)
+    result = await service.import_excel(
+        tenant_id=1,
+        user_id=7,
+        content=_catalog_workbook(
+            ("", "MISSING-ID", "", "消防安全", "消防专题", 1, "是"),
+        ),
+    )
+    assert result.success == 0
+    assert result.failed == 1
+    assert any("上级目录ID「MISSING-ID」不存在" in item for item in result.errors)
+
+
+async def test_excel_preview_flags_missing_parent_id_as_recoverable(course_session):
+    service = PortalCourseCatalogService(course_session)
+    preview = await service.preview_excel(
+        tenant_id=1,
+        content=_catalog_workbook(
+            ("", "MISSING-ID", "", "消防安全", "消防专题", 1, "是"),
+        ),
+    )
+    assert preview.total == 1
+    assert preview.valid == 0
+    assert preview.issues[0].code == "missing_parent"
+    assert preview.issues[0].recoverable is True
+    assert "上级目录ID「MISSING-ID」不存在" in preview.issues[0].message
+
+
+async def test_excel_force_import_puts_missing_parent_id_under_root(course_session):
+    service = PortalCourseCatalogService(course_session)
+    result = await service.import_excel(
+        tenant_id=1,
+        user_id=7,
+        force=True,
+        content=_catalog_workbook(
+            ("CAT-CHILD", "MISSING-ID", "", "消防安全", "消防专题", 1, "是"),
+        ),
+    )
+    assert result.failed == 0
+    child = await service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id="CAT-CHILD",
+    )
+    assert child is not None
+    assert child.parent_id is None
+
+
+async def test_excel_import_rejects_self_as_parent():
+    service = PortalCourseCatalogService(session=None)
+    with pytest.raises(ValueError, match="上级目录ID不能与目录ID相同"):
+        service._parse_import_row(2, ("CAT-001", "CAT-001", "", "安全生产", "", 1, "是"))

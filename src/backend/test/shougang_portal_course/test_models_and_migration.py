@@ -74,6 +74,19 @@ def test_progress_has_tenant_user_video_unique_constraint():
     assert len(matching) == 1
 
 
+def test_catalog_has_tenant_external_id_unique_constraint():
+    *_, PortalCourseCatalog = _models()
+    matching = []
+    for constraint in PortalCourseCatalog.__table__.constraints:
+        if isinstance(constraint, UniqueConstraint):
+            columns = tuple(column.name for column in constraint.columns)
+            if columns == ("tenant_id", "external_id"):
+                matching.append(constraint)
+
+    assert len(matching) == 1
+    assert PortalCourseCatalog.__table__.c.external_id.nullable is True
+
+
 def test_course_tables_compile_without_native_json_or_database_enum():
     for model in _models():
         mysql_sql = str(CreateTable(model.__table__).compile(dialect=mysql.dialect()))
@@ -201,6 +214,45 @@ def test_f104_migration_adds_external_import_fields():
             assert "external_id" not in columns
             assert "cover_url" not in columns
             assert "source_updated_at" not in columns
+        finally:
+            migration.op = original_op
+    engine.dispose()
+
+
+def test_f105_migration_adds_catalog_external_id_and_backfills_legacy_ids():
+    migration = importlib.import_module(
+        "bisheng.core.database.alembic.versions.v2_6_0_f105_portal_catalog_external_id"
+    )
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        original_op = migration.op
+        migration.op = Operations(MigrationContext.configure(connection))
+        try:
+            connection.exec_driver_sql(
+                "CREATE TABLE portal_course_catalog "
+                "(id CHAR(32) PRIMARY KEY, tenant_id INTEGER NOT NULL)"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO portal_course_catalog (id, tenant_id) VALUES ('CAT-001', 1)"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO portal_course_catalog (id, tenant_id) "
+                "VALUES ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1)"
+            )
+            migration.upgrade()
+            columns = {item["name"] for item in sa_inspect(connection).get_columns("portal_course_catalog")}
+            assert "external_id" in columns
+            rows = {
+                row[0]: row[1]
+                for row in connection.exec_driver_sql(
+                    "SELECT id, external_id FROM portal_course_catalog"
+                )
+            }
+            assert rows["CAT-001"] == "CAT-001"
+            assert rows["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] is None
+            migration.downgrade()
+            columns = {item["name"] for item in sa_inspect(connection).get_columns("portal_course_catalog")}
+            assert "external_id" not in columns
         finally:
             migration.op = original_op
     engine.dispose()
