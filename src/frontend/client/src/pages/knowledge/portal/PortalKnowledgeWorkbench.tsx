@@ -314,6 +314,9 @@ export default function PortalKnowledgeWorkbench() {
     const currentFolderIdRef = useRef<string | undefined>();
     const previousSpaceIdRef = useRef<string | undefined>(undefined);
     const lastPortalLocationKeyRef = useRef("");
+    /** Skip the automatic reloadFiles in the activeSpace effect after back-to-list sets the URL.
+     *  Otherwise reloadFiles races with handleNavigateFolder and overwrites the full path tree. */
+    const skipNextReloadRef = useRef(false);
     const isDeepLinkRestoring = Boolean(
         portalDeepLinkTarget && restoringDeepLinkKey === portalDeepLinkTarget.key,
     );
@@ -1642,11 +1645,12 @@ export default function PortalKnowledgeWorkbench() {
             setCanCreateFolder(false);
             setCanUploadFile(false);
             void loadRootTreeRef.current(1, false, activeSpace.id);
-        } else if (!openingDeepLinkedFileHere) {
+        } else if (!openingDeepLinkedFileHere && !skipNextReloadRef.current) {
             // Sort/filter changed: keep the current folder and reload the same view
             // with the new ordering/filter instead of jumping back to the root.
             void reloadFilesRef.current();
         }
+        skipNextReloadRef.current = false;
         previousSpaceIdRef.current = String(activeSpace.id);
         // Reset + reload ONLY when the space or the sort/filter actually change.
         // Intentionally NOT depending on loadRootTree/reloadFiles identity (see refs
@@ -2396,6 +2400,10 @@ export default function PortalKnowledgeWorkbench() {
         setSearchTagIds([]);
         // Early back during tag-review deep link must not stick on the restore overlay.
         setRestoringDeepLinkKey(null);
+        // The activeSpace effect below will see the URL change and call reloadFiles,
+        // which races with handleNavigateFolder's path rebuild. Skip that reload so
+        // the full ancestor path from the deep-link effect survives.
+        skipNextReloadRef.current = true;
 
         // Return to the file's actual folder location instead of the entry position.
         // If the file sits in a sub-folder, jump to the deepest folder that contains it.
