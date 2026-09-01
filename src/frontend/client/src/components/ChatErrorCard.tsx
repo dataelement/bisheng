@@ -13,10 +13,11 @@
  * move and is kept — renaming ~20 keys across three locales would change nothing
  * a user sees.
  */
-import { ChevronDown, ChevronRight, CircleAlert } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { useState } from 'react';
 import { useLocalize } from '~/hooks';
 import { ServiceBusyNotice } from '~/components/ServiceBusyNotice';
+import type { WorkbenchModelOption } from '~/components/Chat/ModelAvailabilityOption';
 
 interface ChatErrorCardProps {
     /** stable classification from the backend (error_message event / SSE error `data.error_type`) */
@@ -31,7 +32,10 @@ interface ChatErrorCardProps {
     onRetry?: () => void;
     retrying?: boolean;
     rateLimitState?: 'normal' | 'recovering' | 'busy';
-    onSwitchModel?: () => void;
+    /** Fires the model switch with the id picked from the dropdown. */
+    onSwitchModel?: (modelId: string) => void;
+    /** Candidate models for the switch-model dropdown (pre-filtered). */
+    switchModelOptions?: WorkbenchModelOption[];
     onLater?: () => void;
 }
 
@@ -82,19 +86,34 @@ export function ChatErrorCard({
     retrying,
     rateLimitState,
     onSwitchModel,
+    switchModelOptions,
     onLater,
 }: ChatErrorCardProps) {
     const localize = useLocalize();
     const [showDetail, setShowDetail] = useState(false);
 
-    const isRecoveryRejected = errorType === 'recovery_rejected';
+    // Recovery rejected = the model is STILL rate-limited after a retry, so it
+    // reads as the same busy notice: standard title, the backend's own copy as
+    // the body, and the full retry / switch-model affordances kept available.
+    if (errorType === 'recovery_rejected') {
+        return (
+            <ServiceBusyNotice
+                title={localize('com_message.rate_limit_title')}
+                desc={fallbackMessage || ''}
+                onRetry={onRetry}
+                retrying={retrying}
+                onSwitchModel={onSwitchModel}
+                switchModelOptions={switchModelOptions}
+                onLater={onLater}
+            />
+        );
+    }
+
     const key = errorType && KNOWN_TYPES.has(errorType) ? errorType : 'unknown';
-    const title = isRecoveryRejected
-        ? (fallbackMessage || '')
-        : localize(`com_linsight_error_title_${key}`);
-    const desc = isRecoveryRejected ? '' : localize(`com_linsight_error_desc_${key}`);
-    const hint = isRecoveryRejected ? '' : localize(`com_linsight_error_hint_${key}`);
-    const rawDetail = detail || (isRecoveryRejected ? '' : fallbackMessage) || '';
+    const title = localize(`com_linsight_error_title_${key}`);
+    const desc = localize(`com_linsight_error_desc_${key}`);
+    const hint = localize(`com_linsight_error_hint_${key}`);
+    const rawDetail = detail || fallbackMessage || '';
 
     // Transient → calm neutral notice (with retry where the surface wires it).
     if (TRANSIENT_TYPES.has(key)) {
@@ -103,38 +122,45 @@ export function ChatErrorCard({
             <ServiceBusyNotice
                 title={title}
                 desc={desc}
+                // The animated gauge is reserved for the rate-limit (service
+                // load) family; timeout / unavailable are outages, so they get
+                // the static gray attention mark.
+                icon={isRateLimit ? 'gauge' : 'attention'}
                 detail={isRateLimit ? undefined : rawDetail}
                 onRetry={onRetry}
                 retrying={retrying}
                 rateLimitState={isRateLimit ? (rateLimitState ?? 'busy') : undefined}
                 onSwitchModel={isRateLimit ? onSwitchModel : undefined}
+                switchModelOptions={isRateLimit ? switchModelOptions : undefined}
                 onLater={isRateLimit ? onLater : undefined}
             />
         );
     }
 
-    // Terminal / unknown → the informative (red) failure card.
+    // Terminal / unknown → the informative failure card. Same neutral surface
+    // and text ramp as ServiceBusyNotice — the warning-orange is confined to
+    // the icon, so a wall of failed turns doesn't read as a wall of color.
     return (
-        <div className="my-2 rounded-2xl border border-red-100 bg-red-50/60 p-4 text-sm">
+        <div className="my-2 rounded-2xl border border-border bg-bg-page p-4 text-sm">
             <div className="flex items-start gap-2.5">
-                <CircleAlert size={18} className="mt-0.5 shrink-0 text-red-500" />
+                <Outlined.Attention size={16} className="mt-0.5 shrink-0 text-warning" />
                 <div className="min-w-0 flex-1">
-                    <div className="font-medium text-red-700">{title}</div>
-                    <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed text-red-600/90">{desc}</p>
-                    {hint && <p className="mt-1.5 leading-relaxed text-red-600/80">{hint}</p>}
+                    <div className="font-medium text-text-2">{title}</div>
+                    <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed text-text-3">{desc}</p>
+                    {hint && <p className="mt-1.5 leading-relaxed text-text-3">{hint}</p>}
 
                     {rawDetail && (
-                        <div className="mt-3">
+                        <div className="mt-2.5">
                             <button
                                 type="button"
                                 onClick={() => setShowDetail((v) => !v)}
-                                className="inline-flex items-center gap-1 text-xs text-red-600/70 transition-colors hover:text-red-700"
+                                className="inline-flex items-center gap-1 text-body text-gray-400 transition-colors hover:text-gray-600"
                             >
-                                {showDetail ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                                 {localize(showDetail ? 'com_linsight_error_hide_detail' : 'com_linsight_error_view_detail')}
+                                {showDetail ? <Outlined.Down size={14} /> : <Outlined.Right size={14} />}
                             </button>
                             {showDetail && (
-                                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-red-100/50 p-2.5 text-xs leading-relaxed text-red-700/80">
+                                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-100 p-2.5 text-xs leading-relaxed text-gray-500">
                                     {rawDetail}
                                 </pre>
                             )}

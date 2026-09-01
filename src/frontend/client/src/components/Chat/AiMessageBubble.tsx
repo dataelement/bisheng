@@ -37,6 +37,12 @@ import { getFileTypeIcon, isImageFileName } from "~/components/ui/icon/File/File
 import { MessageImage } from "~/components/Chat/Messages/Content/MessageImage";
 import { ModelRateLimitRecoveryDialog } from "~/components/ModelRateLimitRecoveryDialog";
 import {
+    getRecoveryModelCandidates,
+    isRecoveryConfirmationAccepted,
+} from "~/components/modelRateLimitRecoveryDialogHelpers";
+import { useToastContext } from "~/Providers";
+import { NotificationSeverity } from "~/common/types";
+import {
     shouldOpenModelSwitchRecommendation,
     useModelRateLimitRecovery,
 } from "~/hooks/useModelRateLimitRecovery";
@@ -561,7 +567,9 @@ function AssistantBubble({
         || (message.errorCode !== undefined && RETRYABLE_ERROR_CODES.has(message.errorCode)
             ? "rate_limit"
             : "chat_unknown");
-    const canRecoverRateLimit = resolvedErrorType === 'rate_limit'
+    // recovery_rejected = still rate-limited after a retry: same recovery
+    // affordances (retry / switch model) as the rate_limit card itself.
+    const canRecoverRateLimit = (resolvedErrorType === 'rate_limit' || resolvedErrorType === 'recovery_rejected')
         && message.unfinished === true
         && isLatest === true
         && !!message.executionId
@@ -664,6 +672,26 @@ function AssistantBubble({
         message.modelId,
         message.rateLimitState,
     );
+
+    // Switch-model dropdown on the busy notice: same candidate filter as the
+    // recovery dialog (current + busy models excluded); picking an item fires
+    // the switch immediately — no confirmation dialog in between.
+    const { showToast } = useToastContext();
+    const switchModelOptions = useMemo(
+        () => getRecoveryModelCandidates(bsConfig?.models ?? [], message.modelId ?? ''),
+        [bsConfig?.models, message.modelId],
+    );
+    const handleSwitchModel = useCallback(async (targetModelId: string) => {
+        try {
+            const result = await recovery.switchModel(targetModelId);
+            if (!isRecoveryConfirmationAccepted(result)) {
+                showToast?.({ message: localize('com_message.switch_rejected'), severity: NotificationSeverity.ERROR });
+            }
+        } catch {
+            showToast?.({ message: localize('com_message.switch_rejected'), severity: NotificationSeverity.ERROR });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- localize is identity-unstable (see client AGENTS pitfalls)
+    }, [recovery.switchModel, showToast]);
 
     const modelName = message.sender || "AI";
     const showCursor = isLatest && isStreaming;
@@ -825,11 +853,8 @@ function AssistantBubble({
                             }
                             retrying={recovery.pending}
                             rateLimitState={displayedRateLimitState}
-                            onSwitchModel={
-                                canRecoverRateLimit
-                                    ? () => setRecoveryDialogOpen(true)
-                                    : undefined
-                            }
+                            onSwitchModel={canRecoverRateLimit ? handleSwitchModel : undefined}
+                            switchModelOptions={switchModelOptions}
                         />
                         {canRecoverRateLimit ? (
                             <ModelRateLimitRecoveryDialog

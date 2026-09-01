@@ -503,6 +503,7 @@
     "still_busy_desc": "建议更换模型继续，本次输入和已有进度会为你保留。",
     "still_busy_title": "当前模型仍未恢复",
     "switch_model": "更换模型",
+    "switch_model_and_retry": "更换模型并重试",
     "switch_rejected": "所选模型当前不可用，请重新选择。",
     "try_later": "稍后再试"
   },

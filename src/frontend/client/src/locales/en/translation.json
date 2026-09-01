@@ -515,6 +515,7 @@
     "still_busy_desc": "We recommend switching models. Your input and existing progress will be preserved.",
     "still_busy_title": "The current model has not recovered",
     "switch_model": "Switch model",
+    "switch_model_and_retry": "Switch model and retry",
     "switch_rejected": "The selected model is currently unavailable. Choose another model.",
     "try_later": "Try later"
   },
