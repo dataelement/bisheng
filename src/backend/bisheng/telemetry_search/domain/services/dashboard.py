@@ -16,12 +16,30 @@ from bisheng.database.models.role_access import AccessType, WebMenuResource
 from bisheng.user.domain.services.user import UserService
 from bisheng.utils import generate_uuid, get_request_ip
 
+from bisheng.department.domain.services.department_service import DepartmentService
+from bisheng.telemetry.domain.mid_table.knowledge_space_content_dimensions import ORG_LEVEL_FIELD_NAMES
+
 from ..models.dashboard import Dashboard, DashboardComponent, DashboardDefault, DashboardStatus, DashboardType
 from ..models.dashboard_dao import DashboardDao
 from ..repositories.implementations.dataset_repository_impl import DashboardDatasetRepositoryImpl
 from ..schemas.dashboard import DashboardCreate, DashboardRead
 from ..services.component import ComponentDataConfig, DataQueryService, TimeFilter
 from ..utils import is_commercial
+from .department_label_resolver import resolve_short_name
+
+# F058: dashboard org-hierarchy dimensions (both "所属"/belonging_* and "原始上传库"/uploader_*
+# variants) are name-text snapshots of Department rows at ETL time, not a live join. Filter
+# options for these fields must come from the live Department tree (AC-01: show org units with
+# no data too), not from an ES terms aggregation over the dataset index.
+_NAME_FIELD_TO_ORG_LEVEL: Dict[str, str] = {value: key for key, value in ORG_LEVEL_FIELD_NAMES.items()}
+_ORG_FIELD_PREFIXES = ("belonging_", "uploader_")
+
+
+def _org_level_for_field(field: str) -> str | None:
+    for prefix in _ORG_FIELD_PREFIXES:
+        if field.startswith(prefix):
+            return _NAME_FIELD_TO_ORG_LEVEL.get(field[len(prefix):])
+    return None
 
 
 class DashboardService(BaseModel):
@@ -547,6 +565,27 @@ class DashboardService(BaseModel):
         dimension_filters=None,
     ) -> Any:
         """ query component telemetry data """
+        _dashboard, component = await self._authorize_component_access(
+            dashboard_id, component_id, component,
+        )
+        data_config = ComponentDataConfig(**component.data_config)
+        res = await DataQueryService(
+            dataset_code=component.dataset_code,
+            data_config=data_config,
+            time_filters=time_filters,
+            dimension_filters=dimension_filters or [],
+        ).query_telemetry_data()
+        return res
+
+    async def _authorize_component_access(
+        self,
+        dashboard_id: int,
+        component_id: str = None,
+        component: DashboardComponent = None,
+    ) -> "tuple[Dashboard, DashboardComponent]":
+        """Shared access + component-ownership check for anything that reads one
+        dashboard component's telemetry data (chart query, F058 detail/all export).
+        Do not duplicate this logic elsewhere — extend it here instead."""
         dashboard = await DashboardDao.get_one(dashboard_id)
         if not dashboard:
             raise NotFoundError()
@@ -579,14 +618,7 @@ class DashboardService(BaseModel):
             and dashboard.status != DashboardStatus.PUBLISHED.value
         ):
             raise UnAuthorizedError()
-        data_config = ComponentDataConfig(**component.data_config)
-        res = await DataQueryService(
-            dataset_code=component.dataset_code,
-            data_config=data_config,
-            time_filters=time_filters,
-            dimension_filters=dimension_filters or [],
-        ).query_telemetry_data()
-        return res
+        return dashboard, component
 
     @staticmethod
     async def get_dataset_options() -> Sequence[Row[Any] | RowMapping | Any]:
@@ -598,9 +630,11 @@ class DashboardService(BaseModel):
         async with get_async_db_session() as session:
             dashboard_dataset_repository = DashboardDatasetRepositoryImpl(session)
             if is_commercial():
-                datasets = await dashboard_dataset_repository.find_all()
+                datasets = await dashboard_dataset_repository.find_all(is_visible=True)
             else:
-                datasets = await dashboard_dataset_repository.find_all(is_commercial_only=False)
+                datasets = await dashboard_dataset_repository.find_all(
+                    is_commercial_only=False, is_visible=True,
+                )
 
         return datasets
 
@@ -633,6 +667,12 @@ class DashboardService(BaseModel):
             label_field and label_field not in allowed_fields
         ):
             raise UnAuthorizedError()
+        org_level = _org_level_for_field(field)
+        if org_level is not None:
+            return await self._get_org_unit_field_enums(
+                org_level=org_level, keyword=keyword, size=size, page=page,
+            )
+
         label_dimension = dimension_by_field[label_field or field]
         label_field_type = label_dimension.get("field_type") or label_dimension.get("type")
 
@@ -768,5 +808,48 @@ class DashboardService(BaseModel):
         return {
             "total": total,
             "enums": enums,
+            "options": options,
+        }
+
+    async def _get_org_unit_field_enums(
+        self, org_level: str, keyword: str | None, size: int, page: int,
+    ) -> Dict[str, Any]:
+        """F058 AC-01/AC-02/AC-03: full Department roster for one org tier, independent of
+        whether the tier has any data in the current dataset's ES index."""
+        roots = await DepartmentService.aget_tree(self.login_user)
+
+        matches = []
+
+        def _walk(nodes) -> None:
+            for node in nodes:
+                if node.status == "active" and node.org_level == org_level:
+                    matches.append(node)
+                _walk(node.children)
+
+        _walk(roots)
+
+        if keyword:
+            normalized_keyword = keyword.casefold()
+            matches = [
+                node
+                for node in matches
+                if normalized_keyword in node.name.casefold()
+                or (node.short_name and normalized_keyword in node.short_name.casefold())
+            ]
+
+        matches.sort(key=lambda node: (node.sort_order, node.name))
+
+        total = len(matches)
+        skip = (page - 1) * size
+        page_matches = matches[skip: skip + size]
+
+        options = []
+        for node in page_matches:
+            label = await resolve_short_name(department_id=node.id, name_text=node.name)
+            options.append({"value": node.name, "label": label})
+
+        return {
+            "total": total,
+            "enums": [option["value"] for option in options],
             "options": options,
         }

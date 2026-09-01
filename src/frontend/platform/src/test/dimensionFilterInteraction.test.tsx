@@ -112,3 +112,62 @@ describe("DimensionFilter interactions", () => {
     })
   })
 })
+
+// F058 AC-02/AC-03: org-hierarchy fields (belonging_*/uploader_*) get a "全选" affordance
+// and a fixed relative display order; non-org fields are untouched.
+describe("DimensionFilter org-hierarchy filters (F058)", () => {
+  const orgComponent: DashboardComponent = {
+    ...component,
+    id: "dimension-filter-org",
+    data_config: {
+      linkedComponentIds: [],
+      fields: [
+        // configured out of level order (squad before company) — display order must
+        // still resolve to company -> squad.
+        {
+          id: "field-squad",
+          fieldId: "belonging_squad_name",
+          fieldName: "belonging_squad_name",
+          displayName: "所属班组",
+        },
+        {
+          id: "field-company",
+          fieldId: "belonging_company_name",
+          fieldName: "belonging_company_name",
+          displayName: "所属公司",
+        },
+        {
+          id: "field-primary",
+          fieldId: "primary_department_id",
+          labelFieldId: "primary_department_name",
+          fieldName: "primary_department_id",
+          displayName: "人员主部门",
+        },
+      ],
+    } satisfies DimensionFilterConfig,
+  }
+
+  it("shows 全选 only for org-hierarchy fields, and orders company before squad", async () => {
+    render(<DimensionFilter component={orgComponent} />)
+
+    await waitFor(() => expect(mockedGetFieldEnums).toHaveBeenCalledTimes(3))
+
+    const selectAllButtons = screen.getAllByRole("button", { name: "全选" })
+    expect(selectAllButtons).toHaveLength(2)
+
+    const labels = screen.getAllByText(/^(所属公司|所属班组|人员主部门)$/).map(el => el.textContent)
+    expect(labels.indexOf("所属公司")).toBeLessThan(labels.indexOf("所属班组"))
+  })
+
+  it("clicking 全选 selects every currently loaded option for that field", async () => {
+    render(<DimensionFilter component={orgComponent} />)
+
+    await waitFor(() => expect(mockedGetFieldEnums).toHaveBeenCalledTimes(3))
+
+    const [selectAllButton] = screen.getAllByRole("button", { name: "全选" })
+    fireEvent.click(selectAllButton)
+
+    expect(await screen.findByText("测试部门01")).toBeInTheDocument()
+    expect(screen.getByText("测试部门02")).toBeInTheDocument()
+  })
+})

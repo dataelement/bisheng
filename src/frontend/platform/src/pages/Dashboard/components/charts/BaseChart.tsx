@@ -472,7 +472,10 @@ const getCartesianChartOption = (
     if (styleConfig.showDataLabel) {
       item.label = {
         show: true,
-        position: chartType === ChartType.GroupedHorizontalBar ? 'right' : 'top',
+        // F058 AC-05: all horizontal-orientation bar types (not just the grouped
+        // variant) must show the value at the bar's end, not the vertical 'top'
+        // position (which reads as "middle of the bar" when the axis is horizontal).
+        position: isHorizontal ? 'right' : 'top',
         fontSize: 10,
         color: "#666",
         formatter: (params: any) => unitConversion(params.value, dataConfig).join('')

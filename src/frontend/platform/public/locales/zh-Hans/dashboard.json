@@ -132,6 +132,9 @@
     "metrics": "指标",
     "virtualMetric": "*",
     "selectDatasetPrompt": "请先选择一个数据集",
+    "group": {
+      "user_engagement": "用户数据统计"
+    },
     "fieldTypes": {
       "date": "日期",
       "integer": "整数",
@@ -145,6 +148,11 @@
       "day": "日",
       "hour": "时"
     }
+  },
+  "componentExport": {
+    "exportDetail": "导出该分类明细",
+    "exportAll": "导出",
+    "exportFailed": "导出失败，请稍后重试"
   },
   "dimensionBlock": {
     "menu": {

@@ -110,6 +110,8 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
       data={data as PivotTableDataResponse}
       dataConfig={dataConfig}
       isDark={isDark}
+      dashboardId={currentDashboard?.id}
+      componentId={component.id}
     />
   }
 

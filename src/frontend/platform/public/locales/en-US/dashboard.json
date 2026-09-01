@@ -133,6 +133,9 @@
     "metrics": "Metrics",
     "virtualMetric": "*",
     "selectDatasetPrompt": "Please select a dataset first",
+    "group": {
+      "user_engagement": "User Engagement"
+    },
     "fieldTypes": {
       "date": "Date",
       "integer": "Integer",
@@ -146,6 +149,11 @@
       "day": "Day",
       "hour": "Hour"
     }
+  },
+  "componentExport": {
+    "exportDetail": "Export category detail",
+    "exportAll": "Export",
+    "exportFailed": "Export failed, please try again later"
   },
   "dimensionBlock": {
     "menu": {
