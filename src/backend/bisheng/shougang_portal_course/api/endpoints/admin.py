@@ -4,6 +4,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -168,7 +169,12 @@ async def download_course_import_template(
     return StreamingResponse(
         BytesIO(data),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": ("attachment; filename=portal_external_course_template.xlsx")},
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="course-import-template.xlsx"; '
+                f"filename*=UTF-8''{quote('第三方课程导入模板.xlsx', safe='')}"
+            )
+        },
     )
 
 

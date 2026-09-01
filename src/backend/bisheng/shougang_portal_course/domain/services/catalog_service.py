@@ -29,13 +29,14 @@ from bisheng.shougang_portal_course.domain.schemas.portal_course_schema import (
     OrderUpdate,
 )
 
-ImportRow = tuple[int, str | None, str, str, int, bool]
+ImportRow = tuple[int, str | None, str | None, str, str, int, bool]
 
 MAX_CATALOG_DEPTH = 8
 NAME_PATH_SEPARATOR = "->"
-EXCEL_HEADERS = ["上级目录", "目录名称", "描述", "排序", "是否公开"]
+EXCEL_HEADERS = ["目录ID", "上级目录", "目录名称", "描述", "排序", "是否公开"]
 MAX_IMPORT_ROWS = 2000
 MAX_CATALOG_NAME_LENGTH = 200
+MAX_CATALOG_EXTERNAL_ID_LENGTH = 32
 
 
 class PortalCourseCatalogService:
@@ -317,18 +318,19 @@ class PortalCourseCatalogService:
             cell.font = header_font
             cell.alignment = Alignment(horizontal="center")
         examples = [
-            ("", "安全生产", "公司级安全培训", 1, "是"),
-            ("安全生产", "消防安全", "消防专题", 1, "是"),
-            ("消防安全", "灭火器使用", "实操课程", 1, "是"),
+            ("", "", "安全生产", "公司级安全培训", 1, "是"),
+            ("", "安全生产", "消防安全", "消防专题", 1, "是"),
+            ("", "消防安全", "灭火器使用", "实操课程", 1, "是"),
         ]
         for row_idx, row in enumerate(examples, start=2):
             for col_idx, value in enumerate(row, start=1):
                 sheet.cell(row=row_idx, column=col_idx, value=value)
-        sheet.column_dimensions["A"].width = 24
+        sheet.column_dimensions["A"].width = 36
         sheet.column_dimensions["B"].width = 24
-        sheet.column_dimensions["C"].width = 30
-        sheet.column_dimensions["D"].width = 10
-        sheet.column_dimensions["E"].width = 12
+        sheet.column_dimensions["C"].width = 24
+        sheet.column_dimensions["D"].width = 30
+        sheet.column_dimensions["E"].width = 10
+        sheet.column_dimensions["F"].width = 12
         self._write_instruction_sheet(workbook.create_sheet("填写说明"))
         output = BytesIO()
         workbook.save(output)
@@ -345,10 +347,10 @@ class PortalCourseCatalogService:
         name_index: dict[str, list[PortalCourseCatalog]] = {}
         for item in existing:
             name_index.setdefault(item.name, []).append(item)
-        names_in_file = {name for _, _, name, _, _, _ in parsed_rows}
+        names_in_file = {name for _, _, _, name, _, _, _ in parsed_rows}
         issues = list(parse_issues)
         valid = 0
-        for row_idx, parent_name, _name, _description, _order_index, _opened in parsed_rows:
+        for row_idx, _catalog_id, parent_name, _name, _description, _order_index, _opened in parsed_rows:
             row_issues = self._preview_parent_issues(
                 row_idx=row_idx,
                 parent_name=parent_name,
@@ -419,7 +421,7 @@ class PortalCourseCatalogService:
                 if pending:
                     continue
                 break
-            for row_idx, parent_name, *_ in next_pending:
+            for row_idx, _catalog_id, parent_name, *_ in next_pending:
                 failed += 1
                 errors.append(f"第 {row_idx} 行: 上级目录「{parent_name}」不存在")
             break
@@ -440,7 +442,7 @@ class PortalCourseCatalogService:
         siblings: dict[str | None, dict[str, PortalCourseCatalog]],
         errors: list[str],
     ) -> bool | None:
-        row_idx, parent_name, name, description, order_index, opened = row
+        row_idx, catalog_id, parent_name, name, description, order_index, opened = row
         try:
             parent = self._resolve_import_parent(parent_name, name_index)
         except ValueError as exc:
@@ -452,6 +454,7 @@ class PortalCourseCatalogService:
             created = await self._upsert_child(
                 tenant_id=tenant_id,
                 user_id=user_id,
+                catalog_id=catalog_id,
                 parent=parent,
                 name=name,
                 description=description,
@@ -476,12 +479,12 @@ class PortalCourseCatalogService:
         siblings: dict[str | None, dict[str, PortalCourseCatalog]],
         errors: list[str],
     ) -> tuple[list[ImportRow], int, int]:
-        pending_names = {name for _, _, name, _, _, _ in rows}
+        pending_names = {name for _, _, _, name, _, _, _ in rows}
         leftover: list[ImportRow] = []
         success = 0
         failed = 0
         for row in rows:
-            row_idx, parent_name, name, description, order_index, opened = row
+            row_idx, catalog_id, parent_name, name, description, order_index, opened = row
             if parent_name in pending_names:
                 leftover.append(row)
                 continue
@@ -489,6 +492,7 @@ class PortalCourseCatalogService:
                 created = await self._upsert_child(
                     tenant_id=tenant_id,
                     user_id=user_id,
+                    catalog_id=catalog_id,
                     parent=None,
                     name=name,
                     description=description,
@@ -505,11 +509,12 @@ class PortalCourseCatalogService:
             success += 1
         if success:
             return leftover, success, failed
-        for row_idx, _parent_name, name, description, order_index, opened in leftover:
+        for row_idx, catalog_id, _parent_name, name, description, order_index, opened in leftover:
             try:
                 created = await self._upsert_child(
                     tenant_id=tenant_id,
                     user_id=user_id,
+                    catalog_id=catalog_id,
                     parent=None,
                     name=name,
                     description=description,
@@ -540,7 +545,7 @@ class PortalCourseCatalogService:
         header_row = next(sheet.iter_rows(values_only=True), None)
         if header_row is None:
             raise PortalCourseCatalogImportError(msg="Excel 表头为空")
-        headers = [str(cell).strip() if cell is not None else "" for cell in header_row[:5]]
+        headers = [str(cell).strip() if cell is not None else "" for cell in header_row[: len(EXCEL_HEADERS)]]
         if headers != EXCEL_HEADERS:
             raise PortalCourseCatalogImportError(msg=f"表头必须为 {' / '.join(EXCEL_HEADERS)}")
 
@@ -617,6 +622,7 @@ class PortalCourseCatalogService:
         *,
         tenant_id: int,
         user_id: int,
+        catalog_id: str | None,
         parent: PortalCourseCatalog | None,
         name: str,
         description: str,
@@ -625,22 +631,38 @@ class PortalCourseCatalogService:
         siblings: dict[str | None, dict[str, PortalCourseCatalog]],
     ) -> PortalCourseCatalog | None:
         parent_key = parent.id if parent else None
-        by_name = siblings.setdefault(parent_key, {})
-        catalog = by_name.get(name)
-        if catalog is None:
-            self._ensure_depth(parent)
-            catalog = PortalCourseCatalog(
+        existing = None
+        if catalog_id:
+            existing = await self.repository.get_catalog(
                 tenant_id=tenant_id,
-                name=name,
-                description=description,
+                catalog_id=catalog_id,
+            )
+        else:
+            existing = siblings.setdefault(parent_key, {}).get(name)
+        if existing is None:
+            self._ensure_depth(parent)
+            await self._ensure_unique_name(
+                tenant_id=tenant_id,
                 parent_id=parent_key,
-                routing_path="0",
-                catalog_id_path="",
-                catalog_name_path="",
-                order_index=order_index,
-                opened=opened,
-                create_user=user_id,
-                update_user=user_id,
+                name=name,
+            )
+            fields = {
+                "tenant_id": tenant_id,
+                "name": name,
+                "description": description,
+                "parent_id": parent_key,
+                "routing_path": "0",
+                "catalog_id_path": "",
+                "catalog_name_path": "",
+                "order_index": order_index,
+                "opened": opened,
+                "create_user": user_id,
+                "update_user": user_id,
+            }
+            catalog = (
+                PortalCourseCatalog(id=catalog_id, **fields)
+                if catalog_id
+                else PortalCourseCatalog(**fields)
             )
             await self.repository.add(catalog)
             catalog.routing_path = await self._next_routing_path(
@@ -650,14 +672,49 @@ class PortalCourseCatalogService:
             )
             self._apply_paths(catalog, parent)
             await self.repository.add(catalog)
-            by_name[name] = catalog
+            siblings.setdefault(parent_key, {})[name] = catalog
             return catalog
-        catalog.description = description
-        catalog.order_index = order_index
-        catalog.opened = opened
-        catalog.update_user = user_id
-        catalog.update_time = datetime.now()
-        await self.repository.add(catalog)
+        old_parent = existing.parent_id
+        old_name = existing.name
+        name_changed = old_name != name
+        parent_changed = old_parent != parent_key
+        if name_changed or parent_changed:
+            await self._ensure_unique_name(
+                tenant_id=tenant_id,
+                parent_id=parent_key,
+                name=name,
+                exclude_id=existing.id,
+            )
+        if parent_changed:
+            descendants = await self.repository.list_descendants(
+                tenant_id=tenant_id,
+                catalog=existing,
+                include_deleted=True,
+            )
+            self._ensure_not_descendant(existing, parent)
+            self._ensure_depth(parent, extra_depth=self._subtree_span(existing, descendants))
+            existing.parent_id = parent_key
+            existing.routing_path = await self._next_routing_path(
+                tenant_id=tenant_id,
+                parent=parent,
+                exclude_id=existing.id,
+            )
+        if name_changed:
+            existing.name = name
+        if parent_changed or name_changed:
+            await self._rebuild_paths(
+                tenant_id=tenant_id,
+                catalog=existing,
+                parent=parent,
+            )
+        existing.description = description
+        existing.order_index = order_index
+        existing.opened = opened
+        existing.update_user = user_id
+        existing.update_time = datetime.now()
+        await self.repository.add(existing)
+        siblings.get(old_parent, {}).pop(old_name, None)
+        siblings.setdefault(parent_key, {})[name] = existing
         return None
 
     @staticmethod
@@ -677,26 +734,49 @@ class PortalCourseCatalogService:
     @staticmethod
     def _parse_import_row(
         row_idx: int, row: tuple
-    ) -> tuple[int, str | None, str, str, int, bool]:
+    ) -> ImportRow:
         values = list(row or ())
-        while len(values) < 5:
+        while len(values) < 6:
             values.append(None)
+        catalog_id = PortalCourseCatalogService._parse_optional_catalog_id(row_idx, values[0])
         parent_name = PortalCourseCatalogService._normalize_import_name(
-            row_idx, values[0], field="上级目录", required=False
+            row_idx, values[1], field="上级目录", required=False
         )
         name = PortalCourseCatalogService._normalize_import_name(
-            row_idx, values[1], field="目录名称", required=True
+            row_idx, values[2], field="目录名称", required=True
         )
         assert name is not None
-        description = str(values[2]).strip() if values[2] is not None else ""
+        description = str(values[3]).strip() if values[3] is not None else ""
         if len(description) > 200:
             raise ValueError(f"第 {row_idx} 行: 描述不能超过 200 字")
         try:
-            order_index = int(values[3]) if values[3] is not None and str(values[3]).strip() != "" else 0
+            order_index = int(values[4]) if values[4] is not None and str(values[4]).strip() != "" else 0
         except (TypeError, ValueError) as exc:
             raise ValueError(f"第 {row_idx} 行: 排序必须是整数") from exc
-        opened = PortalCourseCatalogService._parse_opened(values[4])
-        return row_idx, parent_name, name, description, order_index, opened
+        opened = PortalCourseCatalogService._parse_opened(values[5])
+        return row_idx, catalog_id, parent_name, name, description, order_index, opened
+
+    @staticmethod
+    def _parse_optional_catalog_id(row_idx: int, value: object) -> str | None:
+        if value is None or value == "":
+            return None
+        if isinstance(value, bool):
+            raise ValueError(f"第 {row_idx} 行: 目录ID格式无效")
+        if isinstance(value, int):
+            text = str(value)
+        elif isinstance(value, float):
+            if not value.is_integer():
+                raise ValueError(f"第 {row_idx} 行: 目录ID格式无效")
+            text = str(int(value))
+        else:
+            text = str(value).strip()
+        if not text:
+            return None
+        if len(text) > MAX_CATALOG_EXTERNAL_ID_LENGTH:
+            raise ValueError(
+                f"第 {row_idx} 行: 目录ID不能超过 {MAX_CATALOG_EXTERNAL_ID_LENGTH} 个字符"
+            )
+        return text
 
     @staticmethod
     def _normalize_import_name(
@@ -730,13 +810,14 @@ class PortalCourseCatalogService:
     def _write_instruction_sheet(sheet: Worksheet) -> None:
         lines = [
             "1. 请使用「课程目录」工作表导入. 表头不可修改.",
-            "2. 「上级目录」填写直接上级的目录名称. 留空则导入到根目录.",
-            "3. 不要填写路径. 例如上级填 安全生产, 目录名称填 消防安全.",
-            "4. 上级目录必须已存在, 或在本文件中有对应的目录行. 预检失败时可选择强行导入, 不存在的上级将改为根目录.",
-            "5. 同一上级下同名目录重复导入时会更新描述、排序和是否公开.",
-            "6. 是否公开填写 是 / 否.",
-            "7. 目录名称和上级目录不能包含 / 或 ->.",
-            f"8. 最多 {MAX_CATALOG_DEPTH} 级. 单次最多导入 {MAX_IMPORT_ROWS} 行.",
+            "2. 「目录ID」选填，填写外部系统目录编号. 填写后重复导入会按该 ID 更新；留空则按「同一上级 + 目录名称」更新或新建.",
+            "3. 「上级目录」填写直接上级的目录名称. 留空则导入到根目录.",
+            "4. 不要填写路径. 例如上级填 安全生产, 目录名称填 消防安全.",
+            "5. 上级目录必须已存在, 或在本文件中有对应的目录行. 预检失败时可选择强行导入, 不存在的上级将改为根目录.",
+            "6. 同一上级下同名目录重复导入时会更新描述、排序和是否公开.",
+            "7. 是否公开填写 是 / 否.",
+            "8. 目录名称和上级目录不能包含 / 或 ->.",
+            f"9. 最多 {MAX_CATALOG_DEPTH} 级. 单次最多导入 {MAX_IMPORT_ROWS} 行.",
         ]
         sheet.column_dimensions["A"].width = 80
         for idx, line in enumerate(lines, start=1):
