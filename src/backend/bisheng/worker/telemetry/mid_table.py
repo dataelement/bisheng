@@ -589,6 +589,16 @@ def _resolve_belonging_start_department(
     return None
 
 
+def _original_space_id_for(file_record, space) -> int:
+    """F081 tracks each file's immutable original upload space in
+    ``KnowledgeFile.original_knowledge_id``. Files created before that column existed
+    (2026-08-10) — or not yet covered by ``backfill_knowledge_file_original_origin.py`` —
+    have it NULL; fall back to the file's current space so 原始上传库 degrades to the
+    (still library→org, not person→department) current-space mapping instead of crashing
+    or silently mis-scoping to zero."""
+    return int(getattr(file_record, "original_knowledge_id", None) or space.id)
+
+
 def _build_knowledge_space_content_records(
     rows,
     user_map: dict,
@@ -596,6 +606,8 @@ def _build_knowledge_space_content_records(
     sync_run_id: str = None,
     space_scope_map: dict | None = None,
     space_department_map: dict | None = None,
+    original_space_scope_map: dict | None = None,
+    original_space_department_map: dict | None = None,
     primary_department_map: dict | None = None,
     category_label_cache: dict | None = None,
 ):
@@ -603,6 +615,10 @@ def _build_knowledge_space_content_records(
         return [], user_map
     space_scope_map = space_scope_map if space_scope_map is not None else {}
     space_department_map = space_department_map if space_department_map is not None else {}
+    original_space_scope_map = original_space_scope_map if original_space_scope_map is not None else {}
+    original_space_department_map = (
+        original_space_department_map if original_space_department_map is not None else {}
+    )
     primary_department_map = primary_department_map if primary_department_map is not None else {}
     category_label_cache = category_label_cache if category_label_cache is not None else {}
     user_ids = {
@@ -625,13 +641,36 @@ def _build_knowledge_space_content_records(
             )
         )
 
+    # 原始上传库: same library->org mapping rule as 所属 (_resolve_belonging_start_department),
+    # but evaluated against each file's ORIGINAL space instead of its current one, so moving a
+    # file (or the uploader changing department) never changes this figure — only ever set once,
+    # at first upload. A file's original space may no longer be one of the CURRENT spaces above
+    # (the file could have since moved away from it), so it needs its own scope/department fetch.
+    original_space_ids = sorted({_original_space_id_for(file_record, space) for file_record, space in rows})
+    missing_original_space_ids = [
+        space_id for space_id in original_space_ids if space_id not in original_space_scope_map
+    ]
+    if missing_original_space_ids:
+        original_space_scope_map.update(KnowledgeSpaceScopeDao.get_map_by_space_ids(missing_original_space_ids))
+    missing_original_space_department_ids = [
+        space_id for space_id in original_space_ids if space_id not in original_space_department_map
+    ]
+    if missing_original_space_department_ids:
+        original_space_department_map.update(
+            _get_knowledge_space_department_map(
+                missing_original_space_department_ids,
+                original_space_scope_map,
+            )
+        )
+
     all_user_ids = {int(file_record.user_id) for file_record, _ in rows if file_record.user_id}
-    for scope in space_scope_map.values():
-        level = _resolve_content_stat_space_level(scope)
-        if level == KnowledgeSpaceLevelEnum.TEAM.value and getattr(scope, "created_by", None):
-            all_user_ids.add(int(scope.created_by))
-        elif level == KnowledgeSpaceLevelEnum.PERSONAL.value and getattr(scope, "owner_id", None):
-            all_user_ids.add(int(scope.owner_id))
+    for scope_map in (space_scope_map, original_space_scope_map):
+        for scope in scope_map.values():
+            level = _resolve_content_stat_space_level(scope)
+            if level == KnowledgeSpaceLevelEnum.TEAM.value and getattr(scope, "created_by", None):
+                all_user_ids.add(int(scope.created_by))
+            elif level == KnowledgeSpaceLevelEnum.PERSONAL.value and getattr(scope, "owner_id", None):
+                all_user_ids.add(int(scope.owner_id))
     all_user_ids = sorted(all_user_ids)
     missing_primary_user_ids = [user_id for user_id in all_user_ids if user_id not in primary_department_map]
     if missing_primary_user_ids:
@@ -640,7 +679,9 @@ def _build_knowledge_space_content_records(
         )
 
     departments_by_id = _get_dimension_department_map(
-        list(primary_department_map.values()) + list(space_department_map.values())
+        list(primary_department_map.values())
+        + list(space_department_map.values())
+        + list(original_space_department_map.values())
     )
     company_departments = [
         department
@@ -656,7 +697,13 @@ def _build_knowledge_space_content_records(
             category_label_cache[tenant_id] = FileClassificationLabelService.get_label_lookup_for_tenant(tenant_id)
         category_labels, subcategory_labels = category_label_cache[tenant_id]
         scope = space_scope_map.get(int(space.id))
-        uploader_department = primary_department_map.get(int(file_record.user_id or 0))
+        original_space_id = _original_space_id_for(file_record, space)
+        original_upload_department = _resolve_belonging_start_department(
+            scope=original_space_scope_map.get(original_space_id),
+            space_department=original_space_department_map.get(original_space_id),
+            primary_department_map=primary_department_map,
+            company_departments=company_departments,
+        )
         belonging_department = _resolve_belonging_start_department(
             scope=scope,
             space_department=space_department_map.get(int(space.id)),
@@ -670,7 +717,7 @@ def _build_knowledge_space_content_records(
                 uploader=uploader,
                 space_level=_resolve_content_stat_space_level(scope),
                 uploader_organization=resolve_organization_names(
-                    uploader_department,
+                    original_upload_department,
                     departments_by_id,
                 ),
                 belonging_organization=resolve_organization_names(
@@ -859,6 +906,8 @@ def rebuild_knowledge_space_content_download_projection(
     user_map: dict[int, Any] = {}
     space_scope_map: dict[int, Any] = {}
     space_department_map: dict[int, Any] = {}
+    original_space_scope_map: dict[int, Any] = {}
+    original_space_department_map: dict[int, Any] = {}
     primary_department_map: dict[int, Any] = {}
     category_label_cache: dict[int, tuple[dict[str, str], dict[str, str]]] = {}
     synced_count = 0
@@ -882,6 +931,8 @@ def rebuild_knowledge_space_content_download_projection(
             sync_run_id=sync_run_id,
             space_scope_map=space_scope_map,
             space_department_map=space_department_map,
+            original_space_scope_map=original_space_scope_map,
+            original_space_department_map=original_space_department_map,
             primary_department_map=primary_department_map,
             category_label_cache=category_label_cache,
         )
@@ -926,6 +977,8 @@ def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[st
     user_map = {}
     space_scope_map = {}
     space_department_map = {}
+    original_space_scope_map = {}
+    original_space_department_map = {}
     primary_department_map = {}
     category_label_cache = {}
     synced_count = 0
@@ -944,6 +997,8 @@ def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[st
             sync_run_id=sync_run_id,
             space_scope_map=space_scope_map,
             space_department_map=space_department_map,
+            original_space_scope_map=original_space_scope_map,
+            original_space_department_map=original_space_department_map,
             primary_department_map=primary_department_map,
             category_label_cache=category_label_cache,
         )
@@ -1025,6 +1080,8 @@ def sync_pending_knowledge_space_content_stat():
         user_map = {}
         space_scope_map = {}
         space_department_map = {}
+        original_space_scope_map = {}
+        original_space_department_map = {}
         primary_department_map = {}
         category_label_cache = {}
 
@@ -1109,6 +1166,8 @@ def sync_pending_knowledge_space_content_stat():
                 user_map,
                 space_scope_map=space_scope_map,
                 space_department_map=space_department_map,
+                original_space_scope_map=original_space_scope_map,
+                original_space_department_map=original_space_department_map,
                 primary_department_map=primary_department_map,
                 category_label_cache=category_label_cache,
             )
@@ -1161,6 +1220,8 @@ def sync_pending_knowledge_space_content_stat():
                     user_map,
                     space_scope_map=space_scope_map,
                     space_department_map=space_department_map,
+                    original_space_scope_map=original_space_scope_map,
+                    original_space_department_map=original_space_department_map,
                     primary_department_map=primary_department_map,
                     category_label_cache=category_label_cache,
                 )

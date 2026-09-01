@@ -15,8 +15,15 @@ import { ORG_LEVEL_ORDER, orgLevelForField } from "../../utils/groupCrossTabRows
 // uploader's department alongside their name ("部门-姓名"), to disambiguate same-named
 // uploaders — but ONLY in this one dropdown, not in the crosstab/chart legends (those
 // already have their own separate person+department merge, see mergePersonDedupValues
-// in groupCrossTabRows.ts). Reuses the existing label_field sub-aggregation the backend
-// already supports (dashboard.py::get_dataset_field_enums) — no backend change needed.
+// in groupCrossTabRows.ts). The dropdown the customer actually configures has
+// fieldId=="uploader_user_id" (DimensionFilterConfigurator auto-pairs it with
+// uploader_user_name as labelFieldId and hides uploader_user_name itself from the picker —
+// see selectableDimensions there), so uploader_user_name is checked too, defensively, in
+// case a component is ever configured directly on it. The backend's label_field
+// sub-aggregation only carries one secondary field per call, and that slot is already
+// spent pairing id->username, so the department name needs a second call, scoped via
+// exactValues to just the ids/names the first call returned.
+const UPLOADER_ID_FIELD_ID = "uploader_user_id"
 const UPLOADER_NAME_FIELD_ID = "uploader_user_name"
 const UPLOADER_DEPARTMENT_FIELD_ID = "uploader_department_name"
 
@@ -67,9 +74,6 @@ export function DimensionFilter({ component, isDark }: DimensionFilterProps) {
     exactValues: string[] = []
   ) => {
     if (!component.dataset_code || !fieldId) return []
-    const effectiveLabelFieldId = fieldId === UPLOADER_NAME_FIELD_ID
-      ? UPLOADER_DEPARTMENT_FIELD_ID
-      : labelFieldId
     const isExactLookup = exactValues.length > 0
     const requestVersion = isExactLookup
       ? 0
@@ -84,20 +88,41 @@ export function DimensionFilter({ component, isDark }: DimensionFilterProps) {
       const response = await getFieldEnums({
         dataset_code: component.dataset_code,
         field: fieldId,
-        labelField: effectiveLabelFieldId,
+        labelField: labelFieldId,
         exactValues,
         page: 1,
         pageSize: 50,
         keyword,
       })
-      const nextOptions = (response.options || response.enums || []).map((option: any) => {
-        const value = String(option?.value ?? option)
-        const label = String(option?.label ?? option)
-        if (fieldId === UPLOADER_NAME_FIELD_ID && label && label !== value) {
-          return { label: `${label}-${value}`, value }
-        }
-        return { label, value }
-      })
+      let nextOptions = (response.options || response.enums || []).map((option: any) => ({
+        label: String(option?.label ?? option),
+        value: String(option?.value ?? option),
+      }))
+      if (
+        (fieldId === UPLOADER_ID_FIELD_ID || fieldId === UPLOADER_NAME_FIELD_ID) &&
+        nextOptions.length
+      ) {
+        const deptResponse = await getFieldEnums({
+          dataset_code: component.dataset_code,
+          field: fieldId,
+          labelField: UPLOADER_DEPARTMENT_FIELD_ID,
+          exactValues: nextOptions.map(option => option.value),
+          page: 1,
+          pageSize: nextOptions.length,
+        })
+        const deptByValue = new Map(
+          (deptResponse.options || []).map((option: any) => [
+            String(option?.value ?? option),
+            String(option?.label ?? option),
+          ])
+        )
+        nextOptions = nextOptions.map(option => {
+          const department = deptByValue.get(option.value)
+          return department && department !== option.value
+            ? { ...option, label: `${department}-${option.label}` }
+            : option
+        })
+      }
       if (
         !isExactLookup &&
         listRequestVersions.current[fieldId] === requestVersion

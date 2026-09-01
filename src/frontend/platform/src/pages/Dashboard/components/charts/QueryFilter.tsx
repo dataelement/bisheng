@@ -104,55 +104,65 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
     }, [queryConditions.defaultValue])
 
     return (
-        <div className="group w-full h-full p-4 py-0 flex flex-col gap-3 relative">
-            {/* date zone */}
-            {/* <div className="flex flex-col gap-2 pr-24">
-                <label className={cn("text-sm font-medium", "dark:text-gray-400")}>{t('selectDate')}</label>
-            </div> */}
-
-            {/* query btn */}
-            <div className="w-full flex flex-1 items-center select-none">
-                <div className="no-drag w-full flex flex-wrap items-center gap-2">
-                    <AdvancedDatePicker
-                        granularity={map[queryConditions.timeGranularity]}
-                        mode={queryConditions.displayType}
-                        isDark={isDark}
-                        value={filter}
-                        placeholder={t('selectTime')}
-                        onChange={(val) => {
-                            setFilter(val);
-                            setQueryComponentParams(component.id, val)
-                        }}
-                    />
-                    {dimensionFields.map(field => (
-                        <MultiSelect
-                            key={field.id}
-                            options={dimensionOptions[field.fieldId] || []}
-                            value={dimensionValues[field.fieldId] || []}
-                            onValueChange={values => {
-                                setDimensionValues(current => ({ ...current, [field.fieldId]: values }))
-                            }}
-                            onSearch={keyword => {
-                                void loadDimensionOptions(field.fieldId, field.datasetCode, keyword)
-                            }}
-                            loading={dimensionLoading[field.fieldId]}
-                            multiple
-                            searchable
-                            clearable
-                            maxDisplayed={1}
-                            placeholder={`全部${field.displayName}`}
-                            searchPlaceholder={`搜索${field.displayName}`}
-                            emptyMessage="暂无可选项"
-                            triggerClassName="no-drag h-9 min-w-32 bg-background"
-                            contentClassName="min-w-56"
-                        />
-                    ))}
-                    <Button onClick={handleQuery} className=" gap-1">
-                        <Search className="h-4 w-4" />
-                        {t('query')}
-                    </Button>
-                </div>
+        <div
+            className={cn(
+                "group flex size-full items-center gap-3 overflow-x-auto p-4 py-0 relative select-none",
+                isDark ? "text-slate-100" : "text-slate-900"
+            )}
+        >
+            {/* Layout mirrors DimensionFilter.tsx: each condition gets its own labeled
+                column, kept in one row (overflow-x-auto instead of wrapping) so this looks
+                like the same widget family instead of a plain stacked form. */}
+            <div className="no-drag min-w-52 flex-1 space-y-1">
+                <label className="block truncate text-xs font-medium text-muted-foreground">
+                    {t('selectDate')}
+                </label>
+                <AdvancedDatePicker
+                    granularity={map[queryConditions.timeGranularity]}
+                    mode={queryConditions.displayType}
+                    isDark={isDark}
+                    value={filter}
+                    placeholder={t('selectTime')}
+                    onChange={(val) => {
+                        setFilter(val);
+                        setQueryComponentParams(component.id, val)
+                    }}
+                />
             </div>
+            {dimensionFields.map(field => (
+                <div key={field.id} className="no-drag min-w-52 flex-1 space-y-1">
+                    <label
+                        className="block truncate text-xs font-medium text-muted-foreground"
+                        title={field.displayName}
+                    >
+                        {field.displayName}
+                    </label>
+                    <MultiSelect
+                        options={dimensionOptions[field.fieldId] || []}
+                        value={dimensionValues[field.fieldId] || []}
+                        onValueChange={values => {
+                            setDimensionValues(current => ({ ...current, [field.fieldId]: values }))
+                        }}
+                        onSearch={keyword => {
+                            void loadDimensionOptions(field.fieldId, field.datasetCode, keyword)
+                        }}
+                        loading={dimensionLoading[field.fieldId]}
+                        multiple
+                        searchable
+                        clearable
+                        maxDisplayed={1}
+                        placeholder={`全部${field.displayName}`}
+                        searchPlaceholder={`搜索${field.displayName}`}
+                        emptyMessage="暂无可选项"
+                        triggerClassName="no-drag h-9 bg-background"
+                        contentClassName="min-w-64"
+                    />
+                </div>
+            ))}
+            <Button onClick={handleQuery} className="no-drag h-9 shrink-0 gap-1">
+                <Search className="h-4 w-4" />
+                {t('query')}
+            </Button>
 
             {!isPreviewMode && <GripHorizontalIcon
                 className={cn(

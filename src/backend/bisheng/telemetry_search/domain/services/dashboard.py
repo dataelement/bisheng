@@ -810,11 +810,18 @@ class DashboardService(BaseModel):
             else:
                 label = enum_labels.get(str(value), label)
             options.append({"value": value, "label": label})
-        if field == "space_level_name":
+        if "space_level_name" in {field, label_field}:
+            # DimensionFilterConfigurator auto-pairs the raw "空间级别编码"(space_level) field
+            # with its "_name" sibling as label_field and hides space_level_name from the
+            # picker — so in practice the widget the customer configures almost always has
+            # field=="space_level" (value=code) with label_field=="space_level_name" (label=
+            # the Chinese text), not field=="space_level_name" directly. Sort on the LABEL
+            # (always the Chinese text either way) so the fixed order applies regardless of
+            # which of the two is the primary field.
             fixed_order = self.SPACE_LEVEL_NAME_ORDER
             options.sort(
                 key=lambda option: (
-                    fixed_order.index(option["value"]) if option["value"] in fixed_order else len(fixed_order)
+                    fixed_order.index(option["label"]) if option["label"] in fixed_order else len(fixed_order)
                 )
             )
         return {
