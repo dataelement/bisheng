@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Audit API-sync files whose uploaders have no clinic knowledge space.
+# Audit API-sync files and whether each uploader has a clinic knowledge space.
 #
 # Usage (from src/backend):
 #   bash scripts/audit_api_sync_uploader_clinic_spaces.sh \

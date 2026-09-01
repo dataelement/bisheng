@@ -712,7 +712,8 @@ Safety:
 
 按知识空间名称和目录名称（支持多级路径）列出该目录及其子目录下入库方式为「接口同步」
 （`user_metadata.filelib_sync_endpoint` 或 `external_file_id`）的文件，再按上传人
-（优先 `original_uploader_id`，否则 `user_id`）按主部门组织树上溯查找科室库绑定。只读；最后统一输出没有科室库的用户及其科室信息。
+（优先 `original_uploader_id`，否则 `user_id`）按主部门组织树上溯查找科室库绑定。只读；输出命中的
+科室库、已有科室库的上传人、以及没有科室库的上传人。
 
 判定：与 filelib_sync 责任人科室库相同——从上传人主部门沿组织树（自己→上级→根）查找第一个
 科室库绑定（空间 level 为 team/team_ks 且 owner_type=user）。不看 org_level。班组人员可以命中

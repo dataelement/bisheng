@@ -96,6 +96,121 @@ def test_build_missing_users_skips_uploaders_with_clinic_space() -> None:
     assert missing[0].reason == "no_clinic_space"
     assert missing[0].departments[0].name == "无库科室"
     assert missing[0].departments[0].clinic_space_id is None
+    assert script_mod.display_fields(missing[0]) == {
+        "uploader": "no-space",
+        "department_name": "无库科室",
+        "clinic_space_name": "-",
+    }
+
+
+def test_build_uploader_audits_lists_users_and_clinic_spaces() -> None:
+    files = [
+        _file(1, user_id=11, user_metadata={"filelib_sync_endpoint": "sync"}),
+        _file(2, user_id=12, user_metadata={"external_file_id": "EXT-1"}),
+        _file(3, user_id=13, user_metadata={"filelib_sync_endpoint": "sync"}),
+    ]
+    users = {
+        11: SimpleNamespace(user_id=11, user_name="has-space", delete=0),
+        12: SimpleNamespace(user_id=12, user_name="no-space", delete=0),
+        13: SimpleNamespace(user_id=13, user_name="also-has-space", delete=0),
+    }
+    memberships = {
+        11: [SimpleNamespace(user_id=11, department_id=101, is_primary=1)],
+        12: [SimpleNamespace(user_id=12, department_id=202, is_primary=1)],
+        13: [SimpleNamespace(user_id=13, department_id=101, is_primary=1)],
+    }
+    departments = {
+        101: SimpleNamespace(id=101, name="有库科室", dept_id="D101", path="/1/101/", status="active"),
+        202: SimpleNamespace(id=202, name="无库科室", dept_id="D202", path="/1/202/", status="active"),
+    }
+    bindings = {101: SimpleNamespace(department_id=101, space_id=501)}
+    spaces = {501: SimpleNamespace(id=501, name="有库科室知识库")}
+    scopes = {501: _clinic_scope()}
+    kwargs = {
+        "users": users,
+        "memberships_by_user": memberships,
+        "departments": departments,
+        "bindings": bindings,
+        "spaces": spaces,
+        "sample_limit": 8,
+        "scopes": scopes,
+    }
+
+    with_clinic, missing = script_mod.build_uploader_audits(files, **kwargs)
+
+    assert [item.user_id for item in with_clinic] == [11, 13]
+    assert with_clinic[0].reason == "has_clinic_space"
+    assert with_clinic[0].departments[0].clinic_space_id == 501
+    assert with_clinic[0].departments[0].clinic_space_name == "有库科室知识库"
+    assert [item.user_id for item in missing] == [12]
+
+    summaries = script_mod.summarize_clinic_spaces(with_clinic)
+    assert len(summaries) == 1
+    assert summaries[0].clinic_space_id == 501
+    assert summaries[0].clinic_space_name == "有库科室知识库"
+    assert summaries[0].bound_department_id == 101
+    assert summaries[0].user_count == 2
+    assert summaries[0].file_count == 2
+    assert summaries[0].user_ids == [11, 13]
+
+    payload = script_mod.report_to_dict(
+        script_mod.AuditReport(
+            space_id=10,
+            space_tenant_id=1,
+            space_name="安全生产知识库",
+            folder_path="/",
+            folder_id=None,
+            file_count=3,
+            api_sync_file_count=3,
+            uploader_count=3,
+            missing_users=missing,
+            users_with_clinic=with_clinic,
+            clinic_spaces=summaries,
+        )
+    )
+    assert payload["clinic_space_count"] == 1
+    assert payload["users_with_clinic_space_count"] == 2
+    assert payload["clinic_spaces"][0]["id"] == 501
+    assert payload["users_with_clinic_space"][0]["uploader"] == "has-space"
+    assert payload["users_with_clinic_space"][0]["department_name"] == "有库科室"
+    assert payload["users_with_clinic_space"][0]["clinic_space_name"] == "有库科室知识库"
+    assert payload["users_with_clinic_space"][0]["clinic_space"]["id"] == 501
+    assert payload["users_without_clinic_space"][0]["user_id"] == 12
+    assert payload["users_without_clinic_space"][0]["uploader"] == "no-space"
+    assert payload["users_without_clinic_space"][0]["department_name"] == "无库科室"
+    assert payload["users_without_clinic_space"][0]["clinic_space_name"] == "-"
+
+
+def test_build_uploader_audits_records_ancestor_clinic_space() -> None:
+    files = [_file(1, user_id=11, user_metadata={"filelib_sync_endpoint": "sync"})]
+    with_clinic, missing = script_mod.build_uploader_audits(
+        files,
+        users={11: SimpleNamespace(user_id=11, user_name="squad-user", delete=0)},
+        memberships_by_user={11: [SimpleNamespace(user_id=11, department_id=4, is_primary=1)]},
+        departments={
+            4: SimpleNamespace(id=4, name="班组", dept_id="D4", path="/1/3/4/", status="active"),
+            3: SimpleNamespace(id=3, name="科室", dept_id="D3", path="/1/3/", status="active"),
+            1: SimpleNamespace(id=1, name="公司", dept_id="D1", path="/1/", status="active"),
+        },
+        bindings={3: SimpleNamespace(department_id=3, space_id=501)},
+        spaces={501: SimpleNamespace(id=501, name="科室知识库")},
+        sample_limit=8,
+        scopes={501: _clinic_scope()},
+    )
+
+    assert missing == []
+    assert with_clinic[0].user_id == 11
+    assert with_clinic[0].departments[0].clinic_space_id == 501
+    assert with_clinic[0].departments[0].clinic_bound_department_id == 3
+    assert with_clinic[0].departments[0].clinic_bound_department_name == "科室"
+    summaries = script_mod.summarize_clinic_spaces(with_clinic)
+    assert summaries[0].bound_department_id == 3
+    assert summaries[0].bound_department_name == "科室"
+    assert script_mod.display_fields(with_clinic[0]) == {
+        "uploader": "squad-user",
+        "department_name": "科室",
+        "clinic_space_name": "科室知识库",
+    }
 
 
 def test_build_missing_users_records_users_without_department() -> None:
@@ -114,6 +229,11 @@ def test_build_missing_users_records_users_without_department() -> None:
     assert missing[0].reason == "no_department"
     assert missing[0].departments == []
     assert missing[0].file_count == 1
+    assert script_mod.display_fields(missing[0]) == {
+        "uploader": "orphan",
+        "department_name": "-",
+        "clinic_space_name": "-",
+    }
 
 
 def test_build_missing_users_records_missing_user_and_sync_department() -> None:
