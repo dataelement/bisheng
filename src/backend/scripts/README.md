@@ -39,6 +39,23 @@ PYTHONPATH=./ .venv/bin/python scripts/execute_sql.py \
   --config config_3002.yaml --sql "SELECT * FROM user" --max-rows 0
 ```
 
+### `sql/fill_mysql_table_column_comments.sql`
+
+一次性 MySQL 脚本，给 COMMENT 为空的表和字段补中文备注。已有备注不覆盖，表或字段不存在则跳过，可重复执行。字段通过 `MODIFY COLUMN` 写 COMMENT，会保留原类型、默认值和自增。
+
+必须用 mysql 客户端执行（含 `DELIMITER`，不能走 `execute_sql.py`）。请先备份，并在低峰执行：
+
+```bash
+mysql -u USER -p DATABASE < src/backend/scripts/sql/fill_mysql_table_column_comments.sql
+```
+
+文案来自 `scripts/_gen_fill_mysql_comments.py`。ORM 变更后如需重生成：
+
+```bash
+cd src/backend
+PYTHONPATH=./ uv run python scripts/_gen_fill_mysql_comments.py
+```
+
 ### `backfill_department_short_names.py`
 
 根据直接父部门全称回填历史活动部门的简称。脚本扫描所有租户和所有部门来源，只处理
@@ -690,6 +707,41 @@ Safety:
 - 默认只选 `FAILED`。`--include-timeout` 才会加上 `TIMEOUT`。
 - `--apply` 前必须先跑 dry-run，并确认 broker 与 knowledge worker 可用。
 - 成功输出只表示任务已入队，不表示解析已经完成。
+
+### `audit_api_sync_uploader_clinic_spaces.py`
+
+按知识空间名称和目录名称（支持多级路径）列出该目录及其子目录下入库方式为「接口同步」
+（`user_metadata.filelib_sync_endpoint` 或 `external_file_id`）的文件，再按上传人
+（优先 `original_uploader_id`，否则 `user_id`）按主部门组织树上溯查找科室库绑定。只读；最后统一输出没有科室库的用户及其科室信息。
+
+判定：与 filelib_sync 责任人科室库相同——从上传人主部门沿组织树（自己→上级→根）查找第一个
+科室库绑定（空间 level 为 team/team_ks 且 owner_type=user）。不看 org_level。班组人员可以命中
+上级科室的库。无上传人、用户不存在、没有部门、整条链都没有科室库才会进入缺失名单。
+
+Usage:
+
+```bash
+export config=/path/to/config.yaml
+cd src/backend
+
+bash scripts/audit_api_sync_uploader_clinic_spaces.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全"
+
+# 整个知识空间
+bash scripts/audit_api_sync_uploader_clinic_spaces.sh \
+  --space-name "安全生产知识库" \
+  --folder /
+
+# JSON 输出；同名空间用租户 ID 区分
+bash scripts/audit_api_sync_uploader_clinic_spaces.sh \
+  --space-name "安全生产知识库" \
+  --folder "消防安全" \
+  --tenant-id 1 \
+  --format json
+```
+
+`--folder` 规则与 `retry_failed_knowledge_space_folder_files.py` 相同。脚本不写库。
 
 ### `move_knowledge_space_files.py`
 
