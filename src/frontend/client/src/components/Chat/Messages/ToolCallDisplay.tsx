@@ -19,11 +19,15 @@ import { cn } from "~/utils";
 
 export interface ToolCallDisplayProps {
     toolCall: AgentToolCall;
+    /** Whether to render a short vertical timeline connector below this card.
+     *  Set to true when this is not the last tool in its group, so a visual
+     *  line bridges to the next tool even when both are collapsed. */
+    showConnector?: boolean;
 }
 
 // --- helpers ---------------------------------------------------------------
 
-export function classifyToolType(tc: AgentToolCall): "knowledge" | "web" | "tool" {
+function classifyToolType(tc: AgentToolCall): "knowledge" | "web" | "tool" {
     if (tc.tool_type === "knowledge") return "knowledge";
     if (tc.tool_type === "web") return "web";
     // Heuristics for legacy rows / server variants:
@@ -40,7 +44,7 @@ const BUILTIN_TOOL_I18N: Record<string, string> = {
     web_search: "com_tools_web_search",
 };
 
-export function resolveToolName(
+function resolveToolName(
     tc: AgentToolCall,
     localize: ReturnType<typeof useLocalize>,
 ): string {
@@ -231,7 +235,7 @@ const variantStyles = {
     },
 } as const;
 
-const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
+const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnector = false }) => {
     const localize = useLocalize();
     const variant = classifyToolType(toolCall);
     const rawResults = toolCall.error ? [] : parseResults(toolCall.results);
@@ -272,14 +276,27 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
         !!toolCall.error ||
         (!toolCall.inflight && variant !== "tool" && resultCount > 0);
 
-    // All nodes start collapsed — including failed calls; the red rail icon
-    // and "失败" label already signal the error, the user expands for detail.
-    const [expanded, setExpanded] = useState<boolean>(false);
-    // Re-collapse when the call transitions (e.g. inflight → finished) so a
-    // row the user expanded mid-stream doesn't stay open for the final state.
+    // Web variant stays open by default after finish (spec §3.2.4); errors
+    // stay open to surface the message; knowledge variant auto-expands when
+    // any KB failed so the error detail is visible without another click.
+    const hasKnowledgeErrors =
+        variant === "knowledge" && knowledgeChips.some((kb) => kb.error);
+    const initialExpanded =
+        !!toolCall.error ||
+        hasKnowledgeErrors ||
+        (variant === "web" && !toolCall.inflight);
+    const [expanded, setExpanded] = useState<boolean>(initialExpanded);
     useEffect(() => {
-        setExpanded(false);
-    }, [toolCall.inflight, toolCall.error, variant]);
+        if (toolCall.error) {
+            setExpanded(true);
+        } else if (hasKnowledgeErrors) {
+            setExpanded(true);
+        } else if (variant === "web" && !toolCall.inflight) {
+            setExpanded(true);
+        } else {
+            setExpanded(false);
+        }
+    }, [toolCall.inflight, toolCall.error, variant, hasKnowledgeErrors]);
 
     const railIcon = toolCall.inflight ? (
         <Outlined.Loading size={16} className="shrink-0 animate-spin text-primary" />
@@ -290,9 +307,14 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
     );
 
     return (
-        <div className="flex w-full min-w-0 gap-2">
-            <div className="flex shrink-0 items-start pt-[3px]">
+        <div className="flex w-full min-w-0 gap-1.5">
+            <div className="flex shrink-0 flex-col items-center gap-2 self-stretch pt-[3px]">
                 {railIcon}
+                {/* Rail line: keep the timeline continuous to the next node, and
+                    always flank this node's own expanded content. */}
+                {(showConnector || expanded) && (
+                    <div className="w-px flex-1 bg-[#E0E0E0]" aria-hidden="true" />
+                )}
             </div>
             <div className="flex min-w-0 flex-1 flex-col pb-3">
                 <button

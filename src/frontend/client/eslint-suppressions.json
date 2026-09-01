@@ -33,7 +33,7 @@
   },
   "src/api/channels.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 41
+      "count": 36
     }
   },
   "src/api/chat/actions.ts": {
@@ -75,7 +75,7 @@
   },
   "src/api/knowledge.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 64
+      "count": 62
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -113,11 +113,6 @@
   "src/api/notifications.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 4
-    }
-  },
-  "src/api/permission.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 7
     }
   },
   "src/api/quota.ts": {
@@ -281,16 +276,13 @@
     }
   },
   "src/components/Chat/AiModelSelect.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
   },
   "src/components/Chat/ChatView.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 28
+      "count": 27
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -589,9 +581,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 17
     }
   },
   "src/components/Chat/Messages/Content/CitationSourceIcon.tsx": {
@@ -1094,11 +1083,6 @@
       "count": 8
     }
   },
-  "src/components/Linsight/Input/ModelSelector.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 6
-    }
-  },
   "src/components/Linsight/Input/TaskModeChatInput.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 11
@@ -1158,9 +1142,6 @@
     }
   },
   "src/components/Nav/MobileNav.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "no-restricted-imports": {
       "count": 1
     }
@@ -1699,21 +1680,6 @@
       "count": 1
     }
   },
-  "src/components/permission/PermissionBadge.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/components/permission/PermissionGrantTab.tsx": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "src/components/permission/PermissionListTab.tsx": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
   "src/components/svg/DownIcon.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -2176,7 +2142,7 @@
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
-      "count": 5
+      "count": 4
     }
   },
   "src/hooks/Websocket/mock.js": {
@@ -2374,9 +2340,6 @@
     },
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
@@ -2594,11 +2557,6 @@
       "count": 1
     }
   },
-  "src/pages/Subscription/channelUtils.ts": {
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
   "src/pages/Subscription/hooks/useArticleShare.ts": {
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -2646,9 +2604,6 @@
       "count": 2
     },
     "no-restricted-imports": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
   },
@@ -2883,7 +2838,7 @@
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 4
+      "count": 3
     }
   },
   "src/pages/appChat/index.tsx": {
@@ -2999,7 +2954,7 @@
   },
   "src/pages/appChat/useWebsocket.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 2
     },
     "no-console": {
       "count": 4
@@ -3012,9 +2967,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
     }
   },
   "src/pages/apps/components/AgentCard.tsx": {
@@ -3193,14 +3145,6 @@
     }
   },
   "src/pages/knowledge/SpaceDetail/KnowledgeSpaceHeader.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-restricted-imports": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/SpaceDetail/KnowledgeSpaceShareDialog.tsx": {
     "no-restricted-imports": {
       "count": 1
     }
@@ -3268,14 +3212,14 @@
     }
   },
   "src/pages/knowledge/hooks/useFileUpload.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
-      "count": 5
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 2
     }
   },
   "src/pages/knowledge/hooks/useInlineRename.ts": {
@@ -3293,7 +3237,7 @@
   },
   "src/pages/knowledge/index.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 2
     },
     "no-console": {
       "count": 3
@@ -3608,7 +3552,7 @@
   },
   "src/vite-env.d.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
+      "count": 1
     }
   },
   "tailwind.docs.config.cjs": {

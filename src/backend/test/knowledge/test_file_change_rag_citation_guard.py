@@ -29,6 +29,8 @@ from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
 )
 
+_VISIBILITY_MODULE = "bisheng.knowledge.domain.services.knowledge_file_visibility_service"
+
 
 def _login_user(*, user_id: int = 7, tenant_id: int = 42, is_admin: bool = False):
     user = MagicMock()
@@ -59,18 +61,24 @@ async def test_admin_index_prefilter_still_excludes_unpublished_and_delete_resid
     service._list_primary_file_ids_in_space = AsyncMock(return_value={101, 102, 103})
     service._count_primary_files_in_space = AsyncMock(return_value=3)
     service._list_file_change_excluded_ids = AsyncMock(return_value={101, 102})
+    service._non_primary_ids = AsyncMock(return_value=set())
 
+    # F048 has no admin short-circuit: an administrator resolves ``visible``
+    # through the same action check as everyone else (identity relations in
+    # OpenFGA carry the privilege), so the file-change exclusion is what must
+    # still keep 101/102 out of the index.
     with patch(
-        "bisheng.permission.domain.services.permission_service.PermissionService.list_accessible_ids",
-        AsyncMock(return_value=None),
+        f"{_VISIBILITY_MODULE}.batch_check_business_actions",
+        AsyncMock(return_value={"103": frozenset({"visible"})}),
     ):
         result = await service.build_index_prefilter(space_id=8, candidate_file_ids=None)
 
-    assert result.strategy == "notin"
-    assert result.milvus_expr == "document_id not in [101, 102]"
-    assert result.es_filter == [
-        {"bool": {"must_not": {"terms": {"metadata.document_id": [101, 102]}}}}
-    ]
+    # F048 pushes down the positive list when it is the smaller side; either
+    # shape is fine as long as the unpublished / delete-residue files cannot
+    # come back from the index.
+    assert result.strategy == "in"
+    assert result.milvus_expr == "document_id in [103]"
+    assert result.es_filter == [{"terms": {"metadata.document_id": [103]}}]
 
 
 async def test_file_change_exclusions_use_one_explicit_tenant_scoped_query_per_guard():
@@ -222,19 +230,14 @@ async def test_single_file_rag_checks_rebac_before_publication_and_deletion_guar
     file_record = MagicMock(id=101, knowledge_id=8)
     permission_service = MagicMock()
 
-    async def require_relation(*args, **kwargs):
-        assert args == (101, "can_read")
+    # F048 resolves the relation and the action in one call.
+    async def require_file_action(*args, **kwargs):
+        assert args == (101, "visible")
         assert kwargs == {"space_id": 8}
-        order.append("rebac-relation")
+        order.append("rebac")
         return file_record
 
-    async def require_permission(*args, **kwargs):
-        assert args == ("knowledge_file", 101, "view_file")
-        assert kwargs == {"space_id": 8}
-        order.append("rebac-permission")
-
-    permission_service._require_file_relation = require_relation
-    permission_service._require_permission_id = require_permission
+    permission_service._require_file_action = require_file_action
     service._knowledge_space_permission_service = permission_service
     visibility = MagicMock()
 
@@ -246,7 +249,7 @@ async def test_single_file_rag_checks_rebac_before_publication_and_deletion_guar
     service._knowledge_file_visibility_service = visibility
 
     assert await service._require_file_view_permission(8, 101) is file_record
-    assert order == ["rebac-relation", "rebac-permission", "file-change"]
+    assert order == ["rebac", "file-change"]
 
 
 async def test_shared_citation_is_dropped_before_enrichment_when_f046_hides_file():
@@ -557,12 +560,9 @@ async def test_preview_runs_view_file_before_stakeholder_preview_guard():
     )
     order: list[str] = []
 
-    async def require_relation(*args, **kwargs):
-        order.append("rebac-relation")
+    async def get_file(*args, **kwargs):
+        order.append("row-lookup")
         return file_record
-
-    async def require_permission(*args, **kwargs):
-        order.append("rebac-permission")
 
     visibility = MagicMock()
 
@@ -574,8 +574,7 @@ async def test_preview_runs_view_file_before_stakeholder_preview_guard():
         }
         order.append("file-change")
 
-    service._require_file_relation = require_relation
-    service._require_permission_id = require_permission
+    service._get_file_for_action = get_file
     visibility.require_file_change_visible = require_visible
     service._knowledge_file_visibility_service = visibility
 
@@ -586,7 +585,7 @@ async def test_preview_runs_view_file_before_stakeholder_preview_guard():
         result = await service.get_file_preview(101)
 
     assert result["original_url"] == "original"
-    assert order == ["rebac-relation", "rebac-permission", "file-change"]
+    assert order == ["row-lookup", "file-change"]
 
 
 async def test_download_runs_download_permission_before_hard_file_change_guard():
@@ -598,7 +597,7 @@ async def test_download_runs_download_permission_before_hard_file_change_guard()
     async def get_file(*args, **kwargs):
         return file_record
 
-    async def require_permission(*args, **kwargs):
+    async def require_action(*args, **kwargs):
         order.append("download-permission")
 
     visibility = MagicMock()
@@ -608,7 +607,7 @@ async def test_download_runs_download_permission_before_hard_file_change_guard()
         order.append("file-change")
 
     service._get_file_for_action = get_file
-    service._require_permission_id = require_permission
+    service._require_action = require_action
     visibility.require_file_change_visible = require_visible
     service._knowledge_file_visibility_service = visibility
 

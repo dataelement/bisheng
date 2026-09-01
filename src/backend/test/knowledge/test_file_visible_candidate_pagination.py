@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from bisheng.common.cursor import decode_cursor
+from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
@@ -15,6 +16,24 @@ from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 
 _SERVICE = "bisheng.knowledge.domain.services.knowledge_space_service"
+
+
+@pytest.fixture(autouse=True)
+def _tenant_context():
+    """Listing goes through the file-change visibility guard, which requires an
+    explicit tenant on the ContextVar (constitution C3)."""
+    token = set_current_tenant_id(7)
+    try:
+        # These cases cover cursor paging, not the file-change approval guard;
+        # stub its lookup so they stay free of database IO.
+        with patch.object(
+            KnowledgeSpaceService,
+            "_get_file_change_excluded_ids",
+            new=AsyncMock(return_value=set()),
+        ):
+            yield
+    finally:
+        current_tenant_id.reset(token)
 
 
 class _User:

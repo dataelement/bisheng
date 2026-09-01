@@ -147,9 +147,6 @@
   "src/components/bs-comp/apiComponent/index.tsx": {
     "react-hooks/exhaustive-deps": {
       "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
     }
   },
   "src/components/bs-comp/cardComponent/LabelShow.tsx": {
@@ -200,17 +197,11 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 7
     }
   },
   "src/components/bs-comp/chatComponent/CitationReferencesDrawer.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 16
     }
   },
   "src/components/bs-comp/chatComponent/CitationSourceIcon.tsx": {
@@ -270,11 +261,6 @@
   "src/components/bs-comp/chatComponent/MessageUser.tsx": {
     "no-restricted-syntax": {
       "count": 1
-    }
-  },
-  "src/components/bs-comp/chatComponent/RunLog.tsx": {
-    "no-restricted-syntax": {
-      "count": 10
     }
   },
   "src/components/bs-comp/chatComponent/citationUtils.ts": {
@@ -401,29 +387,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
-    }
-  },
-  "src/components/bs-comp/permission/PermissionBadge.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/components/bs-comp/permission/PermissionGrantTab.tsx": {
-    "no-restricted-syntax": {
-      "count": 5
-    }
-  },
-  "src/components/bs-comp/permission/PermissionListTab.tsx": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "src/components/bs-comp/permission/usePermissionLevels.ts": {
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 3
     }
   },
   "src/components/bs-comp/permission/useResourceActions.ts": {
@@ -958,9 +921,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
     }
   },
   "src/components/inputListComponent/index.tsx": {
@@ -1178,11 +1138,6 @@
       "count": 1
     }
   },
-  "src/controllers/API/permission.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    }
-  },
   "src/controllers/API/pro.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 13
@@ -1200,10 +1155,7 @@
   },
   "src/controllers/API/user.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 17
-    },
-    "no-restricted-syntax": {
-      "count": 2
+      "count": 12
     }
   },
   "src/controllers/API/workflow.ts": {
@@ -1620,15 +1572,10 @@
   },
   "src/pages/BuildPage/bench/ConfigInheritanceBanner.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 6
+      "count": 1
     },
     "no-restricted-syntax": {
       "count": 3
-    }
-  },
-  "src/pages/BuildPage/bench/DepartmentKnowledgeSpaceManagerDialog.tsx": {
-    "no-restricted-syntax": {
-      "count": 16
     }
   },
   "src/pages/BuildPage/bench/DialogueWork.tsx": {
@@ -1644,9 +1591,6 @@
   "src/pages/BuildPage/bench/KnowledgeSpace.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 7
     }
   },
   "src/pages/BuildPage/bench/KnowledgeSpaceSensitivePolicy.tsx": {
@@ -2356,7 +2300,7 @@
   },
   "src/pages/BuildPage/tools/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 2
     },
     "@typescript-eslint/no-unused-expressions": {
       "count": 2
@@ -2551,19 +2495,8 @@
       "count": 4
     }
   },
-  "src/pages/Dashboard/components/dashboard/DashboardDetail.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
   "src/pages/Dashboard/components/dashboard/DashboardListItem.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-expressions": {
       "count": 1
     }
   },
@@ -2756,9 +2689,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 11
     }
   },
   "src/pages/KnowledgePage/KnowledgeQa.tsx": {
@@ -2770,9 +2700,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 11
     }
   },
   "src/pages/KnowledgePage/components/AddKnowledgeFileMenu.tsx": {
@@ -3027,7 +2954,7 @@
       "count": 2
     },
     "no-restricted-syntax": {
-      "count": 8
+      "count": 2
     }
   },
   "src/pages/KnowledgePage/components/RuleFile.tsx": {
@@ -3046,7 +2973,7 @@
       "count": 4
     },
     "@typescript-eslint/no-unused-expressions": {
-      "count": 3
+      "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -3089,11 +3016,6 @@
       "count": 3
     },
     "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/KnowledgePage/index.tsx": {
-    "react-hooks/rules-of-hooks": {
       "count": 1
     }
   },
@@ -3516,23 +3438,6 @@
       "count": 2
     }
   },
-  "src/pages/SystemPage/components/EditRole.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 34
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 5
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 1
-    }
-  },
   "src/pages/SystemPage/components/EditUserGroup.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
@@ -3547,11 +3452,6 @@
   "src/pages/SystemPage/components/Roles.tsx": {
     "react-hooks/exhaustive-deps": {
       "count": 1
-    }
-  },
-  "src/pages/SystemPage/components/RolesAndPermissions.tsx": {
-    "no-restricted-syntax": {
-      "count": 25
     }
   },
   "src/pages/SystemPage/components/UserGroup.tsx": {
@@ -3696,7 +3596,7 @@
       "count": 3
     },
     "no-restricted-syntax": {
-      "count": 21
+      "count": 15
     }
   },
   "src/test/departmentPageRefresh.test.tsx": {
@@ -3725,17 +3625,6 @@
       "count": 2
     }
   },
-  "src/test/knowledgePermissionDialog.test.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 13
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
   "src/test/knowledgeSpaceGrantSubjects.test.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 18
@@ -3762,30 +3651,6 @@
       "count": 14
     }
   },
-  "src/test/permissionGrantTab.test.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 7
-    },
-    "no-restricted-syntax": {
-      "count": 12
-    }
-  },
-  "src/test/permissionListTab.test.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 20
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "src/test/permissionRegressions.test.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 34
-    },
-    "no-restricted-syntax": {
-      "count": 79
-    }
-  },
   "src/test/resolveRoutePermissions.test.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
@@ -3798,10 +3663,10 @@
   },
   "src/test/subjectSearchUser.test.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 12
+      "count": 8
     },
     "no-restricted-syntax": {
-      "count": 3
+      "count": 1
     }
   },
   "src/test/systemDepartmentsArchivedDelete.test.tsx": {

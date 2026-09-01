@@ -260,7 +260,6 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
         stopGenerating,
         clearConversation,
         regenerate,
-        recoverRateLimitedMessage,
     } = useChannelChat(articleDocId);
 
     useChatModelMemo(user, bsConfig as any);
@@ -337,7 +336,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                 // keeps the panel locked to the visible region; height shrinks to the
                 // keyboard-clipped viewport height.
                 style={{
-                    height: viewportHeight ? `${viewportHeight}px` : "var(--bs-dvh,100dvh)",
+                    height: viewportHeight ? `${viewportHeight}px` : "100dvh",
                     transform: `translateY(${viewportOffsetTop}px)`,
                 }}
                 role="dialog"
@@ -366,7 +365,6 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                         emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                         onPresetClick={(q) => setInputText(q)}
                         onRegenerate={regenerate}
-                        onRecover={recoverRateLimitedMessage}
                     />
                     {/* White gradient where messages meet the input — text appears to fade out. */}
                     <div
@@ -453,7 +451,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                                     type="button"
                                     onClick={() => setOpen(true)}
                                     aria-label={localize("com_ui_expand")}
-                                    className="absolute bottom-full right-0 z-10 mb-2 mr-3 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-text-3 drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-text-2"
+                                    className="absolute bottom-full right-0 z-10 mb-2.5 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-text-3 drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-text-2"
                                 >
                                     <Outlined.DoubleDown className="size-4 rotate-180" />
                                 </button>
@@ -469,10 +467,10 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                 <div
                     className={cn(
                         "overflow-hidden transition-[max-height] duration-300 ease-out",
-                        open ? "max-h-[clamp(440px,70vh,calc(var(--bs-vh,100vh)_-_160px))]" : "max-h-0",
+                        open ? "max-h-[clamp(440px,70vh,calc(100vh_-_160px))]" : "max-h-0",
                     )}
                 >
-                    <div className="flex h-[clamp(440px,70vh,calc(var(--bs-vh,100vh)_-_160px))] flex-col">
+                    <div className="flex h-[clamp(440px,70vh,calc(100vh_-_160px))] flex-col">
                             {/* Header: title left, clear + collapse-down right */}
                             <div className="relative flex shrink-0 items-center gap-2 px-4 py-3">
                                 <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-[22px] text-text-1">
@@ -536,7 +534,6 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                             emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                             onPresetClick={(q) => setInputText(q)}
                             onRegenerate={regenerate}
-                            onRecover={recoverRateLimitedMessage}
                         />
                     </div>
                 </div>

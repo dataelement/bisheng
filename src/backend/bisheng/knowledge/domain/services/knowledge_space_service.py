@@ -205,6 +205,8 @@ _JOINED_DB_ID_BATCH_SIZE = 500
 # filtering is refilled from the next OFFSET window, so this only bounds per-round
 # DB fetch + visibility evaluation, not the page size.
 _SEARCH_SCAN_BATCH_SIZE = 100
+# MySQL caps how many SELECTs a UNION can hold; chunk the per-folder count queries.
+_FOLDER_COUNT_UNION_CHUNK_SIZE = 100
 _WEB_LINK_SEPARATORS = ["\n\n", "\n", "。", "\\.", "，", ",", "；", ";", "、", "\\s+", ""]
 _WEB_LINK_SEPARATOR_RULES = ["after"] * len(_WEB_LINK_SEPARATORS)
 _AUDIO_FILE_EXTENSIONS = {"mp3", "wav", "m4a", "aac", "flac", "ogg"}
@@ -2390,7 +2392,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return items
 
-    async def _handle_file_folder_extra_info(self, res: list[KnowledgeFile]) -> list[dict]:
+    async def _handle_file_folder_extra_info(
+        self,
+        res: list[KnowledgeFile],
+        *,
+        file_change_excluded_ids: set[int] | None = None,
+    ) -> list[dict]:
         folder_ids = []
         file_ids = []
         for one in res:
@@ -2402,49 +2409,109 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # folder need find all success file num and all file num
         folder_counts = {}
         if folder_ids:
-            from sqlalchemy import func, or_
+            from sqlalchemy import func, literal, or_, union_all
             from sqlmodel import col, select
 
             from bisheng.core.database import get_async_db_session
 
-            async def count_folder(folder: KnowledgeFile):
-                prefix = f"{folder.file_level_path or ''}/{folder.id}"
-                stmt = (
-                    select(KnowledgeFile.status, func.count(KnowledgeFile.id))
-                    .where(
-                        KnowledgeFile.knowledge_id == folder.knowledge_id,
-                        KnowledgeFile.file_type == 1,
-                        or_(
-                            col(KnowledgeFile.file_level_path) == prefix,
-                            col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
-                        ),
-                    )
-                    .group_by(KnowledgeFile.status)
-                )
-
-                in_progress_statuses = {
-                    KnowledgeFileStatus.PROCESSING.value,
-                    KnowledgeFileStatus.WAITING.value,
-                    KnowledgeFileStatus.REBUILDING.value,
-                }
-                # Statuses a batch-retry would actually act on (see batch_retry_failed_files).
-                retryable_statuses = {
-                    KnowledgeFileStatus.FAILED.value,
-                    KnowledgeFileStatus.VIOLATION.value,
-                }
-                async with get_async_db_session() as session:
-                    rows = (await session.exec(stmt)).all()
-                    success = sum(r[1] for r in rows if r[0] == KnowledgeFileStatus.SUCCESS.value)
-                    processing = sum(r[1] for r in rows if r[0] in in_progress_statuses)
-                    failed = sum(r[1] for r in rows if r[0] in retryable_statuses)
-                    folder_counts[folder.id] = {
-                        "has_failed_files": failed > 0,
-                        "success_file_num": success,
-                        "processing_file_num": processing,
-                    }
-
+            effective_tenant_id = self._file_change_visibility_service().require_explicit_tenant()
             folders = [f for f in res if f.file_type == FileType.DIR]
-            await asyncio.gather(*(count_folder(f) for f in folders))
+            folder_scopes = {
+                int(folder.id): (
+                    int(folder.knowledge_id),
+                    f"{folder.file_level_path or ''}/{folder.id}",
+                )
+                for folder in folders
+            }
+            aggregate_queries = [
+                select(
+                    literal(folder_id).label("folder_id"),
+                    KnowledgeFile.status,
+                    func.count(KnowledgeFile.id).label("file_count"),
+                )
+                .where(
+                    KnowledgeFile.tenant_id == effective_tenant_id,
+                    KnowledgeFile.knowledge_id == knowledge_id,
+                    KnowledgeFile.file_type == FileType.FILE.value,
+                    or_(
+                        col(KnowledgeFile.file_level_path) == prefix,
+                        col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
+                    ),
+                )
+                .group_by(KnowledgeFile.status)
+                for folder_id, (knowledge_id, prefix) in folder_scopes.items()
+            ]
+            async with get_async_db_session() as session:
+                aggregate_rows = []
+                for offset in range(0, len(aggregate_queries), _FOLDER_COUNT_UNION_CHUNK_SIZE):
+                    aggregate_stmt = union_all(
+                        *aggregate_queries[offset : offset + _FOLDER_COUNT_UNION_CHUNK_SIZE],
+                    )
+                    aggregate_rows.extend((await session.exec(aggregate_stmt)).all())
+
+                hidden_rows = []
+                hidden_ids = sorted(file_change_excluded_ids or set())
+                for offset in range(0, len(hidden_ids), 500):
+                    hidden_chunk = hidden_ids[offset : offset + 500]
+                    hidden_stmt = select(
+                        KnowledgeFile.id,
+                        KnowledgeFile.knowledge_id,
+                        KnowledgeFile.status,
+                        KnowledgeFile.file_level_path,
+                    ).where(
+                        KnowledgeFile.tenant_id == effective_tenant_id,
+                        KnowledgeFile.knowledge_id.in_(
+                            sorted({scope[0] for scope in folder_scopes.values()}),
+                        ),
+                        KnowledgeFile.file_type == FileType.FILE.value,
+                        col(KnowledgeFile.id).in_(hidden_chunk),
+                    )
+                    hidden_rows.extend((await session.exec(hidden_stmt)).all())
+
+            in_progress_statuses = {
+                KnowledgeFileStatus.PROCESSING.value,
+                KnowledgeFileStatus.WAITING.value,
+                KnowledgeFileStatus.REBUILDING.value,
+            }
+            # Statuses a batch-retry would actually act on (see batch_retry_failed_files).
+            retryable_statuses = {
+                KnowledgeFileStatus.FAILED.value,
+                KnowledgeFileStatus.VIOLATION.value,
+            }
+            raw_counts = {folder_id: {"success": 0, "processing": 0, "failed": 0} for folder_id in folder_scopes}
+            for folder_id, status, count in aggregate_rows:
+                normalized_folder_id = int(folder_id)
+                if status == KnowledgeFileStatus.SUCCESS.value:
+                    raw_counts[normalized_folder_id]["success"] += int(count)
+                elif status in in_progress_statuses:
+                    raw_counts[normalized_folder_id]["processing"] += int(count)
+                elif status in retryable_statuses:
+                    raw_counts[normalized_folder_id]["failed"] += int(count)
+
+            for _file_id, row_knowledge_id, status, file_level_path in hidden_rows:
+                normalized_path = str(file_level_path or "")
+                for folder_id, (knowledge_id, prefix) in folder_scopes.items():
+                    if int(row_knowledge_id) != knowledge_id:
+                        continue
+                    if normalized_path != prefix and not normalized_path.startswith(f"{prefix}/"):
+                        continue
+                    if status == KnowledgeFileStatus.SUCCESS.value:
+                        counter = "success"
+                    elif status in in_progress_statuses:
+                        counter = "processing"
+                    elif status in retryable_statuses:
+                        counter = "failed"
+                    else:
+                        continue
+                    raw_counts[folder_id][counter] = max(0, raw_counts[folder_id][counter] - 1)
+
+            for folder_id in folder_scopes:
+                counts = raw_counts[folder_id]
+                folder_counts[folder_id] = {
+                    "has_failed_files": counts["failed"] > 0,
+                    "success_file_num": counts["success"],
+                    "processing_file_num": counts["processing"],
+                }
 
         # file need find all tags
         file_tags = {}
@@ -2475,7 +2542,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 item["has_similar"] = getattr(one, "_has_similar", (one.similar_status == 1))
             result.append(item)
 
-        return result
+        return await self._enrich_file_change_approval_views(res, result)
 
     async def _filter_visible_child_items_reference(
         self,
@@ -2600,6 +2667,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         permission_context = None if system_scope else await self._build_child_permission_context(space_id)
         if permission_context is not None and verified_space is not None:
             permission_context["verified_space"] = verified_space
+        file_change_excluded_ids = await self._get_file_change_excluded_ids(space_id=space_id)
         batch_cursor: list | None = list(cursor) if cursor else None
         resume_cursor: list | None = None
         scanned_candidates = 0
@@ -2676,6 +2744,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
                 permission_elapsed_ms += (perf_counter() - permission_started_at) * 1000
             visible_ids = {item.id for item in visible_batch}
+            visible_ids -= file_change_excluded_ids
             for item in batch_items:
                 if item.id in visible_ids:
                     if len(visible_page_items) == page_size:
@@ -2729,6 +2798,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """
         needed = page * page_size + 1
         permission_context = None if system_scope else await self._build_child_permission_context(space_id)
+        file_change_excluded_ids = await self._get_file_change_excluded_ids(space_id=space_id)
         visible: list[KnowledgeFile] = []
         batch_num = 0
 
@@ -2752,14 +2822,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if not batch:
                 break
             if system_scope:
-                visible.extend(batch)
+                visible.extend(item for item in batch if int(item.id) not in file_change_excluded_ids)
             else:
                 visible.extend(
-                    await self._filter_visible_child_items(
+                    item
+                    for item in await self._filter_visible_child_items(
                         batch,
                         space_id=space_id,
                         context=permission_context,
                     )
+                    if int(item.id) not in file_change_excluded_ids
                 )
             if len(batch) < _SEARCH_SCAN_BATCH_SIZE:
                 break
@@ -2900,7 +2972,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             stage = "extra_info"
             stage_started_at = perf_counter()
-            data = await self._handle_file_folder_extra_info(visible_page_items)
+            data = await self._handle_file_folder_extra_info(
+                visible_page_items,
+                file_change_excluded_ids=await self._get_file_change_excluded_ids(space_id=space_id),
+            )
             stage_elapsed_ms["extra_info_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
             next_cursor: str | None = None
@@ -3055,7 +3130,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # Enrich page items with version fields (version_no, is_multi_version, has_similar).
         await self._enrich_with_version_info(page_items)
 
-        data = await self._handle_file_folder_extra_info(page_items)
+        data = await self._handle_file_folder_extra_info(
+            page_items,
+            file_change_excluded_ids=await self._get_file_change_excluded_ids(space_id=space_id),
+        )
         # `total` is intentionally dropped (INV-6): an accurate post-ReBAC-filter
         # count requires materialising every match, which is exactly what the
         # batch-scan avoids. Both consumers (client useFileManager, F030
@@ -4331,6 +4409,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # service still resolves the canonical file row and status, but it does
         # not invoke PermissionAction or treat `visible` as a preview action.
         file_record = await self._get_file_for_action(file_id)
+        await self._file_change_visibility_service().require_file_change_visible(
+            space_id=file_record.knowledge_id,
+            resource_id=file_id,
+            allow_unpublished_stakeholder=True,
+        )
 
         original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
         metadata = file_record.user_metadata or {}
@@ -4351,7 +4434,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     async def get_file_download(self, file_id: int, *, space_id: int | None = None) -> dict:
-        await self._get_file_for_action(file_id, space_id=space_id)
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
         if self.f048_file_delivery is not None:
             from bisheng.permission.domain.services.permission_action_service import (
                 PermissionActor,
@@ -4372,6 +4455,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 file_id,
                 "download",
             )
+
+        await self._file_change_visibility_service().require_file_change_visible(
+            space_id=file_record.knowledge_id,
+            resource_id=file_id,
+        )
 
         original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
 

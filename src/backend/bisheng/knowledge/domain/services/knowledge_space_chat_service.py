@@ -110,11 +110,17 @@ class KnowledgeSpaceChatService:
 
     async def _require_file_view_permission(self, space_id: int, file_id: int):
         svc = self._permission_service()
-        return await svc._require_file_action(
+        file_record = await svc._require_file_action(
             file_id,
             "visible",
             space_id=space_id,
         )
+        # A file parked behind a pending change request is not chattable either.
+        await self._visibility_service().require_file_change_visible(
+            space_id=space_id,
+            resource_id=file_id,
+        )
+        return file_record
 
     @staticmethod
     async def _prepare_rag_citation_context(

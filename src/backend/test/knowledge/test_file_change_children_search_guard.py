@@ -70,7 +70,7 @@ async def test_children_guard_filters_after_rebac_and_refills_with_one_guard_loa
         patch.object(service, "_filter_visible_child_items", new=rebac_filter),
         patch(f"{_SERVICE_MODULE}._CHILD_PERMISSION_SCAN_BATCH_SIZE", 3),
     ):
-        items, has_more = await service._scan_visible_child_items(
+        items, has_more, _cursor = await service._scan_visible_child_items(
             space_id=1,
             parent_id=None,
             file_ids=None,
@@ -150,7 +150,7 @@ async def test_shared_published_folder_remains_but_unpublished_sibling_is_hidden
             new=AsyncMock(return_value=[shared_folder, unpublished_sibling, published_child]),
         ),
     ):
-        items, has_more = await service._scan_visible_child_items(
+        items, has_more, _cursor = await service._scan_visible_child_items(
             space_id=1,
             parent_id=None,
             file_ids=None,
@@ -187,7 +187,7 @@ async def test_status_alone_does_not_hide_pre_cutover_rename_move_delete_resourc
         patch.object(service, "_build_child_permission_context", new=AsyncMock(return_value={})),
         patch.object(service, "_filter_visible_child_items", new=AsyncMock(return_value=[old_resource])),
     ):
-        items, _ = await service._scan_visible_child_items(
+        items, _, _cursor = await service._scan_visible_child_items(
             space_id=1,
             parent_id=None,
             file_ids=None,

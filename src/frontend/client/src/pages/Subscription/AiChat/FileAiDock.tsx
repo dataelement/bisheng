@@ -249,7 +249,6 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
         stopGenerating,
         clearConversation,
         regenerate,
-        recoverRateLimitedMessage,
     } = useFileChat(spaceId, fileId);
 
     useChatModelMemo(user, bsConfig as any);
@@ -320,7 +319,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
             <div
                 className="fixed inset-x-0 top-0 z-50 flex flex-col bg-white"
                 style={{
-                    height: viewportHeight ? `${viewportHeight}px` : "var(--bs-dvh,100dvh)",
+                    height: viewportHeight ? `${viewportHeight}px` : "100dvh",
                     transform: `translateY(${viewportOffsetTop}px)`,
                 }}
                 role="dialog"
@@ -344,7 +343,6 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                         emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                         onPresetClick={(q) => setInputText(q)}
                         onRegenerate={regenerate}
-                        onRecover={recoverRateLimitedMessage}
                     />
                     <div
                         aria-hidden
@@ -418,7 +416,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                                         type="button"
                                         onClick={() => setOpen(true)}
                                         aria-label={localize("com_ui_expand")}
-                                        className="absolute bottom-full right-0 z-10 mb-2 mr-3 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-text-3 drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-text-2"
+                                        className="absolute bottom-full right-0 z-10 mb-2.5 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-text-3 drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-text-2"
                                     >
                                         <Outlined.DoubleDown className="size-4 rotate-180" />
                                     </button>
@@ -435,10 +433,10 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                             // Height scales with the viewport (taller on large screens); floored at 440px,
                             // capped so it never overflows the file-display area.
                             "overflow-hidden transition-[max-height] duration-300 ease-out",
-                            open ? "max-h-[clamp(440px,70vh,calc(var(--bs-vh,100vh)_-_160px))]" : "max-h-0",
+                            open ? "max-h-[clamp(440px,70vh,calc(100vh_-_160px))]" : "max-h-0",
                         )}
                     >
-                        <div className="flex h-[clamp(440px,70vh,calc(var(--bs-vh,100vh)_-_160px))] flex-col">
+                        <div className="flex h-[clamp(440px,70vh,calc(100vh_-_160px))] flex-col">
                             <div className="relative flex shrink-0 items-center gap-2 px-4 py-3">
                                 <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-[22px] text-text-1">
                                     {assistantTitle}
@@ -498,7 +496,6 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                                 emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                                 onPresetClick={(q) => setInputText(q)}
                                 onRegenerate={regenerate}
-                                onRecover={recoverRateLimitedMessage}
                             />
                         </div>
                     </div>

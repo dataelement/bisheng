@@ -14,6 +14,7 @@ import FilePreview from "./index";
 import { RichKnowledgePreview } from "./RichKnowledgePreview";
 import { resolveKnowledgePreviewUrl } from "./previewUrlUtils";
 import { useLocalize } from "~/hooks";
+import { cn } from "~/utils";
 
 /**
  * Extract file extension from a URL path, ignoring query parameters.
@@ -51,12 +52,32 @@ function isRichPreviewData(data: KnowledgeFilePreview | null): boolean {
     );
 }
 
-export default function FilePreviewPage() {
+export interface FilePreviewPageProps {
+    /** Embedded mode: file id from props instead of the route param. */
+    fileId?: string;
+    /** Embedded mode: display name instead of the `name` query param. */
+    fileName?: string;
+    /** Embedded mode: space id instead of the `spaceId` query param. */
+    spaceId?: string;
+    /** Fill the parent instead of the viewport, and skip the standalone mobile layout. */
+    embedded?: boolean;
+    /** Extra buttons appended to the TopBar action slot (e.g. the drawer's "open in new tab"). */
+    extraActions?: React.ReactNode;
+}
+
+export default function FilePreviewPage({
+    fileId: fileIdProp,
+    fileName: fileNameProp,
+    spaceId: spaceIdProp,
+    embedded = false,
+    extraActions,
+}: FilePreviewPageProps = {}) {
     const localize = useLocalize();
-    const { fileId } = useParams<{ fileId: string }>();
+    const { fileId: routeFileId } = useParams<{ fileId: string }>();
     const [searchParams] = useSearchParams();
-    const fileName = searchParams.get("name") || localize("com_knowledge.unknown_file");
-    const spaceId = searchParams.get("spaceId") || "";
+    const fileId = fileIdProp || routeFileId;
+    const fileName = fileNameProp || searchParams.get("name") || localize("com_knowledge.unknown_file");
+    const spaceId = spaceIdProp || searchParams.get("spaceId") || "";
 
     // Fetch real preview URL via API
     const [fileUrl, setFileUrl] = useState<string>("");
@@ -154,6 +175,9 @@ export default function FilePreviewPage() {
         };
     }, [isMobile, fileName]);
 
+    // Embedded in a drawer the preview fills its container; standalone it owns the viewport.
+    const rootHeightClass = embedded ? "h-full" : "h-[var(--bs-vh,100vh)]";
+
     const renderPreview = (compactMode = false) => {
         if (previewData && isRichPreviewData(previewData)) {
             return (
@@ -163,6 +187,7 @@ export default function FilePreviewPage() {
                     allowDownload={canDownload}
                     onDownloadFile={handleDownloadFile}
                     compactMode={compactMode}
+                    actions={compactMode ? undefined : extraActions}
                 />
             );
         }
@@ -174,6 +199,7 @@ export default function FilePreviewPage() {
                 conversionFailed={conversionFailed}
                 allowDownload={canDownload}
                 onDownloadFile={handleDownloadFile}
+                actions={compactMode ? undefined : extraActions}
                 hideHeader={compactMode}
                 hideSidebar={compactMode}
             />
@@ -183,7 +209,7 @@ export default function FilePreviewPage() {
     // Loading state while fetching preview URL
     if (loading) {
         return (
-            <div className="h-[var(--bs-vh,100vh)] flex items-center justify-center bg-white">
+            <div className={cn(rootHeightClass, "flex items-center justify-center bg-white")}>
                 <div className="text-[#86909c]">{localize("com_knowledge.loading")}</div>
             </div>
         );
@@ -192,7 +218,7 @@ export default function FilePreviewPage() {
     // No URL available (skip this guard for pptx conversion failure — handled by FilePreview)
     if (!fileUrl && !conversionFailed && !isRichPreviewData(previewData)) {
         return (
-            <div className="h-[var(--bs-vh,100vh)] flex items-center justify-center bg-white">
+            <div className={cn(rootHeightClass, "flex items-center justify-center bg-white")}>
                 <div className="text-[#86909c]">{localize("com_knowledge.fetch_preview_link_failed")}</div>
             </div>
         );
@@ -203,7 +229,7 @@ export default function FilePreviewPage() {
     // the screen, controls float, and the file-chat dock pins to the bottom.
     if (isMobile) {
         return (
-            <div className="relative h-[var(--bs-vh,100vh)] w-[var(--bs-vw,100vw)] overflow-hidden bg-white">
+            <div className={cn("relative overflow-hidden bg-white", rootHeightClass, embedded ? "w-full" : "w-[var(--bs-vw,100vw)]")}>
                 {/* Bare preview — header hidden, viewer fills the container. */}
                 <div className="absolute inset-0">
                     {renderPreview(true)}
@@ -229,7 +255,7 @@ export default function FilePreviewPage() {
 
     // ─── Desktop layout: TopBar + viewer with a bottom-anchored AI dock overlay.
     return (
-        <div className="relative h-[var(--bs-vh,100vh)] flex flex-col bg-white overflow-hidden">
+        <div className={cn("relative flex flex-col bg-white overflow-hidden", rootHeightClass)}>
             <div className="min-h-0 flex-1">
                 {renderPreview(false)}
             </div>
