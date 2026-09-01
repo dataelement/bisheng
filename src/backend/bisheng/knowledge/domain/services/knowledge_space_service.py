@@ -8627,7 +8627,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         cached_candidates = [candidate_for(key) for key in cached_top_n_ids]
         cached_candidates = [candidate for candidate in cached_candidates if candidate is not None]
         selected = []
-        cache_stable = cached_top_n_hit and not cached_top_n_ids
+        cache_stable = False
         if cached_candidates:
             selected = await recommendation_service.select_authorized_top_n(
                 cached_candidates,
@@ -8636,7 +8636,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 check_permission_batch=check_permission_batch,
                 state=authorization_state,
             )
-            cache_stable = len(selected) == len(cached_top_n_ids) == len(cached_candidates)
+            cache_stable = self._personalized_recommendation_cached_selection_is_stable(
+                cached_top_n_hit=cached_top_n_hit,
+                cached_top_n_ids=cached_top_n_ids,
+                cached_candidates=cached_candidates,
+                selected=selected,
+            )
         if not cache_stable and len(selected) < target_count:
             selected = []
             ordered = score(first_candidates)
@@ -8730,7 +8735,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_subcategory_code=req.file_subcategory_code,
             include_source_paths=True,
         )
-        if uses_top_n_cache:
+        cache_write_allowed = uses_top_n_cache and self._personalized_recommendation_cache_write_allowed(
+            selected_count=len(selected),
+            result_count=len(items),
+            authorization_state=authorization_state,
+        )
+        if cache_write_allowed:
             try:
                 await redis_repository.set_top_n(
                     tenant_id,
@@ -8778,6 +8788,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "cache_candidate_count": len(cached_candidates),
                     "cache_hit": cached_top_n_hit,
                     "cache_stable": cache_stable,
+                    "cache_write_allowed": cache_write_allowed,
                     "candidate_count": ordered_candidate_count,
                     "domain_candidate_count": len(domain_candidates),
                     "duration_ms": round((time.monotonic() - diagnostic_started_at) * 1000, 2),
@@ -8808,6 +8819,37 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ),
         )
         return self._build_shougang_portal_search_response(items, limit=target_count)
+
+    @staticmethod
+    def _personalized_recommendation_cached_selection_is_stable(
+        *,
+        cached_top_n_hit: bool,
+        cached_top_n_ids: list[tuple[int, int]],
+        cached_candidates: list[PortalRecommendationCandidate],
+        selected: list[PortalRecommendationCandidate],
+    ) -> bool:
+        # An empty cached payload can be produced by a transient permission failure.
+        # Recompute instead of treating it as a stable empty recommendation.
+        return bool(
+            cached_top_n_hit and cached_top_n_ids and len(selected) == len(cached_top_n_ids) == len(cached_candidates)
+        )
+
+    @staticmethod
+    def _personalized_recommendation_cache_write_allowed(
+        *,
+        selected_count: int,
+        result_count: int,
+        authorization_state: PortalRecommendationAuthorizationState,
+    ) -> bool:
+        # Do not replace a usable Top-N with a transient or partially authorized result.
+        return bool(
+            selected_count > 0
+            and result_count == selected_count
+            and not authorization_state.unavailable
+            and not authorization_state.time_budget_reached
+            and not authorization_state.check_limit_reached
+            and authorization_state.error_count == 0
+        )
 
     @staticmethod
     def _personalized_recommendation_target_count(

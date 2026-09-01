@@ -9,6 +9,10 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFileSearchReq,
 )
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+from bisheng.knowledge.domain.services.portal_recommendation_service import (
+    PortalRecommendationAuthorizationState,
+    PortalRecommendationCandidate,
+)
 
 
 @pytest.mark.asyncio
@@ -326,6 +330,84 @@ def test_personalized_filter_request_is_not_allowed_to_reuse_base_topn_cache(fie
 
     assert KnowledgeSpaceService._personalized_recommendation_uses_base_cache(filtered) is False
     assert KnowledgeSpaceService._personalized_recommendation_uses_base_cache(plain) is True
+
+
+def test_personalized_empty_topn_cache_is_recomputed_instead_of_treated_as_stable():
+    assert (
+        KnowledgeSpaceService._personalized_recommendation_cached_selection_is_stable(
+            cached_top_n_hit=True,
+            cached_top_n_ids=[],
+            cached_candidates=[],
+            selected=[],
+        )
+        is False
+    )
+
+
+def test_personalized_complete_nonempty_topn_cache_remains_stable():
+    candidate = PortalRecommendationCandidate(space_id=10, file_id=100)
+
+    assert (
+        KnowledgeSpaceService._personalized_recommendation_cached_selection_is_stable(
+            cached_top_n_hit=True,
+            cached_top_n_ids=[candidate.key],
+            cached_candidates=[candidate],
+            selected=[candidate],
+        )
+        is True
+    )
+
+
+@pytest.mark.parametrize(
+    "authorization_state",
+    [
+        PortalRecommendationAuthorizationState(time_budget_reached=True),
+        PortalRecommendationAuthorizationState(check_limit_reached=True),
+        PortalRecommendationAuthorizationState(unavailable=True),
+        PortalRecommendationAuthorizationState(error_count=1),
+    ],
+)
+def test_personalized_incomplete_authorization_does_not_overwrite_topn_cache(authorization_state):
+    assert (
+        KnowledgeSpaceService._personalized_recommendation_cache_write_allowed(
+            selected_count=10,
+            result_count=10,
+            authorization_state=authorization_state,
+        )
+        is False
+    )
+
+
+def test_personalized_empty_or_unmapped_result_does_not_overwrite_topn_cache():
+    authorization_state = PortalRecommendationAuthorizationState()
+
+    assert (
+        KnowledgeSpaceService._personalized_recommendation_cache_write_allowed(
+            selected_count=0,
+            result_count=0,
+            authorization_state=authorization_state,
+        )
+        is False
+    )
+    assert (
+        KnowledgeSpaceService._personalized_recommendation_cache_write_allowed(
+            selected_count=10,
+            result_count=0,
+            authorization_state=authorization_state,
+        )
+        is False
+    )
+
+
+def test_personalized_complete_result_can_update_topn_cache():
+    assert (
+        KnowledgeSpaceService._personalized_recommendation_cache_write_allowed(
+            selected_count=10,
+            result_count=10,
+            authorization_state=PortalRecommendationAuthorizationState(),
+        )
+        is True
+    )
 
 
 def test_visible_space_scope_is_stable_and_isolates_different_candidate_sets():
