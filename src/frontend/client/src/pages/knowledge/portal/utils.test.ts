@@ -92,10 +92,39 @@ describe("portal preview utils", () => {
                 [deepFolder],
                 [rootFile],
                 "101",
+                "space-1",
             );
 
             expect(merged.map((node) => node.file.id)).toEqual(["101", "102"]);
             expect(merged[0].children).toEqual([child]);
+        });
+
+        it("preserves the full ancestor chain for a nested current folder missing from the root page", () => {
+            const grandchild = createTreeNode(makeFile({ id: "301", name: "grandchild.md", type: FileType.MD }));
+            const deepFolder = {
+                ...createTreeNode(makeFile({ id: "201", name: "deep" })),
+                children: [grandchild],
+                loaded: true,
+            };
+            const parentFolder = {
+                ...createTreeNode(makeFile({ id: "101", name: "parent" })),
+                children: [deepFolder],
+                expanded: true,
+                loaded: true,
+            };
+            const rootFile = makeFile({ id: "102", name: "root.md", type: FileType.MD });
+
+            const merged = mergeRootTreeNodesPreservingLoadedFolders(
+                [parentFolder],
+                [rootFile],
+                "201",
+                "space-1",
+            );
+
+            expect(merged.map((node) => node.file.id)).toEqual(["102", "101"]);
+            const mergedParent = merged.find((node) => node.file.id === "101");
+            expect(mergedParent?.children.map((node) => node.file.id)).toEqual(["201"]);
+            expect(mergedParent?.children[0].children).toEqual([grandchild]);
         });
     });
 

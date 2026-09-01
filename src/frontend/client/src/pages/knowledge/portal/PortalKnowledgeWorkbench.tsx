@@ -80,6 +80,7 @@ import {
     mergeRootTreeNodesPreservingLoadedFolders,
     normalizePortalFileCategoryGroups,
     normalizePortalFileCategoryOptions,
+    removeTreeNode,
     resolvePreviewUrl,
     toNumericIds,
     toStatusNumbers,
@@ -317,6 +318,12 @@ export default function PortalKnowledgeWorkbench() {
     /** Skip the automatic reloadFiles in the activeSpace effect after back-to-list sets the URL.
      *  Otherwise reloadFiles races with handleNavigateFolder and overwrites the full path tree. */
     const skipNextReloadRef = useRef(false);
+    /** Expose handleNavigateFolder to handleBackToFileList, which is declared earlier. */
+    const navigateFolderRef = useRef<
+        (folderId?: string, folderName?: string, knownParentPath?: Array<{ id: string; name: string }>) => Promise<void>
+    >();
+    /** Deduplicate concurrent handleNavigateFolder calls for the same folder. */
+    const navigatingFolderRef = useRef<string | null>(null);
     const isDeepLinkRestoring = Boolean(
         portalDeepLinkTarget && restoringDeepLinkKey === portalDeepLinkTarget.key,
     );
@@ -1143,6 +1150,7 @@ export default function PortalKnowledgeWorkbench() {
                     prev,
                     nextFiles,
                     currentFolderIdRef.current,
+                    spaceId,
                 );
             });
             setTreeRootPage(page);
@@ -2435,6 +2443,13 @@ export default function PortalKnowledgeWorkbench() {
             next.delete("openNonce");
             return next;
         });
+        // Navigate to the folder right away so the full ancestor path is built
+        // regardless of deep-link effect timing. If activeSpace is about to switch,
+        // handleNavigateFolder will no-op and the deep-link effect will take over
+        // once the space swap completes.
+        if (folderId) {
+            void navigateFolderRef.current?.(folderId, folderName, parentFolders);
+        }
     }, [activeSpace, selectedFile, selectedFileParentPath, setActiveSpace, setSearchParams, sourceSpace]);
 
     // 从"我的收藏"只读面板打开源文件：#4 原地预览——不切换 activeSpace（不跳转到源知识空间），
@@ -2616,18 +2631,22 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [activeSpace?.id, loadFolderStats, showToast, sortBy, sortDirection, statusFilterNumbers]);
 
-    const handleNavigateFolder = useCallback(async (folderId?: string, folderName?: string) => {
+    const handleNavigateFolder = useCallback(async (
+        folderId?: string,
+        folderName?: string,
+        knownParentPath?: Array<{ id: string; name: string }>,
+    ) => {
         const spaceId = activeSpace?.id;
         if (!spaceId) return;
-        setSearchMode(false);
-        setSearchResults([]);
-        setSearchText("");
-        setSearchTagIds([]);
-        setSelectedFile(null);
-        setSelectedFileIds(new Set());
-        setSelectedFolderIds(new Set());
 
         if (!folderId) {
+            setSearchMode(false);
+            setSearchResults([]);
+            setSearchText("");
+            setSearchTagIds([]);
+            setSelectedFile(null);
+            setSelectedFileIds(new Set());
+            setSelectedFolderIds(new Set());
             setCurrentFolderId(undefined);
             if (treeNodes.length === 0) {
                 await loadRootTree(1, false, spaceId);
@@ -2635,89 +2654,106 @@ export default function PortalKnowledgeWorkbench() {
             return;
         }
 
-        setCurrentFolderId(folderId);
-        const node = findTreeNode(treeNodes, folderId);
-        if (node?.loaded) {
-            setTreeNodes((prev) => updateTreeNode(prev, folderId, (item) => ({
-                ...item,
-                expanded: true,
-            })));
-            return;
-        }
+        if (navigatingFolderRef.current === folderId) return;
+        navigatingFolderRef.current = folderId;
 
-        // Folder is not yet in the tree (e.g. back-to-list or deep-link).
-        // Fetch its ancestor chain first so the breadcrumb can render the
-        // full path instead of only the deepest folder.
-        // Note: getFolderParentPathApi returns ancestors EXCLUDING the folder
-        // itself, so we append the target folder to complete the path.
-        const existingPath = findTreeNodePath(treeNodes, folderId);
-        const pathIncomplete = !node || existingPath.length <= 1;
-        if (pathIncomplete) {
-            try {
-                const parentPath = await getFolderParentPathApi(spaceId, folderId);
-                if (activeSpaceIdRef.current !== spaceId) return;
-                const fullPath = parentPath.some((seg) => String(seg.id) === folderId)
-                    ? parentPath
-                    : [...parentPath, { id: folderId, name: folderName || `文件夹 ${folderId}` }];
-                if (fullPath.length) {
-                    setTreeNodes((prev) => ensureFolderPath(prev, fullPath, spaceId));
-                }
-            } catch {
-                // Fall through to single-node placeholder below.
-            }
-        }
-
-        setTreeNodes((prev) => updateTreeNode(
-            ensureFolderNode(prev, spaceId, folderId, folderName),
-            folderId,
-            (item) => ({
-                ...item,
-                expanded: true,
-                loading: true,
-            }),
-        ));
         try {
-            const res = await getPortalWorkbenchChildren(activeSpace, {
-                space_id: spaceId,
-                parent_id: folderId,
-                page: 1,
-                page_size: TREE_PAGE_SIZE,
-                order_field: sortBy,
-                order_sort: sortDirection,
-                file_status: statusFilterNumbers,
-            });
-            if (activeSpaceIdRef.current !== spaceId) return;
-            const total = (res as any).total ?? res.data.length;
-            const nextFiles = markFolderStatsLoading(res.data);
-            setTreeNodes((prev) => updateTreeNode(
-                ensureFolderNode(prev, spaceId, folderId, folderName),
-                folderId,
-                (item) => ({
+            setSearchMode(false);
+            setSearchResults([]);
+            setSearchText("");
+            setSearchTagIds([]);
+            setSelectedFile(null);
+            setSelectedFileIds(new Set());
+            setSelectedFolderIds(new Set());
+
+            setCurrentFolderId(folderId);
+            const existingPath = findTreeNodePath(treeNodes, folderId);
+            const node = findTreeNode(treeNodes, folderId);
+            const hasFullPath = node?.loaded && existingPath.length > 1;
+            if (hasFullPath) {
+                setTreeNodes((prev) => updateTreeNode(prev, folderId, (item) => ({
                     ...item,
-                    children: dedupeFilesById(nextFiles).map(createTreeNode),
                     expanded: true,
-                    loaded: true,
-                    loading: false,
-                    page: 1,
-                    total,
-                    hasMore: Boolean(res.has_more),
-                    nextCursor: res.next_cursor ?? null,
-                }),
-            ));
-            void loadFolderStats(spaceId, nextFiles);
-        } catch {
-            if (activeSpaceIdRef.current !== spaceId) return;
+                })));
+                return;
+            }
+
+            // Folder is not yet in the tree or only exists as a shallow root-level
+            // placeholder (e.g. after a race or partial refresh). Build/rebuild the
+            // full ancestor chain and prune any stale duplicate of the target node.
+            let fullPath: Array<{ id: string; name: string }> | undefined = knownParentPath;
+            if (!fullPath?.length) {
+                try {
+                    const parentPath = await getFolderParentPathApi(spaceId, folderId);
+                    if (activeSpaceIdRef.current !== spaceId) return;
+                    fullPath = parentPath.some((seg) => String(seg.id) === folderId)
+                        ? parentPath
+                        : [...parentPath, { id: folderId, name: folderName || `文件夹 ${folderId}` }];
+                } catch {
+                    // Fall through to single-node placeholder below.
+                }
+            }
+            if (fullPath?.length) {
+                setTreeNodes((prev) => ensureFolderPath(removeTreeNode(prev, folderId), fullPath, spaceId));
+            }
+
             setTreeNodes((prev) => updateTreeNode(
                 ensureFolderNode(prev, spaceId, folderId, folderName),
                 folderId,
                 (item) => ({
                     ...item,
-                    loading: false,
+                    expanded: true,
+                    loading: true,
                 }),
             ));
-            showToast({ message: "文件夹加载失败", severity: NotificationSeverity.ERROR });
+            try {
+                const res = await getPortalWorkbenchChildren(activeSpace, {
+                    space_id: spaceId,
+                    parent_id: folderId,
+                    page: 1,
+                    page_size: TREE_PAGE_SIZE,
+                    order_field: sortBy,
+                    order_sort: sortDirection,
+                    file_status: statusFilterNumbers,
+                });
+                if (activeSpaceIdRef.current !== spaceId) return;
+                const total = (res as any).total ?? res.data.length;
+                const nextFiles = markFolderStatsLoading(res.data);
+                setTreeNodes((prev) => updateTreeNode(
+                    ensureFolderNode(prev, spaceId, folderId, folderName),
+                    folderId,
+                    (item) => ({
+                        ...item,
+                        children: dedupeFilesById(nextFiles).map(createTreeNode),
+                        expanded: true,
+                        loaded: true,
+                        loading: false,
+                        page: 1,
+                        total,
+                        hasMore: Boolean(res.has_more),
+                        nextCursor: res.next_cursor ?? null,
+                    }),
+                ));
+                void loadFolderStats(spaceId, nextFiles);
+            } catch {
+                if (activeSpaceIdRef.current !== spaceId) return;
+                setTreeNodes((prev) => updateTreeNode(
+                    ensureFolderNode(prev, spaceId, folderId, folderName),
+                    folderId,
+                    (item) => ({
+                        ...item,
+                        loading: false,
+                    }),
+                ));
+                showToast({ message: "文件夹加载失败", severity: NotificationSeverity.ERROR });
+            }
+        } finally {
+            navigatingFolderRef.current = null;
         }
     }, [activeSpace?.id, loadFolderStats, loadRootTree, showToast, sortBy, sortDirection, statusFilterNumbers, treeNodes]);
+
+    // Expose the latest handler to event callbacks defined earlier in the file.
+    navigateFolderRef.current = handleNavigateFolder;
 
     usePortalDeepLink({
         searchParams,
