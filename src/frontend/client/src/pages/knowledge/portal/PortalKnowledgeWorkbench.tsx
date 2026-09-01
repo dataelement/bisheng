@@ -3125,7 +3125,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     onSearch={(params) => void handleNativeSearch(params)}
                                                     onFilterStatus={handleNativeStatusFilter}
                                                     onSort={handleNativeSort}
-                                                    onNavigateFolder={(folderId) => void handleNavigateFolder(folderId)}
+                                                    onNavigateFolder={(folderId, folderName) => void handleNavigateFolder(folderId, folderName)}
                                                     onUploadFile={(files) => fileUpload.handleUploadFile(files)}
                                                     onUploadFolder={(files, options) => fileUpload.handleUploadFolder(files, options)}
                                                     onCreateFolder={() => fileUpload.handleCreateFolder()}

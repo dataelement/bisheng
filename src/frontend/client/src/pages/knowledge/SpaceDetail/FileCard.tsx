@@ -30,7 +30,7 @@ interface FileCardProps {
     onDelete: () => void;
     onEditTags: () => void;
     onRetry?: () => void;
-    onNavigateFolder?: (folderId?: string) => void;
+    onNavigateFolder?: (folderId?: string, folderName?: string) => void;
     onPreview?: (fileId: string) => void;
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
@@ -319,7 +319,7 @@ export function FileCard({
         // Folder click is treated as "enter folder"/"navigate directory"
         // (depending on the parent component's onNavigateFolder implementation).
         if (isFolder) {
-            onNavigateFolder?.(file.id);
+            onNavigateFolder?.(file.id, file.name);
             return;
         }
 

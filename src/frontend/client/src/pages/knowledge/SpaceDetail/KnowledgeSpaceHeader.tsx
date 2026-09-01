@@ -47,7 +47,7 @@ const TOOLBAR_COMPACT_MAX_WIDTH = 1040;
 interface KnowledgeSpaceHeaderProps {
     space: KnowledgeSpace;
     currentPath: Array<{ id?: string; name: string }>;
-    onNavigateFolder: (folderId?: string) => void;
+    onNavigateFolder: (folderId?: string, folderName?: string) => void;
     searchQuery: string;
     isSearching: boolean;
     onSearch: (params: SearchParams) => void;

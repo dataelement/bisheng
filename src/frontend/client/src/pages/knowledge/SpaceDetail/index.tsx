@@ -92,7 +92,7 @@ interface KnowledgeSpaceContentProps {
     onSearch: (params: SearchParams) => void;
     onFilterStatus: (status: FileStatus[]) => void;
     onSort: (sortBy: SortType | undefined, direction: SortDirection | undefined) => void;
-    onNavigateFolder: (folderId?: string) => void;
+    onNavigateFolder: (folderId?: string, folderName?: string) => void;
     onUploadFile: (files?: FileList | File[]) => void;
     onUploadFolder: (
         files: FileList | File[],
@@ -1857,7 +1857,7 @@ export function KnowledgeSpaceContent({
                                             onDelete={() => handleDelete(file.id)}
                                             onEditTags={() => handleOpenEditTags(file.id)}
                                             onRetry={() => handleSingleRetry(file.id)}
-                                            onNavigateFolder={() => onNavigateFolder(file.id)}
+                                            onNavigateFolder={() => onNavigateFolder(file.id, file.name)}
                                             onPreview={handlePreviewFile}
                                             onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                             onCancelCreate={onCancelCreateFolder}
@@ -1905,7 +1905,7 @@ export function KnowledgeSpaceContent({
                                     onRetry={(id) => handleSingleRetry(id)}
                                     onAcceptAlias={onAcceptAlias}
                                     onRejectAlias={onRejectAlias}
-                                    onNavigateFolder={(id) => onNavigateFolder(id)}
+                                    onNavigateFolder={(id, name) => onNavigateFolder(id, name)}
                                     canReorderFolders={isSystemAdmin}
                                     onReorderFolder={(folderId, prevFolderId, nextFolderId) =>
                                         void handleReorderFolder(folderId, prevFolderId, nextFolderId)
