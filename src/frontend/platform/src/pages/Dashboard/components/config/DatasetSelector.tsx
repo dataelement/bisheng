@@ -2,7 +2,7 @@
 
 import { Input } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
 import { getDatasets, MetricConfig } from "@/controllers/API/dashboard"
 import { Calendar, ChevronDown, ChevronRight, ChevronUp, Clock3, Hash, Search, Type } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
@@ -102,6 +102,23 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
         return allDatasets.find(d => d.dataset_code === selectedDatasetCode)
     }, [allDatasets, selectedDatasetCode])
 
+    // F058 AC-07: datasets sharing a non-null dataset_group render as one grouped
+    // section (e.g. 用户规模统计/活跃用户规模统计/全员每日参与度 -> "用户数据统计") instead of
+    // separate top-level entries. Ungrouped datasets keep their original flat listing.
+    const { groupedSections, ungroupedDatasets } = useMemo(() => {
+        const sections = new Map<string, typeof filteredDatasets>()
+        const ungrouped: typeof filteredDatasets = []
+        filteredDatasets.forEach(dataset => {
+            if (dataset.dataset_group) {
+                if (!sections.has(dataset.dataset_group)) sections.set(dataset.dataset_group, [])
+                sections.get(dataset.dataset_group)!.push(dataset)
+            } else {
+                ungrouped.push(dataset)
+            }
+        })
+        return { groupedSections: sections, ungroupedDatasets: ungrouped }
+    }, [filteredDatasets])
+
     // 处理拖拽开始
     const handleDragStart = (e: React.DragEvent, data: any, fieldType: 'dimension' | 'metric') => {
         e.dataTransfer.effectAllowed = 'copy'
@@ -191,13 +208,29 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                                 {t("datasetSelector.noDatasetsFound")}
                             </div>
                         ) : (
-                            filteredDatasets.map((dataset) => (
-                                <SelectItem key={dataset.dataset_code} value={dataset.dataset_code}>
-                                    {t(dataset.dataset_code, {
-                                        defaultValue: dataset.dataset_name
-                                    })}
-                                </SelectItem>
-                            ))
+                            <>
+                                {Array.from(groupedSections.entries()).map(([groupKey, datasets]) => (
+                                    <SelectGroup key={groupKey}>
+                                        <SelectLabel>
+                                            {t(`datasetSelector.group.${groupKey}`, { defaultValue: groupKey })}
+                                        </SelectLabel>
+                                        {datasets.map((dataset) => (
+                                            <SelectItem key={dataset.dataset_code} value={dataset.dataset_code}>
+                                                {t(dataset.dataset_code, {
+                                                    defaultValue: dataset.dataset_name
+                                                })}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectGroup>
+                                ))}
+                                {ungroupedDatasets.map((dataset) => (
+                                    <SelectItem key={dataset.dataset_code} value={dataset.dataset_code}>
+                                        {t(dataset.dataset_code, {
+                                            defaultValue: dataset.dataset_name
+                                        })}
+                                    </SelectItem>
+                                ))}
+                            </>
                         )}
                     </SelectContent>
                 </Select>

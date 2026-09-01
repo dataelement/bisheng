@@ -39,3 +39,13 @@ class QueryDimensionNotFoundError(BaseErrorCode):
 class QueryOperatorNotFoundError(BaseErrorCode):
     Code = 17015
     Msg = 'Corresponding operator configuration not found'
+
+
+class DashboardExportEmptyError(BaseErrorCode):
+    Code: int = 17016
+    Msg: str = 'No detail rows to export'
+
+
+class DashboardExportLimitExceededError(BaseErrorCode):
+    Code: int = 17017
+    Msg: str = 'Detail row count exceeds export limit'

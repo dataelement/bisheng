@@ -322,6 +322,15 @@ class DepartmentDao:
             return session.exec(select(Department).where(Department.dept_id == dept_id)).first()
 
     @classmethod
+    async def aget_by_name(cls, name: str) -> list[Department]:
+        """Read-only lookup by display name. Names are not unique, so callers
+        must handle zero/one/many results themselves (see F058 department
+        label resolver, which treats >1 match as ambiguous)."""
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Department).where(Department.name == name))
+            return result.all()
+
+    @classmethod
     async def aget_by_ids(cls, dept_ids: list[int]) -> list[Department]:
         if not dept_ids:
             return []

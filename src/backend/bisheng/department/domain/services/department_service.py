@@ -470,6 +470,8 @@ class DepartmentService:
                 id=d.id,
                 dept_id=d.dept_id,
                 name=d.name,
+                short_name=getattr(d, "short_name", None),
+                org_level=getattr(d, "org_level", None),
                 parent_id=d.parent_id,
                 path=d.path,
                 sort_order=d.sort_order,

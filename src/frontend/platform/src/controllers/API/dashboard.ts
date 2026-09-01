@@ -3,6 +3,11 @@
 import { generateUUID } from "@/components/bs-ui/utils";
 import { resolvePivotColumnLabels } from "@/pages/Dashboard/components/charts/pivotColumnAliases";
 import { ChartType, Dashboard, DashboardComponent, LayoutItem, TimeRangeMode, TimeRangeType } from "@/pages/Dashboard/types/dataConfig";
+import {
+    mergePersonDedupValues,
+    resolveGroupDimensionIndex,
+    resolvePersonDedupIndices,
+} from "@/pages/Dashboard/utils/groupCrossTabRows";
 import axios from "../request";
 
 // Simulate API delay
@@ -150,6 +155,10 @@ export interface DashboardDataset {
     description: string
     is_commercial_only: boolean
     schema_config: SchemaConfig
+    // F058 AC-07: datasets sharing a non-null dataset_group render as one grouped entry
+    // in the dataset picker (e.g. 用户规模统计/活跃用户规模统计/全员每日参与度 -> "用户数据统计").
+    // "用户反馈统计" is already excluded server-side (is_visible=false), no frontend filter needed.
+    dataset_group?: string | null
 }
 
 // 获取数据集列表
@@ -206,7 +215,11 @@ function transformNormalData(resData: any, component: DashboardComponent) {
 const MAX_PIVOT_ROWS = 500;
 const MAX_PIVOT_COLUMNS = 100;
 
-export function transformPivotData(resData: any, component: DashboardComponent) {
+export function transformPivotData(
+    resData: any,
+    component: DashboardComponent,
+    dimensionFilters: { fieldId: string, values: unknown[] }[] = [],
+) {
     const config = component.data_config;
     const rowDimensionCount = config.dimensions?.length || 0;
     const stackDimensions = config.stackDimensions?.length
@@ -266,6 +279,28 @@ export function transformPivotData(resData: any, component: DashboardComponent) 
         };
     });
 
+    // F058 AC-11: when both a person-name field (e.g. uploader_user_name) and its
+    // paired department field are configured as row dimensions, merge them into one
+    // "name(dept)" cell instead of two columns, to disambiguate same-named people.
+    const rawRowFieldIds = (config.dimensions || []).map(dimension => dimension.fieldId);
+    const personDedup = resolvePersonDedupIndices(rawRowFieldIds);
+    const mergedRowFieldIds = personDedup
+        ? rawRowFieldIds.filter((_id, index) => index !== personDedup.deptIndex)
+        : rawRowFieldIds;
+    const mergedRowHeaders = (config.dimensions || [])
+        .filter((_dimension, index) => !personDedup || index !== personDedup.deptIndex)
+        .map(dimension => dimension.displayName || dimension.fieldName || dimension.fieldId);
+    if (personDedup) {
+        pivotRows.forEach(row => {
+            row.key = mergePersonDedupValues(row.key, personDedup.personIndex, personDedup.deptIndex);
+        });
+    }
+    // Index of the merged "name(dept)" column in the FINAL (post-removal) key/header
+    // arrays — shifts left by one if the removed department column came before it.
+    const personDedupIndex = personDedup
+        ? personDedup.personIndex - (personDedup.deptIndex < personDedup.personIndex ? 1 : 0)
+        : null;
+
     const displayColumnPaths = columnPaths.map(path => path.map((value, index) => {
         const dimension = stackDimensions[index];
         return resolvePivotColumnLabels({
@@ -278,10 +313,14 @@ export function transformPivotData(resData: any, component: DashboardComponent) 
         dimension => dimension.displayName || dimension.fieldName || dimension.fieldId
     );
 
+    // F058 AC-12/AC-13: group rows by the finest actively-filtered org-hierarchy row
+    // dimension (see spec.md AD-02 — this is a pure client-side transform over the
+    // already-flat rows above; the backend response/aggregation contract is unchanged).
+    // Computed on the post-merge field list so indices line up with the returned rows.
+    const groupDimensionIndex = resolveGroupDimensionIndex(mergedRowFieldIds, dimensionFilters);
+
     return {
-        rowHeaders: (config.dimensions || []).map(
-            dimension => dimension.displayName || dimension.fieldName || dimension.fieldId
-        ),
+        rowHeaders: mergedRowHeaders,
         columnHeader: columnHeaders[0] || '',
         columnHeaders,
         metricName: config.metrics?.[0]?.displayName
@@ -295,6 +334,9 @@ export function transformPivotData(resData: any, component: DashboardComponent) 
         columnTotals,
         grandTotal: columnTotals.reduce((sum, value) => sum + value, 0),
         truncated,
+        groupDimensionIndex,
+        rowFieldIds: mergedRowFieldIds,
+        personDedupIndex,
     };
 }
 
@@ -305,6 +347,10 @@ export async function queryChartData(params: {
     queryParams?: any
 }): Promise<QueryDataResponse> {
     const { component, useId, dashboardId, queryParams = [] } = params;
+
+    const dimensionFilters = queryParams.flatMap(
+        param => param.dimensionFilters || []
+    );
 
     const resData = await axios.post(`/api/v1/telemetry/dashboard/component/query`, {
         dashboard_id: dashboardId,
@@ -325,15 +371,13 @@ export async function queryChartData(params: {
                     return q.defaultValue
                 }
             }),
-        dimension_filters: queryParams.flatMap(
-            param => param.dimensionFilters || []
-        ),
+        dimension_filters: dimensionFilters,
     });
 
     if (!resData?.value?.length) return null
 
     if (component.type === ChartType.PivotTable) {
-        return transformPivotData(resData, component);
+        return transformPivotData(resData, component, dimensionFilters);
     }
 
     const isStacked = !!component.data_config.stackDimension?.fieldId;
@@ -384,6 +428,44 @@ export async function queryChartData(params: {
                 format: { decimalPlaces: 2, thousandSeparator: true }
             };
     }
+}
+
+// F058 AC-09: export the detail rows for one clicked chart category as an Excel file.
+export async function exportComponentDetail(params: {
+    dashboardId: string
+    componentId: string
+    dimensionField: string
+    dimensionValue: string | number
+    timeFilters?: any[]
+    dimensionFilters?: { fieldId: string, values: unknown[] }[]
+}): Promise<{ file_url: string }> {
+    return await axios.post(
+        `/api/v1/telemetry/dashboard/component/${params.componentId}/export`,
+        {
+            dashboard_id: params.dashboardId,
+            dimension_field: params.dimensionField,
+            dimension_value: params.dimensionValue,
+            time_filters: params.timeFilters || [],
+            dimension_filters: params.dimensionFilters || [],
+        },
+    );
+}
+
+// F058 AC-10: export the whole chart as a multi-sheet Excel file.
+export async function exportComponentAll(params: {
+    dashboardId: string
+    componentId: string
+    timeFilters?: any[]
+    dimensionFilters?: { fieldId: string, values: unknown[] }[]
+}): Promise<{ file_url: string }> {
+    return await axios.post(
+        `/api/v1/telemetry/dashboard/component/${params.componentId}/export-all`,
+        {
+            dashboard_id: params.dashboardId,
+            time_filters: params.timeFilters || [],
+            dimension_filters: params.dimensionFilters || [],
+        },
+    );
 }
 
 // 获取字段枚举列表

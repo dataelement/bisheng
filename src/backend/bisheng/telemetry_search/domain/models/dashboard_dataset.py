@@ -107,3 +107,13 @@ class DashboardDataset(SQLModelSerializable, table=True):
 
     schema_config: Dict = Field(..., sa_column=Column(JsonType, nullable=False),
                                 description='Schema Configuration in JSON format')
+
+    # F058: whether this dataset appears in the dashboard's dataset/component picker.
+    # Historical rows written before this column existed default to True (visible).
+    is_visible: bool = Field(default=True, sa_column=Column(BOOLEAN, nullable=False),
+                             description='Whether this dataset is selectable in the dashboard UI')
+
+    # F058: datasets sharing a non-null group_key are presented as one grouped entry
+    # (multiple sub-panels) in the dataset picker instead of separate top-level entries.
+    dataset_group: Optional[str] = Field(default=None, sa_column=Column(VARCHAR(64), nullable=True),
+                                         description='Optional grouping key for the dataset picker UI')

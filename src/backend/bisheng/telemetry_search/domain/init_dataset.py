@@ -35,6 +35,10 @@ DASHBOARD_DATASET = [
         es_index_name="mid_user_increment",
         description="用户行为指标数据表",
         is_commercial_only=False,
+        # F058: merged into one "用户数据统计" dashboard entry together with
+        # mid_active_user and mid_user_daily_participation (UI-level grouping only —
+        # each dataset still queries its own ES index independently, see AD-04).
+        dataset_group="user_engagement",
         schema_config=SchemaConfig(
             metrics=[
                 MetricConfig(
@@ -101,6 +105,8 @@ DASHBOARD_DATASET = [
         es_index_name="mid_active_user",
         description="活跃用户数据表",
         is_commercial_only=True,
+        # F058: merged into "用户数据统计" (see mid_user_increment above).
+        dataset_group="user_engagement",
         schema_config=SchemaConfig(
             metrics=[
                 MetricConfig(
@@ -1293,6 +1299,9 @@ DASHBOARD_DATASET = [
         es_index_name="mid_user_interact_dtl",
         description="用户反馈指标数据表",
         is_commercial_only=False,
+        # F058: "用户反馈统计" dropped from the dashboard picker. ES data and the underlying
+        # dataset row are untouched — only the UI-visibility flag changes.
+        is_visible=False,
         schema_config=SchemaConfig(
             metrics=[
                 MetricConfig(
@@ -1493,6 +1502,8 @@ DASHBOARD_DATASET = [
         es_index_name="mid_user_daily_participation_fact",
         description="按自然日维护的在职员工名册、登录人数与登录次数事实表",
         is_commercial_only=False,
+        # F058: merged into "用户数据统计" (see mid_user_increment above).
+        dataset_group="user_engagement",
         schema_config=SchemaConfig(
             metrics=[
                 MetricConfig(
@@ -1664,6 +1675,11 @@ DASHBOARD_DATASET_REFRESH_CODES = (
     "mid_user_daily_participation",
     "mid_tool_call_dtl",
     "mid_doc_parse_dtl",
+    # F058: is_visible/dataset_group changes must reach already-deployed rows, not just
+    # fresh installs — these three were previously insert-once-only (via bulk_save below).
+    "mid_user_increment",
+    "mid_active_user",
+    "mid_user_interact_dtl",
 )
 
 
@@ -1692,6 +1708,8 @@ async def _upgrade_dashboard_datasets(
         existing_dataset.description = seed_dataset.description
         existing_dataset.is_commercial_only = seed_dataset.is_commercial_only
         existing_dataset.schema_config = seed_dataset.schema_config
+        existing_dataset.is_visible = seed_dataset.is_visible
+        existing_dataset.dataset_group = seed_dataset.dataset_group
         await dashboard_dataset_repository.update(existing_dataset)
 
 

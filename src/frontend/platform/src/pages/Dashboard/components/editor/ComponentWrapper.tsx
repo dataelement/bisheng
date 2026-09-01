@@ -3,12 +3,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, D
 import { Input } from "@/components/bs-ui/input"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore } from "@/store/dashboardStore"
-import { Copy, Edit3, GripHorizontalIcon, MoreHorizontal, MoreVerticalIcon, Trash2 } from "lucide-react"
+import { Copy, Download, Edit3, GripHorizontalIcon, Loader2, MoreHorizontal, MoreVerticalIcon, Trash2 } from "lucide-react"
 import { memo, useEffect, useRef, useState } from "react"
 import { ChartType, Dashboard, DashboardComponent } from "../../types/dataConfig"
 import { ChartContainer } from "../charts/ChartContainer"
 import { DimensionFilter } from "../charts/DimensionFilter"
 import { QueryFilter } from "../charts/QueryFilter"
+import { useComponentExport } from "../export/useComponentExport"
 import "./index.css"
 import { cn } from "@/utils"
 import { useTranslation } from "react-i18next"
@@ -45,6 +46,12 @@ export const ComponentWrapper = memo(({
     } = useComponentEditorStore();
     const isSelected = editingComponent?.id === component.id
     const componentData = component
+    // F058 AC-10: whole-chart export, available to both editors and viewers (unlike the
+    // rest of this component's toolbar, which is editor-only via isPreviewMode).
+    const { exportAll, isExportingAll } = useComponentExport({
+        dashboardId: component.dashboard_id,
+        componentId: component.id,
+    })
 
     useEffect(() => {
         console.log('componentData :>> ', componentData);
@@ -289,6 +296,24 @@ export const ComponentWrapper = memo(({
                             )}
                             size={16}
                         />}
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            title={t('componentExport.exportAll')}
+                            disabled={isExportingAll}
+                            className={cn(
+                                "no-drag absolute top-0 right-0 h-5 w-5 p-0 text-gray-400 transition-opacity",
+                                "opacity-0 group-hover:opacity-100"
+                            )}
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                void exportAll()
+                            }}
+                        >
+                            {isExportingAll
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <Download className="h-3.5 w-3.5" />}
+                        </Button>
                     </div>
                 )}
 

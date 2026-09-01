@@ -1,15 +1,22 @@
 "use client"
 
+import { Download } from "lucide-react"
 import { memo, useMemo } from "react"
 
 import { PivotTableDataResponse } from "../../types/chartData"
 import { DataConfig } from "../../types/dataConfig"
+import { groupCrossTabRows } from "../../utils/groupCrossTabRows"
+import { useComponentExport } from "../export/useComponentExport"
 import { unitConversion } from "./MetricCard"
 
 interface PivotTableProps {
   data: PivotTableDataResponse
   dataConfig: DataConfig
   isDark: boolean
+  // F058 AC-09: optional — omit to disable drill-down export (e.g. in contexts with no
+  // saved dashboard/component id yet).
+  dashboardId?: string
+  componentId?: string
 }
 
 interface PivotHeaderCell {
@@ -59,7 +66,17 @@ export const PivotTable = memo(function PivotTable({
   data,
   dataConfig,
   isDark,
+  dashboardId,
+  componentId,
 }: PivotTableProps) {
+  // F058 AC-09: click a row's category cell to export that category's detail rows.
+  // Disabled (no-op) when this table has no saved dashboard/component id yet.
+  const canExportDetail = Boolean(dashboardId && componentId)
+  const { exportDetail, isExportingDetail } = useComponentExport({
+    dashboardId: dashboardId || "",
+    componentId: componentId || "",
+  })
+
   const maxValue = useMemo(
     () => Math.max(0, ...data.rows.flatMap(row => row.values)),
     [data.rows]
@@ -78,6 +95,21 @@ export const PivotTable = memo(function PivotTable({
   )
   const headerRows = useMemo(() => buildHeaderRows(columnPaths), [columnPaths])
   const headerDepth = headerRows.length
+
+  // F058 AC-12/AC-13: when the query resolved a group dimension (see transformPivotData),
+  // re-cluster rows so same-group rows are contiguous, then rowSpan-merge the group's
+  // cell across its rows instead of repeating the label on every row.
+  const groupDimensionIndex = data.groupDimensionIndex ?? null
+  const displayRows = useMemo(() => {
+    const groups = groupCrossTabRows(data.rows, groupDimensionIndex)
+    if (!groups) {
+      return data.rows.map(row => ({ row, groupRowSpan: null as number | null }))
+    }
+    return groups.flatMap(group => group.childRows.map((row, indexInGroup) => ({
+      row,
+      groupRowSpan: indexInGroup === 0 ? group.childRows.length : null,
+    })))
+  }, [data.rows, groupDimensionIndex])
 
   const cellBackground = (value: number) => {
     if (!value || !maxValue) return isDark ? "rgba(71, 85, 105, 0.18)" : "#f8fafc"
@@ -147,7 +179,7 @@ export const PivotTable = memo(function PivotTable({
           ))}
         </thead>
         <tbody>
-          {data.rows.map((row, rowIndex) => (
+          {displayRows.map(({ row, groupRowSpan }, rowIndex) => (
             <tr key={JSON.stringify(row.key)} className="hover:brightness-[0.98]">
               <th
                 scope="row"
@@ -155,22 +187,39 @@ export const PivotTable = memo(function PivotTable({
               >
                 {rowIndex + 1}
               </th>
-              {row.key.map((label, dimensionIndex) => (
-                <th
-                  key={`${label}-${dimensionIndex}`}
-                  scope="row"
-                  className="sticky z-10 w-32 min-w-32 max-w-32 border-b border-r border-border bg-background px-3 py-2 text-left font-medium text-foreground"
-                  style={{
-                    left: `${64 + dimensionIndex * 128}px`,
-                    paddingLeft: `${12 + dimensionIndex * 12}px`,
-                  }}
-                  title={label}
-                >
-                  <span className="block max-w-28 truncate">
-                    {label || "未分类"}
-                  </span>
-                </th>
-              ))}
+              {row.key.map((label, dimensionIndex) => {
+                // Continuation row of a rowSpan-merged group cell: the group's value
+                // already renders on the group's first row, covering this cell.
+                if (dimensionIndex === groupDimensionIndex && groupRowSpan === null) {
+                  return null
+                }
+                // F058 AC-09/AC-11: the merged "name(dept)" cell has no single raw value
+                // to filter on, so it never becomes a drill-down export target.
+                const fieldId = data.rowFieldIds?.[dimensionIndex]
+                const isDedupMergedCell = dimensionIndex === data.personDedupIndex
+                const isClickable = canExportDetail && fieldId && !isDedupMergedCell && label
+                const exporting = fieldId ? isExportingDetail(fieldId, label) : false
+                return (
+                  <th
+                    key={`${label}-${dimensionIndex}`}
+                    scope="row"
+                    rowSpan={dimensionIndex === groupDimensionIndex ? groupRowSpan ?? undefined : undefined}
+                    className={`sticky z-10 w-32 min-w-32 max-w-32 border-b border-r border-border bg-background px-3 py-2 text-left font-medium text-foreground ${
+                      isClickable ? "cursor-pointer hover:underline hover:text-primary" : ""
+                    }`}
+                    style={{
+                      left: `${64 + dimensionIndex * 128}px`,
+                      paddingLeft: `${12 + dimensionIndex * 12}px`,
+                    }}
+                    title={isClickable ? `${label}（点击导出该分类明细）` : label}
+                    onClick={isClickable ? () => void exportDetail(fieldId, label) : undefined}
+                  >
+                    <span className="block max-w-28 truncate">
+                      {exporting ? "导出中…" : (label || "未分类")}
+                    </span>
+                  </th>
+                )
+              })}
               {data.rowHeaders.slice(row.key.length).map((_, missingIndex) => (
                 <th
                   key={`missing-${missingIndex}`}
