@@ -62,6 +62,98 @@ Options:
 
 ## Permission Scripts
 
+### `cleanup_f048_user_group_admin_grants.py`
+
+Audit and revoke resource Grant sources assigned to one user group's
+administrator userset (`user_group:<id>#admin`). The command does not change
+group administrator membership, ordinary member Grants, protected creator
+sources, or unrelated assignments. It retires selected assignee rows through
+the normal F048 Grant projection service so the SQL control plane, durable
+projection ledger, flattened `visible` sources, and OpenFGA tuples remain
+consistent.
+
+Run a dry-run first from `src/backend/` with the live `config`. The default
+batch contains at most 100 resources:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python \
+  scripts/cleanup_f048_user_group_admin_grants.py \
+  --tenant-id 1 \
+  --user-group-id 2
+```
+
+The report identifies the exact Store/model/Catalog pin, selected assignees,
+resource/model/source breakdown, blockers, remaining resource count, resume
+cursor, and `plan_checksum`. The safest apply mode requires a maintenance
+window: stop ingress and all API/Worker/Linsight processes, wait for F048
+heartbeat TTLs to expire, then repeat the same selection arguments with all
+confirmation values from the immediately preceding dry-run:
+
+```bash
+PYTHONPATH=./ .venv/bin/python \
+  scripts/cleanup_f048_user_group_admin_grants.py \
+  --tenant-id 1 \
+  --user-group-id 2 \
+  --apply \
+  --operator-id <operator-user-id> \
+  --confirm-store-id <store-id> \
+  --confirm-model-id <model-id> \
+  --confirm-plan-checksum <plan-checksum>
+```
+
+If the service cannot be stopped, an online apply is available only when the
+operator has confirmed that no new matching `user_group:<id>#admin` Grants can
+be created during the run. It processes resources serially, defaults to a
+100-ms delay between resources, and stops if the per-resource version or exact
+source identity changes concurrently:
+
+```bash
+PYTHONPATH=./ .venv/bin/python \
+  scripts/cleanup_f048_user_group_admin_grants.py \
+  --tenant-id 1 \
+  --user-group-id 2 \
+  --apply \
+  --online \
+  --delay-ms 100 \
+  --operator-id <operator-user-id> \
+  --confirm-store-id <store-id> \
+  --confirm-model-id <model-id> \
+  --confirm-plan-checksum <plan-checksum>
+```
+
+Maintenance apply refuses active F048 runtime heartbeats and in-flight
+projection operations. Both modes refuse non-current Grant/resource
+projections, non-`CUSTOM` resources, protected sources, changed candidates, or
+a mismatched confirmation. Use repeatable `--resource-type` filters for a
+narrower rollout. When the report has more resources, review the next dry-run
+with `--after-assignee-id` set to the last successful
+`resume_after_assignee_id`; never advance the cursor past a failed resource.
+For an explicitly reviewed full-type cleanup, `--max-resources` accepts up to
+50,000 resources while remaining bound to one exact plan checksum. `--quiet`
+suppresses routine runtime logs but keeps JSON reports and failures visible.
+
+Deleted assistant/workflow rows can leave an active permission mirror that the
+business resolver intentionally rejects. Such an orphan is blocked by default.
+After verifying the resource is absent, repeat both dry-run and apply with
+`--allow-orphan-applications`; the apply path asks the owning business loader to
+confirm absence before constructing a target from the CURRENT permission mirror
+and still uses the normal Grant/projection mutation.
+
+Unpublished knowledge spaces/libraries are also rejected by the normal visible
+target resolver. After verifying that these lifecycle states should have their
+administrator Grants retired, repeat dry-run and apply with
+`--allow-unpublished-knowledge-containers`. The fallback accepts only a valid
+record from the owning knowledge loader, requires a non-`PUBLISHED` status and
+an exact tenant/identity/version match, then continues through the normal
+Grant/projection mutation.
+
+Deleted knowledge containers require the separate
+`--allow-orphan-knowledge-containers` flag. The owning loader must confirm that
+the record is absent, while the permission mirror must remain CUSTOM/CURRENT
+with one consistent version and parent scope; the script then uses the same
+normal Grant/projection mutation.
+
 ### `reconcile_f048_visible_projection.py`
 
 Audit and repair environments that already completed an older F048 data
