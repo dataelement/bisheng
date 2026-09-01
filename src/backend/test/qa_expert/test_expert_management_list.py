@@ -224,6 +224,7 @@ async def test_service_sorts_department_names_before_paginating(monkeypatch) -> 
         answer_desc=None,
         adoption_desc=None,
         vote_desc=None,
+        status=None,
     )
 
 
@@ -253,3 +254,23 @@ async def test_service_maps_department_filter_options(monkeypatch) -> None:
         {"id": "102", "name": "设备部", "short_name": "设备", "display_name": "设备"},
         {"id": "101", "name": "质量部", "short_name": None, "display_name": "质量部"},
     ]
+
+
+async def test_repository_status_filter_excludes_disabled(expert_engine) -> None:
+    await _seed_experts(expert_engine)
+    async with AsyncSession(expert_engine, expire_on_commit=False) as session:
+        expert = await session.get(Expert, 2)
+        expert.status = 0
+        session.add(expert)
+        await session.commit()
+
+    _all_rows, all_total = await repository_module.ExpertRepository().list_all(skip=0, limit=10)
+    active_rows, active_total = await repository_module.ExpertRepository().list_all(
+        skip=0,
+        limit=10,
+        status=1,
+    )
+
+    assert all_total == 3
+    assert active_total == 2
+    assert {row.expert_name for row in active_rows} == {"甲专家", "丙专家"}
