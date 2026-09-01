@@ -1035,10 +1035,14 @@ DASHBOARD_DATASET = [
                     name="业务域",
                     field="business_domain_name"
                 ),
-                DimensionConfig(name="上传人公司", field="uploader_company_name"),
-                DimensionConfig(name="上传人部门", field="uploader_department_name"),
-                DimensionConfig(name="上传人科室", field="uploader_office_name"),
-                DimensionConfig(name="上传人班组", field="uploader_squad_name"),
+                # 原始上传库XX: renamed from "上传人XX" (2026-09-01) to match corrected ETL
+                # semantics — these track the org bound to the file's ORIGINAL upload space
+                # (frozen via KnowledgeFile.original_knowledge_id, F081), not the uploading
+                # person's own current department. See mid_table.py::_build_knowledge_space_content_records.
+                DimensionConfig(name="原始上传库公司", field="uploader_company_name"),
+                DimensionConfig(name="原始上传库部门", field="uploader_department_name"),
+                DimensionConfig(name="原始上传库科室", field="uploader_office_name"),
+                DimensionConfig(name="原始上传库班组", field="uploader_squad_name"),
                 DimensionConfig(name="所属公司", field="belonging_company_name"),
                 DimensionConfig(name="所属部门", field="belonging_department_name"),
                 DimensionConfig(name="所属科室", field="belonging_office_name"),

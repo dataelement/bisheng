@@ -113,7 +113,7 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
             {/* Layout mirrors DimensionFilter.tsx: each condition gets its own labeled
                 column, kept in one row (overflow-x-auto instead of wrapping) so this looks
                 like the same widget family instead of a plain stacked form. */}
-            <div className="no-drag min-w-52 flex-1 space-y-1">
+            <div className="no-drag min-w-52 flex-1 space-y-1 [&_button]:h-9 [&_button]:w-full">
                 <label className="block truncate text-xs font-medium text-muted-foreground">
                     {t('selectDate')}
                 </label>

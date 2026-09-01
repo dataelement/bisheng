@@ -259,6 +259,31 @@ def test_build_dataframe_includes_stack_dimension_columns():
     assert df.iloc[0].tolist() == ["gzx01205", "二级积分部门1", 562]
 
 
+async def test_upload_excel_returns_a_browser_reachable_link_not_the_internal_minio_host(monkeypatch):
+    """Customer report (2026-09-01): the export link was `http://minio:9000/...` — only
+    resolvable inside the docker network, unreachable from the browser. The old code
+    (save_uploaded_file) hardcoded get_share_link(clear_host=False), keeping that internal
+    host. Fixed to upload directly and call get_share_link with its default
+    clear_host=True, matching the working pattern in api/v1/evaluation.py::get_download_url."""
+    from io import BytesIO
+
+    from bisheng.telemetry_search.domain.services import dashboard_export_service as export_module
+
+    fake_client = SimpleNamespace(
+        tmp_bucket="tmp-dir",
+        put_object_tmp=AsyncMock(),
+        get_share_link=AsyncMock(return_value="https://dashboard.example.com/tmp-dir/report.xlsx"),
+    )
+    monkeypatch.setattr(export_module, "get_minio_storage", AsyncMock(return_value=fake_client))
+
+    url = await export_module._upload_excel(BytesIO(b"fake-excel-bytes"), "report.xlsx")
+
+    assert url == "https://dashboard.example.com/tmp-dir/report.xlsx"
+    fake_client.put_object_tmp.assert_awaited_once()
+    assert fake_client.put_object_tmp.call_args.kwargs["object_name"] == "report.xlsx"
+    fake_client.get_share_link.assert_awaited_once_with("report.xlsx", "tmp-dir")
+
+
 async def test_export_detail_pivot_table_with_stack_dimension_matches_column_count(monkeypatch, service_module):
     """Regression: a pivot-table component's query result carries data_config.dimensions
     *plus* get_stack_dimensions() per row (see component.py::query_telemetry_data), so the

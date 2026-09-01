@@ -11,11 +11,11 @@ from io import BytesIO
 from typing import Any
 
 import pandas as pd
-from fastapi import Request, UploadFile
+from fastapi import Request
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.telemetry import DashboardExportEmptyError, DashboardExportLimitExceededError
-from bisheng.core.cache.utils import save_uploaded_file
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.utils import generate_uuid
 
 from ..schemas.component import ComponentDataConfig, DimensionQueryFilter, TimeFilter
@@ -58,12 +58,23 @@ def _build_dataframe(data_config: ComponentDataConfig, dimensions: list[list], v
 
 
 async def _upload_excel(bio: BytesIO, file_name: str) -> str:
+    # `save_uploaded_file` (used elsewhere for cache-scoped uploads) hardcodes
+    # get_share_link(clear_host=False), which keeps the internal-only "minio:9000" host in
+    # the returned URL — unreachable from the browser. Upload directly and ask for the
+    # nginx-proxied, browser-reachable link instead (clear_host=True is the client's
+    # default — see minio_storage.py::get_share_link's docstring — matching the working
+    # pattern in api/v1/evaluation.py::get_download_url).
     bio.seek(0)
-    upload = UploadFile(filename=file_name, file=bio)
+    minio_client = await get_minio_storage()
     try:
-        return await save_uploaded_file(upload, "bisheng", file_name)
+        await minio_client.put_object_tmp(
+            object_name=file_name,
+            file=bio,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        return await minio_client.get_share_link(file_name, minio_client.tmp_bucket)
     finally:
-        await upload.close()
+        bio.close()
 
 
 class DashboardExportService:
