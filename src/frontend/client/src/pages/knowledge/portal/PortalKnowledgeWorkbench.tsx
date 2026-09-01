@@ -2649,9 +2649,10 @@ export default function PortalKnowledgeWorkbench() {
             setSelectedFileIds(new Set());
             setSelectedFolderIds(new Set());
             setCurrentFolderId(undefined);
-            if (treeNodes.length === 0) {
-                await loadRootTree(1, false, spaceId);
-            }
+            // Always reload the root listing when the user explicitly navigates back
+            // to the space root (e.g. by clicking the root breadcrumb). Otherwise
+            // folder metadata such as child counts stays stale or blank.
+            await loadRootTree(1, false, spaceId);
             return;
         }
 
