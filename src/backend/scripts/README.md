@@ -184,6 +184,44 @@ Options:
 
 - `--apply`: perform the revokes; default is dry-run. Irreversible (revokes group members' access) — review dry-run output first.
 
+### `clean_user_group_admin_resource_grants.py`
+
+One-off F048 cleanup for the elevated resource permissions created by the F006
+``groupresource`` migration. User-group administrators have no special resource
+permission in the business model: they retain normal member access through the
+authorization model's ``admin -> member`` relationship, but must not receive an
+extra ``manager`` grant.
+
+Behavior:
+
+- scans all user groups from MySQL, then queries OpenFGA using each exact
+  ``user_group:<id>#admin`` subject, the ``manager`` relation, and every object
+  type derived from F006 ``GROUP_RESOURCE_TYPE_MAPPING``
+- preserves all ``user_group#admin`` / ``user_group#member`` membership tuples
+  and ordinary ``user_group:<id>#member`` resource grants
+- marks matching pending ``failed_tuple`` write operations as ``dead`` before
+  deletion so the compensation worker cannot recreate the removed grants
+- acquires the failed-tuple retry lock, invalidates permission caches, and
+  verifies that no matching tuple or retryable write remains
+- intentionally preserves ``groupresource`` rows because they are still used by
+  audit filters, dashboards, and user-group resource views
+
+Do not replay F006 migration step 8 after this cleanup: that historical step
+reconstructs these tuples from ``groupresource``. If step 8 is replayed, run the
+cleanup again.
+
+Usage from ``src/backend`` with the same config as the running service:
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/clean_user_group_admin_resource_grants.py
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/clean_user_group_admin_resource_grants.py --apply
+```
+
+Options:
+
+- `--apply`: perform writes; default is dry-run
+- `--sample-limit N`: maximum matching tuples and pending writes printed; default is 50
+
 ### `permission_migration.sh`
 
 Manual runner for the F006 historical permission migration from RBAC to ReBAC.
