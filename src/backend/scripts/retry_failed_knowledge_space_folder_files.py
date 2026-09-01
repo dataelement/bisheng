@@ -61,6 +61,7 @@ from scripts.enqueue_reparse_knowledge_space_files import (  # noqa: E402
     exit_code_for_report,
 )
 from scripts.reparse_knowledge_space_files import (  # noqa: E402
+    SelectionReport,
     _folder_descendant_prefix,
     collect_candidate_files,
     print_selection_report,
@@ -284,9 +285,10 @@ def print_failed_files(files: Sequence[KnowledgeFile]) -> None:
         print(f"  file_id={record.id} status={status_name} file_name={record.file_name} remark={remark or '-'}")
 
 
-async def run(args: argparse.Namespace) -> int:
+async def collect_failed_files(
+    args: argparse.Namespace,
+) -> tuple[SelectionReport | None, tuple[int, ...], int]:
     statuses = eligible_statuses(include_timeout=args.include_timeout)
-    selection = None
     try:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
@@ -299,7 +301,7 @@ async def run(args: argparse.Namespace) -> int:
                     )
                 except TargetLookupError as exc:
                     print(f"[ERROR] {exc}", file=sys.stderr)
-                    return 1
+                    return None, statuses, 1
 
                 if target.folder is None:
                     print(f"[INFO] space {_format_space(target.space)}; folder path=/ (entire space)")
@@ -325,19 +327,31 @@ async def run(args: argparse.Namespace) -> int:
             print("[INFO] selecting FAILED and TIMEOUT files.")
         else:
             print("[INFO] selecting FAILED files only.")
-
-        report = apply_selection(
-            selection,
-            apply=args.apply,
-            eligible_statuses=statuses,
-        )
-        return exit_code_for_report(report) if report is not None else 0
+        return selection, statuses, 0
     finally:
         await close_app_context()
 
 
+def apply_collected_files(
+    selection: SelectionReport,
+    statuses: tuple[int, ...],
+    *,
+    apply: bool,
+) -> int:
+    report = apply_selection(
+        selection,
+        apply=apply,
+        eligible_statuses=statuses,
+    )
+    return exit_code_for_report(report) if report is not None else 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    return asyncio.run(run(parse_args(argv)))
+    args = parse_args(argv)
+    selection, statuses, code = asyncio.run(collect_failed_files(args))
+    if code != 0 or selection is None:
+        return code
+    return apply_collected_files(selection, statuses, apply=args.apply)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 """Tests for retrying failed files under a named knowledge-space folder."""
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -130,7 +131,6 @@ async def test_run_dry_run_prints_failed_files_and_does_not_enqueue(monkeypatch,
         remark="parse error",
     )
     selection = SelectionReport(selected_files=[failed])
-    applied: list[bool] = []
 
     async def fake_resolve_target(session, **kwargs):
         assert kwargs["space_name"] == "库A"
@@ -149,16 +149,14 @@ async def test_run_dry_run_prints_failed_files_and_does_not_enqueue(monkeypatch,
     monkeypatch.setattr(script_mod, "resolve_target", fake_resolve_target)
     monkeypatch.setattr(script_mod, "collect_candidate_files", fake_collect_candidate_files)
     monkeypatch.setattr(script_mod, "close_app_context", fake_close_app_context)
-    monkeypatch.setattr(
-        script_mod,
-        "apply_selection",
-        lambda *args, **kwargs: applied.append(kwargs["apply"]) or None,
+
+    selection, statuses, code = await script_mod.collect_failed_files(
+        script_mod.parse_args(["--space-name", "库A", "--folder", "消防安全"]),
     )
 
-    code = await script_mod.run(script_mod.parse_args(["--space-name", "库A", "--folder", "消防安全"]))
-
     assert code == 0
-    assert applied == [False]
+    assert selection is not None
+    assert statuses == (KnowledgeFileStatus.FAILED.value,)
     output = capsys.readouterr().out
     assert "失败文件.pdf" in output
     assert "file_id=101" in output
@@ -194,15 +192,53 @@ async def test_run_space_root_selects_entire_space(monkeypatch, capsys) -> None:
     monkeypatch.setattr(script_mod, "resolve_target", fake_resolve_target)
     monkeypatch.setattr(script_mod, "collect_candidate_files", fake_collect_candidate_files)
     monkeypatch.setattr(script_mod, "close_app_context", fake_close_app_context)
-    monkeypatch.setattr(script_mod, "apply_selection", lambda *args, **kwargs: None)
 
-    code = await script_mod.run(
+    collected, statuses, code = await script_mod.collect_failed_files(
         script_mod.parse_args(["--space-name", "admin的知识库", "--folder", "/"]),
     )
 
     assert code == 0
+    assert collected is not None
+    assert statuses == (KnowledgeFileStatus.FAILED.value,)
     assert collect_kwargs["space_ids"] == [10]
     assert "folder_ids" not in collect_kwargs or collect_kwargs.get("folder_ids") in ((), [], None)
     output = capsys.readouterr().out
     assert "entire space" in output
     assert "根目录失败.pdf" in output
+
+
+def test_main_enqueues_after_event_loop_closes(monkeypatch) -> None:
+    selection = SelectionReport(
+        selected_files=[
+            KnowledgeFile(
+                id=101,
+                knowledge_id=10,
+                file_name="失败文件.pdf",
+                file_type=FileType.FILE.value,
+                status=KnowledgeFileStatus.FAILED.value,
+            )
+        ]
+    )
+    loop_states: list[str] = []
+
+    async def fake_collect(args):
+        return selection, (KnowledgeFileStatus.FAILED.value,), 0
+
+    def fake_apply(selected, *, apply, eligible_statuses):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            loop_states.append("no-loop")
+        else:
+            loop_states.append("running")
+        assert apply is True
+        assert selected is selection
+        return None
+
+    monkeypatch.setattr(script_mod, "collect_failed_files", fake_collect)
+    monkeypatch.setattr(script_mod, "apply_selection", fake_apply)
+
+    code = script_mod.main(["--space-name", "库A", "--folder", "/", "--apply"])
+
+    assert code == 0
+    assert loop_states == ["no-loop"]
