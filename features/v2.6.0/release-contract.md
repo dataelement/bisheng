@@ -99,7 +99,7 @@
 | 181 | approval | F025（沿用现有 `common/errcode/approval.py`，扩展为统一审批中心错误码；F045 协同占用 18118 `ApprovalConfirmationFlowRequiredError`，所有权仍归 F025） |
 | 190 | channel / bisheng_information | F026 沿用现有 `common/errcode/channel.py`，扩展频道授权错误码时不得与既有 190xx 冲突 |
 | 120 | workstation | F028 沿用现有 `common/errcode/workstation.py`，会话导出 / 导入知识空间错误码段位 12060-12079，不得与既有 1204X / 1205X 冲突 |
-| 120 | workstation / model recovery | F051 复用 12046 `LLMRateLimitError` 表达真实临时限流；新增 12048 `RecoveryRejectedError` 表达原请求、权限、短锁、模型或 checkpoint 校验后无法继续恢复，统一通过 SSE envelope 返回；不得将 12048 伪装为新的限流 |
+| 120 | workstation / model recovery | F051 复用 12046 `LLMRateLimitError` 表达真实临时限流；新增 12048 `RecoveryRejectedError` 表达原请求、权限、短锁或模型校验后无法继续恢复，统一通过 SSE envelope 返回；不得将 12048 伪装为新的限流 |
 | 109 | knowledge | F030 沿用现有 `common/errcode/knowledge.py`，新增 `KnowledgeTypeNotSupportedError`(10962)；复用 10900/10901/10991。180 (knowledge_space) 复用 18001/18010/18040 |
 | 109 | knowledge | F032 沿用现有 `common/errcode/knowledge.py`，新增 `OfdConvertError`(10917)；不得与既有 10915/10916/10962 冲突 |
 | 110 | linsight | F035 沿用现有 `common/errcode/linsight.py`，Skill 管理占用段位 **11050–11069**。实际落码：**11051** 校验失败 / **11052** 上传文件超 10MB / **11053** 不存在 / **11054** 无权限 / **11055** 重名 / **11056–11058** GitHub 导入 / **11059** 解压后内容超 100MB（2026-07-31 新增，与 11052 分离）。✅ 原占用段内/邻近的存量 SOP 检索·管理错误码（11010/11011/11050/11060/11070/11100/11110/11150/11160/11170/11171，design §8.6 计划下线）已随 SOP 残留代码移除（2026-06-17，见变更历史），段位腾空；Skill 码沿用已发布编号、不回迁腾空槽位（已发布编码不重编） |
@@ -138,3 +138,4 @@
 | 2026-08-27 | F051 初始方案曾登记 `ModelCallExecution` 与 Redis `ModelRateLimitState`、INV-9 和四入口依赖；该 execution 表方案已由下方 2026-08-28 简化决策取代 | F051 |
 | 2026-08-28 | F051 简化为仅新增 Redis `ModelRateLimitState`；原请求从既有 ChatMessage/Linsight session version 恢复，第三次提示由当前页面计数，后端仅做重新鉴权、模型复核与短时防重，不新增 execution 表 | F051 |
 | 2026-08-28 | F051 最终口径确认：限流模块定位为 observer-not-interceptor；任务 429 完整沿用 F035 自动重试、失败处理和用户 Retry；probe body 改为 `model_id/probe_token/probe_attempt` 以隔离排队槽位和 Redis key ABA；新增 12048 统一表达非任务恢复拒绝 | F051 |
+| 2026-09-01 | F051 日常模式主动恢复明确为从原 ChatMessage 重新执行一轮日常调用，不使用任务 checkpoint；任务模式继续完整沿用 F035 恢复链路 | F051 |

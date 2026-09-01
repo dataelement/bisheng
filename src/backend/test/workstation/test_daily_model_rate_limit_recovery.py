@@ -192,7 +192,7 @@ def test_initial_context_binds_execution_to_persisted_question_without_content()
     assert context.entry == ModelCallEntry.DAILY
     assert context.subject_type == "chat_message"
     assert context.subject_id == "101"
-    assert context.resume_mode == ModelCallResumeMode.CHECKPOINT
+    assert context.resume_mode == ModelCallResumeMode.REINVOKE
     assert not hasattr(context, "prompt")
 
 

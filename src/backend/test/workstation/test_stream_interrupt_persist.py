@@ -21,7 +21,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion
-from bisheng.llm.domain.services.model_rate_limit import RateLimitObservation
+from bisheng.llm.domain.services.model_rate_limit import (
+    ClaimedAttempt,
+    ModelCallEntry,
+    ModelCallResumeMode,
+    RateLimitObservation,
+    RecoveryAction,
+)
 from bisheng.llm.domain.services.model_rate_limit_state import ModelRateLimitState
 from bisheng.workstation.domain.services import chat_service
 
@@ -57,7 +63,12 @@ def stream_env(monkeypatch: pytest.MonkeyPatch):
     ws_config = SimpleNamespace(systemPrompt="")
     model_info = SimpleNamespace(displayName="qwen3.7-plus")
 
-    state = {"chunks": ["前半段答案", "后半段答案"], "after": None, "observation": None}
+    state = {
+        "chunks": ["前半段答案", "后半段答案"],
+        "after": None,
+        "observation": None,
+        "tools": [],
+    }
 
     class _LLM:
         async def astream(self, _messages):
@@ -95,7 +106,11 @@ def stream_env(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(chat_service, "ModelRateLimitService", _RateLimitService)
     monkeypatch.setattr(chat_service, "_resolve_user_kb_selection", AsyncMock(return_value=[]))
-    monkeypatch.setattr(chat_service, "_prepare_tools", AsyncMock(return_value=([], [])))
+    monkeypatch.setattr(
+        chat_service,
+        "_prepare_tools",
+        AsyncMock(side_effect=lambda **_kwargs: (state["tools"], [])),
+    )
     monkeypatch.setattr(chat_service, "_process_agent_files", AsyncMock(return_value=("", [])))
     monkeypatch.setattr(chat_service, "_get_history_max_tokens", AsyncMock(return_value=4096))
     monkeypatch.setattr(
@@ -197,6 +212,74 @@ async def test_rate_limit_does_not_persist_a_bot_answer(stream_env):
 
     assert _answer_rows(stream_env.inserted) == []
     assert any("rate_limit" in chunk for chunk in chunks)
+
+
+async def test_daily_recovery_reinvokes_agent_without_checkpoint(stream_env, monkeypatch):
+    """Retry starts a fresh daily-agent run instead of resuming graph state."""
+    import langgraph.prebuilt
+
+    captured = {}
+    stream_env.state["tools"] = [SimpleNamespace(name="search_knowledge_bases")]
+
+    class _Agent:
+        async def astream_events(self, graph_input, *, version, config):
+            captured["graph_input"] = graph_input
+            captured["version"] = version
+            captured["config"] = config
+            yield {
+                "event": "on_chat_model_stream",
+                "name": "agent",
+                "data": {"chunk": _Chunk("重试成功")},
+            }
+
+    def _create_react_agent(*_args, **kwargs):
+        captured["create_kwargs"] = kwargs
+        return _Agent()
+
+    monkeypatch.setattr(langgraph.prebuilt, "ToolNode", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(langgraph.prebuilt, "create_react_agent", _create_react_agent)
+    monkeypatch.setattr(chat_service, "_build_tool_meta", lambda _tool: {})
+
+    model_info = SimpleNamespace(id=17, displayName="qwen3.7-plus")
+    ws_config = SimpleNamespace(systemPrompt="", models=[model_info])
+    conversation = SimpleNamespace(chat_id="chat-1", user_id=7, name="Existing Chat")
+    recovery_message = SimpleNamespace(id=101, chat_id="chat-1")
+    monkeypatch.setattr(chat_service.WorkStationService, "aget_config", AsyncMock(return_value=ws_config))
+    monkeypatch.setattr(
+        chat_service.MessageSessionDao,
+        "async_get_one",
+        AsyncMock(return_value=conversation),
+    )
+    monkeypatch.setattr(
+        chat_service.LLMService,
+        "get_bisheng_llm",
+        AsyncMock(return_value=SimpleNamespace()),
+    )
+
+    recovery_attempt = ClaimedAttempt(
+        execution_id="101",
+        attempt_id="attempt-2",
+        subject_id="101",
+        entry=ModelCallEntry.DAILY,
+        model_id=17,
+        resume_mode=ModelCallResumeMode.REINVOKE,
+        action=RecoveryAction.MANUAL_RETRY,
+        should_execute=True,
+    )
+    chunks = await _drain(
+        await chat_service._agent_stream_chat_completion(
+            MagicMock(),
+            _data(),
+            MagicMock(user_id=7, tenant_id=2),
+            recovery_attempt=recovery_attempt,
+            recovery_message=recovery_message,
+        )
+    )
+
+    assert "checkpointer" not in captured["create_kwargs"]
+    assert captured["graph_input"]["messages"]
+    assert "checkpoint_ns" not in captured["config"].get("configurable", {})
+    assert any("重试成功" in chunk for chunk in chunks)
 
 
 async def test_interrupt_after_completion_does_not_double_insert(stream_env):

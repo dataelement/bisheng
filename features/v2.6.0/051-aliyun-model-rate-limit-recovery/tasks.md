@@ -155,7 +155,7 @@
 
 - [x] **T015：统一 SSE 与恢复公共契约测试**
   **文件**: <code>src/backend/test/llm/test_model_recovery_service.py</code>、四入口 SSE 测试
-  **断言**: 真实限流使用 12046/rate_limit；原消息失效、权限失败、模型 busy、短锁冲突、checkpoint 不可安全继续统一使用 12048/recovery_rejected；两者都使用统一 SSE envelope，12048 不创建 busy 状态且不伪装为 429。
+  **断言**: 真实限流使用 12046/rate_limit；原消息失效、权限失败、模型 busy、短锁冲突统一使用 12048/recovery_rejected；两者都使用统一 SSE envelope，12048 不创建 busy 状态且不伪装为 429。
   **覆盖 AC**: AC-41, AC-42, AC-43, AC-55
   **依赖**: T008
 
@@ -166,15 +166,15 @@
   **覆盖 AC**: AC-39, AC-40, AC-41, AC-42, AC-43, AC-45, AC-51, AC-55
   **依赖**: T015
 
-- [x] **T017：日常 Agent 原位置恢复测试**
-  **文件**: <code>src/backend/test/workstation/test_daily_model_rate_limit_recovery.py</code>、<code>src/backend/test/workstation/test_daily_rate_limit_checkpoint.py</code>、<code>src/backend/test/workstation/test_stream_interrupt_persist.py</code>
-  **断言**: 首次请求先保存用户消息；限流不写 bot 失败回答；只从以消息 ID 隔离且仍安全 pending 的 checkpoint 继续；已完成工具不重放；checkpoint 不可恢复返回 12048；成功只写一条回答。
+- [x] **T017：日常 Agent 原位置重新调用测试**
+  **文件**: <code>src/backend/test/workstation/test_daily_model_rate_limit_recovery.py</code>、<code>src/backend/test/workstation/test_stream_interrupt_persist.py</code>
+  **断言**: 首次请求先保存用户消息；限流不写 bot 失败回答；Retry 从原 ChatMessage 读取参数并启动新的日常 Agent 调用，不创建或读取 checkpoint、不重复用户消息；成功只写一条回答。
   **覆盖 AC**: AC-37, AC-38, AC-39, AC-42, AC-43, AC-49, AC-50, AC-51, AC-55
   **依赖**: T016
 
 - [x] **T018：日常 Agent RecoveryPort 与 Endpoint 实现**
-  **文件**: <code>src/backend/bisheng/workstation/domain/services/chat_service.py</code>、<code>src/backend/bisheng/workstation/api/endpoints/chat.py</code>、日常 checkpointer
-  **逻辑**: 从原 ChatMessage 读取请求，重新验证 owner/tenant/model；只在安全 pending 节点继续；使用统一 SSE 返回限流、拒绝和成功结果。
+  **文件**: <code>src/backend/bisheng/workstation/domain/services/chat_service.py</code>、<code>src/backend/bisheng/workstation/api/endpoints/chat.py</code>
+  **逻辑**: 从原 ChatMessage 读取请求，重新验证 owner/tenant/model；重新启动一轮日常调用且不依赖 checkpoint；使用统一 SSE 返回限流、拒绝和成功结果。
   **测试**: T017 全部通过。
   **覆盖 AC**: AC-37, AC-38, AC-39, AC-41, AC-42, AC-43, AC-49, AC-50, AC-51, AC-55
   **依赖**: T017
@@ -293,7 +293,7 @@
 
 > 只记录已确认设计与实施之间的实际偏差指针；不能用本节推翻 spec/design。
 
-- 暂无。旧 tasks 中“任务 429 跳过 resilience”和 probe body 使用 status_version 的记录已被本版整体替换，不属于可保留偏差。
+- 2026-09-01：T017/T018 从“日常 checkpoint 续跑”调整为“基于原 ChatMessage 重新调用”，已同步更新 spec AC-39/AC-50 与 design 决策 7；用户已明确确认日常模式不采用任务 checkpoint。
 
 ---
 
@@ -301,4 +301,5 @@
 
 | 日期 | 内容 | 原因 |
 |---|---|---|
+| 2026-09-01 | 日常模式 Retry 移除 checkpoint，改为重新执行原问题 | 日常模式不属于任务断点续跑；现场 checkpoint 子图错误导致 recover 返回 200 SSE 后立即失败 |
 | 2026-08-28 | 完整重写 tasks，所有实现状态重置为待重新核验 | spec/design 最终确认后发现旧任务清单仍要求任务 429 旁路并使用旧 probe 参数，不能继续作为执行依据 |

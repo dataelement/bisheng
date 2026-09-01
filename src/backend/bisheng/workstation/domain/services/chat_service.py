@@ -91,7 +91,7 @@ def build_daily_model_call_context(
         attempt_id=attempt_id,
         subject_type="chat_message",
         subject_id=str(question_message_id),
-        resume_mode=ModelCallResumeMode.CHECKPOINT,
+        resume_mode=ModelCallResumeMode.REINVOKE,
         action=action,
     )
 
@@ -102,9 +102,7 @@ def build_daily_rate_limit_sse(observation: RateLimitObservation) -> str:
         execution_id=observation.execution_id,
         attempt_id=observation.attempt_id,
         error_type=observation.error_type,
-        rate_limit_state=(
-            observation.rate_limit_state.value if observation.rate_limit_state is not None else None
-        ),
+        rate_limit_state=(observation.rate_limit_state.value if observation.rate_limit_state is not None else None),
         busy_until=observation.busy_until.isoformat() if observation.busy_until is not None else None,
         status_version=observation.status_version,
         recovery_subject_id=observation.subject_id,
@@ -154,7 +152,7 @@ class DailyChatRecoveryService:
             user_id=login_user.user_id,
             entry=ModelCallEntry.DAILY,
             subject_type="chat_message",
-            resume_mode=ModelCallResumeMode.CHECKPOINT,
+            resume_mode=ModelCallResumeMode.REINVOKE,
             port=port,
         )
         payload = await port.resume_attempt(attempt) if attempt.should_execute else None
@@ -166,7 +164,7 @@ class DailyChatRecoveryService:
 
 
 class DailyChatRecoveryPort:
-    """Daily-chat authorization boundary; checkpoint resume lands in T019."""
+    """Daily-chat authorization boundary for re-invoking the original request."""
 
     def __init__(self, login_user: UserPayload, request: Request | None = None) -> None:
         self._login_user = login_user
@@ -228,13 +226,6 @@ class DailyChatRecoveryPort:
             recovery_attempt=attempt,
             recovery_message=self._message,
         )
-
-
-async def ensure_daily_checkpoint_pending(agent, config) -> None:
-    """Fail closed unless LangGraph reports a resumable pending node."""
-    state = await agent.aget_state(config)
-    if not state.next:
-        raise RecoveryNotAllowedError("daily checkpoint has no pending node")
 
 
 async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: int):
@@ -1898,8 +1889,6 @@ async def _agent_stream_chat_completion(
                 from langchain_core.runnables import RunnableConfig
                 from langgraph.prebuilt import ToolNode, create_react_agent
 
-                from bisheng.linsight.domain.services.checkpointer import make_checkpointer
-
                 # Wrap tools in a ToolNode whose error handler feeds tool
                 # failures back to the model as observations, so a single tool
                 # error never aborts the whole agent stream
@@ -1913,7 +1902,6 @@ async def _agent_stream_chat_completion(
                     bisheng_llm,
                     tool_node,
                     prompt=sys_prompt,  # may be None
-                    checkpointer=make_checkpointer(namespace="daily"),
                 )
 
                 tool_meta_map = {t.name: _build_tool_meta(t) for t in langchain_tools}
@@ -1922,15 +1910,8 @@ async def _agent_stream_chat_completion(
                 max_iter = await _get_agent_max_iterations()
                 graph_config = RunnableConfig(
                     recursion_limit=max_iter,
-                    configurable={
-                        "thread_id": execution_id,
-                        "checkpoint_ns": "daily-agent-v1",
-                    },
                 )
                 graph_input = {"messages": llm_messages}
-                if recovery_attempt is not None:
-                    await ensure_daily_checkpoint_pending(agent, graph_config)
-                    graph_input = None
 
                 async for ev in agent.astream_events(
                     graph_input,
