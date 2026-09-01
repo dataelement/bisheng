@@ -36,7 +36,6 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository 
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
 from bisheng.knowledge.domain.services.knowledge_file_service import KnowledgeFileService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.open_endpoints.domain.repositories.implementations.filelib_sync_repository_impl import (
     FilelibSyncRepositoryImpl,
 )
@@ -45,6 +44,9 @@ from bisheng.open_endpoints.domain.repositories.interfaces.filelib_sync_reposito
 )
 from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service import (
     FilelibRetrieveSourceService,
+)
+from bisheng.open_endpoints.domain.services.filelib_sync_factory import (
+    build_knowledge_space_service_for_filelib_sync,
 )
 from bisheng.open_endpoints.domain.services.filelib_sync_service import FilelibSyncService
 from bisheng.open_endpoints.domain.services.filelib_user_context_service import (
@@ -195,11 +197,8 @@ async def get_filelib_sync_service(
     request: Request,
     principal: DeveloperTokenPrincipal = Depends(get_filelib_sync_principal),
     repository: FilelibSyncRepository = Depends(get_filelib_sync_repository),
+    session: AsyncSession = Depends(get_db_session),
 ) -> FilelibSyncService:
-    knowledge_space_service = KnowledgeSpaceService(
-        request=request,
-        login_user=principal.user,
-    )
     return FilelibSyncService(
         request=request,
         login_user=principal.user,
@@ -207,7 +206,11 @@ async def get_filelib_sync_service(
         token_name=principal.token_name,
         file_sync_rule=DeveloperTokenFileSyncRule.model_validate(principal.raw_file_sync_rule),
         repository=repository,
-        knowledge_space_service=knowledge_space_service,
+        knowledge_space_service=build_knowledge_space_service_for_filelib_sync(
+            session=session,
+            login_user=principal.user,
+            request=request,
+        ),
     )
 
 

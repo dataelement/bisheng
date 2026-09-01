@@ -9,6 +9,9 @@ from bisheng.common.errcode.filelib_sync import FilelibSyncPermissionDeniedError
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.developer_token.domain.models import DeveloperToken
 from bisheng.developer_token.domain.schemas import DeveloperTokenFileSyncRule
+from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+    KnowledgeDocumentDistributionService,
+)
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.open_endpoints.domain.repositories.implementations.filelib_sync_repository_impl import (
     FilelibSyncRepositoryImpl,
@@ -17,6 +20,22 @@ from bisheng.open_endpoints.domain.services.filelib_sync_factory import (
     build_filelib_sync_service_for_scheduled_sync,
 )
 from bisheng.open_endpoints.domain.services.filelib_sync_service import FilelibSyncService
+
+
+@pytest.fixture(autouse=True)
+def _skip_fulltext_tracker(monkeypatch):
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl.track_fulltext_file_changes",
+        lambda _session: None,
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_document_distribution_service.track_fulltext_file_changes",
+        lambda _session: None,
+    )
+
+
+def _session() -> SimpleNamespace:
+    return SimpleNamespace()
 
 
 def _rule() -> DeveloperTokenFileSyncRule:
@@ -30,7 +49,7 @@ def _rule() -> DeveloperTokenFileSyncRule:
 
 
 def test_build_filelib_sync_service_for_scheduled_sync():
-    session = SimpleNamespace()
+    session = _session()
     token = DeveloperToken(
         id=7,
         tenant_id=5,
@@ -60,11 +79,15 @@ def test_build_filelib_sync_service_for_scheduled_sync():
     assert isinstance(service.knowledge_space_service, KnowledgeSpaceService)
     assert service.knowledge_space_service.request is None
     assert service.knowledge_space_service.login_user is login_user
+    assert isinstance(
+        service.knowledge_space_service.document_distribution_service,
+        KnowledgeDocumentDistributionService,
+    )
 
 
 @pytest.mark.asyncio
 async def test_scheduled_sync_factory_service_surfaces_upload_permission_errors(monkeypatch):
-    session = SimpleNamespace()
+    session = _session()
     token = DeveloperToken(
         id=7,
         tenant_id=5,
@@ -97,5 +120,6 @@ async def test_scheduled_sync_factory_service_surfaces_upload_permission_errors(
                 space=SimpleNamespace(id=8),
                 folder_id=None,
                 used_personal_fallback=False,
+                used_responsible_person_personal=False,
             )
         )
