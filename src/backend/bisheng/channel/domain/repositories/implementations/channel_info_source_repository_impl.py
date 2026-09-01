@@ -1,8 +1,8 @@
-from typing import List, Union
+from typing import Union
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select, col, delete, Session
+from sqlmodel import Session, col, select
 
 from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
 from bisheng.channel.domain.repositories.interfaces.channel_info_source_repository import ChannelInfoSourceRepository
@@ -14,14 +14,14 @@ class ChannelInfoSourceRepositoryImpl(BaseRepositoryImpl[ChannelInfoSource, str]
         super().__init__(session, ChannelInfoSource)
         self.session = session
 
-    async def find_by_ids(self, source_ids: List[str]) -> List[ChannelInfoSource]:
+    async def find_by_ids(self, source_ids: list[str]) -> list[ChannelInfoSource]:
         if not source_ids:
             return []
         statement = select(ChannelInfoSource).where(col(ChannelInfoSource.id).in_(source_ids))
         result = await self.session.exec(statement)
         return list(result.all())
 
-    async def batch_add(self, sources: List[ChannelInfoSource]) -> None:
+    async def batch_add(self, sources: list[ChannelInfoSource]) -> None:
         if not sources:
             return
         try:
@@ -40,7 +40,44 @@ class ChannelInfoSourceRepositoryImpl(BaseRepositoryImpl[ChannelInfoSource, str]
                 self.session.add_all(remaining)
                 await self.session.commit()
 
-    def get_by_page(self, information_id: str = None, page: int = 1, page_size: int = 20) -> List[ChannelInfoSource]:
+    async def upsert_metadata(self, sources: list[ChannelInfoSource]) -> None:
+        if not sources:
+            return
+        sources = list({source.id: source for source in sources}.values())
+        existing = {row.id: row for row in await self.find_by_ids([source.id for source in sources])}
+        for source in sources:
+            row = existing.get(source.id)
+            if row is None:
+                self.session.add(source)
+                continue
+            row.source_name = source.source_name
+            row.source_icon = source.source_icon
+            row.source_type = source.source_type
+            row.description = source.description
+            self.session.add(row)
+        try:
+            await self.session.commit()
+        except IntegrityError:
+            await self.session.rollback()
+            existing = {row.id: row for row in await self.find_by_ids([source.id for source in sources])}
+            for source in sources:
+                row = existing.get(source.id)
+                if row is None:
+                    self.session.add(source)
+                else:
+                    row.source_name = source.source_name
+                    row.source_icon = source.source_icon
+                    row.source_type = source.source_type
+                    row.description = source.description
+                    self.session.add(row)
+            await self.session.commit()
+
+    def get_by_page(
+        self,
+        information_id: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> list[ChannelInfoSource]:
         offset = (page - 1) * page_size
         statement = select(ChannelInfoSource)
         if information_id:
@@ -49,14 +86,7 @@ class ChannelInfoSourceRepositoryImpl(BaseRepositoryImpl[ChannelInfoSource, str]
         result = self.session.exec(statement)
         return list(result.all())
 
-    async def find_all(self) -> List[ChannelInfoSource]:
+    async def find_all(self) -> list[ChannelInfoSource]:
         statement = select(ChannelInfoSource)
         result = await self.session.exec(statement)
         return list(result.all())
-
-    async def delete_by_ids(self, source_ids: List[str]) -> None:
-        if not source_ids:
-            return
-        statement = delete(ChannelInfoSource).where(col(ChannelInfoSource.id).in_(source_ids))
-        await self.session.exec(statement)
-        await self.session.commit()

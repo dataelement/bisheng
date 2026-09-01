@@ -9,7 +9,8 @@
 > 是本版本的 P0 权限架构升级 Feature；F049 在遵守 C4 系统身份策略与 OpenFGA 最终可见性语义的前提下，
 > 优化知识空间目录与搜索读取的候选批次、冗余查询和可观测性；F051 将知识库列表的非筛选动作
 > 改为打开单行操作菜单后按资源查询，保持 F048 最终动作判定与 F027 列表筛选契约；F052 为工作流
-> 独立会话增加系统级统一的“打开已结束会话时自动重新运行”能力。
+> 独立会话增加系统级统一的“打开已结束会话时自动重新运行”能力；F060 替代 v2.6.0 F031
+> 以租户本地元数据推断远端订阅状态的旧语义，建立平台级订阅对账、公共文章同步和知识空间一次投递。
 
 ---
 
@@ -42,6 +43,8 @@
 | —（无新增） | F050-unified-permission-settings | 统一知识空间/频道新建与设置页面；复用既有 Knowledge、Channel、F048 Grant/Assignee 与 protected owner，不建立第二套权限领域对象 |
 | —（无新增） | F051-knowledge-list-action-lazy-load | 只调整文档/QA 知识库列表的动作权限读取时机与单行操作菜单体验；复用既有 Knowledge 与 F048 单资源权限读取，不新增领域对象、表、错误码、Grant、权限模式或 OpenFGA relation |
 | —（无新增） | F052-workflow-session-auto-rerun | 只增加系统级统一开关和工作流独立会话打开时的一次性自动重新运行行为；复用既有工作流会话与手动重新运行能力，不新增领域对象、表或错误码 |
+| ChannelInfoSource（既有，v3 语义） | F060-information-source-subscription-reconciliation | 作为平台公共的信息源展示目录，不再作为某个租户或远端订阅状态的真相；F060 接替 v2.6.0 F031 对该对象生命周期语义的所有权 |
+| InformationArticleSyncState | F060-information-source-subscription-reconciliation | 每个公共信息源一份文章增量进度和已处理远端水位；不带租户归属，不保存知识投递状态 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -77,6 +80,7 @@
 | INV-26 | F048 的 Alembic revision 只允许 MySQL/DM8 schema DDL，不得读取、转换、回填、去重、清理或 seed 旧权限数据，也不得访问 OpenFGA。所有旧 Config、业务事实和 tuple 数据迁移必须由运维人员在已启动但 F048 未就绪的 backend 容器内，通过 `src/backend/scripts/` 下的专用脚本于 schema upgrade 成功后显式执行；不得由 API、Celery 或应用启动钩子自动触发 | PermissionMigrationRun, PermissionMigrationItem | F048 |
 | INV-27 | 权限模型、Grant、Grant 主体和权限模式以规范化 MySQL/DM8 关系表为控制面真相；组织成员、系统身份和资源状态以各自 Owner 业务域的 canonical 事实为真相；OpenFGA 是这些事实发布后的唯一权限执行面。每条有效资源可见结果必须可追溯到至少一个当前有效来源；模型停用只禁止新增或变更授权，已有授权保持有效；模型删除前必须撤销或替换全部绑定，并在引用、来源投影和残留 tuple 清零后才允许删除。来源撤销只清除该来源贡献，并保证 Check 与可见资源枚举一致，不得删除其他仍有效来源的可见性 | PermissionModel, PermissionGrant, PermissionGrantAssignee, AuthorizationModelRelease | F048 |
 | INV-28 | 知识空间和频道统一创建页只能在业务资源与 protected owner 成功后应用初始普通 Grant；普通 Grant 失败必须保留并返回真实资源、允许基于同一持久请求键前向重试且不得重复创建资源。创建前不得伪造 VerifiedPermissionTarget，旧 relation/permission_id 路径不得作为 fallback | Knowledge, Channel, ProtectedPermissionAssignment, PermissionGrant | F050 |
+| INV-29 | 一个毕昇部署的单一 Information API Key 只对应一个平台订阅集合：期望集合必须由全部活跃租户频道来源求并集，实际集合必须来自远端完整订阅分页；任一本地或远端快照不完整时不得执行远端订阅变更。信息源文章与同步进度是平台公共数据，同一来源不得按租户重复拉取；频道、知识配置和知识文件仍在各自租户上下文内处理 | Channel, ChannelInfoSource, InformationArticleSyncState, ChannelKnowledgeSync, KnowledgeFile | F060 |
 
 （INV-1~7 为 v2.6.0 存量不变量，继续有效，见 `features/v2.6.0/release-contract.md`。）
 
@@ -102,6 +106,7 @@
 | F050-unified-permission-settings | v2.6.0 F044, F048 | 只继承 F044 的完整页面与统一入口目标；权限上下文、候选、protected owner、Grant mutation、版本和投影全部以 F048 为准 |
 | F051-knowledge-list-action-lazy-load | F027, F048 | 保持知识库列表 cursor 与可见/可用筛选语义；列表不预取非筛选动作，单资源菜单能力继续以 F048 当前有效动作和执行时鉴权为准 |
 | F052-workflow-session-auto-rerun | 既有工作流独立会话与手动重新运行能力 | 系统统一开关只影响免登录/需登录独立工作流会话的打开行为；不改变工作流执行、权限或其他会话入口 |
+| F060-information-source-subscription-reconciliation | v2.6.0 F031、Information 同步查询协议 v1.1 | 继承频道来源与知识同步配置；以远端实际订阅和公共文章状态替代 F031 的租户本地订阅推断，不依赖本版本权限 Feature |
 
 ---
 
@@ -119,6 +124,7 @@
 | F027/F048 | F051 保持知识库列表可见/可用资源集合、cursor 与分页契约，只移除列表行非筛选动作的预计算；设置、删除和权限管理能力在单资源操作菜单打开后读取，最终业务操作仍由 F048 执行时鉴权 |
 | 既有工作流独立会话 | F052 在首次进入或切换历史会话时增加一次性状态判断；开关关闭时保持原行为，打开后的后续结束或中断不触发自动重试，手动重新运行契约不变 |
 | F018-resource-owner-transfer | 当前实现先提交资源 `user_id`、再删除旧/写入新 owner tuple，失败依赖 `failed_tuple` 补写；同时不更新 knowledge_space/channel CREATOR membership，且无已接入前端。OQ-07 已选择 A：F048 启服时退役其 API/Service 调用路径，本期不重构 owner transfer；历史差异按 preservation-first 迁移 |
+| F031-channel-source-subscription-reconcile | F060 替代其“各租户 `channel_info_source` 行存在即代表已订阅、按租户分别对账”的运行语义。频道来源意图改为全部活跃租户并集，远端 `/information/subscriptions` 完整分页成为实际订阅真相；`channel_info_source` 改为平台公共展示目录。F031 已交付的频道创建/编辑能力继续保留，但不得再以本地元数据行推断远端订阅状态 |
 
 ---
 
@@ -131,6 +137,7 @@
 | —（不新增） | 既有功能体验优化与引用溯源 | F043 复用工作流/报告既有错误响应；F044 验证失败是业务结果（状态=异常）而非错误响应，不占码；F045/F046 纯前端；F047 复用 citation 子系统与 F029 权限过滤的既有错误响应 |
 | —（不新增） | 工作流会话打开时自动重新运行 | F052 复用既有系统配置、工作流状态与重新运行错误响应 |
 | 250 | ReBAC 权限 Catalog、Grant、投影、迁移与完整枚举 | F048；25001～25014，具体语义见 F048 Design §6.3 |
+| —（不新增） | 信息源订阅对账、公共文章同步与知识空间一次投递 | F060 仅调整内部任务与状态，不新增对外 API 或业务错误码 |
 
 ---
 
@@ -154,5 +161,6 @@
 | 2026-08-14 | 登记 F049 知识空间目录与搜索读取优化：指定资源的超级管理员按 C4 系统身份策略放行、去重空间鉴权、页大小驱动的有界候选扫描、移除未展示的文件夹数量统计并保留失败存在性、增加分段性能观测；普通用户候选最终可见性继续统一使用 OpenFGA BatchCheck，不新增继承捷径 | F049、F027、F040、F048 |
 | 2026-08-14 | 登记 F050 统一权限设置入口：保留 v2.6.0 F044 页面目标，创建/编辑权限完全改接 F048，并增加创建后初始 Grant 部分失败与持久幂等约束 INV-28 | F050、F048 |
 | 2026-08-20 | 澄清 INV-19 的决策与写入边界：资源权限投影非 CURRENT 时冻结新的权限配置写，但不暂停普通资源鉴权；具体 action/visible 继续使用 higher-consistency OpenFGA，OpenFGA/Catalog/model/verified identity 不可用时仍 fail closed，SQL 不兜底 ALLOW | F048 |
+| 2026-08-21 | 登记 F060 信息源订阅对账、公共文章同步与知识空间一次投递：新增平台公共 InformationArticleSyncState 与 INV-29，ChannelInfoSource 改为平台公共展示目录；替代 v2.6.0 F031 的租户本地订阅推断。F051～F059 已在当前代码或其他并行 Feature 历史中使用，故本 Feature 从 F060 起号 | F060、F031 |
 | 2026-08-25 | 登记 F051 知识库列表动作权限懒加载：文档/QA 列表只承担可见/可用筛选，不为列表行预计算设置、删除和权限管理动作；单资源菜单按需读取当前动作，保持执行时最终鉴权与失败关闭 | F051、F027、F048 |
 | 2026-08-27 | 登记 F052 工作流会话打开时自动重新运行：由系统级统一开关控制免登录与需登录独立会话；首次进入或切换历史会话时，若目标会话已经结束则至多自动重新运行一次，打开后的后续结束或中断不自动重试 | F052、既有工作流独立会话 |

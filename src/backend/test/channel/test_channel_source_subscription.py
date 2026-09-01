@@ -1,9 +1,8 @@
-"""F031 — synchronous subscribe gate + dismiss/update no longer unsubscribe synchronously.
+"""F060 — channel writes desired sources without remote subscription side effects.
 
 These cover the hot-path half of the feature (spec §7.3):
-- create/update subscribe only sources missing from `channel_info_source` (indexed gate);
-- update-remove and dismiss never call the information service to unsubscribe
-  (unsubscription is deferred to the daily reconcile).
+- create/update persist desired sources and refresh public display metadata best-effort;
+- subscribe/unsubscribe is owned exclusively by periodic platform reconciliation.
 """
 
 from __future__ import annotations
@@ -19,7 +18,6 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
     UpdateChannelRequest,
 )
 from bisheng.channel.domain.services.channel_service import ChannelService
-from bisheng.common.errcode.channel import InformationSourceSubscriptionLimitError
 from bisheng.common.models.space_channel_member import (
     MembershipStatusEnum,
     UserRoleEnum,
@@ -83,8 +81,7 @@ def _permission_adapter():
 
 
 @pytest.mark.asyncio
-async def test_create_subscribes_only_missing_sources():
-    """source_list=[A,B], A already in channel_info_source → only B is subscribed. (AC-01)"""
+async def test_create_never_subscribes_and_refreshes_public_metadata():
     created = SimpleNamespace(
         id="channel-1",
         source_list=["A", "B"],
@@ -97,7 +94,7 @@ async def test_create_subscribes_only_missing_sources():
     )
     info_source_repository = SimpleNamespace(
         find_by_ids=AsyncMock(return_value=_info_source_rows(["A"])),
-        batch_add=AsyncMock(),
+        upsert_metadata=AsyncMock(),
     )
     service = _service(
         channel_repository=channel_repository,
@@ -108,57 +105,7 @@ async def test_create_subscribes_only_missing_sources():
 
     info_client = SimpleNamespace(
         subscribe_information_source=AsyncMock(),
-        get_information_source_by_ids=AsyncMock(return_value=[_info_source_meta("B")]),
-    )
-    permission_adapter = _permission_adapter()
-
-    with (
-        patch(
-            f"{_CS}.get_f048_resource_adapter",
-            new=AsyncMock(return_value=permission_adapter),
-        ),
-        patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
-    ):
-        await service.create_channel(
-            CreateChannelRequest(
-                name="资讯频道",
-                source_list=["A", "B"],
-                visibility=ChannelVisibilityEnum.PUBLIC,
-                is_released=True,
-            ),
-            _LoginUser(),
-        )
-
-    info_client.subscribe_information_source.assert_awaited_once_with(["B"])
-
-
-@pytest.mark.asyncio
-async def test_create_skips_subscribe_when_all_present():
-    """All sources already in channel_info_source → no subscribe call. (AC-02)"""
-    created = SimpleNamespace(
-        id="channel-1",
-        source_list=["A", "B"],
-        tenant_id=1,
-    )
-    channel_repository = SimpleNamespace(save=AsyncMock(return_value=created))
-    member_repository = SimpleNamespace(
-        find_channel_memberships=AsyncMock(return_value=[]),
-        add_member=AsyncMock(),
-    )
-    info_source_repository = SimpleNamespace(
-        find_by_ids=AsyncMock(return_value=_info_source_rows(["A", "B"])),
-        batch_add=AsyncMock(),
-    )
-    service = _service(
-        channel_repository=channel_repository,
-        member_repository=member_repository,
-        info_source_repository=info_source_repository,
-    )
-    service.update_channels_latest_article_time = AsyncMock()
-
-    info_client = SimpleNamespace(
-        subscribe_information_source=AsyncMock(),
-        get_information_source_by_ids=AsyncMock(return_value=[]),
+        get_information_source_by_ids=AsyncMock(return_value=[_info_source_meta("A"), _info_source_meta("B")]),
     )
     permission_adapter = _permission_adapter()
 
@@ -180,13 +127,63 @@ async def test_create_skips_subscribe_when_all_present():
         )
 
     info_client.subscribe_information_source.assert_not_awaited()
-    info_client.get_information_source_by_ids.assert_not_awaited()
-    info_source_repository.batch_add.assert_not_awaited()
+    info_client.get_information_source_by_ids.assert_awaited_once_with(["A", "B"])
+    info_source_repository.upsert_metadata.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_create_inserts_metadata_rows_for_new_sources():
-    """Missing source is subscribed and its metadata row is inserted. (AC-05)"""
+async def test_create_metadata_failure_does_not_roll_back_channel():
+    created = SimpleNamespace(
+        id="channel-1",
+        source_list=["A", "B"],
+        tenant_id=1,
+    )
+    channel_repository = SimpleNamespace(save=AsyncMock(return_value=created))
+    member_repository = SimpleNamespace(
+        find_channel_memberships=AsyncMock(return_value=[]),
+        add_member=AsyncMock(),
+    )
+    info_source_repository = SimpleNamespace(
+        find_by_ids=AsyncMock(return_value=_info_source_rows(["A", "B"])),
+        upsert_metadata=AsyncMock(),
+    )
+    service = _service(
+        channel_repository=channel_repository,
+        member_repository=member_repository,
+        info_source_repository=info_source_repository,
+    )
+    service.update_channels_latest_article_time = AsyncMock()
+
+    info_client = SimpleNamespace(
+        subscribe_information_source=AsyncMock(),
+        get_information_source_by_ids=AsyncMock(side_effect=RuntimeError("metadata unavailable")),
+    )
+    permission_adapter = _permission_adapter()
+
+    with (
+        patch(
+            f"{_CS}.get_f048_resource_adapter",
+            new=AsyncMock(return_value=permission_adapter),
+        ),
+        patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
+    ):
+        await service.create_channel(
+            CreateChannelRequest(
+                name="资讯频道",
+                source_list=["A", "B"],
+                visibility=ChannelVisibilityEnum.PUBLIC,
+                is_released=True,
+            ),
+            _LoginUser(),
+        )
+
+    info_client.subscribe_information_source.assert_not_awaited()
+    channel_repository.save.assert_awaited_once()
+    member_repository.add_member.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_create_upserts_selected_source_metadata():
     created = SimpleNamespace(id="channel-1", source_list=["B"], tenant_id=1)
     channel_repository = SimpleNamespace(save=AsyncMock(return_value=created))
     member_repository = SimpleNamespace(
@@ -195,7 +192,7 @@ async def test_create_inserts_metadata_rows_for_new_sources():
     )
     info_source_repository = SimpleNamespace(
         find_by_ids=AsyncMock(return_value=[]),
-        batch_add=AsyncMock(),
+        upsert_metadata=AsyncMock(),
     )
     service = _service(
         channel_repository=channel_repository,
@@ -228,20 +225,21 @@ async def test_create_inserts_metadata_rows_for_new_sources():
         )
 
     info_client.get_information_source_by_ids.assert_awaited_once_with(["B"])
-    info_source_repository.batch_add.assert_awaited_once()
+    info_client.subscribe_information_source.assert_not_awaited()
+    info_source_repository.upsert_metadata.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_create_aborts_before_persist_on_limit():
-    """19007 on the new source aborts creation before anything is persisted. (AC-03)"""
-    channel_repository = SimpleNamespace(save=AsyncMock())
+async def test_create_is_not_blocked_by_remote_subscription_limit():
+    created = SimpleNamespace(id="channel-1", source_list=["B"], tenant_id=1)
+    channel_repository = SimpleNamespace(save=AsyncMock(return_value=created))
     member_repository = SimpleNamespace(
         find_channel_memberships=AsyncMock(return_value=[]),
         add_member=AsyncMock(),
     )
     info_source_repository = SimpleNamespace(
         find_by_ids=AsyncMock(return_value=[]),
-        batch_add=AsyncMock(),
+        upsert_metadata=AsyncMock(),
     )
     service = _service(
         channel_repository=channel_repository,
@@ -251,8 +249,8 @@ async def test_create_aborts_before_persist_on_limit():
     service.update_channels_latest_article_time = AsyncMock()
 
     info_client = SimpleNamespace(
-        subscribe_information_source=AsyncMock(side_effect=InformationSourceSubscriptionLimitError()),
-        get_information_source_by_ids=AsyncMock(return_value=[]),
+        subscribe_information_source=AsyncMock(side_effect=RuntimeError("must not be called")),
+        get_information_source_by_ids=AsyncMock(side_effect=RuntimeError("metadata unavailable")),
     )
     permission_adapter = _permission_adapter()
 
@@ -263,20 +261,20 @@ async def test_create_aborts_before_persist_on_limit():
         ),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
     ):
-        with pytest.raises(InformationSourceSubscriptionLimitError):
-            await service.create_channel(
-                CreateChannelRequest(
-                    name="资讯频道",
-                    source_list=["B"],
-                    visibility=ChannelVisibilityEnum.PUBLIC,
-                    is_released=True,
-                ),
-                _LoginUser(),
-            )
+        await service.create_channel(
+            CreateChannelRequest(
+                name="资讯频道",
+                source_list=["B"],
+                visibility=ChannelVisibilityEnum.PUBLIC,
+                is_released=True,
+            ),
+            _LoginUser(),
+        )
 
-    channel_repository.save.assert_not_awaited()
-    member_repository.add_member.assert_not_awaited()
-    permission_adapter.authorize_created.assert_not_awaited()
+    info_client.subscribe_information_source.assert_not_awaited()
+    channel_repository.save.assert_awaited_once()
+    member_repository.add_member.assert_awaited_once()
+    permission_adapter.authorize_created.assert_awaited_once()
 
 
 # --------------------------------------------------------------------------- update
@@ -291,8 +289,7 @@ def _update_membership():
 
 
 @pytest.mark.asyncio
-async def test_update_add_subscribes_only_missing():
-    """update adds [B,C]; B already present → only C subscribed. (AC-04)"""
+async def test_update_add_never_subscribes_and_refreshes_metadata():
     channel = SimpleNamespace(id="channel-1", name="c", source_list=["A"], visibility=ChannelVisibilityEnum.PUBLIC)
     channel_repository = SimpleNamespace(
         find_by_id=AsyncMock(return_value=channel),
@@ -305,7 +302,7 @@ async def test_update_add_subscribes_only_missing():
 
     info_source_repository = SimpleNamespace(
         find_by_ids=AsyncMock(side_effect=_find_by_ids),
-        batch_add=AsyncMock(),
+        upsert_metadata=AsyncMock(),
     )
     service = _service(
         channel_repository=channel_repository,
@@ -317,7 +314,9 @@ async def test_update_add_subscribes_only_missing():
     info_client = SimpleNamespace(
         subscribe_information_source=AsyncMock(),
         unsubscribe_information_source=AsyncMock(),
-        get_information_source_by_ids=AsyncMock(return_value=[_info_source_meta("C")]),
+        get_information_source_by_ids=AsyncMock(
+            return_value=[_info_source_meta("A"), _info_source_meta("B"), _info_source_meta("C")]
+        ),
     )
 
     with (
@@ -330,8 +329,9 @@ async def test_update_add_subscribes_only_missing():
             _LoginUser(),
         )
 
-    info_client.subscribe_information_source.assert_awaited_once_with(["C"])
+    info_client.subscribe_information_source.assert_not_awaited()
     info_client.unsubscribe_information_source.assert_not_awaited()
+    info_source_repository.upsert_metadata.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -345,7 +345,7 @@ async def test_update_remove_does_not_unsubscribe():
     member_repository = SimpleNamespace(find_membership=AsyncMock(return_value=_update_membership()))
     info_source_repository = SimpleNamespace(
         find_by_ids=AsyncMock(return_value=_info_source_rows(["A"])),
-        batch_add=AsyncMock(),
+        upsert_metadata=AsyncMock(),
     )
     service = _service(
         channel_repository=channel_repository,
