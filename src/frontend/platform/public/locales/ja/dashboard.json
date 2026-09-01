@@ -132,9 +132,6 @@
     "metrics": "メトリック",
     "virtualMetric": "*",
     "selectDatasetPrompt": "まずデータセットを選択してください",
-    "group": {
-      "user_engagement": "ユーザーエンゲージメント統計"
-    },
     "fieldTypes": {
       "date": "日付",
       "integer": "整数",
@@ -418,7 +415,7 @@
     "metricCard": "指標カード",
     "pivotTable": "クロス集計表"
   },
-  "mid_user_increment": "ユーザースケール統計",
+  "mid_user_increment": "ユーザーエンゲージメント統計",
   "timestamp": {
     "year": "時間(年)",
     "month": "時間(月)",

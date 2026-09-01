@@ -4,9 +4,11 @@ import { fireEvent, render, screen, waitFor } from "@/test/test-utils"
 import { QueryClient, QueryClientProvider } from "react-query"
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
-// F058 AC-06/AC-07: 用户反馈统计 is excluded server-side (is_visible=false, not asserted
-// here — that's a backend concern, see test_dashboard_user_dataset_merge.py); this only
-// covers the frontend grouping of datasets that share a dataset_group.
+// F058 AC-06/AC-07: 用户规模统计/活跃用户规模统计/全员每日参与度/用户反馈统计 are now merged
+// server-side into one shared ES index (see init_dataset.py / test_dashboard_user_dataset_merge.py)
+// and the non-surviving three entries are excluded from the picker via is_visible=false —
+// the picker itself has no client-side grouping/merging logic to test anymore; it just
+// renders whatever the (already-filtered) dataset list returns, same as any other dataset.
 
 vi.mock("@/controllers/API/dashboard", async () => {
   const actual = await vi.importActual<typeof import("@/controllers/API/dashboard")>(
@@ -41,25 +43,16 @@ function renderWithQueryClient(ui: React.ReactElement) {
 
 beforeEach(() => {
   mockedGetDatasets.mockReset()
+  // Simulates what the API already returns after server-side is_visible filtering:
+  // exactly one entry for the merged user-engagement dataset, not three.
   mockedGetDatasets.mockResolvedValue([
     {
       id: 1,
-      dataset_name: "用户行为指标表",
+      dataset_name: "用户数据统计",
       dataset_code: "mid_user_increment",
-      es_index_name: "mid_user_increment",
+      es_index_name: "mid_user_engagement_stat",
       description: "",
       is_commercial_only: false,
-      dataset_group: "user_engagement",
-      schema_config: { dimensions: [], metrics: [] },
-    },
-    {
-      id: 2,
-      dataset_name: "活跃用户表",
-      dataset_code: "mid_active_user",
-      es_index_name: "mid_active_user",
-      description: "",
-      is_commercial_only: true,
-      dataset_group: "user_engagement",
       schema_config: { dimensions: [], metrics: [] },
     },
     {
@@ -69,38 +62,26 @@ beforeEach(() => {
       es_index_name: "mid_knowledge_space_content_stat",
       description: "",
       is_commercial_only: false,
-      dataset_group: null,
       schema_config: { dimensions: [], metrics: [] },
     },
   ] as any)
 })
 
 // The test suite globally mocks react-i18next's `t` as `(key) => key` (see
-// src/test/setup.ts) — it does not honor `defaultValue`. So assertions below check for
-// the translation KEY text (`datasetSelector.group.<group>`, or the dataset_code as the
-// `t(dataset.dataset_code, {defaultValue: ...})` fallback) rather than the localized
-// copy a real app run would show.
-describe("DatasetSelector grouping (F058 AC-07)", () => {
-  it("renders a group label and clusters the merged user-engagement datasets under it", async () => {
+// src/test/setup.ts) — it does not honor `defaultValue`, so assertions below check for
+// the dataset_code text (the `t(dataset.dataset_code, {defaultValue: ...})` fallback key)
+// rather than the localized copy a real app run would show.
+describe("DatasetSelector picker (F058 AC-06/AC-07)", () => {
+  it("renders exactly one entry per dataset returned by the API — no client-side grouping/duplication", async () => {
     renderWithQueryClient(<DatasetSelector />)
 
     fireEvent.click(screen.getByRole("combobox"))
 
     await waitFor(() => expect(mockedGetDatasets).toHaveBeenCalled())
 
-    expect(await screen.findByText("datasetSelector.group.user_engagement")).toBeInTheDocument()
-    expect(screen.getByText("mid_user_increment")).toBeInTheDocument()
-    expect(screen.getByText("mid_active_user")).toBeInTheDocument()
-  })
-
-  it("renders an ungrouped dataset as a plain item, not inside a group", async () => {
-    renderWithQueryClient(<DatasetSelector />)
-
-    fireEvent.click(screen.getByRole("combobox"))
-
-    await waitFor(() => expect(mockedGetDatasets).toHaveBeenCalled())
-
-    expect(await screen.findByText("mid_knowledge_space_content_stat")).toBeInTheDocument()
+    expect(await screen.findByText("mid_user_increment")).toBeInTheDocument()
+    expect(screen.getByText("mid_knowledge_space_content_stat")).toBeInTheDocument()
+    expect(screen.getAllByText("mid_user_increment")).toHaveLength(1)
   })
 })
 

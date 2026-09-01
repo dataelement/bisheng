@@ -1,10 +1,16 @@
-"""T010 — user-related dashboard dataset consolidation (F058, AC-06, AC-07).
+"""T010 + F058 follow-up — user-related dashboard dataset consolidation (AC-06, AC-07).
 
 - 用户反馈统计 (mid_user_interact_dtl) drops out of the dashboard picker.
-- 用户规模统计 (mid_user_increment) / 活跃用户规模统计 (mid_active_user) /
-  全员每日参与度 (mid_user_daily_participation) share one dataset_group so the
-  frontend can render them as sub-panels of a single entry (UI-level merge only —
-  each still queries its own ES index, see spec.md AD-04).
+- 用户规模统计 (mid_user_increment) is now the ONE surviving, visible dataset — its
+  schema_config is the union of what used to be three separate datasets' metrics and
+  dimensions, and its es_index_name points at the shared ES index
+  (USER_ENGAGEMENT_ES_INDEX). dataset_code/es_index_name deliberately keep the ORIGINAL
+  "mid_user_increment" identity so existing components (including the preset_oss
+  dashboard SQL in this file) keep working without edits.
+- 活跃用户规模统计 (mid_active_user) / 全员每日参与度 (mid_user_daily_participation) are
+  hidden from the picker (is_visible=False) but their es_index_name is ALSO repointed at
+  the shared index, so any pre-existing component referencing them by dataset_code still
+  reads live (not stale/frozen) data.
 """
 
 import sys
@@ -17,12 +23,13 @@ if "langchain.docstore.document" not in sys.modules:
     sys.modules.setdefault("langchain.docstore", MagicMock())
     sys.modules["langchain.docstore.document"] = _docstore_stub
 
+from bisheng.telemetry.domain.mid_table.user_engagement_shared import USER_ENGAGEMENT_ES_INDEX
 from bisheng.telemetry_search.domain.init_dataset import (
     DASHBOARD_DATASET,
     DASHBOARD_DATASET_REFRESH_CODES,
 )
 
-_USER_ENGAGEMENT_CODES = ("mid_user_increment", "mid_active_user", "mid_user_daily_participation")
+_HIDDEN_ENGAGEMENT_CODES = ("mid_active_user", "mid_user_daily_participation")
 
 
 def _dataset(code: str):
@@ -33,10 +40,32 @@ def test_feedback_dataset_marked_not_visible():
     assert _dataset("mid_user_interact_dtl").is_visible is False
 
 
-def test_engagement_datasets_share_one_group():
-    groups = {_dataset(code).dataset_group for code in _USER_ENGAGEMENT_CODES}
-    assert groups == {"user_engagement"}
-    assert _dataset("mid_user_interact_dtl").dataset_group != "user_engagement"
+def test_mid_user_increment_is_the_one_surviving_visible_entry():
+    surviving = _dataset("mid_user_increment")
+    assert surviving.is_visible is True
+    assert surviving.es_index_name == USER_ENGAGEMENT_ES_INDEX
+
+
+def test_surviving_dataset_schema_is_the_union_of_all_three_sources():
+    fields = {m["field"] for m in _dataset("mid_user_increment").schema_config["dimensions"]}
+    metric_fields = {m["field"] for m in _dataset("mid_user_increment").schema_config["metrics"]}
+    # from mid_user_increment
+    assert {"total_user_count", "new_user_count"} <= metric_fields
+    # from mid_active_user
+    assert "active_user_count" in metric_fields
+    # from mid_user_daily_participation
+    assert {"participation_rate", "logged_in_employee_count", "active_employee_count", "login_count"} <= metric_fields
+    assert {"local_date", "primary_department_id", "primary_department_name", "user_id", "user_name"} <= fields
+
+
+def test_non_surviving_engagement_datasets_hidden_but_index_repointed():
+    """The two merged-away datasets stay is_visible=False, but their es_index_name is
+    still repointed at the shared index — pre-existing components referencing them by
+    dataset_code must keep reading live data, not a frozen/abandoned index."""
+    for code in _HIDDEN_ENGAGEMENT_CODES:
+        dataset = _dataset(code)
+        assert dataset.is_visible is False
+        assert dataset.es_index_name == USER_ENGAGEMENT_ES_INDEX
 
 
 def test_previously_insert_once_datasets_now_refresh_on_startup():

@@ -349,6 +349,34 @@
 
 ---
 
+## 补充：用户数据集真合并（171 走查反馈后追加，2026-09-01）
+
+171 部署后走查发现 AC-07 的"分组展示"没有达到用户预期——用户要求的是下拉框里**真的只有一行**，不是"一行分组标题+三个子项"。深入之后确认三个数据源合并成一个物理索引是可行的（同一个 ES 集群，只是两个客户端句柄），于是把 T010/T011/T024 的"UI 层分组"方案换成了真正的后端合并：
+
+- **写入侧**：`mid_user_increment`/`mid_active_user`/`mid_user_daily_participation_fact` 三条采集逻辑（`user_increment.py`/`derived_events.py`/`daily_participation.py`）改成共写一个新索引 `mid_user_engagement_stat`；每条记录打 `metric_source` 来源标记，`_id` 按来源加前缀避免撞号
+- **修了一个真实的坑**：`用户规模统计`原来的"从哪天继续同步"水位查询是"查索引里最新一条记录的时间"，三个来源共用索引后会被"参与度"每 5 分钟一条的高频写入带偏，导致每天同步被误判成"已经同步到现在"而静默跳过——加了 `_watermark_filter`，让水位查询只看自己来源的记录，不影响其它已有 mid-table
+- **看板侧**：`mid_user_increment` 这个 dataset_code 变成"唯一存活、可见"的合并入口（`dataset_name` 改成"用户数据统计"，`schema_config` 合并三边指标+维度），另外两个 dataset_code 保留但 `is_visible=False`——因为预置看板（`preset_oss_dashboard_sql`）里有硬编码引用 `mid_user_increment` 的图表组件，不能删/改这个 dataset_code，只能新增字段，两个隐藏的也要保持 `es_index_name` 指向新索引，不然那些预置组件会读到冻结的旧数据
+- 撤掉了 T024 做的前端 `SelectGroup` 分组 UI（不再需要，`is_visible` 过滤后下拉框自然就是一行）
+- 新增一次性历史数据搬迁脚本 `scripts/migrate_user_engagement_indices.py`（dry-run 默认，`--apply` 才写；旧的三个索引只读不动、不删）
+- 用户确认：三个旧索引保留不删；三条采集任务各自的触发频率（每天/每 5 分钟+登录实时）不变，只改写入目标
+
+**待做**（未完成，需要在 171 上手动执行）：
+1. 部署新代码到 171
+2. 跑 `PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py --apply` 做历史数据搬迁
+3. 浏览器走查：下拉框确认只有一行"用户数据统计"；打开这个数据集的图表，确认新老数据（合并前+合并后）都能查到
+
+## 补充：171 走查问题4/5/7 修复（同次反馈追加，2026-09-01）
+
+- **问题7（echarts 图表导出）**：补上了偏差 5 里明确留下的跟进项——`BaseChart.tsx` 接入了 echarts 的
+  `click` 事件，点击柱状图/饼图等的某个分类，用同一套 `useComponentExport`/导出接口触发该分类明细导出；
+  `ChartContainer.tsx` 同步把 `dashboardId`/`componentId` 传给 `BaseChart`（之前只有 `PivotTable` 有）。
+- **问题5（交叉表子表格）**：功能本身是正常的（触发条件：类别轴/维度至少两级 + 筛选面板对组织维度选中
+  具体值），走查后客户进一步反馈组内展示顺序要调整——组的第一行应该是该组的汇总（科室维度的合计），
+  后面再跟明细行，而不是直接从第一条明细开始。`groupCrossTabRows.ts` 新增按组汇总的 `subtotalRow`
+  计算，`PivotTable.tsx` 渲染时把这行放在组的最前面（`rowSpan` 覆盖汇总行+全部明细行）。
+- **问题4（原始上传库命名）**：确认了"上传人公司/部门/科室/班组"就是客户说的"原始上传库XX"，同一批字段
+  只是显示名不同；客户选择先不改，维持现状。
+
 ## 实际偏差记录
 
 > 完成后，在此记录实现与 spec.md 的偏差，供后续参考。

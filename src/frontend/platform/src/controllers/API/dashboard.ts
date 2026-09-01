@@ -155,10 +155,11 @@ export interface DashboardDataset {
     description: string
     is_commercial_only: boolean
     schema_config: SchemaConfig
-    // F058 AC-07: datasets sharing a non-null dataset_group render as one grouped entry
-    // in the dataset picker (e.g. 用户规模统计/活跃用户规模统计/全员每日参与度 -> "用户数据统计").
-    // "用户反馈统计" is already excluded server-side (is_visible=false), no frontend filter needed.
-    dataset_group?: string | null
+    // F058: "用户反馈统计" is excluded from the picker server-side (is_visible=false); the
+    // three former user-engagement datasets are now genuinely merged into one shared ES
+    // index server-side (see dashboard_config.py / init_dataset.py), so no client-side
+    // grouping/merging logic is needed here anymore — the picker just renders whatever
+    // the (already-filtered) dataset list returns.
 }
 
 // 获取数据集列表

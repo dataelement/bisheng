@@ -133,9 +133,6 @@
     "metrics": "Metrics",
     "virtualMetric": "*",
     "selectDatasetPrompt": "Please select a dataset first",
-    "group": {
-      "user_engagement": "User Engagement"
-    },
     "fieldTypes": {
       "date": "Date",
       "integer": "Integer",
@@ -421,7 +418,7 @@
     "metricCard": "Metric",
     "pivotTable": "Pivot Table"
   },
-  "mid_user_increment": "User Scale Statistics",
+  "mid_user_increment": "User Engagement Statistics",
   "timestamp": {
     "year": "Time(Year)",
     "month": "Time(Month)",

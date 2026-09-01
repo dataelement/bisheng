@@ -10,10 +10,20 @@ export interface PivotTableRow {
   total: number
 }
 
+export interface PivotSubtotalRow {
+  groupLabel: string
+  values: number[]
+  total: number
+}
+
 export interface GroupedPivotRows {
   groupKey: string
   groupLabel: string
   childRows: PivotTableRow[]
+  // The group's own summary row (sum of all its child rows), rendered as the group's
+  // first row — ahead of the individual child rows — per customer feedback: they expect
+  // to see the department-level total before drilling into its 科室 breakdown.
+  subtotalRow: PivotSubtotalRow
 }
 
 export interface DimensionQueryFilter {
@@ -132,19 +142,37 @@ export function mergePersonDedupValues(
     .filter((_value, index) => index !== deptIndex)
 }
 
+function sumChildRows(groupLabel: string, childRows: PivotTableRow[]): PivotSubtotalRow {
+  const columnCount = childRows[0]?.values.length ?? 0
+  const values = Array.from({ length: columnCount }, (_, columnIndex) =>
+    childRows.reduce((sum, row) => sum + (row.values[columnIndex] || 0), 0))
+  const total = childRows.reduce((sum, row) => sum + row.total, 0)
+  return { groupLabel, values, total }
+}
+
 export function groupCrossTabRows(
   rows: PivotTableRow[],
   groupDimensionIndex: number | null,
 ): GroupedPivotRows[] | null {
   if (groupDimensionIndex === null) return null
 
-  const groups = new Map<string, GroupedPivotRows>()
+  const groupOrder: string[] = []
+  const childRowsByGroup = new Map<string, PivotTableRow[]>()
   for (const row of rows) {
     const groupLabel = row.key[groupDimensionIndex] ?? "未分类"
-    if (!groups.has(groupLabel)) {
-      groups.set(groupLabel, { groupKey: groupLabel, groupLabel, childRows: [] })
+    if (!childRowsByGroup.has(groupLabel)) {
+      groupOrder.push(groupLabel)
+      childRowsByGroup.set(groupLabel, [])
     }
-    groups.get(groupLabel)!.childRows.push(row)
+    childRowsByGroup.get(groupLabel)!.push(row)
   }
-  return Array.from(groups.values())
+  return groupOrder.map(groupLabel => {
+    const childRows = childRowsByGroup.get(groupLabel)!
+    return {
+      groupKey: groupLabel,
+      groupLabel,
+      childRows,
+      subtotalRow: sumChildRows(groupLabel, childRows),
+    }
+  })
 }

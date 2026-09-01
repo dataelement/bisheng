@@ -76,6 +76,13 @@ class BaseMidTable(BaseModel):
     _mapping_updates_applied: ClassVar[set[str]] = set()
     _es_client: AsyncElasticsearch = None
     _es_client_sync: Elasticsearch = None
+    # F058 follow-up: when several mid-tables share one physical ES index (see
+    # user_engagement_shared.py), the "latest record time" watermark used to resume
+    # incremental syncs must only look at THIS table's own records — otherwise a
+    # higher-frequency sibling writing into the same index makes the watermark query
+    # always return "just now" and silently starves this table's sync window.
+    # None (the default) preserves the exact prior behavior for every other mid-table.
+    _watermark_filter: dict[str, Any] | None = None
 
     def __init__(self, ensure_sync_index: bool = True, **kwargs: Any):
         super().__init__(**kwargs)
@@ -140,7 +147,9 @@ class BaseMidTable(BaseModel):
 
     def get_latest_record_time_sync(self) -> int | None:
         """Time to fetch the last record"""
-        query = {"size": 1, "sort": [{"timestamp": {"order": "desc"}}], "_source": ["timestamp"]}
+        query: dict[str, Any] = {"size": 1, "sort": [{"timestamp": {"order": "desc"}}], "_source": ["timestamp"]}
+        if self._watermark_filter:
+            query["query"] = {"bool": {"filter": [self._watermark_filter]}}
         response = self._es_client_sync.search(index=self._index_name, body=query)
         hits = response.get("hits", {}).get("hits", [])
         if hits:
