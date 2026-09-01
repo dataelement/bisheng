@@ -37,8 +37,8 @@ catalogs:
       specifier: ^18.2.4
       version: 18.3.7
     bisheng-icons:
-      specifier: ^0.2.33
-      version: 0.2.33
+      specifier: ^0.2.36
+      version: 0.2.36
     class-variance-authority:
       specifier: ^0.6.0
       version: 0.6.1
@@ -193,8 +193,8 @@ importers:
         specifier: ^1.8.4
         version: 1.18.1
       bisheng-icons:
-        specifier: ^0.2.33
-        version: 0.2.33(react@18.3.1)
+        specifier: ^0.2.36
+        version: 0.2.36(react@18.3.1)
       class-variance-authority:
         specifier: ^0.6.0
         version: 0.6.1
@@ -582,7 +582,7 @@ importers:
         version: 1.2.13(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       bisheng-icons:
         specifier: 'catalog:'
-        version: 0.2.33(react@18.3.1)
+        version: 0.2.36(react@18.3.1)
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.6.1
@@ -4943,8 +4943,8 @@ packages:
     resolution: {integrity: sha512-Ceh+7ox5qe7LJuLHoY0feh3pHuUDHAcRUeyL2VYghZwfpkNIy/+8Ocg0a3UuSoYzavmylwuLWQOf3hl0jjMMIw==}
     engines: {node: '>=8'}
 
-  bisheng-icons@0.2.33:
-    resolution: {integrity: sha512-sxwBxr9iXmn17NJoo/dwjbDhcfF9cYkKTjAdYFEGGewUtfAr4nCSXNVSAx8zTxYPody2Hi7/rZfJhy+tSiloaQ==}
+  bisheng-icons@0.2.36:
+    resolution: {integrity: sha512-OwM9iCuTuZsatyvylkL1odefKlLw+dTr7pzKDnTt1j5baOKfhNx+Fwkv1yXxWn4k1OekEs1JA8NgxDolLR44sg==}
     peerDependencies:
       react: '>=17.0.0'
 
@@ -14800,7 +14800,7 @@ snapshots:
 
   binary-extensions@2.3.0: {}
 
-  bisheng-icons@0.2.33(react@18.3.1):
+  bisheng-icons@0.2.36(react@18.3.1):
     dependencies:
       react: 18.3.1
 
