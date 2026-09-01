@@ -1126,7 +1126,7 @@ async def test_runtime_revalidation_rejects_revoked_rename_permission_before_ste
             return_value=[],
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_permission_id_strict",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_action_strict",
             new_callable=AsyncMock,
             return_value=False,
         ) as permission_check,
@@ -1137,7 +1137,7 @@ async def test_runtime_revalidation_rejects_revoked_rename_permission_before_ste
             )
 
     permission_check.assert_awaited_once()
-    assert permission_check.await_args.args == ("knowledge_file", 101, "rename_file")
+    assert permission_check.await_args.args == ("knowledge_file", 101, "rename")
     assert permission_check.await_args.kwargs["space_id"] == 10
     assert permission_check.await_args.kwargs["locked_space"] is not None
     assert await _steps(saga_engine, request_id) == []
@@ -1168,7 +1168,7 @@ async def test_runtime_revalidation_rejects_unpublished_move_target_before_steps
             return_value=[],
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_permission_id_strict",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_action_strict",
             new_callable=AsyncMock,
             return_value=True,
         ),
@@ -1212,7 +1212,7 @@ async def test_cutover_revalidates_revoked_permission_and_compensates_old_name(s
             return_value=[],
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_permission_id_strict",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_action_strict",
             new_callable=AsyncMock,
             side_effect=current_permission,
         ) as permission_check,
@@ -1261,7 +1261,7 @@ async def test_cutover_revalidates_target_space_state_and_compensates_old_positi
             return_value=[],
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_permission_id_strict",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_action_strict",
             new_callable=AsyncMock,
             return_value=True,
         ),
