@@ -2200,7 +2200,10 @@
       "inherited_from": "継承元",
       "parent_folder": "上位フォルダー",
       "parent_knowledge_space": "上位ナレッジスペース",
-      "parent_resource": "上位リソース"
+      "parent_resource": "上位リソース",
+      "invite_pending": "承認待ち",
+      "invite_failed": "権限付与に失敗",
+      "invite_retry": "再試行"
     },
     "scope": {
       "local": "ローカル",
@@ -2234,7 +2237,9 @@
       "remove": "削除",
       "pending": "{{count}} 件の変更を送信予定",
       "submit": "変更を送信",
-      "conflict": "付与バージョンが変更されました。再読み込みしてください。"
+      "conflict": "付与バージョンが変更されました。再読み込みしてください。",
+      "invite_submitted": "{{count}} 件の権限申請を送信しました。承認後に有効になります",
+      "invite_already_pending": "このメンバーの権限申請はすでに承認待ちです"
     },
     "impact": {
       "title": "影響の確認",

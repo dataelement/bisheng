@@ -6,7 +6,8 @@ import {
   getCreationDepartmentChildren,
   getCreationUserGroups,
   searchCreationDepartments,
-  searchCreationUsers,
+  getCreationUserTreeChildren,
+  searchCreationUserTree,
   type SubjectType,
 } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
@@ -97,8 +98,10 @@ export function KnowledgeSpaceSettingsPage() {
   );
   const permissionSearchApi = useMemo<PermissionDraftSearchApi | undefined>(
     () => settings.mode === "create" ? {
-      usersApi: (_type, _id, name, params, config) =>
-        searchCreationUsers("knowledge_space", name, params, config),
+      userTreeChildrenApi: (_type, _id, parentId, params, config) =>
+        getCreationUserTreeChildren("knowledge_space", parentId, params, config),
+      userTreeSearchApi: (_type, _id, keyword, limit, config) =>
+        searchCreationUserTree("knowledge_space", keyword, limit, config),
       departmentChildrenApi: (_type, _id, parentId, config) =>
         getCreationDepartmentChildren("knowledge_space", parentId, config),
       departmentSearchApi: (_type, _id, keyword, limit, config) =>

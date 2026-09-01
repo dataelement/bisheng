@@ -128,6 +128,54 @@ async def list_grant_subject_user_groups(
     return resp_200({"data": rows, "total": len(rows)})
 
 
+@router.get("/resources/{resource_type}/{resource_id}/grant-subjects/users/tree/children")
+async def list_grant_subject_user_tree_children(
+    resource_type: str,
+    resource_id: str,
+    parent_id: int | None = None,
+    user_page: int = Query(1, ge=1),
+    user_page_size: int = Query(100, ge=1, le=500),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
+    """One layer of the person picker's tree: sub-departments and their people.
+
+    Kept separate from the department endpoints because the picker grants to
+    people here; the department tree grants to whole departments.
+    """
+    if resource_type not in GRANT_SUBJECT_RESOURCE_TYPES:
+        return permission_error_response(PermissionDeniedError())
+    try:
+        scope = await _authorized_scope(resource_type, resource_id, login_user)
+    except PermissionDeniedError as error:
+        return permission_error_response(error)
+    return resp_200(
+        await grant_subject_service.list_candidate_user_tree_layer(
+            scope,
+            parent_id=parent_id,
+            user_page=user_page,
+            user_page_size=user_page_size,
+        )
+    )
+
+
+@router.get("/resources/{resource_type}/{resource_id}/grant-subjects/users/tree/search")
+async def search_grant_subject_user_tree(
+    resource_type: str,
+    resource_id: str,
+    keyword: str = "",
+    limit: int = Query(50, ge=1, le=200),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
+    """Search people without leaving the tree: matches come back in place."""
+    if resource_type not in GRANT_SUBJECT_RESOURCE_TYPES:
+        return permission_error_response(PermissionDeniedError())
+    try:
+        scope = await _authorized_scope(resource_type, resource_id, login_user)
+    except PermissionDeniedError as error:
+        return permission_error_response(error)
+    return resp_200(await grant_subject_service.search_candidate_user_tree(scope, keyword=keyword, limit=limit))
+
+
 @router.get("/resources/{resource_type}/{resource_id}/grant-subjects/departments/children")
 async def list_grant_subject_department_children(
     resource_type: str,

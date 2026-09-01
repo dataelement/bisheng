@@ -734,6 +734,40 @@ class ChannelService:
             page_size=page_size,
         )
 
+    async def list_creation_grant_user_tree_children(
+        self,
+        login_user: UserPayload,
+        *,
+        parent_id: int | None,
+        user_page: int,
+        user_page_size: int,
+    ) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access(login_user)
+        return await prospective.list_user_tree_children(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="channel",
+            parent_id=parent_id,
+            user_page=user_page,
+            user_page_size=user_page_size,
+        )
+
+    async def search_creation_grant_user_tree(
+        self,
+        login_user: UserPayload,
+        *,
+        keyword: str,
+        limit: int,
+    ) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access(login_user)
+        return await prospective.search_user_tree(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="channel",
+            keyword=keyword,
+            limit=limit,
+        )
+
     async def list_creation_grant_user_groups(
         self,
         login_user: UserPayload,
@@ -811,9 +845,7 @@ class ChannelService:
                 statuses=[MembershipStatusEnum.ACTIVE],
             )
             channel_ids = [membership.business_id for membership in memberships]
-            existing_channels = (
-                await self.channel_repository.find_channels_by_ids(channel_ids) if channel_ids else []
-            )
+            existing_channels = await self.channel_repository.find_channels_by_ids(channel_ids) if channel_ids else []
             if len(existing_channels) >= effective:
                 raise ChannelCreateLimitExceededError(quota=effective)
         return (
@@ -853,9 +885,7 @@ class ChannelService:
         # Apply mixed sorting: pinned channels first, then sort by the selected criteria within each group
         return self._sort_channels(result, query_data.sort_by)
 
-    async def _get_created_channels(
-        self, login_user: UserPayload, pinned_ids: set[str]
-    ) -> list[ChannelItemResponse]:
+    async def _get_created_channels(self, login_user: UserPayload, pinned_ids: set[str]) -> list[ChannelItemResponse]:
         """Channels created by the current user, straight from the channel table."""
         channels = await self.channel_repository.find_channels_by_user_id(login_user.user_id)
         if not channels:
@@ -885,9 +915,7 @@ class ChannelService:
             )
         return result
 
-    async def _get_followed_channels(
-        self, login_user: UserPayload, pinned_ids: set[str]
-    ) -> list[ChannelItemResponse]:
+    async def _get_followed_channels(self, login_user: UserPayload, pinned_ids: set[str]) -> list[ChannelItemResponse]:
         """Channels the user can see but did not create.
 
         Uses the "visible-ids-first" pattern (F048 ``list_visible_objects``): one
@@ -985,11 +1013,7 @@ class ChannelService:
             fga_elapsed_ms=fga_elapsed_ms,
             total_elapsed_ms=(perf_counter() - started) * 1000,
             returned_count=len(result),
-            alert=(
-                "capacity_80_percent"
-                if len(visible_ids) >= _FOLLOWED_VISIBLE_MAX_RESULTS * 0.8
-                else None
-            ),
+            alert=("capacity_80_percent" if len(visible_ids) >= _FOLLOWED_VISIBLE_MAX_RESULTS * 0.8 else None),
         )
         return result
 

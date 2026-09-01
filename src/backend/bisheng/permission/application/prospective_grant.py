@@ -68,6 +68,45 @@ class ProspectiveGrantApplication:
             include_hidden=self._is_admin(actor, tenant_id),
         )
 
+    async def list_user_tree_children(
+        self,
+        *,
+        actor: PermissionActor,
+        tenant_id: int,
+        resource_type: str,
+        parent_id: int | None,
+        user_page: int,
+        user_page_size: int,
+    ) -> dict[str, object]:
+        """One layer of the person picker's tree, before the resource exists."""
+        self._require_tenant_scope(actor, tenant_id)
+        return await self._subjects.list_user_tree_children(
+            tenant_id=tenant_id,
+            resource_type=resource_type,
+            parent_id=parent_id,
+            user_page=user_page,
+            user_page_size=user_page_size,
+            include_hidden=self._is_admin(actor, tenant_id),
+        )
+
+    async def search_user_tree(
+        self,
+        *,
+        actor: PermissionActor,
+        tenant_id: int,
+        resource_type: str,
+        keyword: str,
+        limit: int,
+    ) -> dict[str, object]:
+        self._require_tenant_scope(actor, tenant_id)
+        return await self._subjects.search_user_tree(
+            tenant_id=tenant_id,
+            resource_type=resource_type,
+            keyword=keyword,
+            limit=limit,
+            include_hidden=self._is_admin(actor, tenant_id),
+        )
+
     async def list_user_groups(
         self,
         *,

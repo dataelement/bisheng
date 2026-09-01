@@ -102,10 +102,15 @@ class F048ResourcePermissionApi:
         resources: ResourceAuthorizationRegistry,
         runtime: F048PermissionRuntime,
         subjects: PermissionSubjectDirectoryPort,
+        invite_gate=None,
     ) -> None:
         self._resources = resources
         self._runtime = runtime
         self._subjects = subjects
+        # F033: personal grants go to approval instead of applying outright.
+        # Left unset the API behaves as plain F048, which is what the unit
+        # tests around the mutation itself want.
+        self._invite_gate = invite_gate
 
     async def get_grantable_models(
         self,
@@ -345,10 +350,35 @@ class F048ResourcePermissionApi:
             actor,
             "manage_permission",
         )
-        add_count = sum(change.op.value == "ADD" for change in request.changes)
+        applied_changes = list(request.changes)
+        pending: list = []
+        if self._invite_gate is not None:
+            context = await self._runtime.build_grant_context(actor=actor, target=target)
+            applied_changes, gated = self._invite_gate.select(
+                target=target,
+                actor=actor,
+                changes=request.changes,
+                grants=context.grants,
+            )
+            pending = await self._invite_gate.raise_invites(
+                target=target,
+                actor=actor,
+                changes=gated,
+                models=context.models,
+            )
+            if not applied_changes:
+                # Nothing left to write; report the resource unchanged rather
+                # than issuing an empty mutation.
+                return {
+                    "resource_version": target.resource_version,
+                    "items": await self._current_items(actor=actor, target=target),
+                    "pending_invites": [item.as_dict() for item in pending],
+                }
+
+        add_count = sum(change.op.value == "ADD" for change in applied_changes)
         source_ids = iter(await self._runtime.allocate_source_ids(add_count))
         canonical: list[CanonicalGrantChange] = []
-        for change in request.changes:
+        for change in applied_changes:
             source = None
             if change.subject is not None:
                 source = await self._subjects.canonical_source(
@@ -409,7 +439,34 @@ class F048ResourcePermissionApi:
         return {
             "resource_version": result.resource_version,
             "items": items,
+            "pending_invites": [item.as_dict() for item in pending],
         }
+
+    async def _current_items(self, *, actor: PermissionActor, target) -> list[dict]:
+        """The resource's grants as they stand, for a mutation that wrote nothing."""
+        context = await self._runtime.build_grant_context(actor=actor, target=target)
+        return [
+            {
+                "assignee_id": str(source.source_id),
+                "assignee_version": source.version,
+                "subject": {"type": source.subject_type, "id": source.subject_id, "name": None},
+                "model": {
+                    "key": grant.model.model_key,
+                    "name": grant.model.model_key,
+                    "level": grant.model.derived_level,
+                    "active": grant.model.active,
+                },
+                "source": {"type": source.source_type, "include_children": source.include_children},
+                "scope": "LOCAL",
+                "inherited_from": None,
+                "protected": source.protected,
+                "editable": not source.protected,
+            }
+            for grant in context.grants
+            if grant.active and grant.model.active
+            for source in grant.sources
+            if source.active
+        ]
 
     async def create_mode_draft(
         self,

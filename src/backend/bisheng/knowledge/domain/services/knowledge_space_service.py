@@ -1467,6 +1467,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
             page_size=page_size,
         )
 
+    async def list_creation_grant_user_tree_children(
+        self,
+        *,
+        parent_id: int | None,
+        user_page: int,
+        user_page_size: int,
+    ) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access()
+        return await prospective.list_user_tree_children(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="knowledge_space",
+            parent_id=parent_id,
+            user_page=user_page,
+            user_page_size=user_page_size,
+        )
+
+    async def search_creation_grant_user_tree(
+        self,
+        *,
+        keyword: str,
+        limit: int,
+    ) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access()
+        return await prospective.search_user_tree(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="knowledge_space",
+            keyword=keyword,
+            limit=limit,
+        )
+
     async def list_creation_grant_user_groups(
         self,
         *,

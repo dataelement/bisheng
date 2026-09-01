@@ -136,9 +136,23 @@ export interface MutateResourceGrantsRequest {
   changes: PermissionGrantMutationChange[];
 }
 
+/**
+ * A grant that was routed to the approval centre instead of being applied.
+ * `invite_existing` means a request for this person was already pending.
+ */
+export interface PendingGrantInvite {
+  subject: { type: "user"; id: string };
+  model_key: string;
+  outcome: "invite_created" | "invite_existing";
+  request_id: number;
+  approval_instance_id: number | null;
+}
+
 export interface MutateResourceGrantsResult {
   resource_version: number;
   items: PermissionGrantAssignee[];
+  /** Absent on resources whose personal grants apply directly. */
+  pending_invites?: PendingGrantInvite[];
 }
 
 export interface CreatePermissionModeDraftRequest {
@@ -280,6 +294,42 @@ export async function searchCreationUsers(
   return { data: list as GrantUser[], total: Number(record?.total ?? list.length) };
 }
 
+export async function getCreationUserTreeChildren(
+  resourceType: CreationResourceType,
+  parentId: number | null,
+  params?: { userPage?: number; userPageSize?: number },
+  config?: PermissionRequestConfig,
+): Promise<GrantUserTreeChildrenResult> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-grant-subjects/users/tree/children`,
+    {
+      params: {
+        parent_id: parentId ?? undefined,
+        user_page: params?.userPage ?? 1,
+        user_page_size: params?.userPageSize ?? 100,
+      },
+      ...withPermissionRequestOptions(config),
+    },
+  );
+  return unwrap<GrantUserTreeChildrenResult>(res) ?? EMPTY_USER_TREE_CHILDREN;
+}
+
+export async function searchCreationUserTree(
+  resourceType: CreationResourceType,
+  keyword: string,
+  limit = 50,
+  config?: PermissionRequestConfig,
+): Promise<GrantDepartmentSearchResult> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-grant-subjects/users/tree/search`,
+    {
+      params: { keyword, limit },
+      ...withPermissionRequestOptions(config),
+    },
+  );
+  return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
+}
+
 export async function getCreationDepartmentChildren(
   resourceType: CreationResourceType,
   parentId: number | null,
@@ -349,6 +399,42 @@ export async function getResourcePermissionContext(
 ): Promise<ResourcePermissionContext> {
   const res = await request.get(
     `${permissionResourcePath(resourceType, resourceId)}/context`,
+    withPermissionRequestOptions(config)
+  );
+  return unwrap(res);
+}
+
+/** An invitee whose grant has not been written yet — see `pending-invites`. */
+export interface PendingInviteItem {
+  subject_type: "user";
+  subject_id: number;
+  subject_name: string;
+  authorization_status: "pending";
+  business_request_id: number;
+  approval_status: string;
+  execution_state: "awaiting_approval" | "queued" | "applying" | "failed";
+  retryable: boolean;
+}
+
+export async function getResourcePendingInvites(
+  resourceType: ResourceType,
+  resourceId: string,
+  config?: PermissionRequestConfig
+): Promise<PendingInviteItem[]> {
+  const res = await request.get(
+    `${permissionResourcePath(resourceType, resourceId)}/pending-invites`,
+    withPermissionRequestOptions(config)
+  );
+  return unwrap(res) ?? [];
+}
+
+export async function retryResourceUserInvite(
+  requestId: number,
+  config?: PermissionRequestConfig
+): Promise<{ retry_dispatched: boolean }> {
+  const res = await request.post(
+    `/api/v1/permissions/resource-user-invites/${requestId}/retry`,
+    {},
     withPermissionRequestOptions(config)
   );
   return unwrap(res);
@@ -542,6 +628,8 @@ export interface GrantDepartmentNode {
   has_children?: boolean;
   matched?: boolean;
   children?: GrantDepartmentNode[];
+  /** Present on the person picker's tree: people sitting directly in this node. */
+  users?: GrantUser[];
 }
 
 export interface GrantDepartmentSearchResult {
@@ -555,6 +643,61 @@ const EMPTY_DEPARTMENT_SEARCH_RESULT: GrantDepartmentSearchResult = {
   total_matches: 0,
   truncated: false,
 };
+
+// ── Person picker tree ──────────────────────────────
+// Departments are navigation; people are leaves under their primary department,
+// so nobody appears twice. Search returns matches in place, keeping the ancestor
+// path so a result stays locatable in the tree.
+
+export interface GrantUserTreeChildrenResult {
+  departments: GrantDepartmentNode[];
+  users: GrantUser[];
+  has_more_users: boolean;
+}
+
+const EMPTY_USER_TREE_CHILDREN: GrantUserTreeChildrenResult = {
+  departments: [],
+  users: [],
+  has_more_users: false,
+};
+
+export async function getResourceGrantUserTreeChildren(
+  resourceType: ResourceType,
+  resourceId: string,
+  parentId: number | null,
+  params?: { userPage?: number; userPageSize?: number },
+  config?: PermissionRequestConfig
+): Promise<GrantUserTreeChildrenResult> {
+  const res = await request.get(
+    `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/users/tree/children`,
+    {
+      params: {
+        parent_id: parentId ?? undefined,
+        user_page: params?.userPage ?? 1,
+        user_page_size: params?.userPageSize ?? 100,
+      },
+      ...withPermissionRequestOptions(config),
+    }
+  );
+  return unwrap<GrantUserTreeChildrenResult>(res) ?? EMPTY_USER_TREE_CHILDREN;
+}
+
+export async function searchResourceGrantUserTree(
+  resourceType: ResourceType,
+  resourceId: string,
+  keyword: string,
+  limit = 50,
+  config?: PermissionRequestConfig
+): Promise<GrantDepartmentSearchResult> {
+  const res = await request.get(
+    `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/users/tree/search`,
+    {
+      params: { keyword, limit },
+      ...withPermissionRequestOptions(config),
+    }
+  );
+  return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
+}
 
 export async function getDepartmentChildren(
   resourceType: ResourceType,

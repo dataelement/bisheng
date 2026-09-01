@@ -22,6 +22,8 @@ import {
   TabsList,
   TabsTrigger,
 } from "~/components/ui";
+import { NotificationSeverity } from "~/common/types";
+import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { ModeHeader } from "./ModeHeader";
 import { PermissionGrantTab } from "./PermissionGrantTab";
@@ -55,6 +57,7 @@ export function PermissionDialog({
   resourceName,
 }: PermissionDialogProps) {
   const localize = useLocalize();
+  const { showToast } = useToastContext();
   const [context, setContext] =
     useState<ResourcePermissionContext | null>(null);
   const [assignees, setAssignees] = useState<PermissionGrantAssignee[]>([]);
@@ -110,6 +113,23 @@ export function PermissionDialog({
     setAssignees(result.items);
     setRefreshKey((current) => current + 1);
     setGrantDialogOpen(false);
+    // Personal grants on gated resources go to approval rather than applying,
+    // so say so — the list will not show them yet.
+    const pending = result.pending_invites ?? [];
+    if (pending.length > 0) {
+      const created = pending.filter(
+        (item) => item.outcome === "invite_created",
+      ).length;
+      showToast?.({
+        message:
+          created > 0
+            ? localize("f048_permission.grant.invite_submitted", {
+                count: created,
+              })
+            : localize("f048_permission.grant.invite_already_pending"),
+        severity: NotificationSeverity.SUCCESS,
+      });
+    }
   };
 
   const handleModeApplied = (result: ApplyPermissionModeDraftResult) => {

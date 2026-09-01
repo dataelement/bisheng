@@ -6,7 +6,8 @@ import {
   getCreationDepartmentChildren,
   getCreationUserGroups,
   searchCreationDepartments,
-  searchCreationUsers,
+  getCreationUserTreeChildren,
+  searchCreationUserTree,
   type SubjectType,
 } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
@@ -67,8 +68,20 @@ export function ChannelSettingsPage() {
     () =>
       !isEditMode
         ? {
-            usersApi: (_resourceType, _resourceId, name, params, config) =>
-              searchCreationUsers("channel", name, params, config),
+            userTreeChildrenApi: (
+              _resourceType,
+              _resourceId,
+              parentId,
+              params,
+              config,
+            ) => getCreationUserTreeChildren("channel", parentId, params, config),
+            userTreeSearchApi: (
+              _resourceType,
+              _resourceId,
+              keyword,
+              limit,
+              config,
+            ) => searchCreationUserTree("channel", keyword, limit, config),
             departmentChildrenApi: (
               _resourceType,
               _resourceId,

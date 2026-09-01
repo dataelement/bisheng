@@ -63,6 +63,36 @@ class TenantPermissionSubjectDirectory:
         total = await grant_subject_service.count_candidate_users(scope, keyword=keyword)
         return {"data": rows, "total": total}
 
+    async def list_user_tree_children(
+        self,
+        *,
+        tenant_id: int,
+        resource_type: str,
+        parent_id: int | None,
+        user_page: int,
+        user_page_size: int,
+        include_hidden: bool = False,
+    ) -> dict[str, object]:
+        scope = self._prospective_scope(tenant_id, resource_type, include_hidden=include_hidden)
+        return await grant_subject_service.list_candidate_user_tree_layer(
+            scope,
+            parent_id=parent_id,
+            user_page=user_page,
+            user_page_size=user_page_size,
+        )
+
+    async def search_user_tree(
+        self,
+        *,
+        tenant_id: int,
+        resource_type: str,
+        keyword: str,
+        limit: int,
+        include_hidden: bool = False,
+    ) -> dict[str, object]:
+        scope = self._prospective_scope(tenant_id, resource_type, include_hidden=include_hidden)
+        return await grant_subject_service.search_candidate_user_tree(scope, keyword=keyword, limit=limit)
+
     async def list_user_groups(
         self,
         *,

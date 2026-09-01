@@ -218,10 +218,16 @@ async def initialize_f048_api_runtime(
         resources=registry,
         permission=runtime,
     )
+    from bisheng.permission.domain.services.personal_grant_invite_gate import (
+        PersonalGrantInviteGate,
+    )
+
     resource_api = F048ResourcePermissionApi(
         resources=registry,
         runtime=runtime,
         subjects=TenantPermissionSubjectDirectory(),
+        # F033: a grant aimed at somebody new goes to the approval centre.
+        invite_gate=PersonalGrantInviteGate(),
     )
     catalog_state = SqlCatalogState()
     catalog_api = F048CatalogApi(

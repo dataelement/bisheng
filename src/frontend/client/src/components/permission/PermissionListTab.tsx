@@ -13,13 +13,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   getGrantablePermissionModels,
   getMyResourcePermissions,
+  getResourcePendingInvites,
   getResourcePermissionGrants,
   mutateResourceGrants,
+  retryResourceUserInvite,
 } from "~/api/permission";
 import type {
   GrantablePermissionModel,
   MutateResourceGrantsResult,
   MyResourcePermissions,
+  PendingInviteItem,
   PermissionGrantAssignee,
   ResourcePermissionContext,
   ResourceType,
@@ -236,6 +239,9 @@ export function PermissionListTab({
   const localize = useLocalize();
   const confirm = useConfirm();
   const [assignees, setAssignees] = useState<PermissionGrantAssignee[]>([]);
+  // People whose grant is still in approval: they hold nothing yet, so the
+  // grant list does not know about them.
+  const [pendingInvites, setPendingInvites] = useState<PendingInviteItem[]>([]);
   const [models, setModels] = useState<GrantablePermissionModel[]>([]);
   const [summary, setSummary] = useState<MyResourcePermissions | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -327,6 +333,20 @@ export function PermissionListTab({
         if (!cancelled) setLoading(false);
       });
 
+    if (context.can_manage_permission) {
+      void getResourcePendingInvites(resourceType, resourceId)
+        .then((items) => {
+          if (!cancelled) setPendingInvites(items);
+        })
+        // A resource whose grants apply directly has no such list; an empty
+        // one is the right answer, not a reason to fail the whole tab.
+        .catch(() => {
+          if (!cancelled) setPendingInvites([]);
+        });
+    } else {
+      setPendingInvites([]);
+    }
+
     return () => {
       cancelled = true;
     };
@@ -337,6 +357,34 @@ export function PermissionListTab({
     resourceId,
     resourceType,
   ]);
+
+  const [retryingRequestId, setRetryingRequestId] = useState<number | null>(
+    null,
+  );
+
+  // Invites only ever concern people, so they show on the user tab alone.
+  const visiblePendingInvites = useMemo(() => {
+    if (fixedSubjectType !== "user") return [];
+    const query = searchQuery.trim().toLowerCase();
+    return pendingInvites.filter(
+      (invite) =>
+        !query || invite.subject_name.toLowerCase().includes(query),
+    );
+  }, [fixedSubjectType, pendingInvites, searchQuery]);
+
+  const handleRetryInvite = async (invite: PendingInviteItem) => {
+    if (retryingRequestId !== null) return;
+    setRetryingRequestId(invite.business_request_id);
+    try {
+      await retryResourceUserInvite(invite.business_request_id);
+      const items = await getResourcePendingInvites(resourceType, resourceId);
+      setPendingInvites(items);
+    } catch {
+      setFailed(true);
+    } finally {
+      setRetryingRequestId(null);
+    }
+  };
 
   const visibleAssignees = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -480,7 +528,37 @@ export function PermissionListTab({
               onRemove={(item) => void handleRemove(item)}
             />
           ))}
-          {visibleAssignees.length === 0 && (
+          {visiblePendingInvites.map((invite) => (
+            <div
+              key={invite.business_request_id}
+              className="flex items-center justify-between gap-2 border-b border-border-base py-3 last:border-b-0"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <User aria-hidden="true" className="size-4 shrink-0 text-text-3" />
+                <span className="truncate text-body-sm text-text-2">
+                  {invite.subject_name}
+                </span>
+                <span className="shrink-0 rounded-sm bg-fill-2 px-1.5 py-0.5 text-caption text-text-3">
+                  {invite.execution_state === "failed"
+                    ? localize("f048_permission.roster.invite_failed")
+                    : localize("f048_permission.roster.invite_pending")}
+                </span>
+              </div>
+              {invite.retryable && (
+                <Button
+                  type="button"
+                  color="default"
+                  variant="text"
+                  size="sm"
+                  disabled={retryingRequestId === invite.business_request_id}
+                  onClick={() => void handleRetryInvite(invite)}
+                >
+                  {localize("f048_permission.roster.invite_retry")}
+                </Button>
+              )}
+            </div>
+          ))}
+          {visibleAssignees.length === 0 && visiblePendingInvites.length === 0 && (
             <p className="py-10 text-center text-sm text-[#818181]">
               {searchQuery.trim()
                 ? localize("com_permission.empty_search")

@@ -2206,7 +2206,10 @@
       "inherited_from": "继承自",
       "parent_folder": "上级文件夹",
       "parent_knowledge_space": "上级知识空间",
-      "parent_resource": "上级资源"
+      "parent_resource": "上级资源",
+      "invite_pending": "审批中",
+      "invite_failed": "授权失败",
+      "invite_retry": "重试"
     },
     "scope": {
       "local": "本级",
@@ -2240,7 +2243,9 @@
       "remove": "移除",
       "pending": "待提交 {{count}} 项变更",
       "submit": "提交变更",
-      "conflict": "授权版本已变化，请刷新后重试"
+      "conflict": "授权版本已变化，请刷新后重试",
+      "invite_submitted": "已提交 {{count}} 条授权申请，审批通过后生效",
+      "invite_already_pending": "该成员的授权申请已在审批中"
     },
     "impact": {
       "title": "影响确认",

@@ -67,6 +67,41 @@ async def list_creation_grant_users(
     )
 
 
+@router.get("/creation-grant-subjects/users/tree/children")
+async def list_creation_grant_user_tree_children(
+    parent_id: int | None = None,
+    user_page: int = Query(1, ge=1),
+    user_page_size: int = Query(100, ge=1, le=500),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    channel_service: "ChannelService" = Depends(get_channel_service),
+):
+    """The person picker's tree while the channel is still being created."""
+    return resp_200(
+        data=await channel_service.list_creation_grant_user_tree_children(
+            login_user,
+            parent_id=parent_id,
+            user_page=user_page,
+            user_page_size=user_page_size,
+        )
+    )
+
+
+@router.get("/creation-grant-subjects/users/tree/search")
+async def search_creation_grant_user_tree(
+    keyword: str = "",
+    limit: int = Query(50, ge=1, le=200),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    channel_service: "ChannelService" = Depends(get_channel_service),
+):
+    return resp_200(
+        data=await channel_service.search_creation_grant_user_tree(
+            login_user,
+            keyword=keyword,
+            limit=limit,
+        )
+    )
+
+
 @router.get("/creation-grant-subjects/user-groups")
 async def list_creation_grant_user_groups(
     keyword: str = "",
@@ -121,9 +156,7 @@ async def get_creation_grant_department_path(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     channel_service: "ChannelService" = Depends(get_channel_service),
 ):
-    return resp_200(
-        data=await channel_service.get_creation_grant_department_path(login_user, department_id)
-    )
+    return resp_200(data=await channel_service.get_creation_grant_department_path(login_user, department_id))
 
 
 @router.get("/list_sources")

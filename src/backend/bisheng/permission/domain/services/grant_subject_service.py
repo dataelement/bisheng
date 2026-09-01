@@ -280,6 +280,203 @@ async def search_candidate_departments(
     return {"roots": roots, "total_matches": len(matches), "truncated": truncated}
 
 
+async def list_candidate_user_tree_layer(
+    scope: GrantSubjectScope,
+    *,
+    parent_id: int | None,
+    user_page: int,
+    user_page_size: int,
+) -> dict:
+    """One layer of the person picker's tree: child departments plus the people
+    who sit directly in ``parent_id``.
+
+    A person is listed only under their primary department, so browsing the
+    tree never shows the same person twice. The root layer carries no people:
+    a tenant root is a container, not a department anyone belongs to.
+    """
+
+    departments = await list_candidate_department_layer(scope, parent_id=parent_id)
+    if parent_id is None:
+        return {"departments": departments, "users": [], "has_more_users": False}
+
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            department = (
+                await session.exec(
+                    select(Department).where(
+                        Department.id == parent_id,
+                        Department.tenant_id == scope.tenant_id,
+                        Department.status == "active",
+                    )
+                )
+            ).first()
+            # Reached by id, so the department must be re-checked against the
+            # resource's scope; a direct call must not widen it (F033).
+            if department is None or (
+                scope.department_path is not None and not str(department.path).startswith(scope.department_path)
+            ):
+                return {"departments": departments, "users": [], "has_more_users": False}
+
+            in_tenant = (
+                select(UserTenant.id)
+                .where(
+                    UserTenant.user_id == User.user_id,
+                    UserTenant.tenant_id == scope.tenant_id,
+                    UserTenant.status == "active",
+                )
+                .exists()
+            )
+            statement = (
+                select(User.user_id, User.user_name, User.external_id)
+                .join(UserDepartment, UserDepartment.user_id == User.user_id)
+                .where(
+                    UserDepartment.department_id == parent_id,
+                    UserDepartment.is_primary == 1,
+                    User.delete == 0,
+                    in_tenant,
+                )
+                .order_by(col(User.user_id).desc())
+                .offset(max(0, (user_page - 1) * user_page_size))
+                .limit(user_page_size + 1)
+            )
+            if not scope.include_hidden:
+                statement = statement.where(User.is_hidden != _HIDDEN_USER)
+            rows = list((await session.exec(statement)).all())
+
+    has_more = len(rows) > user_page_size
+    return {
+        "departments": departments,
+        "users": [
+            {
+                "user_id": int(row.user_id),
+                "user_name": row.user_name,
+                "external_id": row.external_id,
+            }
+            for row in rows[:user_page_size]
+        ],
+        "has_more_users": has_more,
+    }
+
+
+async def search_candidate_user_tree(
+    scope: GrantSubjectScope,
+    *,
+    keyword: str,
+    limit: int,
+) -> dict:
+    """Search people and return them in place: the pruned department tree from
+    the roots down to each match, with the person hanging off their primary
+    department.
+
+    Somebody with no primary department, or one outside the resource's scope,
+    cannot be placed in the tree and is left out — the same boundary browsing
+    enforces.
+    """
+
+    empty = {"roots": [], "total_matches": 0, "truncated": False}
+    keyword = (keyword or "").strip()
+    if not keyword:
+        return empty
+
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            in_tenant = (
+                select(UserTenant.id)
+                .where(
+                    UserTenant.user_id == User.user_id,
+                    UserTenant.tenant_id == scope.tenant_id,
+                    UserTenant.status == "active",
+                )
+                .exists()
+            )
+            statement = (
+                select(User.user_id, User.user_name, User.external_id)
+                .where(User.delete == 0, in_tenant, col(User.user_name).like(f"{keyword}%"))
+                .order_by(col(User.user_id).desc())
+                .limit(limit + 1)
+            )
+            if not scope.include_hidden:
+                statement = statement.where(User.is_hidden != _HIDDEN_USER)
+            if scope.department_path is not None:
+                in_subtree = (
+                    select(UserDepartment.id)
+                    .join(Department, Department.id == UserDepartment.department_id)
+                    .where(
+                        UserDepartment.user_id == User.user_id,
+                        # Only the primary membership counts: matching on a
+                        # secondary one would spend a result slot on somebody
+                        # who is then dropped for sitting outside the scope.
+                        UserDepartment.is_primary == 1,
+                        col(Department.path).like(f"{scope.department_path}%"),
+                        Department.status == "active",
+                    )
+                    .exists()
+                )
+                statement = statement.where(in_subtree)
+            rows = list((await session.exec(statement)).all())
+
+    truncated = len(rows) > limit
+    rows = rows[:limit]
+    if not rows:
+        return empty
+
+    primary_department = await _primary_department_ids([int(row.user_id) for row in rows])
+    department_ids = sorted(set(primary_department.values()))
+    departments = await DepartmentDao.aget_by_ids(department_ids) if department_ids else []
+    seeds = [
+        item
+        for item in departments
+        if int(item.tenant_id) == scope.tenant_id
+        and (scope.department_path is None or str(item.path).startswith(scope.department_path))
+    ]
+    roots = await DepartmentService.abuild_forest_within_subtree(
+        seeds,
+        {int(item.id) for item in seeds if item.id is not None},
+        confined_to_path=scope.department_path,
+    )
+
+    node_by_id: dict[int, dict] = {}
+
+    def _index(nodes: list[dict]) -> None:
+        for node in nodes:
+            node.setdefault("users", [])
+            node_by_id[int(node["id"])] = node
+            _index(node.get("children") or [])
+
+    _index(roots)
+
+    placed = 0
+    for row in rows:
+        node = node_by_id.get(primary_department.get(int(row.user_id), -1))
+        if node is None:
+            continue
+        node["users"].append(
+            {
+                "user_id": int(row.user_id),
+                "user_name": row.user_name,
+                "external_id": row.external_id,
+            }
+        )
+        placed += 1
+    return {"roots": roots, "total_matches": placed, "truncated": truncated}
+
+
+async def _primary_department_ids(user_ids: list[int]) -> dict[int, int]:
+    if not user_ids:
+        return {}
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            rows = (
+                await session.exec(
+                    select(UserDepartment.user_id, UserDepartment.department_id).where(
+                        col(UserDepartment.user_id).in_(user_ids),
+                        UserDepartment.is_primary == 1,
+                    )
+                )
+            ).all()
+    return {int(row.user_id): int(row.department_id) for row in rows}
+
+
 async def get_candidate_department_path(scope: GrantSubjectScope, *, dept_id: int) -> dict:
     """Reveal one department: the pruned tree from the root down to it.
 

@@ -2276,7 +2276,10 @@
       "inherited_from": "Inherited from",
       "parent_folder": "Parent folder",
       "parent_knowledge_space": "Parent knowledge space",
-      "parent_resource": "Parent resource"
+      "parent_resource": "Parent resource",
+      "invite_pending": "Awaiting approval",
+      "invite_failed": "Grant failed",
+      "invite_retry": "Retry"
     },
     "scope": {
       "local": "Local",
@@ -2310,7 +2313,9 @@
       "remove": "Remove",
       "pending": "{{count}} pending changes",
       "submit": "Submit Changes",
-      "conflict": "The grant version changed. Refresh and try again."
+      "conflict": "The grant version changed. Refresh and try again.",
+      "invite_submitted": "{{count}} access request(s) submitted; access starts once approved",
+      "invite_already_pending": "An access request for this member is already awaiting approval"
     },
     "impact": {
       "title": "Impact Confirmation",

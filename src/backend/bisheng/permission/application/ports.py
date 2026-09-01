@@ -39,6 +39,27 @@ class ProspectiveGrantSubjectDirectoryPort(Protocol):
         include_hidden: bool = False,
     ) -> dict[str, object]: ...
 
+    async def list_user_tree_children(
+        self,
+        *,
+        tenant_id: int,
+        resource_type: str,
+        parent_id: int | None,
+        user_page: int,
+        user_page_size: int,
+        include_hidden: bool = False,
+    ) -> dict[str, object]: ...
+
+    async def search_user_tree(
+        self,
+        *,
+        tenant_id: int,
+        resource_type: str,
+        keyword: str,
+        limit: int,
+        include_hidden: bool = False,
+    ) -> dict[str, object]: ...
+
     async def list_user_groups(
         self,
         *,

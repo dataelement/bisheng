@@ -179,3 +179,63 @@ async def apply_permission_mode_draft(
     except BaseErrorCode as error:
         return permission_error_response(error)
     return resp_200(data)
+
+
+@router.get(
+    "/resources/{resource_type}/{resource_id}/pending-invites",
+    response_model=UnifiedResponseModel,
+)
+async def list_resource_pending_invites(
+    resource_type: str,
+    resource_id: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
+    """People invited to this resource whose grant is still awaiting approval.
+
+    They hold nothing yet, so they are absent from the grant list; the member
+    UI shows them separately so an administrator can see an invitation is in
+    flight instead of re-inviting.
+    """
+    from bisheng.permission.domain.services.resource_user_invite_application_service import (
+        build_runtime_resource_user_invite_application_service,
+    )
+
+    try:
+        service = build_runtime_resource_user_invite_application_service()
+        items = await service.list_pending_invite_items(
+            tenant_id=int(login_user.tenant_id),
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )
+    except BaseErrorCode as error:
+        return permission_error_response(error)
+    return resp_200([item.model_dump() for item in items])
+
+
+@router.post(
+    "/resource-user-invites/{request_id}/retry",
+    response_model=UnifiedResponseModel,
+)
+async def retry_resource_user_invite(
+    request_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
+    """Re-dispatch an approved invite whose grant execution failed.
+
+    Execution can fail on facts that have since been fixed (a stale projection,
+    a transient write). Retrying re-runs the same idempotent command rather
+    than asking the approver to decide again.
+    """
+    from bisheng.permission.domain.services.resource_user_invite_application_service import (
+        build_runtime_resource_user_invite_application_service,
+    )
+
+    try:
+        service = build_runtime_resource_user_invite_application_service()
+        result = await service.retry_failed_invite(
+            tenant_id=int(login_user.tenant_id),
+            request_id=request_id,
+        )
+    except BaseErrorCode as error:
+        return permission_error_response(error)
+    return resp_200(result.model_dump())

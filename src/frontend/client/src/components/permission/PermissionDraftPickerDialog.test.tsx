@@ -19,7 +19,10 @@ describe("F050 permission subject picker contract", () => {
 
   it("uses injectable create/edit candidate adapters and F048 models", () => {
     expect(source).toContain("searchApi?: PermissionDraftSearchApi");
-    expect(source).toContain("usersApi={searchApi?.usersApi}");
+    expect(source).toContain(
+      "grantUserTreeChildrenApi={searchApi?.userTreeChildrenApi}",
+    );
+    expect(source).toContain("grantUserTreeSearchApi={searchApi?.userTreeSearchApi}");
     expect(source).toContain("departmentChildrenApi={searchApi?.departmentChildrenApi}");
     expect(source).toContain("userGroupsApi={searchApi?.userGroupsApi}");
     expect(source).toContain("modelKey: activeModel.id");
