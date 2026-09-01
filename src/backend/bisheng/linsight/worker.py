@@ -41,6 +41,7 @@ def encode_queue_item(
     resume: bool = False,
     user_input: Any = None,
     continue_question: str | None = None,
+    tenant_id: int | None = None,
 ) -> dict:
     """Build a Linsight queue item.
 
@@ -54,12 +55,15 @@ def encode_queue_item(
     the SAME thread (thread_id = session_version_id) so the agent keeps prior
     context. Distinct from ``resume`` (which answers a parked ask_user interrupt).
     """
-    return {
+    item = {
         "session_version_id": session_version_id,
         "resume": resume,
         "user_input": user_input,
         "continue_question": continue_question,
     }
+    if tenant_id is not None:
+        item["tenant_id"] = tenant_id
+    return item
 
 
 def parse_queue_item(raw: Any) -> dict:
@@ -74,9 +78,16 @@ def parse_queue_item(raw: Any) -> dict:
             "resume": bool(raw.get("resume", False)),
             "user_input": raw.get("user_input"),
             "continue_question": raw.get("continue_question"),
+            "tenant_id": raw.get("tenant_id"),
         }
     # Legacy bare-string item == new task.
-    return {"session_version_id": raw, "resume": False, "user_input": None, "continue_question": None}
+    return {
+        "session_version_id": raw,
+        "resume": False,
+        "user_input": None,
+        "continue_question": None,
+        "tenant_id": None,
+    }
 
 
 def _item_session_version_id(raw: Any) -> str | None:
@@ -91,10 +102,11 @@ def _item_is_resume(raw: Any) -> bool:
 class NodeManager:
     _instance = None
 
-    def __init__(self, redis_client, node_id):
+    def __init__(self, redis_client, node_id, fga_manager=None):
         # generate unique node ID
         self.node_id = node_id
         self.redis: RedisClient = redis_client
+        self.fga_manager = fga_manager
         self.heartbeat_key = f"linsight:node:heartbeat:{self.node_id}"
         # Heartbeat interval (seconds)
         self.interval = 5
@@ -102,10 +114,12 @@ class NodeManager:
         self.ttl = 15
 
     @classmethod
-    def get_instance(cls, node_id):
+    def get_instance(cls, node_id, fga_manager=None):
         if not cls._instance:
             redis_client = get_redis_client_sync()
-            cls._instance = cls(redis_client, node_id)
+            cls._instance = cls(redis_client, node_id, fga_manager)
+        elif fga_manager is not None:
+            cls._instance.fga_manager = fga_manager
         return cls._instance
 
     async def start_heartbeat(self):
@@ -115,20 +129,30 @@ class NodeManager:
             try:
                 # set heartbeat key with expiration
                 await self.redis.aset(self.heartbeat_key, "1", expiration=self.ttl)
+                if self.fga_manager is not None:
+                    healthy = await self.fga_manager.heartbeat()
+                    if not healthy:
+                        raise RuntimeError("Linsight F048 runtime heartbeat is not ready")
             except Exception as e:
                 logger.error(f"Heartbeat failed: {e}")
             await asyncio.sleep(self.interval)
 
     async def register_task_ownership(self, session_version_id):
-        """Register task ownership to this node"""
+        """Register task ownership to this node.
+
+        The key is never deleted explicitly — it expires via its TTL, and a
+        re-queued task (resume / follow-up) overwrites it with the node that
+        picked it up. Do NOT add a release-on-park counterpart: park-and-release
+        frees the concurrency semaphore, not the ownership key. Deleting the key
+        while the session row is still IN_PROGRESS makes the worker-startup sweep
+        (``check_and_terminate_incomplete_tasks``) hit its ``not owner_node_id``
+        branch and fail the task with "Worker node crash detected". Parked tasks
+        stay out of that sweep via the WAITING_FOR_USER_INPUT session status
+        instead (see ``task_exec._handle_need_user_input``).
+        """
         key = f"linsight:task:owner:{session_version_id}"
         # Set the node ID as the owner of the task with a TTL
         await self.redis.aset(key, self.node_id, expiration=86400)  # 1 day expiration
-
-    async def release_task_ownership(self, session_version_id):
-        """Release task ownership"""
-        key = f"linsight:task:owner:{session_version_id}"
-        await self.redis.adelete(key)
 
     async def is_node_alive(self, target_node_id):
         """Check if a target node is alive based on its heartbeat"""
@@ -143,7 +167,7 @@ class NodeManager:
 class LinsightQueue:
     def __init__(self, name, namespace, redis):
         self.__db: RedisClient = redis
-        self.key = "%s:%s" % (namespace, name)
+        self.key = f"{namespace}:{name}"
 
     async def qsize(self):
         return await self.__db.allen(self.key)  # Back to queuelistNumber of inner elements
@@ -211,7 +235,11 @@ class LinsightQueue:
 
 
 class ScheduleCenterProcess(Process):
-    def __init__(self, max_concurrency: ValueProxy = None, node_id: ValueProxy = None):
+    def __init__(
+        self,
+        max_concurrency: ValueProxy | None = None,
+        node_id: ValueProxy | None = None,
+    ):
         """
         Dispatch Center Process
         :param max_concurrency: Maximum number of concurrent tasks allowed per process
@@ -222,6 +250,7 @@ class ScheduleCenterProcess(Process):
         # Semaphores
         self.semaphore: asyncio.Semaphore | None = None
         self.node_manager: NodeManager | None = None
+        self.heartbeat_task: asyncio.Task | None = None
         # Strong refs to the fire-and-forget stranded-session repair tasks. asyncio
         # only holds a weak reference to a running task, so without this the loop is
         # free to garbage-collect a repair mid-flight and the session it was meant
@@ -233,9 +262,9 @@ class ScheduleCenterProcess(Process):
 
     def handle_task_result(self, task: asyncio.Task, session_version_id: str | None = None):
         try:
-            task.result()  # If there is an exception, it will be thrown here
+            task.result()  # Re-raise task exceptions in the callback.
         except Exception as e:
-            logger.error(f"Task failed with exception: {e}", exc_info=True)
+            logger.exception("Task failed with exception: %s", e)
             # task_exec owns the normal failure path; reaching here means it could
             # not record a terminal status (its own handler raised, the worker was
             # cancelled, ...). Without this net the session stays IN_PROGRESS and
@@ -287,7 +316,7 @@ class ScheduleCenterProcess(Process):
                 f"Force-failed stranded session {session_version_id} (task died before recording a terminal status)"
             )
         except Exception:
-            logger.error(f"Failed to force-fail stranded session {session_version_id}", exc_info=True)
+            logger.exception("Failed to force-fail stranded session %s", session_version_id)
 
     def _release_semaphore(self):
         """Release the concurrency slot once, guarding against over-release."""
@@ -351,17 +380,30 @@ class ScheduleCenterProcess(Process):
         await node_manager.register_task_ownership(session_version_id)
 
         exec_task = LinsightWorkflowTask()
+        tenant_kwargs = {"tenant_id": item["tenant_id"]} if item.get("tenant_id") is not None else {}
         if item.get("continue_question") is not None:
             logger.info(
                 f"Continuing conversation session_version_id: {session_version_id} on node {node_manager.node_id}"
             )
-            task = asyncio.create_task(exec_task.async_continue(session_version_id, question=item["continue_question"]))
+            task = asyncio.create_task(
+                exec_task.async_continue(
+                    session_version_id,
+                    question=item["continue_question"],
+                    **tenant_kwargs,
+                )
+            )
         elif item["resume"]:
             logger.info(f"Resuming session_version_id: {session_version_id} on node {node_manager.node_id}")
-            task = asyncio.create_task(exec_task.async_resume(session_version_id, user_input=item["user_input"]))
+            task = asyncio.create_task(
+                exec_task.async_resume(
+                    session_version_id,
+                    user_input=item["user_input"],
+                    **tenant_kwargs,
+                )
+            )
         else:
             logger.info(f"Processing session_version_id: {session_version_id} on node {node_manager.node_id}")
-            task = asyncio.create_task(exec_task.async_run(session_version_id))
+            task = asyncio.create_task(exec_task.async_run(session_version_id, **tenant_kwargs))
 
         # When the task finishes OR parks (interrupt -> coroutine returns), the
         # done callback releases the slot. park-and-release therefore frees the
@@ -409,9 +451,38 @@ class ScheduleCenterProcess(Process):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
+        if settings.openfga.enabled:
+            from bisheng.api.services.f048_permission_runtime import (
+                initialize_f048_worker_runtime,
+            )
+            from bisheng.core.context import initialize_app_context
+            from bisheng.department.domain.services.department_projection_scope import (
+                get_department_projection_scope,
+                register_department_projection_runtime_context,
+            )
+            from bisheng.permission.application.process_runtime import (
+                register_f048_permission_runtime_context,
+            )
+
+            loop.run_until_complete(initialize_app_context(settings, instance_role="linsight"))
+
+            async def initialize(client):
+                return await initialize_f048_worker_runtime(
+                    client,
+                    external_scopes={
+                        "department": get_department_projection_scope(),
+                    },
+                )
+
+            register_f048_permission_runtime_context(initialize)
+            register_department_projection_runtime_context()
+
         # 启动心跳
-        self.node_manager = NodeManager.get_instance(self.node_id.value)
-        loop.create_task(self.node_manager.start_heartbeat())
+        self.node_manager = NodeManager.get_instance(
+            self.node_id.value,
+            fga_manager=None,
+        )
+        self.heartbeat_task = loop.create_task(self.node_manager.start_heartbeat())
 
         # 启动主逻辑
         for _ in range(10000):  # 你的原始逻辑
@@ -419,10 +490,17 @@ class ScheduleCenterProcess(Process):
                 loop.run_until_complete(self.async_run())
             except Exception as e:
                 logger.error(f"Unhandled exception in main loop: {e}")
+        from bisheng.core.context import close_app_context
+
+        loop.run_until_complete(close_app_context())
         loop.close()
 
 
-def start_schedule_center_process(worker_num: int = 4, max_concurrency: ValueProxy = None, node_id: ValueProxy = None):
+def start_schedule_center_process(
+    worker_num: int = 4,
+    max_concurrency: ValueProxy | None = None,
+    node_id: ValueProxy | None = None,
+):
     """
 
     Start Schedule Center Process Workers

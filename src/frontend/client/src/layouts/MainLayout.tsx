@@ -38,10 +38,26 @@ interface SidebarItemProps {
 }
 
 function SidebarItem({ icon, activeIcon, to, active, label, showLabel = false, onNavigate }: SidebarItemProps) {
+  const location = useLocation();
+  // Re-navigating to the path we are already on is a no-op the user cannot see,
+  // but react-router still mints a fresh location.key and every effect keyed on
+  // it re-runs. The 首页 entry points at `lastSectionPaths.home`, which IS the
+  // current `/c/<id>` while a chat is open — so an idle click used to churn chat
+  // state for nothing. Swallow it here, the way Convo does for the conversation
+  // list.
+  const handleClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    // Still fires on a same-path click: collapsing the H5 drawer is what the
+    // user asked for, only the redundant navigation is dropped.
+    onNavigate?.();
+    if (to === location.pathname) {
+      event.preventDefault();
+    }
+  };
+
   return (
     <NavLink
       to={to}
-      onClick={onNavigate}
+      onClick={handleClick}
       className={cn(
         'flex cursor-pointer rounded-lg transition-colors hover:bg-fill-2',
         showLabel
@@ -444,6 +460,11 @@ export default function MainLayout() {
   const cacheKey = (() => {
     if (pathname.startsWith('/menu-unavailable')) return 'menu_unavailable_tab';
     if (/^\/linsight(\/|$)/.test(pathname)) return 'linsight_tab';
+    // Media playback lives under /c but is a page of its own, so it needs a key
+    // of its own: sharing the chat key means opening a video replaces the cached
+    // chat tree under that key, and coming back rebuilds the chat from scratch —
+    // losing the attachments the user had staged but not yet sent.
+    if (pathname.startsWith('/c/media-playback')) return 'media_playback_tab';
     if (/^\/c(\/|$)/.test(pathname)) return 'chat_tab';
     if (/^\/(apps|app)(\/|$)/.test(pathname)) return 'apps_tab';
     if (/^\/channel(\/|$)/.test(pathname)) return 'channel_tab';
@@ -523,7 +544,7 @@ export default function MainLayout() {
               !isMobile && 'rounded-xl',
               // Match the main panel: when the left system menu is revealed, round
               // the exposed left edge and clip content to it (parity with KeepAlive branch).
-              systemMenuRevealing && 'rounded-l-[24px]',
+              systemMenuRevealing && 'rounded-l-3xl',
               isMobile
                 ? 'h-auto min-h-[var(--bs-dvh,100dvh)] overflow-visible'
                 : 'scrollbar-os h-[calc(var(--bs-dvh,100dvh)-16px)] overflow-y-auto overscroll-y-none',
@@ -557,12 +578,18 @@ export default function MainLayout() {
         >
           <div
             ref={!isMobile && !innerScrollShell ? outletScrollRevealRef : undefined}
+            // Anchor + handle for panels that must cover the conversation while
+            // leaving the rail alone — media playback is the one today. They
+            // portal in here and lay themselves out against this box, so they
+            // follow the panel's own geometry instead of guessing at the rail's
+            // width.
+            data-workbench-panel
             className={cn(
-              'bg-white shadow-[0px_0px_20px_0px_#07225808]',
+              'relative bg-white shadow-[0px_0px_20px_0px_#07225808]',
               !isMobile && 'rounded-xl',
               // When the left system menu is revealed, the panel slides right and
               // exposes its left edge — round the left corners to 24px.
-              systemMenuRevealing && 'rounded-l-[24px]',
+              systemMenuRevealing && 'rounded-l-3xl',
               isMobile
                 ? innerScrollShell
                   ? 'flex h-[var(--bs-dvh,100dvh)] min-h-0 w-full flex-col overflow-hidden'

@@ -13,10 +13,6 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Outlined } from "bisheng-icons";
 import { getFileDownloadApi, getFilePreviewApi } from "~/api/knowledge";
 import type { KnowledgeFilePreview } from "~/api/knowledge";
-import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
-import { Button, DropdownMenu, DropdownMenuTrigger } from "~/components";
-import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
-import { PermissionDialog } from "~/components/permission";
 import { FileAiDock } from "~/pages/Subscription/AiChat/FileAiDock";
 import FilePreview from "./index";
 import { RichKnowledgePreview } from "./RichKnowledgePreview";
@@ -92,9 +88,7 @@ export default function FilePreviewPage({
     const [previewData, setPreviewData] = useState<KnowledgeFilePreview | null>(null);
     const [loading, setLoading] = useState(true);
     const [conversionFailed, setConversionFailed] = useState(false);
-    const [canDownload, setCanDownload] = useState(false);
-    const [canManagePermission, setCanManagePermission] = useState(false);
-    const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
+    const canDownload = Boolean(fileId && spaceId);
 
     useEffect(() => {
         if (!fileId || !spaceId) { setLoading(false); return; }
@@ -143,56 +137,8 @@ export default function FilePreviewPage({
             .finally(() => setLoading(false));
     }, [fileId, spaceId]);
 
-    useEffect(() => {
-        if (!fileId) {
-            setCanDownload(false);
-            return;
-        }
-
-        let cancelled = false;
-        const controller = new AbortController();
-        checkPermission("knowledge_file", fileId, "can_read", "download_file", {
-            signal: controller.signal,
-        })
-            .then((result) => {
-                if (!cancelled) setCanDownload(Boolean(result.allowed));
-            })
-            .catch(() => {
-                if (!cancelled) setCanDownload(false);
-            });
-
-        return () => {
-            cancelled = true;
-            controller.abort();
-        };
-    }, [fileId]);
-
-    useEffect(() => {
-        if (!fileId) {
-            setCanManagePermission(false);
-            return;
-        }
-
-        let cancelled = false;
-        const controller = new AbortController();
-        canOpenPermissionDialog("knowledge_file", fileId, {
-            signal: controller.signal,
-        })
-            .then((allowed) => {
-                if (!cancelled) setCanManagePermission(Boolean(allowed));
-            })
-            .catch(() => {
-                if (!cancelled) setCanManagePermission(false);
-            });
-
-        return () => {
-            cancelled = true;
-            controller.abort();
-        };
-    }, [fileId]);
-
     const handleDownloadFile = useCallback(async () => {
-        if (!fileId || !spaceId || !canDownload) return;
+        if (!fileId || !spaceId) return;
         try {
             const downloadData = await getFileDownloadApi(spaceId, fileId);
             const downloadUrl = downloadData.original_url || downloadData.preview_url;
@@ -208,7 +154,7 @@ export default function FilePreviewPage({
         } catch (err) {
             console.error("Failed to download file:", err);
         }
-    }, [canDownload, fileId, fileName, spaceId]);
+    }, [fileId, fileName, spaceId]);
 
     // Mobile layout (<md = 768px): keep a bare preview + floating download (no TopBar).
     // Never applies in embedded mode — the drawer is a desktop-only affordance.
@@ -296,7 +242,6 @@ export default function FilePreviewPage({
                 onDownloadFile={handleDownloadFile}
                 hideHeader={compactMode}
                 hideSidebar={compactMode}
-                hideHeaderDownload={!compactMode}
             />
         );
     };
@@ -346,7 +291,7 @@ export default function FilePreviewPage({
                         type="button"
                         onClick={handleDownloadFile}
                         aria-label={localize("com_knowledge.download_file")}
-                        className="fixed right-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-10 inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-white/70 text-text-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:bg-white/85"
+                        className="fixed right-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-10 inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-white/70 text-[#212121] shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:bg-white/85"
                     >
                         <Outlined.Download className="size-5" />
                     </button>

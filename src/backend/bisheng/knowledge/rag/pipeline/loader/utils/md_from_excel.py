@@ -1,6 +1,4 @@
-import math
 import os
-from typing import List
 from uuid import uuid4
 
 import openpyxl
@@ -44,8 +42,8 @@ def xls_to_xlsx(xls_path):
 
         return xlsx_path
 
-    except Exception as e:
-        logger.exception(f"xls_to_xlsx error: ")
+    except Exception:
+        logger.exception("xls_to_xlsx error: ")
         return None
 
 
@@ -115,6 +113,19 @@ def unmerge_and_read_sheet(sheet_obj):
     return data_grid
 
 
+def render_markdown_row(row_values) -> str:
+    """Render one table row. Single source of truth for row rendering.
+
+    The char-budget planner measures rows with this exact function, so the
+    budget can never drift from what actually gets written.
+    """
+    return "| " + " | ".join(remove_characters(str(v)) if v is not None else "" for v in row_values) + " |"
+
+
+def render_markdown_separator(num_columns: int) -> str:
+    return "|" + "---|" * num_columns
+
+
 def generate_markdown_table_string(
     header_rows_list_of_lists,
     data_rows_list_of_lists,
@@ -131,27 +142,174 @@ def generate_markdown_table_string(
     if header_rows_list_of_lists:
         pre_separator_header = header_rows_list_of_lists[:separator_placement_index]
         for row_values in pre_separator_header:
-            md_lines.append(
-                "| " + " | ".join(remove_characters(str(v)) if v is not None else "" for v in row_values) + " |"
-            )
+            md_lines.append(render_markdown_row(row_values))
 
         # Insert below the header in the first rowMarkdownSeparator
         if num_columns > 0:
-            md_lines.append("|" + "---|" * num_columns)
+            md_lines.append(render_markdown_separator(num_columns))
 
         post_separator_header = header_rows_list_of_lists[separator_placement_index:]
         for row_values in post_separator_header:
-            md_lines.append(
-                "| " + " | ".join(remove_characters(str(v)) if v is not None else "" for v in row_values) + " |"
-            )
+            md_lines.append(render_markdown_row(row_values))
 
     # Always process data rows
     for row_values in data_rows_list_of_lists:
-        md_lines.append(
-            "| " + " | ".join(remove_characters(str(v)) if v is not None else "" for v in row_values) + " |"
-        )
+        md_lines.append(render_markdown_row(row_values))
 
     return "\n".join(md_lines)
+
+
+class ExcelRowTooLongError(ValueError):
+    """A single table row does not fit in one chunk even on its own.
+
+    Raised only when no ``long_row_splitter`` was supplied to degrade the row to
+    plain text. Kept as a plain ValueError so this module stays free of the
+    errcode layer (which pulls in fastapi); the loader translates it.
+    """
+
+    def __init__(self, sheet_index: str, row_number: int, row_chars: int, max_chars: int):
+        self.sheet_index = sheet_index
+        self.row_number = row_number
+        self.row_chars = row_chars
+        self.max_chars = max_chars
+        super().__init__(
+            f"sheet {sheet_index} row {row_number} renders to {row_chars} chars, over the {max_chars} chars budget"
+        )
+
+
+def _chunk_fixed_prefix_len(header_rows_as_lists, num_columns: int, append_header: bool) -> int:
+    """Chunk length that does not depend on how many data rows the chunk holds.
+
+    ``"\\n".join`` means ``len(chunk) = sum(len(line)) + (n_lines - 1)``, which
+    factors into this fixed part plus ``len(render_markdown_row(row)) + 1`` per
+    data row -- see ``_per_row_cost``.
+    """
+    if not append_header:
+        # Pseudo-header mode: the group's own first row doubles as the header
+        # line, so only the separator is fixed overhead.
+        return len(render_markdown_separator(num_columns))
+    if not header_rows_as_lists:
+        # No header block at all: len = sum(len(line) + 1) - 1.
+        return -1
+    return (
+        sum(len(render_markdown_row(one)) for one in header_rows_as_lists)
+        + len(render_markdown_separator(num_columns))
+        + len(header_rows_as_lists)
+    )
+
+
+def _per_row_cost(row_values) -> int:
+    return len(render_markdown_row(row_values)) + 1
+
+
+def _plan_chunks(indexed_data_rows, rows_per_markdown, fixed_prefix: int, max_chars: int | None):
+    """Group data rows into chunk plans.
+
+    Greedy accumulation *within* each ``rows_per_markdown`` slice, so
+    ``rows_per_markdown`` becomes an upper bound instead of an exact count and
+    every slice that already fits keeps byte-identical boundaries.
+
+    Returns a list of ``("table", [(row_no, values), ...])`` /
+    ``("long_row", (row_no, values))`` plans, in output order.
+    """
+    if rows_per_markdown and rows_per_markdown > 0:
+        slices = [
+            indexed_data_rows[i : i + rows_per_markdown] for i in range(0, len(indexed_data_rows), rows_per_markdown)
+        ]
+    else:
+        slices = [indexed_data_rows]
+
+    plans = []
+    for one_slice in slices:
+        if max_chars is None:
+            plans.append(("table", one_slice))
+            continue
+
+        group, cost = [], fixed_prefix
+        for indexed_row in one_slice:
+            add = _per_row_cost(indexed_row[1])
+            if group and cost + add > max_chars:
+                plans.append(("table", group))
+                group, cost = [], fixed_prefix
+            if not group and fixed_prefix + add > max_chars:
+                # Even alone this row blows the budget -- degrade it separately.
+                plans.append(("long_row", indexed_row))
+                continue
+            group.append(indexed_row)
+            cost += add
+        if group:
+            plans.append(("table", group))
+    return plans
+
+
+def _column_names(header_rows_as_lists, num_columns: int) -> list[str]:
+    """Column labels for the plain-text degradation of an over-long row."""
+    first_header = header_rows_as_lists[0] if header_rows_as_lists else []
+    names = []
+    for i in range(num_columns):
+        raw = first_header[i] if i < len(first_header) else None
+        name = remove_characters(str(raw)) if raw is not None else ""
+        names.append(name or f"列{i + 1}")
+    return names
+
+
+def _render_long_row_chunks(
+    row_values,
+    header_rows_as_lists,
+    num_columns: int,
+    append_header: bool,
+    long_row_splitter,
+    max_chars: int,
+) -> list[str]:
+    """Degrade one over-long row to plain-text chunks.
+
+    Rendered as ``column: value`` lines rather than character-cut markdown so the
+    column/value association survives and no chunk ends in a dangling ``| cell``.
+    Newlines inside cells are deliberately kept here (unlike table rendering) so
+    the text splitter has real separators to cut on. Every fragment carries the
+    table header as a prefix.
+    """
+    column_names = _column_names(header_rows_as_lists if append_header else [], num_columns)
+    body_lines = []
+    for i, value in enumerate(row_values):
+        text = "" if value is None else str(value).strip()
+        if not text:
+            continue
+        name = column_names[i] if i < len(column_names) else f"列{i + 1}"
+        body_lines.append(f"{name}: {text}")
+    body = "\n".join(body_lines)
+
+    prefix = ""
+    if append_header and header_rows_as_lists:
+        prefix = generate_markdown_table_string(header_rows_as_lists, [], num_columns) + "\n"
+
+    # The header prefix eats into the budget, so the body gets what is left.
+    body_budget = max(1, max_chars - len(prefix))
+    chunks = []
+    for fragment in long_row_splitter(body, body_budget):
+        if not fragment.strip():
+            continue
+        # Last resort: a splitter cannot break text that holds no separator at
+        # all. Slicing plain text here is safe -- this row is no longer a table.
+        for i in range(0, len(fragment), body_budget):
+            chunks.append(prefix + fragment[i : i + body_budget])
+    return chunks
+
+
+def _write_chunk_file(output_dir, sheet_index: str, chunk_index: int, markdown_content: str) -> None:
+    """Write one chunk file.
+
+    The name must sort lexicographically in logical order -- ``ExcelLoader``
+    derives chunk order purely from ``sorted(os.listdir(...))``. The old
+    ``{sheet:02}{i:03}`` scheme silently reordered chunks past 999 ("001000" <
+    "00999"), which a large sheet reaches on its own.
+    """
+    file_name = f"{str(sheet_index).zfill(3)}_{str(chunk_index).zfill(6)}.md"
+    file_path = os.path.join(output_dir, file_name)
+    # Not swallowed: a dropped chunk is silent data loss in the knowledge base.
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(markdown_content)
+    logger.debug("chunk file saved: {}", file_path)
 
 
 def process_dataframe_to_markdown_files(
@@ -161,10 +319,18 @@ def process_dataframe_to_markdown_files(
     rows_per_markdown,
     output_dir,
     append_header=True,
+    max_chars: int | None = None,
+    long_row_splitter=None,
 ):
     """
     - append_header=True: Tekan num_header_rows Separate the header and data.
     - append_header=False: All content is treated as data, table header is empty, ignored num_header_rows。
+    - max_chars: per-chunk character budget. ``None`` keeps the legacy fixed-row
+      behaviour byte for byte; otherwise ``rows_per_markdown`` becomes an upper
+      bound and oversized groups are subdivided.
+    - long_row_splitter: ``Callable[[str], list[str]]`` used to degrade a row that
+      does not fit even alone. ``None`` makes that case raise
+      ``ExcelRowTooLongError``.
     """
     if df.empty:
         logger.warning(f"  feed '{sheet_index}' DataDataFrameEmpty, skippingMarkdownBuat")
@@ -206,6 +372,8 @@ def process_dataframe_to_markdown_files(
             header_block_df = df.iloc[header_slice]
             data_block_df = df.drop(df.index[header_slice]).reset_index(drop=True)
             header_rows_as_lists = header_block_df.values.tolist()
+            header_positions = set(range(rows)[header_slice])
+            data_row_numbers = [one + 1 for one in range(rows) if one not in header_positions]
         except Exception as e:
             logger.error(
                 f"  At Source '{sheet_index}' Index by header in [{start_header_idx}, {end_header_idx}] Error Splitting Data: {e}Skip"
@@ -215,54 +383,58 @@ def process_dataframe_to_markdown_files(
         # when append_header are False , everything is treated as data and the header list is empty
         header_rows_as_lists = []
         data_block_df = df.reset_index(drop=True)
+        data_row_numbers = [one + 1 for one in range(rows)]
 
     # --- Subsequent pagination logic ---
     if data_block_df.empty:
         if append_header and not header_block_df.empty:
             markdown_content = generate_markdown_table_string(header_rows_as_lists, [], num_columns)
-            # BUG FIX: Use zfill for proper padding. This is file '000' for the sheet.
-            file_name = f"{str(sheet_index).zfill(2)}000.md"
-            file_path = os.path.join(output_dir, file_name)
-            try:
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(markdown_content)
-                logger.debug(f"  Header-only files saved:'{file_path}'")
-            except Exception as e:
-                logger.debug(f"  Save file '{file_path}' Error during: {e}")
+            _write_chunk_file(output_dir, sheet_index, 0, markdown_content)
         return
 
-    num_data_rows_total = len(data_block_df)
-    num_files_to_create = (
-        math.ceil(num_data_rows_total / rows_per_markdown)
-        if rows_per_markdown > 0
-        else (1 if num_data_rows_total > 0 else 0)
-    )
+    # Row numbers are the original 1-based sheet positions, so an over-long row is
+    # reported by the row number the user sees in Excel.
+    indexed_data_rows = list(zip(data_row_numbers, data_block_df.values.tolist(), strict=True))
 
-    for i in range(num_files_to_create):
-        start_idx = i * rows_per_markdown
-        end_idx = min(start_idx + rows_per_markdown, num_data_rows_total)
-        current_data_chunk_as_lists = data_block_df.iloc[start_idx:end_idx].values.tolist()
+    fixed_prefix = _chunk_fixed_prefix_len(header_rows_as_lists, num_columns, append_header)
+    plans = _plan_chunks(indexed_data_rows, rows_per_markdown, fixed_prefix, max_chars)
 
-        final_header_for_chunk = header_rows_as_lists
-        final_data_for_chunk = current_data_chunk_as_lists
+    chunk_contents = []
+    for kind, payload in plans:
+        if kind == "table":
+            group_rows = [values for _, values in payload]
+            final_header_for_chunk = header_rows_as_lists
+            final_data_for_chunk = group_rows
 
-        # If no real header is attached and the current data block is not empty, the first row of data is used as the “pseudo header” to generate the delimiter
-        if not append_header and current_data_chunk_as_lists:
-            final_header_for_chunk = [current_data_chunk_as_lists[0]]
-            final_data_for_chunk = current_data_chunk_as_lists[1:]
+            # If no real header is attached and the current data block is not empty, the first row of data is used as the "pseudo header" to generate the delimiter
+            if not append_header and group_rows:
+                final_header_for_chunk = [group_rows[0]]
+                final_data_for_chunk = group_rows[1:]
 
-        markdown_content = generate_markdown_table_string(final_header_for_chunk, final_data_for_chunk, num_columns)
+            chunk_contents.append(
+                generate_markdown_table_string(final_header_for_chunk, final_data_for_chunk, num_columns)
+            )
+            continue
 
-        # BUG FIX: Use zfill for proper 2-digit sheet and 3-digit file padding.
-        file_name = f"{str(sheet_index).zfill(2)}{str(i).zfill(3)}.md"
-        file_path = os.path.join(output_dir, file_name)
+        row_number, row_values = payload
+        row_chars = _per_row_cost(row_values) - 1
+        if long_row_splitter is None:
+            raise ExcelRowTooLongError(str(sheet_index), row_number, row_chars, max_chars)
+        logger.warning(
+            "sheet {} row {} is {} chars, over the {} chars budget; degrading it to plain-text chunks",
+            sheet_index,
+            row_number,
+            row_chars,
+            max_chars,
+        )
+        chunk_contents.extend(
+            _render_long_row_chunks(
+                row_values, header_rows_as_lists, num_columns, append_header, long_row_splitter, max_chars
+            )
+        )
 
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(markdown_content)
-            logger.debug(f"  Sudah disimpan'{file_path}' (incl.  {len(current_data_chunk_as_lists)} Row Raw Data)")
-        except Exception as e:
-            logger.debug(f"  Save file '{file_path}' Error during: {e}")
+    for i, markdown_content in enumerate(chunk_contents):
+        _write_chunk_file(output_dir, sheet_index, i, markdown_content)
 
 
 def is_list_of_lists_empty(data_list):
@@ -307,7 +479,15 @@ def _load_workbook_with_style_repair(excel_path: str):
             raise first_error from None
 
 
-def excel_file_to_markdown(excel_path, num_header_rows, rows_per_markdown, output_dir, append_header=True):
+def excel_file_to_markdown(
+    excel_path,
+    num_header_rows,
+    rows_per_markdown,
+    output_dir,
+    append_header=True,
+    max_chars: int | None = None,
+    long_row_splitter=None,
+):
     logger.debug(f"\nStart ProcessingExcelDocumentation:'{excel_path}'")
     try:
         workbook = _load_workbook_with_style_repair(excel_path)
@@ -345,6 +525,8 @@ def excel_file_to_markdown(excel_path, num_header_rows, rows_per_markdown, outpu
             rows_per_markdown,
             output_dir,
             append_header=append_header,
+            max_chars=max_chars,
+            long_row_splitter=long_row_splitter,
         )
         sheet_index += 1
 
@@ -361,6 +543,8 @@ def csv_file_to_markdown(
     csv_encoding="utf-8",
     csv_delimiter=",",
     append_header=True,
+    max_chars: int | None = None,
+    long_row_splitter=None,
 ):
     logger.debug(f"\nStart ProcessingCSVDocumentation:'{csv_path}'")
     try:
@@ -395,6 +579,8 @@ def csv_file_to_markdown(
         rows_per_markdown,
         output_dir,
         append_header,
+        max_chars=max_chars,
+        long_row_splitter=long_row_splitter,
     )
     logger.debug(f"\nCSVDoc. '{csv_path}' Process Completed.")
 
@@ -407,9 +593,15 @@ def convert_file_to_markdown(
     csv_encoding="utf-8",
     csv_delimiter=",",
     append_header=True,
+    max_chars: int | None = None,
+    long_row_splitter=None,
 ):
     """
     will be Excel OR CSV Convert files to multiple Markdown files.
+
+    ``max_chars`` turns ``rows_per_markdown`` into an upper bound: groups that
+    would exceed the budget are subdivided. ``None`` keeps the legacy fixed-row
+    behaviour byte for byte.
     """
     if not os.path.exists(input_file_path):
         logger.debug(f"Error: Input file '{input_file_path}' Nothing found.")
@@ -431,6 +623,8 @@ def convert_file_to_markdown(
             rows_per_markdown,
             base_output_dir,
             append_header,
+            max_chars=max_chars,
+            long_row_splitter=long_row_splitter,
         )
     elif file_extension == ".csv":
         csv_file_to_markdown(
@@ -441,6 +635,8 @@ def convert_file_to_markdown(
             csv_encoding,
             csv_delimiter,
             append_header,
+            max_chars=max_chars,
+            long_row_splitter=long_row_splitter,
         )
     else:
         logger.debug(
@@ -451,7 +647,7 @@ def convert_file_to_markdown(
 def handler(
     cache_dir,
     file_name: str,
-    header_rows: List[int] = [0, 1],
+    header_rows: list[int] = [0, 1],
     data_rows: int = 12,
     append_header=True,
 ):

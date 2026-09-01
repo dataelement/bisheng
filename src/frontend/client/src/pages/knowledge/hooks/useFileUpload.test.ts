@@ -44,7 +44,7 @@ describe("useFileUpload helpers", () => {
         inputId: "upload-invalid",
         resourceType: "file",
         decision: "invalid",
-        errorCode: 18072,
+        errorCode: 18077,
         errorMessage: "conflict",
       },
     ];

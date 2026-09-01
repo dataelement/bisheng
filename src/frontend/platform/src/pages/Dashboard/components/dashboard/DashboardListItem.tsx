@@ -13,6 +13,7 @@ import { cn } from "@/utils"
 import { MoreHorizontal } from "lucide-react"
 import { useContext, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useLazyDashboardPermission } from "../../hook"
 import { Dashboard } from "../../types/dataConfig"
 
 
@@ -49,6 +50,11 @@ export function DashboardListItem({
     const { toast } = useToast()
     const { appConfig } = useContext(locationContext)
 
+    // Visibility is decided by the server list; edit/delete/manage_permission
+    // are resolved lazily the moment the user reaches for them (menu open or a
+    // double-click rename), so the list never front-loads a request per row.
+    const { actions, privileged, ensureLoaded } = useLazyDashboardPermission(String(dashboard.id))
+
     useEffect(() => {
         setTitle(dashboard.title)
     }, [dashboard])
@@ -60,8 +66,16 @@ export function DashboardListItem({
         }
     }, [isEditing])
 
+    const canEdit = privileged || actions.includes("edit")
+    const canDelete = privileged || actions.includes("delete")
+    const canManagePermission =
+        privileged || actions.includes("manage_permission")
+
     const handleDoubleClick = () => {
-        !dashboard.mange && setIsEditing(true)
+        // Prefetch happened on hover; by the time a double-click lands the
+        // action list is usually ready. Trigger once more in case it was not.
+        ensureLoaded()
+        if (canEdit) setIsEditing(true)
     }
 
     const handleBlur = (e) => {
@@ -82,7 +96,7 @@ export function DashboardListItem({
             return
         }
 
-        if (trimmedTitle !== dashboard.title) {
+        if (canEdit && trimmedTitle !== dashboard.title) {
             onRename(dashboard.id, trimmedTitle)
         }
     }
@@ -104,6 +118,7 @@ export function DashboardListItem({
                 selected ? "bg-[#002FFF]/10" : "hover:bg-[#f5f2f2f2]",
             )}
             onClick={onSelect}
+            onMouseEnter={ensureLoaded}
         >
             <div className="flex-1 min-w-0 mr-2">
                 {isEditing ? (
@@ -126,23 +141,28 @@ export function DashboardListItem({
             {permissionBadge}
             {dashboard.is_default && <Badge variant="outline" className="border border-primary rounded-sm py-0 px-1 text-primary scale-75">{t('default')}</Badge>}
 
-            <DropdownMenu>
+            <DropdownMenu onOpenChange={(open) => { if (open) ensureLoaded() }}>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" size="icon" className={`h-5 w-0 ${isEditing ? "" : "group-hover:w-5"}`}>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="dashboard.actions"
+                        className={`h-5 w-0 ${isEditing ? "" : "group-hover:w-5"}`}
+                    >
                         <MoreHorizontal className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                    {dashboard.write && appConfig.isDashboardPro && <DropdownMenuItem
+                    {canEdit && appConfig.isDashboardPro && <DropdownMenuItem
                         onClick={() => setTimeout(() => {
                             setIsEditing(true)
                         }, 300)} // hold close dropdownmenu
                     >{t('rename')}</DropdownMenuItem>}
                     {appConfig.isDashboardPro && <DropdownMenuItem disabled={dashboard.is_default} onClick={() => onDefault(dashboard.id)}>{dashboard.is_default ? t('alreadyDefault') : t('setAsDefault')}</DropdownMenuItem>}
-                    {dashboard.write && appConfig.isDashboardPro && <DropdownMenuItem onClick={() => onDuplicate(dashboard)}>{t('duplicate')}</DropdownMenuItem>}
-                    {onPermission && <DropdownMenuItem onClick={() => onPermission(dashboard)}>{t('managePermission', { ns: 'permission' })}</DropdownMenuItem>}
+                    {appConfig.isDashboardPro && <DropdownMenuItem onClick={() => onDuplicate(dashboard)}>{t('duplicate')}</DropdownMenuItem>}
+                    {canManagePermission && onPermission && <DropdownMenuItem onClick={() => onPermission(dashboard)}>{t('managePermission', { ns: 'permission' })}</DropdownMenuItem>}
                     <DropdownMenuItem onClick={() => onShare(dashboard.id)}>{t('share')}</DropdownMenuItem>
-                    {dashboard.write && appConfig.isDashboardPro && <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(dashboard.id)}>
+                    {canDelete && appConfig.isDashboardPro && <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(dashboard.id)}>
                         {t('delete')}
                     </DropdownMenuItem>}
                 </DropdownMenuContent>

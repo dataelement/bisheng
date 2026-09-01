@@ -53,7 +53,7 @@ async def test_get_llm_uses_per_task_model(monkeypatch: pytest.MonkeyPatch, patc
     monkeypatch.setattr(
         LLMService,
         "get_workbench_llm",
-        AsyncMock(return_value=SimpleNamespace(linsight_default_model_id=None)),
+        AsyncMock(return_value=SimpleNamespace(linsight_default_model_id=None, models=[])),
     )
     fake_llm = object()
     get_llm_mock = AsyncMock(return_value=fake_llm)
@@ -74,7 +74,7 @@ async def test_get_llm_preserves_original_exception(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(
         LLMService,
         "get_workbench_llm",
-        AsyncMock(return_value=SimpleNamespace(linsight_default_model_id="tenant-default")),
+        AsyncMock(return_value=SimpleNamespace(linsight_default_model_id="tenant-default", models=[])),
     )
     original = RuntimeError("model offline")
     monkeypatch.setattr(LLMService, "get_bisheng_linsight_llm", AsyncMock(side_effect=original))

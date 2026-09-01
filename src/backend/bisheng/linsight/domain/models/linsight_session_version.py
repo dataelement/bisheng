@@ -78,6 +78,17 @@ class LinsightSessionVersionBase(SQLModelSerializable):
     files: list[dict] | None = Field(
         None, description="Uploaded files list:", sa_column=Column(JsonType, nullable=True)
     )
+    # Raw submitted file refs the worker still has to ingest. Attachment parsing
+    # runs the full ETL (minutes on a multi-PDF batch) and used to happen inside
+    # the submit request, which nginx cut at 300s; it now happens in the worker
+    # right before the run. ``files`` keeps meaning "ingested and usable", so
+    # nothing downstream had to learn about this staging column. Worker-only:
+    # API responses go through ``public_dump``, which drops it.
+    pending_files: list[dict] | None = Field(
+        None,
+        description="Submitted file refs awaiting worker-side ingestion",
+        sa_column=Column(JsonType, nullable=True),
+    )
     # F035: per-task execution model id chosen at submit time (nullable; falls
     # back to the tenant linsight_default_model_id when empty).
     model: str | None = Field(None, description="Per-task execution model id", sa_type=Text, nullable=True)
@@ -142,6 +153,19 @@ class LinsightSessionVersion(LinsightSessionVersionBase, table=True):
     )
 
     __tablename__ = "linsight_session_version"
+
+    def public_dump(self) -> dict:
+        """``model_dump`` for anything that leaves the server.
+
+        Drops ``pending_files``: each entry carries the presigned temp-bucket
+        link the browser uploaded with (7-day validity), and the version list is
+        reachable through a share link — echoing them would hand a share
+        recipient direct URLs to the submitter's originals. The worker reads the
+        column off the row / Redis snapshot, never off an API response.
+        """
+        data = self.model_dump()
+        data.pop("pending_files", None)
+        return data
 
 
 class LinsightSessionVersionDao:

@@ -10,13 +10,14 @@ the two callers share one code path.
 from __future__ import annotations
 
 import logging
-from typing import List
 
 logger = logging.getLogger(__name__)
 
 
 async def send_inbox_notice(
-    title: str, body: str, recipients: List[int],
+    title: str,
+    body: str,
+    recipients: list[int],
 ) -> None:
     """Send one ``NOTIFY`` inbox message to the given recipients.
 
@@ -31,21 +32,22 @@ async def send_inbox_notice(
             MessageStatusEnum,
             MessageTypeEnum,
         )
-        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import (  # noqa: E501
+        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import (
             InboxMessageReadRepositoryImpl,
         )
-        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import (  # noqa: E501
+        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import (
             InboxMessageRepositoryImpl,
         )
         from bisheng.message.domain.services.message_service import MessageService
     except ImportError as exc:
         logger.warning(
-            'MessageService unavailable (%s); inbox notice skipped (title=%s)',
-            exc, title,
+            "MessageService unavailable (%s); inbox notice skipped (title=%s)",
+            exc,
+            title,
         )
         return
 
-    content = [{'type': 'text', 'title': title, 'body': body}]
+    content = [{"type": "text", "title": title, "body": body}]
     try:
         async with get_async_db_session() as session:
             service = MessageService(
@@ -59,28 +61,30 @@ async def send_inbox_notice(
                 receiver=recipients,
                 status=MessageStatusEnum.APPROVED,
             )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning(
-            'Inbox delivery failed for %d recipients (title=%s): %s',
-            len(recipients), title, exc,
+            "Inbox delivery failed for %d recipients (title=%s): %s",
+            len(recipients),
+            title,
+            exc,
         )
 
 
-async def list_global_super_admin_ids() -> List[int]:
-    """Return user ids carrying ``system:global#super_admin``.
+async def list_global_super_admin_ids() -> list[int]:
+    """Return user IDs carrying the global super-admin permission.
 
-    Returns ``[]`` on any FGA failure so callers degrade gracefully.
+    Returns ``[]`` on any permission-service failure so callers degrade gracefully.
     """
     try:
-        from bisheng.core.openfga.manager import aget_fga_client
-        fga = await aget_fga_client()
-        if fga is None:
-            return []
-        raw = await fga.list_users(
-            object='system:global', relation='super_admin',
-            user_type='user',
+        from bisheng.permission.application import PermissionObject, get_permission_relation_api
+
+        permissions = await get_permission_relation_api()
+        raw = await permissions.list_subject_ids(
+            resource=PermissionObject("system", "global"),
+            relation="super_admin",
+            subject_type="user",
         )
-        return [int(u.split(':', 1)[1]) for u in raw if ':' in u]
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('FGA super-admin lookup failed: %s', exc)
+        return [int(user_id) for user_id in raw if user_id.isdigit()]
+    except Exception as exc:
+        logger.warning("Permission super-admin lookup failed: %s", exc)
         return []

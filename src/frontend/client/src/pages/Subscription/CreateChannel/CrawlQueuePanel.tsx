@@ -51,7 +51,7 @@ export function CrawlQueuePanel({
             </button>
 
             {panelOpen && (
-                <div className="absolute right-0 top-6 z-[230] w-[320px] max-h-[360px] overflow-y-auto rounded-lg bg-white px-[8px] py-[12px] flex flex-col gap-[4px] drop-shadow-[0px_4px_10px_rgba(7,34,88,0.07)]">
+                <div className="absolute right-0 top-6 z-30 w-[320px] max-h-[360px] overflow-y-auto rounded-lg bg-white px-[8px] py-[12px] flex flex-col gap-[4px] drop-shadow-[0px_4px_10px_rgba(7,34,88,0.07)]">
                     {queue.map(item => {
                         if (item.status === "pending" || item.status === "crawling") {
                             return (
@@ -121,7 +121,7 @@ export function CrawlQueuePanel({
                                         </span>
                                     </div>
                                 </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-[280px] z-[260] bg-[rgba(23,23,23,0.85)]">
+                                <TooltipContent side="top" className="max-w-[280px] bg-[rgba(23,23,23,0.85)]">
                                     {localize(crawlErrorMessageKey(item.errorCode))}
                                 </TooltipContent>
                             </Tooltip>

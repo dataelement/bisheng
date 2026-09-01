@@ -207,7 +207,9 @@ function MarkdownFromUrl({ fileUrl }: { fileUrl: string }) {
     return <MarkdownBlock content={content} />;
 }
 
-function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
+/** Transcript pane of a media preview: 识别文本 / 入库文本 tabs over the parsed
+ *  markdown. Exported so citation previews render the same pane. */
+export function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
     const localize = useLocalize();
     const [activeTab, setActiveTab] = useState<MediaTab>("recognized");
     const [content, setContent] = useState("");
@@ -260,7 +262,7 @@ function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
                     <button
                         type="button"
                         onClick={() => setActiveTab("recognized")}
-                        className={`whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors ${activeTab === "recognized"
+                        className={`whitespace-nowrap rounded-sm px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors ${activeTab === "recognized"
                             ? "bg-blue-500/15 font-medium text-blue-500"
                             : "bg-transparent text-text-3 hover:bg-fill-2"}`}
                     >
@@ -269,7 +271,7 @@ function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
                     <button
                         type="button"
                         onClick={() => setActiveTab("entry")}
-                        className={`whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors ${activeTab === "entry"
+                        className={`whitespace-nowrap rounded-sm px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors ${activeTab === "entry"
                             ? "bg-blue-500/15 font-medium text-blue-500"
                             : "bg-transparent text-text-3 hover:bg-fill-2"}`}
                     >

@@ -786,16 +786,16 @@ export function FileCard({
                     the 160px fixed-height card, leaving the bottom info row at its natural height. */}
                 <div className={cn(
                     "relative flex min-h-0 flex-1 p-1.5",
-                    mobileListMode && "max-[767px]:h-12 max-[767px]:w-12 max-[767px]:flex-none max-[767px]:p-0 max-[767px]:rounded-[4px]",
+                    mobileListMode && "max-[767px]:h-12 max-[767px]:w-12 max-[767px]:flex-none max-[767px]:p-0 max-[767px]:rounded-sm",
                 )}>
                     <div className={cn(
-                        "relative flex flex-1 items-center justify-center overflow-hidden rounded-[4px]",
+                        "relative flex flex-1 items-center justify-center overflow-hidden rounded-sm",
                         isSelected
                             ? "bg-transparent"
                             : isNotParsed
                                 ? "bg-[#fbfbfb]"
                                 : "bg-white",
-                        mobileListMode && "max-[767px]:rounded-[4px]",
+                        mobileListMode && "max-[767px]:rounded-sm",
                     )}>
                         <FileIconRenderer file={file} isFolder={isFolder} />
                         {renderStatusOverlayTag()}

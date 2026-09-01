@@ -1,15 +1,16 @@
 import json
-from typing import List, Optional, Any, Dict, Set
+from typing import Any, Dict, List, Optional, Set
 
+from elasticsearch import exceptions as es_exceptions
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from bisheng.core.search.elasticsearch.manager import get_es_connection
 from bisheng.telemetry_search.domain.schemas.query_builder import (
     AggregationExpression,
-    FilterExpression,
     AggsTypeEnum,
-    TermOp
+    FilterExpression,
+    TermOp,
 )
 
 
@@ -189,6 +190,12 @@ class ResultParser:
         self._traverse_buckets(aggregations, {}, rows, metric_keys)
         return rows
 
+    def empty_result(self) -> list[list[Any]]:
+        """Return the same shape an empty index would produce."""
+        if self.num_dims > 0:
+            return []
+        return [[0] * self.num_metrics]
+
     def _extract_aggregations(self, es_response: dict) -> dict:
         """Extract aggregations from ES response"""
         if Constants.AGGREGATION_KEY in es_response:
@@ -343,7 +350,7 @@ class QueryBuilder:
                 "aggs": self._build_aggregations()
             }
         except Exception as e:
-            raise ValueError(f"Failed to build search query: {str(e)}") from e
+            raise ValueError(f"Failed to build search query: {e!s}") from e
 
     def _build_bool_query(self) -> dict:
         """Build bool query from filters"""
@@ -637,8 +644,23 @@ class SearchEngineService:
 
             return self.result_parser.parse_to_2d_array(response)
 
+        except es_exceptions.NotFoundError as e:
+            if self._is_index_not_found(e):
+                logger.info("Telemetry index {} does not exist yet; returning empty result",
+                            self.parameters.index_name)
+                return self.result_parser.empty_result()
+            raise RuntimeError(f"Search execution failed: {e!s}") from e
         except Exception as e:
-            raise RuntimeError(f"Search execution failed: {str(e)}") from e
+            raise RuntimeError(f"Search execution failed: {e!s}") from e
+
+    @staticmethod
+    def _is_index_not_found(error: es_exceptions.NotFoundError) -> bool:
+        body = getattr(error, "body", None)
+        if isinstance(body, dict):
+            error_body = body.get("error", {})
+            if isinstance(error_body, dict) and error_body.get("type") == "index_not_found_exception":
+                return True
+        return "index_not_found_exception" in str(error)
 
     def build_search_query(self) -> dict:
         """Build query DSL for debugging"""

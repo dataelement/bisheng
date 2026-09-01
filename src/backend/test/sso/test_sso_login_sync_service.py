@@ -70,7 +70,7 @@ def _user(user_id=7, delete=0, source="sso", external_id="u1", user_name="Alice"
 
 
 def _dept(
-    ext, *, id=1, path="/", is_deleted=0, is_tenant_root=0, mounted_tenant_id=None, source="sso", status="active"
+    ext, *, id=1, path="/", is_deleted=0, is_tenant_root=0, mounted_tenant_id=None, source="wecom", status="active"
 ):
     return SimpleNamespace(
         id=id,
@@ -145,6 +145,18 @@ def patches(monkeypatch):
         "aget_token_version",
         AsyncMock(return_value=0),
     )
+    from bisheng.database.models.tenant import UserTenantDao
+
+    monkeypatch.setattr(
+        UserTenantDao,
+        "aactivate_user_tenant",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                tenant_id=1,
+                is_active=1,
+            )
+        ),
+    )
 
     monkeypatch.setattr(
         m.DepartmentDao,
@@ -195,9 +207,35 @@ def patches(monkeypatch):
         "aremove_member",
         AsyncMock(return_value=None),
     )
+    membership_add = AsyncMock(return_value=True)
+    membership_remove = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        m.DepartmentMembershipProjectionService,
+        "aadd_member",
+        membership_add,
+    )
+    monkeypatch.setattr(
+        m.DepartmentMembershipProjectionService,
+        "aremove_member",
+        membership_remove,
+    )
+    monkeypatch.setattr(
+        m,
+        "_uses_f048_department_projection",
+        lambda: True,
+    )
     monkeypatch.setattr(
         m.DepartmentAdminGrantDao,
         "adelete",
+        AsyncMock(return_value=None),
+    )
+    from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+        DepartmentKnowledgeSpaceService,
+    )
+
+    monkeypatch.setattr(
+        DepartmentKnowledgeSpaceService,
+        "cleanup_removed_department_admins",
         AsyncMock(return_value=None),
     )
     from bisheng.department.domain.services import department_change_handler as dch
@@ -215,6 +253,11 @@ def patches(monkeypatch):
     # sync_user — returns an active leaf tenant by default.
     sync_user = AsyncMock(return_value=_tenant(tid=15, status="active"))
     monkeypatch.setattr(m.UserTenantSyncService, "sync_user", sync_user)
+    monkeypatch.setattr(
+        m.UserService,
+        "_reject_login_if_user_has_no_usable_access",
+        AsyncMock(return_value=None),
+    )
 
     # JWT signer
     monkeypatch.setattr(m, "AuthJwt", MagicMock(return_value=MagicMock()))
@@ -231,6 +274,8 @@ def patches(monkeypatch):
         tmh_process=tmh_process,
         sync_user=sync_user,
         dept_execute=dept_execute,
+        membership_add=membership_add,
+        membership_remove=membership_remove,
     )
 
 
@@ -271,7 +316,7 @@ class TestNewUserHappyPath:
         assert call_args.args[0] == 7
         assert call_args.kwargs["trigger"] == UserTenantSyncTrigger.LOGIN
 
-    async def test_repairs_department_member_tuples_for_primary_and_secondary(
+    async def test_projects_primary_and_secondary_memberships(
         self,
         patches,
     ):
@@ -285,13 +330,8 @@ class TestNewUserHappyPath:
 
         await LoginSyncService.execute(_payload(secondary=["D2"]), request_ip="")
 
-        ops = [op for call in patches.dept_execute.await_args_list for op in call.args[0]]
-        assert ("write", "user:7", "member", "department:11") in [
-            (op.action, op.user, op.relation, op.object) for op in ops
-        ]
-        assert ("write", "user:7", "member", "department:12") in [
-            (op.action, op.user, op.relation, op.object) for op in ops
-        ]
+        projected_ids = {call.kwargs["department_id"] for call in patches.membership_add.await_args_list}
+        assert projected_ids == {11, 12}
 
 
 @pytest.mark.asyncio
@@ -310,8 +350,12 @@ class TestSecondaryDeptReconcileRemove:
         )
 
         m = patches.module
-        ud_rem = AsyncMock()
-        monkeypatch.setattr(m.UserDepartmentDao, "aremove_member", ud_rem)
+        membership_remove = AsyncMock(return_value=True)
+        monkeypatch.setattr(
+            m.DepartmentMembershipProjectionService,
+            "aremove_member",
+            membership_remove,
+        )
         ag_del = AsyncMock()
         monkeypatch.setattr(m.DepartmentAdminGrantDao, "adelete", ag_del)
         m.UserDepartmentDao.aget_user_departments = AsyncMock(
@@ -335,7 +379,10 @@ class TestSecondaryDeptReconcileRemove:
         )
         await LoginSyncService.execute(payload, request_ip="")
 
-        ud_rem.assert_awaited_once_with(7, 12)
+        membership_remove.assert_awaited_once_with(
+            user_id=7,
+            department_id=12,
+        )
         ag_del.assert_any_await(7, 12)
 
     async def test_local_source_secondary_not_removed_on_reconcile(
@@ -352,8 +399,12 @@ class TestSecondaryDeptReconcileRemove:
         )
 
         m = patches.module
-        ud_rem = AsyncMock()
-        monkeypatch.setattr(m.UserDepartmentDao, "aremove_member", ud_rem)
+        membership_remove = AsyncMock(return_value=True)
+        monkeypatch.setattr(
+            m.DepartmentMembershipProjectionService,
+            "aremove_member",
+            membership_remove,
+        )
         m.UserDepartmentDao.aget_user_departments = AsyncMock(
             return_value=[
                 SimpleNamespace(department_id=12, is_primary=0),
@@ -375,7 +426,7 @@ class TestSecondaryDeptReconcileRemove:
         )
         await LoginSyncService.execute(payload, request_ip="")
 
-        ud_rem.assert_not_awaited()
+        membership_remove.assert_not_awaited()
 
     async def test_omitted_secondary_field_skips_removal_queries(self, patches, monkeypatch):
         """Backward compat: field omitted → no reconcile-remove."""
@@ -558,7 +609,7 @@ class TestDepartmentAdminFgaReconcile:
 
         m = patches.module
         m.UserDepartmentDao.aget_user_departments = AsyncMock(
-            return_value=[SimpleNamespace(department_id=11)],
+            return_value=[SimpleNamespace(department_id=11, is_primary=1)],
         )
         m.DepartmentDao.aget_by_ids = AsyncMock(
             return_value=[_dept("D1", id=11)],
@@ -617,7 +668,7 @@ class TestDepartmentAdminFgaReconcile:
 
         m = patches.module
         m.UserDepartmentDao.aget_user_departments = AsyncMock(
-            return_value=[SimpleNamespace(department_id=11)],
+            return_value=[SimpleNamespace(department_id=11, is_primary=1)],
         )
         m.DepartmentDao.aget_by_ids = AsyncMock(
             return_value=[_dept("D1", id=11)],
@@ -664,7 +715,7 @@ class TestDepartmentAdminFgaReconcile:
 
         m = patches.module
         m.UserDepartmentDao.aget_user_departments = AsyncMock(
-            return_value=[SimpleNamespace(department_id=11)],
+            return_value=[SimpleNamespace(department_id=11, is_primary=1)],
         )
         m.DepartmentDao.aget_by_ids = AsyncMock(
             return_value=[_dept("D1", id=11)],
@@ -776,8 +827,16 @@ def _wire_reconcile(monkeypatch, *, memberships, guest_status="active", guest=Tr
     add = AsyncMock()
     remove = AsyncMock()
     execute = AsyncMock()
-    monkeypatch.setattr(mod.UserDepartmentDao, "aadd_member", add)
-    monkeypatch.setattr(mod.UserDepartmentDao, "aremove_member", remove)
+    monkeypatch.setattr(
+        mod.DepartmentMembershipProjectionService,
+        "aadd_member",
+        add,
+    )
+    monkeypatch.setattr(
+        mod.DepartmentMembershipProjectionService,
+        "aremove_member",
+        remove,
+    )
     monkeypatch.setattr(mod.DepartmentChangeHandler, "execute_async", execute)
     # `_remove_department_membership` (vacate path) touches these too.
     monkeypatch.setattr(mod.DepartmentAdminGrantDao, "adelete", AsyncMock())
@@ -798,15 +857,13 @@ class TestGuestMembershipReconcile:
         asyncio.run(LoginSyncService._reconcile_guest_membership(7, row_source="sso"))
 
         # Guest added as primary, tracked as a bisheng-internal placeholder.
-        mocks.add.assert_awaited_once_with(7, _GUEST_ID, is_primary=1, source="local")
+        mocks.add.assert_awaited_once_with(
+            user_id=7,
+            department_id=_GUEST_ID,
+            is_primary=1,
+            source="local",
+        )
         mocks.remove.assert_not_awaited()
-        # Guest membership tuple repaired.
-        ops = [
-            (op.action, op.user, op.relation, op.object)
-            for call in mocks.execute.await_args_list
-            for op in call.args[0]
-        ]
-        assert ("write", "user:7", "member", f"department:{_GUEST_ID}") in ops
 
     def test_real_department_only_is_noop(self, monkeypatch):
         from bisheng.sso_sync.domain.services.login_sync_service import (
@@ -833,7 +890,10 @@ class TestGuestMembershipReconcile:
 
         asyncio.run(LoginSyncService._reconcile_guest_membership(7, row_source="sso"))
 
-        mocks.remove.assert_awaited_once_with(7, _GUEST_ID)
+        mocks.remove.assert_awaited_once_with(
+            user_id=7,
+            department_id=_GUEST_ID,
+        )
         mocks.add.assert_not_awaited()
 
     def test_guest_only_stays(self, monkeypatch):
@@ -906,5 +966,5 @@ class TestGuestFallbackPlacement:
 
         # Short-circuits before guest reconcile — guest never looked up or added.
         aget_by_dept_id.assert_not_awaited()
-        m.UserDepartmentDao.aadd_member.assert_not_awaited()
+        patches.membership_add.assert_not_awaited()
         assert resp.token == ""

@@ -22,6 +22,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     collect_rag_citation_registry_items,
     save_message_citations,
     select_registry_items_for_persistence,
+    strip_unregistered_citation_markers,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -97,23 +98,23 @@ class KnowledgeSpaceChatService:
     async def _require_space_view_permission(self, space_id: int):
         svc = self._permission_service()
         await svc._require_read_permission(space_id)
-        await svc._require_permission_id("knowledge_space", space_id, "view_space")
+        await svc._require_action("knowledge_space", space_id, "visible")
 
     async def _require_folder_view_permission(self, space_id: int, folder_id: int):
         svc = self._permission_service()
-        folder = await svc._require_folder_relation(space_id, folder_id, "can_read")
-        await svc._require_permission_id("folder", folder_id, "view_folder", space_id=space_id)
-        return folder
+        return await svc._require_folder_action(
+            space_id,
+            folder_id,
+            "visible",
+        )
 
     async def _require_file_view_permission(self, space_id: int, file_id: int):
         svc = self._permission_service()
-        file_record = await svc._require_file_relation(file_id, "can_read", space_id=space_id)
-        await svc._require_permission_id("knowledge_file", file_id, "view_file", space_id=space_id)
-        await self._visibility_service().require_file_change_visible(
+        return await svc._require_file_action(
+            file_id,
+            "visible",
             space_id=space_id,
-            resource_id=file_id,
         )
-        return file_record
 
     @staticmethod
     async def _prepare_rag_citation_context(
@@ -287,7 +288,7 @@ class KnowledgeSpaceChatService:
             app_type=ApplicationTypeEnum.DAILY_CHAT,
             user_id=user_id,
         )
-        title = await generate_conversation_title_async(question=question, llm=llm, answer=answer)
+        title = await generate_conversation_title_async(question=question, llm=llm)
         await MessageSessionDao.update_session_name(chat_id, title)
 
     async def single_file_history(
@@ -534,7 +535,7 @@ class KnowledgeSpaceChatService:
                 for d in docs
                 if d.metadata and d.metadata.get("document_id") is not None
             }
-            permitted = await visibility.post_filter_visible_files(space.id, unique_file_ids)
+            permitted = await visibility.post_filter_retrievable_files(space.id, unique_file_ids)
             survivors = [d for d in docs if int(d.metadata.get("document_id", -1)) in permitted]
             dropped = len(docs) - len(survivors)
 
@@ -678,6 +679,11 @@ class KnowledgeSpaceChatService:
                 model_id=observation.model_id,
             ) from exc
 
+        # Resolve citations before persisting: markers the registry did not keep
+        # must not reach the stored answer, so the strip has to run first.
+        cited_items = select_registry_items_for_persistence(citation_items, answer)
+        answer = strip_unregistered_citation_markers(answer, cited_items)
+
         answer_message = await ChatMessageDao.ainsert_one(
             ChatMessage(
                 category=MessageCategory.ANSWER,
@@ -691,7 +697,6 @@ class KnowledgeSpaceChatService:
             )
         )
         await rate_limit_service.observe_call_success(call_context, observed_status_version)
-        cited_items = select_registry_items_for_persistence(citation_items, answer)
         await save_message_citations(
             message_id=answer_message.id,
             items=cited_items,
@@ -1053,9 +1058,9 @@ class KnowledgeSpaceChatService:
         from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 
         kb_id = kb.id
-        # KB-level read permission (raises UnAuthorizedError on denial → surfaced
+        # KB-level use permission (raises UnAuthorizedError on denial → surfaced
         # by the endpoint's BaseErrorCode handler).
-        await KnowledgeService.permission_service.ensure_knowledge_read_async(
+        await KnowledgeService.permission_service.ensure_knowledge_use_async(
             login_user=self.login_user,
             owner_user_id=kb.user_id,
             knowledge_id=kb_id,

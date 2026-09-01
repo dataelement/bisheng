@@ -22,19 +22,28 @@ class XinChuangFormatterLoader(BaseBishengLoader):
     }
 
     def __init__(
-            self,
-            retain_images: bool = True,
-            header_rows: list[int] | None = None,
-            data_rows: int = 12,
-            append_header: bool = True,
-            *args,
-            **kwargs,
+        self,
+        retain_images: bool = True,
+        header_rows: list[int] | None = None,
+        data_rows: int = 12,
+        append_header: bool = True,
+        separator: list[str] | None = None,
+        separator_rule: list[str] | None = None,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
+        *args,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.retain_images = retain_images
-        self.header_rows = header_rows or [0, 1]
+        self.header_rows = header_rows or [0, 0]
         self.data_rows = data_rows
         self.append_header = append_header
+        # Only meaningful for the excel delegate (.et); word/ppt delegates ignore them.
+        self.separator = separator
+        self.separator_rule = separator_rule
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
 
     def load(self) -> list[Document]:
         target_ext, loader_type = self.FORMAT_MAP.get(self.file_extension, (None, None))
@@ -64,9 +73,7 @@ class XinChuangFormatterLoader(BaseBishengLoader):
             raise RuntimeError(f"failed to convert {self.file_name} to {target_ext}")
         return converted_path
 
-    def _build_delegate_loader(
-            self, file_path: str, file_extension: str, loader_type: str
-    ) -> BaseBishengLoader:
+    def _build_delegate_loader(self, file_path: str, file_extension: str, loader_type: str) -> BaseBishengLoader:
         params = {
             "file_path": file_path,
             "file_metadata": self.file_metadata,
@@ -82,6 +89,10 @@ class XinChuangFormatterLoader(BaseBishengLoader):
                 header_rows=self.header_rows,
                 data_rows=self.data_rows,
                 append_header=self.append_header,
+                separator=self.separator,
+                separator_rule=self.separator_rule,
+                chunk_size=self.chunk_size,
+                chunk_overlap=self.chunk_overlap,
             )
         if loader_type == "ppt":
             return BishengPptLoader(**params, retain_images=self.retain_images)

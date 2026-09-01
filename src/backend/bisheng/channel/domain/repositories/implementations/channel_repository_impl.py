@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import case, func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -22,11 +23,72 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
     def __init__(self, session: AsyncSession):
         super().__init__(session, Channel)
 
+    async def find_by_creation_request(
+        self,
+        *,
+        tenant_id: int,
+        user_id: int,
+        creation_request_id: str,
+    ) -> Channel | None:
+        query = select(Channel).where(
+            Channel.tenant_id == tenant_id,
+            Channel.user_id == user_id,
+            Channel.creation_request_id == creation_request_id,
+        )
+        return (await self.session.exec(query)).first()
+
+    async def save_creation(self, channel: Channel) -> tuple[Channel, bool]:
+        try:
+            return await self.save(channel), True
+        except IntegrityError:
+            await self.session.rollback()
+            if channel.creation_request_id is None or channel.tenant_id is None:
+                raise
+            existing = await self.find_by_creation_request(
+                tenant_id=int(channel.tenant_id),
+                user_id=channel.user_id,
+                creation_request_id=channel.creation_request_id,
+            )
+            if existing is None:
+                raise
+            return existing, False
+
     async def find_channels_by_ids(self, channel_ids: list[str]) -> list[Channel]:
         """Find channels by a list of channel IDs."""
         if not channel_ids:
             return []
         query = select(Channel).where(col(Channel.id).in_(channel_ids))
+        result = await self.session.exec(query)
+        return list(result.all())
+
+    async def find_channels_by_user_id(self, user_id: int) -> list[Channel]:
+        """Find all channels created by the given user (tenant auto-scoped)."""
+        query = select(Channel).where(Channel.user_id == user_id)
+        result = await self.session.exec(query)
+        return list(result.all())
+
+    async def find_followed_by_visible_ids(
+        self,
+        channel_ids: list[str],
+        *,
+        tenant_id: int,
+        exclude_creator_id: int,
+    ) -> list[Channel]:
+        """Load one bounded visible-id chunk under the canonical followed filters.
+
+        Called by ``_get_followed_channels`` with a page of ids that OpenFGA has
+        already declared visible for the current user; the ``tenant_id`` and
+        ``user_id != exclude_creator_id`` predicates keep the row set to the
+        active tenant and drop the user's own created channels at the DB layer,
+        so the loop never materialises them just to filter them out again.
+        """
+        if not channel_ids:
+            return []
+        query = select(Channel).where(
+            col(Channel.id).in_(channel_ids),
+            Channel.tenant_id == tenant_id,
+            Channel.user_id != exclude_creator_id,
+        )
         result = await self.session.exec(query)
         return list(result.all())
 
@@ -72,7 +134,10 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
                 & (SpaceChannelMember.user_id == user_id),
             )
             .outerjoin(subscriber_subq, subscriber_subq.c.business_id == Channel.id)
-            .where(Channel.is_released == True, Channel.visibility != ChannelVisibilityEnum.PRIVATE)
+            .where(
+                Channel.is_released == True,  # noqa: E712 — DM8 rejects `IS 1`
+                Channel.visibility != ChannelVisibilityEnum.PRIVATE,
+            )
         )
 
         # Apply keyword filter (fuzzy search on name and description)
@@ -138,7 +203,10 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
                 & (SpaceChannelMember.user_id == user_id),
             )
             .outerjoin(subscriber_subq, subscriber_subq.c.business_id == Channel.id)
-            .where(Channel.is_released == True, Channel.visibility == ChannelVisibilityEnum.PUBLIC)
+            .where(
+                Channel.is_released == True,  # noqa: E712 — DM8 rejects `IS 1`
+                Channel.visibility == ChannelVisibilityEnum.PUBLIC,
+            )
             .order_by(func.coalesce(Channel.update_time, Channel.create_time).desc())
             .limit(candidate_limit)
         )
@@ -151,7 +219,10 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
         query = (
             select(func.count())
             .select_from(Channel)
-            .where(Channel.is_released == True, Channel.visibility != ChannelVisibilityEnum.PRIVATE)
+            .where(
+                Channel.is_released == True,  # noqa: E712 — DM8 rejects `IS 1`
+                Channel.visibility != ChannelVisibilityEnum.PRIVATE,
+            )
         )
 
         if keyword:

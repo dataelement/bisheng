@@ -13,7 +13,6 @@ from bisheng.common.schemas.api import SSEResponse, resp_200
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_space_chat_service,
-    get_knowledge_space_creation_application_service,
     get_knowledge_space_file_change_service,
     get_knowledge_space_service,
 )
@@ -51,9 +50,6 @@ from bisheng.knowledge.domain.services.department_knowledge_space_service import
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
     KnowledgeSpaceChatService,
 )
-from bisheng.knowledge.domain.services.knowledge_space_creation_application_service import (
-    KnowledgeSpaceCreationApplicationService,
-)
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
 )
@@ -69,10 +65,12 @@ from bisheng.llm.domain.services.model_recovery_service import (
     RecoveryNotAllowedError,
     build_recovery_rejected_sse,
 )
-from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 router = APIRouter(prefix="/knowledge/space", tags=["knowledge_space"])
+
+SPACE_FILE_PREVIEW_PERMISSION_ACTION = None
+SPACE_FILE_DOWNLOAD_PERMISSION_ACTION = "download"
 
 
 class KnowledgeChatRecoveryRequest(BaseModel):
@@ -195,14 +193,32 @@ async def _request_item_changes(
 # ──────────────────────────── Space CRUD ──────────────────────────────────────
 
 
+# No `@require_quota` here, unlike assistant / workflow / tool. Those have no
+# domain-level quota check, so the decorator is their only gate. Knowledge spaces
+# gate inside `KnowledgeSpaceService._assert_space_creation_quota`, which also
+# covers the two paths the decorator cannot reach (the v2 open API in
+# `open_endpoints/filelib.py` and the F050 prospective-grant GETs). Keeping the
+# decorator would only duplicate the COUNT and — because it runs first — replace
+# the domain error 18001 ("创建知识空间数量已达上限") with the generic 19402
+# ("当前角色配额已用尽"), losing which resource actually ran out.
 @router.post("")
-@require_quota(QuotaResourceType.KNOWLEDGE_SPACE)
 async def create_space(
     req: KnowledgeSpaceCreateReq,
-    svc: KnowledgeSpaceCreationApplicationService = Depends(get_knowledge_space_creation_application_service),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> Any:
-    space = await svc.create(req=req, login_user=login_user)
+    space = await svc.create_knowledge_space(
+        name=req.name,
+        description=req.description,
+        icon=req.icon,
+        auth_type=req.auth_type,
+        is_released=req.is_released,
+        auto_tag_enabled=req.auto_tag_enabled,
+        auto_tag_library_id=req.auto_tag_library_id,
+        auto_tag_custom_tags=req.auto_tag_custom_tags,
+        creation_request_id=req.creation_request_id,
+        initial_permissions=req.initial_permissions,
+    )
     return resp_200(space)
 
 
@@ -223,6 +239,62 @@ async def get_auto_tag_visibility(
     ) = await WorkStationService.get_knowledge_space_config_with_meta()
     visible = bool(getattr(cfg, "auto_tag_visible", False)) if cfg else False
     return resp_200({"visible": visible})
+
+
+@router.get("/creation-permission-context")
+async def get_creation_permission_context(
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(await svc.get_creation_permission_context())
+
+
+@router.get("/creation-grant-subjects/users")
+async def list_creation_grant_users(
+    keyword: str = "",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(
+        await svc.list_creation_grant_users(keyword=keyword, page=page, page_size=page_size)
+    )
+
+
+@router.get("/creation-grant-subjects/user-groups")
+async def list_creation_grant_user_groups(
+    keyword: str = "",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(
+        await svc.list_creation_grant_user_groups(keyword=keyword, page=page, page_size=page_size)
+    )
+
+
+@router.get("/creation-grant-subjects/departments/children")
+async def list_creation_grant_department_children(
+    parent_id: int | None = None,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(await svc.list_creation_grant_department_children(parent_id=parent_id))
+
+
+@router.get("/creation-grant-subjects/departments/search")
+async def search_creation_grant_departments(
+    keyword: str = "",
+    limit: int = Query(50, ge=1, le=200),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(await svc.search_creation_grant_departments(keyword=keyword, limit=limit))
+
+
+@router.get("/creation-grant-subjects/departments/{department_id}/path-tree")
+async def get_creation_grant_department_path(
+    department_id: int,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(await svc.get_creation_grant_department_path(department_id))
 
 
 @router.get("/{space_id}/info")

@@ -71,7 +71,7 @@ fi
 
 echo "❌ [check-rbac-rebac-leak] INV-T19 VIOLATION — DAO/Model 层禁止直读 RoleAccessDao 做权限过滤"
 echo ""
-echo "请改走 PermissionService.list_accessible_ids / PermissionService.check（参考 KnowledgeDao.ajudge_knowledge_permission / FlowDao.get_user_access_online_flows 迁移模板）。"
+echo "请改走 permission.application 导出的权限应用协议。"
 echo ""
 echo "命中行："
 printf "%s" "${violations}" | sed 's/^/  /'

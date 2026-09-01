@@ -2,7 +2,7 @@
 
 Strategy: DB-backed (async_db_session) for the validation matrix + same-space
 cascade + cross-space version-chain effects; the permission boundary
-(_get_effective_permission_ids), the cross-space migrate dispatch, and tag I/O
+(``_get_effective_actions``), the cross-space migrate dispatch, and tag I/O
 are patched. See features/v2.6.0/034-knowledge-space-file-move/design.md.
 """
 
@@ -69,8 +69,8 @@ async def _add(session, **kw):
 def _svc():
     svc = KnowledgeSpaceService(request=MagicMock(), login_user=MagicMock(user_id=1, user_name="u1", tenant_id=1))
     # Grant everything by default; individual tests override.
-    svc._get_effective_permission_ids = AsyncMock(
-        return_value={"view_space", "move_file", "move_folder", "upload_file"}
+    svc._get_effective_actions = AsyncMock(
+        return_value={"move", "upload_file"}
     )
     svc._require_read_permission = AsyncMock(return_value=MagicMock(id=1, tenant_id=1))
     svc._replace_resource_parent_tuple = AsyncMock(return_value=None)
@@ -289,7 +289,7 @@ async def test_no_permission_blocks_item(async_db_session):
     svc = _svc()
     # upload_file present so the target check (#5) passes; no move_file on the
     # item → it's rejected with no_permission by the per-item gate.
-    svc._get_effective_permission_ids = AsyncMock(return_value={"upload_file", "view_space", "view_file"})
+    svc._get_effective_actions = AsyncMock(return_value={"upload_file"})
     res = await svc.move_items(1, [{"id": 20, "type": "file"}], target_space_id=1, target_folder_id=10)
     assert res["moved"] == []
     assert res["invalid"][0]["reason"] == "no_permission"
@@ -417,6 +417,6 @@ async def test_move_rejected_without_upload_file_on_target(async_db_session):
     await _add(async_db_session, id=20, knowledge_id=1, file_name="a.pdf", file_type=FILE, level=0, file_level_path="")
 
     svc = _svc()
-    svc._get_effective_permission_ids = AsyncMock(return_value={"move_file", "move_folder", "view_space"})
+    svc._get_effective_actions = AsyncMock(return_value={"move"})
     with pytest.raises(SpacePermissionDeniedError):
         await svc.move_items(1, [{"id": 20, "type": "file"}], target_space_id=1, target_folder_id=10)

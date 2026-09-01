@@ -376,8 +376,10 @@
     "menuEnableAll": "すべて有効",
     "menuDisableAll": "すべて無効",
     "channelQuotaLimit": "チャンネル作成上限",
-    "infoSourceSubscribeQuotaLimit": "購読情報源の数量上限",
-    "infoSourceSubscribeQuotaLimitDesc": "このロールのユーザーが作成した全チャンネルで購読できる情報源の総数（重複排除後）を制限します",
+    "spaceCreateQuotaLimit": "ナレッジスペース作成上限",
+    "spaceCreateQuotaLimitDesc": "このロールのユーザーが作成できるナレッジスペースの最大数を制限します",
+    "infoSourceSubscribeQuotaLimit": "情報ソース購読数の上限",
+    "infoSourceSubscribeQuotaLimitDesc": "このロールが作成したチャネル全体で購読できる情報ソースの総数の上限（重複を除く）",
     "infoSourceSubscribeQuotaInvalid": "0～10000 の整数を入力してください",
     "spaceSubscribeQuotaLimit": "ナレッジスペース参加上限",
     "spaceSubscribeQuotaLimitDesc": "このロールのユーザーが参加（購読）できるナレッジスペースの最大数を制限します",
@@ -518,6 +520,8 @@
     "fileUploadFailed": "ファイルのアップロードに失敗しました: {{name}}",
     "fileExceedRemoved": "ファイル：{{name}} は {{size}}M を超えているため削除されました",
     "fileTypeNotAllowed": "サポートされていないファイル形式：{{type}}",
+    "mediaFileTooMany": "アップロードファイル数は5個を超えられません。",
+    "noFileSelected": "ファイルが選択されていません",
     "uploadFailedCheckFormat": "アップロードに失敗しました。ファイル形式を確認してください",
     "sourceTooltip": "出典段落",
     "filterLabel": "ラベルでフィルター",
@@ -543,7 +547,20 @@
     "confirmed": "確定済み",
     "confirm": "確定",
     "runNewWorkflow": "新しい会話を開始",
-    "chatEndMessage": "この会話は終了しました"
+    "chatEndMessage": "この会話は終了しました",
+    "runLog": {
+      "used": "使用済み",
+      "using": "使用中",
+      "searched": "検索済み",
+      "searching": "検索中",
+      "done": "完了",
+      "thinking": "思考中",
+      "flowOffline": "{{name}} はオフラインです",
+      "flowDeleted": "スキルが削除されているため、スキル名を取得できません",
+      "toolDeleted": "ツールが削除されているため、ツール名を取得できません",
+      "knowledgeDeleted": "ナレッジベースが削除されているため、名称を取得できません",
+      "interrupted": "ツール呼び出しは結果を返しませんでした（セッション終了）"
+    }
   },
   "model": {
     "addSuccess": "追加に成功しました",
@@ -602,6 +619,9 @@
     "actions": "操作",
     "modelType": "モデルタイプ",
     "onlineOfflineOperation": "オンライン / オフライン操作",
+    "statusUpdateTime": "ステータス更新日時",
+    "updateStatus": "ステータス更新",
+    "statusUpdated": "ステータスを更新しました",
     "available": "利用可能",
     "abnormal": "異常",
     "unknown": "不明",
@@ -749,6 +769,8 @@
     "reportDescription": "レポート生成の説明...",
     "newButton": "新規",
     "importButton": "インポート",
+    "saveTemplate": "保存",
+    "saveSuccess": "保存しました",
     "start": "開始",
     "requiredLabel": "必須",
     "isRequired": "必須項目です",
@@ -902,7 +924,10 @@
     "internationalization": "あなたは知識ベースのQ&Aアシスタントです：\n1. ユーザーが使用する言語で質問に答え、答えが厳密で専門的であることを確認してください。\n2. 次の[参照テキスト]の内容に基づいて回答する必要があります。[参照テキスト]にユーザーの質問に直接関連する情報がある場合のみ回答してください。自分の知識に基づいて回答しないでください。関連する内容に画像が含まれている場合、画像ソースファイルを直接出力してください。`![image](path/IMAGE_1.png)`のようなプレースホルダーがある場合は、それらのプレースホルダーを変更したり削除したりせずに保持してください。\n3. ドキュメントにテーブルが含まれている場合は、変更を加えたり、マークダウン形式でテーブルを返したりしないでください。\n4. 参照テキストには異なる情報源からの情報が含まれている可能性があり、異なるまたは矛盾する回答が得られる場合があります。その場合、矛盾が生じた場合は、これらの回答をリストしてください。矛盾がなければ、最終的な結果のみを提供してください。\n5. 参照テキストの内容がユーザーの質問に関連していない場合は、「関連する内容が見つかりませんでした」と回答してください。\n\n# 参照テキスト\n{retrieved_file_content}\n\n# ユーザーの質問\n{question}",
     "taskModeName": "タスクモード表示名",
     "taskModeInputPlaceholder": "タスクモード入力プレースホルダー",
-    "taskModeFullName": "タスクモード"
+    "taskModeFullName": "タスクモード",
+    "blindOverwriteTitle": "この設定を保存しますか？",
+    "blindOverwriteDesc": "現在表示されているのは既定の設定で、保存済みのワークベンチ設定を読み込めていません。既存の設定がある場合、保存すると既定値で全体が上書きされます。保存する前にページを再読み込みして確認してください。",
+    "blindOverwriteOk": "このまま保存"
   },
   "build": {
     "create": "作成",
@@ -1071,7 +1096,7 @@
     "modelDescription": "説明",
     "modelDescriptionPlaceholder": "モデル選択に表示されます",
     "vision": "画像",
-    "visionText": "有効にすると、モデルは画像コンテンツ（PNG、JPEG、WEBP、非アニメーションGIF形式をサポート）を組み合わせて回答します。この機能はマルチモーダルモデルのみでサポートされています。",
+    "visionText": "有効にすると、モデルは画像コンテンツ（PNG、JPEG、WEBP、非アニメーションGIF形式をサポート）を組み合わせて回答します。この機能はマルチモーダルモデルのみでサポートされています。無効の間は、Linsightタスクモードでもこのモデルに画像を渡しません。",
     "webSearchPrompt": "Web 検索プロンプト",
     "confirmDelete": "削除してよろしいですか？",
     "deleteFailed": "削除に失敗しました",
@@ -2050,5 +2075,30 @@
   },
   "departmentSpace.adminLabel": "スペース責任者",
   "departmentSpace.adminSearchPlaceholder": "組織内のユーザーを検索",
-  "departmentSpace.adminRequired": "新しいスペースごとにスペース責任者を選択してください"
+  "departmentSpace.adminRequired": "新しいスペースごとにスペース責任者を選択してください",
+  "citation": {
+    "unsupportedPreview": "この形式のファイルはプレビューできません",
+    "loadingPreview": "ドキュメントプレビューを読み込み中...",
+    "noPreviewUrl": "プレビュー可能なファイルアドレスがありません",
+    "documentPreview": "ドキュメントプレビュー",
+    "downloadDocument": "ドキュメントをダウンロード",
+    "closeDocumentPreview": "ドキュメントプレビューを閉じる",
+    "web": "ウェブ",
+    "document": "ドキュメント",
+    "untitled": "タイトルなし",
+    "loadingDetail": "出典の詳細を読み込み中...",
+    "loadDetailFailed": "出典の詳細の読み込みに失敗しました",
+    "policyDocument": "政策文書",
+    "references": "参考資料",
+    "closeReferences": "参考資料を閉じる",
+    "backToReferences": "参考資料一覧に戻る",
+    "noDownloadUrl": "ダウンロード可能なファイルアドレスがありません"
+  },
+  "mediaPreview": {
+    "recognizedText": "認識テキスト",
+    "entryText": "登録テキスト",
+    "webPreview": "ウェブプレビュー",
+    "openSourcePage": "元のページを開く",
+    "noWebSnapshot": "ウェブスナップショットがありません。登録テキストを確認するか、元のページを開いてください。"
+  }
 }

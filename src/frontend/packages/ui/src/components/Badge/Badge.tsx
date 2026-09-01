@@ -9,11 +9,14 @@ import cn from '../../utils/cn';
  * that never clears is the same as no red dot at all. What says「what this
  * is」is a Tag (判别表 in §1 of the same doc).
  *
- * Four forms, one size — the badge does not grow with its host (§3):
+ * Five forms, one size — the badge does not grow with its host (§3):
  *   • `count` on a host      — 16px pill in the host's top-right corner (§2)
  *   • `dot` on a host        — 6px circle, same corner (§2)
  *   • `count` with no host   — the standalone number after a tab / menu label
  *   • `dot` with no host     — the unread marker in its own column of a list row
+ *   • `citation`             — the 溯源角标 inside running text: the ordinal of
+ *                              a source, and the ONE form that is clickable
+ *                              (§5, added 2026-08-28)
  *
  * Reporting a STATE (「运行中」/「失败」) is not one of them: that is a dot
  * plus a word, which is a word about the object — a Tag with `dot` (§1, moved
@@ -26,7 +29,10 @@ import cn from '../../utils/cn';
  * figures so 9→10 does not jitter (§3); a 1px page-colored ring so a corner
  * badge stays legible on a colored icon or an avatar (§3); 0 renders nothing
  * unless the caller opts in with `showZero` (§4); no hover, no focus, no
- * click, no enter/leave transition — the click belongs to the host (§5).
+ * click, no enter/leave transition — the click belongs to the host (§5). The
+ * citation form is the single exception to that last rule, because a footnote
+ * marker IS the link to its source; it is a real `<button>` and forwards its
+ * ref, so a Popover trigger can drive it (§5).
  *
  * The corner form is decorative to a screen reader (`aria-hidden`): the host
  * carries the merged description (`aria-label="通知，3 条未读"`, §落地 4).
@@ -34,6 +40,10 @@ import cn from '../../utils/cn';
 
 /** §2 — semantic, not positional: red = act on it, brand tint = just a count. */
 export type BadgeColor = 'danger' | 'brand';
+
+/** §2 — where the cited source came from. Two colors, so a reader can tell a
+ * document from a web page without opening either. */
+export type BadgeCitationSource = 'document' | 'web';
 
 /**
  * §2 — `danger` is a solid fill with white text (the loudest thing on the
@@ -50,6 +60,20 @@ const COLOR: Record<BadgeColor, string> = {
  * user cannot act on is worse than saying nothing. */
 const DISABLED_FILL = 'bg-text-4 text-white';
 
+/**
+ * §2 — the citation badge's two source colors. Both are a FULL light tint, not
+ * the standalone number's 5% wash: this one sits inside a paragraph of running
+ * text, where a 5% wash reads as a printing flaw rather than a marker.
+ *
+ * `document` rides the brand ramp (`blue-*` is the brand ramp here), so it
+ * follows the blue⇄green theme like everything else. `web` is frozen — the
+ * system's one purple, which belongs to no theme (基础-色彩规范 §4).
+ */
+const CITATION: Record<BadgeCitationSource, string> = {
+  document: 'bg-blue-50 text-blue-600 hover:bg-blue-100 data-[state=open]:bg-blue-100 focus-visible:ring-blue-600/25',
+  web: 'bg-citation-web-tint text-citation-web hover:bg-citation-web/15 data-[state=open]:bg-citation-web/15 focus-visible:ring-citation-web/25',
+};
+
 
 /** §3 — one size, 16px tall, min 16px wide, full radius (a single digit is a
  * circle, two digits stretch it into a pill), the
@@ -62,12 +86,13 @@ const PILL =
 /** §3 — 6px circle. */
 const DOT = 'inline-block h-1.5 w-1.5 shrink-0 rounded-full';
 
-export interface BadgeProps {
+export interface BadgeProps extends Omit<React.HTMLAttributes<HTMLElement>, 'color' | 'children'> {
   /**
    * The host the badge rides on — an icon, an avatar, a nav entry. WITH a
    * host the badge is a corner badge; WITHOUT one it is the standalone number.
-   * There is no third mode, so there is nothing to declare: the shape of the
-   * call site decides.
+   * The shape of the call site decides, so there is nothing to declare —
+   * except in the `citation` form, where there is no host and `children` is
+   * the ordinal itself.
    */
   children?: React.ReactNode;
   /**
@@ -101,6 +126,15 @@ export interface BadgeProps {
   offset?: [number, number];
   /** §5 — grey out with a disabled host. */
   disabled?: boolean;
+  /**
+   * §5 — the 溯源角标: renders a `<button>` carrying `children` (the source's
+   * ordinal) and nothing else. The only interactive form — the marker IS the
+   * link to its source — so the call site owns the behaviour (`onClick`, the
+   * hover card, `data-state` while the popover is open) and passes it through
+   * like any DOM prop. Every other form ignores the click: it belongs to the
+   * host.
+   */
+  citation?: BadgeCitationSource;
   /** Classes for the OUTER element: the wrapper in corner mode, the badge
    * itself otherwise. */
   className?: string;
@@ -108,7 +142,7 @@ export interface BadgeProps {
   badgeClassName?: string;
 }
 
-function Badge({
+const Badge = React.forwardRef<HTMLElement, BadgeProps>(function Badge({
   children,
   count,
   dot = false,
@@ -117,9 +151,40 @@ function Badge({
   circle = false,
   offset,
   disabled = false,
+  citation,
   className,
   badgeClassName,
-}: BadgeProps) {
+  ...rest
+}, ref) {
+  if (citation) {
+    return (
+      <button
+        ref={ref as React.Ref<HTMLButtonElement>}
+        type="button"
+        {...rest}
+        className={cn(
+          PILL,
+          // §5 — center the marker on the line it annotates. Two steps, and
+          // both are needed:
+          //   `align-middle` — an inline box sits on the BASELINE by default,
+          //     which drops a 16px circle to the descender line.
+          //   `-top-[0.16em]` — `middle` is defined as「baseline + half the
+          //     x-height」, and a Chinese glyph stands taller than the Latin
+          //     x-height, so the marker still hangs ~0.11em of the TEXT's size
+          //     low. 0.16em of the badge's own 10px ≈ 1.6px, which is that
+          //     gap for both body rungs (14px desktop / 16px mobile) to within
+          //     0.2px. Relative offset, so the line box does not move.
+          'relative -top-[0.16em] cursor-pointer select-none rounded-full align-middle outline-none transition-colors duration-150 focus-visible:ring-2',
+          CITATION[citation],
+          className,
+          badgeClassName,
+        )}
+      >
+        {children ?? count}
+      </button>
+    );
+  }
+
   const hasHost = children !== undefined;
   // §4 — 0 is silence unless the caller says 0 is the answer.
   const showCount = count !== undefined && (count > 0 || (showZero && count === 0));
@@ -136,14 +201,18 @@ function Badge({
     // radius Tabs had been drawing; the designer settled the open question on
     // the settings nav — one number badge, one radius.
     if (showCount) {
-      return <span className={cn(PILL, 'rounded-full', fill, className, badgeClassName)}>{count}</span>;
+      return (
+        <span ref={ref as React.Ref<HTMLSpanElement>} {...rest} className={cn(PILL, 'rounded-full', fill, className, badgeClassName)}>
+          {count}
+        </span>
+      );
     }
     // §2 — the same red dot, in its own column: a list row whose unread marker
     // has nowhere to hang (no icon, no avatar) still needs one, and the row is
     // the host in every sense that matters. No page-colored ring here — there
     // is nothing underneath it to separate from.
     if (showDot) {
-      return <span aria-hidden className={cn(DOT, fill, className, badgeClassName)} />;
+      return <span ref={ref as React.Ref<HTMLSpanElement>} aria-hidden {...rest} className={cn(DOT, fill, className, badgeClassName)} />;
     }
     return null;
   }
@@ -156,7 +225,7 @@ function Badge({
   const inset = circle ? '14.6%' : '0';
 
   return (
-    <span className={cn('relative inline-flex', className)}>
+    <span ref={ref as React.Ref<HTMLSpanElement>} {...rest} className={cn('relative inline-flex', className)}>
       {children}
       {(showCount || showDot) && (
         <span
@@ -182,6 +251,6 @@ function Badge({
       )}
     </span>
   );
-}
+});
 
 export { Badge };

@@ -2,6 +2,7 @@
  * Activity summary: classify a group's tool calls into readable buckets.
  * Split out of stepUtils.ts.
  */
+import { INGEST_STEP_NAME } from './execTypes';
 import type { MergedStep } from './execTypes';
 
 /**
@@ -38,6 +39,12 @@ function classifyActivity(name: string): ActivityCategory | null {
     if (!n) return 'other';
     // never-count noise (defensive — callers already drop these)
     if (n === 'thinking' || n === 'ls' || n === 'write_todos' || n === 'ask_user') return null;
+    // Attachment ingest is the SYSTEM preparing the user's uploads, not the agent
+    // acting. Counting it charged the agent for the whole parse — a 12-PDF batch
+    // turned the header into "读取 6 个文件 · 执行 1 步操作（用时 1416 秒）", i.e.
+    // 20 minutes of file parsing billed to the model's thinking. It renders as its
+    // own phase row (IngestPhaseRow) and is deliberately absent from the tally.
+    if (n === INGEST_STEP_NAME) return null;
     // knowledge before web_search: search_knowledge_base must not match web_search
     if (n.includes('knowledge') || n.includes('search_knowledge')) return 'knowledge';
     if (n.includes('web_search') || n.includes('search')) return 'web_search';

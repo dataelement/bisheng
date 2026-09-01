@@ -9,8 +9,9 @@ This file focuses on the *workflow-specific* invariants that AC-02/08/11 demand:
 - ``FlowDao.aget_all_apps`` accepts a ``cursor`` keyword and returns
   ``(data, has_more)`` (signature/contract).
 - ``WorkFlowService.get_all_flows_envelope`` exists, uses
-  ``"flow|sort=update_time"`` as the cursor context (AC-02), and routes
-  cursor-decode failures through ``AppInvalidCursorError`` (AC-08).
+  an action- and managed-mode-bound ``"flow|sort=update_time|..."`` cursor
+  context (AC-02), and routes cursor-decode failures through
+  ``AppInvalidCursorError`` (AC-08).
 - ``PageInfiniteCursorData`` is the wrapped return shape.
 
 The pytest pre-mock chain (``test/conftest.py``) breaks
@@ -19,18 +20,16 @@ The pytest pre-mock chain (``test/conftest.py``) breaks
 time. We therefore validate via the source code of the file rather than
 importing the live class.
 """
+
 from __future__ import annotations
 
 import ast
-import inspect
 import re
 from pathlib import Path
 
 
 def _read(rel: str) -> str:
-    return (
-        Path(__file__).resolve().parents[2] / "bisheng" / rel
-    ).read_text(encoding="utf-8")
+    return (Path(__file__).resolve().parents[2] / "bisheng" / rel).read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +43,8 @@ def test_flowdao_aget_all_apps_no_count_statement():
     # `count_statement` token elsewhere in the file doesn't cause a false fail.
     tree = ast.parse(src)
     func = next(
-        n for n in ast.walk(tree)
+        n
+        for n in ast.walk(tree)
         if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "aget_all_apps"
     )
     func_src = ast.get_source_segment(src, func)
@@ -56,7 +56,8 @@ def test_flowdao_aget_all_apps_takes_cursor_returns_has_more():
     src = _read("database/models/flow.py")
     tree = ast.parse(src)
     func = next(
-        n for n in ast.walk(tree)
+        n
+        for n in ast.walk(tree)
         if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "aget_all_apps"
     )
     # Args include `cursor`
@@ -75,10 +76,20 @@ def test_flowdao_aget_all_apps_takes_cursor_returns_has_more():
 # ---------------------------------------------------------------------------
 
 
-def test_get_all_flows_envelope_exists_and_uses_flow_sort_update_time_context():
+def test_get_all_flows_envelope_binds_cursor_to_concrete_action_and_mode():
     src = _read("api/services/workflow.py")
-    assert "async def get_all_flows_envelope" in src
-    assert '"flow|sort=update_time"' in src or "'flow|sort=update_time'" in src
+    tree = ast.parse(src)
+    cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "WorkFlowService")
+    func = next(
+        n
+        for n in cls.body
+        if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "get_all_flows_envelope"
+    )
+    func_src = ast.get_source_segment(src, func)
+
+    assert 'required_action = "edit" if managed else action' in func_src
+    assert "flow|sort=update_time|action={required_action}|" in func_src
+    assert "managed={int(managed)}" in func_src
 
 
 def test_get_all_flows_envelope_raises_app_invalid_cursor_error_on_decode_failure():
@@ -87,7 +98,8 @@ def test_get_all_flows_envelope_raises_app_invalid_cursor_error_on_decode_failur
 
     cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "WorkFlowService")
     func = next(
-        n for n in cls.body
+        n
+        for n in cls.body
         if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "get_all_flows_envelope"
     )
     func_src = ast.get_source_segment(src, func)
@@ -102,7 +114,8 @@ def test_get_all_flows_envelope_returns_page_infinite_cursor_data():
     tree = ast.parse(src)
     cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "WorkFlowService")
     func = next(
-        n for n in cls.body
+        n
+        for n in cls.body
         if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "get_all_flows_envelope"
     )
     func_src = ast.get_source_segment(src, func)
@@ -123,8 +136,7 @@ def test_get_all_flows_returns_has_more_not_total():
     tree = ast.parse(src)
     cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "WorkFlowService")
     func = next(
-        n for n in cls.body
-        if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "get_all_flows"
+        n for n in cls.body if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "get_all_flows"
     )
     func_src = ast.get_source_segment(src, func)
     assert "return data, has_more" in func_src
@@ -152,8 +164,11 @@ def test_envelope_uses_fetch_until_enough_scan_loop():
     cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "WorkFlowService")
 
     scan = next(
-        (n for n in cls.body
-         if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "_scan_visible_flows_cursor"),
+        (
+            n
+            for n in cls.body
+            if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "_scan_visible_flows_cursor"
+        ),
         None,
     )
     assert scan is not None, "_scan_visible_flows_cursor helper must exist"
@@ -163,21 +178,19 @@ def test_envelope_uses_fetch_until_enough_scan_loop():
     )
 
     envelope = next(
-        n for n in cls.body
+        n
+        for n in cls.body
         if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "get_all_flows_envelope"
     )
     envelope_src = ast.get_source_segment(src, envelope)
-    assert "_scan_visible_flows_cursor" in envelope_src, (
-        "envelope must delegate fetching to the scan loop"
-    )
+    assert "_scan_visible_flows_cursor" in envelope_src, "envelope must delegate fetching to the scan loop"
 
 
 def test_workflow_list_endpoint_accepts_cursor_param():
     src = _read("api/v1/workflow.py")
     tree = ast.parse(src)
     func = next(
-        n for n in ast.walk(tree)
-        if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "read_flows"
+        n for n in ast.walk(tree) if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "read_flows"
     )
     func_src = ast.get_source_segment(src, func)
     # Endpoint declares a cursor query parameter

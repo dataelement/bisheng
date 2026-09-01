@@ -7,12 +7,13 @@
 
 ## 1. 什么时候用
 
-徽标回答两个问题：**有没有新的**、**有多少**。它贴在入口或文字旁边，本身不承载内容。
+徽标回答两个问题：**有没有新的**、**有多少**。它贴在入口或文字旁边，本身不承载内容。正文里的**溯源角标**是第三问——**这句话是第几条来源**——同样是一个圆圈里的数字，2026-08-28 一并归口本文（§2）。
 
 - 入口上有未读、待办、新消息，用徽标挂在右上角。
 - 页签、菜单项后面要报条目数，用独立数字。
 - 列表每行要标「这条没看过」，用红点：挂在行内的头像上；行里没有可挂的东西就单独占一列。
 - 要说「这是什么 / 什么状态」——包括列表里那种小圆点 + 一个词——用标签，见 [组件-Tag标签.md](组件-Tag标签.md)。
+- 正文里要标「这段话出自第几条来源」，用溯源角标：正文流里的数字圆圈，点开就是那条来源。
 - 徽标只报事实，不做装饰：没有新东西就不显示，看过就清零——长期挂着的红点等于没有红点。
 
 | 场景 | 用什么 |
@@ -21,6 +22,7 @@
 | 要说「有几个」 | 数字 |
 | 列表每行都要标状态、要一眼扫过去 | 标签的状态点款（small 档）：点 + 一个词，行高不变、颜色好扫 |
 | 单个对象的状态要醒目 | 标签：有色底，面积大，见得远 |
+| 正文里指向第几条来源 | 溯源角标：数字圆圈，**可点**，颜色分文档 / 网页两类来源 |
 
 后两行都落在[标签](组件-Tag标签.md)：一句话分界——**徽标数「有几个」，标签说「是什么」**。「失败」不是一个数量。
 
@@ -31,6 +33,7 @@
 | **数字** `count` | 16px 高的胶囊，有色底 + 数字 | 宿主右上角 |
 | **红点** `dot` | 6px 实心圆 | 宿主右上角；没有可挂的宿主时（列表行没有图标 / 头像）单独立在行内，此时行本身就是宿主 |
 | **独立数字** | 同数字款，不挂角 | 文字右侧 |
+| **溯源角标** `citation` | 同数字款，底色更实（见下） | 正文行内，跟在被引用的那句话后面 |
 
 数字与独立数字按**语义**分两个色，不按位置分：
 
@@ -42,13 +45,22 @@
 - 一个入口的未读数用 danger，页签后的条目数用 brand，两者不互换：红底白字全站只表示「等你处理」，用多了就没人理了。
 - 独立数字跟随所在组件的配色款（如 Tabs 墨色款下为墨色），规则见宿主组件文档。
 
+溯源角标另分两色，说的是**来源是哪一类**——读者不用点开就知道下面是文档还是网页：
+
+| 来源 | 底 / 字 | 说明 |
+|---|---|---|
+| **文档**（知识库 / 知识空间） | 品牌浅色底 / 品牌字 | 随蓝⇄绿主题 |
+| **网页**（联网搜索） | 固定紫浅底 / 固定紫字 | 不换肤，与技能标签同一支紫，见 [基础-色彩规范.mdx](基础-色彩规范.mdx) §4 |
+
+底色用的是**整档浅色**（品牌 50 / 紫 50），不是独立数字那种 5% 淡染：角标嵌在正文里，四周都是字，5% 的底在那种环境下看着像印坏了。
+
 ## 3. 尺寸 Size
 
 徽标只有一档，不随宿主尺寸变。
 
 | 类型 | 尺寸 | 字号 / 字重 | 圆角 | 内边距 |
 |---|---|---|---|---|
-| 数字 / 独立数字 | 高 16px、最小宽 16px | caption-sm 10px / 500，等宽数字 | full：一位数是正圆，两位起拉成胶囊（两款同值） | 左右 4px |
+| 数字 / 独立数字 / 溯源角标 | 高 16px、最小宽 16px | caption-sm 10px / 500，等宽数字 | full：一位数是正圆，两位起拉成胶囊（三款同值） | 左右 4px |
 | 红点 | 6 × 6px | — | full | — |
 
 - 数字**不折算、不截断**：传多少显示多少，位数多了胶囊跟着变宽。一个入口攒到四位数未读，问题在通知策略，不在徽标。
@@ -71,6 +83,8 @@
 - **挂角位置**：徽标中心落在宿主右上角（向右上各出 50%）；宿主是圆形（头像、圆形图标按钮）时向内收，让徽标中心落在圆周上。业务可传 `offset` 微调，单位 px。
 - **宿主不可用时徽标一起变灰**（同宿主的 disabled 字色）：入口点不了，红点还亮着是在催人做做不了的事。
 - 徽标本身**不可点、无悬停、无焦点**：点击落到宿主上。要「点徽标清未读」，由宿主处理。
+- **溯源角标与整行文字居中对齐**：行内元素默认坐在基线上，16px 的圆会掉到降部那一线；而只把它改成 `vertical-align: middle` 也还差一点——那条线对的是西文 x-height 的一半，中文字面比它高。两步都要做，画法见给实现窗口 4。
+- **唯一例外是溯源角标**：脚注序号本身就是通往那条来源的入口，没有别的宿主可点。它是真正的 `<button>`，有悬停加深、有展开态（弹出溯源卡片时底色保持加深）、有键盘焦点环；无权查看的那一条不给指针手势。行为（点开哪张卡、悬停出不出预览）由调用方决定，本文只管画法。
 - **出现 / 消失不加动画**：数字变化即时替换。
 - 深色模式：danger 实底走功能色深色阶，品牌透明底随品牌深色阶；业务不写 `dark:` 覆盖。
 
@@ -92,16 +106,18 @@
 <!-- site-hide -->
 ## 给实现窗口
 
-1. 组件位置 `packages/ui/src/components/Badge/`（2026-08-28 已落地），props：`count` / `dot`、`color: danger | brand`、`showZero`、`circle`（圆形宿主）、`offset: [x, y]`、`disabled`。挂角款用 `relative inline-flex` 包宿主 + `absolute` 徽标；不传 `children` 即行内款（数字或红点），渲染为 `inline-flex`。默认色**按形态定、不按位置定**：红点恒为 danger（红点就是「有新的」），只有独立数字默认 brand——品牌 5% 透明底摊在 6px 的圆点上等于没有。**没有 `standalone` prop**：挂角与独立只差一个宿主，调用点的形状已经说清楚了，再加一个布尔量只会多出「传了 standalone 又传了 children」这种没有答案的组合。
-2. 颜色全走 token：danger `bg-danger text-white`；brand `bg-blue-500/5 text-blue-500`（同 Tabs 现行 `badge` 画法，随蓝⇄绿主题）；描边 `ring-1 ring-bg-page`；禁用 `bg-text-4`。
-3. 尺寸：`h-4 min-w-4 px-1 text-caption-sm font-medium tabular-nums leading-none`；数字款与独立数字同为 `rounded-full`；红点 `h-1.5 w-1.5 rounded-full`。
-4. 无障碍：挂角徽标对读屏是文字信息，宿主加 `aria-label="通知，3 条未读"` 之类的合并描述，徽标本体 `aria-hidden`。
-5. 迁移映射（本次只读扫描，2026-08-28，范围 `client/src`，排除 node_modules）：
+1. 组件位置 `packages/ui/src/components/Badge/`（2026-08-28 已落地），props：`count` / `dot`、`color: danger | brand`、`citation: document | web`、`showZero`、`circle`（圆形宿主）、`offset: [x, y]`、`disabled`。挂角款用 `relative inline-flex` 包宿主 + `absolute` 徽标；不传 `children` 即行内款（数字或红点），渲染为 `inline-flex`。默认色**按形态定、不按位置定**：红点恒为 danger（红点就是「有新的」），只有独立数字默认 brand——品牌 5% 透明底摊在 6px 的圆点上等于没有。**没有 `standalone` prop**：挂角与独立只差一个宿主，调用点的形状已经说清楚了，再加一个布尔量只会多出「传了 standalone 又传了 children」这种没有答案的组合。
+2. 颜色全走 token：danger `bg-danger text-white`；brand `bg-blue-500/5 text-blue-500`（同 Tabs 现行 `badge` 画法，随蓝⇄绿主题）；描边 `ring-1 ring-bg-page`；禁用 `bg-text-4`。溯源角标：文档 `bg-blue-50 text-blue-600`、悬停与展开态 `bg-blue-100`；网页 `bg-citation-web-tint text-citation-web`、悬停与展开态 `bg-citation-web/15`（`--citation-web*` 明暗两套，值与技能标签紫同源、写死不引用 `--brand-*`）。
+3. 溯源角标是组件里唯一 `forwardRef` 出去、并把 DOM 属性透传出去的形态：调用方拿它当 Radix `Popover.Trigger asChild` 的子节点，`onClick` / `onMouseEnter` / `data-state` 都从外面传进来。其余形态的 ref 落在最外层元素上。
+4. 尺寸：`h-4 min-w-4 px-1 text-caption-sm font-medium tabular-nums leading-none`；数字款、独立数字与溯源角标同为 `rounded-full`；红点 `h-1.5 w-1.5 rounded-full`。溯源角标另加 `align-middle` + `relative -top-[0.16em]` 与正文居中对齐：`middle` 对齐的是「基线 + 半个 x-height」，中文字面比 x-height 高，只写 `align-middle` 仍会低约正文字号的 0.11em；0.16em 折合角标自身 10px 字号约 1.6px，桌面 14px 与移动 16px 两档正文都落在 0.2px 以内。用相对定位而非 margin，行高不受影响。
+5. 无障碍：挂角徽标对读屏是文字信息，宿主加 `aria-label="通知，3 条未读"` 之类的合并描述，徽标本体 `aria-hidden`。
+6. 迁移映射（本次只读扫描，2026-08-28，范围 `client/src`，排除 node_modules）：
    - **已迁（2026-08-28）**：`pages/settings/SettingsPage.tsx` 的 `NavCountBadge`（桌面 + 移动两处导航行）→ `<Badge color="danger" count={n} />`。**去掉了 99+ 折算**，字号 11 → caption-sm 10，`#f53f3f` → danger token；圆角仍是正圆（这块页面正是设计师拍下「两款同为 full」的地方）。
    - **已迁（2026-08-28）**：`components/messageApproval/NotificationRow.tsx` 的未读点（`size-2 bg-[#f53f3f]`）→ `<Badge dot />`，8 → 6px；`layouts/UserPopMenu.tsx` 头像右上角的红点（`absolute size-2.5 ring-2 ring-white`）→ `<Badge dot circle>{avatar}</Badge>`，10 → 6px，2px 白描边 → 1px 页面底色描边（深色模式下自动跟着走，原来那圈白在深色里是道亮边）。
    - Tabs 组件内置的 `badge`（16px、原圆角 6、`bg-primary/5`、caption-sm/500）→ **已改**为渲染 `<Badge count={item.badge} />`，配色仍由 Tabs 的 `variant` 传入（墨色款不能长出品牌色）；圆角随本次统一从 6px 变为 full，Tabs §4 同步改写。
+   - **已迁（2026-08-28）**：`components/Chat/Messages/Content/Markdown.tsx` 的溯源角标（18px 圆 + 12px 字，配色表在 `citationUtils.getCitationClassName`）→ `<Badge citation="document | web">`，尺寸收到本文的 16px / caption-sm，网页那档的 `#7224D9` / `#F7F3FF` 换成 `--citation-web*`（顺带把值归到系统里那支紫）；`getCitationClassName` 删除。来源抽屉里的「网页 / 文档」小片按判别表属**标签**，本次只把它的裸紫换成同一组 token，markup 迁 Tag 待办。
    - 其它手写红点 / 数字（侧栏未读、通知铃铛）未扫描，迁移窗口用 `rounded-full` + `bg-[#f5` / `bg-red` grep 后补附录。
-6. 站点接线（元规范 §5）：本文 + `components/badge.mdx` demo 页均已注册进 `rspress.config.ts` 侧栏，front matter `component: Badge` 已写（组件已进库）；00-总纲 §四 与 01-设计规范 §0 索引行随建档更新。client 侧仍有同名的 `components/ui/Badge.tsx`（实为标签），迁移顺序见 Tag 规范给实现窗口第 6 条。
+7. 站点接线（元规范 §5）：本文 + `components/badge.mdx` demo 页均已注册进 `rspress.config.ts` 侧栏，front matter `component: Badge` 已写（组件已进库）；00-总纲 §四 与 01-设计规范 §0 索引行随建档更新。client 侧仍有同名的 `components/ui/Badge.tsx`（实为标签），迁移顺序见 Tag 规范给实现窗口第 6 条。
 
 ## 待决策清单
 
@@ -112,6 +128,8 @@
 
 | 日期 | 改了什么 | 提交 |
 |---|---|---|
+| 2026-08-28 | 溯源角标改为与整行文字**居中对齐**（设计师验收两轮）：原来坐在基线上，圆圈掉到降部一线；改 `align-middle` 后仍低约正文字号的 0.11em——中文字面高过西文 x-height，而 `middle` 对的正是 x-height 的一半——再补 `relative -top-[0.16em]`，实测两档正文都对到 0.2px 以内。§5 与 §给实现窗口 4 记录 | 待 committer 窗口提交 |
+| 2026-08-28 | 收编**溯源角标**（设计师拍板：它也是圆圈数字，归徽标）：新增 `citation` 形态，尺寸统一到本文的 16px / caption-sm 10px（原 18px / 12px），文档来源走品牌色、网页来源走冻结紫 `--citation-web*`（值与技能标签同源，色彩规范 §4 第三条固定例外）。它是徽标里**唯一可点**的一档——脚注序号就是通往来源的入口——§5 为此开例外，组件随之 `forwardRef` 并透传 DOM 属性。§1 判别表 / §2 类型表与来源配色表 / §3 尺寸表 / §给实现窗口 1·2·3·6 同步；client 侧 `Markdown.tsx` 的手写角标迁入 | 待 committer 窗口提交 |
 | 2026-08-28 | **圆角统一为 full**（设计师在设置页导航上拍板）：独立数字原沿用 Tabs 的 6px，与挂角数字的正圆并存两个值；现在一律 full——一位数正圆、两位起胶囊。§3 尺寸表、§给实现窗口 3 同步，待决策清单第 1 条结案；Tabs §4 的画法描述随之改写（其计数徽标本就由本组件渲染） | 待 committer 窗口提交 |
 | 2026-08-28 | 红点补上**无宿主**的行内形态：列表行没有图标 / 头像可挂时，红点自己占一列（通知列表就是这个），行本身即宿主；默认色改为按形态定——红点恒 danger，只有独立数字默认 brand。§1 / §2 / §给实现窗口 1 同步；client 三处手写徽标（设置导航计数 ×2、通知未读点、头像红点）随之迁入组件 | 待 committer 窗口提交 |
 | 2026-08-28 | **状态点移出本文**，归口 [组件-Tag标签.md](组件-Tag标签.md) §5 `dot` 款（设计师拍板）：状态点说的是「这个对象是什么状态」，与徽标的「有没有新的 / 有多少」不是一件事，而它和标签本来就共用一套语义色、在真实页面（知识空间文件列表）里也一直是带色底的标签形态。本文剩数字 / 红点 / 独立数字三类；§1 判别表、§2 类型表、§3 尺寸表、§4 内容形态、§给实现窗口 1/2/4 同步；组件与 demo 页同步删 `status` / `text` prop | 待 committer 窗口提交 |

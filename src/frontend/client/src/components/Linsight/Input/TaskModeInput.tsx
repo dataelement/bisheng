@@ -15,7 +15,9 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 're
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { checkFileParseStatus } from '~/api/linsight';
-import { File_Accept, NotificationSeverity } from '~/common';
+import { buildChatAccept } from '~/common/chatAccept';
+import { NotificationSeverity } from '~/common';
+import { resolveUploadSizeLimits } from '~/pages/knowledge/knowledgeUtils';
 import DragDropOverlay from '~/components/Chat/Input/Files/DragDropOverlay';
 import { TextareaAutosize } from '~/components/ui';
 import {
@@ -119,6 +121,8 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
 
     // Drag & paste upload support
     const { isDragging, handlePaste } = useFileDropAndPaste({
+        // Task mode: a dropped directory is expanded with its tree preserved.
+        allowFolders: true,
         enabled: !disabled,
         onFilesReceived: (files: FileList | File[]) => {
             inputFilesRef.current?.upload(files);
@@ -143,7 +147,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
             try {
                 const res = await checkFileParseStatus(pending.map((file: any) => file.file_id));
                 const statusList = Array.isArray(res.data) ? res.data.filter(Boolean) : [];
-                const statusMap = new Map(statusList.map((item: any) => [item.file_id, item.parsing_status]));
+                const statusMap = new Map<string, any>(statusList.map((item: any) => [item.file_id, item]));
                 if (!statusMap.size) return;
 
                 inputFilesRef.current?.updateParsingStatus?.(statusMap);
@@ -151,10 +155,13 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                 setContext((prev) => {
                     let changed = false;
                     const nextFiles = prev.files.reduce((result: any[], file: any) => {
-                        const nextStatus = statusMap.get(file?.file_id);
-                        if (!nextStatus) {
+                        const item = statusMap.get(file?.file_id);
+                        if (!item) {
                             result.push(file);
-                        } else if (nextStatus === 'failed') {
+                            return result;
+                        }
+                        const nextStatus = item.parsing_status;
+                        if (nextStatus === 'failed') {
                             changed = true;
                             showToast({
                                 message: localize('com_file_parse_failed_auto_removed', {
@@ -162,9 +169,16 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                                 }),
                                 severity: NotificationSeverity.ERROR,
                             });
-                        } else if (nextStatus !== file.parsing_status) {
+                        } else if (
+                            nextStatus !== file.parsing_status
+                            || (item.cover_filepath && item.cover_filepath !== file.cover_filepath)
+                        ) {
                             changed = true;
-                            result.push({ ...file, parsing_status: nextStatus });
+                            result.push({
+                                ...file,
+                                parsing_status: nextStatus,
+                                ...(item.cover_filepath ? { cover_filepath: item.cover_filepath } : {}),
+                            });
                         } else {
                             result.push(file);
                         }
@@ -222,6 +236,10 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                 file_id: item.file_id,
                 file_name: item.filename || item.file_name || item.name,
                 parsing_status: item.parsing_status || 'completed',
+                // Folder upload: the backend rebuilds this tree under the task
+                // workspace's uploads/ prefix. Undefined for a loose file.
+                relative_path: item.relative_path,
+                size: item.size,
             })),
             question: trimmed,
             tools: submissionTools as any,
@@ -267,15 +285,26 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
         setSkills((prev) => prev.filter((s) => s.name !== skill.name));
 
     const handleRemoveFile = (file: any) => {
-        inputFilesRef.current?.removeByName?.(file.name || file.filename);
+        // clientId, not name: a folder upload can carry the same file name in
+        // several subdirectories, and removing by name would take out all of them.
+        inputFilesRef.current?.removeByClientId?.(file.clientId);
         setContext((prev) => ({
             ...prev,
-            files: prev.files.filter((i: any) => (i.file_id || i.name) !== (file.file_id || file.name)),
+            files: prev.files.filter((i: any) => String(i.clientId) !== String(file.clientId)),
         }));
     };
 
     const hasText = !!text.trim();
-    const accept = (bsConfig as any)?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight;
+    // This box only ever runs inside a task, so both task-mode extras apply. `.ofd`
+    // used to be excluded here alone, which made the same file pickable when
+    // starting a task and rejected when following up on it — the backend carries
+    // ofd originals into the workspace either way.
+    const accept = buildChatAccept({
+        enableMedia: !!(envConfig as any)?.enable_media_upload,
+        enableEtl4lm: !!(bsConfig as any)?.enable_etl4lm,
+        includeOfd: true,
+        taskMode: true,
+    });
     const InputFilesAny = InputFiles as any;
 
     return (
@@ -291,6 +320,8 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                     hideTrigger
                     hideList
                     uploadMode="linsight"
+                    allowFolderUpload
+                    uploadSizeLimits={resolveUploadSizeLimits(envConfig as any)}
                     size={(envConfig as any)?.uploaded_files_maximum_size || 50}
                     onFilesStateChange={(currentFiles: any[] = []) => {
                         setAttachmentFiles(
@@ -303,11 +334,17 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                                 filename: f.name,
                                 file_name: f.name,
                                 parsing_status: f.parsingStatus,
+                                // Drives the folder chip grouping in ContextChips.
+                                relative_path: f.relativePath,
                             })),
                         );
                     }}
                     onChange={(files: any) => {
-                        setFileUploading(!files);
+                        if (files === null) {
+                            setFileUploading(true);
+                            return;
+                        }
+                        setFileUploading(false);
                         setContext((prev) => ({ ...prev, files: files || [] }));
                     }}
                 />
@@ -352,6 +389,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                         <PlusMenu
                             disabled={disabled}
                             onUploadFile={() => inputFilesRef.current?.openPicker?.()}
+                            onUploadFolder={() => inputFilesRef.current?.openFolderPicker?.()}
                             taskModeActive
                             onToggleTaskMode={handleExitTaskMode}
                             selectedSkills={skills}

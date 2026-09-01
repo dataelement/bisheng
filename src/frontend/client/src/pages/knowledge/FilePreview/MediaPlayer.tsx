@@ -16,6 +16,9 @@ interface MediaPlayerProps {
     src: string;
     allowDownload?: boolean;
     onDownload?: () => void;
+    /** Start on its own. Off in knowledge preview, where opening a file is
+     *  browsing; on in chat, where opening a clip is asking to watch it. */
+    autoPlay?: boolean;
 }
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -226,7 +229,7 @@ function VolumeControl({
     );
 }
 
-export function MediaPlayer({ kind, src, allowDownload = false, onDownload }: MediaPlayerProps) {
+export function MediaPlayer({ kind, src, allowDownload = false, onDownload, autoPlay = false }: MediaPlayerProps) {
     const localize = useLocalize();
     const isVideo = kind === "video";
     const containerRef = useRef<HTMLDivElement>(null);
@@ -402,7 +405,7 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload }: Me
             className={cn(
                 "relative overflow-hidden",
                 onDarkStage ? "bg-black" : "bg-fill-2",
-                fullscreen ? "flex h-full w-full flex-col justify-center" : "rounded-[12px]",
+                fullscreen ? "flex h-full w-full flex-col justify-center" : "rounded-xl",
             )}
         >
             {isVideo ? (
@@ -412,6 +415,7 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload }: Me
                     }}
                     className={cn("w-full", fullscreen ? "min-h-0 flex-1" : "max-h-[60vh]")}
                     src={src}
+                    autoPlay={autoPlay}
                     playsInline
                     onClick={togglePlay}
                     {...mediaEvents}
@@ -431,6 +435,7 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload }: Me
                             mediaRef.current = node;
                         }}
                         src={src}
+                        autoPlay={autoPlay}
                         {...mediaEvents}
                     />
                 </>

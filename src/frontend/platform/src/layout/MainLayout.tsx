@@ -330,7 +330,11 @@ export default function MainLayout() {
                         </div>
                     </div>}
                 </div>
-                <div className="flex-1 bg-background-main-content rounded-lg w-[calc(var(--bs-vw,100vw)-184px)]">
+                {/* Width comes from the flex row, not from 100vw: 100vw counts the
+                    document scrollbar, so calc(100vw-184px) overshot the free space
+                    by the scrollbar width and forced a horizontal document scrollbar
+                    (which then cost vertical space and produced a second, outer scrollbar). */}
+                <div className="flex-1 min-w-0 bg-background-main-content rounded-lg">
                     <Suspense fallback={<div className="flex items-center justify-center h-full"><LoadingIcon /></div>}>
                         <Outlet />
                     </Suspense>

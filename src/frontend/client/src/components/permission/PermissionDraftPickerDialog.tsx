@@ -25,11 +25,10 @@ import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup";
 import type { PermissionDraftRow } from "./usePermissionDraft";
 
 export interface PermissionDraftSearchApi {
-  grantUserTreeChildrenApi?: ComponentProps<typeof SubjectSearchUser>["grantUserTreeChildrenApi"];
-  grantUserTreeSearchApi?: ComponentProps<typeof SubjectSearchUser>["grantUserTreeSearchApi"];
-  grantDepartmentChildrenApi?: ComponentProps<typeof SubjectSearchDepartment>["grantDepartmentChildrenApi"];
-  grantDepartmentSearchApi?: ComponentProps<typeof SubjectSearchDepartment>["grantDepartmentSearchApi"];
-  grantUserGroupsApi?: ComponentProps<typeof SubjectSearchUserGroup>["grantUserGroupsApi"];
+  usersApi?: ComponentProps<typeof SubjectSearchUser>["usersApi"];
+  departmentChildrenApi?: ComponentProps<typeof SubjectSearchDepartment>["departmentChildrenApi"];
+  departmentSearchApi?: ComponentProps<typeof SubjectSearchDepartment>["departmentSearchApi"];
+  userGroupsApi?: ComponentProps<typeof SubjectSearchUserGroup>["userGroupsApi"];
 }
 
 export interface PermissionDraftPickerDialogProps {
@@ -62,14 +61,9 @@ export function PermissionDraftPickerDialog({
   const [subjects, setSubjects] = useState<SelectedSubject[]>([]);
   const [includeChildren, setIncludeChildren] = useState(true);
   const [selectedModelId, setSelectedModelId] = useState("");
-  const selectableModels = useMemo(
-    () => subjectType === "user"
-      ? relationModels
-      : relationModels.filter((model) => model.relation !== "owner"),
-    [relationModels, subjectType],
-  );
+  const selectableModels = useMemo(() => relationModels, [relationModels]);
   const activeModel = selectableModels.find((model) => model.id === selectedModelId)
-    ?? selectableModels.find((model) => model.relation === "viewer")
+    ?? selectableModels.find((model) => model.level === 1)
     ?? selectableModels[0];
 
   useEffect(() => {
@@ -94,8 +88,9 @@ export function PermissionDraftPickerDialog({
       subjectType: subject.type,
       subjectId: subject.id,
       subjectName: subject.name,
-      relation: activeModel.relation,
-      modelId: activeModel.id,
+      modelKey: activeModel.id,
+      modelName: activeModel.name,
+      modelLevel: activeModel.level,
       includeChildren: subject.type === "department" ? includeChildren : undefined,
     })));
     onOpenChange(false);
@@ -104,7 +99,7 @@ export function PermissionDraftPickerDialog({
   const searchProps = {
     mode,
     resourceType,
-    resourceId,
+    resourceId: resourceId ?? "__creation__",
     value: subjects,
     onChange: setSubjects,
     disabledIds: disabledIds[subjectType],
@@ -153,27 +148,22 @@ export function PermissionDraftPickerDialog({
               </label>
             )}
           </div>
+          {/* The subject type is picked by the RadioGroup above, so the panes
+              render conditionally — there is no Tabs shell to hang them on. */}
           <div className="mt-3 min-h-0 flex-1 overflow-hidden">
             {subjectType === "user" && (
-              <SubjectSearchUser
-                {...searchProps}
-                grantUserTreeChildrenApi={searchApi?.grantUserTreeChildrenApi}
-                grantUserTreeSearchApi={searchApi?.grantUserTreeSearchApi}
-              />
+              <SubjectSearchUser {...searchProps} usersApi={searchApi?.usersApi} />
             )}
             {subjectType === "department" && (
               <SubjectSearchDepartment
                 {...searchProps}
                 includeChildren={includeChildren}
-                grantDepartmentChildrenApi={searchApi?.grantDepartmentChildrenApi}
-                grantDepartmentSearchApi={searchApi?.grantDepartmentSearchApi}
+                departmentChildrenApi={searchApi?.departmentChildrenApi}
+                departmentSearchApi={searchApi?.departmentSearchApi}
               />
             )}
             {subjectType === "user_group" && (
-              <SubjectSearchUserGroup
-                {...searchProps}
-                grantUserGroupsApi={searchApi?.grantUserGroupsApi}
-              />
+              <SubjectSearchUserGroup {...searchProps} userGroupsApi={searchApi?.userGroupsApi} />
             )}
           </div>
         </div>

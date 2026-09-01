@@ -19,7 +19,12 @@ from sqlmodel import Session, select
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.department.domain.services.department_change_handler import (
     DepartmentChangeHandler,
-    TupleOperation,
+)
+from bisheng.permission.application import (
+    PermissionObject,
+    PermissionRelation,
+    PermissionRelationChange,
+    PermissionSubject,
 )
 
 if "user" not in Department.metadata.tables:
@@ -82,7 +87,11 @@ def svc_engine():
                               is_deleted INTEGER NOT NULL DEFAULT 0,
                               last_sync_ts BIGINT NOT NULL DEFAULT 0,
                               default_role_ids JSON,
+                              concurrent_session_limit INTEGER NOT NULL DEFAULT 0,
                               create_user INTEGER,
+                              permission_projection_version BIGINT NOT NULL DEFAULT 0,
+                              permission_projection_state VARCHAR(64) NOT NULL DEFAULT 'CURRENT',
+                              permission_projection_operation_id BIGINT,
                               create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                               update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                               UNIQUE
@@ -357,6 +366,7 @@ class TestCreateDepartment:
                 "execute_async",
                 new_callable=AsyncMock,
             ),
+            patch.object(m, "_uses_f048_department_projection", return_value=False),
         ):
             dept = await m.DepartmentService.acreate_department(
                 DepartmentCreate(name="Engineering", parent_id=1),
@@ -420,26 +430,8 @@ class TestGetTree:
         _child_b = _create_child(session, root, "BS@tree_b", "Dept B", sort_order=1)
         _grandchild = _create_child(session, child_a, "BS@tree_gc", "Sub A")
 
-        # Add members to child_a
-        uid = _create_user(session, "tree_user")
-        session.add(UserDepartment(user_id=uid, department_id=child_a.id))
-        session.commit()
-
         # Fetch all active departments
         depts = session.exec(select(Department).where(Department.status == "active")).all()
-
-        # Build count map
-        from sqlalchemy import func
-
-        count_result = session.exec(
-            select(
-                UserDepartment.department_id,
-                func.count(UserDepartment.id),
-            )
-            .where(UserDepartment.department_id.in_([d.id for d in depts]))
-            .group_by(UserDepartment.department_id)
-        ).all()
-        count_map = dict(count_result)
 
         # Build tree
         nodes = {}
@@ -453,7 +445,6 @@ class TestGetTree:
                 sort_order=d.sort_order,
                 source=d.source,
                 status=d.status,
-                member_count=count_map.get(d.id, 0),
                 children=[],
             )
         roots = []
@@ -472,7 +463,7 @@ class TestGetTree:
         test_root.children.sort(key=lambda n: n.sort_order)
         assert test_root.children[0].name == "Dept B"  # sort_order=1
         assert test_root.children[1].name == "Dept A"  # sort_order=2
-        assert test_root.children[1].member_count == 1
+        assert not hasattr(test_root.children[1], "member_count")
         assert len(test_root.children[1].children) == 1
 
 
@@ -936,10 +927,8 @@ class TestPermission:
 
         dept_result = MagicMock()
         dept_result.all.return_value = [root, child]
-        count_result = MagicMock()
-        count_result.all.return_value = [(1, 3), (2, 1)]
         db_session = MagicMock()
-        db_session.exec = AsyncMock(side_effect=[dept_result, count_result])
+        db_session.exec = AsyncMock(return_value=dept_result)
 
         @asynccontextmanager
         async def fake_session():
@@ -957,7 +946,7 @@ class TestPermission:
                 return_value=[],
             ),
             patch(
-                "bisheng.permission.domain.services.permission_service.PermissionService.check",
+                "bisheng.permission.application.is_tenant_admin",
                 new_callable=AsyncMock,
                 return_value=True,
             ) as mock_perm_check,
@@ -969,16 +958,10 @@ class TestPermission:
             tree = await DepartmentService.aget_tree(login_user)
 
         assert [node.id for node in tree] == [1]
-        assert tree[0].member_count == 3
+        assert not hasattr(tree[0], "member_count")
         assert [child.id for child in tree[0].children] == [2]
-        assert tree[0].children[0].member_count == 1
-        mock_perm_check.assert_awaited_once_with(
-            user_id=login_user.user_id,
-            relation="admin",
-            object_type="tenant",
-            object_id=str(login_user.tenant_id),
-            login_user=login_user,
-        )
+        assert not hasattr(tree[0].children[0], "member_count")
+        mock_perm_check.assert_awaited_once_with(login_user.user_id, login_user.tenant_id)
 
 
 class TestLocalMemberCreate:
@@ -1295,14 +1278,16 @@ class TestRootDepartment:
 
 class TestChangeHandler:
     def test_change_handler_on_created(self):
-        """AC-20: on_created returns correct TupleOperation."""
+        """AC-20: on_created returns a semantic permission grant."""
         ops = DepartmentChangeHandler.on_created(dept_id=5, parent_id=1)
         assert len(ops) == 1
-        assert ops[0] == TupleOperation(
-            action="write",
-            user="department:1",
-            relation="parent",
-            object="department:5",
+        assert ops[0] == PermissionRelationChange(
+            action="grant",
+            relation=PermissionRelation(
+                subject=PermissionSubject("department", "1"),
+                relation="parent",
+                resource=PermissionObject("department", "5"),
+            ),
         )
 
     def test_change_handler_on_moved(self):
@@ -1313,18 +1298,18 @@ class TestChangeHandler:
             new_parent_id=3,
         )
         assert len(ops) == 2
-        assert ops[0].action == "delete"
-        assert ops[0].user == "department:1"
-        assert ops[1].action == "write"
-        assert ops[1].user == "department:3"
+        assert ops[0].action == "revoke"
+        assert ops[0].relation.subject == PermissionSubject("department", "1")
+        assert ops[1].action == "grant"
+        assert ops[1].relation.subject == PermissionSubject("department", "3")
 
     def test_change_handler_on_members_added(self):
         """AC-20: on_members_added returns one write per user."""
         ops = DepartmentChangeHandler.on_members_added(dept_id=5, user_ids=[1, 2, 3])
         assert len(ops) == 3
-        assert all(o.action == "write" for o in ops)
-        assert all(o.relation == "member" for o in ops)
-        assert {o.user for o in ops} == {"user:1", "user:2", "user:3"}
+        assert all(o.action == "grant" for o in ops)
+        assert all(o.relation.relation == "member" for o in ops)
+        assert {o.relation.subject.subject_id for o in ops} == {"1", "2", "3"}
 
     def test_on_reparented_new_top_level_attached_under_real_parent(self):
         """None → real: only a write (no delete of a non-existent old edge)."""
@@ -1334,11 +1319,13 @@ class TestChangeHandler:
             new_parent_id=1,
         )
         assert ops == [
-            TupleOperation(
-                action="write",
-                user="department:1",
-                relation="parent",
-                object="department:5",
+            PermissionRelationChange(
+                action="grant",
+                relation=PermissionRelation(
+                    subject=PermissionSubject("department", "1"),
+                    relation="parent",
+                    resource=PermissionObject("department", "5"),
+                ),
             ),
         ]
 
@@ -1350,11 +1337,13 @@ class TestChangeHandler:
             new_parent_id=None,
         )
         assert ops == [
-            TupleOperation(
-                action="delete",
-                user="department:1",
-                relation="parent",
-                object="department:5",
+            PermissionRelationChange(
+                action="revoke",
+                relation=PermissionRelation(
+                    subject=PermissionSubject("department", "1"),
+                    relation="parent",
+                    resource=PermissionObject("department", "5"),
+                ),
             ),
         ]
 
@@ -1365,9 +1354,9 @@ class TestChangeHandler:
             old_parent_id=1,
             new_parent_id=3,
         )
-        assert [(o.action, o.user) for o in ops] == [
-            ("delete", "department:1"),
-            ("write", "department:3"),
+        assert [(o.action, o.relation.subject.subject_id) for o in ops] == [
+            ("revoke", "1"),
+            ("grant", "3"),
         ]
 
     def test_on_reparented_unchanged_is_noop(self):
@@ -1413,8 +1402,8 @@ class TestAdminDepartmentsBypassTenantFilter:
             def __exit__(self, exc_type, exc, tb):
                 return False
 
-        fga = MagicMock()
-        fga.list_objects = AsyncMock(return_value=["department:4", "department:7"])
+        permissions = MagicMock()
+        permissions.list_resource_ids = AsyncMock(return_value=("4", "7"))
 
         async def _fake_aget_by_ids(dept_ids):
             assert dept_ids == [4, 7]
@@ -1422,9 +1411,9 @@ class TestAdminDepartmentsBypassTenantFilter:
 
         with (
             patch(
-                "bisheng.core.openfga.manager.aget_fga_client",
+                "bisheng.permission.application.get_permission_relation_api",
                 new_callable=AsyncMock,
-                return_value=fga,
+                return_value=permissions,
             ),
             patch(
                 "bisheng.core.context.tenant.bypass_tenant_filter",
@@ -1442,8 +1431,8 @@ class TestAdminDepartmentsBypassTenantFilter:
         assert [d.id for d in depts] == [4, 7]
 
     @pytest.mark.asyncio
-    async def test_aget_user_admin_departments_skips_bypass_when_fga_empty(self):
-        """No FGA result → no DB fetch → bypass not entered (cheap exit path)."""
+    async def test_aget_user_admin_departments_skips_bypass_when_permission_empty(self):
+        """No permission result means no DB fetch or tenant bypass."""
         from bisheng.database.models.department import DepartmentDao
 
         entered = {"value": False}
@@ -1455,14 +1444,14 @@ class TestAdminDepartmentsBypassTenantFilter:
             def __exit__(self, exc_type, exc, tb):
                 return False
 
-        fga = MagicMock()
-        fga.list_objects = AsyncMock(return_value=[])
+        permissions = MagicMock()
+        permissions.list_resource_ids = AsyncMock(return_value=())
 
         with (
             patch(
-                "bisheng.core.openfga.manager.aget_fga_client",
+                "bisheng.permission.application.get_permission_relation_api",
                 new_callable=AsyncMock,
-                return_value=fga,
+                return_value=permissions,
             ),
             patch(
                 "bisheng.core.context.tenant.bypass_tenant_filter",
@@ -1484,6 +1473,14 @@ class TestAdminDepartmentsBypassTenantFilter:
 
 
 class TestMoveDepartmentSubtreeSync:
+    @pytest.fixture(autouse=True)
+    def _disable_projection_runtime(self, monkeypatch):
+        """These tests isolate post-commit subtree synchronization."""
+
+        from bisheng.department.domain.services import department_service
+
+        monkeypatch.setattr(department_service, "_uses_f048_department_projection", lambda: False)
+
     @staticmethod
     def _move_test_setup(*, dept_path="/1/7/", new_parent_path="/1/9/", new_parent_id=9):
         """Build the minimum mocks for amove_department to reach the sync hook.

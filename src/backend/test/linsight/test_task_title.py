@@ -8,11 +8,14 @@ rather than getting stuck on the "New Chat" placeholder.
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from langchain_core.messages import AIMessage
 
+from bisheng.database.models.session import MessageSessionDao
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 
 
@@ -103,3 +106,56 @@ class TestTaskTitleGenerate:
         assert result["task_title"] == "用户问题原文"
         assert result["error_message"] == "boom"
         upd.assert_awaited_once_with("c1", "用户问题原文")
+
+
+class TestTaskTitleCancellation:
+    """This runs inside the submit SSE generator, so a client disconnect cancels it.
+
+    GeneratorExit / CancelledError are BaseException, so the ``except Exception``
+    fallback never saw them: the title was never written and nothing was logged —
+    the session stayed on "New Chat" forever (114, 2026-08-14).
+    """
+
+    @pytest.mark.parametrize("exc", [GeneratorExit, asyncio.CancelledError])
+    async def test_cancellation_writes_fallback_synchronously(self, exc):
+        login_user = SimpleNamespace(user_id=1)
+        fake_llm = SimpleNamespace(ainvoke=AsyncMock(side_effect=exc()))
+        with (
+            patch.object(LinsightWorkbenchImpl, "_get_llm", new=AsyncMock(return_value=(fake_llm, None))),
+            patch.object(LinsightWorkbenchImpl, "_generate_title_prompt", new=AsyncMock(return_value=[])),
+            patch.object(MessageSessionDao, "update_session_name_sync") as sync_upd,
+            patch.object(LinsightWorkbenchImpl, "_update_session_title", new=AsyncMock()) as async_upd,
+        ):
+            with pytest.raises(exc):
+                await LinsightWorkbenchImpl.task_title_generate(
+                    question="卢旺达变压器参数抽取", chat_id="c1", login_user=login_user
+                )
+
+        # Written, and written SYNCHRONOUSLY: awaiting inside a cancelled coroutine
+        # re-raises at the first suspension point, so the async path would be lost.
+        sync_upd.assert_called_once_with("c1", "卢旺达变压器参数抽取")
+        async_upd.assert_not_awaited()
+
+    async def test_cancellation_still_propagates(self):
+        """Swallowing GeneratorExit makes Python raise 'generator ignored
+        GeneratorExit'; swallowing CancelledError breaks cancellation semantics."""
+        login_user = SimpleNamespace(user_id=1)
+        fake_llm = SimpleNamespace(ainvoke=AsyncMock(side_effect=asyncio.CancelledError()))
+        with (
+            patch.object(LinsightWorkbenchImpl, "_get_llm", new=AsyncMock(return_value=(fake_llm, None))),
+            patch.object(LinsightWorkbenchImpl, "_generate_title_prompt", new=AsyncMock(return_value=[])),
+            patch.object(MessageSessionDao, "update_session_name_sync"),
+        ):
+            with pytest.raises(asyncio.CancelledError):
+                await LinsightWorkbenchImpl.task_title_generate(question="q", chat_id="c1", login_user=login_user)
+
+    async def test_fallback_write_failure_does_not_mask_cancellation(self):
+        login_user = SimpleNamespace(user_id=1)
+        fake_llm = SimpleNamespace(ainvoke=AsyncMock(side_effect=GeneratorExit()))
+        with (
+            patch.object(LinsightWorkbenchImpl, "_get_llm", new=AsyncMock(return_value=(fake_llm, None))),
+            patch.object(LinsightWorkbenchImpl, "_generate_title_prompt", new=AsyncMock(return_value=[])),
+            patch.object(MessageSessionDao, "update_session_name_sync", side_effect=RuntimeError("db down")),
+        ):
+            with pytest.raises(GeneratorExit):
+                await LinsightWorkbenchImpl.task_title_generate(question="q", chat_id="c1", login_user=login_user)

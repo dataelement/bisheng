@@ -16,6 +16,7 @@ from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItem
 from bisheng.citation.domain.services.citation_prompt_helper import (
     save_message_citations,
     select_registry_items_for_persistence,
+    strip_unregistered_citation_markers,
 )
 from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
@@ -373,12 +374,17 @@ class ChatClient:
                 if msg.get('type') == 'reasoning':
                     reasoning_content += msg.get('content')
 
-            res = await self.add_message('bot', reasoning_content, 'reasoning_answer')
-            res = await self.add_message('bot', answer, 'answer')
             citation_items = select_registry_items_for_persistence(
                 self.gpts_agent.collect_citation_registry_items(),
                 answer,
             )
+            # A marker the registry cannot back must not reach storage: it would
+            # render as a footnote whose detail lookup 404s, reading as a system
+            # failure rather than the model having invented the id.
+            answer = strip_unregistered_citation_markers(answer, citation_items)
+
+            res = await self.add_message('bot', reasoning_content, 'reasoning_answer')
+            res = await self.add_message('bot', answer, 'answer')
             if res:
                 await save_message_citations(
                     message_id=res.id,
@@ -405,7 +411,7 @@ class ChatClient:
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} question:{input_msg}')
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} answer:{answer}')
 
-            asyncio.create_task(self.generate_session_title(input_msg, answer))
+            asyncio.create_task(self.generate_session_title(input_msg))
 
         except BaseErrorCode as e:
             logger.exception('handle gpts message error: ')
@@ -419,7 +425,7 @@ class ChatClient:
         finally:
             await self.send_response('processing', 'close', '')
 
-    async def generate_session_title(self, question: str, answer: str = None):
+    async def generate_session_title(self, question: str):
         if not self.new_session:
             return
         if self.new_session.name:
@@ -436,6 +442,6 @@ class ChatClient:
             app_type=ApplicationTypeEnum.DAILY_CHAT,
             user_id=self.user_id
         )
-        title = await generate_conversation_title_async(question=question, llm=llm, answer=answer)
+        title = await generate_conversation_title_async(question=question, llm=llm)
         await MessageSessionDao.update_session_name(self.new_session.chat_id, title)
         self.new_session.name = title

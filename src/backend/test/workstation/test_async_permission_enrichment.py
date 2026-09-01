@@ -25,7 +25,7 @@ async def test_recommended_apps_passes_async_writeable_ids_to_enrichment():
         ),
         patch.object(
             apps_endpoint.WorkFlowService,
-            "filter_apps_by_permission_id",
+            "filter_apps_by_action",
             new_callable=AsyncMock,
             return_value=visible_apps,
         ),

@@ -160,6 +160,11 @@ export const changeLLmServerStatus = async (model_id: string, online: number) =>
     return await axios.post(`/api/v1/llm/online`, { model_id, online })
 }
 
+// 手动验证模型可用性：对模型发起一次真实调用，返回刷新后的状态
+export const verifyLLmModelStatus = async (model_id: number): Promise<any> => {
+    return await axios.post(`/api/v1/llm/verify`, { model_id })
+}
+
 // 获取模型详情
 export const getLLmServerDetail = async (server_id: string): Promise<any> => {
     return await axios.get(`/api/v1/llm/info?server_id=${server_id}`)

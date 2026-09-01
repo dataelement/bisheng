@@ -149,6 +149,18 @@ _ENCODING_MIN_CONFIDENCE = 0.5
 # aware hint; on its own the message still reads correctly to the model.
 BINARY_READ_ERROR_PREFIX = "[binary-file]"
 
+# Character-page fallback for files with (almost) no line breaks — see
+# ``_slice_workspace_text``. The size is a compromise: small enough that a default
+# ``limit=100`` read stays a sane chunk, large enough that paging a 100KB file does
+# not take dozens of calls.
+_CHAR_PAGE_SIZE = 2000
+_CHAR_PAGE_MIN_CHARS = 8000
+_CHAR_PAGE_NOTICE = (
+    "[This file has no line breaks, so it was paginated by CHARACTER: "
+    "{total} pages of {size} characters each. Use offset/limit to page through it — "
+    "offset counts pages, not source lines.]\n"
+)
+
 
 def _is_skills_path(rel_path: str) -> bool:
     """True when a workspace-relative path lands inside the provisioned skills subtree.
@@ -319,6 +331,45 @@ def _decode_workspace_text(data: bytes, rel_path: str = "") -> str | None:
         return None
     logger.info("workspace read: {} decoded as {} (confidence {})", rel_path, encoding, confidence)
     return text
+
+
+def _slice_workspace_text(text: str, offset: int, limit: int | None) -> str:
+    """Apply ``offset``/``limit`` to text, falling back to CHARACTER pages when the
+    file has (almost) no line breaks.
+
+    Line slicing silently breaks down on a file that is one enormous line, and the
+    single most likely such file is one deepagents itself produced: an offloaded
+    tool result. ToolNode serializes a dict result with ``json.dumps``, so every
+    newline becomes a literal ``\\n`` and the whole payload is one line. Reading it
+    back then had exactly two outcomes, both wrong:
+
+    - ``offset=0`` returned the entire file (deepagents then clipped it to its own
+      80000-char ceiling), and
+    - ``offset>=1`` returned ``""``, which upstream reports to the model as
+      *"File exists but has empty contents"* — worse than an error, because it
+      states as fact that there is nothing there.
+
+    So the tail of such a file was unreachable by ANY call, while the offload notice
+    was busy telling the model to page through it with offset/limit. Paginating by
+    character makes that advice true. Only files that are both nearly line-free and
+    genuinely large are affected; ordinary text keeps byte-identical behaviour.
+    """
+    lines = text.splitlines()
+    end = offset + limit if limit is not None else None
+    if not (len(lines) <= 2 and len(text) > _CHAR_PAGE_MIN_CHARS):
+        return "\n".join(lines[offset:end])
+
+    pages = [text[i : i + _CHAR_PAGE_SIZE] for i in range(0, len(text), _CHAR_PAGE_SIZE)]
+    selected = pages[offset:end]
+    if not selected:
+        return ""  # past the end reads empty, exactly as line slicing would
+    if offset == 0 and len(selected) == len(pages):
+        # The whole file fits in this one read: hand back the ORIGINAL text. Joining
+        # the pages would splice in newlines that are not in the file, and a caller
+        # parsing the result (json.loads on a one-line payload) would get corrupt
+        # input — while the header would be noise it never asked for.
+        return text
+    return _CHAR_PAGE_NOTICE.format(total=len(pages), size=_CHAR_PAGE_SIZE) + "\n".join(selected)
 
 
 def _binary_read_result(rel_path: str, data: bytes) -> ReadResult:
@@ -571,10 +622,7 @@ class WorkspaceBackend(FilesystemBackend):
             # Binary: offset/limit are meaningless here (slicing bytes by "lines"
             # would corrupt the payload), so the whole object is decided on at once.
             return _binary_read_result(rel, data)
-        lines = text.splitlines()
-        start = offset
-        end = offset + limit if limit is not None else None
-        sliced = "\n".join(lines[start:end])
+        sliced = _slice_workspace_text(text, offset, limit)
         return ReadResult(file_data=FileData(content=sliced, encoding="utf-8"))
 
     # -- ls (authoritative from MinIO) --------------------------------------
@@ -582,7 +630,11 @@ class WorkspaceBackend(FilesystemBackend):
         rel_prefix = self._ws_rel(path) if path else ""
         object_prefix = f"{WORKSPACE_PREFIX}/{self.svid}/"
         if rel_prefix:
-            object_prefix += rel_prefix
+            # Terminate the prefix at a directory boundary. Without the slash,
+            # ``ls("/uploads/年报")`` also matches a sibling ``年报备份/`` — harmless
+            # when uploads were flat, wrong as soon as a folder upload puts real
+            # sibling directories in there.
+            object_prefix += rel_prefix.rstrip("/") + "/"
         entries: list[FileInfo] = []
         key_prefix = f"{WORKSPACE_PREFIX}/{self.svid}/"
         try:
@@ -652,9 +704,41 @@ class WorkspaceBackend(FilesystemBackend):
         return EditResult(path="/" + rel, occurrences=occurrences)
 
     # -- glob ---------------------------------------------------------------
-    def glob(self, pattern: str, path: str | None = None) -> GlobResult:
+    @staticmethod
+    def _glob_patterns(pattern: str) -> tuple[str, ...]:
+        """The spellings of ``pattern`` that should all mean the same thing.
+
+        Two mismatches to absorb, both of which used to silently return zero
+        matches for patterns we ourselves tell the model to write:
+
+        - **Leading slash.** ``ls`` reports ``/uploads/a/b.csv`` and every tool
+          argument in the prompt is written absolute, but matching happens against
+          the workspace-RELATIVE key (``uploads/a/b.csv``). ``fnmatch`` is literal
+          about that first character, so ``/uploads/**/*.xlsx`` — the exact
+          spelling in the folder-upload guidance — matched nothing.
+        - **``**`` spanning zero directories.** ``fnmatch`` has no ``**``; it
+          treats it as a plain ``*`` that happens to cross ``/``. So
+          ``uploads/**/*.csv`` demands at least one intermediate directory and
+          skips ``uploads/top.csv`` — surprising for a pattern whose whole point
+          is "anywhere under uploads". Collapsing ``**/`` gives that case its
+          own candidate.
+        """
+        pat = (pattern or "").strip().lstrip("/")
+        candidates = [pat]
+        if "**/" in pat:
+            candidates.append(pat.replace("**/", ""))
+        return tuple(dict.fromkeys(c for c in candidates if c))
+
+    @classmethod
+    def _glob_matches(cls, rel_in_ws: str, pattern: str) -> bool:
         import fnmatch
 
+        return any(
+            fnmatch.fnmatch(rel_in_ws, pat) or fnmatch.fnmatch(os.path.basename(rel_in_ws), pat)
+            for pat in cls._glob_patterns(pattern)
+        )
+
+    def glob(self, pattern: str, path: str | None = None) -> GlobResult:
         base = self._ws_rel(path) if path else ""
         ls_res = self.ls(base)
         if ls_res.error is not None:
@@ -664,7 +748,7 @@ class WorkspaceBackend(FilesystemBackend):
         for entry in ls_res.entries or []:
             rel = entry["path"]
             rel_in_ws = rel[len(prefix) :] if rel.startswith(prefix) else rel.lstrip("/")
-            if fnmatch.fnmatch(rel_in_ws, pattern) or fnmatch.fnmatch(os.path.basename(rel_in_ws), pattern):
+            if self._glob_matches(rel_in_ws, pattern):
                 matches.append(entry)
         return GlobResult(matches=matches)
 
@@ -678,14 +762,15 @@ class WorkspaceBackend(FilesystemBackend):
             return GrepResult(error=ls_res.error)
         prefix = f"/{WORKSPACE_PREFIX}/{self.svid}/"
         matches: list = []
-        import fnmatch
 
         skipped_large = 0
         skipped_binary = 0
         for entry in ls_res.entries or []:
             full = entry["path"]
             rel_in_ws = full[len(prefix) :] if full.startswith(prefix) else full.lstrip("/")
-            if glob and not (fnmatch.fnmatch(rel_in_ws, glob) or fnmatch.fnmatch(os.path.basename(rel_in_ws), glob)):
+            # Same spelling tolerance as ``glob`` — an absolute filter must not
+            # silently narrow the scan to nothing.
+            if glob and not self._glob_matches(rel_in_ws, glob):
                 continue
             # ``ls`` already reports the object size; use it to avoid downloading a
             # multi-MB original (uploads/ carries them since the dual-track write)
@@ -786,9 +871,8 @@ class WorkspaceBackend(FilesystemBackend):
         if text is None:
             # Same contract as the sync path: binary is decided whole, never sliced.
             return _binary_read_result(rel, data)
-        lines = text.splitlines()
-        end = offset + limit if limit is not None else None
-        return ReadResult(file_data=FileData(content="\n".join(lines[offset:end]), encoding="utf-8"))
+        # Same slicing contract as the sync path — they must not diverge.
+        return ReadResult(file_data=FileData(content=_slice_workspace_text(text, offset, limit), encoding="utf-8"))
 
     async def als(self, path: str = "") -> LsResult:
         return await asyncio.to_thread(self.ls, path)

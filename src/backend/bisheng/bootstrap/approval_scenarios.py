@@ -110,6 +110,31 @@ def _build_resource_user_invite_dispatcher():
     return CeleryResourceUserInviteDispatcher()
 
 
+class _UnportedResourceGrantExecutor:
+    """Stands in for an executor whose service 3.0 removed (cofco-909 phase 2).
+
+    Registered rather than omitted so the registry's freeze() contract still
+    holds and the app starts. It fails loudly on use: an approved grant that
+    silently did nothing would look like a working approval right up until
+    someone noticed the permission was never written.
+    """
+
+    def __init__(self, resource_type: str) -> None:
+        self.resource_type = resource_type
+
+    async def execute(self, command) -> None:
+        raise NotImplementedError(
+            f"resource grant execution for {self.resource_type!r} is not ported to the "
+            "3.0 permission model yet (cofco-909 phase 2)"
+        )
+
+    async def verify(self, command):
+        raise NotImplementedError(
+            f"resource grant verification for {self.resource_type!r} is not ported to the "
+            "3.0 permission model yet (cofco-909 phase 2)"
+        )
+
+
 def _build_default_components() -> ApprovalScenarioBootstrapComponents:
     from bisheng.approval.domain.services.channel_subscribe_scenario_handler import (
         ChannelSubscribeScenarioHandler,
@@ -118,10 +143,6 @@ def _build_default_components() -> ApprovalScenarioBootstrapComponents:
         KnowledgeSpaceSubscribeScenarioHandler,
     )
     from bisheng.approval.domain.services.menu_access_handler import MenuAccessApprovalHandler
-    from bisheng.channel.domain.services.channel_authorization_service import (
-        ChannelAuthorizationService,
-        ChannelResourceGrantExecutor,
-    )
     from bisheng.channel.domain.services.channel_service import ChannelService
     from bisheng.common.models.space_channel_member import SpaceChannelMemberDao
     from bisheng.knowledge.domain.services.knowledge_space_file_change_approval_policy import (
@@ -131,9 +152,6 @@ def _build_default_components() -> ApprovalScenarioBootstrapComponents:
         KnowledgeSpaceFileChangeDecisionSubscriber,
     )
     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
-    from bisheng.permission.domain.services.resource_authorization_service import (
-        KnowledgeSpaceResourceGrantExecutor,
-    )
     from bisheng.permission.domain.services.resource_user_invite_approval_policy import (
         ResourceUserInviteApprovalPolicy,
     )
@@ -141,10 +159,6 @@ def _build_default_components() -> ApprovalScenarioBootstrapComponents:
         ResourceUserInviteDecisionSubscriber,
     )
 
-    channel_service = ChannelAuthorizationService(
-        channel_repository=_SessionBackedChannelRepository(),
-        space_channel_member_repository=_SessionBackedSpaceChannelMemberRepository(),
-    )
     return ApprovalScenarioBootstrapComponents(
         policies=(
             ResourceUserInviteApprovalPolicy(),
@@ -173,9 +187,15 @@ def _build_default_components() -> ApprovalScenarioBootstrapComponents:
             ),
         ),
         resource_executor_registry=ResourceGrantExecutorRegistry(),
+        # TODO(cofco-909 phase 2): re-implement the knowledge_space / channel
+        # resource-grant executors on 3.0's permission API. Their old ones drove
+        # ChannelAuthorizationService / ResourceAuthorizationService, both of
+        # which 3.0 deleted. Until they are back, an approved personal invite or
+        # resource-grant request records its decision but does NOT write the
+        # grant. Every other approval scenario above is unaffected.
         resource_executors={
-            "knowledge_space": KnowledgeSpaceResourceGrantExecutor(),
-            "channel": ChannelResourceGrantExecutor(authorization_service=channel_service),
+            "knowledge_space": _UnportedResourceGrantExecutor("knowledge_space"),
+            "channel": _UnportedResourceGrantExecutor("channel"),
         },
     )
 

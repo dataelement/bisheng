@@ -1,25 +1,18 @@
-"""PermissionService — core ReBAC permission engine (T07b).
+"""Business-independent permission services.
 
-Permission check chain (AC-02 / F013 spec §6):
-  L1: Super admin shortcircuit (等效 owner，无 FGA 元组)
-  L2: Redis cache (10s TTL, UNCACHEABLE_RELATIONS bypass)
-  L3: F013 — Tenant IN-list visibility gate (resolve resource tenant_id;
-      reject when not in user's visible set unless tenant#shared_to#member)
-  L4: F013 — Child Tenant admin shortcut (skip Root: no tenant#admin tuples
-      by design, INV-T3)
-  L5: OpenFGA check (was L3)
-  L6: DB creator = self → owner fallback (was L4)
-  L7: Fail-closed on FGA connection error (AD-03)
-
-All methods are @classmethod — no instance state.
+``F048PermissionService`` is the sole authorization facade for migrated
+business resources. ``PermissionService`` remains only as a narrow compatibility
+bridge for identity relations and the explicitly allowlisted LLM resources.
+It never loads business resources or derives tenant, status, parent, or creator
+facts.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 
+from bisheng.core.openfga.authorization_model_f048 import LEGACY_RESOURCE_TYPES
 from bisheng.core.openfga.exceptions import FGAConnectionError, FGAWriteError
 from bisheng.permission.domain.schemas.permission_schema import (
     UNCACHEABLE_RELATIONS,
@@ -29,54 +22,59 @@ from bisheng.permission.domain.schemas.permission_schema import (
     ResourcePermissionItem,
 )
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
+from bisheng.permission.domain.services import (
+    permission_action_service as f048_permission_action_service,
+)
 
 logger = logging.getLogger(__name__)
 
-
-def _parse_path_ids(path: str | None) -> list[int]:
-    """Ancestor→self id chain parsed from a materialized path ``/1/21/106/`` →
-    ``[1, 21, 106]`` (paths end with the node's own id). F038."""
-    ids: list[int] = []
-    for part in str(path or "").split("/"):
-        part = part.strip()
-        if part.isdigit():
-            ids.append(int(part))
-    return ids
-
-
-def _department_path_label(path: str | None, id_to_name: dict[int, str], own_name: str | None) -> str | None:
-    """Full display path for a department (``总公司/研发部/平台组``) from its
-    materialized ``path`` and an id→name map. Falls back to the node's own name
-    when the path can't be parsed. F038: lets the permission list show the path
-    without a per-grant path-tree round trip."""
-    ids = _parse_path_ids(path)
-    if not ids:
-        return own_name
-    return "/".join(id_to_name.get(i) or f"#{i}" for i in ids)
+F048PermissionService = f048_permission_action_service.F048PermissionService
+PermissionActor = f048_permission_action_service.PermissionActor
 
 
 class PermissionService:
-    """Stateless service for ReBAC permission operations."""
+    """Identity/LLM compatibility bridge isolated from F048 resources."""
 
-    #: 隐式「部门管理范围」仅适用于应用/助手/知识库（与创建者主属部门树相关）
-    _IMPLICIT_SCOPE_RESOURCE_TYPES = frozenset(
+    _IDENTITY_RELATION_TYPES = frozenset(
         {
-            "workflow",
-            "assistant",
-            "knowledge_space",
-            "knowledge_library",
+            "system",
+            "tenant",
+            "department",
+            "user_group",
         }
     )
-    _TENANT_GATED_RESOURCE_TYPES = frozenset(
-        {
-            "workflow",
-            "assistant",
-            "knowledge_space",
-            "knowledge_library",
-        }
+    _LEGACY_INTERNAL_RESOURCE_TYPES = frozenset(LEGACY_RESOURCE_TYPES)
+    _ALLOWED_RUNTIME_TYPES = (
+        _IDENTITY_RELATION_TYPES | _LEGACY_INTERNAL_RESOURCE_TYPES
+    )
+    _FGA_BATCH_SIZE = 100
+    _SUBJECT_RE = re.compile(
+        r"^(user|department|user_group):(\d+)"
+        r"(?:#(member|subtree_member|admin))?$"
     )
 
-    # ── Public API ──────────────────────────────────────────────
+    @classmethod
+    def _require_allowed_runtime_type(cls, object_type: str) -> str:
+        normalized = str(object_type or "").strip().lower()
+        if normalized not in cls._ALLOWED_RUNTIME_TYPES:
+            raise RuntimeError(
+                "Legacy PermissionService cannot authorize an F048 "
+                f"business resource: {normalized or '<empty>'}"
+            )
+        return normalized
+
+    @classmethod
+    def _require_allowed_operations(
+        cls,
+        operations: list[TupleOperation],
+    ) -> None:
+        for operation in operations:
+            object_type, separator, object_id = operation.object.partition(":")
+            if not separator or not object_id:
+                raise ValueError(
+                    f"Invalid OpenFGA object key: {operation.object}"
+                )
+            cls._require_allowed_runtime_type(object_type)
 
     @classmethod
     async def check(
@@ -88,120 +86,63 @@ class PermissionService:
         login_user=None,
         consistency: str | None = None,
     ) -> bool:
-        """Five-level permission check.
+        """Check an identity or allowlisted LLM relation, failing closed."""
 
-        Returns True if user has the given relation on the resource.
-
-        ``consistency`` forwards an OpenFGA consistency preference (e.g.
-        ``"HIGHER_CONSISTENCY"``) to the L5 check. When set, the L2 cache is
-        bypassed for both read and write so a strong-consistency read is never
-        served from — or polluted into — a possibly-stale cache. Use it for
-        read-after-write checks (e.g. post-authorize notification snapshots).
-        """
-        strong_consistency = bool(consistency)
-        # L1: Super admin shortcircuit
+        object_type = cls._require_allowed_runtime_type(object_type)
         if login_user and login_user.is_admin():
             return True
 
-        # L3 / L4 — F013 tenant gating (only when login_user is supplied; legacy
-        # call sites that pass None preserve their previous behavior).
-        denied_by_tenant_gate, shortcut_level = await cls._evaluate_tenant_gate(
-            user_id=user_id,
-            object_type=object_type,
-            object_id=object_id,
-            login_user=login_user,
-        )
-        if denied_by_tenant_gate:
-            return False
-        if shortcut_level is not None:
-            return cls._permission_level_satisfies_relation(
-                shortcut_level,
-                relation,
-                object_type,
+        strong_consistency = bool(consistency)
+        if relation not in UNCACHEABLE_RELATIONS and not strong_consistency:
+            from bisheng.permission.domain.services.permission_cache import (
+                PermissionCache,
             )
 
-        # L2: Cache lookup (skip for UNCACHEABLE_RELATIONS). This happens after
-        # tenant gating so visibility / tenant-admin changes cannot be bypassed
-        # by a stale cached allow.
-        if relation not in UNCACHEABLE_RELATIONS and not strong_consistency:
-            from bisheng.permission.domain.services.permission_cache import PermissionCache
-
-            cached = await PermissionCache.get_check(user_id, relation, object_type, object_id)
+            cached = await PermissionCache.get_check(
+                user_id,
+                relation,
+                object_type,
+                object_id,
+            )
             if cached is not None:
                 return cached
 
-        # L5: OpenFGA check
         try:
             fga = await cls._aget_fga()
             if fga is None:
-                logger.warning("FGAClient not available, falling back to owner / department-space member")
-                implicit_level = await cls._get_implicit_permission_level_after_gate(
-                    user_id,
-                    object_type,
-                    object_id,
-                )
-                return cls._permission_level_satisfies_relation(
-                    implicit_level,
-                    relation,
-                    object_type,
-                )
-
+                return False
             allowed = await fga.check(
                 user=f"user:{user_id}",
                 relation=relation,
                 object=f"{object_type}:{object_id}",
                 consistency=consistency,
             )
-
-            # L4: Owner fallback — if FGA says no, check DB creator field. Owner
-            # and creator are decoupled, so an explicitly revoked creator-owner
-            # must not be resurrected: only fall back to creator ownership when no
-            # other owner tuple remains (FGA is reachable on this path).
-            if not allowed:
-                implicit_level = await cls._get_implicit_permission_level_after_gate(
-                    user_id,
-                    object_type,
-                    object_id,
-                    require_no_active_owner=True,
-                )
-                allowed = cls._permission_level_satisfies_relation(
-                    implicit_level,
-                    relation,
-                    object_type,
-                )
-
-            # Write to cache (skip strong-consistency reads: their result reflects
-            # a just-applied write and must not become a stale entry served to
-            # default-consistency callers).
-            if relation not in UNCACHEABLE_RELATIONS and not strong_consistency:
-                from bisheng.permission.domain.services.permission_cache import PermissionCache
-
-                await PermissionCache.set_check(user_id, relation, object_type, object_id, allowed)
-
-            return allowed
-
-        except FGAConnectionError as e:
-            # OpenFGA unreachable. Originally a hard fail-closed (return False),
-            # but that diverged from the two other "FGA unavailable" paths — the
-            # `fga is None` branch above and list_accessible_ids — which both fall
-            # back to the owner / implicit level (DB truth, independent of FGA).
-            # The divergence let an owner SEE a resource in lists yet be denied on
-            # access during an outage. Align all three on the owner/implicit
-            # fallback. Deliberately NOT cached (degraded, outage-only result).
-            logger.error("OpenFGA unreachable during check, falling back to owner/implicit: %s", e)
-            implicit_level = await cls._get_implicit_permission_level_after_gate(
-                user_id,
-                object_type,
-                object_id,
+        except FGAConnectionError as exc:
+            logger.error(
+                "OpenFGA unavailable during identity/LLM check: %s",
+                exc,
             )
-            return cls._permission_level_satisfies_relation(
-                implicit_level,
+            return False
+        except Exception as exc:
+            logger.error(
+                "Identity/LLM permission check failed closed: %s",
+                exc,
+            )
+            return False
+
+        if relation not in UNCACHEABLE_RELATIONS and not strong_consistency:
+            from bisheng.permission.domain.services.permission_cache import (
+                PermissionCache,
+            )
+
+            await PermissionCache.set_check(
+                user_id,
                 relation,
                 object_type,
+                object_id,
+                allowed,
             )
-        except Exception as e:
-            logger.error("Unexpected error during permission check: %s", e)
-            return False
+        return bool(allowed)
 
     @classmethod
     async def list_accessible_ids(
@@ -211,163 +152,126 @@ class PermissionService:
         object_type: str,
         login_user=None,
     ) -> list[str] | None:
-        """List resource IDs the user can access.
+        """List identity/LLM object IDs without loading business rows."""
 
-        Returns None for admin (caller should not filter).
-        Returns list of ID strings for normal users.
-        """
-        # Admin shortcircuit
+        object_type = cls._require_allowed_runtime_type(object_type)
         if login_user and login_user.is_admin():
             return None
 
-        # Cache lookup (skip for UNCACHEABLE_RELATIONS)
-        from bisheng.permission.domain.services.permission_cache import PermissionCache
+        from bisheng.permission.domain.services.permission_cache import (
+            PermissionCache,
+        )
 
         if relation not in UNCACHEABLE_RELATIONS:
-            cached = await PermissionCache.get_list_objects(user_id, relation, object_type)
+            cached = await PermissionCache.get_list_objects(
+                user_id,
+                relation,
+                object_type,
+            )
             if cached is not None:
-                return await cls._finalize_accessible_ids(
-                    cached,
-                    user_id,
-                    object_type,
-                    login_user=login_user,
-                )
+                return list(dict.fromkeys(str(value) for value in cached))
 
         try:
             fga = await cls._aget_fga()
             if fga is None:
-                logger.warning("FGAClient not available for list_objects, using fallback scopes only")
-                ids = await cls._finalize_accessible_ids(
-                    [],
-                    user_id,
-                    object_type,
-                    login_user=login_user,
-                )
-                if relation not in UNCACHEABLE_RELATIONS:
-                    await PermissionCache.set_list_objects(user_id, relation, object_type, ids)
-                return ids
-
-            # OpenFGA returns ["workflow:abc", "workflow:def"]
+                return []
             raw_objects = await fga.list_objects(
                 user=f"user:{user_id}",
                 relation=relation,
                 type=object_type,
             )
-
-            # Extract IDs: "workflow:abc" → "abc"
-            ids = []
-            for obj in raw_objects:
-                parts = obj.split(":", 1)
-                if len(parts) == 2:
-                    ids.append(parts[1])
-
-            ids = await cls._finalize_accessible_ids(
-                ids,
-                user_id,
-                object_type,
-                login_user=login_user,
+        except FGAConnectionError as exc:
+            logger.error(
+                "OpenFGA unavailable during identity/LLM list: %s",
+                exc,
             )
-
-            # Cache result (skip for UNCACHEABLE_RELATIONS)
-            if relation not in UNCACHEABLE_RELATIONS:
-                await PermissionCache.set_list_objects(user_id, relation, object_type, ids)
-
-            return ids
-
-        except FGAConnectionError as e:
-            logger.error("OpenFGA unreachable during list_objects: %s", e)
-            ids = await cls._finalize_accessible_ids(
-                [],
-                user_id,
-                object_type,
-                login_user=login_user,
-            )
-            return ids
-        except Exception as e:
-            logger.error("Unexpected error during list_accessible_ids: %s", e)
             return []
+        except Exception as exc:
+            logger.error(
+                "Identity/LLM permission list failed closed: %s",
+                exc,
+            )
+            return []
+
+        prefix = f"{object_type}:"
+        ids = list(
+            dict.fromkeys(
+                value.removeprefix(prefix)
+                for value in raw_objects
+                if value.startswith(prefix) and value.removeprefix(prefix)
+            )
+        )
+        if relation not in UNCACHEABLE_RELATIONS:
+            await PermissionCache.set_list_objects(
+                user_id,
+                relation,
+                object_type,
+                ids,
+            )
+        return ids
 
     @classmethod
     async def authorize(
         cls,
         object_type: str,
         object_id: str,
-        grants: list[AuthorizeGrantItem] = None,
-        revokes: list[AuthorizeRevokeItem] = None,
+        grants: list[AuthorizeGrantItem] | None = None,
+        revokes: list[AuthorizeRevokeItem] | None = None,
         enforce_fga_success: bool = False,
         recovery_owner: str = "service",
         dispatch_file_change_approver_reconcile: bool = True,
     ) -> None:
-        """Grant or revoke permissions on a resource.
+        """Write identity/LLM tuples without expanding business membership."""
 
-        Expands department subjects to include sub-departments when include_children=True.
-        Delegates to batch_write_tuples() for FGA writes + FailedTuple compensation.
-        """
+        object_type = cls._require_allowed_runtime_type(object_type)
         operations: list[TupleOperation] = []
         affected_user_ids: set[int] = set()
-        fga_object = f"{object_type}:{object_id}"
+        has_userset_subject = False
 
-        for grant in grants or []:
-            fga_users = await cls._expand_subject(
-                grant.subject_type,
-                grant.subject_id,
-                grant.include_children,
-            )
-            for fga_user in fga_users:
+        for action, items in (
+            ("write", grants or []),
+            ("delete", revokes or []),
+        ):
+            for item in items:
+                fga_user = cls._subject_userset(
+                    item.subject_type,
+                    item.subject_id,
+                    item.include_children,
+                )
                 operations.append(
                     TupleOperation(
-                        action="write",
+                        action=action,
                         user=fga_user,
-                        relation=grant.relation,
-                        object=fga_object,
+                        relation=item.relation,
+                        object=f"{object_type}:{object_id}",
                     )
                 )
-            affected_user_ids.update(
-                await cls._affected_user_ids_for_subject(
-                    grant.subject_type,
-                    grant.subject_id,
-                    grant.include_children,
-                )
-            )
-
-        for revoke in revokes or []:
-            fga_users = await cls._expand_subject(
-                revoke.subject_type,
-                revoke.subject_id,
-                revoke.include_children,
-            )
-            for fga_user in fga_users:
-                operations.append(
-                    TupleOperation(
-                        action="delete",
-                        user=fga_user,
-                        relation=revoke.relation,
-                        object=fga_object,
-                    )
-                )
-            affected_user_ids.update(
-                await cls._affected_user_ids_for_subject(
-                    revoke.subject_type,
-                    revoke.subject_id,
-                    revoke.include_children,
-                )
-            )
+                if item.subject_type == "user":
+                    affected_user_ids.add(int(item.subject_id))
+                else:
+                    has_userset_subject = True
 
         if not operations:
             return
 
-        # If the same tuple is both written and deleted in one call (e.g. switching
-        # a subject's relation model without changing the underlying relation), the
-        # desired end state is "present" — the write must win, otherwise the delete
-        # would cancel the grant and silently drop the subject's access.
-        write_keys = {(op.user, op.relation, op.object) for op in operations if op.action == "write"}
-        if write_keys:
-            operations = [
-                op
-                for op in operations
-                if not (op.action == "delete" and (op.user, op.relation, op.object) in write_keys)
-            ]
-
+        write_keys = {
+            (operation.user, operation.relation, operation.object)
+            for operation in operations
+            if operation.action == "write"
+        }
+        operations = [
+            operation
+            for operation in operations
+            if not (
+                operation.action == "delete"
+                and (
+                    operation.user,
+                    operation.relation,
+                    operation.object,
+                )
+                in write_keys
+            )
+        ]
         await cls.batch_write_tuples(
             operations,
             raise_on_failure=enforce_fga_success,
@@ -398,12 +302,30 @@ class PermissionService:
         # Invalidate cache for directly affected users
         if affected_user_ids:
             from bisheng.permission.domain.services.permission_cache import PermissionCache
+        from bisheng.permission.domain.services.permission_cache import (
+            PermissionCache,
+        )
 
-            for uid in affected_user_ids:
-                await PermissionCache.invalidate_user(uid)
+        if has_userset_subject:
+            await PermissionCache.invalidate_all()
+        else:
+            for user_id in affected_user_ids:
+                await PermissionCache.invalidate_user(user_id)
 
-    # OpenFGA Write API limit per request
-    _FGA_BATCH_SIZE = 100
+    @staticmethod
+    def _subject_userset(
+        subject_type: str,
+        subject_id: int,
+        include_children: bool,
+    ) -> str:
+        if subject_type == "user":
+            return f"user:{subject_id}"
+        if subject_type == "department":
+            relation = "subtree_member" if include_children else "member"
+            return f"department:{subject_id}#{relation}"
+        if subject_type == "user_group":
+            return f"user_group:{subject_id}#member"
+        raise ValueError(f"Unsupported permission subject: {subject_type}")
 
     @classmethod
     async def batch_write_tuples(
@@ -414,7 +336,7 @@ class PermissionService:
         stop_on_failure: bool = False,
         recovery_owner: str = "service",
     ) -> None:
-        """Batch write/delete tuples to OpenFGA.
+        """Write identity/LLM tuples with legacy FailedTuple compensation.
 
         Chunks into batches of _FGA_BATCH_SIZE to respect OpenFGA's per-request limit.
         Used by ChangeHandler.execute_async(). Failures recorded in FailedTuple.
@@ -434,8 +356,8 @@ class PermissionService:
         if not operations:
             return
         operations = cls._dedupe_operations(operations)
+        cls._require_allowed_operations(operations)
 
-        # Pre-record for crash safety — delete on success
         pre_recorded_ids: list[int] = []
         saved_failure_ops = False
         if crash_safe:
@@ -450,41 +372,45 @@ class PermissionService:
                     raise FGAConnectionError("FGAClient not available")
                 return
 
-            # Chunk the original operation list so writes+deletes together stay
-            # within the per-request limit. If a batch trips on duplicate
-            # writes / missing deletes, fall back to single-tuple writes and
-            # treat those idempotent cases as success.
-            batch = cls._FGA_BATCH_SIZE
             failed_ops: list[TupleOperation] = []
-            for idx in range(0, len(operations), batch):
-                chunk = operations[idx : idx + batch]
+            for offset in range(0, len(operations), cls._FGA_BATCH_SIZE):
+                chunk = operations[offset : offset + cls._FGA_BATCH_SIZE]
                 writes = [
-                    {"user": op.user, "relation": op.relation, "object": op.object}
-                    for op in chunk
-                    if op.action == "write"
+                    {
+                        "user": operation.user,
+                        "relation": operation.relation,
+                        "object": operation.object,
+                    }
+                    for operation in chunk
+                    if operation.action == "write"
                 ]
                 deletes = [
-                    {"user": op.user, "relation": op.relation, "object": op.object}
-                    for op in chunk
-                    if op.action == "delete"
+                    {
+                        "user": operation.user,
+                        "relation": operation.relation,
+                        "object": operation.object,
+                    }
+                    for operation in chunk
+                    if operation.action == "delete"
                 ]
                 try:
                     await fga.write_tuples(
                         writes=writes or None,
                         deletes=deletes or None,
                     )
-                except FGAWriteError as e:
+                except FGAWriteError as exc:
                     logger.info(
-                        "Batch tuple write fell back to single writes for %d ops: %s",
+                        "Identity tuple batch fell back to single writes for "
+                        "%d operations: %s",
                         len(chunk),
-                        e,
+                        exc,
                     )
                     failed_ops.extend(
                         await cls._write_operations_individually(
                             fga,
                             chunk,
                             stop_on_failure=stop_on_failure,
-                        ),
+                        )
                     )
 
             if failed_ops:
@@ -502,11 +428,11 @@ class PermissionService:
                     saved_failure_ops = True
                 if raise_on_failure:
                     raise FGAWriteError(
-                        f"OpenFGA write did not complete successfully; {len(failed_ops)} tuple operations failed",
+                        "OpenFGA write did not complete successfully; "
+                        f"{len(failed_ops)} tuple operations failed"
                     )
                 return
 
-            # FGA succeeded — clean up pre-recorded FailedTuples
             if pre_recorded_ids:
                 await cls._delete_pre_recorded(pre_recorded_ids)
 
@@ -525,69 +451,54 @@ class PermissionService:
         operations: list[TupleOperation],
         stop_on_failure: bool = False,
     ) -> list[TupleOperation]:
-        """Replay a failed batch one tuple at a time.
-
-        OpenFGA rejects duplicate writes and deletes of already-missing tuples
-        as invalid input. Those cases are semantically idempotent for our
-        callers, so we treat them as success and only return truly failed ops.
-        """
         failed: list[TupleOperation] = []
-        for index, op in enumerate(operations):
+        for index, operation in enumerate(operations):
             payload = {
-                "user": op.user,
-                "relation": op.relation,
-                "object": op.object,
+                "user": operation.user,
+                "relation": operation.relation,
+                "object": operation.object,
             }
             try:
-                if op.action == "write":
+                if operation.action == "write":
                     await fga.write_tuples(writes=[payload])
                 else:
                     await fga.write_tuples(deletes=[payload])
-            except FGAWriteError as e:
-                if cls._is_idempotent_tuple_error(op.action, str(e)):
-                    logger.info(
-                        "Ignoring idempotent OpenFGA %s failure for %s %s %s: %s",
-                        op.action,
-                        op.user,
-                        op.relation,
-                        op.object,
-                        e,
-                    )
+            except FGAWriteError as exc:
+                if cls._is_idempotent_tuple_error(
+                    operation.action,
+                    str(exc),
+                ):
                     continue
-                failed.append(op)
+                failed.append(operation)
                 if stop_on_failure:
-                    remaining = operations[index + 1 :]
-                    if remaining:
-                        logger.warning(
-                            "Stopping tuple fallback after non-idempotent %s failure; skipping %d trailing operations",
-                            op.action,
-                            len(remaining),
-                        )
-                        failed.extend(remaining)
+                    failed.extend(operations[index + 1 :])
                     break
             except FGAConnectionError:
                 raise
             except Exception:
-                failed.append(op)
+                failed.append(operation)
                 if stop_on_failure:
-                    remaining = operations[index + 1 :]
-                    if remaining:
-                        logger.warning(
-                            "Stopping tuple fallback after unexpected %s failure; skipping %d trailing operations",
-                            op.action,
-                            len(remaining),
-                        )
-                        failed.extend(remaining)
+                    failed.extend(operations[index + 1 :])
                     break
         return failed
 
     @staticmethod
-    def _is_idempotent_tuple_error(action: str, error_msg: str) -> bool:
+    def _is_idempotent_tuple_error(
+        action: str,
+        error_msg: str,
+    ) -> bool:
         text = error_msg.lower()
         if action == "write":
-            return "already exists" in text or "cannot write a tuple which already exists" in text
+            return (
+                "already exists" in text
+                or "cannot write a tuple which already exists" in text
+            )
         if action == "delete":
-            return "does not exist" in text or "did not exist" in text or "tuple to be deleted did not exist" in text
+            return (
+                "does not exist" in text
+                or "did not exist" in text
+                or "tuple to be deleted did not exist" in text
+            )
         return False
 
     @staticmethod
@@ -596,16 +507,18 @@ class PermissionService:
     ) -> list[TupleOperation]:
         seen: set[tuple[str, str, str, str]] = set()
         deduped: list[TupleOperation] = []
-        for op in operations:
-            key = (op.action, op.user, op.relation, op.object)
+        for operation in operations:
+            key = (
+                operation.action,
+                operation.user,
+                operation.relation,
+                operation.object,
+            )
             if key in seen:
                 continue
             seen.add(key)
-            deduped.append(op)
+            deduped.append(operation)
         return deduped
-
-    # Regex to parse FGA subject usersets supported by the permission model.
-    _SUBJECT_RE = re.compile(r"^(user|department|user_group):(\d+)(#member|#admin)?$")
 
     @classmethod
     async def get_resource_permissions(
@@ -613,29 +526,197 @@ class PermissionService:
         object_type: str,
         object_id: str,
     ) -> list[ResourcePermissionItem]:
-        """List enriched permission entries for a resource.
+        """Return raw legacy roster identities without business display data."""
 
-        Reads raw FGA tuples, parses subjects, resolves names via DB,
-        and returns structured ResourcePermissionItem list.
-        """
+        object_type = cls._require_allowed_runtime_type(object_type)
         try:
             fga = await cls._aget_fga()
             if fga is None:
                 return []
-
-            tuples = await fga.read_tuples(object=f"{object_type}:{object_id}")
-            if not tuples:
-                return []
-
-            deduped = list({(t.get("user", ""), t.get("relation", "")): t for t in tuples}.values())
-            return await cls._enrich_permission_tuples(deduped)
-
-        except FGAConnectionError as e:
-            logger.error("OpenFGA unreachable during read_tuples: %s", e)
+            tuples = await fga.read_tuples(
+                object=f"{object_type}:{object_id}"
+            )
+        except Exception as exc:
+            logger.error("Failed to read identity/LLM roster: %s", exc)
             return []
-        except Exception as e:
-            logger.error("Error reading resource permissions: %s", e)
+
+        items: list[ResourcePermissionItem] = []
+        seen: set[tuple[str, int, str, bool]] = set()
+        for row in tuples:
+            match = cls._SUBJECT_RE.match(str(row.get("user", "")))
+            if match is None:
+                continue
+            subject_type, subject_id, userset_relation = match.groups()
+            include_children = userset_relation == "subtree_member"
+            key = (
+                subject_type,
+                int(subject_id),
+                str(row.get("relation", "")),
+                include_children,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            items.append(
+                ResourcePermissionItem(
+                    subject_type=subject_type,
+                    subject_id=int(subject_id),
+                    relation=key[2],
+                    include_children=(
+                        include_children
+                        if subject_type == "department"
+                        else None
+                    ),
+                )
+            )
+        return items
+
+    @classmethod
+    async def get_permission_level(
+        cls,
+        user_id: int,
+        object_type: str,
+        object_id: str,
+        login_user=None,
+    ) -> str | None:
+        """Return the highest explicit level for an allowlisted LLM resource."""
+
+        object_type = cls._require_allowed_runtime_type(object_type)
+        if login_user and login_user.is_admin():
+            return PermissionLevel.owner.value
+        try:
+            fga = await cls._aget_fga()
+            if fga is None:
+                return None
+            levels = tuple(PermissionLevel)
+            results = await fga.batch_check(
+                [
+                    {
+                        "user": f"user:{user_id}",
+                        "relation": level.value,
+                        "object": f"{object_type}:{object_id}",
+                    }
+                    for level in levels
+                ]
+            )
+            for level, allowed in zip(levels, results, strict=True):
+                if allowed:
+                    return level.value
+        except Exception as exc:
+            logger.error(
+                "Failed to resolve identity/LLM permission level: %s",
+                exc,
+            )
+        return None
+
+    @classmethod
+    async def get_implicit_permission_level(
+        cls,
+        user_id: int,
+        object_type: str,
+        object_id: str,
+        login_user=None,
+    ) -> str | None:
+        """Compatibility surface with no creator or business-data fallback."""
+
+        del user_id, object_id
+        cls._require_allowed_runtime_type(object_type)
+        is_admin = getattr(login_user, "is_admin", None)
+        if callable(is_admin) and is_admin():
+            return PermissionLevel.owner.value
+        return None
+
+    @classmethod
+    async def _save_failed_tuples(
+        cls,
+        operations: list[TupleOperation],
+        error_msg: str,
+    ) -> None:
+        if not operations:
+            return
+        try:
+            from bisheng.database.models.failed_tuple import (
+                FailedTuple,
+                FailedTupleDao,
+            )
+
+            tuples = [
+                FailedTuple(
+                    action=operation.action,
+                    fga_user=operation.user,
+                    relation=operation.relation,
+                    object=operation.object,
+                    error_message=error_msg,
+                )
+                for operation in operations
+            ]
+            await FailedTupleDao.acreate_batch(tuples)
+        except Exception as exc:
+            logger.critical(
+                "Failed to record identity tuple compensation: %s",
+                exc,
+            )
+
+    @classmethod
+    async def _pre_record_failed_tuples(
+        cls,
+        operations: list[TupleOperation],
+    ) -> list[int]:
+        try:
+            from bisheng.database.models.failed_tuple import (
+                FailedTuple,
+                FailedTupleDao,
+            )
+
+            tuples = [
+                FailedTuple(
+                    action=operation.action,
+                    fga_user=operation.user,
+                    relation=operation.relation,
+                    object=operation.object,
+                    error_message="pre-recorded for crash safety",
+                )
+                for operation in operations
+            ]
+            await FailedTupleDao.acreate_batch(tuples)
+            return [int(row.id) for row in tuples if row.id is not None]
+        except Exception as exc:
+            logger.warning(
+                "Failed to pre-record identity tuple compensation: %s",
+                exc,
+            )
             return []
+
+    @classmethod
+    async def _delete_pre_recorded(
+        cls,
+        record_ids: list[int],
+    ) -> None:
+        if not record_ids:
+            return
+        try:
+            from bisheng.database.models.failed_tuple import FailedTupleDao
+
+            for record_id in record_ids:
+                await FailedTupleDao.aupdate_succeeded(record_id)
+        except Exception as exc:
+            logger.debug(
+                "Failed to complete identity tuple compensation: %s",
+                exc,
+            )
+
+    @staticmethod
+    def _get_fga():
+        from bisheng.core.openfga.manager import get_fga_client
+
+        return get_fga_client()
+
+    @classmethod
+    async def _aget_fga(cls):
+        from bisheng.core.openfga.manager import aget_fga_client
+
+        fga = await aget_fga_client()
+        return fga if fga is not None else cls._get_fga()
 
     @classmethod
     async def resolve_resource_relation_user_ids_strict(
@@ -850,1054 +931,6 @@ class PermissionService:
             item.model_id = binding.get("model_id")
             item.model_name = model_map.get(item.model_id, {}).get("name")
         return permissions
-
-    @classmethod
-    async def _enrich_permission_tuples(
-        cls,
-        tuples: list[dict],
-    ) -> list[ResourcePermissionItem]:
-        """Parse FGA tuples, resolve subject names, merge department entries."""
-        # Step 1: Parse and filter tuples
-        parsed = []
-        for t in tuples:
-            m = cls._SUBJECT_RE.match(t.get("user", ""))
-            if not m:
-                continue
-            subject_type, subject_id_str, member_suffix = m.groups()
-            # OpenFGA 中部门/用户组对资源的授权 subject 写作 department:id#member、user_group:id#member；
-            # 仅 user 不应带 #member，若出现则跳过。
-            if member_suffix:
-                if subject_type == "user":
-                    continue
-            parsed.append(
-                {
-                    "subject_type": subject_type,
-                    "subject_id": int(subject_id_str),
-                    "relation": t.get("relation", ""),
-                }
-            )
-
-        if not parsed:
-            return []
-
-        # Step 2: Collect IDs by subject_type
-        user_ids = [p["subject_id"] for p in parsed if p["subject_type"] == "user"]
-        dept_ids = [p["subject_id"] for p in parsed if p["subject_type"] == "department"]
-        group_ids = [p["subject_id"] for p in parsed if p["subject_type"] == "user_group"]
-
-        # Step 3: Batch resolve names and user-group captions for the user/group list UI
-        name_map, user_group_names_map, user_group_member_names_map = await asyncio.gather(
-            cls._resolve_subject_names(user_ids, dept_ids, group_ids),
-            cls._resolve_user_group_names(user_ids),
-            cls._resolve_user_group_member_names(group_ids),
-        )
-
-        # Step 4: Build items and merge department entries
-        dept_tracker: dict[tuple, ResourcePermissionItem] = {}
-        items: list[ResourcePermissionItem] = []
-
-        for p in parsed:
-            key = (p["subject_type"], p["subject_id"])
-            name = name_map.get(key)
-
-            if p["subject_type"] == "department":
-                dept_key = (p["subject_id"], p["relation"])
-                if dept_key in dept_tracker:
-                    # Multiple tuples for same dept+relation → include_children=True
-                    dept_tracker[dept_key].include_children = True
-                else:
-                    item = ResourcePermissionItem(
-                        subject_type=p["subject_type"],
-                        subject_id=p["subject_id"],
-                        subject_name=name,
-                        relation=p["relation"],
-                        include_children=False,
-                    )
-                    dept_tracker[dept_key] = item
-                    items.append(item)
-            else:
-                items.append(
-                    ResourcePermissionItem(
-                        subject_type=p["subject_type"],
-                        subject_id=p["subject_id"],
-                        subject_name=name,
-                        subject_member_names=user_group_member_names_map.get(p["subject_id"])
-                        if p["subject_type"] == "user_group"
-                        else None,
-                        subject_group_names=user_group_names_map.get(p["subject_id"])
-                        if p["subject_type"] == "user"
-                        else None,
-                        relation=p["relation"],
-                    )
-                )
-
-        return items
-
-    @classmethod
-    async def _resolve_user_group_names(
-        cls,
-        user_ids: list[int],
-    ) -> dict[int, list[str]]:
-        """Batch-resolve user group names for user subjects in permission lists."""
-        if not user_ids:
-            return {}
-
-        try:
-            from bisheng.database.models.user_group import UserGroupDao
-
-            groups_map = await UserGroupDao.aget_user_groups_batch(list(set(user_ids)))
-        except Exception as e:
-            logger.warning("Failed to resolve user group names: %s", e)
-            return {}
-
-        resolved: dict[int, list[str]] = {}
-        for user_id, groups in groups_map.items():
-            names: list[str] = []
-            for group in groups or []:
-                group_name = getattr(group, "group_name", None)
-                if group_name and group_name not in names:
-                    names.append(group_name)
-            if names:
-                resolved[int(user_id)] = names
-
-        return resolved
-
-    @classmethod
-    async def _resolve_user_group_member_names(
-        cls,
-        group_ids: list[int],
-    ) -> dict[int, list[str]]:
-        """Batch-resolve visible member names for user-group subjects."""
-        if not group_ids:
-            return {}
-
-        try:
-            from bisheng.database.models.user_group import UserGroupDao
-            from bisheng.user.domain.models.user import UserDao
-
-            rows = await UserGroupDao.aget_group_users(list(set(group_ids)))
-            if not rows:
-                return {}
-
-            member_group_pairs: list[tuple[int, int]] = []
-            user_ids = set()
-            for row in rows:
-                group_id = int(getattr(row, "group_id", 0) or 0)
-                user_id = int(getattr(row, "user_id", 0) or 0)
-                if not group_id or not user_id:
-                    continue
-                member_group_pairs.append((group_id, user_id))
-                user_ids.add(user_id)
-
-            if not member_group_pairs:
-                return {}
-
-            users = await UserDao.aget_user_by_ids(sorted(user_ids))
-            user_name_map = {
-                int(user.user_id): user.user_name
-                for user in users or []
-                if getattr(user, "delete", 0) == 0 and getattr(user, "user_name", None)
-            }
-
-            resolved: dict[int, list[str]] = {}
-            for group_id, user_id in member_group_pairs:
-                user_name = user_name_map.get(user_id)
-                if not user_name:
-                    continue
-                names = resolved.setdefault(group_id, [])
-                if user_name not in names:
-                    names.append(user_name)
-            return resolved
-        except Exception as e:
-            logger.warning("Failed to resolve user-group member names: %s", e)
-            return {}
-
-    @classmethod
-    async def _resolve_subject_names(
-        cls,
-        user_ids: list[int],
-        dept_ids: list[int],
-        group_ids: list[int],
-    ) -> dict[tuple, str | None]:
-        """Batch-resolve subject names from DB. Returns {(type, id): name}.
-
-        Runs all DAO queries concurrently via asyncio.gather.
-        """
-
-        async def _fetch_users():
-            if not user_ids:
-                return []
-            from bisheng.user.domain.models.user import UserDao
-
-            return await UserDao.aget_user_by_ids(user_ids) or []
-
-        async def _fetch_depts():
-            if not dept_ids:
-                return []
-            from bisheng.database.models.department import DepartmentDao
-
-            return await DepartmentDao.aget_by_ids(dept_ids) or []
-
-        async def _fetch_groups():
-            if not group_ids:
-                return []
-            from bisheng.database.models.group import GroupDao
-
-            return await GroupDao.aget_group_by_ids(group_ids) or []
-
-        results = await asyncio.gather(
-            _fetch_users(),
-            _fetch_depts(),
-            _fetch_groups(),
-            return_exceptions=True,
-        )
-
-        # F038: a department's display name is its FULL ancestor path so the
-        # permission list (which can hold one row per descendant of an
-        # include-children grant) renders labels without issuing one path-tree
-        # call per granted department. Ancestors not in the granted set are
-        # loaded in a single extra batched query.
-        dept_label_map: dict[int, str | None] = {}
-        dept_result = results[1]
-        if not isinstance(dept_result, Exception) and dept_result:
-            id_to_name = {d.id: d.name for d in dept_result}
-            ancestor_ids = {
-                i for d in dept_result for i in _parse_path_ids(getattr(d, "path", None)) if i not in id_to_name
-            }
-            if ancestor_ids:
-                from bisheng.database.models.department import DepartmentDao
-
-                try:
-                    for ancestor in await DepartmentDao.aget_by_ids(list(ancestor_ids)) or []:
-                        id_to_name[ancestor.id] = ancestor.name
-                except Exception as exc:
-                    logger.warning("Failed to resolve department ancestor names: %s", exc)
-            dept_label_map = {
-                d.id: _department_path_label(getattr(d, "path", None), id_to_name, d.name) for d in dept_result
-            }
-
-        name_map: dict[tuple, str | None] = {}
-        extractors = [
-            (results[0], "user", lambda u: (u.user_id, u.user_name)),
-            (results[1], "department", lambda d: (d.id, dept_label_map.get(d.id, d.name))),
-            (results[2], "user_group", lambda g: (g.id, g.group_name)),
-        ]
-        for result, subject_type, extractor in extractors:
-            if isinstance(result, Exception):
-                logger.warning("Failed to resolve %s names: %s", subject_type, result)
-                continue
-            for item in result:
-                id_val, name_val = extractor(item)
-                name_map[(subject_type, id_val)] = name_val
-
-        return name_map
-
-    @classmethod
-    async def get_permission_level(
-        cls,
-        user_id: int,
-        object_type: str,
-        object_id: str,
-        login_user=None,
-    ) -> str | None:
-        """Get user's highest permission level on a resource (AD-04).
-
-        Uses batch_check for efficiency. Returns PermissionLevel value or None.
-        """
-        if login_user and login_user.is_admin():
-            return PermissionLevel.owner.value
-
-        denied_by_tenant_gate, shortcut_level = await cls._evaluate_tenant_gate(
-            user_id=user_id,
-            object_type=object_type,
-            object_id=object_id,
-            login_user=login_user,
-        )
-        if denied_by_tenant_gate:
-            return None
-        if shortcut_level is not None:
-            return shortcut_level
-
-        try:
-            fga = await cls._aget_fga()
-            if fga is None:
-                return await cls._get_implicit_permission_level_after_gate(
-                    user_id,
-                    object_type,
-                    object_id,
-                )
-
-            # Batch check all 4 levels
-            checks = [
-                {"user": f"user:{user_id}", "relation": level.value, "object": f"{object_type}:{object_id}"}
-                for level in PermissionLevel
-            ]
-            results = await fga.batch_check(checks)
-
-            # Return highest level that is True
-            for level, allowed in zip(PermissionLevel, results):
-                if allowed:
-                    return level.value
-
-            # Owner/creator decoupled: creator counts as owner only when no other
-            # owner tuple remains (FGA reachable here). See check() L4 fallback.
-            return await cls._get_implicit_permission_level_after_gate(
-                user_id,
-                object_type,
-                object_id,
-                require_no_active_owner=True,
-            )
-
-        except FGAConnectionError as e:
-            logger.error("OpenFGA unreachable during get_permission_level: %s", e)
-            return None
-        except Exception as e:
-            logger.error("Error getting permission level: %s", e)
-            return None
-
-    # ── Internal helpers ────────────────────────────────────────
-
-    @classmethod
-    async def get_implicit_permission_level(
-        cls,
-        user_id: int,
-        object_type: str,
-        object_id: str,
-        login_user=None,
-    ) -> str | None:
-        """Resolve non-tuple permission sources only.
-
-        This intentionally excludes direct OpenFGA grants so fine-grained
-        permission services can layer custom bound models on top of implicit
-        access such as owner fallback, tenant-admin shortcut, and implicit
-        department-admin scope without over-granting explicit custom models.
-        """
-        is_admin = getattr(login_user, "is_admin", None)
-        if callable(is_admin) and is_admin():
-            return PermissionLevel.owner.value
-
-        denied_by_tenant_gate, shortcut_level = await cls._evaluate_tenant_gate(
-            user_id=user_id,
-            object_type=object_type,
-            object_id=object_id,
-            login_user=login_user,
-        )
-        if denied_by_tenant_gate:
-            return None
-        if shortcut_level is not None:
-            return shortcut_level
-
-        # Owner/creator decoupled: a revoked creator-owner is not resurrected as
-        # long as another owner tuple remains. FGA-outage callers fall back to the
-        # permissive path inside _resource_has_active_owner (returns "no owner").
-        return await cls._get_implicit_permission_level_after_gate(
-            user_id,
-            object_type,
-            object_id,
-            require_no_active_owner=True,
-        )
-
-    @classmethod
-    async def _evaluate_tenant_gate(
-        cls,
-        user_id: int,
-        object_type: str,
-        object_id: str,
-        login_user=None,
-    ) -> tuple[bool, str | None]:
-        """Return ``(denied, shortcut_level)`` for tenant visibility/admin rules."""
-        visible_tenants = getattr(login_user, "get_visible_tenants", None)
-        if login_user is None or not callable(visible_tenants):
-            return False, None
-
-        resource_tenant_id = await cls._resolve_resource_tenant(object_type, object_id)
-        if resource_tenant_id is None:
-            return False, None
-
-        visible = await visible_tenants()
-        if resource_tenant_id not in visible:
-            if not await cls._is_shared_to(
-                user_id,
-                resource_tenant_id,
-                visible_tenant_ids=visible,
-            ):
-                return True, None
-
-        from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
-
-        if resource_tenant_id != ROOT_TENANT_ID:
-            tenant = await TenantDao.aget_by_id(resource_tenant_id)
-            if tenant is not None and tenant.parent_tenant_id is not None:
-                has_tenant_admin = getattr(login_user, "has_tenant_admin", None)
-                if callable(has_tenant_admin) and await has_tenant_admin(resource_tenant_id):
-                    # check() historically short-circuits tenant admins for any
-                    # relation. Expose the same effective level here so list /
-                    # level callers stay aligned with check().
-                    return False, PermissionLevel.owner.value
-
-        return False, None
-
-    @classmethod
-    async def _get_implicit_permission_level_after_gate(
-        cls,
-        user_id: int,
-        object_type: str,
-        object_id: str,
-        *,
-        require_no_active_owner: bool = False,
-    ) -> str | None:
-        try:
-            creator_id = await cls._get_resource_creator(object_type, object_id)
-            if creator_id is not None and creator_id == user_id:
-                # knowledge_space creators are PERMANENT owners: ownership is backed
-                # by the SpaceChannelMember CREATOR row (honored by the list + file
-                # access regardless of FGA tuples), so the creator always resolves as
-                # owner here too. For every OTHER type owner and creator are decoupled
-                # — the DB creator field is only a SAFETY NET so a resource is never
-                # left ownerless (INV-2), not a permanent owner: on the reachable-FGA
-                # path (require_no_active_owner=True) the creator counts as owner only
-                # while no other owner tuple remains, so an explicit owner revoke /
-                # downgrade on the creator then actually takes effect. FGA-outage
-                # callers keep require_no_active_owner=False so the creator can still
-                # reach their own resource while FGA is down.
-                if (
-                    object_type == "knowledge_space"
-                    or not require_no_active_owner
-                    or not await cls._resource_has_active_owner(
-                        object_type,
-                        object_id,
-                        exclude_user_id=user_id,
-                    )
-                ):
-                    return PermissionLevel.owner.value
-            department_space_level = await cls._implicit_department_space_member_level(
-                user_id,
-                object_type,
-                object_id,
-            )
-            if department_space_level is not None:
-                return department_space_level
-            return None
-        except Exception as e:
-            logger.debug(
-                "Could not resolve implicit permission level for %s:%s: %s",
-                object_type,
-                object_id,
-                e,
-            )
-            return None
-
-    @classmethod
-    async def _resource_has_active_owner(
-        cls,
-        object_type: str,
-        object_id: str,
-        *,
-        exclude_user_id: int | None = None,
-    ) -> bool:
-        """Return True if the resource still has an owner tuple in OpenFGA.
-
-        Used to decouple the DB creator field from the owner role: the creator is
-        treated as owner only as a last-resort safety net (INV-2), so this reports
-        whether a *real* owner tuple survives. ``exclude_user_id`` skips the
-        caller's own tuple so a stale self-tuple can never mask a genuine
-        "someone else owns it" state.
-
-        FGA unavailable → returns False (cannot prove another owner exists), so
-        the caller keeps the permissive creator fallback while FGA is down.
-        """
-        try:
-            fga = await cls._aget_fga()
-            if fga is None:
-                return False
-            tuples = await fga.read_tuples(object=f"{object_type}:{object_id}", relation="owner")
-            exclude_user = f"user:{exclude_user_id}" if exclude_user_id is not None else None
-            return any(t.get("relation") == "owner" and t.get("user") != exclude_user for t in (tuples or []))
-        except Exception as e:
-            logger.debug("Could not read owner tuples for %s:%s: %s", object_type, object_id, e)
-            return False
-
-    @classmethod
-    def _permission_level_satisfies_relation(
-        cls,
-        level: str | None,
-        relation: str,
-        object_type: str,
-    ) -> bool:
-        if level == PermissionLevel.owner.value:
-            return True
-        if level == PermissionLevel.can_manage.value:
-            return cls._relation_implicit_manager_ok(relation, object_type)
-        if level == PermissionLevel.can_edit.value:
-            return relation in ("can_edit", "can_read", "editor", "viewer")
-        if level == PermissionLevel.can_read.value:
-            return relation in ("can_read", "viewer")
-        return False
-
-    @classmethod
-    def _relation_implicit_manager_ok(cls, relation: str, object_type: str) -> bool:
-        """隐式部门管理档位可满足的 relation（不写 FGA；所有者/删除仍走显式规则）。"""
-        if object_type not in cls._IMPLICIT_SCOPE_RESOURCE_TYPES:
-            return False
-        if relation in ("owner", "can_delete"):
-            return False
-        if relation in ("can_manage", "can_edit", "can_read", "manager", "editor", "viewer"):
-            return True
-        return False
-
-    @classmethod
-    async def _implicit_department_space_member_level(
-        cls,
-        user_id: int,
-        object_type: str,
-        object_id: str,
-    ) -> str | None:
-        if object_type != "knowledge_space" or not str(object_id).isdigit():
-            return None
-
-        from bisheng.core.context.tenant import bypass_tenant_filter
-        from bisheng.database.models.department import UserDepartmentDao
-        from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
-
-        with bypass_tenant_filter():
-            binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(int(object_id))
-            if binding is None:
-                return None
-            user_departments = await UserDepartmentDao.aget_user_departments(user_id)
-        if any(int(row.department_id) == int(binding.department_id) for row in user_departments):
-            return PermissionLevel.can_read.value
-        return None
-
-    @classmethod
-    async def _resource_ids_by_creator_user_ids(
-        cls,
-        object_type: str,
-        creator_uids: set[int],
-    ) -> list[str]:
-        if not creator_uids:
-            return []
-        from bisheng.core.context.tenant import bypass_tenant_filter
-
-        uids = list(creator_uids)
-        from sqlmodel import col, select
-
-        from bisheng.core.database import get_async_db_session
-
-        with bypass_tenant_filter():
-            async with get_async_db_session() as session:
-                if object_type == "knowledge_space":
-                    from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
-
-                    stmt = select(Knowledge.id).where(
-                        col(Knowledge.user_id).in_(uids),
-                        Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-                    )
-                    result = await session.exec(stmt)
-                    rows = result.all()
-                    return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
-                if object_type == "knowledge_library":
-                    from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
-
-                    stmt = select(Knowledge.id).where(
-                        col(Knowledge.user_id).in_(uids),
-                        Knowledge.type.in_(
-                            [
-                                KnowledgeTypeEnum.NORMAL.value,
-                                KnowledgeTypeEnum.QA.value,
-                            ]
-                        ),
-                    )
-                    result = await session.exec(stmt)
-                    rows = result.all()
-                    return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
-                if object_type == "workflow":
-                    from bisheng.database.models.flow import Flow
-
-                    stmt = select(Flow.id).where(col(Flow.user_id).in_(uids))
-                    result = await session.exec(stmt)
-                    rows = result.all()
-                    return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
-                if object_type == "assistant":
-                    from bisheng.database.models.assistant import Assistant
-
-                    stmt = select(Assistant.id).where(col(Assistant.user_id).in_(uids))
-                    result = await session.exec(stmt)
-                    rows = result.all()
-                    return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
-                if object_type == "knowledge_file":
-                    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
-
-                    stmt = select(KnowledgeFile.id).where(col(KnowledgeFile.user_id).in_(uids))
-                    result = await session.exec(stmt)
-                    rows = result.all()
-                    return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
-                if object_type == "tool":
-                    from bisheng.tool.domain.models.gpts_tools import GptsToolsType
-
-                    stmt = select(GptsToolsType.id).where(col(GptsToolsType.user_id).in_(uids))
-                    result = await session.exec(stmt)
-                    rows = result.all()
-                    return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
-                if object_type == "channel":
-                    from bisheng.channel.domain.models.channel import Channel
-
-                    stmt = select(Channel.id).where(col(Channel.user_id).in_(uids))
-                    result = await session.exec(stmt)
-                    rows = result.all()
-                    return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
-        return []
-
-    @classmethod
-    async def _resource_ids_in_tenants(
-        cls,
-        object_type: str,
-        tenant_ids: set[int],
-    ) -> list[str]:
-        if not tenant_ids:
-            return []
-        from sqlmodel import col, select
-
-        from bisheng.core.context.tenant import bypass_tenant_filter
-        from bisheng.core.database import get_async_db_session
-
-        tids = list(tenant_ids)
-        with bypass_tenant_filter():
-            async with get_async_db_session() as session:
-                if object_type == "workflow":
-                    from bisheng.database.models.flow import Flow
-
-                    stmt = select(Flow.id).where(col(Flow.tenant_id).in_(tids))
-                    result = await session.exec(stmt)
-                    rows = result.all()
-                    return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
-                if object_type == "assistant":
-                    from bisheng.database.models.assistant import Assistant
-
-                    stmt = select(Assistant.id).where(col(Assistant.tenant_id).in_(tids))
-                    result = await session.exec(stmt)
-                    rows = result.all()
-                    return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
-                if object_type in {"knowledge_space", "knowledge_library"}:
-                    from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
-
-                    stmt = select(Knowledge.id).where(col(Knowledge.tenant_id).in_(tids))
-                    if object_type == "knowledge_space":
-                        stmt = stmt.where(Knowledge.type == KnowledgeTypeEnum.SPACE.value)
-                    else:
-                        stmt = stmt.where(
-                            Knowledge.type.in_(
-                                [
-                                    KnowledgeTypeEnum.NORMAL.value,
-                                    KnowledgeTypeEnum.QA.value,
-                                ]
-                            )
-                        )
-                    result = await session.exec(stmt)
-                    rows = result.all()
-                    return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
-        return []
-
-    @classmethod
-    async def _resource_tenant_map(
-        cls,
-        object_type: str,
-        object_ids: list[str],
-    ) -> dict[str, int]:
-        if not object_ids or object_type not in cls._TENANT_GATED_RESOURCE_TYPES:
-            return {}
-
-        from bisheng.core.context.tenant import bypass_tenant_filter
-
-        mapping: dict[str, int] = {}
-        with bypass_tenant_filter():
-            if object_type == "workflow":
-                from bisheng.database.models.flow import FlowDao
-
-                rows = await FlowDao.aget_flow_by_ids(object_ids)
-                for row in rows or []:
-                    mapping[str(row.id)] = int(row.tenant_id)
-                return mapping
-            if object_type == "assistant":
-                from bisheng.database.models.assistant import AssistantDao
-
-                rows = await AssistantDao.aget_assistants_by_ids(object_ids)
-                for row in rows or []:
-                    mapping[str(row.id)] = int(row.tenant_id)
-                return mapping
-            if object_type in {"knowledge_space", "knowledge_library"}:
-                from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
-
-                numeric_ids = [int(one) for one in object_ids if str(one).isdigit()]
-                if not numeric_ids:
-                    return {}
-                rows = await KnowledgeDao.aget_list_by_ids(numeric_ids)
-                for row in rows or []:
-                    if object_type == "knowledge_space" and row.type != KnowledgeTypeEnum.SPACE.value:
-                        continue
-                    if object_type == "knowledge_library" and row.type not in (
-                        KnowledgeTypeEnum.NORMAL.value,
-                        KnowledgeTypeEnum.QA.value,
-                    ):
-                        continue
-                    mapping[str(row.id)] = int(row.tenant_id)
-                return mapping
-        return {}
-
-    @classmethod
-    async def _resource_ids_child_tenant_admin_scope(
-        cls,
-        login_user,
-        object_type: str,
-    ) -> list[str]:
-        get_visible_tenants = getattr(login_user, "get_visible_tenants", None)
-        has_tenant_admin = getattr(login_user, "has_tenant_admin", None)
-        if (
-            login_user is None
-            or object_type not in cls._TENANT_GATED_RESOURCE_TYPES
-            or not callable(get_visible_tenants)
-            or not callable(has_tenant_admin)
-        ):
-            return []
-
-        from bisheng.database.models.tenant import ROOT_TENANT_ID
-
-        visible = await get_visible_tenants()
-        candidate_tenant_ids = [int(tid) for tid in visible if int(tid) != ROOT_TENANT_ID]
-        if not candidate_tenant_ids:
-            return []
-
-        admin_checks = await asyncio.gather(*[has_tenant_admin(tid) for tid in candidate_tenant_ids])
-        admin_tenant_ids = {tid for tid, allowed in zip(candidate_tenant_ids, admin_checks) if allowed}
-        return await cls._resource_ids_in_tenants(object_type, admin_tenant_ids)
-
-    @classmethod
-    async def _filter_ids_by_tenant_gate(
-        cls,
-        user_id: int,
-        object_type: str,
-        object_ids: list[str],
-        login_user,
-    ) -> list[str]:
-        if login_user is None or object_type not in cls._TENANT_GATED_RESOURCE_TYPES or not object_ids:
-            return object_ids
-
-        tenant_map = await cls._resource_tenant_map(object_type, object_ids)
-        if not tenant_map:
-            return object_ids
-
-        visible = set(await login_user.get_visible_tenants())
-        shared_tenant_ids = sorted({tenant_id for tenant_id in tenant_map.values() if tenant_id not in visible})
-        shared_checks = await asyncio.gather(
-            *[cls._is_shared_to(user_id, tenant_id, visible_tenant_ids=visible) for tenant_id in shared_tenant_ids]
-        )
-        shared_by_tenant = {tenant_id: allowed for tenant_id, allowed in zip(shared_tenant_ids, shared_checks)}
-        return [
-            object_id
-            for object_id in object_ids
-            if (
-                tenant_map.get(object_id) is None
-                or tenant_map[object_id] in visible
-                or shared_by_tenant.get(tenant_map[object_id], False)
-            )
-        ]
-
-    @classmethod
-    async def _finalize_accessible_ids(
-        cls,
-        ids: list[str],
-        user_id: int,
-        object_type: str,
-        login_user=None,
-    ) -> list[str]:
-        ordered_ids = list(dict.fromkeys(str(one) for one in (ids or [])))
-
-        creator_owned_ids = await cls._resource_ids_by_creator_user_ids(
-            object_type,
-            {user_id},
-        )
-        if creator_owned_ids:
-            ordered_ids = list(
-                dict.fromkeys(
-                    [
-                        *ordered_ids,
-                        *(str(one) for one in creator_owned_ids),
-                    ]
-                )
-            )
-
-        tenant_admin_scope_ids = await cls._resource_ids_child_tenant_admin_scope(
-            login_user,
-            object_type,
-        )
-        if tenant_admin_scope_ids:
-            ordered_ids = list(
-                dict.fromkeys(
-                    [
-                        *ordered_ids,
-                        *(str(one) for one in tenant_admin_scope_ids),
-                    ]
-                )
-            )
-
-        return await cls._filter_ids_by_tenant_gate(
-            user_id,
-            object_type,
-            ordered_ids,
-            login_user,
-        )
-
-    @classmethod
-    async def _expand_subject(
-        cls,
-        subject_type: str,
-        subject_id: int,
-        include_children: bool = True,
-    ) -> list[str]:
-        """Expand a subject to OpenFGA user strings.
-
-        user → ["user:{id}"]
-        department + include_children → ["department:{id}#member" for each subtree dept]
-        department + not include_children → ["department:{id}#member"]
-        user_group → ["user_group:{id}#member"]
-        """
-        if subject_type == "user":
-            return [f"user:{subject_id}"]
-
-        if subject_type == "department":
-            if include_children:
-                from bisheng.database.models.department import DepartmentDao
-
-                dept = await DepartmentDao.aget_by_id(subject_id)
-                if dept is None:
-                    logger.warning("Department %d not found for expansion", subject_id)
-                    return [f"department:{subject_id}#member"]
-
-                subtree_ids = await DepartmentDao.aget_subtree_ids(dept.path)
-                return [f"department:{did}#member" for did in subtree_ids]
-            else:
-                return [f"department:{subject_id}#member"]
-
-        if subject_type == "user_group":
-            return [f"user_group:{subject_id}#member"]
-
-        logger.warning("Unknown subject type: %s", subject_type)
-        return []
-
-    @classmethod
-    async def _affected_user_ids_for_subject(
-        cls,
-        subject_type: str,
-        subject_id: int,
-        include_children: bool = True,
-    ) -> set[int]:
-        """Expand an auth subject to concrete user ids for cache invalidation."""
-        if subject_type == "user":
-            return {int(subject_id)}
-
-        if subject_type == "department":
-            from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
-
-            department_ids = {int(subject_id)}
-            if include_children:
-                dept = await DepartmentDao.aget_by_id(subject_id)
-                if dept is not None and getattr(dept, "path", None):
-                    subtree_ids = await DepartmentDao.aget_subtree_ids(dept.path)
-                    department_ids = {int(one) for one in subtree_ids}
-
-            if not department_ids:
-                return set()
-
-            membership_lists = await asyncio.gather(
-                *[
-                    UserDepartmentDao.aget_user_ids_by_department(department_id)
-                    for department_id in sorted(department_ids)
-                ]
-            )
-            affected: set[int] = set()
-            for user_ids in membership_lists:
-                affected.update(int(user_id) for user_id in user_ids)
-            return affected
-
-        if subject_type == "user_group":
-            from bisheng.database.models.user_group import UserGroupDao
-
-            rows = await UserGroupDao.aget_group_users([subject_id])
-            return {int(row.user_id) for row in rows if getattr(row, "user_id", None) is not None}
-
-        return set()
-
-    @classmethod
-    async def _get_resource_creator(
-        cls,
-        object_type: str,
-        object_id: str,
-    ) -> int | None:
-        """Query DB for the creator (user_id) of a resource.
-
-        Owner fallback (AC-06): when FGA write is delayed, DB creator field
-        provides a safety net for the resource owner.
-        """
-        try:
-            from bisheng.core.context.tenant import bypass_tenant_filter
-
-            with bypass_tenant_filter():
-                if object_type == "workflow":
-                    from bisheng.database.models.flow import FlowDao
-
-                    flow = await FlowDao.aget_flow_by_id(object_id)
-                    return flow.user_id if flow else None
-                if object_type == "assistant":
-                    from bisheng.database.models.assistant import AssistantDao
-
-                    assistant = await AssistantDao.aget_one_assistant(object_id)
-                    return assistant.user_id if assistant else None
-
-                if object_type == "knowledge_space":
-                    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
-
-                    ks = await KnowledgeDao.aquery_by_id(int(object_id))
-                    return ks.user_id if ks and ks.type == KnowledgeTypeEnum.SPACE.value else None
-
-                if object_type == "knowledge_library":
-                    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
-
-                    kb = await KnowledgeDao.aquery_by_id(int(object_id))
-                    if kb and kb.type in (KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.QA.value):
-                        return kb.user_id
-                    return None
-
-                if object_type == "knowledge_file":
-                    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
-
-                    files = await KnowledgeFileDao.aget_file_by_ids([int(object_id)])
-                    return files[0].user_id if files else None
-
-                if object_type == "tool":
-                    from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
-
-                    tool_type = await GptsToolsDao.aget_one_tool_type(int(object_id))
-                    return tool_type.user_id if tool_type else None
-
-                if object_type == "channel":
-                    from sqlmodel import select
-
-                    from bisheng.channel.domain.models.channel import Channel
-                    from bisheng.core.database import get_async_db_session
-
-                    async with get_async_db_session() as session:
-                        result = await session.exec(
-                            select(Channel).where(Channel.id == object_id),
-                        )
-                        channel = result.first()
-                    return channel.user_id if channel else None
-
-            # For other types (dashboard, folder), no direct
-            # user_id field — owner fallback not applicable, return None.
-            return None
-
-        except Exception as e:
-            logger.debug("Could not query resource creator for %s:%s: %s", object_type, object_id, e)
-            return None
-
-    @classmethod
-    async def _save_failed_tuples(
-        cls,
-        operations: list[TupleOperation],
-        error_msg: str,
-    ) -> None:
-        """Record failed operations in the compensation queue (INV-4)."""
-        if not operations:
-            return
-        try:
-            from bisheng.database.models.failed_tuple import FailedTuple, FailedTupleDao
-
-            tuples = [
-                FailedTuple(
-                    action=op.action,
-                    fga_user=op.user,
-                    relation=op.relation,
-                    object=op.object,
-                    error_message=error_msg,
-                )
-                for op in operations
-            ]
-            await FailedTupleDao.acreate_batch(tuples)
-            logger.warning(
-                "Recorded %d failed tuples for compensation: %s",
-                len(tuples),
-                error_msg[:200],
-            )
-        except Exception as e:
-            logger.critical(
-                "CRITICAL: Failed to record failed tuples (data loss risk): %s",
-                e,
-            )
-
-    @classmethod
-    async def _pre_record_failed_tuples(cls, operations: list[TupleOperation]) -> list[int]:
-        """Pre-insert FailedTuple records as 'pending' for crash safety.
-
-        Returns list of record IDs to delete on FGA success.
-        """
-        try:
-            from bisheng.database.models.failed_tuple import FailedTuple, FailedTupleDao
-
-            tuples = [
-                FailedTuple(
-                    action=op.action,
-                    fga_user=op.user,
-                    relation=op.relation,
-                    object=op.object,
-                    error_message="pre-recorded for crash safety",
-                )
-                for op in operations
-            ]
-            await FailedTupleDao.acreate_batch(tuples)
-            return [t.id for t in tuples if t.id]
-        except Exception as e:
-            logger.warning("Failed to pre-record failed tuples: %s", e)
-            return []
-
-    @classmethod
-    async def _delete_pre_recorded(cls, record_ids: list[int]) -> None:
-        """Delete pre-recorded FailedTuples after FGA success."""
-        if not record_ids:
-            return
-        try:
-            from bisheng.database.models.failed_tuple import FailedTupleDao
-
-            for rid in record_ids:
-                await FailedTupleDao.aupdate_succeeded(rid)
-        except Exception as e:
-            logger.debug("Failed to clean up pre-recorded tuples: %s", e)
-
-    @staticmethod
-    def _get_fga():
-        """Get FGAClient from app context. Returns None if unavailable."""
-        from bisheng.core.openfga.manager import get_fga_client
-
-        return get_fga_client()
-
-    @classmethod
-    async def _aget_fga(cls):
-        """Async accessor for FGAClient.
-
-        PermissionService methods are async and FGAManager is initialized
-        asynchronously. Prefer the async accessor here so write paths do not
-        falsely degrade to ``FGAClient not available`` when the sync accessor
-        cannot materialize the optional context.
-
-        Falls back to ``_get_fga()`` so existing tests that patch the sync
-        helper keep working without broad rewrites.
-        """
-        from bisheng.core.openfga.manager import aget_fga_client
-
-        fga = await aget_fga_client()
-        if fga is not None:
-            return fga
-        return cls._get_fga()
-
-    # ── F013 helpers (Tenant tree) ──────────────────────────────
 
     @classmethod
     async def resolve_resource_tenant_id(cls, object_type: str, object_id: str) -> int | None:

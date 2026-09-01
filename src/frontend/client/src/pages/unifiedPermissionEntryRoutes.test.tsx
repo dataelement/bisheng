@@ -7,7 +7,7 @@ function source(relativePath: string) {
   return readFileSync(join(process.cwd(), "src", relativePath), "utf8");
 }
 
-describe("F044 unified permission entry structure", () => {
+describe("F050 unified permission entry structure", () => {
   it("registers the four create/settings routes behind the existing plugin gates", () => {
     const routes = source("routes/index.tsx");
 

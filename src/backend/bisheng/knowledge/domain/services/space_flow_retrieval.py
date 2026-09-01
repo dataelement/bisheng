@@ -153,7 +153,7 @@ async def _aretrieve_one_space(
         unique_file_ids = {
             int(d.metadata.get("document_id")) for d in docs if d.metadata and d.metadata.get("document_id") is not None
         }
-        permitted = await visibility.post_filter_visible_files(space.id, unique_file_ids)
+        permitted = await visibility.post_filter_retrievable_files(space.id, unique_file_ids)
         survivors = [d for d in docs if int(d.metadata.get("document_id", -1)) in permitted]
 
         logger.info(
@@ -273,9 +273,11 @@ class SpaceKnowledgeRetrieverTool(KnowledgeRetrieverTool):
     """F041 drop-in replacement for ``KnowledgeRetrieverTool`` that retrieves from
     knowledge spaces through the F029 view_file filter.
 
-    Exposes the same ``invoke({"query": ...})`` / ``ainvoke`` contract so the agent
-    node and assistant (which reach into ``tool.knowledge_retriever_tool``) work
-    unchanged. Sync ``_run`` hops onto the single persistent loop via
+    Exposes the same ``_run(query)`` / ``_arun(query)`` contract so the agent node
+    and assistant (which reach into ``tool.knowledge_retriever_tool``) work
+    unchanged. Callers invoke it directly rather than through ``invoke``: as an
+    internal retrieval step it must not open a tool run of its own, which would
+    show up as a stray card in the chat. Sync ``_run`` hops onto the single persistent loop via
     ``run_async_safe`` (never ``asyncio.run`` — gotcha 5.2); ``_arun`` awaits directly.
     """
 

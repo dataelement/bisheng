@@ -168,6 +168,10 @@ export function TaskModeChatInput({ conversationId = 'new' }: TaskModeChatInputP
                     file_id: item.file_id,
                     file_name: item.filename || item.file_name || item.name,
                     parsing_status: item.parsing_status || 'completed',
+                    // Folder upload: the backend rebuilds this tree under the task
+                    // workspace's uploads/ prefix. Undefined for a loose file.
+                    relative_path: item.relative_path,
+                    size: item.size,
                 })),
                 question: trimmed,
                 tools: submissionTools as any,

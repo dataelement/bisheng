@@ -12,7 +12,9 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.tenant_fga import RootTenantAdminNotAllowedError
 from bisheng.common.schemas.api import resp_200
-from bisheng.permission.domain.services.tenant_admin_service import TenantAdminService
+from bisheng.tenant.domain.services.tenant_admin_service import (
+    TenantAdminService,
+)
 
 router = APIRouter()
 

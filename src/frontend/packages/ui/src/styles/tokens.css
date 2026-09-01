@@ -91,6 +91,13 @@
   --tag-approving: 22 93 255;        /* #165DFF */
   --tag-skill-tint: 245 232 255;     /* #F5E8FF */
   --tag-skill: 114 46 209;           /* #722ED1 */
+  /* 溯源角标的「网页来源」紫 (组件-Badge徽标.md §2) — SAME purple as the skill
+   * tag: the system has exactly one. Two use-names because they are two
+   * components' semantics; the values move together or not at all. (It shipped
+   * in the chat as #7224D9 / #F7F3FF — eyeballed neighbors of the Arco purple
+   * below, now snapped onto it.) */
+  --citation-web-tint: 245 232 255;  /* = --tag-skill-tint */
+  --citation-web: 114 46 209;        /* = --tag-skill */
 
   /* ---------- Brand palette — default = design-system brand blue (Arco-style
    * ramp, primary-6 #165DFF / pressed #024DE3). RGB channels so Tailwind's
@@ -302,6 +309,8 @@
   --tag-approving: 60 126 255;    /* #3C7EFF */
   --tag-skill-tint: 51 0 77;      /* #33004D */
   --tag-skill: 155 93 224;        /* #9B5DE0 */
+  --citation-web-tint: 51 0 77;   /* = --tag-skill-tint */
+  --citation-web: 155 93 224;     /* = --tag-skill */
 }
 
 /* Mobile (≤768px) remap of the SEMANTIC typography layer only:

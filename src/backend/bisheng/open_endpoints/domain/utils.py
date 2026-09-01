@@ -81,7 +81,7 @@ async def resolve_operator(user_id: int | None = None) -> UserPayload:
       (existing behaviour, unchanged).
     - ``user_id`` provided → build a ``UserPayload`` for that target user so
       列表 / 检索 / 文件列表 are filtered by *that user's* visibility scope and
-      ``permission_ids`` are computed under the same identity. This is the
+      concrete F048 ``actions`` are computed under the same identity. This is the
       "代用户" protocol F029 deferred for ``/api/v2/filelib/retrieve``.
 
     Seeds ``current_tenant_id`` with the resolved user's active tenant so

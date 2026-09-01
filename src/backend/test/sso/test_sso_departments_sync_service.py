@@ -26,8 +26,7 @@ def _no_default_root():
     """These orchestration tests predate the single-root invariant and
     assert on batch counters only, not on parent resolution. Stub the
     default-root lookup to None so ``execute`` never touches a real DB and
-    top-level items keep their original ``parent_id=None`` semantics, and
-    stub the OpenFGA flush so the batch never reaches a real FGA client.
+    top-level items keep their original ``parent_id=None`` semantics.
     """
     with (
         patch(
@@ -36,7 +35,7 @@ def _no_default_root():
             return_value=None,
         ),
         patch(
-            f"{MODULE}.DepartmentChangeHandler.execute_async",
+            (f"{MODULE}.DepartmentArchiveCleanupService.arun_for_archived_department"),
             new_callable=AsyncMock,
         ),
     ):
@@ -140,10 +139,8 @@ class TestUpsertBatch:
 
         assert upsert.await_args.kwargs["default_root"] is root
 
-    async def test_upsert_writes_parent_edge_to_fga(self):
-        """A newly synced top-level dept under the root emits a single
-        ``write department:{root}#parent department:{dept}`` flushed once.
-        """
+    async def test_upsert_does_not_use_after_commit_projection_bridge(self):
+        """The upsert gate owns the business mutation and projection binding."""
         from bisheng.sso_sync.domain.services.departments_sync_service import (
             DepartmentsSyncService,
         )
@@ -170,19 +167,16 @@ class TestUpsertBatch:
                 f"{MODULE}.DeptUpsertService.upsert_from_sync_payload",
                 new_callable=AsyncMock,
                 return_value=child,
-            ),
+            ) as upsert,
             patch(
-                f"{MODULE}.DepartmentChangeHandler.execute_async",
+                (f"{MODULE}.DepartmentTopologyProjectionService.areconcile_parent_change"),
                 new_callable=AsyncMock,
-            ) as flush,
+            ) as project,
         ):
             await DepartmentsSyncService.execute(payload)
 
-        flush.assert_awaited_once()
-        ops = flush.await_args.args[0]
-        assert [(o.action, o.user, o.relation, o.object) for o in ops] == [
-            ("write", "department:1", "parent", "department:5"),
-        ]
+        upsert.assert_awaited_once()
+        project.assert_not_awaited()
 
     async def test_stale_ts_counts_as_skipped(self):
         from bisheng.sso_sync.domain.services.departments_sync_service import (
@@ -321,7 +315,7 @@ class TestRemoveBatch:
                 return_value=dept,
             ),
             patch(
-                f"{MODULE}.DepartmentDao.aarchive_by_external_id",
+                f"{MODULE}.DepartmentTopologyProjectionService.aarchive_synced_department",
                 new_callable=AsyncMock,
                 return_value=dept,
             ),
@@ -339,8 +333,8 @@ class TestRemoveBatch:
         assert kwargs["dept_id"] == 99
         assert kwargs["deletion_source"] == DeletionSource.SSO_REALTIME
 
-    async def test_remove_breaks_parent_edge_in_fga(self):
-        """Archiving a dept emits a single ``delete`` of its parent edge."""
+    async def test_remove_uses_atomic_archive_projection(self):
+        """The archive gate binds edge deletion before its business commit."""
         from bisheng.sso_sync.domain.services.departments_sync_service import (
             DepartmentsSyncService,
         )
@@ -358,27 +352,21 @@ class TestRemoveBatch:
                 return_value=dept,
             ),
             patch(
-                f"{MODULE}.DepartmentDao.aarchive_by_external_id",
+                f"{MODULE}.DepartmentTopologyProjectionService.aarchive_synced_department",
                 new_callable=AsyncMock,
                 return_value=dept,
-            ),
+            ) as archive,
             patch(
                 f"{MODULE}.DepartmentDeletionHandler.on_deleted",
                 new_callable=AsyncMock,
             ),
-            patch(
-                f"{MODULE}.DepartmentChangeHandler.execute_async",
-                new_callable=AsyncMock,
-            ) as flush,
         ):
             await DepartmentsSyncService.execute(payload)
 
-        # execute_async may also be awaited by the archive-cleanup service
-        # for member/admin tuples; scan every flushed op for the parent edge.
-        all_ops = [(o.action, o.user, o.relation, o.object) for call in flush.await_args_list for o in call.args[0]]
-        assert ("delete", "department:7", "parent", "department:50") in all_ops
-        # never a bogus department:None edge
-        assert all("department:None" not in o[1] for o in all_ops)
+        archive.assert_awaited_once_with(
+            department_id=50,
+            last_sync_ts=100,
+        )
 
     async def test_remove_unmounted_no_orphan(self):
         from bisheng.sso_sync.domain.services.departments_sync_service import (
@@ -398,7 +386,7 @@ class TestRemoveBatch:
                 return_value=dept,
             ),
             patch(
-                f"{MODULE}.DepartmentDao.aarchive_by_external_id",
+                f"{MODULE}.DepartmentTopologyProjectionService.aarchive_synced_department",
                 new_callable=AsyncMock,
                 return_value=dept,
             ),
@@ -429,7 +417,7 @@ class TestRemoveBatch:
                 return_value=None,
             ),
             patch(
-                f"{MODULE}.DepartmentDao.aarchive_by_external_id",
+                f"{MODULE}.DepartmentTopologyProjectionService.aarchive_synced_department",
                 new_callable=AsyncMock,
             ) as archive,
             patch(
@@ -500,7 +488,7 @@ class TestRemoveBatch:
                 new_callable=AsyncMock,
             ),
             patch(
-                f"{MODULE}.DepartmentDao.aarchive_by_external_id",
+                f"{MODULE}.DepartmentTopologyProjectionService.aarchive_synced_department",
                 new_callable=AsyncMock,
                 return_value=remove_dept,
             ),

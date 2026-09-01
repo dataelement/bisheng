@@ -18,31 +18,32 @@ export default function SkillChatSheet({ children, onSelect }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
 
-    const pageRef = useRef(1)
+    const cursorRef = useRef<string | null>(null)
     const searchRef = useRef('')
     const [options, setOptions] = useState<any>([])
 
     const loadData = (more = false) => {
-        open && getChatOnlineApi(pageRef.current, searchRef.current).then(res => {
-            setOptions(opts => more ? [...opts, ...res] : res)
+        open && getChatOnlineApi(more ? cursorRef.current : null, searchRef.current, -1).then(res => {
+            const list = res.list || []
+            setOptions(opts => more ? [...opts, ...list] : list)
+            cursorRef.current = res.nextCursor
         })
     }
     const debounceLoad = useDebounce(loadData, 600, false)
 
     useEffect(() => {
-        pageRef.current = 1
+        cursorRef.current = null
         searchRef.current = ''
         loadData()
     }, [open])
 
     const handleSearch = (e) => {
-        pageRef.current = 1
+        cursorRef.current = null
         searchRef.current = e.target.value
         debounceLoad()
     }
 
     const handleLoadMore = () => {
-        pageRef.current++
         loadData(true)
     }
 

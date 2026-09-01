@@ -64,6 +64,18 @@ def test_active_modes_superseded_map():
     assert active == {EXTRACT, KEEP_RAW}
 
 
+def test_active_modes_media_only():
+    active, keep_raw = InputNode._active_modes({"media": EXTRACT})
+    assert active == {EXTRACT}
+    assert keep_raw is False
+
+
+def test_accepts_image_legacy_and_array():
+    assert InputNode._accepts_image("all") is True
+    assert InputNode._accepts_image(["image"]) is True
+    assert InputNode._accepts_image(["file"]) is False
+
+
 def test_active_modes_missing_defaults_to_ingest():
     active, _ = InputNode._active_modes(None)
     assert active == {INGEST}

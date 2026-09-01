@@ -22,7 +22,7 @@ class CitationResolveService:
     """Resolve persisted citation items into a unified response payload.
 
     F029 (knowledge QA permission filter) moved the access check from the
-    legacy RBAC ``AccessType.KNOWLEDGE`` space-level probe (an arch-guard
+    legacy RBAC space-level probe (an arch-guard
     RULE-8 violation) to the ReBAC + Fine-grained ``view_file`` per-file
     visibility primitive. The new flow filters out RAG citations the user
     cannot see before enrichment; anonymous callers (share-link / public

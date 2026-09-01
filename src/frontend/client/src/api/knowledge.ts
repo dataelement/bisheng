@@ -147,6 +147,7 @@ export interface KnowledgeSpace {
     departmentName?: string;
     approvalEnabled?: boolean;
     sensitiveCheckEnabled?: boolean;
+    actions?: string[];
     initialPermissionResult?: InitialPermissionResult;
 }
 
@@ -265,6 +266,7 @@ interface RawKnowledgeSpace {
     is_followed?: boolean;
     subscription_status?: string;
     initial_permission_result?: RawInitialPermissionResult | null;
+    actions?: string[];
 }
 
 export interface KnowledgeSpaceTagLibraryListItem {
@@ -610,6 +612,7 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
             (raw as any).sensitive_check_enabled !== undefined
                 ? Boolean((raw as any).sensitive_check_enabled)
                 : undefined,
+        actions: Array.isArray(raw.actions) ? raw.actions : [],
     };
 }
 
@@ -1023,7 +1026,10 @@ export async function getMineSpacesApi(params?: {
             order_by: params?.order_by,
         },
     });
-    return extractKnowledgeSpaceList(res).map(mapSpace);
+    return extractKnowledgeSpaceList(res).map((raw) => ({
+        ...mapSpace(raw),
+        spaceKind: "normal",
+    }));
 }
 
 /**
@@ -1037,7 +1043,10 @@ export async function getJoinedSpacesApi(params?: {
             order_by: params?.order_by,
         },
     });
-    return extractKnowledgeSpaceList(res).map(mapSpace);
+    return extractKnowledgeSpaceList(res).map((raw) => ({
+        ...mapSpace(raw),
+        spaceKind: "normal",
+    }));
 }
 
 /**
@@ -1065,7 +1074,10 @@ export async function getDepartmentSpacesApi(params?: {
             order_by: params?.order_by,
         },
     });
-    return extractKnowledgeSpaceList(res).map(mapSpace);
+    return extractKnowledgeSpaceList(res).map((raw) => ({
+        ...mapSpace(raw),
+        spaceKind: "department",
+    }));
 }
 
 /**
@@ -1234,12 +1246,14 @@ export interface CreateSpacePayload {
     auto_tag_library_id?: number | null;
     auto_tag_custom_tags?: string[] | null;
     initialPermissions?: InitialPermissionsPayload;
+    creationRequestId?: string;
 }
 
 export async function createSpaceApi(data: CreateSpacePayload): Promise<KnowledgeSpace> {
-    const { initialPermissions, ...spaceData } = data;
+    const { initialPermissions, creationRequestId, ...spaceData } = data;
     const body = {
         ...spaceData,
+        ...(creationRequestId ? { creation_request_id: creationRequestId } : {}),
         ...(initialPermissions ? { initial_permissions: initialPermissions } : {}),
     };
     const res = await request.post(`/api/v1/knowledge/space`, body);

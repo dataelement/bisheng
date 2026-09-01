@@ -51,8 +51,6 @@ import { cn } from "~/utils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { resolveUploadSizeLimits } from "./knowledgeUtils";
-import { knowledgeUploadCapabilities } from "./knowledgeUploadCapabilities";
-
 export default function Knowledge() {
     const localize = useLocalize();
     // 模块标题跟随后台配置的菜单显示名称
@@ -678,7 +676,7 @@ export default function Knowledge() {
             {/* Drag and Drop Overlay */}
             {isDragging && (
                 <div
-                    className={`absolute inset-0.5 z-[100] rounded-[12px] flex flex-col items-center justify-center pointer-events-none transition-all duration-300 ${dragError ? "border border-dashed border-red-500 bg-[rgba(255,236,232,0.7)]" : "border border-dashed bg-[rgba(255,255,255,0.7)]"}`}
+                    className={`absolute inset-0.5 z-[100] rounded-xl flex flex-col items-center justify-center pointer-events-none transition-all duration-300 ${dragError ? "border border-dashed border-red-500 bg-[rgba(255,236,232,0.7)]" : "border border-dashed bg-[rgba(255,255,255,0.7)]"}`}
                 >
                     <div className={`flex flex-col items-center justify-center p-8 rounded-2xl ${dragError ? "bg-transparent" : "bg-white/50"}`}>
                         {dragError ? (
@@ -691,7 +689,7 @@ export default function Knowledge() {
                             <p>{localize("com_knowledge.format_list")}</p>
                             <p>
                                 {localize(
-                                    knowledgeUploadCapabilities.media
+                                    bishengConfig?.enable_media_upload
                                         ? "com_knowledge.upload_size_limits_hint"
                                         : "com_knowledge.upload_size_limit_hint_without_media",
                                     {

@@ -63,7 +63,11 @@ export default function ChatInput({ readOnly, v }) {
                     disabled={readOnly || audioOpening || inputDisabled}
                     size={bishengConfig?.uploaded_files_maximum_size || 50}
                     onChange={(files => {
-                        setFileUploading(!files);
+                        if (files === null) {
+                            setFileUploading(true);
+                            return;
+                        }
+                        setFileUploading(false);
                         setChatFiles(files);
                     })} />}
 

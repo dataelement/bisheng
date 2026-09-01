@@ -52,10 +52,8 @@ async def test_retrieve_and_filter_empty_strategy_skips_invocation(monkeypatch):
     """IndexFilter.strategy='empty' → returns [] without touching retriever."""
     svc = _make_service()
     visibility = MagicMock()
-    visibility.build_index_prefilter = AsyncMock(
-        return_value=IndexFilter(strategy="empty", accessible_size=0)
-    )
-    visibility.post_filter_visible_files = AsyncMock()
+    visibility.build_index_prefilter = AsyncMock(return_value=IndexFilter(strategy="empty", accessible_size=0))
+    visibility.post_filter_retrievable_files = AsyncMock()
     monkeypatch.setattr(svc, "_visibility_service", lambda: visibility)
 
     space = MagicMock(id=10)
@@ -65,13 +63,11 @@ async def test_retrieve_and_filter_empty_strategy_skips_invocation(monkeypatch):
         lambda **kwargs: MagicMock(ainvoke=invoke_mock),
     )
 
-    docs = await svc._retrieve_and_filter(
-        space=space, query="q", candidate_file_ids=None, max_content=1000
-    )
+    docs = await svc._retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
 
     assert docs == []
     visibility.build_index_prefilter.assert_awaited_once_with(10, None)
-    visibility.post_filter_visible_files.assert_not_called()
+    visibility.post_filter_retrievable_files.assert_not_called()
     invoke_mock.assert_not_called()
 
 
@@ -84,7 +80,7 @@ async def test_retrieve_and_filter_first_attempt_satisfies(monkeypatch):
         return_value=IndexFilter(strategy="in", accessible_size=3, milvus_expr="document_id in [1, 2, 3]"),
     )
     # All 3 file_ids are permitted.
-    visibility.post_filter_visible_files = AsyncMock(return_value={1, 2, 3})
+    visibility.post_filter_retrievable_files = AsyncMock(return_value={1, 2, 3})
     monkeypatch.setattr(svc, "_visibility_service", lambda: visibility)
 
     space = MagicMock(id=10)
@@ -111,12 +107,10 @@ async def test_retrieve_and_filter_first_attempt_satisfies(monkeypatch):
         lambda **kwargs: MagicMock(ainvoke=fake_ainvoke),
     )
 
-    docs = await svc._retrieve_and_filter(
-        space=space, query="q", candidate_file_ids=None, max_content=1000
-    )
+    docs = await svc._retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
 
     assert [int(d.metadata["document_id"]) for d in docs] == [1, 2, 3]
-    visibility.post_filter_visible_files.assert_awaited_once()
+    visibility.post_filter_retrievable_files.assert_awaited_once()
     assert len(invoke_calls) == 1  # no expansion
 
 
@@ -125,11 +119,9 @@ async def test_retrieve_and_filter_post_filter_drops_some(monkeypatch):
     """First attempt returns docs but only a subset passes post-filter."""
     svc = _make_service()
     visibility = MagicMock()
-    visibility.build_index_prefilter = AsyncMock(
-        return_value=IndexFilter(strategy="none", accessible_size=10)
-    )
+    visibility.build_index_prefilter = AsyncMock(return_value=IndexFilter(strategy="none", accessible_size=10))
     # Only file_ids 1 and 3 are permitted; 2 and 4 dropped.
-    visibility.post_filter_visible_files = AsyncMock(return_value={1, 3})
+    visibility.post_filter_retrievable_files = AsyncMock(return_value={1, 3})
     monkeypatch.setattr(svc, "_visibility_service", lambda: visibility)
 
     space = MagicMock(id=10)
@@ -144,7 +136,7 @@ async def test_retrieve_and_filter_post_filter_drops_some(monkeypatch):
 
     docs_first = [_make_doc(1), _make_doc(2), _make_doc(3), _make_doc(4)]
 
-    async def fake_ainvoke(query):  # noqa: ARG001
+    async def fake_ainvoke(query):
         return docs_first
 
     monkeypatch.setattr(
@@ -152,9 +144,7 @@ async def test_retrieve_and_filter_post_filter_drops_some(monkeypatch):
         lambda **kwargs: MagicMock(ainvoke=fake_ainvoke),
     )
 
-    docs = await svc._retrieve_and_filter(
-        space=space, query="q", candidate_file_ids=None, max_content=1000
-    )
+    docs = await svc._retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
 
     surviving_ids = sorted(int(d.metadata["document_id"]) for d in docs)
     assert surviving_ids == [1, 3]
@@ -165,10 +155,8 @@ async def test_retrieve_and_filter_capped_at_two_attempts(monkeypatch):
     """AD-03: if both attempts produce 0 survivors, stop; no third attempt."""
     svc = _make_service()
     visibility = MagicMock()
-    visibility.build_index_prefilter = AsyncMock(
-        return_value=IndexFilter(strategy="none", accessible_size=100)
-    )
-    visibility.post_filter_visible_files = AsyncMock(return_value=set())
+    visibility.build_index_prefilter = AsyncMock(return_value=IndexFilter(strategy="none", accessible_size=100))
+    visibility.post_filter_retrievable_files = AsyncMock(return_value=set())
     monkeypatch.setattr(svc, "_visibility_service", lambda: visibility)
 
     space = MagicMock(id=10)
@@ -183,7 +171,7 @@ async def test_retrieve_and_filter_capped_at_two_attempts(monkeypatch):
 
     invoke_count = 0
 
-    async def fake_ainvoke(query):  # noqa: ARG001
+    async def fake_ainvoke(query):
         nonlocal invoke_count
         invoke_count += 1
         return [_make_doc(invoke_count * 10)]
@@ -193,9 +181,7 @@ async def test_retrieve_and_filter_capped_at_two_attempts(monkeypatch):
         lambda **kwargs: MagicMock(ainvoke=fake_ainvoke),
     )
 
-    docs = await svc._retrieve_and_filter(
-        space=space, query="q", candidate_file_ids=None, max_content=1000
-    )
+    docs = await svc._retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
 
     assert docs == []
     assert invoke_count == 2  # AD-03 hard cap
@@ -210,14 +196,14 @@ async def test_retrieve_and_filter_expansion_succeeds_second_attempt(monkeypatch
         return_value=IndexFilter(strategy="in", accessible_size=5, milvus_expr="document_id in [1,2,3,4,5]")
     )
 
-    # post_filter_visible_files called twice: first round nothing matches,
+    # post_filter_retrievable_files called twice: first round nothing matches,
     # second round file_id 5 survives.
     post_filter_results = iter([set(), {5}])
 
-    async def fake_post(space_id, file_ids):  # noqa: ARG001
+    async def fake_post(space_id, file_ids):
         return next(post_filter_results)
 
-    visibility.post_filter_visible_files = AsyncMock(side_effect=fake_post)
+    visibility.post_filter_retrievable_files = AsyncMock(side_effect=fake_post)
     monkeypatch.setattr(svc, "_visibility_service", lambda: visibility)
 
     space = MagicMock(id=10)
@@ -232,7 +218,7 @@ async def test_retrieve_and_filter_expansion_succeeds_second_attempt(monkeypatch
 
     call_count = 0
 
-    async def fake_ainvoke(query):  # noqa: ARG001
+    async def fake_ainvoke(query):
         nonlocal call_count
         call_count += 1
         if call_count == 1:
@@ -244,9 +230,7 @@ async def test_retrieve_and_filter_expansion_succeeds_second_attempt(monkeypatch
         lambda **kwargs: MagicMock(ainvoke=fake_ainvoke),
     )
 
-    docs = await svc._retrieve_and_filter(
-        space=space, query="q", candidate_file_ids=None, max_content=1000
-    )
+    docs = await svc._retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
 
     assert call_count == 2
     assert sorted(int(d.metadata["document_id"]) for d in docs) == [5]
@@ -255,14 +239,13 @@ async def test_retrieve_and_filter_expansion_succeeds_second_attempt(monkeypatch
 @pytest.mark.asyncio
 async def test_retrieve_and_filter_logs_structured_fields(monkeypatch, caplog):
     """AC-27: each retrieval attempt writes the permission_filter log fields."""
-    import logging
 
     svc = _make_service()
     visibility = MagicMock()
     visibility.build_index_prefilter = AsyncMock(
         return_value=IndexFilter(strategy="in", accessible_size=2, milvus_expr="document_id in [1,2]")
     )
-    visibility.post_filter_visible_files = AsyncMock(return_value={1})
+    visibility.post_filter_retrievable_files = AsyncMock(return_value={1})
     monkeypatch.setattr(svc, "_visibility_service", lambda: visibility)
 
     space = MagicMock(id=10)
@@ -275,7 +258,7 @@ async def test_retrieve_and_filter_logs_structured_fields(monkeypatch, caplog):
         AsyncMock(return_value=MagicMock(as_retriever=lambda **kw: MagicMock())),
     )
 
-    async def fake_ainvoke(query):  # noqa: ARG001
+    async def fake_ainvoke(query):
         return [_make_doc(1), _make_doc(2)]
 
     monkeypatch.setattr(
@@ -293,9 +276,7 @@ async def test_retrieve_and_filter_logs_structured_fields(monkeypatch, caplog):
 
     handler_id = loguru_logger.add(sink, level="INFO")
     try:
-        await svc._retrieve_and_filter(
-            space=space, query="q", candidate_file_ids=None, max_content=1000
-        )
+        await svc._retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
     finally:
         loguru_logger.remove(handler_id)
 
@@ -326,9 +307,7 @@ async def test_chat_single_file_logs_view_file_passed_debug(monkeypatch):
 
     # Stub permission gate to succeed and return a file record.
     file_record = MagicMock(id=42, knowledge_id=10, file_name="test.pdf")
-    monkeypatch.setattr(
-        svc, "_require_file_view_permission", AsyncMock(return_value=file_record)
-    )
+    monkeypatch.setattr(svc, "_require_file_view_permission", AsyncMock(return_value=file_record))
 
     # Stub everything downstream so the generator can advance and yield.
     space = MagicMock(id=10)
@@ -351,7 +330,7 @@ async def test_chat_single_file_logs_view_file_passed_debug(monkeypatch):
     )
 
     # Patch space_rag to a no-op async generator so chat_single_file returns quickly.
-    async def fake_space_rag(*args, **kwargs):  # noqa: ARG001
+    async def fake_space_rag(*args, **kwargs):
         if False:
             yield  # make this an async generator
 
@@ -360,17 +339,12 @@ async def test_chat_single_file_logs_view_file_passed_debug(monkeypatch):
     sink_records = []
     handler_id = loguru_logger.add(lambda m: sink_records.append(str(m)), level="DEBUG")
     try:
-        async for _ in svc.chat_single_file(
-            knowledge_id=10, file_id=42, query="q", model_id=1
-        ):
+        async for _ in svc.chat_single_file(knowledge_id=10, file_id=42, query="q", model_id=1):
             pass
     finally:
         loguru_logger.remove(handler_id)
 
     debug_lines = [
-        r for r in sink_records
-        if "view_file" in r and ("passed" in r or "checked" in r or "ok" in r.lower())
+        r for r in sink_records if "view_file" in r and ("passed" in r or "checked" in r or "ok" in r.lower())
     ]
-    assert debug_lines, (
-        f"Expected a DEBUG log about the view_file check; got: {sink_records!r}"
-    )
+    assert debug_lines, f"Expected a DEBUG log about the view_file check; got: {sink_records!r}"

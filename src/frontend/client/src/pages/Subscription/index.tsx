@@ -1,6 +1,5 @@
 import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { EmptyStateIllustration } from "~/components/illustrations";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useActivate, useUnactivate } from "react-activation";
@@ -63,6 +62,7 @@ export default function Subscription() {
     const previewChannelId = routePreviewChannelId || manualPreviewChannelId;
     const detailChannelId = !isShareRoute ? extractDetailChannelIdFromPath(location.pathname) : undefined;
     const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
+    const [channelRefreshToken] = useState(0);
     const [showChannelSquare, setShowChannelSquare] = useState(false);
     const [fullScreenArticle, setFullScreenArticle] = useState<Article | null>(null);
     const [showAiAssistant, setShowAiAssistant] = useState(false);
@@ -202,8 +202,8 @@ export default function Subscription() {
                         subscriberCount: Number(detail?.subscriber_count ?? 0),
                         articleCount: Number(detail?.article_count ?? 0),
                         unreadCount: 0,
-                        role: detail?.relation ?? ChannelRole.MEMBER,
-                        permissionIds: Array.isArray(detail?.permission_ids) ? detail.permission_ids : [],
+                        role: ChannelRole.MEMBER,
+                        actions: detail?.actions,
                         isPinned: false,
                         createdAt: String(detail?.create_time ?? ""),
                         updatedAt: String(detail?.latest_article_update_time ?? ""),
@@ -259,8 +259,8 @@ export default function Subscription() {
                     subscriberCount: Number(detail?.subscriber_count ?? 0),
                     articleCount: Number(detail?.article_count ?? 0),
                     unreadCount: 0,
-                    role: detail?.relation ?? ChannelRole.MEMBER,
-                    permissionIds: Array.isArray(detail?.permission_ids) ? detail.permission_ids : [],
+                    role: ChannelRole.MEMBER,
+                    actions: detail?.actions,
                     isPinned: false,
                     createdAt: String(detail?.create_time ?? ""),
                     updatedAt: String(detail?.latest_article_update_time ?? ""),
@@ -406,7 +406,7 @@ export default function Subscription() {
         if (isH5) setChannelListDrawerOpen(false);
     };
 
-    // Create channel - navigates to the unified settings page after the quota gate.
+    // Create channel - opens drawer (with limit check)
     const handleCreateChannel = () => {
         if (isOverQuota("channel", createdChannelCountRef.current)) {
             showToast({
@@ -481,6 +481,9 @@ export default function Subscription() {
             ) : (
                 <>
                     {/* PC：频道列表已移至顶部标题下拉（ChannelSwitcher）；H5：改抽屉叠在主内容之上（见下方 fixed） */}
+                    {/* NOTE: `channelListDrawerOpen` is never set to true anywhere, so this
+                        ChannelSidebar drawer branch is currently dead code. Kept intentionally
+                        (not cleaned up) — the live H5 channel list is the ChannelSwitcher panel. */}
                     {isH5 && channelListDrawerOpen ? (
                         <div
                             className="fixed inset-0 z-[70] flex"
@@ -516,7 +519,7 @@ export default function Subscription() {
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                         {activeChannel ? (
                             <ChannelLayout
-                                key={activeChannel.id}
+                                key={`${activeChannel.id}-${channelRefreshToken}`}
                                 channel={activeChannel}
                                 onChannelSelect={handleChannelSelect}
                                 onChannelSettings={(channel) => navigate(`/channel/${channel.id}/settings`)}

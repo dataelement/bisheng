@@ -23,7 +23,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from bisheng.llm.domain.models.llm_server import LLMDao, LLMServer
-
+from bisheng.permission.application import PermissionSubject
 
 # --- fixtures ---------------------------------------------------------------
 
@@ -70,7 +70,7 @@ def _build_session(flushed_id: int = 100):
     s.flush.side_effect = _flush_effect
 
     def _refresh_effect(obj):
-        if getattr(obj, 'id', None) is None:
+        if getattr(obj, "id", None) is None:
             obj.id = flushed_id
         return obj
 
@@ -86,24 +86,29 @@ async def test_root_llm_default_shared_writes_viewer_tuple():
     """AC-01: Root + share_to_children=True + share_default_to_children=True
     → enable_sharing fanout."""
     session = _build_session(flushed_id=100)
-    server = LLMServer(name='s1', type='openai', config={})
+    server = LLMServer(name="s1", type="openai", config={})
 
     enable_mock = AsyncMock(return_value=[5, 7])
-    with patch('bisheng.llm.domain.models.llm_server.get_async_db_session',
-               _session_context(session)), \
-         patch('bisheng.llm.domain.models.llm_server.get_current_tenant_id',
-               return_value=1), \
-         patch('bisheng.database.models.tenant.TenantDao.aget_by_id',
-               new=AsyncMock(return_value=_mk_root_tenant(share_default=True))), \
-         patch('bisheng.tenant.domain.services.resource_share_service.'
-               'ResourceShareService.enable_sharing', new=enable_mock), \
-         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
-               new=AsyncMock(return_value=True)):
+    with (
+        patch("bisheng.llm.domain.models.llm_server.get_async_db_session", _session_context(session)),
+        patch("bisheng.llm.domain.models.llm_server.get_current_tenant_id", return_value=1),
+        patch(
+            "bisheng.database.models.tenant.TenantDao.aget_by_id",
+            new=AsyncMock(return_value=_mk_root_tenant(share_default=True)),
+        ),
+        patch(
+            "bisheng.tenant.domain.services.resource_share_service.ResourceShareService.enable_sharing", new=enable_mock
+        ),
+        patch("bisheng.llm.domain.models.llm_server._check_is_global_super", new=AsyncMock(return_value=True)),
+    ):
         await LLMDao.ainsert_server_with_models(
-            server, models=[], share_to_children=True, operator=_mk_user(),
+            server,
+            models=[],
+            share_to_children=True,
+            operator=_mk_user(),
         )
 
-    enable_mock.assert_awaited_once_with('llm_server', '100')
+    enable_mock.assert_awaited_once_with("llm_server", "100")
     assert server.tenant_id == 1
 
 
@@ -111,21 +116,26 @@ async def test_root_llm_default_shared_writes_viewer_tuple():
 async def test_root_llm_share_off_skips_viewer_tuple():
     """AC-02: share_to_children=False → enable_sharing NOT called."""
     session = _build_session(flushed_id=101)
-    server = LLMServer(name='s2', type='openai', config={})
+    server = LLMServer(name="s2", type="openai", config={})
 
     enable_mock = AsyncMock()
-    with patch('bisheng.llm.domain.models.llm_server.get_async_db_session',
-               _session_context(session)), \
-         patch('bisheng.llm.domain.models.llm_server.get_current_tenant_id',
-               return_value=1), \
-         patch('bisheng.database.models.tenant.TenantDao.aget_by_id',
-               new=AsyncMock(return_value=_mk_root_tenant(share_default=True))), \
-         patch('bisheng.tenant.domain.services.resource_share_service.'
-               'ResourceShareService.enable_sharing', new=enable_mock), \
-         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
-               new=AsyncMock(return_value=True)):
+    with (
+        patch("bisheng.llm.domain.models.llm_server.get_async_db_session", _session_context(session)),
+        patch("bisheng.llm.domain.models.llm_server.get_current_tenant_id", return_value=1),
+        patch(
+            "bisheng.database.models.tenant.TenantDao.aget_by_id",
+            new=AsyncMock(return_value=_mk_root_tenant(share_default=True)),
+        ),
+        patch(
+            "bisheng.tenant.domain.services.resource_share_service.ResourceShareService.enable_sharing", new=enable_mock
+        ),
+        patch("bisheng.llm.domain.models.llm_server._check_is_global_super", new=AsyncMock(return_value=True)),
+    ):
         await LLMDao.ainsert_server_with_models(
-            server, models=[], share_to_children=False, operator=_mk_user(),
+            server,
+            models=[],
+            share_to_children=False,
+            operator=_mk_user(),
         )
 
     enable_mock.assert_not_awaited()
@@ -135,7 +145,7 @@ async def test_root_llm_share_off_skips_viewer_tuple():
 async def test_child_admin_creates_own_llm_not_shared():
     """AC-05: tenant_id=5 (Child) → tenant_id fill is 5, no fanout."""
     session = _build_session(flushed_id=102)
-    server = LLMServer(name='s3', type='openai', config={})
+    server = LLMServer(name="s3", type="openai", config={})
 
     enable_mock = AsyncMock()
 
@@ -143,17 +153,20 @@ async def test_child_admin_creates_own_llm_not_shared():
         class llm:
             endpoint_whitelist: list = []
 
-    with patch('bisheng.llm.domain.models.llm_server.get_async_db_session',
-               _session_context(session)), \
-         patch('bisheng.llm.domain.models.llm_server.get_current_tenant_id',
-               return_value=5), \
-         patch('bisheng.llm.domain.models.llm_server.settings', _NoWhitelist()), \
-         patch('bisheng.tenant.domain.services.resource_share_service.'
-               'ResourceShareService.enable_sharing', new=enable_mock), \
-         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
-               new=AsyncMock(return_value=False)):
+    with (
+        patch("bisheng.llm.domain.models.llm_server.get_async_db_session", _session_context(session)),
+        patch("bisheng.llm.domain.models.llm_server.get_current_tenant_id", return_value=5),
+        patch("bisheng.llm.domain.models.llm_server.settings", _NoWhitelist()),
+        patch(
+            "bisheng.tenant.domain.services.resource_share_service.ResourceShareService.enable_sharing", new=enable_mock
+        ),
+        patch("bisheng.llm.domain.models.llm_server._check_is_global_super", new=AsyncMock(return_value=False)),
+    ):
         await LLMDao.ainsert_server_with_models(
-            server, models=[], share_to_children=True, operator=_mk_user(),
+            server,
+            models=[],
+            share_to_children=True,
+            operator=_mk_user(),
         )
 
     enable_mock.assert_not_awaited()  # tenant_id != 1, no fanout
@@ -165,23 +178,25 @@ async def test_endpoint_whitelist_enforced_for_child_admin():
     """Boundary: non-super + whitelist + mismatched endpoint → 19804."""
     from fastapi import HTTPException
 
-    server = LLMServer(name='s4', type='openai',
-                       config={'openai_api_base': 'https://attacker.example.com/v1'})
+    server = LLMServer(name="s4", type="openai", config={"openai_api_base": "https://attacker.example.com/v1"})
 
     class _FakeLLMConf:
-        endpoint_whitelist = ['https://api.openai.com', 'https://*.azure.com']
+        endpoint_whitelist = ["https://api.openai.com", "https://*.azure.com"]
 
     class _FakeSettings:
         llm = _FakeLLMConf()
 
-    with patch('bisheng.llm.domain.models.llm_server.settings', _FakeSettings()), \
-         patch('bisheng.llm.domain.models.llm_server.get_current_tenant_id',
-               return_value=5), \
-         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
-               new=AsyncMock(return_value=False)):
+    with (
+        patch("bisheng.llm.domain.models.llm_server.settings", _FakeSettings()),
+        patch("bisheng.llm.domain.models.llm_server.get_current_tenant_id", return_value=5),
+        patch("bisheng.llm.domain.models.llm_server._check_is_global_super", new=AsyncMock(return_value=False)),
+    ):
         with pytest.raises(HTTPException) as excinfo:
             await LLMDao.ainsert_server_with_models(
-                server, models=[], share_to_children=False, operator=_mk_user(),
+                server,
+                models=[],
+                share_to_children=False,
+                operator=_mk_user(),
             )
 
     assert excinfo.value.status_code == 19804  # BaseErrorCode.http_exception uses Code as status_code
@@ -197,17 +212,20 @@ async def test_toggle_root_llm_share_enables_fga_tuple():
 
     enable_mock = AsyncMock(return_value=[5])
     disable_mock = AsyncMock()
-    with patch.object(LLMDao, 'aget_server_by_id',
-                      new=AsyncMock(return_value=root_server)), \
-         patch('bisheng.tenant.domain.services.resource_share_service.'
-               'ResourceShareService.enable_sharing', new=enable_mock), \
-         patch('bisheng.tenant.domain.services.resource_share_service.'
-               'ResourceShareService.disable_sharing', new=disable_mock), \
-         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
-               new=AsyncMock(return_value=True)):
+    with (
+        patch.object(LLMDao, "aget_server_by_id", new=AsyncMock(return_value=root_server)),
+        patch(
+            "bisheng.tenant.domain.services.resource_share_service.ResourceShareService.enable_sharing", new=enable_mock
+        ),
+        patch(
+            "bisheng.tenant.domain.services.resource_share_service.ResourceShareService.disable_sharing",
+            new=disable_mock,
+        ),
+        patch("bisheng.llm.domain.models.llm_server._check_is_global_super", new=AsyncMock(return_value=True)),
+    ):
         await LLMDao.aupdate_server_share(200, True, _mk_user())
 
-    enable_mock.assert_awaited_once_with('llm_server', '200')
+    enable_mock.assert_awaited_once_with("llm_server", "200")
     disable_mock.assert_not_awaited()
 
 
@@ -218,17 +236,20 @@ async def test_toggle_root_llm_share_off_removes_fga_tuple():
 
     enable_mock = AsyncMock()
     disable_mock = AsyncMock(return_value=[5])
-    with patch.object(LLMDao, 'aget_server_by_id',
-                      new=AsyncMock(return_value=root_server)), \
-         patch('bisheng.tenant.domain.services.resource_share_service.'
-               'ResourceShareService.enable_sharing', new=enable_mock), \
-         patch('bisheng.tenant.domain.services.resource_share_service.'
-               'ResourceShareService.disable_sharing', new=disable_mock), \
-         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
-               new=AsyncMock(return_value=True)):
+    with (
+        patch.object(LLMDao, "aget_server_by_id", new=AsyncMock(return_value=root_server)),
+        patch(
+            "bisheng.tenant.domain.services.resource_share_service.ResourceShareService.enable_sharing", new=enable_mock
+        ),
+        patch(
+            "bisheng.tenant.domain.services.resource_share_service.ResourceShareService.disable_sharing",
+            new=disable_mock,
+        ),
+        patch("bisheng.llm.domain.models.llm_server._check_is_global_super", new=AsyncMock(return_value=True)),
+    ):
         await LLMDao.aupdate_server_share(200, False, _mk_user())
 
-    disable_mock.assert_awaited_once_with('llm_server', '200')
+    disable_mock.assert_awaited_once_with("llm_server", "200")
     enable_mock.assert_not_awaited()
 
 
@@ -238,10 +259,10 @@ async def test_toggle_share_on_non_root_raises_19802():
     from fastapi import HTTPException
 
     child_server = MagicMock(id=301, tenant_id=5)
-    with patch.object(LLMDao, 'aget_server_by_id',
-                      new=AsyncMock(return_value=child_server)), \
-         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
-               new=AsyncMock(return_value=True)):
+    with (
+        patch.object(LLMDao, "aget_server_by_id", new=AsyncMock(return_value=child_server)),
+        patch("bisheng.llm.domain.models.llm_server._check_is_global_super", new=AsyncMock(return_value=True)),
+    ):
         with pytest.raises(HTTPException) as excinfo:
             await LLMDao.aupdate_server_share(301, True, _mk_user())
 
@@ -254,10 +275,10 @@ async def test_toggle_share_by_non_super_raises_19801():
     from fastapi import HTTPException
 
     root_server = MagicMock(id=200, tenant_id=1)
-    with patch.object(LLMDao, 'aget_server_by_id',
-                      new=AsyncMock(return_value=root_server)), \
-         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
-               new=AsyncMock(return_value=False)):
+    with (
+        patch.object(LLMDao, "aget_server_by_id", new=AsyncMock(return_value=root_server)),
+        patch("bisheng.llm.domain.models.llm_server._check_is_global_super", new=AsyncMock(return_value=False)),
+    ):
         with pytest.raises(HTTPException) as excinfo:
             await LLMDao.aupdate_server_share(200, True, _mk_user())
 
@@ -273,10 +294,10 @@ async def test_child_admin_cannot_delete_root_shared_llm():
     from fastapi import HTTPException
 
     root_server = MagicMock(id=200, tenant_id=1)
-    with patch.object(LLMDao, 'aget_server_by_id',
-                      new=AsyncMock(return_value=root_server)), \
-         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
-               new=AsyncMock(return_value=False)):
+    with (
+        patch.object(LLMDao, "aget_server_by_id", new=AsyncMock(return_value=root_server)),
+        patch("bisheng.llm.domain.models.llm_server._check_is_global_super", new=AsyncMock(return_value=False)),
+    ):
         with pytest.raises(HTTPException) as excinfo:
             await LLMDao.adelete_server_by_id(200, operator=_mk_user())
 
@@ -288,8 +309,7 @@ async def test_delete_missing_server_raises_19802():
     """Delete with operator + no such server → 19802."""
     from fastapi import HTTPException
 
-    with patch.object(LLMDao, 'aget_server_by_id',
-                      new=AsyncMock(return_value=None)):
+    with patch.object(LLMDao, "aget_server_by_id", new=AsyncMock(return_value=None)):
         with pytest.raises(HTTPException) as excinfo:
             await LLMDao.adelete_server_by_id(999, operator=_mk_user())
 
@@ -307,13 +327,15 @@ async def test_child_admin_cannot_update_root_shared_llm():
     existing = MagicMock(id=200, tenant_id=1)
     incoming = MagicMock(id=200, config={}, tenant_id=5)
 
-    with patch.object(LLMDao, 'aget_server_by_id',
-                      new=AsyncMock(return_value=existing)), \
-         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
-               new=AsyncMock(return_value=False)):
+    with (
+        patch.object(LLMDao, "aget_server_by_id", new=AsyncMock(return_value=existing)),
+        patch("bisheng.llm.domain.models.llm_server._check_is_global_super", new=AsyncMock(return_value=False)),
+    ):
         with pytest.raises(HTTPException) as excinfo:
             await LLMDao.update_server_with_models(
-                incoming, models=[], operator=_mk_user(),
+                incoming,
+                models=[],
+                operator=_mk_user(),
             )
 
     assert excinfo.value.status_code == 19801
@@ -327,51 +349,58 @@ async def test_child_admin_cannot_update_root_shared_llm():
 
 @pytest.mark.asyncio
 async def test_aget_shared_server_ids_for_leaf_returns_root_shared():
-    """AC-03 source: FGA list_objects response → int id list."""
-    fga = MagicMock()
-    fga.list_objects = AsyncMock(return_value=[
-        'llm_server:123', 'llm_server:456',
-    ])
-    with patch('bisheng.core.openfga.manager.aget_fga_client',
-               new=AsyncMock(return_value=fga)):
+    """AC-03 source: permission application response becomes an int ID list."""
+    permissions = MagicMock()
+    permissions.list_resource_ids = AsyncMock(return_value=("123", "456"))
+    with patch(
+        "bisheng.permission.application.get_permission_relation_api",
+        new=AsyncMock(return_value=permissions),
+    ):
         ids = await LLMDao.aget_shared_server_ids_for_leaf(5)
 
     assert sorted(ids) == [123, 456]
-    fga.list_objects.assert_awaited_once_with(
-        user='tenant:5', relation='shared_with', type='llm_server',
+    permissions.list_resource_ids.assert_awaited_once_with(
+        subject=PermissionSubject("tenant", "5"),
+        relation="shared_with",
+        resource_type="llm_server",
     )
 
 
 @pytest.mark.asyncio
 async def test_aget_shared_server_ids_for_leaf_root_returns_empty():
     """AC-03 edge: leaf=1 (Root) never has shares pointing at itself."""
-    fga = MagicMock()
-    fga.list_objects = AsyncMock()
-    with patch('bisheng.core.openfga.manager.aget_fga_client',
-               new=AsyncMock(return_value=fga)):
+    permissions = MagicMock()
+    permissions.list_resource_ids = AsyncMock()
+    with patch(
+        "bisheng.permission.application.get_permission_relation_api",
+        new=AsyncMock(return_value=permissions),
+    ):
         ids = await LLMDao.aget_shared_server_ids_for_leaf(1)
 
     assert ids == []
-    fga.list_objects.assert_not_awaited()  # short-circuit before FGA call
+    permissions.list_resource_ids.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_aget_shared_server_ids_for_leaf_fga_disabled_returns_empty():
-    """AC-03 edge: OpenFGA disabled → empty list, no exception."""
-    with patch('bisheng.core.openfga.manager.aget_fga_client',
-               new=AsyncMock(return_value=None)):
+async def test_aget_shared_server_ids_for_leaf_permission_unavailable_returns_empty():
+    with patch(
+        "bisheng.permission.application.get_permission_relation_api",
+        new=AsyncMock(side_effect=RuntimeError("permission down")),
+    ):
         ids = await LLMDao.aget_shared_server_ids_for_leaf(5)
 
     assert ids == []
 
 
 @pytest.mark.asyncio
-async def test_aget_shared_server_ids_for_leaf_fga_failure_degrades_to_empty():
-    """Boundary: FGA raise on list_objects → log + empty list (fail-closed)."""
-    fga = MagicMock()
-    fga.list_objects = AsyncMock(side_effect=RuntimeError('FGA down'))
-    with patch('bisheng.core.openfga.manager.aget_fga_client',
-               new=AsyncMock(return_value=fga)):
+async def test_aget_shared_server_ids_for_leaf_permission_failure_degrades_to_empty():
+    """Boundary: permission query failure degrades to empty (fail-closed)."""
+    permissions = MagicMock()
+    permissions.list_resource_ids = AsyncMock(side_effect=RuntimeError("permission down"))
+    with patch(
+        "bisheng.permission.application.get_permission_relation_api",
+        new=AsyncMock(return_value=permissions),
+    ):
         ids = await LLMDao.aget_shared_server_ids_for_leaf(5)
 
     assert ids == []
@@ -386,4 +415,5 @@ def test_llm_server_registered_in_shareable_types():
     from bisheng.tenant.domain.services.resource_share_service import (
         SUPPORTED_SHAREABLE_TYPES,
     )
-    assert 'llm_server' in SUPPORTED_SHAREABLE_TYPES
+
+    assert "llm_server" in SUPPORTED_SHAREABLE_TYPES

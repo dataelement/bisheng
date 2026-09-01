@@ -1,481 +1,559 @@
-import { Button } from "~/components/ui/Button";
-import { Checkbox } from "~/components/ui/Checkbox";
-import { useToastContext } from "~/Providers";
+import { Loader2, LockKeyhole, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  authorizeResource,
-  getGrantableRelationModels,
-  getResourceGrantDepartmentChildren,
-  searchResourceGrantDepartments,
-  getResourceGrantUserGroups,
-  getResourceGrantUserTreeChildren,
-  searchResourceGrantUserTree,
-  getResourcePermissions,
+  getGrantablePermissionModels,
+  mutateResourceGrants,
 } from "~/api/permission";
 import type {
-  GrantItem,
-  PermissionEntry,
-  RelationLevel,
-  RelationModel,
+  GrantablePermissionModel,
+  MutateResourceGrantsResult,
+  PermissionGrantAssignee,
+  PermissionGrantMutationChange,
+  ResourcePermissionContext,
   ResourceType,
   SelectedSubject,
   SubjectType,
 } from "~/api/permission";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
-import { cn } from "~/utils";
-import { PERMISSION_FOOTER_ACTIONS_CLASS } from "./permissionDialogStyles";
-import { RelationModelOption, RelationSelect } from "./RelationSelect";
+import { Button, Checkbox } from "~/components/ui";
+import { useLocalize } from "~/hooks";
+import { canMutatePermissionAssignee } from "./assigneePolicy";
+import { SourceBadge } from "./SourceBadge";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup";
 
 const SUBJECT_TYPES: SubjectType[] = ["user", "department", "user_group"];
-const DEFAULT_MODELS: RelationModelOption[] = [
-  { id: "owner", name: "所有者", relation: "owner" },
-  { id: "viewer", name: "可查看", relation: "viewer" },
-  { id: "editor", name: "可编辑", relation: "editor" },
-  { id: "manager", name: "可管理", relation: "manager" },
-];
-const EMPTY_GRANTED_SUBJECT_IDS: Record<SubjectType, number[]> = {
-  user: [],
-  department: [],
-  user_group: [],
-};
-
-export interface PermissionGrantApiAdapter {
-  getPermissions: typeof getResourcePermissions;
-  authorize: typeof authorizeResource;
-  getGrantableRelationModels: typeof getGrantableRelationModels;
-  getGrantUserTreeChildren?: typeof getResourceGrantUserTreeChildren;
-  searchGrantUserTree?: typeof searchResourceGrantUserTree;
-  getGrantDepartmentChildren?: typeof getResourceGrantDepartmentChildren;
-  searchGrantDepartments?: typeof searchResourceGrantDepartments;
-  getGrantUserGroups?: typeof getResourceGrantUserGroups;
-}
-
-// Render selected subjects as chips. Horizontally scrollable with a right-edge fade when overflow occurs.
-function SelectedSubjectChips({ subjects, fullText }: { subjects: SelectedSubject[]; fullText: string }) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [open, setOpen] = useState(false);
-  const [hasLeftOverflow, setHasLeftOverflow] = useState(false);
-  const [hasRightOverflow, setHasRightOverflow] = useState(false);
-
-  const updateOverflow = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    setHasLeftOverflow(el.scrollLeft > 1);
-    setHasRightOverflow(el.scrollWidth - el.clientWidth - el.scrollLeft > 1);
-  }, []);
-
-  useEffect(() => {
-    updateOverflow();
-    const el = ref.current;
-    if (!el) return;
-    const ro = new ResizeObserver(updateOverflow);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [subjects, updateOverflow]);
-
-  const handleOpenChange = (next: boolean) => {
-    if (!next) {
-      setOpen(false);
-      return;
-    }
-    const el = ref.current;
-    if (el && el.scrollWidth > el.clientWidth) {
-      setOpen(true);
-    }
-  };
-
-  if (subjects.length === 0) return null;
-
-  return (
-    <Tooltip open={open} onOpenChange={handleOpenChange}>
-      <TooltipTrigger asChild>
-        <div
-          ref={ref}
-          onScroll={updateOverflow}
-          className="min-w-0 flex flex-1 items-center gap-1 overflow-x-auto scrollbar-hide"
-          style={(() => {
-            if (!hasLeftOverflow && !hasRightOverflow) return undefined;
-            const leftStop = hasLeftOverflow ? "24px" : "0";
-            const rightStop = hasRightOverflow ? "calc(100% - 24px)" : "100%";
-            const value = `linear-gradient(to right, transparent, black ${leftStop}, black ${rightStop}, transparent)`;
-            return { maskImage: value, WebkitMaskImage: value };
-          })()}
-        >
-          {subjects.map((subject) => (
-            <span
-              key={subject.id}
-              className="inline-flex shrink-0 items-center rounded-[4px] bg-fill-2 px-2 py-0.5 text-[14px] leading-[22px] text-text-2"
-            >
-              {subject.name}
-            </span>
-          ))}
-        </div>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="z-[120] max-w-xs break-all">
-        {fullText}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
 
 interface PermissionGrantTabProps {
   resourceType: ResourceType;
   resourceId: string;
-  onSuccess: () => void;
-  /** Dismiss without granting. The cancel button only renders when provided. */
-  onCancel?: () => void;
-  prefetchedGrantableModels?: RelationModel[];
-  prefetchedGrantableModelsLoaded?: boolean;
-  prefetchedUseDefaultModels?: boolean;
-  skipGrantableModelsRequest?: boolean;
-  // UI-only: when provided, hides the internal subject type switcher
-  // and locks the grant form to the given subject type.
+  context: ResourcePermissionContext;
+  assignees?: PermissionGrantAssignee[];
   fixedSubjectType?: SubjectType;
   includeChildren?: boolean;
   onIncludeChildrenChange?: (value: boolean) => void;
   hideDepartmentIncludeChildrenControl?: boolean;
-  permissionApi?: PermissionGrantApiAdapter;
+  legacyAddLayout?: boolean;
+  showExistingAssignees?: boolean;
+  onSuccess: (result: MutateResourceGrantsResult) => void;
 }
 
-const DEFAULT_PERMISSION_API: PermissionGrantApiAdapter = {
-  getPermissions: getResourcePermissions,
-  authorize: authorizeResource,
-  getGrantableRelationModels,
-  getGrantUserTreeChildren: getResourceGrantUserTreeChildren,
-  searchGrantUserTree: searchResourceGrantUserTree,
-  getGrantDepartmentChildren: getResourceGrantDepartmentChildren,
-  searchGrantDepartments: searchResourceGrantDepartments,
-  getGrantUserGroups: getResourceGrantUserGroups,
-};
+function createIdempotencyKey(): string {
+  return `grant-mutation-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+}
 
 export function PermissionGrantTab({
   resourceType,
   resourceId,
-  onSuccess,
-  onCancel,
-  prefetchedGrantableModels,
-  prefetchedGrantableModelsLoaded = false,
-  prefetchedUseDefaultModels = false,
-  skipGrantableModelsRequest = false,
+  context,
+  assignees = [],
   fixedSubjectType,
   includeChildren: includeChildrenProp,
   onIncludeChildrenChange,
   hideDepartmentIncludeChildrenControl = false,
-  permissionApi,
+  legacyAddLayout = false,
+  showExistingAssignees = true,
+  onSuccess,
 }: PermissionGrantTabProps) {
   const localize = useLocalize();
-  const isMobile = usePrefersMobileLayout();
-  const { showToast } = useToastContext();
-  const activePermissionApi = permissionApi ?? DEFAULT_PERMISSION_API;
-  const [subjectType, setSubjectType] = useState<SubjectType>(fixedSubjectType ?? "user");
-  const [selected, setSelected] = useState<SelectedSubject[]>([]);
-  const [models, setModels] = useState<RelationModelOption[]>([]);
-  const [selectedModelId, setSelectedModelId] = useState<string>("viewer");
-  const [internalIncludeChildren, setInternalIncludeChildren] = useState(true);
-  const [selectedDepartmentSummary, setSelectedDepartmentSummary] = useState<SelectedSubject[]>([]);
-  const [grantedSubjectIds, setGrantedSubjectIds] = useState<Record<SubjectType, number[]>>(
-    EMPTY_GRANTED_SUBJECT_IDS
+  const [models, setModels] = useState<GrantablePermissionModel[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [subjectType, setSubjectType] = useState<SubjectType>(
+    fixedSubjectType ?? "user",
   );
+  const [selectedSubjects, setSelectedSubjects] = useState<SelectedSubject[]>(
+    [],
+  );
+  const [selectedModelKey, setSelectedModelKey] = useState("");
+  const [internalIncludeChildren, setInternalIncludeChildren] = useState(false);
+  const [targetModels, setTargetModels] = useState<Record<string, string>>({});
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
+  const [queuedAdds, setQueuedAdds] = useState<
+    PermissionGrantMutationChange[]
+  >([]);
   const [submitting, setSubmitting] = useState(false);
+  const [conflict, setConflict] = useState(false);
   const includeChildren = includeChildrenProp ?? internalIncludeChildren;
-  const handleIncludeChildrenChange = onIncludeChildrenChange ?? setInternalIncludeChildren;
-
-  const applyRelationModels = useCallback((
-    relationModels: RelationModel[] | undefined,
-    fallbackToDefault: boolean,
-  ) => {
-    const options: RelationModelOption[] = fallbackToDefault
-      ? DEFAULT_MODELS.map((model) => ({
-        ...model,
-        name: localize(`com_permission.level_${model.relation}`),
-      }))
-      : (Array.isArray(relationModels) ? relationModels : []).map((m) => ({
-        id: m.id,
-        name: m.is_system
-          ? localize(`com_permission.level_${m.relation}`)
-          : m.name,
-        relation: m.relation as RelationLevel,
-      }));
-    if (options.length) {
-      setModels(options);
-      setSelectedModelId((current) => (
-        options.some((option) => option.id === current)
-          ? current
-          : options.find((option) => option.relation === "viewer")?.id ?? options[0].id
-      ));
-      return;
-    }
-
-    setModels([]);
-    setSelectedModelId("");
-  }, [localize]);
-
-  const applyGrantedPermissions = useCallback((permissions: PermissionEntry[] | undefined) => {
-    const next = {
-      user: new Set<number>(),
-      department: new Set<number>(),
-      user_group: new Set<number>(),
-    };
-    for (const permission of Array.isArray(permissions) ? permissions : []) {
-      if (permission.subject_type in next) {
-        next[permission.subject_type].add(permission.subject_id);
-      }
-    }
-    setGrantedSubjectIds({
-      user: Array.from(next.user),
-      department: Array.from(next.department),
-      user_group: Array.from(next.user_group),
-    });
-  }, []);
-
-  useEffect(() => {
-    setSelected((prev) =>
-      prev.map((subject) =>
-        subject.type === "department"
-          ? { ...subject, include_children: includeChildren }
-          : subject
-      )
-    );
-  }, [includeChildren]);
-
-  useEffect(() => {
-    if (fixedSubjectType) {
-      setSubjectType(fixedSubjectType);
-      setSelected([]);
-      setSelectedDepartmentSummary([]);
-    }
-  }, [fixedSubjectType]);
+  const handleIncludeChildrenChange =
+    onIncludeChildrenChange ?? setInternalIncludeChildren;
 
   useEffect(() => {
     let cancelled = false;
-    activePermissionApi.getPermissions(resourceType, resourceId)
-      .then((permissions) => {
-        if (!cancelled) applyGrantedPermissions(permissions);
+    setModelsLoading(true);
+    setConflict(false);
+    void getGrantablePermissionModels(resourceType, resourceId)
+      .then((result) => {
+        if (cancelled) return;
+        const activeModels = result.filter((model) => model.active);
+        setModels(activeModels);
+        setSelectedModelKey((current) =>
+          activeModels.some((model) => model.key === current)
+            ? current
+            : (activeModels[0]?.key ?? ""),
+        );
       })
       .catch(() => {
-        if (!cancelled) setGrantedSubjectIds(EMPTY_GRANTED_SUBJECT_IDS);
+        if (!cancelled) setConflict(true);
+      })
+      .finally(() => {
+        if (!cancelled) setModelsLoading(false);
       });
+
     return () => {
       cancelled = true;
     };
-  }, [activePermissionApi, applyGrantedPermissions, resourceId, resourceType]);
+  }, [resourceId, resourceType]);
 
   useEffect(() => {
-    if (skipGrantableModelsRequest) {
-      if (!prefetchedGrantableModelsLoaded) return;
-      applyRelationModels(prefetchedGrantableModels, prefetchedUseDefaultModels);
-      return;
+    setTargetModels({});
+    setRemovedIds(new Set());
+    setQueuedAdds([]);
+    setSelectedSubjects([]);
+    setConflict(false);
+  }, [context.resource_version, resourceId]);
+
+  useEffect(() => {
+    if (fixedSubjectType) setSubjectType(fixedSubjectType);
+    setSelectedSubjects([]);
+  }, [fixedSubjectType, resourceId]);
+
+  // Anyone already holding a grant here is checked and locked, whichever model
+  // it is. Granting them again under a second model produced a duplicate row in
+  // the roster — two permissions for one person, of which only the higher one
+  // means anything. Changing someone's model is the roster's job, not this
+  // panel's.
+  const disabledSubjectIds = useMemo(
+    () => [
+      ...assignees
+        .filter(
+          (assignee) =>
+            assignee.subject.type === subjectType && assignee.scope === "LOCAL",
+        )
+        .map((assignee) => Number(assignee.subject.id))
+        .filter(Number.isFinite),
+      ...queuedAdds
+        .filter(
+          (change) => change.op === "ADD" && change.subject.type === subjectType,
+        )
+        .map((change) =>
+          change.op === "ADD" ? Number(change.subject.id) : Number.NaN,
+        )
+        .filter(Number.isFinite),
+    ],
+    [assignees, queuedAdds, subjectType],
+  );
+
+  // The badge names which model they already hold, so a locked row explains
+  // itself rather than just refusing to be clicked.
+  const grantedModelLabels = useMemo(() => {
+    const names: Record<string, string[]> = {};
+    for (const assignee of assignees) {
+      if (assignee.subject.type !== subjectType) continue;
+      if (assignee.scope !== "LOCAL") continue;
+      const id = String(assignee.subject.id);
+      const modelName = assignee.model.name || assignee.model.key;
+      (names[id] ??= []).push(modelName);
     }
+    return Object.fromEntries(
+      Object.entries(names).map(([id, list]) => [id, list.join(", ")]),
+    ) as Record<string, string>;
+  }, [assignees, subjectType]);
 
-    activePermissionApi.getGrantableRelationModels(resourceType, resourceId)
-      .then((res) => {
-        applyRelationModels(res, false);
-      })
-      .catch(() => {
-        applyRelationModels(undefined, false);
-      });
-  }, [
-    activePermissionApi,
-    applyRelationModels,
-    prefetchedGrantableModels,
-    prefetchedGrantableModelsLoaded,
-    prefetchedUseDefaultModels,
-    resourceId,
-    resourceType,
-    skipGrantableModelsRequest,
-  ]);
+  const pendingChanges = useMemo<PermissionGrantMutationChange[]>(() => {
+    const changes: PermissionGrantMutationChange[] = [];
+    for (const assignee of assignees) {
+      if (!canMutatePermissionAssignee(assignee, context, models)) continue;
+      if (removedIds.has(assignee.assignee_id)) {
+        changes.push({
+          op: "REMOVE",
+          assignee_id: assignee.assignee_id,
+          expected_assignee_version: assignee.assignee_version,
+        });
+        continue;
+      }
+      const targetModel = targetModels[assignee.assignee_id];
+      if (targetModel && targetModel !== assignee.model.key) {
+        changes.push({
+          op: "MOVE",
+          assignee_id: assignee.assignee_id,
+          expected_assignee_version: assignee.assignee_version,
+          target_model_key: targetModel,
+        });
+      }
+    }
+    return [...changes, ...queuedAdds];
+  }, [assignees, context, models, queuedAdds, removedIds, targetModels]);
 
-  const relation = useMemo<RelationLevel>(() => {
-    return models.find((m) => m.id === selectedModelId)?.relation || "viewer";
-  }, [models, selectedModelId]);
+  const selectedAddChanges = useMemo<PermissionGrantMutationChange[]>(
+    () =>
+      selectedSubjects.map((subject) => ({
+        op: "ADD",
+        model_key: selectedModelKey,
+        subject: {
+          type: subject.type,
+          id: String(subject.id),
+          ...(subject.type === "department"
+            ? {
+                include_children: includeChildren,
+                userset_relation: includeChildren
+                  ? "subtree_member"
+                  : "member",
+              }
+            : {}),
+        },
+      })),
+    [includeChildren, selectedModelKey, selectedSubjects],
+  );
 
-  const availableModels = useMemo(() => {
-    if (subjectType === "user") return models;
-    return models.filter((model) => model.relation !== "owner");
-  }, [models, subjectType]);
-
-  useEffect(() => {
-    if (!availableModels.length) return;
-    if (availableModels.some((model) => model.id === selectedModelId)) return;
-    setSelectedModelId(availableModels[0].id);
-  }, [availableModels, selectedModelId]);
-
-  const handleSubjectTypeChange = (type: SubjectType) => {
-    setSubjectType(type);
-    setSelected([]);
-    setSelectedDepartmentSummary([]);
+  const handleAdd = () => {
+    if (!selectedModelKey || selectedSubjects.length === 0) return;
+    setQueuedAdds((current) => [...current, ...selectedAddChanges]);
+    setSelectedSubjects([]);
   };
 
-  const handleSubmit = async () => {
-    if (selected.length === 0) return;
-    const grants: GrantItem[] = selected.map((s) => ({
-      subject_type: s.type,
-      subject_id: s.id,
-      relation,
-      model_id: selectedModelId,
-      ...(s.type === "department"
-        ? { include_children: includeChildren }
-        : {}),
-    }));
-
+  const handleSubmit = async (
+    changes: PermissionGrantMutationChange[] = pendingChanges,
+  ) => {
+    if (changes.length === 0 || submitting) return;
     setSubmitting(true);
+    setConflict(false);
     try {
-      await activePermissionApi.authorize(resourceType, resourceId, grants, []);
-      showToast({
-        message: localize("com_permission.success_grant"),
-        status: "success",
+      const result = await mutateResourceGrants(resourceType, resourceId, {
+        idempotency_key: createIdempotencyKey(),
+        expected_resource_version: context.resource_version,
+        expected_catalog_release_id: context.catalog_release_id,
+        changes,
       });
-      setSelected([]);
-      setSelectedDepartmentSummary([]);
-      onSuccess();
+      onSuccess(result);
+      setTargetModels({});
+      setRemovedIds(new Set());
+      setQueuedAdds([]);
+      setSelectedSubjects([]);
     } catch {
-      showToast({
-        message: localize("com_permission.error_grant_failed"),
-        status: "error",
-      });
+      setConflict(true);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const subjectLabel = (type: SubjectType) => {
-    const map: Record<SubjectType, string> = {
-      user: localize("com_permission.subject_user"),
-      department: localize("com_permission.subject_department"),
-      user_group: localize("com_permission.subject_user_group"),
-    };
-    return map[type];
-  };
+  const canEdit =
+    context.mode === "CUSTOM" && context.can_manage_permission;
 
-  const showDepartmentIncludeChildrenControl =
-    subjectType === "department" && !hideDepartmentIncludeChildrenControl;
-  const selectedSubjectList =
-    subjectType === "department" && selectedDepartmentSummary.length > 0
-      ? selectedDepartmentSummary
-      : selected;
-  const selectedSummaryText = selectedSubjectList.map((subject) => subject.name).join("、");
+  const subjectLabel = localize(`f048_permission.subject.${subjectType}`);
+  const selectedSummaryText = selectedSubjects
+    .map((subject) => subject.name)
+    .join("、");
+  const subjectPicker = (
+    <>
+      {subjectType === "user" && (
+        <SubjectSearchUser
+          value={selectedSubjects}
+          onChange={setSelectedSubjects}
+          resourceType={resourceType}
+          resourceId={resourceId}
+          disabledIds={disabledSubjectIds}
+          grantedLabels={grantedModelLabels}
+        />
+      )}
+      {subjectType === "department" && (
+        <SubjectSearchDepartment
+          value={selectedSubjects}
+          onChange={setSelectedSubjects}
+          resourceType={resourceType}
+          resourceId={resourceId}
+          includeChildren={includeChildren}
+          disabledIds={disabledSubjectIds}
+          grantedLabels={grantedModelLabels}
+        />
+      )}
+      {subjectType === "user_group" && (
+        <SubjectSearchUserGroup
+          value={selectedSubjects}
+          onChange={setSelectedSubjects}
+          resourceType={resourceType}
+          resourceId={resourceId}
+          disabledIds={disabledSubjectIds}
+          grantedLabels={grantedModelLabels}
+        />
+      )}
+    </>
+  );
 
-  return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      {!fixedSubjectType && (
-        <div className="flex items-center gap-3">
-          <div className="flex w-fit gap-1 rounded-md bg-gray-100 p-1">
-            {SUBJECT_TYPES.map((type) => (
-              <button
-                key={type}
-                className={`rounded px-3 py-1.5 text-sm transition-colors ${subjectType === type
-                    ? "bg-white text-gray-900 shadow"
-                    : "text-gray-500 hover:text-gray-700"
-                  }`}
-                onClick={() => handleSubjectTypeChange(type)}
-              >
-                {subjectLabel(type)}
-              </button>
-            ))}
-          </div>
+  if (legacyAddLayout) {
+    return (
+      <div
+        className="flex h-full min-h-0 flex-col overflow-hidden"
+        data-testid="legacy-permission-grant-layout"
+      >
+        {conflict && (
+          <p
+            className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+            role="alert"
+          >
+            {localize("f048_permission.grant.conflict")}
+          </p>
+        )}
 
-          {showDepartmentIncludeChildrenControl && (
-            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-text-1">
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {subjectPicker}
+        </div>
+
+        {subjectType === "department" &&
+          !hideDepartmentIncludeChildrenControl && (
+            <label className="mt-3 flex h-10 shrink-0 items-center gap-2 text-sm">
               <Checkbox
-                className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
                 checked={includeChildren}
-                onCheckedChange={(value) => handleIncludeChildrenChange(value === true)}
+                onCheckedChange={(checked) =>
+                  handleIncludeChildrenChange(checked === true)
+                }
               />
-              {localize("com_permission.include_children")}
+              {localize("f048_permission.source.include_children")}
             </label>
           )}
+
+        <div className="mt-4 flex h-10 shrink-0 items-center gap-4 pr-1">
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+            <span className="shrink-0 text-sm font-normal leading-[22px] text-[#999999]">
+              {`${localize("com_permission.selected_prefix")}${subjectLabel}:`}
+            </span>
+            <span className="truncate text-sm leading-[22px] text-[#4E5969]">
+              {selectedSummaryText}
+            </span>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="shrink-0 text-sm font-normal leading-[22px] text-[#999999]">
+              {localize("com_permission.uniform_grant")}
+            </span>
+            <select
+              aria-label={localize("f048_permission.grant.add_model")}
+              value={selectedModelKey}
+              disabled={modelsLoading || models.length === 0}
+              onChange={(event) => setSelectedModelKey(event.target.value)}
+              className="h-8 w-[132px] truncate rounded-md border-0 bg-white px-1 text-sm leading-[22px] text-[#212121] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/40 disabled:opacity-60"
+            >
+              {models.map((model) => (
+                <option key={model.key} value={model.key}>
+                  {model.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+
+        <div className="mt-4 flex shrink-0 justify-end border-t pt-4">
+          <Button
+            type="button"
+            disabled={
+              selectedAddChanges.length === 0 ||
+              !selectedModelKey ||
+              submitting
+            }
+            onClick={() => void handleSubmit(selectedAddChanges)}
+          >
+            {submitting && (
+              <Loader2 aria-hidden="true" className="animate-spin" />
+            )}
+            {localize("f048_permission.grant.submit")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-0 flex-col gap-4">
+      {conflict && (
+        <p
+          className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+          role="alert"
+        >
+          {localize("f048_permission.grant.conflict")}
+        </p>
       )}
 
-      <div
-        className={cn(
-          "min-h-0 flex-1 overflow-hidden",
-          !fixedSubjectType && "mt-4"
-        )}
-      >
-        {subjectType === "user" && (
-          <SubjectSearchUser
-            value={selected}
-            onChange={setSelected}
-            resourceType={resourceType}
-            resourceId={resourceId}
-            disabledIds={grantedSubjectIds.user}
-            grantUserTreeChildrenApi={activePermissionApi.getGrantUserTreeChildren}
-            grantUserTreeSearchApi={activePermissionApi.searchGrantUserTree}
-          />
-        )}
-        {subjectType === "department" && (
-          <SubjectSearchDepartment
-            value={selected}
-            onChange={setSelected}
-            resourceType={resourceType}
-            resourceId={resourceId}
-            includeChildren={includeChildren}
-            onSelectionSummaryChange={setSelectedDepartmentSummary}
-            disabledIds={grantedSubjectIds.department}
-            grantDepartmentChildrenApi={activePermissionApi.getGrantDepartmentChildren}
-            grantDepartmentSearchApi={activePermissionApi.searchGrantDepartments}
-          />
-        )}
-        {subjectType === "user_group" && (
-          <SubjectSearchUserGroup
-            value={selected}
-            onChange={setSelected}
-            resourceType={resourceType}
-            resourceId={resourceId}
-            disabledIds={grantedSubjectIds.user_group}
-            grantUserGroupsApi={activePermissionApi.getGrantUserGroups}
-          />
-        )}
-      </div>
+      {showExistingAssignees && (
+        <section className="space-y-3">
+          <h3 className="text-sm font-medium text-[#212121]">
+            {localize("f048_permission.grant.existing")}
+          </h3>
+          {assignees.map((assignee) => {
+            const editable = canMutatePermissionAssignee(
+              assignee,
+              context,
+              models,
+            );
+            const removed = removedIds.has(assignee.assignee_id);
+            const currentIsGrantable = models.some(
+              (model) => model.key === assignee.model.key,
+            );
+            return (
+              <div
+                key={assignee.assignee_id}
+                className="grid items-center gap-2 rounded-lg border border-[#EBECF0] p-3 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,0.6fr)_auto]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-[#212121]">
+                    {assignee.subject.name ||
+                      `${assignee.subject.type}:${assignee.subject.id}`}
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-[#818181]">
+                    <SourceBadge source={assignee.source} />
+                    {assignee.protected && (
+                      <span className="ml-2 inline-flex items-center gap-1">
+                        <LockKeyhole aria-hidden="true" className="size-3" />
+                        {localize("f048_permission.roster.protected")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <select
+                  aria-label={`${localize(
+                    "f048_permission.grant.model",
+                  )}.${assignee.assignee_id}`}
+                  value={
+                    targetModels[assignee.assignee_id] ?? assignee.model.key
+                  }
+                  disabled={!editable || removed || modelsLoading}
+                  onChange={(event) =>
+                    setTargetModels((current) => ({
+                      ...current,
+                      [assignee.assignee_id]: event.target.value,
+                    }))
+                  }
+                  className="h-10 truncate rounded-md border border-[#D9D9D9] bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                >
+                  {!currentIsGrantable && (
+                    <option value={assignee.model.key}>
+                      {assignee.model.name}
+                    </option>
+                  )}
+                  {models.map((model) => (
+                    <option key={model.key} value={model.key}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  color="danger"
+                  variant="text"
+                  size="medium"
+                  iconOnly
+                  aria-label={`${localize(
+                    "f048_permission.grant.remove",
+                  )}.${assignee.assignee_id}`}
+                  disabled={!editable}
+                  onClick={() =>
+                    setRemovedIds((current) => {
+                      const next = new Set(current);
+                      if (next.has(assignee.assignee_id)) {
+                        next.delete(assignee.assignee_id);
+                      } else {
+                        next.add(assignee.assignee_id);
+                      }
+                      return next;
+                    })
+                  }
+                >
+                  <Trash2 aria-hidden="true" />
+                </Button>
+              </div>
+            );
+          })}
+        </section>
+      )}
 
-      <div
-        className={cn(
-          "mt-3 shrink-0 overflow-hidden",
-          // Mobile: stack "selected subjects" and "uniform grant" onto two rows
-          // so they don't crowd each other on a narrow dialog.
-          isMobile ? "flex flex-col gap-2" : "flex h-10 items-center gap-4",
-        )}
-      >
-        <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
-          <span className="shrink-0 text-[14px] font-normal leading-[22px] text-text-3">
-            {`${localize("com_permission.selected_prefix")}${subjectLabel(subjectType)}:`}
-          </span>
-          <SelectedSubjectChips subjects={selectedSubjectList} fullText={selectedSummaryText} />
-        </div>
+      {canEdit && (
+        <section className="space-y-3 rounded-lg border border-[#EBECF0] p-3">
+          {!fixedSubjectType && (
+            <div className="flex flex-wrap gap-1 rounded-md bg-black/[0.04] p-1">
+              {SUBJECT_TYPES.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  aria-pressed={subjectType === type}
+                  className="min-h-10 rounded px-3 text-sm text-[#818181] aria-pressed:bg-white aria-pressed:text-blue-500"
+                  onClick={() => {
+                    setSubjectType(type);
+                    setSelectedSubjects([]);
+                  }}
+                >
+                  {localize(`f048_permission.subject.${type}`)}
+                </button>
+              ))}
+            </div>
+          )}
 
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="shrink-0 text-[14px] font-normal leading-[22px] text-text-3">
-            {localize("com_permission.uniform_grant")}
-          </span>
-          <RelationSelect
-            value={selectedModelId}
-            onChange={setSelectedModelId}
-            options={availableModels}
-            className="w-[132px]"
-          />
-        </div>
-      </div>
+          <div className="min-h-40">
+            {subjectPicker}
+          </div>
 
-      <div className={cn("mt-3 border-t pt-3", PERMISSION_FOOTER_ACTIONS_CLASS)}>
-        {onCancel && (
-          <Button color="default" variant="outlined" size="medium" onClick={onCancel}>
-            {localize("com_unified_permission.cancel")}
-          </Button>
-        )}
+          {subjectType === "department" && (
+            <label className="flex min-h-10 items-center gap-2 text-sm">
+              <Checkbox
+                checked={includeChildren}
+                onCheckedChange={(checked) =>
+                  handleIncludeChildrenChange(checked === true)
+                }
+              />
+              {localize("f048_permission.source.include_children")}
+            </label>
+          )}
+
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="min-w-52 flex-1 text-sm">
+              <span className="mb-1 block">
+                {localize("f048_permission.grant.add_model")}
+              </span>
+              <select
+                aria-label={localize("f048_permission.grant.add_model")}
+                value={selectedModelKey}
+                disabled={modelsLoading || models.length === 0}
+                onChange={(event) => setSelectedModelKey(event.target.value)}
+                className="h-10 w-full truncate rounded-md border border-[#D9D9D9] bg-white px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+              >
+                {models.map((model) => (
+                  <option key={model.key} value={model.key}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              type="button"
+              color="default"
+              variant="outlined"
+              size="large"
+              disabled={
+                selectedSubjects.length === 0 || !selectedModelKey
+              }
+              onClick={handleAdd}
+            >
+              <Plus aria-hidden="true" />
+              {localize("f048_permission.grant.add")}
+            </Button>
+          </div>
+        </section>
+      )}
+
+      <div className="flex items-center justify-between gap-3 border-t pt-3">
+        <p className="text-xs text-[#818181]">
+          {localize("f048_permission.grant.pending", {
+            count: pendingChanges.length,
+          })}
+        </p>
         <Button
-          color="primary"
-          variant="solid"
-          size="medium"
-          loading={submitting}
-          onClick={handleSubmit}
-          disabled={selected.length === 0 || availableModels.length === 0 || submitting}
+          type="button"
+          disabled={pendingChanges.length === 0 || submitting}
+          onClick={() => void handleSubmit()}
         >
-          {localize("com_permission.action_submit")}
+          {submitting && (
+            <Loader2 aria-hidden="true" className="animate-spin" />
+          )}
+          {localize("f048_permission.grant.submit")}
         </Button>
       </div>
     </div>

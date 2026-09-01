@@ -1,3 +1,4 @@
+import sys
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -6,14 +7,14 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_get_department_admin_user_ids_falls_back_to_grant_table_when_fga_missing():
+async def test_get_department_admin_user_ids_falls_back_when_permission_service_missing():
     from bisheng.department.domain.services.department_service import DepartmentService
 
     with (
         patch(
-            "bisheng.department.domain.services.department_service._aget_fga_client_with_fallback",
+            "bisheng.permission.application.get_permission_relation_api",
             new_callable=AsyncMock,
-            return_value=None,
+            side_effect=RuntimeError("permission down"),
         ),
         patch(
             "bisheng.department.domain.services.department_service.DepartmentAdminGrantDao.aget_user_ids_by_department",
@@ -28,15 +29,15 @@ async def test_get_department_admin_user_ids_falls_back_to_grant_table_when_fga_
 
 
 @pytest.mark.asyncio
-async def test_get_department_admin_user_ids_falls_back_to_grant_table_when_fga_read_fails():
+async def test_get_department_admin_user_ids_falls_back_when_permission_read_fails():
     from bisheng.department.domain.services.department_service import DepartmentService
 
-    fake_fga = SimpleNamespace(read_tuples=AsyncMock(side_effect=RuntimeError("boom")))
+    permissions = SimpleNamespace(list_subject_ids=AsyncMock(side_effect=RuntimeError("boom")))
     with (
         patch(
-            "bisheng.department.domain.services.department_service._aget_fga_client_with_fallback",
+            "bisheng.permission.application.get_permission_relation_api",
             new_callable=AsyncMock,
-            return_value=fake_fga,
+            return_value=permissions,
         ),
         patch(
             "bisheng.department.domain.services.department_service.DepartmentAdminGrantDao.aget_user_ids_by_department",
@@ -57,6 +58,12 @@ async def test_aset_admins_does_not_raise_when_fga_accessor_returns_none():
     dept = SimpleNamespace(id=5, status="active")
     login_user = SimpleNamespace(user_id=1)
     dummy_session = SimpleNamespace()
+    fake_sync_memberships = AsyncMock()
+    fake_department_ks_module = SimpleNamespace(
+        DepartmentKnowledgeSpaceService=SimpleNamespace(
+            sync_department_admin_memberships=fake_sync_memberships,
+        ),
+    )
 
     @asynccontextmanager
     async def fake_session():
@@ -99,6 +106,10 @@ async def test_aset_admins_does_not_raise_when_fga_accessor_returns_none():
             "aupsert",
             new_callable=AsyncMock,
         ) as upsert,
+        patch.dict(
+            sys.modules,
+            {"bisheng.knowledge.domain.services.department_knowledge_space_service": fake_department_ks_module},
+        ),
     ):
         result = await m.DepartmentService.aset_admins("dept-5", [7], login_user)
 
@@ -106,3 +117,10 @@ async def test_aset_admins_does_not_raise_when_fga_accessor_returns_none():
     aget_admins.assert_awaited()
     execute_async.assert_awaited_once()
     upsert.assert_awaited_once_with(7, 5, "manual")
+    fake_sync_memberships.assert_awaited_once_with(
+        request=None,
+        login_user=login_user,
+        department_id=5,
+        added_user_ids=[7],
+        removed_user_ids=[],
+    )

@@ -77,7 +77,7 @@ def test_agent_factory_subagent_excludes_hitl():
 
     # required SubAgent keys present; the safety-critical optional keys absent
     assert set(spec.keys()) == {"name", "description", "system_prompt", "tools"}
-    assert "model" not in spec, "omitting model => subagent inherits parent tenant model (graph.py:608)"
+    assert "model" not in spec, "omitting model => subagent inherits parent tenant model (graph.py:633)"
     assert "permissions" not in spec, "permissions would derive a filesystem interrupt source (§3.1)"
     assert "interrupt_on" not in spec, "interrupt_on would add HumanInTheLoopMiddleware (§3.1)"
 
@@ -281,7 +281,9 @@ def test_stream_mapper_namespaced_tool_keeps_real_step_type():
     # B1: namespace no longer rewrites step_type — knowledge inference wins
     assert step.step_type == "knowledge"
     assert step.extra_info.get("namespace") == sub_ns[0]
-    assert step.call_id == "call_sub_1"
+    # Emitted ids are minted from the provider's (StreamContext.tool_seq); the raw
+    # id stays as the prefix.
+    assert step.call_id.startswith("call_sub_1#")
 
     # sanity contrast: the SAME tool with ns=None is the same (knowledge) step
     main_mapper = StreamEventMapper(svid=SVID)

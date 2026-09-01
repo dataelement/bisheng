@@ -14,7 +14,7 @@ Behaviour:
     raise ``TenantRelocateBlockedError`` and write a blocked audit event
     (PRD Review P0-C — resources stay put, transfer first).
   - Otherwise: swap the active ``user_tenant`` row, bump
-    ``user.token_version``, rewrite ``tenant:{X}#member`` FGA tuples
+    ``user.token_version``, update tenant membership permissions
     (crash-safe), invalidate Redis caches, write the relocated audit
     event, and, if resources remain with the old tenant, notify the
     operator/admins via inbox.
@@ -34,8 +34,13 @@ from bisheng.database.models.tenant import (
     Tenant,
     UserTenantDao,
 )
-from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
-from bisheng.permission.domain.services.permission_service import PermissionService
+from bisheng.permission.application import (
+    PermissionObject,
+    PermissionRelation,
+    PermissionRelationChange,
+    PermissionSubject,
+    get_permission_relation_api,
+)
 from bisheng.tenant.domain.constants import (
     TenantAuditAction,
     UserTenantSyncTrigger,
@@ -113,7 +118,7 @@ class UserTenantSyncService:
         # Perform the swap.
         await UserTenantDao.aactivate_user_tenant(user_id, new_leaf.id)
         await UserDao.aincrement_token_version(user_id)
-        await cls._rewrite_fga_member_tuples(
+        await cls._rewrite_tenant_membership_permissions(
             user_id,
             old_tenant_id,
             new_leaf.id,
@@ -128,24 +133,8 @@ class UserTenantSyncService:
             from bisheng.admin.domain.services.tenant_scope import TenantScopeService
 
             await TenantScopeService.clear_on_token_version_bump(user_id)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.debug("admin_scope clear on relocate failed: %s", exc)
-
-        # F045: leaving a tenant invalidates the user's single-space-admin role
-        # on that tenant's department knowledge spaces (spaces of the tenant the
-        # user moved INTO keep their admin). Lazy import: tenant → knowledge
-        # stays off the top-level module graph.
-        try:
-            from bisheng.knowledge.domain.services.department_knowledge_space_service import (
-                DepartmentKnowledgeSpaceService,
-            )
-
-            await DepartmentKnowledgeSpaceService.handle_admin_invalidated(
-                user_id,
-                except_tenant_id=new_leaf.id,
-            )
-        except Exception:
-            logger.exception("F045 admin invalidation on tenant relocate failed for user %s", user_id)
 
         relocate_reason = "no_primary_department" if old_tenant_id is None and new_leaf.id == ROOT_TENANT_ID else None
         await cls._write_relocation_audit(
@@ -289,48 +278,50 @@ class UserTenantSyncService:
         return total
 
     @classmethod
-    async def _rewrite_fga_member_tuples(
+    async def _rewrite_tenant_membership_permissions(
         cls,
         user_id: int,
         old_tenant_id: int | None,
         new_tenant_id: int,
     ) -> None:
-        """Revoke ``tenant:{old}#member`` and grant ``tenant:{new}#member``.
+        """Revoke the old tenant membership and grant the new membership.
 
-        Uses ``batch_write_tuples(crash_safe=True)`` so an FGA outage
-        between MySQL commit and the FGA write lands in ``failed_tuples``
-        for the retry worker to pick up. This function never raises on FGA
-        failure — the DB swap has priority.
+        The crash-safe permission protocol persists unresolved mutations for
+        the retry worker. This function never raises because the DB swap has
+        priority.
         """
-        operations: list[TupleOperation] = []
+        changes: list[PermissionRelationChange] = []
         if old_tenant_id is not None and old_tenant_id != new_tenant_id:
-            operations.append(
-                TupleOperation(
-                    action="delete",
-                    user=f"user:{user_id}",
-                    relation="member",
-                    object=f"tenant:{old_tenant_id}",
+            changes.append(
+                PermissionRelationChange(
+                    action="revoke",
+                    relation=PermissionRelation(
+                        subject=PermissionSubject("user", str(user_id)),
+                        relation="member",
+                        resource=PermissionObject("tenant", str(old_tenant_id)),
+                    ),
                 )
             )
-        # New tenant membership — skip Root since F013 doesn't write tenant:1#member
-        # tuples (see INV-T3). The invariant is still enforced here because Root
-        # users derive visibility from leaf == Root, not from #member.
+        # Root users derive visibility from leaf == Root, not membership.
         if new_tenant_id != ROOT_TENANT_ID:
-            operations.append(
-                TupleOperation(
-                    action="write",
-                    user=f"user:{user_id}",
-                    relation="member",
-                    object=f"tenant:{new_tenant_id}",
+            changes.append(
+                PermissionRelationChange(
+                    action="grant",
+                    relation=PermissionRelation(
+                        subject=PermissionSubject("user", str(user_id)),
+                        relation="member",
+                        resource=PermissionObject("tenant", str(new_tenant_id)),
+                    ),
                 )
             )
-        if not operations:
+        if not changes:
             return
         try:
-            await PermissionService.batch_write_tuples(operations, crash_safe=True)
-        except Exception as exc:
+            permissions = await get_permission_relation_api()
+            await permissions.apply_changes(tuple(changes), crash_safe=True)
+        except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "FGA tuple rewrite for user %d relocate %s→%s failed: %s",
+                "Permission membership update for user %d relocate %s→%s failed: %s",
                 user_id,
                 old_tenant_id,
                 new_tenant_id,
@@ -344,7 +335,7 @@ class UserTenantSyncService:
             from bisheng.core.cache.redis_manager import get_redis_client
 
             redis = await get_redis_client()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.debug("Redis unavailable; cache invalidation skipped: %s", exc)
             return
         for key in (
@@ -354,7 +345,7 @@ class UserTenantSyncService:
         ):
             try:
                 await redis.adelete(key)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.debug("Redis delete %s failed: %s", key, exc)
 
     @classmethod
@@ -385,7 +376,7 @@ class UserTenantSyncService:
                     "trigger": trigger,
                 },
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.error("audit %s write failed: %s", action.value, exc)
 
     @classmethod

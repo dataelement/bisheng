@@ -25,13 +25,12 @@ AC coverage map (spec §2):
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from bisheng.permission.application import PermissionObject, PermissionRelation, PermissionSubject
 from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
-
 
 # ── T28 — AC-01 + AC-05 + AC-12: share toggle (revoke preserves derived data) ──
 
@@ -46,38 +45,50 @@ async def test_ac_01_enable_share_writes_tuples_per_active_child():
     asserted by test_enable_sharing_rejects_retired_business_types in
     test_f017_resource_share_service.py.
     """
-    fga = MagicMock()
-    fga.write_tuples = AsyncMock()
-    fga.read_tuples = AsyncMock(return_value=[])
-    with patch.object(ResourceShareService, '_get_fga', return_value=fga), \
-         patch(
-             'bisheng.tenant.domain.services.resource_share_service.TenantDao.aget_children_ids_active',
-             AsyncMock(return_value=[5, 7]),
-         ):
+    permissions = MagicMock()
+    permissions.list_subject_ids = AsyncMock(return_value=())
+    permissions.grant = AsyncMock()
+    with (
+        patch(
+            "bisheng.tenant.domain.services.resource_share_service.get_permission_relation_api",
+            AsyncMock(return_value=permissions),
+        ),
+        patch(
+            "bisheng.tenant.domain.services.resource_share_service.TenantDao.aget_children_ids_active",
+            AsyncMock(return_value=[5, 7]),
+        ),
+    ):
         result = await ResourceShareService.enable_sharing(
-            'llm_server', '42', root_tenant_id=1,
+            "llm_server",
+            "42",
+            root_tenant_id=1,
         )
     assert result == [5, 7]
-    writes = fga.write_tuples.await_args.kwargs['writes']
-    assert {w['user'] for w in writes} == {'tenant:5', 'tenant:7'}
-    assert all(w['relation'] == 'shared_with' for w in writes)
+    grants = permissions.grant.await_args.args[0]
+    assert {grant.subject.subject_id for grant in grants} == {"5", "7"}
+    assert all(grant.relation == "shared_with" for grant in grants)
 
 
 @pytest.mark.asyncio
 async def test_ac_05_disable_share_deletes_only_shared_with_tuples():
     """AC-05: revoking share deletes ``shared_with`` tuples; owner stays."""
-    fga = MagicMock()
-    fga.read_tuples = AsyncMock(return_value=[
-        {'user': 'tenant:5', 'relation': 'shared_with', 'object': 'knowledge_space:42'},
-        {'user': 'user:100', 'relation': 'owner', 'object': 'knowledge_space:42'},
-    ])
-    fga.write_tuples = AsyncMock()
-    with patch.object(ResourceShareService, '_get_fga', return_value=fga):
-        revoked = await ResourceShareService.disable_sharing('knowledge_space', '42')
+    permissions = MagicMock()
+    permissions.list_subject_ids = AsyncMock(return_value=("5",))
+    permissions.revoke = AsyncMock()
+    with patch(
+        "bisheng.tenant.domain.services.resource_share_service.get_permission_relation_api",
+        AsyncMock(return_value=permissions),
+    ):
+        revoked = await ResourceShareService.disable_sharing("knowledge_space", "42")
     assert revoked == [5]
-    deletes = fga.write_tuples.await_args.kwargs['deletes']
-    assert len(deletes) == 1  # owner NOT deleted
-    assert deletes[0]['user'] == 'tenant:5'
+    revokes = permissions.revoke.await_args.args[0]
+    assert revokes == (
+        PermissionRelation(
+            subject=PermissionSubject("tenant", "5"),
+            relation="shared_with",
+            resource=PermissionObject("knowledge_space", "42"),
+        ),
+    )
 
 
 @pytest.mark.asyncio
@@ -88,24 +99,20 @@ async def test_ac_12_revoke_share_four_step_sequence():
     Verified by combining AC-05 (delete tuple but keep owner) with the
     chat_message DAO — F017 Phase C never touches chat_message on revoke.
     """
-    fga = MagicMock()
-    fga.read_tuples = AsyncMock(return_value=[
-        {'user': 'tenant:5', 'relation': 'shared_with', 'object': 'knowledge_space:42'},
-        {'user': 'user:100', 'relation': 'owner', 'object': 'knowledge_space:42'},
-    ])
-    fga.write_tuples = AsyncMock()
-    with patch.object(ResourceShareService, '_get_fga', return_value=fga):
-        await ResourceShareService.disable_sharing('knowledge_space', '42')
-    # Step 1 + 2: viewer deleted, owner preserved
-    deletes = fga.write_tuples.await_args.kwargs['deletes']
-    assert all(d['relation'] == 'shared_with' for d in deletes)
-    # Step 3: list_sharing_children after revoke → empty (mock re-read)
-    fga.read_tuples = AsyncMock(return_value=[
-        {'user': 'user:100', 'relation': 'owner', 'object': 'knowledge_space:42'},
-    ])
-    remaining = await ResourceShareService.list_sharing_children(
-        'knowledge_space', '42',
-    )
+    permissions = MagicMock()
+    permissions.list_subject_ids = AsyncMock(side_effect=[("5",), ()])
+    permissions.revoke = AsyncMock()
+    with patch(
+        "bisheng.tenant.domain.services.resource_share_service.get_permission_relation_api",
+        AsyncMock(return_value=permissions),
+    ):
+        await ResourceShareService.disable_sharing("knowledge_space", "42")
+        revokes = permissions.revoke.await_args.args[0]
+        assert all(relation.relation == "shared_with" for relation in revokes)
+        remaining = await ResourceShareService.list_sharing_children(
+            "knowledge_space",
+            "42",
+        )
     assert remaining == []
     # Step 4: no chat_message delete was invoked — this is a non-contract
     # (revoke must not reach into the message table). Enforced at code
@@ -118,13 +125,21 @@ async def test_ac_12_revoke_share_four_step_sequence():
 @pytest.mark.asyncio
 async def test_ac_02_distribute_to_child_writes_tenant_shared_to_tuple():
     """AC-02: new Child mount writes ``tenant:{child}#shared_to → tenant:{root}``."""
-    fga = MagicMock()
-    fga.write_tuples = AsyncMock()
-    with patch.object(ResourceShareService, '_get_fga', return_value=fga):
+    permissions = MagicMock(grant=AsyncMock())
+    with patch(
+        "bisheng.tenant.domain.services.resource_share_service.get_permission_relation_api",
+        AsyncMock(return_value=permissions),
+    ):
         await ResourceShareService.distribute_to_child(child_id=7, root_tenant_id=1)
-    fga.write_tuples.assert_awaited_once_with(writes=[
-        {'user': 'tenant:7', 'relation': 'shared_to', 'object': 'tenant:1'},
-    ])
+    permissions.grant.assert_awaited_once_with(
+        (
+            PermissionRelation(
+                subject=PermissionSubject("tenant", "7"),
+                relation="shared_to",
+                resource=PermissionObject("tenant", "1"),
+            ),
+        )
+    )
 
 
 @pytest.mark.asyncio
@@ -141,11 +156,12 @@ async def test_ac_13_mount_skip_auto_distribute_writes_no_tuple():
     # ``tenant_mount_service.ResourceShareService`` attribute does not
     # exist at patch-time.
     with patch(
-        'bisheng.tenant.domain.services.resource_share_service.ResourceShareService.distribute_to_child',
+        "bisheng.tenant.domain.services.resource_share_service.ResourceShareService.distribute_to_child",
         AsyncMock(),
     ) as distribute_mock:
         distributed = await TenantMountService._on_child_mounted(
-            new_child_id=7, auto_distribute=False,
+            new_child_id=7,
+            auto_distribute=False,
         )
     assert distributed == []
     distribute_mock.assert_not_called()
@@ -155,24 +171,78 @@ async def test_ac_13_mount_skip_auto_distribute_writes_no_tuple():
 
 
 @pytest.mark.asyncio
-async def test_ac_03_permission_service_is_shared_to_returns_true_after_distribute():
-    """AC-03: PermissionService._is_shared_to returns True for a Child
-    once ``distribute_to_child`` has written the tuple."""
-    from bisheng.permission.domain.services.permission_service import PermissionService
+async def test_ac_03_shared_system_relation_precedes_exact_id_business_load():
+    """AC-03: a Child sees a Root-shared resource through the F048 boundary.
 
-    fga = MagicMock()
-    # The FGA check query: member of tenant:{target}#shared_to
-    fga.check = AsyncMock(return_value=True)
-    with patch.object(PermissionService, '_get_fga', return_value=fga):
-        result = await PermissionService._is_shared_to(user_id=500, target_tenant_id=1)
-    assert result is True
-    fga.check.assert_awaited_once()
-    args = fga.check.await_args.kwargs
-    assert args == {
-        'user': 'user:500',
-        'relation': 'member',
-        'object': 'tenant:1#shared_to',
-    }
+    The permission side only checks the system relation. The tenant business
+    service then performs the narrowly scoped exact-ID load and validates the
+    Root-to-Child topology before constructing a verified target.
+    """
+    from bisheng.permission.domain.services.permission_action_service import (
+        PermissionActor,
+    )
+    from bisheng.tenant.domain.repositories.resource_share_repository import (
+        SharedResourceRecord,
+        SharedResourceRepository,
+    )
+
+    events: list[str] = []
+
+    class Loader:
+        async def load_by_ids(self, resource_type, resource_ids):
+            events.append("load")
+            assert resource_type == "knowledge_library"
+            assert resource_ids == ("42",)
+            return (
+                SharedResourceRecord(
+                    owner_tenant_id=1,
+                    resource_type=resource_type,
+                    resource_id="42",
+                    status="ACTIVE",
+                    shareable=True,
+                    permission_version=2,
+                    context_version="knowledge_library-42-v2",
+                ),
+            )
+
+    class SystemPermission:
+        async def check_system_action(
+            self,
+            actor,
+            resource_type,
+            resource_id,
+            action,
+        ):
+            events.append("system-check")
+            assert actor == PermissionActor(user_id=500, current_tenant_id=7)
+            assert (resource_type, resource_id, action) == (
+                "knowledge_library",
+                "42",
+                "use",
+            )
+            return True
+
+    class Topology:
+        async def is_root_to_child(self, owner_tenant_id, child_tenant_id):
+            events.append("topology")
+            assert (owner_tenant_id, child_tenant_id) == (1, 7)
+            return True
+
+    service = ResourceShareService(
+        repository=SharedResourceRepository(Loader()),
+        system_permission=SystemPermission(),
+        topology=Topology(),
+    )
+    target = await service.resolve_shared_target(
+        actor=PermissionActor(user_id=500, current_tenant_id=7),
+        resource_type="knowledge_library",
+        resource_id="42",
+        action="use",
+    )
+
+    assert events == ["system-check", "load", "topology"]
+    assert target.tenant_id == 1
+    assert target.resource_id == "42"
 
 
 # AC-04 (Child cannot edit Root shared): covered by FGA DSL enforcement
@@ -183,17 +253,18 @@ async def test_ac_03_permission_service_is_shared_to_returns_true_after_distribu
 # test_openfga_authorization_model.py (F013 module unit test). Per-AC
 # smoke here just asserts the DSL export still lacks the bad relation.
 
+
 def test_ac_04_editor_dsl_does_not_include_shared_with_userset():
     """AC-04: editor relation stays Root-only; no shared_with branch."""
     from bisheng.core.openfga.authorization_model import AUTHORIZATION_MODEL
 
-    types = {t['type']: t for t in AUTHORIZATION_MODEL['type_definitions']}
-    for resource in ('knowledge_space', 'workflow', 'assistant', 'channel', 'tool'):
-        editor = types[resource]['relations']['editor']
+    types = {t["type"]: t for t in AUTHORIZATION_MODEL["type_definitions"]}
+    for resource in ("knowledge_space", "workflow", "assistant", "channel", "tool"):
+        editor = types[resource]["relations"]["editor"]
         serialized = repr(editor)
-        assert 'shared_with' not in serialized, (
-            f'{resource}.editor must NOT flow through shared_with '
-            f'(AC-04: Child users see Root-shared resources as read-only)'
+        assert "shared_with" not in serialized, (
+            f"{resource}.editor must NOT flow through shared_with "
+            f"(AC-04: Child users see Root-shared resources as read-only)"
         )
 
 
@@ -215,13 +286,19 @@ def test_ac_10_shared_resource_is_counted_on_root_only():
     """
     from bisheng.role.domain.services import quota_service as qs_mod
 
-    template = qs_mod._RESOURCE_COUNT_TEMPLATES.get('knowledge_space', '')
-    assert '=' in template and 'IN' not in template.upper().split('WHERE', 1)[-1], (
-        'AC-10: knowledge_space count SQL must use strict tenant_id equality, '
-        'not an IN list (that would double-count shared rows for a Child)'
+    # knowledge_space moved off the raw-SQL templates (it needs `type = 3`);
+    # its tenant predicate is now built by _count_knowledge_space, so assert on
+    # the compiled statement instead of on a template string.
+    stmt = qs_mod.QuotaService._knowledge_space_count_stmt("tenant_id", 7)
+    ks_sql = str(stmt.compile(compile_kwargs={"literal_binds": True})).replace("\n", " ").upper()
+    where = ks_sql.split("WHERE", 1)[-1]
+    assert "TENANT_ID = 7" in where, (
+        "AC-10: knowledge_space count SQL must use strict tenant_id equality"
+    )
+    assert "TENANT_ID IN" not in where, (
+        "AC-10: knowledge_space count SQL must not use a tenant IN list "
+        "(that would double-count shared rows for a Child)"
     )
     # storage_gb follows the same pattern
-    storage_tpl = qs_mod._RESOURCE_COUNT_TEMPLATES.get('storage_gb', '')
-    assert '=' in storage_tpl, (
-        'AC-10: storage_gb SQL must use strict tenant_id equality'
-    )
+    storage_tpl = qs_mod._RESOURCE_COUNT_TEMPLATES.get("storage_gb", "")
+    assert "=" in storage_tpl, "AC-10: storage_gb SQL must use strict tenant_id equality"

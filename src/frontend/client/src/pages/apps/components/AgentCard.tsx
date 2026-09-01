@@ -12,6 +12,7 @@ import { useLocalize, useMediaQuery } from '~/hooks';
 import { cn } from '~/utils';
 import { Outlined } from 'bisheng-icons';
 import { MoreVertical } from 'lucide-react';
+import { useLazyAppSharePermission } from '../hooks/useLazyAppSharePermission';
 
 interface AgentCardProps {
   agent: AppItem;
@@ -34,18 +35,23 @@ export function AgentCard({
   const canHover = useMediaQuery('(hover: hover) and (pointer: fine)');
   const shouldUseHoverActions = !isMobileCard && canHover;
   const shouldUseHoverActionsInMobileCard = isMobileCard && canHover;
+  const { canShare, ensureSharePermission } = useLazyAppSharePermission(agent);
   // Only render pin affordances when a toggle handler is supplied.
   const showPin = typeof onTogglePin === 'function';
+
+  const handleShare = () => {
+    onShare({ ...agent, can_share: true });
+  };
 
   // Desktop card actions — rendered once, reused for the hover overlay and the
   // no-hover inline fallback.
   const actionButtons = (
     <>
-      {agent.can_share === true ? (
+      {canShare ? (
         <Button
           onClick={(e) => {
             e.stopPropagation();
-            onShare(agent);
+            handleShare();
           }}
           variant="outline"
           className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-md px-2 py-0 text-[14px] font-normal"
@@ -74,6 +80,9 @@ export function AgentCard({
         'bg-[linear-gradient(135deg,_rgb(var(--brand-500)/0.04)_0%,_rgb(255,255,255)_50%,_rgb(var(--brand-500)/0.04)_100%)]',
       )}
       onClick={() => onStartChat(agent)}
+      onMouseEnter={() => {
+        if (canHover) void ensureSharePermission();
+      }}
     >
       {/* Header Info */}
       <div className="flex items-start justify-between w-full relative z-10 shrink-0">
@@ -85,7 +94,7 @@ export function AgentCard({
         </div>
 
         {isMobileCard ? (
-          (showPin || agent.can_share === true) ? (
+          (showPin || canShare) ? (
             <div
               className={cn(
                 "flex items-center gap-1 shrink-0 transition-opacity",
@@ -124,11 +133,11 @@ export function AgentCard({
                       {isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')}
                     </DropdownMenuItem>
                   ) : null}
-                  {agent.can_share === true ? (
+                  {canShare ? (
                     <DropdownMenuItem
                       onClick={(e) => {
                         e.stopPropagation();
-                        onShare(agent);
+                        handleShare();
                       }}
                     >
                       {localize('com_app_share_app')}

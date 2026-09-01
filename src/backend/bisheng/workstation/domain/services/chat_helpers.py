@@ -113,13 +113,17 @@ async def final_message(
 
 async def gen_title(
     human: str,
-    assistant: str,
     llm: BaseChatModel,
     conversation_id: str,
     login_user: UserPayload,
     request: Request,
 ):
-    title = await generate_conversation_title_async(question=human, answer=assistant, llm=llm)
+    """Name a conversation from the user's question alone.
+
+    The assistant's reply is deliberately NOT used: waiting for it is what tied
+    the title to the end of a round, and the question already states the topic.
+    """
+    title = await generate_conversation_title_async(question=human, llm=llm)
     session = await MessageSessionDao.async_get_one(conversation_id)
     if session:
         await MessageSessionDao.update_session_name(chat_id=session.chat_id, name=title)

@@ -21,6 +21,7 @@ from bisheng.utils.threadpool import thread_pool
 
 
 def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
+    http_status = status.HTTP_200_OK
     if isinstance(exc, HTTPException):
         msg = {
             "status_code": exc.status_code,
@@ -32,8 +33,9 @@ def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
     else:
         logger.exception("Unhandled exception")
         msg = {"status_code": 500, "status_message": str(exc)}
+        http_status = status.HTTP_500_INTERNAL_SERVER_ERROR
     logger.error(f"{req.method} {req.url} {exc!s}")
-    return JSONResponse(content=msg)
+    return JSONResponse(status_code=http_status, content=msg)
 
 
 def handle_request_validation_error(req: Request, exc: RequestValidationError) -> JSONResponse:
@@ -50,46 +52,83 @@ _EXCEPTION_HANDLERS = {
 }
 
 
+def _register_permission_runtime_contexts() -> None:
+    if not settings.openfga.enabled:
+        return
+    from bisheng.api.services.f048_permission_runtime import (
+        initialize_f048_api_runtime,
+    )
+    from bisheng.department.domain.services.department_projection_scope import (
+        get_department_projection_scope,
+        register_department_projection_runtime_context,
+    )
+    from bisheng.permission.application.process_runtime import (
+        register_f048_permission_runtime_context,
+    )
+
+    async def initialize(client):
+        return await initialize_f048_api_runtime(
+            client,
+            external_scopes={
+                "department": get_department_projection_scope(),
+            },
+        )
+
+    register_f048_permission_runtime_context(initialize)
+    register_department_projection_runtime_context()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await initialize_app_context(config=settings)
-    await init_default_data()
-    # F034: align frozen system permission tiers with newly-added
-    # move_file/move_folder on every boot. Idempotent + non-critical — a failure
-    # only leaves the admin permission UI stale, so it must never block startup.
+    _register_permission_runtime_contexts()
     try:
-        from bisheng.permission.domain.relation_model_backfill import (
-            backfill_relation_model_move_permissions,
-        )
+        await init_default_data()
+        # F035 task-mode compatibility data remains unrelated to F048 resource
+        # authorization and is safe to maintain independently.
+        try:
+            from bisheng.linsight.domain.services.task_mode_menu_backfill import (
+                backfill_linsight_task_mode_web_menu,
+            )
 
-        await backfill_relation_model_move_permissions()
-    except Exception:
-        logger.exception("relation-model move-permission backfill failed; continuing startup")
-    # F035: align legacy linsight data with the deepagents task-mode shape on every
-    # boot. Both are idempotent + non-critical — failure only leaves stale menu
-    # grants / model config (operators can re-run the standalone scripts), so it
-    # must never block startup. The SOP->Skill data migration is intentionally NOT
-    # here (it writes object storage and is heavier — stays a manual ops script).
-    try:
-        from bisheng.permission.domain.linsight_task_mode_menu_backfill import (
-            backfill_linsight_task_mode_web_menu,
-        )
+            await backfill_linsight_task_mode_web_menu()
+        except Exception:
+            logger.exception("linsight task-mode menu backfill failed; continuing startup")
+        try:
+            from bisheng.llm.domain.services.linsight_default_model_backfill import (
+                backfill_linsight_default_model,
+            )
 
-        await backfill_linsight_task_mode_web_menu()
-    except Exception:
-        logger.exception("linsight task-mode menu backfill failed; continuing startup")
-    try:
-        from bisheng.llm.domain.services.linsight_default_model_backfill import (
-            backfill_linsight_default_model,
-        )
+            await backfill_linsight_default_model()
+        except Exception:
+            logger.exception("linsight default-model backfill failed; continuing startup")
+        # Skill bundles moved from node-local disk to object storage. Publish what
+        # this host still holds so an upgraded deployment heals itself; anything it
+        # cannot resolve is logged by name for the operator to run the migration
+        # script on the host that has it. Runs before seeding: built-in rows are
+        # left to the seeder, which republishes them from the image.
+        try:
+            from bisheng.linsight.domain.services.skill_bundle_backfill import (
+                backfill_skill_bundles_from_local_disk,
+            )
 
-        await backfill_linsight_default_model()
-    except Exception:
-        logger.exception("linsight default-model backfill failed; continuing startup")
-    # LangfuseInstance.update()
-    yield
-    thread_pool.tear_down()
-    await close_app_context()
+            await backfill_skill_bundles_from_local_disk()
+        except Exception:
+            logger.exception("linsight skill bundle backfill failed; continuing startup")
+        # Ships the kernel's built-in skills into every tenant so a fresh deploy
+        # has them without any operator step. Content-addressed and idempotent:
+        # an unchanged image costs one existence probe per skill.
+        try:
+            from bisheng.linsight.domain.services.builtin_skill_seeder import seed_builtin_skills
+
+            await seed_builtin_skills()
+        except Exception:
+            logger.exception("built-in linsight skill seeding failed; continuing startup")
+        # LangfuseInstance.update()
+        yield
+    finally:
+        thread_pool.tear_down()
+        await close_app_context()
 
 
 def create_app():
@@ -102,8 +141,8 @@ def create_app():
         lifespan=lifespan,
     )
 
-    # 前端 axios 使用 withCredentials=true 时，浏览器禁止 ACAO 为 *。
-    # 可通过环境变量 BISHENG_CORS_ORIGINS 覆盖，逗号分隔，例如：
+    # Browsers reject ACAO=* when axios uses withCredentials=true.
+    # Override with comma-separated BISHENG_CORS_ORIGINS when needed.
     # BISHENG_CORS_ORIGINS=http://localhost:3001,http://127.0.0.1:3001
     _cors_raw = (os.getenv("BISHENG_CORS_ORIGINS") or "").strip()
     if _cors_raw:

@@ -122,9 +122,14 @@ export type FileComponentType = {
   disabled: boolean;
   onChange: (value: string[] | string) => void;
   value: string;
-  fileTypes: Array<string>;
-  onFileChange: (value: string) => void;
+  fileTypes?: Array<string>;
+  onFileChange: (value: string | string[]) => void;
   editNode?: boolean;
+  /** Suffix array, or an `.a,.b` accept string as built by fileAcceptToInputAccept. */
+  suffixes?: string[] | string;
+  placeholder?: string;
+  isSSO?: boolean;
+  multiple?: boolean;
 };
 
 export type DisclosureComponentType = {

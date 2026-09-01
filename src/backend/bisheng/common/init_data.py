@@ -30,6 +30,7 @@ async def init_default_data():
             from bisheng.core.context.tenant import _bypass_tenant_filter
 
             _bypass_token = _bypass_tenant_filter.set(True)
+            seeded_preset_tool_types = False
             async with get_async_db_session() as session:
                 db_role = await session.exec(select(Role).limit(1))
                 db_role = db_role.all()
@@ -151,6 +152,7 @@ async def init_default_data():
                 preset_tools_type = await session.exec(select(GptsToolsType).limit(1))
                 preset_tools_type = preset_tools_type.all()
                 if not preset_tools_type:
+                    seeded_preset_tool_types = True
                     preset_tools_type = []
                     json_items = json.loads(read_from_conf("../database/data/t_gpts_tools_type.json"))
                     for item in json_items:
@@ -169,13 +171,36 @@ async def init_default_data():
                     await session.exec(update(GptsTools).where(GptsTools.id.in_(jr_types)).values(type=8))
                     await session.commit()
 
-            _bypass_tenant_filter.reset(_bypass_token)
-
-            # Initialize Databaseconfig
+            # Initialize Databaseconfig while init bypass is still active.
             await settings.init_config()
 
-            # init dashboard data
+            # init dashboard data — dashboard is tenant-scoped since F048
             await init_dashboard_datasets()
+
+            _bypass_tenant_filter.reset(_bypass_token)
+            if settings.openfga.enabled:
+                if seeded_preset_tool_types:
+                    from bisheng.api.services.f048_system_resource_bootstrap import (
+                        reconcile_fresh_install_system_resources,
+                    )
+
+                    report = await reconcile_fresh_install_system_resources()
+                    logger.info(
+                        "Seeded F048 system-owned resource projections: current={} missing_before={}",
+                        report.current_count,
+                        report.missing_count,
+                    )
+                from bisheng.api.services.f048_preset_dashboard_bootstrap import (
+                    reconcile_preset_dashboard_permissions,
+                )
+
+                dashboard_report = await reconcile_preset_dashboard_permissions()
+                logger.info(
+                    "Reconciled preset dashboard owner projections: owner_ready={} current={} missing_before={}",
+                    dashboard_report.owner_ready,
+                    dashboard_report.current_count,
+                    dashboard_report.missing_count,
+                )
 
         except Exception as exc:
             # if the exception involves tables already existing
@@ -485,23 +510,19 @@ async def _backfill_guest_department_membership(session):
         has_any = (await session.exec(select(UserDepartment.id).where(UserDepartment.user_id == uid))).first()
         if has_any is not None:
             continue
-        session.add(
-            UserDepartment(
+        added_user_ids.append(int(uid))
+    if added_user_ids:
+        from bisheng.department.domain.services.department_service import (
+            DepartmentMembershipProjectionService,
+        )
+
+        for uid in added_user_ids:
+            await DepartmentMembershipProjectionService.aadd_member(
                 user_id=uid,
-                department_id=guest.id,
+                department_id=int(guest.id),
                 is_primary=1,
                 source="local",
             )
-        )
-        added_user_ids.append(int(uid))
-    await session.commit()
-    if added_user_ids:
-        from bisheng.department.domain.services.department_change_handler import (
-            DepartmentChangeHandler,
-        )
-
-        ops = DepartmentChangeHandler.on_members_added(guest.id, added_user_ids)
-        await DepartmentChangeHandler.execute_async(ops)
 
 
 def upload_preset_minio_file():

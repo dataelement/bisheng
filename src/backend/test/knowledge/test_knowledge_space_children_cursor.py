@@ -17,13 +17,11 @@ Key F027 AD-14 invariants covered:
 from __future__ import annotations
 
 import ast
-import inspect
 import re
 from pathlib import Path
 
 import pytest
-
-from sqlalchemy import literal, select
+from sqlalchemy import select
 from sqlalchemy.dialects import sqlite
 
 from bisheng.knowledge.domain.models.knowledge_space_file import (
@@ -99,11 +97,11 @@ def test_python_and_sql_ext_rank_agree_for_all_extensions():
         assert _compute_ext_rank_python(file_name) == expected_rank
 
 
-def test_ext_priority_table_length_is_15():
-    """Spec §6.2: pdf=1 .. html=15, exactly 15 ranked extensions."""
-    assert len(_EXT_PRIORITIES) == 15
+def test_ext_priority_table_length_is_16():
+    """The SQL/Python cursor rank table includes OFD after the original 15."""
+    assert len(_EXT_PRIORITIES) == 16
     assert _EXT_PRIORITIES[0] == ("pdf", 1)
-    assert _EXT_PRIORITIES[-1] == ("html", 15)
+    assert _EXT_PRIORITIES[-1] == ("ofd", 16)
 
 
 # ---------------------------------------------------------------------------
@@ -142,8 +140,8 @@ def test_scan_visible_child_items_uses_cursor_fetch_until_enough():
     assert "batch_cursor" in func_src
     assert "_compute_ext_rank_python" in func_src
 
-    # Fetch-until-enough: break when visible exceeds page_size+1 probe
-    assert re.search(r"len\(visible_page_items\)\s*>\s*page_size", func_src)
+    # Fetch-until-enough: the next visible candidate is the has_more probe.
+    assert re.search(r"len\(visible_page_items\)\s*==\s*page_size", func_src)
 
 
 def test_scan_visible_child_items_returns_data_and_has_more():
@@ -192,8 +190,9 @@ def test_list_space_children_returns_page_infinite_cursor_data():
     func_src = ast.get_source_segment(src, func)
     assert "PageInfiniteCursorData(" in func_src
     assert "encode_cursor(" in func_src
-    # Cursor key shape: 4-tuple including ext_rank
-    assert "_compute_ext_rank_python" in func_src
+    # Cursor key is the 4-element last-scanned candidate boundary returned by the scanner.
+    assert "scan_cursor" in func_src
+    assert "encode_cursor(scan_cursor" in func_src
 
 
 # ---------------------------------------------------------------------------

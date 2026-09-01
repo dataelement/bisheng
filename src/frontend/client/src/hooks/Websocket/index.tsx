@@ -16,6 +16,7 @@ const connections: Record<string, WebSocket> = {};
 export const useLinsightWebSocket = (versionId) => {
     const queryClient = useQueryClient();
     const { getLinsight, updateLinsight } = useLinsightManager()
+    const { getLinsight, updateLinsight, reconcileLinsightFromServer } = useLinsightManager()
     const { showToast } = useToastContext();
     const maxRetryCountRef = useRef(5);
 
@@ -32,6 +33,10 @@ export const useLinsightWebSocket = (versionId) => {
     // Live mirror of task.running, read inside the (stable, []-deps) connect
     // callback's onclose retry to avoid a stale closure and to gate reconnects.
     const runningRef = useRef(false);
+    // Same reason: the connect callback must reach the CURRENT reconcile fn
+    // without taking it as a dependency (that would rebuild connect and break
+    // the self-referencing reconnect below).
+    const reconcileRef = useRef(reconcileLinsightFromServer);
 
     // 同步最新活跃版本 ID
     useEffect(() => {
@@ -41,6 +46,10 @@ export const useLinsightWebSocket = (versionId) => {
     useEffect(() => {
         runningRef.current = task.running;
     }, [task.running]);
+
+    useEffect(() => {
+        reconcileRef.current = reconcileLinsightFromServer;
+    }, [reconcileLinsightFromServer]);
 
 
     const connect = useCallback((id: string, msg: any) => {
@@ -78,6 +87,13 @@ export const useLinsightWebSocket = (versionId) => {
         websocket.onopen = () => {
             console.log("WebSocket connection established!");
             // websocket.send(JSON.stringify(msg));
+            // The run may have reached its end while we had no socket, and the
+            // terminal event is destructively popped server-side — nobody will
+            // resend it. Ask the DB what actually happened; a still-running
+            // session is left to the stream (see reconcileLinsightFromServer).
+            reconcileRef.current?.(id)?.catch((e) => {
+                console.error(`Failed to reconcile session ${id} on open:`, e);
+            });
         };
 
         websocket.onmessage = (event) => {
@@ -394,6 +410,15 @@ export const useLinsightWebSocket = (versionId) => {
                         connect(id, { type: 'relink' })
                         maxRetryCountRef.current--;
                     }, 1000);
+                } else if (runningRef.current) {
+                    // Retry budget spent while still running: there will be no
+                    // further `onopen` to reconcile on, so take the last chance
+                    // to adopt whatever state the server settled on. Without
+                    // this, a backend restart mid-run strands the panel
+                    // spinning until the user reloads.
+                    reconcileRef.current?.(id)?.catch((e) => {
+                        console.error(`Failed to reconcile session ${id} after retries:`, e);
+                    });
                 }
             } else {
             }

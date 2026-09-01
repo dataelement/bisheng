@@ -9,144 +9,169 @@ export type ResourceType =
   | "assistant"
   | "tool"
   | "channel"
-  | "dashboard";
+  | "dashboard"
+  | "linsight_skill";
 
-export type RelationLevel = "owner" | "manager" | "editor" | "viewer";
 export type SubjectType = "user" | "department" | "user_group";
-export type CreationResourceType = "knowledge_space" | "channel";
+export type PermissionActionLevel = 1 | 2 | 3 | 4;
+export type ResourcePermissionMode = "INHERIT" | "CUSTOM";
 
-export interface InitialPermissionsPayload {
-  grants: GrantItem[];
+export interface GrantablePermissionModel {
+  key: string;
+  name: string;
+  level: PermissionActionLevel | null;
+  active: boolean;
 }
 
-export interface InitialPermissionResult {
-  status: "success" | "failed";
-  errorCode: number | null;
-  directAppliedCount: number;
-  inviteCreatedCount: number;
-  inviteExistingCount: number;
-  failedCount: number;
-  results: AuthorizationItemOutcome[];
+export interface CreationPermissionContext {
+  catalog_release_id: number;
+  can_configure_initial_permissions: boolean;
+  grantable_models: GrantablePermissionModel[];
+}
+
+export interface InitialPermissionGrant {
+  model_key: string;
+  subject: PermissionGrantSubjectInput;
+}
+
+export interface InitialPermissionsPayload {
+  expected_catalog_release_id: number;
+  grants: InitialPermissionGrant[];
 }
 
 export interface RawInitialPermissionResult {
-  status: "success" | "failed";
+  status: "succeeded" | "failed";
+  resource_version?: number | null;
+  assignee_ids?: string[];
   error_code?: number | null;
-  direct_applied_count?: number;
-  invite_created_count?: number;
-  invite_existing_count?: number;
-  failed_count?: number;
-  results?: RawAuthorizationItemOutcome[];
+  message?: string | null;
 }
 
-export type AuthorizationOutcome =
-  | "applied"
-  | "invite_created"
-  | "invite_existing"
-  | "failed";
-
-export interface AuthorizationItemOutcome {
-  operation: "grant" | "revoke";
-  subjectType: SubjectType;
-  subjectId: number;
-  relation: RelationLevel;
-  modelId: string | null;
-  outcome: AuthorizationOutcome;
-  approvalInstanceId: number | null;
+export interface InitialPermissionResult {
+  status: "succeeded" | "failed";
+  resourceVersion?: number;
+  assigneeIds: string[];
   errorCode: number | null;
-  errorMessage: string | null;
+  message?: string;
 }
 
-export interface RawAuthorizationItemOutcome {
-  operation: "grant" | "revoke";
-  subject_type: SubjectType;
-  subject_id: number;
-  relation: RelationLevel;
-  model_id?: string | null;
-  outcome: AuthorizationOutcome;
-  approval_instance_id?: number | null;
-  error_code?: number | null;
-  error_message?: string | null;
+export interface ResourcePermissionContext {
+  mode: ResourcePermissionMode;
+  parent_type: ResourceType | null;
+  parent_id: string | null;
+  resource_version: number;
+  catalog_release_id: number;
+  projection_state: string;
+  can_manage_permission: boolean;
 }
 
-export interface AuthorizationResult {
-  syncedUserCount: number;
-  affectedMemberCount: number;
-  directAppliedCount: number;
-  inviteCreatedCount: number;
-  inviteExistingCount: number;
-  failedCount: number;
-  results: AuthorizationItemOutcome[];
-}
-
-export interface RawAuthorizationResult {
-  synced_user_count?: number;
-  affected_member_count?: number;
-  direct_applied_count?: number;
-  invite_created_count?: number;
-  invite_existing_count?: number;
-  failed_count?: number;
-  results?: RawAuthorizationItemOutcome[];
-}
-
-export interface PermissionEntry {
-  subject_type: SubjectType;
-  subject_id: number;
-  subject_name: string | null;
-  subject_group_names?: string[];
-  subject_member_names?: string[];
-  relation: RelationLevel;
-  model_id?: string;
-  model_name?: string;
-  include_children?: boolean;
-  /** Channel creator: permission level is permanent and not editable. */
-  is_creator?: boolean;
-  authorizationStatus?: "active" | "pending";
-  approvalInstanceId?: number | null;
-  authorization_status?: "active" | "pending";
-  approval_instance_id?: number | null;
-}
-
-export interface GrantItem {
-  subject_type: SubjectType;
-  subject_id: number;
-  relation: RelationLevel;
-  model_id?: string;
-  include_children?: boolean;
-}
-
-function authorizationOutcomeMatchesGrant(
-  outcome: AuthorizationItemOutcome,
-  grant: GrantItem,
-): boolean {
-  return outcome.operation === "grant"
-    && outcome.subjectType === grant.subject_type
-    && outcome.subjectId === grant.subject_id
-    && outcome.relation === grant.relation
-    && (outcome.modelId ?? null) === (grant.model_id ?? null);
-}
-
-export function getFailedAuthorizationGrants(
-  grants: GrantItem[],
-  results: AuthorizationItemOutcome[],
-): GrantItem[] {
-  if (results.length === 0) return grants;
-  const failed = results.filter((result) => result.outcome === "failed");
-  return grants.filter((grant) => (
-    failed.some((outcome) => authorizationOutcomeMatchesGrant(outcome, grant))
-  ));
-}
-
-export type RevokeItem = Omit<GrantItem, "model_id">;
-
-export interface RelationModel {
+export interface PermissionGrantSubject {
+  type: SubjectType;
   id: string;
-  name: string;
-  relation: RelationLevel;
-  grant_tier?: "owner" | "manager" | "usage";
-  permissions: string[];
-  permissions_explicit?: boolean;
-  is_system: boolean;
+  name: string | null;
+}
+
+export interface PermissionGrantSource {
+  type: string;
+  include_children: boolean;
+  userset_relation?: string | null;
+}
+
+export interface PermissionGrantAssignee {
+  assignee_id: string;
+  assignee_version: number;
+  subject: PermissionGrantSubject;
+  model: GrantablePermissionModel;
+  source: PermissionGrantSource;
+  scope: "LOCAL" | "INHERITED";
+  inherited_from: string | null;
+  inherited_from_name?: string | null;
+  protected: boolean;
+  editable: boolean;
+}
+
+export interface PermissionGrantCursorPage {
+  data: PermissionGrantAssignee[];
+  page_size: number;
+  has_more: boolean;
+  next_cursor: string | null;
+}
+
+export interface MyResourcePermissions {
+  mode: ResourcePermissionMode;
+  actions: string[];
+  sources: PermissionGrantSource[];
+  roster_complete: boolean;
+}
+
+export interface PermissionGrantSubjectInput {
+  type: SubjectType;
+  id: string;
+  userset_relation?: string | null;
+  include_children?: boolean;
+}
+
+export type PermissionGrantMutationChange =
+  | {
+      op: "ADD";
+      model_key: string;
+      subject: PermissionGrantSubjectInput;
+    }
+  | {
+      op: "MOVE";
+      assignee_id: string;
+      expected_assignee_version: number;
+      target_model_key: string;
+    }
+  | {
+      op: "REMOVE";
+      assignee_id: string;
+      expected_assignee_version: number;
+    };
+
+export interface MutateResourceGrantsRequest {
+  idempotency_key: string;
+  expected_resource_version: number;
+  expected_catalog_release_id: number;
+  changes: PermissionGrantMutationChange[];
+}
+
+export interface MutateResourceGrantsResult {
+  resource_version: number;
+  items: PermissionGrantAssignee[];
+}
+
+export interface CreatePermissionModeDraftRequest {
+  target_mode: ResourcePermissionMode;
+  expected_resource_version: number;
+  expected_catalog_release_id: number;
+}
+
+export interface PermissionModeDraft {
+  draft_id: string;
+  target_mode: ResourcePermissionMode;
+  impact_checksum: string;
+  affected_assignees: number;
+  expires_at: string;
+}
+
+export interface ApplyPermissionModeDraftRequest {
+  idempotency_key: string;
+  expected_resource_version: number;
+  expected_catalog_release_id: number;
+  confirmed: true;
+}
+
+export interface ApplyPermissionModeDraftResult {
+  applied: boolean;
+  mode: ResourcePermissionMode;
+  resource_version: number;
+}
+
+export interface CheckResourceActionRequest {
+  resource_type: ResourceType;
+  resource_id: string;
+  action: string;
 }
 
 export interface SelectedSubject {
@@ -156,7 +181,7 @@ export interface SelectedSubject {
   include_children?: boolean;
 }
 
-export interface PermissionRequestConfig {
+interface PermissionRequestConfig {
   signal?: AbortSignal;
 }
 
@@ -164,20 +189,29 @@ export interface PermissionRequestConfig {
 // Client request layer returns the full backend envelope {status_code, status_message, data}.
 // All functions below unwrap .data so callers get the payload directly.
 
-function assertSuccess(res: any) {
-  if (res && typeof res === "object" && "status_code" in res && res.status_code !== 200) {
-    throw new Error(res.status_message || `Permission request failed: ${res.status_code}`);
+type JsonRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): JsonRecord | null {
+  return value !== null && typeof value === "object" ? value as JsonRecord : null;
+}
+
+function assertSuccess(res: unknown) {
+  const record = asRecord(res);
+  if (record && "status_code" in record && record.status_code !== 200) {
+    throw new Error(String(record.status_message || `Permission request failed: ${record.status_code}`));
   }
 }
 
-function unwrap<T>(res: any): T {
+function unwrap<T>(res: unknown): T {
   assertSuccess(res);
-  return res?.data ?? res;
+  const record = asRecord(res);
+  return (record && "data" in record ? record.data : res) as T;
 }
 
-function unwrapArray<T = any>(res: any): T[] {
-  const data = unwrap<any>(res);
-  const rows = data?.data ?? data?.list ?? data?.records ?? data;
+function unwrapArray<T>(res: unknown): T[] {
+  const data = unwrap<unknown>(res);
+  const record = asRecord(data);
+  const rows = record?.data ?? record?.list ?? record?.records ?? data;
   return Array.isArray(rows) ? rows : [];
 }
 
@@ -194,136 +228,254 @@ export function mapInitialPermissionResult(
   if (!result) return undefined;
   return {
     status: result.status,
+    ...(result.resource_version == null
+      ? {}
+      : { resourceVersion: result.resource_version }),
+    assigneeIds: result.assignee_ids ?? [],
     errorCode: result.error_code ?? null,
-    directAppliedCount: result.direct_applied_count ?? 0,
-    inviteCreatedCount: result.invite_created_count ?? 0,
-    inviteExistingCount: result.invite_existing_count ?? 0,
-    failedCount: result.failed_count ?? 0,
-    results: (result.results ?? []).map(mapAuthorizationItemOutcome),
+    ...(result.message ? { message: result.message } : {}),
   };
 }
 
-function mapAuthorizationItemOutcome(
-  result: RawAuthorizationItemOutcome,
-): AuthorizationItemOutcome {
-  return {
-    operation: result.operation,
-    subjectType: result.subject_type,
-    subjectId: result.subject_id,
-    relation: result.relation,
-    modelId: result.model_id ?? null,
-    outcome: result.outcome,
-    approvalInstanceId: result.approval_instance_id ?? null,
-    errorCode: result.error_code ?? null,
-    errorMessage: result.error_message ?? null,
-  };
+type CreationResourceType = "knowledge_space" | "channel";
+
+function creationPermissionPath(resourceType: CreationResourceType): string {
+  return resourceType === "knowledge_space"
+    ? "/api/v1/knowledge/space"
+    : "/api/v1/channel/manager";
 }
 
-export function mapAuthorizationResult(
-  result?: RawAuthorizationResult | null,
-): AuthorizationResult {
-  return {
-    syncedUserCount: result?.synced_user_count ?? 0,
-    affectedMemberCount: result?.affected_member_count ?? 0,
-    directAppliedCount: result?.direct_applied_count ?? 0,
-    inviteCreatedCount: result?.invite_created_count ?? 0,
-    inviteExistingCount: result?.invite_existing_count ?? 0,
-    failedCount: result?.failed_count ?? 0,
-    results: (result?.results ?? []).map(mapAuthorizationItemOutcome),
-  };
+export async function getCreationPermissionContext(
+  resourceType: CreationResourceType,
+  config?: PermissionRequestConfig,
+): Promise<CreationPermissionContext> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-permission-context`,
+    withPermissionRequestOptions(config),
+  );
+  return unwrap(res);
 }
 
-function mapPermissionEntry(entry: PermissionEntry): PermissionEntry {
-  return {
-    ...entry,
-    authorizationStatus: entry.authorization_status ?? entry.authorizationStatus ?? "active",
-    approvalInstanceId: entry.approval_instance_id ?? entry.approvalInstanceId ?? null,
-  };
+export async function searchCreationUsers(
+  resourceType: CreationResourceType,
+  name: string,
+  params?: { page?: number; pageSize?: number },
+  config?: PermissionRequestConfig,
+): Promise<{ data: GrantUser[]; total: number }> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-grant-subjects/users`,
+    {
+      params: {
+        keyword: name,
+        page: params?.page ?? 1,
+        page_size: params?.pageSize ?? 50,
+      },
+      ...withPermissionRequestOptions(config),
+    },
+  );
+  const data = unwrap<unknown>(res);
+  const record = asRecord(data);
+  const rows = record?.data ?? data;
+  const list = Array.isArray(rows) ? rows : [];
+  return { data: list as GrantUser[], total: Number(record?.total ?? list.length) };
+}
+
+export async function getCreationDepartmentChildren(
+  resourceType: CreationResourceType,
+  parentId: number | null,
+  config?: PermissionRequestConfig,
+): Promise<GrantDepartmentNode[]> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-grant-subjects/departments/children`,
+    {
+      params: { parent_id: parentId ?? undefined },
+      ...withPermissionRequestOptions(config),
+    },
+  );
+  return unwrapArray<GrantDepartmentNode>(res);
+}
+
+export async function searchCreationDepartments(
+  resourceType: CreationResourceType,
+  keyword: string,
+  limit = 50,
+  config?: PermissionRequestConfig,
+): Promise<GrantDepartmentSearchResult> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-grant-subjects/departments/search`,
+    {
+      params: { keyword, limit },
+      ...withPermissionRequestOptions(config),
+    },
+  );
+  return unwrap(res);
+}
+
+export async function getCreationUserGroups(
+  resourceType: CreationResourceType,
+  config?: PermissionRequestConfig,
+): Promise<{ id: number; group_name: string }[]> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-grant-subjects/user-groups`,
+    {
+      params: { page: 1, page_size: 200 },
+      ...withPermissionRequestOptions(config),
+    },
+  );
+  const data = unwrap<unknown>(res);
+  const record = asRecord(data);
+  const rows = record?.data ?? data;
+  return Array.isArray(rows)
+    ? rows.map((row) => {
+        const item = asRecord(row) ?? {};
+        return { id: Number(item.id), group_name: String(item.name ?? item.group_name ?? "") };
+      })
+    : [];
 }
 
 // ── Permission APIs ──────────────────────────────────
 
-export async function getResourcePermissions(
-  resourceType: string,
+function permissionResourcePath(
+  resourceType: ResourceType,
+  resourceId: string
+): string {
+  return `/api/v1/permissions/resources/${resourceType}/${resourceId}`;
+}
+
+export async function getResourcePermissionContext(
+  resourceType: ResourceType,
   resourceId: string,
   config?: PermissionRequestConfig
-): Promise<PermissionEntry[]> {
+): Promise<ResourcePermissionContext> {
   const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/permissions`,
+    `${permissionResourcePath(resourceType, resourceId)}/context`,
     withPermissionRequestOptions(config)
   );
-  return unwrapArray<PermissionEntry>(res).map(mapPermissionEntry);
-}
-
-export async function authorizeResource(
-  resourceType: string,
-  resourceId: string,
-  grants: GrantItem[],
-  revokes: RevokeItem[],
-  config?: PermissionRequestConfig
-): Promise<AuthorizationResult> {
-  const res = await request.post(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/authorize`,
-    { grants, revokes },
-    withPermissionRequestOptions(config)
-  );
-  return mapAuthorizationResult(unwrap<RawAuthorizationResult | null>(res));
-}
-
-export async function checkPermission(
-  objectType: string,
-  objectId: string,
-  relation: string,
-  permissionIdOrConfig?: string | PermissionRequestConfig,
-  config?: PermissionRequestConfig
-): Promise<{ allowed: boolean }> {
-  const permissionId =
-    typeof permissionIdOrConfig === "string" ? permissionIdOrConfig : undefined;
-  const requestConfig =
-    typeof permissionIdOrConfig === "string" ? config : permissionIdOrConfig;
-  const res = await request.post(`/api/v1/permissions/check`, {
-    object_type: objectType,
-    object_id: objectId,
-    relation,
-    permission_id: permissionId,
-  }, withPermissionRequestOptions(requestConfig));
   return unwrap(res);
 }
 
-export async function getGrantableRelationModels(
-  objectType: string,
-  objectId: string,
+export async function getResourcePermissionGrants(
+  resourceType: ResourceType,
+  resourceId: string,
+  params: { cursor?: string | null; page_size?: number } = {},
   config?: PermissionRequestConfig
-): Promise<RelationModel[]> {
-  const res = await request.get(`/api/v1/permissions/relation-models/grantable`, {
-    params: { object_type: objectType, object_id: objectId },
-    ...withPermissionRequestOptions(config),
-  });
-  return unwrapArray<RelationModel>(res);
-}
-
-export async function getCreationGrantableRelationModels(
-  objectType: CreationResourceType,
-  config?: PermissionRequestConfig,
-): Promise<RelationModel[]> {
-  const res = await request.get(`/api/v1/permissions/relation-models/grantable`, {
-    params: { object_type: objectType, creation: true },
-    ...withPermissionRequestOptions(config),
-  });
-  return unwrapArray<RelationModel>(res);
-}
-
-export async function canOpenPermissionDialog(
-  objectType: ResourceType,
-  objectId: string,
-  config?: PermissionRequestConfig
-): Promise<boolean> {
-  const models = await getGrantableRelationModels(
-    objectType,
-    objectId,
-    config
+): Promise<PermissionGrantCursorPage> {
+  const res = await request.get(
+    `${permissionResourcePath(resourceType, resourceId)}/grants`,
+    {
+      params: {
+        cursor: params.cursor ?? undefined,
+        page_size: params.page_size ?? 50,
+      },
+      ...withPermissionRequestOptions(config),
+    }
   );
-  return Array.isArray(models) && models.length > 0;
+  return unwrap(res);
+}
+
+export async function getAllResourcePermissionGrants(
+  resourceType: ResourceType,
+  resourceId: string,
+  config?: PermissionRequestConfig,
+): Promise<PermissionGrantAssignee[]> {
+  const items: PermissionGrantAssignee[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | null = null;
+
+  for (;;) {
+    const page = await getResourcePermissionGrants(
+      resourceType,
+      resourceId,
+      { cursor, page_size: 200 },
+      config,
+    );
+    items.push(...page.data);
+    if (!page.has_more) return items;
+    if (!page.next_cursor || seenCursors.has(page.next_cursor)) {
+      throw new Error("Permission roster pagination returned an invalid cursor");
+    }
+    seenCursors.add(page.next_cursor);
+    cursor = page.next_cursor;
+  }
+}
+
+export async function getMyResourcePermissions(
+  resourceType: ResourceType,
+  resourceId: string,
+  config?: PermissionRequestConfig
+): Promise<MyResourcePermissions> {
+  const res = await request.get(
+    `${permissionResourcePath(resourceType, resourceId)}/my-permissions`,
+    withPermissionRequestOptions(config)
+  );
+  return unwrap(res);
+}
+
+export async function getGrantablePermissionModels(
+  resourceType: ResourceType,
+  resourceId: string,
+  config?: PermissionRequestConfig
+): Promise<GrantablePermissionModel[]> {
+  const res = await request.get(
+    `${permissionResourcePath(resourceType, resourceId)}/grantable-models`,
+    withPermissionRequestOptions(config)
+  );
+  return unwrap(res);
+}
+
+export async function mutateResourceGrants(
+  resourceType: ResourceType,
+  resourceId: string,
+  payload: MutateResourceGrantsRequest,
+  config?: PermissionRequestConfig
+): Promise<MutateResourceGrantsResult> {
+  const res = await request.post(
+    `${permissionResourcePath(resourceType, resourceId)}/grants:mutate`,
+    payload,
+    withPermissionRequestOptions(config)
+  );
+  return unwrap(res);
+}
+
+export async function createResourcePermissionModeDraft(
+  resourceType: ResourceType,
+  resourceId: string,
+  payload: CreatePermissionModeDraftRequest,
+  config?: PermissionRequestConfig
+): Promise<PermissionModeDraft> {
+  const res = await request.post(
+    `${permissionResourcePath(resourceType, resourceId)}/mode-drafts`,
+    payload,
+    withPermissionRequestOptions(config)
+  );
+  return unwrap(res);
+}
+
+export async function applyResourcePermissionModeDraft(
+  resourceType: ResourceType,
+  resourceId: string,
+  draftId: string,
+  payload: ApplyPermissionModeDraftRequest,
+  config?: PermissionRequestConfig
+): Promise<ApplyPermissionModeDraftResult> {
+  const res = await request.post(
+    `${permissionResourcePath(resourceType, resourceId)}/mode-drafts/${draftId}/apply`,
+    payload,
+    withPermissionRequestOptions(config)
+  );
+  return unwrap(res);
+}
+
+export async function checkResourceAction(
+  payload: CheckResourceActionRequest,
+  config?: PermissionRequestConfig
+): Promise<{ allowed: boolean }> {
+  const res = await request.post(
+    "/api/v1/permissions/check",
+    payload,
+    withPermissionRequestOptions(config)
+  );
+  return unwrap(res);
 }
 
 // ── Subject search APIs ──────────────────────────────
@@ -340,147 +492,36 @@ export interface GrantUser {
   primary_department_path?: string | null;
 }
 
-export interface GrantUserGroup {
-  id: number;
-  group_name: string;
-}
-
-interface CreationGrantSubjectQueryBase {
-  resourceType: CreationResourceType;
-}
-
-export interface CreationGrantUserQuery extends CreationGrantSubjectQueryBase {
-  subjectType: "user";
-  operation: "list";
-  keyword?: string;
-  page?: number;
-  pageSize?: number;
-}
-
-export interface CreationGrantUserGroupQuery extends CreationGrantSubjectQueryBase {
-  subjectType: "user_group";
-  operation: "list";
-  keyword?: string;
-  page?: number;
-  pageSize?: number;
-}
-
-export interface CreationGrantDepartmentChildrenQuery extends CreationGrantSubjectQueryBase {
-  subjectType: "department";
-  operation: "children";
-  parentId?: number | null;
-}
-
-export interface CreationGrantDepartmentSearchQuery extends CreationGrantSubjectQueryBase {
-  subjectType: "department";
-  operation: "search";
-  keyword: string;
-  limit?: number;
-}
-
-export interface CreationGrantDepartmentPathTreeQuery extends CreationGrantSubjectQueryBase {
-  subjectType: "department";
-  operation: "path_tree";
-  departmentId: number;
-}
-
-export interface CreationGrantUserTreeChildrenQuery extends CreationGrantSubjectQueryBase {
-  subjectType: "user";
-  operation: "tree_children";
-  parentId?: number | null;
-  page?: number;
-  pageSize?: number;
-}
-
-export interface CreationGrantUserTreeSearchQuery extends CreationGrantSubjectQueryBase {
-  subjectType: "user";
-  operation: "tree_search";
-  keyword: string;
-  limit?: number;
-}
-
-export type CreationGrantSubjectsQuery =
-  | CreationGrantUserQuery
-  | CreationGrantUserGroupQuery
-  | CreationGrantDepartmentChildrenQuery
-  | CreationGrantDepartmentSearchQuery
-  | CreationGrantDepartmentPathTreeQuery
-  | CreationGrantUserTreeChildrenQuery
-  | CreationGrantUserTreeSearchQuery;
-
-export async function getResourceGrantUsers(
+// Scoped to the resource, not to the org chart: "who may be granted THIS
+// resource" is answered by holding manage_permission on it, while the user-admin
+// list answers "whom do I administer" — which a space manager may not be at all,
+// so it came back empty for exactly the people allowed to grant.
+export async function searchUsers(
   resourceType: ResourceType,
   resourceId: string,
-  params?: { keyword?: string; page?: number; page_size?: number },
+  name: string,
+  params?: { page?: number; pageSize?: number },
   config?: { signal?: AbortSignal }
-): Promise<GrantUser[]> {
+): Promise<{ data: GrantUser[]; total: number }> {
   const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/users`,
+    `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/users`,
     {
       params: {
-        keyword: params?.keyword ?? "",
+        keyword: name,
         page: params?.page ?? 1,
-        page_size: params?.page_size ?? 2000,
+        page_size: params?.pageSize ?? 50,
       },
       ...withPermissionRequestOptions(config),
     }
   );
-  return unwrapArray(res);
+  const data = unwrap<unknown>(res);
+  const record = asRecord(data);
+  const rows = record?.data ?? data;
+  const list = Array.isArray(rows) ? rows : [];
+  return { data: list as GrantUser[], total: Number(record?.total ?? list.length) };
 }
 
-export async function getKnowledgeSpaceGrantUsers(
-  resourceId: string,
-  params?: { keyword?: string; page?: number; page_size?: number },
-  config?: { signal?: AbortSignal }
-): Promise<GrantUser[]> {
-  return getResourceGrantUsers("knowledge_space", resourceId, params, config);
-}
-
-// ── Lazy grant-user tree (F038) ───────────────────────
-// Department-tree user picker: one browse layer = child departments
-// (navigation) + the direct primary-department users of the expanded node
-// (leaves); search keeps the full ancestor path and attaches matched users to
-// their primary department node. Mirrors the department tree below.
-
-export async function getResourceGrantUserTreeChildren(
-  resourceType: ResourceType,
-  resourceId: string,
-  parentId: number | null,
-  params?: { userPage?: number; userPageSize?: number },
-  config?: { signal?: AbortSignal }
-): Promise<GrantUserTreeChildrenResult> {
-  const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/users/tree/children`,
-    {
-      params: {
-        parent_id: parentId ?? undefined,
-        user_page: params?.userPage ?? 1,
-        user_page_size: params?.userPageSize ?? 100,
-      },
-      ...withPermissionRequestOptions(config),
-    }
-  );
-  return unwrap<GrantUserTreeChildrenResult>(res) ?? EMPTY_USER_TREE_CHILDREN;
-}
-
-export async function searchResourceGrantUserTree(
-  resourceType: ResourceType,
-  resourceId: string,
-  keyword: string,
-  limit = 50,
-  config?: { signal?: AbortSignal }
-): Promise<GrantDepartmentSearchResult> {
-  const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/users/tree/search`,
-    {
-      params: { keyword, limit },
-      ...withPermissionRequestOptions(config),
-    }
-  );
-  return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
-}
-
-// ── Lazy grant-department tree (F038) ────────────────
+// ── Lazy organization-department tree ────────────────
 // Browse one visible layer / server search / locate-by-id, so a large org tree
 // is never loaded at once. Same authorization scope as the full-tree endpoint
 // above (tenant subtree minus child-tenant mounts). `path` is the materialized
@@ -501,10 +542,6 @@ export interface GrantDepartmentNode {
   has_children?: boolean;
   matched?: boolean;
   children?: GrantDepartmentNode[];
-  /** F038 user-tree only: direct primary-department members attached as leaves
-   * (populated by the user-tree search endpoint; absent for department-only
-   * browsing/search responses). */
-  users?: GrantUser[];
 }
 
 export interface GrantDepartmentSearchResult {
@@ -513,99 +550,20 @@ export interface GrantDepartmentSearchResult {
   truncated: boolean;
 }
 
-/** F038 user-tree browse layer: child departments (navigation) + the direct
- * primary-department users of the expanded node (leaves), one page at a time. */
-export interface GrantUserTreeChildrenResult {
-  departments: GrantDepartmentNode[];
-  users: GrantUser[];
-  has_more_users: boolean;
-}
-
 const EMPTY_DEPARTMENT_SEARCH_RESULT: GrantDepartmentSearchResult = {
   roots: [],
   total_matches: 0,
   truncated: false,
 };
 
-const EMPTY_USER_TREE_CHILDREN: GrantUserTreeChildrenResult = {
-  departments: [],
-  users: [],
-  has_more_users: false,
-};
-
-export function getCreationGrantSubjects(
-  query: CreationGrantUserQuery,
-  config?: PermissionRequestConfig,
-): Promise<GrantUser[]>;
-export function getCreationGrantSubjects(
-  query: CreationGrantUserGroupQuery,
-  config?: PermissionRequestConfig,
-): Promise<GrantUserGroup[]>;
-export function getCreationGrantSubjects(
-  query: CreationGrantDepartmentChildrenQuery,
-  config?: PermissionRequestConfig,
-): Promise<GrantDepartmentNode[]>;
-export function getCreationGrantSubjects(
-  query: CreationGrantDepartmentSearchQuery | CreationGrantDepartmentPathTreeQuery,
-  config?: PermissionRequestConfig,
-): Promise<GrantDepartmentSearchResult>;
-export function getCreationGrantSubjects(
-  query: CreationGrantUserTreeChildrenQuery,
-  config?: PermissionRequestConfig,
-): Promise<GrantUserTreeChildrenResult>;
-export function getCreationGrantSubjects(
-  query: CreationGrantUserTreeSearchQuery,
-  config?: PermissionRequestConfig,
-): Promise<GrantDepartmentSearchResult>;
-export async function getCreationGrantSubjects(
-  query: CreationGrantSubjectsQuery,
-  config?: PermissionRequestConfig,
-): Promise<
-  | GrantUser[]
-  | GrantUserGroup[]
-  | GrantDepartmentNode[]
-  | GrantDepartmentSearchResult
-  | GrantUserTreeChildrenResult
-> {
-  const params: Record<string, string | number> = {
-    resource_type: query.resourceType,
-    subject_type: query.subjectType,
-    operation: query.operation,
-  };
-  if ("keyword" in query && query.keyword !== undefined) params.keyword = query.keyword;
-  if ("page" in query && query.page !== undefined) params.page = query.page;
-  if ("pageSize" in query && query.pageSize !== undefined) params.page_size = query.pageSize;
-  if ("parentId" in query && query.parentId != null) params.parent_id = query.parentId;
-  if ("departmentId" in query) params.department_id = query.departmentId;
-  if ("limit" in query && query.limit !== undefined) params.limit = query.limit;
-
-  const res = await request.get(`/api/v1/permissions/creation-grant-subjects`, {
-    params,
-    ...withPermissionRequestOptions(config),
-  });
-  if (query.subjectType === "department"
-    && (query.operation === "search" || query.operation === "path_tree")) {
-    return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
-  }
-  if (query.subjectType === "user") {
-    if (query.operation === "list") return unwrapArray<GrantUser>(res);
-    if (query.operation === "tree_children") {
-      return unwrap<GrantUserTreeChildrenResult>(res) ?? EMPTY_USER_TREE_CHILDREN;
-    }
-    return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
-  }
-  if (query.subjectType === "user_group") return unwrapArray<GrantUserGroup>(res);
-  return unwrapArray<GrantDepartmentNode>(res);
-}
-
-export async function getResourceGrantDepartmentChildren(
+export async function getDepartmentChildren(
   resourceType: ResourceType,
   resourceId: string,
   parentId: number | null,
   config?: { signal?: AbortSignal }
 ): Promise<GrantDepartmentNode[]> {
   const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/children`,
+    `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/departments/children`,
     {
       params: { parent_id: parentId ?? undefined },
       ...withPermissionRequestOptions(config),
@@ -614,7 +572,7 @@ export async function getResourceGrantDepartmentChildren(
   return unwrapArray<GrantDepartmentNode>(res);
 }
 
-export async function searchResourceGrantDepartments(
+export async function searchDepartments(
   resourceType: ResourceType,
   resourceId: string,
   keyword: string,
@@ -622,7 +580,7 @@ export async function searchResourceGrantDepartments(
   config?: { signal?: AbortSignal }
 ): Promise<GrantDepartmentSearchResult> {
   const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/search`,
+    `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/departments/search`,
     {
       params: { keyword, limit },
       ...withPermissionRequestOptions(config),
@@ -631,51 +589,28 @@ export async function searchResourceGrantDepartments(
   return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
 }
 
-export async function getResourceGrantDepartmentPathTree(
-  resourceType: ResourceType,
-  resourceId: string,
-  departmentId: number,
-  config?: PermissionRequestConfig,
-): Promise<GrantDepartmentSearchResult> {
-  const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/${departmentId}/path-tree`,
-    withPermissionRequestOptions(config),
-  );
-  return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
-}
+// (no client consumer needs locate/path-tree: the picker browses+searches only,
+// and the permission list reads the backend-resolved full-path subject_name.)
 
 export async function getUserGroups(
-  config?: { signal?: AbortSignal }
-): Promise<any[]> {
-  const res = await request.get(
-    `/api/v1/group/list`,
-    withPermissionRequestOptions(config)
-  );
-  const data = unwrap<any>(res);
-  const rows = data?.records ?? data;
-  return Array.isArray(rows) ? rows : [];
-}
-
-export async function getResourceGrantUserGroups(
   resourceType: ResourceType,
   resourceId: string,
-  params?: { keyword?: string },
   config?: { signal?: AbortSignal }
-): Promise<GrantUserGroup[]> {
+): Promise<{ id: number; group_name: string }[]> {
   const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/user-groups`,
+    `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/user-groups`,
     {
-      params: { keyword: params?.keyword ?? "" },
+      params: { page: 1, page_size: 200 },
       ...withPermissionRequestOptions(config),
     }
   );
-  return unwrapArray<GrantUserGroup>(res);
-}
-
-export async function getKnowledgeSpaceGrantUserGroups(
-  resourceId: string,
-  params?: { keyword?: string },
-  config?: { signal?: AbortSignal }
-): Promise<GrantUserGroup[]> {
-  return getResourceGrantUserGroups("knowledge_space", resourceId, params, config);
+  const data = unwrap<unknown>(res);
+  const record = asRecord(data);
+  const rows = record?.data ?? data;
+  return Array.isArray(rows)
+    ? rows.map((row) => {
+        const item = asRecord(row) ?? {};
+        return { id: Number(item.id), group_name: String(item.name ?? item.group_name ?? "") };
+      })
+    : [];
 }

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/ruff-format-hook.sh"
+      }
+    ],
+    "postToolUse": [
+      {
+        "matcher": "Write|StrReplace|Edit",
+        "command": ".cursor/hooks/arch-guard-hook.sh"
+      }
+    ]
+  }
+}

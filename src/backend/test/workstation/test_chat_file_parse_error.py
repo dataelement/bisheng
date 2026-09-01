@@ -10,6 +10,10 @@ import json
 
 import pytest
 
+from bisheng.common.errcode.knowledge import (
+    KnowledgeMediaNoRecognizableAudioError,
+    KnowledgeMediaTranscriptionError,
+)
 from bisheng.common.errcode.workstation import ChatFileParseError
 from bisheng.utils.exceptions import EtlException
 from bisheng.workstation.domain.services import chat_service
@@ -67,3 +71,65 @@ async def test_successful_extraction_passes_through(monkeypatch):
 
     monkeypatch.setattr(chat_service, "get_file_content", _ok)
     assert await chat_service._extract_doc_text("/tmp/a.jpg", "invoice.jpg", 1) == "text of invoice.jpg"
+
+
+async def test_media_without_speech_is_narrated_not_raised(monkeypatch):
+    """A silent clip must not cost the user the question they wrote with it.
+
+    ASR returning nothing is not a fault: the user attached a file, they did not
+    ask for a transcript. The turn continues and the model is told the file
+    carried no speech — rather than the whole message failing, or the attachment
+    vanishing so the model answers as if nothing were sent.
+    """
+
+    class _Pipeline:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def arun(self):
+            raise KnowledgeMediaNoRecognizableAudioError()
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.rag.temp_file_pipeline.TempFilePipeline",
+        _Pipeline,
+    )
+    # The suite stubs knowledge_imp; give it back the one call this path makes.
+    monkeypatch.setattr(
+        chat_service.knowledge_imp.KnowledgeUtils,
+        "chunk2promt",
+        classmethod(lambda _cls, chunk, metadata: f"[file name]:{metadata['source']}\n{chunk}"),
+        raising=False,
+    )
+
+    content = await chat_service.get_file_content(
+        filepath_local="/tmp/clip.avi",
+        file_name="clip.avi",
+        invoke_user_id=1,
+    )
+
+    assert chat_service.NO_SPEECH_PLACEHOLDER in content
+    # Still wrapped as an attachment, so the model sees which file was empty.
+    assert "clip.avi" in content
+
+
+async def test_transcription_service_failure_still_raises(monkeypatch):
+    """A broken ASR service is a real fault — narrating it would hide the outage."""
+
+    class _Pipeline:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def arun(self):
+            raise KnowledgeMediaTranscriptionError()
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.rag.temp_file_pipeline.TempFilePipeline",
+        _Pipeline,
+    )
+
+    with pytest.raises(KnowledgeMediaTranscriptionError):
+        await chat_service.get_file_content(
+            filepath_local="/tmp/clip.avi",
+            file_name="clip.avi",
+            invoke_user_id=1,
+        )

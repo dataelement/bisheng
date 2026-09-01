@@ -133,6 +133,55 @@ def test_quota_label():
     assert label_error(exc) is ErrorType.QUOTA_EXHAUSTED
 
 
+def _relay_pre_consume_403():
+    """The verbatim 403 a one-api/new-api style relay returns when its PRE-DEDUCTED
+    cost estimate exceeds the remaining balance (114, 2026-08-14, kimi-k3)."""
+    return make_exc(
+        openai.PermissionDeniedError,
+        message=(
+            "Error code: 403 - {'error': {'message': 'token quota is not enough, "
+            "token remain quota: $0.073168, need quota: $0.173140 "
+            "(request id: 20260814123904962529180kpTepsN4)', 'type': 'api_error', "
+            "'param': '', 'code': 'pre_consume_token_quota_failed'}, 'id': 123}"
+        ),
+        code="pre_consume_token_quota_failed",
+        status_code=403,
+    )
+
+
+def test_relay_pre_consume_403_is_quota_not_auth():
+    """Regression: this used to fall through to the auth branch, so the user was
+    told "凭证无效或没有权限 / 检查模型配置" when the only remedy was topping up.
+
+    It is money wording but arrives as 403 (not the 429 this bucket was written
+    around) and matches none of the arrears/balance strings, which is exactly how
+    it slipped past.
+    """
+    assert label_error(_relay_pre_consume_403()) is ErrorType.QUOTA_EXHAUSTED
+
+
+def test_relay_pre_consume_403_still_fails_fast():
+    """Behaviour must not change: retrying a balance shortfall is pointless."""
+    assert classify_behavior(_relay_pre_consume_403()) is Behavior.FAIL_FAST
+
+
+def test_relay_quota_signal_survives_in_body_only():
+    """Some relays put the code only in the body — _exc_text folds body values in."""
+    exc = make_exc(
+        openai.PermissionDeniedError,
+        message="request failed",
+        body={"error": {"code": "pre_consume_token_quota_failed"}},
+        status_code=403,
+    )
+    assert label_error(exc) is ErrorType.QUOTA_EXHAUSTED
+
+
+def test_plain_403_is_still_auth_error():
+    """The narrow signals must not swallow genuine credential/permission failures."""
+    exc = make_exc(openai.PermissionDeniedError, message="invalid api key", status_code=403)
+    assert label_error(exc) is ErrorType.AUTH_ERROR
+
+
 def test_network_and_service_labels():
     assert label_error(make_exc(openai.APITimeoutError, message="t")) is ErrorType.NETWORK_TIMEOUT
     assert label_error(make_exc(openai.InternalServerError, status_code=500)) is ErrorType.SERVICE_UNAVAILABLE

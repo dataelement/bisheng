@@ -312,13 +312,17 @@ class TestKI01SqlTemplateSchema:
     see F016 ac-verification.md).
     """
 
-    def test_knowledge_space_no_phantom_status_filter(self):
+    def test_knowledge_space_is_not_a_raw_template(self):
+        """knowledge_space must stay off the raw-SQL path.
+
+        It needs ``type = 3`` (the old template counted document/QA knowledge
+        bases as spaces) plus a department-space exclusion, and ``type`` is a
+        reserved word DM8 cannot quote inside ``text()``. Counting moved to
+        ``_count_knowledge_space``; see test_knowledge_space_count_scope.py.
+        """
         from bisheng.role.domain.services.quota_service import _RESOURCE_COUNT_TEMPLATES
 
-        tmpl = _RESOURCE_COUNT_TEMPLATES["knowledge_space"]
-        assert "status" not in tmpl.lower(), (
-            f"knowledge table has no status column; template must not filter by it: {tmpl!r}"
-        )
+        assert "knowledge_space" not in _RESOURCE_COUNT_TEMPLATES
 
     def test_channel_no_phantom_status_filter(self):
         from bisheng.role.domain.services.quota_service import _RESOURCE_COUNT_TEMPLATES

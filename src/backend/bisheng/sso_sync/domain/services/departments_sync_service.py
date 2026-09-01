@@ -25,9 +25,8 @@ from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.department.domain.services.department_archive_cleanup_service import (
     DepartmentArchiveCleanupService,
 )
-from bisheng.department.domain.services.department_change_handler import (
-    DepartmentChangeHandler,
-    TupleOperation,
+from bisheng.department.domain.services.department_service import (
+    DepartmentTopologyProjectionService,
 )
 from bisheng.org_sync.domain.services.ts_guard import (
     GuardDecision,
@@ -81,11 +80,9 @@ class DepartmentsSyncService:
                     ROOT_TENANT_ID,
                 )
 
-                # OpenFGA ``department#parent`` edge deltas accumulated across
-                # the whole batch and flushed once at the end (1-2 round-trips
-                # instead of one per item). SSO historically never synced the
-                # parent edge; this keeps FGA mirroring the DB tree.
-                fga_ops: list[TupleOperation] = []
+                # Kept as an argument for compatibility with isolated helper
+                # tests. F048 projects every verified item through its ledger.
+                fga_ops: list = []
 
                 # --- upsert round ---
                 for item in payload.upsert:
@@ -128,10 +125,6 @@ class DepartmentsSyncService:
                     fga_ops,
                 )
 
-                # Flush all accumulated parent-edge deltas once. crash_safe so
-                # a crash between the DB commits above and this write leaves
-                # recoverable FailedTuple records (FGA drift self-heals).
-                await DepartmentChangeHandler.execute_async(fga_ops)
             finally:
                 current_tenant_id.reset(token)
 
@@ -168,7 +161,7 @@ class DepartmentsSyncService:
         result: BatchResult,
         request_ip: str,
         row_source: str,
-        fga_ops: list[TupleOperation] | None = None,
+        fga_ops: list | None = None,
     ) -> None:
         """PRD §5: third-party dept IDs not in this import → archive (like remove)."""
         if not payload.full_snapshot:
@@ -244,7 +237,7 @@ class DepartmentsSyncService:
         parent_cache: dict[str, Department] | None = None,
         row_source: str = DEFAULT_SSO_SYNC_SOURCE,
         default_root: Department | None = None,
-        fga_ops: list[TupleOperation] | None = None,
+        fga_ops: list | None = None,
     ) -> None:
         try:
             existing = await DepartmentDao.aget_by_source_external_id(
@@ -266,7 +259,7 @@ class DepartmentsSyncService:
                     getattr(existing, "last_sync_ts", 0),
                 )
                 return
-            dept = await DeptUpsertService.upsert_from_sync_payload(
+            await DeptUpsertService.upsert_from_sync_payload(
                 existing=existing,
                 item=item,
                 source=row_source,
@@ -275,17 +268,6 @@ class DepartmentsSyncService:
                 default_root=default_root,
             )
             result.applied_upsert += 1
-            # Mirror the DB parent change onto the FGA tree. old=existing's
-            # parent (None for a brand-new dept), new=the parent just written.
-            if fga_ops is not None and dept is not None:
-                old_parent = existing.parent_id if existing is not None else None
-                fga_ops.extend(
-                    DepartmentChangeHandler.on_reparented(
-                        int(dept.id),
-                        old_parent,
-                        dept.parent_id,
-                    )
-                )
         except Exception as exc:
             # AC-11: one malformed external_id, DB constraint violation or
             # transient failure must not abort the whole batch; record and
@@ -311,7 +293,7 @@ class DepartmentsSyncService:
         result: BatchResult,
         request_ip: str,
         row_source: str = DEFAULT_SSO_SYNC_SOURCE,
-        fga_ops: list[TupleOperation] | None = None,
+        fga_ops: list | None = None,
     ) -> None:
         try:
             dept = await DepartmentDao.aget_by_source_external_id(
@@ -343,11 +325,12 @@ class DepartmentsSyncService:
                 return
 
             mounted_before = dept.mounted_tenant_id
-            await DepartmentDao.aarchive_by_external_id(
-                source=row_source,
-                external_id=external_id,
+            archived = await DepartmentTopologyProjectionService.aarchive_synced_department(
+                department_id=int(dept.id),
                 last_sync_ts=incoming_ts,
             )
+            if archived is None:
+                return
             await DepartmentArchiveCleanupService.arun_for_archived_department(
                 int(dept.id),
                 reason="f014_department_remove",
@@ -361,15 +344,6 @@ class DepartmentsSyncService:
             if mounted_before:
                 result.orphan_triggered.append(mounted_before)
             result.applied_remove += 1
-            # Break the FGA parent edge for the archived dept (real → None).
-            if fga_ops is not None:
-                fga_ops.extend(
-                    DepartmentChangeHandler.on_reparented(
-                        int(dept.id),
-                        dept.parent_id,
-                        None,
-                    )
-                )
             await cls._cascade_archive_descendants_after_sso_remove(
                 dept,
                 incoming_ts,
@@ -396,7 +370,7 @@ class DepartmentsSyncService:
         archived_parent_snapshot: Department,
         incoming_ts: int,
         result: BatchResult,
-        fga_ops: list[TupleOperation] | None = None,
+        fga_ops: list | None = None,
     ) -> None:
         """PRD §5: archive active sub-departments (e.g. source=local) under SSO path."""
         prefix = (archived_parent_snapshot.path or "").strip()
@@ -428,9 +402,9 @@ class DepartmentsSyncService:
                 continue
             try:
                 mounted_before = row.mounted_tenant_id
-                snap = await DepartmentDao.aarchive_by_id_sso_cascade(
-                    cid,
-                    incoming_ts,
+                snap = await DepartmentTopologyProjectionService.aarchive_synced_department(
+                    department_id=cid,
+                    last_sync_ts=incoming_ts,
                 )
                 if snap is None:
                     continue
@@ -445,15 +419,6 @@ class DepartmentsSyncService:
                 if mounted_before:
                     result.orphan_triggered.append(mounted_before)
                 result.applied_remove += 1
-                # Break the archived descendant's FGA parent edge too.
-                if fga_ops is not None:
-                    fga_ops.extend(
-                        DepartmentChangeHandler.on_reparented(
-                            cid,
-                            row.parent_id,
-                            None,
-                        )
-                    )
             except Exception as exc:
                 logger.warning(
                     "F014 cascade archive failed dept_id=%s: %s",

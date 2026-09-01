@@ -1,6 +1,6 @@
 # build router
 import logging
-from typing import Annotated, List, Optional
+from typing import Annotated
 
 import anyio
 from fastapi import APIRouter, Body, Depends, Query, Request
@@ -11,12 +11,10 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.user import UserGroupEmptyError
 from bisheng.database.models.group import Group, GroupCreate, GroupDao
-from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
-from bisheng.database.models.user_group import UserGroupDao
 from bisheng.role.domain.services.role_service import RoleService
 
-router = APIRouter(prefix='/group', tags=['User'], dependencies=[Depends(UserPayload.get_login_user)])
+router = APIRouter(prefix="/group", tags=["User"], dependencies=[Depends(UserPayload.get_login_user)])
 logger = logging.getLogger(__name__)
 
 
@@ -25,36 +23,30 @@ async def _can_use_v25_role_catalog(user: UserPayload) -> bool:
         return True
 
     from bisheng.database.models.department import DepartmentDao
-    from bisheng.permission.domain.services.permission_service import PermissionService
+    from bisheng.permission.application import is_tenant_admin
 
     try:
         admin_depts = await DepartmentDao.aget_user_admin_departments(user.user_id)
     except Exception:
         logger.exception(
-            'get_group_roles: department admin check failed user=%s',
-            getattr(user, 'user_id', None),
+            "get_group_roles: department admin check failed user=%s",
+            getattr(user, "user_id", None),
         )
         admin_depts = []
     if admin_depts:
         return True
 
     try:
-        return await PermissionService.check(
-            user_id=user.user_id,
-            relation='admin',
-            object_type='tenant',
-            object_id=str(user.tenant_id),
-            login_user=user,
-        )
+        return await is_tenant_admin(user.user_id, int(user.tenant_id))
     except Exception:
         logger.exception(
-            'get_group_roles: tenant admin check failed user=%s',
-            getattr(user, 'user_id', None),
+            "get_group_roles: tenant admin check failed user=%s",
+            getattr(user, "user_id", None),
         )
         return False
 
 
-@router.get('/list')
+@router.get("/list")
 async def get_all_group(login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     Get all groups（PRD：超管/租户管理员全量；其他用户见公开组 + 自建/加入的私密组）
@@ -64,14 +56,15 @@ async def get_all_group(login_user: UserPayload = Depends(UserPayload.get_login_
     if login_user.is_admin() or await _is_tenant_admin(login_user):
         groups_res = RoleGroupService().get_group_list([])
     else:
-        groups, _ = await GroupDao.aget_visible_groups(login_user.user_id, 1, 5000, '')
+        groups, _ = await GroupDao.aget_visible_groups(login_user.user_id, 1, 5000, "")
         groups_res = RoleGroupService().enrich_group_reads(groups)
-    return resp_200({'records': groups_res, 'total': len(groups_res)})
+    return resp_200({"records": groups_res, "total": len(groups_res)})
 
 
-@router.post('/create')
-async def create_group(request: Request, group: GroupCreate,
-                       login_user: UserPayload = Depends(UserPayload.get_admin_user)):
+@router.post("/create")
+async def create_group(
+    request: Request, group: GroupCreate, login_user: UserPayload = Depends(UserPayload.get_admin_user)
+):
     """
     Add Usergroup
     """
@@ -84,10 +77,8 @@ async def create_group(request: Request, group: GroupCreate,
     return resp_200(data)
 
 
-@router.put('/create')
-async def update_group(request: Request,
-                       group: Group,
-                       login_user: UserPayload = Depends(UserPayload.get_admin_user)):
+@router.put("/create")
+async def update_group(request: Request, group: Group, login_user: UserPayload = Depends(UserPayload.get_admin_user)):
     """
     Can edit existing usergroups
     """
@@ -100,10 +91,8 @@ async def update_group(request: Request,
     return resp_200(data)
 
 
-@router.delete('/create', status_code=200)
-async def delete_group(request: Request,
-                       group_id: int,
-                       login_user: UserPayload = Depends(UserPayload.get_admin_user)):
+@router.delete("/create", status_code=200)
+async def delete_group(request: Request, group_id: int, login_user: UserPayload = Depends(UserPayload.get_admin_user)):
     """
     Can delete existing usergroups
     """
@@ -115,11 +104,13 @@ async def delete_group(request: Request,
     )
 
 
-@router.post('/set_user_group')
-async def set_user_group(request: Request,
-                         user_id: Annotated[int, Body(embed=True)],
-                         group_id: Annotated[List[int], Body(embed=True)],
-                         login_user: UserPayload = Depends(UserPayload.get_login_user)):
+@router.post("/set_user_group")
+async def set_user_group(
+    request: Request,
+    user_id: Annotated[int, Body(embed=True)],
+    group_id: Annotated[list[int], Body(embed=True)],
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
     """
     Set up user groups, Batch Replacement, Replace different user groups according to different operation permissions
     User group management replaces only the user groups for which he has permissions. Super Admin Full Replacement
@@ -136,7 +127,7 @@ async def set_user_group(request: Request,
     return resp_200(data)
 
 
-@router.get('/get_user_group')
+@router.get("/get_user_group")
 async def get_user_group(user_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     Get the group to which the user belongs
@@ -144,23 +135,26 @@ async def get_user_group(user_id: int, login_user: UserPayload = Depends(UserPay
     return resp_200(RoleGroupService().get_user_groups_list(user_id))
 
 
-@router.get('/get_group_user')
-async def get_group_user(group_id: int,
-                         page_size: int = None,
-                         page_num: int = None,
-                         login_user: UserPayload = Depends(UserPayload.get_login_user)):
+@router.get("/get_group_user")
+async def get_group_user(
+    group_id: int,
+    page_size: int = None,
+    page_num: int = None,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
     """
     Get grouped users
     """
     return resp_200(RoleGroupService().get_group_user_list(group_id, page_size, page_num))
 
 
-@router.post('/set_group_admin')
+@router.post("/set_group_admin")
 async def set_group_admin(
-        request: Request,
-        user_ids: Annotated[List[int], Body(embed=True)],
-        group_id: Annotated[int, Body(embed=True)],
-        login_user: UserPayload = Depends(UserPayload.get_admin_user)):
+    request: Request,
+    user_ids: Annotated[list[int], Body(embed=True)],
+    group_id: Annotated[int, Body(embed=True)],
+    login_user: UserPayload = Depends(UserPayload.get_admin_user),
+):
     """
     Get groupingadmin, batch setting interface, overriding the historicaladmin
     """
@@ -173,12 +167,14 @@ async def set_group_admin(
     )
     return resp_200(data)
 
-@router.post('/set_group_members')
+
+@router.post("/set_group_members")
 async def set_group_members(
-        request: Request,
-        user_ids: Annotated[List[int], Body(embed=True)],
-        group_id: Annotated[int, Body(embed=True)],
-        login_user: UserPayload = Depends(UserPayload.get_admin_user)):
+    request: Request,
+    user_ids: Annotated[list[int], Body(embed=True)],
+    group_id: Annotated[int, Body(embed=True)],
+    login_user: UserPayload = Depends(UserPayload.get_admin_user),
+):
     """
     Batch set group members (non-admin), overriding the historical members
     """
@@ -192,48 +188,25 @@ async def set_group_members(
     return resp_200(data)
 
 
-@router.post('/set_update_user', status_code=200)
-async def set_update_user(group_id: Annotated[int, Body(embed=True)],
-                          login_user: UserPayload = Depends(UserPayload.get_login_user)):
+@router.post("/set_update_user", status_code=200)
+async def set_update_user(
+    group_id: Annotated[int, Body(embed=True)], login_user: UserPayload = Depends(UserPayload.get_login_user)
+):
     """
     Update user group last modified by
     """
     return resp_200(RoleGroupService().set_group_update_user(login_user, group_id))
 
 
-@router.get('/get_group_resources')
-async def get_group_resources(*,
-                              group_id: int,
-                              resource_type: int,
-                              name: Optional[str] = None,
-                              page_size: Optional[int] = 10,
-                              page_num: Optional[int] = 1,
-                              user: UserPayload = Depends(UserPayload.get_login_user)):
-    """
-    Get a list of resources under a user group
-    """
-    # Determine if you are an administrator of a user group
-    if not user.check_group_admin(group_id):
-        return UnAuthorizedError.return_resp()
-    res, total = await RoleGroupService().get_group_resources(
-        group_id,
-        resource_type=ResourceTypeEnum(resource_type),
-        name=name,
-        page_size=page_size,
-        page_num=page_num)
-    return resp_200(data={
-        "data": res,
-        "total": total
-    })
-
-
 @router.get("/roles")
-async def get_group_roles(*,
-                          group_id: List[int] = Query(..., description="User GroupsIDVertical"),
-                          keyword: str = Query(None, description="Search keyword ..."),
-                          page: int = 0,
-                          limit: int = 0,
-                          user: UserPayload = Depends(UserPayload.get_login_user)):
+async def get_group_roles(
+    *,
+    group_id: list[int] = Query(..., description="User GroupsIDVertical"),
+    keyword: str = Query(None, description="Search keyword ..."),
+    page: int = 0,
+    limit: int = 0,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+):
     """
     Get a list of roles within a user group
     """
@@ -258,20 +231,16 @@ async def get_group_roles(*,
     role_list = RoleDao.get_role_by_groups(group_id, keyword, page, limit)
     total = RoleDao.count_role_by_groups(group_id, keyword)
 
-    return resp_200(data={
-        "data": role_list,
-        "total": total
-    })
+    return resp_200(data={"data": role_list, "total": total})
 
 
 @router.get("/manage/resources")
-async def get_manage_resources(login_user: UserPayload = Depends(UserPayload.get_login_user),
-                               keyword: str = Query(None, description="Search keyword ..."),
-                               page: int = 1,
-                               page_size: int = 10):
-    """ Get a list of apps under a managed user group """
+async def get_manage_resources(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    keyword: str = Query(None, description="Search keyword ..."),
+    page: int = 1,
+    page_size: int = 10,
+):
+    """Get a list of apps under a managed user group"""
     res, total = await RoleGroupService().get_manage_resources(login_user, keyword, page, page_size)
-    return resp_200(data={
-        "data": res,
-        "total": total
-    })
+    return resp_200(data={"data": res, "total": total})

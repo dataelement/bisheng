@@ -18,12 +18,14 @@ from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
-from bisheng.permission.domain.services.owner_service import _run_async_safe
-from bisheng.permission.domain.services.tool_permission_service import ToolPermissionService
+from bisheng.permission.application.business_authorization import (
+    check_business_action,
+)
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRagTool
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType
 from bisheng.tool.domain.services.openapi import OpenApiSchema
+from bisheng.utils.async_utils import run_async_safe
 from bisheng_langchain.gpts.load_tools import load_tools
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 
@@ -91,27 +93,40 @@ class ToolExecutor(BaseTool):
     tool_instance: BaseTool = Field(..., description="Langchain Tool Instance")
 
     @staticmethod
-    def _build_permission_user(user_id: int) -> UserPayload:
-        return UserPayload(user_id=user_id, user_name="", user_role=[])
+    async def _build_permission_user(
+        user_id: int,
+        tenant_id: int,
+    ) -> UserPayload:
+        from bisheng.utils.http_middleware import _check_is_global_super
+
+        return UserPayload(
+            user_id=user_id,
+            user_name="",
+            user_role=[],
+            tenant_id=tenant_id,
+            is_global_super=await _check_is_global_super(user_id),
+        )
 
     @classmethod
     async def _ensure_use_permission_async(cls, tool_type: GptsToolsType, user_id: int) -> None:
-        if tool_type.is_preset == ToolPresetType.PRESET.value:
-            return
-        login_user = cls._build_permission_user(user_id)
-        allowed = await ToolPermissionService.has_any_permission_async(
+        if not tool_type.id or not tool_type.tenant_id:
+            raise PermissionError("Permission denied: use")
+        login_user = await cls._build_permission_user(
+            user_id,
+            int(tool_type.tenant_id),
+        )
+        allowed = await check_business_action(
             login_user,
-            str(tool_type.id),
-            ["use_tool"],
+            resource_type="tool",
+            resource_id=tool_type.id,
+            action="use",
         )
         if not allowed:
-            raise PermissionError("Permission denied: use_tool")
+            raise PermissionError("Permission denied: use")
 
     @classmethod
     def _ensure_use_permission_sync(cls, tool_type: GptsToolsType, user_id: int) -> None:
-        if tool_type.is_preset == ToolPresetType.PRESET.value:
-            return
-        _run_async_safe(cls._ensure_use_permission_async(tool_type, user_id))
+        run_async_safe(cls._ensure_use_permission_async(tool_type, user_id))
 
     @classmethod
     def init_by_tool_instance(
@@ -262,8 +277,8 @@ class ToolExecutor(BaseTool):
     @classmethod
     async def init_by_tool_id(
         cls,
-        tool_id: int = None,
-        tool: GptsTools = None,
+        tool_id: int | None = None,
+        tool: GptsTools | None = None,
         *,
         app_id: str,
         app_name: str,

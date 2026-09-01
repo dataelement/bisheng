@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next"
 import { LoadingIcon } from "@/components/bs-icons/loading"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { QuestionTooltip } from "@/components/bs-ui/tooltip"
-import { changeLLmServerStatus, getAssistantModelList, getModelListApi } from "@/controllers/API/finetune"
+import { changeLLmServerStatus, getAssistantModelList, getModelListApi, verifyLLmModelStatus } from "@/controllers/API/finetune"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { CircleMinus, CirclePlus } from "lucide-react"
 import { useQuery } from "react-query"
@@ -22,11 +22,26 @@ import { canManageModelSettings } from "./permissions"
 import { ScopeBar } from "./ScopeBar"
 import SystemModelConfig from "./SystemModelConfig"
 
-function CustomTableRow({ data, index, user, onModel, onCheck }) {
+function CustomTableRow({ data, index, user, onModel, onCheck, onVerified }) {
     const { t } = useTranslation()
+    const { message } = useToast()
     const { appConfig } = useContext(locationContext)
     const [expand, setExpand] = useState(false)
+    const [verifyingId, setVerifyingId] = useState(null)
     const canManage = canManageModelSettings(user, appConfig.multiTenantEnabled)
+
+    // A probe is one real call to the model; keep it to the row the user asked
+    // for, and let other rows stay clickable while it runs.
+    const handleVerify = async (modelId) => {
+        if (verifyingId === modelId) return
+        setVerifyingId(modelId)
+        const res = await captureAndAlertRequestErrorHoc(verifyLLmModelStatus(modelId))
+        setVerifyingId(null)
+        if (res?.id) {
+            onVerified(data.id, res)
+            message({ description: t('model.statusUpdated'), variant: 'success' })
+        }
+    }
 
     // Root-shared rows are read-only for the current caller; the backend
     // sets `is_root_shared_readonly` on the list API so Child Admins do
@@ -68,12 +83,13 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
                             <TableHead className="w-[200px]">{t('model.modelName')}</TableHead>
                             <TableHead className="w-[200px] min-w-[100px]">{t('model.modelType')}</TableHead>
                             <TableHead className="w-[200px] min-w-[100px]">{t('model.status')}</TableHead>
+                            <TableHead className="w-[180px] min-w-[140px]">{t('model.statusUpdateTime')}</TableHead>
                             <TableHead className="w-[100px] min-w-[100px]">{t('model.onlineOfflineOperation')}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {data.models.map(m => (
-                            <TableRow key={m.id}>
+                            <TableRow key={m.id} className="group">
                                 <TableCell>{m.model_name}</TableCell>
                                 <TableCell>{m.model_type}</TableCell>
                                 <TableCell>
@@ -81,6 +97,21 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
                                         {[t('model.available'), t('model.abnormal'), t('model.unknown')][m.status]}
                                     </span>
                                     {m.status === 1 && <QuestionTooltip className=" align-middle" content={m.remark} />}
+                                    {/* Verifying is a real call to the model, so it stays an
+                                        explicit per-row action rather than anything automatic. */}
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={verifyingId === m.id}
+                                        onClick={() => handleVerify(m.id)}
+                                        className={`ml-2 h-6 rounded-md border-primary/30 bg-primary/5 px-2 align-middle text-xs font-normal text-primary shadow-none transition-opacity hover:bg-primary/10 hover:text-primary ${verifyingId === m.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                                    >
+                                        {verifyingId === m.id && <LoadingIcon className="mr-1 size-3" />}
+                                        {t('model.updateStatus')}
+                                    </Button>
+                                </TableCell>
+                                <TableCell className="text-gray-500">
+                                    {m.status_update_time?.replace('T', ' ') || '—'}
                                 </TableCell>
                                 <TableCell>
                                     <Switch
@@ -165,6 +196,20 @@ export default function Management() {
         setData([...data])
     }
 
+    // Patch the verified row from the response rather than refetching the whole
+    // list — a refetch would collapse nothing but does throw away the expanded
+    // state's scroll position for a single-row change.
+    const handleVerified = (serverId, model) => {
+        setData(prev => prev.map(server => server.id === serverId
+            ? {
+                ...server,
+                models: server.models.map(el => el.id === model.id
+                    ? { ...el, status: model.status, remark: model.remark, status_update_time: model.status_update_time }
+                    : el)
+            }
+            : server))
+    }
+
     if (modelId) return <ModelConfig
         id={modelId}
         onGetName={handleGetRepeatName}
@@ -220,6 +265,7 @@ export default function Management() {
                             data={d}
                             index={index}
                             onCheck={handleCheck}
+                            onVerified={handleVerified}
                             onModel={setModelId}
                         />)
                     }

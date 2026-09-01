@@ -1,17 +1,16 @@
 // @ts-strict-ignore
-import { CheckIcon, File } from "lucide-react";
+import { CheckIcon } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { ChatMessageType } from "~/@types/chat";
 import { Button, Textarea } from "~/components";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 import useLocalize from "~/hooks/useLocalize";
-import { downloadFile } from "~/utils";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
-import { changeMinioUrl } from "./ResouceModal";
+import { AppChatFileList } from "./AppChatFileList";
 
 export default function MessageBsChoose({ type = 'choose', disabled, logo, data, flow }
-    : { type?: string, disabled?: boolean, logo: React.ReactNode, data: ChatMessageType }) {
+    : { type?: string, disabled?: Boolean, logo: React.ReactNode, data: ChatMessageType }) {
     const t = useLocalize()
     const [selected, setSelected] = useState(data.message.hisValue || '')
     const handleSelect = (obj) => {
@@ -31,11 +30,6 @@ export default function MessageBsChoose({ type = 'choose', disabled, logo, data,
         })
 
         setSelected(obj.id)
-    }
-
-    // download file
-    const handleDownloadFile = (file) => {
-        downloadFile(changeMinioUrl(file.path), file.name)
     }
 
     // input
@@ -69,19 +63,7 @@ export default function MessageBsChoose({ type = 'choose', disabled, logo, data,
                 {/* message */}
                 <div><Markdown content={data.message.msg} isLatestMessage={false} webContent={undefined} /></div>
                 {/* files */}
-                <div>
-                    {files.map((file) => <div
-                        className="flex gap-2 w-52 border border-gray-200 shadow-sm bg-gray-50 dark:bg-gray-600 px-4 py-2 rounded-sm cursor-pointer"
-                        onClick={() => handleDownloadFile(file)}
-                    >
-                        <div className="flex items-center"><File size={14} /></div>
-                        <div>
-                            <h1 className="text-sm font-bold">{file.name}</h1>
-                            <p className="text-xs text-gray-400 mt-1">{t('com_bschoose_click_to_download')}</p>
-                        </div>
-                    </div>)
-                    }
-                </div>
+                <AppChatFileList files={files} className="mt-2" />
                 {/* select or input */}
                 <div className="mt-2">
                     {type === 'input' ?

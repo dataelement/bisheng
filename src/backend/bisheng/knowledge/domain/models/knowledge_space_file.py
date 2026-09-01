@@ -14,7 +14,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 )
 
 # F027 AD-14: file extension priority for "file_type" sort order.
-# Same 15-WHEN ranking used by `SpaceFileDao.order_field_text`'s SQL CASE.
+# Same 16-WHEN ranking used by `SpaceFileDao.order_field_text`'s SQL CASE.
 # Files not matching any of these (folders, unknown extensions) get rank 999.
 _EXT_PRIORITIES: list[tuple] = [
     ("pdf", 1),
@@ -251,7 +251,7 @@ class SpaceFileDao(KnowledgeFileDao):
             statement = statement.where(build_keyset_where(sort_cols, tuple(cursor), descending=descending))
             if page_size:
                 statement = statement.limit(page_size)
-            statement = statement.order_by(text(cls.order_field_text(order_field, order_sort)))
+            statement = statement.order_by(text(f"{cls.order_field_text(order_field, order_sort)}, id desc"))
         else:
             if page and page_size:
                 statement = statement.offset((page - 1) * page_size).limit(page_size)

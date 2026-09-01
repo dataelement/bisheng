@@ -63,24 +63,27 @@ export const deleteAssistantApi = async (id) => {
 };
 
 
-// 获取会话选择列表
+// 获取会话选择列表（F027 游标瀑布流）
+// 传上一页返回的 nextCursor 续拉，首屏传 null。返回 { list, hasMore, nextCursor }。
 export const getChatOnlineApi = async (
-    page,
+    cursor: string | null,
     keyword,
     tag_id,
     flow_type?: number,
     options?: { sortBy?: 'update_time'; searchDescription?: boolean }
 ) => {
-    return await axios.get(`/api/v1/chat/online`, {
+    const res = await axios.get(`/api/v1/chat/online`, {
         params: {
-            page, keyword,
+            cursor: cursor || undefined,
+            keyword,
             limit: 40,
             tag_id: tag_id === -1 ? null : tag_id,
             flow_type,
             sort_by: options?.sortBy,
             search_description: options?.searchDescription ? true : undefined,
         }
-    })
+    }) as { data?: unknown[]; has_more?: boolean; next_cursor?: string | null }
+    return { list: res?.data || [], hasMore: !!res?.has_more, nextCursor: res?.next_cursor || null }
 }
 // export const getChatOnlineApi = async (tag_id:-1) => {
 //     const tagStr = tag_id === -1 ? '' : `tag_id=${tag_id}`

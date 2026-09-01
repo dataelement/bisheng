@@ -137,9 +137,6 @@ async def test_approval_space_subscription_direct_pass_activates_member():
     membership = SimpleNamespace(
         id=9, business_id="12", user_id=42, user_role="member", status=MembershipStatusEnum.REJECTED
     )
-    active_membership = SimpleNamespace(
-        id=9, business_id="12", user_id=42, user_role="member", status=MembershipStatusEnum.ACTIVE
-    )
 
     with (
         patch(
@@ -165,7 +162,7 @@ async def test_approval_space_subscription_direct_pass_activates_member():
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_upsert_space_member_status",
             new_callable=AsyncMock,
-            return_value=active_membership,
+            return_value=membership,
         ) as mock_upsert,
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.sync_direct_space_user_permissions",
@@ -175,7 +172,6 @@ async def test_approval_space_subscription_direct_pass_activates_member():
         result = await service.subscribe_space(12)
 
     assert result == {"status": "subscribed", "space_id": 12}
-    assert active_membership.status == MembershipStatusEnum.ACTIVE
     mock_upsert.assert_awaited_once_with(
         space_id=12,
         user_id=42,

@@ -323,7 +323,8 @@ class AssistantInfo(AssistantBase):
     flow_list: list[FlowRead] = Field(default_factory=list, description="Skills for assistantsIDVertical")
     knowledge_list: list[KnowledgeRead] = Field(default_factory=list, description="The knowledge base uponIDVertical")
     can_share: bool = Field(
-        default=False, description="Current user may copy app share link (relation-model share_app)"
+        default=False,
+        description="Current user may create an app share link",
     )
 
 

@@ -52,13 +52,30 @@ def patched_endpoint(monkeypatch):
         AsyncMock(return_value=_session()),
     )
     monkeypatch.setattr(endpoint.MessageSessionDao, "touch_session", AsyncMock())
+    # Enqueueing now lives in linsight_execute_utils (shared with the unified
+    # submit path), so the Redis stub belongs on THAT module — patching only the
+    # endpoint's name let the real client through and the call reached the DB.
     monkeypatch.setattr(endpoint, "get_redis_client", AsyncMock(return_value=SimpleNamespace()))
+    monkeypatch.setattr(endpoint.linsight_execute_utils, "get_redis_client", AsyncMock(return_value=SimpleNamespace()))
 
-    # LinsightQueue is imported function-locally from bisheng.linsight.worker;
-    # inject a stub module so the heavy worker import chain is never loaded.
+    # LinsightQueue and encode_queue_item are imported function-locally from
+    # bisheng.linsight.worker; inject a stub module so the heavy worker import
+    # chain is never loaded.
+    #
+    # ⚠️ The stub must export everything the endpoint imports. ``encode_queue_item``
+    # was added to that import line (it stamps tenant_id onto the queue item) but
+    # not here, and since the import sits OUTSIDE the endpoint's try/except the
+    # resulting ImportError propagated and broke both enqueue tests. Asserting on
+    # the encoded payload below keeps the stub honest if the signature moves again.
     fake_worker = ModuleType("bisheng.linsight.worker")
-    fake_worker.LinsightQueue = lambda *a, **k: SimpleNamespace(put=AsyncMock())
+    queue_stub = SimpleNamespace(put=AsyncMock())
+    fake_worker.LinsightQueue = lambda *a, **k: queue_stub
+    fake_worker.encode_queue_item = lambda session_version_id, **kwargs: {
+        "session_version_id": session_version_id,
+        **kwargs,
+    }
     monkeypatch.setitem(sys.modules, "bisheng.linsight.worker", fake_worker)
+    captured["queue"] = queue_stub
 
     async def _fake_persist(session_model):
         captured["session"] = session_model
@@ -77,6 +94,12 @@ async def test_start_execute_persists_queued_task_turn(patched_endpoint):
     assert persisted is not None
     assert persisted.id == "SV-1"
 
+    # The queue item must carry tenant_id: the worker runs outside any request
+    # context, so this is the only way it can restore the tenant for the task.
+    queued = patched_endpoint["queue"].put.await_args.kwargs["data"]
+    assert queued["session_version_id"] == "SV-1"
+    assert queued["tenant_id"] == 1
+
 
 async def test_start_execute_persist_failure_does_not_break_enqueue(monkeypatch, patched_endpoint):
     """The persist is best-effort: a failure must not fail the start-execute call
@@ -92,14 +115,23 @@ async def test_start_execute_persist_failure_does_not_break_enqueue(monkeypatch,
     assert resp.data is True
 
 
-async def test_start_execute_rejects_in_progress(monkeypatch, patched_endpoint):
-    """An already-running session is rejected and never re-persisted/enqueued."""
+async def test_start_execute_on_in_progress_is_a_no_op(monkeypatch, patched_endpoint):
+    """An already-running session is left alone — never re-persisted or re-enqueued.
+
+    It now answers 200 rather than an error: submit enqueues server-side, so the
+    client's start-execute routinely arrives after the worker already picked the
+    session up, and reporting that as a failure made the UI mark a healthy task
+    as stopped. Idempotency itself is covered in
+    test_task_submit_server_side_enqueue.py.
+    """
     monkeypatch.setattr(
         endpoint.LinsightSessionVersionDao,
         "get_by_id",
         AsyncMock(return_value=_session(status=SessionVersionStatusEnum.IN_PROGRESS)),
     )
 
-    await endpoint.start_execute(linsight_session_version_id="SV-1", login_user=_login_user())
+    resp = await endpoint.start_execute(linsight_session_version_id="SV-1", login_user=_login_user())
 
+    assert resp.data is True
     assert "session" not in patched_endpoint  # persist never reached
+    patched_endpoint["queue"].put.assert_not_awaited()

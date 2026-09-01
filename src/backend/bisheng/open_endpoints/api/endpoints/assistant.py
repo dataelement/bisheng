@@ -1,31 +1,28 @@
 # Login-free assistant related interface
 import json
 import time
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketException
 from fastapi import status as http_status
 from fastapi.responses import JSONResponse, StreamingResponse
-from langchain_core.messages import AIMessage, HumanMessage, AIMessageChunk
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from loguru import logger
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.v1.chat import chat_manager
-from bisheng.api.v1.schemas import (OpenAIChatCompletionReq,
-                                    OpenAIChatCompletionResp, OpenAIChoice)
+from bisheng.api.v1.schemas import OpenAIChatCompletionReq, OpenAIChatCompletionResp, OpenAIChoice
 from bisheng.common.chat.types import WorkType
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
-from bisheng.common.schemas.api import resp_200, PageData
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
+from bisheng.common.schemas.api import PageData, resp_200
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData, ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.logger import trace_id_var
 from bisheng.llm.domain.utils import extract_reasoning_content
 from bisheng.open_endpoints.domain.utils import get_default_operator
-from bisheng.utils import generate_uuid
-from bisheng.utils import get_request_ip
+from bisheng.utils import generate_uuid, get_request_ip
 
 router = APIRouter(prefix='/assistant', tags=['OpenAPI', 'Assistant'])
 
@@ -35,7 +32,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
     """
     Compatible openaiInterface format, all errors must return non-http200Status code
     Chat with your assistant
-    
+
     Fulfillment needs:
     1. Determine if the model invoked by the assistant supports streaming calls
     2. If not, follow the original logic
@@ -126,7 +123,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
 
         async def _streaming_event_generator():
             """Real Streaming Event Generator"""
-            logger.debug(f'[APIStreamed] _streaming_event_generatorto process')
+            logger.debug('[APIStreamed] _streaming_event_generatorto process')
             try:
 
                 # Use True Streaming Calls
@@ -136,7 +133,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
                         chunk_counter += 1
 
                         if not message_chunk:
-                            logger.debug(f'Empty message_chunk received')
+                            logger.debug('Empty message_chunk received')
                             continue
                         # Get the latest news
                         latest_message = message_chunk[-1] if isinstance(message_chunk, list) else message_chunk
@@ -190,7 +187,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
                     "model": req_data.model,
                     "choices": [{
                         "index": 0,
-                        "delta": {"content": f"Error-free: {str(exc)}"},
+                        "delta": {"content": f"Error-free: {exc!s}"},
                         "finish_reason": "stop"
                     }]
                 }
@@ -272,13 +269,13 @@ async def get_assistant_info(request: Request, assistant_id: UUID):
 
 
 @router.get('/list', status_code=200)
-def get_assistant_list(request: Request,
+async def get_assistant_list(request: Request,
                        name: str = Query(default=None, description='assistant name, fuzzy matching, Fuzzy matches with description'),
                        tag_id: int = Query(default=None, description='labelID'),
-                       page: Optional[int] = Query(default=1, gt=0, description='Page'),
-                       limit: Optional[int] = Query(default=10, gt=0, description='Listings Per Page'),
-                       status: Optional[int] = Query(default=None, description='Is online status'),
-                       user_id: int = None):
+                       page: int | None = Query(default=1, gt=0, description='Page'),
+                       limit: int | None = Query(default=10, gt=0, description='Listings Per Page'),
+                       status: int | None = Query(default=None, description='Is online status'),
+                       user_id: int | None = None):
     """
     Exposed interfaces for obtaining skill information
     """
@@ -287,12 +284,19 @@ def get_assistant_list(request: Request,
     if not settings.get_from_db("default_operator").get("enable_guest_access"):
         raise HTTPException(status_code=403, detail="No permission to access")
     login_user = get_default_operator()
-    data, total = AssistantService.get_assistant(login_user, name, status, tag_id, page, limit)
+    data, total = await AssistantService.get_assistant(
+        login_user,
+        name,
+        status,
+        tag_id,
+        page,
+        limit,
+    )
     return resp_200(PageData(data=data, total=total))
 
 
 @router.websocket('/chat/{assistant_id}')
-async def chat(*, websocket: WebSocket, assistant_id: str, chat_id: Optional[str] = None):
+async def chat(*, websocket: WebSocket, assistant_id: str, chat_id: str | None = None):
     """
     Assistant'swsLogin-Free Interface
     """
@@ -303,10 +307,10 @@ async def chat(*, websocket: WebSocket, assistant_id: str, chat_id: Optional[str
         await chat_manager.dispatch_client(request, assistant_id, chat_id, login_user,
                                            WorkType.GPTS, websocket)
     except WebSocketException as exc:
-        logger.error(f'Websocket exception: {str(exc)}')
+        logger.error(f'Websocket exception: {exc!s}')
         await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(exc))
     except Exception as exc:
-        logger.exception(f'Error in chat websocket: {str(exc)}')
+        logger.exception(f'Error in chat websocket: {exc!s}')
         message = exc.detail if isinstance(exc, HTTPException) else str(exc)
         if 'Could not validate credentials' in str(exc):
             await websocket.close(code=http_status.WS_1008_POLICY_VIOLATION, reason='Unauthorized')

@@ -6,9 +6,9 @@ import {
   searchDepartmentsApi,
 } from "@/controllers/API/department"
 import {
-  getResourceGrantDepartmentChildrenApi,
-  getResourceGrantDepartmentPathTreeApi,
-  searchResourceGrantDepartmentsApi,
+  getGrantSubjectDepartmentChildrenApi,
+  getGrantSubjectDepartmentPathTreeApi,
+  searchGrantSubjectDepartmentsApi,
 } from "@/controllers/API/permission"
 import type { DepartmentTreeNode } from "@/types/api/department"
 import { useEffect, useRef } from "react"
@@ -54,27 +54,30 @@ export function SubjectSearchDepartment({
   const { t } = useTranslation("permission")
   const disabledIdSet = new Set(disabledIds)
 
-  const hasResource = !!(resourceType && resourceId)
-  // Data source: the authorization grant tree (resource scope) when granting a
-  // resource, otherwise the plain org tree (allowOrganizationTree). Inline
-  // fetchers are fine — the hook keeps them in a ref; cacheKey is the stable
-  // namespace.
+  // Scoped to the resource: the org-management tree answers "which departments
+  // do I administer", which a space manager may administer none of — it replied
+  // "no permission" and the picker stayed empty. These ask who may be granted
+  // THIS resource, and narrow to the bound department for a department space.
+  const scoped = Boolean(resourceType && resourceId)
   const tree = useLazyDepartmentTree(
-    hasResource
-      ? {
-          autoLoad: true,
-          cacheKey: `grant-dept:${resourceType}:${resourceId}`,
-          fetchChildren: (p) => getResourceGrantDepartmentChildrenApi(resourceType!, resourceId!, p),
-          fetchSearch: (kw) => searchResourceGrantDepartmentsApi(resourceType!, resourceId!, kw),
-          fetchPathTree: (id) => getResourceGrantDepartmentPathTreeApi(resourceType!, resourceId!, id),
-        }
-      : {
-          autoLoad: allowOrganizationTree,
-          cacheKey: "dept:false",
-          fetchChildren: (p) => getDepartmentChildrenApi(p, false),
-          fetchSearch: (kw) => searchDepartmentsApi(kw, false),
-          fetchPathTree: (id) => getDepartmentPathTreeApi(id, false),
-        }
+    {
+      autoLoad: scoped || allowOrganizationTree,
+      cacheKey: scoped
+        ? `permission-subject-departments:${resourceType}:${resourceId}`
+        : "permission-subject-departments",
+      fetchChildren: (p) =>
+        scoped
+          ? getGrantSubjectDepartmentChildrenApi(resourceType!, resourceId!, p)
+          : getDepartmentChildrenApi(p, false),
+      fetchSearch: (kw) =>
+        scoped
+          ? searchGrantSubjectDepartmentsApi(resourceType!, resourceId!, kw)
+          : searchDepartmentsApi(kw, false),
+      fetchPathTree: (id) =>
+        scoped
+          ? getGrantSubjectDepartmentPathTreeApi(resourceType!, resourceId!, id)
+          : getDepartmentPathTreeApi(id, false),
+    }
   )
 
   // Remember each selected dept's path at pick time so implicit selection can be

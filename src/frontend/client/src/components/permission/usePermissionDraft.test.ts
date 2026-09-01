@@ -1,243 +1,116 @@
-import { act, renderHook } from "@testing-library/react";
+/** @jest-environment node */
+
 import {
   createPermissionDraft,
   getPermissionDraftDiff,
   getPermissionDraftRowKey,
   permissionDraftReducer,
-  usePermissionDraft,
+  type PermissionDraftRow,
 } from "./usePermissionDraft";
-import type { PermissionDraftRow } from "./usePermissionDraft";
 
-const creator: PermissionDraftRow = {
-  subjectType: "user",
-  subjectId: 1,
-  subjectName: "Creator",
-  relation: "owner",
-  modelId: "owner",
-  immutableCreator: true,
+const localViewer: PermissionDraftRow = {
+  subjectType: "user", subjectId: 7, subjectName: "Ada", modelKey: "viewer",
+  assigneeId: "assignee-1", assigneeVersion: 3, sourceType: "DIRECT",
+  scope: "LOCAL", editable: true,
 };
 
-const viewer: PermissionDraftRow = {
-  subjectType: "user",
-  subjectId: 2,
-  subjectName: "Viewer",
-  relation: "viewer",
-  modelId: "viewer",
-};
-
-const pendingViewer: PermissionDraftRow = {
-  ...viewer,
-  subjectId: 7,
-  subjectName: "Pending viewer",
-  authorizationStatus: "pending",
-  approvalInstanceId: 1201,
-};
-
-describe("permissionDraftReducer", () => {
-  it("adds, changes and removes rows while tracking both sides of a change", () => {
-    const editor: PermissionDraftRow = {
-      subjectType: "user_group",
-      subjectId: 3,
-      subjectName: "Editors",
-      relation: "editor",
-      modelId: "custom-editor",
+describe("F048 permission draft", () => {
+  it("builds ADD with canonical subject fields", () => {
+    const row: PermissionDraftRow = {
+      subjectType: "department", subjectId: 8, subjectName: "Platform",
+      modelKey: "editor", includeChildren: true,
     };
-    let state = createPermissionDraft([viewer]);
-
-    state = permissionDraftReducer(state, { type: "add", row: editor });
-    expect(state.rows).toEqual([viewer, editor]);
-    expect(state.touchedKeys).toEqual([getPermissionDraftRowKey(editor)]);
-
-    const viewerKey = getPermissionDraftRowKey(viewer);
-    state = permissionDraftReducer(state, {
-      type: "change",
-      key: viewerKey,
-      changes: { relation: "manager", modelId: "manager" },
-    });
-    const manager = state.rows[0];
-    expect(manager).toMatchObject({ relation: "manager", modelId: "manager" });
-    expect(state.touchedKeys).toEqual(expect.arrayContaining([
-      viewerKey,
-      getPermissionDraftRowKey(manager),
-      getPermissionDraftRowKey(editor),
-    ]));
-
-    state = permissionDraftReducer(state, {
-      type: "remove",
-      key: getPermissionDraftRowKey(editor),
-    });
-    expect(state.rows).toEqual([manager]);
+    const draft = permissionDraftReducer(createPermissionDraft(), { type: "add", row });
+    expect(getPermissionDraftDiff(draft).changes).toEqual([{
+      op: "ADD", model_key: "editor",
+      subject: {
+        type: "department", id: "8", userset_relation: "subtree_member",
+        include_children: true,
+      },
+    }]);
   });
 
-  it("keeps creator rows immutable", () => {
-    const state = createPermissionDraft([creator, viewer]);
-    const creatorKey = getPermissionDraftRowKey(creator);
-
-    const changed = permissionDraftReducer(state, {
-      type: "change",
-      key: creatorKey,
-      changes: { relation: "viewer", modelId: "viewer" },
+  it("builds versioned MOVE and REMOVE changes", () => {
+    let draft = createPermissionDraft([localViewer], { resourceVersion: 9, catalogReleaseId: 42 });
+    draft = permissionDraftReducer(draft, {
+      type: "change", key: getPermissionDraftRowKey(localViewer), changes: { modelKey: "editor" },
     });
-    const removed = permissionDraftReducer(state, { type: "remove", key: creatorKey });
-
-    expect(changed).toBe(state);
-    expect(removed).toBe(state);
+    expect(getPermissionDraftDiff(draft).changes).toEqual([{
+      op: "MOVE", assignee_id: "assignee-1", expected_assignee_version: 3,
+      target_model_key: "editor",
+    }]);
+    draft = permissionDraftReducer(draft, {
+      type: "remove", key: getPermissionDraftRowKey(draft.rows[0]),
+    });
+    expect(getPermissionDraftDiff(draft).changes).toEqual([{
+      op: "REMOVE", assignee_id: "assignee-1", expected_assignee_version: 3,
+    }]);
   });
 
-  it("keeps pending rows immutable across change, remove and replace", () => {
-    const state = createPermissionDraft([pendingViewer, viewer]);
-    const pendingKey = getPermissionDraftRowKey(pendingViewer);
-
-    expect(permissionDraftReducer(state, {
-      type: "change",
-      key: pendingKey,
-      changes: { relation: "editor", modelId: "editor" },
-    })).toBe(state);
-    expect(permissionDraftReducer(state, { type: "remove", key: pendingKey })).toBe(state);
-
-    const replaced = permissionDraftReducer(state, {
+  it("keeps the server baseline when the editor replaces visible rows", () => {
+    const baseline = createPermissionDraft([localViewer]);
+    const moved = permissionDraftReducer(baseline, {
       type: "replace_rows",
-      rows: [{ ...pendingViewer, relation: "editor", modelId: "editor" }],
+      rows: [{ ...localViewer, modelKey: "editor" }],
     });
-    expect(replaced.rows).toContainEqual(pendingViewer);
-    expect(replaced.rows).not.toContainEqual(expect.objectContaining({
-      subjectId: pendingViewer.subjectId,
-      relation: "editor",
-    }));
+    expect(getPermissionDraftDiff(moved).changes).toEqual([{
+      op: "MOVE",
+      assignee_id: "assignee-1",
+      expected_assignee_version: 3,
+      target_model_key: "editor",
+    }]);
+
+    const removed = permissionDraftReducer(baseline, {
+      type: "replace_rows",
+      rows: [],
+    });
+    expect(getPermissionDraftDiff(removed).changes).toEqual([{
+      op: "REMOVE",
+      assignee_id: "assignee-1",
+      expected_assignee_version: 3,
+    }]);
   });
 
-  it("never emits pending grants or revokes", () => {
-    let state = createPermissionDraft([pendingViewer, viewer]);
-    state = {
-      ...state,
-      rows: [viewer, { ...pendingViewer, relation: "editor" }],
-      touchedKeys: [
-        getPermissionDraftRowKey(pendingViewer),
-        getPermissionDraftRowKey({ ...pendingViewer, relation: "editor" }),
-      ],
+  it("keeps protected rows when the editor replaces a subject tab", () => {
+    const protectedOwner: PermissionDraftRow = {
+      ...localViewer,
+      assigneeId: "owner-1",
+      modelKey: "owner",
+      protected: true,
+      editable: false,
     };
-
-    expect(getPermissionDraftDiff(state)).toEqual({ grants: [], revokes: [] });
+    const baseline = createPermissionDraft([protectedOwner, localViewer]);
+    const next = permissionDraftReducer(baseline, {
+      type: "replace_rows",
+      rows: [{ ...localViewer, modelKey: "editor" }],
+    });
+    expect(next.rows).toContainEqual(protectedOwner);
+    expect(getPermissionDraftDiff(next).changes).toHaveLength(1);
   });
 
-  it("uses relation, model and department scope in the stable key", () => {
-    const department: PermissionDraftRow = {
-      subjectType: "department",
-      subjectId: 8,
-      subjectName: "Platform",
-      relation: "viewer",
-      modelId: "viewer-a",
-      includeChildren: false,
-    };
-
-    expect(getPermissionDraftRowKey({ ...department, relation: "editor" }))
-      .not.toBe(getPermissionDraftRowKey(department));
-    expect(getPermissionDraftRowKey({ ...department, modelId: "viewer-b" }))
-      .not.toBe(getPermissionDraftRowKey(department));
-    expect(getPermissionDraftRowKey({ ...department, includeChildren: true }))
-      .not.toBe(getPermissionDraftRowKey(department));
+  it.each([
+    { ...localViewer, protected: true },
+    { ...localViewer, scope: "INHERITED" as const },
+    { ...localViewer, editable: false },
+  ])("does not mutate protected or read-only rows", (row) => {
+    const draft = createPermissionDraft([row]);
+    expect(permissionDraftReducer(draft, {
+      type: "remove", key: getPermissionDraftRowKey(row),
+    })).toBe(draft);
   });
 
-  it("emits only touched grants and revokes", () => {
-    const untouchedConcurrentRow: PermissionDraftRow = {
-      subjectType: "user",
-      subjectId: 99,
-      subjectName: "Concurrent member",
-      relation: "viewer",
-    };
-    let state = createPermissionDraft([viewer, untouchedConcurrentRow]);
-    state = permissionDraftReducer(state, {
-      type: "change",
-      key: getPermissionDraftRowKey(viewer),
-      changes: { relation: "editor", modelId: "editor" },
-    });
-
-    expect(getPermissionDraftDiff(state)).toEqual({
-      grants: [{
-        subject_type: "user",
-        subject_id: 2,
-        relation: "editor",
-        model_id: "editor",
-      }],
-      revokes: [{
-        subject_type: "user",
-        subject_id: 2,
-        relation: "viewer",
-      }],
-    });
+  it("keeps the same subject as separate source assignees", () => {
+    const rows = [localViewer, { ...localViewer, assigneeId: "assignee-2", sourceType: "DEPARTMENT" }];
+    expect(createPermissionDraft(rows).rows).toHaveLength(2);
   });
 
-  it("omits department scope from user revokes even when the API returned null", () => {
-    const viewerWithNullScope = {
-      ...viewer,
-      includeChildren: null,
-    } as unknown as PermissionDraftRow;
-    let state = createPermissionDraft([viewerWithNullScope]);
-
-    state = permissionDraftReducer(state, {
-      type: "remove",
-      key: getPermissionDraftRowKey(viewerWithNullScope),
+  it("cancel restores rows and clears changes", () => {
+    const baseline = createPermissionDraft([localViewer]);
+    const changed = permissionDraftReducer(baseline, {
+      type: "remove", key: getPermissionDraftRowKey(localViewer),
     });
-
-    expect(getPermissionDraftDiff(state).revokes).toEqual([
-      {
-        subject_type: "user",
-        subject_id: 2,
-        relation: "viewer",
-      },
-    ]);
-  });
-
-  it("serializes department scope as a boolean", () => {
-    const department: PermissionDraftRow = {
-      subjectType: "department",
-      subjectId: 8,
-      subjectName: "Platform",
-      relation: "viewer",
-      includeChildren: false,
-    };
-    let state = createPermissionDraft([department]);
-
-    state = permissionDraftReducer(state, {
-      type: "remove",
-      key: getPermissionDraftRowKey(department),
-    });
-
-    expect(getPermissionDraftDiff(state).revokes).toEqual([
-      {
-        subject_type: "department",
-        subject_id: 8,
-        relation: "viewer",
-        include_children: false,
-      },
-    ]);
-  });
-});
-
-describe("usePermissionDraft", () => {
-  it("resets/cancels local edits without producing a write diff", () => {
-    const { result } = renderHook(() => usePermissionDraft([viewer]));
-
-    act(() => {
-      result.current.removeRow(getPermissionDraftRowKey(viewer));
-    });
-    expect(result.current.diff.revokes).toHaveLength(1);
-
-    act(() => {
-      result.current.cancel();
-    });
-    expect(result.current.rows).toEqual([viewer]);
-    expect(result.current.diff).toEqual({ grants: [], revokes: [] });
-    expect(result.current.hasChanges).toBe(false);
-  });
-
-  it("can replace the baseline after a server refresh", () => {
-    const { result } = renderHook(() => usePermissionDraft([viewer]));
-
-    act(() => {
-      result.current.reset([creator]);
-    });
-
-    expect(result.current.draft).toEqual(createPermissionDraft([creator]));
+    const reset = permissionDraftReducer(changed, { type: "reset" });
+    expect(reset.rows).toEqual([localViewer]);
+    expect(getPermissionDraftDiff(reset).changes).toEqual([]);
   });
 });

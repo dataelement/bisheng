@@ -210,7 +210,7 @@ export const ComponentWrapper = memo(({
                                                 <div className="px-2 py-1.5 text-sm text-muted-foreground">{t('noOtherDashboards')}</div>
                                             ) : (
                                                 dashboards
-                                                    .filter(d => d.id !== component.dashboard_id && d.status === 'draft' && d.write)
+                                                    .filter(d => d.id !== component.dashboard_id && d.status === 'draft')
                                                     .map(dashboard => (
                                                         <DropdownMenuItem
                                                             key={dashboard.id}
@@ -302,5 +302,4 @@ export const ComponentWrapper = memo(({
         </div>
     )
 });
-
 

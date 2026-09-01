@@ -164,7 +164,9 @@ class ApprovalNotificationService:
             logger.exception("failed to load system-admin notification recipients")
 
         try:
-            from bisheng.permission.domain.services.tenant_admin_service import TenantAdminService
+            from bisheng.tenant.domain.services.tenant_admin_service import (
+                TenantAdminService,
+            )
 
             recipient_ids.update(await TenantAdminService.list_tenant_admins(tenant_id))
         except Exception:

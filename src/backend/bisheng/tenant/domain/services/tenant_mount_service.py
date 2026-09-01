@@ -314,8 +314,13 @@ class TenantMountService:
             from sqlalchemy import text as sa_text
 
             from bisheng.core.database import get_async_db_session
-            from bisheng.core.openfga.manager import get_fga_client
             from bisheng.database.models.tenant import TenantDao
+            from bisheng.permission.application import (
+                PermissionObject,
+                PermissionRelation,
+                PermissionSubject,
+                get_permission_relation_api,
+            )
 
             root_tenant = await TenantDao.aget_by_id(ROOT_TENANT_ID)
             share_default = (
@@ -329,23 +334,24 @@ class TenantMountService:
                 if root_tenant
                 else True
             )
-            fga = get_fga_client()
-            if share_default and fga is not None:
+            if share_default:
                 async with get_async_db_session() as session:
                     res = await session.exec(
                         sa_text("SELECT id FROM llm_server WHERE tenant_id = :t").bindparams(t=ROOT_TENANT_ID)
                     )
                     server_ids = [r[0] for r in res.all()]
                 if server_ids:
-                    writes = [
-                        {
-                            "user": f"tenant:{new_child_id}",
-                            "relation": "shared_with",
-                            "object": f"llm_server:{sid}",
-                        }
+                    permissions = await get_permission_relation_api()
+                    grants = tuple(
+                        PermissionRelation(
+                            subject=PermissionSubject("tenant", str(new_child_id)),
+                            relation="shared_with",
+                            resource=PermissionObject("llm_server", str(server_id)),
+                        )
                         for sid in server_ids
-                    ]
-                    await fga.write_tuples(writes=writes)
+                        for server_id in (sid,)
+                    )
+                    await permissions.grant(grants)
         except Exception as e:  # pragma: no cover — compensator handles retry
             logger.warning(
                 "[F029] llm_server fanout to child %s failed: %s",
@@ -393,30 +399,27 @@ class TenantMountService:
             )
 
         try:
-            from bisheng.core.openfga.manager import aget_fga_client, get_fga_client
+            from bisheng.permission.application import (
+                PermissionObject,
+                PermissionSubject,
+                get_permission_relation_api,
+            )
 
-            fga = await aget_fga_client()
-            if fga is None:
-                fga = get_fga_client()
-            if fga is None:
-                return
+            permissions = await get_permission_relation_api()
 
             # Collect tuples where the Child appears as either side of a
             # tenant-level relation, then batch-delete them. We restrict to
             # ``object=tenant:{child}`` / ``user=tenant:{child}`` shapes so
             # we never touch resource-level rows by mistake.
-            obj_tuples = await fga.read_tuples(object=f"tenant:{child_tenant_id}")
-            user_tuples = await fga.read_tuples(user=f"tenant:{child_tenant_id}")
-            seen: set = set()
-            deletes: list[dict[str, str]] = []
-            for t in list(obj_tuples) + list(user_tuples):
-                key = (t.get("user"), t.get("relation"), t.get("object"))
-                if None in key or key in seen:
-                    continue
-                seen.add(key)
-                deletes.append({"user": key[0], "relation": key[1], "object": key[2]})
-            if deletes:
-                await fga.write_tuples(deletes=deletes)
+            resource_relations = await permissions.list_relations(
+                resource=PermissionObject("tenant", str(child_tenant_id)),
+            )
+            subject_relations = await permissions.list_relations(
+                subject=PermissionSubject("tenant", str(child_tenant_id)),
+            )
+            revokes = tuple(dict.fromkeys((*resource_relations, *subject_relations)))
+            if revokes:
+                await permissions.revoke(revokes)
         except Exception as e:  # pragma: no cover
             logger.warning(
                 "[F017] tenant-level tuple cleanup failed for child %s: %s",

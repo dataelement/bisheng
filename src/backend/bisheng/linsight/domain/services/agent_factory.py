@@ -157,10 +157,19 @@ __SKILL_DELIVERABLE_LINE__   - 3a（始终）：write_file 写 output/<name>.md�
 
 - ask_user(reason, questions)：第 0 步澄清；整个会话最多调用一次。
 - write_todos(todos)：维护有编号的待办清单；只翻转 status，不改写已有文案。
-__KB_TOOL_LINE__- write_file / read_file / edit_file / ls：工作区文件工具；交付物写 output/，中间产物写 scratch/（工具回显的 /output/x 与 output/x 是同一个文件）。
+__KB_TOOL_LINE__- write_file / read_file / edit_file / ls / glob / grep：工作区文件工具；交付物写 output/，中间产物写 scratch/（工具回显的 /output/x 与 output/x 是同一个文件）。read_file 支持 offset/limit 分块读取大文件；grep 可在整个工作区按关键字定位内容。
 - export_docx(source_path, dest_path)：把 output/ 下的 markdown 转 Word(.docx)，必须在对应 .md 写好之后。
 - export_pdf(source_path, dest_path)：把 output/ 下的 markdown 转 PDF，必须在对应 .md 写好之后。
 - task(description, subagent_type="general-purpose")：把独立、可隔离、较重的调研子任务委派给子代理。description 必须自包含——子代理看不到你的对话历史与上下文，只能读到 description，因此完成该子任务所需的全部背景、目标、约束与必要标识都要写进去；不得委派最终交付物撰写，也不得委派“问用户/澄清”。
+
+# 超大工具结果
+
+某次工具结果过大时，系统会把它存入 /large_tool_results/<tool_call_id>，只在回复里保留开头片段。
+这表示**结果已经产生并保存好了**，不是执行失败、也不是输出被弄丢了。此时：
+
+- 用 read_file 读那个路径把内容取回来；文件很大就配合 offset/limit 分页读（该文件常常没有换行，会按字符分页，offset 数的是页不是行）。
+- 不知道确切路径时，用 grep 在 /large_tool_results/ 下按关键字定位。
+- **绝对不要重跑产生它的那次调用**：参数没变，结果一定一样，重跑只会再产生一份同样的大结果。
 
 __PATH_NAMESPACE_LINE__# 风格
 
@@ -270,7 +279,10 @@ def _build_linsight_system_prompt(
     if has_knowledge_base:
         exec_line = (
             "   - 需要资料时用 search_knowledge_base 检索知识库/知识空间；"
-            "读写文件用 write_file / read_file / edit_file / ls。"
+            "读写文件用 write_file / read_file / edit_file / ls。\n"
+            "   - 用户上传的音视频（mp3/mp4 等）已由 ASR 转写为 uploads/*.md；"
+            "<uploaded_files> 中 path 为转写文本、name 为原始文件名。"
+            "read_file(path) 即可获取内容，勿推断为「扩展名标注有误」或「实际是文本文件」。"
         )
         tool_line = "- search_knowledge_base：在授权的知识库/知识空间语义检索。\n"
         # Delegation must restate the KB ids: a subagent's messages are replaced
@@ -289,7 +301,10 @@ def _build_linsight_system_prompt(
         exec_line = (
             "   - 读写文件用 write_file / read_file / edit_file / ls；若用户上传了文件，"
             "用 ls / read_file 在工作区中查阅。本次任务没有可检索的知识库/知识空间，"
-            "请基于已有资料与自身知识完成，不要调用任何知识库检索工具。"
+            "请基于已有资料与自身知识完成，不要调用任何知识库检索工具。\n"
+            "   - 用户上传的音视频（mp3/mp4 等）已由 ASR 转写为 uploads/*.md；"
+            "<uploaded_files> 中 path 为转写文本、name 为原始文件名。"
+            "read_file(path) 即可获取内容，勿推断为「扩展名标注有误」或「实际是文本文件」。"
         )
         tool_line = ""
         delegate_line = ""
@@ -348,9 +363,15 @@ def _build_linsight_system_prompt(
             "写会被丢弃、进不了交付。\n"
             "- 反向同理：**不要**把代码里看到的宿主机绝对路径（形如 /root/.cache/…/<8位任务号>/output/a.png）"
             "传给 read_file / edit_file，去掉前缀只传 output/a.png。\n"
-            "- 执行器直接写本地工作目录，它生成的文件**不会**出现在 ls / glob 的结果里"
-            "（那两个工具读的是对象存储视图）。只要执行返回 exitcode 0 且日志显示写成功，"
-            "就视为交付物已产出，继续下一步；不要反复 ls / glob 找它，也不要因为“找不到”而重新生成。\n\n"
+            "- 执行器写完会把本轮产出同步到工作区，随后 ls / glob 一般就能看到它们。"
+            "但**判定成功的依据是执行结果本身**：只要 exitcode 0 且 file_list 里出现了目标文件，"
+            "就视为交付物已产出，继续下一步，不要反复 ls / glob 找它。\n"
+            "- 若日志被截断、你看不到 file_list：可以 ls output/ **核实一次**；"
+            "若结果提示「Tool result too large … /large_tool_results/…」，用 read_file 读那个路径取回内容"
+            "（必要时配合 offset/limit 分页，或用 grep 在 /large_tool_results/ 下定位关键字）。"
+            "**任何情况下都不要把同一段代码原样再跑一遍**——相同的输入只会得到相同的结果。\n"
+            "- 不要一次 print 巨量内容：超长日志会被截断（中间省略），需要完整数据时把它写进 "
+            "scratch/ 下的文件，再用 read_file 分块读取。\n\n"
         )
 
     return (
@@ -370,14 +391,17 @@ def _build_researcher_prompt(has_knowledge_base: bool) -> str:
     tool subset (_subagent_tools), which mirrors the main graph; advertise it only
     when it is actually available.
     """
+    media_line = " 音视频附件的 path 为 ASR 转写文本（.md），name 为原始上传名，并非扩展名错误。"
     if has_knowledge_base:
         research_line = (
             "- 优先使用 search_knowledge_base 检索知识库/知识空间，并用 read_file / ls 阅读工作区中已有的资料。"
+            f"{media_line}"
         )
     else:
         research_line = (
             "- 用 read_file / ls 阅读工作区中已有的资料；本次没有可检索的知识库/知识空间，"
             "不要调用任何知识库检索工具，基于已有资料与自身知识给出结论。"
+            f"{media_line}"
         )
     return _LINSIGHT_RESEARCHER_PROMPT_TEMPLATE_ZH.replace("__KB_RESEARCH_LINE__", research_line)
 
@@ -673,9 +697,10 @@ def _subagent_tools(tools: Sequence[BaseTool]) -> list[BaseTool]:
 
     The returned list MUST be passed as the subagent spec's explicit ``tools`` key
     so deepagents does NOT fall back to inheriting ``[*tools, ask_user]``
-    (graph.py:670 — an explicit ``tools`` means the subagent gets ONLY those). The
-    subagent still receives ls/read_file/write_file/edit_file + write_todos from
-    its own middleware stack (graph.py:618-627), sharing the main WorkspaceBackend.
+    (graph.py:694 in deepagents 0.6.12 — an explicit ``tools`` means the subagent
+    gets ONLY those). The subagent still receives ls/read_file/write_file/edit_file
+    + write_todos from its own middleware stack (graph.py:643-652), sharing the
+    main WorkspaceBackend.
     """
     return [t for t in tools if t.name not in _SUBAGENT_TOOL_DENY and t.name not in _KNOWN_HITL_TOOL_NAMES]
 
@@ -686,14 +711,15 @@ def _build_researcher_subagent(tools: Sequence[BaseTool]) -> dict:
     Design #1 §4.1 (MVP = one researcher) / §4.2 (decision 1: same-name override).
 
     - ``name="general-purpose"``: providing our own spec with this name SUPPRESSES
-      deepagents' auto-injected default general-purpose subagent (graph.py:693), so
-      the unsafe default GP — which would inherit ``[*tools, ask_user]`` — never
-      gets built. The model decides whether to delegate from ``description``, not
-      ``name``, so the honest description below is what actually steers it.
+      deepagents' auto-injected default general-purpose subagent (graph.py:717 in
+      deepagents 0.6.12), so the unsafe default GP — which would inherit
+      ``[*tools, ask_user]`` — never gets built. The model decides whether to
+      delegate from ``description``, not ``name``, so the honest description below
+      is what actually steers it.
     - ``tools=_subagent_tools(tools)``: explicit subset (blacklist). Explicit
       ``tools`` is REQUIRED so the subagent does not inherit ask_user (§4.3).
     - NO ``model`` key: the subagent inherits the parent's per-task tenant model
-      (graph.py:608 ``spec.get("model", model)``).
+      (graph.py:633 ``spec.get("model", model)``).
     - NO ``permissions`` / ``interrupt_on`` keys: this is the SAFETY BASIS
       (design §3.1). Without them the subagent stack carries no
       HumanInTheLoopMiddleware and no filesystem interrupts, so the subagent has
@@ -747,7 +773,7 @@ async def create_linsight_agent(
     from deepagents import create_deep_agent
 
     svid = svid or session_model.id
-    model = await _resolve_model(session_model, model_id)
+    model, supports_vision = await _resolve_model(session_model, model_id)
     from bisheng.llm.domain.services.model_rate_limit import (
         ModelCallContext,
         ModelCallEntry,
@@ -815,7 +841,7 @@ async def create_linsight_agent(
             **rate_limit_observer_kwargs,
         ),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
-        *build_binary_guards(has_code_interpreter),
+        *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
     ]
 
     # F035 Track D — skills (RE-ENABLED 2026-06-24, Fork X). The run's allowed skill
@@ -828,8 +854,8 @@ async def create_linsight_agent(
     # ``skills=`` param (which would reuse the workspace backend) discovers nothing.
     # SkillsMiddleware registers NO file tools, so this second backend does NOT shadow
     # the workspace read_file/write_file (the 2026-06-16 disable concern does not hold
-    # in deepagents 0.6.8); the model reads the same /skills/<name>/SKILL.md paths back
-    # through the WorkspaceBackend. The copy is the whitelist gate — no per-run
+    # in deepagents 0.6.8; re-verified unchanged in 0.6.12); the model reads the same
+    # /skills/<name>/SKILL.md paths back through the WorkspaceBackend. The copy is the whitelist gate — no per-run
     # active_skills config is threaded.
     skills_advertised = bool(skills_present and file_dir)
     if skills_advertised:
@@ -860,7 +886,7 @@ async def create_linsight_agent(
     # can park-and-release for user input (F035 §4.6); deepagents ships no
     # built-in ask-human tool, so we inject our own.
     # design #1 §4.1/§4.2: a single MVP researcher subagent, named
-    # "general-purpose" to suppress deepagents' auto default GP (graph.py:693).
+    # "general-purpose" to suppress deepagents' auto default GP (graph.py:717).
     # ask_user is appended ONLY to the MAIN graph tools below; the subagent
     # receives _subagent_tools(tools), which never includes ask_user.
     #
@@ -893,7 +919,7 @@ async def create_linsight_agent(
         # reading an original would fail the whole task. It sees the same code
         # interpreter as the main graph (not in _SUBAGENT_TOOL_DENY), so the flag
         # carries over; revisit if it is ever added to that deny list.
-        *build_binary_guards(has_code_interpreter),
+        *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
         # Same tail language directive on the subagent's own stack (last -> after
         # its TodoList/Filesystem framework prompts), so the researcher also
         # reasons in the user's language.
@@ -926,12 +952,21 @@ async def create_linsight_agent(
     )
 
 
-async def _resolve_model(session_model, model_id: str | None) -> BaseChatModel:
+async def _resolve_model(session_model, model_id: str | None) -> tuple[BaseChatModel, bool]:
     """Resolve the per-task model via LLMService (design §2.2 / §2.2.1).
 
     Priority: per-task ``model_id`` -> tenant Linsight default model. Tenant
     resolution + share fallback live inside ``get_bisheng_linsight_llm``
     (INV-T18: tenant_id is threaded explicitly in the Worker subprocess).
+
+    Returns ``(model, supports_vision)``. ``supports_vision`` is the admin-declared
+    ``WSModel.visual`` flag — the 视觉 column in 系统模型设置 → 工作台模型, which
+    daily chat already gates image attachments on. Linsight picks its model from
+    that SAME list (``models[]``, the id ``linsight_default_model_id`` selects
+    from), so the lookup is always resolvable; a model id that is somehow absent
+    reads as False, matching the field's own default. Returned from here rather
+    than fetched separately because ``workbench_conf`` is already in hand —
+    ``get_workbench_llm`` re-validates model refs and is not free to call twice.
     """
     workbench_conf = await LLMService.get_workbench_llm(tenant_id=session_model.tenant_id)
     linsight_conf = settings.get_linsight_conf()
@@ -947,11 +982,16 @@ async def _resolve_model(session_model, model_id: str | None) -> BaseChatModel:
                 "linsight_default_model_id is not configured"
             )
 
-    return await LLMService.get_bisheng_linsight_llm(
+    supports_vision = any(
+        str(entry.id) == str(resolved_id) and bool(entry.visual) for entry in (workbench_conf.models or [])
+    )
+
+    model = await LLMService.get_bisheng_linsight_llm(
         invoke_user_id=session_model.user_id,
         model_id=resolved_id,
         temperature=linsight_conf.default_temperature,
     )
+    return model, supports_vision
 
 
 def _default_backend(svid: str, file_dir: str | None):

@@ -138,6 +138,12 @@ module.exports = {
           DEFAULT: 'rgb(var(--tag-skill) / <alpha-value>)',
           tint: 'rgb(var(--tag-skill-tint) / <alpha-value>)',
         },
+        // Citation badge, web source (组件-Badge徽标.md §2) — the same frozen
+        // purple under its own use-name; never follows the brand theme either.
+        'citation-web': {
+          DEFAULT: 'rgb(var(--citation-web) / <alpha-value>)',
+          tint: 'rgb(var(--citation-web-tint) / <alpha-value>)',
+        },
       },
       // Radius token scale (rounded-md/lg used by Button sizes: 6/8px).
       borderRadius: {

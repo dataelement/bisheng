@@ -10,7 +10,7 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.schemas.api import resp_200
 from bisheng.utils import get_request_ip
 
-router = APIRouter(prefix='/approval/admin', tags=['approval'])
+router = APIRouter(prefix="/approval/admin", tags=["approval"])
 
 
 class ScenarioUpsertReq(BaseModel):
@@ -26,7 +26,7 @@ class ScenarioUpdateReq(BaseModel):
 
 
 class ExceptionRetryReq(BaseModel):
-    action: str = Field(default='retry')
+    action: str = Field(default="retry")
     approver_user_ids: list[int] = Field(default_factory=list)
 
 
@@ -57,7 +57,6 @@ class FlowUpdateReq(BaseModel):
     is_active: bool | None = None
 
 
-
 class RouteReorderReq(BaseModel):
     ordered_route_ids: list[int]
 
@@ -69,24 +68,26 @@ class NodeListReq(BaseModel):
 async def _ensure_admin(login_user: UserPayload) -> None:
     if login_user.is_admin():
         return
-    if await login_user.has_tenant_admin(login_user.tenant_id):
+    from bisheng.permission.application import is_tenant_admin
+
+    if await is_tenant_admin(login_user.user_id, login_user.tenant_id):
         return
-    raise HTTPException(status_code=403, detail='Admin access required')
+    raise HTTPException(status_code=403, detail="Admin access required")
 
 
-@router.get('/scenario-presets')
+@router.get("/scenario-presets")
 async def list_scenario_presets(login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
     return resp_200(await ApprovalScenarioAdminService.list_presets())
 
 
-@router.get('/scenarios')
+@router.get("/scenarios")
 async def list_scenarios(login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
     return resp_200(await ApprovalScenarioAdminService.list_scenarios(tenant_id=login_user.tenant_id))
 
 
-@router.post('/scenarios')
+@router.post("/scenarios")
 async def create_scenario(req: ScenarioUpsertReq, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
     return resp_200(
@@ -99,7 +100,7 @@ async def create_scenario(req: ScenarioUpsertReq, login_user: UserPayload = Depe
     )
 
 
-@router.put('/scenarios/{scenario_id}')
+@router.put("/scenarios/{scenario_id}")
 async def update_scenario(
     scenario_id: int,
     req: ScenarioUpdateReq,
@@ -119,13 +120,15 @@ async def update_scenario(
     )
 
 
-@router.get('/scenarios/{scenario_id}/routes')
+@router.get("/scenarios/{scenario_id}/routes")
 async def list_routes(scenario_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
-    return resp_200(await ApprovalScenarioAdminService.list_routes(tenant_id=login_user.tenant_id, scenario_id=scenario_id))
+    return resp_200(
+        await ApprovalScenarioAdminService.list_routes(tenant_id=login_user.tenant_id, scenario_id=scenario_id)
+    )
 
 
-@router.post('/scenarios/{scenario_id}/routes')
+@router.post("/scenarios/{scenario_id}/routes")
 async def create_route(
     scenario_id: int,
     req: RouteCreateReq,
@@ -141,7 +144,7 @@ async def create_route(
     )
 
 
-@router.put('/routes/{route_rule_id}')
+@router.put("/routes/{route_rule_id}")
 async def update_route(
     route_rule_id: int,
     req: RouteUpdateReq,
@@ -157,13 +160,15 @@ async def update_route(
     )
 
 
-@router.get('/scenarios/{scenario_id}/flows')
+@router.get("/scenarios/{scenario_id}/flows")
 async def list_flows(scenario_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
-    return resp_200(await ApprovalScenarioAdminService.list_flows(tenant_id=login_user.tenant_id, scenario_id=scenario_id))
+    return resp_200(
+        await ApprovalScenarioAdminService.list_flows(tenant_id=login_user.tenant_id, scenario_id=scenario_id)
+    )
 
 
-@router.post('/scenarios/{scenario_id}/flows')
+@router.post("/scenarios/{scenario_id}/flows")
 async def create_flow(
     scenario_id: int,
     req: FlowCreateReq,
@@ -179,7 +184,7 @@ async def create_flow(
     )
 
 
-@router.put('/flows/{flow_definition_id}')
+@router.put("/flows/{flow_definition_id}")
 async def update_flow(
     flow_definition_id: int,
     req: FlowUpdateReq,
@@ -195,33 +200,35 @@ async def update_flow(
     )
 
 
-@router.get('/flows/{flow_definition_id}/nodes')
+@router.get("/flows/{flow_definition_id}/nodes")
 async def list_nodes(flow_definition_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
     try:
-        data = await ApprovalScenarioAdminService.list_nodes(tenant_id=login_user.tenant_id, flow_definition_id=flow_definition_id)
+        data = await ApprovalScenarioAdminService.list_nodes(
+            tenant_id=login_user.tenant_id, flow_definition_id=flow_definition_id
+        )
     except ValueError:
         from bisheng.common.errcode.approval import ApprovalFlowNotFoundError
+
         return ApprovalFlowNotFoundError.return_resp()
     return resp_200(data)
 
 
-
-@router.delete('/scenarios/{scenario_id}')
+@router.delete("/scenarios/{scenario_id}")
 async def delete_scenario(scenario_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
     await ApprovalScenarioAdminService.delete_scenario(tenant_id=login_user.tenant_id, scenario_id=scenario_id)
-    return resp_200({'deleted': scenario_id})
+    return resp_200({"deleted": scenario_id})
 
 
-@router.delete('/routes/{route_rule_id}')
+@router.delete("/routes/{route_rule_id}")
 async def delete_route(route_rule_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
     await ApprovalScenarioAdminService.delete_route(tenant_id=login_user.tenant_id, route_rule_id=route_rule_id)
-    return resp_200({'deleted': route_rule_id})
+    return resp_200({"deleted": route_rule_id})
 
 
-@router.patch('/scenarios/{scenario_id}/routes/reorder')
+@router.patch("/scenarios/{scenario_id}/routes/reorder")
 async def reorder_routes(
     scenario_id: int,
     req: RouteReorderReq,
@@ -233,17 +240,19 @@ async def reorder_routes(
         scenario_id=scenario_id,
         ordered_route_ids=req.ordered_route_ids,
     )
-    return resp_200({'reordered': req.ordered_route_ids})
+    return resp_200({"reordered": req.ordered_route_ids})
 
 
-@router.delete('/flows/{flow_definition_id}')
+@router.delete("/flows/{flow_definition_id}")
 async def delete_flow(flow_definition_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
-    await ApprovalScenarioAdminService.delete_flow(tenant_id=login_user.tenant_id, flow_definition_id=flow_definition_id)
-    return resp_200({'deleted': flow_definition_id})
+    await ApprovalScenarioAdminService.delete_flow(
+        tenant_id=login_user.tenant_id, flow_definition_id=flow_definition_id
+    )
+    return resp_200({"deleted": flow_definition_id})
 
 
-@router.get('/flows/{flow_definition_id}/versions/{flow_version_id}')
+@router.get("/flows/{flow_definition_id}/versions/{flow_version_id}")
 async def get_flow_version(
     flow_definition_id: int,
     flow_version_id: int,
@@ -259,7 +268,7 @@ async def get_flow_version(
     )
 
 
-@router.put('/flows/{flow_definition_id}/nodes')
+@router.put("/flows/{flow_definition_id}/nodes")
 async def set_flow_nodes(
     flow_definition_id: int,
     req: NodeListReq,
@@ -279,7 +288,7 @@ async def set_flow_nodes(
     )
 
 
-@router.get('/exceptions')
+@router.get("/exceptions")
 async def list_exceptions(login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
     return resp_200(await ApprovalScenarioAdminService.list_open_exceptions(tenant_id=login_user.tenant_id))
@@ -289,7 +298,7 @@ class CancelExceptionReq(BaseModel):
     reason: str = Field(min_length=1, max_length=2000)
 
 
-@router.post('/exceptions/{exception_id}/retry')
+@router.post("/exceptions/{exception_id}/retry")
 async def retry_exception(
     exception_id: int,
     req: ExceptionRetryReq,
@@ -310,7 +319,7 @@ async def retry_exception(
     return resp_200(result)
 
 
-@router.post('/exceptions/{exception_id}/cancel')
+@router.post("/exceptions/{exception_id}/cancel")
 async def cancel_exception(
     exception_id: int,
     req: CancelExceptionReq,

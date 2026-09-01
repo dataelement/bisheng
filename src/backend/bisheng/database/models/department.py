@@ -199,6 +199,32 @@ class Department(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(Integer, nullable=True, comment="Creator user ID"),
     )
+    permission_projection_version: int = Field(
+        default=0,
+        sa_column=Column(
+            BigInteger,
+            nullable=False,
+            server_default=text("0"),
+            comment="F048 department identity projection version",
+        ),
+    )
+    permission_projection_state: str = Field(
+        default="CURRENT",
+        sa_column=Column(
+            String(64),
+            nullable=False,
+            server_default=text("'CURRENT'"),
+            comment="F048 department identity projection state",
+        ),
+    )
+    permission_projection_operation_id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            BigInteger,
+            nullable=True,
+            comment="F048 durable projection operation ID",
+        ),
+    )
     create_time: datetime | None = Field(
         default=None,
         sa_column=Column(
@@ -854,36 +880,34 @@ class DepartmentDao:
 
     @classmethod
     async def aget_user_admin_departments(cls, user_id: int) -> list[Department]:
-        """Get departments where user is admin via OpenFGA.
+        """Get departments where the user has the admin permission.
 
-        Uses FGAClient.list_objects() which respects admin inheritance from parent.
-        Returns empty list if FGA is unavailable.
+        The permission application resolves inherited administration. Returns
+        an empty list when permissions are unavailable.
 
-        Department admin is a cross-tenant relation (FGA stores it without a
-        tenant scope), and this DAO is invoked from tenant-exempt paths such
+        Department admin is a cross-tenant relation, and this DAO is invoked
+        from tenant-exempt paths such
         as ``/user/login`` and SSO callbacks where no tenant context exists.
         Bypass the tenant filter on the row fetch so those callers don't
-        ``raise NoTenantContextError`` when the FGA result is non-empty.
+        ``raise NoTenantContextError`` when the permission result is non-empty.
         """
         from bisheng.core.context.tenant import bypass_tenant_filter
-        from bisheng.core.openfga.manager import aget_fga_client
+        from bisheng.permission.application import PermissionSubject, get_permission_relation_api
 
-        fga = await aget_fga_client()
-        if fga is None:
-            return []
         try:
-            raw = await fga.list_objects(
-                user=f"user:{user_id}",
+            permissions = await get_permission_relation_api()
+            raw = await permissions.list_resource_ids(
+                subject=PermissionSubject("user", str(user_id)),
                 relation="admin",
-                type="department",
+                resource_type="department",
             )
         except Exception:
             logger.warning(
-                "FGA list_objects failed for user %d department admin",
+                "Permission lookup failed for user %d department admin",
                 user_id,
             )
             return []
-        dept_ids = [int(obj.split(":", 1)[1]) for obj in raw if ":" in obj]
+        dept_ids = [int(resource_id) for resource_id in raw if resource_id.isdigit()]
         if not dept_ids:
             return []
         with bypass_tenant_filter():

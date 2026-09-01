@@ -144,12 +144,19 @@ class DeptUpsertService:
         if existing is not None and (existing.parent_id or 0) != (parent_id or 0):
             await DepartmentDao.aassert_reparent_legal(existing.id, parent_id)
 
-        return await DepartmentDao.aupsert_by_external_id(
+        # The business row and its F048 parent/child projection binding must
+        # share one SQL commit. Import lazily to keep the SSO service independent
+        # from DepartmentService module initialization.
+        from bisheng.department.domain.services.department_service import (
+            DepartmentTopologyProjectionService,
+        )
+
+        return await DepartmentTopologyProjectionService.aupsert_synced_department(
             source=source,
             external_id=item.external_id,
             name=item.name,
             parent_id=parent_id,
-            path=computed_path,
+            parent_path=computed_path,
             sort_order=item.sort,
             last_sync_ts=last_sync_ts,
         )

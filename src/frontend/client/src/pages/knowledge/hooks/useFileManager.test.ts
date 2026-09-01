@@ -200,6 +200,36 @@ describe("useFileManager — F027 infinite-scroll guards", () => {
     // currentPage — the accumulated tail is no longer trustworthy.
     expect(src).toMatch(/handleKnowledgeSpaceFilesRefresh[\s\S]{0,400}?loadFilesRef\.current\(1\)/);
   });
+
+  it("waits for the resolved space role before loading children", () => {
+    expect(src).toMatch(
+      /if\s*\(!enabled\s*\|\|\s*!activeSpace\?\.id\s*\|\|\s*!activeSpace\.role\)\s*return\s*\[\]/,
+    );
+  });
+
+  it("funnels space readiness changes through one reload token", () => {
+    const startIdx = src.indexOf("// Reload files whenever active space");
+    const endIdx = src.indexOf("// Reload files when folder navigation", startIdx);
+    const resetEffect = src.slice(startIdx, endIdx);
+
+    expect(resetEffect).toMatch(/if\s*\(isActiveSpaceReady\s*&&\s*activeSpace\)/);
+    expect(resetEffect.match(/setReloadToken\(/g)).toHaveLength(1);
+    expect(resetEffect).toMatch(
+      /\[isActiveSpaceReady,\s*activeSpace\?\.id,\s*activeSpace\?\.role,\s*initialFolderId\]/,
+    );
+  });
+
+  it("does not directly reload on role or enabled changes", () => {
+    const startIdx = src.indexOf("// Reload files when folder navigation");
+    const endIdx = src.indexOf("// ─── Auto-polling", startIdx);
+    const loaderEffect = src.slice(startIdx, endIdx);
+
+    expect(loaderEffect).toMatch(/reloadToken\s*>\s*0\s*&&\s*isActiveSpaceReady/);
+    const dependencies = loaderEffect.match(/\},\s*\[([^\]]+)\]\);/)?.[1] ?? "";
+    expect(dependencies).toContain("reloadToken");
+    expect(dependencies).not.toContain("activeSpace");
+    expect(dependencies).not.toContain("enabled");
+  });
 });
 
 describe("SpaceDetail UI — F027 infinite-scroll guards", () => {
@@ -209,8 +239,8 @@ describe("SpaceDetail UI — F027 infinite-scroll guards", () => {
     expect(src).not.toMatch(/import\s*\{[^}]*PaginationBar[^}]*\}\s*from\s*["']\.\/PaginationBar["']/);
   });
 
-  it("imports LoadMore from sibling file", () => {
-    expect(src).toMatch(/import\s*\{\s*LoadMore\s*\}\s*from\s*["']\.\/LoadMore["']/);
+  it("declares the append callback on KnowledgeSpaceContentProps", () => {
+    expect(src).toMatch(/onLoadMore:\s*\(\)\s*=>\s*void/);
   });
 
   it("declares hasMore prop on KnowledgeSpaceContentProps", () => {

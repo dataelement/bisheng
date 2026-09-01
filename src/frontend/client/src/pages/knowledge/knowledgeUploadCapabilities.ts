@@ -1,4 +1,5 @@
-// Build-time switches keep the implementation available for a later rollout.
+// Build-time switch for web link upload only.
+// Media upload is controlled at runtime via enable_media_upload from /api/v1/env.
 export const knowledgeUploadCapabilities = {
     media: false,
     webLink: false,

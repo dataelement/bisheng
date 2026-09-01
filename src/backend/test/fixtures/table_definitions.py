@@ -201,7 +201,11 @@ CREATE TABLE IF NOT EXISTS department (
     is_deleted INTEGER NOT NULL DEFAULT 0,
     last_sync_ts BIGINT NOT NULL DEFAULT 0,
     default_role_ids JSON,
+    concurrent_session_limit INTEGER NOT NULL DEFAULT 0,
     create_user INTEGER,
+    permission_projection_version BIGINT NOT NULL DEFAULT 0,
+    permission_projection_state VARCHAR(64) NOT NULL DEFAULT 'CURRENT',
+    permission_projection_operation_id BIGINT,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     UNIQUE(source, external_id)
@@ -284,6 +288,15 @@ CREATE TABLE IF NOT EXISTS knowledge_space_user_pin (
     space_id INTEGER NOT NULL,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     UNIQUE (user_id, space_id)
+)"""
+
+TABLE_CHANNEL_USER_PIN = """\
+CREATE TABLE IF NOT EXISTS channel_user_pin (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    channel_id VARCHAR(36) NOT NULL,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    UNIQUE (user_id, channel_id)
 )"""
 
 TABLE_KNOWLEDGE_FILE = """\
@@ -505,6 +518,8 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "org_sync_log": TABLE_ORG_SYNC_LOG,
     # F037: per-user knowledge-space pin, decoupled from membership.
     "knowledge_space_user_pin": TABLE_KNOWLEDGE_SPACE_USER_PIN,
+    # F051: per-user channel pin, decoupled from membership.
+    "channel_user_pin": TABLE_CHANNEL_USER_PIN,
 }
 
 # Indexes emitted after CREATE TABLE via create_all_tables.

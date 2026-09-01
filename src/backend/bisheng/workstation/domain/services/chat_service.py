@@ -20,7 +20,12 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTe
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
-from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeFileNotSupportedError,
+    KnowledgeMediaNoRecognizableAudioError,
+    KnowledgeMediaTranscriptionError,
+)
+from bisheng.common.errcode.server import NoAsrModelConfigError
 from bisheng.common.errcode.workstation import (
     ChatFileParseError,
     ConversationNotFoundError,
@@ -69,6 +74,11 @@ from .chat_helpers import (
 )
 from .constants import VISUAL_MODEL_FILE_TYPES
 from .workstation_service import WorkStationService
+
+# Handed to the model in place of a transcript when an audio/video attachment
+# carries no recognizable speech. English on purpose, like the [file name] /
+# [file content] markers around it — the model answers in the user's language.
+NO_SPEECH_PLACEHOLDER = "(No recognizable speech was detected in this audio/video file.)"
 
 
 def build_daily_model_call_context(
@@ -260,6 +270,21 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
         raw_texts = [doc.page_content for doc in result.documents]
     except KnowledgeFileNotSupportedError:
         raw_texts = []
+    except KnowledgeMediaNoRecognizableAudioError:
+        # A clip with no speech in it is not a failure — the user attached a
+        # file, not a transcription request. Failing the turn would throw away
+        # the question they wrote alongside it; dropping it silently would have
+        # the model answer as if nothing were attached. Say so instead, and let
+        # the turn continue. The genuine faults below (no ASR model configured,
+        # transcription service down) still raise: those need fixing, not
+        # narrating.
+        logger.info("[get_file_content] no recognizable speech in {}; telling the model it is empty", file_name)
+        raw_texts = [NO_SPEECH_PLACEHOLDER]
+    except (
+        NoAsrModelConfigError,
+        KnowledgeMediaTranscriptionError,
+    ):
+        raise
     return knowledge_imp.KnowledgeUtils.chunk2promt("".join(raw_texts), {"source": file_name})
 
 
@@ -371,6 +396,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     save_message_citations,
     save_message_citations_sync,
     select_registry_items_for_persistence,
+    strip_unregistered_citation_markers,
 )
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
@@ -465,7 +491,10 @@ class DailyChatCitationToolWrapper(BaseTool):
         if not self._has_knowledge_rag_tool():
             return self.tool.invoke({"query": query}, config=config)
 
-        retrieval_result = self.tool.knowledge_retriever_tool.invoke({"query": query}, config=config)
+        # Called directly rather than through `invoke`: the retriever is this
+        # wrapper's internal step, and opening a run for it adds a stray tool
+        # entry named after the retriever instead of the knowledge base.
+        retrieval_result = self.tool.knowledge_retriever_tool._run(query)
         return self._format_knowledge_results(retrieval_result)
 
     async def _arun(self, query: str, config=None, **kwargs: Any) -> Any:
@@ -474,7 +503,7 @@ class DailyChatCitationToolWrapper(BaseTool):
         if not self._has_knowledge_rag_tool():
             return await self.tool.ainvoke({"query": query}, config=config)
 
-        retrieval_result = await self.tool.knowledge_retriever_tool.ainvoke({"query": query}, config=config)
+        retrieval_result = await self.tool.knowledge_retriever_tool._arun(query)
         return await self._aformat_knowledge_results(retrieval_result)
 
 
@@ -1450,6 +1479,18 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
 # parse failure. Mirrors the task-mode failure card's transient/terminal split.
 _TRANSIENT_PARSE_ERRORS = frozenset({ErrorType.RATE_LIMIT, ErrorType.NETWORK_TIMEOUT, ErrorType.SERVICE_UNAVAILABLE})
 
+# Extracted document text is hard-cut at ``maxTokens`` CHARACTERS. Silently
+# handing the model a prefix makes it read the fragment as the whole document:
+# a 1072-page tender truncated to 15k chars still "answers" questions about
+# tables that live on page 400, complete with fabricated page citations. Naming
+# the cut is what lets the model say "I only have the first N characters".
+_TRUNCATION_NOTICE = (
+    "\n\n[TRUNCATED] Only the first {shown} of {total} characters of the uploaded file(s) appear above; "
+    "the remainder was NOT provided to you. Do not state or infer anything about the omitted part, and do "
+    "not cite page, section or table numbers that are not visible in the text above. If answering needs "
+    "the full document, say so plainly instead of guessing."
+)
+
 
 async def _extract_doc_text(filepath: str, filename: str, invoke_user_id: int) -> str:
     """Extract one attachment's text, turning a parser failure into a domain error.
@@ -1477,15 +1518,19 @@ async def _extract_doc_text(filepath: str, filename: str, invoke_user_id: int) -
 
 async def _process_agent_files(data: APIChatCompletion, model_info, login_user, ws_config):
     """Split uploaded files into visual (image base64 data URLs) and doc
-    (extracted text chunks concatenated up to maxTokens)."""
+    (extracted text chunks concatenated up to maxTokens).
+
+    Video covers are extracted during parse so history rows can render a poster
+    thumbnail once ASR/content extraction finishes.
+    """
     if not data.files:
-        return "", []
+        return "", [], data.files or []
     # Skip entries without a filepath (upload in flight / failed uploads still
     # sometimes reach us). Prevents `NoneType.split` inside async_file_download.
     valid_files = [f for f in data.files if f and f.get("filepath")]
     if not valid_files:
         logger.info(f"[process_agent_files] no files with filepath (received={len(data.files)})")
-        return "", []
+        return "", [], data.files
     download_tasks = [async_file_download(f.get("filepath")) for f in valid_files]
     downloaded_files = await asyncio.gather(*download_tasks)
 
@@ -1500,13 +1545,81 @@ async def _process_agent_files(data: APIChatCompletion, model_info, login_user, 
         asyncio.gather(*visual_tasks),
         asyncio.gather(*doc_tasks),
     )
+    annotated_valid = await _annotate_agent_files_with_video_covers(valid_files, downloaded_files)
+    merged_files = _merge_agent_file_covers(data.files, valid_files, annotated_valid)
     max_token = getattr(ws_config, "maxTokens", 15000) or 15000
-    file_context = "\n".join(doc_results)[:max_token]
+    joined_docs = "\n".join(doc_results)
+    file_context = joined_docs[:max_token]
+    if len(joined_docs) > max_token:
+        file_context += _TRUNCATION_NOTICE.format(shown=len(file_context), total=len(joined_docs))
     logger.info(
         f"[process_agent_files] docs={len(doc_results)} visuals={len(visual_results)}"
         f" file_context_len={len(file_context)} max_token={max_token}"
+        f" video_covers={sum(1 for f in merged_files if f.get('cover_filepath'))}"
     )
-    return file_context, list(visual_results)
+    return file_context, list(visual_results), merged_files
+
+
+async def _annotate_agent_files_with_video_covers(
+    valid_files: list[dict],
+    downloaded_files: list[tuple[str, str]],
+) -> list[dict]:
+    """Extract a poster frame for each downloaded video attachment."""
+    from bisheng.core.storage.minio.minio_manager import get_minio_storage
+    from bisheng.workstation.domain.services.media_cover_service import WorkstationMediaCoverService
+
+    minio_client = await get_minio_storage()
+    annotated: list[dict] = []
+    for file_item, (local_path, filename) in zip(valid_files, downloaded_files):
+        item = dict(file_item)
+        if WorkstationMediaCoverService.is_video_filename(filename):
+            try:
+                cover_filepath = await WorkstationMediaCoverService.upload_video_cover(local_path, minio_client)
+                if cover_filepath:
+                    item["cover_filepath"] = cover_filepath
+            except Exception as exc:
+                logger.warning(
+                    "video cover extraction during daily chat parse failed: file={} error={}",
+                    filename,
+                    exc,
+                )
+        annotated.append(item)
+    return annotated
+
+
+def _merge_agent_file_covers(
+    original_files: list[dict] | None,
+    valid_files: list[dict],
+    annotated_valid: list[dict],
+) -> list[dict]:
+    """Stamp cover_filepath from the parsed subset back onto the full files list."""
+    if not original_files:
+        return []
+    cover_by_key: dict[str, str] = {}
+    for source, annotated in zip(valid_files, annotated_valid):
+        cover = annotated.get("cover_filepath")
+        if not cover:
+            continue
+        key = str(source.get("file_id") or source.get("filepath") or "")
+        if key:
+            cover_by_key[key] = cover
+    merged: list[dict] = []
+    for file_item in original_files:
+        item = dict(file_item)
+        key = str(file_item.get("file_id") or file_item.get("filepath") or "")
+        cover = cover_by_key.get(key)
+        if cover:
+            item["cover_filepath"] = cover
+        merged.append(item)
+    return merged
+
+
+async def _persist_question_file_attachments(message: ChatMessage, query: str, files: list[dict]) -> None:
+    """Update the persisted user question row with post-parse attachment metadata."""
+    payload = {"query": query or "", "files": files or []}
+    message.message = json.dumps(payload, ensure_ascii=False)
+    message.files = json.dumps(files) if files else None
+    await ChatMessageDao.aupdate_message_model(message)
 
 
 async def _agent_stream_chat_completion(
@@ -1712,13 +1825,21 @@ async def _agent_stream_chat_completion(
             error_msg = error_msg or reason
             finalise_dangling_events()
             try:
-                resp = ChatMessageDao.insert_one(build_answer_row({"msg": final_msg, "events": events}))
+                citation_items = select_registry_items_for_persistence(
+                    citation_collector.list_items(),
+                    final_msg,
+                )
+                resp = ChatMessageDao.insert_one(
+                    build_answer_row(
+                        {
+                            "msg": strip_unregistered_citation_markers(final_msg, citation_items),
+                            "events": events,
+                        }
+                    )
+                )
                 save_message_citations_sync(
                     message_id=resp.id,
-                    items=select_registry_items_for_persistence(
-                        citation_collector.list_items(),
-                        final_msg,
-                    ),
+                    items=citation_items,
                     chat_id=conversation_id,
                     flow_id="",
                 )
@@ -1783,12 +1904,26 @@ async def _agent_stream_chat_completion(
                 yield _sse_resp("agent_tool_call", "end", end_payload, conversation_id)
 
             # ---- Step 3: process uploaded files ----
-            file_context, image_bases64 = await _process_agent_files(
+            file_context, image_bases64, merged_files = await _process_agent_files(
                 data,
                 model_info,
                 login_user,
                 ws_config,
             )
+            if merged_files and any(
+                merged.get("cover_filepath") and not (orig or {}).get("cover_filepath")
+                for orig, merged in zip(data.files or [], merged_files)
+            ):
+                data.files = merged_files
+                await _persist_question_file_attachments(message, data.text or "", merged_files)
+                yield _sse_resp(
+                    "question",
+                    "update",
+                    {"query": data.text or "", "files": merged_files},
+                    conversation_id,
+                    message_id=message.id,
+                    is_bot=False,
+                )
 
             # ---- Step 4: compose user content + history ----
             user_text = _build_user_content(
@@ -1825,12 +1960,13 @@ async def _agent_stream_chat_completion(
                     "{cur_date}",
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 )
-            # Citation-rule backstop: inject only when knowledge/citation tools are in play
-            # and the admin prompt doesn't already carry the rules (the default does), so
-            # existing configs keep citations and updated prompts aren't duplicated.
-            has_citation_tool = knowledge_bases_info or any(
-                isinstance(tool, DailyChatCitationToolWrapper) for tool in langchain_tools
-            )
+            # No citation-rule backstop here on purpose: the default daily-chat
+            # system prompt (platform locales, `chatConfig.systemPrompt2`) already
+            # carries the full marker spec — source-id format, the private-use
+            # delimiters and the "never invent an id" rule — making it a superset
+            # of CITATION_PROMPT_RULES. A backstop was declared here once but the
+            # flag was never read, so it never ran; injecting it now would only
+            # duplicate rules the prompt already states.
             llm_messages = list(history) + [HumanMessage(content=content_payload)]
 
             logger.info(
@@ -2208,14 +2344,20 @@ async def _agent_stream_chat_completion(
             await rate_limit_service.observe_call_success(call_context, observed_status_version)
 
         # Persist agent_answer — new unified shape is `{msg, events}`.
-        db_content: dict = {"msg": final_msg, "events": events}
-
-        persisted = True
-        resp_msg = await ChatMessageDao.ainsert_one(build_answer_row(db_content))
+        # Citations are resolved BEFORE the insert so a marker the registry
+        # cannot back never reaches storage: an invented id would still render
+        # as a footnote, and its detail lookup would 404 as "溯源详情加载失败".
         citation_items = select_registry_items_for_persistence(
             citation_collector.list_items(),
             final_msg,
         )
+        db_content: dict = {
+            "msg": strip_unregistered_citation_markers(final_msg, citation_items),
+            "events": events,
+        }
+
+        persisted = True
+        resp_msg = await ChatMessageDao.ainsert_one(build_answer_row(db_content))
         await save_message_citations(
             message_id=resp_msg.id,
             items=citation_items,
@@ -2252,7 +2394,7 @@ async def _agent_stream_chat_completion(
         # task has persisted a real name (slow models take >5s).
         if is_new_conv or (conversation.name in (None, "", "New Chat")):
             asyncio.create_task(
-                gen_title(data.text or "", final_msg, bisheng_llm, conversation_id, login_user, request)
+                gen_title(data.text or "", bisheng_llm, conversation_id, login_user, request)
             )
         await log_telemetry_events(str(login_user.user_id), conversation_id, start_time)
 
@@ -2333,6 +2475,29 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
         submit_obj, login_user, display_files=data.files
     )
 
+    # Enqueue HERE, not from the browser after it receives the handoff below.
+    # Attachment parsing no longer happens in this request (submit parks the raw
+    # refs in pending_files and the worker ingests them), so the request itself is
+    # fast — but the run must not depend on the browser coming back at all: a user
+    # who refreshes, closes the tab or hits a proxy timeout never sends the
+    # follow-up start-execute, and the session is stranded at NOT_STARTED with no
+    # one to pick it up. Enqueueing server-side decouples "the task runs" from
+    # "the client is still listening". The client's start-execute remains as a
+    # late retry and is safe to arrive after this: the executor rejects re-entry
+    # on an already-running session.
+    from bisheng.linsight.domain import utils as linsight_execute_utils
+
+    try:
+        await linsight_execute_utils.enqueue_session_for_execution(session_version)
+        await linsight_execute_utils.persist_task_turn_message(session_version)
+    except Exception:
+        # Keep streaming the handoff: the client's start-execute is the fallback
+        # path, and failing the whole submit here would lose the question too.
+        logger.exception(
+            f"[TASK_SUBMIT] server-side enqueue failed chat_id={session_version.session_id} "
+            f"svid={session_version.id}; relying on client start-execute"
+        )
+
     # Generate the conversation title straight from the user's question (task
     # mode has no "round complete" moment to hang it on). Reuse the daily-mode
     # title helper with the daily chat model (data.model) rather than the
@@ -2376,7 +2541,6 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
             await asyncio.wait_for(
                 gen_title(
                     submit_obj.question or "",
-                    "",
                     title_llm,
                     session_version.session_id,
                     login_user,
@@ -2461,6 +2625,10 @@ def _to_linsight_submit(data: APIChatCompletion):
                     file_name=item.get("file_name") or item.get("filename") or item.get("name") or "",
                     parsing_status=item.get("parsing_status") or "completed",
                     file_url=item.get("filepath") or item.get("file_url"),
+                    # Folder upload: the tree the user dropped is rebuilt inside the
+                    # task workspace from this. Absent on a plain single-file pick.
+                    relative_path=item.get("relative_path") or None,
+                    size=int(item.get("size") or 0),
                 )
             )
         submit_files = submit_files or None

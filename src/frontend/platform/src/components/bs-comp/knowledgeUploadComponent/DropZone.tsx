@@ -11,7 +11,7 @@ const MEDIA_FORMATS = ['.MP3', '.WAV', '.M4A', '.AAC', '.FLAC', '.OGG', '.MP4', 
 
 export function getKnowledgeUploadFormats(
     enableEtl4lm: boolean,
-    mediaEnabled: boolean = knowledgeUploadCapabilities.media
+    mediaEnabled = false
 ): string[] {
     const enabledMediaFormats = mediaEnabled ? MEDIA_FORMATS : [];
     return enableEtl4lm
@@ -21,7 +21,7 @@ export function getKnowledgeUploadFormats(
 
 export function getKnowledgeUploadAccept(
     supportedFormats: string[],
-    mediaEnabled: boolean = knowledgeUploadCapabilities.media
+    mediaEnabled = false
 ): Record<string, string[]> {
     return {
         'application/*': supportedFormats,
@@ -39,13 +39,14 @@ export function getKnowledgeUploadAccept(
 export default function DropZone({ onDrop }) {
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
+    const mediaEnabled = !!appConfig.enableMediaUpload;
 
-    const supportedFormats = getKnowledgeUploadFormats(appConfig.enableEtl4lm);
+    const supportedFormats = getKnowledgeUploadFormats(appConfig.enableEtl4lm, mediaEnabled);
     const allowedExts = new Set(
         supportedFormats.map(ext => ext.toLowerCase().replace('.', ''))
     );
     const { getRootProps, getInputProps } = useDropzone({
-        accept: getKnowledgeUploadAccept(supportedFormats),
+        accept: getKnowledgeUploadAccept(supportedFormats, mediaEnabled),
         useFsAccessApi: false,
         onDrop: (acceptedFiles, disAcceptedFiles) => {
             // Filter files that don't match the allowed formats
@@ -78,8 +79,8 @@ export default function DropZone({ onDrop }) {
 
     const mediaMaxSize = appConfig.uploadMediaMaxSize ?? 1024;
     const formatKey = appConfig.enableEtl4lm
-        ? (knowledgeUploadCapabilities.media ? 'supportedFormatsWithImages' : 'supportedFormatsWithImagesWithoutMedia')
-        : (knowledgeUploadCapabilities.media ? 'supportedFormatsWithoutImages' : 'supportedFormatsWithoutImagesWithoutMedia');
+        ? (mediaEnabled ? 'supportedFormatsWithImages' : 'supportedFormatsWithImagesWithoutMedia')
+        : (mediaEnabled ? 'supportedFormatsWithoutImages' : 'supportedFormatsWithoutImagesWithoutMedia');
     const formatText = t(formatKey, { maxSize: appConfig.uploadFileMaxSize, mediaMaxSize });
 
     return (

@@ -28,6 +28,7 @@ from bisheng.common.errcode.llm_tenant import (
 )
 from bisheng.common.errcode.server import (
     AsrModelConfigDeletedError,
+    AsrTranscriptionFailedError,
     NoAsrModelConfigError,
     NoTtsModelConfigError,
     TtsModelConfigDeletedError,
@@ -59,6 +60,7 @@ from bisheng.llm.domain.schemas import (
     WSModel,
 )
 from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
+from bisheng.llm.domain.utils import invalidate_llm_info_cache
 from bisheng.tenant.domain.constants import TenantAuditAction
 from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
 from bisheng.utils import generate_uuid, md5_hash
@@ -67,6 +69,10 @@ from bisheng.utils.mask_data import JsonFieldMasker
 
 from ..llm import BishengASR, BishengEmbedding, BishengLLM, BishengTTS
 from ..llm.rerank import BishengRerank
+
+# A probe sends a couple of tokens; anything slower than this is unusable in a
+# real request anyway, and without a cap one dead endpoint hangs the caller.
+MODEL_TEST_TIMEOUT = 30
 
 
 def _resolve_tenant_id(tenant_id: int | None) -> int:
@@ -681,11 +687,17 @@ class LLMService:
             raise ServerAddError.http_exception(f"<{success_msg.rstrip(',')}>Added{failed_msg}")
 
         await cls.add_llm_server_hook(request, login_user, ret)
+        # Record what the share flag actually did, not what the request asked
+        # for: ``ainsert_server_with_models`` only fans out when the new row is
+        # Root-owned, and a super admin creating under a child-tenant admin
+        # scope lands in that child. Logging the raw request value there would
+        # claim a share that never happened.
+        shared_to_children = bool(getattr(server, "share_to_children", True)) and db_server.tenant_id == ROOT_TENANT_ID
         await _write_llm_audit(
             login_user,
             TenantAuditAction.LLM_SERVER_CREATE.value,
             ret,
-            extra={"share_to_children": getattr(server, "share_to_children", True)},
+            extra={"share_to_children": shared_to_children},
         )
         return ret
 
@@ -725,6 +737,12 @@ class LLMService:
 
     @classmethod
     async def test_model_status(cls, model: LLMModel | LLMModelInfo, login_user: UserPayload):
+        """Probe a model with one real call and record the verdict.
+
+        Writes on BOTH outcomes: a model that was marked abnormal and has since
+        been fixed has to be able to go back to normal, otherwise re-checking it
+        can never change anything.
+        """
         common_params = {
             "app_id": ApplicationTypeEnum.MODEL_TEST.value,
             "app_name": ApplicationTypeEnum.MODEL_TEST.value,
@@ -732,30 +750,40 @@ class LLMService:
             "user_id": login_user.user_id,
         }
         try:
-            if model.model_type == LLMModelType.LLM.value:
-                bisheng_model = await cls.get_bisheng_llm(
-                    model_id=model.id, ignore_online=True, streaming=False, **common_params
-                )
-                await bisheng_model.ainvoke("hello")
-            elif model.model_type == LLMModelType.EMBEDDING.value:
-                bisheng_embed = await cls.get_bisheng_embedding(model_id=model.id, ignore_online=True, **common_params)
-                await bisheng_embed.aembed_query("hello")
-            elif model.model_type == LLMModelType.TTS.value:
-                bisheng_tts = await cls.get_bisheng_tts(model_id=model.id, ignore_online=True, **common_params)
-                await bisheng_tts.ainvoke("hello")
-            elif model.model_type == LLMModelType.ASR.value:
-                example_file_path = os.path.join(os.path.dirname(__file__), "./asr_example.wav")
-                with open(example_file_path, "rb") as f:
-                    bisheng_asr = await cls.get_bisheng_asr(model_id=model.id, ignore_online=True, **common_params)
-                    await bisheng_asr.ainvoke(f)
-            elif model.model_type == LLMModelType.RERANK.value:
-                bisheng_rerank = await cls.get_bisheng_rerank(model_id=model.id, ignore_online=True, **common_params)
-                await bisheng_rerank.acompress_documents(
-                    documents=[Document(page_content="hello world")], query="hello"
-                )
+            async with asyncio.timeout(MODEL_TEST_TIMEOUT):
+                await cls._invoke_model_probe(model, common_params)
+        except TimeoutError:
+            LLMDao.update_model_status(model.id, 1, f"Timeout after {MODEL_TEST_TIMEOUT}s")
+            logger.warning("test model status timeout: {} {}", model.id, model.model_name)
         except Exception as e:
             LLMDao.update_model_status(model.id, 1, str(e))
             logger.exception(f"test model status: {model.id} {model.model_name}")
+        else:
+            # Clear any stale failure reason along with the status.
+            LLMDao.update_model_status(model.id, 0, "")
+
+    @classmethod
+    async def _invoke_model_probe(cls, model: LLMModel | LLMModelInfo, common_params: dict):
+        """Issue the smallest meaningful call for this model type."""
+        if model.model_type == LLMModelType.LLM.value:
+            bisheng_model = await cls.get_bisheng_llm(
+                model_id=model.id, ignore_online=True, streaming=False, **common_params
+            )
+            await bisheng_model.ainvoke("hello")
+        elif model.model_type == LLMModelType.EMBEDDING.value:
+            bisheng_embed = await cls.get_bisheng_embedding(model_id=model.id, ignore_online=True, **common_params)
+            await bisheng_embed.aembed_query("hello")
+        elif model.model_type == LLMModelType.TTS.value:
+            bisheng_tts = await cls.get_bisheng_tts(model_id=model.id, ignore_online=True, **common_params)
+            await bisheng_tts.ainvoke("hello")
+        elif model.model_type == LLMModelType.ASR.value:
+            example_file_path = os.path.join(os.path.dirname(__file__), "./asr_example.wav")
+            with open(example_file_path, "rb") as f:
+                bisheng_asr = await cls.get_bisheng_asr(model_id=model.id, ignore_online=True, **common_params)
+                await bisheng_asr.ainvoke(f)
+        elif model.model_type == LLMModelType.RERANK.value:
+            bisheng_rerank = await cls.get_bisheng_rerank(model_id=model.id, ignore_online=True, **common_params)
+            await bisheng_rerank.acompress_documents(documents=[Document(page_content="hello world")], query="hello")
 
     @classmethod
     async def set_default_model(cls, model: LLMModel | LLMModelInfo):
@@ -897,6 +925,15 @@ class LLMService:
             db_server,
         )
 
+        # The probe below resolves the model and its server through the same 60s
+        # in-process cache that no write invalidates, so a model renamed a moment
+        # ago would be called under its old name and the verdict recorded against
+        # it -- the status the list then shows belongs to the previous name. Evict
+        # what this save just changed before probing anything.
+        invalidate_llm_info_cache(server_id=db_server.id)
+        for one in new_server_info.models:
+            invalidate_llm_info_cache(model_id=one.id)
+
         # Determine if the model status needs to be re-determined
         for one in new_server_info.models:
             if one.id not in old_model_dict:
@@ -909,6 +946,28 @@ class LLMService:
             ):
                 await cls.test_model_status(one, login_user)
         return new_server_info
+
+    @classmethod
+    async def verify_model_status(cls, model_id: int, login_user: UserPayload) -> LLMModelInfo:
+        """Re-probe one model on demand and return its refreshed state.
+
+        The stored status is otherwise only decided when the provider config is
+        saved, so it can be weeks stale; this lets an admin confirm a model is
+        actually reachable right now without leaving the model list.
+        """
+        exist_model = await LLMDao.aget_model_by_id(model_id)
+        if not exist_model:
+            raise NotFoundError.http_exception()
+        # The probe resolves the model through a 60s in-process cache that no
+        # write invalidates, so a model renamed moments ago would be called under
+        # its old name and reported back as "does not exist". Evict first — an
+        # on-demand check that answers from a minute-old snapshot is worthless.
+        invalidate_llm_info_cache(model_id=model_id, server_id=exist_model.server_id)
+        # Probing ignores the online flag on purpose: a model taken offline
+        # still needs checking before you decide to bring it back.
+        await cls.test_model_status(exist_model, login_user)
+        refreshed = await LLMDao.aget_model_by_id(model_id)
+        return LLMModelInfo(**refreshed.model_dump())
 
     @classmethod
     async def update_model_online(cls, model_id: int, online: bool) -> LLMModelInfo:
@@ -1514,7 +1573,21 @@ class LLMService:
             app_type=ApplicationTypeEnum.ASR,
             user_id=login_user.user_id,
         )
-        return await asr_client.ainvoke(file.file)
+        try:
+            return await asr_client.ainvoke(file.file)
+        except Exception as e:
+            # Provider-level recognition failure (rate limit, auth, an audio
+            # format the model will not take) — surface as a dedicated business
+            # code, not a raw 500, so the client shows a toast naming the reason
+            # instead of the global maintenance overlay claiming the platform is
+            # down. Same treatment as workbench TTS.
+            logger.exception("workbench asr transcription failed")
+            # Raised as an instance, not via http_exception: only this path puts
+            # the provider's own words into the envelope's `data`, which is where
+            # the client reads the {exception} its translated message leaves a
+            # slot for. http_exception would have replaced the whole message with
+            # the raw error instead, in English, whatever the user's language.
+            raise AsrTranscriptionFailedError(exception=e) from e
 
     @classmethod
     async def invoke_workbench_tts(cls, login_user: UserPayload, text: str) -> str:

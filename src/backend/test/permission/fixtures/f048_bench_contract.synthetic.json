@@ -1,0 +1,143 @@
+{
+  "contract_version": "f048-bench-01-v2",
+  "authorization_model_checksum": "cdcb8c337e756305966082e0d9cd5540e794692e614a048de9f8efbbf168350f",
+  "dataset": {
+    "name": "f048-single-slot-visible-synthetic-v2",
+    "source": "checksum-pinned-representative-synthetic-not-production",
+    "production_derived": false,
+    "representative_distribution": true,
+    "representative_reason": "Covers the design-mandated N_db/V matrix, every canonical subject kind, multi-source overlap, and all three list path shapes without copying production rows.",
+    "dataset_checksum": "d083c56febda9eb055e9ae5356f800ca837a1e534628fdeda623dc4b8063ab22",
+    "source_checksum": "9e2e7699dbe65851de0b04651ee8bdb009e2a85ac16e8c12a5b9e5092c220df0",
+    "visible_checksum": "f185c204418fbd98d41c15b0bac7759060c2df73da8c8c4fcf381f0a02c1994e",
+    "scenarios": [
+      {
+        "name": "n10000_v10_direct",
+        "source_kind": "direct",
+        "actor_id": 1010,
+        "resource_type": "workflow",
+        "resource_id_prefix": "bench-n10k-v10-",
+        "resource_count": 10000,
+        "visible_count": 10,
+        "expected_object_checksum": "276af3de69921d262e61bd168ab288d0609f685dd2547e9a1a618a414bec633d"
+      },
+      {
+        "name": "n10000_v100_department",
+        "source_kind": "department",
+        "actor_id": 1100,
+        "resource_type": "assistant",
+        "resource_id_prefix": "bench-n10k-v100-",
+        "resource_count": 10000,
+        "visible_count": 100,
+        "expected_object_checksum": "cd02436e0256be2f7897168846ab8d3c33eb5324b2d47bea912fd083bf0e4ca6"
+      },
+      {
+        "name": "n10000_v1000_group",
+        "source_kind": "group",
+        "actor_id": 2000,
+        "resource_type": "tool",
+        "resource_id_prefix": "bench-n10k-v1000-",
+        "resource_count": 10000,
+        "visible_count": 1000,
+        "expected_object_checksum": "2e083800048bf32787bbae4a55d692985e236a313fe95bbf1c69ab043bc08090"
+      },
+      {
+        "name": "n10000_v5000_system",
+        "source_kind": "system",
+        "actor_id": 6000,
+        "resource_type": "dashboard",
+        "resource_id_prefix": "bench-n10k-v5000-",
+        "resource_count": 10000,
+        "visible_count": 5000,
+        "expected_object_checksum": "39774222a1afd329db8148b2fe00bb9f466b22cfccec1d1c30f71049bf3fe4fa"
+      },
+      {
+        "name": "n100000_v10_direct",
+        "source_kind": "direct",
+        "actor_id": 10010,
+        "resource_type": "channel",
+        "resource_id_prefix": "bench-n100k-v10-",
+        "resource_count": 100000,
+        "visible_count": 10,
+        "expected_object_checksum": "59c5930799bb1af3c8261121b5fbb73860ee779f65e09067ff47a0c34724f76c"
+      },
+      {
+        "name": "n100000_v100_department",
+        "source_kind": "department",
+        "actor_id": 10100,
+        "resource_type": "knowledge_space",
+        "resource_id_prefix": "bench-n100k-v100-",
+        "resource_count": 100000,
+        "visible_count": 100,
+        "expected_object_checksum": "b3cd3850fc6ddcc900320c8f7152e33bdc985fde3a1bcef5b83d62cc01cc93a6"
+      },
+      {
+        "name": "n100000_v1000_group",
+        "source_kind": "group",
+        "actor_id": 11000,
+        "resource_type": "knowledge_library",
+        "resource_id_prefix": "bench-n100k-v1000-",
+        "resource_count": 100000,
+        "visible_count": 1000,
+        "expected_object_checksum": "5a3da0068b3ab75fb0d61e1ab2332ea114182f72b945f1900a2f8f7b85488ed0"
+      },
+      {
+        "name": "n100000_v5000_multi",
+        "source_kind": "multi_source",
+        "actor_id": 15000,
+        "resource_type": "knowledge_file",
+        "resource_id_prefix": "bench-n100k-v5000-",
+        "resource_count": 100000,
+        "visible_count": 5000,
+        "expected_object_checksum": "b489f002d624e9e36aa3b925c1af6b8795edc1b521cf60f5fb6ebd2617123162"
+      }
+    ],
+    "business_paths": {
+      "joined": {
+        "scenario": "n100000_v100_department",
+        "strategy": "visible_id_first",
+        "page_size": 20
+      },
+      "department": {
+        "scenario": "n100000_v100_department",
+        "strategy": "candidate_first",
+        "n_db": 200,
+        "visible_total": 100,
+        "selectivity": 0.5,
+        "page_size": 20,
+        "batch_size": 50
+      },
+      "file": {
+        "scenario": "n100000_v5000_multi",
+        "strategy": "candidate_first",
+        "n_db": 100000,
+        "visible_total": 5000,
+        "selectivity": 0.95,
+        "page_size": 50,
+        "batch_size": 100
+      }
+    }
+  },
+  "limits": {
+    "check_p95_ms": 50,
+    "batch_check_p95_ms": {
+      "20": 100,
+      "50": 200,
+      "100": 300
+    },
+    "stream_p95_ms": {
+      "10": 50,
+      "100": 100,
+      "1000": 300,
+      "5000": 1000
+    },
+    "max_error_rate": 0.001
+  },
+  "run": {
+    "warmup": 2,
+    "iterations": 30,
+    "concurrency": 1,
+    "consistency": "HIGHER_CONSISTENCY"
+  },
+  "contract_checksum": "80a80489bf4f3ae01f5b1f3519cd275b10a92f16dd58df5fa1378de48c608912"
+}

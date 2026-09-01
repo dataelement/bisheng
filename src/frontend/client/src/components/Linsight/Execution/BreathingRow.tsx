@@ -7,7 +7,8 @@
  * carriers (ExecutionFlow full-page view + TaskTurnPanel chat-embedded view),
  * which keeps the live feedback identical across surfaces.
  *
- * State → copy mapping (all keys pre-existing):
+ * State → copy mapping:
+ *  - preparing   → com_linsight_preparing  ("Preparing the task")
  *  - planning    → com_linsight_planning   ("Planning tasks")
  *  - researching → com_linsight_executing  ("Working")
  *  - generating  → com_linsight_generating ("Generating results, please wait…")
@@ -15,10 +16,11 @@
 import { Outlined } from 'bisheng-icons';
 import { useLocalize } from '~/hooks';
 
-type BreathingState = 'planning' | 'researching' | 'generating';
+type BreathingState = 'preparing' | 'planning' | 'researching' | 'generating';
 
 // state → localize key (single source of truth for the activity copy).
 const STATE_I18N: Record<BreathingState, string> = {
+    preparing: 'com_linsight_preparing',
     planning: 'com_linsight_planning',
     researching: 'com_linsight_executing',
     generating: 'com_linsight_generating',

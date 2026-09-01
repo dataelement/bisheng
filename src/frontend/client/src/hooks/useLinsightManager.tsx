@@ -9,7 +9,7 @@ import {
     useSetRecoilState
 } from 'recoil';
 import { SSE } from 'sse.js';
-import { continueLinsight, startLinsight } from '~/api/linsight';
+import { continueLinsight, getLinsightSessionVersionList, getLinsightTaskList, startLinsight } from '~/api/linsight';
 import { ConversationData, QueryKeys } from '~/types/chat';
 import { useToastContext } from '~/Providers';
 import store from '~/store';
@@ -20,6 +20,20 @@ import {
     toggleNav
 } from '~/utils';
 
+
+/**
+ * Backend SessionVersionStatusEnum values a run can no longer leave, i.e. the
+ * ones that emit no further WS events. `waiting_for_user_input` is NOT one of
+ * them — a parked run resumes — and neither is `not_started`, which means
+ * queued. Kept as raw backend values (mapSessionVersionStatus maps them to the
+ * store's SopStatus afterwards).
+ */
+const TERMINAL_SESSION_STATUSES = new Set([
+    'completed',
+    'failed',
+    'terminated',
+    'sop_generation_failed',
+]);
 
 export const useLinsightManager = () => {
     const [linsightMap, setLinsightMap] = useRecoilState(linsightMapState);
@@ -67,6 +81,65 @@ export const useLinsightManager = () => {
     const getLinsight = (versionId: string) => {
         return linsightMap.get(versionId) || null;
     };
+
+    /**
+     * Re-sync one session version from the server and adopt a TERMINAL state.
+     *
+     * The task-message-stream WS is the only carrier of terminal events
+     * (final_result / task_terminated / error_message), and the backend hands
+     * them out with a destructive BLPOP: a socket that dies between the pop and
+     * the send takes the event with it. The reconnect that follows then blocks
+     * on an empty queue forever, so a run that finished inside the disconnect
+     * window leaves the panel spinning on its last live snapshot (and its task
+     * progress frozen mid-count) until the user reloads the page.
+     *
+     * Reconciling against the DB — the authority — closes that window. It runs
+     * on every WS open rather than only on reconnects, because the same event
+     * can also be swallowed by a competing consumer of the shared queue (a
+     * second tab on the same session, or a previous connection's server-side
+     * coroutine still parked in BLPOP), which a first connection is no more
+     * immune to than a relink.
+     *
+     * Deliberately one-way: server state is adopted ONLY once the run has
+     * reached a terminal status. A still-running session is left untouched —
+     * the snapshot is fetched asynchronously and would otherwise clobber live
+     * WS events that landed while it was in flight. Terminal states take no
+     * further events, so there is nothing left to lose.
+     *
+     * Reads the store through a Recoil snapshot: the caller lives inside the
+     * WS pump's `[]`-deps connect callback, where a captured `getLinsight`
+     * would be a first-render closure.
+     *
+     * @returns true if a terminal state was adopted, false if left alone.
+     */
+    const reconcileLinsightFromServer = useRecoilCallback(({ snapshot }) => async (versionId: string) => {
+        const map = await snapshot.getPromise(linsightMapState);
+        const current = map.get(versionId);
+        // No session_id ⇒ nothing to query by (entry not hydrated yet).
+        if (!current?.session_id) return false;
+
+        const versions = await getLinsightSessionVersionList(current.session_id, '');
+        const item = (versions || []).find((v) => String(v.id) === String(versionId));
+        if (!item || !TERMINAL_SESSION_STATUSES.has(item.status)) return false;
+
+        // Same shape the reload path builds (switchAndUpdateLinsight), so a
+        // reconciled panel is indistinguishable from a freshly loaded one.
+        const tasks = await getLinsightTaskList(versionId, item, '');
+        updateLinsight(versionId, {
+            status: mapSessionVersionStatus(item.status, item.execute_feedback),
+            output_result: item.output_result,
+            execute_feedback: item.execute_feedback,
+            tasks: buildTaskTree(tasks),
+            file_list: item.output_result?.final_files || [],
+            taskError: 'failed' === item.status ? item.output_result?.error_message : '',
+            // Carry the persisted task ChatMessage id + verdict, exactly as the
+            // live final_result handler does, so like/dislike targets the right
+            // row instead of a streaming placeholder.
+            ...(item.message_id != null ? { message_id: item.message_id, liked: item.liked } : {}),
+            queueCount: 0,
+        });
+        return true;
+    }, [updateLinsight]);
 
     // F035 多轮对话：在已完成的同一会话里追加新一轮。
     // 复用同一 session_version (versionId) + 同一 agent thread，后端保留全部上下文；
@@ -157,6 +230,7 @@ export const useLinsightManager = () => {
         switchSession,
         switchAndUpdateLinsight,
         continueConversation,
+        reconcileLinsightFromServer,
         linsightMap
     };
 };
@@ -469,8 +543,26 @@ export function mapSessionVersionStatus(status: string, executeFeedback?: string
     }
 }
 
+/**
+ * Project the server's task rows onto the shape the panels render.
+ *
+ * Status is passed through as-is. There used to be a sticky `hasTerminated` flag
+ * here that rewrote EVERY row after the first `terminated`/`failed` one to
+ * `not_started` (to hide them), back when `terminated` could only mean "the user
+ * hit stop". It no longer can: `_diff_todos` now also marks a todo `terminated` when
+ * the MODEL prunes it from its own plan, so one pruned todo silently buried every
+ * task after it — a session with 8 successful tasks rendered "3/18" with grey
+ * rings, and since `isTaskStarted('not_started')` is false, those tasks' steps
+ * vanished from the timeline too.
+ *
+ * Nothing is lost by passing status through: a manually stopped run has its
+ * unfinished rows swept to TERMINATED by the backend (`_terminate_unfinished_tasks`)
+ * and its in-flight row rewritten by `getLinsightTaskList`, `TaskPanel` keys the
+ * stopped-run rendering off its own `terminated` prop, and a pruned row with no
+ * history is dropped by TaskStepRow's empty guard. The live WS path never called
+ * this function at all — so this is the reload view converging on the live one.
+ */
 function buildTaskTree(tasks) {
-    let hasTerminated = false
     const newTasks = tasks.map(task => {
         const taskTree = {
             id: task.id,
@@ -479,7 +571,7 @@ function buildTaskTree(tasks) {
             // task_generate mapping (Websocket/index.tsx) or history-loaded turns
             // render blank task rows (structure present, names empty).
             name: task.name || task.task_data?.name || task.task_data?.display_target || '',
-            status: hasTerminated ? 'not_started' : task.status === 'waiting_for_user_input' ? 'user_input' : task.status,
+            status: task.status === 'waiting_for_user_input' ? 'user_input' : task.status,
             history: task.history || [],
             event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
             call_reason: task.input_prompt || '',
@@ -499,11 +591,6 @@ function buildTaskTree(tasks) {
                     task_data: child.task_data
                 }
             }) || []
-        }
-
-        // 处理终止后的任务全部为not_started（隐藏）
-        if (['terminated', 'failed'].includes(task.status)) {
-            hasTerminated = true
         }
 
         return taskTree

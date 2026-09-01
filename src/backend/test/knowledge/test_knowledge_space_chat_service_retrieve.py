@@ -6,7 +6,6 @@ These tests cover the multi-KB retrieval orchestration introduced for the
 filter validation, tag-name resolution, KB-not-found, multi-KB merge and
 top_k truncation, and the per-chunk knowledge_id annotation.
 """
-
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -57,7 +56,6 @@ def _doc(content: str, *, document_id: int, document_name: str, chunk_index: int
 # aretrieve_chunks — input validation
 # ---------------------------------------------------------------------------
 
-
 async def test_aretrieve_chunks_empty_kb_ids_raises_400():
     svc = _make_service()
     with pytest.raises(HTTPException) as exc:
@@ -93,15 +91,12 @@ async def test_aretrieve_chunks_tag_match_mode_all_raises_400():
 # aretrieve_chunks — orchestration (per-KB delegation mocked)
 # ---------------------------------------------------------------------------
 
-
 async def test_aretrieve_chunks_merges_results_and_tags_knowledge_id():
     svc = _make_service()
-    svc._aretrieve_chunks_dispatch = AsyncMock(
-        side_effect=[
-            [(1, _doc("a", document_id=10, document_name="A.pdf", chunk_index=0))],
-            [(2, _doc("b", document_id=20, document_name="B.pdf", chunk_index=1))],
-        ]
-    )
+    svc._aretrieve_chunks_dispatch = AsyncMock(side_effect=[
+        [(1, _doc("a", document_id=10, document_name="A.pdf", chunk_index=0))],
+        [(2, _doc("b", document_id=20, document_name="B.pdf", chunk_index=1))],
+    ])
 
     result = await svc.aretrieve_chunks(query="hello", knowledge_base_ids=[1, 2])
 
@@ -116,12 +111,10 @@ async def test_aretrieve_chunks_merges_results_and_tags_knowledge_id():
 
 async def test_aretrieve_chunks_truncates_to_top_k():
     svc = _make_service()
-    svc._aretrieve_chunks_dispatch = AsyncMock(
-        side_effect=[
-            [(1, _doc(f"a{i}", document_id=i, document_name="A.pdf", chunk_index=i)) for i in range(3)],
-            [(2, _doc(f"b{i}", document_id=i + 100, document_name="B.pdf", chunk_index=i)) for i in range(3)],
-        ]
-    )
+    svc._aretrieve_chunks_dispatch = AsyncMock(side_effect=[
+        [(1, _doc(f"a{i}", document_id=i, document_name="A.pdf", chunk_index=i)) for i in range(3)],
+        [(2, _doc(f"b{i}", document_id=i + 100, document_name="B.pdf", chunk_index=i)) for i in range(3)],
+    ])
 
     result = await svc.aretrieve_chunks(query="hello", knowledge_base_ids=[1, 2], top_k=4)
 
@@ -152,7 +145,6 @@ async def test_aretrieve_chunks_passes_filter_tags_to_kb_delegate():
 # _aretrieve_chunks_for_kb — per-KB flow
 # ---------------------------------------------------------------------------
 
-
 async def test_aretrieve_chunks_for_kb_raises_not_found_when_space_missing(monkeypatch):
     svc = _make_service()
     monkeypatch.setattr(svc_mod.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=None))
@@ -160,10 +152,7 @@ async def test_aretrieve_chunks_for_kb_raises_not_found_when_space_missing(monke
 
     with pytest.raises(_StubNotFoundError):
         await svc._aretrieve_chunks_for_kb(
-            kb_id=99,
-            query="q",
-            tag_names=[],
-            max_content=15000,
+            kb_id=99, query="q", tag_names=[], max_content=15000,
         )
 
 
@@ -173,29 +162,22 @@ async def test_aretrieve_chunks_for_kb_returns_empty_when_tag_filter_resolves_to
     svc._resolve_kb_target_file_ids = AsyncMock(return_value=[])
 
     out = await svc._aretrieve_chunks_for_kb(
-        kb_id=1,
-        query="q",
-        tag_names=["nope"],
-        max_content=15000,
+        kb_id=1, query="q", tag_names=["nope"], max_content=15000,
     )
     assert out == []
 
 
-async def test_aretrieve_chunks_for_kb_returns_empty_when_visibility_path_has_no_survivors(monkeypatch):
-    """The shared visibility path owns empty/non-primary/F046 short-circuiting."""
+async def test_aretrieve_chunks_for_kb_returns_empty_when_search_kwargs_none(monkeypatch):
+    """When the build helper returns (None, None) (all candidates are non-primary), skip retrieval."""
     svc = _make_service()
     monkeypatch.setattr(svc_mod.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=MagicMock(id=1)))
     svc._resolve_kb_target_file_ids = AsyncMock(return_value=None)
-    svc._retrieve_and_filter = AsyncMock(return_value=[])
+    svc._build_folder_search_kwargs = AsyncMock(return_value=(None, None))
 
     out = await svc._aretrieve_chunks_for_kb(
-        kb_id=1,
-        query="q",
-        tag_names=[],
-        max_content=15000,
+        kb_id=1, query="q", tag_names=[], max_content=15000,
     )
     assert out == []
-    svc._retrieve_and_filter.assert_awaited_once()
 
 
 async def test_aretrieve_chunks_for_kb_invokes_retriever_and_tags_kb_id(monkeypatch):
@@ -203,34 +185,46 @@ async def test_aretrieve_chunks_for_kb_invokes_retriever_and_tags_kb_id(monkeypa
     space = MagicMock(id=1)
     monkeypatch.setattr(svc_mod.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=space))
     svc._resolve_kb_target_file_ids = AsyncMock(return_value=None)
+    svc._build_folder_search_kwargs = AsyncMock(return_value=({"k": 100}, {"k": 100}))
+
+    milvus_store = MagicMock()
+    milvus_store.as_retriever.return_value = MagicMock()
+    es_store = MagicMock()
+    es_store.as_retriever.return_value = MagicMock()
+    monkeypatch.setattr(
+        svc_mod.KnowledgeRag,
+        "init_knowledge_milvus_vectorstore",
+        AsyncMock(return_value=milvus_store),
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeRag,
+        "init_knowledge_es_vectorstore",
+        AsyncMock(return_value=es_store),
+    )
 
     docs = [
         _doc("hit-1", document_id=10, document_name="A.pdf", chunk_index=0),
         _doc("hit-2", document_id=10, document_name="A.pdf", chunk_index=1),
     ]
-    svc._retrieve_and_filter = AsyncMock(return_value=docs)
+    fake_tool = MagicMock()
+    fake_tool.ainvoke = AsyncMock(return_value=docs)
+    tool_factory = MagicMock(return_value=fake_tool)
+    monkeypatch.setattr(svc_mod, "KnowledgeRetrieverTool", tool_factory)
 
     out = await svc._aretrieve_chunks_for_kb(
-        kb_id=1,
-        query="hello",
-        tag_names=[],
-        max_content=12345,
+        kb_id=1, query="hello", tag_names=[], max_content=12345,
     )
 
     assert [kb_id for kb_id, _ in out] == [1, 1]
     assert [d.page_content for _, d in out] == ["hit-1", "hit-2"]
-    svc._retrieve_and_filter.assert_awaited_once_with(
-        space=space,
-        query="hello",
-        candidate_file_ids=None,
-        max_content=12345,
-    )
+    # KnowledgeRetrieverTool constructed with the requested max_content
+    assert tool_factory.call_args.kwargs["max_content"] == 12345
+    fake_tool.ainvoke.assert_awaited_once_with("hello")
 
 
 # ---------------------------------------------------------------------------
 # _resolve_kb_target_file_ids — tag name → id → file id mapping
 # ---------------------------------------------------------------------------
-
 
 async def test_resolve_kb_target_file_ids_none_when_no_tags():
     svc = _make_service()
@@ -256,12 +250,10 @@ async def test_resolve_kb_target_file_ids_returns_file_ids(monkeypatch):
     monkeypatch.setattr(
         svc_mod.TagDao,
         "aget_resources_by_tags",
-        AsyncMock(
-            return_value=[
-                MagicMock(resource_id="100"),
-                MagicMock(resource_id="200"),
-            ]
-        ),
+        AsyncMock(return_value=[
+            MagicMock(resource_id="100"),
+            MagicMock(resource_id="200"),
+        ]),
     )
 
     out = await svc._resolve_kb_target_file_ids(1, ["alpha", "beta"])

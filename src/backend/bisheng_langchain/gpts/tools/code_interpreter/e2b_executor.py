@@ -8,7 +8,12 @@ from e2b.sandbox.filesystem.filesystem import EntryInfo, FileType, WriteEntry
 from e2b_code_interpreter import Result, Sandbox
 from loguru import logger
 
-from bisheng_langchain.gpts.tools.code_interpreter.base_executor import BaseExecutor, path_namespace_rules
+from bisheng_langchain.gpts.tools.code_interpreter.base_executor import (
+    MAX_SUCCESS_LOG_CHARS,
+    BaseExecutor,
+    clip_middle,
+    path_namespace_rules,
+)
 
 # F035 TC-4: copy-in/copy-out thresholds. The sandbox cannot reach MinIO, so the
 # worker mediates all file transfer (design §9.3.9).
@@ -21,6 +26,23 @@ SIZE_AUTOPUSH = 5 * 1024 * 1024  # 5 MB
 SIZE_INLINE = 1 * 1024 * 1024  # 1 MB
 
 _SANDBOX_ROOT = "/home/user/"
+
+
+def _clip_log_lines(lines):
+    """Cap an E2B ``logs.stdout`` / ``logs.stderr`` list, preserving its type.
+
+    E2B hands these back as ``List[str]`` and, unlike LocalExecutor's failure path,
+    nothing here bounds them at all. An unbounded log crosses the deepagents eviction
+    threshold and lands the run in the offload path whose preview is effectively
+    unreadable — see ``base_executor.MAX_SUCCESS_LOG_CHARS`` for the full story.
+    Over the limit the list collapses to a single clipped entry; the list type is kept
+    so callers that iterate keep working.
+    """
+    if not isinstance(lines, list):
+        return clip_middle(lines) if isinstance(lines, str) else lines
+    if sum(len(str(x)) for x in lines) <= MAX_SUCCESS_LOG_CHARS:
+        return lines
+    return [clip_middle("".join(str(x) for x in lines))]
 
 
 class E2bCodeExecutor(BaseExecutor):
@@ -123,8 +145,8 @@ class E2bCodeExecutor(BaseExecutor):
 
             result = {
                 "results": results,
-                "stdout": execution.logs.stdout,
-                "stderr": execution.logs.stderr,
+                "stdout": _clip_log_lines(execution.logs.stdout),
+                "stderr": _clip_log_lines(execution.logs.stderr),
                 "error": execution.error,
                 "file_list": file_list,
                 "new_files": new_files,
@@ -229,8 +251,8 @@ class E2bCodeExecutor(BaseExecutor):
         results, file_list = self.parse_results(execution.results)
         return {
             "results": results,
-            "stdout": execution.logs.stdout,
-            "stderr": execution.logs.stderr,
+            "stdout": _clip_log_lines(execution.logs.stdout),
+            "stderr": _clip_log_lines(execution.logs.stderr),
             "error": execution.error,
             "file_list": file_list,
         }

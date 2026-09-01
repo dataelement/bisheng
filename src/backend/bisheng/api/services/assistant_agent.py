@@ -144,7 +144,12 @@ class AssistantCitationToolWrapper(BaseTool):
         if not self._has_knowledge_rag_tool():
             return self.tool.invoke({"query": query}, config=kwargs.get("config"))
 
-        retrieval_result = self.tool.knowledge_retriever_tool.invoke({"query": query})
+        # Called directly rather than through `invoke`: the retriever is this
+        # wrapper's internal step, and opening a run for it put a second card in
+        # the chat per search — named after the retriever instead of the
+        # knowledge base, so it read "知识库已被删除", carrying the raw Document
+        # dump as its output.
+        retrieval_result = self.tool.knowledge_retriever_tool._run(query)
         return self._format_knowledge_results(retrieval_result)
 
     async def _arun(self, query: str, **kwargs: Any) -> Any:
@@ -155,7 +160,7 @@ class AssistantCitationToolWrapper(BaseTool):
         if not self._has_knowledge_rag_tool():
             return await self.tool.ainvoke({"query": query}, config=kwargs.get("config"))
 
-        retrieval_result = await self.tool.knowledge_retriever_tool.ainvoke({"query": query})
+        retrieval_result = await self.tool.knowledge_retriever_tool._arun(query)
         return await self._aformat_knowledge_results(retrieval_result)
 
 

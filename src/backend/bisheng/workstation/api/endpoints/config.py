@@ -93,6 +93,13 @@ async def get_config(request: Request, login_user=LoginUserDep):
     if isinstance(models, list):
         tenant_id = get_current_tenant_id() or login_user.tenant_id
         ret["models"] = await project_workstation_model_states(models, tenant_id=tenant_id)
+    # The admin curates this tool list, but each tool keeps its own resource
+    # permission, so only offer the ones this user may actually run. Task mode
+    # binds the same daily selection (see `_build_linsight_submit_payload`), so
+    # filtering here covers both modes. The admin-facing `/config/daily` is
+    # deliberately left unfiltered — that endpoint edits the curated list.
+    if ret.get("tools"):
+        ret["tools"] = await WorkStationService.afilter_tools_by_use_permission(ret["tools"], login_user)
     ret["linsightConfig"] = linsight_config.model_dump() if linsight_config else {}
     ret["enable_etl4lm"] = knowledge_conf.image_parser_enabled
     linsight_invitation_code = (await bisheng_settings.aget_all_config()).get("linsight_invitation_code", None)
@@ -133,13 +140,22 @@ async def get_config(request: Request, login_user=LoginUserDep):
 
 @router.get("/config/daily", summary="Get daily workbench configuration", response_model=UnifiedResponseModel)
 async def get_daily_config(request: Request, login_user=LoginUserDep):
-    ret, inherited, source_tenant_id, has_override = await WorkStationService.get_daily_chat_config_with_meta()
+    (
+        ret,
+        inherited,
+        source_tenant_id,
+        has_override,
+        is_fallback,
+    ) = await WorkStationService.get_daily_chat_config_with_meta()
     return resp_200(
         data={
             "data": ret.model_dump(exclude_unset=True) if ret else None,
             "inherited_from_root": inherited,
             "source_tenant_id": source_tenant_id,
             "has_override": has_override,
+            # Nothing was stored — this payload is the built-in default, not the
+            # admin's settings. The config page confirms before persisting it.
+            "is_fallback": is_fallback,
         }
     )
 

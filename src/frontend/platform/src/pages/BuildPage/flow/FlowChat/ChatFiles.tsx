@@ -4,6 +4,7 @@ import { generateUUID } from "@/components/bs-ui/utils";
 import Loading from "@/components/ui/loading";
 import { locationContext } from "@/contexts/locationContext";
 import { uploadChatFile } from "@/controllers/API/flow";
+import { MAX_MEDIA_FILES, isMediaFileName } from "@/util/fileAcceptUtils";
 import { getFileExtension } from "@/util/utils";
 import { FileIcon, PaperclipIcon, X } from "lucide-react";
 import { forwardRef, useContext, useImperativeHandle, useRef, useState } from "react";
@@ -79,6 +80,18 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
             // 3. 所有校验通过，加入有效文件列表
             validFiles.push({ id: generateUUID(6), file });
         });
+
+        // Audio/video is transcribed, not text-extracted: every clip holds an ASR
+        // slot for the whole run. Same cap the end-user chat enforces (client
+        // `InputFiles`), counting what is already attached this round.
+        const existingMediaCount = filesRef.current.filter((f) => isMediaFileName(f.name)).length;
+        const incomingMediaCount = validFiles.filter(({ file }) => isMediaFileName(file.name)).length;
+        if (existingMediaCount + incomingMediaCount > MAX_MEDIA_FILES) {
+            return toast({
+                variant: 'error',
+                description: t('chat.mediaFileTooMany'),
+            });
+        }
 
         // 显示无效文件提示（区分类型/大小错误）
         if (invalidTips.length > 0) {

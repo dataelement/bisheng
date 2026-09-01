@@ -202,7 +202,9 @@ export function TopBar({
                 <div className="content-stretch flex gap-[12px] items-center justify-end relative shrink-0 flex-1">
                     {actions}
                     {onDownload && (
-                        <Button onClick={onDownload}
+                        <Button
+                            aria-label="preview.download"
+                            onClick={onDownload}
                             variant="outline" className="w-8 h-8 p-2">
                             <DownloadIcon />
                         </Button>

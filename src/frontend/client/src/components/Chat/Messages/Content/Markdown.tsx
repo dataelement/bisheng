@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { Outlined } from 'bisheng-icons';
+import { Badge } from '@bisheng/ui';
 import ReactMarkdown from 'react-markdown';
 import { useRecoilValue } from 'recoil';
 import rehypeHighlight from 'rehype-highlight';
@@ -33,7 +34,6 @@ import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/
 import {
   buildCitationPreview,
   createCitationDetailMap,
-  getCitationClassName,
   getCitationDocumentUrl,
   getCitationSourceLabel,
   getLegacyCitationPreview,
@@ -542,7 +542,9 @@ const Citation = ({
   // 404 path still sets it for citations the batch didn't cover.
   const [notPermitted, setNotPermitted] = useState(!!initialNotPermitted);
   const closeTimerRef = useRef<number | null>(null);
-  const citationClassName = getCitationClassName(data.type);
+  // 组件-Badge徽标.md §2 — the source kind picks the badge color: brand for a
+  // document, the frozen purple for a web page.
+  const citationSource = normalizeCitationType(data.type) === 'web' ? 'web' : 'document';
   const legacyPreview = data.ref?.startsWith('citation:')
     ? getLegacyCitationPreview(webContent, data.label)
     : null;
@@ -690,8 +692,12 @@ const Citation = ({
   return (
     <Popover.Root open={isOpen} onOpenChange={handleOpenChange}>
       <Popover.Trigger asChild>
-        <button
-          type="button"
+        {/* 组件-Badge徽标.md §5 — the 溯源角标 is a Badge: the ordinal of a
+            source, and the one badge form that is clickable. The behaviour
+            below (popover, hover card, no-permission) stays here; the drawing
+            does not. */}
+        <Badge
+          citation={citationSource}
           data-citation-trigger="true"
           data-citation-ref={data.ref}
           data-citation-id={data.citationId}
@@ -709,10 +715,10 @@ const Citation = ({
             if (!citationPreviewUsesHover) return;
             scheduleClose();
           }}
-          className={`ml-2 inline-flex h-[18px] min-h-[18px] min-w-[18px] ${notPermitted ? 'cursor-default' : 'cursor-pointer'} select-none items-center justify-center rounded-full px-1 text-[12px] font-medium leading-none outline-none ring-blue-600/25 focus-visible:ring-2 ${citationClassName}`}
+          className={notPermitted ? 'ml-2 cursor-default' : 'ml-2'}
         >
-          <span className="flex items-center justify-center">{children}</span>
-        </button>
+          {children}
+        </Badge>
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content

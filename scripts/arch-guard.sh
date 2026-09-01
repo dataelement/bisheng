@@ -12,6 +12,7 @@
 #   RULE-6: 前端 store 不直接调 HTTP（C7，WARNING）
 #   RULE-7: 硬编码敏感信息检测（C6，WARNING）
 #   RULE-8: DAO/Model 层不得直读 RoleAccessDao 做权限过滤（C4，INV-T19，VIOLATION）
+#   RULE-9: 业务模块不得导入 OpenFGA 基础设施（C4，VIOLATION）
 
 FILE="$1"
 [ -z "$FILE" ] && exit 0
@@ -113,7 +114,21 @@ fi
 if echo "$FILE" | grep -q "/bisheng/" && echo "$FILE" | grep -q "\.py$"; then
     if ! echo "$FILE" | grep -qE "/(user/domain/services/auth\.py|user/api/user\.py|role/domain/services/role_service\.py|permission/migration/|database/models/role_access\.py)$"; then
         if grep -qE "RoleAccessDao\.(find|judge|afind|ajudge)_role_access\(|RoleAccessDao\.get_role_access\(" "$FILE" 2>/dev/null; then
-            echo "⚠️  [arch-guard] RULE-8 VIOLATION: $(basename "$FILE") — DAO/Model 层禁止直读 RoleAccessDao 做权限过滤（INV-T19，请改走 PermissionService.list_accessible_ids/check）"
+            echo "⚠️  [arch-guard] RULE-8 VIOLATION: $(basename "$FILE") — DAO/Model 层禁止直读 RoleAccessDao 做权限过滤（INV-T19，请改走 permission.application 协议）"
+        fi
+    fi
+fi
+
+# ── RULE-9：业务模块不得感知 OpenFGA 基础设施（C4）───────────────
+# OpenFGA client/manager/tuple APIs 只允许由 core/openfga 和 permission
+# 模块使用；其他模块必须依赖 permission.application 暴露的应用协议。
+if echo "$FILE" | grep -q "/bisheng/" && echo "$FILE" | grep -q "\.py$"; then
+    if ! echo "$FILE" | grep -qE "/bisheng/(core/openfga|core/context/manager\.py|permission/).*\.py$"; then
+        if grep -qE "^(from|import) bisheng\.core\.openfga" "$FILE" 2>/dev/null; then
+            echo "⚠️  [arch-guard] RULE-9 VIOLATION: $(basename "$FILE") — 业务模块禁止依赖 OpenFGA 基础设施（请改走 permission.application 协议）"
+        fi
+        if grep -qE "bisheng\.permission\.domain\.schemas\.tuple_operation|PermissionService\.batch_write_tuples\(" "$FILE" 2>/dev/null; then
+            echo "⚠️  [arch-guard] RULE-9 VIOLATION: $(basename "$FILE") — 业务模块禁止构造或写入 transport tuple（请使用 PermissionRelationChange/apply_changes）"
         fi
     fi
 fi

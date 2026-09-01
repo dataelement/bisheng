@@ -290,10 +290,23 @@ class UserService:
                 tenant_id=assigned_tenant_id,
             )
             await cls._ensure_user_guest_department_membership(db_user.user_id)
+            await cls.areconcile_first_user_dashboard_permissions(db_user.user_id)
             return db_user
         finally:
             if tenant_token is not None:
                 current_tenant_id.reset(tenant_token)
+
+    @classmethod
+    async def areconcile_first_user_dashboard_permissions(cls, user_id: int) -> None:
+        """Bind seeded dashboard examples after the first admin is durable."""
+
+        if user_id != 1 or not settings.openfga.enabled:
+            return
+        from bisheng.api.services.f048_preset_dashboard_bootstrap import (
+            reconcile_preset_dashboard_permissions,
+        )
+
+        await reconcile_preset_dashboard_permissions()
 
     @classmethod
     async def _ensure_user_guest_department_membership(cls, user_id: int) -> None:
@@ -324,21 +337,19 @@ class UserService:
             ).first()
             if exists:
                 return
-            session.add(
-                UserDepartment(
-                    user_id=user_id,
-                    department_id=dept.id,
-                    is_primary=1,
-                    source="local",
-                )
-            )
-            await session.commit()
-            from bisheng.department.domain.services.department_change_handler import (
-                DepartmentChangeHandler,
-            )
+            department_id = int(dept.id)
 
-            ops = DepartmentChangeHandler.on_members_added(dept.id, [user_id])
-            await DepartmentChangeHandler.execute_async(ops)
+        from bisheng.department.domain.services.department_service import (
+            DepartmentMembershipProjectionService,
+        )
+
+        await DepartmentMembershipProjectionService.aadd_member(
+            user_id=user_id,
+            department_id=department_id,
+            is_primary=1,
+            source="local",
+            operator_id=user_id,
+        )
 
     @classmethod
     async def _resolve_registration_tenant_id(cls) -> int:

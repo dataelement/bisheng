@@ -24,6 +24,11 @@ import { ChannelPinIcon } from "~/components/icons/channels";
 import ClosedIcon from "~/components/ui/icon/ClosedIcon";
 import { SpaceNotebookIcon } from "~/components/icons/SpaceNotebookIcon";
 
+// NOTE (dead code, kept intentionally): ChannelItem is only used by ChannelSidebar,
+// which is currently unreachable (see ChannelSidebar.tsx). Its per-row ⋯ menu is the
+// only place that reads `channel.actions` for 频道设置/解散 — which is why the
+// my_channels list endpoint no longer returns those actions (resolved lazily via the
+// ChannelActionsMenu settings button instead). Left in place per request.
 interface ChannelItemProps {
     channel: Channel;
     isActive: boolean;
@@ -53,15 +58,10 @@ export default function ChannelItem({
     const { showToast } = useToastContext();
     const confirm = useConfirm()
 
-    // Dissolving deletes the channel for everyone — gate it on the delete
-    // permission (or owner/creator), not on whether the user created it, so a
-    // user explicitly granted `delete_channel` sees the action. Unsubscribe is
-    // independent: any subscriber can leave, including one who can also dissolve.
-    const canDissolve = canDeleteChannel(channel.role, channel.permissionIds);
+    // Dissolve uses the concrete delete action. Unsubscribe remains an
+    // independent business operation for subscribed-list entries.
+    const canDissolve = canDeleteChannel(channel.actions);
     const canUnsubscribe = type === "subscribed";
-    const effectivePermissionIds = channel.permissionIds ?? [];
-    const canOpenSettings = canEditChannelSettings(undefined, effectivePermissionIds)
-        || canManageChannelPermissions(undefined, effectivePermissionIds);
 
     const rename = (e) => {
         const newName = e.target.value.trim();
@@ -167,7 +167,7 @@ export default function ChannelItem({
                     </DropdownMenuTrigger>
 
                     <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                        {canOpenSettings && (
+                        {(canEditChannelSettings(channel.actions) || canManageChannelPermissions(channel.actions)) && (
                             <DropdownMenuItem
                                 className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onChannelSettings(channel)}

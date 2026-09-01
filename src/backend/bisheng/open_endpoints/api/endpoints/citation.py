@@ -7,11 +7,12 @@ from bisheng.citation.domain.services.citation_resolve_service import CitationRe
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
-from bisheng.database.models.role_access import AccessType
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.open_endpoints.domain.schemas.citation import OpenCitationResponse
 from bisheng.open_endpoints.domain.utils import get_default_operator_async
+from bisheng.permission.application.business_authorization import (
+    check_business_action,
+)
 
 router = APIRouter(prefix='/citation', tags=['OpenAPI', 'Citation'])
 
@@ -40,11 +41,13 @@ async def get_open_citation_detail(
     file_info = await KnowledgeFileDao.query_by_id(payload.documentId)
     if file_info is None or file_info.knowledge_id != payload.knowledgeId:
         raise NotFoundError()
-    knowledge = await KnowledgeDao.aquery_by_id(file_info.knowledge_id)
-    if knowledge is None or not await default_user.async_access_check(
-        knowledge.user_id,
-        str(knowledge.id),
-        AccessType.KNOWLEDGE,
+    # The response carries a direct original-file URL, so this is a download
+    # decision. Preview itself remains action-free in the dedicated endpoint.
+    if not await check_business_action(
+        default_user,
+        resource_type="knowledge_file",
+        resource_id=file_info.id,
+        action="download",
     ):
         raise NotFoundError()
 

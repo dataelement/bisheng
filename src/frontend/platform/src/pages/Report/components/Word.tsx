@@ -5,17 +5,18 @@ import { locationContext } from "../../../contexts/locationContext"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useTranslation } from "react-i18next"
 import { getOfficeTokenApi } from "@/controllers/API/flow"
+import { getOfficeReachableUrl } from "@/utils/officeUrl"
 
 export default function Word({ data, workflow }) {
     const { appConfig } = useContext(locationContext)
     const { t } = useTranslation('flow')
 
     const wordUrl = appConfig.officeUrl
-    // Local debug
-    // const host = 'http://192.168.106.120:3002'
-    const host = `${location.origin}${__APP_ENV__.BASE_URL}`
-    const backUrl = workflow ? `${host}/api/v1/workflow/report/callback`
-        : `${host}/api/v1/report/callback` // Backend callback URL
+    // The document server POSTs this callback itself — in local dev override the
+    // origin via VITE_OFFICE_PUBLIC_ORIGIN (see utils/officeUrl).
+    const backUrl = getOfficeReachableUrl(
+        workflow ? '/api/v1/workflow/report/callback' : '/api/v1/report/callback'
+    )
 
     const editorConfig = {
         // Editor width

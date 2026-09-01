@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { paginateAllUserGroupMembers } from "@/controllers/API/userGroups";
-import { canDeleteUserGroup } from "@/pages/SystemPage/components/UserGroup";
+import { canDeleteUserGroup, canEditUserGroup } from "@/pages/SystemPage/components/UserGroup";
 
 describe("paginateAllUserGroupMembers", () => {
   it("loads every page until total is reached", async () => {
@@ -76,6 +76,44 @@ describe("canDeleteUserGroup", () => {
       canDeleteUserGroup(
         { role: "user", can_manage_user_groups: true, user_id: 5 },
         { id: 1, group_name: "g", visibility: "public", create_user: 6 },
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("canEditUserGroup", () => {
+  it("allows the super admin to edit any group", () => {
+    expect(
+      canEditUserGroup(
+        { role: "admin", user_id: 1 },
+        { id: 1, group_name: "g", visibility: "public", create_user: 6 },
+      ),
+    ).toBe(true);
+  });
+
+  it("allows the creator to edit their own group", () => {
+    expect(
+      canEditUserGroup(
+        { role: "user", is_department_admin: true, user_id: 5 },
+        { id: 1, group_name: "g", visibility: "public", create_user: "5" },
+      ),
+    ).toBe(true);
+  });
+
+  it("blocks department admins on groups created by others", () => {
+    expect(
+      canEditUserGroup(
+        { role: "user", is_department_admin: true, user_id: 5 },
+        { id: 1, group_name: "g", visibility: "public", create_user: 1 },
+      ),
+    ).toBe(false);
+  });
+
+  it("blocks child admins on groups created by others", () => {
+    expect(
+      canEditUserGroup(
+        { role: "user", is_child_admin: true, can_manage_user_groups: true, user_id: 5 },
+        { id: 1, group_name: "g", visibility: "private", create_user: 1 },
       ),
     ).toBe(false);
   });

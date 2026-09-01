@@ -1,53 +1,64 @@
 import { useCallback, useMemo, useReducer } from "react";
-import type {
-  GrantItem,
-  RelationLevel,
-  RevokeItem,
-  SubjectType,
-} from "~/api/permission";
+import type { PermissionGrantMutationChange, SubjectType } from "~/api/permission";
 
 export interface PermissionDraftRow {
   subjectType: SubjectType;
   subjectId: number;
   subjectName: string;
-  relation: RelationLevel;
-  modelId?: string;
+  modelKey: string;
+  modelName?: string;
+  modelLevel?: number | null;
   includeChildren?: boolean;
-  immutableCreator?: boolean;
-  authorizationStatus?: "active" | "pending";
-  approvalInstanceId?: number | null;
+  assigneeId?: string;
+  assigneeVersion?: number;
+  sourceType?: string;
+  scope?: "LOCAL" | "INHERITED";
+  inheritedFrom?: string | null;
+  inheritedFromName?: string | null;
+  protected?: boolean;
+  editable?: boolean;
+}
+
+export interface PermissionDraftBaseline {
+  resourceVersion: number;
+  catalogReleaseId: number;
 }
 
 export interface PermissionDraft {
   baseline: PermissionDraftRow[];
   rows: PermissionDraftRow[];
-  touchedKeys: string[];
+  touchedAssigneeIds: string[];
+  baselineVersion?: PermissionDraftBaseline;
 }
 
 export interface PermissionDraftDiff {
-  grants: GrantItem[];
-  revokes: RevokeItem[];
+  changes: PermissionGrantMutationChange[];
 }
 
 export type PermissionDraftAction =
   | { type: "add"; row: PermissionDraftRow }
   | { type: "change"; key: string; changes: Partial<PermissionDraftRow> }
   | { type: "remove"; key: string }
-  | { type: "replace_rows"; rows: PermissionDraftRow[] }
-  | { type: "reset"; rows?: PermissionDraftRow[] };
+  | { type: "replace_rows"; rows: PermissionDraftRow[]; baselineVersion?: PermissionDraftBaseline }
+  | { type: "reset"; rows?: PermissionDraftRow[]; baselineVersion?: PermissionDraftBaseline };
 
-const EMPTY_DIFF: PermissionDraftDiff = { grants: [], revokes: [] };
-
-function isImmutableRow(row: PermissionDraftRow): boolean {
-  return row.immutableCreator === true || row.authorizationStatus === "pending";
-}
-
-function isSameSubject(left: PermissionDraftRow, right: PermissionDraftRow): boolean {
-  return left.subjectType === right.subjectType && left.subjectId === right.subjectId;
-}
+const EMPTY_DIFF: PermissionDraftDiff = { changes: [] };
 
 function cloneRows(rows: PermissionDraftRow[]): PermissionDraftRow[] {
   return rows.map((row) => ({ ...row }));
+}
+
+function isReadOnly(row: PermissionDraftRow): boolean {
+  return row.protected === true || row.scope === "INHERITED" || row.editable === false;
+}
+
+export function getPermissionDraftRowKey(row: PermissionDraftRow): string {
+  return row.assigneeId ?? JSON.stringify([
+    row.subjectType,
+    row.subjectId,
+    row.modelKey,
+    row.includeChildren ?? null,
+  ]);
 }
 
 function uniqueRows(rows: PermissionDraftRow[]): PermissionDraftRow[] {
@@ -60,50 +71,19 @@ function uniqueRows(rows: PermissionDraftRow[]): PermissionDraftRow[] {
   });
 }
 
-function mergeTouchedKeys(current: string[], next: string[]): string[] {
-  return Array.from(new Set([...current, ...next]));
-}
-
-function rowToGrant(row: PermissionDraftRow): GrantItem {
-  return {
-    subject_type: row.subjectType,
-    subject_id: row.subjectId,
-    relation: row.relation,
-    ...(row.modelId ? { model_id: row.modelId } : {}),
-    ...(row.subjectType === "department"
-      ? { include_children: Boolean(row.includeChildren) }
-      : {}),
-  };
-}
-
-function rowToRevoke(row: PermissionDraftRow): RevokeItem {
-  return {
-    subject_type: row.subjectType,
-    subject_id: row.subjectId,
-    relation: row.relation,
-    ...(row.subjectType === "department"
-      ? { include_children: Boolean(row.includeChildren) }
-      : {}),
-  };
-}
-
-export function getPermissionDraftRowKey(row: PermissionDraftRow): string {
-  return JSON.stringify([
-    row.subjectType,
-    row.subjectId,
-    row.relation,
-    row.modelId ?? "",
-    row.includeChildren ?? null,
-  ]);
-}
-
-export function createPermissionDraft(rows: PermissionDraftRow[] = []): PermissionDraft {
+export function createPermissionDraft(
+  rows: PermissionDraftRow[] = [],
+  baselineVersion?: PermissionDraftBaseline,
+): PermissionDraft {
   const baseline = uniqueRows(cloneRows(rows));
-  return {
-    baseline,
-    rows: cloneRows(baseline),
-    touchedKeys: [],
-  };
+  return { baseline, rows: cloneRows(baseline), touchedAssigneeIds: [], baselineVersion };
+}
+
+function touch(state: PermissionDraft, row: PermissionDraftRow): string[] {
+  const key = getPermissionDraftRowKey(row);
+  return state.touchedAssigneeIds.includes(key)
+    ? state.touchedAssigneeIds
+    : [...state.touchedAssigneeIds, key];
 }
 
 export function permissionDraftReducer(
@@ -111,141 +91,141 @@ export function permissionDraftReducer(
   action: PermissionDraftAction,
 ): PermissionDraft {
   if (action.type === "reset") {
-    return createPermissionDraft(action.rows ?? state.baseline);
+    return createPermissionDraft(
+      action.rows ?? state.baseline,
+      action.baselineVersion ?? state.baselineVersion,
+    );
   }
-
-  if (action.type === "add") {
-    const key = getPermissionDraftRowKey(action.row);
-    if (state.rows.some((row) => getPermissionDraftRowKey(row) === key)) {
-      return state;
+  if (action.type === "replace_rows") {
+    const immutableBaseline = state.baseline.filter(isReadOnly);
+    const immutableKeys = new Set(immutableBaseline.map(getPermissionDraftRowKey));
+    const rows = uniqueRows([
+      ...immutableBaseline,
+      ...cloneRows(action.rows).filter(
+        (row) => !immutableKeys.has(getPermissionDraftRowKey(row)),
+      ),
+    ]);
+    const currentByKey = new Map(state.rows.map((row) => [getPermissionDraftRowKey(row), row]));
+    const nextByKey = new Map(rows.map((row) => [getPermissionDraftRowKey(row), row]));
+    const touched = [...state.touchedAssigneeIds];
+    for (const baseline of state.baseline) {
+      if (isReadOnly(baseline)) continue;
+      const key = getPermissionDraftRowKey(baseline);
+      const previous = currentByKey.get(key);
+      const next = nextByKey.get(key);
+      if (
+        previous?.modelKey !== next?.modelKey
+        || (previous !== undefined && next === undefined)
+        || (previous === undefined && next !== undefined)
+      ) {
+        if (!touched.includes(key)) touched.push(key);
+      }
     }
     return {
       ...state,
-      rows: [...state.rows, { ...action.row }],
-      touchedKeys: mergeTouchedKeys(state.touchedKeys, [key]),
-    };
-  }
-
-  if (action.type === "change") {
-    const index = state.rows.findIndex((row) => getPermissionDraftRowKey(row) === action.key);
-    if (index < 0 || isImmutableRow(state.rows[index])) return state;
-
-    const previous = state.rows[index];
-    const next = {
-      ...previous,
-      ...action.changes,
-      immutableCreator: previous.immutableCreator,
-      authorizationStatus: previous.authorizationStatus,
-      approvalInstanceId: previous.approvalInstanceId,
-    };
-    if (JSON.stringify(previous) === JSON.stringify(next)) return state;
-
-    const rows = state.rows.slice();
-    rows[index] = next;
-    return {
-      ...state,
       rows,
-      touchedKeys: mergeTouchedKeys(state.touchedKeys, [
-        getPermissionDraftRowKey(previous),
-        getPermissionDraftRowKey(next),
-      ]),
+      touchedAssigneeIds: touched,
+      baselineVersion: action.baselineVersion ?? state.baselineVersion,
     };
   }
-
-  if (action.type === "remove") {
-    const row = state.rows.find((candidate) => getPermissionDraftRowKey(candidate) === action.key);
-    if (!row || isImmutableRow(row)) return state;
+  if (action.type === "add") {
+    if (isReadOnly(action.row)) return state;
+    const key = getPermissionDraftRowKey(action.row);
+    if (state.rows.some((row) => getPermissionDraftRowKey(row) === key)) return state;
     return {
       ...state,
-      rows: state.rows.filter((candidate) => getPermissionDraftRowKey(candidate) !== action.key),
-      touchedKeys: mergeTouchedKeys(state.touchedKeys, [action.key]),
+      rows: [...state.rows, { ...action.row }],
+      touchedAssigneeIds: touch(state, action.row),
     };
   }
-
-  const immutableRows = state.rows.filter(isImmutableRow);
-  const rows = uniqueRows([
-    ...immutableRows,
-    ...cloneRows(action.rows).filter(
-      (row) => !immutableRows.some((immutableRow) => isSameSubject(immutableRow, row)),
-    ),
-  ]);
-  const currentKeys = state.rows.map(getPermissionDraftRowKey);
-  const nextKeys = rows.map(getPermissionDraftRowKey);
-  const currentKeySet = new Set(currentKeys);
-  const nextKeySet = new Set(nextKeys);
-  const changedKeys = [
-    ...currentKeys.filter((key) => !nextKeySet.has(key)),
-    ...nextKeys.filter((key) => !currentKeySet.has(key)),
-  ];
-  if (changedKeys.length === 0) return state;
-
-  return {
-    ...state,
-    rows,
-    touchedKeys: mergeTouchedKeys(state.touchedKeys, changedKeys),
-  };
+  const index = state.rows.findIndex((row) => getPermissionDraftRowKey(row) === action.key);
+  if (index < 0 || isReadOnly(state.rows[index])) return state;
+  const previous = state.rows[index];
+  if (action.type === "remove") {
+    return {
+      ...state,
+      rows: state.rows.filter((_, rowIndex) => rowIndex !== index),
+      touchedAssigneeIds: touch(state, previous),
+    };
+  }
+  const next = { ...previous, ...action.changes };
+  if (next.modelKey === previous.modelKey) return state;
+  const rows = state.rows.slice();
+  rows[index] = next;
+  return { ...state, rows, touchedAssigneeIds: touch(state, previous) };
 }
 
 export function getPermissionDraftDiff(draft: PermissionDraft): PermissionDraftDiff {
-  if (draft.touchedKeys.length === 0) return EMPTY_DIFF;
-
-  const touchedKeys = new Set(draft.touchedKeys);
-  const baselineKeys = new Set(draft.baseline.map(getPermissionDraftRowKey));
-  const rowKeys = new Set(draft.rows.map(getPermissionDraftRowKey));
-
-  return {
-    grants: draft.rows
-      .filter((row) => {
-        if (isImmutableRow(row)) return false;
-        const key = getPermissionDraftRowKey(row);
-        return touchedKeys.has(key) && !baselineKeys.has(key);
-      })
-      .map(rowToGrant),
-    revokes: draft.baseline
-      .filter((row) => {
-        if (isImmutableRow(row)) return false;
-        const key = getPermissionDraftRowKey(row);
-        return touchedKeys.has(key) && !rowKeys.has(key);
-      })
-      .map(rowToRevoke),
-  };
+  const baselineByKey = new Map(draft.baseline.map((row) => [getPermissionDraftRowKey(row), row]));
+  const rowsByKey = new Map(draft.rows.map((row) => [getPermissionDraftRowKey(row), row]));
+  const changes: PermissionGrantMutationChange[] = [];
+  for (const current of draft.rows) {
+    if (current.assigneeId || isReadOnly(current)) continue;
+    changes.push({
+      op: "ADD",
+      model_key: current.modelKey,
+      subject: {
+        type: current.subjectType,
+        id: String(current.subjectId),
+        ...(current.subjectType === "department"
+          ? {
+              userset_relation: current.includeChildren ? "subtree_member" : null,
+              include_children: Boolean(current.includeChildren),
+            }
+          : {}),
+      },
+    });
+  }
+  if (draft.touchedAssigneeIds.length === 0) {
+    return changes.length === 0 ? EMPTY_DIFF : { changes };
+  }
+  for (const key of draft.touchedAssigneeIds) {
+    const baseline = baselineByKey.get(key);
+    const current = rowsByKey.get(key);
+    if (baseline && !current && baseline.assigneeId != null && baseline.assigneeVersion != null) {
+      changes.push({
+        op: "REMOVE",
+        assignee_id: baseline.assigneeId,
+        expected_assignee_version: baseline.assigneeVersion,
+      });
+    } else if (
+      baseline && current && baseline.modelKey !== current.modelKey
+      && baseline.assigneeId != null && baseline.assigneeVersion != null
+    ) {
+      changes.push({
+        op: "MOVE",
+        assignee_id: baseline.assigneeId,
+        expected_assignee_version: baseline.assigneeVersion,
+        target_model_key: current.modelKey,
+      });
+    }
+  }
+  return { changes };
 }
 
 export function usePermissionDraft(initialRows: PermissionDraftRow[] = []) {
-  const [draft, dispatch] = useReducer(
-    permissionDraftReducer,
-    initialRows,
-    createPermissionDraft,
-  );
+  const [draft, dispatch] = useReducer(permissionDraftReducer, initialRows, createPermissionDraft);
   const diff = useMemo(() => getPermissionDraftDiff(draft), [draft]);
-
-  const addRow = useCallback((row: PermissionDraftRow) => {
-    dispatch({ type: "add", row });
-  }, []);
+  const addRow = useCallback((row: PermissionDraftRow) => dispatch({ type: "add", row }), []);
   const addRows = useCallback((rows: PermissionDraftRow[]) => {
     rows.forEach((row) => dispatch({ type: "add", row }));
   }, []);
   const changeRow = useCallback((key: string, changes: Partial<PermissionDraftRow>) => {
     dispatch({ type: "change", key, changes });
   }, []);
-  const removeRow = useCallback((key: string) => {
-    dispatch({ type: "remove", key });
+  const removeRow = useCallback((key: string) => dispatch({ type: "remove", key }), []);
+  const replaceRows = useCallback((rows: PermissionDraftRow[], baselineVersion?: PermissionDraftBaseline) => {
+    dispatch({ type: "replace_rows", rows, baselineVersion });
   }, []);
-  const replaceRows = useCallback((rows: PermissionDraftRow[]) => {
-    dispatch({ type: "replace_rows", rows });
+  const reset = useCallback((rows?: PermissionDraftRow[], baselineVersion?: PermissionDraftBaseline) => {
+    dispatch({ type: "reset", rows, baselineVersion });
   }, []);
-  const reset = useCallback((rows?: PermissionDraftRow[]) => {
-    dispatch({ type: "reset", rows });
-  }, []);
-  const cancel = useCallback(() => {
-    dispatch({ type: "reset" });
-  }, []);
-
+  const cancel = useCallback(() => dispatch({ type: "reset" }), []);
   return {
     draft,
     rows: draft.rows,
     diff,
-    hasChanges: diff.grants.length > 0 || diff.revokes.length > 0,
+    hasChanges: diff.changes.length > 0,
     addRow,
     addRows,
     changeRow,

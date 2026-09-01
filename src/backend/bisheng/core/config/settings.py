@@ -139,6 +139,11 @@ class MinioConf(BaseModel):
     tmp_bucket: str | None = Field(
         default="tmp-dir", description="Ad hocbucket, stored files will have an expiration date"
     )
+    upload_timeout_seconds: int = Field(
+        default=1800,
+        description="MinIO HTTP read/connect timeout for uploads and downloads (seconds). "
+        "Default 1800 (30 min); minio-py otherwise caps at 300s and large video uploads fail.",
+    )
 
 
 class ObjectStore(BaseModel):
@@ -153,6 +158,15 @@ class WorkflowConf(BaseModel):
 
     max_steps: int = Field(default=50, description="Maximum number of steps a node can run")
     timeout: int = Field(default=720, description="Node timeout (min)")
+    auto_rerun_on_open: bool = Field(
+        default=False,
+        description="Auto rerun an already-ended standalone workflow conversation when opened",
+    )
+
+    @field_validator("auto_rerun_on_open", mode="before")
+    @classmethod
+    def validate_auto_rerun_on_open(cls, value: object) -> bool:
+        return value if isinstance(value, bool) else False
 
 
 class CeleryConf(BaseModel):
@@ -205,6 +219,11 @@ class CeleryConf(BaseModel):
             self.beat_schedule["retry_failed_tuples"] = {
                 "task": "bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples",
                 "schedule": 30.0,  # Every 30 seconds
+            }
+        if "cleanup_succeeded_failed_tuples" not in self.beat_schedule:
+            self.beat_schedule["cleanup_succeeded_failed_tuples"] = {
+                "task": "bisheng.worker.permission.retry_failed_tuples.cleanup_succeeded_failed_tuples",
+                "schedule": crontab.from_string("30 3 * * *"),  # 03:30 every day
             }
         # v2.5.1 F012: 6h user-leaf-tenant catch-up reconcile.
         if "reconcile_user_tenant_assignments" not in self.beat_schedule:
@@ -259,6 +278,12 @@ class CeleryConf(BaseModel):
             self.beat_schedule["file_change_cleanup"] = {
                 "task": "bisheng.worker.knowledge.file_change_tasks.cleanup_all_file_change_residue",
                 "schedule": 300.0,
+            }
+        # v3.0.0-beta1 052: 10min stale permission projection reconcile.
+        if "reconcile_stale_parent_projections" not in self.beat_schedule:
+            self.beat_schedule["reconcile_stale_parent_projections"] = {
+                "task": "bisheng.worker.knowledge.stale_projection_reconciler.reconcile_stale_parent_projections",
+                "schedule": crontab.from_string("*/10 * * * *"),  # every 10 minutes
             }
 
         # convert str to crontab
@@ -373,9 +398,9 @@ class KnowledgeQAFilterConf(BaseModel):
         ge=1,
         le=64,
         description=(
-            "AD-08 concurrency. Semaphore limit when resolving view_file per file "
-            "via FineGrainedPermissionService; mirrors KnowledgeSpaceService's "
-            "_CHILD_PERMISSION_CHECK_CONCURRENCY default."
+            "Legacy-compatible concurrency cap for bounded per-file checks. "
+            "F048 authorization uses concrete actions through the unified "
+            "permission facade."
         ),
     )
 
@@ -401,7 +426,7 @@ class LinsightConf(BaseModel):
         default=100000, description="Maximum Tool Execution Historytoken, you need to summarize your history after"
     )
     max_steps: int = Field(
-        default=500,
+        default=2500,
         description="LangGraph ``recursion_limit`` for a task graph — a runaway FUSE, not the business "
         "budget. It counts SUPER-STEPS, not model turns: one model turn costs ~4 super-steps "
         "(model -> tool-loop-breaker.after_model -> TodoList.after_model -> tools), so 500 ~= 115 turns. "
@@ -409,13 +434,13 @@ class LinsightConf(BaseModel):
         "value automatically if it would trip before the turn budget.",
     )
     max_model_turns: int = Field(
-        default=115,
+        default=600,
         description="Turn budget for the MAIN graph: how many model calls one task run may make before "
         "the soft-landing ladder forces it to wrap up. This is the real business gate (see max_steps). "
         "Reset on every ask_user resume, since the middleware instance is rebuilt with the agent.",
     )
     max_model_turns_subagent: int = Field(
-        default=30,
+        default=120,
         description="Turn budget for the researcher subagent's own graph (counted separately — a subgraph "
         "runs its own Pregel loop with its own step counter).",
     )
@@ -434,6 +459,19 @@ class LinsightConf(BaseModel):
         default=8,
         description="L3 tool-loop breaker: after this many consecutive same-tool failures, abort the task "
         "gracefully and salvage the intermediate result (instead of spinning to recursion_limit).",
+    )
+    tool_repeat_soft_limit: int = Field(
+        default=3,
+        description="L3 tool-loop breaker: after this many consecutive BYTE-IDENTICAL tool calls (same tool, "
+        "same arguments) that keep SUCCEEDING, append a counted corrective instruction to the next model "
+        "request. Distinct from tool_failure_soft_limit, which only counts errors. 0 disables the tier.",
+    )
+    tool_repeat_hard_limit: int = Field(
+        default=8,
+        description="L3 tool-loop breaker: after this many consecutive byte-identical tool calls, abort the "
+        "task gracefully and salvage the intermediate result. Measured baseline: healthy runs that COMPLETED "
+        "reached at most 10 consecutive identical tool OUTPUTS (an upper bound on identical arguments), while "
+        "the 2026-08-14 incident hit 48. 0 disables the abort and leaves only the soft nudge.",
     )
     truncation_retry_limit: int = Field(
         default=2,
@@ -471,9 +509,15 @@ class LinsightConf(BaseModel):
     )
     skills_root: str = Field(
         default="data/linsight_skills",
-        description="Root directory of Linsight skills on disk (F035). Layout: built-in/<name>/SKILL.md for "
-        "kernel built-in skills; data/skills/{tenant_id}/<name>/ for tenant custom skill bundles. "
-        "Multi-node deployments must mount this path on a shared volume (design §7.1).",
+        description="LEGACY: the pre-object-storage on-disk skill root. Skill bundles now live in object "
+        "storage; this path is only read by the one-off migration/restore scripts to find bundles left "
+        "on a node's local disk by an older release. Not used at runtime.",
+    )
+    skills_cache_dir: str = Field(
+        default="",
+        description="Local cache root for materialized skill bundles. Empty = a 'linsight_skills' folder "
+        "under the process cache dir. Purely a cache: object storage is authoritative, entries are keyed "
+        "by content hash and are safe to delete at any time. Do NOT point this at a shared volume.",
     )
 
 

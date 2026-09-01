@@ -1,8 +1,10 @@
 import json
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from langchain_core.documents import BaseDocumentTransformer, Document
 
+from bisheng.common.constants.knowledge import KNOWLEDGE_MAX_CHUNK_CHARS
 from bisheng.common.errcode.knowledge import KnowledgeFileChunkMaxError
 from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransformer
 
@@ -11,15 +13,15 @@ class HierarchicalSplitterTransformer(BaseDocumentTransformer):
     _break_priority = ["\n", "。", "，", ",", "."]
 
     def __init__(
-            self,
-            hierarchy_level: int = 3,
-            append_title: bool = False,
-            max_chunk_size: int = 1000,
-            fallback_separator: Optional[List[str]] = None,
-            fallback_separator_rule: Optional[List[str]] = None,
-            fallback_chunk_size: int = 1000,
-            fallback_chunk_overlap: int = 0,
-            max_chunk_limit: int = 10000,
+        self,
+        hierarchy_level: int = 3,
+        append_title: bool = False,
+        max_chunk_size: int = 1000,
+        fallback_separator: list[str] | None = None,
+        fallback_separator_rule: list[str] | None = None,
+        fallback_chunk_size: int = 1000,
+        fallback_chunk_overlap: int = 0,
+        max_chunk_limit: int = KNOWLEDGE_MAX_CHUNK_CHARS,
     ) -> None:
         self.hierarchy_level = hierarchy_level
         self.append_title = append_title
@@ -36,7 +38,7 @@ class HierarchicalSplitterTransformer(BaseDocumentTransformer):
             chunk_overlap=fallback_chunk_overlap,
         )
 
-    def _split_long_text(self, text: str) -> List[str]:
+    def _split_long_text(self, text: str) -> list[str]:
         text = (text or "").strip()
         if not text:
             return []
@@ -44,14 +46,14 @@ class HierarchicalSplitterTransformer(BaseDocumentTransformer):
         if len(text) <= self.max_chunk_size:
             return [text]
 
-        segments: List[str] = []
+        segments: list[str] = []
         remaining = text
         while remaining:
             if len(remaining) <= self.max_chunk_size:
                 segments.append(remaining.strip())
                 break
 
-            window = remaining[:self.max_chunk_size]
+            window = remaining[: self.max_chunk_size]
             split_at = -1
             for token in self._break_priority:
                 split_at = window.rfind(token)
@@ -66,7 +68,7 @@ class HierarchicalSplitterTransformer(BaseDocumentTransformer):
             remaining = remaining[split_at:].lstrip()
         return [one for one in segments if one]
 
-    def _build_nav_prefix(self, nav_path: List[str]) -> str:
+    def _build_nav_prefix(self, nav_path: list[str]) -> str:
         nav_prefix = ""
         for one_index, one in enumerate(nav_path):
             nav_prefix += self._format_markdown_heading(one, one_index + 1) + "\n"
@@ -77,7 +79,7 @@ class HierarchicalSplitterTransformer(BaseDocumentTransformer):
         heading_level = max(1, min(level, 6))
         return "#" * heading_level + f" {title.strip()}"
 
-    def _normalize_metadata(self, metadata: Dict, chunk_index: int) -> Dict:
+    def _normalize_metadata(self, metadata: dict, chunk_index: int) -> dict:
         new_metadata = metadata.copy()
         new_metadata["chunk_index"] = chunk_index
         new_metadata["bbox"] = json.dumps({"chunk_bboxes": new_metadata.get("chunk_bboxes", "")})
@@ -87,15 +89,13 @@ class HierarchicalSplitterTransformer(BaseDocumentTransformer):
             new_metadata["nav_path"] = None
             new_metadata["nav_depth"] = 0
         if len(new_metadata.get("nav_path") or []) > self.hierarchy_level:
-            new_metadata["nav_path"] = new_metadata["nav_path"][:self.hierarchy_level]
+            new_metadata["nav_path"] = new_metadata["nav_path"][: self.hierarchy_level]
             new_metadata["nav_depth"] = len(new_metadata["nav_path"])
         if "is_heading" not in new_metadata:
             new_metadata["is_heading"] = False
         return new_metadata
 
-    def transform_documents(
-            self, documents: Sequence[Document], **kwargs: Any
-    ) -> Sequence[Document]:
+    def transform_documents(self, documents: Sequence[Document], **kwargs: Any) -> Sequence[Document]:
         if not documents:
             return documents
 
@@ -106,23 +106,25 @@ class HierarchicalSplitterTransformer(BaseDocumentTransformer):
             fallback_doc = Document(page_content=fallback_text, metadata=fallback_metadata)
             return self.fallback_splitter.transform_documents([fallback_doc])
 
-        merged_blocks: List[Dict] = []
+        merged_blocks: list[dict] = []
         for doc in documents:
             metadata = doc.metadata.copy()
             original_nav_path = list(metadata.get("nav_path") or [])
             nav_path = list(original_nav_path)
             if nav_path:
-                nav_path = nav_path[:self.hierarchy_level]
+                nav_path = nav_path[: self.hierarchy_level]
             is_heading = bool(metadata.get("is_heading", False))
             text = (doc.page_content or "").strip()
 
             if is_heading:
                 if self.append_title and len(original_nav_path) > self.hierarchy_level and text:
-                    merged_blocks.append({
-                        "nav_path": nav_path,
-                        "text": self._format_markdown_heading(text, len(original_nav_path)),
-                        "metadata": metadata,
-                    })
+                    merged_blocks.append(
+                        {
+                            "nav_path": nav_path,
+                            "text": self._format_markdown_heading(text, len(original_nav_path)),
+                            "metadata": metadata,
+                        }
+                    )
                 continue
 
             if not text:
@@ -132,17 +134,19 @@ class HierarchicalSplitterTransformer(BaseDocumentTransformer):
                 merged_blocks[-1]["text"] += f"\n\n{text}"
                 continue
 
-            merged_blocks.append({
-                "nav_path": nav_path,
-                "text": text,
-                "metadata": metadata,
-            })
+            merged_blocks.append(
+                {
+                    "nav_path": nav_path,
+                    "text": text,
+                    "metadata": metadata,
+                }
+            )
 
         if not merged_blocks:
             fallback_doc = Document(page_content=documents[0].page_content, metadata=documents[0].metadata.copy())
             return self.fallback_splitter.transform_documents([fallback_doc])
 
-        result: List[Document] = []
+        result: list[Document] = []
         for block in merged_blocks:
             nav_path = block["nav_path"]
             block_text = block["text"].strip()

@@ -1,56 +1,34 @@
-import asyncio
 import json
 import os
 import re
-import time
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import aiofiles
 import requests
 from langchain_classic.schema.document import Document
 from langchain_classic.text_splitter import CharacterTextSplitter
-from langchain_community.document_loaders import (
-    BSHTMLLoader,
-    PyPDFLoader,
-    TextLoader,
-    UnstructuredPowerPointLoader,
-    UnstructuredWordDocumentLoader,
-)
 from loguru import logger
 from sqlalchemy import func, or_
 from sqlmodel import select
 
-from bisheng.api.services.etl4lm_loader import Etl4lmLoader
-from bisheng.api.services.patch_130 import (
-    convert_file_to_md,
-    combine_multiple_md_files_to_raw_texts,
-)
-from bisheng.api.v1.schemas import ExcelRule
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA, QA_KNOWLELDGE_METADATA_SCHEMA
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.knowledge import (
-    KnowledgeSimilarError,
+    KnowledgeEtl4lmTimeoutError,
     KnowledgeFileDeleteError,
     KnowledgeFileEmptyError,
-    KnowledgeFileChunkMaxError,
-    KnowledgeLLMError,
-    KnowledgeFileDamagedError,
-    KnowledgeFileNotSupportedError,
-    KnowledgeEtl4lmTimeoutError,
     KnowledgeFileFailedError,
-    KnowledgeExcelChunkMaxError,
     KnowledgeRecommendQuestionError,
+    KnowledgeSimilarError,
 )
 from bisheng.common.schemas.telemetry.event_data_schema import FileParseEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.ai import FakeEmbeddings
-from bisheng.core.cache.utils import file_download
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
-from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
+from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
@@ -63,22 +41,13 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     QAKnowledgeUpsert,
     QAStatus,
 )
-from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata, QAKnowledgeMetadata
+from bisheng.knowledge.domain.schemas.knowledge_rag_schema import QAKnowledgeMetadata
 from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import KnowledgeSpaceAutoTagService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
-from bisheng.knowledge.domain.utils import is_pdf_damaged
 from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
-from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import (
-    convert_doc_to_docx,
-    convert_ppt_to_pdf,
-    convert_ppt_to_pptx,
-)
 from bisheng.llm.domain.services import LLMService
 from bisheng.sensitive_word.domain.services.exceptions import ContentSafetyViolation
-from bisheng.user.domain.models.user import UserDao
-from bisheng.utils import util
-from bisheng.utils.exceptions import EtlException, FileParseException
-from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
+from bisheng.utils.exceptions import EtlException
 
 
 def put_images_to_minio(local_image_dir, knowledge_id, doc_id):
@@ -113,8 +82,8 @@ async def async_images_to_minio(local_image_dir, knowledge_id, doc_id):
 
 def process_file_task(
     knowledge: Knowledge,
-    db_files: List[KnowledgeFile],
-    preview_cache_keys: List[str] = None,
+    db_files: list[KnowledgeFile],
+    preview_cache_keys: list[str] = None,
     callback_url: str = None,
     enable_auto_tags: bool = False,
 ):
@@ -140,7 +109,7 @@ def process_file_task(
         raise e
 
 
-def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
+def delete_vector_files(file_ids: list[int], knowledge: Knowledge) -> bool:
     """Delete vector data andesDATA"""
     if not file_ids:
         return True
@@ -193,7 +162,7 @@ def delete_minio_files(file: KnowledgeFile):
     return True
 
 
-def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True):
+def delete_knowledge_file_vectors(file_ids: list[int], clear_minio: bool = True):
     """Delete Knowledge File Information"""
     knowledge_files = KnowledgeFileDao.select_list(file_ids=file_ids)
 
@@ -212,9 +181,9 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
 
 def addEmbedding(
     knowledge_id: int,
-    knowledge_files: List[KnowledgeFile],
+    knowledge_files: list[KnowledgeFile],
     callback: str = None,
-    preview_cache_keys: List[str] = None,
+    preview_cache_keys: list[str] = None,
     enable_auto_tags: bool = False,
 ):
     """Adding Files to Vector SumsesCunene"""
@@ -270,13 +239,14 @@ def addEmbedding(
             # not yet committed) and stages db_file.similar_status for the upstream
             # KnowledgeFileDao.update(db_file) call to persist.
             try:
-                from sqlmodel import select, col
+                from sqlmodel import col, select
+
+                from bisheng.common.utils.simhash_utils import similarity as _simhash_similarity
                 from bisheng.core.database import get_sync_db_session
                 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
                 from bisheng.knowledge.domain.models.knowledge_document_version import (
                     KnowledgeDocumentVersion,
                 )
-                from bisheng.common.utils.simhash_utils import similarity as _simhash_similarity
 
                 knowledge_conf = settings.get_knowledge()
                 vmc = getattr(knowledge_conf, "version_management", None)
@@ -373,8 +343,8 @@ def add_text_into_vector(
     vector_client,
     es_client,
     db_file: KnowledgeFile,
-    texts: List[str],
-    metadatas: List[dict],
+    texts: list[str],
+    metadatas: list[dict],
 ):
     logger.info(f"add_vectordb file={db_file.id} file_name={db_file.file_name}")
     # Depositmilvus
@@ -385,7 +355,7 @@ def add_text_into_vector(
     es_client.add_texts(texts=texts, metadatas=metadatas)
 
 
-def parse_partitions(partitions: List[Any]) -> Dict:
+def parse_partitions(partitions: list[Any]) -> dict:
     """Resolve BuildbboxCorrespondence with text"""
     if not partitions:
         return {}
@@ -444,7 +414,7 @@ def parse_document_title(title: str) -> str:
     return title
 
 
-def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]):
+def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: list[Document]):
     """Usetext Importknowledge"""
     vectore_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
         invoke_user_id=db_file.user_id, knowledge=db_knowledge
@@ -501,8 +471,8 @@ def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: L
             session.commit()
     except Exception as e:
         logger.error(e)
-        setattr(db_file, "status", 3)
-        setattr(db_file, "remark", str(e)[:500])
+        db_file.status = 3
+        db_file.remark = str(e)[:500]
         with get_sync_db_session() as session:
             session.add(db_file)
             session.commit()
@@ -542,16 +512,16 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
             for index, doc in enumerate(docs)
         ]
         vector_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
-        logger.info(f"qa_save_knowledge add vector over")
+        logger.info("qa_save_knowledge add vector over")
         es_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
-        logger.info(f"qa_save_knowledge add es over")
+        logger.info("qa_save_knowledge add es over")
 
         QA.status = QAStatus.ENABLED.value
         KnowledgeFileDao.update(QA)
     except Exception as e:
         logger.error(e)
-        setattr(QA, "status", QAStatus.FAILED.value)
-        setattr(QA, "remark", KnowledgeFileFailedError(exception=e).to_json_str())
+        QA.status = QAStatus.FAILED.value
+        QA.remark = KnowledgeFileFailedError(exception=e).to_json_str()
         KnowledgeFileDao.update(QA)
 
     return QA
@@ -607,10 +577,10 @@ async def list_qa_by_knowledge_id(
     knowledge_id: int,
     page_size: int = 10,
     page_num: int = 1,
-    question: Optional[str] = None,
-    answer: Optional[str] = None,
-    keyword: Optional[str] = None,
-    status: Optional[int] = None,
+    question: str | None = None,
+    answer: str | None = None,
+    keyword: str | None = None,
+    status: int | None = None,
 ) -> list[Any] | tuple[Any, Any]:
     """Get all under knowledge baseqa"""
     if not knowledge_id:
@@ -652,7 +622,7 @@ async def list_qa_by_knowledge_id(
     return list_qa, count
 
 
-def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
+def delete_vector_data(knowledge: Knowledge, file_ids: list[int]):
     """Delete vector data, Want to make a general purpose that can be dockedlangchainright of privacyvectorDB"""
     # for qa knowledge!!!
     embeddings = FakeEmbeddings()
@@ -674,8 +644,8 @@ def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
 
 
 def recommend_question(
-    invoke_user_id: int, question: str, answer: str, number: int = 3, tenant_id: Optional[int] = None
-) -> List[str]:
+    invoke_user_id: int, question: str, answer: str, number: int = 3, tenant_id: int | None = None
+) -> list[str]:
     from langchain_classic.chains.llm import LLMChain
     from langchain_core.prompts.prompt import PromptTemplate
 

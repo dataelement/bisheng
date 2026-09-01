@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import { Channel, SortType, canDeleteChannel, canEditChannelSettings, canManageChannelPermissions, getChannelsApi } from "~/api/channels";
+import { Channel, SortType, canDeleteChannel, canEditChannelSettings, canManageChannelPermissions, getChannelDetailApi, getChannelsApi } from "~/api/channels";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -37,8 +37,8 @@ interface ChannelActionsMenuProps {
 
 /**
  * Page-level (top-right ⋯) management menu for the active channel.
- * PC variant items: 频道设置 / 解散频道·取消订阅.
- * Mobile variant items: 分享 / 信息源筛选 / 频道设置 / 删除频道·取消订阅.
+ * PC variant items: 频道设置 / 成员管理 / 解散频道·取消订阅.
+ * Mobile variant items: 分享 / 信息源筛选 / 编辑频道 / 权限管理 / 删除频道·取消订阅.
  * Pinning lives on the per-channel rows in the channel-switcher dropdown, not here.
  */
 export function ChannelActionsMenu({
@@ -68,15 +68,29 @@ export function ChannelActionsMenu({
         queryFn: () => getChannelsApi({ type: "subscribed", sortBy: SortType.RECENT_UPDATE }),
         placeholderData: (prev) => prev,
     });
+    const { data: channelDetail, isFetched: isChannelDetailFetched } = useQuery({
+        queryKey: ["channelDetail", channel.id],
+        queryFn: () => getChannelDetailApi(channel.id),
+        staleTime: 60_000,
+    });
 
     const type: "created" | "subscribed" = subscribedChannels.some((c) => c.id === channel.id) && !createdChannels.some((c) => c.id === channel.id)
         ? "subscribed"
         : "created";
 
     // Prefer the freshest channel record from the lists (role/name can be stale on a deep-linked channel).
-    const liveChannel = createdChannels.find((c) => c.id === channel.id)
+    const listChannel = createdChannels.find((c) => c.id === channel.id)
         || subscribedChannels.find((c) => c.id === channel.id)
         || channel;
+    // Channel detail is the authoritative permission snapshot for the active
+    // resource. It also covers deep links whose locally constructed Channel
+    // record may not have actions yet.
+    const liveChannel: Channel = {
+        ...listChannel,
+        actions: Array.isArray(channelDetail?.actions)
+            ? channelDetail.actions
+            : listChannel.actions,
+    };
 
     const { handleDeleteChannel, handleUnsubscribeChannel } = useChannelActions({
         activeChannelId: channel.id,
@@ -87,18 +101,21 @@ export function ChannelActionsMenu({
         onChannelSelect,
     });
 
-    // Gate every management entry by the actual role/ReBAC permission (not by which
-    // list the channel sits in), mirroring the channel-sidebar (ChannelItem). A user
-    // granted ownership rather than being the original creator has the channel in the
-    // followed list, yet must still see 频道设置 / 解散频道.
-    const effectivePermissionIds = liveChannel.permissionIds ?? [];
-    const canEditSettings = canEditChannelSettings(undefined, effectivePermissionIds);
-    const canManageMembers = canManageChannelPermissions(undefined, effectivePermissionIds);
-    // Dissolving deletes the channel for everyone — gate on the delete permission, not
-    // on creation. Unsubscribe is independent: any subscriber can leave (a granted owner
-    // who is also a subscriber may see both).
-    const canDissolve = canDeleteChannel(liveChannel.role, liveChannel.permissionIds);
+    // Gate every management entry by its concrete F048 action, independent of
+    // which business list contains the channel.
+    const canEditSettings = canEditChannelSettings(liveChannel.actions);
+    const canManageMembers = canManageChannelPermissions(liveChannel.actions);
+    // Unsubscribe remains a separate subscription operation.
+    const canDissolve = canDeleteChannel(liveChannel.actions);
     const canUnsubscribe = type === "subscribed";
+    const hasMenuItem = Boolean(
+        (isMobile && onShare)
+        || (isMobile && onOpenSourceFilter)
+        || ((canEditSettings || canManageMembers) && onChannelSettings)
+        || canDissolve
+        || canUnsubscribe,
+    );
+    const permissionsResolving = !isChannelDetailFetched && !Array.isArray(listChannel.actions);
     const itemCls = "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] text-sm leading-[22px] text-text-1";
     const iconCls = "size-4 text-text-2";
 
@@ -107,12 +124,12 @@ export function ChannelActionsMenu({
             <DropdownMenuTrigger asChild>
                 <button
                     type="button"
-                    disabled={disabled}
+                    disabled={disabled || permissionsResolving || !hasMenuItem}
                     className={cn(
                         isMobile
                             ? "inline-flex size-5 shrink-0 items-center justify-center text-text-1"
                             : "inline-flex size-8 items-center justify-center rounded-md border border-border-base bg-white text-text-2 outline-none transition-colors fine-pointer:hover:bg-fill-1",
-                        disabled && "pointer-events-none opacity-20",
+                        (disabled || permissionsResolving || !hasMenuItem) && "pointer-events-none opacity-20",
                         triggerClassName,
                     )}
                     aria-label={localize("com_subscription.channel_settings")}
@@ -151,7 +168,9 @@ export function ChannelActionsMenu({
                 {(canEditSettings || canManageMembers) && onChannelSettings ? (
                     <DropdownMenuItem className={itemCls} onClick={() => onChannelSettings(liveChannel)}>
                         <Outlined.Edit className={iconCls} />
-                        {localize("com_subscription.channel_settings")}
+                        {isMobile
+                            ? localize("com_subscription.edit_channel")
+                            : localize("com_subscription.channel_settings")}
                     </DropdownMenuItem>
                 ) : null}
                 {canDissolve ? (

@@ -86,6 +86,8 @@ export function ChannelMemberDialog({
     channelId: string | null;
     currentUserRole: ChannelRole | null;
 }) {
+    // This dialog manages subscription membership only. Resource authorization
+    // is handled by the F048 ChannelPermissionDialog and its Grant endpoints.
     const { showToast } = useToastContext();
     const localize = useLocalize();
     const [keyword, setKeyword] = useState("");
@@ -484,4 +486,3 @@ export function ChannelMemberDialog({
         </>
     );
 }
-

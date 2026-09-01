@@ -145,10 +145,10 @@
     }
   },
   "src/components/bs-comp/apiComponent/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
+    "react-hooks/exhaustive-deps": {
       "count": 1
     },
-    "react-hooks/exhaustive-deps": {
+    "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
   },
@@ -350,6 +350,9 @@
   "src/components/bs-comp/knowledgeUploadComponent/DropZone.tsx": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
     }
   },
   "src/components/bs-comp/knowledgeUploadComponent/ProgressItem.tsx": {
@@ -421,6 +424,11 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 3
+    }
+  },
+  "src/components/bs-comp/permission/useResourceActions.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
     }
   },
   "src/components/bs-comp/selectComponent/LabelSelect.tsx": {
@@ -948,11 +956,11 @@
     "no-console": {
       "count": 2
     },
-    "no-restricted-syntax": {
-      "count": 4
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 4
     }
   },
   "src/components/inputListComponent/index.tsx": {
@@ -1119,7 +1127,7 @@
   },
   "src/controllers/API/finetune.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 28
+      "count": 29
     }
   },
   "src/controllers/API/flow.ts": {
@@ -1200,7 +1208,7 @@
   },
   "src/controllers/API/workflow.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 10
+      "count": 11
     },
     "no-restricted-syntax": {
       "count": 24
@@ -1618,6 +1626,11 @@
       "count": 3
     }
   },
+  "src/pages/BuildPage/bench/DepartmentKnowledgeSpaceManagerDialog.tsx": {
+    "no-restricted-syntax": {
+      "count": 16
+    }
+  },
   "src/pages/BuildPage/bench/DialogueWork.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
@@ -1631,6 +1644,9 @@
   "src/pages/BuildPage/bench/KnowledgeSpace.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 7
     }
   },
   "src/pages/BuildPage/bench/KnowledgeSpaceSensitivePolicy.tsx": {
@@ -2544,10 +2560,10 @@
     }
   },
   "src/pages/Dashboard/components/dashboard/DashboardListItem.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
+    "@typescript-eslint/no-unused-vars": {
       "count": 1
     },
-    "@typescript-eslint/no-unused-vars": {
+    "@typescript-eslint/no-unused-expressions": {
       "count": 1
     }
   },
@@ -2624,6 +2640,9 @@
     },
     "no-restricted-imports": {
       "count": 1
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 3
     }
   },
   "src/pages/Dashboard/index.tsx": {
@@ -2726,9 +2745,6 @@
     }
   },
   "src/pages/KnowledgePage/KnowledgeFile.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 11
-    },
     "@typescript-eslint/no-unused-expressions": {
       "count": 3
     },
@@ -2740,12 +2756,12 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 11
     }
   },
   "src/pages/KnowledgePage/KnowledgeQa.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 11
-    },
     "@typescript-eslint/no-unused-expressions": {
       "count": 3
     },
@@ -2754,6 +2770,9 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 11
     }
   },
   "src/pages/KnowledgePage/components/AddKnowledgeFileMenu.tsx": {
@@ -3070,6 +3089,11 @@
       "count": 3
     },
     "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/pages/KnowledgePage/index.tsx": {
+    "react-hooks/rules-of-hooks": {
       "count": 1
     }
   },
@@ -3532,7 +3556,7 @@
   },
   "src/pages/SystemPage/components/UserGroup.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 1
+      "count": 3
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -3672,7 +3696,7 @@
       "count": 3
     },
     "no-restricted-syntax": {
-      "count": 15
+      "count": 21
     }
   },
   "src/test/departmentPageRefresh.test.tsx": {
@@ -3735,7 +3759,7 @@
   },
   "src/test/modelPermissions.test.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 12
+      "count": 14
     }
   },
   "src/test/permissionGrantTab.test.tsx": {

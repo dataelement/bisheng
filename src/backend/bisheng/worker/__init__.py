@@ -2,6 +2,8 @@
 from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
 from bisheng.worker.approval.decision_delivery_tasks import (
     coordinate_approval_decision_delivery as coordinate_approval_decision_delivery,
+)
+from bisheng.worker.approval.decision_delivery_tasks import (
     deliver_approval_decision as deliver_approval_decision,
 )
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
@@ -32,9 +34,12 @@ from bisheng.worker.knowledge.scheduler import (
     trigger_dispatch_task,
 )
 from bisheng.worker.knowledge.space_admin_reconcile import reconcile_department_space_admins
-from bisheng.worker.permission.retry_failed_tuples import retry_failed_tuples
 from bisheng.worker.permission.resource_user_invite_tasks import (
     execute_resource_user_invite as execute_resource_user_invite,
+)
+from bisheng.worker.permission.retry_failed_tuples import (
+    cleanup_succeeded_failed_tuples,
+    retry_failed_tuples,
 )
 from bisheng.worker.telemetry.mid_table import (
     sync_mid_app_increment,

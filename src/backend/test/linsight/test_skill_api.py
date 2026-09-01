@@ -8,6 +8,7 @@ fields, multi-format upload, bundle file endpoint, built-in 404 semantics.
 
 import io
 import zipfile
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -20,6 +21,8 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.linsight.api.endpoints import skill as skill_endpoints
 from bisheng.linsight.domain.services import skill_service as service_module
 from bisheng.linsight.domain.services.skill_service import SkillService
+from test.linsight.fixtures.fake_minio import FakeMinioStorage
+
 from bisheng.linsight.domain.services.skill_store import MAX_BUNDLE_SIZE, SkillStore
 from test.linsight.test_skill_service import FakeSkillDao
 
@@ -40,9 +43,16 @@ class MockEndUser:
 def client(tmp_path, monkeypatch):
     FakeSkillDao.reset()
     monkeypatch.setattr(service_module, "LinsightSkillDao", FakeSkillDao)
-    monkeypatch.setattr(service_module.PermissionService, "authorize", AsyncMock())
+    owner_projection = SimpleNamespace(authorize_created=AsyncMock())
     # Endpoint-level service factory pinned to the tmp store; tenant id pinned to 1.
-    monkeypatch.setattr(skill_endpoints, "SkillService", lambda: SkillService(store=SkillStore(root=tmp_path)))
+    monkeypatch.setattr(
+        skill_endpoints,
+        "SkillService",
+        lambda: SkillService(
+            store=SkillStore(root=tmp_path, minio=FakeMinioStorage()),
+            owner_projection=owner_projection,
+        ),
+    )
     monkeypatch.setattr(skill_endpoints, "_current_tenant_id", lambda: 1)
 
     app = FastAPI()

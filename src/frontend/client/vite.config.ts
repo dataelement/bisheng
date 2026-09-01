@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
 import react from '@vitejs/plugin-react';
+import { readFileSync } from 'node:fs';
 import * as http from 'node:http';
 import path from 'path';
 import { visualizer } from "rollup-plugin-visualizer";
@@ -11,12 +11,25 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import { createHtmlPlugin } from 'vite-plugin-html';
 
+/**
+ * Build stamp shown on the crash screen: package version plus the minute the
+ * bundle was built, e.g. `v3.0.0-beta1 (20260807-2132)`. Local time on purpose —
+ * it is read by whoever built it, alongside a release log kept in the same zone.
+ */
+function buildVersion(): string {
+  const pkg = JSON.parse(readFileSync(path.join(__dirname, 'package.json'), 'utf-8'));
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+  return `v${pkg.version} (${stamp})`;
+}
+
 const app_env = {
   BASE_URL: '/workspace',
   BISHENG_HOST: '/admin'
 }
 
-const minioPathRE = /^\/(?:workspace\/)?bisheng(?:\/|$)/;
+const minioPathRE = /^\/(?:workspace\/)?(?:bisheng|tmp-dir)(?:\/|$)/;
 
 // Emit one loud, actionable warning the first time MinIO answers a proxied
 // object request with 403. For presigned (SigV4) URLs to the public bucket a
@@ -55,7 +68,7 @@ function minioFileProxyPlugin(minioTarget: string): Plugin {
           return;
         }
 
-        const rewrittenUrl = requestUrl.replace(/^\/workspace(?=\/bisheng(?:\/|$))/, '');
+        const rewrittenUrl = requestUrl.replace(/^\/workspace(?=\/(?:bisheng|tmp-dir)(?:\/|$))/, '');
         const targetUrl = new URL(rewrittenUrl, minioTarget);
         const proxyReq = http.request(
           {
@@ -97,19 +110,6 @@ function minioFileProxyPlugin(minioTarget: string): Plugin {
 }
 
 // https://vitejs.dev/config/
-/**
- * Build stamp shown on the crash screen: package version plus the minute the
- * bundle was built, e.g. `v2.6.0 (20260806-1432)`. Local time on purpose — it is
- * read by whoever built it, alongside a release log kept in the same zone.
- */
-function buildVersion(): string {
-  const pkg = JSON.parse(readFileSync(path.join(__dirname, 'package.json'), 'utf-8'));
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, '0');
-  const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
-  return `v${pkg.version} (${stamp})`;
-}
-
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, path.join(__dirname, '..'));
   // MinIO object proxy for bucket paths (/bisheng/...): these must reach MinIO,
@@ -117,8 +117,11 @@ export default defineConfig(({ command, mode }) => {
   // VITE_DEV_MINIO_TARGET, whose host MUST match the backend `sharepoint` config —
   // SigV4 presigned URLs sign the Host header, so a mismatch yields 403
   // SignatureDoesNotMatch (e.g. set http://localhost:9000 when sharepoint=localhost:9000).
-  const minioTarget = env.VITE_DEV_MINIO_TARGET || 'http://192.168.106.105:3001/';
-  const apiTarget = env.VITE_DEV_API_TARGET || 'http://192.168.106.105:3001/';
+  const minioTarget = env.VITE_DEV_MINIO_TARGET || 'http://127.0.0.1:9000';
+  const apiTarget = env.VITE_DEV_API_TARGET || 'http://127.0.0.1:7860';
+  // Per-request proxy logging is opt-in (VITE_PROXY_LOG=1): on by default it prints
+  // dozens of lines per page load and buries the warnings that matter.
+  const proxyLog = env.VITE_PROXY_LOG === '1';
 
   return {
     base: app_env.BASE_URL || '/',
@@ -153,9 +156,11 @@ export default defineConfig(({ command, mode }) => {
           secure: false,
           ws: true,
           configure: (proxy, options) => {
-            proxy.on('proxyReq', (proxyReq, req, res) => {
-              console.log('Proxying request to:', proxyReq.path);
-            });
+            if (proxyLog) {
+              proxy.on('proxyReq', (proxyReq, req, res) => {
+                console.log('Proxying request to:', proxyReq.path);
+              });
+            }
           },
           rewrite: (path) => {
             return path.replace(/^\/workspace/, '');
@@ -165,9 +170,9 @@ export default defineConfig(({ command, mode }) => {
           target: minioTarget,
           changeOrigin: true,
           secure: false,
-          // rewrite: (path) => {
-          //   return path.replace(/^\/workspace/, '');
-          // },
+          rewrite: (path) => {
+            return path.replace(/^\/workspace/, '');
+          },
         },
       },
     },
@@ -269,8 +274,6 @@ export default defineConfig(({ command, mode }) => {
     ],
     publicDir: './public',
     build: {
-      sourcemap: process.env.NODE_ENV === 'development',
-      outDir: './build',
       // pnpm workspace: deps live in ../node_modules (outside this vite root),
       // which defeats vite-plugin-node-polyfills' node_modules exemption — its
       // injected ESM imports land inside CJS deps (react, react-dom) and break
@@ -279,6 +282,8 @@ export default defineConfig(({ command, mode }) => {
       commonjsOptions: {
         transformMixedEsModules: true,
       },
+      sourcemap: process.env.NODE_ENV === 'development',
+      outDir: './build',
       minify: 'terser',
       // Strip all console.* / debugger from production bundles so no debug data
       // (API payloads, tokens, filenames) leaks to the browser console. The

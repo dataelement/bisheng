@@ -142,6 +142,33 @@ grandfathered: do **not** edit released migrations, but never add new ones like 
     constraints. Keep names stable so schema inspection remains understandable.
   - Identifiers come back **uppercase** from DM8 reflection — compare
     case-insensitively (the `*_exists` helpers already do).
+- **Charset and collation follow the database defaults.** New migrations must not
+  normally pass MySQL-specific table options such as `mysql_charset` or
+  `mysql_collate` to `op.create_table()`. Charset and collation are deployment-level
+  database policy; hard-coding them in one migration makes schemas differ by creation
+  path, embeds MySQL-only semantics in a MySQL/DM8 codebase, and may change sorting or
+  uniqueness behaviour unexpectedly. Keep the corresponding SQLModel `__table_args__`
+  consistent with this rule so `create_all()` and Alembic do not create different table
+  definitions. An explicit table charset/collation is allowed only when it is a
+  documented data-contract requirement that cannot safely inherit the database default;
+  explain the exception in the migration and review its DM8 behaviour. A MySQL client
+  connection charset (for example `charset=utf8mb4`) controls transport encoding and
+  does not establish the database or table default. Do not edit an already-released
+  migration merely to remove legacy charset/collation options.
+- **`update_time` columns must use the shared server default.** Write
+  `sa.Column('update_time', sa.DateTime, nullable=False, server_default=update_time_server_default(conn))`
+  — never a bare `sa.text('CURRENT_TIMESTAMP')` and never no default at all. The models
+  declare `UPDATE_TIME_SERVER_DEFAULT`, which compiles to
+  `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` on MySQL, so a fresh install
+  (`create_all()`) and an upgrade (the revision you are writing) must emit the same thing. When they
+  differ the same release behaves differently per environment: upgraded MySQL databases
+  silently lose the ON UPDATE half, while fresh installs and every DaMeng database (whose
+  boot-time triggers cover *all* update_time columns) keep it. That drift shipped a real
+  bug — `linsight_skill` rows landed with a NULL update_time and the skill list sorted
+  freshly imported skills onto the last page; `update_time_default_align` repairs
+  existing databases and `test/database/test_update_time_default_alignment.py` guards
+  both sides. A table whose model deliberately declares a plain default is listed in
+  that test's `_PLAIN_DEFAULT_TABLES`.
 - **Reusable DDL guards** go in `alembic_helpers/online.py` (`table_exists`,
   `column_exists`) so revisions stay thin. Do **not** treat `alembic_helpers/f011.py`
   as a template — it holds read-then-write *data* logic from a pre-rule revision, which
@@ -156,6 +183,8 @@ grandfathered: do **not** edit released migrations, but never add new ones like 
 - [ ] `down_revision` equals the head that existed *before* this change.
 - [ ] `revision` is a readable `f0NN_<slug>` (not a random hash).
 - [ ] DDL reviewed for DM8 (not just MySQL autogen) and made idempotent.
+- [ ] `update_time` columns use `update_time_server_default(conn)`, not a bare
+      `CURRENT_TIMESTAMP` (keeps `create_all()` and the migration in agreement).
 - [ ] `upgrade()` is DDL-only — no `SELECT`→`UPDATE`/`INSERT`, no `INSERT…SELECT`, no
       dedup/backfill/cleanup (only a `server_default` fill is allowed). Any such data op
       lives in a `scripts/` ops job run out-of-band, not in the revision.

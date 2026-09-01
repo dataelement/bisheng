@@ -279,6 +279,47 @@ def filter_registry_items_by_text(
     return [item for item in items if item.citationId in citation_ids]
 
 
+def strip_unregistered_citation_markers(text: str, items: list[CitationRegistryItemSchema]) -> str:
+    """Drop citation markers whose ids were never registered.
+
+    The citation rules tell the model to copy a retrieval result's id verbatim
+    and never invent one, but nothing enforced it: a model that emitted
+    ``\ue200knowledgesearch_bixude.mp4:0\ue202`` — the file name substituted for
+    the id — got that marker persisted and rendered like any real one. The
+    reader then clicked a footnote whose detail endpoint 404s and read
+    "溯源详情加载失败", which describes a hallucination as a system fault.
+
+    A marker may carry several ids separated by ``CITATION_SEPARATOR_MARKER``;
+    the known ones survive and the marker is rewritten around them. A marker
+    left with nothing is removed outright, whitespace and all, so the sentence
+    it trailed does not keep a dangling gap.
+
+    Returns the text unchanged when it holds no markers, so the common path
+    costs one regex search.
+    """
+    if not text or CITATION_START_MARKER not in text:
+        return text
+
+    known_ids = {item.citationId for item in items}
+
+    def _rewrite(match: "re.Match[str]") -> str:
+        kept: list[str] = []
+        for raw_key in match.group(1).split(CITATION_SEPARATOR_MARKER):
+            key = raw_key.strip()
+            citation_id, _ = _split_citation_key(key)
+            if citation_id and citation_id in known_ids:
+                kept.append(key)
+        if not kept:
+            return ""
+        return (
+            f"{CITATION_START_MARKER}"
+            f"{CITATION_SEPARATOR_MARKER.join(kept)}"
+            f"{CITATION_END_MARKER}"
+        )
+
+    return CITATION_KEY_PATTERN.sub(_rewrite, text)
+
+
 def select_registry_items_for_persistence(
     items: list[CitationRegistryItemSchema],
     text: str,
