@@ -156,6 +156,20 @@ describe("mapSpace", () => {
       auth_type: VisibilityType.PRIVATE,
     } as any).portalDiscoveryEnabled).toBeUndefined();
   });
+
+  it("maps can_reorder from the list payload", () => {
+    expect(mapSpace({
+      id: 204,
+      name: "可排序库",
+      auth_type: VisibilityType.PUBLIC,
+      can_reorder: true,
+    } as any).canReorder).toBe(true);
+    expect(mapSpace({
+      id: 205,
+      name: "不可排序库",
+      auth_type: VisibilityType.PUBLIC,
+    } as any).canReorder).toBe(false);
+  });
 });
 
 describe("getSquareSpacesApi", () => {

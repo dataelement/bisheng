@@ -295,6 +295,7 @@ export default function PortalKnowledgeWorkbench() {
     const [canCreateFolder, setCanCreateFolder] = useState(false);
     const [canUploadFile, setCanUploadFile] = useState(false);
     const [currentFolderId, setCurrentFolderId] = useState<string | undefined>();
+    const [canReorderFoldersByParent, setCanReorderFoldersByParent] = useState<Record<string, boolean>>({});
     const [restoringDeepLinkKey, setRestoringDeepLinkKey] = useState<string | null>(
         () => portalDeepLinkTarget?.key ?? null,
     );
@@ -313,6 +314,10 @@ export default function PortalKnowledgeWorkbench() {
     const downloadPendingRef = useRef(false);
     const activeSpaceIdRef = useRef<string | undefined>();
     const currentFolderIdRef = useRef<string | undefined>();
+    const rememberCanReorderFolders = useCallback((parentId: string | undefined, flag: boolean) => {
+        const key = parentId || "";
+        setCanReorderFoldersByParent((prev) => (prev[key] === flag ? prev : { ...prev, [key]: flag }));
+    }, []);
     const previousSpaceIdRef = useRef<string | undefined>(undefined);
     const lastPortalLocationKeyRef = useRef("");
     /** Skip the automatic reloadFiles in the activeSpace effect after back-to-list sets the URL.
@@ -1140,6 +1145,7 @@ export default function PortalKnowledgeWorkbench() {
                 file_status: statusFilterNumbers,
             });
             if (activeSpaceIdRef.current !== spaceId) return;
+            rememberCanReorderFolders(undefined, Boolean(res.can_reorder_folders));
             const nextFiles = markFolderStatsLoading(res.data);
             setTreeNodes((prev) => {
                 if (append) {
@@ -1173,7 +1179,7 @@ export default function PortalKnowledgeWorkbench() {
                 setTreeRootLoadingMore(false);
             }
         }
-    }, [activeSpace?.id, loadFolderStats, showToast, sortBy, sortDirection, statusFilterNumbers, treeRootNextCursor]);
+    }, [activeSpace?.id, loadFolderStats, rememberCanReorderFolders, showToast, sortBy, sortDirection, statusFilterNumbers, treeRootNextCursor]);
 
     // Always-current ref to loadRootTree so the space/sort/filter reset effect
     // below can call it WITHOUT listing it as a dependency. loadRootTree's
@@ -1206,6 +1212,7 @@ export default function PortalKnowledgeWorkbench() {
                 file_status: statusFilterNumbers,
             });
             if (activeSpaceIdRef.current !== spaceId) return;
+            rememberCanReorderFolders(folderId, Boolean(res.can_reorder_folders));
             const nextFiles = markFolderStatsLoading(res.data);
             setTreeNodes((prev) => updateTreeNode(prev, folderId, (node) => ({
                 ...node,
@@ -1223,7 +1230,7 @@ export default function PortalKnowledgeWorkbench() {
             if (activeSpaceIdRef.current !== spaceId) return;
             showToast({ message: "文件列表加载失败", severity: NotificationSeverity.ERROR });
         }
-    }, [activeSpace?.id, currentFolderId, loadFolderStats, loadRootTree, showToast, sortBy, sortDirection, statusFilterNumbers]);
+    }, [activeSpace?.id, currentFolderId, loadFolderStats, loadRootTree, rememberCanReorderFolders, showToast, sortBy, sortDirection, statusFilterNumbers]);
 
     const reloadFilesRef = useRef(reloadFiles);
     reloadFilesRef.current = reloadFiles;
@@ -1647,6 +1654,7 @@ export default function PortalKnowledgeWorkbench() {
             setTreeRootTotal(0);
             setTreeRootHasMore(false);
             setTreeRootNextCursor(null);
+            setCanReorderFoldersByParent({});
             if (!openingDeepLinkedFileHere) {
                 setCurrentFolderId(undefined);
             }
@@ -2569,6 +2577,7 @@ export default function PortalKnowledgeWorkbench() {
                 file_status: statusFilterNumbers,
             });
             if (activeSpaceIdRef.current !== spaceId) return;
+            rememberCanReorderFolders(node.file.id, Boolean(res.can_reorder_folders));
             const total = (res as any).total ?? res.data.length;
             const nextFiles = markFolderStatsLoading(res.data);
             setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({
@@ -2592,7 +2601,7 @@ export default function PortalKnowledgeWorkbench() {
             })));
             showToast({ message: "文件夹加载失败", severity: NotificationSeverity.ERROR });
         }
-    }, [activeSpace?.id, loadFolderStats, showToast, sortBy, sortDirection, statusFilterNumbers]);
+    }, [activeSpace?.id, loadFolderStats, rememberCanReorderFolders, showToast, sortBy, sortDirection, statusFilterNumbers]);
 
     const handleLoadMoreChildren = useCallback(async (node: PortalFileTreeNode) => {
         const spaceId = activeSpace?.id;
@@ -2611,6 +2620,7 @@ export default function PortalKnowledgeWorkbench() {
                 file_status: statusFilterNumbers,
             });
             if (activeSpaceIdRef.current !== spaceId) return;
+            rememberCanReorderFolders(node.file.id, Boolean(res.can_reorder_folders));
             const total = (res as any).total ?? node.total;
             const nextFiles = markFolderStatsLoading(res.data);
             setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({
@@ -2629,7 +2639,7 @@ export default function PortalKnowledgeWorkbench() {
             setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({ ...item, loading: false })));
             showToast({ message: "加载更多失败", severity: NotificationSeverity.ERROR });
         }
-    }, [activeSpace?.id, loadFolderStats, showToast, sortBy, sortDirection, statusFilterNumbers]);
+    }, [activeSpace?.id, loadFolderStats, rememberCanReorderFolders, showToast, sortBy, sortDirection, statusFilterNumbers]);
 
     const handleNavigateFolder = useCallback(async (
         folderId?: string,
@@ -2717,6 +2727,7 @@ export default function PortalKnowledgeWorkbench() {
                     file_status: statusFilterNumbers,
                 });
                 if (activeSpaceIdRef.current !== spaceId) return;
+                rememberCanReorderFolders(folderId, Boolean(res.can_reorder_folders));
                 const total = (res as any).total ?? res.data.length;
                 const nextFiles = markFolderStatsLoading(res.data);
                 setTreeNodes((prev) => updateTreeNode(
@@ -2750,7 +2761,7 @@ export default function PortalKnowledgeWorkbench() {
         } finally {
             navigatingFolderRef.current = null;
         }
-    }, [activeSpace?.id, loadFolderStats, loadRootTree, showToast, sortBy, sortDirection, statusFilterNumbers, treeNodes]);
+    }, [activeSpace?.id, loadFolderStats, loadRootTree, rememberCanReorderFolders, showToast, sortBy, sortDirection, statusFilterNumbers, treeNodes]);
 
     // Expose the latest handler to event callbacks defined earlier in the file.
     navigateFolderRef.current = handleNavigateFolder;
@@ -3070,7 +3081,6 @@ export default function PortalKnowledgeWorkbench() {
                         onOpenSpaceSettings={(space) => void handleOpenSpaceSettings(space)}
                         onOpenSpaceMembers={handleOpenSpaceMembers}
                         onPinSpace={(space, pinned, group) => void handlePinSpace(space, pinned, group)}
-                        canReorderSpaces={isSystemAdmin}
                         onReorderSpace={(space, prevSpaceId, nextSpaceId, group) =>
                             void handleReorderSpace(space, prevSpaceId, nextSpaceId, group)
                         }
@@ -3122,6 +3132,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     hasMore={currentFileListHasMore}
                                                     onPageChange={handleNativePageChange}
                                                     loading={currentFileListLoading}
+                                                    canReorderFolders={!searchMode && Boolean(canReorderFoldersByParent[currentFolderId || ""])}
                                                     onSearch={(params) => void handleNativeSearch(params)}
                                                     onFilterStatus={handleNativeStatusFilter}
                                                     onSort={handleNativeSort}

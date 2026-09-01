@@ -119,7 +119,8 @@ export function resolveReorderNeighbours(
     if (targetIndex < 0) return null;
 
     const insertAt = position === "before" ? targetIndex : targetIndex + 1;
-    const samePinGroup = (item: KnowledgeSpace) => Boolean(item.isPinned) === Boolean(dragged.isPinned);
+    const samePinGroup = (item: KnowledgeSpace) =>
+        Boolean(item.isPinned) === Boolean(dragged.isPinned) && Boolean(item.canReorder);
     const prevSpace = remaining.slice(0, insertAt).filter(samePinGroup).pop() ?? null;
     const nextSpace = remaining.slice(insertAt).find(samePinGroup) ?? null;
     return { prevSpaceId: prevSpace?.id ?? null, nextSpaceId: nextSpace?.id ?? null };
@@ -323,8 +324,10 @@ export function SpaceSidebar({
 
     // Personal spaces are per-user, so there is no shared order to define for them.
     const isGroupReorderable = useCallback((group: SpaceGroup) => (
-        canReorderSpaces && Boolean(onReorderSpace) && group.level !== SpaceLevel.PERSONAL
-    ), [canReorderSpaces, onReorderSpace]);
+        Boolean(onReorderSpace)
+        && group.level !== SpaceLevel.PERSONAL
+        && group.spaces.some((item) => item.canReorder)
+    ), [onReorderSpace]);
 
     const handleSpaceDragStart = useCallback((group: SpaceGroup, space: KnowledgeSpace) => {
         setSpaceDrag({ groupKey: group.key, spaceId: space.id });
@@ -346,7 +349,8 @@ export function SpaceSidebar({
         // against rows sharing its pin state — dropping across the boundary can't move
         // it there anyway.
         const dragged = group.spaces.find((item) => item.id === spaceDrag.spaceId);
-        if (!dragged || Boolean(dragged.isPinned) !== Boolean(space.isPinned)) return;
+        if (!dragged || !dragged.canReorder || !space.canReorder) return;
+        if (Boolean(dragged.isPinned) !== Boolean(space.isPinned)) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
         const bounds = event.currentTarget.getBoundingClientRect();
@@ -512,18 +516,18 @@ export function SpaceSidebar({
                                                             spaceDropTarget?.spaceId === space.id && spaceDropTarget.position === "after"
                                                                 ? s.spaceRowDropAfter : "",
                                                         ].filter(Boolean).join(" ")}
-                                                        draggable={isGroupReorderable(group)}
-                                                        onDragStart={isGroupReorderable(group)
+                                                        draggable={Boolean(space.canReorder) && isGroupReorderable(group)}
+                                                        onDragStart={space.canReorder && isGroupReorderable(group)
                                                             ? () => handleSpaceDragStart(group, space)
                                                             : undefined}
                                                         onDragEnd={isGroupReorderable(group) ? handleSpaceDragEnd : undefined}
-                                                        onDragOver={isGroupReorderable(group)
+                                                        onDragOver={space.canReorder && isGroupReorderable(group)
                                                             ? (event) => handleSpaceDragOver(event, group, space)
                                                             : undefined}
-                                                        onDragLeave={isGroupReorderable(group)
+                                                        onDragLeave={space.canReorder && isGroupReorderable(group)
                                                             ? () => setSpaceDropTarget((prev) => (prev?.spaceId === space.id ? null : prev))
                                                             : undefined}
-                                                        onDrop={isGroupReorderable(group)
+                                                        onDrop={space.canReorder && isGroupReorderable(group)
                                                             ? (event) => handleSpaceDrop(event, group, space)
                                                             : undefined}
                                                     >
