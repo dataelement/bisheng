@@ -13,7 +13,8 @@ import type {
 } from "~/api/permission";
 import { Avatar, AvatarName } from "~/components/ui/Avatar";
 import { PermissionEmptyState } from "./PermissionEmptyState";
-import { Building2, RotateCcw, Search, User, Users } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+import { RotateCcw, Search } from "lucide-react";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
@@ -23,9 +24,9 @@ import { RelationModelOption } from "./RelationSelect";
 import { TruncatedTooltip } from "./TruncatedTooltip";
 
 const SUBJECT_ICONS = {
-  user: User,
-  department: Building2,
-  user_group: Users,
+  user: Outlined.People,
+  department: Outlined.City,
+  user_group: Outlined.PeopleGroup,
 };
 
 const LIST_SUBJECT_TYPES = ["user", "department", "user_group"] as const;
@@ -503,7 +504,7 @@ export function PermissionListTab({
           ) : (
             <div className="flex flex-col">
               {visibleEntries.map((entry, index) => {
-                const Icon = SUBJECT_ICONS[entry.subject_type] || User;
+                const Icon = SUBJECT_ICONS[entry.subject_type] || Outlined.People;
                 const currentModelId = entry.model_id || entry.relation;
                 const isOwner = entry.relation === "owner";
                 const canManageOwnerEntry = isOwner && ownerEntryCount > 1;

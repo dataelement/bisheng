@@ -9,10 +9,21 @@ import type {
   ResourceType,
   SelectedSubject,
 } from "~/api/permission";
-import { Users, Search } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocalize } from "~/hooks";
+import { cn } from "~/utils";
 import { PermissionEmptyState } from "./PermissionEmptyState";
+import {
+  PERMISSION_SUBJECT_ICON_CLASS,
+  PERMISSION_SUBJECT_LIST_CLASS,
+  PERMISSION_SUBJECT_ROW_CLASS,
+  PERMISSION_SUBJECT_ROW_DISABLED_CLASS,
+  PERMISSION_SUBJECT_ROW_INTERACTIVE_CLASS,
+  PERMISSION_SUBJECT_SLOT_CLASS,
+  permissionSubjectIndent,
+} from "./permissionDialogStyles";
 
 interface SubjectSearchUserGroupProps {
   value: SelectedSubject[];
@@ -127,34 +138,47 @@ export function SubjectSearchUserGroup({
         {!loading && filtered.length === 0 && (
           <PermissionEmptyState message={localize("com_permission.empty_user_groups")} />
         )}
-        {!loading &&
-          filtered.map((group) => {
-            const isDisabled = disabledIdSet.has(group.id);
-            return (
-              <div
-                key={group.id}
-                className={`flex items-center gap-2 px-3 py-2 ${
-                  isDisabled
-                    ? "cursor-not-allowed opacity-60"
-                    : "cursor-pointer hover:bg-gray-50"
-                }`}
-                onClick={() => toggle(group)}
-              >
-                <Checkbox
-                  className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
-                  checked={selectedIds.has(group.id)}
-                  disabled={isDisabled}
-                />
-                <Users className="h-4 w-4 text-gray-400" />
-                <span className="min-w-0 flex-1 truncate text-sm">{group.group_name}</span>
-                {isDisabled && (
-                  <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
-                    {localize("com_permission.already_granted")}
+        {!loading && filtered.length > 0 && (
+          <div className={PERMISSION_SUBJECT_LIST_CLASS}>
+            {filtered.map((group) => {
+              const isDisabled = disabledIdSet.has(group.id);
+              return (
+                <div
+                  key={group.id}
+                  className={cn(
+                    PERMISSION_SUBJECT_ROW_CLASS,
+                    isDisabled
+                      ? PERMISSION_SUBJECT_ROW_DISABLED_CLASS
+                      : PERMISSION_SUBJECT_ROW_INTERACTIVE_CLASS,
+                  )}
+                  style={{ paddingLeft: permissionSubjectIndent(0) }}
+                  onClick={() => toggle(group)}
+                >
+                  {/* No switcher slot: this list is flat, so nothing in it expands
+                      and the slot would only be dead space. The checkbox leads. */}
+                  <div className={PERMISSION_SUBJECT_SLOT_CLASS}>
+                    <Checkbox
+                      className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
+                      checked={selectedIds.has(group.id)}
+                      disabled={isDisabled}
+                    />
+                  </div>
+                  <div className={PERMISSION_SUBJECT_SLOT_CLASS}>
+                    <Outlined.PeopleGroup className={PERMISSION_SUBJECT_ICON_CLASS} />
+                  </div>
+                  <span className="min-w-0 flex-1 truncate pl-1" title={group.group_name}>
+                    {group.group_name}
                   </span>
-                )}
-              </div>
-            );
-          })}
+                  {isDisabled && (
+                    <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+                      {localize("com_permission.already_granted")}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
