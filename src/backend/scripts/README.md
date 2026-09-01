@@ -640,6 +640,51 @@ Safety:
 - `--include-inflight` / `--only-inflight` 可能与正在运行的任务重复解析，只能在明确需要时使用。
 - 数据库状态提交与 Celery 发布不是原子事务；网络异常存在 broker 已接受但客户端未收到确认的不确定窗口。
 
+### `retry_failed_knowledge_space_folder_files.py`
+
+按知识空间名称和目录名称（支持多级路径）查找该目录及其子目录下状态为 `FAILED` 的文件，
+默认 dry-run 只列出文件；传入 `--apply` 后复用 `enqueue_reparse_knowledge_space_files.py`
+把重试任务发到 `knowledge_celery` worker。
+
+Usage:
+
+```bash
+export config=/path/to/config.yaml
+cd src/backend
+
+# 先预览失败文件，不改数据
+bash scripts/retry_failed_knowledge_space_folder_files.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全"
+
+# 确认无误后再入队重解析
+bash scripts/retry_failed_knowledge_space_folder_files.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全" \
+  --apply
+
+# 目录名在空间内唯一时可只写最后一级
+bash scripts/retry_failed_knowledge_space_folder_files.sh \
+  --space-name "安全生产知识库" \
+  --folder "消防安全"
+
+# 同名知识空间用租户 ID 区分；需要时连 TIMEOUT 一起重试
+bash scripts/retry_failed_knowledge_space_folder_files.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全" \
+  --tenant-id 1 \
+  --include-timeout \
+  --apply
+```
+
+`--folder` 支持 `/`、`>`、`->` 分隔多级目录。解析范围包含该目录及其所有子目录。
+
+Safety:
+
+- 默认只选 `FAILED`。`--include-timeout` 才会加上 `TIMEOUT`。
+- `--apply` 前必须先跑 dry-run，并确认 broker 与 knowledge worker 可用。
+- 成功输出只表示任务已入队，不表示解析已经完成。
+
 ### `move_knowledge_space_files.py`
 
 扫描一个或多个来源知识空间的 `SUCCESS` 真实文件，可按来源文件夹、门户一级分类 code、
