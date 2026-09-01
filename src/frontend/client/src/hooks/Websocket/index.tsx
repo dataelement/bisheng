@@ -15,7 +15,6 @@ const connections: Record<string, WebSocket> = {};
 
 export const useLinsightWebSocket = (versionId) => {
     const queryClient = useQueryClient();
-    const { getLinsight, updateLinsight } = useLinsightManager()
     const { getLinsight, updateLinsight, reconcileLinsightFromServer } = useLinsightManager()
     const { showToast } = useToastContext();
     const maxRetryCountRef = useRef(5);
