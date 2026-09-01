@@ -35,7 +35,7 @@ def _catalog_workbook(*rows: tuple) -> bytes:
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.title = "课程目录"
-    headers = ["目录ID", "上级目录", "目录名称", "描述", "排序", "是否公开"]
+    headers = ["目录ID", "上级目录ID", "上级目录", "目录名称", "描述", "排序", "是否公开"]
     for col, header in enumerate(headers, start=1):
         sheet.cell(row=1, column=col, value=header)
     for row_idx, row in enumerate(rows, start=2):
@@ -193,11 +193,11 @@ async def test_import_rejects_missing_name(course_session):
 
 async def test_import_assigns_catalog_by_external_id(course_session):
     catalog_service = PortalCourseCatalogService(course_session)
-    external_catalog_id = "CAT-1001"
+    external_catalog_id = "c" * 32
     imported = await catalog_service.import_excel(
         tenant_id=1,
         user_id=7,
-        content=_catalog_workbook((external_catalog_id, "", "安全生产", "公司级", 1, "是")),
+        content=_catalog_workbook((external_catalog_id, "", "", "安全生产", "公司级", 1, "是")),
     )
     assert imported.failed == 0
     service = PortalCourseImportService(course_session)
