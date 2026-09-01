@@ -2225,7 +2225,7 @@ class KnowledgeSpaceMutationExecutor:
         permission_id_allowed = await KnowledgeSpaceService(
             request=None,
             login_user=applicant,
-        ).has_effective_permission_id_strict(
+        ).has_effective_action_strict(
             permission_object_type,
             permission_object_id,
             "upload_file",
@@ -2315,12 +2315,13 @@ class KnowledgeSpaceMutationExecutor:
         service = KnowledgeSpaceService(request=None, login_user=applicant)
         source_type = "folder" if request.resource_type == "folder" else "knowledge_file"
         if request.action == KnowledgeSpaceFileChangeAction.RENAME:
-            source_permission = "rename_folder" if source_type == "folder" else "rename_file"
+            # 3.0 scopes actions by resource type, so the _folder/_file suffix is gone.
+            source_permission = "rename"
         elif request.action == KnowledgeSpaceFileChangeAction.MOVE:
-            source_permission = "move_folder" if source_type == "folder" else "move_file"
+            source_permission = "move"
         else:
-            source_permission = "delete_folder" if source_type == "folder" else "delete_file"
-        source_allowed = await service.has_effective_permission_id_strict(
+            source_permission = "delete"
+        source_allowed = await service.has_effective_action_strict(
             source_type,
             int(request.resource_id),
             source_permission,
@@ -2337,7 +2338,7 @@ class KnowledgeSpaceMutationExecutor:
             else:
                 target_type = "folder"
                 target_id = int(request.target_parent_id)
-            target_allowed = await service.has_effective_permission_id_strict(
+            target_allowed = await service.has_effective_action_strict(
                 target_type,
                 target_id,
                 "upload_file",

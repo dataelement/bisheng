@@ -667,6 +667,46 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ]
         )
 
+    async def has_effective_action_strict(
+        self,
+        object_type: str,
+        object_id: int,
+        action: str,
+        *,
+        space_id: int | None = None,
+        locked_space: Knowledge | None = None,
+    ) -> bool:
+        """Fail-closed re-check used just before an approved change executes.
+
+        Replaces COFCO's has_effective_permission_id_strict, which read OpenFGA
+        tuples directly because the old projection could not be trusted at
+        execution time. 3.0's decision layer carries that guarantee itself: a
+        target whose projection is stale raises PermissionPublishNotReadyError
+        and resolves to False, and a degraded projection forces the check up to
+        HIGHER_CONSISTENCY rather than answering from the projection. A target
+        that cannot be resolved yields no actions at all, so it is denied.
+
+        Bypasses the per-instance action cache on purpose: an approval may have
+        sat for days, and a decision cached earlier in this request must not
+        stand in for the state at execution time.
+        """
+        del space_id, locked_space  # kept for call-site compatibility
+        tenant_id = get_current_tenant_id()
+        if tenant_id is None or int(tenant_id) != int(self.login_user.tenant_id):
+            raise SpaceTenantMismatchError.http_exception()
+        self.__dict__.pop("_effective_actions_cache", None)
+        action_map = await self._batch_actions(object_type, [object_id], (action,))
+        return action in action_map.get(str(object_id), frozenset())
+
+    async def _get_space_or_raise(self, space_id: int) -> Knowledge:
+        """Fetch a space row or raise. 3.0 inlined this lookup; COFCO code and
+        its tests still address it by name, and it carries no permission
+        semantics of its own."""
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+        return space
+
     async def _space_id_for_resource(self, object_type: str, object_id: int) -> int | None:
         if object_type == "knowledge_space":
             return int(object_id)
