@@ -1,10 +1,12 @@
 "use client"
 
+import { MultiSelect, Option } from "@/components/bs-ui/multiSelect.tsx"
 import { Button } from "@/components/bs-ui/button"
+import { getFieldEnums } from "@/controllers/API/dashboard"
 import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { cn } from "@/utils"
 import { GripHorizontalIcon, Search } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { DashboardComponent, QueryConfig, TimeRangeMode, TimeRangeType } from "../../types/dataConfig"
 import { AdvancedDatePicker, DatePickerValue } from "../AdvancedDatePicker"
 import { useTranslation } from "react-i18next"
@@ -21,17 +23,59 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
     const { refreshChartsByQuery, setQueryComponentParams } = useEditorDashboardStore()
     const [date, setDate] = useState<Date | undefined>(undefined)
 
-    const handleDateChange = (newDate: Date) => {
-        setDate(newDate)
-    }
+    const { queryConditions, dimensionFields = [] } = component.data_config as QueryConfig
+
+    // 客户反馈(2026-09-01): 查询组件除了时间，还要支持知识库大类/知识分类/组织架构/业务域。
+    // 每个字段各自的枚举值来自它所属的数据集（配置时已记录在 field.datasetCode 上），跟
+    // DimensionFilter.tsx 的加载逻辑一致，只是这里可能跨多个不同的数据集。
+    const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({})
+    const [dimensionOptions, setDimensionOptions] = useState<Record<string, Option[]>>({})
+    const [dimensionLoading, setDimensionLoading] = useState<Record<string, boolean>>({})
+    const dimensionRequestVersions = useRef<Record<string, number>>({})
+
+    const loadDimensionOptions = useCallback(async (fieldId: string, datasetCode: string | undefined, keyword = "") => {
+        if (!datasetCode || !fieldId) return
+        const requestVersion = (dimensionRequestVersions.current[fieldId] || 0) + 1
+        dimensionRequestVersions.current[fieldId] = requestVersion
+        setDimensionLoading(current => ({ ...current, [fieldId]: true }))
+        try {
+            const response = await getFieldEnums({
+                dataset_code: datasetCode,
+                field: fieldId,
+                page: 1,
+                pageSize: 50,
+                keyword,
+            })
+            const nextOptions = (response.options || response.enums || []).map((option: any) => ({
+                label: String(option?.label ?? option),
+                value: String(option?.value ?? option),
+            }))
+            if (dimensionRequestVersions.current[fieldId] === requestVersion) {
+                setDimensionOptions(current => ({ ...current, [fieldId]: nextOptions }))
+            }
+        } finally {
+            if (dimensionRequestVersions.current[fieldId] === requestVersion) {
+                setDimensionLoading(current => ({ ...current, [fieldId]: false }))
+            }
+        }
+    }, [])
+
+    useEffect(() => {
+        setDimensionValues(Object.fromEntries(
+            dimensionFields.map(field => [field.fieldId, field.defaultValues || []])
+        ))
+        dimensionFields.forEach(field => {
+            void loadDimensionOptions(field.fieldId, field.datasetCode)
+        })
+        // Only re-run when the configured field list itself changes (not on every keystroke).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [component.id, dimensionFields.map(f => f.fieldId).join(",")])
 
     const handleQuery = () => {
-        console.log("查询日期:", date)
-        // Refresh the associated chart based on the query component ID 
-        refreshChartsByQuery(component, filter)
+        // Refresh the associated chart based on the query component ID
+        refreshChartsByQuery(component, filter, dimensionValues)
     }
 
-    const { queryConditions } = component.data_config as QueryConfig
     const map = { 'year_month': 'month', 'year_month_day': 'day', 'year_month_day_hour': 'hour' }
 
     const [filter, setFilter] = useState<DatePickerValue | undefined>();
@@ -68,7 +112,7 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
 
             {/* query btn */}
             <div className="w-full flex flex-1 items-center select-none">
-                <div className="no-drag w-full flex gap-4 ">
+                <div className="no-drag w-full flex flex-wrap items-center gap-2">
                     <AdvancedDatePicker
                         granularity={map[queryConditions.timeGranularity]}
                         mode={queryConditions.displayType}
@@ -76,11 +120,33 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
                         value={filter}
                         placeholder={t('selectTime')}
                         onChange={(val) => {
-                            console.log("Day Range Change:", val);
                             setFilter(val);
                             setQueryComponentParams(component.id, val)
                         }}
                     />
+                    {dimensionFields.map(field => (
+                        <MultiSelect
+                            key={field.id}
+                            options={dimensionOptions[field.fieldId] || []}
+                            value={dimensionValues[field.fieldId] || []}
+                            onValueChange={values => {
+                                setDimensionValues(current => ({ ...current, [field.fieldId]: values }))
+                            }}
+                            onSearch={keyword => {
+                                void loadDimensionOptions(field.fieldId, field.datasetCode, keyword)
+                            }}
+                            loading={dimensionLoading[field.fieldId]}
+                            multiple
+                            searchable
+                            clearable
+                            maxDisplayed={1}
+                            placeholder={`全部${field.displayName}`}
+                            searchPlaceholder={`搜索${field.displayName}`}
+                            emptyMessage="暂无可选项"
+                            triggerClassName="no-drag h-9 min-w-32 bg-background"
+                            contentClassName="min-w-56"
+                        />
+                    ))}
                     <Button onClick={handleQuery} className=" gap-1">
                         <Search className="h-4 w-4" />
                         {t('query')}

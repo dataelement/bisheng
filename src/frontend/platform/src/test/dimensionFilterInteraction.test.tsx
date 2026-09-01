@@ -171,3 +171,64 @@ describe("DimensionFilter org-hierarchy filters (F058)", () => {
     expect(screen.getByText("测试部门02")).toBeInTheDocument()
   })
 })
+
+// Customer feedback (2026-09-01): only the "上传人名称" filter dropdown shows
+// "部门-姓名" — every other dropdown (including this same component's other fields)
+// keeps showing the plain enum label.
+describe("DimensionFilter uploader name shows department (customer feedback)", () => {
+  const uploaderComponent: DashboardComponent = {
+    ...component,
+    id: "dimension-filter-uploader",
+    data_config: {
+      linkedComponentIds: [],
+      fields: [
+        {
+          id: "field-uploader",
+          fieldId: "uploader_user_name",
+          fieldName: "uploader_user_name",
+          displayName: "上传人名称",
+        },
+      ],
+    } satisfies DimensionFilterConfig,
+  }
+
+  beforeEach(() => {
+    mockedGetFieldEnums.mockReset()
+    mockedGetFieldEnums.mockImplementation(async () => ({
+      // Backend's label_field sub-aggregation already resolves `label` to the
+      // department name when `labelField` is passed — see dashboard.py::get_dataset_field_enums.
+      options: [
+        { label: "测试积分部门", value: "gzx003" },
+        { label: "测试部门10", value: "gzx0001" },
+      ],
+    }))
+  })
+
+  it("requests the paired department field and combines it into the option label", async () => {
+    render(<DimensionFilter component={uploaderComponent} />)
+
+    await waitFor(() => expect(mockedGetFieldEnums).toHaveBeenCalledTimes(1))
+    expect(mockedGetFieldEnums).toHaveBeenCalledWith(
+      expect.objectContaining({ field: "uploader_user_name", labelField: "uploader_department_name" }),
+    )
+
+    fireEvent.click(screen.getByRole("combobox"))
+
+    expect(await screen.findByText("测试积分部门-gzx003")).toBeInTheDocument()
+    expect(screen.getByText("测试部门10-gzx0001")).toBeInTheDocument()
+    expect(screen.queryByText("gzx003")).not.toBeInTheDocument()
+  })
+
+  it("falls back to the bare value when the option has no distinct department label", async () => {
+    mockedGetFieldEnums.mockReset()
+    mockedGetFieldEnums.mockImplementation(async () => ({
+      options: [{ label: "admin", value: "admin" }],
+    }))
+
+    render(<DimensionFilter component={uploaderComponent} />)
+    await waitFor(() => expect(mockedGetFieldEnums).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole("combobox"))
+
+    expect(await screen.findByText("admin")).toBeInTheDocument()
+  })
+})

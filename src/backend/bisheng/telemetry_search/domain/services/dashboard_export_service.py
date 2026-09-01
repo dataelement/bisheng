@@ -36,9 +36,16 @@ def _sanitize_sheet_name(name: str) -> str:
 
 
 def _build_dataframe(data_config: ComponentDataConfig, dimensions: list[list], values: list[list]) -> pd.DataFrame:
-    columns = [_column_label(field) for field in data_config.dimensions]
+    # DataQueryService.query_telemetry_data() queries data_config.dimensions followed by
+    # get_stack_dimensions() (pivot table's 堆叠项/维度) as one combined dimension list —
+    # see component.py::query_telemetry_data lines 80-88 — so each result.dimensions row
+    # carries both, in that order. The exported columns must match, or pandas raises
+    # "N columns passed, passed data had M columns" for any pivot-table component that
+    # has a stack dimension configured.
+    row_dimension_fields = [*data_config.dimensions, *data_config.get_stack_dimensions()]
+    columns = [_column_label(field) for field in row_dimension_fields]
     columns.extend(_column_label(field) for field in data_config.metrics)
-    if data_config.dimensions:
+    if row_dimension_fields:
         # dimensions/values are index-aligned parallel lists (DataQueryResult contract).
         rows = [
             list(dim_row) + list(value_row) for dim_row, value_row in zip(dimensions, values, strict=True)

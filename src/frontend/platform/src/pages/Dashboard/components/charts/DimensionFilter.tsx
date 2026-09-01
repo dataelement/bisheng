@@ -11,6 +11,15 @@ import {
 } from "../../types/dataConfig"
 import { ORG_LEVEL_ORDER, orgLevelForField } from "../../utils/groupCrossTabRows"
 
+// Customer feedback (2026-09-01): the "上传人名称" filter dropdown must show each
+// uploader's department alongside their name ("部门-姓名"), to disambiguate same-named
+// uploaders — but ONLY in this one dropdown, not in the crosstab/chart legends (those
+// already have their own separate person+department merge, see mergePersonDedupValues
+// in groupCrossTabRows.ts). Reuses the existing label_field sub-aggregation the backend
+// already supports (dashboard.py::get_dataset_field_enums) — no backend change needed.
+const UPLOADER_NAME_FIELD_ID = "uploader_user_name"
+const UPLOADER_DEPARTMENT_FIELD_ID = "uploader_department_name"
+
 // F058 AC-03: among configured org-hierarchy fields (公司/部门/科室/班组，both "所属"
 // belonging_* and "原始上传库" uploader_* variants), enforce a fixed relative display
 // order — company -> dept -> office -> squad. Non-org fields keep their configured
@@ -58,6 +67,9 @@ export function DimensionFilter({ component, isDark }: DimensionFilterProps) {
     exactValues: string[] = []
   ) => {
     if (!component.dataset_code || !fieldId) return []
+    const effectiveLabelFieldId = fieldId === UPLOADER_NAME_FIELD_ID
+      ? UPLOADER_DEPARTMENT_FIELD_ID
+      : labelFieldId
     const isExactLookup = exactValues.length > 0
     const requestVersion = isExactLookup
       ? 0
@@ -72,16 +84,20 @@ export function DimensionFilter({ component, isDark }: DimensionFilterProps) {
       const response = await getFieldEnums({
         dataset_code: component.dataset_code,
         field: fieldId,
-        labelField: labelFieldId,
+        labelField: effectiveLabelFieldId,
         exactValues,
         page: 1,
         pageSize: 50,
         keyword,
       })
-      const nextOptions = (response.options || response.enums || []).map((option: any) => ({
-        label: String(option?.label ?? option),
-        value: String(option?.value ?? option),
-      }))
+      const nextOptions = (response.options || response.enums || []).map((option: any) => {
+        const value = String(option?.value ?? option)
+        const label = String(option?.label ?? option)
+        if (fieldId === UPLOADER_NAME_FIELD_ID && label && label !== value) {
+          return { label: `${label}-${value}`, value }
+        }
+        return { label, value }
+      })
       if (
         !isExactLookup &&
         listRequestVersions.current[fieldId] === requestVersion

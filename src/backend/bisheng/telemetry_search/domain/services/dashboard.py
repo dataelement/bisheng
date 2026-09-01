@@ -60,6 +60,11 @@ class DashboardService(BaseModel):
         "team_ks": "科室库",
         "personal": "个人库",
     }
+    # 知识库大类 filter dropdown: fixed display order agreed with the customer, not the ES
+    # terms-agg's default `_key` (alphabetical Unicode) order. `space_level_name` holds the
+    # literal Chinese label text at ETL time (see knowledge_space_content.py::SPACE_LEVEL_LABELS),
+    # so this list keys off that same text, not the `space_level` code.
+    SPACE_LEVEL_NAME_ORDER: ClassVar[list[str]] = ["公共库", "部门库", "科室库", "团队库", "个人库"]
     APPLICATION_TYPE_LABELS: ClassVar[dict[str, str]] = {
         "workflow": "工作流",
         "assistant": "助手",
@@ -805,6 +810,13 @@ class DashboardService(BaseModel):
             else:
                 label = enum_labels.get(str(value), label)
             options.append({"value": value, "label": label})
+        if field == "space_level_name":
+            fixed_order = self.SPACE_LEVEL_NAME_ORDER
+            options.sort(
+                key=lambda option: (
+                    fixed_order.index(option["value"]) if option["value"] in fixed_order else len(fixed_order)
+                )
+            )
         return {
             "total": total,
             "enums": enums,

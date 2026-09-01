@@ -243,6 +243,63 @@ async def test_export_all_row_limit_exceeded(monkeypatch, service_module):
         await service.export_component_all(dashboard_id=1, component_id="comp-1")
 
 
+def test_build_dataframe_includes_stack_dimension_columns():
+    from bisheng.telemetry_search.domain.schemas.component import ComponentDataConfig
+    from bisheng.telemetry_search.domain.services.dashboard_export_service import _build_dataframe
+
+    data_config = ComponentDataConfig(
+        dimensions=[{"fieldId": "uploader_company_name", "displayName": "上传人公司"}],
+        stackDimensions=[{"fieldId": "uploader_office_name", "displayName": "上传人科室"}],
+        metrics=[{"fieldId": "total_file_count", "displayName": "总文件数"}],
+    )
+
+    df = _build_dataframe(data_config, [["gzx01205", "二级积分部门1"]], [[562]])
+
+    assert list(df.columns) == ["上传人公司", "上传人科室", "总文件数"]
+    assert df.iloc[0].tolist() == ["gzx01205", "二级积分部门1", 562]
+
+
+async def test_export_detail_pivot_table_with_stack_dimension_matches_column_count(monkeypatch, service_module):
+    """Regression: a pivot-table component's query result carries data_config.dimensions
+    *plus* get_stack_dimensions() per row (see component.py::query_telemetry_data), so the
+    export's column list must include the stack dimension too — otherwise pandas raises
+    "N columns passed, passed data had M columns" for any pivot table with a 堆叠项/维度
+    configured (e.g. 交叉表 grouped by 上传人公司 with 上传人科室 as the stack dimension)."""
+    from bisheng.telemetry_search.domain.schemas.component import DataQueryResult
+
+    export_module, dashboard_module = service_module
+    dashboard = _dashboard()
+    component = _component(
+        data_config={
+            "dimensions": [{"fieldId": "uploader_company_name", "displayName": "上传人公司"}],
+            "stackDimensions": [{"fieldId": "uploader_office_name", "displayName": "上传人科室"}],
+            "metrics": [{"fieldId": "total_file_count", "displayName": "总文件数"}],
+        }
+    )
+    login_user, _query_mock = _patch_common(
+        monkeypatch,
+        dashboard_module,
+        dashboard=dashboard,
+        component=component,
+        query_result=DataQueryResult(dimensions=[["gzx01205", "二级积分部门1"]], value=[[562]]),
+    )
+    monkeypatch.setattr(export_module, "_upload_excel", AsyncMock(return_value="https://minio/detail.xlsx"))
+
+    # Before the fix, _build_dataframe's columns list only covered data_config.dimensions
+    # (1 field) while each result row carried dimensions + stack dimensions (2 values) +
+    # metrics (1 value) = 3 columns, so pd.DataFrame(rows, columns=columns) itself raised
+    # "2 columns passed, passed data had 3 columns" here — before any Excel writing.
+    service = export_module.DashboardExportService(request=None, login_user=login_user)
+    url = await service.export_component_detail(
+        dashboard_id=1,
+        component_id="comp-1",
+        dimension_field="uploader_company_name",
+        dimension_value="gzx01205",
+    )
+
+    assert url == "https://minio/detail.xlsx"
+
+
 async def test_export_all_no_dimensions_configured_uses_single_sheet(monkeypatch, service_module):
     """Regression: sort_metrics() leaves `dimensions` empty (not per-row) when no dimensions
     are configured — grouping must fall back to a single sheet, not zip-truncate to zero rows."""

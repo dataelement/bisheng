@@ -32,6 +32,10 @@ interface EditorState {
     // Chart refresh triggers: each chart has its own trigger counter and query params
     chartRefreshTriggers: Record<string, ChartRefreshInfo>;
     queryComponentParams: Record<string, DatePickerValue | undefined>;
+    // Customer feedback (2026-09-01): the Query component's own 知识库大类/知识分类/组织架构/
+    // 业务域 conditions (QueryConfig.dimensionFields), keyed by query component id then fieldId —
+    // parallel to dimensionFilterParams below, which is for the separate DimensionFilter component.
+    queryComponentDimensionParams: Record<string, Record<string, string[]>>;
     dimensionFilterParams: Record<string, Record<string, string[]>>;
     // history
     history: HistoryState;
@@ -64,7 +68,11 @@ interface EditorState {
     // Refresh a single chart
     refreshChart: (chartId: string) => void;
     // Refresh charts linked to a query component
-    refreshChartsByQuery: (queryComponent: DashboardComponent, filter: DatePickerValue) => void;
+    refreshChartsByQuery: (
+        queryComponent: DashboardComponent,
+        filter: DatePickerValue,
+        dimensionValues?: Record<string, string[]>
+    ) => void;
     refreshChartsByDimensionFilter: (
         filterComponent: DashboardComponent,
         values: Record<string, string[]>
@@ -115,6 +123,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     savedLayouts: [],
     chartRefreshTriggers: {},
     queryComponentParams: {},
+    queryComponentDimensionParams: {},
     dimensionFilterParams: {},
     // Initialize history stacks
     history: {
@@ -440,9 +449,19 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             [id]: params
         }
     })),
+    setQueryComponentDimensionParams: (id, values) => set((state) => ({
+        queryComponentDimensionParams: {
+            ...state.queryComponentDimensionParams,
+            [id]: values
+        }
+    })),
     // Refresh all charts linked to a query component
-    refreshChartsByQuery: (queryComponent: DashboardComponent, filter: DatePickerValue) => {
-        const { currentDashboard, chartRefreshTriggers, queryComponentParams } = get()
+    refreshChartsByQuery: (
+        queryComponent: DashboardComponent,
+        filter: DatePickerValue,
+        dimensionValues?: Record<string, string[]>
+    ) => {
+        const { currentDashboard, chartRefreshTriggers, queryComponentParams, queryComponentDimensionParams } = get()
         if (!currentDashboard) return
 
         // Find the query component
@@ -453,10 +472,27 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         // test all components
         // const linkedChartIds = currentDashboard.components.map(e => e.id)
 
+        // 客户反馈(2026-09-01): 查询组件自身的维度条件(知识库大类/知识分类/组织架构/业务域),
+        // 复用 DimensionFilter 组件一样的 {fieldId, values} 结构随查询请求带过去；某个图表没有
+        // 这个维度，convert_filters 会静默跳过（component.py），不需要前端判断。
+        const nextQueryComponentDimensionParams = {
+            ...queryComponentDimensionParams,
+            [queryComponent.id]: dimensionValues || {},
+        }
+        const buildDimensionFilters = (config: QueryConfig, componentId: string) => {
+            const values = nextQueryComponentDimensionParams[componentId] || Object.fromEntries(
+                (config.dimensionFields || []).map(field => [field.fieldId, field.defaultValues || []])
+            )
+            return Object.entries(values)
+                .filter(([, selected]) => selected.length > 0)
+                .map(([fieldId, selected]) => ({ fieldId, values: selected }))
+        }
+
         // Prepare query parameters (from the current query component)
         const currentQueryParams = [{
             queryComponentId: queryComponent.id,
-            queryComponentParams: filter
+            queryComponentParams: filter,
+            dimensionFilters: buildDimensionFilters(queryConfig, queryComponent.id),
         }]
 
         // Increment trigger for each linked chart and attach query params
@@ -471,12 +507,13 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
                 return false
             })
 
-            // Combine all query parameters 
+            // Combine all query parameters
             const allQueryParams = [
                 ...currentQueryParams,
                 ...otherLinkedQueries.map(qc => ({
                     queryComponentId: qc.id,
-                    queryComponentParams: queryComponentParams[qc.id]
+                    queryComponentParams: queryComponentParams[qc.id],
+                    dimensionFilters: buildDimensionFilters(qc.data_config as QueryConfig, qc.id),
                 })),
                 ...currentDashboard.components
                     .filter(component => {
@@ -505,7 +542,10 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             }
         })
 
-        set({ chartRefreshTriggers: updatedTriggers })
+        set({
+            chartRefreshTriggers: updatedTriggers,
+            queryComponentDimensionParams: nextQueryComponentDimensionParams,
+        })
     },
 
     refreshChartsByDimensionFilter: (filterComponent, values) => {
@@ -620,9 +660,15 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             if (component.type === 'query') {
                 const queryConfig = component.data_config as QueryConfig
                 if (queryConfig.linkedComponentIds) {
+                    const dimensionValues = get().queryComponentDimensionParams[component.id] || Object.fromEntries(
+                        (queryConfig.dimensionFields || []).map(field => [field.fieldId, field.defaultValues || []])
+                    )
                     const queryParam = {
                         queryComponentId: component.id,
-                        queryConditions: queryConfig.queryConditions
+                        queryConditions: queryConfig.queryConditions,
+                        dimensionFilters: Object.entries(dimensionValues)
+                            .filter(([, selected]) => selected.length > 0)
+                            .map(([fieldId, selected]) => ({ fieldId, values: selected })),
                     }
 
                     // Add query parameters to each associated chart
@@ -685,6 +731,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         savedLayouts: [],
         chartRefreshTriggers: {},
         queryComponentParams: {},
+        queryComponentDimensionParams: {},
         dimensionFilterParams: {},
         history: { past: [], future: [] }
     }),
