@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, List
 
 from fastapi import APIRouter, Request, Depends, Body, Query
 
@@ -10,6 +10,7 @@ from bisheng.telemetry_search.domain.schemas.dashboard import DashboardCreate, D
 from bisheng.telemetry_search.domain.services.component import TimeFilter
 from bisheng.telemetry_search.domain.schemas.component import DimensionQueryFilter
 from bisheng.telemetry_search.domain.services.dashboard import DashboardService
+from bisheng.telemetry_search.domain.services.dashboard_export_service import DashboardExportService
 
 router = APIRouter(prefix="/dashboard", tags=["TelemetryDashboard"])
 
@@ -104,6 +105,44 @@ async def query_component_data(request: Request,
         dimension_filters,
     )
     return resp_200(data=res)
+
+
+@router.post("/component/{component_id}/export", summary="F058: export one drill-down category as Excel")
+async def export_component_detail(request: Request,
+                                  component_id: str,
+                                  dashboard_id: int = Body(..., embed=True),
+                                  dimension_field: str = Body(..., embed=True),
+                                  dimension_value: Any = Body(..., embed=True),
+                                  time_filters: List[TimeFilter] = Body(None, embed=True),
+                                  dimension_filters: List[DimensionQueryFilter] = Body(None, embed=True),
+                                  login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    export_service = DashboardExportService(request=request, login_user=login_user)
+    file_url = await export_service.export_component_detail(
+        dashboard_id,
+        component_id,
+        dimension_field,
+        dimension_value,
+        time_filters,
+        dimension_filters,
+    )
+    return resp_200(data={"file_url": file_url})
+
+
+@router.post("/component/{component_id}/export-all", summary="F058: export the whole component as multi-sheet Excel")
+async def export_component_all(request: Request,
+                               component_id: str,
+                               dashboard_id: int = Body(..., embed=True),
+                               time_filters: List[TimeFilter] = Body(None, embed=True),
+                               dimension_filters: List[DimensionQueryFilter] = Body(None, embed=True),
+                               login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    export_service = DashboardExportService(request=request, login_user=login_user)
+    file_url = await export_service.export_component_all(
+        dashboard_id,
+        component_id,
+        time_filters,
+        dimension_filters,
+    )
+    return resp_200(data={"file_url": file_url})
 
 
 @router.get("/dataset/list", summary="Get all available datasets for dashboards")

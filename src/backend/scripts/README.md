@@ -39,6 +39,23 @@ PYTHONPATH=./ .venv/bin/python scripts/execute_sql.py \
   --config config_3002.yaml --sql "SELECT * FROM user" --max-rows 0
 ```
 
+### `sql/fill_mysql_table_column_comments.sql`
+
+一次性 MySQL 脚本，给 COMMENT 为空的表和字段补中文备注。已有备注不覆盖，表或字段不存在则跳过，可重复执行。字段通过 `MODIFY COLUMN` 写 COMMENT，会保留原类型、默认值和自增。
+
+必须用 mysql 客户端执行（含 `DELIMITER`，不能走 `execute_sql.py`）。请先备份，并在低峰执行：
+
+```bash
+mysql -u USER -p DATABASE < src/backend/scripts/sql/fill_mysql_table_column_comments.sql
+```
+
+文案来自 `scripts/_gen_fill_mysql_comments.py`。ORM 变更后如需重生成：
+
+```bash
+cd src/backend
+PYTHONPATH=./ uv run python scripts/_gen_fill_mysql_comments.py
+```
+
 ### `backfill_department_short_names.py`
 
 根据直接父部门全称回填历史活动部门的简称。脚本扫描所有租户和所有部门来源，只处理
@@ -640,6 +657,92 @@ Safety:
 - `--include-inflight` / `--only-inflight` 可能与正在运行的任务重复解析，只能在明确需要时使用。
 - 数据库状态提交与 Celery 发布不是原子事务；网络异常存在 broker 已接受但客户端未收到确认的不确定窗口。
 
+### `retry_failed_knowledge_space_folder_files.py`
+
+按知识空间名称和目录名称（支持多级路径）查找该目录及其子目录下状态为 `FAILED` 的文件，
+默认 dry-run 只列出文件；传入 `--apply` 后复用 `enqueue_reparse_knowledge_space_files.py`
+把重试任务发到 `knowledge_celery` worker。
+
+Usage:
+
+```bash
+export config=/path/to/config.yaml
+cd src/backend
+
+# 先预览失败文件，不改数据
+bash scripts/retry_failed_knowledge_space_folder_files.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全"
+
+# 确认无误后再入队重解析
+bash scripts/retry_failed_knowledge_space_folder_files.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全" \
+  --apply
+
+# 整个知识空间（含根目录和所有子目录）下的失败文件
+bash scripts/retry_failed_knowledge_space_folder_files.sh \
+  --space-name "admin的知识库" \
+  --folder /
+
+# 目录名在空间内唯一时可只写最后一级
+bash scripts/retry_failed_knowledge_space_folder_files.sh \
+  --space-name "安全生产知识库" \
+  --folder "消防安全"
+
+# 同名知识空间用租户 ID 区分；需要时连 TIMEOUT 一起重试
+bash scripts/retry_failed_knowledge_space_folder_files.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全" \
+  --tenant-id 1 \
+  --include-timeout \
+  --apply
+```
+
+`--folder` 支持 `/`、`>`、`->` 分隔多级目录。解析范围包含该目录及其所有子目录。
+`--folder /`（或 `root`）表示整个知识空间，包括根目录下的文件。
+
+Safety:
+
+- 默认只选 `FAILED`。`--include-timeout` 才会加上 `TIMEOUT`。
+- `--apply` 前必须先跑 dry-run，并确认 broker 与 knowledge worker 可用。
+- 成功输出只表示任务已入队，不表示解析已经完成。
+
+### `audit_api_sync_uploader_clinic_spaces.py`
+
+按知识空间名称和目录名称（支持多级路径）列出该目录及其子目录下入库方式为「接口同步」
+（`user_metadata.filelib_sync_endpoint` 或 `external_file_id`）的文件，再按上传人
+（优先 `original_uploader_id`，否则 `user_id`）按主部门组织树上溯查找科室库绑定。只读；最后统一输出没有科室库的用户及其科室信息。
+
+判定：与 filelib_sync 责任人科室库相同——从上传人主部门沿组织树（自己→上级→根）查找第一个
+科室库绑定（空间 level 为 team/team_ks 且 owner_type=user）。不看 org_level。班组人员可以命中
+上级科室的库。无上传人、用户不存在、没有部门、整条链都没有科室库才会进入缺失名单。
+
+Usage:
+
+```bash
+export config=/path/to/config.yaml
+cd src/backend
+
+bash scripts/audit_api_sync_uploader_clinic_spaces.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全"
+
+# 整个知识空间
+bash scripts/audit_api_sync_uploader_clinic_spaces.sh \
+  --space-name "安全生产知识库" \
+  --folder /
+
+# JSON 输出；同名空间用租户 ID 区分
+bash scripts/audit_api_sync_uploader_clinic_spaces.sh \
+  --space-name "安全生产知识库" \
+  --folder "消防安全" \
+  --tenant-id 1 \
+  --format json
+```
+
+`--folder` 规则与 `retry_failed_knowledge_space_folder_files.py` 相同。脚本不写库。
+
 ### `move_knowledge_space_files.py`
 
 扫描一个或多个来源知识空间的 `SUCCESS` 真实文件，可按来源文件夹、门户一级分类 code、
@@ -836,6 +939,38 @@ JSON 报告：
   旧目标不会自动恢复，需要根据 JSONL 人工清理残留。
 - `--apply` 会删除来源文件并生成新的目标文件 ID。收藏、分享链接及其他保存旧文件 ID 的引用不会迁移，
   执行前必须先审核 dry-run 报告并确认这些引用中断的影响。
+
+## Telemetry / Dashboard Scripts
+
+### `migrate_user_engagement_indices.py`
+
+F058 后续改造：`用户规模统计`(mid_user_increment) / `活跃用户规模统计`(mid_active_user) /
+`全员每日参与度`(mid_user_daily_participation_fact) 三个原本独立的 ES 索引，写入侧已经
+改成共写一个新的合并索引（`mid_user_engagement_stat`，见
+`bisheng/telemetry/domain/mid_table/user_engagement_shared.py`）。这个脚本把三个旧索引里
+**历史**数据搬进新索引，让合并后的看板还能看到切换之前的数据。旧的三个索引本身不改、不删，
+脚本只读它们。每条记录按来源打 `metric_source` 标记，`_id` 按来源加前缀（`increment_`/
+`active_`，`participation` 本来就带前缀不用改），跟线上写入逻辑用的是同一套前缀规则，
+重复跑这个脚本是幂等的（同一条历史记录每次都会覆盖成同样的内容，不会重复插入）。
+默认 dry-run，`--apply` 才写库。
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py
+PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py --apply --source increment
+PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py --apply --batch-size 2000
+PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py --apply --limit 500  # 先小批量验证
+
+bash scripts/migrate_user_engagement_indices.sh --apply
+```
+
+说明：
+
+- `--source`：只迁移一个来源(`increment`/`active_user`/`participation`)，默认三个都迁。
+- `--limit`：每个来源最多扫描多少条，用于先小批量验证。
+- `--apply` 时脚本会先复用线上写入代码本身的建表逻辑（`UserIncrement`/`DailyParticipationFact`/
+  `MidActiveUserJob` 各自的 `ensure_index_exists`）把目标索引的 mapping 建/补齐，不在脚本里
+  另外维护一份 mapping 定义。
 
 ## OpenAPI Verification Scripts
 

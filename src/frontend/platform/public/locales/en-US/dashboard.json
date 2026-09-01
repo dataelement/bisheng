@@ -147,6 +147,11 @@
       "hour": "Hour"
     }
   },
+  "componentExport": {
+    "exportDetail": "Export category detail",
+    "exportAll": "Export",
+    "exportFailed": "Export failed, please try again later"
+  },
   "dimensionBlock": {
     "menu": {
       "sort": "Sort",
@@ -413,7 +418,7 @@
     "metricCard": "Metric",
     "pivotTable": "Pivot Table"
   },
-  "mid_user_increment": "User Scale Statistics",
+  "mid_user_increment": "User Engagement Statistics",
   "timestamp": {
     "year": "Time(Year)",
     "month": "Time(Month)",

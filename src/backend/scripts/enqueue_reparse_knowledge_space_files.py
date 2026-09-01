@@ -406,7 +406,7 @@ def apply_selection(
     return report
 
 
-async def run(args: argparse.Namespace) -> int:
+async def collect_selection(args: argparse.Namespace) -> tuple[SelectionReport, tuple[int, ...]]:
     effective_statuses = resolve_eligible_statuses(args)
     try:
         with bypass_tenant_filter():
@@ -429,19 +429,20 @@ async def run(args: argparse.Namespace) -> int:
             print(f"[INFO] --space-level is active: {args.space_level}.")
         if args.statuses:
             print(f"[INFO] --status is active: {','.join(args.statuses)}.")
-
-        report = apply_selection(
-            selection,
-            apply=args.apply,
-            eligible_statuses=effective_statuses,
-        )
-        return exit_code_for_report(report) if report is not None else 0
+        return selection, effective_statuses
     finally:
         await close_app_context()
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    return asyncio.run(run(parse_args(argv)))
+    args = parse_args(argv)
+    selection, effective_statuses = asyncio.run(collect_selection(args))
+    report = apply_selection(
+        selection,
+        apply=args.apply,
+        eligible_statuses=effective_statuses,
+    )
+    return exit_code_for_report(report) if report is not None else 0
 
 
 if __name__ == "__main__":

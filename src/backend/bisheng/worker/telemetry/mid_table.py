@@ -122,7 +122,7 @@ def sync_mid_user_increment(start_date: str = None, end_date: str = None):
         for user in user_list:
             records.append(
                 UserIncrementRecord(
-                    es_id=f"user_{user.user_id}",
+                    es_id=f"increment_user_{user.user_id}",
                     user_id=user.user_id,
                     user_name=user.user_name,
                     user_group_infos=[

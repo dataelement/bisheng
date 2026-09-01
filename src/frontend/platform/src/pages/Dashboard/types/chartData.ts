@@ -35,6 +35,18 @@ export interface PivotTableDataResponse {
   columnTotals: number[]
   grandTotal: number
   truncated?: boolean
+  // F058 AC-12/AC-13: row-dimension index to group by (rowSpan-merge in the UI), or
+  // null when no org-hierarchy row dimension has an active filter value (flat rendering).
+  groupDimensionIndex?: number | null
+  // F058 AC-09: raw field ids parallel to rowHeaders/row.key, needed to call the
+  // drill-down export API (which takes a field id, not the localized display label).
+  // Note: after AC-11's person/department merge, this array is shorter than the
+  // pre-merge dimension count — it stays index-aligned with the (merged) row.key/rowHeaders.
+  rowFieldIds?: string[]
+  // F058 AC-09/AC-11: row-key index whose displayed value is an AC-11 merged
+  // "name(dept)" string, not a raw filterable value — click-to-export must skip this
+  // column (there's no single raw value left to filter on after the merge).
+  personDedupIndex?: number | null
 }
 
 // 饼图数据项

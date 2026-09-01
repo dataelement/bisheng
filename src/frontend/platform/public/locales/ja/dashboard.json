@@ -146,6 +146,11 @@
       "hour": "時"
     }
   },
+  "componentExport": {
+    "exportDetail": "この分類の明細をエクスポート",
+    "exportAll": "エクスポート",
+    "exportFailed": "エクスポートに失敗しました。しばらくしてから再度お試しください"
+  },
   "dimensionBlock": {
     "menu": {
       "sort": "ソート",
@@ -410,7 +415,7 @@
     "metricCard": "指標カード",
     "pivotTable": "クロス集計表"
   },
-  "mid_user_increment": "ユーザースケール統計",
+  "mid_user_increment": "ユーザーエンゲージメント統計",
   "timestamp": {
     "year": "時間(年)",
     "month": "時間(月)",

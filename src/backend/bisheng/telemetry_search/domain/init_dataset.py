@@ -5,6 +5,7 @@ from bisheng.common.constants.telemetry import (
 from bisheng.core.database import get_async_db_session, get_database_connection
 from bisheng.database.models.group import DefaultGroup
 from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
+from bisheng.telemetry.domain.mid_table.user_engagement_shared import USER_ENGAGEMENT_ES_INDEX
 from bisheng.telemetry_search.domain.models.dashboard import DashboardType
 from bisheng.telemetry_search.domain.models.dashboard_dao import DashboardDao
 from bisheng.telemetry_search.domain.models.dashboard_dataset import (
@@ -30,10 +31,19 @@ from bisheng.telemetry_search.domain.schemas.query_builder import (
 
 DASHBOARD_DATASET = [
     DashboardDataset(
-        dataset_name="用户行为指标表",
+        # F058 follow-up: this is now the ONE surviving, visible entry for what used to
+        # be three separate datasets (用户规模统计/mid_user_increment,
+        # 活跃用户规模统计/mid_active_user, 全员每日参与度/mid_user_daily_participation).
+        # dataset_code/es_index_name below deliberately keep the ORIGINAL
+        # "mid_user_increment" identity — existing components (including the preset_oss
+        # dashboard SQL further down this file) already reference this dataset_code by
+        # name and must keep working without edits. The other two datasets are kept
+        # around read-only (is_visible=False) purely for that same backward-compat
+        # reason; their es_index_name is also repointed at the shared index below.
+        dataset_name="用户数据统计",
         dataset_code="mid_user_increment",
-        es_index_name="mid_user_increment",
-        description="用户行为指标数据表",
+        es_index_name=USER_ENGAGEMENT_ES_INDEX,
+        description="合并后的用户规模、活跃度与每日参与度统计数据表",
         is_commercial_only=False,
         schema_config=SchemaConfig(
             metrics=[
@@ -67,7 +77,81 @@ DASHBOARD_DATASET = [
                             field="user_id"
                         )
                     ]
-                )
+                ),
+                MetricConfig(
+                    field="active_user_count",
+                    name="活跃用户数",
+                    is_virtual=True,
+                    aggregations=[
+                        AggregationExpression(
+                            name="active_user_count",
+                            type=AggsTypeEnum.CARDINALITY,
+                            field="user_id"
+                        )
+                    ]
+                ),
+                MetricConfig(
+                    field="participation_rate",
+                    name="全员参与占比",
+                    is_virtual=True,
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[
+                            TermOp(field="logged_in", value=True),
+                            MatchAllOp(field=""),
+                        ],
+                    ),
+                    aggregations=[
+                        AggregationExpression(
+                            name="logged_in_employee_count",
+                            type=AggsTypeEnum.VALUE_COUNT,
+                            field="user_id",
+                        ),
+                        AggregationExpression(
+                            name="active_employee_count",
+                            type=AggsTypeEnum.VALUE_COUNT,
+                            field="user_id",
+                        ),
+                    ],
+                    formula=FormulaEnum.DIVIDE,
+                ),
+                MetricConfig(
+                    field="logged_in_employee_count",
+                    name="实际登录人数",
+                    is_virtual=True,
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[TermOp(field="logged_in", value=True)],
+                    ),
+                    aggregations=[
+                        AggregationExpression(
+                            name="logged_in_employee_count",
+                            type=AggsTypeEnum.VALUE_COUNT,
+                            field="user_id",
+                        )
+                    ],
+                ),
+                MetricConfig(
+                    field="active_employee_count",
+                    name="全员总数",
+                    is_virtual=True,
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[TermOp(field="active_employee", value=1)],
+                    ),
+                    aggregations=[
+                        AggregationExpression(
+                            name="active_employee_count",
+                            type=AggsTypeEnum.VALUE_COUNT,
+                            field="user_id",
+                        )
+                    ],
+                ),
+                MetricConfig(
+                    field="login_count",
+                    name="实际登录次数",
+                    is_virtual=False,
+                ),
             ],
             dimensions=[
                 DimensionConfig(
@@ -76,6 +160,7 @@ DASHBOARD_DATASET = [
                     time_granularitys=["year", "month", "week", "day"],
                     field_type="date"
                 ),
+                DimensionConfig(name="自然日", field="local_date"),
                 DimensionConfig(
                     name="用户组ID",
                     field="user_group_infos.user_group_id"
@@ -91,16 +176,26 @@ DASHBOARD_DATASET = [
                 DimensionConfig(
                     name="部门名称",
                     field="user_department_infos.department_name"
-                )
+                ),
+                DimensionConfig(name="人员主部门ID", field="primary_department_id"),
+                DimensionConfig(name="人员主部门", field="primary_department_name"),
+                DimensionConfig(name="部门口径来源", field="department_source"),
+                DimensionConfig(name="人员ID", field="user_id"),
+                DimensionConfig(name="人员姓名", field="user_name"),
             ]
         ).model_dump()
     ),
     DashboardDataset(
         dataset_name="活跃用户表",
         dataset_code="mid_active_user",
-        es_index_name="mid_active_user",
+        es_index_name=USER_ENGAGEMENT_ES_INDEX,
         description="活跃用户数据表",
         is_commercial_only=True,
+        # F058 follow-up: fully merged into "用户数据统计" (mid_user_increment above,
+        # same shared ES index now). Kept only so components created before the merge
+        # that reference this dataset_code keep working; hidden from the picker so no
+        # new chart can select it directly.
+        is_visible=False,
         schema_config=SchemaConfig(
             metrics=[
                 MetricConfig(
@@ -1293,6 +1388,9 @@ DASHBOARD_DATASET = [
         es_index_name="mid_user_interact_dtl",
         description="用户反馈指标数据表",
         is_commercial_only=False,
+        # F058: "用户反馈统计" dropped from the dashboard picker. ES data and the underlying
+        # dataset row are untouched — only the UI-visibility flag changes.
+        is_visible=False,
         schema_config=SchemaConfig(
             metrics=[
                 MetricConfig(
@@ -1490,9 +1588,14 @@ DASHBOARD_DATASET = [
     DashboardDataset(
         dataset_name="全员每日参与度",
         dataset_code="mid_user_daily_participation",
-        es_index_name="mid_user_daily_participation_fact",
+        es_index_name=USER_ENGAGEMENT_ES_INDEX,
         description="按自然日维护的在职员工名册、登录人数与登录次数事实表",
         is_commercial_only=False,
+        # F058 follow-up: fully merged into "用户数据统计" (mid_user_increment above,
+        # same shared ES index now). Kept only so components created before the merge
+        # that reference this dataset_code keep working; hidden from the picker so no
+        # new chart can select it directly.
+        is_visible=False,
         schema_config=SchemaConfig(
             metrics=[
                 MetricConfig(
@@ -1664,6 +1767,11 @@ DASHBOARD_DATASET_REFRESH_CODES = (
     "mid_user_daily_participation",
     "mid_tool_call_dtl",
     "mid_doc_parse_dtl",
+    # F058: is_visible/dataset_group changes must reach already-deployed rows, not just
+    # fresh installs — these three were previously insert-once-only (via bulk_save below).
+    "mid_user_increment",
+    "mid_active_user",
+    "mid_user_interact_dtl",
 )
 
 
@@ -1692,6 +1800,8 @@ async def _upgrade_dashboard_datasets(
         existing_dataset.description = seed_dataset.description
         existing_dataset.is_commercial_only = seed_dataset.is_commercial_only
         existing_dataset.schema_config = seed_dataset.schema_config
+        existing_dataset.is_visible = seed_dataset.is_visible
+        existing_dataset.dataset_group = seed_dataset.dataset_group
         await dashboard_dataset_repository.update(existing_dataset)
 
 

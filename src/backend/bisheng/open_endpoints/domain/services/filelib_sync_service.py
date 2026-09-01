@@ -3,9 +3,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any
 
 from fastapi import Request, UploadFile
 from loguru import logger
@@ -712,11 +713,7 @@ class FilelibSyncService:
         allowed_codes = cls._space_allowed_business_domain_code_set(space)
         if not allowed_codes:
             return candidates
-        return [
-            item
-            for item in candidates
-            if normalize_business_domain_code(item.code) in allowed_codes
-        ]
+        return [item for item in candidates if normalize_business_domain_code(item.code) in allowed_codes]
 
     def _list_business_domain_candidates(
         self,
@@ -758,10 +755,7 @@ class FilelibSyncService:
                 return None
             raise FilelibSyncNotFoundError(msg="configured business domain does not exist")
 
-        if (
-            self.file_sync_rule.business_domain.mode == "dynamic"
-            and target_space is not None
-        ):
+        if self.file_sync_rule.business_domain.mode == "dynamic" and target_space is not None:
             space_allowed_codes = self._space_allowed_business_domain_code_set(target_space)
             if space_allowed_codes:
                 space_candidates = self._filter_business_domain_candidates_for_space(
@@ -1053,10 +1047,14 @@ class FilelibSyncService:
         department: Department,
         identity: ResolvedIdentity | None,
     ) -> tuple[Knowledge, bool]:
-        """Clinic library on the responsible person's department, else their personal space."""
+        """Nearest clinic library on the department chain, else the person's personal space.
+
+        Walks self → parent → root. The first organization that has a clinic
+        knowledge-space binding wins; org_level is not consulted.
+        """
         clinic_space = await self._resolve_bound_space(
             department,
-            department_ids=[int(department.id)],
+            department_ids=self._department_chain(department),
             kind=DepartmentSpaceTargetKind.CLINIC,
             missing_is_error=False,
             ambiguous_picks_first=True,
@@ -1094,9 +1092,7 @@ class FilelibSyncService:
             )
         except DepartmentKnowledgeSpaceAmbiguousError as exc:
             if ambiguous_picks_first:
-                candidate_space_ids = sorted(
-                    int(one) for one in (exc.kwargs.get("candidate_space_ids") or [])
-                )
+                candidate_space_ids = sorted(int(one) for one in (exc.kwargs.get("candidate_space_ids") or []))
                 if not candidate_space_ids:
                     if missing_is_error:
                         raise FilelibSyncConflictError(
@@ -1184,12 +1180,15 @@ class FilelibSyncService:
         candidates: dict[int, KnowledgeFile] = {}
 
         for path in self._file_level_path_variants(file_level_path):
-            for existing_file in await asyncio.to_thread(
-                KnowledgeFileDao.get_file_by_condition,
-                knowledge_id=knowledge_id,
-                file_name=file_name,
-                file_level_path=path,
-            ) or []:
+            for existing_file in (
+                await asyncio.to_thread(
+                    KnowledgeFileDao.get_file_by_condition,
+                    knowledge_id=knowledge_id,
+                    file_name=file_name,
+                    file_level_path=path,
+                )
+                or []
+            ):
                 candidates[int(existing_file.id)] = existing_file
 
         if not candidates:
@@ -1282,11 +1281,7 @@ class FilelibSyncService:
 
         object_name = await KnowledgeService.save_upload_file_original_name(file_name)
         minio_client = await get_minio_storage()
-        content_type = (
-            "application/pdf"
-            if object_name.lower().endswith(".pdf")
-            else "application/octet-stream"
-        )
+        content_type = "application/pdf" if object_name.lower().endswith(".pdf") else "application/octet-stream"
         await minio_client.put_object_tmp(
             object_name=object_name,
             file=local_candidate,

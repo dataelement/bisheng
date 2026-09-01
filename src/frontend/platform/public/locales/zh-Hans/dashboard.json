@@ -146,6 +146,11 @@
       "hour": "时"
     }
   },
+  "componentExport": {
+    "exportDetail": "导出该分类明细",
+    "exportAll": "导出",
+    "exportFailed": "导出失败，请稍后重试"
+  },
   "dimensionBlock": {
     "menu": {
       "sort": "排序",
@@ -410,7 +415,7 @@
     "metricCard": "指标卡",
     "pivotTable": "交叉表"
   },
-  "mid_user_increment": "用户规模统计",
+  "mid_user_increment": "用户数据统计",
   "timestamp": {
     "year": "时间(年)",
     "month": "时间(月)",
