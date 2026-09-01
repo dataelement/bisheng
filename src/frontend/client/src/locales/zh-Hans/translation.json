@@ -496,6 +496,21 @@
     "saveToKnowledgePending": "已提交审批，通过后将存入知识空间",
     "saveToKnowledgeFailed": "存入知识空间失败，请稍后重试"
   },
+  "com_message": {
+    "document_preview": "文档预览",
+    "source_empty": "暂无参考资料",
+    "source_load_failed": "溯源详情加载失败",
+    "source_loading": "加载溯源详情...",
+    "source_name_fallback_document": "政策文件",
+    "source_name_fallback_web": "网页",
+    "source_panel_back": "返回参考资料列表",
+    "source_panel_close": "关闭参考资料",
+    "source_panel_download": "下载文档",
+    "source_panel_label": "参考资料",
+    "source_type_document": "文档",
+    "source_type_web": "网页",
+    "source_untitled": "暂无标题"
+  },
   "com_message_content_copied": "内容已复制",
   "com_notifications_approved": "已同意",
   "com_notifications_rejected": "已拒绝",

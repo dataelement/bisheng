@@ -508,6 +508,21 @@
     "saveToKnowledgePending": "Submitted for approval; it will be saved to the knowledge space once approved",
     "saveToKnowledgeFailed": "Failed to save to knowledge space, please try again later"
   },
+  "com_message": {
+    "document_preview": "Document preview",
+    "source_empty": "No references yet",
+    "source_load_failed": "Failed to load source details",
+    "source_loading": "Loading source details...",
+    "source_name_fallback_document": "Policy document",
+    "source_name_fallback_web": "Web page",
+    "source_panel_back": "Back to reference list",
+    "source_panel_close": "Close references",
+    "source_panel_download": "Download document",
+    "source_panel_label": "References",
+    "source_type_document": "Document",
+    "source_type_web": "Web page",
+    "source_untitled": "Untitled"
+  },
   "com_message_content_copied": "Content copied",
   "com_notifications_approved": "Approved",
   "com_notifications_rejected": "Rejected",

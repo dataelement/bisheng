@@ -493,6 +493,21 @@
     "saveToKnowledgePending": "承認申請を送信しました。承認後にナレッジスペースへ保存されます",
     "saveToKnowledgeFailed": "ナレッジスペースへの保存に失敗しました。後でもう一度お試しください"
   },
+  "com_message": {
+    "document_preview": "ドキュメントプレビュー",
+    "source_empty": "参考資料はありません",
+    "source_load_failed": "参照元の詳細を読み込めませんでした",
+    "source_loading": "参照元の詳細を読み込み中...",
+    "source_name_fallback_document": "政策文書",
+    "source_name_fallback_web": "ウェブページ",
+    "source_panel_back": "参考資料一覧に戻る",
+    "source_panel_close": "参考資料を閉じる",
+    "source_panel_download": "ドキュメントをダウンロード",
+    "source_panel_label": "参考資料",
+    "source_type_document": "ドキュメント",
+    "source_type_web": "ウェブページ",
+    "source_untitled": "タイトルなし"
+  },
   "com_message_content_copied": "内容をコピーしました",
   "com_notifications_approved": "承認済み",
   "com_notifications_rejected": "却下済み",

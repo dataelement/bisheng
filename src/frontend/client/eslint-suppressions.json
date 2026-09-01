@@ -584,9 +584,6 @@
     "no-restricted-imports": {
       "count": 1
     },
-    "no-restricted-syntax": {
-      "count": 17
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
