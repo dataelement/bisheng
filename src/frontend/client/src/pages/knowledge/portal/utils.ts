@@ -275,6 +275,56 @@ export function updateTreeNode(
     });
 }
 
+export function createRestoredFolderFile(
+    spaceId: string,
+    folderId: string,
+    folderName?: string,
+): KnowledgeFile {
+    const name = folderName?.trim() || `文件夹 ${folderId}`;
+    return {
+        id: folderId,
+        name,
+        type: FileType.FOLDER,
+        tags: [],
+        path: name,
+        spaceId,
+        createdAt: "",
+        updatedAt: "",
+    };
+}
+
+/**
+ * Ensure a chain of ancestor folders exists in the tree, creating placeholder
+ * nodes for any missing segments. Used when restoring a deep-linked/returned
+ * folder so the breadcrumb can show the full path instead of only the deepest
+ * folder.
+ */
+export function ensureFolderPath(
+    nodes: PortalFileTreeNode[],
+    path: Array<{ id: string; name: string }>,
+    spaceId: string,
+): PortalFileTreeNode[] {
+    if (!path.length) return nodes;
+    const [head, ...tail] = path;
+    const headId = String(head.id);
+    const index = nodes.findIndex((node) => String(node.file.id) === headId);
+    if (index >= 0) {
+        const node = nodes[index];
+        const nextNode: PortalFileTreeNode = {
+            ...node,
+            expanded: true,
+            children: ensureFolderPath(node.children, tail, spaceId),
+        };
+        return [...nodes.slice(0, index), nextNode, ...nodes.slice(index + 1)];
+    }
+    const newNode: PortalFileTreeNode = {
+        ...createTreeNode(createRestoredFolderFile(spaceId, headId, head.name)),
+        expanded: true,
+        children: ensureFolderPath([], tail, spaceId),
+    };
+    return [...nodes, newNode];
+}
+
 export function createUploadFolderNode(item: { id: number | string; file_name?: string; name?: string }): PortalUploadFolderNode {
     return {
         id: String(item.id),

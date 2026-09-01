@@ -65,9 +65,11 @@ import type {
 } from "./types";
 import {
     collectTreeFileIds,
+    createRestoredFolderFile,
     createTreeNode,
     dedupeFilesById,
     dedupeTreeNodesByFileId,
+    ensureFolderPath,
     extractExt,
     findTreeNode,
     findTreeNodePath,
@@ -152,20 +154,6 @@ const shouldShowFolderStatsLoading = (file: KnowledgeFile) => (
     && file.successFileNum === undefined
     && file.fileNum === undefined
 );
-
-const createRestoredFolderFile = (spaceId: string, folderId: string, folderName?: string): KnowledgeFile => {
-    const name = folderName?.trim() || `文件夹 ${folderId}`;
-    return {
-        id: folderId,
-        name,
-        type: FileType.FOLDER,
-        tags: [],
-        path: name,
-        spaceId,
-        createdAt: "",
-        updatedAt: "",
-    };
-};
 
 const ensureFolderNode = (
     nodes: PortalFileTreeNode[],
@@ -2647,6 +2635,28 @@ export default function PortalKnowledgeWorkbench() {
                 expanded: true,
             })));
             return;
+        }
+
+        // Folder is not yet in the tree (e.g. back-to-list or deep-link).
+        // Fetch its ancestor chain first so the breadcrumb can render the
+        // full path instead of only the deepest folder.
+        // Note: getFolderParentPathApi returns ancestors EXCLUDING the folder
+        // itself, so we append the target folder to complete the path.
+        const existingPath = findTreeNodePath(treeNodes, folderId);
+        const pathIncomplete = !node || existingPath.length <= 1;
+        if (pathIncomplete) {
+            try {
+                const parentPath = await getFolderParentPathApi(spaceId, folderId);
+                if (activeSpaceIdRef.current !== spaceId) return;
+                const fullPath = parentPath.some((seg) => String(seg.id) === folderId)
+                    ? parentPath
+                    : [...parentPath, { id: folderId, name: folderName || `文件夹 ${folderId}` }];
+                if (fullPath.length) {
+                    setTreeNodes((prev) => ensureFolderPath(prev, fullPath, spaceId));
+                }
+            } catch {
+                // Fall through to single-node placeholder below.
+            }
         }
 
         setTreeNodes((prev) => updateTreeNode(
