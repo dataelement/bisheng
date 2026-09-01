@@ -25,7 +25,10 @@ router.add_api_route(
     methods=["GET"],
 )
 router.add_api_route("/experts", endpoints.create_expert, methods=["POST"])
+router.add_api_route("/experts/batch-disable", endpoints.batch_disable_experts, methods=["POST"])
+router.add_api_route("/experts/batch-delete", endpoints.batch_hard_delete_experts, methods=["POST"])
 router.add_api_route("/experts/{expert_id}", endpoints.update_expert, methods=["PUT"])
+router.add_api_route("/experts/{expert_id}/delete", endpoints.hard_delete_expert, methods=["POST"])
 router.add_api_route("/experts/{expert_id}/disable", endpoints.disable_expert, methods=["POST"])
 router.add_api_route("/experts/{expert_id}/enable", endpoints.enable_expert, methods=["POST"])
 router.add_api_route("/experts/{expert_id}", endpoints.delete_expert, methods=["DELETE"])

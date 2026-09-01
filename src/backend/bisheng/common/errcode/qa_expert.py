@@ -80,3 +80,9 @@ class QaExpertAssetInvalidError(BaseErrorCode):
     """提问/回答图片或附件引用不合法（数量、格式、路径等）。"""
 
     Code, Msg = 18313, "问答图片或附件不合法"
+
+
+class QaExpertHasAnswersCannotDeleteError(BaseErrorCode):
+    """专家已有问答记录, 不可从专家库硬删。"""
+
+    Code, Msg = 18314, "该专家已有回答记录, 不可删除, 请使用停用"
