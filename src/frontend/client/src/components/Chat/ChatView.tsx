@@ -1,14 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getDisplayScale, getLogicalViewport } from '~/utils/fontSize';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useUnactivate } from 'react-activation';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useRecoilState, useSetRecoilState } from 'recoil';
+import { useRecoilState } from 'recoil';
 import { getRecommendedAppsApi } from '~/api/apps';
 import { writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
 import AiChatInput from '~/components/Chat/AiChatInput';
-import { persistAgentTools, restoreAgentTools } from '~/components/Chat/Input/agentToolsMemory';
 import { resolveTaskModeOnNavigation } from '~/components/Chat/resolveTaskMode';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
 import { PinnedTaskPanel } from '~/components/Linsight/Execution/PinnedTaskPanel';
@@ -18,7 +16,6 @@ import { collectConversationWorkspaceFiles } from '~/components/Linsight/Artifac
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { userStopLinsightEvent } from '~/api/linsight';
 import { SopStatus, taskModeState } from '~/store/linsight';
-import { useConversationDraft } from '~/store/chatDraft';
 import { findPendingUserInput, splitSessionPseudoTask } from '~/components/Linsight/Execution/stepUtils';
 import type { ExecStepEventData } from '~/components/Linsight/Execution/stepUtils';
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
@@ -58,24 +55,13 @@ import {
   type AddToKnowledgeSelection,
 } from '~/pages/Subscription/Article/AddToKnowledgeModal';
 
-/** Physical client rect -> the logical px the zoomed page lays out in. */
-const scaleRect = (r: DOMRect, scale: number) => ({
-  top: r.top / scale,
-  left: r.left / scale,
-  right: r.right / scale,
-  bottom: r.bottom / scale,
-});
-
 const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?: number, shareToken?: string }) => {
   const t = useLocalize();
   const { conversationId: cid } = useParams();
   const location = useLocation();
   const conversationId = (cid ?? id) || 'new';
 
-  // Draft text belongs to the conversation, not to this component: ChatView is
-  // not remounted when `conversationId` changes (and is KeepAlive-cached), so a
-  // local useState leaked half-typed text into the next conversation opened.
-  const [inputText, setInputText] = useConversationDraft(conversationId);
+  const [inputText, setInputText] = useState('');
 
   // F035: task mode is a toggle on the daily welcome page — no route jump.
   // The route stays `/c`; only submitting in task mode navigates to /linsight.
@@ -90,7 +76,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const [chatModel, setChatModel] = useRecoilState(store.chatModel);
   const [selectedOrgKbs, setSelectedOrgKbs] = useRecoilState(store.selectedOrgKbs);
   const [selectedAgentTools, setSelectedAgentTools] = useRecoilState(store.selectedAgentTools);
-  const setAgentToolsInitialized = useSetRecoilState(store.agentToolsInitialized);
+  const [agentToolsInitialized, setAgentToolsInitialized] = useRecoilState(store.agentToolsInitialized);
   const [searchType, setSearchType] = useRecoilState(store.searchType);
   // Landing-only: the input box reports whether its attachment bar is showing
   // so the welcome subtitle can hide without shifting the title / input box.
@@ -186,18 +172,26 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
       }
     } catch { /* ignore */ }
 
-    // Agent tool groups (parent-level). Unlike the KB list above, a stored
-    // selection only outranks the admin config once the user has actually used
-    // the picker (see readStoredAgentTools). A user who never opened it keeps
-    // following bsConfig.tools[].default_checked, INCLUDING changes the admin
-    // makes after that user's first visit.
-    const savedAgentTools = restoreAgentTools(user.id);
-    if (savedAgentTools !== null) {
-      setSelectedAgentTools(savedAgentTools as any[]);
-      setAgentToolsInitialized(true);
-    }
-    // else: nothing the user chose → leave initialized=false so
-    // AgentToolSelector applies the current admin defaults.
+    // Agent tool groups (parent-level). Same priority rule: any localStorage
+    // entry (including empty) is treated as the user's choice; admin
+    // default_checked only seeds the first session via AgentToolSelector
+    // when no key exists yet.
+    try {
+      const raw = localStorage.getItem(`${prefix}selectedAgentTools`);
+      let saved: any[] | null = null;
+      if (raw !== null) {
+        try {
+          const v = JSON.parse(raw);
+          if (Array.isArray(v)) saved = v;
+        } catch { /* ignore parse errors */ }
+      }
+      if (saved !== null) {
+        setSelectedAgentTools(saved);
+        setAgentToolsInitialized(true);
+      }
+      // else: key absent → leave initialized=false so AgentToolSelector
+      // applies admin defaults on first session.
+    } catch { /* ignore */ }
 
     // Web search toggle. ChatForm clears searchType on conversation change,
     // but its effect runs before this one (children commit first), so the
@@ -217,13 +211,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     localStorage.setItem(`bs:${user.id}:selectedOrgKbs`, JSON.stringify(selectedOrgKbs));
   }, [selectedOrgKbs, user?.id]);
 
-  // Only a real choice is written. Persisting derived state (admin defaults, a
-  // prune of a removed group) is what turned "never touched it" into a stored
-  // preference the admin could no longer reach.
   useEffect(() => {
-    if (!memoReadyRef.current) return;
-    persistAgentTools(user?.id, selectedAgentTools);
-  }, [selectedAgentTools, user?.id]);
+    if (!memoReadyRef.current || !user?.id || !agentToolsInitialized) return;
+    localStorage.setItem(`bs:${user.id}:selectedAgentTools`, JSON.stringify(selectedAgentTools));
+  }, [selectedAgentTools, user?.id, agentToolsInitialized]);
 
   useEffect(() => {
     if (!memoReadyRef.current || !user?.id) return;
@@ -241,7 +232,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     sendMessage,
     stopGenerating,
     regenerate,
-    recoverRateLimitedMessage,
   } = useAiChat(conversationId, false, shareToken);
 
   // ── F028: workstation conversation export / import-to-knowledge ──
@@ -406,7 +396,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
     sendMessage(text, files);
     setInputText('');
-  }, [taskMode, canUseTaskMode, sendMessage, setInputText]);
+  }, [taskMode, canUseTaskMode, sendMessage]);
 
   const isNew = conversationId === 'new';
   const hasMessages = messages.length > 0;
@@ -545,13 +535,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
         main = p;
       }
       if (card && main) {
-        // getBoundingClientRect and innerWidth/innerHeight are physical px,
-        // while the insets below are laid out at page zoom — normalise both
-        // sides to logical px so the fullscreen animation lands on the edges.
-        const scale = getDisplayScale();
-        const { width: W, height: H } = getLogicalViewport();
-        const c = scaleRect(card.getBoundingClientRect(), scale);
-        const m = scaleRect(main.getBoundingClientRect(), scale);
+        const W = window.innerWidth;
+        const H = window.innerHeight;
+        const c = card.getBoundingClientRect();
+        const m = main.getBoundingClientRect();
         // Collapsed = the docked panel's measured box (it keeps its 4px p-1 margin),
         // overlay padding 0. Expanded grows the BOX outward by 4px on top/right/
         // bottom (border reaches the card edge) and left to the card's left
@@ -711,7 +698,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               )}>
                 {/* Content area: Split into Chat Main and Citation Sidebar */}
                 {isLoading && conversationId !== 'new' ? (
-                  <div className="flex h-[var(--bs-vh,100vh)] items-center justify-center">
+                  <div className="flex h-screen items-center justify-center">
                     <Spinner className="opacity-0" />
                   </div>
                 ) : (hasMessages || !isNew) ? (
@@ -730,7 +717,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           allowExport
                           contentWidthClassName="w-full max-w-[800px] mx-auto px-4 touch-mobile:max-w-full"
                           onRegenerate={regenerate}
-                          onRecover={recoverRateLimitedMessage}
                           onOpenCitationPanel={onOpenCitationPanel}
                           activeCitationMessageId={activeCitationMessageId}
                           onOpenWorkspace={taskArtifacts.openWorkspace}
@@ -896,7 +882,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       // ≤576: full-screen overlay flush to the viewport edges.
                       if (isPhoneViewport) {
                         return (
-                          <div className="fixed inset-0 z-[120] flex h-[var(--bs-dvh,100dvh)] min-h-0 flex-col overflow-hidden overscroll-contain bg-[#FBFBFB]">
+                          <div className="fixed inset-0 z-[120] flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-contain bg-[#FBFBFB]">
                             {mobilePanel}
                           </div>
                         );
@@ -907,7 +893,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       // higher z so it clears the chrome (mirrors the citation panel).
                       if (!isH5) {
                         return createPortal(
-                          <div className="fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-border-base bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300 w-[min(480px,var(--bs-vw,100vw))]">
+                          <div className="fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-border-base bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300 w-[min(480px,100vw)]">
                             {mobilePanel}
                           </div>,
                           document.body,
@@ -917,7 +903,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       // 577–767: right drawer docked to the viewport edge (z above
                       // MobileNav z-60), full height, slide-in from the right.
                       return (
-                        <div className="fixed inset-y-0 right-0 z-[130] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-border-base bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.08)] animate-in slide-in-from-right duration-300 min-w-[260px] w-[min(520px,42vw)] max-[580px]:min-w-[240px] max-[580px]:w-[min(360px,calc(var(--bs-vw,100vw)-40px))]">
+                        <div className="fixed inset-y-0 right-0 z-[130] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-border-base bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.08)] animate-in slide-in-from-right duration-300 min-w-[260px] w-[min(520px,42vw)] max-[580px]:min-w-[240px] max-[580px]:w-[min(360px,calc(100vw-40px))]">
                           {mobilePanel}
                         </div>
                       );

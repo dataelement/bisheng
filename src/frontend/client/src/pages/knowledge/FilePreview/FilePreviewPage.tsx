@@ -3,10 +3,6 @@
  * Renders the file preview with a bottom-anchored AI dock (mirrors the knowledge
  * space dock pattern). This is the route-level component; FilePreview itself is
  * a reusable, decoupled component.
- *
- * It doubles as the body of the side-drawer preview (`FilePreviewDrawer`): pass
- * `embedded` plus the ids and it reads them from props instead of the route and
- * fills its parent instead of the viewport.
  */
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
@@ -55,32 +51,12 @@ function isRichPreviewData(data: KnowledgeFilePreview | null): boolean {
     );
 }
 
-export interface FilePreviewPageProps {
-    /** Embedded mode: file id from props instead of the route param. */
-    fileId?: string;
-    /** Embedded mode: display name instead of the `name` query param. */
-    fileName?: string;
-    /** Embedded mode: space id instead of the `spaceId` query param. */
-    spaceId?: string;
-    /** Fill the parent instead of the viewport, and skip the standalone mobile layout. */
-    embedded?: boolean;
-    /** Extra buttons appended to the TopBar action slot (e.g. the drawer's "open in new tab"). */
-    extraActions?: React.ReactNode;
-}
-
-export default function FilePreviewPage({
-    fileId: fileIdProp,
-    fileName: fileNameProp,
-    spaceId: spaceIdProp,
-    embedded = false,
-    extraActions,
-}: FilePreviewPageProps) {
+export default function FilePreviewPage() {
     const localize = useLocalize();
-    const { fileId: routeFileId } = useParams<{ fileId: string }>();
+    const { fileId } = useParams<{ fileId: string }>();
     const [searchParams] = useSearchParams();
-    const fileId = fileIdProp || routeFileId;
-    const fileName = fileNameProp || searchParams.get("name") || localize("com_knowledge.unknown_file");
-    const spaceId = spaceIdProp || searchParams.get("spaceId") || "";
+    const fileName = searchParams.get("name") || localize("com_knowledge.unknown_file");
+    const spaceId = searchParams.get("spaceId") || "";
 
     // Fetch real preview URL via API
     const [fileUrl, setFileUrl] = useState<string>("");
@@ -157,16 +133,14 @@ export default function FilePreviewPage({
     }, [fileId, fileName, spaceId]);
 
     // Mobile layout (<md = 768px): keep a bare preview + floating download (no TopBar).
-    // Never applies in embedded mode — the drawer is a desktop-only affordance.
-    const [isMobileViewport, setIsMobileViewport] = useState(false);
+    const [isMobile, setIsMobile] = useState(false);
     useEffect(() => {
         const mq = window.matchMedia("(max-width: 767px)");
-        const update = () => setIsMobileViewport(mq.matches);
+        const update = () => setIsMobile(mq.matches);
         update();
         mq.addEventListener("change", update);
         return () => mq.removeEventListener("change", update);
     }, []);
-    const isMobile = isMobileViewport && !embedded;
 
     // Mobile only: drive the browser tab title to the file name, restoring the
     // previous title on unmount so navigating back doesn't leave it stuck.
@@ -180,50 +154,12 @@ export default function FilePreviewPage({
         };
     }, [isMobile, fileName]);
 
-    // Extra actions injected into FilePreview's TopBar slot:
-    // a single More dropdown that consolidates permission management + download.
-    const showMoreMenu = canManagePermission || canDownload;
-    const moreMenu = showMoreMenu ? (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button
-                    variant="outline"
-                    className="h-8 w-8 p-2"
-                    aria-label={localize("com_knowledge.more")}
-                >
-                    <Outlined.MoreCircle className="size-4 text-text-2" />
-                </Button>
-            </DropdownMenuTrigger>
-            <ActionMenuContent align="end">
-                {canManagePermission && (
-                    <ActionMenuItem
-                        onClick={() => setPermissionDialogOpen(true)}
-                        icon={<Outlined.PeopleSafe />}
-                        label={localize("com_permission.manage_permission")}
-                    />
-                )}
-                {canDownload && (
-                    <ActionMenuItem
-                        onClick={handleDownloadFile}
-                        icon={<Outlined.Download />}
-                        label={localize("com_knowledge.download")}
-                    />
-                )}
-            </ActionMenuContent>
-        </DropdownMenu>
-    ) : null;
-
-    // Embedded in a drawer, the preview fills its container; standalone it owns the viewport.
-    const rootHeightClass = embedded ? "h-full" : "h-[var(--bs-vh,100vh)]";
-
     const renderPreview = (compactMode = false) => {
         if (previewData && isRichPreviewData(previewData)) {
             return (
                 <RichKnowledgePreview
                     fileName={fileName}
                     preview={previewData}
-                    actions={compactMode ? undefined : moreMenu}
-                    trailingActions={compactMode ? undefined : extraActions}
                     allowDownload={canDownload}
                     onDownloadFile={handleDownloadFile}
                     compactMode={compactMode}
@@ -235,8 +171,6 @@ export default function FilePreviewPage({
                 fileName={fileName}
                 fileType={fileType}
                 fileUrl={fileUrl}
-                actions={compactMode ? undefined : moreMenu}
-                trailingActions={compactMode ? undefined : extraActions}
                 conversionFailed={conversionFailed}
                 allowDownload={canDownload}
                 onDownloadFile={handleDownloadFile}
@@ -249,8 +183,8 @@ export default function FilePreviewPage({
     // Loading state while fetching preview URL
     if (loading) {
         return (
-            <div className={`${rootHeightClass} flex items-center justify-center bg-white`}>
-                <div className="text-text-3">{localize("com_knowledge.loading")}</div>
+            <div className="h-[var(--bs-vh,100vh)] flex items-center justify-center bg-white">
+                <div className="text-[#86909c]">{localize("com_knowledge.loading")}</div>
             </div>
         );
     }
@@ -258,8 +192,8 @@ export default function FilePreviewPage({
     // No URL available (skip this guard for pptx conversion failure — handled by FilePreview)
     if (!fileUrl && !conversionFailed && !isRichPreviewData(previewData)) {
         return (
-            <div className={`${rootHeightClass} flex items-center justify-center bg-white`}>
-                <div className="text-text-3">{localize("com_knowledge.fetch_preview_link_failed")}</div>
+            <div className="h-[var(--bs-vh,100vh)] flex items-center justify-center bg-white">
+                <div className="text-[#86909c]">{localize("com_knowledge.fetch_preview_link_failed")}</div>
             </div>
         );
     }
@@ -270,16 +204,6 @@ export default function FilePreviewPage({
     if (isMobile) {
         return (
             <div className="relative h-[var(--bs-vh,100vh)] w-[var(--bs-vw,100vw)] overflow-hidden bg-white">
-                {fileId && (
-                    <PermissionDialog
-                        open={permissionDialogOpen}
-                        onOpenChange={setPermissionDialogOpen}
-                        resourceType="knowledge_file"
-                        resourceId={fileId}
-                        resourceName={fileName}
-                    />
-                )}
-
                 {/* Bare preview — header hidden, viewer fills the container. */}
                 <div className="absolute inset-0">
                     {renderPreview(true)}
@@ -305,17 +229,7 @@ export default function FilePreviewPage({
 
     // ─── Desktop layout: TopBar + viewer with a bottom-anchored AI dock overlay.
     return (
-        <div className={`relative ${rootHeightClass} flex flex-col bg-white overflow-hidden`}>
-            {fileId && (
-                <PermissionDialog
-                    open={permissionDialogOpen}
-                    onOpenChange={setPermissionDialogOpen}
-                    resourceType="knowledge_file"
-                    resourceId={fileId}
-                    resourceName={fileName}
-                />
-            )}
-
+        <div className="relative h-[var(--bs-vh,100vh)] flex flex-col bg-white overflow-hidden">
             <div className="min-h-0 flex-1">
                 {renderPreview(false)}
             </div>

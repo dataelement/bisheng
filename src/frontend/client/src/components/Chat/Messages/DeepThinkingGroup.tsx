@@ -1,231 +1,154 @@
 /**
- * DeepThinkingGroup — one "deep thinking" episode of the daily chat: a
- * contiguous run of thinking + tool_call events behind a single collapsible
- * header, aligned with task mode's DeepStepGroup (F—2.4.2):
+ * DeepThinkingGroup — outer collapsible wrapper around a contiguous run of
+ * thinking + tool_call events. Header reads "已深度思考" once the run is closed
+ * by a following text block (or stream end), or "正在深度思考…" while still
+ * open. Collapsing the wrapper hides everything inside, including any inner
+ * ThinkingContent state.
  *
- * - The header is the stable outer status — 正在深度思考（已用 N 秒）... while
- *   the run is live (spinner + pulsing label), settling to 已深度思考（用时 N 秒）.
- *   Searches and tool calls never replace it. The clock spans only this
- *   group's process events, never the answer text outside it.
- * - One small line under the header tracks the CURRENT step while running
- *   (正在分析问题 / 正在联网搜索 / 正在检索知识 / 正在调用工具：X /
- *   正在整理信息并继续思考); once the run ends it keeps the last sentence of
- *   the reasoning, exactly like task mode's collapsed narration line.
- * - Default collapsed, live or done; expanding reveals the full event
- *   timeline — thinking passages as plain text interleaved with tool rows in
- *   arrival order (only ADJACENT thinking fragments fold together). Folding
- *   only changes visibility, never content or order.
- *
- * Deliberately does NOT import task-mode (Linsight/Execution) modules — the
- * two surfaces stay decoupled; shared primitives live in ~/utils.
+ * **No duration (2026-08-13).** The header used to end in "（用时 N 秒）", driven
+ * by a 100ms ticker. A live counter promises the number matters, and for model
+ * reasoning it does not — it only measures how long you have waited, with no
+ * denominator to reason against, at a precision that implies the work should
+ * have been quick. On a long run it made the product look broken rather than
+ * busy. Liveness is carried by the streaming glyph and the reasoning text.
+ * Removed here in lockstep with task mode's GroupHeaderLabel, which the two
+ * surfaces are deliberately isomorphic with — see Linsight/Execution/
+ * GroupHeaderLabel.tsx for the full reasoning.
  */
 import { Outlined } from "bisheng-icons";
-import { memo, useEffect, useMemo, useState, type FC } from "react";
+import {
+    memo,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type FC,
+    type MouseEvent,
+} from "react";
 import type { AgentEvent } from "~/api/chatApi";
-import { NarrationTicker } from "~/components/ui/NarrationTicker";
 import { useLocalize } from "~/hooks";
-import { cn, formatSeconds } from "~/utils";
-import ToolCallDisplay, { classifyToolType, resolveToolName } from "./ToolCallDisplay";
+import { cn } from "~/utils";
+import ThinkingContent from "./ThinkingContent";
+import ToolCallDisplay from "./ToolCallDisplay";
+
+const BUTTON_STYLES = {
+    base: "group flex w-fit items-center gap-1 text-sm font-medium leading-[22px] text-text-1",
+    icon: "shrink-0 transform-gpu text-text-3 transition-transform duration-200",
+} as const;
 
 export interface DeepThinkingGroupProps {
     /** Ordered events in this group — only thinking + tool_call entries. */
     events: AgentEvent[];
-    /** True if this group is the currently-open trailing run (message still
-     *  streaming, no final answer text yet). Drives the 正在/已 status. */
+    /** True if this group is the currently-open trailing run. */
     isStreaming: boolean;
 }
 
-type ToolCallEvent = Extract<AgentEvent, { type: "tool_call" }>;
-type Segment =
-    | { kind: "thinking"; key: string; content: string }
-    | { kind: "tool"; key: string; toolCall: ToolCallEvent };
+const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
+    ({ events, isStreaming }) => {
+        const localize = useLocalize();
+        // Open while the run is live so the user can watch it; closed for
+        // already-finished groups (history rows mount with isStreaming false).
+        const [isExpanded, setIsExpanded] = useState(isStreaming);
 
-/** Earliest start / latest end across the group's process events, with a
- *  per-event duration sum as the legacy-row fallback (no wall-clock fields). */
-function groupSpan(events: AgentEvent[]) {
-    let start: number | undefined;
-    let end: number | undefined;
-    let sum = 0;
-    for (const ev of events) {
-        if (ev.type !== "thinking" && ev.type !== "tool_call") continue;
-        if (ev.started_at != null && (start == null || ev.started_at < start)) start = ev.started_at;
-        if (ev.ended_at != null && (end == null || ev.ended_at > end)) end = ev.ended_at;
-        sum += ev.duration_ms ?? 0;
-    }
-    return { start, end, sum };
-}
-
-/** Last complete sentence of the reasoning — the finished-state small line,
- *  mirroring task mode's narration. Falls back to the final line fragment. */
-function lastReasoningSentence(segments: Segment[]): string {
-    for (let i = segments.length - 1; i >= 0; i--) {
-        const seg = segments[i];
-        if (seg.kind !== "thinking") continue;
-        const parts = seg.content
-            .split(/[。！？!?\n]/)
-            .map((s) => s.trim())
-            .filter(Boolean);
-        if (parts.length) return parts[parts.length - 1];
-    }
-    return "";
-}
-
-const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(({ events, isStreaming }) => {
-    const localize = useLocalize();
-    // Default collapsed, live or done — the page opens quiet and the small
-    // line below carries the current step; the user expands to read.
-    const [isExpanded, setIsExpanded] = useState(false);
-
-    // Walk the events in arrival order, folding only ADJACENT thinking
-    // fragments into one passage. The wire and the DB already interleave
-    // thinking and tool calls truthfully (the backend closes the open thinking
-    // segment before every tool call), so the render must not regroup them.
-    const segments = useMemo<Segment[]>(() => {
-        const out: Segment[] = [];
-        events.forEach((ev, i) => {
-            if (ev.type === "thinking") {
-                // A just-opened live segment has no text yet — skip it until
-                // the first token lands so no empty passage flashes in.
-                if (!ev.content) return;
-                const last = out[out.length - 1];
-                if (last?.kind === "thinking") {
-                    // Adjacent rounds are distinct closed passages (unlike task
-                    // mode's per-frame chunks), so a paragraph break is right.
-                    last.content += `\n\n${ev.content}`;
-                } else {
-                    out.push({ kind: "thinking", key: `think-${i}`, content: ev.content });
-                }
-            } else if (ev.type === "tool_call") {
-                out.push({ kind: "tool", key: ev.tool_call_id || `tc-${i}`, toolCall: ev });
+        // Auto-collapse the moment the run finishes — i.e. the main answer
+        // starts streaming and isStreaming flips false — so focus moves to the
+        // answer body without a manual click. Manual toggling stays intact
+        // afterward since we only react to the streaming → done falling edge.
+        const wasStreamingRef = useRef(isStreaming);
+        useEffect(() => {
+            if (wasStreamingRef.current && !isStreaming) {
+                setIsExpanded(false);
             }
-        });
-        return out;
-    }, [events]);
+            wasStreamingRef.current = isStreaming;
+        }, [isStreaming]);
 
-    // ── Header clock — this group's process events only ────────────────────
-    const { start, end, sum } = groupSpan(events);
+        // Shared with task mode on purpose: the two 深度思考 surfaces are
+        // explicitly isomorphic, so one key pair keeps their wording from
+        // drifting apart. (The `_compact` name is historical — it was the
+        // duration-free variant back when a duration variant existed.)
+        const label = localize(
+            isStreaming ? "com_linsight_deep_thinking_running_compact" : "com_linsight_deep_thinking_done_compact",
+        );
 
-    // Live-tick while streaming so the counter advances every 100ms.
-    const [tick, setTick] = useState(0);
-    useEffect(() => {
-        if (!isStreaming) return;
-        const id = window.setInterval(() => setTick((t) => t + 1), 100);
-        return () => window.clearInterval(id);
-    }, [isStreaming]);
+        const handleClick = useCallback((e: MouseEvent<HTMLButtonElement>) => {
+            e.preventDefault();
+            setIsExpanded((prev) => !prev);
+        }, []);
 
-    const elapsedMs = (() => {
-        if (start == null) return sum;
-        // A closed group missing its end stamp must not creep against Date.now().
-        if (!isStreaming && end == null) return sum;
-        return Math.max(0, (isStreaming ? Date.now() : end!) - start);
-    })();
-    // `tick` is read here so the IIFE re-runs on every interval render.
-    void tick;
+        // Walk the events in arrival order, folding only ADJACENT thinking
+        // fragments into one passage. The wire and the DB already interleave
+        // thinking and tool calls truthfully (the backend closes the open
+        // thinking segment before every tool call), so the render must not
+        // regroup them: reasoning that happened after a search belongs below
+        // that search, not merged into the block above it. Mirrors task mode's
+        // DeepStepGroup.buildSegments.
+        const segments = useMemo(() => {
+            type Segment =
+                | { kind: "thinking"; key: string; content: string }
+                | { kind: "tool"; key: string; toolCall: Extract<AgentEvent, { type: "tool_call" }> };
+            const out: Segment[] = [];
+            events.forEach((ev, i) => {
+                if (ev.type === "thinking") {
+                    // A just-opened live segment has no text yet — skip it so the
+                    // connector chain never points at a row that renders nothing.
+                    if (!ev.content) return;
+                    const last = out[out.length - 1];
+                    if (last?.kind === "thinking") {
+                        // Adjacent rounds are distinct closed passages (unlike task
+                        // mode's per-frame chunks), so a paragraph break is right.
+                        last.content += `\n\n${ev.content}`;
+                    } else {
+                        out.push({ kind: "thinking", key: `think-${i}`, content: ev.content });
+                    }
+                } else if (ev.type === "tool_call") {
+                    out.push({ kind: "tool", key: ev.tool_call_id || `tc-${i}`, toolCall: ev });
+                }
+            });
+            return out;
+        }, [events]);
 
-    const label = (() => {
-        // Duration hides at 0 — legacy rows without timing fields, and the
-        // brief moment before the first tick lands.
-        const seconds = elapsedMs > 0 ? formatSeconds(elapsedMs) : "";
-        if (isStreaming) {
-            return seconds
-                ? localize("com_deep_thinking.running", { 0: seconds })
-                : localize("com_deep_thinking.running_no_time");
-        }
-        return seconds
-            ? localize("com_deep_thinking.done", { 0: seconds })
-            : localize("com_deep_thinking.done_no_time");
-    })();
-
-    // ── Small line under the header ────────────────────────────────────────
-    // Running: the CURRENT step, derived from the trailing event. Done: the
-    // last reasoning sentence (task mode's narration semantics). Shown while
-    // running or collapsed; a finished, expanded group hides it — the full
-    // timeline below carries the same information.
-    const subline = (() => {
-        if (!isStreaming) return lastReasoningSentence(segments);
-        const trailing = events[events.length - 1];
-        if (!trailing) return localize("com_deep_thinking.step_analyzing");
-        if (trailing.type === "tool_call" && trailing.inflight) {
-            const variant = classifyToolType(trailing);
-            if (variant === "web") return localize("com_deep_thinking.step_web_search");
-            if (variant === "knowledge") return localize("com_deep_thinking.step_knowledge");
-            return localize("com_deep_thinking.step_tool", { 0: resolveToolName(trailing, localize) });
-        }
-        // Thinking (or a just-finished tool, about to resume thinking): first
-        // round reads as analysis, later rounds as digesting tool output.
-        const hasPriorTool = events.some((ev) => ev.type === "tool_call" && ev !== trailing);
-        return hasPriorTool
-            ? localize("com_deep_thinking.step_continuing")
-            : localize("com_deep_thinking.step_analyzing");
-    })();
-
-    return (
-        <div className="flex w-full min-w-0 flex-col animate-thinking-appear">
-            <button
-                type="button"
-                onClick={() => setIsExpanded((prev) => !prev)}
-                className="group flex w-fit max-w-full items-center gap-2 py-1 text-left text-sm font-medium leading-[22px] text-[#999999]"
-            >
-                <span className="flex size-4 shrink-0 items-center justify-center">
-                    {/* Spinner only while running AND collapsed (task-mode icon
-                        regime); otherwise the static reasoning bulb. */}
-                    {isStreaming && !isExpanded ? (
-                        <Outlined.Loading size={16} className="animate-spin text-primary" />
-                    ) : (
-                        <Outlined.Bulb size={16} className="text-[#1D2129]" />
-                    )}
-                </span>
-                <span
-                    className={cn(
-                        "min-w-0 truncate transition-colors group-hover:text-[#212121]",
-                        isExpanded && "text-[#212121]",
-                        isStreaming && "animate-pulse group-hover:animate-none",
-                    )}
+        return (
+            <div className="flex w-full min-w-0 flex-col gap-3">
+                <button
+                    type="button"
+                    onClick={handleClick}
+                    className={cn(BUTTON_STYLES.base, isStreaming && "animate-pulse")}
                 >
-                    {label}
-                </span>
-                <Outlined.Down
-                    size={16}
-                    className={cn(
-                        "shrink-0 transform-gpu text-[#8C8C8C] transition duration-200 group-hover:text-[#212121]",
-                        !isExpanded && "-rotate-90",
-                    )}
-                />
-            </button>
-            {/* Current-step / narration line — indented under the label. The
-                ticker crossfades each step upward (task mode's animation) and
-                holds the last text through empty updates, so steps never hard-swap. */}
-            {(isStreaming || !isExpanded) && (
-                <div className="pl-6">
-                    <NarrationTicker text={subline} />
-                </div>
-            )}
-            <div
-                className={cn("grid transition-all duration-300 ease-out", isExpanded && "mt-2")}
-                style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
-            >
-                <div className="min-h-0 overflow-hidden">
-                    <div className="flex flex-col gap-1.5 pl-6 pb-1">
-                        {segments.map((seg) =>
-                            seg.kind === "thinking" ? (
-                                // Plain passage — single-level fold, no inner
-                                // "思考内容" collapsible (task-mode alignment).
-                                <p
+                    <span>{label}</span>
+                    <Outlined.Down
+                        size={16}
+                        className={cn(BUTTON_STYLES.icon, !isExpanded && "-rotate-90")}
+                    />
+                </button>
+                <div
+                    className="grid transition-all duration-300 ease-out"
+                    style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
+                >
+                    <div className="overflow-hidden flex flex-col gap-2">
+                        {segments.map((seg, i) => {
+                            // Connector runs to the next row, whatever kind it is.
+                            const hasNext = i < segments.length - 1;
+                            return seg.kind === "thinking" ? (
+                                <ThinkingContent
                                     key={seg.key}
-                                    className="whitespace-pre-wrap break-words text-xs leading-5 text-[#818181]"
-                                >
-                                    {seg.content}
-                                </p>
+                                    reasoning={seg.content}
+                                    showConnector={hasNext}
+                                />
                             ) : (
-                                <ToolCallDisplay key={seg.key} toolCall={seg.toolCall} />
-                            ),
-                        )}
+                                <ToolCallDisplay
+                                    key={seg.key}
+                                    toolCall={seg.toolCall}
+                                    showConnector={hasNext}
+                                />
+                            );
+                        })}
                     </div>
                 </div>
             </div>
-        </div>
-    );
-});
+        );
+    },
+);
 
 DeepThinkingGroup.displayName = "DeepThinkingGroup";
 

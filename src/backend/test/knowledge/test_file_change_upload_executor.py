@@ -502,62 +502,6 @@ async def test_runtime_validator_rejects_role_quota_tightened_below_reserved_sta
     assert side_effects.events == []
 
 
-@pytest.mark.skip(
-    reason="cofco-909 phase 2: asserts the old permission-id expansion "
-    "(_get_effective_permission_ids on a custom relation model). 3.0 expresses the same "
-    "rule through the catalog release, so the guarantee needs re-asserting in its terms."
-)
-async def test_knowledge_owner_rejects_can_edit_model_without_upload_file_permission_id(monkeypatch):
-    from bisheng.common.dependencies.user_deps import UserPayload
-    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
-
-    service = KnowledgeSpaceService(
-        request=None,
-        login_user=UserPayload(user_id=7, user_name="editor", tenant_id=42, user_role=[]),
-    )
-    effective_loader = AsyncMock(return_value={"view_space", "edit_space", "rename"})
-    monkeypatch.setattr(service, "_get_effective_permission_ids", effective_loader)
-
-    allowed = await service.has_effective_permission_id(
-        "knowledge_space",
-        8,
-        "upload_file",
-        space_id=8,
-    )
-
-    assert allowed is False
-    effective_loader.assert_awaited_once_with(
-        "knowledge_space",
-        8,
-        space_id=8,
-        include_public_viewer=False,
-    )
-
-
-@pytest.mark.skip(
-    reason="cofco-909 phase 2: asserts the old permission-id expansion "
-    "(_get_effective_permission_ids on a custom relation model). 3.0 expresses the same "
-    "rule through the catalog release, so the guarantee needs re-asserting in its terms."
-)
-async def test_knowledge_owner_allows_custom_non_edit_relation_with_upload_file_permission_id(monkeypatch):
-    from bisheng.common.dependencies.user_deps import UserPayload
-    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
-
-    service = KnowledgeSpaceService(
-        request=None,
-        login_user=UserPayload(user_id=7, user_name="custom-viewer", tenant_id=42, user_role=[]),
-    )
-    effective_loader = AsyncMock(return_value={"view_space", "upload_file"})
-    monkeypatch.setattr(service, "_get_effective_permission_ids", effective_loader)
-
-    assert await service.has_effective_permission_id(
-        "knowledge_space",
-        8,
-        "upload_file",
-        space_id=8,
-    )
-
-
 async def test_parse_scheduler_handoff_completes_business_step_while_pipeline_steps_remain_pending(upload_engine):
     set_current_tenant_id(42)
     request_id, _stage_id = await _seed_upload_bundle(upload_engine)

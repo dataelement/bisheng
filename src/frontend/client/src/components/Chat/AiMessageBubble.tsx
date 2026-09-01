@@ -37,17 +37,6 @@ import { MediaAttachmentChip, isMediaChipFile } from "~/components/Chat/attachme
 import { ChatHistoryFileRow } from "~/components/Chat/attachments/ChatHistoryFileRow";
 import { isImageFileName } from "~/components/ui/icon/File/FileIcon";
 import { MessageImage } from "~/components/Chat/Messages/Content/MessageImage";
-import { ModelRateLimitRecoveryDialog } from "~/components/ModelRateLimitRecoveryDialog";
-import {
-    shouldOpenModelSwitchRecommendation,
-    useModelRateLimitRecovery,
-} from "~/hooks/useModelRateLimitRecovery";
-import type {
-    ModelRecoveryCommand,
-    ModelRecoveryResponse,
-    ModelRecoveryTarget,
-} from "~/api/modelRecovery";
-import { resolveDisplayedModelRateLimitState } from "~/hooks/queries/endpoints/modelRateLimitPolling";
 import { ServiceBusyNotice } from "~/components/ServiceBusyNotice";
 
 // Transient/retryable backend error codes surfaced by daily-mode chat — LLM rate
@@ -141,7 +130,6 @@ interface AiMessageBubbleProps {
     isLatest?: boolean;
     isStreaming?: boolean;
     onRegenerate?: () => void;
-    onRecover?: (command: ModelRecoveryCommand) => Promise<ModelRecoveryResponse>;
     // Sibling paging
     siblingIdx?: number;
     siblingCount?: number;
@@ -345,7 +333,6 @@ const AiMessageBubble = memo(
         isLatest,
         isStreaming,
         onRegenerate,
-        onRecover,
         siblingIdx,
         siblingCount,
         setSiblingIdx,
@@ -375,7 +362,6 @@ const AiMessageBubble = memo(
                 isLatest={isLatest}
                 isStreaming={isStreaming}
                 onRegenerate={onRegenerate}
-                onRecover={onRecover}
                 siblingIdx={siblingIdx}
                 siblingCount={siblingCount}
                 setSiblingIdx={setSiblingIdx}
@@ -504,7 +490,6 @@ function AssistantBubble({
     isLatest,
     isStreaming,
     onRegenerate,
-    onRecover,
     siblingIdx,
     siblingCount,
     setSiblingIdx,
@@ -519,7 +504,6 @@ function AssistantBubble({
     isLatest?: boolean;
     isStreaming?: boolean;
     onRegenerate?: () => void;
-    onRecover?: (command: ModelRecoveryCommand) => Promise<ModelRecoveryResponse>;
     siblingIdx?: number;
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
@@ -531,31 +515,6 @@ function AssistantBubble({
     onPreviewFile?: (file: ArtifactFile) => void;
 }) {
     const localize = useLocalize();
-    const [recoveryDialogOpen, setRecoveryDialogOpen] = useState(false);
-    const recoveryTransport = useCallback(
-        (_target: ModelRecoveryTarget, command: ModelRecoveryCommand) => (
-            onRecover?.(command) ?? Promise.resolve({
-                execution_id: command.executionId,
-                attempt_id: command.attemptId,
-                accepted: false,
-            })
-        ),
-        [onRecover],
-    );
-    const recovery = useModelRateLimitRecovery({
-        target: { entry: 'daily' },
-        executionId: message.executionId,
-        subjectId: message.recoverySubjectId,
-        activeAttemptId: message.attemptId,
-        currentModelId: message.modelId,
-        transport: recoveryTransport,
-    });
-    const {
-        activeAttemptId: recoveryActiveAttemptId,
-        pending: recoveryPending,
-        resetManualRetryCount,
-        showSwitchRecommendation,
-    } = recovery;
 
     // Prefer the backend's own classification; fall back to the status code so
     // pre-classification backends still split busy-vs-failed correctly, and land
@@ -564,39 +523,10 @@ function AssistantBubble({
         || (message.errorCode !== undefined && RETRYABLE_ERROR_CODES.has(message.errorCode)
             ? "rate_limit"
             : "chat_unknown");
-    const canRecoverRateLimit = resolvedErrorType === 'rate_limit'
-        && message.unfinished === true
-        && isLatest === true
-        && !!message.executionId
-        && !!message.recoverySubjectId
-        && !!onRecover;
 
     // A transient/retryable failure (rate limit / busy) renders as the calm neutral
     // notice + Retry instead of the red error card.
     const isTransientError = !!message.error && isTransientErrorType(resolvedErrorType);
-
-    useEffect(() => {
-        if (resolvedErrorType !== 'rate_limit') {
-            resetManualRetryCount();
-            return;
-        }
-        if (shouldOpenModelSwitchRecommendation({
-            errorType: resolvedErrorType,
-            pending: recoveryPending,
-            recommended: showSwitchRecommendation,
-            eventAttemptId: message.attemptId,
-            activeAttemptId: recoveryActiveAttemptId,
-        })) {
-            setRecoveryDialogOpen(true);
-        }
-    }, [
-        message.attemptId,
-        recoveryActiveAttemptId,
-        recoveryPending,
-        resetManualRetryCount,
-        showSwitchRecommendation,
-        resolvedErrorType,
-    ]);
 
     // v2.5 Agent-native detection — when a message has structured fields set
     // (populated by useAiChatSSE.onAgentUpdate or by getAgentMessages history
@@ -662,11 +592,6 @@ function AssistantBubble({
         : message.errorText || regularContent || localize("workstation.chat.answer_failed");
 
     const { data: bsConfig } = useGetBsConfig()
-    const displayedRateLimitState = resolveDisplayedModelRateLimitState(
-        bsConfig?.models,
-        message.modelId,
-        message.rateLimitState,
-    );
 
     const modelName = message.sender || "AI";
     const showCursor = isLatest && isStreaming;
@@ -810,42 +735,6 @@ function AssistantBubble({
                 {/* Error state — replaces the body when nothing streamed in, and sits
                     below it when a partial answer did. */}
                 {!showWaiting && message.error && (
-                    <div className={cn(hasAnswerBody && "mt-2")}>
-                        <ChatErrorCard
-                            errorType={resolvedErrorType}
-                            detail={message.errorDetail}
-                            fallbackMessage={errorNotice}
-                            onRetry={
-                                canRecoverRateLimit
-                                    ? recovery.retry
-                                    : resolvedErrorType !== 'rate_limit' && isTransientError
-                                        ? onRegenerate
-                                        : undefined
-                            }
-                            retrying={recovery.pending}
-                            rateLimitState={displayedRateLimitState}
-                            onSwitchModel={
-                                canRecoverRateLimit
-                                    ? () => setRecoveryDialogOpen(true)
-                                    : undefined
-                            }
-                        />
-                        {canRecoverRateLimit ? (
-                            <ModelRateLimitRecoveryDialog
-                                open={recoveryDialogOpen}
-                                models={bsConfig?.models ?? []}
-                                currentModelId={message.modelId ?? ''}
-                                pending={recovery.pending}
-                                onOpenChange={setRecoveryDialogOpen}
-                                onConfirm={async (targetModelId) => {
-                                    const result = await recovery.switchModel(targetModelId);
-                                    if (result?.accepted !== false) setRecoveryDialogOpen(false);
-                                    return result;
-                                }}
-                                onLater={() => setRecoveryDialogOpen(false)}
-                            />
-                        ) : null}
-                    </div>
                     isTransientError ? (
                         // Transient upstream hiccup (rate limit / busy): calm neutral
                         // notice + Retry (re-sends the last user message via regenerate),

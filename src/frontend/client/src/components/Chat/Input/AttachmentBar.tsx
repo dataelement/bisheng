@@ -55,16 +55,6 @@ function resolveFilePreviewUrl(file: {
     return resolveKnowledgePreviewUrl(remote);
 }
 
-/**
- * Icon for a file chip, picked from the file name's extension.
- * Exported so other surfaces that show the same chip (knowledge-space quick Q&A)
- * render identical icons instead of maintaining a second mapping.
- */
-export const AttachmentFileIcon = ({ name }: { name: string }) => {
-    const Icon = CHIP_FILE_ICONS[resolveFileType({ name })] ?? Outlined.File;
-    return <Icon size={16} />;
-};
-
 /** Shared card shell: fixed width, white surface, optional hover-only remove. */
 const CardShell = ({
     icon,
@@ -79,8 +69,7 @@ const CardShell = ({
     title?: string;
     onRemove?: () => void;
     onClick?: () => void;
-    /** Surface override — the chip is white on this bar's grey strip, but reused on
-     *  white surfaces elsewhere, where it needs the inverse. Geometry stays fixed. */
+    /** Callers that place the chip outside the bar (the knowledge-space strip). */
     className?: string;
 }) => (
     <div
@@ -113,9 +102,6 @@ const CardShell = ({
         )}
     </div>
 );
-
-/** The chat-mode reference chip itself, for surfaces outside this bar. */
-export const AttachmentChip = CardShell;
 
 const KbCard = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => (
     <CardShell
@@ -283,6 +269,9 @@ type Entry =
     | { kind: "folder"; key: string; data: { folderName: string; files: unknown[]; isUploading: boolean } }
     | { kind: "kb"; key: string; data: any }
     | { kind: "skill"; key: string; data: any };
+
+/** Alias for the chip shell, reused by the knowledge-space attachment strip. */
+export const AttachmentChip = CardShell;
 
 export const AttachmentBar = ({
     uploadingFiles,

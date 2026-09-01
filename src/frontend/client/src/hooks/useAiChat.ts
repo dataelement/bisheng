@@ -19,13 +19,6 @@ import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useLinsightManager } from "~/hooks/useLinsightManager";
 import { startLinsight, getLinsightSessionVersionList } from "~/api/linsight";
 import { SopStatus, taskModeSkillsState } from "~/store/linsight";
-import {
-    buildModelRecoveryRequest,
-    type ModelRecoveryCommand,
-    type ModelRecoveryResponse,
-} from "~/api/modelRecovery";
-import { closeSupersededRateLimitRecoveries } from "~/hooks/useModelRateLimitRecovery";
-import { observeModelRateLimitEvent } from "~/hooks/queries/endpoints/modelRateLimitPolling";
 import { isMediaAttachmentFile, type MediaParsingState } from "~/utils/mediaAttachmentUtils";
 
 const NO_PARENT = "00000000-0000-0000-0000-000000000000";
@@ -372,11 +365,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             };
 
             // Add both messages immediately
-            const updatedMessages = [
-                ...closeSupersededRateLimitRecoveries(messagesRef.current),
-                userMessage,
-                initialResponse,
-            ];
+            const updatedMessages = [...messagesRef.current, userMessage, initialResponse];
             setMessages(updatedMessages);
 
             // Build SSE payload (same structure as useChatFunctions.ask).
@@ -838,7 +827,6 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 // that already produced an answer would lose it if we overwrote `text`
                 // (and the bubble would then render that answer as raw error text).
                 onError: (error, errorCode, meta) => {
-                    observeModelRateLimitEvent(queryClient, meta);
                     finishMediaParsing(realUserMessageId);
                     setMessages((prev) => {
                         const msgs = [...prev];
@@ -851,13 +839,6 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                 errorCode,
                                 errorType: meta?.errorType,
                                 errorDetail: meta?.errorDetail,
-                                executionId: meta?.executionId,
-                                attemptId: meta?.attemptId,
-                                recoverySubjectId: meta?.recoverySubjectId,
-                                modelId: meta?.modelId,
-                                rateLimitState: meta?.rateLimitState,
-                                resumeMode: meta?.resumeMode,
-                                unfinished: meta?.errorType === "rate_limit",
                             };
                         }
                         return msgs;
@@ -892,156 +873,6 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         setConversationId("new");
         setTitle("");
     }, [stopGenerating]);
-
-    const recoverRateLimitedMessage = useCallback(
-        (command: ModelRecoveryCommand): Promise<ModelRecoveryResponse> => {
-            const targetMessage = messagesRef.current.find(
-                (message) => message.executionId === command.executionId,
-            );
-            if (!targetMessage || isStreaming) {
-                return Promise.resolve({
-                    execution_id: command.executionId,
-                    attempt_id: command.attemptId,
-                    accepted: false,
-                });
-            }
-
-            const parentMessage = messagesRef.current.find(
-                (message) => message.messageId === targetMessage.parentMessageId,
-            ) ?? ({
-                messageId: targetMessage.parentMessageId,
-                parentMessageId: NO_PARENT,
-                conversationId,
-                sender: "user",
-                text: "",
-                isCreatedByUser: true,
-            } satisfies ChatMessage);
-            const targetMessageId = targetMessage.messageId;
-            const request = buildModelRecoveryRequest({ entry: 'daily' }, command);
-            const baseUrl = (__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
-            const stream: LiveStream = {
-                convoId: targetMessage.conversationId || conversationId,
-                ownerId: ownerIdRef.current,
-                handle: { close: () => undefined },
-            };
-            const setMessages = (
-                updater: ChatMessage[] | ((previous: ChatMessage[]) => ChatMessage[]),
-            ) => setBucket(stream.convoId, updater);
-            const setIsStreaming = (value: boolean) => setStreamingFlag(stream.convoId, value);
-            const updateActiveMessage = (
-                updater: (message: ChatMessage) => ChatMessage,
-            ) => {
-                setMessages((previous) => {
-                    const messages = [...previous];
-                    const index = messages.findIndex(
-                        (message) => message.executionId === command.executionId
-                            || message.messageId === targetMessageId,
-                    );
-                    if (index < 0 || messages[index].attemptId !== command.attemptId) return previous;
-                    messages[index] = updater(messages[index]);
-                    return messages;
-                });
-            };
-
-            setMessages((previous) => previous.map((message) => (
-                message.executionId === command.executionId || message.messageId === targetMessageId
-                    ? {
-                        ...message,
-                        attemptId: command.attemptId,
-                        error: false,
-                        errorText: undefined,
-                        errorDetail: undefined,
-                        unfinished: true,
-                    }
-                    : message
-            )));
-            setIsStreaming(true);
-            liveStreams.set(keyOf(stream.convoId), stream);
-
-            return new Promise<ModelRecoveryResponse>((resolve, reject) => {
-                let settled = false;
-                let accepted = true;
-                let recoveryErrorType: string | undefined;
-                const settle = () => {
-                    if (settled) return;
-                    settled = true;
-                    setIsStreaming(false);
-                    if (streamFor(stream.convoId) === stream) {
-                        liveStreams.delete(keyOf(stream.convoId));
-                    }
-                    void queryClient.invalidateQueries([QueryKeys.bishengConfig]);
-                    resolve({
-                        execution_id: command.executionId,
-                        attempt_id: command.attemptId,
-                        accepted,
-                        error_type: recoveryErrorType,
-                    });
-                };
-
-                const submission: SSESubmission = {
-                    payload: request.body,
-                    sseUrl: `${baseUrl}${request.url}`,
-                    userMessage: parentMessage,
-                    onStart: () => setIsStreaming(true),
-                    onCreated: () => undefined,
-                    onMessage: (text, messageId) => updateActiveMessage((message) => ({
-                        ...message,
-                        text,
-                        ...(messageId ? { messageId } : {}),
-                    })),
-                    onAgentUpdate: (patch) => updateActiveMessage((message) => ({
-                        ...message,
-                        category: patch.category ?? message.category ?? 'agent_answer',
-                        ...(patch.messageId ? { messageId: patch.messageId } : {}),
-                        ...(patch.text != null ? { text: patch.text } : {}),
-                        ...(patch.events ? { events: patch.events } : {}),
-                        ...(patch.finalised ? { unfinished: false } : {}),
-                    })),
-                    onFinal: (data) => updateActiveMessage((message) => ({
-                        ...message,
-                        ...(data.responseMessage ?? {}),
-                        executionId: command.executionId,
-                        attemptId: command.attemptId,
-                        error: false,
-                        unfinished: false,
-                        rateLimitState: 'normal',
-                    })),
-                    onError: (error, errorCode, meta) => {
-                        if (meta?.attemptId && meta.attemptId !== command.attemptId) return;
-                        observeModelRateLimitEvent(queryClient, meta);
-                        accepted = false;
-                        recoveryErrorType = meta?.errorType;
-                        updateActiveMessage((message) => ({
-                            ...message,
-                            error: true,
-                            errorText: error,
-                            errorCode,
-                            errorType: meta?.errorType,
-                            executionId: meta?.executionId ?? command.executionId,
-                            attemptId: meta?.attemptId ?? command.attemptId,
-                            recoverySubjectId: meta?.recoverySubjectId ?? command.subjectId,
-                            modelId: meta?.modelId ?? message.modelId,
-                            rateLimitState: meta?.rateLimitState,
-                            resumeMode: meta?.resumeMode,
-                            unfinished: meta?.errorType === 'rate_limit',
-                            // F051 never renders or stores raw rate-limit detail.
-                            errorDetail: meta?.errorType === 'rate_limit' ? undefined : meta?.errorDetail,
-                        }));
-                    },
-                    onEnd: settle,
-                };
-
-                try {
-                    stream.handle = openChatStream(submission, localize);
-                } catch (error) {
-                    setIsStreaming(false);
-                    liveStreams.delete(keyOf(stream.convoId));
-                    reject(error);
-                }
-            });
-        },
-        [conversationId, isStreaming, keyOf, localize, queryClient, setBucket, setStreamingFlag, streamFor],
-    );
 
     // --- Regenerate: add a new sibling response under the same parent ---
     const regenerate = useCallback(
@@ -1171,7 +1002,6 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 // Same as the send path: failure copy goes to `errorText` so a
                 // partially-streamed answer survives the error.
                 onError: (error, errorCode, meta) => {
-                    observeModelRateLimitEvent(queryClient, meta);
                     setMessages((prev) => {
                         const msgs = [...prev];
                         const idx = msgs.findIndex(
@@ -1185,13 +1015,6 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                 errorCode,
                                 errorType: meta?.errorType,
                                 errorDetail: meta?.errorDetail,
-                                executionId: meta?.executionId,
-                                attemptId: meta?.attemptId,
-                                recoverySubjectId: meta?.recoverySubjectId,
-                                modelId: meta?.modelId,
-                                rateLimitState: meta?.rateLimitState,
-                                resumeMode: meta?.resumeMode,
-                                unfinished: meta?.errorType === "rate_limit",
                             };
                         }
                         return msgs;
@@ -1226,7 +1049,6 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         stopGenerating,
         clearConversation,
         regenerate,
-        recoverRateLimitedMessage,
         setConversationId,
     };
 }

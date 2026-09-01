@@ -62,16 +62,7 @@ export interface SSESubmission {
     onError: (
         error: string,
         errorCode?: number,
-        meta?: {
-            errorType?: string;
-            errorDetail?: string;
-            executionId?: string;
-            attemptId?: string;
-            recoverySubjectId?: string;
-            modelId?: string | number;
-            rateLimitState?: "recovering" | "busy" | "normal";
-            resumeMode?: string;
-        },
+        meta?: { errorType?: string; errorDetail?: string },
     ) => void;
     onStart: () => void;
     onEnd: () => void;
@@ -451,52 +442,6 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
             safeEnd();
         });
 
-    sse.addEventListener("error", (e: MessageEvent) => {
-        try {
-            const data = JSON.parse(e.data);
-            // Resolve the SSE error envelope ({ status_code, status_message,
-            // data }) through the shared api_errors.<code> i18n logic, falling
-            // back to legacy plain-text shapes, then a generic message.
-            const resolved = translateApiErrorMessage(data);
-            const code = typeof data?.status_code === "number" ? data.status_code : undefined;
-            // `data.data` carries the backend's classification alongside the
-            // localized copy: without it the bubble could only ever say
-            // "服务器错误" and the upstream reason (which file, which service,
-            // what it actually said) was dropped on the floor.
-            const payload = data?.data ?? {};
-            onError(resolved || data?.text || data?.message || localize("workstation.chat.connection_lost"), code, {
-                errorType: typeof payload.error_type === "string" ? payload.error_type : undefined,
-                errorDetail:
-                    typeof payload.detail === "string"
-                        ? payload.detail
-                        : typeof payload.exception === "string"
-                            ? payload.exception
-                            : undefined,
-                executionId: typeof payload.execution_id === "string" ? payload.execution_id : undefined,
-                attemptId: typeof payload.attempt_id === "string" ? payload.attempt_id : undefined,
-                recoverySubjectId:
-                    typeof payload.recovery_subject_id === "string"
-                        ? payload.recovery_subject_id
-                        : undefined,
-                modelId:
-                    typeof payload.model_id === "string" || typeof payload.model_id === "number"
-                        ? payload.model_id
-                        : undefined,
-                rateLimitState:
-                    payload.rate_limit_state === "normal"
-                    || payload.rate_limit_state === "recovering"
-                    || payload.rate_limit_state === "busy"
-                        ? payload.rate_limit_state
-                        : undefined,
-                resumeMode: typeof payload.resume_mode === "string" ? payload.resume_mode : undefined,
-            });
-        } catch {
-            // Non-JSON payload — the stream dropped rather than the backend
-            // reporting a typed failure (gateway/proxy timeout, worker restart).
-            onError(localize("workstation.chat.connection_lost"));
-        }
-        safeEnd();
-    });
         sse.addEventListener("cancel", () => safeEnd());
 
         sse.stream();

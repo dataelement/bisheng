@@ -2,7 +2,7 @@
 table instead of mutating membership rows.
 
 Pinning is a pure personal UI preference and is NOT permission-gated. We only
-validate the space exists (and is a SPACE) via ``_get_space_or_raise`` so a pin
+gate on ``visible`` via ``_require_read_permission`` so a pin
 is never written for an invalid id. Stale pins stay inert because every space
 listing re-checks ``view_space`` on read.
 
@@ -33,11 +33,14 @@ def _service():
     return KnowledgeSpaceService(request=None, login_user=_User())
 
 
-async def test_pin_is_not_permission_gated():
-    """Pinning must NOT invoke the view_space read-permission gate."""
+async def test_pin_is_permission_gated():
+    """A pin may only be written for a space the user can actually see.
+
+    3.0 gates this on ``visible``; the customization used to leave pinning
+    ungated as a purely personal preference, and that rule no longer applies.
+    """
     service = _service()
     with (
-        patch.object(service, "_get_space_or_raise", new=AsyncMock()),
         patch.object(service, "_require_read_permission", new=AsyncMock()) as guard,
         patch(f"{_KS}.KnowledgeSpaceUserPinDao") as dao,
     ):
@@ -45,7 +48,7 @@ async def test_pin_is_not_permission_gated():
         dao.unpin = AsyncMock()
         result = await service.pin_space(42, is_pinned=True)
     assert result is True
-    guard.assert_not_called()
+    guard.assert_awaited_once_with(42)
 
 
 async def test_pin_validates_space_exists_before_writing():
@@ -53,7 +56,7 @@ async def test_pin_validates_space_exists_before_writing():
     service = _service()
     boom = RuntimeError("space not found")
     with (
-        patch.object(service, "_get_space_or_raise", new=AsyncMock(side_effect=boom)),
+        patch.object(service, "_require_read_permission", new=AsyncMock(side_effect=boom)),
         patch(f"{_KS}.KnowledgeSpaceUserPinDao") as dao,
     ):
         with pytest.raises(RuntimeError):
@@ -66,7 +69,7 @@ async def test_pin_writes_pin():
     """AC1: is_pinned=True → DAO.pin(user, space) after existence validation."""
     service = _service()
     with (
-        patch.object(service, "_get_space_or_raise", new=AsyncMock()),
+        patch.object(service, "_require_read_permission", new=AsyncMock()),
         patch(f"{_KS}.KnowledgeSpaceUserPinDao") as dao,
     ):
         dao.pin = AsyncMock()
@@ -81,7 +84,7 @@ async def test_unpin_removes_pin():
     """AC3: is_pinned=False → DAO.unpin(user, space)."""
     service = _service()
     with (
-        patch.object(service, "_get_space_or_raise", new=AsyncMock()),
+        patch.object(service, "_require_read_permission", new=AsyncMock()),
         patch(f"{_KS}.KnowledgeSpaceUserPinDao") as dao,
     ):
         dao.pin = AsyncMock()

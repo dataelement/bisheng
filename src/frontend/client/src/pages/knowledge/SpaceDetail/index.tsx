@@ -547,51 +547,13 @@ export function KnowledgeSpaceContent({
         setDeleteEntryIds(new Set());
     }, [permissionEntryProbeKey]);
 
-    // F046: the listing response prefetches each item's effective action permission
-    // ids (computed by the backend's visibility pass anyway), so the "⋯" menus render
-    // complete the moment data arrives — zero follow-up permission requests, scrolling
-    // included. Items WITHOUT prefetched ids (admin bypass branch, older backends)
-    // stay on the legacy lazy path below (ensureFilePermissions). Declared after the
-    // reset effect so, on the same probe-key change, reset runs first and this refills.
-    useEffect(() => {
-        const grants: Record<"download" | "rename" | "del" | "manage", Set<string>> = {
-            download: new Set(),
-            rename: new Set(),
-            del: new Set(),
-            manage: new Set(),
-        };
-        let resolvedAny = false;
-        for (const file of displayFiles) {
-            const id = String(file.id);
-            if (file.isCreating || !/^\d+$/.test(id)) continue;
-            const ids = file.permissionIds;
-            if (!Array.isArray(ids)) continue; // not prefetched -> lazy fallback
-            if (checkedFileIdsRef.current.has(id)) continue;
-            checkedFileIdsRef.current.add(id);
-            resolvedAny = true;
-            const isFolder = file.type === FileType.FOLDER;
-            if (ids.includes(isFolder ? "download_folder" : "download_file")) grants.download.add(id);
-            if (ids.includes(isFolder ? "rename_folder" : "rename_file")) grants.rename.add(id);
-            if (ids.includes(isFolder ? "delete_folder" : "delete_file")) grants.del.add(id);
-            if (ids.includes(isFolder ? "manage_folder_relation" : "manage_file_relation")) grants.manage.add(id);
-        }
-        if (!resolvedAny) return;
-        const merge = (setter: (updater: (prev: Set<string>) => Set<string>) => void, add: Set<string>) => {
-            if (!add.size) return;
-            setter((prev) => {
-                const next = new Set(prev);
-                add.forEach((v) => next.add(v));
-                return next;
-            });
-        };
-        merge(setDownloadEntryIds, grants.download);
-        merge(setRenameEntryIds, grants.rename);
-        merge(setDeleteEntryIds, grants.del);
-        merge(setPermissionEntryIds, grants.manage);
-        // displayFiles is rebuilt every render; the probe key captures the stable id list.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [permissionEntryProbeKey]);
-
+    // The listing used to prefetch each item's effective permission ids so the
+    // "⋯" menus could render complete with no follow-up requests. 3.0's file
+    // listing carries no per-file permissions — it answers space-level actions in
+    // bulk and resolves file-level ones on demand — so that path is gone and
+    // ensureFilePermissions below is the only one left. Worth revisiting if large
+    // listings feel slow: the fix would be a backend `actions` field on the
+    // listing, not a client-side prefetch of ids nothing returns.
     const ensureFilePermissions = useCallback(
         async (file: KnowledgeFile) => {
             const id = String(file.id);

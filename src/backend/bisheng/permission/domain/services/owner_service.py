@@ -16,7 +16,6 @@ from bisheng.permission.domain.models import (
     ProjectionOperationStatus,
 )
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
-from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem
 from bisheng.permission.domain.services.grant_source_service import (
     GrantSnapshot,
     GrantSourceRecord,
@@ -342,100 +341,4 @@ class OwnerService:
             logger.info("Cleaned up %d tuples for %s:%s", len(operations), object_type, object_id)
         except Exception as e:
             logger.warning("Failed to cleanup tuples for %s:%s: %s", object_type, object_id, e)
-
-    @classmethod
-    async def delete_resource_tuples_strict(
-        cls,
-        object_type: str,
-        object_id: str,
-    ) -> int:
-        """Delete and verify all tuples, propagating infrastructure failure.
-
-        Durable deletion workers must not acknowledge a best-effort cleanup as
-        success. The legacy delete path keeps using the tolerant method above.
-        """
-
-        from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
-        from bisheng.permission.domain.services.permission_service import PermissionService
-
-        fga = PermissionService._get_fga()
-        if fga is None:
-            raise RuntimeError("FGA client is unavailable for strict tuple cleanup")
-        object_key = f"{object_type}:{object_id}"
-        tuples = await fga.read_tuples(object=object_key, consistency="HIGHER_CONSISTENCY")
-        operations = [
-            TupleOperation(
-                action="delete",
-                user=tuple_row["user"],
-                relation=tuple_row["relation"],
-                object=tuple_row["object"],
-            )
-            for tuple_row in tuples
-        ]
-        if operations:
-            await PermissionService.batch_write_tuples(
-                operations,
-                raise_on_failure=True,
-                stop_on_failure=True,
-                recovery_owner="caller",
-            )
-        remaining = await fga.read_tuples(object=object_key, consistency="HIGHER_CONSISTENCY")
-        if remaining:
-            raise RuntimeError(f"FGA tuple cleanup verification failed for {object_key}")
-        return len(operations)
-
-
-    @classmethod
-    async def read_relation_subjects_strict(
-        cls,
-        object_type: str,
-        object_id: str,
-        relation: str,
-    ) -> set[str]:
-        """Read one resource relation with authoritative consistency."""
-
-        from bisheng.permission.domain.services.permission_service import PermissionService
-
-        fga = await PermissionService._aget_fga()
-        if fga is None:
-            raise RuntimeError("FGA client is unavailable for strict tuple verification")
-        rows = await fga.read_tuples(
-            object=f"{object_type}:{object_id}",
-            relation=str(relation),
-            consistency="HIGHER_CONSISTENCY",
-        )
-        return {str(row["user"]) for row in rows}
-
-
-    @classmethod
-    async def write_owner_tuple(
-        cls,
-        user_id: int,
-        object_type: str,
-        object_id: str,
-        *,
-        enforce_fga_success: bool = False,
-    ) -> None:
-        """Write an owner tuple for a newly created resource.
-
-        Called during resource creation (F008 integration point).
-        By default this preserves legacy best-effort behavior. Callers that
-        cannot safely continue without owner visibility should pass
-        ``enforce_fga_success=True``.
-        """
-        from bisheng.permission.domain.services.permission_service import PermissionService
-
-        await PermissionService.authorize(
-            object_type=object_type,
-            object_id=object_id,
-            grants=[
-                AuthorizeGrantItem(
-                    subject_type="user",
-                    subject_id=user_id,
-                    relation="owner",
-                    include_children=False,
-                ),
-            ],
-            enforce_fga_success=enforce_fga_success,
-        )
 

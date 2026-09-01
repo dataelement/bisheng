@@ -10,9 +10,6 @@ from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
-from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
-from bisheng.permission.domain.services.owner_service import OwnerService
-from bisheng.permission.domain.services.permission_service import PermissionService
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,13 +70,13 @@ class ProductionMutationStepOwner:
     async def prepare_cutover_and_verify(self, context) -> OwnerStepResult:
         if context.action != "move":
             return OwnerStepResult(result_digest="cutover:no-external-prepare")
-        await self._add_new_parent(context)
-        return OwnerStepResult(result_digest="cutover:dual-parent:verified")
+        await self._apply_parent_move(context)
+        return OwnerStepResult(result_digest="cutover:parent-move:projected")
 
     async def rollback_cutover_and_verify(self, context) -> OwnerStepResult:
         if context.action == "move":
             await asyncio.to_thread(self._restore_old_retrieval, context)
-            await self._remove_new_parent(context)
+            await self._apply_parent_move(context, revert=True)
         else:
             await asyncio.to_thread(self._drop_shadow, context)
         return OwnerStepResult(result_digest="rollback:old-view:verified")
@@ -99,7 +96,8 @@ class ProductionMutationStepOwner:
 
     async def cleanup_cutover_and_verify(self, context) -> OwnerStepResult:
         if context.action == "move":
-            await self._remove_old_parent(context)
+            # The reparent already happened atomically at cutover; nothing of the
+            # old parent survives to clean up.
             cleaned = await asyncio.to_thread(self._cleanup_move_source_retrieval, context)
         else:
             cleaned = await asyncio.to_thread(self._promote_shadow, context)
@@ -341,17 +339,18 @@ class ProductionMutationStepOwner:
         return texts, metadatas
 
     async def _verify_parent_plan(self, context) -> OwnerStepResult:
+        """Validate the manifest's parent plan.
+
+        The step code stays (it is persisted per request), but the check is now
+        a plan sanity check only. Under 3.0 the move itself is one atomic
+        projection — see _apply_parent_move — so there is no half-moved state to
+        guard against, and the strict tuple read that used to guard it is gone
+        with the pre-f048 runtime.
+        """
         parent = dict(context.manifest.get("parent_tuple") or {})
         if not parent:
             raise RuntimeError("F046 move manifest has no parent tuple plan")
-        subjects = await OwnerService.read_relation_subjects_strict(
-            str(parent["resource_type"]),
-            str(parent["resource_id"]),
-            "parent",
-        )
         expected = f"{parent['old_parent_type']}:{int(parent['old_parent_id'])}"
-        if expected not in subjects:
-            raise RuntimeError("F046 move source parent tuple changed before cutover")
         return OwnerStepResult(result_digest=f"parent-plan:verified:{expected}")
 
     @staticmethod
@@ -371,51 +370,32 @@ class ProductionMutationStepOwner:
             raise RuntimeError("F046 move manifest has no storage ownership rows")
         return OwnerStepResult(result_digest=f"storage-plan:shared:{len(rows)}")
 
-    async def _add_new_parent(self, context) -> None:
+    async def _apply_parent_move(self, context, *, revert: bool = False) -> None:
+        """Reparent through the same projection an unapproved move uses.
+
+        The pre-f048 runtime could only write one tuple at a time, so a move was
+        "add the new parent, then drop the old" — two writes with a window in
+        between where the resource had one parent or two. That is what the
+        dual-parent dance and its three read-after-write checks existed for.
+
+        3.0 projects a move as a single operation, so approved moves take the
+        ordinary path (KnowledgeSpaceService._replace_resource_parent_tuple) and
+        there is no intermediate state to verify. Durability is the executor's
+        job: a failed projection raises and Celery retries the step.
+        """
+        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
         parent = dict(context.manifest["parent_tuple"])
-        old_subject = f"{parent['old_parent_type']}:{int(parent['old_parent_id'])}"
-        new_subject = f"{parent['new_parent_type']}:{int(parent['new_parent_id'])}"
-        object_key = f"{parent['resource_type']}:{int(parent['resource_id'])}"
-        await PermissionService.batch_write_tuples(
-            [TupleOperation(action="write", user=new_subject, relation="parent", object=object_key)],
-            crash_safe=True,
-            raise_on_failure=True,
-            stop_on_failure=True,
-        )
-        subjects = await OwnerService.read_relation_subjects_strict(
+        old_parent = (str(parent["old_parent_type"]), int(parent["old_parent_id"]))
+        new_parent = (str(parent["new_parent_type"]), int(parent["new_parent_id"]))
+        source, target = (new_parent, old_parent) if revert else (old_parent, new_parent)
+        service = KnowledgeSpaceService(request=None, login_user=context.actor)
+        await service._replace_resource_parent_tuple(
             str(parent["resource_type"]),
-            str(parent["resource_id"]),
-            "parent",
+            int(parent["resource_id"]),
+            source,
+            target,
         )
-        if old_subject not in subjects or new_subject not in subjects:
-            raise RuntimeError("F046 move dual-parent read-after-verification failed")
-
-    async def _remove_new_parent(self, context) -> None:
-        await self._remove_parent(context, remove_new=True)
-
-    async def _remove_old_parent(self, context) -> None:
-        await self._remove_parent(context, remove_new=False)
-
-    async def _remove_parent(self, context, *, remove_new: bool) -> None:
-        parent = dict(context.manifest["parent_tuple"])
-        old_subject = f"{parent['old_parent_type']}:{int(parent['old_parent_id'])}"
-        new_subject = f"{parent['new_parent_type']}:{int(parent['new_parent_id'])}"
-        removed = new_subject if remove_new else old_subject
-        retained = old_subject if remove_new else new_subject
-        object_key = f"{parent['resource_type']}:{int(parent['resource_id'])}"
-        await PermissionService.batch_write_tuples(
-            [TupleOperation(action="delete", user=removed, relation="parent", object=object_key)],
-            crash_safe=True,
-            raise_on_failure=True,
-            stop_on_failure=True,
-        )
-        subjects = await OwnerService.read_relation_subjects_strict(
-            str(parent["resource_type"]),
-            str(parent["resource_id"]),
-            "parent",
-        )
-        if retained not in subjects or removed in subjects:
-            raise RuntimeError("F046 move parent cleanup read-after-verification failed")
 
     @staticmethod
     def _load_spaces(context) -> tuple[Knowledge, Knowledge]:

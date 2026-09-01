@@ -223,7 +223,6 @@ export interface KnowledgeFile {
      *  rename_file, delete_file, manage_file_relation, … / *_folder variants).
      *  null/undefined = not prefetched (admin bypass or older backend) → the action menu
      *  falls back to the legacy lazy per-file permission checks. */
-    permissionIds?: string[] | null;
     // Transient UI-only fields
     isCreating?: boolean;
     /**
@@ -916,7 +915,6 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         is_multi_version: Boolean(raw?.is_multi_version),
         has_similar: Boolean(raw?.has_similar),
         user_name: raw?.user_name ?? undefined,
-        permissionIds: Array.isArray(raw?.permission_ids) ? (raw.permission_ids as string[]) : null,
     };
 }
 

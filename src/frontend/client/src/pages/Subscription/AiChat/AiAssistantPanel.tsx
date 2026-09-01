@@ -92,7 +92,6 @@ export function AiAssistantPanel({
         stopGenerating,
         clearConversation,
         regenerate,
-        recoverRateLimitedMessage,
     } = activeChat;
 
     // Media parsing state only exists on the workstation hook; channel/file chat
@@ -213,7 +212,6 @@ export function AiAssistantPanel({
                 emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                 onPresetClick={(q) => setInputText(q)}
                 onRegenerate={regenerate}
-                onRecover={recoverRateLimitedMessage}
             />
 
             {/* Input Area */}

@@ -1018,15 +1018,22 @@ class KnowledgeSpaceMutationExecutor:
         manifest = context.manifest
         file_ids = sorted({int(file_id) for file_id in manifest.get("file_ids", [])})
         if context.step_code == DeleteExecutionStepCode.FGA:
-            from bisheng.permission.domain.services.owner_service import OwnerService
+            # Same projection an unapproved delete uses. The pre-f048 runtime had
+            # to enumerate every tuple, delete them one by one and read back to
+            # confirm; 3.0 projects the delete per resource, and a failure raises
+            # so Celery retries the step.
+            from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
-            deleted_count = 0
-            for resource in manifest.get("fga_resources", []):
-                deleted_count += await OwnerService.delete_resource_tuples_strict(
-                    str(resource["resource_type"]),
-                    str(resource["resource_id"]),
-                )
-            return VerifiedMutationStepResult(result_digest=f"fga:verified:{deleted_count}")
+            resources = [
+                (str(resource["resource_type"]), int(resource["resource_id"]))
+                for resource in manifest.get("fga_resources", [])
+            ]
+            if resources:
+                await KnowledgeSpaceService(
+                    request=None,
+                    login_user=context.actor,
+                )._cleanup_resource_tuples(resources)
+            return VerifiedMutationStepResult(result_digest=f"fga:projected:{len(resources)}")
 
         if context.step_code == DeleteExecutionStepCode.MINIO:
             from bisheng.core.storage.minio.minio_manager import get_minio_storage
@@ -2437,8 +2444,8 @@ class KnowledgeSpaceMutationExecutor:
 
     @staticmethod
     async def _authorize_file(context: UploadStepDispatchContext) -> str:
+        from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem
         from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
-        from bisheng.permission.domain.services.owner_service import OwnerService
         from bisheng.permission.domain.services.permission_service import PermissionService
 
         resources = context.checkpoint.get("fga_resources") or []
@@ -2458,10 +2465,19 @@ class KnowledgeSpaceMutationExecutor:
                 raise_on_failure=True,
                 stop_on_failure=True,
             )
-            await OwnerService.write_owner_tuple(
-                int(resource["owner_user_id"]),
-                str(resource["resource_type"]),
-                str(resource["resource_id"]),
+            # OwnerService.write_owner_tuple was only ever a wrapper around this
+            # call; it goes with the rest of the pre-f048 runtime.
+            await PermissionService.authorize(
+                object_type=str(resource["resource_type"]),
+                object_id=str(resource["resource_id"]),
+                grants=[
+                    AuthorizeGrantItem(
+                        subject_type="user",
+                        subject_id=int(resource["owner_user_id"]),
+                        relation="owner",
+                        include_children=False,
+                    ),
+                ],
                 enforce_fga_success=True,
             )
         return f"fga:{context.idempotency_key}"
