@@ -1035,18 +1035,24 @@ DASHBOARD_DATASET = [
                     name="业务域",
                     field="business_domain_name"
                 ),
-                # 原始上传库XX: renamed from "上传人XX" (2026-09-01) to match corrected ETL
-                # semantics — these track the org bound to the file's ORIGINAL upload space
-                # (frozen via KnowledgeFile.original_knowledge_id, F081), not the uploading
-                # person's own current department. See mid_table.py::_build_knowledge_space_content_records.
-                DimensionConfig(name="原始上传库公司", field="uploader_company_name"),
-                DimensionConfig(name="原始上传库部门", field="uploader_department_name"),
-                DimensionConfig(name="原始上传库科室", field="uploader_office_name"),
-                DimensionConfig(name="原始上传库班组", field="uploader_squad_name"),
+                # 上传人XX (2026-09-01): reverted to its original meaning — "current
+                # uploader's current department" — product wants this untouched.
+                DimensionConfig(name="上传人公司", field="uploader_company_name"),
+                DimensionConfig(name="上传人部门", field="uploader_department_name"),
+                DimensionConfig(name="上传人科室", field="uploader_office_name"),
+                DimensionConfig(name="上传人班组", field="uploader_squad_name"),
                 DimensionConfig(name="所属公司", field="belonging_company_name"),
                 DimensionConfig(name="所属部门", field="belonging_department_name"),
                 DimensionConfig(name="所属科室", field="belonging_office_name"),
                 DimensionConfig(name="所属班组", field="belonging_squad_name"),
+                # 原始上传库XX (2026-09-01): NEW, separate dimension — library->org mapping
+                # (same rule as belonging_*) frozen at the file's ORIGINAL upload space
+                # (KnowledgeFile.original_knowledge_id, F081), never recomputed afterward.
+                # See mid_table.py::_build_knowledge_space_content_records.
+                DimensionConfig(name="原始上传库公司", field="original_upload_company_name"),
+                DimensionConfig(name="原始上传库部门", field="original_upload_department_name"),
+                DimensionConfig(name="原始上传库科室", field="original_upload_office_name"),
+                DimensionConfig(name="原始上传库班组", field="original_upload_squad_name"),
                 DimensionConfig(
                     name="上传人ID",
                     field="uploader_user_id"

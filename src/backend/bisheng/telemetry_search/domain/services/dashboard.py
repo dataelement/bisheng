@@ -32,7 +32,7 @@ from .department_label_resolver import resolve_short_name
 # options for these fields must come from the live Department tree (AC-01: show org units with
 # no data too), not from an ES terms aggregation over the dataset index.
 _NAME_FIELD_TO_ORG_LEVEL: Dict[str, str] = {value: key for key, value in ORG_LEVEL_FIELD_NAMES.items()}
-_ORG_FIELD_PREFIXES = ("belonging_", "uploader_")
+_ORG_FIELD_PREFIXES = ("belonging_", "uploader_", "original_upload_")
 
 
 def _org_level_for_field(field: str) -> str | None:

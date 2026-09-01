@@ -398,14 +398,15 @@ def test_content_sync_keeps_team_and_clinic_levels_separate(
     assert records[0].space_level_name == expected_name
 
 
-def test_uploader_organization_follows_original_space_not_current_uploader_department(monkeypatch):
-    """Customer correction (2026-09-01): 原始上传库XX must be the library->org mapping of
-    the file's ORIGINAL upload space (frozen forever, via KnowledgeFile.original_knowledge_id
-    — see F081), not "whichever department the uploading person currently sits in". A file
-    originally uploaded into dept-库A (bound to department A), later moved to dept-库B (bound
-    to department B) by a DIFFERENT user who now belongs to department B, must still report
-    原始上传库部门=A — both because it moved (belonging follows the CURRENT space, B) and
-    because the mover isn't the original uploader (whose own department is irrelevant here)."""
+def test_original_upload_organization_follows_original_space_not_current_uploader_department(monkeypatch):
+    """Customer correction (2026-09-01): 原始上传库XX is a NEW, separate dimension — the
+    library->org mapping of the file's ORIGINAL upload space (frozen forever, via
+    KnowledgeFile.original_knowledge_id — see F081), not "whichever department the
+    uploading person currently sits in". A file originally uploaded into dept-库A (bound
+    to department A), later moved to dept-库B (bound to department B) by a DIFFERENT user
+    who now belongs to department B, must report 原始上传库部门=A (frozen at the original
+    space) while 上传人部门 keeps its OLD, UNCHANGED meaning — the current uploader-of-record's
+    current department, B — and belonging follows the CURRENT space, also B."""
     worker_module = _import_worker_mid_table()
     monkeypatch.setattr(
         worker_module,
@@ -452,15 +453,16 @@ def test_uploader_organization_follows_original_space_not_current_uploader_depar
     )
 
     record = records[0]
-    assert record.uploader_department_name == "部门A"
+    assert record.original_upload_department_name == "部门A"
+    assert record.uploader_department_name == "部门B"
     assert record.belonging_department_name == "部门B"
 
 
-def test_uploader_organization_falls_back_to_current_space_when_original_id_missing(monkeypatch):
+def test_original_upload_organization_falls_back_to_current_space_when_original_id_missing(monkeypatch):
     """Files created before 2026-08-10 (or not yet covered by
-    backfill_knowledge_file_original_origin.py) have original_knowledge_id=None — must
-    degrade to the current space's library->org mapping (still correct-shaped, just not
-    frozen), not crash and not silently fall back to zero/empty."""
+    backfill_knowledge_file_original_origin.py) have original_knowledge_id=None — 原始上传库
+    must degrade to the current space's library->org mapping (still correct-shaped, just
+    not frozen), not crash and not silently fall back to zero/empty."""
     worker_module = _import_worker_mid_table()
     monkeypatch.setattr(
         worker_module,
@@ -498,7 +500,7 @@ def test_uploader_organization_falls_back_to_current_space_when_original_id_miss
         category_label_cache={1: ({}, {})},
     )
 
-    assert records[0].uploader_department_name == "部门A"
+    assert records[0].original_upload_department_name == "部门A"
 
 
 def test_knowledge_space_content_mapping_excludes_tenant_and_common_user_context():

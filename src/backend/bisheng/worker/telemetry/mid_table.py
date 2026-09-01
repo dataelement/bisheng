@@ -697,6 +697,11 @@ def _build_knowledge_space_content_records(
             category_label_cache[tenant_id] = FileClassificationLabelService.get_label_lookup_for_tenant(tenant_id)
         category_labels, subcategory_labels = category_label_cache[tenant_id]
         scope = space_scope_map.get(int(space.id))
+        # 上传人XX keeps its original, unchanged meaning: whoever is currently on record as
+        # this file's uploader (file_record.user_id), in THEIR current department — product
+        # wants this field's semantics untouched. 原始上传库XX is the new, separate,
+        # library->org mapping frozen at the file's ORIGINAL upload space.
+        uploader_department = primary_department_map.get(int(file_record.user_id or 0))
         original_space_id = _original_space_id_for(file_record, space)
         original_upload_department = _resolve_belonging_start_department(
             scope=original_space_scope_map.get(original_space_id),
@@ -717,11 +722,15 @@ def _build_knowledge_space_content_records(
                 uploader=uploader,
                 space_level=_resolve_content_stat_space_level(scope),
                 uploader_organization=resolve_organization_names(
-                    original_upload_department,
+                    uploader_department,
                     departments_by_id,
                 ),
                 belonging_organization=resolve_organization_names(
                     belonging_department,
+                    departments_by_id,
+                ),
+                original_upload_organization=resolve_organization_names(
+                    original_upload_department,
                     departments_by_id,
                 ),
                 file_category_labels=category_labels,

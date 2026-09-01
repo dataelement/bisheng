@@ -41,7 +41,7 @@ const ORG_LEVEL_BY_SUFFIX: Record<string, OrgLevel> = {
   squad_name: "squad",
 }
 
-const ORG_FIELD_PREFIXES = ["belonging_", "uploader_"]
+const ORG_FIELD_PREFIXES = ["belonging_", "uploader_", "original_upload_"]
 
 // F058 AC-11: person-name dimensions that must show their paired department alongside
 // them (same visual cell) to disambiguate same-named people across departments. Scoped
