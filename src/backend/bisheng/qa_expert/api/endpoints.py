@@ -30,6 +30,7 @@ from bisheng.qa_expert.domain.schemas import (
     CommentCreateRequest,
     CommentDetailResponse,
     CommentPageData,
+    ExpertBatchIdsRequest,
     ExpertCreateRequest,
     ExpertResponse,
     ExpertUpdateRequest,
@@ -118,6 +119,8 @@ async def list_experts(
     answer_desc: bool | None = Query(None, description="回答数排序"),
     adoption_desc: bool | None = Query(None, description="采纳数排序"),
     vote_desc: bool | None = Query(None, description="点赞数排序"),
+    # 查询串是字符串 "1"；用 int + ge/le，不要用 Literal[0, 1]（Pydantic 不把 "1" 当成 1）
+    status: int | None = Query(None, ge=0, le=1, description="专家状态: 1有效 0停用, 缺省全部"),
     page: int = Query(1, ge=1, description="页码"),
     limit: int = Query(20, ge=1, le=500, description="每页数量"),
     service: ExpertService = Depends(get_expert_service),
@@ -138,6 +141,7 @@ async def list_experts(
         answer_desc=answer_desc,
         adoption_desc=adoption_desc,
         vote_desc=vote_desc,
+        status=status,
     )
     return resp_200(data={"experts": experts, "total": total})
 
@@ -163,6 +167,38 @@ async def create_expert(
     try:
         expert = await service.create_expert(request, user=user)
         return resp_200(data=_jsonable(expert))
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+    except Exception as e:
+        return resp_500(code=500, message=str(e))
+
+
+@router.post("/experts/batch-disable")
+async def batch_disable_experts(
+    request: ExpertBatchIdsRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: ExpertService = Depends(get_expert_service),
+):
+    """批量停用专家"""
+    try:
+        result = await service.batch_disable_experts(request.expert_ids, user)
+        return resp_200(data=result)
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+    except Exception as e:
+        return resp_500(code=500, message=str(e))
+
+
+@router.post("/experts/batch-delete")
+async def batch_hard_delete_experts(
+    request: ExpertBatchIdsRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: ExpertService = Depends(get_expert_service),
+):
+    """批量硬删专家档案(无回答记录时可删)"""
+    try:
+        result = await service.batch_hard_delete_experts(request.expert_ids, user)
+        return resp_200(data=result)
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
     except Exception as e:
@@ -198,6 +234,22 @@ async def delete_expert(
         if not success:
             return resp_500(code=500, message="Failed to disable expert")
         return resp_200(data={"message": "Expert disabled successfully", "deprecated": True})
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+    except Exception as e:
+        return resp_500(code=500, message=str(e))
+
+
+@router.post("/experts/{expert_id}/delete")
+async def hard_delete_expert(
+    expert_id: int,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: ExpertService = Depends(get_expert_service),
+):
+    """硬删专家档案(无回答记录时可删)"""
+    try:
+        await service.hard_delete_expert(expert_id, user)
+        return resp_200(data={"message": "Expert deleted successfully", "expert_id": expert_id})
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
     except Exception as e:

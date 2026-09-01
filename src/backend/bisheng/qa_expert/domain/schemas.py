@@ -109,6 +109,42 @@ class ExpertCreateRequest(BaseModel):
     wechat_user_id: str | None = Field(None, description="绑定企业微信用户id")
 
 
+class ExpertBatchIdsRequest(BaseModel):
+    """批量操作专家 - 请求"""
+
+    expert_ids: list[int] = Field(..., min_length=1, max_length=200, description="专家档案 ID 列表")
+
+    @field_validator("expert_ids")
+    @classmethod
+    def _normalize_expert_ids(cls, value: list[int]) -> list[int]:
+        seen: set[int] = set()
+        normalized: list[int] = []
+        for item in value:
+            expert_id = int(item)
+            if expert_id <= 0 or expert_id in seen:
+                continue
+            seen.add(expert_id)
+            normalized.append(expert_id)
+        if not normalized:
+            raise ValueError("expert_ids must contain at least one valid id")
+        return normalized
+
+
+class ExpertBatchItemFailure(BaseModel):
+    """批量操作单条失败项"""
+
+    expert_id: int
+    code: int
+    message: str
+
+
+class ExpertBatchOperationResult(BaseModel):
+    """批量操作专家 - 响应"""
+
+    succeeded: list[int] = Field(default_factory=list)
+    failed: list[ExpertBatchItemFailure] = Field(default_factory=list)
+
+
 class ExpertUpdateRequest(BaseModel):
     """更新专家 - 请求"""
 
