@@ -1736,11 +1736,15 @@ class ChannelService:
                 source_list_changed = True
 
             if to_add_sources:
-                # Enforce the `info_source_subscribe` quota before subscribing; deduped
-                # against the operator's existing sources, so swapping sources within
-                # this channel does not consume extra slots.
+                # Enforce the `info_source_subscribe` quota against the channel CREATOR's
+                # allowance — the spec's quota owner — not the operator's: managers and
+                # editors can add sources to someone else's channel, and those sources
+                # count toward the creator's deduped total in every later check.
                 await QuotaService.check_info_source_subscribe_limit(
-                    login_user.user_id, login_user.tenant_id, to_add_sources, login_user=login_user
+                    channel.user_id,
+                    channel.tenant_id or login_user.tenant_id,
+                    to_add_sources,
+                    login_user=login_user,
                 )
                 # Subscribe only sources not already subscribed (missing from
                 # channel_info_source). Already-subscribed sources are skipped.

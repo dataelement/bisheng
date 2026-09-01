@@ -46,11 +46,13 @@ export * from './components/Tabs';
 // (组件-Segmented分段控制器.md). The gray track + sliding thumb, equal-width
 // segments and the touch rules are baked in; every label is a prop.
 export * from './components/Segmented';
-// Badge — 「is there anything new」 and 「how many」, in four forms: the corner
-// count, the corner dot, the standalone number after a label, and the inline
-// status dot (组件-Badge徽标.md). One 16px size, the two semantic colors, the
-// no-99+ rule and「0 shows nothing」are baked in; it is never clickable — the
-// host is. What says「what this is」is the Tag below (判别表 in Badge §1).
+// Badge — 「is there anything new」,「how many」and「which source」, in five
+// forms: the corner count, the corner dot, the standalone number after a
+// label, the unread dot in a list row's own column, and the 溯源角标 inside
+// running text (组件-Badge徽标.md). One 16px size, the semantic colors, the
+// no-99+ rule and「0 shows nothing」are baked in; only the citation form is
+// clickable — everywhere else the click belongs to the host. What says「what
+// this is」is the Tag below (判别表 in Badge §1).
 export * from './components/Badge';
 // Tag — one word stuck on an object: what it is, what state it is in
 // (组件-Tag标签.md). Light tint + dark text only, the five semantic colors plus

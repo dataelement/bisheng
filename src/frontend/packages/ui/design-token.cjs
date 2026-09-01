@@ -227,6 +227,7 @@ const TAG = [
   { label: '已完成',                   bg: '#E8FFEA', fg: '#00B42A', note: 'success tint' },
   { label: '已驳回',                   bg: '#FFECE8', fg: '#F53F3F', note: 'danger tint' },
   { label: '审批中（例外：永远蓝）',    bg: '#E8F3FF', fg: '#165DFF', note: '--tag-approving-tint / --tag-approving，不换肤' },
+  { label: '网页来源角标（例外：永远紫）', bg: '#F5E8FF', fg: '#722ED1', note: '--citation-web-tint / --citation-web，与技能紫同值' },
 ];
 
 /* ------------------------------------------------------------------ *

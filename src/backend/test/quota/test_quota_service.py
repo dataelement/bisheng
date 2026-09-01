@@ -301,6 +301,65 @@ class TestCheckQuota:
         assert result is True
 
 
+class TestCheckInfoSourceSubscribeLimit:
+    """info_source_subscribe enforcement: deduped usage + quota-owner admin exemption.
+
+    The quota owner is the channel creator, not necessarily the operator —
+    update_channel lets managers/editors add sources to someone else's channel.
+    """
+
+    @pytest.mark.asyncio
+    async def test_admin_operator_passes(self, mock_admin_user):
+        """Admin operator short-circuits before any owner/usage lookup."""
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        with patch(
+            "bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles",
+            new=AsyncMock(side_effect=AssertionError("owner roles must not be queried")),
+        ):
+            await QuotaService.check_info_source_subscribe_limit(10, 1, ["s1"], login_user=mock_admin_user)
+
+    @pytest.mark.asyncio
+    async def test_admin_owner_exempt_for_non_admin_operator(self, mock_normal_user):
+        """Creator holding AdminRole stays exempt when a plain manager edits the channel."""
+        from bisheng.database.constants import AdminRole
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        with (
+            patch(
+                "bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles",
+                new=AsyncMock(return_value=[_make_user_role(AdminRole)]),
+            ),
+            patch.object(
+                QuotaService,
+                "get_effective_quota",
+                new=AsyncMock(side_effect=AssertionError("admin owner must be exempt")),
+            ),
+        ):
+            await QuotaService.check_info_source_subscribe_limit(1, 1, ["s1"], login_user=mock_normal_user)
+
+    @pytest.mark.asyncio
+    async def test_deduped_union_is_compared_to_limit(self, mock_normal_user):
+        """Re-using an already-counted source never consumes a slot; only the
+        deduped post-save total is compared against the effective limit."""
+        from bisheng.common.errcode.tenant_quota import TenantRoleQuotaExceededError
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        with (
+            patch(
+                "bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles",
+                new=AsyncMock(return_value=[_make_user_role(3)]),
+            ),
+            patch.object(QuotaService, "get_effective_quota", new=AsyncMock(return_value=3)),
+            patch.object(QuotaService, "_distinct_info_source_ids", new=AsyncMock(return_value={"a", "b", "x"})),
+        ):
+            # Both already counted → total stays 3 == limit → allowed.
+            await QuotaService.check_info_source_subscribe_limit(10, 1, ["a", "x"], login_user=mock_normal_user)
+            # "y" is new → deduped total 4 > 3 → blocked.
+            with pytest.raises(TenantRoleQuotaExceededError):
+                await QuotaService.check_info_source_subscribe_limit(10, 1, ["a", "y"], login_user=mock_normal_user)
+
+
 class TestKI01SqlTemplateSchema:
     """Regression for v2.5.0/F005 KI-01 (2026-04-19 fixed).
 
