@@ -25,6 +25,7 @@ from bisheng.common.errcode.qa_expert import (
     QaExpertCommentNotAllowedError,
     QaExpertContentLockedError,
     QaExpertDisabledError,
+    QaExpertHasAnswersCannotDeleteError,
     QaExpertQuestionAccessDeniedError,
 )
 from bisheng.common.utils.beijing_time import beijing_epoch_seconds, dump_qa_datetimes, to_beijing_iso
@@ -182,6 +183,8 @@ class ExpertService:
 
     def __init__(self):
         self.repository = ExpertRepository()
+        self.invite_repository = QuestionInviteRepository()
+        self.answer_repository = AnswerRepository()
         self.publish_service = None
 
     def _publish(self):
@@ -477,6 +480,48 @@ class ExpertService:
         """兼容 DELETE：映射为停用，不硬删。"""
         await self.disable_expert(expert_id, user)
         return True
+
+    async def hard_delete_expert(self, expert_id: int, user) -> None:
+        """硬删专家档案：无未软删回答时可删；历史回答保留 expert_id 引用。"""
+        self._require_admin(user)
+        expert = await self.repository.get_by_id(expert_id)
+        if not expert:
+            raise ExpertNotFoundError()
+        answer_count = await self.answer_repository.count_active_by_expert_id(expert_id)
+        if answer_count > 0:
+            raise QaExpertHasAnswersCannotDeleteError()
+        if int(expert.status) == EXPERT_STATUS_ACTIVE:
+            await self._publish().on_expert_disabled(int(expert.user_id))
+        await self.invite_repository.delete_by_expert_id(expert_id)
+        deleted = await self.repository.delete(expert_id)
+        if not deleted:
+            raise ExpertNotFoundError()
+
+    async def batch_disable_experts(self, expert_ids: list[int], user) -> dict:
+        """批量停用专家，单条失败不影响其余条目。"""
+        self._require_admin(user)
+        succeeded: list[int] = []
+        failed: list[dict] = []
+        for expert_id in expert_ids:
+            try:
+                await self.disable_expert(expert_id, user)
+                succeeded.append(expert_id)
+            except BaseErrorCode as exc:
+                failed.append({"expert_id": expert_id, "code": exc.code, "message": exc.message})
+        return {"succeeded": succeeded, "failed": failed}
+
+    async def batch_hard_delete_experts(self, expert_ids: list[int], user) -> dict:
+        """批量硬删专家档案，单条失败不影响其余条目。"""
+        self._require_admin(user)
+        succeeded: list[int] = []
+        failed: list[dict] = []
+        for expert_id in expert_ids:
+            try:
+                await self.hard_delete_expert(expert_id, user)
+                succeeded.append(expert_id)
+            except BaseErrorCode as exc:
+                failed.append({"expert_id": expert_id, "code": exc.code, "message": exc.message})
+        return {"succeeded": succeeded, "failed": failed}
 
     async def get_expertinfo(self, expert_name: str) -> dict | None:
         """获取专家信息"""

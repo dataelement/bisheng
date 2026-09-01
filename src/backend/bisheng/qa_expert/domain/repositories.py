@@ -225,7 +225,7 @@ class ExpertRepository:
             return expert
 
     async def delete(self, expert_id: int) -> bool:
-        """删除专家"""
+        """硬删专家档案行"""
         async with get_async_db_session() as session:
             expert = await self.get_by_id(expert_id)
             if not expert:
@@ -234,6 +234,15 @@ class ExpertRepository:
             await session.commit()
             await session.flush()
             return True
+
+    async def count_by_ids(self, expert_ids: list[int]) -> int:
+        """统计给定 ID 中仍存在的专家档案数"""
+        if not expert_ids:
+            return 0
+        async with get_async_db_session() as session:
+            stmt = select(func.count()).select_from(Expert).where(Expert.id.in_(expert_ids))
+            result = await session.exec(stmt)
+            return int(result.one())
 
     async def get_expertinfo(self, expert_name: str):
         """原子性增加专家的回答数量"""
@@ -321,6 +330,15 @@ class QuestionInviteRepository:
             stmt = select(QuestionInvite.question_id).where(QuestionInvite.user_id == user_id)
             result = await session.exec(stmt)
             return [int(item) for item in result.all()]
+
+    async def delete_by_expert_id(self, expert_id: int) -> None:
+        """删除专家相关的全部邀请行(硬删前清理)"""
+        async with get_async_db_session() as session:
+            stmt = select(QuestionInvite).where(QuestionInvite.expert_id == expert_id)
+            result = await session.exec(stmt)
+            for row in result.all():
+                await session.delete(row)
+            await session.commit()
 
 
 class QuestionRepository:
@@ -663,6 +681,17 @@ class AnswerRepository:
             result = await session.exec(stmt)
 
             return result.first()
+
+    async def count_active_by_expert_id(self, expert_id: int) -> int:
+        """统计专家未软删的回答数(硬删前校验)"""
+        async with get_async_db_session() as session:
+            stmt = (
+                select(func.count())
+                .select_from(Answer)
+                .where(and_(Answer.expert_id == expert_id, Answer.status != 3))
+            )
+            result = await session.exec(stmt)
+            return int(result.one())
 
     async def count_adopted_by_question_id(self, question_id: int) -> int:
         """统计同题未软删且已采纳的回答数（用于最多 3 个最佳答案上限）。"""

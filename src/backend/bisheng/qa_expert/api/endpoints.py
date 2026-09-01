@@ -30,6 +30,7 @@ from bisheng.qa_expert.domain.schemas import (
     CommentCreateRequest,
     CommentDetailResponse,
     CommentPageData,
+    ExpertBatchIdsRequest,
     ExpertCreateRequest,
     ExpertResponse,
     ExpertUpdateRequest,
@@ -169,6 +170,38 @@ async def create_expert(
         return resp_500(code=500, message=str(e))
 
 
+@router.post("/experts/batch-disable")
+async def batch_disable_experts(
+    request: ExpertBatchIdsRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: ExpertService = Depends(get_expert_service),
+):
+    """批量停用专家"""
+    try:
+        result = await service.batch_disable_experts(request.expert_ids, user)
+        return resp_200(data=result)
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+    except Exception as e:
+        return resp_500(code=500, message=str(e))
+
+
+@router.post("/experts/batch-delete")
+async def batch_hard_delete_experts(
+    request: ExpertBatchIdsRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: ExpertService = Depends(get_expert_service),
+):
+    """批量硬删专家档案(无回答记录时可删)"""
+    try:
+        result = await service.batch_hard_delete_experts(request.expert_ids, user)
+        return resp_200(data=result)
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+    except Exception as e:
+        return resp_500(code=500, message=str(e))
+
+
 @router.put("/experts/{expert_id}", response_model=ExpertResponse)
 async def update_expert(
     expert_id: int,
@@ -198,6 +231,22 @@ async def delete_expert(
         if not success:
             return resp_500(code=500, message="Failed to disable expert")
         return resp_200(data={"message": "Expert disabled successfully", "deprecated": True})
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+    except Exception as e:
+        return resp_500(code=500, message=str(e))
+
+
+@router.post("/experts/{expert_id}/delete")
+async def hard_delete_expert(
+    expert_id: int,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: ExpertService = Depends(get_expert_service),
+):
+    """硬删专家档案(无回答记录时可删)"""
+    try:
+        await service.hard_delete_expert(expert_id, user)
+        return resp_200(data={"message": "Expert deleted successfully", "expert_id": expert_id})
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
     except Exception as e:
