@@ -240,7 +240,9 @@ async def test_daily_recovery_reinvokes_agent_without_checkpoint(stream_env, mon
     monkeypatch.setattr(langgraph.prebuilt, "create_react_agent", _create_react_agent)
     monkeypatch.setattr(chat_service, "_build_tool_meta", lambda _tool: {})
 
-    model_info = SimpleNamespace(id=17, displayName="qwen3.7-plus")
+    # Workstation config serializes model ids as strings, while the recovery
+    # service authorizes and carries the target model as an integer.
+    model_info = SimpleNamespace(id="17", displayName="qwen3.7-plus")
     ws_config = SimpleNamespace(systemPrompt="", models=[model_info])
     conversation = SimpleNamespace(chat_id="chat-1", user_id=7, name="Existing Chat")
     recovery_message = SimpleNamespace(id=101, chat_id="chat-1")

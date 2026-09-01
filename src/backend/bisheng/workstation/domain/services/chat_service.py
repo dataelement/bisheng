@@ -1543,7 +1543,10 @@ async def _agent_stream_chat_completion(
             if recovery_message is None:
                 raise ValueError("recovery message is required")
             ws_config = await WorkStationService.aget_config()
-            model_info = next((model for model in ws_config.models if model.id == recovery_attempt.model_id), None)
+            model_info = next(
+                (model for model in ws_config.models if str(model.id) == str(recovery_attempt.model_id)),
+                None,
+            )
             if model_info is None:
                 raise ValueError("recovery model is unavailable")
             conversation = await MessageSessionDao.async_get_one(recovery_message.chat_id)
@@ -1562,6 +1565,7 @@ async def _agent_stream_chat_completion(
             attempt_id = recovery_attempt.attempt_id
         conversation_id = conversation.chat_id
     except (BaseErrorCode, ValueError) as exc:
+        logger.warning("Agent chat setup rejected: {}", exc)
         error_response = exc if isinstance(exc, BaseErrorCode) else ServerError(message=str(exc))
         return StreamingResponse(
             iter([error_response.to_sse_event_instance_str()]),
