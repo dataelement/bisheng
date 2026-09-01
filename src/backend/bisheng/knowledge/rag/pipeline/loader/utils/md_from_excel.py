@@ -60,17 +60,14 @@ def unmerge_and_read_sheet(sheet_obj):
     if sheet_obj.max_row == 0 or sheet_obj.max_column == 0:
         return []
 
-    max_row = sheet_obj.max_row
-    max_column = sheet_obj.max_column
-
-    # 处理 merged cells
-    merged_map = {}
+    # Keep merged-range content only at its top-left coordinate. Covered cells
+    # must remain empty so repeated values do not pollute Markdown chunks.
+    merged_top_left_values = {}
     for merged_range in sheet_obj.merged_cells.ranges:
-        min_col, min_row, max_col, max_row_r = merged_range.bounds
-        val = sheet_obj.cell(row=min_row, column=min_col).value
-        for r in range(min_row, max_row_r + 1):
-            for c in range(min_col, max_col + 1):
-                merged_map[(r, c)] = val
+        min_col, min_row, _, _ = merged_range.bounds
+        merged_top_left_values[(min_row, min_col)] = sheet_obj.cell(
+            row=min_row, column=min_col
+        ).value
 
     data_grid = []
     empty_row_num = 0
@@ -81,7 +78,7 @@ def unmerge_and_read_sheet(sheet_obj):
         row_empty = True
 
         for c_idx, cell in enumerate(row):
-            value = merged_map.get((r_idx+1, c_idx+1), cell.value)
+            value = merged_top_left_values.get((r_idx + 1, c_idx + 1), cell.value)
             row_data.append(value)
 
             if value is not None and str(value).strip() != "":
