@@ -24,6 +24,9 @@ async def _build_filter(
     service = _service(threshold=threshold)
     service._non_primary_ids = AsyncMock(return_value=non_primary_ids)
     service._list_primary_file_ids_in_space = AsyncMock(return_value=primary_ids)
+    # These cases cover the primary-version boundary, not the file-change
+    # approval guard; report nothing hidden rather than requiring a tenant.
+    service._list_file_change_excluded_ids = AsyncMock(return_value=set())
     action_map = {str(file_id): frozenset({"visible"}) for file_id in visible_ids}
     with patch(
         "bisheng.knowledge.domain.services.knowledge_file_visibility_service.batch_check_business_actions",

@@ -33,6 +33,7 @@ from bisheng.knowledge.domain.services.knowledge_space_mutation_step_owner impor
     MutationStepOwner,
     OwnerStepResult,
     ProductionMutationStepOwner,
+    build_context_actor,
 )
 
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
@@ -1031,7 +1032,7 @@ class KnowledgeSpaceMutationExecutor:
             if resources:
                 await KnowledgeSpaceService(
                     request=None,
-                    login_user=context.actor,
+                    login_user=build_context_actor(context),
                 )._cleanup_resource_tuples(resources)
             return VerifiedMutationStepResult(result_digest=f"fga:projected:{len(resources)}")
 

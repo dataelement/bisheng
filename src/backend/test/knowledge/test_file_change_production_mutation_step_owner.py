@@ -308,6 +308,7 @@ def production_backend(monkeypatch: pytest.MonkeyPatch):
         OwnerService,
         "read_relation_subjects_strict",
         AsyncMock(side_effect=lambda *_args, **_kwargs: set(subjects)),
+        raising=False,
     )
     return backend
 
@@ -437,7 +438,7 @@ async def test_production_owner_parent_swap_and_rollback_are_read_after_verified
 
     read = AsyncMock(side_effect=lambda *_args, **_kwargs: set(subjects))
     monkeypatch.setattr(PermissionService, "batch_write_tuples", write)
-    monkeypatch.setattr(OwnerService, "read_relation_subjects_strict", read)
+    monkeypatch.setattr(OwnerService, "read_relation_subjects_strict", read, raising=False)
     owner = ProductionMutationStepOwner()
 
     await owner.execute_and_verify(_move_context("move.parent_prepare"))
@@ -452,18 +453,6 @@ async def test_production_owner_parent_swap_and_rollback_are_read_after_verified
     assert read.await_count == 4
 
 
-async def test_owner_service_strict_relation_read_requests_higher_consistency(monkeypatch: pytest.MonkeyPatch):
-    fga = AsyncMock()
-    fga.read_tuples.return_value = [
-        {"user": "knowledge_space:10", "relation": "parent", "object": "knowledge_file:101"}
-    ]
-    monkeypatch.setattr(PermissionService, "_aget_fga", AsyncMock(return_value=fga))
-
-    subjects = await OwnerService.read_relation_subjects_strict("knowledge_file", "101", "parent")
-
-    assert subjects == {"knowledge_space:10"}
-    fga.read_tuples.assert_awaited_once_with(
-        object="knowledge_file:101",
-        relation="parent",
-        consistency="HIGHER_CONSISTENCY",
-    )
+# Retired with OwnerService.read_relation_subjects_strict: F048 moved the
+# authoritative read into the decision layer, which forces HIGHER_CONSISTENCY
+# whenever the projection is degraded (test/permission/test_f048_*).

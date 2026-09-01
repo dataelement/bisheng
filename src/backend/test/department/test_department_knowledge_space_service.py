@@ -195,7 +195,9 @@ def _make_department(*, dept_id: int = 10, name: str = "财务部"):
 @pytest.mark.asyncio
 async def test_batch_create_spaces_creates_binding_and_returns_infos():
     DepartmentKnowledgeSpaceService = _load_service_class()
-    req = DepartmentKnowledgeSpaceBatchCreateReq(items=[DepartmentKnowledgeSpaceBatchItem(department_id=10)])
+    req = DepartmentKnowledgeSpaceBatchCreateReq(
+        items=[DepartmentKnowledgeSpaceBatchItem(department_id=10, admin_user_id=2)]
+    )
     login_user = _make_login_user()
     department = _make_department()
     created_space = SimpleNamespace(id=101)
@@ -222,14 +224,18 @@ async def test_batch_create_spaces_creates_binding_and_returns_infos():
             new_callable=AsyncMock,
         ) as mock_binding_create,
         patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentService.aget_admins",
+            "bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentKnowledgeSpaceService._validate_admin_candidate",
             new_callable=AsyncMock,
-            return_value=[{"user_id": 2, "user_name": "dept-admin"}],
+            return_value=2,
         ),
         patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentKnowledgeSpaceService._grant_default_department_admins",
+            "bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentKnowledgeSpaceService._materialize_space_admin",
             new_callable=AsyncMock,
-        ) as mock_grant_admins,
+        ) as mock_materialize_admin,
+        patch(
+            "bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentKnowledgeSpaceService._notify",
+            new_callable=AsyncMock,
+        ),
         patch(
             "bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentKnowledgeSpaceService._grant_department_members_viewer",
             new_callable=AsyncMock,
@@ -257,19 +263,22 @@ async def test_batch_create_spaces_creates_binding_and_returns_infos():
         department_id=10,
         space_id=101,
         created_by=1,
+        admin_user_id=2,
     )
     mock_grant_department_viewer.assert_awaited_once_with(
         space_id=101,
         department_id=10,
         operator_user_id=1,
     )
-    mock_grant_admins.assert_awaited_once()
+    mock_materialize_admin.assert_awaited_once_with(space_id=101, user_id=2)
 
 
 @pytest.mark.asyncio
 async def test_batch_create_spaces_rejects_duplicate_department_binding():
     DepartmentKnowledgeSpaceService = _load_service_class()
-    req = DepartmentKnowledgeSpaceBatchCreateReq(items=[DepartmentKnowledgeSpaceBatchItem(department_id=10)])
+    req = DepartmentKnowledgeSpaceBatchCreateReq(
+        items=[DepartmentKnowledgeSpaceBatchItem(department_id=10, admin_user_id=2)]
+    )
     login_user = _make_login_user()
     department = _make_department()
     existing_binding = SimpleNamespace(department_id=10)
@@ -297,7 +306,9 @@ async def test_batch_create_spaces_rejects_duplicate_department_binding():
 @pytest.mark.asyncio
 async def test_batch_create_spaces_requires_super_admin():
     DepartmentKnowledgeSpaceService = _load_service_class()
-    req = DepartmentKnowledgeSpaceBatchCreateReq(items=[DepartmentKnowledgeSpaceBatchItem(department_id=10)])
+    req = DepartmentKnowledgeSpaceBatchCreateReq(
+        items=[DepartmentKnowledgeSpaceBatchItem(department_id=10, admin_user_id=2)]
+    )
 
     with pytest.raises(UnAuthorizedError):
         await DepartmentKnowledgeSpaceService.batch_create_spaces(
@@ -307,54 +318,9 @@ async def test_batch_create_spaces_requires_super_admin():
         )
 
 
-@pytest.mark.asyncio
-async def test_grant_default_department_admins_promotes_manual_member_consistently():
-    DepartmentKnowledgeSpaceService = _load_service_class()
-    existing_member = SpaceChannelMember(
-        business_id="101",
-        business_type=BusinessTypeEnum.SPACE,
-        user_id=2,
-        user_role=UserRoleEnum.MEMBER,
-        status=MembershipStatusEnum.ACTIVE,
-        membership_source="manual",
-    )
-
-    with (
-        patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.SpaceChannelMemberDao.async_find_member",
-            new_callable=AsyncMock,
-            return_value=existing_member,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.SpaceChannelMemberDao.update",
-            new_callable=AsyncMock,
-        ) as mock_update,
-        patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service."
-            "KnowledgeSpaceService.sync_direct_space_user_permissions",
-            new_callable=AsyncMock,
-        ) as mock_sync_permissions,
-    ):
-        await DepartmentKnowledgeSpaceService._grant_default_department_admins(
-            request=SimpleNamespace(),
-            login_user=_make_login_user(),
-            space_id=101,
-            admin_user_ids=[2],
-        )
-
-    assert existing_member.user_role == UserRoleEnum.ADMIN
-    assert existing_member.membership_source == "department_admin"
-    assert existing_member.department_admin_promoted_from_role == UserRoleEnum.MEMBER.value
-    mock_update.assert_awaited_once_with(existing_member)
-    mock_sync_permissions.assert_awaited_once_with(
-        101,
-        2,
-        UserRoleEnum.ADMIN,
-        is_active=True,
-        operator_user_id=1,
-    )
-
-
+# Retired with _grant_default_department_admins: F045 gives a department
+# knowledge space one explicit admin instead of deriving them from the
+# department's admins.
 @pytest.mark.asyncio
 async def test_sync_removed_admin_restores_promoted_manual_member_role():
     DepartmentKnowledgeSpaceService = _load_service_class()
@@ -763,7 +729,9 @@ async def test_batch_create_defaults_to_unpublished():
     DepartmentKnowledgeSpaceService = _load_service_class()
     assert DepartmentKnowledgeSpaceService.DEFAULT_IS_RELEASED is False
 
-    req = DepartmentKnowledgeSpaceBatchCreateReq(items=[DepartmentKnowledgeSpaceBatchItem(department_id=10)])
+    req = DepartmentKnowledgeSpaceBatchCreateReq(
+        items=[DepartmentKnowledgeSpaceBatchItem(department_id=10, admin_user_id=2)]
+    )
     department = _make_department()
 
     with (
@@ -782,16 +750,20 @@ async def test_batch_create_defaults_to_unpublished():
             new_callable=AsyncMock,
         ),
         patch(
-            f"{_SERVICE_MODULE}.DepartmentService.aget_admins",
-            new_callable=AsyncMock,
-            return_value=[],
-        ),
-        patch(
-            f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceService._grant_default_department_admins",
-            new_callable=AsyncMock,
-        ),
-        patch(
             f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceService._grant_department_members_viewer",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceService._validate_admin_candidate",
+            new_callable=AsyncMock,
+            return_value=2,
+        ),
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceService._materialize_space_admin",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceService._notify",
             new_callable=AsyncMock,
         ),
         patch(

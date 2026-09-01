@@ -31,6 +31,25 @@ class MutationStepOwner(Protocol):
     async def cleanup_cutover_and_verify(self, context) -> OwnerStepResult: ...
 
 
+def build_context_actor(context):
+    """Rebuild the applicant's identity for a step running outside a request.
+
+    Approved changes replay the ordinary permission-carrying service calls, so
+    the projection must run as the applicant rather than as an anonymous system
+    user (constitution C3/C4). Both callers only project tuples — they take no
+    permission decision — so the role list is left empty rather than paid for
+    with a database round-trip on every retry.
+    """
+    from bisheng.common.dependencies.user_deps import UserPayload
+
+    return UserPayload(
+        user_id=int(context.applicant_user_id),
+        user_name=str(context.applicant_user_id),
+        tenant_id=int(context.tenant_id),
+        user_role=[],
+    )
+
+
 class ProductionMutationStepOwner:
     """Authoritative F046 external-storage owner.
 
@@ -389,7 +408,7 @@ class ProductionMutationStepOwner:
         old_parent = (str(parent["old_parent_type"]), int(parent["old_parent_id"]))
         new_parent = (str(parent["new_parent_type"]), int(parent["new_parent_id"]))
         source, target = (new_parent, old_parent) if revert else (old_parent, new_parent)
-        service = KnowledgeSpaceService(request=None, login_user=context.actor)
+        service = KnowledgeSpaceService(request=None, login_user=build_context_actor(context))
         await service._replace_resource_parent_tuple(
             str(parent["resource_type"]),
             int(parent["resource_id"]),

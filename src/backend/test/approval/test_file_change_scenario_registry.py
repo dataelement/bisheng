@@ -343,7 +343,7 @@ async def test_new_tenant_bootstrap_calls_fixed_ensure(monkeypatch):
         "bisheng.tenant.domain.services.tenant_service.UserTenantDao.aadd_user_to_tenant",
         AsyncMock(),
     )
-    monkeypatch.setattr(TenantService, "_write_tenant_tuples", AsyncMock())
+    monkeypatch.setattr(TenantService, "_apply_tenant_permissions", AsyncMock())
     monkeypatch.setattr(
         "bisheng.workstation.domain.services.WorkStationService.acopy_root_builtin_tools_to_tenant",
         AsyncMock(),

@@ -151,7 +151,7 @@ async def test_rate_limit_retry_uses_only_existing_continue_workflow(monkeypatch
         def __init__(self):
             raise AssertionError("task continuation must not infer model-call success")
 
-    async def restore_tenant_context(_session_version_id):
+    async def restore_tenant_context(_session_version_id, **_kwargs):
         return None
 
     @asynccontextmanager
@@ -164,6 +164,12 @@ async def test_rate_limit_retry_uses_only_existing_continue_workflow(monkeypatch
     monkeypatch.setattr(
         "bisheng.linsight.domain.task_exec.ModelRateLimitService",
         UnexpectedRateLimitService,
+    )
+    # F048 boots a permission runtime before the turn; this case is about the
+    # continuation path, not that bootstrap.
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.task_exec.ensure_linsight_permission_runtime",
+        AsyncMock(),
     )
     task = LinsightWorkflowTask()
     task._restore_tenant_context = restore_tenant_context

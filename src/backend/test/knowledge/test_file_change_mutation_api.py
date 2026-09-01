@@ -577,7 +577,7 @@ async def test_folder_file_change_authorization_uses_folder_lookup_and_permissio
     folder = SimpleNamespace(id=5117, file_type=0, knowledge_id=81)
     owner._get_folder_for_action = AsyncMock(return_value=folder)
     owner._get_file_for_action = AsyncMock(side_effect=AssertionError("folder must not use file lookup"))
-    owner._require_permission_id = AsyncMock()
+    owner._require_action = AsyncMock()
     command = FileChangeRequestCommand(
         action="rename",
         space_id=81,
@@ -593,11 +593,10 @@ async def test_folder_file_change_authorization_uses_folder_lookup_and_permissio
 
     owner._get_folder_for_action.assert_awaited_once_with(81, 5117)
     owner._get_file_for_action.assert_not_awaited()
-    owner._require_permission_id.assert_awaited_once_with(
+    owner._require_action.assert_awaited_once_with(
         "folder",
         5117,
-        "rename_folder",
-        space_id=81,
+        "rename",
     )
 
 

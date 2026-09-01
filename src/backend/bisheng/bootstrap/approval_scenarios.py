@@ -8,6 +8,9 @@ from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
 from bisheng.permission.domain.services.resource_grant_executor_registry import (
     ResourceGrantExecutorRegistry,
 )
+from bisheng.permission.domain.services.resource_grant_executors import (
+    F048ResourceGrantExecutor,
+)
 
 F045_SCENARIO = "resource_user_invite_confirmation"
 F046_SCENARIO = "knowledge_space_file_change_request"
@@ -110,31 +113,6 @@ def _build_resource_user_invite_dispatcher():
     return CeleryResourceUserInviteDispatcher()
 
 
-class _UnportedResourceGrantExecutor:
-    """Stands in for an executor whose service 3.0 removed (cofco-909 phase 2).
-
-    Registered rather than omitted so the registry's freeze() contract still
-    holds and the app starts. It fails loudly on use: an approved grant that
-    silently did nothing would look like a working approval right up until
-    someone noticed the permission was never written.
-    """
-
-    def __init__(self, resource_type: str) -> None:
-        self.resource_type = resource_type
-
-    async def execute(self, command) -> None:
-        raise NotImplementedError(
-            f"resource grant execution for {self.resource_type!r} is not ported to the "
-            "3.0 permission model yet (cofco-909 phase 2)"
-        )
-
-    async def verify(self, command):
-        raise NotImplementedError(
-            f"resource grant verification for {self.resource_type!r} is not ported to the "
-            "3.0 permission model yet (cofco-909 phase 2)"
-        )
-
-
 def _build_default_components() -> ApprovalScenarioBootstrapComponents:
     from bisheng.approval.domain.services.channel_subscribe_scenario_handler import (
         ChannelSubscribeScenarioHandler,
@@ -187,15 +165,12 @@ def _build_default_components() -> ApprovalScenarioBootstrapComponents:
             ),
         ),
         resource_executor_registry=ResourceGrantExecutorRegistry(),
-        # TODO(cofco-909 phase 2): re-implement the knowledge_space / channel
-        # resource-grant executors on 3.0's permission API. Their old ones drove
-        # ChannelAuthorizationService / ResourceAuthorizationService, both of
-        # which 3.0 deleted. Until they are back, an approved personal invite or
-        # resource-grant request records its decision but does NOT write the
-        # grant. Every other approval scenario above is unaffected.
+        # Both resource types share one executor: an approved invite is an
+        # ordinary ADD Grant, and F048 owns the rest (see
+        # permission/domain/services/resource_grant_executors.py).
         resource_executors={
-            "knowledge_space": _UnportedResourceGrantExecutor("knowledge_space"),
-            "channel": _UnportedResourceGrantExecutor("channel"),
+            "knowledge_space": F048ResourceGrantExecutor("knowledge_space"),
+            "channel": F048ResourceGrantExecutor("channel"),
         },
     )
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 
 from fastapi import Request
 
@@ -10,6 +10,7 @@ from bisheng.common.errcode.department import DepartmentNotFoundError
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge_space import (
     DepartmentKnowledgeSpaceExistsError,
+    DepartmentSpacePrivateForbiddenError,
     SpaceAdminConflictError,
     SpaceAdminInvalidUserError,
     SpaceAdminRequiredError,
@@ -28,7 +29,6 @@ from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.tenant import UserTenantDao
-from bisheng.department.domain.services.department_service import DepartmentService
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
@@ -59,6 +59,7 @@ SPACE_ADMIN_MEMBERSHIP_SOURCE = "space_admin"
 
 _logger = logging.getLogger(__name__)
 
+
 class DepartmentKnowledgeSpaceService:
     DEFAULT_AUTH_TYPE = AuthTypeEnum.APPROVAL
     # Department knowledge spaces are not published to the square by default;
@@ -86,68 +87,6 @@ class DepartmentKnowledgeSpaceService:
         if len(dept_map) != len(deduped):
             raise DepartmentNotFoundError(msg="One or more departments do not exist or are archived")
         return dept_map
-
-    @classmethod
-    async def _grant_default_department_admins(
-        cls,
-        *,
-        request: Request,
-        login_user: UserPayload,
-        space_id: int,
-        admin_user_ids: Iterable[int],
-    ) -> None:
-        for admin_user_id in sorted(set(int(uid) for uid in admin_user_ids if int(uid) != login_user.user_id)):
-            existing = await SpaceChannelMemberDao.async_find_member(space_id, admin_user_id)
-            if existing is not None:
-                if existing.user_role == UserRoleEnum.CREATOR:
-                    continue
-                if existing.membership_source == "department_admin":
-                    if existing.user_role != UserRoleEnum.ADMIN:
-                        existing.user_role = UserRoleEnum.ADMIN
-                        existing.status = MembershipStatusEnum.ACTIVE
-                        await SpaceChannelMemberDao.update(existing)
-                    await cls._grant_department_admin_manager(
-                        space_id=space_id,
-                        user_id=admin_user_id,
-                        operator_user_id=login_user.user_id,
-                    )
-                    continue
-                if existing.user_role == UserRoleEnum.ADMIN:
-                    if existing.status != MembershipStatusEnum.ACTIVE:
-                        existing.status = MembershipStatusEnum.ACTIVE
-                        await SpaceChannelMemberDao.update(existing)
-                    await cls._grant_department_admin_manager(
-                        space_id=space_id,
-                        user_id=admin_user_id,
-                        operator_user_id=login_user.user_id,
-                    )
-                    continue
-                existing.department_admin_promoted_from_role = existing.user_role.value
-                existing.user_role = UserRoleEnum.ADMIN
-                existing.status = MembershipStatusEnum.ACTIVE
-                existing.membership_source = "department_admin"
-                await SpaceChannelMemberDao.update(existing)
-                await cls._grant_department_admin_manager(
-                    space_id=space_id,
-                    user_id=admin_user_id,
-                    operator_user_id=login_user.user_id,
-                )
-                continue
-
-            member = SpaceChannelMember(
-                business_id=str(space_id),
-                business_type=BusinessTypeEnum.SPACE,
-                user_id=admin_user_id,
-                user_role=UserRoleEnum.ADMIN,
-                status=MembershipStatusEnum.ACTIVE,
-                membership_source="department_admin",
-            )
-            await SpaceChannelMemberDao.async_insert_member(member)
-            await cls._grant_department_admin_manager(
-                space_id=space_id,
-                user_id=admin_user_id,
-                operator_user_id=login_user.user_id,
-            )
 
     @classmethod
     async def _grant_department_admin_manager(
@@ -379,6 +318,10 @@ class DepartmentKnowledgeSpaceService:
         cls._ensure_super_admin(login_user)
         if not req.items:
             return []
+        # A department space is shared by construction; reject a private one
+        # before touching the department table or writing anything.
+        if any(item.auth_type == AuthTypeEnum.PRIVATE for item in req.items):
+            raise DepartmentSpacePrivateForbiddenError()
         dept_ids = [int(item.department_id) for item in req.items]
         if len(set(dept_ids)) != len(dept_ids):
             raise DepartmentKnowledgeSpaceExistsError(
@@ -392,10 +335,25 @@ class DepartmentKnowledgeSpaceService:
                 msg=f"Department knowledge space already exists: {sorted({row.department_id for row in existing})}"
             )
 
+        # AC-01/02: validate every space admin up front — the whole batch is
+        # rejected before any space is created, so a bad item cannot leave a
+        # partially-created batch behind.
+        admin_by_dept: dict[int, int] = {}
+        for item in req.items:
+            admin_by_dept[int(item.department_id)] = await cls._validate_admin_candidate(
+                user_id=item.admin_user_id,
+                tenant_id=login_user.tenant_id,
+            )
+
         space_service = KnowledgeSpaceService(request=request, login_user=login_user)
         created_spaces: list[KnowledgeSpaceInfoResp] = []
         for item in req.items:
             dept = dept_map[int(item.department_id)]
+            admin_user_id = admin_by_dept[int(item.department_id)]
+            # AC-04: the creating super admin leaves no front-facing footprint —
+            # no CREATOR member row, and the space is owned by its explicit
+            # admin. Knowledge.user_id and DepartmentKnowledgeSpace.created_by
+            # keep the audit trail.
             space = await space_service.create_knowledge_space(
                 name=item.name or cls._build_default_name(dept.name),
                 description=item.description or cls._build_default_description(dept.name),
@@ -403,24 +361,28 @@ class DepartmentKnowledgeSpaceService:
                 auth_type=item.auth_type or cls.DEFAULT_AUTH_TYPE,
                 is_released=cls.DEFAULT_IS_RELEASED if item.is_released is None else item.is_released,
                 skip_user_limit=True,
+                materialize_creator=False,
+                owner_user_id=admin_user_id,
             )
             await DepartmentKnowledgeSpaceDao.acreate(
                 tenant_id=login_user.tenant_id,
                 department_id=dept.id,
                 space_id=space.id,
                 created_by=login_user.user_id,
+                admin_user_id=admin_user_id,
             )
             await cls._grant_department_members_viewer(
                 space_id=space.id,
                 department_id=dept.id,
                 operator_user_id=login_user.user_id,
             )
-            admin_rows = await DepartmentService.aget_admins(dept.dept_id, login_user)
-            await cls._grant_default_department_admins(
-                request=request,
-                login_user=login_user,
+            await cls._materialize_space_admin(space_id=space.id, user_id=admin_user_id)
+            await cls._notify(
+                sender_user_id=login_user.user_id,
+                receiver_user_ids=[admin_user_id],
+                action_code=SPACE_ADMIN_ASSIGNED_MESSAGE,
                 space_id=space.id,
-                admin_user_ids=[row["user_id"] for row in admin_rows],
+                navigable=True,
             )
             created_spaces.append(await space_service.get_space_info(space.id))
         return created_spaces
@@ -572,7 +534,6 @@ class DepartmentKnowledgeSpaceService:
         rows = await UserRoleDao.aget_roles_user([AdminRole])
         return sorted({int(row.user_id) for row in rows})
 
-
     @classmethod
     async def _validate_admin_candidate(cls, *, user_id: int | None, tenant_id: int) -> int:
         """AC-02: the space admin must be an active user of the current tenant.
@@ -591,7 +552,6 @@ class DepartmentKnowledgeSpaceService:
             if user_tenant is None or user_tenant.is_active != 1:
                 raise SpaceAdminInvalidUserError()
         return int(user_id)
-
 
     @classmethod
     async def _materialize_space_admin(cls, *, space_id: int, user_id: int) -> None:
@@ -626,7 +586,6 @@ class DepartmentKnowledgeSpaceService:
         if await cls._grant_space_admin_manager(space_id=space_id, user_id=user_id):
             await cls._reconcile_file_change_approvers(space_id)
 
-
     @classmethod
     async def _dematerialize_space_admin(cls, *, space_id: int, user_id: int) -> None:
         """Clear the space-admin materialization for ``user_id`` (AC-07).
@@ -647,7 +606,6 @@ class DepartmentKnowledgeSpaceService:
                 await SpaceChannelMemberDao.delete_space_member(space_id, user_id)
         if await cls._revoke_space_admin_manager(space_id=space_id, user_id=user_id):
             await cls._reconcile_file_change_approvers(space_id)
-
 
     @classmethod
     async def _grant_space_admin_manager(cls, *, space_id: int, user_id: int) -> bool:
@@ -685,7 +643,6 @@ class DepartmentKnowledgeSpaceService:
             )
             return False
 
-
     @classmethod
     async def _revoke_space_admin_manager(cls, *, space_id: int, user_id: int) -> bool:
         try:
@@ -713,7 +670,6 @@ class DepartmentKnowledgeSpaceService:
             )
             return False
 
-
     @classmethod
     async def _reconcile_file_change_approvers(cls, space_id: int) -> None:
         """Recompute the F046 file-change approvers after an admin relation write.
@@ -740,7 +696,6 @@ class DepartmentKnowledgeSpaceService:
             )
         except Exception:
             _logger.exception("F046 approver reconcile dispatch failed for space %s", space_id)
-
 
     @classmethod
     async def _notify(
@@ -783,20 +738,17 @@ class DepartmentKnowledgeSpaceService:
                 space_id,
             )
 
-
     @classmethod
     async def is_space_pending_admin(cls, space_id: int) -> bool:
         """True iff ``space_id`` is a department space currently without an admin."""
         binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(int(space_id))
         return binding is not None and binding.admin_user_id is None
 
-
     @classmethod
     async def ensure_space_not_pending_admin(cls, space_id: int) -> None:
         """AC-09 gate: block admin-gated operations while the space has no admin."""
         if await cls.is_space_pending_admin(space_id):
             raise SpacePendingAdminError()
-
 
     @classmethod
     async def handle_admin_invalidated(
@@ -857,7 +809,6 @@ class DepartmentKnowledgeSpaceService:
                 user_id,
             )
         return flipped
-
 
     @classmethod
     async def replace_admin(

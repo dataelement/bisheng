@@ -65,6 +65,7 @@ class ProspectiveGrantApplication:
             keyword=keyword,
             page=page,
             page_size=page_size,
+            include_hidden=self._is_admin(actor, tenant_id),
         )
 
     async def list_user_groups(
@@ -132,6 +133,11 @@ class ProspectiveGrantApplication:
             resource_type=resource_type,
             department_id=department_id,
         )
+
+    @staticmethod
+    def _is_admin(actor: PermissionActor, tenant_id: int) -> bool:
+        """F053: only administrators still see users the directory marks hidden."""
+        return bool(actor.super_admin) or int(tenant_id) in actor.tenant_admin_tenant_ids
 
     @staticmethod
     def _require_tenant_scope(actor: PermissionActor, tenant_id: int) -> None:

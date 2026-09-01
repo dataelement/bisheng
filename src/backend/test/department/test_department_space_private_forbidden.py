@@ -72,7 +72,7 @@ async def test_department_space_update_rejects_public_to_private_before_cleanup_
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
             new=AsyncMock(return_value=space),
         ),
-        patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+        patch.object(service, "_require_action", new_callable=AsyncMock),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id",
             new=AsyncMock(return_value=SimpleNamespace(space_id=space.id, department_id=10)),
@@ -100,7 +100,7 @@ async def test_department_space_update_rejects_explicit_private_for_historical_p
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
             new=AsyncMock(return_value=space),
         ),
-        patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+        patch.object(service, "_require_action", new_callable=AsyncMock),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id",
             new=AsyncMock(return_value=SimpleNamespace(space_id=space.id, department_id=10)),
@@ -127,7 +127,7 @@ async def test_non_department_space_can_be_changed_to_private():
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
             new=AsyncMock(return_value=space),
         ),
-        patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+        patch.object(service, "_require_action", new_callable=AsyncMock),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id",
             new=AsyncMock(return_value=None),
@@ -170,7 +170,7 @@ async def test_unrelated_update_preserves_historical_private_department_space():
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
             new=AsyncMock(return_value=space),
         ),
-        patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+        patch.object(service, "_require_action", new_callable=AsyncMock),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id",
             new=AsyncMock(return_value=SimpleNamespace(space_id=space.id, department_id=10)),

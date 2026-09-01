@@ -29,10 +29,19 @@ class TenantPermissionSubjectDirectory:
         self._sources = GrantSourceService()
 
     @staticmethod
-    def _prospective_scope(tenant_id: int, resource_type: str) -> GrantSubjectScope:
+    def _prospective_scope(
+        tenant_id: int,
+        resource_type: str,
+        *,
+        include_hidden: bool = False,
+    ) -> GrantSubjectScope:
         if resource_type not in {"knowledge_space", "channel"}:
             raise PermissionInvalidResourceError()
-        return GrantSubjectScope(tenant_id=tenant_id, department_path=None)
+        return GrantSubjectScope(
+            tenant_id=tenant_id,
+            department_path=None,
+            include_hidden=include_hidden,
+        )
 
     async def list_users(
         self,
@@ -42,8 +51,9 @@ class TenantPermissionSubjectDirectory:
         keyword: str,
         page: int,
         page_size: int,
+        include_hidden: bool = False,
     ) -> dict[str, object]:
-        scope = self._prospective_scope(tenant_id, resource_type)
+        scope = self._prospective_scope(tenant_id, resource_type, include_hidden=include_hidden)
         rows = await grant_subject_service.list_candidate_users(
             scope,
             keyword=keyword,

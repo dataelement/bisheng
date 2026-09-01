@@ -331,12 +331,7 @@ class KnowledgeSpaceChatService:
 
     async def get_chat_folder_session(self, space_id: int, folder_id: int) -> list[MessageSession]:
         """Query sessions for a specific folder_id"""
-        permission_service = self._permission_service()
-        if permission_service._is_read_permission_bypassed(space_id):
-            await permission_service._get_space_or_raise(space_id)
-            if folder_id:
-                await permission_service._get_folder_for_action(space_id, folder_id)
-        elif folder_id:
+        if folder_id:
             await self._require_folder_view_permission(space_id, folder_id)
         else:
             await self._require_space_view_permission(space_id)

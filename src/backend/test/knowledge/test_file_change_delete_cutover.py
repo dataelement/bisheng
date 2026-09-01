@@ -436,10 +436,12 @@ def _delete_purge_context(step_code: str, *, manifest: dict | None = None) -> Mu
     )
 
 
-async def test_delete_fga_purge_requires_strict_authoritative_read_after(monkeypatch: pytest.MonkeyPatch):
+async def test_delete_fga_purge_propagates_tuple_cleanup_failure(monkeypatch: pytest.MonkeyPatch):
+    """F048 retired OwnerService's strict readback; the projection layer owns
+    the authoritative read now, so the step must surface its failure."""
     strict_delete = AsyncMock(side_effect=RuntimeError("tuple residue"))
     monkeypatch.setattr(
-        "bisheng.permission.domain.services.owner_service.OwnerService.delete_resource_tuples_strict",
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._cleanup_resource_tuples",
         strict_delete,
     )
     context = _delete_purge_context(
@@ -452,7 +454,7 @@ async def test_delete_fga_purge_requires_strict_authoritative_read_after(monkeyp
 
     with pytest.raises(RuntimeError, match="tuple residue"):
         await KnowledgeSpaceMutationExecutor._apply_delete_purge_step(context)
-    strict_delete.assert_awaited_once_with("knowledge_file", "101")
+    strict_delete.assert_awaited_once_with([("knowledge_file", 101)])
 
 
 async def test_delete_minio_purge_fails_when_object_exists_after_remove(monkeypatch: pytest.MonkeyPatch):

@@ -56,10 +56,10 @@ class _FakeCelery:
 
 
 fake_celery = _FakeCelery()
-fake_worker_package = types.ModuleType("bisheng.worker")
-fake_worker_package.__path__ = []  # type: ignore[attr-defined]
-sys.modules["bisheng.worker"] = fake_worker_package
-
+# Do NOT replace the bisheng.worker package itself: these stubs live in
+# sys.modules for the whole session, and other modules import names straight
+# off the package (e.g. `from bisheng.worker import rebuild_knowledge_celery`).
+# Only the two submodules that would pull in a live Celery app are stubbed.
 fake_worker_main = types.ModuleType("bisheng.worker.main")
 fake_worker_main.bisheng_celery = fake_celery
 sys.modules["bisheng.worker.main"] = fake_worker_main

@@ -74,6 +74,9 @@ async def _authorized_scope(
             resource_type,
             resource_id,
         ),
+        # F053: people the upstream directory marks hidden stay out of every
+        # picker; administrators still see and can grant to them.
+        include_hidden=bool(login_user.is_admin()),
     )
 
 

@@ -37,12 +37,21 @@ from bisheng.user.domain.models.user import User
 _MATCHES_NOTHING = "\x00never-matches"
 
 
+#: ``user.is_hidden`` value marking a person who must not be offered as a grant
+#: subject. Only an explicit upstream ``jobGrade=1`` is stored as 1; every other
+#: user carries 0.
+_HIDDEN_USER = 1
+
+
 @dataclass(frozen=True, slots=True)
 class GrantSubjectScope:
     """The resource's tenant, plus the department subtree it is confined to."""
 
     tenant_id: int
     department_path: str | None
+    #: Super admins keep seeing people the upstream directory marked hidden;
+    #: everyone else must not be offered them as a grant subject (F053).
+    include_hidden: bool = False
 
 
 async def resolve_department_space_path(resource_type: str, resource_id: str) -> str | None:
@@ -90,6 +99,8 @@ async def list_candidate_users(
                 .where(User.delete == 0, in_tenant)
                 .order_by(col(User.user_id).desc())
             )
+            if not scope.include_hidden:
+                statement = statement.where(User.is_hidden != _HIDDEN_USER)
             if scope.department_path is not None:
                 in_subtree = (
                     select(UserDepartment.id)
@@ -134,6 +145,8 @@ async def count_candidate_users(scope: GrantSubjectScope, *, keyword: str) -> in
                 .exists()
             )
             statement = select(func.count(User.user_id)).where(User.delete == 0, in_tenant)
+            if not scope.include_hidden:
+                statement = statement.where(User.is_hidden != _HIDDEN_USER)
             if scope.department_path is not None:
                 in_subtree = (
                     select(UserDepartment.id)

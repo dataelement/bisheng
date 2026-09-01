@@ -33,6 +33,18 @@ def _service() -> KnowledgeSpaceService:
     return service
 
 
+@pytest.fixture(autouse=True)
+def _no_department_binding():
+    """Turning a space private consults its department binding (a department
+    space may never go private). These cases cover the permission projection,
+    so report no binding rather than reaching the database."""
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id",
+        new=AsyncMock(return_value=None),
+    ):
+        yield
+
+
 async def test_business_save_failure_does_not_touch_grants_or_memberships() -> None:
     service = _service()
     clear = AsyncMock()

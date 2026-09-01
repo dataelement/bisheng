@@ -27,6 +27,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
+    DepartmentSpacePrivateForbiddenError,
     SpaceCreationRequestConflictError,
     SpaceFileChangeApproverUnavailableError,
     SpaceFileChangeInvalidStateError,
@@ -1161,6 +1162,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         creation_request_id: str | None = None,
         initial_permissions: InitialPermissionsRequest | None = None,
         skip_user_limit: bool = False,
+        materialize_creator: bool = True,
+        owner_user_id: int | None = None,
     ) -> KnowledgeSpaceCreateResp:
         """Create a new knowledge space, subject to the role-level creation quota."""
 
@@ -1201,6 +1204,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 existing,
                 creation_request_id=creation_request_id,
                 initial_permissions=initial_permissions,
+                owner_user_id=owner_user_id,
             )
         if workbench_llm is None or workbench_llm.embedding_model is None:
             raise WorkbenchEmbeddingError()
@@ -1252,19 +1256,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
             knowledge_space,
             creation_request_id=creation_request_id,
             initial_permissions=initial_permissions,
+            owner_user_id=owner_user_id,
         )
 
         if not created:
             return result
 
-        member = SpaceChannelMember(
-            business_id=str(knowledge_space.id),
-            business_type=BusinessTypeEnum.SPACE,
-            user_id=self.login_user.user_id,
-            user_role=UserRoleEnum.CREATOR,
-            status=MembershipStatusEnum.ACTIVE,
-        )
-        await SpaceChannelMemberDao.async_insert_member(member)
+        # F045: a department knowledge space is managed by its single explicit
+        # admin, so the creating super admin gets no front-facing CREATOR row.
+        # Knowledge.user_id still records the operator for auditing.
+        if materialize_creator:
+            member = SpaceChannelMember(
+                business_id=str(knowledge_space.id),
+                business_type=BusinessTypeEnum.SPACE,
+                user_id=self.login_user.user_id,
+                user_role=UserRoleEnum.CREATOR,
+                status=MembershipStatusEnum.ACTIVE,
+            )
+            await SpaceChannelMemberDao.async_insert_member(member)
 
         # Audit log for knowledge space creation
         await KnowledgeAuditTelemetryService.audit_create_knowledge_space(
@@ -1279,6 +1288,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         creation_request_id: str | None,
         initial_permissions: InitialPermissionsRequest | None,
+        owner_user_id: int | None = None,
     ) -> KnowledgeSpaceCreateResp:
         container_adapter = await self._resource_adapter("knowledge_space")
         actor = await self._permission_actor()
@@ -1289,7 +1299,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 resource_id=str(knowledge_space.id),
                 status=KnowledgeState.PUBLISHED.name,
                 kind=KnowledgeTypeEnum.SPACE.name,
-                owner_user_id=int(knowledge_space.user_id),
+                owner_user_id=int(owner_user_id or knowledge_space.user_id),
                 permission_version=0,
                 context_version=(f"created:knowledge_space:{knowledge_space.id}"),
             ),
@@ -1738,6 +1748,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         old_auth_type = space.auth_type
         old_square_visible = self._is_square_preview_space(space)
+
+        # A space bound to a department is shared by construction — it can
+        # never be turned private, including one that predates the binding.
+        if auth_type == AuthTypeEnum.PRIVATE:
+            department_binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
+            if department_binding is not None:
+                raise DepartmentSpacePrivateForbiddenError()
 
         if name is not None:
             space.name = name
@@ -2584,10 +2601,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 actor=actor,
                 action="visible",
             )
-            performance["target_build_elapsed_ms"] = performance.get(
-                "target_build_elapsed_ms",
-                0.0,
-            ) + (perf_counter() - target_started_at) * 1000
+            performance["target_build_elapsed_ms"] = (
+                performance.get(
+                    "target_build_elapsed_ms",
+                    0.0,
+                )
+                + (perf_counter() - target_started_at) * 1000
+            )
             performance["verified_target_count"] = performance.get(
                 "verified_target_count",
                 0,
@@ -2598,16 +2618,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 actor=actor,
                 targets=targets,
             )
-            performance["decision_elapsed_ms"] = performance.get(
-                "decision_elapsed_ms",
-                0.0,
-            ) + (perf_counter() - decision_started_at) * 1000
+            performance["decision_elapsed_ms"] = (
+                performance.get(
+                    "decision_elapsed_ms",
+                    0.0,
+                )
+                + (perf_counter() - decision_started_at) * 1000
+            )
             for resource_type, resource_ids in by_type.items():
                 for resource_id in resource_ids:
                     permissions[(resource_type, str(resource_id))] = (
-                        {"visible"}
-                        if visible_map.get((resource_type, str(resource_id)), False)
-                        else set()
+                        {"visible"} if visible_map.get((resource_type, str(resource_id)), False) else set()
                     )
         else:
             # Compatibility path for callers that have only ids. The children
@@ -2701,9 +2722,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 permission_decision_elapsed_ms=(permission_context or {})
                 .get("performance", {})
                 .get("decision_elapsed_ms", 0.0),
-                verified_target_count=(permission_context or {})
-                .get("performance", {})
-                .get("verified_target_count", 0),
+                verified_target_count=(permission_context or {}).get("performance", {}).get("verified_target_count", 0),
             )
 
         def candidate_cursor(item: KnowledgeFile) -> list:
@@ -2941,9 +2960,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 exclude_file_ids = (
                     await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([space_id]) or None
                 )
-            stage_elapsed_ms["version_filter_elapsed_ms"] = (
-                perf_counter() - stage_started_at
-            ) * 1000
+            stage_elapsed_ms["version_filter_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
             stage = "scan_visible"
             stage_started_at = perf_counter()
@@ -2966,9 +2983,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             stage = "version_enrich"
             stage_started_at = perf_counter()
             await self._enrich_with_version_info(visible_page_items)
-            stage_elapsed_ms["version_enrich_elapsed_ms"] = (
-                perf_counter() - stage_started_at
-            ) * 1000
+            stage_elapsed_ms["version_enrich_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
             stage = "extra_info"
             stage_started_at = perf_counter()
@@ -5255,12 +5270,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             record = await self._get_folder_for_action(command.space_id, command.resource_id)
         else:
             record = await self._get_file_for_action(command.resource_id, space_id=command.space_id)
-        # 3.0's actions are scoped by resource type, so no _folder/_file suffix.
-            permission_id = command.action
+        # 3.0's actions are scoped by resource type, so no _folder / _file suffix.
         await self._require_action(
             "folder" if is_folder else "knowledge_file",
             int(record.id),
-            permission_id,
+            command.action,
         )
         if command.action == "move":
             target_space_id = int(command.target_space_id)
@@ -5759,7 +5773,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             created_folders=tuple(created_folders),
         )
 
-
     @staticmethod
     def _should_preserve_private_space_tuple(
         creator_user_id: int,
@@ -5773,7 +5786,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if resource_type in {"folder", "knowledge_file"}:
             return relation == "parent"
         return False
-
 
     async def _withdraw_pending_invites_for_private(self, space_id: int) -> None:
         """Withdraw still-pending F045 share invitations when a space goes PRIVATE.

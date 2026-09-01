@@ -227,7 +227,7 @@ async def test_v2_space_retrieve_reuses_visibility_prefilter_and_postfilter(monk
             es_filter=[{"bool": {"must_not": {"terms": {"metadata.document_id": [101, 102]}}}}],
         )
     )
-    visibility.post_filter_visible_files = AsyncMock(return_value={103})
+    visibility.post_filter_retrievable_files = AsyncMock(return_value={103})
     visibility.project_mutation_retrieval_query = AsyncMock(return_value="q")
     visibility.project_mutation_retrieval_names = AsyncMock(side_effect=lambda **kwargs: kwargs["documents"])
     service._knowledge_file_visibility_service = visibility
@@ -255,7 +255,7 @@ async def test_v2_space_retrieve_reuses_visibility_prefilter_and_postfilter(monk
 
     assert [(space_id, int(doc.metadata["document_id"])) for space_id, doc in results] == [(8, 103)]
     visibility.build_index_prefilter.assert_awaited_once_with(8, None)
-    visibility.post_filter_visible_files.assert_awaited_once_with(8, {101, 102, 103})
+    visibility.post_filter_retrievable_files.assert_awaited_once_with(8, {101, 102, 103})
     milvus_store.as_retriever.assert_called_once()
     assert milvus_store.as_retriever.call_args.kwargs["search_kwargs"]["expr"] == ("document_id not in [101, 102]")
 

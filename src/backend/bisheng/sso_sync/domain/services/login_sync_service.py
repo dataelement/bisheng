@@ -718,8 +718,18 @@ class LoginSyncService:
             )
         for did in dict.fromkeys(delete_grant_dept_ids):
             await DepartmentAdminGrantDao.adelete(user_id, did)
-            # F045: department-admin status no longer grants department knowledge
-            # space manage access, so there is no derived binding to clear.
+            # F045 gives a department knowledge space one explicit admin, so a
+            # department-admin revoke grants nothing to clear going forward —
+            # but pre-F045 rows can still carry a derived binding, and this
+            # cleanup only removes residue, so it stays on the revoke path.
+            from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+                DepartmentKnowledgeSpaceService,
+            )
+
+            await DepartmentKnowledgeSpaceService.cleanup_removed_department_admins(
+                department_id=did,
+                user_ids=[user_id],
+            )
 
     @classmethod
     async def _remove_sso_secondary_membership(
@@ -750,8 +760,15 @@ class LoginSyncService:
         )
         await DepartmentChangeHandler.execute_async(ops)
         await DepartmentAdminGrantDao.adelete(user_id, department_id)
-        # F045: department-admin status no longer grants department knowledge
-        # space manage access, so there is no derived binding to clear.
+        # Clear any pre-F045 derived binding; see the note on the reconcile path.
+        from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+            DepartmentKnowledgeSpaceService,
+        )
+
+        await DepartmentKnowledgeSpaceService.cleanup_removed_department_admins(
+            department_id=department_id,
+            user_ids=[user_id],
+        )
 
     @classmethod
     async def _reconcile_remove_sso_secondary_memberships(

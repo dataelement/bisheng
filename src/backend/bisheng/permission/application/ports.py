@@ -36,6 +36,7 @@ class ProspectiveGrantSubjectDirectoryPort(Protocol):
         keyword: str,
         page: int,
         page_size: int,
+        include_hidden: bool = False,
     ) -> dict[str, object]: ...
 
     async def list_user_groups(
