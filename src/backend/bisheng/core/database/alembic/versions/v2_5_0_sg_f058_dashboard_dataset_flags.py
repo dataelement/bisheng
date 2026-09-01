@@ -1,7 +1,7 @@
 """Add dashboard_dataset visibility and grouping flags (F058).
 
 Revision ID: f058_dashboard_dataset_flags
-Revises: f104_portal_course_ext_import
+Revises: f105_portal_catalog_external_id
 Create Date: 2026-09-01
 """
 
@@ -15,7 +15,7 @@ from alembic import op
 from bisheng.core.database.dialect_helpers import column_exists, table_exists
 
 revision: str = "f058_dashboard_dataset_flags"
-down_revision: str | Sequence[str] | None = "f104_portal_course_ext_import"
+down_revision: str | Sequence[str] | None = "f105_portal_catalog_external_id"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
