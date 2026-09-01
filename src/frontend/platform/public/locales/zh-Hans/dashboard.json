@@ -132,9 +132,6 @@
     "metrics": "指标",
     "virtualMetric": "*",
     "selectDatasetPrompt": "请先选择一个数据集",
-    "group": {
-      "user_engagement": "用户数据统计"
-    },
     "fieldTypes": {
       "date": "日期",
       "integer": "整数",
@@ -418,7 +415,7 @@
     "metricCard": "指标卡",
     "pivotTable": "交叉表"
   },
-  "mid_user_increment": "用户规模统计",
+  "mid_user_increment": "用户数据统计",
   "timestamp": {
     "year": "时间(年)",
     "month": "时间(月)",

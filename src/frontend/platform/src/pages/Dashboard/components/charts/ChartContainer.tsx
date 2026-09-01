@@ -124,6 +124,8 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
         chartType={component.type}
         dataConfig={component.data_config}
         styleConfig={component.style_config}
+        dashboardId={currentDashboard?.id}
+        componentId={component.id}
       />
     </div>
   )

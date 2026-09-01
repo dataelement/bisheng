@@ -5,9 +5,13 @@ import { memo, useMemo } from "react"
 
 import { PivotTableDataResponse } from "../../types/chartData"
 import { DataConfig } from "../../types/dataConfig"
-import { groupCrossTabRows } from "../../utils/groupCrossTabRows"
+import { GroupedPivotRows, groupCrossTabRows } from "../../utils/groupCrossTabRows"
 import { useComponentExport } from "../export/useComponentExport"
 import { unitConversion } from "./MetricCard"
+
+type DisplayRow =
+  | { kind: "subtotal"; group: GroupedPivotRows }
+  | { kind: "child"; row: PivotTableDataResponse["rows"][number] }
 
 interface PivotTableProps {
   data: PivotTableDataResponse
@@ -98,17 +102,19 @@ export const PivotTable = memo(function PivotTable({
 
   // F058 AC-12/AC-13: when the query resolved a group dimension (see transformPivotData),
   // re-cluster rows so same-group rows are contiguous, then rowSpan-merge the group's
-  // cell across its rows instead of repeating the label on every row.
+  // cell across its rows instead of repeating the label on every row. Per customer
+  // feedback, the group's own subtotal (sum of its child rows) leads each group,
+  // ahead of the individual child rows.
   const groupDimensionIndex = data.groupDimensionIndex ?? null
-  const displayRows = useMemo(() => {
+  const displayRows = useMemo((): DisplayRow[] => {
     const groups = groupCrossTabRows(data.rows, groupDimensionIndex)
     if (!groups) {
-      return data.rows.map(row => ({ row, groupRowSpan: null as number | null }))
+      return data.rows.map(row => ({ kind: "child" as const, row }))
     }
-    return groups.flatMap(group => group.childRows.map((row, indexInGroup) => ({
-      row,
-      groupRowSpan: indexInGroup === 0 ? group.childRows.length : null,
-    })))
+    return groups.flatMap(group => [
+      { kind: "subtotal" as const, group },
+      ...group.childRows.map(row => ({ kind: "child" as const, row })),
+    ])
   }, [data.rows, groupDimensionIndex])
 
   const cellBackground = (value: number) => {
@@ -179,68 +185,127 @@ export const PivotTable = memo(function PivotTable({
           ))}
         </thead>
         <tbody>
-          {displayRows.map(({ row, groupRowSpan }, rowIndex) => (
-            <tr key={JSON.stringify(row.key)} className="hover:brightness-[0.98]">
-              <th
-                scope="row"
-                className="sticky left-0 z-20 w-16 min-w-16 max-w-16 border-b border-r border-border bg-background px-2 py-2 text-center font-medium tabular-nums text-foreground"
-              >
-                {rowIndex + 1}
-              </th>
-              {row.key.map((label, dimensionIndex) => {
-                // Continuation row of a rowSpan-merged group cell: the group's value
-                // already renders on the group's first row, covering this cell.
-                if (dimensionIndex === groupDimensionIndex && groupRowSpan === null) {
-                  return null
-                }
-                // F058 AC-09/AC-11: the merged "name(dept)" cell has no single raw value
-                // to filter on, so it never becomes a drill-down export target.
-                const fieldId = data.rowFieldIds?.[dimensionIndex]
-                const isDedupMergedCell = dimensionIndex === data.personDedupIndex
-                const isClickable = canExportDetail && fieldId && !isDedupMergedCell && label
-                const exporting = fieldId ? isExportingDetail(fieldId, label) : false
-                return (
+          {displayRows.map((entry, rowIndex) => {
+            if (entry.kind === "subtotal") {
+              const { group } = entry
+              // Guaranteed non-null: a "subtotal" entry only exists when groupCrossTabRows
+              // resolved groups, which itself requires groupDimensionIndex !== null.
+              const gdi = groupDimensionIndex as number
+              const remainingDimCount = Math.max(0, data.rowHeaders.length - (gdi + 1))
+              const fieldId = data.rowFieldIds?.[gdi]
+              const isClickable = canExportDetail && fieldId && group.groupLabel
+              const exporting = fieldId ? isExportingDetail(fieldId, group.groupLabel) : false
+              return (
+                <tr key={`subtotal-${group.groupKey}`} className="bg-slate-50 font-semibold dark:bg-slate-800/40">
                   <th
-                    key={`${label}-${dimensionIndex}`}
                     scope="row"
-                    rowSpan={dimensionIndex === groupDimensionIndex ? groupRowSpan ?? undefined : undefined}
-                    className={`sticky z-10 w-32 min-w-32 max-w-32 border-b border-r border-border bg-background px-3 py-2 text-left font-medium text-foreground ${
+                    className="sticky left-0 z-20 w-16 min-w-16 max-w-16 border-b border-r border-border bg-slate-50 px-2 py-2 text-center font-medium tabular-nums text-foreground dark:bg-slate-800/40"
+                  >
+                    {rowIndex + 1}
+                  </th>
+                  <th
+                    scope="row"
+                    rowSpan={group.childRows.length + 1}
+                    className={`sticky z-10 w-32 min-w-32 max-w-32 border-b border-r border-border bg-background px-3 py-2 text-left font-semibold text-foreground ${
                       isClickable ? "cursor-pointer hover:underline hover:text-primary" : ""
                     }`}
-                    style={{
-                      left: `${64 + dimensionIndex * 128}px`,
-                      paddingLeft: `${12 + dimensionIndex * 12}px`,
-                    }}
-                    title={isClickable ? `${label}（点击导出该分类明细）` : label}
-                    onClick={isClickable ? () => void exportDetail(fieldId, label) : undefined}
+                    style={{ left: `${64 + gdi * 128}px`, paddingLeft: `${12 + gdi * 12}px` }}
+                    title={isClickable ? `${group.groupLabel}（点击导出该分类明细）` : group.groupLabel}
+                    onClick={isClickable ? () => void exportDetail(fieldId, group.groupLabel) : undefined}
                   >
                     <span className="block max-w-28 truncate">
-                      {exporting ? "导出中…" : (label || "未分类")}
+                      {exporting ? "导出中…" : group.groupLabel}
                     </span>
                   </th>
-                )
-              })}
-              {data.rowHeaders.slice(row.key.length).map((_, missingIndex) => (
+                  {remainingDimCount > 0 && (
+                    <th
+                      scope="row"
+                      colSpan={remainingDimCount}
+                      className="sticky z-10 border-b border-r border-border bg-slate-50 px-3 py-2 text-left font-semibold text-slate-500 dark:bg-slate-800/40 dark:text-slate-300"
+                      style={{ left: `${64 + (gdi + 1) * 128}px`, paddingLeft: `${12 + (gdi + 1) * 12}px` }}
+                    >
+                      汇总
+                    </th>
+                  )}
+                  {group.subtotalRow.values.map((value, columnIndex) => (
+                    <td
+                      key={`subtotal-${group.groupKey}-${JSON.stringify(originalColumnPaths[columnIndex])}`}
+                      className="border-b border-r border-border bg-slate-50 px-3 py-2 text-right tabular-nums text-foreground dark:bg-slate-800/40"
+                      title={`${group.groupLabel} · 汇总 · ${columnPaths[columnIndex].join(" / ")}：${formatValue(value, dataConfig)}`}
+                    >
+                      {value ? formatValue(value, dataConfig) : "—"}
+                    </td>
+                  ))}
+                  <td className="border-b border-border bg-amber-100 px-3 py-2 text-right font-semibold tabular-nums text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                    {formatValue(group.subtotalRow.total, dataConfig)}
+                  </td>
+                </tr>
+              )
+            }
+
+            const { row } = entry
+            return (
+              <tr key={JSON.stringify(row.key)} className="hover:brightness-[0.98]">
                 <th
-                  key={`missing-${missingIndex}`}
-                  className="border-b border-r border-border bg-background px-3 py-2"
-                />
-              ))}
-              {row.values.map((value, columnIndex) => (
-                <td
-                  key={`${rowIndex}-${JSON.stringify(originalColumnPaths[columnIndex])}`}
-                  className="border-b border-r border-border px-3 py-2 text-right tabular-nums text-foreground"
-                  style={{ backgroundColor: cellBackground(value) }}
-                  title={`${row.key.join(" / ")} · ${columnPaths[columnIndex].join(" / ")}：${formatValue(value, dataConfig)}`}
+                  scope="row"
+                  className="sticky left-0 z-20 w-16 min-w-16 max-w-16 border-b border-r border-border bg-background px-2 py-2 text-center font-medium tabular-nums text-foreground"
                 >
-                  {value ? formatValue(value, dataConfig) : "—"}
+                  {rowIndex + 1}
+                </th>
+                {row.key.map((label, dimensionIndex) => {
+                  // The group dimension's cell is fully rendered on the group's subtotal
+                  // row (with a rowSpan covering this row) — never repeated here.
+                  if (dimensionIndex === groupDimensionIndex) {
+                    return null
+                  }
+                  // F058 AC-09/AC-11: the merged "name(dept)" cell has no single raw value
+                  // to filter on, so it never becomes a drill-down export target.
+                  const fieldId = data.rowFieldIds?.[dimensionIndex]
+                  const isDedupMergedCell = dimensionIndex === data.personDedupIndex
+                  const isClickable = canExportDetail && fieldId && !isDedupMergedCell && label
+                  const exporting = fieldId ? isExportingDetail(fieldId, label) : false
+                  return (
+                    <th
+                      key={`${label}-${dimensionIndex}`}
+                      scope="row"
+                      className={`sticky z-10 w-32 min-w-32 max-w-32 border-b border-r border-border bg-background px-3 py-2 text-left font-medium text-foreground ${
+                        isClickable ? "cursor-pointer hover:underline hover:text-primary" : ""
+                      }`}
+                      style={{
+                        left: `${64 + dimensionIndex * 128}px`,
+                        paddingLeft: `${12 + dimensionIndex * 12}px`,
+                      }}
+                      title={isClickable ? `${label}（点击导出该分类明细）` : label}
+                      onClick={isClickable ? () => void exportDetail(fieldId, label) : undefined}
+                    >
+                      <span className="block max-w-28 truncate">
+                        {exporting ? "导出中…" : (label || "未分类")}
+                      </span>
+                    </th>
+                  )
+                })}
+                {data.rowHeaders.slice(row.key.length).map((_, missingIndex) => (
+                  <th
+                    key={`missing-${missingIndex}`}
+                    className="border-b border-r border-border bg-background px-3 py-2"
+                  />
+                ))}
+                {row.values.map((value, columnIndex) => (
+                  <td
+                    key={`${rowIndex}-${JSON.stringify(originalColumnPaths[columnIndex])}`}
+                    className="border-b border-r border-border px-3 py-2 text-right tabular-nums text-foreground"
+                    style={{ backgroundColor: cellBackground(value) }}
+                    title={`${row.key.join(" / ")} · ${columnPaths[columnIndex].join(" / ")}：${formatValue(value, dataConfig)}`}
+                  >
+                    {value ? formatValue(value, dataConfig) : "—"}
+                  </td>
+                ))}
+                <td className="border-b border-border bg-amber-50 px-3 py-2 text-right font-semibold tabular-nums text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                  {formatValue(row.total, dataConfig)}
                 </td>
-              ))}
-              <td className="border-b border-border bg-amber-50 px-3 py-2 text-right font-semibold tabular-nums text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-                {formatValue(row.total, dataConfig)}
-              </td>
-            </tr>
-          ))}
+              </tr>
+            )
+          })}
         </tbody>
         <tfoot className="sticky bottom-0 z-10">
           <tr>

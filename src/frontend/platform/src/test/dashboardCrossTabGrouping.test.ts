@@ -84,13 +84,26 @@ describe("groupCrossTabRows", () => {
         groupKey: "生产制造部",
         groupLabel: "生产制造部",
         childRows: [rows[0], rows[1]],
+        subtotalRow: { groupLabel: "生产制造部", values: [15], total: 15 },
       },
       {
         groupKey: "安全环保监察部",
         groupLabel: "安全环保监察部",
         childRows: [rows[2]],
+        subtotalRow: { groupLabel: "安全环保监察部", values: [3], total: 3 },
       },
     ])
+  })
+
+  it("sums each column across the group's child rows for the subtotal row", () => {
+    const rows = [
+      { key: ["生产制造部", "轧钢科室"], values: [10, 1], total: 11 },
+      { key: ["生产制造部", "炼钢科室"], values: [5, 2], total: 7 },
+    ]
+
+    const grouped = groupCrossTabRows(rows, 0)
+
+    expect(grouped?.[0].subtotalRow).toEqual({ groupLabel: "生产制造部", values: [15, 3], total: 18 })
   })
 
   it("falls back to 未分类 when the group dimension value is missing", () => {

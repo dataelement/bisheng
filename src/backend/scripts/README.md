@@ -940,6 +940,38 @@ JSON 报告：
 - `--apply` 会删除来源文件并生成新的目标文件 ID。收藏、分享链接及其他保存旧文件 ID 的引用不会迁移，
   执行前必须先审核 dry-run 报告并确认这些引用中断的影响。
 
+## Telemetry / Dashboard Scripts
+
+### `migrate_user_engagement_indices.py`
+
+F058 后续改造：`用户规模统计`(mid_user_increment) / `活跃用户规模统计`(mid_active_user) /
+`全员每日参与度`(mid_user_daily_participation_fact) 三个原本独立的 ES 索引，写入侧已经
+改成共写一个新的合并索引（`mid_user_engagement_stat`，见
+`bisheng/telemetry/domain/mid_table/user_engagement_shared.py`）。这个脚本把三个旧索引里
+**历史**数据搬进新索引，让合并后的看板还能看到切换之前的数据。旧的三个索引本身不改、不删，
+脚本只读它们。每条记录按来源打 `metric_source` 标记，`_id` 按来源加前缀（`increment_`/
+`active_`，`participation` 本来就带前缀不用改），跟线上写入逻辑用的是同一套前缀规则，
+重复跑这个脚本是幂等的（同一条历史记录每次都会覆盖成同样的内容，不会重复插入）。
+默认 dry-run，`--apply` 才写库。
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py
+PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py --apply --source increment
+PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py --apply --batch-size 2000
+PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py --apply --limit 500  # 先小批量验证
+
+bash scripts/migrate_user_engagement_indices.sh --apply
+```
+
+说明：
+
+- `--source`：只迁移一个来源(`increment`/`active_user`/`participation`)，默认三个都迁。
+- `--limit`：每个来源最多扫描多少条，用于先小批量验证。
+- `--apply` 时脚本会先复用线上写入代码本身的建表逻辑（`UserIncrement`/`DailyParticipationFact`/
+  `MidActiveUserJob` 各自的 `ensure_index_exists`）把目标索引的 mapping 建/补齐，不在脚本里
+  另外维护一份 mapping 定义。
+
 ## OpenAPI Verification Scripts
 
 ### `verify_filelib_sync.py`
