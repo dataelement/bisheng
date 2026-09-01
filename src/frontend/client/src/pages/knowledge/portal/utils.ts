@@ -23,6 +23,10 @@ export function isFolder(file: KnowledgeFile) {
     return file.type === FileType.FOLDER;
 }
 
+export function isFallbackFolderName(folderId: string | number, name?: string | null): boolean {
+    return typeof name === "string" && name.trim() === `文件夹 ${folderId}`;
+}
+
 export function normalizePortalFileCategoryOptions(rawOptions: unknown): PortalFileCategoryOption[] {
     if (!Array.isArray(rawOptions)) {
         return DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS;
@@ -227,7 +231,9 @@ export function mergeRootTreeNodesPreservingLoadedFolders(
                 ...nodes.slice(index + 1),
             ];
         }
-        const placeholderFile = createRestoredFolderFile(spaceId, headId, head.name);
+        const rootFile = rootFiles.find((f) => String(f.id) === headId);
+        const placeholderName = rootFile?.name ?? head.name;
+        const placeholderFile = createRestoredFolderFile(spaceId, headId, placeholderName);
         const newNode: PortalFileTreeNode = tail.length
             ? { ...createTreeNode(placeholderFile), expanded: true, children: insertIntoPath([], tail) }
             : currentFolderNode;
@@ -360,8 +366,16 @@ export function ensureFolderPath(
     const index = nodes.findIndex((node) => String(node.file.id) === headId);
     if (index >= 0) {
         const node = nodes[index];
+        const shouldRefreshName =
+            head.name &&
+            !isFallbackFolderName(headId, head.name) &&
+            isFallbackFolderName(headId, node.file.name);
+        const nextFile = shouldRefreshName
+            ? { ...node.file, name: head.name, path: head.name }
+            : node.file;
         const nextNode: PortalFileTreeNode = {
             ...node,
+            file: nextFile,
             expanded: true,
             children: ensureFolderPath(node.children, tail, spaceId),
         };

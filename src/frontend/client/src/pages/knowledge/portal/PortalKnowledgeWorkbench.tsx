@@ -74,6 +74,7 @@ import {
     findTreeNode,
     findTreeNodePath,
     flattenTreeFiles,
+    isFallbackFolderName,
     isFolder,
     isPreviewable,
     isRetryable,
@@ -2669,11 +2670,24 @@ export default function PortalKnowledgeWorkbench() {
             setCurrentFolderId(folderId);
             const existingPath = findTreeNodePath(treeNodes, folderId);
             const node = findTreeNode(treeNodes, folderId);
+            // Prefer a real folderName from the UI; never overwrite an existing real
+            // name with a fallback "文件夹 {id}" name passed by breadcrumb navigation.
+            const effectiveFolderName =
+                folderName && !isFallbackFolderName(folderId, folderName)
+                    ? folderName
+                    : node?.file.name;
             const hasFullPath = node?.loaded && existingPath.length > 1;
             if (hasFullPath) {
+                const shouldRefreshName =
+                    effectiveFolderName &&
+                    !isFallbackFolderName(folderId, effectiveFolderName) &&
+                    isFallbackFolderName(folderId, node?.file.name);
                 setTreeNodes((prev) => updateTreeNode(prev, folderId, (item) => ({
                     ...item,
                     expanded: true,
+                    file: shouldRefreshName
+                        ? { ...item.file, name: effectiveFolderName, path: effectiveFolderName }
+                        : item.file,
                 })));
                 return;
             }
@@ -2688,7 +2702,7 @@ export default function PortalKnowledgeWorkbench() {
                     if (activeSpaceIdRef.current !== spaceId) return;
                     fullPath = parentPath.some((seg) => String(seg.id) === folderId)
                         ? parentPath
-                        : [...parentPath, { id: folderId, name: folderName || `文件夹 ${folderId}` }];
+                        : [...parentPath, { id: folderId, name: effectiveFolderName || `文件夹 ${folderId}` }];
                 } catch {
                     // Fall through to single-node placeholder below.
                 }
@@ -2698,7 +2712,7 @@ export default function PortalKnowledgeWorkbench() {
             }
 
             setTreeNodes((prev) => updateTreeNode(
-                ensureFolderNode(prev, spaceId, folderId, folderName),
+                ensureFolderNode(prev, spaceId, folderId, effectiveFolderName),
                 folderId,
                 (item) => ({
                     ...item,
@@ -2720,7 +2734,7 @@ export default function PortalKnowledgeWorkbench() {
                 const total = (res as any).total ?? res.data.length;
                 const nextFiles = markFolderStatsLoading(res.data);
                 setTreeNodes((prev) => updateTreeNode(
-                    ensureFolderNode(prev, spaceId, folderId, folderName),
+                    ensureFolderNode(prev, spaceId, folderId, effectiveFolderName),
                     folderId,
                     (item) => ({
                         ...item,
@@ -2738,7 +2752,7 @@ export default function PortalKnowledgeWorkbench() {
             } catch {
                 if (activeSpaceIdRef.current !== spaceId) return;
                 setTreeNodes((prev) => updateTreeNode(
-                    ensureFolderNode(prev, spaceId, folderId, folderName),
+                    ensureFolderNode(prev, spaceId, folderId, effectiveFolderName),
                     folderId,
                     (item) => ({
                         ...item,

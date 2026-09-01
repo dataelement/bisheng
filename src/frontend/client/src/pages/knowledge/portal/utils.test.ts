@@ -4,7 +4,9 @@ import {
     createTreeNode,
     dedupeFilesById,
     dedupeTreeNodesByFileId,
+    ensureFolderPath,
     extractExt,
+    isFallbackFolderName,
     mergeRootTreeNodesPreservingLoadedFolders,
     normalizePortalFileCategoryGroups,
     normalizePortalFileCategoryOptions,
@@ -232,6 +234,52 @@ describe("portal preview utils", () => {
                     { code: "CAS\u200B", label: "案例\u200B" },
                 ]),
             ).toBe("CAS / 案例");
+        });
+    });
+
+    describe("isFallbackFolderName", () => {
+        it("detects the default placeholder folder name", () => {
+            expect(isFallbackFolderName("1571", "文件夹 1571")).toBe(true);
+            expect(isFallbackFolderName(1571, "文件夹 1571")).toBe(true);
+        });
+
+        it("returns false for real folder names", () => {
+            expect(isFallbackFolderName("1571", "精益项目")).toBe(false);
+            expect(isFallbackFolderName("1571", "")).toBe(false);
+            expect(isFallbackFolderName("1571", null)).toBe(false);
+        });
+    });
+
+    describe("ensureFolderPath", () => {
+        it("refreshes a fallback folder name when the path provides a real name", () => {
+            const placeholder = createTreeNode(makeFile({ id: "1571", name: "文件夹 1571" }));
+            const refreshed = ensureFolderPath(
+                [placeholder],
+                [{ id: "1571", name: "业务接口未分配" }],
+                "space-1",
+            );
+            expect(refreshed[0].file.name).toBe("业务接口未分配");
+            expect(refreshed[0].file.path).toBe("业务接口未分配");
+        });
+
+        it("keeps the existing real name when the path also has a real name", () => {
+            const realNode = createTreeNode(makeFile({ id: "1571", name: "原始名称" }));
+            const refreshed = ensureFolderPath(
+                [realNode],
+                [{ id: "1571", name: "新名称" }],
+                "space-1",
+            );
+            expect(refreshed[0].file.name).toBe("原始名称");
+        });
+
+        it("does not downgrade a real name to a fallback name", () => {
+            const realNode = createTreeNode(makeFile({ id: "1571", name: "原始名称" }));
+            const refreshed = ensureFolderPath(
+                [realNode],
+                [{ id: "1571", name: "文件夹 1571" }],
+                "space-1",
+            );
+            expect(refreshed[0].file.name).toBe("原始名称");
         });
     });
 });
