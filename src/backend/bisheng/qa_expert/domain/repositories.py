@@ -85,6 +85,7 @@ class ExpertRepository:
         answer_desc: bool | None = None,
         adoption_desc: bool | None = None,
         vote_desc: bool | None = None,
+        status: int | None = None,
     ) -> tuple[list[Expert], int]:
         """列表查询专家"""
         async with get_async_db_session() as session:
@@ -116,6 +117,9 @@ class ExpertRepository:
             for column, value in exact_filters:
                 if value and value.strip():
                     base_stmt = base_stmt.where(func.trim(column) == value.strip())
+
+            if status is not None:
+                base_stmt = base_stmt.where(Expert.status == status)
 
             # 2. 执行计数查询（应用了相同的筛选条件）
             count_stmt = select(func.count()).select_from(base_stmt.subquery())

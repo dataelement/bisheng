@@ -119,6 +119,8 @@ async def list_experts(
     answer_desc: bool | None = Query(None, description="回答数排序"),
     adoption_desc: bool | None = Query(None, description="采纳数排序"),
     vote_desc: bool | None = Query(None, description="点赞数排序"),
+    # 查询串是字符串 "1"；用 int + ge/le，不要用 Literal[0, 1]（Pydantic 不把 "1" 当成 1）
+    status: int | None = Query(None, ge=0, le=1, description="专家状态: 1有效 0停用, 缺省全部"),
     page: int = Query(1, ge=1, description="页码"),
     limit: int = Query(20, ge=1, le=500, description="每页数量"),
     service: ExpertService = Depends(get_expert_service),
@@ -139,6 +141,7 @@ async def list_experts(
         answer_desc=answer_desc,
         adoption_desc=adoption_desc,
         vote_desc=vote_desc,
+        status=status,
     )
     return resp_200(data={"experts": experts, "total": total})
 

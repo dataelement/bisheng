@@ -283,6 +283,7 @@ class ExpertService:
         answer_desc: bool | None = None,
         adoption_desc: bool | None = None,
         vote_desc: bool | None = None,
+        status: int | None = None,
     ) -> tuple[list[dict], int]:
         """列表查询专家"""
         sort_by_department = sort_by == "department"
@@ -300,6 +301,7 @@ class ExpertService:
             answer_desc=answer_desc,
             adoption_desc=adoption_desc,
             vote_desc=vote_desc,
+            status=status,
         )
         experts_all = await self._build_expert_rows(experts)
         if sort_by_department:
