@@ -54,7 +54,15 @@ def test_split_folder_path_accepts_slash_and_arrow_separators() -> None:
 
 def test_split_folder_path_rejects_blank() -> None:
     with pytest.raises(script_mod.TargetLookupError, match="empty"):
-        script_mod.split_folder_path("  /  ")
+        script_mod.split_folder_path("   ")
+
+
+def test_is_space_root_path_accepts_slash() -> None:
+    assert script_mod.is_space_root_path("/")
+    assert script_mod.is_space_root_path(" / ")
+    assert script_mod.is_space_root_path("root")
+    assert not script_mod.is_space_root_path("消防安全")
+    assert not script_mod.is_space_root_path("安全生产/消防安全")
 
 
 def test_resolve_folder_walks_nested_name_path() -> None:
@@ -155,3 +163,46 @@ async def test_run_dry_run_prints_failed_files_and_does_not_enqueue(monkeypatch,
     assert "失败文件.pdf" in output
     assert "file_id=101" in output
     assert "path=安全生产/消防安全" in output
+
+
+async def test_run_space_root_selects_entire_space(monkeypatch, capsys) -> None:
+    space = SimpleNamespace(id=10, tenant_id=1, name="admin的知识库")
+    failed = KnowledgeFile(
+        id=101,
+        knowledge_id=10,
+        file_name="根目录失败.pdf",
+        file_type=FileType.FILE.value,
+        status=KnowledgeFileStatus.FAILED.value,
+        remark="parse error",
+    )
+    selection = SelectionReport(selected_files=[failed])
+    collect_kwargs: dict = {}
+
+    async def fake_resolve_target(session, **kwargs):
+        assert kwargs["folder_path"] == "/"
+        return script_mod.ResolvedTarget(space=space, folder=None, folder_path="/")
+
+    async def fake_collect_candidate_files(session, **kwargs):
+        collect_kwargs.update(kwargs)
+        return selection
+
+    async def fake_close_app_context():
+        return None
+
+    monkeypatch.setattr(script_mod, "bypass_tenant_filter", lambda: _Bypass())
+    monkeypatch.setattr(script_mod, "get_async_db_session", lambda: _Session())
+    monkeypatch.setattr(script_mod, "resolve_target", fake_resolve_target)
+    monkeypatch.setattr(script_mod, "collect_candidate_files", fake_collect_candidate_files)
+    monkeypatch.setattr(script_mod, "close_app_context", fake_close_app_context)
+    monkeypatch.setattr(script_mod, "apply_selection", lambda *args, **kwargs: None)
+
+    code = await script_mod.run(
+        script_mod.parse_args(["--space-name", "admin的知识库", "--folder", "/"]),
+    )
+
+    assert code == 0
+    assert collect_kwargs["space_ids"] == [10]
+    assert "folder_ids" not in collect_kwargs or collect_kwargs.get("folder_ids") in ((), [], None)
+    output = capsys.readouterr().out
+    assert "entire space" in output
+    assert "根目录失败.pdf" in output

@@ -9,7 +9,8 @@ By default this is a dry-run. Pass ``--apply`` to update each still-failed
 file to ``WAITING`` and publish ``retry_knowledge_file_celery``.
 
 Folder paths use ``/`` (also ``>`` or ``->``). A single unique folder name
-in the space is accepted without the full path.
+in the space is accepted without the full path. Pass ``--folder /`` to select
+every failed file in the knowledge space (root and all nested folders).
 
 Usage (from ``src/backend``):
 
@@ -18,6 +19,8 @@ Usage (from ``src/backend``):
       --space-name "安全生产知识库" --folder "安全生产/消防安全"
     PYTHONPATH=./ .venv/bin/python scripts/retry_failed_knowledge_space_folder_files.py \\
       --space-name "安全生产知识库" --folder "消防安全" --apply
+    PYTHONPATH=./ .venv/bin/python scripts/retry_failed_knowledge_space_folder_files.py \\
+      --space-name "安全生产知识库" --folder /
     PYTHONPATH=./ .venv/bin/python scripts/retry_failed_knowledge_space_folder_files.py \\
       --space-name "安全生产知识库" --folder "安全生产/消防安全" --tenant-id 1 --apply
 """
@@ -65,6 +68,7 @@ from scripts.reparse_knowledge_space_files import (  # noqa: E402
 
 _FOLDER_PATH_SPLIT = re.compile(r"\s*(?:->|/|>)\s*")
 _REMARK_DISPLAY_LIMIT = 160
+_SPACE_ROOT_ALIASES = {"/", ".", "root"}
 
 
 class TargetLookupError(RuntimeError):
@@ -74,7 +78,7 @@ class TargetLookupError(RuntimeError):
 @dataclass(frozen=True)
 class ResolvedTarget:
     space: Knowledge
-    folder: KnowledgeFile
+    folder: KnowledgeFile | None
     folder_path: str
 
 
@@ -84,7 +88,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--folder",
         required=True,
-        help='folder name or nested path, e.g. "消防安全" or "安全生产/消防安全"',
+        help='folder name, nested path, or "/" for the whole knowledge space',
     )
     parser.add_argument(
         "--tenant-id",
@@ -103,6 +107,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="also select TIMEOUT files in addition to FAILED",
     )
     return parser.parse_args(argv)
+
+
+def is_space_root_path(raw: str) -> bool:
+    return raw.strip().lower() in _SPACE_ROOT_ALIASES
 
 
 def split_folder_path(raw: str) -> list[str]:
@@ -249,6 +257,8 @@ async def resolve_target(
     space = spaces[0]
     if space.id is None:
         raise TargetLookupError(f'knowledge space "{space_name}" has no id')
+    if is_space_root_path(folder_path):
+        return ResolvedTarget(space=space, folder=None, folder_path="/")
     folders = await list_space_folders(session, int(space.id))
     folder, folder_path_names = resolve_named_folder(folders, folder_path)
     return ResolvedTarget(space=space, folder=folder, folder_path=folder_path_names)
@@ -276,6 +286,7 @@ def print_failed_files(files: Sequence[KnowledgeFile]) -> None:
 
 async def run(args: argparse.Namespace) -> int:
     statuses = eligible_statuses(include_timeout=args.include_timeout)
+    selection = None
     try:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
@@ -290,15 +301,23 @@ async def run(args: argparse.Namespace) -> int:
                     print(f"[ERROR] {exc}", file=sys.stderr)
                     return 1
 
-                print(
-                    f"[INFO] space {_format_space(target.space)}; "
-                    f"folder id={target.folder.id} path={target.folder_path}"
-                )
-                selection = await collect_candidate_files(
-                    session,
-                    folder_ids=[int(target.folder.id)],
-                    eligible_statuses=statuses,
-                )
+                if target.folder is None:
+                    print(f"[INFO] space {_format_space(target.space)}; folder path=/ (entire space)")
+                    selection = await collect_candidate_files(
+                        session,
+                        space_ids=[int(target.space.id)],
+                        eligible_statuses=statuses,
+                    )
+                else:
+                    print(
+                        f"[INFO] space {_format_space(target.space)}; "
+                        f"folder id={target.folder.id} path={target.folder_path}"
+                    )
+                    selection = await collect_candidate_files(
+                        session,
+                        folder_ids=[int(target.folder.id)],
+                        eligible_statuses=statuses,
+                    )
 
         print_failed_files(selection.selected_files)
         print_selection_report(selection)

@@ -663,6 +663,11 @@ bash scripts/retry_failed_knowledge_space_folder_files.sh \
   --folder "安全生产/消防安全" \
   --apply
 
+# 整个知识空间（含根目录和所有子目录）下的失败文件
+bash scripts/retry_failed_knowledge_space_folder_files.sh \
+  --space-name "admin的知识库" \
+  --folder /
+
 # 目录名在空间内唯一时可只写最后一级
 bash scripts/retry_failed_knowledge_space_folder_files.sh \
   --space-name "安全生产知识库" \
@@ -678,6 +683,7 @@ bash scripts/retry_failed_knowledge_space_folder_files.sh \
 ```
 
 `--folder` 支持 `/`、`>`、`->` 分隔多级目录。解析范围包含该目录及其所有子目录。
+`--folder /`（或 `root`）表示整个知识空间，包括根目录下的文件。
 
 Safety:
 
