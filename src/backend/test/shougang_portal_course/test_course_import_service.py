@@ -193,7 +193,7 @@ async def test_import_rejects_missing_name(course_session):
 
 async def test_import_assigns_catalog_by_external_id(course_session):
     catalog_service = PortalCourseCatalogService(course_session)
-    external_catalog_id = "c" * 32
+    external_catalog_id = "CAT-1001"
     imported = await catalog_service.import_excel(
         tenant_id=1,
         user_id=7,
@@ -224,7 +224,12 @@ async def test_import_assigns_catalog_by_external_id(course_session):
         tenant_id=1,
         public_only=False,
     )
-    assert courses[0].catalog_id == external_catalog_id
+    catalog = await catalog_service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id=external_catalog_id,
+    )
+    assert catalog is not None
+    assert courses[0].catalog_id == catalog.id
 
 
 async def test_import_assigns_catalog_by_id(course_session):

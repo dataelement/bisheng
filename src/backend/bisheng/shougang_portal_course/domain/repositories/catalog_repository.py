@@ -54,6 +54,44 @@ class PortalCourseCatalogRepository:
             statement = statement.with_for_update()
         return (await self.session.exec(statement)).first()
 
+    async def get_catalog_by_external_id(
+        self,
+        *,
+        tenant_id: int,
+        external_id: str,
+        include_deleted: bool = False,
+    ) -> PortalCourseCatalog | None:
+        text = (external_id or "").strip()
+        if not text:
+            return None
+        statement = select(PortalCourseCatalog).where(
+            PortalCourseCatalog.tenant_id == tenant_id,
+            PortalCourseCatalog.external_id == text,
+        )
+        if not include_deleted:
+            statement = statement.where(PortalCourseCatalog.deleted.is_(False))
+        return (await self.session.exec(statement)).first()
+
+    async def find_by_import_id(
+        self,
+        *,
+        tenant_id: int,
+        import_id: str,
+        include_deleted: bool = False,
+    ) -> PortalCourseCatalog | None:
+        found = await self.get_catalog_by_external_id(
+            tenant_id=tenant_id,
+            external_id=import_id,
+            include_deleted=include_deleted,
+        )
+        if found is not None:
+            return found
+        return await self.get_catalog(
+            tenant_id=tenant_id,
+            catalog_id=import_id,
+            include_deleted=include_deleted,
+        )
+
     async def find_sibling_by_name(
         self,
         *,

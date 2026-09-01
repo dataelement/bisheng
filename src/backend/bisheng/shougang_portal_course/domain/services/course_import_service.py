@@ -42,7 +42,7 @@ EXCEL_HEADERS = [
 SHEET_NAME = "第三方课程"
 MAX_IMPORT_ROWS = 2000
 MAX_EXTERNAL_ID_LENGTH = 128
-MAX_CATALOG_ID_LENGTH = 32
+MAX_CATALOG_ID_LENGTH = 128
 MAX_CATALOG_NAME_LENGTH = 200
 MAX_NAME_LENGTH = 200
 MAX_INSTRUCTOR_LENGTH = 100
@@ -265,7 +265,7 @@ class PortalCourseImportService:
     ) -> str | None:
         if catalog_id:
             for item in catalogs:
-                if item.id == catalog_id:
+                if item.external_id == catalog_id or item.id == catalog_id:
                     return item.id
             raise LookupError(catalog_id)
         return PortalCourseImportService._resolve_catalog_name(catalog_name, catalogs)

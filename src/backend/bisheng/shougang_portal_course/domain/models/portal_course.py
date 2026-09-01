@@ -44,6 +44,11 @@ class PortalCourseCatalog(SQLModelSerializable, table=True):
             "opened",
         ),
         Index("ix_portal_catalog_tenant_routing", "tenant_id", "routing_path"),
+        UniqueConstraint(
+            "tenant_id",
+            "external_id",
+            name="uk_portal_catalog_tenant_external_id",
+        ),
         {"mysql_charset": "utf8mb4", "mysql_collate": "utf8mb4_unicode_ci"},
     )
 
@@ -52,6 +57,10 @@ class PortalCourseCatalog(SQLModelSerializable, table=True):
         sa_column=Column(CHAR(32), primary_key=True, nullable=False),
     )
     tenant_id: int = Field(sa_column=Column(Integer, nullable=False))
+    external_id: str | None = Field(
+        default=None,
+        sa_column=Column(String(128), nullable=True),
+    )
     name: str = Field(sa_column=Column(String(200), nullable=False))
     description: str = Field(
         default="",

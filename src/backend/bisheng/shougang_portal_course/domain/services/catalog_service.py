@@ -36,7 +36,7 @@ NAME_PATH_SEPARATOR = "->"
 EXCEL_HEADERS = ["目录ID", "上级目录ID", "上级目录", "目录名称", "描述", "排序", "是否公开"]
 MAX_IMPORT_ROWS = 2000
 MAX_CATALOG_NAME_LENGTH = 200
-MAX_CATALOG_EXTERNAL_ID_LENGTH = 32
+MAX_CATALOG_EXTERNAL_ID_LENGTH = 128
 
 
 class PortalCourseCatalogService:
@@ -345,7 +345,7 @@ class PortalCourseCatalogService:
     ) -> CatalogImportPreview:
         parsed_rows, parse_issues, total = self._parse_import_workbook(content)
         existing = await self.repository.list_catalogs(tenant_id=tenant_id)
-        id_index = {item.id: item for item in existing}
+        id_index = self._import_ref_index(existing)
         name_index: dict[str, list[PortalCourseCatalog]] = {}
         for item in existing:
             name_index.setdefault(item.name, []).append(item)
@@ -380,7 +380,7 @@ class PortalCourseCatalogService:
         parsed_rows, parse_issues, total = self._parse_import_workbook(content)
         errors = [issue.message for issue in parse_issues]
         existing = await self.repository.list_catalogs(tenant_id=tenant_id)
-        id_index = {item.id: item for item in existing}
+        id_index = self._import_ref_index(existing)
         name_index: dict[str, list[PortalCourseCatalog]] = {}
         siblings: dict[str | None, dict[str, PortalCourseCatalog]] = {}
         for item in existing:
@@ -469,7 +469,7 @@ class PortalCourseCatalogService:
         except LookupError:
             return None
         try:
-            created = await self._upsert_child(
+            catalog, created = await self._upsert_child(
                 tenant_id=tenant_id,
                 user_id=user_id,
                 catalog_id=catalog_id,
@@ -483,9 +483,9 @@ class PortalCourseCatalogService:
         except Exception as exc:
             errors.append(f"第 {row_idx} 行: {exc}")
             return False
-        if created is not None:
-            name_index.setdefault(name, []).append(created)
-            id_index[created.id] = created
+        if created:
+            name_index.setdefault(name, []).append(catalog)
+        self._index_import_ref(catalog, id_index)
         return True
 
     async def _force_missing_parents(
@@ -513,7 +513,7 @@ class PortalCourseCatalogService:
                 leftover.append(row)
                 continue
             try:
-                created = await self._upsert_child(
+                catalog, created = await self._upsert_child(
                     tenant_id=tenant_id,
                     user_id=user_id,
                     catalog_id=catalog_id,
@@ -528,15 +528,15 @@ class PortalCourseCatalogService:
                 failed += 1
                 errors.append(f"第 {row_idx} 行: {exc}")
                 continue
-            if created is not None:
-                name_index.setdefault(name, []).append(created)
-                id_index[created.id] = created
+            if created:
+                name_index.setdefault(name, []).append(catalog)
+            self._index_import_ref(catalog, id_index)
             success += 1
         if success:
             return leftover, success, failed
         for row_idx, catalog_id, _parent_id, _parent_name, name, description, order_index, opened in leftover:
             try:
-                created = await self._upsert_child(
+                catalog, created = await self._upsert_child(
                     tenant_id=tenant_id,
                     user_id=user_id,
                     catalog_id=catalog_id,
@@ -551,9 +551,9 @@ class PortalCourseCatalogService:
                 failed += 1
                 errors.append(f"第 {row_idx} 行: {exc}")
                 continue
-            if created is not None:
-                name_index.setdefault(name, []).append(created)
-                id_index[created.id] = created
+            if created:
+                name_index.setdefault(name, []).append(catalog)
+            self._index_import_ref(catalog, id_index)
             success += 1
         return [], success, failed
 
@@ -685,13 +685,13 @@ class PortalCourseCatalogService:
         order_index: int,
         opened: bool,
         siblings: dict[str | None, dict[str, PortalCourseCatalog]],
-    ) -> PortalCourseCatalog | None:
+    ) -> tuple[PortalCourseCatalog, bool]:
         parent_key = parent.id if parent else None
         existing = None
         if catalog_id:
-            existing = await self.repository.get_catalog(
+            existing = await self.repository.find_by_import_id(
                 tenant_id=tenant_id,
-                catalog_id=catalog_id,
+                import_id=catalog_id,
             )
         else:
             existing = siblings.setdefault(parent_key, {}).get(name)
@@ -702,23 +702,19 @@ class PortalCourseCatalogService:
                 parent_id=parent_key,
                 name=name,
             )
-            fields = {
-                "tenant_id": tenant_id,
-                "name": name,
-                "description": description,
-                "parent_id": parent_key,
-                "routing_path": "0",
-                "catalog_id_path": "",
-                "catalog_name_path": "",
-                "order_index": order_index,
-                "opened": opened,
-                "create_user": user_id,
-                "update_user": user_id,
-            }
-            catalog = (
-                PortalCourseCatalog(id=catalog_id, **fields)
-                if catalog_id
-                else PortalCourseCatalog(**fields)
+            catalog = PortalCourseCatalog(
+                tenant_id=tenant_id,
+                external_id=catalog_id,
+                name=name,
+                description=description,
+                parent_id=parent_key,
+                routing_path="0",
+                catalog_id_path="",
+                catalog_name_path="",
+                order_index=order_index,
+                opened=opened,
+                create_user=user_id,
+                update_user=user_id,
             )
             await self.repository.add(catalog)
             catalog.routing_path = await self._next_routing_path(
@@ -729,7 +725,7 @@ class PortalCourseCatalogService:
             self._apply_paths(catalog, parent)
             await self.repository.add(catalog)
             siblings.setdefault(parent_key, {})[name] = catalog
-            return catalog
+            return catalog, True
         old_parent = existing.parent_id
         old_name = existing.name
         name_changed = old_name != name
@@ -763,6 +759,8 @@ class PortalCourseCatalogService:
                 catalog=existing,
                 parent=parent,
             )
+        if catalog_id and existing.external_id is None and existing.id != catalog_id:
+            existing.external_id = catalog_id
         existing.description = description
         existing.order_index = order_index
         existing.opened = opened
@@ -771,7 +769,25 @@ class PortalCourseCatalogService:
         await self.repository.add(existing)
         siblings.get(old_parent, {}).pop(old_name, None)
         siblings.setdefault(parent_key, {})[name] = existing
-        return None
+        return existing, False
+
+    @staticmethod
+    def _import_ref_index(
+        catalogs: list[PortalCourseCatalog],
+    ) -> dict[str, PortalCourseCatalog]:
+        index: dict[str, PortalCourseCatalog] = {}
+        for item in catalogs:
+            PortalCourseCatalogService._index_import_ref(item, index)
+        return index
+
+    @staticmethod
+    def _index_import_ref(
+        catalog: PortalCourseCatalog,
+        id_index: dict[str, PortalCourseCatalog],
+    ) -> None:
+        id_index[catalog.id] = catalog
+        if catalog.external_id:
+            id_index[catalog.external_id] = catalog
 
     @staticmethod
     def _resolve_import_parent(
@@ -886,7 +902,7 @@ class PortalCourseCatalogService:
     def _write_instruction_sheet(sheet: Worksheet) -> None:
         lines = [
             "1. 请使用「课程目录」工作表导入. 表头不可修改.",
-            "2. 「目录ID」选填，填写外部系统目录编号. 填写后重复导入会按该 ID 更新；留空则按「同一上级 + 目录名称」更新或新建.",
+            "2. 「目录ID」选填，填写外部系统目录编号，写入目录的外部ID，不占用系统内部ID. 填写后重复导入会按该 ID 更新；留空则按「同一上级 + 目录名称」更新或新建.",
             "3. 「上级目录ID」选填，填写直接上级的外部系统目录编号，优先于「上级目录」名称.",
             "4. 「上级目录」填写直接上级的目录名称. 上级目录ID 和上级目录都留空则导入到根目录.",
             "5. 不要填写路径. 例如上级填 安全生产, 目录名称填 消防安全.",
@@ -1064,6 +1080,7 @@ class PortalCourseCatalogService:
     def _to_read(catalog: PortalCourseCatalog, *, course_count: int) -> CatalogRead:
         return CatalogRead(
             id=catalog.id,
+            external_id=catalog.external_id,
             name=catalog.name,
             description=catalog.description,
             parent_id=catalog.parent_id,

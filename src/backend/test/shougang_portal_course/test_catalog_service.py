@@ -398,7 +398,7 @@ async def test_template_headers_match_import_format():
 
 async def test_excel_import_uses_catalog_id_to_create_and_update(course_session):
     service = PortalCourseCatalogService(course_session)
-    catalog_id = "a" * 32
+    catalog_id = "CAT-1001"
     created = await service.import_excel(
         tenant_id=1,
         user_id=7,
@@ -408,8 +408,14 @@ async def test_excel_import_uses_catalog_id_to_create_and_update(course_session)
     )
     assert created.failed == 0
     assert created.success == 1
-    item = await service.repository.get_catalog(tenant_id=1, catalog_id=catalog_id)
+    item = await service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id=catalog_id,
+    )
     assert item is not None
+    assert item.id != catalog_id
+    assert len(item.id) == 32
+    assert item.external_id == catalog_id
     assert item.name == "安全生产"
 
     updated = await service.import_excel(
@@ -420,7 +426,10 @@ async def test_excel_import_uses_catalog_id_to_create_and_update(course_session)
         ),
     )
     assert updated.failed == 0
-    item = await service.repository.get_catalog(tenant_id=1, catalog_id=catalog_id)
+    item = await service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id=catalog_id,
+    )
     assert item is not None
     assert item.name == "安全培训"
     assert item.description == "更新简介"
@@ -440,9 +449,17 @@ async def test_excel_import_uses_parent_id_over_parent_name(course_session):
         ),
     )
     assert result.failed == 0
-    child = await service.repository.get_catalog(tenant_id=1, catalog_id="CAT-CHILD")
+    child = await service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id="CAT-CHILD",
+    )
+    root = await service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id="CAT-ROOT",
+    )
     assert child is not None
-    assert child.parent_id == "CAT-ROOT"
+    assert root is not None
+    assert child.parent_id == root.id
     assert child.catalog_name_path == "安全生产->消防安全"
 
 
@@ -458,9 +475,17 @@ async def test_excel_import_parent_id_from_later_row(course_session):
     )
     assert result.failed == 0
     assert result.success == 2
-    child = await service.repository.get_catalog(tenant_id=1, catalog_id="CAT-CHILD")
+    child = await service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id="CAT-CHILD",
+    )
+    root = await service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id="CAT-ROOT",
+    )
     assert child is not None
-    assert child.parent_id == "CAT-ROOT"
+    assert root is not None
+    assert child.parent_id == root.id
 
 
 async def test_excel_import_missing_parent_id_fails_row(course_session):
@@ -503,7 +528,10 @@ async def test_excel_force_import_puts_missing_parent_id_under_root(course_sessi
         ),
     )
     assert result.failed == 0
-    child = await service.repository.get_catalog(tenant_id=1, catalog_id="CAT-CHILD")
+    child = await service.repository.get_catalog_by_external_id(
+        tenant_id=1,
+        external_id="CAT-CHILD",
+    )
     assert child is not None
     assert child.parent_id is None
 
