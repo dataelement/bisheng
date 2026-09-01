@@ -174,6 +174,13 @@ class PortalCourseCatalogRepository:
         )
         return len(list((await self.session.exec(statement)).all()))
 
+    async def list_course_names(self, *, tenant_id: int, catalog_id: str) -> list[str]:
+        statement = select(PortalCourse.name).where(
+            PortalCourse.tenant_id == tenant_id,
+            PortalCourse.catalog_id == catalog_id,
+        )
+        return [name for name in (await self.session.exec(statement)).all() if name]
+
     async def count_courses_by_ids(
         self,
         *,
@@ -183,7 +190,10 @@ class PortalCourseCatalogRepository:
     ) -> dict[str, int]:
         if not catalog_ids:
             return {}
-        counts: dict[str, int] = dict.fromkeys(catalog_ids, 0)
+        counts: dict[str, int] = {}
+        for catalog_id in catalog_ids:
+            counts[catalog_id] = 0
+            counts[str(catalog_id).strip()] = 0
         statement = select(PortalCourse).where(
             PortalCourse.tenant_id == tenant_id,
             PortalCourse.catalog_id.in_(catalog_ids),
@@ -192,7 +202,9 @@ class PortalCourseCatalogRepository:
             statement = statement.where(PortalCourse.enabled.is_(True))
         for course in (await self.session.exec(statement)).all():
             if course.catalog_id:
-                counts[course.catalog_id] = counts.get(course.catalog_id, 0) + 1
+                key = str(course.catalog_id).strip()
+                counts[key] = counts.get(key, 0) + 1
+                counts[course.catalog_id] = counts[key]
         return counts
 
     async def add(self, model: PortalCourseCatalog) -> None:

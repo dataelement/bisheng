@@ -169,19 +169,37 @@ class PortalCourseCatalogService:
         )
         if catalog is None:
             raise PortalCourseCatalogNotFoundError()
-        child_count = await self.repository.count_children(
+        child_catalogs = await self.repository.list_children(
             tenant_id=tenant_id,
             parent_id=catalog.id,
         )
-        course_count = await self.repository.count_courses(
+        course_names = await self.repository.list_course_names(
             tenant_id=tenant_id,
             catalog_id=catalog.id,
         )
-        if child_count or course_count:
-            raise PortalCourseCatalogInUseError()
+        if child_catalogs or course_names:
+            raise PortalCourseCatalogInUseError(
+                msg=self._in_use_message(child_catalogs, course_names),
+            )
         catalog.deleted = True
         catalog.update_time = datetime.now()
         await self.repository.add(catalog)
+
+    @staticmethod
+    def _in_use_message(
+        children: list[PortalCourseCatalog],
+        course_names: list[str],
+    ) -> str:
+        parts: list[str] = []
+        if children:
+            names = "、".join(item.name for item in children[:3])
+            extra = f" 等 {len(children)} 个" if len(children) > 3 else ""
+            parts.append(f"子目录{extra}「{names}」")
+        if course_names:
+            names = "、".join(course_names[:3])
+            extra = f" 等 {len(course_names)} 门" if len(course_names) > 3 else ""
+            parts.append(f"课程{extra}「{names}」")
+        return f"无法删除：该目录下仍有{'和'.join(parts)}。请先移走或删除后再试。"
 
     async def update_catalog_order(self, *, tenant_id: int, payload: OrderUpdate) -> None:
         for item in payload.items:

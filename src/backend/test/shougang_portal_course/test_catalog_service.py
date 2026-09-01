@@ -127,7 +127,7 @@ async def test_delete_catalog_rejects_children_and_assigned_courses(course_sessi
         user_id=7,
         payload=CatalogCreate(name="消防安全", parent_id=root.id),
     )
-    with pytest.raises(PortalCourseCatalogInUseError):
+    with pytest.raises(PortalCourseCatalogInUseError, match="子目录"):
         await catalog_service.delete_catalog(tenant_id=1, catalog_id=root.id)
 
     leaf = await catalog_service.create_catalog(
@@ -140,7 +140,7 @@ async def test_delete_catalog_rejects_children_and_assigned_courses(course_sessi
         user_id=7,
         payload=CourseCreate(name="高炉安全", catalog_id=leaf.id),
     )
-    with pytest.raises(PortalCourseCatalogInUseError):
+    with pytest.raises(PortalCourseCatalogInUseError, match="高炉安全"):
         await catalog_service.delete_catalog(tenant_id=1, catalog_id=leaf.id)
 
 
