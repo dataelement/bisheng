@@ -28,6 +28,7 @@ def _service_with_mocks() -> tuple[ModerateDeleteService, MagicMock]:
     svc.answer_repo = MagicMock()
     svc.comment_repo = MagicMock()
     svc.expert_repo = MagicMock()
+    svc.expert_repo.increment_answer_count = AsyncMock()
     svc.pending_deduct = MagicMock()
     return svc, svc.pending_deduct
 
@@ -97,6 +98,7 @@ async def test_delete_answer_no_rule_cascades_and_clears_adopted():
         adopted_answer_id=None,
         status=0,
     )
+    svc.expert_repo.increment_answer_count.assert_awaited_once_with(5, count=-1)
     pending.deduct_or_enqueue.assert_not_called()
 
 
@@ -144,6 +146,7 @@ async def test_delete_answer_with_rule_uses_qa_answer_biz_type():
     assert kwargs["operator_id"] == 9
     assert kwargs["remark"] == "违规"
     svc.question_repo.update.assert_awaited_once_with(101, answer_count=0)
+    svc.expert_repo.increment_answer_count.assert_awaited_once_with(6, count=-1)
 
 
 @pytest.mark.asyncio

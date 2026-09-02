@@ -3,7 +3,7 @@
 
 from types import SimpleNamespace
 
-from sqlalchemy import Integer, cast, desc, func, update
+from sqlalchemy import Integer, case, cast, desc, func, update
 from sqlmodel import and_, or_, select
 
 from bisheng.common.utils.beijing_time import now_beijing
@@ -193,10 +193,14 @@ class ExpertRepository:
             return {key: sorted(values, key=str.casefold) for key, values in options.items()}
 
     async def increment_answer_count(self, expert_id: int, count: int = 1):
-        """原子性增加专家的回答数量"""
+        """原子增减专家回答数。删答回退时 count 可为负, 结果不低于 0。"""
         async with get_async_db_session() as session:
-            stmt = update(Expert).where(Expert.id == expert_id).values(answer_count=Expert.answer_count + count)
-
+            next_count = Expert.answer_count + count
+            stmt = (
+                update(Expert)
+                .where(Expert.id == expert_id)
+                .values(answer_count=case((next_count < 0, 0), else_=next_count))
+            )
             await session.exec(stmt)
             await session.commit()
 
@@ -690,9 +694,7 @@ class AnswerRepository:
         """统计专家未软删的回答数(硬删前校验)"""
         async with get_async_db_session() as session:
             stmt = (
-                select(func.count())
-                .select_from(Answer)
-                .where(and_(Answer.expert_id == expert_id, Answer.status != 3))
+                select(func.count()).select_from(Answer).where(and_(Answer.expert_id == expert_id, Answer.status != 3))
             )
             result = await session.exec(stmt)
             return int(result.one())

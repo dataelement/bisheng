@@ -189,4 +189,7 @@ class ModerateDeleteService:
                 update_kwargs["status"] = 0
             await self.question_repo.update(question_id, **update_kwargs)
 
+        # 软删后回退专家累计回答数, 与作者自删路径同一不变量
+        await self.expert_repo.increment_answer_count(int(expert.id), count=-1)
+
         return author_id, "qa_answer", str(target_id)
