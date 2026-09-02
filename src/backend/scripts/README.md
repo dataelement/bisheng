@@ -270,6 +270,51 @@ Exit codes:
 - `4`：真实删除、分步核验或恢复执行失败。
 - `5`：审计报告无法持久化；脚本不会在该状态下继续新的业务删除。
 
+### `relink_duplicate_space_files_as_publish.py`
+
+把多知识空间中的相同当前主版本转成 F059 软链接：最高级空间保留物理原文件（`manager`），
+严格下级空间原地改成 `entry_type=publish`（保留 `file_id`，预览走原文件，默认禁止下载）。
+同级多库（例如两个部门库同一 MD5）不互转。空 MD5 用 `文件名+大小` 兜底。下级独有历史版本
+留在原空间，并写入报告供人工处理。仅支持未启用多租户的部署。
+
+默认 dry-run，报告同时写 JSON 和 Markdown 到 `migration_reports/knowledge_file_relink/`
+（`relink-{run_id}.json` / `relink-{run_id}.md`）；只有 `--apply` 才会改库、
+删除下级副本的 Milvus/ES/MinIO，并入队投影。从已有 JSON 恢复时仍只认 `.json`。
+
+用法：
+
+```bash
+# 全量只读扫描
+PYTHONPATH=./ .venv/bin/python scripts/relink_duplicate_space_files_as_publish.py
+
+# 按空间 / 文件 / MD5 收窄；参数可重复
+PYTHONPATH=./ .venv/bin/python scripts/relink_duplicate_space_files_as_publish.py \
+  --space-id 10 --file-id 201 --md5 same-md5 --limit 20
+
+# 审核 dry-run 报告并安排维护窗口后执行
+PYTHONPATH=./ .venv/bin/python scripts/relink_duplicate_space_files_as_publish.py --apply
+
+# 从上次 apply 报告恢复未完成单元
+PYTHONPATH=./ .venv/bin/python scripts/relink_duplicate_space_files_as_publish.py \
+  --apply --resume-report migration_reports/knowledge_file_relink/relink-RUN_ID.json
+```
+
+Safety and reports:
+
+- 库级从高到低：`public` > `department` > `team`/`team_ks` > `personal`。只转换严格下级。
+- 每个单元在写入前重新扫描并校验 origin/source/匹配键；数据漂移时跳过。
+- 报告同时写 JSON（机器可读，可 `--resume-report`）和 Markdown（中文汇总、库级分布、转换/跳过/历史版本明细，含文件名、库名、目录）。
+- `--apply` 不可逆地清空下级物理载荷；公共/最高库原文件和 OpenFGA 本地权限保留。
+  正式执行前必须备份、审核 dry-run、单文件烟测和小批量灰度。
+
+Exit codes:
+
+- `0`：dry-run 完成，或所有 apply 单元已完成/安全跳过。
+- `2`：参数、单租户约束或恢复报告预检失败。
+- `3`：扫描或初始化失败。
+- `4`：转换、外部清理或核验失败。
+- `5`：审计报告无法持久化。
+
 ### `strip_abstract_labels.py`
 
 剥离历史 `knowledgefile.abstract` 中由旧摘要 prompt 写入的装饰标签（`【文档类型】` / `【摘要】`）。门户详情已有「文档摘要」标题，这些前缀会造成重复展示。默认 dry-run；传入 `--apply` 后写回 MySQL（不刷 ES）。清洗逻辑与入库 `AbstractTransformer` 共用。

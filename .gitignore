@@ -304,3 +304,4 @@ scripts/dev-stack.sh
 # Tag-library migration JSON snapshots (local / production ops)
 src/backend/scripts/backups/
 .cursor/
+src/backend/migration_reports

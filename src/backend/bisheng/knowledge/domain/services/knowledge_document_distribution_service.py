@@ -63,11 +63,7 @@ def publish_parent_user(target_file_level_path: str | None, target_space_id: int
     like "/" is truthy but holds no id, and yielded a malformed "folder:" that
     OpenFGA rejects, which fails the publish and every unit of a batch with it.
     """
-    folder_ids = [
-        part
-        for part in str(target_file_level_path or "").split("/")
-        if part.isdigit() and int(part) > 0
-    ]
+    folder_ids = [part for part in str(target_file_level_path or "").split("/") if part.isdigit() and int(part) > 0]
     if folder_ids:
         return f"folder:{folder_ids[-1]}"
     return f"knowledge_space:{int(target_space_id)}"
@@ -176,6 +172,22 @@ class UpdateManagerMetadataResult:
     active_entry_ids: tuple[int, ...]
 
 
+@dataclass(frozen=True)
+class AttachExistingAsPublishCommand:
+    tenant_id: int
+    origin_file_id: int
+    source_file_id: int
+
+
+@dataclass(frozen=True)
+class AttachExistingAsPublishResult:
+    document_id: int
+    manager_file_id: int
+    publish_entry_id: int
+    retained_history_file_ids: tuple[int, ...] = ()
+    idempotent: bool = False
+
+
 async def _default_permission_snapshot_loader(
     file_id: int,
 ) -> Sequence[TupleOperation]:
@@ -234,12 +246,8 @@ class KnowledgeDocumentDistributionService:
             .execution_options(populate_existing=True)
         )
         spaces = list(result.scalars().all())
-        if len(spaces) != len(normalized) or any(
-            item.state != KnowledgeState.PUBLISHED.value for item in spaces
-        ):
-            raise KnowledgeDocumentDistributionError(
-                "source or target knowledge space is no longer published"
-            )
+        if len(spaces) != len(normalized) or any(item.state != KnowledgeState.PUBLISHED.value for item in spaces):
+            raise KnowledgeDocumentDistributionError("source or target knowledge space is no longer published")
 
     async def _ensure_publish_target_content_not_duplicate(
         self,
@@ -433,6 +441,301 @@ class KnowledgeDocumentDistributionService:
             manager_space_id=int(source_file.knowledge_id),
             original_uploader_id=source_file.original_uploader_id,
             original_knowledge_id=source_file.original_knowledge_id,
+        )
+
+    @staticmethod
+    def _logical_entry_has_physical_payload(entry: KnowledgeFile) -> bool:
+        return (
+            entry.object_name is not None
+            or entry.preview_file_object_name is not None
+            or entry.thumbnails is not None
+            or int(entry.file_size or 0) != 0
+            or entry.md5 is not None
+            or (entry.bbox_object_name or "") != ""
+        )
+
+    @staticmethod
+    def _clear_logical_payload(entry: KnowledgeFile) -> None:
+        entry.object_name = None
+        entry.preview_file_object_name = None
+        entry.thumbnails = None
+        entry.bbox_object_name = ""
+        entry.md5 = None
+        entry.file_size = 0
+
+    def _activate_existing_physical_manager(
+        self,
+        source_file: KnowledgeFile,
+        document: KnowledgeDocument,
+    ) -> None:
+        """Mark an already-parsed physical file as the active manager without rebuilding it."""
+        source_file.reference_document_id = int(document.id)
+        source_file.entry_type = KnowledgeFileEntryType.MANAGER.value
+        source_file.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
+        source_file.approval_instance_id = None
+        source_file.allow_download = False
+        already_projected = (
+            source_file.object_name is not None
+            and source_file.status == KnowledgeFileStatus.SUCCESS.value
+            and source_file.projection_status == KnowledgeFileProjectionStatus.READY.value
+            and int(source_file.applied_content_generation or 0) >= int(document.content_generation or 0)
+            and int(source_file.applied_entry_generation or 0) >= int(source_file.desired_entry_generation or 0)
+        )
+        if already_projected:
+            source_file.desired_content_generation = int(document.content_generation or 0)
+            source_file.applied_content_generation = int(document.content_generation or 0)
+        else:
+            has_physical_content = (
+                source_file.object_name is not None and source_file.status == KnowledgeFileStatus.SUCCESS.value
+            )
+            source_file.desired_content_generation = int(document.content_generation or 0)
+            if has_physical_content:
+                source_file.applied_content_generation = int(document.content_generation or 0)
+                source_file.desired_entry_generation = max(int(source_file.desired_entry_generation or 0), 1)
+                source_file.applied_entry_generation = int(source_file.desired_entry_generation)
+                source_file.projection_status = KnowledgeFileProjectionStatus.READY.value
+            else:
+                source_file.applied_content_generation = 0
+                source_file.desired_entry_generation = int(source_file.desired_entry_generation or 0) + 1
+                source_file.applied_entry_generation = 0
+                source_file.projection_status = KnowledgeFileProjectionStatus.PENDING.value
+            source_file.projection_retry_count = 0
+            source_file.projection_next_retry_at = None
+            source_file.projection_lease_owner = None
+            source_file.projection_lease_until = None
+            source_file.projection_last_error = None
+        self.session.add(source_file)
+        self.session.add(document)
+
+    async def _detach_primary_from_local_document(
+        self,
+        source_file: KnowledgeFile,
+    ) -> tuple[int, ...]:
+        """Remove the current primary from its local version chain.
+
+        Remaining historical versions stay in the lower space as that document's
+        new primary chain, so operators can handle unique history separately.
+        """
+        version = await self.version_repository.find_by_knowledge_file_id(int(source_file.id))
+        if version is None:
+            return ()
+        document = await self.document_repository.find_by_id_for_update(int(version.document_id))
+        if document is None:
+            raise KnowledgeDocumentDistributionError("source version has no canonical document")
+        if int(document.tenant_id or 0) != int(source_file.tenant_id or 0):
+            raise KnowledgeDocumentDistributionError("source document tenant mismatch")
+        versions = await self.version_repository.find_by_document_id(int(document.id))
+        if int(document.primary_version_id or 0) not in {0, int(version.id or 0)} and not version.is_primary:
+            raise KnowledgeDocumentDistributionError("only the current primary version can become a publish entry")
+        remaining = [item for item in versions if int(item.knowledge_file_id) != int(source_file.id)]
+        history_ids = tuple(sorted({int(item.knowledge_file_id) for item in remaining}))
+        await self.session.delete(version)
+        await self.session.flush()
+        if not remaining:
+            await self.session.delete(document)
+            await self.session.flush()
+            return history_ids
+        remaining.sort(key=lambda item: (int(item.version_no), int(item.id or 0)))
+        new_primary = remaining[-1]
+        for item in remaining:
+            item.is_primary = int(item.id) == int(new_primary.id)
+            self.session.add(item)
+        document.primary_version_id = int(new_primary.id)
+        self.session.add(document)
+        await self.session.flush()
+        return history_ids
+
+    async def _append_publish_to_predecessor_chain(
+        self,
+        document: KnowledgeDocument,
+        new_publish: KnowledgeFile,
+    ) -> None:
+        """Keep every active publish reachable without making the new link the rollback head.
+
+        Existing publish-up predecessors stay at the head so deleting the manager
+        still rolls back to the original publish source, not a converted duplicate.
+        """
+        entries = await self.file_repository.find_distribution_entries_by_document_id(
+            int(document.id),
+            for_update=True,
+        )
+        publish_by_id = {
+            int(entry.id): entry
+            for entry in entries
+            if entry.entry_type == KnowledgeFileEntryType.PUBLISH.value and int(entry.id) != int(new_publish.id)
+        }
+        new_publish.predecessor_logic_file_id = None
+        if document.predecessor_logic_file_id is None:
+            if publish_by_id:
+                raise KnowledgeDocumentDistributionError("publish predecessor chain is incomplete")
+            document.predecessor_logic_file_id = int(new_publish.id)
+            self.session.add(document)
+            self.session.add(new_publish)
+            return
+
+        current_id = int(document.predecessor_logic_file_id)
+        visited: set[int] = set()
+        tail: KnowledgeFile | None = None
+        while current_id:
+            if current_id in visited:
+                raise KnowledgeDocumentDistributionError("publish predecessor chain contains a cycle")
+            visited.add(current_id)
+            if current_id == int(new_publish.id):
+                tail = new_publish
+                break
+            node = publish_by_id.get(current_id)
+            if node is None:
+                raise KnowledgeDocumentDistributionError("publish predecessor chain is incomplete")
+            tail = node
+            predecessor_id = node.predecessor_logic_file_id
+            current_id = int(predecessor_id) if predecessor_id is not None else 0
+        if tail is None:
+            raise KnowledgeDocumentDistributionError("publish predecessor chain is incomplete")
+        if int(tail.id) == int(new_publish.id):
+            self.session.add(document)
+            self.session.add(new_publish)
+            return
+        if tail.predecessor_logic_file_id is not None:
+            raise KnowledgeDocumentDistributionError("publish predecessor chain is incomplete")
+        tail.predecessor_logic_file_id = int(new_publish.id)
+        self.session.add(tail)
+        self.session.add(document)
+        self.session.add(new_publish)
+
+    async def attach_existing_as_publish(
+        self,
+        command: AttachExistingAsPublishCommand,
+    ) -> AttachExistingAsPublishResult:
+        """Convert an independent lower-space file into a publish entry of the origin document.
+
+        The origin physical file stays the manager. The source row keeps its id and
+        location; its MinIO/MD5 payload is cleared so preview resolves to the manager.
+        """
+        if int(command.origin_file_id) == int(command.source_file_id):
+            raise KnowledgeDocumentDistributionError("source and origin must be different files")
+
+        origin = await self.file_repository.find_by_id(command.origin_file_id)
+        source = await self.file_repository.find_by_id(command.source_file_id)
+        if origin is None or source is None:
+            raise KnowledgeDocumentDistributionError("origin or source file no longer exists")
+        await self._lock_published_spaces({int(origin.knowledge_id), int(source.knowledge_id)})
+
+        origin, document = await self._load_or_create_primary_document(
+            tenant_id=command.tenant_id,
+            source_file_id=command.origin_file_id,
+        )
+        if (
+            origin.reference_document_id != int(document.id)
+            or origin.entry_type != KnowledgeFileEntryType.MANAGER.value
+            or origin.entry_status != KnowledgeFileEntryStatus.ACTIVE.value
+        ):
+            self._activate_existing_physical_manager(origin, document)
+            await self.session.flush()
+
+        source = await self.file_repository.find_by_id_for_update(command.source_file_id)
+        if source is None:
+            raise KnowledgeDocumentDistributionError("source file no longer exists")
+        if int(source.tenant_id or 0) != command.tenant_id or int(origin.tenant_id or 0) != command.tenant_id:
+            raise KnowledgeDocumentDistributionError("attach tenant mismatch")
+        if int(source.knowledge_id) == int(origin.knowledge_id):
+            raise KnowledgeDocumentDistributionError("source and origin must be in different spaces")
+        if source.file_type != FileType.FILE.value or source.status != KnowledgeFileStatus.SUCCESS.value:
+            raise KnowledgeDocumentDistributionError("only a parsed file can become a publish entry")
+        if source.deleted_at is not None:
+            raise KnowledgeDocumentDistributionError("source file is in the recycle bin")
+        if source.entry_type == KnowledgeFileEntryType.SHARE.value:
+            raise KnowledgeDocumentDistributionError("source entry is a share")
+        if source.entry_type == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value:
+            raise KnowledgeDocumentDistributionError("source entry is not eligible to become a publish")
+
+        existing_target = await self.file_repository.find_entry_in_space_for_update(
+            int(document.id),
+            int(source.knowledge_id),
+        )
+        if existing_target is not None and int(existing_target.id) != int(source.id):
+            raise KnowledgeDocumentDistributionError("canonical document already has an entry in target space")
+
+        if (
+            source.entry_type == KnowledgeFileEntryType.PUBLISH.value
+            and int(source.reference_document_id or 0) == int(document.id)
+            and source.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+        ):
+            if self._logical_entry_has_physical_payload(source):
+                self._clear_logical_payload(source)
+                source.allow_download = False
+                source.projection_status = KnowledgeFileProjectionStatus.PENDING.value
+                source.desired_entry_generation = int(source.desired_entry_generation or 0) + 1
+                source.applied_entry_generation = 0
+                self.session.add(source)
+                await self.session.flush()
+                await self._commit()
+                return AttachExistingAsPublishResult(
+                    document_id=int(document.id),
+                    manager_file_id=int(origin.id),
+                    publish_entry_id=int(source.id),
+                    idempotent=False,
+                )
+            return AttachExistingAsPublishResult(
+                document_id=int(document.id),
+                manager_file_id=int(origin.id),
+                publish_entry_id=int(source.id),
+                idempotent=True,
+            )
+        if source.entry_type in {
+            KnowledgeFileEntryType.PUBLISH.value,
+            KnowledgeFileEntryType.SHARE.value,
+        }:
+            raise KnowledgeDocumentDistributionError("source entry belongs to a different canonical document")
+
+        if (
+            source.entry_type == KnowledgeFileEntryType.MANAGER.value
+            and source.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+            and source.reference_document_id is not None
+        ):
+            dependents = await self.file_repository.find_distribution_entries_by_document_id(
+                int(source.reference_document_id),
+                for_update=True,
+            )
+            if any(int(entry.id) != int(source.id) for entry in dependents):
+                raise KnowledgeDocumentDistributionError("source manager has distribution dependents")
+
+        retained_history_file_ids = await self._detach_primary_from_local_document(source)
+        origin = await self.file_repository.find_by_id_for_update(command.origin_file_id)
+        document = await self.document_repository.find_by_id_for_update(int(document.id))
+        source = await self.file_repository.find_by_id_for_update(command.source_file_id)
+        if origin is None or document is None or source is None:
+            raise KnowledgeDocumentDistributionError("attach state no longer exists")
+
+        source.reference_document_id = int(document.id)
+        source.entry_type = KnowledgeFileEntryType.PUBLISH.value
+        source.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
+        source.allow_download = False
+        source.approval_instance_id = None
+        source.share_source_file_id = None
+        source.projection_previous_file_id = None
+        source.desired_content_generation = int(document.content_generation or 0)
+        source.applied_content_generation = 0
+        source.desired_entry_generation = int(source.desired_entry_generation or 0) + 1
+        source.applied_entry_generation = 0
+        source.projection_status = KnowledgeFileProjectionStatus.PENDING.value
+        source.projection_retry_count = 0
+        source.projection_next_retry_at = None
+        source.projection_lease_owner = None
+        source.projection_lease_until = None
+        source.projection_last_error = None
+        self._clear_logical_payload(source)
+        self.session.add(source)
+        await self.session.flush()
+        await self._append_publish_to_predecessor_chain(document, source)
+        await self.session.flush()
+        entries = await self.file_repository.find_distribution_entries_by_document_id(int(document.id))
+        self._active_publish_predecessor(document, entries)
+        await self._commit()
+        return AttachExistingAsPublishResult(
+            document_id=int(document.id),
+            manager_file_id=int(origin.id),
+            publish_entry_id=int(source.id),
+            retained_history_file_ids=retained_history_file_ids,
         )
 
     async def restore_unapproved_manager(
@@ -967,9 +1270,7 @@ class KnowledgeDocumentDistributionService:
             KnowledgeFileEntryType.SHARE.value,
         }
         if not any(int(entry.id) == manager_file_id for entry in entries):
-            raise KnowledgeDocumentDistributionError(
-                "active canonical manager is missing from distribution entries"
-            )
+            raise KnowledgeDocumentDistributionError("active canonical manager is missing from distribution entries")
 
         document.content_generation += 1
         for entry in entries:
@@ -991,11 +1292,7 @@ class KnowledgeDocumentDistributionService:
         return UpdateManagerMetadataResult(
             manager_file=manager,
             active_entry_ids=tuple(
-                sorted(
-                    int(entry.id)
-                    for entry in entries
-                    if entry.entry_type in active_entry_types
-                )
+                sorted(int(entry.id) for entry in entries if entry.entry_type in active_entry_types)
             ),
         )
 
@@ -1235,9 +1532,7 @@ class KnowledgeDocumentDistributionService:
         source_entry = await self.file_repository.find_by_id(command.source_entry_id)
         if source_entry is None:
             raise KnowledgeDocumentDistributionError("publish source no longer exists")
-        await self._lock_published_spaces(
-            {int(source_entry.knowledge_id), int(command.target_space_id)}
-        )
+        await self._lock_published_spaces({int(source_entry.knowledge_id), int(command.target_space_id)})
         await self._ensure_publish_target_content_not_duplicate(
             command,
             lock_target_space=True,
@@ -1453,16 +1748,10 @@ class KnowledgeDocumentDistributionService:
         self,
         command: PublishKnowledgeDocumentCommand,
     ) -> PublishKnowledgeDocumentResult:
-        source_entry = await self.file_repository.find_by_id(
-            command.source_entry_id
-        )
+        source_entry = await self.file_repository.find_by_id(command.source_entry_id)
         if source_entry is None:
-            raise KnowledgeDocumentDistributionError(
-                "publish source no longer exists"
-            )
-        await self._lock_published_spaces(
-            {int(source_entry.knowledge_id), int(command.target_space_id)}
-        )
+            raise KnowledgeDocumentDistributionError("publish source no longer exists")
+        await self._lock_published_spaces({int(source_entry.knowledge_id), int(command.target_space_id)})
         existing = await self.file_repository.find_by_approval_instance_id(command.approval_instance_id)
         if existing is not None:
             result_document_id = command.target_document_id or command.document_id
@@ -1740,16 +2029,10 @@ class KnowledgeDocumentDistributionService:
         self,
         command: ShareKnowledgeDocumentCommand,
     ) -> ShareKnowledgeDocumentResult:
-        source_entry = await self.file_repository.find_by_id(
-            command.source_entry_id
-        )
+        source_entry = await self.file_repository.find_by_id(command.source_entry_id)
         if source_entry is None:
-            raise KnowledgeDocumentDistributionError(
-                "share source state no longer exists"
-            )
-        await self._lock_published_spaces(
-            {int(source_entry.knowledge_id), int(command.target_space_id)}
-        )
+            raise KnowledgeDocumentDistributionError("share source state no longer exists")
+        await self._lock_published_spaces({int(source_entry.knowledge_id), int(command.target_space_id)})
         existing = await self.file_repository.find_by_approval_instance_id(command.approval_instance_id)
         if existing is not None:
             if (
@@ -1792,16 +2075,10 @@ class KnowledgeDocumentDistributionService:
             await self._commit()
 
         try:
-            source_entry = await self.file_repository.find_by_id(
-                command.source_entry_id
-            )
+            source_entry = await self.file_repository.find_by_id(command.source_entry_id)
             if source_entry is None:
-                raise KnowledgeDocumentDistributionError(
-                    "share source state no longer exists"
-                )
-            await self._lock_published_spaces(
-                {int(source_entry.knowledge_id), int(command.target_space_id)}
-            )
+                raise KnowledgeDocumentDistributionError("share source state no longer exists")
+            await self._lock_published_spaces({int(source_entry.knowledge_id), int(command.target_space_id)})
             await self.permission_activation_service.prewrite_and_activate(
                 entry_id=int(share.id),
             )
@@ -1888,9 +2165,7 @@ class KnowledgeDocumentDistributionService:
         entries: Sequence[KnowledgeFile],
     ) -> KnowledgeFile | None:
         publish_entries = {
-            int(entry.id): entry
-            for entry in entries
-            if entry.entry_type == KnowledgeFileEntryType.PUBLISH.value
+            int(entry.id): entry for entry in entries if entry.entry_type == KnowledgeFileEntryType.PUBLISH.value
         }
         if any(
             int(entry.tenant_id or 0) != int(document.tenant_id or 0)
@@ -2212,11 +2487,7 @@ class KnowledgeDocumentDistributionService:
         entries = await self.file_repository.find_distribution_entries_by_document_id(
             document_id,
         )
-        return (
-            "rollback"
-            if self._active_publish_predecessor(document, entries) is not None
-            else "final_delete"
-        )
+        return "rollback" if self._active_publish_predecessor(document, entries) is not None else "final_delete"
 
     @staticmethod
     def _mark_entry_for_manager_delete(
@@ -2301,12 +2572,8 @@ class KnowledgeDocumentDistributionService:
                 for entry in entries
             )
         )
-        if (
-            document.lifecycle_status == KnowledgeDocumentLifecycleStatus.ACTIVE.value
-            and (
-                manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
-                or rollback_in_progress
-            )
+        if document.lifecycle_status == KnowledgeDocumentLifecycleStatus.ACTIVE.value and (
+            manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value or rollback_in_progress
         ):
             predecessor = self._active_publish_predecessor(document, entries)
             if predecessor is not None:
@@ -2325,14 +2592,10 @@ class KnowledgeDocumentDistributionService:
                     entry,
                     KnowledgeFileEntryStatus.DELETING,
                 )
-            elif (
-                entry.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
-                and entry.entry_type
-                in {
-                    KnowledgeFileEntryType.PUBLISH.value,
-                    KnowledgeFileEntryType.SHARE.value,
-                }
-            ):
+            elif entry.entry_status == KnowledgeFileEntryStatus.ACTIVE.value and entry.entry_type in {
+                KnowledgeFileEntryType.PUBLISH.value,
+                KnowledgeFileEntryType.SHARE.value,
+            }:
                 self._mark_entry_for_manager_delete(
                     entry,
                     KnowledgeFileEntryStatus.INVALID,
@@ -2427,9 +2690,7 @@ class KnowledgeDocumentDistributionService:
                     action="write",
                 ),
             ]
-            await self.permission_activation_service.tuple_writer(
-                permission_prewrite_operations
-            )
+            await self.permission_activation_service.tuple_writer(permission_prewrite_operations)
         except Exception as exc:
             await self._cleanup_rollback_permission_prewrite(
                 operations=permission_prewrite_operations,
@@ -2438,23 +2699,21 @@ class KnowledgeDocumentDistributionService:
             raise KnowledgeDocumentDistributionError("rollback permission prewrite failed") from exc
 
         try:
-            await self._lock_published_spaces(
-                {int(manager.knowledge_id), int(predecessor.knowledge_id)}
-            )
+            await self._lock_published_spaces({int(manager.knowledge_id), int(predecessor.knowledge_id)})
             document = await self.document_repository.find_by_id_for_update(int(document.id))
-            entries = await self.file_repository.find_distribution_entries_by_document_id(
-                int(document.id),
-                for_update=True,
-            ) if document is not None else []
+            entries = (
+                await self.file_repository.find_distribution_entries_by_document_id(
+                    int(document.id),
+                    for_update=True,
+                )
+                if document is not None
+                else []
+            )
             file_map = {int(item.id): item for item in entries}
             manager = file_map.get(int(manager.id))
             predecessor = file_map.get(predecessor_id)
             tombstone = file_map.get(int(tombstone.id))
-            active_predecessor = (
-                self._active_publish_predecessor(document, entries)
-                if document is not None
-                else None
-            )
+            active_predecessor = self._active_publish_predecessor(document, entries) if document is not None else None
         except Exception as exc:
             await self.session.rollback()
             await self._cleanup_rollback_permission_prewrite(
@@ -2537,13 +2796,10 @@ class KnowledgeDocumentDistributionService:
                 target_file_id=int(manager.id),
                 action="delete",
             )
-            if (operation.user, operation.relation, operation.object)
-            not in desired_explicit_keys
+            if (operation.user, operation.relation, operation.object) not in desired_explicit_keys
         ]
         try:
-            await self.permission_activation_service.tuple_writer(
-                [old_parent_delete, *old_explicit_cleanup]
-            )
+            await self.permission_activation_service.tuple_writer([old_parent_delete, *old_explicit_cleanup])
         except Exception:
             logger.exception(
                 "F059 rollback old manager permission cleanup deferred: document_id=%s",

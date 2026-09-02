@@ -1270,10 +1270,23 @@ class KnowledgeSpaceFolderStatsResp(BaseModel):
     )
 
 
+class KnowledgeSpaceFileTagItem(BaseModel):
+    """File tag shown on the knowledge-space children list."""
+
+    id: int
+    name: str
+    resource_type: str | None = None
+    review_status: int | None = None
+
+
 class KnowledgeSpaceFileResponse(KnowledgeFileRead):
     """Knowledge Space File Response"""
 
     summary: str = Field(default="", description="Read-only summary mapped from file abstract")
+    tags: list[KnowledgeSpaceFileTagItem] = Field(
+        default_factory=list,
+        description="Approved file tags plus pending review tags for list display",
+    )
     old_file_level_path: str | None = Field(None, description="Old File Level Path")
     approval_request_id: int | None = Field(None, description="Approval request id for pending uploads")
     approval_status: str | None = Field(None, description="Approval status for pending uploads")
