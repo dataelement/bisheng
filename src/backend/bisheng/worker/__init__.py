@@ -34,6 +34,9 @@ from bisheng.worker.knowledge.scheduler import (
     trigger_dispatch_task,
 )
 from bisheng.worker.knowledge.space_admin_reconcile import reconcile_department_space_admins
+from bisheng.worker.knowledge.stale_projection_reconciler import (
+    reconcile_stale_parent_projections as reconcile_stale_parent_projections,
+)
 from bisheng.worker.permission.resource_user_invite_tasks import (
     execute_resource_user_invite as execute_resource_user_invite,
 )
