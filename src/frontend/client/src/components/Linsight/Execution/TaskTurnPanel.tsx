@@ -64,7 +64,7 @@ interface TaskTurnPanelProps {
 
 export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversationId, answer, readOnly = false, onPreviewFile }: TaskTurnPanelProps) {
     const localize = useLocalize();
-    const { getLinsight, switchAndUpdateLinsight, updateLinsight } = useLinsightManager();
+    const { continueConversation, getLinsight, switchAndUpdateLinsight, updateLinsight } = useLinsightManager();
     // WS pump — self-guards on status===Running, so mounting it for a completed
     // historical turn is a no-op (no connection opened).
     const { sendInput, stop } = useLinsightWebSocket(versionId);
@@ -222,6 +222,13 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
                     errorType={linsight.taskErrorInfo?.error_type}
                     detail={linsight.taskErrorInfo?.detail}
                     fallbackMessage={linsight.taskError}
+                    onRetry={
+                        readOnly
+                        || linsight.taskErrorInfo?.error_type !== 'rate_limit'
+                        || !linsight.question
+                            ? undefined
+                            : () => continueConversation(versionId, linsight.question)
+                    }
                 />
             )}
             {stopped && !linsight.taskError && (
