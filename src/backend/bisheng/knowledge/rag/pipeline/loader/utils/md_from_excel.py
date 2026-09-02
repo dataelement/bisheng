@@ -320,6 +320,12 @@ def excel_file_to_markdown(excel_path, num_header_rows, rows_per_markdown, outpu
         logger.exception(f"Unable to load Excel doc '{excel_path}'")
         raise KnowledgeFileDamagedError(exception=e)
 
+    # Workbook sheet order, with the markdown file prefix each sheet got (None when
+    # the sheet had no cell data and therefore produced no markdown). The loader uses
+    # this to place a sheet's embedded pictures next to that sheet's table chunks —
+    # the numbered file names alone cannot say which sheet a chunk came from, because
+    # empty sheets are skipped and do not consume a number.
+    sheet_order: list[tuple[str, int | None]] = []
     sheet_index = 0
     for sheet_name in workbook.sheetnames:
         logger.debug(f"\n  (In work)ExcelWorksheet'{sheet_name}'...")
@@ -330,12 +336,14 @@ def excel_file_to_markdown(excel_path, num_header_rows, rows_per_markdown, outpu
         # Using the new decision function
         if is_list_of_lists_empty(unmerged_data_list_of_lists):
             logger.debug(f"  Worksheet '{sheet_name}' Empty or no valid data, skipping.")
+            sheet_order.append((sheet_name, None))
             continue
 
         df = pd.DataFrame(unmerged_data_list_of_lists)
         df.fillna("", inplace=True)
         if df.empty:
             logger.debug(f"  Worksheet '{sheet_name}' Empty after processingDataFrameSkip")
+            sheet_order.append((sheet_name, None))
             continue
 
         process_dataframe_to_markdown_files(
@@ -346,11 +354,13 @@ def excel_file_to_markdown(excel_path, num_header_rows, rows_per_markdown, outpu
             output_dir,
             append_header=append_header,
         )
+        sheet_order.append((sheet_name, sheet_index))
         sheet_index += 1
 
     if workbook:
         workbook.close()
     logger.debug(f"\nExcelDoc. '{excel_path}' Process Completed.")
+    return sheet_order
 
 
 def csv_file_to_markdown(
@@ -410,10 +420,13 @@ def convert_file_to_markdown(
 ):
     """
     will be Excel OR CSV Convert files to multiple Markdown files.
+
+    Returns the workbook's sheet order as ``[(sheet_name, markdown prefix or None)]``
+    for Excel input; an empty list for CSV (a single, nameless sheet) and on failure.
     """
     if not os.path.exists(input_file_path):
         logger.debug(f"Error: Input file '{input_file_path}' Nothing found.")
-        return
+        return []
 
     if not os.path.exists(base_output_dir):
         os.makedirs(base_output_dir)
@@ -425,14 +438,14 @@ def convert_file_to_markdown(
         input_file_path = xls_to_xlsx(input_file_path)
 
     if file_extension in [".xlsx", ".xls"]:
-        excel_file_to_markdown(
+        return excel_file_to_markdown(
             input_file_path,
             num_header_rows,
             rows_per_markdown,
             base_output_dir,
             append_header,
         )
-    elif file_extension == ".csv":
+    if file_extension == ".csv":
         csv_file_to_markdown(
             input_file_path,
             num_header_rows,
@@ -442,10 +455,11 @@ def convert_file_to_markdown(
             csv_delimiter,
             append_header,
         )
-    else:
-        logger.debug(
-            f"Error: Unsupported file type '{file_extension}'Please provide user. Excel (.xlsx, .xls) OR CSV (.csv) files."
-        )
+        return []
+    logger.debug(
+        f"Error: Unsupported file type '{file_extension}'Please provide user. Excel (.xlsx, .xls) OR CSV (.csv) files."
+    )
+    return []
 
 
 def handler(
