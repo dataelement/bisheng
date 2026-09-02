@@ -16,6 +16,17 @@ describe('model rate-limit recovery helpers', () => {
     ).toEqual({ id: 2, name: 'new-model', manual: true, mode: 'task' });
   });
 
+  it('can explicitly keep a task recovery in task mode', () => {
+    expect(
+      buildRecoveryChatModelSelection(
+        { id: 1, name: 'old-model', manual: false, mode: 'daily' },
+        '2',
+        'new-model',
+        'task',
+      ),
+    ).toEqual({ id: 2, name: 'new-model', manual: true, mode: 'task' });
+  });
+
   it('keeps only distinct available alternatives in the switch list', () => {
     const models = [
       { key: 'current', id: '1', name: 'current', displayName: 'Current' },

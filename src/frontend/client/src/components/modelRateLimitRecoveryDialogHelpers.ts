@@ -11,12 +11,14 @@ export function buildRecoveryChatModelSelection(
   current: RecoveryChatModelSelection,
   modelId: string,
   modelName: string,
+  mode?: 'daily' | 'task',
 ): RecoveryChatModelSelection {
   return {
     ...current,
     id: Number(modelId),
     name: modelName,
     manual: true,
+    mode: mode ?? current.mode,
   };
 }
 

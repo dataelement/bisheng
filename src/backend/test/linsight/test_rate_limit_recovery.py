@@ -4,9 +4,14 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from bisheng.common.errcode.linsight import LinsightStartTaskError
+from bisheng.common.errcode.server import LlmModelOfflineError
+from bisheng.linsight.api.endpoints.linsight import continue_conversation
+from bisheng.linsight.domain.models.linsight_session_version import SessionVersionStatusEnum
 from bisheng.linsight.domain.services.resilience_middleware import (
     LinsightModelResilienceMiddleware,
 )
+from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.linsight.domain.task_exec import LinsightWorkflowTask
 from bisheng.llm.domain.services.model_rate_limit_state import ModelRateLimitState
 
@@ -173,6 +178,202 @@ async def test_rate_limit_retry_uses_only_existing_continue_workflow(monkeypatch
     await task.async_continue("session-1", "retry the original question")
 
     assert continued == [(session, "retry the original question")]
+
+
+async def test_continue_without_model_keeps_existing_queue_contract(monkeypatch) -> None:
+    session = SimpleNamespace(
+        id="session-1",
+        session_id="chat-1",
+        user_id=7,
+        status=SessionVersionStatusEnum.FAILED,
+        model="18",
+    )
+    update_status = AsyncMock()
+    enqueue = AsyncMock()
+    validate_model = AsyncMock()
+
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.workbench_impl.LinsightSessionVersionDao.get_by_id",
+        AsyncMock(return_value=session),
+    )
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.workbench_impl.LinsightSessionVersionDao."
+        "batch_update_session_versions_status",
+        update_status,
+    )
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.workbench_impl.MessageSessionDao.touch_session",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(LinsightWorkbenchImpl, "_validate_continue_model", validate_model)
+    monkeypatch.setattr(LinsightWorkbenchImpl, "_enqueue_continue", enqueue)
+
+    await LinsightWorkbenchImpl.continue_conversation(
+        session_version_id="session-1",
+        question="retry the original question",
+        login_user=SimpleNamespace(user_id=7),
+    )
+
+    validate_model.assert_not_awaited()
+    update_status.assert_awaited_once_with(
+        ["session-1"],
+        SessionVersionStatusEnum.IN_PROGRESS,
+    )
+    enqueue.assert_awaited_once_with("session-1", "retry the original question")
+
+
+async def test_continue_with_model_updates_existing_session_and_keeps_queue_payload(monkeypatch) -> None:
+    session = SimpleNamespace(
+        id="session-1",
+        session_id="chat-1",
+        user_id=7,
+        status=SessionVersionStatusEnum.FAILED,
+        model="18",
+    )
+    update_status = AsyncMock()
+    enqueue = AsyncMock()
+    validate_model = AsyncMock()
+
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.workbench_impl.LinsightSessionVersionDao.get_by_id",
+        AsyncMock(return_value=session),
+    )
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.workbench_impl.LinsightSessionVersionDao."
+        "batch_update_session_versions_status",
+        update_status,
+    )
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.workbench_impl.MessageSessionDao.touch_session",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(LinsightWorkbenchImpl, "_validate_continue_model", validate_model)
+    monkeypatch.setattr(LinsightWorkbenchImpl, "_enqueue_continue", enqueue)
+
+    await LinsightWorkbenchImpl.continue_conversation(
+        session_version_id="session-1",
+        question="retry the original question",
+        login_user=SimpleNamespace(user_id=7),
+        model_id="22",
+    )
+
+    validate_model.assert_awaited_once_with(session, "22")
+    update_status.assert_awaited_once_with(
+        ["session-1"],
+        SessionVersionStatusEnum.IN_PROGRESS,
+        model="22",
+    )
+    enqueue.assert_awaited_once_with("session-1", "retry the original question")
+
+
+async def test_continue_rejects_invalid_target_before_mutation(monkeypatch) -> None:
+    session = SimpleNamespace(
+        id="session-1",
+        session_id="chat-1",
+        user_id=7,
+        status=SessionVersionStatusEnum.FAILED,
+        model="18",
+    )
+    update_status = AsyncMock()
+    enqueue = AsyncMock()
+
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.workbench_impl.LinsightSessionVersionDao.get_by_id",
+        AsyncMock(return_value=session),
+    )
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.workbench_impl.LinsightSessionVersionDao."
+        "batch_update_session_versions_status",
+        update_status,
+    )
+    monkeypatch.setattr(
+        LinsightWorkbenchImpl,
+        "_validate_continue_model",
+        AsyncMock(side_effect=LlmModelOfflineError(server_name="server", model_name="model")),
+    )
+    monkeypatch.setattr(LinsightWorkbenchImpl, "_enqueue_continue", enqueue)
+
+    with pytest.raises(LlmModelOfflineError):
+        await LinsightWorkbenchImpl.continue_conversation(
+            session_version_id="session-1",
+            question="retry the original question",
+            login_user=SimpleNamespace(user_id=7),
+            model_id="22",
+        )
+
+    update_status.assert_not_awaited()
+    enqueue.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "original_status",
+    [SessionVersionStatusEnum.FAILED, SessionVersionStatusEnum.COMPLETED],
+)
+async def test_continue_enqueue_failure_restores_original_status_and_model(monkeypatch, original_status) -> None:
+    session = SimpleNamespace(
+        id="session-1",
+        session_id="chat-1",
+        user_id=7,
+        status=original_status,
+        model="18",
+    )
+    update_status = AsyncMock()
+
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.workbench_impl.LinsightSessionVersionDao.get_by_id",
+        AsyncMock(return_value=session),
+    )
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.workbench_impl.LinsightSessionVersionDao."
+        "batch_update_session_versions_status",
+        update_status,
+    )
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.workbench_impl.MessageSessionDao.touch_session",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(LinsightWorkbenchImpl, "_validate_continue_model", AsyncMock())
+    monkeypatch.setattr(
+        LinsightWorkbenchImpl,
+        "_enqueue_continue",
+        AsyncMock(side_effect=RuntimeError("queue unavailable")),
+    )
+
+    with pytest.raises(LinsightStartTaskError):
+        await LinsightWorkbenchImpl.continue_conversation(
+            session_version_id="session-1",
+            question="retry the original question",
+            login_user=SimpleNamespace(user_id=7),
+            model_id="22",
+        )
+
+    assert update_status.await_args_list[0].args == (
+        ["session-1"],
+        SessionVersionStatusEnum.IN_PROGRESS,
+    )
+    assert update_status.await_args_list[0].kwargs == {"model": "22"}
+    assert update_status.await_args_list[1].args == (["session-1"], original_status)
+    assert update_status.await_args_list[1].kwargs == {"model": "18"}
+
+
+async def test_continue_endpoint_forwards_optional_model(monkeypatch) -> None:
+    service = AsyncMock()
+    monkeypatch.setattr(LinsightWorkbenchImpl, "continue_conversation", service)
+
+    response = await continue_conversation(
+        session_version_id="session-1",
+        question="retry the original question",
+        model_id="22",
+        login_user=SimpleNamespace(user_id=7),
+    )
+
+    service.assert_awaited_once_with(
+        session_version_id="session-1",
+        question="retry the original question",
+        login_user=SimpleNamespace(user_id=7),
+        model_id="22",
+    )
+    assert response.status_code == 200
 
 
 async def test_non_rate_limit_failure_does_not_inherit_existing_busy_projection(monkeypatch) -> None:

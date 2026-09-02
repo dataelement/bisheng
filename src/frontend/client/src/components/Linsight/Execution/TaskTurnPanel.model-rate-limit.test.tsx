@@ -6,6 +6,8 @@ import { TaskTurnPanel } from './TaskTurnPanel';
 const mockContinueConversation = jest.fn();
 const mockGetLinsight = jest.fn();
 let mockOnRetry: (() => void) | undefined;
+let mockOnSwitchModel: ((modelId: string) => void | Promise<void>) | undefined;
+let mockSwitchModelOptions: Array<{ id: string | number }> | undefined;
 
 jest.mock('~/api/linsight', () => ({
     getLinsightSessionVersionList: jest.fn(),
@@ -14,6 +16,22 @@ jest.mock('~/api/linsight', () => ({
 
 jest.mock('~/hooks', () => ({
     useLocalize: () => (key: string) => key,
+}));
+
+jest.mock('~/hooks/queries/data-provider', () => ({
+    useGetBsConfig: () => ({
+        data: {
+            models: [
+                { id: '18', name: 'busy-model', rateLimitState: 'busy' },
+                { id: '22', name: 'available-model', displayName: 'Available Model' },
+                { id: '23', name: 'recovering-model', rateLimitState: 'recovering' },
+            ],
+        },
+    }),
+}));
+
+jest.mock('~/Providers', () => ({
+    useToastContext: () => ({ showToast: jest.fn() }),
 }));
 
 jest.mock('~/hooks/useAutoScroll', () => ({
@@ -49,8 +67,18 @@ jest.mock('lucide-react', () => ({
 }));
 
 jest.mock('~/components/ChatErrorCard', () => ({
-    ChatErrorCard: ({ onRetry }: { onRetry?: () => void }) => {
+    ChatErrorCard: ({
+        onRetry,
+        onSwitchModel,
+        switchModelOptions,
+    }: {
+        onRetry?: () => void;
+        onSwitchModel?: (modelId: string) => void | Promise<void>;
+        switchModelOptions?: Array<{ id: string | number }>;
+    }) => {
         mockOnRetry = onRetry;
+        mockOnSwitchModel = onSwitchModel;
+        mockSwitchModelOptions = switchModelOptions;
         return null;
     },
 }));
@@ -70,11 +98,18 @@ describe('TaskTurnPanel model rate-limit retry', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockOnRetry = undefined;
+        mockOnSwitchModel = undefined;
+        mockSwitchModelOptions = undefined;
+        mockContinueConversation.mockResolvedValue(true);
         mockGetLinsight.mockReturnValue({
             status: 'stoped',
             question: 'Analyze gold trend',
             taskError: 'rate limited',
-            taskErrorInfo: { error_type: 'rate_limit' },
+            taskErrorInfo: {
+                error_type: 'rate_limit',
+                model_id: '18',
+                rate_limit_state: 'busy',
+            },
             tasks: [],
             sessionSteps: [],
             file_list: [],
@@ -97,6 +132,24 @@ describe('TaskTurnPanel model rate-limit retry', () => {
         renderToStaticMarkup(<TaskTurnPanel versionId="version-1" readOnly />);
 
         expect(mockOnRetry).toBeUndefined();
+        expect(mockOnSwitchModel).toBeUndefined();
+    });
+
+    it('switches and retries through the same continuation flow', async () => {
+        const onModelChange = jest.fn();
+        renderToStaticMarkup(
+            <TaskTurnPanel versionId="version-1" onModelChange={onModelChange} />,
+        );
+
+        expect(mockSwitchModelOptions?.map((model) => model.id)).toEqual(['22']);
+        await mockOnSwitchModel?.('22');
+
+        expect(mockContinueConversation).toHaveBeenCalledWith(
+            'version-1',
+            'Analyze gold trend',
+            '22',
+        );
+        expect(onModelChange).toHaveBeenCalledWith('22', 'Available Model');
     });
 
     it('does not change retry behavior for other task errors', () => {
@@ -115,5 +168,6 @@ describe('TaskTurnPanel model rate-limit retry', () => {
         renderToStaticMarkup(<TaskTurnPanel versionId="version-1" />);
 
         expect(mockOnRetry).toBeUndefined();
+        expect(mockOnSwitchModel).toBeUndefined();
     });
 });

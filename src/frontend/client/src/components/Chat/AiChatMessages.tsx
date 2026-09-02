@@ -99,7 +99,7 @@ function MessageTreeNode({
     currentIndex: number;
     onRegenerate?: (parentMessageId: string) => void;
     onRecover?: (command: ModelRecoveryCommand) => Promise<ModelRecoveryResponse>;
-    onRecoveryModelChange?: (modelId: string, modelName: string) => void;
+    onRecoveryModelChange?: (modelId: string, modelName: string, mode?: 'daily' | 'task') => void;
     onPreviewFile?: (file: ArtifactFile) => void;
     knowledgeChatLayout?: boolean;
     allowExport?: boolean;
@@ -217,9 +217,9 @@ export default function AiChatMessages({
     const endRef = useRef<HTMLDivElement>(null);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     const handleRecoveryModelChange = useCallback(
-        (modelId: string, modelName: string) => {
+        (modelId: string, modelName: string, mode?: 'daily' | 'task') => {
             setChatModel((current) =>
-                buildRecoveryChatModelSelection(current, modelId, modelName),
+                buildRecoveryChatModelSelection(current, modelId, modelName, mode),
             );
         },
         [setChatModel],

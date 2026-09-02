@@ -58,6 +58,7 @@ function SharedView() {
               messages={messages}
               conversationId={data.conversationId}
               title={data.title}
+              shareToken={shareId || 'shared'}
               isLoading={false}
               isStreaming={false}
               hideHeaderTitle

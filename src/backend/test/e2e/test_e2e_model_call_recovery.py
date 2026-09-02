@@ -179,3 +179,48 @@ class TestE2EModelCallRecovery:
             headers=auth_headers(admin_token),
         )
         assert_resp_200(response)
+
+    async def test_ac24_task_switch_updates_the_existing_session_version(
+        self,
+        client,
+        admin_token,
+        cases,
+    ):
+        """AC-24/AC-25/AC-27: task switch reuses continue and the same session version."""
+        case = require_case(cases, "task_continue_switch")
+        await configure_fake_provider(case)
+        headers = auth_headers(admin_token)
+        session_id = str(case["session_id"])
+        session_version_id = str(case["execution_id"])
+        target_model_id = str(case["target_model_id"])
+
+        before = assert_resp_200(
+            await client.get(
+                "/linsight/workbench/session-version-list",
+                params={"session_id": session_id},
+                headers=headers,
+            )
+        )
+        before_ids = [str(item["id"]) for item in before]
+
+        response = await client.post(
+            "/linsight/workbench/continue",
+            json={
+                "session_version_id": session_version_id,
+                "question": str(case["question"]),
+                "model_id": target_model_id,
+            },
+            headers=headers,
+        )
+        assert_resp_200(response)
+
+        after = assert_resp_200(
+            await client.get(
+                "/linsight/workbench/session-version-list",
+                params={"session_id": session_id},
+                headers=headers,
+            )
+        )
+        assert [str(item["id"]) for item in after] == before_ids
+        switched = next(item for item in after if str(item["id"]) == session_version_id)
+        assert str(switched["model"]) == target_model_id

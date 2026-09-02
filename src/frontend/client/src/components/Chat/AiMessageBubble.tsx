@@ -138,7 +138,7 @@ interface AiMessageBubbleProps {
     isStreaming?: boolean;
     onRegenerate?: () => void;
     onRecover?: (command: ModelRecoveryCommand) => Promise<ModelRecoveryResponse>;
-    onRecoveryModelChange?: (modelId: string, modelName: string) => void;
+    onRecoveryModelChange?: (modelId: string, modelName: string, mode?: 'daily' | 'task') => void;
     // Sibling paging
     siblingIdx?: number;
     siblingCount?: number;
@@ -520,7 +520,7 @@ function AssistantBubble({
     isStreaming?: boolean;
     onRegenerate?: () => void;
     onRecover?: (command: ModelRecoveryCommand) => Promise<ModelRecoveryResponse>;
-    onRecoveryModelChange?: (modelId: string, modelName: string) => void;
+    onRecoveryModelChange?: (modelId: string, modelName: string, mode?: 'daily' | 'task') => void;
     siblingIdx?: number;
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
@@ -713,7 +713,11 @@ function AssistantBubble({
                         allowFeedback={allowFeedback}
                         conversationId={message.conversationId}
                         answer={message.text}
+                        readOnly={!allowFeedback}
                         onPreviewFile={onPreviewFile}
+                        onModelChange={(modelId, modelName) =>
+                            onRecoveryModelChange?.(modelId, modelName, 'task')
+                        }
                     />
                 </div>
             </div>

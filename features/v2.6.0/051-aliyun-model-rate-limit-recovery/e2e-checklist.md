@@ -36,7 +36,7 @@
 - [ ] 停用或删除繁忙模型后再让旧 probe 返回成功，预期不会把停用/删除模型恢复为可选。
 - [ ] 临时停止 Redis 或 Celery 再触发一次测试调用，预期业务请求按既定 fail-soft/fail-safe 行为收敛，后台不得扫描或排队用户会话；恢复组件后重新验证正常路径。
 
-## 3. 三入口主动恢复与任务旧重试
+## 3. 三入口主动恢复与任务重试/换模
 
 ### 工作台日常模式（AC-37～AC-51、AC-55）
 
@@ -44,7 +44,7 @@
 - [ ] 点击“重试”并快速双击，预期只有一个 recover 请求，且 URL 携带原 execution；不得走普通 regenerate。
 - [ ] 当前页面点击重试；预期从同一原业务记录恢复。刷新后限流卡和失败片段允许消失，历史只显示原用户问题；不要求两个标签页共享状态。
 - [ ] 首次限流即常驻显示“更换模型”，连续点击任意次数的 Retry 都不得自动弹出换模弹窗，页面和接口均无手动重试次数。
-- [ ] 从常驻入口选择模型 B，预期输入框当前模型立即同步为 B，并在原位置继续原请求；该选择属于用户手动选择，不修改管理员默认模型。
+- [ ] 从常驻入口选择模型 B，预期恢复请求受理后输入框当前模型同步为 B，并在原位置继续原请求；该选择属于用户手动选择，不修改管理员默认模型。
 - [ ] 选择后将模型 B 改为繁忙，预期返回统一 `12048/recovery_rejected` SSE 终态并提示恢复被拒绝；让 B 返回 auth_error 等普通模型错误时只显示原错误卡，不额外弹“所选模型不可用”。
 - [ ] 删除原消息、撤销资源权限或移除日常恢复必要参数，再点击重试；预期统一返回 `12048/recovery_rejected`，不创建新的 busy 状态、不显示 provider detail，当前 Retry 入口结束。
 - [ ] 在旧请求繁忙时新发一条请求；预期旧提示仍保留，但“重试”和“更换模型”入口消失，新请求独立执行。
@@ -55,7 +55,14 @@
 - [ ] 将同一任务配置为“前两次阿里临时 429、第三次成功”，预期调用次数、退避和最终成功结果与既有 retryable 错误完全相同；不得在识别 429 后提前失败。
 - [ ] 将重试次数耗尽，预期仍经过既有失败落档、失败轮次、任务收敛和错误事件，只附加标准 `rate_limit_state/model_id` 展示字段。
 - [ ] 任务模式触发 429 后点击“重试”；预期与其他任务执行错误一致，调用既有 `continueConversation(sessionVersionId, question)`，不调用独立 recover endpoint。
+- [ ] 分别在独立灵思执行页和统一工作台内嵌任务卡触发最终限流失败；预期可操作页面同时显示“重试”和常驻“更换模型”，分享/历史只读页面不显示操作。
+- [ ] 打开任务换模列表，预期复用任务模式现有模型集合，排除当前模型、重复模型和 `recovering/busy` 模型；连续 Retry/换模不显示次数，也不自动弹出换模弹窗。
+- [ ] 选择模型 B，确认请求仍为 `POST /api/v1/linsight/workbench/continue`，body 使用原 `session_version_id/question` 并额外携带 `model_id=B`；普通 Retry body 不含 `model_id`。
+- [ ] 换模请求受理后，确认仍是同一 session version 和 LangGraph thread，`linsight_session_version.model` 更新为 B，独立页及统一页当前任务输入框同步为 B 且按手动任务模型记忆；不得新建外层用户消息或 session version。
 - [ ] 检查 Linsight 队列 item；预期仍为既有 `continue_question` 协议，不出现 `recovery/execution_id/attempt_id/target_model_id` 等任务专用恢复字段。
+- [ ] 在打开候选后删除、停用、收回权限或使模型 B 不满足任务能力，再提交换模；预期复用现有模型校验拒绝，原失败轮次、session status/model 和输入框选择均不变，不产生 queue item。
+- [ ] 模拟 queue enqueue 失败，并分别准备原状态 FAILED/COMPLETED；预期恢复各自的 original status 和 original model，不永久停留 IN_PROGRESS，页面保留原失败卡。
+- [ ] 让模型 B 继续返回 429 或其他执行错误；预期仍经过任务原自动 retry、失败落档和错误事件，不进入换模专用失败分支。
 - [ ] 任务模式 429 使用中性繁忙提示；非 429 执行错误的旧提示和 Retry 行为保持不变。
 
 ### 知识空间 file/folder（AC-37～AC-43、AC-49～AC-55）
@@ -90,3 +97,10 @@
 
 - [ ] 真实阿里百炼配额触发、运维日志脱敏目检、Radix 弹窗焦点/键盘、三语视觉布局、真实浏览器双标签竞态、停 Redis/Celery 的降级演练、Linsight 已写真实文件后的人工内容核对、MySQL/DM8 双环境部署 smoke 均保留为手工项。
 - [ ] 本清单执行人记录环境、镜像 SHA、数据库类型、时间、通过/失败项和证据链接；未执行项不得标记通过。
+
+## 7. 本地自动化执行记录（2026-09-02）
+
+- [x] 后端 F051 focused 回归：152 项通过。
+- [x] Client 任务换模专项：5 个测试文件、13 项通过；完整 lint 与 i18n 检查通过。
+- [x] 外部 E2E harness 成功收集 15 项，其中新增任务换模 case <code>task_continue_switch</code> 验证同一 continue endpoint、同一 session version 和 model 更新。
+- [ ] 当前机器未提供 <code>E2E_F051_STATE_CASES_JSON</code>、<code>E2E_F051_RECOVERY_CASES_JSON</code> 及 fake provider/full middleware 环境，因此 15 项全部跳过；本记录不代表真实环境 E2E 通过。

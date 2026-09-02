@@ -41,6 +41,8 @@ export type LinsightInfo = {
     version: string;
     create_time: string;
     session_id: string;
+    /** Model selected for this task session version. */
+    model?: string | number;
     tools: {
         id: string | number;
         name: string;

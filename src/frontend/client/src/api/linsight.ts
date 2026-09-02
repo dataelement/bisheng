@@ -50,10 +50,15 @@ export function startLinsight(versionId: string): Promise<any> {
 }
 
 // F035 多轮对话：在已完成的同一会话里追加新一轮（复用同一 session_version + agent thread，保留上下文）
-export function continueLinsight(session_version_id: string, question: string): Promise<any> {
+export function continueLinsight(
+    session_version_id: string,
+    question: string,
+    model_id?: string | number,
+): Promise<any> {
     return request.post('/api/v1/linsight/workbench/continue', {
         session_version_id,
-        question
+        question,
+        ...(model_id == null ? {} : { model_id }),
     });
 }
 
