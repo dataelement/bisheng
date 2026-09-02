@@ -123,6 +123,8 @@ export interface KnowledgeSpace {
 
     // Used only by the "square explore" UI
     isFollowed?: boolean;
+    /** Effective permission ids the current user holds on the space (from /info). */
+    permissionIds?: string[];
     isPending?: boolean;
     // join | joined | pending | rejected (square list & preview)
     squareStatus?: "join" | "joined" | "pending" | "rejected";
@@ -245,6 +247,7 @@ interface RawKnowledgeSpace {
     auto_tag_custom_tags?: string[] | null;
     is_pending?: boolean;
     is_followed?: boolean;
+    permission_ids?: string[];
     subscription_status?: string;
     initial_permission_result?: RawInitialPermissionResult | null;
 }
@@ -365,6 +368,7 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
             : null,
         isPending: raw.is_pending ?? false,
         isFollowed: raw.is_followed ?? false,
+        permissionIds: Array.isArray(raw.permission_ids) ? raw.permission_ids : undefined,
         // Some detail endpoints may carry subscription_status; keep it if present.
         subscriptionStatus:
             (raw as any).subscription_status ??

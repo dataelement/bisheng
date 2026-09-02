@@ -192,3 +192,74 @@ async def test_active_member_still_allowed(monkeypatch):
     result = await svc.get_article_detail("article-1", "channel-review", login_user)
 
     assert result is _SENTINEL
+
+
+# --- The article *list* shares the gate --------------------------------------
+#
+# ``search_channel_articles`` used to go straight from the channel lookup to ES,
+# so a former member (or anyone holding the channel id) could page through the
+# titles and summaries of a review-join channel while the detail endpoint said
+# no. The list now runs the same check; these tests pin it. Reaching ES is the
+# "allowed" signal — the fake raises a sentinel there so the tail of the method
+# (source enrichment, read flags) stays out of the picture.
+
+
+class _ReachedEs(Exception):
+    pass
+
+
+def _list_service(member: SpaceChannelMember | None) -> ChannelService:
+    async def _search_articles(**kwargs):
+        raise _ReachedEs()
+
+    svc = _service(member)
+    # The list returns early, before ES, when the channel has no sources — give it one so
+    # "reached ES" is a meaningful signal that the gate let the caller through.
+    channel = _channel()
+    channel.source_list = ["source-1"]
+    svc.channel_repository = SimpleNamespace(find_channels_by_ids=_async_return([channel]))
+    svc.article_es_service = SimpleNamespace(search_articles=_search_articles)
+    return svc
+
+
+async def test_list_denies_a_former_member_without_grant(monkeypatch):
+    _stub_rebac(monkeypatch, set())
+    svc = _list_service(None)
+    login_user = SimpleNamespace(user_id=999, tenant_id=1)
+
+    with pytest.raises(ChannelAccessDeniedError):
+        await svc.search_channel_articles("channel-review", login_user=login_user)
+
+
+async def test_list_denies_a_pending_applicant(monkeypatch):
+    _stub_rebac(monkeypatch, set())
+    svc = _list_service(_pending_member())
+    login_user = SimpleNamespace(user_id=200, tenant_id=1)
+
+    with pytest.raises(ChannelAccessDeniedError):
+        await svc.search_channel_articles("channel-review", login_user=login_user)
+
+
+async def test_list_lets_an_admin_or_rebac_grant_through(monkeypatch):
+    _stub_rebac(monkeypatch, {"view_channel"})
+    svc = _list_service(None)
+    login_user = SimpleNamespace(user_id=1, tenant_id=1)
+
+    with pytest.raises(_ReachedEs):
+        await svc.search_channel_articles("channel-review", login_user=login_user)
+
+
+async def test_list_active_member_does_not_consult_rebac(monkeypatch):
+    async def _boom(*args, **kwargs):
+        raise AssertionError("ReBAC should not be consulted for an ACTIVE member")
+
+    monkeypatch.setattr(
+        FineGrainedPermissionService,
+        "get_effective_permission_ids_async",
+        staticmethod(_boom),
+    )
+    svc = _list_service(_active_member())
+    login_user = SimpleNamespace(user_id=100, tenant_id=1)
+
+    with pytest.raises(_ReachedEs):
+        await svc.search_channel_articles("channel-review", login_user=login_user)
