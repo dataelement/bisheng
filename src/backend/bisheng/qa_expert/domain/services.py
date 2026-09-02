@@ -1899,6 +1899,9 @@ class AnswerService:
         if question is not None:
             new_count = max(int(getattr(question, "answer_count", 0) or 0) - 1, 0)
             await self.question_repo.update(answer.question_id, answer_count=new_count)
+        # 软删后回退专家累计回答数, 前端解决率 = adoption_count / answer_count
+        if getattr(answer, "expert_id", None) not in (None, ""):
+            await self.expert_repo.increment_answer_count(int(answer.expert_id), count=-1)
         return True
 
     async def _send_answer_notification(self, question: Question, answer: Answer):
