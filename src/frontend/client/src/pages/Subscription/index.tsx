@@ -257,7 +257,12 @@ export default function Subscription() {
                 const permissionIds: string[] = Array.isArray(detail?.permission_ids) ? detail.permission_ids : [];
                 const subscribed = String(detail?.subscription_status ?? "").toLowerCase() === "subscribed";
                 if (!subscribed && !permissionIds.includes("view_channel")) {
-                    navigate(`/channel/share/${detailChannelId}?square=1`, { replace: true });
+                    // The share route, deliberately without ?square=1: that flag means "arrived
+                    // from the square", which renders the square behind the preview and sends the
+                    // user there when they close it. A channel that was never published to the
+                    // square must not put them in it — the intro-and-apply preview is the whole
+                    // destination, and closing it returns to their own channel list.
+                    navigate(`/channel/share/${detailChannelId}`, { replace: true });
                     return;
                 }
                 const name = String(detail?.name ?? "");
