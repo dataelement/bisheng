@@ -272,7 +272,9 @@ export function ModelEditor({
             )}
           </div>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            {t("model.description")}
+            {isStandard
+              ? t("model.descriptionBuiltin")
+              : t("model.description")}
           </p>
         </div>
         {/* A bare "3" said nothing. The level is derived from the highest action
@@ -384,11 +386,13 @@ export function ModelEditor({
                         }
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="block font-medium text-foreground">
+                        {/* The API code matters to whoever wires up integrations,
+                            not to the admin ticking boxes — hover, not a second line. */}
+                        <span
+                          className="block font-medium text-foreground"
+                          title={action.code}
+                        >
                           {actionLabel(t, action.code, action.name)}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {action.code}
                         </span>
                       </span>
                       {action.level === null ? (

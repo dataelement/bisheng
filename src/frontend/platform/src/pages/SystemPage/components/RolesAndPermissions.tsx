@@ -304,6 +304,14 @@ export function RolesAndPermissions() {
           )}
         </TabsList>
 
+        {/* Three sibling tabs that look interchangeable but are not: menu roles
+            gate pages, the other two gate what a user may do to a resource. */}
+        {isPlatformSuperAdmin && (
+          <p className="mt-2 shrink-0 text-xs leading-5 text-muted-foreground">
+            {t("catalog.hint")}
+          </p>
+        )}
+
         <TabsContent
           value="menuRoles"
           className="min-h-0 flex-1 overflow-auto"
