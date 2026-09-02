@@ -986,9 +986,6 @@ export function fileStatusToNumber(status: FileStatus): number {
     }
 }
 
-/** Backend `/children` filter for members: keep violation visible, exclude generic failed files. */
-export const SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED: number[] = [1, 2, 4, 5, 6, 7];
-
 /** Backend `/children` filter: SUCCESS (2) only. Used for 广场预览 when user is not an active space member. */
 export const SPACE_CHILDREN_STATUS_SUCCESS_ONLY: number[] = [2];
 
@@ -1509,8 +1506,8 @@ export async function listKnowledgeFolders(params: {
     parent_id?: string | number | null;
     /**
      * Status filter — must mirror what the right-side file panel sends so the
-     * tree and the panel stay consistent. For MEMBER-role users this should be
-     * SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED; omit for admins/creators.
+     * tree and the panel stay consistent. Omit it unless the user picked a status:
+     * hiding other people's parse failures is the server's job, not a query param.
      */
     file_status?: number[];
 }): Promise<{ items: KnowledgeFolderNode[]; total: number }> {
