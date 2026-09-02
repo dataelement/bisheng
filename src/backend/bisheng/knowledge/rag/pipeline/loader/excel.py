@@ -25,7 +25,7 @@ class ExcelLoader(BaseBishengLoader):
     def __init__(self, header_rows: List[int] = None, data_rows: int = 12, append_header=True,
                  *args, **kwargs):
         super(ExcelLoader, self).__init__(*args, **kwargs)
-        self.header_rows = header_rows or [0, 1]
+        self.header_rows = header_rows or [0, 0]
         self.data_rows = data_rows
         self.append_header = append_header
         self.max_chunk_limit = 10000

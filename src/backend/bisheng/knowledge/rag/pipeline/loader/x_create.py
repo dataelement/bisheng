@@ -32,7 +32,7 @@ class XinChuangFormatterLoader(BaseBishengLoader):
     ):
         super().__init__(*args, **kwargs)
         self.retain_images = retain_images
-        self.header_rows = header_rows or [0, 1]
+        self.header_rows = header_rows or [0, 0]
         self.data_rows = data_rows
         self.append_header = append_header
 
