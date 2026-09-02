@@ -2828,12 +2828,45 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     for counter in counters:
                         raw_counts[folder_id][counter] = max(0, raw_counts[folder_id][counter] - 1)
 
-            for folder_id in folder_scopes:
+            # 存在异常 only counts files the *current user* may see. A viewer or editor
+            # cannot see other people's failed uploads in the listing, so a folder must
+            # not light up over files that are invisible to them. The check reuses the
+            # listing's own visibility rule (_filter_visible_child_items) so both agree;
+            # the permission context is built once per space and shared across folders.
+            # The aggregate above says whether anything abnormal exists at all; only then
+            # is this (dearer) visibility pass worth running.
+            permission_contexts: dict[int, dict] = {}
+            hidden_ids = set(file_change_excluded_ids or set())
+
+            async def visible_abnormal_exists(knowledge_id: int, prefix: str) -> bool:
+                candidates_stmt = select(KnowledgeFile).where(
+                    KnowledgeFile.tenant_id == effective_tenant_id,
+                    KnowledgeFile.knowledge_id == knowledge_id,
+                    KnowledgeFile.file_type == FileType.FILE.value,
+                    col(KnowledgeFile.status).in_(sorted(abnormal_statuses)),
+                    or_(
+                        col(KnowledgeFile.file_level_path) == prefix,
+                        col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
+                    ),
+                )
+                async with get_async_db_session() as session:
+                    candidates = [row for row in (await session.exec(candidates_stmt)).all() if row.id not in hidden_ids]
+                if not candidates:
+                    return False
+                if knowledge_id not in permission_contexts:
+                    permission_contexts[knowledge_id] = await self._build_child_permission_context(knowledge_id)
+                visible = await self._filter_visible_child_items(
+                    candidates, space_id=knowledge_id, context=permission_contexts[knowledge_id]
+                )
+                return bool(visible)
+
+            for folder_id, (knowledge_id, prefix) in folder_scopes.items():
                 counts = raw_counts[folder_id]
+                has_abnormal = counts["abnormal"] > 0 and await visible_abnormal_exists(knowledge_id, prefix)
                 folder_counts[folder_id] = {
                     "has_failed_files": counts["failed"] > 0,
                     # Drives the folder's 存在异常 pill; see abnormal_statuses above.
-                    "has_abnormal_files": counts["abnormal"] > 0,
+                    "has_abnormal_files": has_abnormal,
                     "success_file_num": counts["success"],
                     "processing_file_num": counts["processing"],
                 }
