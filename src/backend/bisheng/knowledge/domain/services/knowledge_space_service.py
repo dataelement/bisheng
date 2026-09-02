@@ -2410,6 +2410,35 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             from bisheng.core.database import get_async_db_session
 
+            # 存在异常 only counts files the *current user* may see. A viewer or editor
+            # cannot see other people's failed uploads in the listing, so a folder must
+            # not light up over files that are invisible to them. The check reuses the
+            # listing's own visibility rule (_filter_visible_child_items) so both agree;
+            # the permission context is built once per space and shared across folders.
+            permission_contexts: dict[int, dict] = {}
+
+            async def visible_abnormal_exists(folder: KnowledgeFile, prefix: str, abnormal_statuses: set[int]) -> bool:
+                candidates_stmt = select(KnowledgeFile).where(
+                    KnowledgeFile.knowledge_id == folder.knowledge_id,
+                    KnowledgeFile.file_type == 1,
+                    col(KnowledgeFile.status).in_(sorted(abnormal_statuses)),
+                    or_(
+                        col(KnowledgeFile.file_level_path) == prefix,
+                        col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
+                    ),
+                )
+                async with get_async_db_session() as session:
+                    candidates = list((await session.exec(candidates_stmt)).all())
+                if not candidates:
+                    return False
+                space_id = int(folder.knowledge_id)
+                if space_id not in permission_contexts:
+                    permission_contexts[space_id] = await self._build_child_permission_context(space_id)
+                visible = await self._filter_visible_child_items(
+                    candidates, space_id=space_id, context=permission_contexts[space_id]
+                )
+                return bool(visible)
+
             async def count_folder(folder: KnowledgeFile):
                 prefix = f"{folder.file_level_path or ''}/{folder.id}"
                 stmt = (
@@ -2446,12 +2475,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     processing = sum(r[1] for r in rows if r[0] in in_progress_statuses)
                     failed = sum(r[1] for r in rows if r[0] in retryable_statuses)
                     abnormal = sum(r[1] for r in rows if r[0] in abnormal_statuses)
-                    folder_counts[folder.id] = {
-                        "has_failed_files": failed > 0,
-                        "has_abnormal_files": abnormal > 0,
-                        "success_file_num": success,
-                        "processing_file_num": processing,
-                    }
+                # The aggregate says whether anything abnormal exists at all; only then is the
+                # (dearer) visibility pass worth running.
+                has_abnormal = abnormal > 0 and await visible_abnormal_exists(folder, prefix, abnormal_statuses)
+                folder_counts[folder.id] = {
+                    "has_failed_files": failed > 0,
+                    "has_abnormal_files": has_abnormal,
+                    "success_file_num": success,
+                    "processing_file_num": processing,
+                }
 
             folders = [f for f in res if f.file_type == FileType.DIR]
             await asyncio.gather(*(count_folder(f) for f in folders))
