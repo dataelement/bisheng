@@ -197,8 +197,10 @@ export interface KnowledgeFile {
     sensitiveCheck?: KnowledgeFileSensitiveCheck;
     /** Number of successfully parsed files (folders only) */
     successFileNum?: number;
-    /** Whether the folder contains at least one FAILED/VIOLATION child (folders only) */
+    /** Whether the folder contains at least one FAILED/VIOLATION child (folders only) — drives batch retry */
     hasFailedFiles?: boolean;
+    /** Whether the folder's subtree holds any FAILED/TIMEOUT/VIOLATION file (folders only) — drives the 存在异常 pill */
+    hasAbnormalFiles?: boolean;
     /** Number of files in PROCESSING/WAITING/REBUILDING (folders only) */
     processingFileNum?: number;
     /** Source of the file, e.g. 'channel' for subscription channel files */
@@ -900,6 +902,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
         successFileNum: raw?.success_file_num !== undefined ? Number(raw.success_file_num) : undefined,
         hasFailedFiles: raw?.has_failed_files !== undefined ? Boolean(raw.has_failed_files) : undefined,
+        hasAbnormalFiles: raw?.has_abnormal_files !== undefined ? Boolean(raw.has_abnormal_files) : undefined,
         processingFileNum: raw?.processing_file_num !== undefined ? Number(raw.processing_file_num) : undefined,
         fileSource: raw?.file_source,
         oldFileLevelPath: raw?.old_file_level_path,

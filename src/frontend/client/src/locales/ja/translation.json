@@ -1648,7 +1648,8 @@
     "batch_withdraw_partial": "{{0}} 件を撤回しました（{{1}} 件失敗）",
     "batch_withdraw_failed": "一括撤回に失敗しました",
     "sort_by_size_label": "サイズで並べ替え",
-    "select_all": "すべて選択"
+    "select_all": "すべて選択",
+    "folder_abnormal": "異常あり"
   },
   "com_deep_thinking": {
     "running": "深く思考中（{{0}} 秒経過）...",

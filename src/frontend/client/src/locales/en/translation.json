@@ -1724,7 +1724,8 @@
     "batch_withdraw_partial": "Withdrew {{0}} item(s), {{1}} failed",
     "batch_withdraw_failed": "Batch withdraw failed",
     "sort_by_size_label": "Sort by size",
-    "select_all": "Select all"
+    "select_all": "Select all",
+    "folder_abnormal": "Has issues"
   },
   "com_deep_thinking": {
     "running": "Thinking deeply ({{0}}s elapsed)...",

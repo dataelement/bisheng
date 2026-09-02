@@ -2788,15 +2788,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 KnowledgeFileStatus.FAILED.value,
                 KnowledgeFileStatus.VIOLATION.value,
             }
-            raw_counts = {folder_id: {"success": 0, "processing": 0, "failed": 0} for folder_id in folder_scopes}
+            # What the folder rollup calls "存在异常" — everything needing the user to step in.
+            # Deliberately wider than retryable_statuses: a timed-out file is an anomaly the
+            # folder must surface, but batch retry does not act on it, so the display signal and
+            # the retry signal stay separate instead of one doing double duty.
+            abnormal_statuses = retryable_statuses | {KnowledgeFileStatus.TIMEOUT.value}
+            raw_counts = {
+                folder_id: {"success": 0, "processing": 0, "failed": 0, "abnormal": 0} for folder_id in folder_scopes
+            }
             for folder_id, status, count in aggregate_rows:
                 normalized_folder_id = int(folder_id)
                 if status == KnowledgeFileStatus.SUCCESS.value:
                     raw_counts[normalized_folder_id]["success"] += int(count)
                 elif status in in_progress_statuses:
                     raw_counts[normalized_folder_id]["processing"] += int(count)
-                elif status in retryable_statuses:
+                if status in retryable_statuses:
                     raw_counts[normalized_folder_id]["failed"] += int(count)
+                if status in abnormal_statuses:
+                    raw_counts[normalized_folder_id]["abnormal"] += int(count)
 
             for _file_id, row_knowledge_id, status, file_level_path in hidden_rows:
                 normalized_path = str(file_level_path or "")
@@ -2805,20 +2814,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         continue
                     if normalized_path != prefix and not normalized_path.startswith(f"{prefix}/"):
                         continue
+                    counters = []
                     if status == KnowledgeFileStatus.SUCCESS.value:
-                        counter = "success"
+                        counters.append("success")
                     elif status in in_progress_statuses:
-                        counter = "processing"
-                    elif status in retryable_statuses:
-                        counter = "failed"
-                    else:
+                        counters.append("processing")
+                    if status in retryable_statuses:
+                        counters.append("failed")
+                    if status in abnormal_statuses:
+                        counters.append("abnormal")
+                    if not counters:
                         continue
-                    raw_counts[folder_id][counter] = max(0, raw_counts[folder_id][counter] - 1)
+                    for counter in counters:
+                        raw_counts[folder_id][counter] = max(0, raw_counts[folder_id][counter] - 1)
 
             for folder_id in folder_scopes:
                 counts = raw_counts[folder_id]
                 folder_counts[folder_id] = {
                     "has_failed_files": counts["failed"] > 0,
+                    # Drives the folder's 存在异常 pill; see abnormal_statuses above.
+                    "has_abnormal_files": counts["abnormal"] > 0,
                     "success_file_num": counts["success"],
                     "processing_file_num": counts["processing"],
                 }
@@ -2840,7 +2855,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if one.file_type == FileType.DIR:
                 counts = folder_counts.get(
                     one.id,
-                    {"has_failed_files": False, "success_file_num": 0, "processing_file_num": 0},
+                    {
+                        "has_failed_files": False,
+                        "has_abnormal_files": False,
+                        "success_file_num": 0,
+                        "processing_file_num": 0,
+                    },
                 )
                 item.update(counts)
             else:

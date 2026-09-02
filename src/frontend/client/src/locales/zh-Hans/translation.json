@@ -1652,7 +1652,8 @@
     "batch_withdraw_partial": "已撤回 {{0}} 项，{{1}} 项失败",
     "batch_withdraw_failed": "批量撤回失败",
     "sort_by_size_label": "大小",
-    "select_all": "全选"
+    "select_all": "全选",
+    "folder_abnormal": "存在异常"
   },
   "com_deep_thinking": {
     "running": "正在深度思考（已用 {{0}} 秒）...",
