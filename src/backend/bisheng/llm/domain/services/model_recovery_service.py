@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterable, AsyncIterator
 from typing import Any
 
 from bisheng.common.errcode.workstation import ModelRecoveryRejectedError
@@ -14,10 +15,20 @@ from bisheng.llm.domain.services.model_rate_limit import (
 )
 
 _RECOVERY_LOCK_TTL_SECONDS = 5
+_RELEASE_RECOVERY_LOCK_SCRIPT = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+  return redis.call('del', KEYS[1])
+end
+return 0
+"""
 
 
 class RecoveryNotAllowedError(ModelRecoveryRejectedError):
     """The original business record cannot be safely resumed."""
+
+
+def _recovery_lock_key(*, tenant_id: int, user_id: int, entry: str, subject_id: str) -> str:
+    return f"model-recovery-lock:{tenant_id}:{user_id}:{entry}:{subject_id}"
 
 
 def build_recovery_rejected_sse(attempt: ClaimedAttempt | RecoveryCommand) -> str:
@@ -111,7 +122,12 @@ class ModelRecoveryService:
         subject_id: str,
         attempt_id: str,
     ) -> bool:
-        key = f"model-recovery-lock:{tenant_id}:{user_id}:{entry}:{subject_id}"
+        key = _recovery_lock_key(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            entry=entry,
+            subject_id=subject_id,
+        )
         try:
             redis = await self._redis_factory()
             return bool(
@@ -133,3 +149,54 @@ class ModelRecoveryService:
                 error_type=type(exc).__name__,
             )
             return True
+
+    async def release_recovery_lock(
+        self,
+        attempt: ClaimedAttempt,
+        *,
+        tenant_id: int,
+        user_id: int,
+    ) -> None:
+        """Release only the short lock owned by this completed attempt."""
+        key = _recovery_lock_key(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            entry=attempt.entry,
+            subject_id=attempt.subject_id,
+        )
+        try:
+            redis = await self._redis_factory()
+            await redis.async_connection.eval(
+                _RELEASE_RECOVERY_LOCK_SCRIPT,
+                1,
+                key,
+                attempt.attempt_id,
+            )
+        except Exception as exc:
+            # A failed best-effort cleanup remains bounded by the short lock TTL.
+            self._diagnostics.state_write_failed(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                entry=attempt.entry,
+                operation="recovery_short_unlock",
+                error_type=type(exc).__name__,
+            )
+
+    async def release_lock_after_stream(
+        self,
+        stream: AsyncIterable[Any],
+        attempt: ClaimedAttempt,
+        *,
+        tenant_id: int,
+        user_id: int,
+    ) -> AsyncIterator[Any]:
+        """Keep duplicate protection while streaming and release it on exit."""
+        try:
+            async for item in stream:
+                yield item
+        finally:
+            await self.release_recovery_lock(
+                attempt,
+                tenant_id=tenant_id,
+                user_id=user_id,
+            )

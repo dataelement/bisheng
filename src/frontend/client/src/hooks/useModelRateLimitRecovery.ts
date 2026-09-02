@@ -94,38 +94,8 @@ export function buildManualRetryOptions(
   };
 }
 
-export function nextManualRetryCount(
-  currentCount: number,
-  action: ModelRecoveryAction,
-  errorType?: string,
-): number {
-  return action === 'manual_retry' && errorType === 'rate_limit'
-    ? currentCount + 1
-    : 0;
-}
-
-export function shouldRecommendModelSwitch(manualRetryCount: number): boolean {
-  return manualRetryCount >= 3;
-}
-
-export function shouldOpenModelSwitchRecommendation({
-  errorType,
-  pending,
-  recommended,
-  eventAttemptId,
-  activeAttemptId,
-}: {
-  errorType?: string | null;
-  pending: boolean;
-  recommended: boolean;
-  eventAttemptId?: string | null;
-  activeAttemptId?: string | null;
-}): boolean {
-  return errorType === 'rate_limit'
-    && !pending
-    && recommended
-    && !!eventAttemptId
-    && eventAttemptId === activeAttemptId;
+export function isRecoveryRequestAccepted(errorType?: string | null): boolean {
+  return errorType !== 'recovery_rejected';
 }
 
 export function useModelRateLimitRecovery({
@@ -139,7 +109,6 @@ export function useModelRateLimitRecovery({
   const queryClient = useQueryClient();
   const [pending, setPending] = useState(false);
   const [lastResponse, setLastResponse] = useState<ModelRecoveryResponse | null>(null);
-  const [manualRetryCount, setManualRetryCount] = useState(0);
   const attemptRef = useRef<string | null>(activeAttemptId ?? null);
   const externalAttemptRef = useRef<string | null>(activeAttemptId ?? null);
   const pendingRef = useRef(false);
@@ -155,7 +124,6 @@ export function useModelRateLimitRecovery({
     attemptRef.current = attemptId;
     pendingRef.current = true;
     setPending(true);
-    if (action === 'switch_model') setManualRetryCount(0);
     try {
       const response = await transport(target, {
         executionId,
@@ -165,16 +133,8 @@ export function useModelRateLimitRecovery({
         targetModelId,
       });
       setLastResponse(response);
-      setManualRetryCount((count) => nextManualRetryCount(
-        count,
-        action,
-        response.error_type,
-      ));
       await queryClient.invalidateQueries([QueryKeys.bishengConfig]);
       return response;
-    } catch (error) {
-      setManualRetryCount(0);
-      throw error;
     } finally {
       pendingRef.current = false;
       setPending(false);
@@ -185,15 +145,11 @@ export function useModelRateLimitRecovery({
     (attemptId?: string | null) => !!attemptId && attemptId === attemptRef.current,
     [],
   );
-  const resetManualRetryCount = useCallback(() => setManualRetryCount(0), []);
 
   return {
     pending,
     activeAttemptId: attemptRef.current,
     lastResponse,
-    manualRetryCount,
-    showSwitchRecommendation: shouldRecommendModelSwitch(manualRetryCount),
-    resetManualRetryCount,
     recover,
     retry: () => recover(buildManualRetryOptions(currentModelId)),
     switchModel: (targetModelId: string | number) => recover({

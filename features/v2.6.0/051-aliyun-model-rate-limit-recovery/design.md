@@ -164,20 +164,20 @@ F051 对真实模型调用只能做 best-effort 观察，不能成为原调用�
   - Redis/Celery 故障：记录日志，当前用户调用继续返回原错误；不增加补偿扫描器。
 - **何时重新考虑**：供应商提供不消耗生成额度的健康端点时替换最小生成 probe；仍不得连接用户会话。
 
-### 决策 6：原请求和页面次数存在哪里
+### 决策 6：原请求和页面 attempt 存在哪里
 
 - **备选**
   - A. 新建统一 <code>model_call_execution</code> 表。
-  - B. 把恢复内容和次数放 Redis。
-  - C. 业务事实读取既有记录；页面关联和次数只在当前页面；后端仅做 5 秒短锁。
+  - B. 把恢复内容和 attempt 放 Redis。
+  - C. 业务事实读取既有记录；attempt 只在当前页面；后端仅做 5 秒短锁。
 - **选定**：C。
-- **原因**：ChatMessage、Linsight session version 已经拥有原问题和业务进度；另建 execution 会复制会话事实并产生清理、状态同步和迁移负担。产品接受刷新后 UI 和次数消失。
+- **原因**：ChatMessage、Linsight session version 已经拥有原问题和业务进度；另建 execution 会复制会话事实并产生清理、状态同步和迁移负担。产品接受刷新后限流 UI 消失，且不再需要手动重试次数。
 - **ID 语义**
   - 日常、知识、频道：<code>execution_id = subject_id = 原用户 ChatMessage.id</code>，只是实时传输关联标识，不代表新的 execution 实体。
   - <code>attempt_id</code>：当前页面为一次主动恢复生成的临时标识，只用于过滤迟到结果。
   - 任务：继续只使用原 <code>sessionVersionId</code>，不进入上述 command。
 - **短锁**：<code>tenant:user:entry:subject</code>，TTL 5 秒，只抑制近同时点击；Redis 故障 fail-open，不承诺 exactly-once。
-- **何时重新考虑**：只有产品明确要求跨设备严格次数、长期幂等或 exactly-once，且业务自身无法承载时，才重新设计持久执行实体。
+- **何时重新考虑**：只有产品明确要求长期幂等或 exactly-once，且业务自身无法承载时，才重新设计持久执行实体。
 
 ### 决策 7：各入口如何主动恢复
 
@@ -200,8 +200,9 @@ F051 对真实模型调用只能做 best-effort 观察，不能成为原调用�
 
 - **选定**：复用 <code>/api/v1/workstation/config</code> 的模型列表，批量叠加 Redis 状态；存在 <code>recovering/busy</code> 时每 5 秒 refetch，全部 normal 后停止。
 - SSE/WS 收到 <code>rate_limit</code> 时先在 Query Cache 中投影并 invalidate，使轮询立即启动。
-- 普通模型选择器显示 busy 但不禁用；换模弹窗排除当前模型和 busy 模型，不改变其他历史候选规则。
-- 旧请求在发送新消息后保留提示、关闭操作；页面刷新允许丢失限流卡和次数。
+- 普通模型选择器显示 busy 但不禁用；限流卡常驻换模列表排除当前模型和 busy 模型，不改变其他历史候选规则。
+- 用户从常驻入口选择模型时同步更新当前输入框模型，并按用户手动选择规则记忆；不修改管理员默认模型。
+- 旧请求在发送新消息后保留提示、关闭操作；页面刷新允许丢失限流卡。
 - **原因**：模型列表已经是四入口公共数据源；不新增 Recoil/store 或服务端推送状态机。
 - **何时重新考虑**：5 秒条件轮询造成可测压力或需要亚秒同步时，再考虑 tenant/model/statusVersion 推送。
 
@@ -352,7 +353,7 @@ probe 收敛规则：
 | 5 | 只用 version 无法同时满足“接管最新版本”和“拒绝重建 key 的旧任务” | Celery 旧 attempt=3 可耗尽新轮次 | version 管结果，probe_token 管排队归属 |
 | 6 | Celery 是 at-least-once，旧任务和重复任务都可能迟到 | probe single-flight 被破坏 | claim 校验 token + attempt + state |
 | 7 | 成功与新 429 可以并发 | 旧成功误删新 busy | 每次真实成功只按调用前观察 version CAS |
-| 8 | 页面三次是交互提示，不是业务事实 | 为计数新建后端状态机和清理链 | 只在当前气泡组件维护；刷新可归零 |
+| 8 | 换模入口已在限流卡常驻 | 继续保留无意义的页面三次计数和自动弹窗 | 删除页面计数；换模只由用户点击常驻入口触发 |
 | 9 | 12048 envelope 有 i18n 不等于页面一定展示该文案 | 用户只看到 unknown 或英文详情 | error_type 映射和 SSE 翻译纳入前端契约测试 |
 | 10 | focused test 可以把错误设计写成正确预期 | 全部测试通过仍违背业务口径 | 测试先比较“接入 F051 前后原行为不变”，再验证新增状态 |
 | 11 | probe 成功不是用户请求恢复 | 后台无授权地自动生成回答 | probe 依赖图禁止任何会话 repository 和 recovery service |
@@ -424,7 +425,7 @@ probe 收敛规则：
 | 三个非任务业务入口 | 读取并鉴权自己的 ChatMessage，执行自己的安全恢复 | 不把恢复事实交给公共聚合器 |
 | Linsight | 原自动 retry、失败处理和 continue 链路；只附加观察/展示 | 不接入通用 recovery command |
 | Client Query | 轮询模型投影 | 不成为模型状态第二真相 |
-| Client bubble/hook | 页面 attempt 和三次提示 | 不写 Recoil/store，不持久化次数 |
+| Client bubble/hook | 页面 attempt、常驻换模入口和输入模型联动 | 不持久化次数，不修改管理员默认模型 |
 
 ### 6.6 数据、发布与回滚
 
@@ -471,12 +472,13 @@ probe 收敛规则：
 ### 7.3 前端关键契约
 
 1. rate_limit 到达即启动 config polling；normal 后停止。
-2. 普通模型选择器 busy 可点击；换模弹窗过滤当前和 busy，其他筛选规则不变。
+2. 普通模型选择器 busy 可点击；限流卡的常驻换模列表过滤当前和 busy，其他筛选规则不变。
 3. 当前页面 Retry 双击禁用，attempt 迟到结果不覆盖当前气泡。
-4. 只有连续三次用户主动重试且结果都是 rate_limit 才显示换模建议；成功、非限流错误、换模、新消息分别按 spec 清理。
-5. 发送新消息后旧卡保留但无 Retry/换模操作；刷新不重建限流卡。
-6. 12048/recovery_rejected 显示对应语言的主要终态文案，不显示 unknown，不提供继续 Retry。
-7. 所有新 UI 使用 Client 设计系统 Button size、语义字体和颜色 token；三语 key parity。
+4. 不维护手动重试次数，不自动打开换模弹窗；用户从常驻入口选择模型后同步更新当前输入框模型。
+5. 恢复调用返回普通模型错误时只展示原错误卡；只有 12048/recovery_rejected 被解释为换模/恢复操作拒绝。
+6. 发送新消息后旧卡保留但无 Retry/换模操作；刷新不重建限流卡。
+7. 12048/recovery_rejected 显示对应语言的主要终态文案，不显示 unknown，不提供继续 Retry。
+8. 所有新 UI 使用 Client 设计系统 Button size、语义字体和颜色 token；三语 key parity。
 
 ### 7.4 E2E/手工矩阵
 

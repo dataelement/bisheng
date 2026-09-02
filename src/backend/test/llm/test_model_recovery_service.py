@@ -1,6 +1,8 @@
 import json
 from types import SimpleNamespace
 
+import pytest
+
 from bisheng.llm.domain.services.model_rate_limit import (
     ModelCallEntry,
     ModelCallResumeMode,
@@ -17,10 +19,23 @@ class FakeRedisConnection:
     def __init__(self, results: list[bool] | None = None) -> None:
         self.results = list(results or [True])
         self.calls: list[tuple] = []
+        self.eval_calls: list[tuple] = []
+        self.values: dict[str, str] = {}
 
     async def set(self, *args, **kwargs):
         self.calls.append((args, kwargs))
-        return self.results.pop(0)
+        result = self.results.pop(0)
+        if result:
+            self.values[args[0]] = args[1]
+        return result
+
+    async def eval(self, *args):
+        self.eval_calls.append(args)
+        _, _, key, attempt_id = args
+        if self.values.get(key) != attempt_id:
+            return 0
+        self.values.pop(key, None)
+        return 1
 
 
 class FakePort:
@@ -104,6 +119,43 @@ async def test_short_lock_rejects_only_near_simultaneous_duplicate() -> None:
 
     assert first.should_execute is True
     assert second.should_execute is False
+
+
+async def test_short_lock_is_released_when_recovery_stream_finishes() -> None:
+    service, connection = await build_service()
+    attempt = await claim(service, FakePort(), command())
+
+    async def stream():
+        yield "event-1"
+
+    wrapped = service.release_lock_after_stream(
+        stream(),
+        attempt,
+        tenant_id=2,
+        user_id=9,
+    )
+    assert await anext(wrapped) == "event-1"
+    assert connection.eval_calls == []
+
+    with pytest.raises(StopAsyncIteration):
+        await anext(wrapped)
+
+    assert connection.values == {}
+    assert connection.eval_calls[-1][2:] == (
+        "model-recovery-lock:2:9:daily:question-9",
+        "attempt-1",
+    )
+
+
+async def test_completed_attempt_cannot_release_a_newer_recovery_lock() -> None:
+    service, connection = await build_service()
+    attempt = await claim(service, FakePort(), command())
+    key = "model-recovery-lock:2:9:daily:question-9"
+    connection.values[key] = "newer-attempt"
+
+    await service.release_recovery_lock(attempt, tenant_id=2, user_id=9)
+
+    assert connection.values[key] == "newer-attempt"
 
 
 async def test_manual_retry_uses_current_page_model_when_provided() -> None:

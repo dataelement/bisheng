@@ -1021,6 +1021,11 @@ async def recover_knowledge_chat(
             media_type="text/event-stream",
         )
     if port.question is None:
+        await recovery_service.release_recovery_lock(
+            claimed,
+            tenant_id=svc.login_user.tenant_id,
+            user_id=svc.login_user.user_id,
+        )
         return StreamingResponse(
             iter([build_recovery_rejected_sse(command)]),
             media_type="text/event-stream",
@@ -1036,4 +1041,12 @@ async def recover_knowledge_chat(
             logger.exception("knowledge chat recovery failed")
             yield ServerError(exception=exc).to_sse_event_instance_str()
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        recovery_service.release_lock_after_stream(
+            event_stream(),
+            claimed,
+            tenant_id=svc.login_user.tenant_id,
+            user_id=svc.login_user.user_id,
+        ),
+        media_type="text/event-stream",
+    )

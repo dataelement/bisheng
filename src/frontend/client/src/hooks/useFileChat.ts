@@ -18,7 +18,10 @@ import {
     type ModelRecoveryCommand,
     type ModelRecoveryResponse,
 } from "~/api/modelRecovery";
-import { closeSupersededRateLimitRecoveries } from "~/hooks/useModelRateLimitRecovery";
+import {
+    closeSupersededRateLimitRecoveries,
+    isRecoveryRequestAccepted,
+} from "~/hooks/useModelRateLimitRecovery";
 import { observeModelRateLimitEvent } from "~/hooks/queries/endpoints/modelRateLimitPolling";
 
 /**
@@ -108,8 +111,8 @@ export default function useFileChat(spaceId: string, fileId: string) {
             },
             onError: (error, meta) => {
                 observeModelRateLimitEvent(queryClient, meta);
-                recoveryAcceptedRef.current = false;
                 recoveryErrorTypeRef.current = meta?.errorType;
+                recoveryAcceptedRef.current = isRecoveryRequestAccepted(recoveryErrorTypeRef.current);
                 setMessages((prev) => {
                     const msgs = [...prev];
                     const idx = msgs.findIndex(

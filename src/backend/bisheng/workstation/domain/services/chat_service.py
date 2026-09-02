@@ -155,7 +155,15 @@ class DailyChatRecoveryService:
             resume_mode=ModelCallResumeMode.REINVOKE,
             port=port,
         )
-        payload = await port.resume_attempt(attempt) if attempt.should_execute else None
+        try:
+            payload = await port.resume_attempt(attempt) if attempt.should_execute else None
+        except Exception:
+            await self._recovery_service.release_recovery_lock(
+                attempt,
+                tenant_id=tenant_id,
+                user_id=login_user.user_id,
+            )
+            raise
         return DailyChatRecoveryResult(
             should_execute=attempt.should_execute,
             payload=payload,

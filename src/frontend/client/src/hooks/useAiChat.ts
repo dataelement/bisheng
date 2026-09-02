@@ -24,7 +24,10 @@ import {
     type ModelRecoveryCommand,
     type ModelRecoveryResponse,
 } from "~/api/modelRecovery";
-import { closeSupersededRateLimitRecoveries } from "~/hooks/useModelRateLimitRecovery";
+import {
+    closeSupersededRateLimitRecoveries,
+    isRecoveryRequestAccepted,
+} from "~/hooks/useModelRateLimitRecovery";
 import { observeModelRateLimitEvent } from "~/hooks/queries/endpoints/modelRateLimitPolling";
 
 const NO_PARENT = "00000000-0000-0000-0000-000000000000";
@@ -1066,8 +1069,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     onError: (error, errorCode, meta) => {
                         if (meta?.attemptId && meta.attemptId !== command.attemptId) return;
                         observeModelRateLimitEvent(queryClient, meta);
-                        accepted = false;
                         recoveryErrorType = meta?.errorType;
+                        accepted = isRecoveryRequestAccepted(recoveryErrorType);
                         updateActiveMessage((message) => ({
                             ...message,
                             error: true,

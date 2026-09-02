@@ -4,7 +4,7 @@
  * Each node with multiple children shows SiblingSwitch for navigation.
  */
 import { ArrowDownIcon, CornerDownRightIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSetRecoilState } from "recoil";
 import { Button } from "~/components";
@@ -23,6 +23,7 @@ import HeaderTitle from "./HeaderTitle";
 import { QueryKeys } from "~/types/chat";
 import type { ConversationData } from "~/types/chat/queries";
 import type { ModelRecoveryCommand, ModelRecoveryResponse } from "~/api/modelRecovery";
+import { buildRecoveryChatModelSelection } from "../modelRateLimitRecoveryDialogHelpers";
 
 interface AiChatMessagesProps {
     messages: ChatMessage[];
@@ -84,6 +85,7 @@ function MessageTreeNode({
     currentIndex,
     onRegenerate,
     onRecover,
+    onRecoveryModelChange,
     knowledgeChatLayout,
     allowExport,
     allowFeedback,
@@ -97,6 +99,7 @@ function MessageTreeNode({
     currentIndex: number;
     onRegenerate?: (parentMessageId: string) => void;
     onRecover?: (command: ModelRecoveryCommand) => Promise<ModelRecoveryResponse>;
+    onRecoveryModelChange?: (modelId: string, modelName: string) => void;
     onPreviewFile?: (file: ArtifactFile) => void;
     knowledgeChatLayout?: boolean;
     allowExport?: boolean;
@@ -142,6 +145,7 @@ function MessageTreeNode({
                         : undefined
                 }
                 onRecover={onRecover}
+                onRecoveryModelChange={onRecoveryModelChange}
                 siblingIdx={siblingIdx}
                 siblingCount={siblings.length}
                 setSiblingIdx={setSiblingIdx}
@@ -161,6 +165,7 @@ function MessageTreeNode({
                     currentIndex={currentIndex + 1}
                     onRegenerate={onRegenerate}
                     onRecover={onRecover}
+                    onRecoveryModelChange={onRecoveryModelChange}
                     knowledgeChatLayout={knowledgeChatLayout}
                     allowExport={allowExport}
                     allowFeedback={allowFeedback}
@@ -203,6 +208,7 @@ export default function AiChatMessages({
     const localize = useLocalize();
     const isNarrowViewport = usePrefersMobileLayout();
     const setChatMobileHeader = useSetRecoilState(store.chatMobileHeaderState);
+    const setChatModel = useSetRecoilState(store.chatModel);
     const queryClient = useQueryClient();
     const { isActiveForChat } = useMessageSelection();
     const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -210,6 +216,14 @@ export default function AiChatMessages({
     const emptyScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const endRef = useRef<HTMLDivElement>(null);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
+    const handleRecoveryModelChange = useCallback(
+        (modelId: string, modelName: string) => {
+            setChatModel((current) =>
+                buildRecoveryChatModelSelection(current, modelId, modelName),
+            );
+        },
+        [setChatModel],
+    );
     // Track whether user has manually scrolled up
     const isUserScrolledUp = useRef(false);
 
@@ -432,6 +446,7 @@ export default function AiChatMessages({
                                             : undefined
                                     }
                                     onRecover={onRecover}
+                                    onRecoveryModelChange={handleRecoveryModelChange}
                                     knowledgeChatLayout={knowledgeChatLayout}
                                     allowExport={allowExport}
                                     allowFeedback={allowFeedback}
@@ -451,6 +466,7 @@ export default function AiChatMessages({
                                 currentIndex={0}
                                 onRegenerate={onRegenerate}
                                 onRecover={onRecover}
+                                onRecoveryModelChange={handleRecoveryModelChange}
                                 knowledgeChatLayout={knowledgeChatLayout}
                                 allowExport={allowExport}
                                 allowFeedback={allowFeedback}

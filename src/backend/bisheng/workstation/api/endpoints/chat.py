@@ -13,6 +13,7 @@ from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.llm.domain.services.model_rate_limit import RecoveryAction, RecoveryCommand
 from bisheng.llm.domain.services.model_recovery_service import (
+    ModelRecoveryService,
     RecoveryNotAllowedError,
     build_recovery_rejected_sse,
 )
@@ -137,8 +138,10 @@ async def recover_chat_execution(
         action=data.action,
         target_model_id=data.target_model_id,
     )
+    recovery_service = ModelRecoveryService()
     try:
         result = await DailyChatRecoveryService(
+            recovery_service=recovery_service,
             port_factory=lambda user: DailyChatRecoveryPort(user, request),
         ).recover(command, login_user=login_user)
     except RecoveryNotAllowedError:
@@ -146,7 +149,20 @@ async def recover_chat_execution(
             iter([build_recovery_rejected_sse(command)]),
             media_type="text/event-stream",
         )
+    if isinstance(result.payload, StreamingResponse):
+        result.payload.body_iterator = recovery_service.release_lock_after_stream(
+            result.payload.body_iterator,
+            result.attempt,
+            tenant_id=login_user.tenant_id,
+            user_id=login_user.user_id,
+        )
+        return result.payload
     if isinstance(result.payload, Response):
+        await recovery_service.release_recovery_lock(
+            result.attempt,
+            tenant_id=login_user.tenant_id,
+            user_id=login_user.user_id,
+        )
         return result.payload
     return StreamingResponse(
         iter([build_recovery_rejected_sse(result.attempt)]),

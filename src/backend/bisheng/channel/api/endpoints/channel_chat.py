@@ -377,6 +377,11 @@ async def recover_channel_chat(
             media_type="text/event-stream",
         )
     if port.question is None or port.article is None:
+        await recovery_service.release_recovery_lock(
+            claimed,
+            tenant_id=login_user.tenant_id,
+            user_id=login_user.user_id,
+        )
         return StreamingResponse(
             iter([build_recovery_rejected_sse(command)]),
             media_type="text/event-stream",
@@ -394,12 +399,22 @@ async def recover_channel_chat(
             port.article.title,
         )
     except BaseErrorCode as exc:
+        await recovery_service.release_recovery_lock(
+            claimed,
+            tenant_id=login_user.tenant_id,
+            user_id=login_user.user_id,
+        )
         return StreamingResponse(
             iter([exc.to_sse_event_instance_str()]),
             media_type="text/event-stream",
         )
     except Exception as exc:
         logger.exception("Channel chat recovery setup failed")
+        await recovery_service.release_recovery_lock(
+            claimed,
+            tenant_id=login_user.tenant_id,
+            user_id=login_user.user_id,
+        )
         return StreamingResponse(
             iter([ServerError(exception=exc).to_sse_event_instance_str()]),
             media_type="text/event-stream",
@@ -483,7 +498,15 @@ async def recover_channel_chat(
             )
         ).to_string()
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        recovery_service.release_lock_after_stream(
+            event_stream(),
+            claimed,
+            tenant_id=login_user.tenant_id,
+            user_id=login_user.user_id,
+        ),
+        media_type="text/event-stream",
+    )
 
 
 async def _persist_channel_answer(

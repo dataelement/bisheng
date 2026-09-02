@@ -35,17 +35,10 @@ import { copyText, cn } from "~/utils";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
 import { getFileTypeIcon, isImageFileName } from "~/components/ui/icon/File/FileIcon";
 import { MessageImage } from "~/components/Chat/Messages/Content/MessageImage";
-import { ModelRateLimitRecoveryDialog } from "~/components/ModelRateLimitRecoveryDialog";
-import {
-    getRecoveryModelCandidates,
-    isRecoveryConfirmationAccepted,
-} from "~/components/modelRateLimitRecoveryDialogHelpers";
+import { getRecoveryModelCandidates } from "~/components/modelRateLimitRecoveryDialogHelpers";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common/types";
-import {
-    shouldOpenModelSwitchRecommendation,
-    useModelRateLimitRecovery,
-} from "~/hooks/useModelRateLimitRecovery";
+import { useModelRateLimitRecovery } from "~/hooks/useModelRateLimitRecovery";
 import type {
     ModelRecoveryCommand,
     ModelRecoveryResponse,
@@ -145,6 +138,7 @@ interface AiMessageBubbleProps {
     isStreaming?: boolean;
     onRegenerate?: () => void;
     onRecover?: (command: ModelRecoveryCommand) => Promise<ModelRecoveryResponse>;
+    onRecoveryModelChange?: (modelId: string, modelName: string) => void;
     // Sibling paging
     siblingIdx?: number;
     siblingCount?: number;
@@ -349,6 +343,7 @@ const AiMessageBubble = memo(
         isStreaming,
         onRegenerate,
         onRecover,
+        onRecoveryModelChange,
         siblingIdx,
         siblingCount,
         setSiblingIdx,
@@ -379,6 +374,7 @@ const AiMessageBubble = memo(
                 isStreaming={isStreaming}
                 onRegenerate={onRegenerate}
                 onRecover={onRecover}
+                onRecoveryModelChange={onRecoveryModelChange}
                 siblingIdx={siblingIdx}
                 siblingCount={siblingCount}
                 setSiblingIdx={setSiblingIdx}
@@ -508,6 +504,7 @@ function AssistantBubble({
     isStreaming,
     onRegenerate,
     onRecover,
+    onRecoveryModelChange,
     siblingIdx,
     siblingCount,
     setSiblingIdx,
@@ -523,6 +520,7 @@ function AssistantBubble({
     isStreaming?: boolean;
     onRegenerate?: () => void;
     onRecover?: (command: ModelRecoveryCommand) => Promise<ModelRecoveryResponse>;
+    onRecoveryModelChange?: (modelId: string, modelName: string) => void;
     siblingIdx?: number;
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
@@ -534,7 +532,6 @@ function AssistantBubble({
     onPreviewFile?: (file: ArtifactFile) => void;
 }) {
     const localize = useLocalize();
-    const [recoveryDialogOpen, setRecoveryDialogOpen] = useState(false);
     const recoveryTransport = useCallback(
         (_target: ModelRecoveryTarget, command: ModelRecoveryCommand) => (
             onRecover?.(command) ?? Promise.resolve({
@@ -553,12 +550,6 @@ function AssistantBubble({
         currentModelId: message.modelId,
         transport: recoveryTransport,
     });
-    const {
-        activeAttemptId: recoveryActiveAttemptId,
-        pending: recoveryPending,
-        resetManualRetryCount,
-        showSwitchRecommendation,
-    } = recovery;
 
     // Prefer the backend's own classification; fall back to the status code so
     // pre-classification backends still split busy-vs-failed correctly, and land
@@ -579,29 +570,6 @@ function AssistantBubble({
     // A transient/retryable failure (rate limit / busy) renders as the calm neutral
     // notice + Retry instead of the red error card.
     const isTransientError = !!message.error && isTransientErrorType(resolvedErrorType);
-
-    useEffect(() => {
-        if (resolvedErrorType !== 'rate_limit') {
-            resetManualRetryCount();
-            return;
-        }
-        if (shouldOpenModelSwitchRecommendation({
-            errorType: resolvedErrorType,
-            pending: recoveryPending,
-            recommended: showSwitchRecommendation,
-            eventAttemptId: message.attemptId,
-            activeAttemptId: recoveryActiveAttemptId,
-        })) {
-            setRecoveryDialogOpen(true);
-        }
-    }, [
-        message.attemptId,
-        recoveryActiveAttemptId,
-        recoveryPending,
-        resetManualRetryCount,
-        showSwitchRecommendation,
-        resolvedErrorType,
-    ]);
 
     // v2.5 Agent-native detection — when a message has structured fields set
     // (populated by useAiChatSSE.onAgentUpdate or by getAgentMessages history
@@ -673,25 +641,31 @@ function AssistantBubble({
         message.rateLimitState,
     );
 
-    // Switch-model dropdown on the busy notice: same candidate filter as the
-    // recovery dialog (current + busy models excluded); picking an item fires
-    // the switch immediately — no confirmation dialog in between.
+    // The always-visible switch list excludes the current and busy models.
+    // Picking an item immediately updates the input selector and starts recovery.
     const { showToast } = useToastContext();
     const switchModelOptions = useMemo(
         () => getRecoveryModelCandidates(bsConfig?.models ?? [], message.modelId ?? ''),
         [bsConfig?.models, message.modelId],
     );
     const handleSwitchModel = useCallback(async (targetModelId: string) => {
+        const selectedModel = bsConfig?.models.find(
+            (model) => String(model.id) === String(targetModelId),
+        );
+        onRecoveryModelChange?.(
+            targetModelId,
+            selectedModel?.displayName || selectedModel?.name || '',
+        );
         try {
             const result = await recovery.switchModel(targetModelId);
-            if (!isRecoveryConfirmationAccepted(result)) {
+            if (result?.accepted === false) {
                 showToast?.({ message: localize('com_message.switch_rejected'), severity: NotificationSeverity.ERROR });
             }
         } catch {
             showToast?.({ message: localize('com_message.switch_rejected'), severity: NotificationSeverity.ERROR });
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- localize is identity-unstable (see client AGENTS pitfalls)
-    }, [recovery.switchModel, showToast]);
+    }, [bsConfig?.models, onRecoveryModelChange, recovery.switchModel, showToast]);
 
     const modelName = message.sender || "AI";
     const showCursor = isLatest && isStreaming;
@@ -856,21 +830,6 @@ function AssistantBubble({
                             onSwitchModel={canRecoverRateLimit ? handleSwitchModel : undefined}
                             switchModelOptions={switchModelOptions}
                         />
-                        {canRecoverRateLimit ? (
-                            <ModelRateLimitRecoveryDialog
-                                open={recoveryDialogOpen}
-                                models={bsConfig?.models ?? []}
-                                currentModelId={message.modelId ?? ''}
-                                pending={recovery.pending}
-                                onOpenChange={setRecoveryDialogOpen}
-                                onConfirm={async (targetModelId) => {
-                                    const result = await recovery.switchModel(targetModelId);
-                                    if (result?.accepted !== false) setRecoveryDialogOpen(false);
-                                    return result;
-                                }}
-                                onLater={() => setRecoveryDialogOpen(false)}
-                            />
-                        ) : null}
                     </div>
                 )}
 

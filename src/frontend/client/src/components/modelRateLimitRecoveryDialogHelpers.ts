@@ -1,9 +1,23 @@
 import type { WorkbenchModelOption } from './Chat/ModelAvailabilityOption';
 
-export function isRecoveryConfirmationAccepted(result: unknown): boolean {
-  if (result === false) return false;
-  if (typeof result !== 'object' || result === null || !('accepted' in result)) return true;
-  return (result as { accepted?: unknown }).accepted !== false;
+interface RecoveryChatModelSelection {
+  id: number;
+  name: string;
+  manual?: boolean;
+  mode?: 'daily' | 'task';
+}
+
+export function buildRecoveryChatModelSelection(
+  current: RecoveryChatModelSelection,
+  modelId: string,
+  modelName: string,
+): RecoveryChatModelSelection {
+  return {
+    ...current,
+    id: Number(modelId),
+    name: modelName,
+    manual: true,
+  };
 }
 
 export function getRecoveryModelCandidates(

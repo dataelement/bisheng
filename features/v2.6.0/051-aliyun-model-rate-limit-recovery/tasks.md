@@ -34,7 +34,7 @@
 - 模型健康状态继续由既有调用装饰器维护；Redis 只保存限流展示状态，两者不得互相推导。
 - probe task body 只含 <code>model_id/probe_token/probe_attempt</code>；<code>tenant_id</code> 只走可信 Celery header，version 只保存在 Redis。
 - 后台 probe 不得接收、查询、枚举或调度 execution/session/chat/prompt，不得恢复用户会话。
-- 不新增 <code>model_call_execution</code>、恢复状态表或后端三次计数；页面刷新后允许限流卡和次数消失。
+- 不新增 <code>model_call_execution</code>、恢复状态表或前后端手动重试计数；页面刷新后允许限流卡消失。
 - 日常、知识、频道的限流失败保留原用户消息，不写失败回答；成功恢复只写一条正常回答。
 - Client 只使用 react-query v4 和页面局部状态，不新增 Recoil atom、Context 或第三方状态库。
 - 新文案与错误码同时更新 zh-Hans/en/ja 源文件并通过生成流程；不得手改生成产物。
@@ -217,20 +217,20 @@
 
 - [x] **T024：Client 模型状态投影和选择器实现**
   **文件**: Client config types/query、共享 model option renderer、四入口模型选择器
-  **逻辑**: 使用 react-query v4 条件轮询和共享 renderer；换模弹窗排除当前及 busy 模型，普通选择器不禁用 busy；不新增全局状态。
+  **逻辑**: 使用 react-query v4 条件轮询和共享 renderer；常驻换模列表排除当前及 busy 模型，普通选择器不禁用 busy；不新增全局状态。
   **测试**: T023 全部通过。
   **覆盖 AC**: AC-14, AC-15, AC-16, AC-17, AC-18, AC-19, AC-40, AC-52, AC-53, AC-54
   **依赖**: T023
 
-- [x] **T025：Client 限流卡与页面次数测试**
-  **文件**: <code>src/frontend/client/src/hooks/useModelRateLimitRecovery.test.tsx</code>、限流卡/弹窗及三入口集成测试
-  **断言**: Retry 从原消息执行且不新增用户消息；同一页面同一 subject 连续三次 429 才建议换模；成功、非限流错误和确认换模清零；新消息关闭旧操作；迟到 attempt 不覆盖当前 attempt；任务模式不进入该计数。
+- [x] **T025：Client 限流卡与恢复交互测试**
+  **文件**: <code>src/frontend/client/src/hooks/useModelRateLimitRecovery.test.tsx</code>、限流卡及三入口集成测试
+  **断言**: Retry 从原消息执行且不新增用户消息；换模入口常驻且无手动次数/自动弹窗；选择模型同步输入框；普通模型错误只展示原错误卡，只有 recovery_rejected 表示恢复拒绝；新消息关闭旧操作；迟到 attempt 不覆盖当前 attempt。
   **覆盖 AC**: AC-38, AC-39, AC-40, AC-41, AC-43, AC-44, AC-45, AC-46, AC-47, AC-48, AC-49, AC-51
   **依赖**: T020, T024
 
 - [x] **T026：Client 主动恢复交互实现**
-  **文件**: 共享 recovery hook、限流提示组件、换模弹窗及日常/知识/频道接入点
-  **逻辑**: execution_id/subject_id/attempt_id 仅保存在当前页面；pending 时禁重复点击；发送新消息使旧操作失效；页面刷新允许丢失 UI；任务模式仅展示中性繁忙信息并沿用旧 Retry。
+  **文件**: 共享 recovery hook、限流提示组件及日常/知识/频道接入点
+  **逻辑**: execution_id/subject_id/attempt_id 仅保存在当前页面；pending 时禁重复点击；常驻换模入口与输入框模型联动；发送新消息使旧操作失效；页面刷新允许丢失 UI；任务模式仅展示中性繁忙信息并沿用旧 Retry。
   **测试**: T025 全部通过。
   **覆盖 AC**: AC-38, AC-39, AC-40, AC-41, AC-43, AC-44, AC-45, AC-46, AC-47, AC-48, AC-49, AC-51
   **依赖**: T025
@@ -261,7 +261,7 @@
 
 - [ ] **T030：四入口 E2E 与手工验证**
   **文件**: <code>src/backend/test/e2e/test_e2e_aliyun_model_rate_limit_state.py</code>、<code>src/backend/test/e2e/test_e2e_model_call_recovery.py</code>、<code>e2e-checklist.md</code>
-  **场景**: 日常/知识/频道限流、Retry、三次换模建议、新消息关闭旧操作、后台 probe/TTL 后页面恢复；任务 429 自动重试成功、重试用尽失败、用户 Retry；永久错误和非阿里 429 回归。
+  **场景**: 日常/知识/频道限流、Retry、常驻换模与输入模型联动、新消息关闭旧操作、后台 probe/TTL 后页面恢复；任务 429 自动重试成功、重试用尽失败、用户 Retry；永久错误和非阿里 429 回归。
   **验证**: 使用 <code>/e2e-test features/v2.6.0/051-aliyun-model-rate-limit-recovery</code>，并记录无法在本地验证的真实 Celery/Redis/供应商场景。
   **覆盖 AC**: AC-01–AC-56
   **依赖**: T028, T029
