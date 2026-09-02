@@ -199,9 +199,18 @@ class ChannelAuthorizationService:
 
         async with AsyncExitStack() as stack:
             if invite_grants and not scenario_guarded:
-                await stack.enter_async_context(
-                    self._invite_scenario_guard(tenant_id=tenant_id),
-                )
+                try:
+                    await stack.enter_async_context(
+                        self._invite_scenario_guard(tenant_id=tenant_id),
+                    )
+                except ApprovalScenarioDisabledError:
+                    # When confirmation is disabled, new personal-user grants
+                    # keep the existing direct-authorization semantics.
+                    direct_request = ChannelAuthorizeRequest(
+                        grants=list(request.grants),
+                        revokes=list(request.revokes),
+                    )
+                    invite_grants = []
 
             await self._validate_subjects_belong_to_channel_tenant(
                 channel,

@@ -241,7 +241,7 @@ async def test_channel_direct_operations_unchanged():
 
 
 @pytest.mark.asyncio
-async def test_channel_disabled_scenario_zero_side_effect():
+async def test_channel_disabled_scenario_degrades_to_direct_authorization():
     service = _service(ChannelRelationEnum.OWNER)
     service._active_explicit_user_ids.return_value = set()
     service._invite_application_service.ensure_scenario_available.side_effect = ApprovalScenarioDisabledError(
@@ -262,16 +262,30 @@ async def test_channel_disabled_scenario_zero_side_effect():
         ]
     )
 
-    with patch(
-        "bisheng.channel.domain.services.channel_authorization_service.PermissionService.authorize",
-        new_callable=AsyncMock,
-    ) as mock_authorize:
-        with pytest.raises(ApprovalScenarioDisabledError):
-            await service.authorize_channel("channel-1", request, _User())
+    with (
+        patch(
+            "bisheng.channel.domain.services.channel_authorization_service.PermissionService.authorize",
+            new_callable=AsyncMock,
+        ) as mock_authorize,
+        patch(
+            "bisheng.channel.domain.services.channel_authorization_service."
+            "ResourcePermissionNotificationService.build_context",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "bisheng.channel.domain.services.channel_authorization_service."
+            "ResourcePermissionNotificationService.dispatch_after_authorize",
+            new=AsyncMock(),
+        ),
+    ):
+        result = await service.authorize_channel("channel-1", request, _User())
 
-    mock_authorize.assert_not_awaited()
+    mock_authorize.assert_awaited_once()
+    assert len(mock_authorize.await_args.kwargs["grants"]) == 2
     service._invite_application_service.request_invite.assert_not_awaited()
-    service._save_bindings.assert_not_awaited()
+    assert result.direct_applied_count == 2
+    assert result.invite_created_count == 0
+    assert {item.outcome for item in result.results} == {"applied"}
 
 
 @pytest.mark.asyncio

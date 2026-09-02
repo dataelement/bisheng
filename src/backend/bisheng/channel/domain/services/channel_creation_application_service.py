@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import AsyncExitStack
+
 from loguru import logger
 
 from bisheng.channel.domain.models.channel import ChannelVisibilityEnum
@@ -15,6 +17,7 @@ from bisheng.channel.domain.services.channel_authorization_service import (
 )
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.channel import ChannelPermissionDeniedError
 from bisheng.permission.domain.services.grant_subject_query_service import (
@@ -48,10 +51,21 @@ class ChannelCreationApplicationService:
         from bisheng.core.context.tenant import get_current_tenant_id
 
         tenant_id = get_current_tenant_id() or int(login_user.tenant_id)
-        async with self.channel_authorization_service.invite_scenario_guard_for_grants(
-            grants,
-            tenant_id=int(tenant_id),
-        ):
+        async with AsyncExitStack() as stack:
+            scenario_guarded = False
+            try:
+                await stack.enter_async_context(
+                    self.channel_authorization_service.invite_scenario_guard_for_grants(
+                        grants,
+                        tenant_id=int(tenant_id),
+                    )
+                )
+                scenario_guarded = True
+            except ApprovalScenarioDisabledError:
+                # The authorization service rechecks the scenario and degrades
+                # personal-user grants to direct grants while it remains disabled.
+                pass
+
             validated_tenant_id = await self.grant_subject_query_service.validate_creation_grant_request(
                 resource_type="channel",
                 grants=grants,
@@ -72,7 +86,7 @@ class ChannelCreationApplicationService:
                     channel_id,
                     authorize_request,
                     login_user,
-                    scenario_guarded=True,
+                    scenario_guarded=scenario_guarded,
                 )
             except BaseErrorCode as exc:
                 logger.warning(

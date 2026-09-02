@@ -177,27 +177,43 @@ async def test_create_then_authorize_channel():
     assert _field(permission_result, "error_code") is None
 
 
-async def test_channel_create_disabled_scene_before_side_effect():
+async def test_channel_create_disabled_scene_degrades_to_direct_authorization():
     application_service, channel_service, query_service, authorization_service = _services()
     authorization_service.ensure_invite_scenario_available_for_grants.side_effect = ApprovalScenarioDisabledError(
         msg="个人用户邀请确认场景未启用，无法新增个人用户权限"  # noqa: RUF001
     )
+    authorization_service.authorize_channel.return_value = ChannelAuthorizeResponse(
+        direct_applied_count=1,
+        results=[
+            ChannelAuthorizationItemResult(
+                operation="grant",
+                subject_type="user",
+                subject_id=11,
+                relation="editor",
+                model_id="editor",
+                outcome="applied",
+            )
+        ],
+    )
 
     grants = [_grant()]
-    with (
-        patch("bisheng.core.context.tenant.get_current_tenant_id", return_value=5),
-        pytest.raises(ApprovalScenarioDisabledError),
-    ):
-        await application_service.create(
+    login_user = _LoginUser()
+    with patch("bisheng.core.context.tenant.get_current_tenant_id", return_value=5):
+        result = await application_service.create(
             _create_request(grants=grants),
-            _LoginUser(),
+            login_user,
             object(),
         )
 
     assert authorization_service.ensure_invite_scenario_available_for_grants.await_args.kwargs["tenant_id"] == 5
-    channel_service.create_channel.assert_not_awaited()
-    query_service.validate_creation_grant_request.assert_not_awaited()
-    authorization_service.authorize_channel.assert_not_awaited()
+    channel_service.create_channel.assert_awaited_once()
+    query_service.validate_creation_grant_request.assert_awaited_once()
+    authorization_service.authorize_channel.assert_awaited_once()
+    assert authorization_service.authorize_channel.await_args.kwargs["scenario_guarded"] is False
+    permission_result = _field(result, "initial_permission_result")
+    assert _field(permission_result, "status") == "success"
+    assert _field(permission_result, "direct_applied_count") == 1
+    assert _field(permission_result, "invite_created_count") == 0
 
 
 async def test_channel_create_mixed_invites():

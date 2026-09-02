@@ -15,7 +15,6 @@ from bisheng.channel.domain.schemas.channel_authorization_schema import (
     ChannelRelationModelItem,
 )
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.channel import ChannelPermissionDeniedError
 
@@ -151,10 +150,20 @@ def test_channel_authorize_returns_item_results(app_with_auth_service):
     assert data["results"][0]["approval_instance_id"] == 1201
 
 
-def test_channel_disabled_scenario_returns_18106(app_with_auth_service):
+def test_channel_disabled_scenario_returns_direct_authorization_result(app_with_auth_service):
     app, service = app_with_auth_service
-    service.authorize_channel.side_effect = ApprovalScenarioDisabledError(
-        msg="个人用户邀请确认场景未启用，无法新增个人用户权限"  # noqa: RUF001
+    service.authorize_channel.return_value = ChannelAuthorizeResponse(
+        direct_applied_count=1,
+        results=[
+            ChannelAuthorizationItemResult(
+                operation="grant",
+                subject_type="user",
+                subject_id=11,
+                relation="viewer",
+                model_id="viewer",
+                outcome="applied",
+            )
+        ],
     )
 
     with TestClient(app) as client:
@@ -167,8 +176,10 @@ def test_channel_disabled_scenario_returns_18106(app_with_auth_service):
         )
 
     body = response.json()
-    assert body["status_code"] == 18106
-    assert body["status_message"] == "个人用户邀请确认场景未启用，无法新增个人用户权限"  # noqa: RUF001
+    assert body["status_code"] == 200
+    assert body["data"]["direct_applied_count"] == 1
+    assert body["data"]["invite_created_count"] == 0
+    assert body["data"]["results"][0]["outcome"] == "applied"
 
 
 def test_channel_permissions_include_pending(app_with_auth_service):
