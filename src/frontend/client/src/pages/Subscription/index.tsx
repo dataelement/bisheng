@@ -249,6 +249,17 @@ export default function Subscription() {
             try {
                 const detail: any = await getChannelDetailApi(detailChannelId);
                 if (cancelled) return;
+                // Membership is decided here, at open time — not by whoever sent the link.
+                // A former member following an old notification, or anyone with the id,
+                // gets the same intro-and-apply preview the square shows; only an active
+                // subscriber (or someone granted view_channel) enters the channel itself.
+                // Mirrors the backend's article gate, so the page and the API agree.
+                const permissionIds: string[] = Array.isArray(detail?.permission_ids) ? detail.permission_ids : [];
+                const subscribed = String(detail?.subscription_status ?? "").toLowerCase() === "subscribed";
+                if (!subscribed && !permissionIds.includes("view_channel")) {
+                    navigate(`/channel/share/${detailChannelId}?square=1`, { replace: true });
+                    return;
+                }
                 const name = String(detail?.name ?? "");
                 setActiveChannel({
                     id: String(detailChannelId),

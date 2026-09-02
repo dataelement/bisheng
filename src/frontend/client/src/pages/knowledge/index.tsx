@@ -288,6 +288,17 @@ export default function Knowledge() {
             try {
                 const detail = await getSpaceInfoApi(detailSpaceId);
                 if (cancelled) return;
+                // Membership is decided here, at open time — not by whoever sent the link.
+                // /info answers for non-members too (that is how the square shows an intro), so
+                // a former member following an old notification would otherwise land inside a
+                // space whose file list the server then refuses. Send them to the same
+                // intro-and-apply preview the square uses; only a follower, or someone
+                // granted view_space, enters the space itself.
+                const canEnter = Boolean(detail.isFollowed) || (detail.permissionIds ?? []).includes("view_space");
+                if (!canEnter) {
+                    navigateRef.current(`/knowledge?square=1&previewSpace=${encodeURIComponent(detailSpaceId)}`, { replace: true });
+                    return;
+                }
                 setActiveSpace({ ...detail, id: detailSpaceId });
             } catch {
                 if (cancelled) return;
