@@ -744,6 +744,34 @@ bash scripts/audit_api_sync_uploader_clinic_spaces.sh \
 
 `--folder` 规则与 `retry_failed_knowledge_space_folder_files.py` 相同。脚本不写库。
 
+### `move_api_sync_files_to_uploader_clinic_spaces.py`
+
+按知识空间名称和目录路径选出入库方式为「接口同步」的文件，解析每位上传人的科室库
+（规则与 `audit_api_sync_uploader_clinic_spaces.py` / filelib_sync 责任人科室库相同），
+再把文件迁到对应科室库。目标目录就是输入的目录路径；不存在则按段创建。
+来源子目录下的文件会平铺到该目标目录。默认为 dry-run；`--apply` 才会建目录并迁移。
+
+Usage:
+
+```bash
+export config=/path/to/config.yaml
+cd src/backend
+
+# 仅预检
+bash scripts/move_api_sync_files_to_uploader_clinic_spaces.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全"
+
+# 执行迁移
+bash scripts/move_api_sync_files_to_uploader_clinic_spaces.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全" \
+  --apply
+```
+
+没有科室库、解析未成功、目标重名、嵌入模型不一致的文件会跳过并打出原因。
+输出每行包含迁移文件、科室库名称、上传人和科室名称。
+
 ### `move_knowledge_space_files.py`
 
 扫描一个或多个来源知识空间的 `SUCCESS` 真实文件，可按来源文件夹、门户一级分类 code、
