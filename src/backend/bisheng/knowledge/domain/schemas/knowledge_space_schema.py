@@ -12,6 +12,7 @@ from pydantic import (
 )
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
+from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.knowledge.domain import knowledge_fulltext_constants
 from bisheng.knowledge.domain.constants import normalize_business_domain_code, normalize_file_category_code
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
@@ -92,6 +93,10 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
         description="Current user subscription status",
     )
     can_unsubscribe: bool = Field(default=False, description="Whether current user can unsubscribe from this space")
+    can_reorder: bool = Field(
+        default=False,
+        description="Whether the current user can drag this knowledge space in its sidebar group",
+    )
     user_role: UserRoleEnum | None = Field(default=None, description="Knowledge Space user role")
     space_kind: Literal["normal", "department"] = Field(default="normal", description="Knowledge space kind")
     is_clinic: bool = Field(
@@ -739,9 +744,7 @@ class ShougangPortalFileItemResp(BaseModel):
     applied_entry_generation: int = 0
     projection_status: str = "ready"
     projection_ready: bool = True
-    capabilities: KnowledgeDocumentEntryCapabilities = Field(
-        default_factory=KnowledgeDocumentEntryCapabilities
-    )
+    capabilities: KnowledgeDocumentEntryCapabilities = Field(default_factory=KnowledgeDocumentEntryCapabilities)
 
     @model_serializer(mode="wrap")
     def serialize_with_content_access_allowlist(self, handler):
@@ -1293,8 +1296,15 @@ class KnowledgeSpaceFileResponse(KnowledgeFileRead):
     manager_space_id: int | None = None
     distribution_invalid_reason: str | None = None
     projection_ready: bool = True
-    capabilities: KnowledgeDocumentEntryCapabilities = Field(
-        default_factory=KnowledgeDocumentEntryCapabilities
+    capabilities: KnowledgeDocumentEntryCapabilities = Field(default_factory=KnowledgeDocumentEntryCapabilities)
+
+
+class KnowledgeSpaceChildrenPage(PageInfiniteCursorData[KnowledgeSpaceFileResponse]):
+    """知识空间当前目录的分页列表, 附带本目录能否拖拽文件夹."""
+
+    can_reorder_folders: bool = Field(
+        default=False,
+        description="Whether the current user can reorder folders under this parent directory",
     )
 
 

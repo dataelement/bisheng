@@ -3,7 +3,8 @@ import type { KnowledgeSpace } from "~/api/knowledge";
 import { resolveReorderNeighbours } from "./SpaceSidebar";
 
 /** Sidebar order: pinned spaces are floated to the top, so a,b sit above c,d,e. */
-const space = (id: string, isPinned = false) => ({ id, name: id, isPinned } as KnowledgeSpace);
+const space = (id: string, isPinned = false, canReorder = true) =>
+    ({ id, name: id, isPinned, canReorder } as KnowledgeSpace);
 const SPACES = [space("a", true), space("b", true), space("c"), space("d"), space("e")];
 
 describe("resolveReorderNeighbours", () => {
@@ -55,6 +56,22 @@ describe("resolveReorderNeighbours", () => {
         expect(resolveReorderNeighbours(spaces, "c", "a", "after")).toEqual({
             prevSpaceId: null,
             nextSpaceId: null,
+        });
+    });
+
+    it("does not use a canReorder=false row as prev or next neighbour", () => {
+        const spaces = [
+            space("a", false, true),
+            space("b", false, false),
+            space("c", false, true),
+        ];
+        expect(resolveReorderNeighbours(spaces, "c", "b", "after")).toEqual({
+            prevSpaceId: "a",
+            nextSpaceId: null,
+        });
+        expect(resolveReorderNeighbours(spaces, "a", "b", "before")).toEqual({
+            prevSpaceId: null,
+            nextSpaceId: "c",
         });
     });
 });

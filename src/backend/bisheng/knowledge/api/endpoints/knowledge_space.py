@@ -250,9 +250,10 @@ async def reorder_space(
     next_space_id: int | None = Body(default=None, embed=True),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ):
-    """调整知识库在其层级内的管理员排序（系统管理员）。
+    """调整知识库在其工作集内的排序.
 
-    传入拖拽后左右相邻的知识库 ID（列表首/尾时对应一侧为空），只改被拖动的这一条。
+    传入拖拽后左右相邻的知识库 ID (列表首/尾时对应一侧为空), 只改被拖动的这一条.
+    系统管理员 / 运营岗 / 部门管理员按服务端矩阵鉴权, 无权返回 18040.
     """
     await svc.reorder_space(space_id, prev_space_id=prev_space_id, next_space_id=next_space_id)
     return resp_200(data=True)
@@ -266,10 +267,10 @@ async def reorder_folder(
     next_folder_id: int | None = Body(default=None, embed=True),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ):
-    """调整文件夹在其所在目录内的管理员排序（系统管理员）。
+    """调整文件夹在其所在目录内的排序.
 
-    传入拖拽后上下相邻的文件夹 ID（列表首/尾时对应一侧为空），只改被拖动的这一条。
-    仅文件夹参与排序，文件保持原有排序规则。
+    传入拖拽后上下相邻的文件夹 ID (列表首/尾时对应一侧为空), 只改被拖动的这一条.
+    仅文件夹参与排序, 文件保持原有排序规则. 鉴权当前父目录 can_manage.
     """
     await svc.reorder_folder(
         space_id,
@@ -571,7 +572,7 @@ async def list_space_children(
 ) -> Any:
     """List space children (F027 cursor-based pagination).
 
-    Response shape (PageInfiniteCursorData): ``{data, page_size, has_more, next_cursor}``.
+    Response shape: ``{data, page_size, has_more, next_cursor, can_reorder_folders}``.
     The legacy ``total`` / ``page`` fields have been removed (AC-03).
     """
     result = await svc.list_space_children(
@@ -763,9 +764,7 @@ async def preflight_delete_folder(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     """What deleting this folder would do to files published or shared elsewhere."""
-    return resp_200(
-        await svc.preflight_container_delete(space_id=space_id, folder_id=folder_id)
-    )
+    return resp_200(await svc.preflight_container_delete(space_id=space_id, folder_id=folder_id))
 
 
 @router.delete("/{space_id}/folders/{folder_id}")

@@ -90,7 +90,7 @@ from bisheng.common.models.space_channel_member import (
     SpaceChannelMemberDao,
     UserRoleEnum,
 )
-from bisheng.common.schemas.api import PageData, PageInfiniteCursorData
+from bisheng.common.schemas.api import PageData
 from bisheng.common.schemas.telemetry.event_data_schema import (
     PortalDocumentDownloadEventData,
     PortalDocumentReadEventData,
@@ -200,6 +200,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchAliasActionResult,
     BatchAliasFailure,
     GroupedKnowledgeSpacesResp,
+    KnowledgeSpaceChildrenPage,
     KnowledgeSpaceCreateOptionDepartment,
     KnowledgeSpaceCreateOptionDepartmentsResp,
     KnowledgeSpaceCreateOptionsResp,
@@ -308,6 +309,16 @@ from bisheng.knowledge.domain.services.portal_recommendation_service import (
     PortalRecommendationService,
 )
 from bisheng.knowledge.domain.services.space_list_cache import SpaceListCache
+from bisheng.knowledge.domain.services.space_reorder_auth import (
+    assert_can_reorder_folders,
+    assert_neighbours_in_workset,
+    assert_space_in_workset,
+    attach_can_reorder_flags,
+    can_reorder_folders,
+    folder_parent_id,
+    is_system_admin,
+    resolve_space_reorder_workset_ids,
+)
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
 from bisheng.knowledge.domain.services.web_link_import_service import (
     KnowledgeWebLinkImportService,
@@ -356,6 +367,7 @@ from bisheng.shougang_portal_config.domain.services.portal_config_service import
 )
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
 from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.services.platform_operator import has_platform_operator_role
 from bisheng.utils import get_request_ip
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
@@ -2969,7 +2981,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             decorate_ms,
             (time.perf_counter() - t0) * 1000,
         )
-        return result
+        return await self._attach_space_reorder_flags(result)
 
     async def _require_write_permission(self, space_id: int) -> None:
         """
@@ -4584,6 +4596,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     self.login_user.user_id,
                 )
 
+        await self._attach_space_reorder_flags([result])
         return result
 
     async def get_shougang_portal_space_levels(self) -> list[dict]:
@@ -7941,8 +7954,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if (
                     space is not None
                     and int(space.type) == KnowledgeTypeEnum.SPACE.value
-                    and int(getattr(space, "tenant_id", 0) or 0)
-                    == int(self.login_user.tenant_id)
+                    and int(getattr(space, "tenant_id", 0) or 0) == int(self.login_user.tenant_id)
                 ):
                     return file, [space]
             return None, []
@@ -12613,6 +12625,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
             )
         result = await self._decorate_department_metadata(spaces)
+        result = await self._attach_space_reorder_flags(result)
         return await KnowledgeSpacePinService.apply_pins(result, self.login_user.user_id)
 
     async def get_my_created_spaces(self, order_by: str = "update_time") -> list[KnowledgeRead]:
@@ -12877,6 +12890,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if user_role is not None:
                 payload["user_role"] = user_role.value
             result.append(payload)
+        result = await self._attach_space_reorder_flags(result)
         return await KnowledgeSpacePinService.apply_pins(result, self.login_user.user_id)
 
     async def global_search_files(
@@ -13020,21 +13034,71 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space.sort_weight = weights[int(space.id)]
         return weights
 
+    async def _space_reorder_admin_department_ids(self) -> set[int]:
+        """部门管理员管辖子树; 系统管理员与运营岗不需要."""
+        if is_system_admin(self.login_user) or has_platform_operator_role(self.login_user):
+            return set()
+        return await self._admin_department_ids()
+
+    async def _attach_space_reorder_flags(self, items: list) -> list:
+        """批量写入 can_reorder, 每个 level 只算一次工作集."""
+        if not items:
+            return items
+        await attach_can_reorder_flags(
+            self.login_user,
+            items,
+            admin_department_ids=await self._space_reorder_admin_department_ids(),
+        )
+        return items
+
+    async def _visible_ids_for_space_reorder(self, level: KnowledgeSpaceLevelEnum) -> set[int] | None:
+        """写接口可见集. None 表示不再与可见集求交.
+
+        不用 get_spaces_by_level: 那条路径会拉成员表和列表装饰, 写鉴权只要 ID.
+        运营岗 TEAM 工作集为空, 这里直接空集, 避免无意义的可见查询.
+        """
+        if is_system_admin(self.login_user):
+            return None
+        if has_platform_operator_role(self.login_user):
+            if level in {
+                KnowledgeSpaceLevelEnum.PUBLIC,
+                KnowledgeSpaceLevelEnum.DEPARTMENT,
+            }:
+                return None
+            return set()
+        if level not in {KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceLevelEnum.TEAM_KS}:
+            return set()
+        if not await self._space_reorder_admin_department_ids():
+            return set()
+        readable = await PermissionService.list_accessible_ids(
+            user_id=self.login_user.user_id,
+            relation="can_read",
+            object_type="knowledge_space",
+            login_user=self.login_user,
+        )
+        if readable is None:
+            return None
+        manageable = await PermissionService.list_accessible_ids(
+            user_id=self.login_user.user_id,
+            relation="can_manage",
+            object_type="knowledge_space",
+            login_user=self.login_user,
+        )
+        visible = {int(space_id) for space_id in readable if str(space_id).isdigit()}
+        visible |= {int(space_id) for space_id in (manageable or []) if str(space_id).isdigit()}
+        return visible
+
     async def reorder_space(
         self,
         space_id: int,
         prev_space_id: int | None = None,
         next_space_id: int | None = None,
     ) -> None:
-        """Move a space between two neighbours in its level's admin-defined order.
+        """按当前用户工作集移动一条库的 sort_weight.
 
-        Callers pass the ids the space is dropped between (either may be None at the
-        list edges); the new weight is the midpoint, so only this row is written no
-        matter how many spaces the level holds.
+        传入拖拽后左右邻居 ID (列表首/尾时一侧为空); 只改被拖动这一行.
+        工作集外 18040; 邻居不在工作集 18041; 个人库 18041.
         """
-        if not self.login_user.is_admin():
-            raise SpacePermissionDeniedError()
-
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
@@ -13049,15 +13113,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
             # Personal spaces are per-user and have no shared order to define.
             raise SpaceInvalidLevelError()
 
-        spaces = await self._load_level_spaces_in_display_order(level)
+        workset = await resolve_space_reorder_workset_ids(
+            self.login_user,
+            dragged_level=level,
+            visible_space_ids=await self._visible_ids_for_space_reorder(level),
+            admin_department_ids=await self._space_reorder_admin_department_ids(),
+        )
+        assert_space_in_workset(space_id, workset)
+        assert_neighbours_in_workset(prev_space_id, next_space_id, workset)
+
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(list(workset), order_by="sort_weight")
         space_by_id = {int(item.id): item for item in spaces}
         if int(space_id) not in space_by_id:
             raise SpaceNotFoundError()
-        for neighbour_id in (prev_space_id, next_space_id):
-            if neighbour_id is not None and int(neighbour_id) not in space_by_id:
-                # Neighbour from another level (or a stale client view) would place the
-                # space against an order it isn't part of.
-                raise SpaceInvalidLevelError()
 
         if any(item.sort_weight is None for item in spaces):
             # First drag in this level: freeze the order currently on screen, then move.
@@ -13129,12 +13197,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         how many folders the directory holds. Only folders take part — files keep a NULL
         weight and their existing ordering.
         """
-        if not self.login_user.is_admin():
-            raise SpacePermissionDeniedError()
-
         folder = await KnowledgeFileDao.query_by_id(folder_id)
         if not folder or int(folder.knowledge_id) != int(space_id) or folder.file_type != FileType.DIR.value:
             raise SpaceFolderNotFoundError()
+        await assert_can_reorder_folders(
+            self.login_user,
+            space_id=space_id,
+            parent_folder_id=folder_parent_id(folder.file_level_path),
+        )
 
         folders = await self._load_sibling_folders_in_display_order(folder)
         folder_by_id = {int(item.id): item for item in folders}
@@ -14656,10 +14726,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             primary_versions = await self.version_repo.find_primary_versions_by_file_ids(
                 [int(one.id) for one in file_items]
             )
-            doc_by_file = {
-                int(version.knowledge_file_id): int(version.document_id)
-                for version in primary_versions
-            }
+            doc_by_file = {int(version.knowledge_file_id): int(version.document_id) for version in primary_versions}
         for one in file_items:
             document_id = doc_by_file.get(int(one.id))
             if document_id is None and one.reference_document_id:
@@ -14740,9 +14807,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         pending_publish_start = time.perf_counter()
         pending_publish_file_ids = (
-            await self._find_pending_publish_approval_file_ids(res)
-            if enrich_files and file_ids
-            else set()
+            await self._find_pending_publish_approval_file_ids(res) if enrich_files and file_ids else set()
         )
         pending_publish_ms = (time.perf_counter() - pending_publish_start) * 1000
 
@@ -15028,17 +15093,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_type: int | None = None,
         enrich_files: bool = True,
         folder_count_mode: str = "none",
-    ) -> "PageInfiniteCursorData":
+    ) -> "KnowledgeSpaceChildrenPage":
         """F027 cursor-paginated listing of direct children under a parent folder.
 
-        Response shape (PageInfiniteCursorData): ``{data, page_size, has_more,
-        next_cursor}``. Legacy ``total`` / ``page`` fields removed (AC-03);
+        Response shape: ``{data, page_size, has_more, next_cursor, can_reorder_folders}``.
+        Legacy ``total`` / ``page`` fields removed (AC-03);
         clients drive infinite-scroll via ``has_more`` + ``next_cursor``.
         """
         perf_start = time.perf_counter()
         from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
         from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
-        from bisheng.common.schemas.api import PageInfiniteCursorData
         from bisheng.knowledge.domain.models.knowledge_space_file import (
             build_child_order_cursor_key,
             child_order_cursor_key_len,
@@ -15141,11 +15205,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             extra_info_ms,
             (time.perf_counter() - perf_start) * 1000,
         )
-        return PageInfiniteCursorData(
+        can_reorder = await can_reorder_folders(
+            self.login_user,
+            space_id=space_id,
+            parent_folder_id=parent_id,
+        )
+        return KnowledgeSpaceChildrenPage(
             data=data,
             page_size=page_size,
             has_more=has_more,
             next_cursor=next_cursor,
+            can_reorder_folders=can_reorder,
         )
 
     async def resolve_qa_scope_file_ids(

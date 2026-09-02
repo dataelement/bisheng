@@ -159,6 +159,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(undefined);
     const [currentFolderId, setCurrentFolderId] = useState<string | undefined>();
     const [currentPath, setCurrentPath] = useState<Array<{ id?: string; name: string }>>([]);
+    const [canReorderFolders, setCanReorderFolders] = useState(false);
 
     // Optimistic-deletion ignore set. Held in a ref so loadFiles can read the
     // latest value synchronously without re-rendering. Items in this set are
@@ -338,10 +339,14 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                     const fetchedSoFar = searchPageToFetch * pageSize;
                     setHasMore(fetchedSoFar < mergedTotal);
                     setNextSearchPage(searchPageToFetch);
+                    setCanReorderFolders(false);
                 } else {
                     setNextCursor((res as any).next_cursor ?? null);
                     setHasMore(!!(res as any).has_more);
-                    if (!isAppending) setNextSearchPage(0);
+                    if (!isAppending) {
+                        setNextSearchPage(0);
+                        setCanReorderFolders(Boolean((res as any).can_reorder_folders));
+                    }
                 }
 
                 const ignore = pendingDeletionIdsRef.current;
@@ -685,5 +690,6 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         handleNavigateFolder,
         markPendingDeletion,
         clearPendingDeletion,
+        canReorderFolders,
     };
 }
