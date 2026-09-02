@@ -449,6 +449,43 @@ async def test_resource_user_candidates_keep_department_space_scope(repository):
     )
 
 
+async def test_resource_user_candidates_global_super_bypasses_department_scope(repository):
+    repository.resolve_department_space_path.return_value = "/10/"
+    login_user = SimpleNamespace(user_id=7, is_admin=lambda: False, is_global_super=True)
+    service = GrantSubjectQueryService(repository)
+
+    with (
+        patch(
+            "bisheng.permission.domain.services.fine_grained_permission_service."
+            "FineGrainedPermissionService.get_effective_permission_ids_async",
+            new=AsyncMock(return_value={"manage_space_relation"}),
+        ),
+        patch(
+            "bisheng.permission.domain.services.permission_service.PermissionService._resolve_resource_tenant",
+            new=AsyncMock(return_value=5),
+        ),
+    ):
+        result = await service.query_resource_users(
+            resource_type="knowledge_space",
+            resource_id="11",
+            login_user=login_user,
+            keyword="Ali",
+            page=1,
+            page_size=20,
+        )
+
+    assert result == [{"user_id": 8, "user_name": "Alice"}]
+    repository.list_users.assert_awaited_once_with(
+        tenant_id=5,
+        keyword="Ali",
+        page=1,
+        page_size=20,
+        restrict_dept_path=None,
+        include_hidden=False,
+    )
+    repository.resolve_department_space_path.assert_not_awaited()
+
+
 async def test_resource_department_space_hides_user_groups(repository):
     repository.resolve_department_space_path.return_value = "/10/"
     service = GrantSubjectQueryService(repository)
