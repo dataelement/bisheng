@@ -1580,7 +1580,8 @@
     "card_view": "卡片视图",
     "filter_file_status": "筛选文件状态",
     "sort_by_size_label": "大小",
-    "select_all": "全选"
+    "select_all": "全选",
+    "folder_abnormal": "存在异常"
   },
   "com_subscription": {
     "tab_channel": "频道",

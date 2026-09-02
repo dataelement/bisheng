@@ -1576,7 +1576,8 @@
     "card_view": "カード表示",
     "filter_file_status": "ファイル状態で絞り込み",
     "sort_by_size_label": "サイズで並べ替え",
-    "select_all": "すべて選択"
+    "select_all": "すべて選択",
+    "folder_abnormal": "異常あり"
   },
   "com_subscription": {
     "tab_channel": "チャンネル",

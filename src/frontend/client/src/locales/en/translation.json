@@ -1653,7 +1653,8 @@
     "card_view": "Card view",
     "filter_file_status": "Filter by status",
     "sort_by_size_label": "Sort by size",
-    "select_all": "Select all"
+    "select_all": "Select all",
+    "folder_abnormal": "Has issues"
   },
   "com_subscription": {
     "tab_channel": "Channels",

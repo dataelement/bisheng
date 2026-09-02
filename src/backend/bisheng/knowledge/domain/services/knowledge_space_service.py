@@ -2435,13 +2435,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     KnowledgeFileStatus.FAILED.value,
                     KnowledgeFileStatus.VIOLATION.value,
                 }
+                # What the folder rollup calls "存在异常" — everything needing the user to step
+                # in. Deliberately wider than retryable_statuses: a timed-out file is an anomaly
+                # the folder must surface, but batch retry does not act on it, so the display
+                # signal and the retry signal stay separate instead of one doing double duty.
+                abnormal_statuses = retryable_statuses | {KnowledgeFileStatus.TIMEOUT.value}
                 async with get_async_db_session() as session:
                     rows = (await session.exec(stmt)).all()
                     success = sum(r[1] for r in rows if r[0] == KnowledgeFileStatus.SUCCESS.value)
                     processing = sum(r[1] for r in rows if r[0] in in_progress_statuses)
                     failed = sum(r[1] for r in rows if r[0] in retryable_statuses)
+                    abnormal = sum(r[1] for r in rows if r[0] in abnormal_statuses)
                     folder_counts[folder.id] = {
                         "has_failed_files": failed > 0,
+                        "has_abnormal_files": abnormal > 0,
                         "success_file_num": success,
                         "processing_file_num": processing,
                     }
@@ -2466,7 +2473,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if one.file_type == FileType.DIR:
                 counts = folder_counts.get(
                     one.id,
-                    {"has_failed_files": False, "success_file_num": 0, "processing_file_num": 0},
+                    {
+                        "has_failed_files": False,
+                        "has_abnormal_files": False,
+                        "success_file_num": 0,
+                        "processing_file_num": 0,
+                    },
                 )
                 item.update(counts)
             else:
