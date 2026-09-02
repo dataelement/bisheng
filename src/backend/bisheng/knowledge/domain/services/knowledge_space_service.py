@@ -2603,7 +2603,55 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return permission_id in await chain_perms(ancestor_ids)
 
         visibility = await asyncio.gather(*(can_view(item) for item in items))
-        return [item for item, allowed in zip(items, visibility) if allowed]
+        visible = [item for item, allowed in zip(items, visibility) if allowed]
+        return await self._hide_others_failed_files(visible, space_id=space_id)
+
+    async def _can_manage_space_cached(self, space_id: int) -> bool:
+        """Admin / space manager check, resolved once per space per request."""
+        if self.login_user.is_admin():
+            return True
+        cache = self.__dict__.setdefault("_can_manage_space_cache", {})
+        normalized = int(space_id)
+        if normalized not in cache:
+            cache[normalized] = await self._user_can_manage_space(self.login_user.user_id, normalized)
+        return cache[normalized]
+
+    async def _hide_others_failed_files(
+        self,
+        items: list[KnowledgeFile],
+        *,
+        space_id: int,
+    ) -> list[KnowledgeFile]:
+        """A parse failure is only the uploader's (and the managers') business.
+
+        Everyone else in the space sees neither the row nor, through the folder rollup that
+        reuses this filter, any hint of it. The rule lives here rather than in the client's
+        `file_status` query so listing, folder rollup and any other reader agree — the query
+        param it replaces hid the row from the uploader too, and left the file reachable by
+        anyone who called the API directly.
+
+        Timeout and violation are deliberately NOT covered: they stayed visible to every
+        member under the old client rule, and a violation in particular is the space's
+        business, not just the uploader's.
+        """
+        failed_items = [
+            item
+            for item in items
+            if item.file_type != FileType.DIR.value and item.status == KnowledgeFileStatus.FAILED.value
+        ]
+        if not failed_items:
+            return items
+        if await self._can_manage_space_cached(space_id):
+            return items
+        user_id = self.login_user.user_id
+        hidden = {
+            int(item.id)
+            for item in failed_items
+            if getattr(item, "user_id", None) != user_id
+        }
+        if not hidden:
+            return items
+        return [item for item in items if int(item.id) not in hidden]
 
     async def _scan_visible_child_items(
         self,
