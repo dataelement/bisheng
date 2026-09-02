@@ -257,11 +257,20 @@ export default function Subscription() {
                 const permissionIds: string[] = Array.isArray(detail?.permission_ids) ? detail.permission_ids : [];
                 const subscribed = String(detail?.subscription_status ?? "").toLowerCase() === "subscribed";
                 if (!subscribed && !permissionIds.includes("view_channel")) {
-                    // The share route, deliberately without ?square=1: that flag means "arrived
-                    // from the square", which renders the square behind the preview and sends the
-                    // user there when they close it. A channel that was never published to the
-                    // square must not put them in it — the intro-and-apply preview is the whole
-                    // destination, and closing it returns to their own channel list.
+                    // Nothing to show and nowhere to apply: the channel was never published to
+                    // the square, so there is no intro page for a stranger to land on. Say so and
+                    // leave them on the square, the way an invalid knowledge-space link behaves.
+                    if (!detail?.is_released) {
+                        showToast({
+                            message: localize("com_subscription.channel_unavailable_or_no_permission"),
+                            severity: NotificationSeverity.WARNING,
+                        });
+                        navigate("/channel?square=1", { replace: true });
+                        return;
+                    }
+                    // Published: the share route shows the intro-and-apply preview. Deliberately
+                    // without ?square=1 — that flag means "arrived from the square" and would both
+                    // render the square behind the preview and send the user there on close.
                     navigate(`/channel/share/${detailChannelId}`, { replace: true });
                     return;
                 }
@@ -291,6 +300,10 @@ export default function Subscription() {
         return () => {
             cancelled = true;
         };
+        // localize / showToast are only read inside the failure branch and are re-created on
+        // every render (see AGENTS.md), so listing them would re-run this detail fetch — and its
+        // redirect — on every render. The effect is keyed on the channel it is resolving.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [detailChannelId, channelPluginGate, navigate]);
 
     // If navigation requests the channel square (e.g. via share-link error), open it.

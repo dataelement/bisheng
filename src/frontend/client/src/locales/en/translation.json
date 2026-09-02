@@ -1992,7 +1992,8 @@
     "website_not_indexed": "Website not in database. Do you want to crawl?",
     "create": "Create",
     "channel_permission_management": "Member Management",
-    "organization_grant_unsubscribe_blocked": "This channel was granted to you through a department/user group and cannot be unsubscribed from yet."
+    "organization_grant_unsubscribe_blocked": "This channel was granted to you through a department/user group and cannot be unsubscribed from yet.",
+    "channel_unavailable_or_no_permission": "This channel is unavailable or you do not have permission to view it"
   },
   "com_ui": {
     "system_notice_acknowledge": "Got it",
