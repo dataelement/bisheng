@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import weakref
 from collections.abc import AsyncIterator, MutableMapping
 from contextlib import asynccontextmanager
@@ -125,15 +126,44 @@ class OpenFgaConcurrencyGate:
             return
 
         semaphore = self._semaphore()
-        try:
-            await asyncio.wait_for(semaphore.acquire(), timeout=self._acquire_timeout)
-        except asyncio.TimeoutError as exc:
-            raise FGAOverloadError(
-                f'OpenFGA concurrency gate full: {self._in_flight}/{self._capacity} in flight, '
-                f'waited {self._acquire_timeout}s'
-            ) from exc
+        wait_started_at: float | None = None
+        if semaphore.locked():
+            wait_started_at = time.monotonic()
+            logger.info(
+                "event=openfga_gate_wait_start in_flight=%s capacity=%s acquire_timeout_s=%s",
+                self._in_flight,
+                self._capacity,
+                self._acquire_timeout,
+            )
+            try:
+                await asyncio.wait_for(semaphore.acquire(), timeout=self._acquire_timeout)
+            except asyncio.TimeoutError as exc:
+                waited_ms = (time.monotonic() - wait_started_at) * 1000
+                logger.warning(
+                    "event=openfga_gate_wait_timeout in_flight=%s capacity=%s waited_ms=%.1f acquire_timeout_s=%s",
+                    self._in_flight,
+                    self._capacity,
+                    waited_ms,
+                    self._acquire_timeout,
+                )
+                raise FGAOverloadError(
+                    f"OpenFGA concurrency gate full: {self._in_flight}/{self._capacity} in flight, "
+                    f"waited {self._acquire_timeout}s"
+                ) from exc
+        else:
+            # acquire() completes without yielding while a permit is available,
+            # so the normal path stays silent and avoids one log per FGA call.
+            await semaphore.acquire()
 
         self._in_flight += 1
+        if wait_started_at is not None:
+            waited_ms = (time.monotonic() - wait_started_at) * 1000
+            logger.info(
+                "event=openfga_gate_wait_acquired in_flight=%s capacity=%s waited_ms=%.1f",
+                self._in_flight,
+                self._capacity,
+                waited_ms,
+            )
         try:
             yield
         finally:
