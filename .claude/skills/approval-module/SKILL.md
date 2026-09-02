@@ -67,7 +67,7 @@ F045/F046
   → 外层一次 commit；post-commit effects 只在提交后运行
 ```
 
-F045/F046 的 policy 禁止 `pass`，也不创建 `ApprovalOutbox`。场景缺失、关闭、审批人为空或固定流程不匹配时，业务申请与审批 bundle 同事务回滚或形成通用提交异常；不得降级为直接执行业务。
+F045/F046 的 policy 禁止 `pass`，也不创建 `ApprovalOutbox`。F045 的知识空间授权编排在场景缺失/关闭时不进入 submission，而是把新增个人用户降级为既有 direct 授权；一旦进入 F045 submission，审批人为空或固定流程不匹配仍必须失败。F046 场景异常始终不得降级为直接执行业务。
 
 ### 2.2 任务决定与多节点流转
 
@@ -141,7 +141,7 @@ resolver/OpenFGA 故障必须传播，绝不能伪造成空审批人集合，也
 | `approval/domain/services/approver_resolver.py` | 解析审批人来源 `direct_user` / `department_admin` / `tenant_admin` | `resolve_approvers_from_sources()` |
 | `approval/domain/services/approval_registry.py` | 五场景目录与两类 completion adapter 注册；启动期校验 protocol/event/completion mode 后 freeze | `with_default_presets()`、`register_handler()`、`register_policy()`、`register_subscriber()`、`freeze_decision_delivery()` |
 | `bootstrap/approval_scenarios.py` | 唯一 composition root；完成五场景 adapter 与 Knowledge/Channel grant executor 装配，完整性校验后 freeze | `bootstrap_approval_scenarios()`、`get_approval_scenario_registry()`、`get_resource_grant_executor_registry()` |
-| `approval/domain/services/approval_submission_service.py` | F047 decision-delivery 场景的 caller-owned 建单；并通过 public port 提供 tenant-bound 场景行锁 guard，保护 F045 资源创建/direct 副作用前的 18106 门禁 | `submit_in_uow()`、`scenario_guard()` |
+| `approval/domain/services/approval_submission_service.py` | F047 decision-delivery 场景的 caller-owned 建单；并通过 public port 提供 tenant-bound 场景行锁 guard；F045 知识空间授权编排捕获缺失/关闭结果后改走 direct，启用态继续持锁建单 | `submit_in_uow()`、`scenario_guard()` |
 | `approval/domain/services/approval_decision_delivery_service.py` | F047 终态决定的可靠交付；独立事务 claim 后调用 subscriber，再独立事务按 token ack；绑定/协议错误 permanent，临时故障 retryable，永不回退审批终态 | `deliver_next()` |
 | `worker/approval/decision_delivery_tasks.py` | F047 默认队列单事件交付与有界 recoverable coordinator；tenant 仅取显式 header 并 finally 恢复 ContextVar，broker task ID 只作派发证据 | `deliver_approval_decision`、`coordinate_approval_decision_delivery` |
 | `approval/domain/services/approval_runtime_handler_factory.py` | 只为菜单、频道订阅、知识空间加入三个 legacy outbox 构造 handler | `build_runtime_handler(scenario_code)` |
@@ -260,7 +260,7 @@ resolver/OpenFGA 故障必须传播，绝不能伪造成空审批人集合，也
 
 ### 4.4 资源个人用户邀请确认 (`resource_user_invite_confirmation`)
 - **入口**：知识空间/频道授权 Service 识别"新增个人用户" 后调 Permission 域 `ResourceUserInviteApplicationService.request_invite()`；不再以 Approval payload 作邀请事实源。
-- **18106 失败关闭**：场景缺失/关闭时，业务请求与 submission bundle 同事务回滚，不得降级直接授权。
+- **关闭场景语义**：知识空间授权（含新建知识空间初始授权）在场景缺失/关闭时不调用 `request_invite()`，而是按既有实时校验直接授权；场景启用但本人流程非法时仍失败且不得降级。`request_invite()` 若被直接调用，仍以 18106 失败关闭并回滚业务请求与 submission bundle。
 - **去重**：稳定 business key 只含 `tenant/resource_type/resource_id/target_user_id`，不含邀请人；Redis token-safe 锁只降争用，`(tenant_id,business_key,active_marker=0)` 唯一约束才是最终事实源。
 - **审批**：只允许被邀请人在唯一 OR 节点处理，管理员不可代办；F025 终态固定为 `approved/rejected/withdrawn/cancelled`，不存在业务 `executed/execute_failed` 回写。
 - **决定消费**：approved 事件幂等写 `queued + decision_event_id` 后派发 Permission 业务任务；派发或 ack 不确定时允许同事件重投，最终授权必须由资源 owner 权威读后校验保证幂等。reject/withdraw/cancel 只关闭业务请求并释放占槽。

@@ -10,7 +10,7 @@
 | 步骤 | 状态 | 备注 |
 |---|---|---|
 | spec.md | ✅ 已评审 | 仅 PRD §1.2；同一资源同一用户的在途邀请不重复创建 |
-| design.md | ✅ 已评审 | 用户确认当前分支重写版；场景不存在/关闭时 18106 请求级失败关闭 |
+| design.md | ✅ 已评审 | 用户确认当前分支重写版；场景不存在/关闭时新增个人用户降级为直接授权 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks`：LGTM；58 项、5 个 Wave |
 | 实现 | ✅ 代码完成 | T001–T054 已完成；当前共 55 / 58 项完成，未完成项均为真实环境交付门禁 |
 | E2E | ⚠️ 已生成待实跑 | API 自动化与人工清单已生成；本地无可用 API/default worker，4 项自动化 skip |
@@ -23,7 +23,7 @@
 - **仅 Client 前端**：只修改 `src/frontend/client/`；不修改 platform，不新增 Recoil、Context 或 UI/状态库。服务器状态用 react-query v4，本地权限草稿沿用 F044 hook。
 - **无数据库迁移**：不新增表/列/索引；`processing` 只是既有 `String(32)` outbox 状态的新枚举值，`executing` 已存在。若实施发现必须 DDL，先停下更新 design 并重新确认。
 - **Owner 边界**：Approval* 聚合与终态由 F025 Service/Repository 修改；频道授权写行为由 F026 `ChannelAuthorizationService` 修改；F044 create/settings 页面只做增量适配；F045 不新增旁路 DAO。
-- **失败关闭**：含新增个人用户的请求在任何副作用前检查场景；缺失/关闭固定返回 18106。确认执行由 ApprovalOutbox 独占重试，禁止本次 FGA 写生成 `failed_tuple`。
+- **场景开关**：含新增个人用户的请求先检查场景；知识空间授权在缺失/关闭时按既有实时校验降级为 direct，启用但本人确认流程非法时失败关闭。确认执行由业务域 worker 独占重试，禁止本次 FGA 写生成 `failed_tuple`。
 - **Worker tenant**：发布 outbox 任务时沿用 `before_task_publish` 把当前 `tenant_id` 写入 Celery headers；worker `task_prerun` 恢复 `current_tenant_id` ContextVar。任务参数仍为 `outbox_id`，payload 不接受客户端 tenant。
 - **共享文件回归**：`approval_gate.py`、`approval_center_service.py`、`approval_outbox_service.py`、`permission_service.py` 的默认行为必须由既有三场景/普通授权回归测试保护；F045 策略不得改变其他场景语义。
 - **任务完成门禁**：每项完成后运行对应 focused test，并执行 `/task-review features/v2.6.0/045-personal-user-invite-confirmation <T-ID>` 后勾选。
@@ -331,15 +331,15 @@
 - [x] **T038**: 知识空间创建邀请 Test-First
   **类别**: 后端 Domain/API 测试
   **文件**: `src/backend/test/knowledge/test_knowledge_space_creation_application_service.py`, `src/backend/test/knowledge/test_knowledge_space_create_initial_permissions_api.py`
-  **逻辑**: 只扩测试；无 permissions 旧行为；有新增 user 时创建前检查场景，缺失/关闭 18106 且资源未创建/direct 未写；通过门禁后资源只建一次，个人逐项、direct 正常；mixed failure 保留资源和 results；恢复输入仅失败 grants。
-  **测试**: `test_create_disabled_invite_scene_before_resource`, `test_create_mixed_direct_and_invites`, `test_create_partial_user_failure_keeps_resource`, `test_create_response_contains_item_results`
+  **逻辑**: 只扩测试；无 permissions 旧行为；有新增 user 时创建前检查场景，缺失/关闭则创建资源并按既有实时校验 direct 授权；启用态资源只建一次，个人逐项、direct 正常；mixed failure 保留资源和 results；恢复输入仅失败 grants。
+  **测试**: `test_create_disabled_invite_scene_degrades_to_direct_authorization`, `test_create_mixed_direct_and_invites`, `test_create_partial_user_failure_keeps_resource`, `test_create_response_contains_item_results`
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-08, AC-09, AC-10, AC-11, AC-27, AC-28, AC-29, AC-30, AC-32
   **依赖**: T031, T033
 
 - [x] **T039**: 知识空间创建编排结果实现
   **类别**: 后端 Domain 实现
   **文件**: `src/backend/bisheng/knowledge/domain/services/knowledge_space_creation_application_service.py`, `src/backend/bisheng/knowledge/domain/schemas/knowledge_space_schema.py`
-  **逻辑**: 拆分 direct 与个人 user 的 creation validation；场景 18106 前置到 create 副作用之前。创建后调用 T031 一次，`initial_permission_result` 保持 success/failed/error_code 并追加 counts/results；个人按项失败不重建/删除资源。
+  **逻辑**: 拆分 direct 与个人 user 的 creation validation；场景启用时持锁进入本人确认，缺失/关闭时创建后调用 T031 的 direct 降级。`initial_permission_result` 保持 success/failed/error_code 并追加 counts/results；个人按项失败不重建/删除资源。
   **测试**: T038 全部通过
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-08, AC-09, AC-10, AC-11, AC-27, AC-28, AC-29, AC-30, AC-32
   **依赖**: T038

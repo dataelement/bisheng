@@ -1,5 +1,8 @@
+from contextlib import AsyncExitStack
+
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
@@ -45,10 +48,21 @@ class KnowledgeSpaceCreationApplicationService:
         from bisheng.core.context.tenant import get_current_tenant_id
 
         tenant_id = get_current_tenant_id() or int(login_user.tenant_id)
-        async with self.resource_authorization_service.invite_scenario_guard_for_grants(
-            grants=grants,
-            tenant_id=int(tenant_id),
-        ):
+        async with AsyncExitStack() as stack:
+            scenario_guarded = False
+            try:
+                await stack.enter_async_context(
+                    self.resource_authorization_service.invite_scenario_guard_for_grants(
+                        grants=grants,
+                        tenant_id=int(tenant_id),
+                    )
+                )
+                scenario_guarded = True
+            except ApprovalScenarioDisabledError:
+                # The authorization service rechecks the scenario and degrades
+                # personal-user grants to direct grants while it remains disabled.
+                pass
+
             validated_tenant_id = await self.grant_subject_query_service.validate_creation_grant_request(
                 resource_type="knowledge_space",
                 grants=grants,
@@ -78,7 +92,7 @@ class KnowledgeSpaceCreationApplicationService:
                     str(space.id),
                     AuthorizeRequest(grants=grants, revokes=[]),
                     login_user,
-                    scenario_guarded=True,
+                    scenario_guarded=scenario_guarded,
                 )
                 if authorization_result is None:
                     permission_result = InitialPermissionResult(status="success")

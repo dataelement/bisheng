@@ -237,18 +237,27 @@ async def test_private_space_rejects_initial_grants_before_validation_or_create(
     authorization_service.authorize.assert_not_awaited()
 
 
-async def test_create_disabled_invite_scene_before_resource():
+async def test_create_disabled_invite_scene_degrades_to_direct_authorization():
     from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 
     grants = [AuthorizeGrantItem(subject_type="user", subject_id=42, relation="viewer")]
     service, knowledge_service, query_service, authorization_service = _build_service()
     authorization_service.ensure_invite_scenario_available_for_grants.side_effect = ApprovalScenarioDisabledError()
+    authorization_service.authorize.return_value = AuthorizationResult(
+        direct_applied_count=1,
+        results=[
+            AuthorizationItemResult(
+                operation="grant",
+                subject_type="user",
+                subject_id=42,
+                relation="viewer",
+                outcome="applied",
+            )
+        ],
+    )
 
-    with (
-        patch("bisheng.core.context.tenant.get_current_tenant_id", return_value=5),
-        pytest.raises(ApprovalScenarioDisabledError),
-    ):
-        await service.create(
+    with patch("bisheng.core.context.tenant.get_current_tenant_id", return_value=5):
+        result = await service.create(
             req=_CreateRequest(initial_permissions=SimpleNamespace(grants=grants)),
             login_user=SimpleNamespace(user_id=7, tenant_id=3),
         )
@@ -257,9 +266,36 @@ async def test_create_disabled_invite_scene_before_resource():
         grants=grants,
         tenant_id=5,
     )
-    knowledge_service.create_knowledge_space.assert_not_awaited()
-    query_service.validate_creation_grant_request.assert_not_awaited()
-    authorization_service.authorize.assert_not_awaited()
+    query_service.validate_creation_grant_request.assert_awaited_once()
+    knowledge_service.create_knowledge_space.assert_awaited_once()
+    authorization_service.authorize.assert_awaited_once_with(
+        "knowledge_space",
+        "101",
+        AuthorizeRequest(grants=grants, revokes=[]),
+        SimpleNamespace(user_id=7, tenant_id=3),
+        scenario_guarded=False,
+    )
+    assert result["initial_permission_result"] == {
+        "status": "success",
+        "error_code": None,
+        "direct_applied_count": 1,
+        "invite_created_count": 0,
+        "invite_existing_count": 0,
+        "failed_count": 0,
+        "results": [
+            {
+                "operation": "grant",
+                "subject_type": "user",
+                "subject_id": 42,
+                "relation": "viewer",
+                "model_id": None,
+                "outcome": "applied",
+                "approval_instance_id": None,
+                "error_code": None,
+                "error_message": None,
+            }
+        ],
+    }
 
 
 async def test_create_response_contains_mixed_item_results():
