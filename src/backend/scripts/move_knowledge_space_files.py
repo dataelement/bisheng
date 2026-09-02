@@ -2577,6 +2577,9 @@ class BishengMoveOperations:
     def release_unit_folders(self, unit_id: str) -> None:
         self.folder_manager.release_unit(unit_id)
 
+    def _accepts_copied_status(self, source_file: KnowledgeFile, target_file: KnowledgeFile) -> bool:
+        return int(target_file.status or 0) == KnowledgeFileStatus.SUCCESS.value
+
     def _source_space(self, source_file: KnowledgeFile) -> Knowledge:
         try:
             return self.source_spaces[int(source_file.knowledge_id)]
@@ -2615,8 +2618,10 @@ class BishengMoveOperations:
         if target_file is None or target_file.id is None:
             raise TargetCopyError("copy_normal did not create a target file")
         try:
-            if target_file.status != KnowledgeFileStatus.SUCCESS.value:
-                raise RuntimeError(f"target file status is {target_file.status}, expected SUCCESS")
+            if not self._accepts_copied_status(source_file, target_file):
+                raise RuntimeError(
+                    f"target file status is {target_file.status}, incompatible with source status {source_file.status}"
+                )
             target_file.user_id = int(target.owner.user_id)
             target_file.user_name = target.owner.user_name
             target_file.updater_id = int(target.owner.user_id)
@@ -2668,8 +2673,8 @@ class BishengMoveOperations:
         target: TargetContext,
     ) -> None:
         current = await KnowledgeFileDao.query_by_id(int(target_file.id))
-        if current is None or current.status != KnowledgeFileStatus.SUCCESS.value:
-            raise RuntimeError("target database record is missing or not SUCCESS")
+        if current is None or not self._accepts_copied_status(source_file, current):
+            raise RuntimeError("target database record is missing or has an incompatible status")
         if int(current.knowledge_id) != int(target.space.id):
             raise RuntimeError("target database record belongs to the wrong knowledge space")
         if int(current.user_id or 0) != int(target.owner.user_id):

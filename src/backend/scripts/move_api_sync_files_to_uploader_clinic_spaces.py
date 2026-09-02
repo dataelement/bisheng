@@ -9,7 +9,9 @@ clinic space.
 
 The destination folder is the input folder path. Missing segments are
 created in the clinic space. Nested source files are flattened into that
-path. Default mode is dry-run; pass ``--apply`` to write.
+path. SUCCESS, FAILED, and VIOLATION files are moved; FAILED/VIOLATION
+keep their original status and are not re-parsed. Default mode is
+dry-run; pass ``--apply`` to write.
 
 Usage (from ``src/backend``):
 
@@ -18,6 +20,8 @@ Usage (from ``src/backend``):
       --space-name "安全生产知识库" --folder "安全生产/消防安全"
     PYTHONPATH=./ .venv/bin/python scripts/move_api_sync_files_to_uploader_clinic_spaces.py \\
       --space-name "安全生产知识库" --folder "安全生产/消防安全" --apply
+    PYTHONPATH=./ .venv/bin/python scripts/move_api_sync_files_to_uploader_clinic_spaces.py \\
+      --space-name "安全生产知识库" --folder "安全生产/消防安全" --repair-existing --apply
     bash scripts/move_api_sync_files_to_uploader_clinic_spaces.sh \\
       --space-name "安全生产知识库" --folder "消防安全" --tenant-id 1
 """
@@ -33,7 +37,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from sqlmodel import col, select
+from sqlmodel import col, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 _BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -48,6 +52,8 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge  # noqa: E402
 from bisheng.knowledge.domain.models.knowledge_file import (  # noqa: E402
     FileType,
     KnowledgeFile,
+    KnowledgeFileDao,
+    KnowledgeFileProjectionStatus,
     KnowledgeFileStatus,
 )
 from bisheng.user.domain.models.user import User  # noqa: E402
@@ -84,6 +90,13 @@ from scripts.retry_failed_knowledge_space_folder_files import (  # noqa: E402
 )
 
 _MAX_FOLDER_DEPTH = 10
+MOVABLE_FILE_STATUSES = frozenset(
+    {
+        KnowledgeFileStatus.SUCCESS.value,
+        KnowledgeFileStatus.FAILED.value,
+        KnowledgeFileStatus.VIOLATION.value,
+    }
+)
 
 
 @dataclass
@@ -116,8 +129,120 @@ class MoveReport:
     rows: list[MoveRow] = field(default_factory=list)
 
 
+def needs_uploader_fix(source_file: KnowledgeFile, target_file: KnowledgeFile) -> bool:
+    if source_file.user_id is not None and int(target_file.user_id or 0) != int(source_file.user_id):
+        return True
+    if source_file.user_name and str(target_file.user_name or "") != str(source_file.user_name):
+        return True
+    return False
+
+
+def has_copied_distribution_identity(file: KnowledgeFile) -> bool:
+    return file.reference_document_id is not None or file.entry_type is not None
+
+
+def detach_copied_distribution_identity(target_file: KnowledgeFile) -> KnowledgeFile:
+    """Copied files must be standalone; keep source document graph out of the clinic space."""
+    values = standalone_file_values()
+    for key, value in values.items():
+        setattr(target_file, key, value)
+    return target_file
+
+
+def standalone_file_values() -> dict[str, Any]:
+    """Force-clear F059 fields so delete/preview treat the file as ordinary."""
+    return {
+        "reference_document_id": None,
+        "entry_type": None,
+        "entry_status": None,
+        "predecessor_logic_file_id": None,
+        "share_source_file_id": None,
+        "projection_previous_file_id": None,
+        "desired_content_generation": 0,
+        "applied_content_generation": 0,
+        "desired_entry_generation": 0,
+        "applied_entry_generation": 0,
+        "projection_status": KnowledgeFileProjectionStatus.PENDING.value,
+        "projection_retry_count": 0,
+        "projection_next_retry_at": None,
+        "projection_lease_owner": None,
+        "projection_lease_until": None,
+    }
+
+
+async def persist_standalone_file(
+    file_id: int,
+    *,
+    user_id: int | None = None,
+    user_name: str | None = None,
+    original_uploader_id: int | None = None,
+) -> None:
+    values = standalone_file_values()
+    if user_id is not None:
+        values["user_id"] = int(user_id)
+    if user_name:
+        values["user_name"] = user_name
+    if original_uploader_id is not None:
+        values["original_uploader_id"] = int(original_uploader_id)
+    async with get_async_db_session() as session:
+        await session.exec(update(KnowledgeFile).where(KnowledgeFile.id == int(file_id)).values(**values))
+        await session.commit()
+
+
+def preserve_source_uploader(source_file: KnowledgeFile, target_file: KnowledgeFile) -> KnowledgeFile:
+    """Keep 上传人 as the source file uploader; do not adopt the clinic-space owner."""
+    if source_file.user_id is not None:
+        target_file.user_id = int(source_file.user_id)
+    if source_file.user_name:
+        target_file.user_name = source_file.user_name
+    if source_file.original_uploader_id is not None:
+        target_file.original_uploader_id = int(source_file.original_uploader_id)
+    return target_file
+
+
 class ClinicMoveOperations(BishengMoveOperations):
     """Same copy/delete saga, but root files parent to the clinic space."""
+
+    def _accepts_copied_status(self, source_file: KnowledgeFile, target_file: KnowledgeFile) -> bool:
+        source_status = int(source_file.status or 0)
+        target_status = int(target_file.status or 0)
+        if source_status not in MOVABLE_FILE_STATUSES:
+            return False
+        return target_status == source_status
+
+    async def copy_file(self, source_file: KnowledgeFile, target: TargetContext) -> KnowledgeFile:
+        target_file = await super().copy_file(source_file, target)
+        preserve_source_uploader(source_file, target_file)
+        detach_copied_distribution_identity(target_file)
+        updated = await KnowledgeFileDao.async_update(target_file)
+        self.target_files_by_source_id[int(source_file.id)] = updated
+        return updated
+
+    async def verify_target(
+        self,
+        source_file: KnowledgeFile,
+        target_file: KnowledgeFile,
+        target: TargetContext,
+    ) -> None:
+        # Parent verify requires user_id == clinic owner. This move keeps the
+        # source uploader, so treat a matching source user_id as valid.
+        original_query = KnowledgeFileDao.query_by_id
+
+        async def query_by_id_allow_source_uploader(file_id: int) -> KnowledgeFile | None:
+            current = await original_query(file_id)
+            if (
+                current is not None
+                and source_file.user_id is not None
+                and int(current.user_id or 0) == int(source_file.user_id)
+            ):
+                current.user_id = int(target.owner.user_id)
+            return current
+
+        KnowledgeFileDao.query_by_id = query_by_id_allow_source_uploader
+        try:
+            await super().verify_target(source_file, target_file, target)
+        finally:
+            KnowledgeFileDao.query_by_id = original_query
 
     async def write_permissions(self, target_file: KnowledgeFile, target: TargetContext) -> None:
         if int(getattr(target.folder, "id", 0) or 0) <= 0:
@@ -159,6 +284,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--apply",
         action="store_true",
         help="write folders and move files; default is dry-run",
+    )
+    parser.add_argument(
+        "--repair-existing",
+        action="store_true",
+        help="only detach leftover distribution identity on already-migrated clinic files",
     )
     parser.add_argument(
         "--format",
@@ -231,6 +361,18 @@ def _files_in_folder(files: Sequence[KnowledgeFile], folder: KnowledgeFile | Non
 
 def _file_status(record: KnowledgeFile) -> int:
     return int(getattr(record, "status", 0) or 0)
+
+
+def _file_status_name(record: KnowledgeFile) -> str:
+    status = _file_status(record)
+    try:
+        return KnowledgeFileStatus(status).name
+    except ValueError:
+        return str(status)
+
+
+def is_movable_file_status(record: KnowledgeFile) -> bool:
+    return _file_status(record) in MOVABLE_FILE_STATUSES
 
 
 def plan_moves(
@@ -310,12 +452,13 @@ def plan_moves(
             row.reason = "folder_too_deep"
             planned.append(row)
             continue
-        if _file_status(record) != KnowledgeFileStatus.SUCCESS.value:
-            row.reason = "source_not_success"
-            planned.append(row)
-            continue
         if int(record.knowledge_id) == int(clinic.id or 0):
-            row.reason = "already_in_clinic_space"
+            if has_copied_distribution_identity(record):
+                row.target_file_id = file_id
+                row.status = "ready"
+                row.reason = "repair_target"
+            else:
+                row.reason = "already_in_clinic_space"
             planned.append(row)
             continue
         existing_folder = find_folder_by_segments(clinic_folders.get(int(clinic.id), []), segments)
@@ -326,8 +469,18 @@ def plan_moves(
         else:
             row.folder_action = "reused"
         target_files = _files_in_folder(clinic_files.get(int(clinic.id), []), existing_folder)
-        if any(item.file_name == file_name for item in target_files):
-            row.reason = "target_name_conflict"
+        existing_target = next((item for item in target_files if item.file_name == file_name), None)
+        if existing_target is not None:
+            row.target_file_id = int(existing_target.id) if existing_target.id is not None else None
+            if needs_uploader_fix(record, existing_target) or has_copied_distribution_identity(existing_target):
+                row.status = "ready"
+                row.reason = "repair_target"
+            else:
+                row.reason = "already_at_target"
+            planned.append(row)
+            continue
+        if not is_movable_file_status(record):
+            row.reason = f"source_not_success:{_file_status_name(record)}"
             planned.append(row)
             continue
         reserve_key = (int(clinic.id), file_name)
@@ -340,6 +493,47 @@ def plan_moves(
         row.reason = "ready"
         planned.append(row)
     return planned
+
+
+def collect_leftover_repair_rows(
+    *,
+    folder_path: str,
+    clinic_spaces: dict[int, Knowledge],
+    clinic_folders: dict[int, list[KnowledgeFile]],
+    clinic_files: dict[int, list[KnowledgeFile]],
+    planned: Sequence[MoveRow],
+) -> list[MoveRow]:
+    planned_ids = {int(row.target_file_id) for row in planned if row.target_file_id is not None}
+    segments = target_folder_segments(folder_path)
+    display_folder = "/" if not segments else "/".join(segments)
+    extras: list[MoveRow] = []
+    for space_id, space in clinic_spaces.items():
+        folder = find_folder_by_segments(clinic_folders.get(int(space_id), []), segments)
+        if segments and folder is None:
+            continue
+        for item in _files_in_folder(clinic_files.get(int(space_id), []), folder):
+            if item.id is None or int(item.id) in planned_ids:
+                continue
+            if not has_copied_distribution_identity(item):
+                continue
+            extras.append(
+                MoveRow(
+                    source_file_id=int(item.id),
+                    source_file_name=str(item.file_name or ""),
+                    uploader=item.user_name or "-",
+                    uploader_id=item.user_id,
+                    department_name="-",
+                    clinic_space_id=int(space.id) if space.id is not None else None,
+                    clinic_space_name=space.name,
+                    target_folder_path=display_folder,
+                    folder_action="none",
+                    status="ready",
+                    reason="repair_target",
+                    target_file_id=int(item.id),
+                )
+            )
+    extras.sort(key=lambda row: (row.clinic_space_id or 0, row.target_file_id or 0))
+    return extras
 
 
 def build_clinic_target_context(
@@ -512,8 +706,9 @@ def print_text_report(report: MoveReport) -> None:
                 f"科室名称={row.department_name} 科室库名称={row.clinic_space_name} 原因={row.reason}"
             )
             continue
+        action = "修复目标" if row.reason in {"repair_target", "fix_uploader", "target_repaired"} else "迁移文件"
         print(
-            f"迁移文件={row.source_file_name} 科室库名称={row.clinic_space_name} "
+            f"{action}={row.source_file_name} 科室库名称={row.clinic_space_name} "
             f"上传人={row.uploader} 科室名称={row.department_name} "
             f"目录={row.target_folder_path} status={row.status}"
         )
@@ -528,6 +723,7 @@ async def _discover(
     list[MoveRow],
     dict[int, Knowledge],
     dict[int, User],
+    dict[int, list[KnowledgeFile]],
     dict[int, list[KnowledgeFile]],
 ]:
     with bypass_tenant_filter():
@@ -586,7 +782,25 @@ async def _discover(
                 clinic_folders=clinic_folders,
                 clinic_files=clinic_files,
             )
-            return target.space, target.folder_path, api_sync_files, rows, clinic_spaces, clinic_owners, clinic_folders
+            rows.extend(
+                collect_leftover_repair_rows(
+                    folder_path=target.folder_path,
+                    clinic_spaces=clinic_spaces,
+                    clinic_folders=clinic_folders,
+                    clinic_files=clinic_files,
+                    planned=rows,
+                )
+            )
+            return (
+                target.space,
+                target.folder_path,
+                api_sync_files,
+                rows,
+                clinic_spaces,
+                clinic_owners,
+                clinic_folders,
+                clinic_files,
+            )
 
 
 async def _apply_moves(
@@ -598,9 +812,13 @@ async def _apply_moves(
     clinic_spaces: dict[int, Knowledge],
     clinic_owners: dict[int, User],
     clinic_folders: dict[int, list[KnowledgeFile]],
+    clinic_files: dict[int, list[KnowledgeFile]],
 ) -> None:
     tenant_id = int(source_space.tenant_id or 1)
     files_by_id = {int(record.id): record for record in api_sync_files if record.id is not None}
+    existing_by_id = {
+        int(record.id): record for records in clinic_files.values() for record in records if record.id is not None
+    }
     segments = target_folder_segments(folder_path)
     operations = ClinicMoveOperations(tenant_id, {int(source_space.id): source_space})
     with _tenant_scope(tenant_id):
@@ -610,7 +828,34 @@ async def _apply_moves(
             clinic = clinic_spaces.get(int(row.clinic_space_id))
             owner = clinic_owners.get(int(clinic.user_id or 0)) if clinic is not None else None
             source_file = files_by_id.get(row.source_file_id)
-            if clinic is None or owner is None or source_file is None:
+            if clinic is None or owner is None:
+                row.status = "failed"
+                row.reason = "apply_context_missing"
+                continue
+            if row.reason in {"repair_target", "fix_uploader"}:
+                target_file = existing_by_id.get(int(row.target_file_id or 0))
+                if row.target_file_id is None:
+                    row.status = "failed"
+                    row.reason = "existing_target_missing"
+                    continue
+                uploader_source = source_file or target_file
+                try:
+                    await persist_standalone_file(
+                        int(row.target_file_id),
+                        user_id=uploader_source.user_id if uploader_source is not None else None,
+                        user_name=uploader_source.user_name if uploader_source is not None else None,
+                        original_uploader_id=(
+                            uploader_source.original_uploader_id if uploader_source is not None else None
+                        ),
+                    )
+                except Exception as exc:
+                    row.status = "failed"
+                    row.reason = f"{type(exc).__name__}: {exc}"
+                    continue
+                row.status = "success"
+                row.reason = "target_repaired"
+                continue
+            if source_file is None:
                 row.status = "failed"
                 row.reason = "apply_context_missing"
                 continue
@@ -647,9 +892,21 @@ async def _apply_moves(
 
 async def collect_report(args: argparse.Namespace) -> tuple[MoveReport | None, int]:
     try:
-        source_space, folder_path, api_sync_files, rows, clinic_spaces, clinic_owners, clinic_folders = await _discover(
-            args
-        )
+        (
+            source_space,
+            folder_path,
+            api_sync_files,
+            rows,
+            clinic_spaces,
+            clinic_owners,
+            clinic_folders,
+            clinic_files,
+        ) = await _discover(args)
+        if args.repair_existing:
+            for row in rows:
+                if row.status == "ready" and row.reason == "ready":
+                    row.status = "skipped"
+                    row.reason = "repair_existing_only"
         if args.apply:
             await initialize_app_context(config=settings)
             await _apply_moves(
@@ -660,6 +917,7 @@ async def collect_report(args: argparse.Namespace) -> tuple[MoveReport | None, i
                 clinic_spaces=clinic_spaces,
                 clinic_owners=clinic_owners,
                 clinic_folders=clinic_folders,
+                clinic_files=clinic_files,
             )
         report = MoveReport(
             mode="apply" if args.apply else "dry-run",
