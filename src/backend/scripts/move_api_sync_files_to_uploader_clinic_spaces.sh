@@ -8,6 +8,9 @@
 #     --space-name "安全生产知识库" --folder "安全生产/消防安全"
 #   bash scripts/move_api_sync_files_to_uploader_clinic_spaces.sh \
 #     --space-name "安全生产知识库" --folder "安全生产/消防安全" --apply
+#   bash scripts/move_api_sync_files_to_uploader_clinic_spaces.sh \
+#     --space-name "安全生产知识库" --folder "安全生产/消防安全" \
+#     --target-folder "归档/接口同步" --apply
 
 set -e
 

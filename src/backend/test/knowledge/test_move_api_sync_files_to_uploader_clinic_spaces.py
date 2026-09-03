@@ -109,6 +109,21 @@ def _plan(**overrides):
     return script_mod.plan_moves(**kwargs)
 
 
+def test_resolve_destination_folder_path_prefers_configured() -> None:
+    assert script_mod.resolve_destination_folder_path("政策文件/测试", None) == "政策文件/测试"
+    assert script_mod.resolve_destination_folder_path("政策文件/测试", "") == "政策文件/测试"
+    assert script_mod.resolve_destination_folder_path("政策文件/测试", "  ") == "政策文件/测试"
+    assert script_mod.resolve_destination_folder_path("政策文件/测试", "归档/接口同步") == "归档/接口同步"
+    assert script_mod.resolve_destination_folder_path("政策文件/测试", "/") == "/"
+
+
+def test_plan_moves_uses_configured_target_folder() -> None:
+    rows = _plan(folder_path="归档/接口同步")
+    assert rows[0].status == "ready"
+    assert rows[0].target_folder_path == "归档/接口同步"
+    assert rows[0].folder_action == "create"
+
+
 def test_target_folder_segments_root_and_nested() -> None:
     assert script_mod.target_folder_segments("/") == []
     assert script_mod.target_folder_segments("安全生产/消防安全") == ["安全生产", "消防安全"]
@@ -346,6 +361,7 @@ def test_print_text_report_shows_uploader_department_and_clinic(capsys) -> None:
         space_id=10,
         space_name="安全生产知识库",
         folder_path="安全生产/消防安全",
+        dest_folder_path="安全生产/消防安全",
         api_sync_file_count=1,
         ready_count=1,
         skipped_count=0,

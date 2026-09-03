@@ -7,8 +7,9 @@ each file's current uploader (``user_id``, not ``original_uploader_id``)
 clinic space the same way as filelib_sync ``responsible_person_id``
 targeting, then copies those files into that clinic space.
 
-The destination folder is the input folder path. Missing segments are
-created in the clinic space. Nested source files are flattened into that
+The destination folder defaults to the source ``--folder`` path. Pass
+``--target-folder`` to write into a different path in the clinic space.
+Missing segments are created. Nested source files are flattened into that
 path. SUCCESS, FAILED, and VIOLATION files are moved; FAILED/VIOLATION
 keep their original status and are not re-parsed. Default mode is
 dry-run; pass ``--apply`` to write.
@@ -20,6 +21,9 @@ Usage (from ``src/backend``):
       --space-name "安全生产知识库" --folder "安全生产/消防安全"
     PYTHONPATH=./ .venv/bin/python scripts/move_api_sync_files_to_uploader_clinic_spaces.py \\
       --space-name "安全生产知识库" --folder "安全生产/消防安全" --apply
+    PYTHONPATH=./ .venv/bin/python scripts/move_api_sync_files_to_uploader_clinic_spaces.py \\
+      --space-name "安全生产知识库" --folder "安全生产/消防安全" \\
+      --target-folder "归档/接口同步" --apply
     PYTHONPATH=./ .venv/bin/python scripts/move_api_sync_files_to_uploader_clinic_spaces.py \\
       --space-name "安全生产知识库" --folder "安全生产/消防安全" --repair-existing --apply
     bash scripts/move_api_sync_files_to_uploader_clinic_spaces.sh \\
@@ -120,6 +124,7 @@ class MoveReport:
     space_id: int
     space_name: str
     folder_path: str
+    dest_folder_path: str
     api_sync_file_count: int
     ready_count: int
     skipped_count: int
@@ -278,7 +283,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--folder",
         required=True,
-        help='folder name, nested path, or "/" for the whole knowledge space',
+        help='source folder name, nested path, or "/" for the whole knowledge space',
+    )
+    parser.add_argument(
+        "--target-folder",
+        default=None,
+        help="destination folder in the clinic space; default is the source --folder path",
     )
     parser.add_argument(
         "--tenant-id",
@@ -303,6 +313,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="output format; default is text",
     )
     return parser.parse_args(argv)
+
+
+def resolve_destination_folder_path(source_folder_path: str, target_folder: str | None) -> str:
+    """Use --target-folder when set; otherwise keep the source folder path."""
+    configured = (target_folder or "").strip()
+    if not configured:
+        return source_folder_path
+    return configured
 
 
 def target_folder_segments(folder_path: str) -> list[str]:
@@ -687,6 +705,7 @@ def report_to_dict(report: MoveReport) -> dict[str, Any]:
         "mode": report.mode,
         "space": {"id": report.space_id, "name": report.space_name},
         "folder_path": report.folder_path,
+        "dest_folder_path": report.dest_folder_path,
         "api_sync_file_count": report.api_sync_file_count,
         "ready_count": report.ready_count,
         "skipped_count": report.skipped_count,
@@ -697,7 +716,10 @@ def report_to_dict(report: MoveReport) -> dict[str, Any]:
 
 
 def print_text_report(report: MoveReport) -> None:
-    print(f"[INFO] mode={report.mode} space id={report.space_id} name={report.space_name} folder={report.folder_path}")
+    print(
+        f"[INFO] mode={report.mode} space id={report.space_id} name={report.space_name} "
+        f"folder={report.folder_path} dest={report.dest_folder_path}"
+    )
     print(
         f"[INFO] api-sync files={report.api_sync_file_count} ready={report.ready_count} "
         f"skipped={report.skipped_count} migrated={report.success_count} failed={report.failed_count}"
@@ -724,6 +746,7 @@ async def _discover(
     args: argparse.Namespace,
 ) -> tuple[
     Knowledge,
+    str,
     str,
     list[KnowledgeFile],
     list[MoveRow],
@@ -779,9 +802,10 @@ async def _discover(
             clinic_ids = [int(space.id) for space in clinic_spaces.values() if space.id is not None]
             clinic_folders = await load_space_folders(session, clinic_ids)
             clinic_files = await load_space_files(session, clinic_ids)
+            dest_folder_path = resolve_destination_folder_path(target.folder_path, args.target_folder)
             rows = plan_moves(
                 source_space=target.space,
-                folder_path=target.folder_path,
+                folder_path=dest_folder_path,
                 api_sync_files=api_sync_files,
                 uploader_rows=[*with_clinic, *missing],
                 clinic_spaces=clinic_spaces,
@@ -791,7 +815,7 @@ async def _discover(
             )
             rows.extend(
                 collect_leftover_repair_rows(
-                    folder_path=target.folder_path,
+                    folder_path=dest_folder_path,
                     clinic_spaces=clinic_spaces,
                     clinic_folders=clinic_folders,
                     clinic_files=clinic_files,
@@ -801,6 +825,7 @@ async def _discover(
             return (
                 target.space,
                 target.folder_path,
+                dest_folder_path,
                 api_sync_files,
                 rows,
                 clinic_spaces,
@@ -902,6 +927,7 @@ async def collect_report(args: argparse.Namespace) -> tuple[MoveReport | None, i
         (
             source_space,
             folder_path,
+            dest_folder_path,
             api_sync_files,
             rows,
             clinic_spaces,
@@ -918,7 +944,7 @@ async def collect_report(args: argparse.Namespace) -> tuple[MoveReport | None, i
             await initialize_app_context(config=settings)
             await _apply_moves(
                 source_space=source_space,
-                folder_path=folder_path,
+                folder_path=dest_folder_path,
                 api_sync_files=api_sync_files,
                 rows=rows,
                 clinic_spaces=clinic_spaces,
@@ -931,6 +957,7 @@ async def collect_report(args: argparse.Namespace) -> tuple[MoveReport | None, i
             space_id=int(source_space.id),
             space_name=source_space.name,
             folder_path=folder_path,
+            dest_folder_path=dest_folder_path,
             api_sync_file_count=len(api_sync_files),
             ready_count=sum(1 for row in rows if row.status == "ready"),
             skipped_count=sum(1 for row in rows if row.status == "skipped"),
