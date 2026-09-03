@@ -115,7 +115,9 @@
    - **已迁（2026-08-28）**：`pages/settings/SettingsPage.tsx` 的 `NavCountBadge`（桌面 + 移动两处导航行）→ `<Badge color="danger" count={n} />`。**去掉了 99+ 折算**，字号 11 → caption-sm 10，`#f53f3f` → danger token；圆角仍是正圆（这块页面正是设计师拍下「两款同为 full」的地方）。
    - **已迁（2026-08-28）**：`components/messageApproval/NotificationRow.tsx` 的未读点（`size-2 bg-[#f53f3f]`）→ `<Badge dot />`，8 → 6px；`layouts/UserPopMenu.tsx` 头像右上角的红点（`absolute size-2.5 ring-2 ring-white`）→ `<Badge dot circle>{avatar}</Badge>`，10 → 6px，2px 白描边 → 1px 页面底色描边（深色模式下自动跟着走，原来那圈白在深色里是道亮边）。
    - Tabs 组件内置的 `badge`（16px、原圆角 6、`bg-primary/5`、caption-sm/500）→ **已改**为渲染 `<Badge count={item.badge} />`，配色仍由 Tabs 的 `variant` 传入（墨色款不能长出品牌色）；圆角随本次统一从 6px 变为 full，Tabs §4 同步改写。
-   - **已迁（2026-08-28）**：`components/Chat/Messages/Content/Markdown.tsx` 的溯源角标（18px 圆 + 12px 字，配色表在 `citationUtils.getCitationClassName`）→ `<Badge citation="document | web">`，尺寸收到本文的 16px / caption-sm，网页那档的 `#7224D9` / `#F7F3FF` 换成 `--citation-web*`（顺带把值归到系统里那支紫）；`getCitationClassName` 删除。来源抽屉里的「网页 / 文档」小片按判别表属**标签**，本次只把它的裸紫换成同一组 token，markup 迁 Tag 待办。
+   - **已迁（2026-08-28）**：`components/Chat/Messages/Content/Markdown.tsx` 的溯源角标（18px 圆 + 12px 字，配色表在 `citationUtils.getCitationClassName`）→ `<Badge citation="document | web">`，尺寸收到本文的 16px / caption-sm，网页那档的 `#7224D9` / `#F7F3FF` 换成 `--citation-web*`（顺带把值归到系统里那支紫）；`getCitationClassName` 删除。来源抽屉里的「网页 / 文档」小片按判别表属**标签**，当日晚些已迁为 Tag（见下条）。
+   - **已迁（2026-08-28）**：`components/Linsight/Artifacts/ResultSection.tsx` 任务模式「已整理输出文件」卡片的计数（`rounded-md bg-[#212121]/5`、字重 600）→ `<Badge count>` 独立数字，圆角 6px → full、字重 600 → 500、裸 hex → `bg-text-1/5 text-text-1`（这张卡是中性的，所以跟中性款 Tabs 一样自带配色，不吃 Badge 的品牌默认色）。
+   - **已迁（2026-08-28）**：`components/Chat/Messages/Content/CitationReferencesDrawer.tsx` 面板标题的来源计数（`rounded-full bg-gray-100 text-[#666]`）→ 同上的中性独立数字；面板里的「网页 / 文档」小片按判别表迁为 `<Tag size="small" color="web | brand">`（18 → 20px、圆角 6 → 4px），本文上一条记的「markup 迁 Tag 待办」就此结案。
    - 其它手写红点 / 数字（侧栏未读、通知铃铛）未扫描，迁移窗口用 `rounded-full` + `bg-[#f5` / `bg-red` grep 后补附录。
 7. 站点接线（元规范 §5）：本文 + `components/badge.mdx` demo 页均已注册进 `rspress.config.ts` 侧栏，front matter `component: Badge` 已写（组件已进库）；00-总纲 §四 与 01-设计规范 §0 索引行随建档更新。client 侧仍有同名的 `components/ui/Badge.tsx`（实为标签），迁移顺序见 Tag 规范给实现窗口第 6 条。
 
@@ -128,6 +130,7 @@
 
 | 日期 | 改了什么 | 提交 |
 |---|---|---|
+| 2026-08-28 | 又两处手写计数迁入独立数字（设计师逐屏点名）：任务模式的「已整理输出文件」卡片、日常模式参考来源面板的标题计数——两处都是中性卡片，各自传 `bg-text-1/5 text-text-1`，圆角随本次统一改为 full。面板里的「网页 / 文档」小片同时迁给 Tag（新增 `web` 固定例外色）。§给实现窗口 6 记录 | 待 committer 窗口提交 |
 | 2026-08-28 | 溯源角标改为与整行文字**居中对齐**（设计师验收两轮）：原来坐在基线上，圆圈掉到降部一线；改 `align-middle` 后仍低约正文字号的 0.11em——中文字面高过西文 x-height，而 `middle` 对的正是 x-height 的一半——再补 `relative -top-[0.16em]`，实测两档正文都对到 0.2px 以内。§5 与 §给实现窗口 4 记录 | 待 committer 窗口提交 |
 | 2026-08-28 | 收编**溯源角标**（设计师拍板：它也是圆圈数字，归徽标）：新增 `citation` 形态，尺寸统一到本文的 16px / caption-sm 10px（原 18px / 12px），文档来源走品牌色、网页来源走冻结紫 `--citation-web*`（值与技能标签同源，色彩规范 §4 第三条固定例外）。它是徽标里**唯一可点**的一档——脚注序号就是通往来源的入口——§5 为此开例外，组件随之 `forwardRef` 并透传 DOM 属性。§1 判别表 / §2 类型表与来源配色表 / §3 尺寸表 / §给实现窗口 1·2·3·6 同步；client 侧 `Markdown.tsx` 的手写角标迁入 | 待 committer 窗口提交 |
 | 2026-08-28 | **圆角统一为 full**（设计师在设置页导航上拍板）：独立数字原沿用 Tabs 的 6px，与挂角数字的正圆并存两个值；现在一律 full——一位数正圆、两位起胶囊。§3 尺寸表、§给实现窗口 3 同步，待决策清单第 1 条结案；Tabs §4 的画法描述随之改写（其计数徽标本就由本组件渲染） | 待 committer 窗口提交 |

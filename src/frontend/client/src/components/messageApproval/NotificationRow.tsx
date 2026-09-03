@@ -143,8 +143,33 @@ export function NotificationRow({
   // Weight stays 400 in both states — unread is signalled by the right-side dot instead.
   const textColor = unread ? "text-text-1" : "text-[#989898]";
 
+  /**
+   * Clicking anywhere on the row marks it read. A notification that has nowhere to jump
+   * (a plain announcement, or one whose object is gone) is still something the user just
+   * read, so it must leave 未读 like any other — read state is about "have I seen this",
+   * not about whether a jump happened.
+   */
+  const handleRowClick = () => {
+    if (canOpenApprovalCenter) {
+      handleOpenApprovalCenter();
+      return;
+    }
+    if (canNavigateTarget) {
+      handleNavigateTarget();
+      return;
+    }
+    markReadIfNeeded();
+  };
+
   const targetSpan = (
-    <span className="cursor-pointer hover:text-blue-500" onClick={handleNavigateTarget}>
+    <span
+      className="cursor-pointer hover:text-blue-500"
+      onClick={(event) => {
+        // The row handler would navigate a second time — this inner span is the same action.
+        event.stopPropagation();
+        handleNavigateTarget();
+      }}
+    >
       {targetName}
     </span>
   );
@@ -155,9 +180,11 @@ export function NotificationRow({
       data-message-type={notification.message_type}
       className={cn(
         "flex flex-col gap-2 rounded-xl p-3 transition-colors duration-300 hover:bg-fill-1",
-        canOpenApprovalCenter && "group cursor-pointer",
+        // Pointer only where the click does something: a jump, or an unread row to clear.
+        (canOpenApprovalCenter || canNavigateTarget || unread) && "cursor-pointer",
+        canOpenApprovalCenter && "group",
       )}
-      onClick={canOpenApprovalCenter ? handleOpenApprovalCenter : undefined}
+      onClick={handleRowClick}
     >
       {/* Avatar, text+time column and the unread dot are all top-aligned. */}
       <div className="flex items-start gap-2">

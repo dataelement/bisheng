@@ -30,8 +30,8 @@ interface KnowledgeFolderTreeProps {
     currentFolderId?: string;
     /**
      * Status filter — must mirror what the right-side file panel sends so the
-     * tree and the panel show the same folders. For MEMBER-role users this is
-     * SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED; omit for admins/creators.
+     * tree and the panel show the same folders. Omit it unless the user picked a
+     * status: hiding other people's parse failures is the server's job.
      * Pass a stable reference (module constant or undefined) to avoid refetch churn.
      */
     fileStatus?: number[];

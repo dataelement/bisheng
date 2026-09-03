@@ -509,6 +509,21 @@
     "saveToKnowledgePending": "Submitted for approval; it will be saved to the knowledge space once approved",
     "saveToKnowledgeFailed": "Failed to save to knowledge space, please try again later"
   },
+  "com_message": {
+    "document_preview": "Document preview",
+    "source_empty": "No references yet",
+    "source_load_failed": "Failed to load source details",
+    "source_loading": "Loading source details...",
+    "source_name_fallback_document": "Policy document",
+    "source_name_fallback_web": "Web page",
+    "source_panel_back": "Back to reference list",
+    "source_panel_close": "Close references",
+    "source_panel_download": "Download document",
+    "source_panel_label": "References",
+    "source_type_document": "Document",
+    "source_type_web": "Web page",
+    "source_untitled": "Untitled"
+  },
   "com_message_content_copied": "Content copied",
   "com_notifications_approved": "Approved",
   "com_notifications_rejected": "Rejected",
@@ -1642,7 +1657,8 @@
     "card_view": "Card view",
     "filter_file_status": "Filter by status",
     "sort_by_size_label": "Sort by size",
-    "select_all": "Select all"
+    "select_all": "Select all",
+    "folder_abnormal": "Has issues"
   },
   "com_subscription": {
     "tab_channel": "Channels",
@@ -1901,7 +1917,8 @@
     "wechat_link_retry_hint": "Please check and fix the {{link}}, then press Enter to detect it again.",
     "wechat_link_label": "WeChat article link",
     "wechat_article_link_label": "WeChat article link",
-    "wechat_link_copy_tip": "Tap \"···\" in the top-right corner of the article and choose \"Copy Link\", or choose \"Open in Browser\" and copy the URL from the address bar."
+    "wechat_link_copy_tip": "Tap \"···\" in the top-right corner of the article and choose \"Copy Link\", or choose \"Open in Browser\" and copy the URL from the address bar.",
+    "channel_unavailable_or_no_permission": "This channel is unavailable or you do not have permission to view it"
   },
   "com_unified_permission": {
     "access_and_share": "Access and sharing",
@@ -2244,17 +2261,6 @@
     "user": "User"
   },
   "com_citation.no_download_url": "No downloadable file address",
-  "com_citation.web": "Web",
-  "com_citation.document": "Document",
-  "com_citation.untitled": "Untitled",
-  "com_citation.loading_detail": "Loading source details...",
-  "com_citation.load_detail_failed": "Failed to load source details",
-  "com_citation.policy_document": "Policy document",
-  "com_citation.document_preview": "Document preview",
-  "com_citation.no_references": "No references",
-  "com_citation.close_references": "Close references",
-  "com_citation.back_to_references": "Back to reference list",
-  "com_citation.download_document": "Download document",
   "com_message_approval_title": "Messages & Approvals",
   "com_message_approval_notifications": "Notifications",
   "com_notifications_tab_unread": "Unread",
