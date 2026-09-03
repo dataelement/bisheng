@@ -2017,7 +2017,7 @@
       "requirementsTitle": "文件要求",
       "reqMd": ".md 文件须包含 YAML frontmatter（name 与 description 必填）",
       "reqZip": ".zip / .skill 压缩包须在根目录包含 SKILL.md，可携带附属文件",
-      "reqSize": "上传文件 ≤ 10MB，解压后内容 ≤ 100MB",
+      "reqSize": "上传文件 ≤ {{size}}MB，解压后内容 ≤ {{unpacked}}MB",
       "githubUrlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill",
       "githubHint": "粘贴指向技能目录的 GitHub 链接（目录须包含 SKILL.md）",
       "githubReqHost": "仅支持 github.com 公共仓库",
@@ -2035,7 +2035,7 @@
     "errors": {
       "validation": "校验失败：frontmatter 或技能 ID 不合规",
       "validationDetail": "校验失败：{{detail}}",
-      "tooLarge": "上传文件超过 10MB 上限，请精简后重传",
+      "tooLarge": "上传文件超过 {{size}}MB 上限，请精简后重传",
       "bundleTooLarge": "压缩包解压后内容超过 100MB 上限，请精简附属文件后重传",
       "notFound": "技能不存在",
       "noPermission": "无权限执行该操作",

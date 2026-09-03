@@ -2072,7 +2072,7 @@
       "requirementsTitle": "File requirements",
       "reqMd": ".md file must contain YAML frontmatter (name and description required)",
       "reqZip": ".zip / .skill archive must include SKILL.md at root; assets allowed",
-      "reqSize": "Uploaded file ≤ 10MB; unpacked contents ≤ 100MB",
+      "reqSize": "Uploaded file ≤ {{size}}MB; unpacked contents ≤ {{unpacked}}MB",
       "githubUrlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill",
       "githubHint": "Paste a GitHub URL pointing to a skill directory (must contain SKILL.md)",
       "githubReqHost": "Public github.com repositories only",
@@ -2090,7 +2090,7 @@
     "errors": {
       "validation": "Validation failed: invalid frontmatter or skill ID",
       "validationDetail": "Validation failed: {{detail}}",
-      "tooLarge": "Uploaded file exceeds the 10MB limit, please trim it and retry",
+      "tooLarge": "Uploaded file exceeds the {{size}}MB limit, please trim it and retry",
       "bundleTooLarge": "Unpacked bundle contents exceed the 100MB limit, please trim the bundled assets and retry",
       "notFound": "Skill not found",
       "noPermission": "No permission for this operation",

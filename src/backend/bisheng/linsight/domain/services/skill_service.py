@@ -48,6 +48,7 @@ from bisheng.linsight.domain.services.skill_store import (
     compose_skill_md,
     parse_skill_md,
     render_skill_md,
+    resolve_skill_upload_limit,
     slugify_pinyin,
     unpack_zip_bytes,
     validate_skill_name,
@@ -142,7 +143,7 @@ class SkillService:
         return await self._create(tenant_id, user_id, form.name, form.display_name, form.description, files)
 
     async def create_from_upload(self, tenant_id: int, user_id: int, filename: str, data: bytes) -> SkillDetail:
-        meta, files = self._parse_upload(filename, data)
+        meta, files = self._parse_upload(filename, data, max_size=await resolve_skill_upload_limit())
         detail = await self._create(tenant_id, user_id, meta.name, meta.display_name, meta.description, files)
         detail.normalized_from = meta.normalized_from
         return detail
@@ -180,7 +181,7 @@ class SkillService:
     async def update_from_upload(self, tenant_id: int, name: str, filename: str, data: bytes) -> SkillDetail:
         """Whole-bundle replacement; frontmatter name (after normalization) must equal the path name."""
         skill = await self._get_or_404(name)
-        meta, files = self._parse_upload(filename, data)
+        meta, files = self._parse_upload(filename, data, max_size=await resolve_skill_upload_limit())
         if meta.name != name:
             raise SkillValidationError(msg=f"frontmatter name '{meta.name}' must equal skill ID '{name}'")
         await self._check_duplicate(name, meta.display_name, exclude_id=skill.id)
@@ -215,8 +216,10 @@ class SkillService:
             raise SkillNotFoundError()
         return skill
 
-    def _parse_upload(self, filename: str, data: bytes) -> tuple[SkillMeta, dict[str, bytes]]:
-        if len(data) > MAX_BUNDLE_SIZE:
+    def _parse_upload(
+        self, filename: str, data: bytes, *, max_size: int = MAX_BUNDLE_SIZE
+    ) -> tuple[SkillMeta, dict[str, bytes]]:
+        if len(data) > max_size:
             raise SkillFileTooLargeError()
         lower = (filename or "").lower()
         if lower.endswith(_ARCHIVE_SUFFIXES):

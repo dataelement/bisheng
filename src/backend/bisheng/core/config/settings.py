@@ -440,6 +440,11 @@ class LinsightConf(BaseModel):
         description="L2 truncation guard: max times to retry a model call whose tool-call arguments were "
         "cut off by finish_reason=length (with a 'write in smaller parts' corrective nudge) before giving up.",
     )
+    skill_upload_max_size_mb: int = Field(
+        default=10,
+        ge=1,
+        description="Upload cap for a skill bundle (.md/.zip/.skill), in MB. 系统配置 linsight.skill_upload_max_size_mb",
+    )
     retry_num: int = Field(
         default=3, description="Number of times the model call was retried during the execution of the Ideas task"
     )
