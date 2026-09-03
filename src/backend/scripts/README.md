@@ -31,6 +31,34 @@ Options:
 
 ## Permission Scripts
 
+### `cleanup_f048_public_reader_tuples.py`
+
+Audit and delete stale `user:* public_reader -> knowledge_space:<id>` OpenFGA
+tuples written by older F048 public-space logic. Public square discovery is no
+longer a permission grant, so the hotfix model ignores these tuples; this
+script physically removes the old Store data after review.
+
+Run dry-run first from `src/backend/` with the live `config`:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python scripts/cleanup_f048_public_reader_tuples.py
+```
+
+The dry-run prints `store_id`, `model_id`, `stale_tuple_count`, the exact tuple
+list, and `cleanup_checksum`. Apply requires copying both confirmations from
+the immediately preceding dry-run:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/cleanup_f048_public_reader_tuples.py \
+  --apply \
+  --confirm-store-id <store-id> \
+  --confirm-cleanup-checksum <cleanup-checksum>
+```
+
+Use repeated `--object knowledge_space:<id>` flags for a scoped cleanup. Apply
+exits without deleting if the Store ID or checksum does not match.
+
 ### `reconcile_f048_visible_projection.py`
 
 Audit and repair environments that already completed an older F048 data
