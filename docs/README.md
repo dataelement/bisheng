@@ -9,6 +9,7 @@
 | [`constitution.md`](constitution.md) | 架构铁律 C1–C7(双 DB / 多租户 / 权限 / 分层 / 错误码 / 安全)——不可违反 |
 | [`SDD-Guide.md`](SDD-Guide.md) | 开发流程总纲:流程分级、★ 暂停点、偏差处理、测试分层、harness 现状 |
 | `../AGENTS.md` | 全局 agent 规则入口(各子项目规则按目录自动加载) |
+| [`cofco-merge-playbook.md`](cofco-merge-playbook.md) | **中粮分支合并手册**:合并顺序、必冲突清单与处理原则、验证清单。只在 `feat/cofco-909-3.0.0-beta1` 维护,合并前必读 |
 
 ## 架构(子系统深度)
 
