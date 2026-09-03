@@ -8,7 +8,9 @@
  * after the old TaskFlow stops rendering.
  */
 import { OctagonX } from 'lucide-react';
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { NotificationSeverity } from '~/common';
+import { ChatErrorCard } from '~/components/ChatErrorCard';
 import { SopStatus } from '~/store/linsight';
 import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPanel';
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
@@ -16,6 +18,7 @@ import { WorkspaceDrawer } from '~/components/Linsight/Artifacts/WorkspaceDrawer
 import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
 import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
 import { TaskModeInput } from '~/components/Linsight/Input/TaskModeInput';
+import { getRecoveryModelCandidates } from '~/components/modelRateLimitRecoveryDialogHelpers';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
 import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
@@ -23,6 +26,7 @@ import { useAutoScroll } from '~/hooks/useAutoScroll';
 import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { resolveDisplayedModelRateLimitState } from '~/hooks/queries/endpoints/modelRateLimitPolling';
+import { useToastContext } from '~/Providers';
 import { BreathingRow } from './BreathingRow';
 import { ClarifyCard } from './ClarifyCard';
 import { ConversationRound } from './ConversationRound';
@@ -31,7 +35,6 @@ import { QueueCard } from './QueueCard';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { ResultPanel } from './ResultPanel';
 import { TaskPanel } from './TaskPanel';
-import { ChatErrorCard } from '~/components/ChatErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import { ExecutionLiveContext } from './executionLive';
 import { findPendingUserInput, hasRenderableTimeline, isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
@@ -54,6 +57,7 @@ interface ExecutionFlowProps {
 
 export function ExecutionFlow({ versionId, conversationId, isSharePage = false, readOnly = false, artifactsPanel }: ExecutionFlowProps) {
     const localize = useLocalize();
+    const { showToast } = useToastContext();
     const { getLinsight, continueConversation, updateLinsight } = useLinsightManager();
     // Mount the WS pump here (the legacy TaskFlow used to own it).
     const { stop, sendInput } = useLinsightWebSocket(versionId);
@@ -66,6 +70,47 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
         rateLimitInfo?.model_id,
         rateLimitInfo?.rate_limit_state,
     );
+    const switchModelOptions = useMemo(
+        () => getRecoveryModelCandidates(bsConfig?.models ?? [], rateLimitInfo?.model_id ?? ''),
+        [bsConfig?.models, rateLimitInfo?.model_id],
+    );
+    const [retrying, setRetrying] = useState(false);
+    const [selectedModelId, setSelectedModelId] = useState(
+        linsight?.model == null ? undefined : String(linsight.model),
+    );
+    const recoveryPendingRef = useRef(false);
+
+    const handleRetry = async () => {
+        if (!linsight?.question || recoveryPendingRef.current) return;
+        recoveryPendingRef.current = true;
+        setRetrying(true);
+        try {
+            await continueConversation(versionId, linsight.question);
+        } finally {
+            recoveryPendingRef.current = false;
+            setRetrying(false);
+        }
+    };
+
+    const handleSwitchModel = async (targetModelId: string) => {
+        if (!linsight?.question || recoveryPendingRef.current) return;
+        recoveryPendingRef.current = true;
+        setRetrying(true);
+        try {
+            const accepted = await continueConversation(versionId, linsight.question, targetModelId);
+            if (accepted) {
+                setSelectedModelId(targetModelId);
+            } else {
+                showToast?.({
+                    message: localize('com_message.switch_rejected'),
+                    severity: NotificationSeverity.ERROR,
+                });
+            }
+        } finally {
+            recoveryPendingRef.current = false;
+            setRetrying(false);
+        }
+    };
     // On reload, session-level steps come back inside the "执行准备" pseudo-task;
     // lift them out so the rebuilt view matches the live one (inline + IntentRow).
     const { tasks, sessionSteps } = splitSessionPseudoTask<ExecTask>(
@@ -243,13 +288,20 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                             onRetry={
                                 isSharePage || readOnly || !linsight?.question
                                     ? undefined
-                                    : () => continueConversation(versionId, linsight.question)
+                                    : handleRetry
                             }
+                            retrying={retrying}
                             rateLimitState={
                                 rateLimitInfo?.error_type === 'rate_limit'
                                     ? displayedRateLimitState
                                     : undefined
                             }
+                            onSwitchModel={
+                                isSharePage || readOnly || rateLimitInfo?.error_type !== 'rate_limit'
+                                    ? undefined
+                                    : handleSwitchModel
+                            }
+                            switchModelOptions={switchModelOptions}
                         />
                     )}
                     {stopped && !linsight?.taskError && (
@@ -314,6 +366,8 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                         // (same session_version + agent thread) instead of starting
                         // a new session. versionId is the live session_version id.
                         onFollowUp={(question) => continueConversation(versionId, question)}
+                        selectedModelId={selectedModelId}
+                        onSelectedModelChange={setSelectedModelId}
                     />
                 )}
             </div>

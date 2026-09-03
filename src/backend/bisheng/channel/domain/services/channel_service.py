@@ -2568,6 +2568,22 @@ class ChannelService:
             action="visible",
         )
 
+        # The list is gated exactly like a single article (get_article_detail): an ACTIVE
+        # member, or someone granted view_channel via ReBAC / admin rank. Without this a
+        # former member — or anyone holding the channel id — could still page through the
+        # titles and summaries of a review-join channel: the detail endpoint said no, the
+        # list said yes. A PENDING applicant resolves to no membership here and stays out.
+        if login_user is not None:
+            current_membership = await self.space_channel_member_repository.find_membership(
+                business_id=channel_id,
+                business_type=BusinessTypeEnum.CHANNEL,
+                user_id=login_user.user_id,
+            )
+            if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
+                permission_ids = await self._get_channel_permission_ids(channel_id, login_user, current_membership)
+                if "view_channel" not in permission_ids:
+                    raise ChannelAccessDeniedError(msg="You do not have permission to view this channel")
+
         # 2. Determine info source list
         channel_source_ids = channel.source_list or []
         if source_ids:

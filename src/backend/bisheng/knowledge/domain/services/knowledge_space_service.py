@@ -2465,47 +2465,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             effective_tenant_id = self._file_change_visibility_service().require_explicit_tenant()
 
-            # 存在异常 only counts files the *current user* may see. A viewer cannot see
-            # other people's failed uploads, nor anything a pending file-change request
-            # hides, so a folder must not light up over rows invisible to them. The
-            # aggregate below says whether anything abnormal exists at all; only then is
-            # the dearer visibility pass worth running. The permission context is built
-            # once per space and shared across that space's folders.
-            permission_contexts: dict[int, dict] = {}
-            excluded_ids = file_change_excluded_ids or set()
-
-            async def visible_abnormal_exists(
-                knowledge_id: int,
-                prefix: str,
-                abnormal_statuses: set[int],
-            ) -> bool:
-                candidates_stmt = select(KnowledgeFile).where(
-                    KnowledgeFile.tenant_id == effective_tenant_id,
-                    KnowledgeFile.knowledge_id == knowledge_id,
-                    KnowledgeFile.file_type == FileType.FILE.value,
-                    col(KnowledgeFile.status).in_(sorted(abnormal_statuses)),
-                    or_(
-                        col(KnowledgeFile.file_level_path) == prefix,
-                        col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
-                    ),
-                )
-                async with get_async_db_session() as session:
-                    candidates = [
-                        row
-                        for row in (await session.exec(candidates_stmt)).all()
-                        if int(row.id) not in excluded_ids
-                    ]
-                if not candidates:
-                    return False
-                if knowledge_id not in permission_contexts:
-                    permission_contexts[knowledge_id] = await self._build_child_permission_context(knowledge_id)
-                visible = await self._filter_visible_child_items(
-                    candidates,
-                    space_id=knowledge_id,
-                    context=permission_contexts[knowledge_id],
-                )
-                return bool(visible)
-
             folders = [f for f in res if f.file_type == FileType.DIR]
             folder_scopes = {
                 int(folder.id): (
@@ -2569,15 +2528,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 KnowledgeFileStatus.FAILED.value,
                 KnowledgeFileStatus.VIOLATION.value,
             }
-            # What the folder rollup calls 存在异常 — everything needing the user to step
-            # in. Deliberately wider than retryable_statuses: a timed-out file is an
-            # anomaly the folder must surface, but batch retry does not act on it, so the
-            # display signal and the retry signal stay separate instead of one doing
-            # double duty.
+            # What the folder rollup calls "存在异常" — everything needing the user to step in.
+            # Deliberately wider than retryable_statuses: a timed-out file is an anomaly the
+            # folder must surface, but batch retry does not act on it, so the display signal and
+            # the retry signal stay separate instead of one doing double duty.
             abnormal_statuses = retryable_statuses | {KnowledgeFileStatus.TIMEOUT.value}
             raw_counts = {
-                folder_id: {"success": 0, "processing": 0, "failed": 0, "abnormal": 0}
-                for folder_id in folder_scopes
+                folder_id: {"success": 0, "processing": 0, "failed": 0, "abnormal": 0} for folder_id in folder_scopes
             }
             for folder_id, status, count in aggregate_rows:
                 normalized_folder_id = int(folder_id)
@@ -2585,7 +2542,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     raw_counts[normalized_folder_id]["success"] += int(count)
                 elif status in in_progress_statuses:
                     raw_counts[normalized_folder_id]["processing"] += int(count)
-                elif status in retryable_statuses:
+                if status in retryable_statuses:
                     raw_counts[normalized_folder_id]["failed"] += int(count)
                 # Not an elif: the abnormal set overlaps retryable rather than excluding it.
                 if status in abnormal_statuses:
@@ -2598,27 +2555,59 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         continue
                     if normalized_path != prefix and not normalized_path.startswith(f"{prefix}/"):
                         continue
+                    counters = []
                     if status == KnowledgeFileStatus.SUCCESS.value:
-                        counter = "success"
+                        counters.append("success")
                     elif status in in_progress_statuses:
-                        counter = "processing"
-                    elif status in retryable_statuses:
-                        counter = "failed"
-                    else:
-                        counter = None
-                    if counter is not None:
-                        raw_counts[folder_id][counter] = max(0, raw_counts[folder_id][counter] - 1)
-                    # A hidden TIMEOUT row carries no counter of its own but still has to
-                    # come off the abnormal tally, or the folder keeps its 存在异常 mark.
+                        counters.append("processing")
+                    if status in retryable_statuses:
+                        counters.append("failed")
                     if status in abnormal_statuses:
-                        raw_counts[folder_id]["abnormal"] = max(0, raw_counts[folder_id]["abnormal"] - 1)
+                        counters.append("abnormal")
+                    if not counters:
+                        continue
+                    for counter in counters:
+                        raw_counts[folder_id][counter] = max(0, raw_counts[folder_id][counter] - 1)
+
+            # 存在异常 only counts files the *current user* may see. A viewer or editor
+            # cannot see other people's failed uploads in the listing, so a folder must
+            # not light up over files that are invisible to them. The check reuses the
+            # listing's own visibility rule (_filter_visible_child_items) so both agree;
+            # the permission context is built once per space and shared across folders.
+            # The aggregate above says whether anything abnormal exists at all; only then
+            # is this (dearer) visibility pass worth running.
+            permission_contexts: dict[int, dict] = {}
+            hidden_ids = set(file_change_excluded_ids or set())
+
+            async def visible_abnormal_exists(knowledge_id: int, prefix: str) -> bool:
+                candidates_stmt = select(KnowledgeFile).where(
+                    KnowledgeFile.tenant_id == effective_tenant_id,
+                    KnowledgeFile.knowledge_id == knowledge_id,
+                    KnowledgeFile.file_type == FileType.FILE.value,
+                    col(KnowledgeFile.status).in_(sorted(abnormal_statuses)),
+                    or_(
+                        col(KnowledgeFile.file_level_path) == prefix,
+                        col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
+                    ),
+                )
+                async with get_async_db_session() as session:
+                    candidates = [row for row in (await session.exec(candidates_stmt)).all() if row.id not in hidden_ids]
+                if not candidates:
+                    return False
+                if knowledge_id not in permission_contexts:
+                    permission_contexts[knowledge_id] = await self._build_child_permission_context(knowledge_id)
+                visible = await self._filter_visible_child_items(
+                    candidates, space_id=knowledge_id, context=permission_contexts[knowledge_id]
+                )
+                return bool(visible)
 
             for folder_id, (knowledge_id, prefix) in folder_scopes.items():
                 counts = raw_counts[folder_id]
+                has_abnormal = counts["abnormal"] > 0 and await visible_abnormal_exists(knowledge_id, prefix)
                 folder_counts[folder_id] = {
                     "has_failed_files": counts["failed"] > 0,
-                    "has_abnormal_files": counts["abnormal"] > 0
-                    and await visible_abnormal_exists(knowledge_id, prefix, abnormal_statuses),
+                    # Drives the folder's 存在异常 pill; see abnormal_statuses above.
+                    "has_abnormal_files": has_abnormal,
                     "success_file_num": counts["success"],
                     "processing_file_num": counts["processing"],
                 }

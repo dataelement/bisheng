@@ -17,6 +17,7 @@ import { Outlined } from 'bisheng-icons';
 import { useState } from 'react';
 import { useLocalize } from '~/hooks';
 import { ServiceBusyNotice } from '~/components/ServiceBusyNotice';
+import type { WorkbenchModelOption } from '~/components/Chat/ModelAvailabilityOption';
 
 interface ChatErrorCardProps {
     /** stable classification from the backend (error_message event / SSE error `data.error_type`) */
@@ -32,7 +33,10 @@ interface ChatErrorCardProps {
     /** disables the retry button + spins its icon while a retry is in flight */
     retrying?: boolean;
     rateLimitState?: 'normal' | 'recovering' | 'busy';
-    onSwitchModel?: () => void;
+    /** Fires the model switch with the id picked from the dropdown. */
+    onSwitchModel?: (modelId: string) => void;
+    /** Candidate models for the switch-model dropdown (pre-filtered). */
+    switchModelOptions?: WorkbenchModelOption[];
     onLater?: () => void;
 }
 
@@ -83,19 +87,34 @@ export function ChatErrorCard({
     retrying,
     rateLimitState,
     onSwitchModel,
+    switchModelOptions,
     onLater,
 }: ChatErrorCardProps) {
     const localize = useLocalize();
     const [showDetail, setShowDetail] = useState(false);
 
-    const isRecoveryRejected = errorType === 'recovery_rejected';
+    // Recovery rejected = the model is STILL rate-limited after a retry, so it
+    // reads as the same busy notice: standard title, the backend's own copy as
+    // the body, and the full retry / switch-model affordances kept available.
+    if (errorType === 'recovery_rejected') {
+        return (
+            <ServiceBusyNotice
+                title={localize('com_message.rate_limit_title')}
+                desc={fallbackMessage || ''}
+                onRetry={onRetry}
+                retrying={retrying}
+                onSwitchModel={onSwitchModel}
+                switchModelOptions={switchModelOptions}
+                onLater={onLater}
+            />
+        );
+    }
+
     const key = errorType && KNOWN_TYPES.has(errorType) ? errorType : 'unknown';
-    const title = isRecoveryRejected
-        ? (fallbackMessage || '')
-        : localize(`com_linsight_error_title_${key}`);
-    const desc = isRecoveryRejected ? '' : localize(`com_linsight_error_desc_${key}`);
-    const hint = isRecoveryRejected ? '' : localize(`com_linsight_error_hint_${key}`);
-    const rawDetail = detail || (isRecoveryRejected ? '' : fallbackMessage) || '';
+    const title = localize(`com_linsight_error_title_${key}`);
+    const desc = localize(`com_linsight_error_desc_${key}`);
+    const hint = localize(`com_linsight_error_hint_${key}`);
+    const rawDetail = detail || fallbackMessage || '';
 
     // Transient → calm neutral notice (with retry where the surface wires it).
     if (TRANSIENT_TYPES.has(key)) {
@@ -113,6 +132,7 @@ export function ChatErrorCard({
                 retrying={retrying}
                 rateLimitState={isRateLimit ? (rateLimitState ?? 'busy') : undefined}
                 onSwitchModel={isRateLimit ? onSwitchModel : undefined}
+                switchModelOptions={isRateLimit ? switchModelOptions : undefined}
                 onLater={isRateLimit ? onLater : undefined}
             />
         );

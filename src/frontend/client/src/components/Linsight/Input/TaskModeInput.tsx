@@ -71,9 +71,12 @@ interface TaskModeInputProps {
     running?: boolean;
     /** Terminate the running task (reuses the WS hook's stop()). */
     onStop?: () => void;
+    /** Optional controlled model selection used by recovery actions outside the input. */
+    selectedModelId?: string;
+    onSelectedModelChange?: (modelId: string) => void;
 }
 
-export function TaskModeInput({ conversationId = 'new', disabled = false, onFollowUp, running = false, onStop }: TaskModeInputProps) {
+export function TaskModeInput({ conversationId = 'new', disabled = false, onFollowUp, running = false, onStop, selectedModelId, onSelectedModelChange }: TaskModeInputProps) {
     const localize = useLocalize();
     // Collapse toolbar labels to icons when the toolbar's own width (not the
     // viewport's) runs short — e.g. once the sidebar opens on a mid-size screen.
@@ -90,7 +93,12 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
     const [skills, setSkills] = useRecoilState(taskModeSkillsState(sessionKey));
 
     const [text, setText] = useState('');
-    const [model, setModel] = useState('');
+    const [internalModel, setInternalModel] = useState('');
+    const model = selectedModelId ?? internalModel;
+    const handleModelChange = useCallback((modelId: string) => {
+        setInternalModel(modelId);
+        onSelectedModelChange?.(modelId);
+    }, [onSelectedModelChange]);
     const [confirmStopOpen, setConfirmStopOpen] = useState(false);
     const [fileUploading, setFileUploading] = useState(false);
     const [attachmentFiles, setAttachmentFiles] = useState<ContextAttachmentFile[]>([]);
@@ -413,7 +421,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                     </div>
 
                     <div className="flex shrink-0 items-center gap-1.5">
-                        <ModelSelector value={model} disabled={disabled} onChange={setModel} />
+                        <ModelSelector value={model} disabled={disabled} onChange={handleModelChange} />
                         {running && onStop ? (
                             // Active execution: the only stop affordance once the
                             // task leaves the queue. Intentionally NOT gated by

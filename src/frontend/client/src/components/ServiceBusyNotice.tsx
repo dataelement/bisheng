@@ -12,6 +12,17 @@ import { Outlined } from 'bisheng-icons';
 import { useState } from 'react';
 import { useLocalize } from '~/hooks';
 import { Button } from '~/components/ui/Button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuTrigger,
+} from '~/components/ui/DropdownMenu';
+import {
+    ModelAvailabilityOption,
+    type WorkbenchModelOption,
+} from '~/components/Chat/ModelAvailabilityOption';
 import { cn } from '~/utils';
 
 /**
@@ -76,8 +87,11 @@ interface ServiceBusyNoticeProps {
     retrying?: boolean;
     /** Model-level state projected by the backend for a rate-limited execution. */
     rateLimitState?: 'normal' | 'recovering' | 'busy';
-    /** Opens the compatible-model chooser. */
-    onSwitchModel?: () => void;
+    /** Fires the model switch immediately with the id picked from the dropdown. */
+    onSwitchModel?: (modelId: string) => void;
+    /** Candidate models for the switch-model dropdown (pre-filtered by the caller);
+        the button only renders when there is at least one. */
+    switchModelOptions?: WorkbenchModelOption[];
     /** Leaves the original request untouched and dismisses any parent UI. */
     onLater?: () => void;
     /** Header icon: the animated 'gauge' (service under load, default) or the
@@ -94,6 +108,7 @@ export function ServiceBusyNotice({
     retrying,
     rateLimitState,
     onSwitchModel,
+    switchModelOptions,
     onLater,
     icon = 'gauge',
     className,
@@ -116,13 +131,15 @@ export function ServiceBusyNotice({
                 : 'com_message.rate_limit_busy_desc',
         )
         : desc;
+    const showSwitchModel = Boolean(
+        onSwitchModel && switchModelOptions && switchModelOptions.length > 0,
+    );
+    const hasActions = Boolean(onRetry || onLater) || showSwitchModel;
 
     // Right-aligned action group. It rides the description's last line when
     // there is no detail disclosure, and the 查看详情 row when there is one —
-    // rendered from this one element so the two placements can't drift. A
-    // rate-limited execution offers two more ways out than a plain failure:
-    // move the same request to another model, or leave it be.
-    const actions = onRetry || onSwitchModel || onLater ? (
+    // rendered from this one element so the two placements can't drift.
+    const actions = hasActions ? (
         <div className="flex shrink-0 items-center gap-2">
             {onRetry && (
                 <Button
@@ -136,16 +153,50 @@ export function ServiceBusyNotice({
                     {localize('com_error_retry')}
                 </Button>
             )}
-            {onSwitchModel && (
-                <Button
-                    color="primary"
-                    variant="filled"
-                    size="small"
-                    disabled={retrying}
-                    onClick={onSwitchModel}
-                >
-                    {localize('com_message.switch_model')}
-                </Button>
+            {onSwitchModel && switchModelOptions && switchModelOptions.length > 0 && (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        {/* `group` lets the caret flip on Radix's open state,
+                            same pattern as SelectTrigger. */}
+                        <Button
+                            color="default"
+                            variant="filled"
+                            size="small"
+                            className="group"
+                            disabled={retrying}
+                        >
+                            {localize('com_message.switch_model')}
+                            <Outlined.Down
+                                size={14}
+                                className="transition-transform group-data-[state=open]:rotate-180"
+                            />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    {/* Cap the panel so a long model description truncates
+                        (ModelAvailabilityOption handles the ellipsis). */}
+                    <DropdownMenuContent
+                        align="start"
+                        className="max-w-[360px]"
+                        // Radix returns focus to the trigger on close, which lights
+                        // up the button's focus ring after a mouse interaction —
+                        // suppress it (same fix as ChatKnowledge / SaveAsButton).
+                        onCloseAutoFocus={(e) => e.preventDefault()}
+                    >
+                        {/* Caption line above the choices: picking one switches
+                            AND retries in a single step. */}
+                        <DropdownMenuLabel className="text-caption font-normal text-text-3">
+                            {localize('com_message.switch_model_and_retry')}
+                        </DropdownMenuLabel>
+                        {switchModelOptions.map((model) => (
+                            <DropdownMenuItem
+                                key={String(model.id)}
+                                onSelect={() => onSwitchModel(String(model.id))}
+                            >
+                                <ModelAvailabilityOption model={model} />
+                            </DropdownMenuItem>
+                        ))}
+                    </DropdownMenuContent>
+                </DropdownMenu>
             )}
             {onLater && (
                 <Button
@@ -178,7 +229,9 @@ export function ServiceBusyNotice({
                         row, bottom-aligned so they read as centered on its LAST
                         line (24px button ≈ the ~23px line box). */}
                     <div className={cn('flex items-end gap-3', displayTitle && 'mt-1')}>
-                        <p className="min-w-0 flex-1 leading-relaxed text-text-3">{displayDescription}</p>
+                        <p className="min-w-0 flex-1 leading-relaxed text-text-3">
+                            {displayDescription}
+                        </p>
                         {!detail && actions}
                     </div>
 

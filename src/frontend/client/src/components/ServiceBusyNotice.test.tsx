@@ -24,8 +24,22 @@ jest.mock('~/hooks', () => ({
 }));
 
 jest.mock('~/components/ui/Button', () => ({
-  Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
+  // Mirrors the real Button's contract for what these tests assert on: the
+  // design-system props are consumed (not spread onto the DOM node) and
+  // `loading` surfaces as aria-busy + blocked interaction, same as @bisheng/ui.
+  Button: ({
+    children,
+    icon,
+    loading,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    icon?: React.ReactNode;
+    loading?: boolean;
+  }) => (
+    <button aria-busy={loading || undefined} disabled={loading || props.disabled} {...props}>
+      {icon}
+      {children}
+    </button>
   ),
 }));
 
@@ -43,11 +57,11 @@ describe('ServiceBusyNotice', () => {
     expect(markup).not.toContain('text-red');
   });
 
-  it('disables retry while the recovery command is pending', () => {
+  it('blocks retry while the recovery command is pending', () => {
     const markup = renderToStaticMarkup(
       <ServiceBusyNotice rateLimitState="busy" onRetry={() => undefined} retrying />,
     );
-    expect(markup).toContain('disabled=""');
+    expect(markup).toContain('aria-busy="true"');
   });
 
   it('never exposes raw provider detail for a rate-limit error', () => {

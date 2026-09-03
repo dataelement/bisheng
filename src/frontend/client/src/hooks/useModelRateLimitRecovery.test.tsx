@@ -8,9 +8,7 @@ import {
   buildManualRetryOptions,
   closeSupersededRateLimitRecoveries,
   createRecoveryAttemptController,
-  nextManualRetryCount,
-  shouldOpenModelSwitchRecommendation,
-  shouldRecommendModelSwitch,
+  isRecoveryRequestAccepted,
 } from './useModelRateLimitRecovery';
 
 describe('model rate-limit recovery', () => {
@@ -71,21 +69,11 @@ describe('model rate-limit recovery', () => {
     expect(controller.isActiveAttempt('attempt-old')).toBe(false);
   });
 
-  it('derives the recommendation from page-local manual clicks only', () => {
-    let count = 0;
-    count = nextManualRetryCount(count, 'manual_retry', 'rate_limit');
-    count = nextManualRetryCount(count, 'manual_retry', 'rate_limit');
-    expect(shouldRecommendModelSwitch(count)).toBe(false);
-
-    count = nextManualRetryCount(count, 'manual_retry', 'rate_limit');
-    expect(shouldRecommendModelSwitch(count)).toBe(true);
-    expect(nextManualRetryCount(count, 'switch_model')).toBe(0);
-  });
-
-  it('counts only retries that finish with another rate-limit event', () => {
-    expect(nextManualRetryCount(2, 'manual_retry', 'rate_limit')).toBe(3);
-    expect(nextManualRetryCount(2, 'manual_retry', undefined)).toBe(0);
-    expect(nextManualRetryCount(2, 'manual_retry', 'recovery_rejected')).toBe(0);
+  it('treats only recovery rejection as an unaccepted recovery request', () => {
+    expect(isRecoveryRequestAccepted('recovery_rejected')).toBe(false);
+    expect(isRecoveryRequestAccepted('auth_error')).toBe(true);
+    expect(isRecoveryRequestAccepted('rate_limit')).toBe(true);
+    expect(isRecoveryRequestAccepted(undefined)).toBe(true);
   });
 
   it('retries with the model currently selected on the page', () => {
@@ -97,26 +85,6 @@ describe('model rate-limit recovery', () => {
       action: 'manual_retry',
       targetModelId: undefined,
     });
-  });
-
-  it('waits for the matching retry result before opening the recommendation', () => {
-    const state = {
-      errorType: 'rate_limit',
-      pending: false,
-      recommended: true,
-      eventAttemptId: 'attempt-3',
-      activeAttemptId: 'attempt-3',
-    };
-    expect(shouldOpenModelSwitchRecommendation(state)).toBe(true);
-    expect(shouldOpenModelSwitchRecommendation({ ...state, pending: true })).toBe(false);
-    expect(shouldOpenModelSwitchRecommendation({
-      ...state,
-      eventAttemptId: 'attempt-old',
-    })).toBe(false);
-    expect(shouldOpenModelSwitchRecommendation({
-      ...state,
-      errorType: 'timeout',
-    })).toBe(false);
   });
 
   it('closes old recovery actions when a later user request starts', () => {

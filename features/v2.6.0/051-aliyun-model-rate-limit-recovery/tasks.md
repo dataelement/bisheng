@@ -3,7 +3,7 @@
 **关联规格**: [spec.md](./spec.md)  
 **关联设计**: [design.md](./design.md)  
 **版本**: v2.6.0（cofco 分支）  
-**任务基线**: 2026-08-28 最终确认版
+**任务基线**: 2026-09-02 任务模式换模增量确认版
 
 ---
 
@@ -11,16 +11,15 @@
 
 | 步骤 | 状态 | 备注 |
 |---|---|---|
-| spec.md | ✅ 已评审 | 最终口径于 2026-08-28 确认 |
-| design.md | ✅ 已评审 | observer-not-interceptor 设计于 2026-08-28 确认 |
-| tasks.md | ✅ 已重新拆解 | 已移除旧的任务 429 旁路和旧 probe 参数 |
-| 实现 | 🟡 核心实现完成，交付验证待收口 | 28 / 31 完成；T029–T031 的剩余边界见各任务说明 |
+| spec.md | ✅ 已评审 | 任务模式换模增量口径于 2026-09-02 确认 |
+| design.md | ✅ 已评审 | 既有 continue 可选 model_id、双 carrier 联动和失败回滚于 2026-09-02 确认 |
+| tasks.md | ✅ 已同步 | 新增 T032–T035；重新打开 T028–T031 验证门 |
+| 实现 | ✅ 增量已实施 | T032–T035 已完成；T028/T029 自动化验证通过，T030 真实环境 E2E 待执行 |
 
 当前剩余项：
 
-- T029：Client lint、专项单测和 i18n 已通过；全量 strict typecheck 仍被两个与 F051 无关的仓库基线错误阻断。
-- T030：外部 harness 测试已收集并正确跳过；尚未配置真实 Redis/Celery/fake provider 执行环境，手工清单未执行。
-- T031：arch-guard 已通过；等待 T029/T030 收口后再标记最终交付审查完成。
+- T030：在提供完整 Redis/Celery/Linsight worker/fake provider case 的隔离环境执行 15 个外部 E2E；本地已成功收集，因未配置 harness 环境变量全部按设计跳过。
+- T031：真实环境 E2E 完成后执行最终交付审查；当前 arch-guard、diff check 和增量代码审查已完成。
 
 ---
 
@@ -30,11 +29,13 @@
 - 后端遵循 test-first：先让配对测试证明旧实现不满足新契约，再修改实现；不得先把现有测试改成通过错误行为。
 - 新后端测试位于 <code>src/backend/test/&lt;module&gt;/</code>；不得在 test 根目录新增文件。
 - F051 是 observer，不是 interceptor。任何分类、Redis、Celery、日志或投影故障都不得改变原异常、原调用次数、原任务重试或原失败处理。
-- 任务模式 429 必须经过既有 <code>classify_behavior → retry/degrade → _handle_task_failure → continueConversation</code> 链路，不得保留 provider-aware fail-fast guard。
+- 任务模式 429 必须经过既有 <code>classify_behavior → retry/degrade → _handle_task_failure → continueConversation</code> 链路，不得保留 provider-aware fail-fast guard；普通 Retry 不携带 model_id。
+- 任务换模只扩展既有 continue 的可选 <code>model_id</code>：更新现有 session version.model 后投递原 <code>continue_question</code>，不得新增 recovery endpoint、queue 字段、checkpoint 分支、session version 或执行实体。
+- 换模校验、入队或网络失败必须保留原失败轮次、原 status、原 model 和输入框选择；不得永久停留 IN_PROGRESS。
 - 模型健康状态继续由既有调用装饰器维护；Redis 只保存限流展示状态，两者不得互相推导。
 - probe task body 只含 <code>model_id/probe_token/probe_attempt</code>；<code>tenant_id</code> 只走可信 Celery header，version 只保存在 Redis。
 - 后台 probe 不得接收、查询、枚举或调度 execution/session/chat/prompt，不得恢复用户会话。
-- 不新增 <code>model_call_execution</code>、恢复状态表或后端三次计数；页面刷新后允许限流卡和次数消失。
+- 不新增 <code>model_call_execution</code>、恢复状态表或前后端手动重试计数；页面刷新后允许限流卡消失。
 - 日常、知识、频道的限流失败保留原用户消息，不写失败回答；成功恢复只写一条正常回答。
 - Client 只使用 react-query v4 和页面局部状态，不新增 Recoil atom、Context 或第三方状态库。
 - 新文案与错误码同时更新 zh-Hans/en/ja 源文件并通过生成流程；不得手改生成产物。
@@ -48,15 +49,15 @@
 - [x] **T001：当前实现与最终设计差异清单**
   **文件**: 本 Feature 涉及的全部 staged、unstaged、untracked 文件
   **逻辑**: 以 design §2–§4 为唯一判据，列出需保留、需修改、需删除的现有实现；重点定位 provider-aware task guard、<code>status_version</code> probe body、缺失 <code>probe_token</code>、恢复拒绝 SSE 和前端终态映射。
-  **验证**: 差异清单必须逐项映射到 T002–T031，不允许以旧 tasks 的完成状态替代证据。
-  **覆盖 AC**: AC-08, AC-21, AC-24, AC-27, AC-34, AC-55, AC-56
+  **验证**: 差异清单必须逐项映射到 T002–T035，不允许以旧 tasks 的完成状态替代证据。
+  **覆盖 AC**: AC-08, AC-21, AC-27, AC-34, AC-55, AC-56
   **依赖**: 无
 
 - [x] **T002：持久化与历史聚合零新增审计**
   **文件**: <code>src/backend/bisheng/llm/</code>、四入口会话模型和删除链路
   **逻辑**: 确认没有 execution ORM/DAO/DDL、会话限流聚合器、会话扫描或删除联动；原请求只来自既有 ChatMessage 或 Linsight session version。
   **验证**: 全仓搜索不存在 F051 execution 实体、受限会话集合和 probe 到业务恢复器的依赖。
-  **覆盖 AC**: AC-24, AC-25, AC-30, AC-45, AC-51, AC-56
+  **覆盖 AC**: AC-27, AC-30, AC-45, AC-51, AC-56
   **依赖**: T001
 
 ---
@@ -139,14 +140,14 @@
 - [x] **T013：任务最终失败与用户 Retry 回归测试**
   **文件**: <code>src/backend/test/linsight/test_rate_limit_recovery.py</code>、<code>src/backend/test/linsight/test_hitl_worker.py</code>
   **断言**: 自动重试用尽后仍写既有 status/output_result/失败轮次/错误事件并收敛未完成任务；只允许附加标准限流展示字段；用户 Retry 仍以原 sessionVersionId/question 进入 continueConversation/continue_question。
-  **覆盖 AC**: AC-22, AC-23, AC-24, AC-25, AC-26
+  **覆盖 AC**: AC-22, AC-23, AC-26
   **依赖**: T012
 
 - [x] **T014：任务错误事件最小增强**
   **文件**: <code>src/backend/bisheng/linsight/domain/task_exec.py</code>、<code>src/backend/bisheng/linsight/api/endpoints/linsight.py</code>、<code>src/backend/bisheng/linsight/worker.py</code>
   **逻辑**: 保持既有失败处理和队列协议，只在最终错误事件已确定为临时限流时附加 error_type/rate_limit_state/model_id；不新增 recovery endpoint、command、attempt、checkpoint 或队列字段。
   **测试**: T013 全部通过。
-  **覆盖 AC**: AC-22, AC-23, AC-24, AC-25, AC-55
+  **覆盖 AC**: AC-22, AC-23, AC-26, AC-55
   **依赖**: T013
 
 ---
@@ -155,7 +156,7 @@
 
 - [x] **T015：统一 SSE 与恢复公共契约测试**
   **文件**: <code>src/backend/test/llm/test_model_recovery_service.py</code>、四入口 SSE 测试
-  **断言**: 真实限流使用 12046/rate_limit；原消息失效、权限失败、模型 busy、短锁冲突、checkpoint 不可安全继续统一使用 12048/recovery_rejected；两者都使用统一 SSE envelope，12048 不创建 busy 状态且不伪装为 429。
+  **断言**: 真实限流使用 12046/rate_limit；原消息失效、权限失败、模型 busy、短锁冲突统一使用 12048/recovery_rejected；两者都使用统一 SSE envelope，12048 不创建 busy 状态且不伪装为 429。
   **覆盖 AC**: AC-41, AC-42, AC-43, AC-55
   **依赖**: T008
 
@@ -166,15 +167,15 @@
   **覆盖 AC**: AC-39, AC-40, AC-41, AC-42, AC-43, AC-45, AC-51, AC-55
   **依赖**: T015
 
-- [x] **T017：日常 Agent 原位置恢复测试**
-  **文件**: <code>src/backend/test/workstation/test_daily_model_rate_limit_recovery.py</code>、<code>src/backend/test/workstation/test_daily_rate_limit_checkpoint.py</code>、<code>src/backend/test/workstation/test_stream_interrupt_persist.py</code>
-  **断言**: 首次请求先保存用户消息；限流不写 bot 失败回答；只从以消息 ID 隔离且仍安全 pending 的 checkpoint 继续；已完成工具不重放；checkpoint 不可恢复返回 12048；成功只写一条回答。
+- [x] **T017：日常 Agent 原位置重新调用测试**
+  **文件**: <code>src/backend/test/workstation/test_daily_model_rate_limit_recovery.py</code>、<code>src/backend/test/workstation/test_stream_interrupt_persist.py</code>
+  **断言**: 首次请求先保存用户消息；限流不写 bot 失败回答；Retry 从原 ChatMessage 读取参数并启动新的日常 Agent 调用，不创建或读取 checkpoint、不重复用户消息；成功只写一条回答。
   **覆盖 AC**: AC-37, AC-38, AC-39, AC-42, AC-43, AC-49, AC-50, AC-51, AC-55
   **依赖**: T016
 
 - [x] **T018：日常 Agent RecoveryPort 与 Endpoint 实现**
-  **文件**: <code>src/backend/bisheng/workstation/domain/services/chat_service.py</code>、<code>src/backend/bisheng/workstation/api/endpoints/chat.py</code>、日常 checkpointer
-  **逻辑**: 从原 ChatMessage 读取请求，重新验证 owner/tenant/model；只在安全 pending 节点继续；使用统一 SSE 返回限流、拒绝和成功结果。
+  **文件**: <code>src/backend/bisheng/workstation/domain/services/chat_service.py</code>、<code>src/backend/bisheng/workstation/api/endpoints/chat.py</code>
+  **逻辑**: 从原 ChatMessage 读取请求，重新验证 owner/tenant/model；重新启动一轮日常调用且不依赖 checkpoint；使用统一 SSE 返回限流、拒绝和成功结果。
   **测试**: T017 全部通过。
   **覆盖 AC**: AC-37, AC-38, AC-39, AC-41, AC-42, AC-43, AC-49, AC-50, AC-51, AC-55
   **依赖**: T017
@@ -217,20 +218,20 @@
 
 - [x] **T024：Client 模型状态投影和选择器实现**
   **文件**: Client config types/query、共享 model option renderer、四入口模型选择器
-  **逻辑**: 使用 react-query v4 条件轮询和共享 renderer；换模弹窗排除当前及 busy 模型，普通选择器不禁用 busy；不新增全局状态。
+  **逻辑**: 使用 react-query v4 条件轮询和共享 renderer；常驻换模列表排除当前及 busy 模型，普通选择器不禁用 busy；不新增全局状态。
   **测试**: T023 全部通过。
   **覆盖 AC**: AC-14, AC-15, AC-16, AC-17, AC-18, AC-19, AC-40, AC-52, AC-53, AC-54
   **依赖**: T023
 
-- [x] **T025：Client 限流卡与页面次数测试**
-  **文件**: <code>src/frontend/client/src/hooks/useModelRateLimitRecovery.test.tsx</code>、限流卡/弹窗及三入口集成测试
-  **断言**: Retry 从原消息执行且不新增用户消息；同一页面同一 subject 连续三次 429 才建议换模；成功、非限流错误和确认换模清零；新消息关闭旧操作；迟到 attempt 不覆盖当前 attempt；任务模式不进入该计数。
+- [x] **T025：Client 限流卡与恢复交互测试**
+  **文件**: <code>src/frontend/client/src/hooks/useModelRateLimitRecovery.test.tsx</code>、限流卡及三入口集成测试
+  **断言**: Retry 从原消息执行且不新增用户消息；换模入口常驻且无手动次数/自动弹窗；选择模型同步输入框；普通模型错误只展示原错误卡，只有 recovery_rejected 表示恢复拒绝；新消息关闭旧操作；迟到 attempt 不覆盖当前 attempt。
   **覆盖 AC**: AC-38, AC-39, AC-40, AC-41, AC-43, AC-44, AC-45, AC-46, AC-47, AC-48, AC-49, AC-51
   **依赖**: T020, T024
 
 - [x] **T026：Client 主动恢复交互实现**
-  **文件**: 共享 recovery hook、限流提示组件、换模弹窗及日常/知识/频道接入点
-  **逻辑**: execution_id/subject_id/attempt_id 仅保存在当前页面；pending 时禁重复点击；发送新消息使旧操作失效；页面刷新允许丢失 UI；任务模式仅展示中性繁忙信息并沿用旧 Retry。
+  **文件**: 共享 recovery hook、限流提示组件及日常/知识/频道接入点
+  **逻辑**: execution_id/subject_id/attempt_id 仅保存在当前页面；pending 时禁重复点击；常驻换模入口与输入框模型联动；发送新消息使旧操作失效；页面刷新允许丢失 UI。任务模式在本任务完成时只接入中性繁忙信息和旧 Retry；2026-09-02 新增换模由 T034/T035 独立实施。
   **测试**: T025 全部通过。
   **覆盖 AC**: AC-38, AC-39, AC-40, AC-41, AC-43, AC-44, AC-45, AC-46, AC-47, AC-48, AC-49, AC-51
   **依赖**: T025
@@ -244,35 +245,92 @@
 
 ---
 
-## Wave 6：验证、E2E 与交付
+## Wave 6：任务模式换模增量
+
+- [x] **T032：任务 continue 可选模型契约测试**
+  **文件**: <code>src/backend/test/linsight/test_rate_limit_recovery.py</code>、continue endpoint/workbench service 相关测试
+  **断言**:
+  1. 不传 <code>model_id</code> 时，普通 Retry/后续提问的归属、终态校验、status 更新、queue payload 和 worker 行为与 F035 基线一致。
+  2. 传合法 <code>model_id</code> 时，复用现有租户模型解析、权限、在线状态和任务能力规则，更新同一 session version.model；queue payload 仍只有 <code>session_version_id + continue_question</code>。
+  3. 不存在、无权限、离线或能力不符的目标在更新和 enqueue 前被现有规则拒绝；不创建新 session version、外层 ChatMessage、checkpoint command 或 queue 字段。
+  4. enqueue 失败时，原状态分别为 FAILED/COMPLETED 的用例都恢复 <code>original_status + original_model</code>，不会停在 IN_PROGRESS。
+  5. 目标模型执行后再次 429/失败时，仍进入原自动 retry、失败落档和错误事件。
+  **覆盖 AC**: AC-20–AC-27, AC-54, AC-55, AC-56
+  **依赖**: T014
+  **完成证据（2026-09-02）**: <code>test/linsight/test_rate_limit_recovery.py</code> 11 项通过，覆盖无 model_id、合法换模、目标拒绝、FAILED/COMPLETED 回滚与 endpoint 转发。
+
+- [x] **T033：既有 Linsight continue 增量实现**
+  **文件**: <code>src/backend/bisheng/linsight/api/endpoints/linsight.py</code>、<code>src/backend/bisheng/linsight/domain/services/workbench_impl.py</code>、既有 session version DAO 调用点
+  **逻辑**:
+  1. endpoint 只增加可选 <code>model_id</code> 并委托既有 workbench service；不得新增 recovery endpoint 或 DAO 入口。
+  2. service 完成 owner/terminal 校验，目标模型存在时复用既有任务模型解析规则；记录 original_status/original_model，并用现有批量更新一次写入 IN_PROGRESS + target model。
+  3. 继续调用原 <code>encode_queue_item(session_version_id, continue_question=question)</code>；worker、队列格式和 LangGraph thread/checkpoint 逻辑零修改。
+  4. enqueue 异常时恢复 original_status/original_model，返回现有统一错误并记录不含问题正文的结构化日志。
+  **测试**: T032 全部通过；arch-guard 无新增违规。
+  **覆盖 AC**: AC-23, AC-24, AC-26, AC-27, AC-54, AC-55, AC-56
+  **依赖**: T032
+  **完成证据（2026-09-02）**: endpoint 仅增加可选 <code>model_id</code> 并委托 workbench service；worker、<code>encode_queue_item</code> 参数和 checkpoint 未改动；arch-guard 通过。
+
+- [x] **T034：任务双 carrier 换模交互测试**
+  **文件**: <code>src/frontend/client/src/components/Linsight/Execution/TaskTurnPanel.model-rate-limit.test.tsx</code>、<code>ExecutionFlow</code>/<code>useLinsightManager</code>/<code>api/linsight</code> 相关测试
+  **断言**:
+  1. 独立 <code>ExecutionFlow</code> 与内嵌 <code>TaskTurnPanel</code> 的可操作限流失败都显示 Retry 和常驻换模；分享/历史只读页、非限流错误不显示换模。
+  2. 候选复用现有任务模型列表，排除当前、重复和 recovering/busy；不新增模型集合或能力判断。
+  3. 普通 Retry 调用 continue 时不传 model_id；选择目标后同一 API 携带 model_id，pending 禁止双击且不维护次数/自动弹窗。
+  4. accepted 后把输入框选择同步为 <code>manual=true, mode=task</code>；统一页更新共享 chatModel，独立页同步 TaskModeInput。
+  5. 拒绝、网络错误或 enqueue 失败完整恢复原失败轮次，输入框模型不变；迟到结果不覆盖当前轮次。
+  **覆盖 AC**: AC-24, AC-25, AC-27, AC-45, AC-54, AC-55, AC-56
+  **依赖**: T024, T025, T033
+  **完成证据（2026-09-02）**: Client 5 个专项测试文件共 13 项通过，覆盖双 carrier、只读、候选过滤、API payload、失败轮次恢复和 mode=task 输入模型同步。
+
+- [x] **T035：任务双 carrier 换模实现**
+  **文件**: <code>src/frontend/client/src/api/linsight.ts</code>、<code>src/frontend/client/src/hooks/useLinsightManager.tsx</code>、<code>src/frontend/client/src/components/Linsight/Execution/{ExecutionFlow,TaskTurnPanel}.tsx</code>、<code>src/frontend/client/src/components/Linsight/Input/TaskModeInput.tsx</code> 及共享候选 helper
+  **逻辑**:
+  1. 给 <code>continueLinsight/continueConversation</code> 增加可选目标模型；无目标参数的现有调用和 UI 时序不变。
+  2. 两个 carrier 复用 <code>ChatErrorCard → ServiceBusyNotice</code> 及既有候选过滤，不新增弹窗、恢复 hook 或全局状态。
+  3. 换模分支保存完整本地轮次快照；失败恢复，accepted 后再提交输入框模型与任务模式手动记忆。
+  4. 独立页用最小受控 props 同步 <code>TaskModeInput</code>，不借机重构任务输入框；内嵌页复用现有 chatModel atom。
+  **测试**: T034 全部通过；普通 Retry、普通 follow-up、只读展示和非限流错误回归通过。
+  **覆盖 AC**: AC-23–AC-27, AC-45, AC-54, AC-55, AC-56
+  **依赖**: T034
+  **完成证据（2026-09-02）**: 两个 carrier 复用 <code>ChatErrorCard → ServiceBusyNotice</code>；换模 accepted 后分别同步共享 chatModel/独立 TaskModeInput，拒绝时保留原失败轮次和输入模型。
+
+---
+
+## Wave 7：验证、E2E 与交付
 
 - [x] **T028：后端 focused 回归**
   **验证**: 运行 F051 的 llm/workstation/knowledge/channel/linsight 测试；同时运行既有 Linsight resilience、任务失败处理、模型健康状态测试。单独记录依赖外部中间件而未运行的测试。
-  **完成条件**: 不存在 task 429 旁路测试；probe_token/ABA、observer fail-open、12048 SSE 均有通过证据。
+  **完成条件**: 不存在 task 429 旁路测试；probe_token/ABA、observer fail-open、12048 SSE、continue model_id 与 original status/model 回滚均有通过证据。
   **覆盖 AC**: AC-01–AC-43, AC-49–AC-56
-  **依赖**: T010, T014, T018, T020, T022
+  **依赖**: T010, T018, T020, T022, T033
+  **历史证据**: 2026-09-02 变更前的 focused 回归曾通过；新增 T032/T033 后必须重跑，旧证据不作为本项完成依据。
+  **本次证据（2026-09-02）**: llm/workstation/knowledge/channel/linsight 共 152 项通过；其中 continue 增量专项 11 项通过。
 
-- [ ] **T029：前端质量门**
+- [x] **T029：前端质量门**
   **验证**: 从 <code>src/frontend/</code> 运行 <code>pnpm lint</code>、<code>pnpm typecheck</code>、相关 Client 单测和 <code>pnpm check-i18n</code>；若存在基线问题，分别记录，不得宣称通过。
   **完成条件**: 无新硬编码中文、无新 any、无手改生成 locale、无新增全局状态或 UI 库。
   **覆盖 AC**: AC-14–AC-19, AC-38–AC-55
-  **依赖**: T027
-  **当前证据**: <code>pnpm lint</code>、33 个专项测试、<code>pnpm check-i18n</code> 通过；<code>pnpm typecheck</code> 仅剩 <code>AgentToolSelector.tsx</code> 与 <code>ChatFormTools.tsx</code> 两个非本期基线错误，故本项保持未完成。
+  **依赖**: T027, T035
+  **历史证据**: 变更前 <code>pnpm lint</code>、33 个专项测试、<code>pnpm check-i18n</code> 通过；<code>pnpm typecheck</code> 存在 <code>AgentToolSelector.tsx</code> 与 <code>ChatFormTools.tsx</code> 两个非本期基线错误。新增 T034/T035 后必须重新记录增量结果。
+  **本次证据（2026-09-02）**: Client 完整 lint、<code>pnpm check-i18n</code> 和 13 项新增专项测试通过；typecheck 仍失败于 7 个缺失 Radix 依赖及 <code>AgentToolSelector.tsx</code>、<code>ChatFormTools.tsx</code>、<code>settingsSections.ts</code> 三个非本期文件，本次变更文件无报错。
 
 - [ ] **T030：四入口 E2E 与手工验证**
   **文件**: <code>src/backend/test/e2e/test_e2e_aliyun_model_rate_limit_state.py</code>、<code>src/backend/test/e2e/test_e2e_model_call_recovery.py</code>、<code>e2e-checklist.md</code>
-  **场景**: 日常/知识/频道限流、Retry、三次换模建议、新消息关闭旧操作、后台 probe/TTL 后页面恢复；任务 429 自动重试成功、重试用尽失败、用户 Retry；永久错误和非阿里 429 回归。
+  **场景**: 日常/知识/频道限流、Retry、常驻换模与输入模型联动、新消息关闭旧操作、后台 probe/TTL 后页面恢复；任务 429 自动重试成功、重试用尽失败、普通 Retry、双 carrier 换模成功、目标失效、enqueue 回滚和输入框联动；永久错误和非阿里 429 回归。
   **验证**: 使用 <code>/e2e-test features/v2.6.0/051-aliyun-model-rate-limit-recovery</code>，并记录无法在本地验证的真实 Celery/Redis/供应商场景。
   **覆盖 AC**: AC-01–AC-56
   **依赖**: T028, T029
-  **当前证据**: 两个外部 harness E2E 文件可成功收集；本地因未提供 <code>E2E_F051_STATE_CASES_JSON</code>/<code>E2E_F051_RECOVERY_CASES_JSON</code> 共跳过 14 项。真实环境步骤见 <code>e2e-checklist.md</code>。
+  **历史证据**: 变更前两个外部 harness E2E 文件可成功收集；本地因未提供 <code>E2E_F051_STATE_CASES_JSON</code>/<code>E2E_F051_RECOVERY_CASES_JSON</code> 共跳过 14 项。任务换模场景尚未执行，真实环境步骤见 <code>e2e-checklist.md</code>。
+  **本次证据（2026-09-02）**: 新增 <code>task_continue_switch</code> 外部用例后两个 harness 共 15 项成功收集；本地未配置外部环境变量，15 项全部按设计跳过，未标记为 E2E 通过。
 
 - [ ] **T031：最终架构与代码审查**
   **验证**: 运行 <code>scripts/arch-guard.sh</code>、<code>/code-review --base &lt;目标基线&gt;</code>，逐项复核 design §7.6 完成门槛；确认 spec/design/tasks/release-contract 和实际代码一致。
   **完成条件**: 无未解释 P0/P1；所有完成任务有验证证据；偏差已回写 design 并按需重新确认。
   **覆盖 AC**: AC-01–AC-56
   **依赖**: T030
-  **当前证据**: <code>scripts/arch-guard.sh</code> 已通过；最终状态等待 T029/T030。
+  **历史证据**: 变更前 <code>scripts/arch-guard.sh</code> 已通过；新增 T032–T035 后必须重新执行，最终状态等待 T028–T030。
+  **当前证据（2026-09-02）**: <code>scripts/arch-guard.sh</code>、<code>git diff --check</code> 通过；最终状态仍等待 T030 真实环境验证。
 
 ---
 
@@ -282,10 +340,10 @@
 |---|---|
 | AC-01–AC-11 分类、原链路与健康状态 | T003–T006 |
 | AC-12–AC-19 Redis 状态与页面投影 | T007–T008, T021–T024 |
-| AC-20–AC-27 任务模式保持原样 | T011–T014 |
+| AC-20–AC-27 任务模式原链路与换模 | T011–T014, T032–T035 |
 | AC-28–AC-36 后台 probe | T007–T010 |
 | AC-37–AC-51 非任务当前页面恢复 | T015–T020, T025–T027 |
-| AC-52–AC-56 一致性与降级 | T006, T014, T020, T024, T027–T031 |
+| AC-52–AC-56 一致性与降级 | T006, T014, T020, T024, T027–T035 |
 
 ---
 
@@ -293,7 +351,8 @@
 
 > 只记录已确认设计与实施之间的实际偏差指针；不能用本节推翻 spec/design。
 
-- 暂无。旧 tasks 中“任务 429 跳过 resilience”和 probe body 使用 status_version 的记录已被本版整体替换，不属于可保留偏差。
+- 2026-09-01：T017/T018 从“日常 checkpoint 续跑”调整为“基于原 ChatMessage 重新调用”，已同步更新 spec AC-39/AC-50 与 design 决策 7；用户已明确确认日常模式不采用任务 checkpoint。
+- 2026-09-02：产品新增任务模式换模能力，但明确不引入任务 recovery 状态机。新增 T032–T035，复用既有 continue/session model/queue 协议；旧 T028–T031 验证状态重新打开。
 
 ---
 
@@ -301,4 +360,6 @@
 
 | 日期 | 内容 | 原因 |
 |---|---|---|
+| 2026-09-02 | 新增任务模式换模增量 T032–T035，并重新打开 T028–T031 验证门 | Design 已确认：continue 增加可选 model_id，双 carrier 联动，queue/worker/checkpoint 不变，失败恢复原 status/model |
+| 2026-09-01 | 日常模式 Retry 移除 checkpoint，改为重新执行原问题 | 日常模式不属于任务断点续跑；现场 checkpoint 子图错误导致 recover 返回 200 SSE 后立即失败 |
 | 2026-08-28 | 完整重写 tasks，所有实现状态重置为待重新核验 | spec/design 最终确认后发现旧任务清单仍要求任务 429 旁路并使用旧 probe 参数，不能继续作为执行依据 |

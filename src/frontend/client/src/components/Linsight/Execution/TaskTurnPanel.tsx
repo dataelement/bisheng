@@ -25,13 +25,19 @@ import { OctagonX } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
+import { NotificationSeverity } from '~/common';
+import { ChatErrorCard } from '~/components/ChatErrorCard';
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
 import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils';
+import { getRecoveryModelCandidates } from '~/components/modelRateLimitRecoveryDialogHelpers';
 import { useLocalize } from '~/hooks';
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import { resolveDisplayedModelRateLimitState } from '~/hooks/queries/endpoints/modelRateLimitPolling';
 import { useAutoScroll } from '~/hooks/useAutoScroll';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
 import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
+import { useToastContext } from '~/Providers';
 import { SopStatus } from '~/store/linsight';
 import { BreathingRow } from './BreathingRow';
 import { ClarifyCard } from './ClarifyCard';
@@ -39,7 +45,6 @@ import { QueueCard } from './QueueCard';
 import { ExecutionLiveContext } from './executionLive';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { ResultPanel } from './ResultPanel';
-import { ChatErrorCard } from '~/components/ChatErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
 import { findPendingUserInput, hasRenderableTimeline, isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
@@ -60,11 +65,15 @@ interface TaskTurnPanelProps {
     /** Preview a result document in the chat-embedded inline workspace panel
         (ChatView owns it). A doc link opens the file directly — no drawer. */
     onPreviewFile?: (file: ArtifactFile) => void;
+    /** Keep the shared task input model in sync after a switch is accepted. */
+    onModelChange?: (modelId: string, modelName: string) => void;
 }
 
-export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversationId, answer, readOnly = false, onPreviewFile }: TaskTurnPanelProps) {
+export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversationId, answer, readOnly = false, onPreviewFile, onModelChange }: TaskTurnPanelProps) {
     const localize = useLocalize();
-    const { getLinsight, switchAndUpdateLinsight, updateLinsight } = useLinsightManager();
+    const { showToast } = useToastContext();
+    const { data: bsConfig } = useGetBsConfig();
+    const { continueConversation, getLinsight, switchAndUpdateLinsight, updateLinsight } = useLinsightManager();
     // WS pump — self-guards on status===Running, so mounting it for a completed
     // historical turn is a no-op (no connection opened).
     const { sendInput, stop } = useLinsightWebSocket(versionId);
@@ -111,6 +120,56 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
     const completed = status === SopStatus.completed || status === SopStatus.FeedbackCompleted;
     const stopped = status === SopStatus.Stoped;
     const fileList: ArtifactFile[] = (linsight?.file_list as ArtifactFile[]) || [];
+    const rateLimitInfo = linsight?.taskErrorInfo;
+    const displayedRateLimitState = resolveDisplayedModelRateLimitState(
+        bsConfig?.models,
+        rateLimitInfo?.model_id,
+        rateLimitInfo?.rate_limit_state,
+    );
+    const switchModelOptions = useMemo(
+        () => getRecoveryModelCandidates(bsConfig?.models ?? [], rateLimitInfo?.model_id ?? ''),
+        [bsConfig?.models, rateLimitInfo?.model_id],
+    );
+    const [retrying, setRetrying] = useState(false);
+    const recoveryPendingRef = useRef(false);
+
+    const handleRetry = async () => {
+        if (!linsight?.question || recoveryPendingRef.current) return;
+        recoveryPendingRef.current = true;
+        setRetrying(true);
+        try {
+            await continueConversation(versionId, linsight.question);
+        } finally {
+            recoveryPendingRef.current = false;
+            setRetrying(false);
+        }
+    };
+
+    const handleSwitchModel = async (targetModelId: string) => {
+        if (!linsight?.question || recoveryPendingRef.current) return;
+        recoveryPendingRef.current = true;
+        setRetrying(true);
+        try {
+            const accepted = await continueConversation(versionId, linsight.question, targetModelId);
+            if (accepted) {
+                const selectedModel = bsConfig?.models.find(
+                    (model) => String(model.id) === String(targetModelId),
+                );
+                onModelChange?.(
+                    targetModelId,
+                    selectedModel?.displayName || selectedModel?.name || '',
+                );
+            } else {
+                showToast?.({
+                    message: localize('com_message.switch_rejected'),
+                    severity: NotificationSeverity.ERROR,
+                });
+            }
+        } finally {
+            recoveryPendingRef.current = false;
+            setRetrying(false);
+        }
+    };
 
     const pendingInput = useMemo(
         () => (running ? findPendingUserInput(sessionSteps, tasks) : null),
@@ -233,6 +292,25 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
                     errorType={linsight.taskErrorInfo?.error_type}
                     detail={linsight.taskErrorInfo?.detail}
                     fallbackMessage={linsight.taskError}
+                    onRetry={
+                        readOnly
+                        || linsight.taskErrorInfo?.error_type !== 'rate_limit'
+                        || !linsight.question
+                            ? undefined
+                            : handleRetry
+                    }
+                    retrying={retrying}
+                    rateLimitState={
+                        rateLimitInfo?.error_type === 'rate_limit'
+                            ? displayedRateLimitState
+                            : undefined
+                    }
+                    onSwitchModel={
+                        readOnly || rateLimitInfo?.error_type !== 'rate_limit'
+                            ? undefined
+                            : handleSwitchModel
+                    }
+                    switchModelOptions={switchModelOptions}
                 />
             )}
             {stopped && !linsight.taskError && (

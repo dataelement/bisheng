@@ -19,6 +19,7 @@ import {
     formatTime,
     toggleNav
 } from '~/utils';
+import { getContinueFailureUpdate } from './linsightContinueHelpers';
 
 
 /**
@@ -144,7 +145,12 @@ export const useLinsightManager = () => {
     // F035 多轮对话：在已完成的同一会话里追加新一轮。
     // 复用同一 session_version (versionId) + 同一 agent thread，后端保留全部上下文；
     // 前端把当前轮快照进 history，再清空顶层字段开新轮，WS 事件继续更新顶层（=当前轮）。
-    const continueConversation = useCallback(async (versionId: string, question: string) => {
+    const continueConversation = useCallback(async (
+        versionId: string,
+        question: string,
+        modelId?: string | number,
+    ): Promise<boolean> => {
+        const originalLinsight = linsightMap.get(versionId);
         updateLinsight(versionId, (prev) => ({
             history: [
                 ...(prev.history || []),
@@ -173,12 +179,16 @@ export const useLinsightManager = () => {
             status: SopStatus.Running,
         }));
         try {
-            await continueLinsight(versionId, question);
+            await continueLinsight(versionId, question, modelId);
+            return true;
         } catch (e) {
             console.error('continueLinsight failed :>> ', e);
-            updateLinsight(versionId, { status: SopStatus.Stoped, taskError: String(e) });
+            // Switching is one atomic user action: a rejected switch restores
+            // the full failed round. Plain retry keeps its legacy failure state.
+            updateLinsight(versionId, getContinueFailureUpdate(originalLinsight, modelId, e));
+            return false;
         }
-    }, [updateLinsight]);
+    }, [linsightMap, updateLinsight]);
 
     // 切换当前会话
     const switchSession = useCallback((versionId: string) => {

@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+from contextlib import AsyncExitStack
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
+from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 from bisheng.common.errcode.permission import (
     PermissionDeniedError,
     PermissionVersionConflictError,
@@ -352,29 +354,61 @@ class F048ResourcePermissionApi:
         )
         applied_changes = list(request.changes)
         pending: list = []
-        if self._invite_gate is not None:
-            context = await self._runtime.build_grant_context(actor=actor, target=target)
-            applied_changes, gated = self._invite_gate.select(
-                target=target,
-                actor=actor,
-                changes=request.changes,
-                grants=context.grants,
-            )
-            pending = await self._invite_gate.raise_invites(
-                target=target,
-                actor=actor,
-                changes=gated,
-                models=context.models,
-            )
-            if not applied_changes:
-                # Nothing left to write; report the resource unchanged rather
-                # than issuing an empty mutation.
-                return {
-                    "resource_version": target.resource_version,
-                    "items": await self._current_items(actor=actor, target=target),
-                    "pending_invites": [item.as_dict() for item in pending],
-                }
+        async with AsyncExitStack() as stack:
+            if self._invite_gate is not None:
+                context = await self._runtime.build_grant_context(actor=actor, target=target)
+                applied_changes, gated = self._invite_gate.select(
+                    target=target,
+                    actor=actor,
+                    changes=request.changes,
+                    grants=context.grants,
+                )
+                if gated:
+                    try:
+                        # Held for the rest of the mutation: the scenario cannot be
+                        # switched off between raising the invites and writing the
+                        # changes that were not gated.
+                        await stack.enter_async_context(
+                            self._invite_gate.scenario_guard(tenant_id=int(target.tenant_id)),
+                        )
+                    except ApprovalScenarioDisabledError:
+                        # Confirmation is off, so a personal grant keeps the direct
+                        # semantics it had before the gate existed. Failing here
+                        # instead would leave the grantor unable to grant at all.
+                        applied_changes = [*applied_changes, *gated]
+                        gated = []
+                pending = await self._invite_gate.raise_invites(
+                    target=target,
+                    actor=actor,
+                    changes=gated,
+                    models=context.models,
+                )
+                if not applied_changes:
+                    # Nothing left to write; report the resource unchanged rather
+                    # than issuing an empty mutation.
+                    return {
+                        "resource_version": target.resource_version,
+                        "items": await self._current_items(actor=actor, target=target),
+                        "pending_invites": [item.as_dict() for item in pending],
+                    }
 
+            return await self._write_grant_mutation(
+                target=target,
+                actor=actor,
+                applied_changes=applied_changes,
+                pending=pending,
+                request=request,
+            )
+
+    async def _write_grant_mutation(
+        self,
+        *,
+        target,
+        actor: PermissionActor,
+        applied_changes: list,
+        pending: list,
+        request: GrantMutationRequest,
+    ) -> dict:
         add_count = sum(change.op.value == "ADD" for change in applied_changes)
         source_ids = iter(await self._runtime.allocate_source_ids(add_count))
         canonical: list[CanonicalGrantChange] = []

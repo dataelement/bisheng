@@ -507,20 +507,13 @@
   },
   "com_message": {
     "choose_model": "Choose a model",
+    "document_preview": "Document preview",
     "model_busy_suffix": " · Service busy",
     "rate_limit_busy_desc": "The current model is temporarily busy. You can retry or switch to another model.",
     "rate_limit_recovered_desc": "The current model has recovered. You can retry this request.",
     "rate_limit_recovered_title": "Model service restored",
     "rate_limit_recovering_desc": "The current model is responding slowly. The system is checking for recovery; please wait.",
     "rate_limit_title": "Model service busy",
-    "still_busy_desc": "We recommend switching models. Your input and existing progress will be preserved.",
-    "still_busy_title": "The current model has not recovered",
-    "switch_model": "Switch model",
-    "switch_rejected": "The selected model is currently unavailable. Choose another model.",
-    "try_later": "Try later"
-  },
-  "com_message": {
-    "document_preview": "Document preview",
     "source_empty": "No references yet",
     "source_load_failed": "Failed to load source details",
     "source_loading": "Loading source details...",
@@ -532,7 +525,13 @@
     "source_panel_label": "References",
     "source_type_document": "Document",
     "source_type_web": "Web page",
-    "source_untitled": "Untitled"
+    "source_untitled": "Untitled",
+    "still_busy_desc": "We recommend switching models. Your input and existing progress will be preserved.",
+    "still_busy_title": "The current model has not recovered",
+    "switch_model": "Switch model",
+    "switch_model_and_retry": "Switch model and retry",
+    "switch_rejected": "The selected model is currently unavailable. Choose another model.",
+    "try_later": "Try later"
   },
   "com_message_content_copied": "Content copied",
   "com_notifications_approved": "Approved",

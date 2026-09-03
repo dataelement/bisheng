@@ -18,12 +18,15 @@ from loguru import logger
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.common.errcode.linsight import (
     LinsightFileTooLargeError,
     LinsightFolderDepthExceededError,
     LinsightFolderFileCountExceededError,
     LinsightFolderTotalSizeExceededError,
+    LinsightSessionVersionRunningError,
+    LinsightStartTaskError,
 )
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
@@ -43,6 +46,7 @@ from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecute
 from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersion,
     LinsightSessionVersionDao,
+    SessionVersionStatusEnum,
 )
 from bisheng.linsight.domain.schemas.linsight_schema import (
     DownloadFilesSchema,
@@ -196,6 +200,71 @@ class LinsightWorkbenchImpl:
             temperature=linsight_conf.default_temperature,
         )
         return llm, workbench_conf
+
+    @classmethod
+    async def _validate_continue_model(cls, session_version: LinsightSessionVersion, model_id: str) -> None:
+        """Resolve a replacement model through the existing Linsight access checks."""
+        await LLMService.get_bisheng_linsight_llm(
+            invoke_user_id=session_version.user_id,
+            model_id=model_id,
+            temperature=settings.get_linsight_conf().default_temperature,
+        )
+
+    @classmethod
+    async def _enqueue_continue(cls, session_version_id: str, question: str) -> None:
+        """Keep the existing worker queue contract for both retry variants."""
+        from bisheng.linsight.worker import LinsightQueue, encode_queue_item
+
+        redis_client = await get_redis_client()
+        queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
+        await queue.put(data=encode_queue_item(session_version_id, continue_question=question))
+
+    @classmethod
+    async def continue_conversation(
+        cls,
+        session_version_id: str,
+        question: str,
+        login_user: UserPayload,
+        model_id: str | int | None = None,
+    ) -> None:
+        """Continue a terminal task round, optionally replacing its model first."""
+        session_version = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id=session_version_id)
+        if not session_version:
+            raise NotFoundError()
+        if login_user.user_id != session_version.user_id:
+            raise UnAuthorizedError()
+        if session_version.status not in {
+            SessionVersionStatusEnum.COMPLETED,
+            SessionVersionStatusEnum.FAILED,
+        }:
+            raise LinsightSessionVersionRunningError()
+
+        target_model_id = str(model_id) if model_id is not None else None
+        if target_model_id is not None:
+            await cls._validate_continue_model(session_version, target_model_id)
+
+        original_status = session_version.status
+        original_model = session_version.model
+        await MessageSessionDao.touch_session(session_version.session_id)
+
+        update_kwargs = {"model": target_model_id} if target_model_id is not None else {}
+        await LinsightSessionVersionDao.batch_update_session_versions_status(
+            [session_version_id],
+            SessionVersionStatusEnum.IN_PROGRESS,
+            **update_kwargs,
+        )
+
+        try:
+            await cls._enqueue_continue(session_version_id, question)
+        except Exception as exc:
+            logger.exception("Failed to enqueue Linsight continuation for session_version={}", session_version_id)
+            rollback_kwargs = {"model": original_model} if target_model_id is not None else {}
+            await LinsightSessionVersionDao.batch_update_session_versions_status(
+                [session_version_id],
+                original_status,
+                **rollback_kwargs,
+            )
+            raise LinsightStartTaskError(exception=exc) from exc
 
     @classmethod
     async def human_participate_add_file(

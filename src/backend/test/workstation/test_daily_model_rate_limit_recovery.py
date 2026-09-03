@@ -2,6 +2,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from fastapi.responses import StreamingResponse
 
 from bisheng.llm.domain.services.model_rate_limit import (
     ClaimedAttempt,
@@ -28,6 +29,7 @@ class FakeRecoveryService:
     def __init__(self, *, should_execute: bool = True) -> None:
         self.should_execute = should_execute
         self.claims = []
+        self.released = []
 
     async def claim_recovery(
         self,
@@ -59,6 +61,9 @@ class FakeRecoveryService:
             action=command.action,
             should_execute=self.should_execute,
         )
+
+    async def release_recovery_lock(self, attempt, *, tenant_id, user_id):
+        self.released.append((attempt.attempt_id, tenant_id, user_id))
 
 
 class FakeDailyPort:
@@ -141,6 +146,7 @@ async def test_recovery_setup_failure_is_returned_without_persisting_attempt_sta
         await service.recover(command, login_user=user())
 
     assert port.resumed == []
+    assert executions.released == [("attempt-2", 2, 9)]
 
 
 async def test_recovery_validation_failure_returns_standard_sse(monkeypatch) -> None:
@@ -179,6 +185,65 @@ async def test_recovery_validation_failure_returns_standard_sse(monkeypatch) -> 
     assert payload["data"]["error_type"] == "recovery_rejected"
 
 
+async def test_recovery_endpoint_releases_short_lock_after_stream_finishes(monkeypatch) -> None:
+    released = []
+
+    class TrackingRecoveryService:
+        async def release_lock_after_stream(self, stream, attempt, *, tenant_id, user_id):
+            try:
+                async for item in stream:
+                    yield item
+            finally:
+                released.append((attempt.attempt_id, tenant_id, user_id))
+
+    class SuccessfulDailyRecoveryService:
+        def __init__(self, *, recovery_service, **_kwargs) -> None:
+            self.recovery_service = recovery_service
+
+        async def recover(self, command, *, login_user):
+            async def stream():
+                yield "event: end\ndata: {}\n\n"
+
+            attempt = ClaimedAttempt(
+                execution_id=command.execution_id,
+                attempt_id=command.attempt_id,
+                subject_id=command.subject_id,
+                entry=ModelCallEntry.DAILY,
+                model_id=17,
+                resume_mode=ModelCallResumeMode.REINVOKE,
+                action=command.action,
+                should_execute=True,
+            )
+            return SimpleNamespace(
+                payload=StreamingResponse(stream(), media_type="text/event-stream"),
+                attempt=attempt,
+            )
+
+    monkeypatch.setattr(
+        "bisheng.workstation.api.endpoints.chat.ModelRecoveryService",
+        TrackingRecoveryService,
+    )
+    monkeypatch.setattr(
+        "bisheng.workstation.api.endpoints.chat.DailyChatRecoveryService",
+        SuccessfulDailyRecoveryService,
+    )
+
+    response = await recover_chat_execution(
+        execution_id="execution-1",
+        data=DailyChatRecoveryRequest(
+            attempt_id="attempt-2",
+            subject_id="101",
+            action=RecoveryAction.MANUAL_RETRY,
+        ),
+        request=SimpleNamespace(),
+        login_user=user(),
+    )
+    chunks = [chunk async for chunk in response.body_iterator]
+
+    assert chunks == ["event: end\ndata: {}\n\n"]
+    assert released == [("attempt-2", 2, 9)]
+
+
 def test_initial_context_binds_execution_to_persisted_question_without_content() -> None:
     context = build_daily_model_call_context(
         tenant_id=2,
@@ -192,7 +257,7 @@ def test_initial_context_binds_execution_to_persisted_question_without_content()
     assert context.entry == ModelCallEntry.DAILY
     assert context.subject_type == "chat_message"
     assert context.subject_id == "101"
-    assert context.resume_mode == ModelCallResumeMode.CHECKPOINT
+    assert context.resume_mode == ModelCallResumeMode.REINVOKE
     assert not hasattr(context, "prompt")
 
 

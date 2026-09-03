@@ -1,0 +1,397 @@
+<title>开放 API 鉴权导读</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg: #F4F6F9;
+    --surface: #FFFFFF;
+    --surface-2: #EEF2F6;
+    --ink: #1B2431;
+    --ink-2: #4B5666;
+    --muted: #7B8594;
+    --line: #D9E0E8;
+    --accent: #B0701C;          /* 钥匙铜 */
+    --accent-ink: #7E4E0F;
+    --accent-soft: #FBF1E2;
+    --mode-s: #1B7A84;          /* 自身身份 · 青 */
+    --mode-s-soft: #E1F2F3;
+    --mode-d: #6E45A3;          /* 代表他人 · 紫 */
+    --mode-d-soft: #EEE7F7;
+    --danger: #B93A3A;
+    --danger-soft: #FBE9E9;
+    --ok: #2E7D4F;
+    --ok-soft: #E4F3EA;
+    --tip-bg: #1B2431;
+    --tip-ink: #F4F6F9;
+    --code-bg: #EEF2F6;
+    --shadow: 0 8px 24px rgba(27,36,49,.08);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0F141B; --surface: #161D27; --surface-2: #1E2732;
+      --ink: #E7EBF1; --ink-2: #B4BCC8; --muted: #8791A0; --line: #2A3441;
+      --accent: #E0A24C; --accent-ink: #F0C27A; --accent-soft: #2A2216;
+      --mode-s: #56BEC7; --mode-s-soft: #14292C;
+      --mode-d: #B792E0; --mode-d-soft: #26203A;
+      --danger: #F08484; --danger-soft: #3A1E1E;
+      --ok: #6CC495; --ok-soft: #17301F;
+      --tip-bg: #E7EBF1; --tip-ink: #0F141B;
+      --code-bg: #1E2732; --shadow: 0 8px 24px rgba(0,0,0,.35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0F141B; --surface: #161D27; --surface-2: #1E2732;
+    --ink: #E7EBF1; --ink-2: #B4BCC8; --muted: #8791A0; --line: #2A3441;
+    --accent: #E0A24C; --accent-ink: #F0C27A; --accent-soft: #2A2216;
+    --mode-s: #56BEC7; --mode-s-soft: #14292C;
+    --mode-d: #B792E0; --mode-d-soft: #26203A;
+    --danger: #F08484; --danger-soft: #3A1E1E;
+    --ok: #6CC495; --ok-soft: #17301F;
+    --tip-bg: #E7EBF1; --tip-ink: #0F141B;
+    --code-bg: #1E2732; --shadow: 0 8px 24px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    font-size: 16px; line-height: 1.75;
+  }
+  h1, h2, h3 { font-family: "Noto Serif SC", "Songti SC", "SimSun", serif; text-wrap: balance; line-height: 1.3; margin: 0; }
+  h1 { font-size: 2.1rem; font-weight: 700; }
+  h2 { font-size: 1.45rem; font-weight: 700; margin-top: .25rem; }
+  h3 { font-size: 1.1rem; font-weight: 600; color: var(--ink); }
+  p { margin: 0 0 1rem; }
+  code, .mono { font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace; font-size: .88em; }
+  code { background: var(--code-bg); padding: .1em .4em; border-radius: 4px; color: var(--ink); }
+  a { color: var(--accent-ink); }
+  strong { font-weight: 700; }
+
+  .shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; max-width: 1120px; margin: 0 auto; padding: 40px 28px 96px; }
+  @media (max-width: 860px) { .shell { grid-template-columns: 1fr; gap: 24px; padding: 24px 18px 72px; } .toc { position: static !important; } }
+
+  .toc { position: sticky; top: 24px; align-self: start; font-size: .9rem; }
+  .toc .eyebrow { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .toc ol { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--line); }
+  .toc li a { display: block; padding: 5px 0 5px 14px; color: var(--ink-2); text-decoration: none; border-left: 2px solid transparent; margin-left: -2px; }
+  .toc li a:hover, .toc li a:focus-visible { color: var(--accent-ink); border-left-color: var(--accent); }
+  .toc .hint { margin-top: 18px; padding: 12px 14px; background: var(--accent-soft); border-radius: 8px; color: var(--accent-ink); font-size: .84rem; line-height: 1.6; }
+
+  main { max-width: 72ch; }
+  .hero { padding-bottom: 28px; border-bottom: 1px solid var(--line); margin-bottom: 36px; }
+  .hero .eyebrow { font-size: .74rem; letter-spacing: .14em; text-transform: uppercase; color: var(--accent-ink); font-weight: 500; margin-bottom: 10px; }
+  .hero .lede { font-size: 1.12rem; color: var(--ink-2); margin-top: 14px; }
+  .hero .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: .84rem; color: var(--muted); margin-top: 12px; }
+
+  section { margin-bottom: 44px; scroll-margin-top: 20px; }
+  section > h2 { margin-bottom: 14px; }
+  .sub { color: var(--muted); font-size: .92rem; margin-top: -8px; margin-bottom: 16px; }
+
+  /* 术语：悬浮解释 */
+  .term {
+    position: relative; cursor: help;
+    border-bottom: 1px dashed var(--accent); color: var(--accent-ink); font-weight: 500;
+    text-decoration: none; outline: none;
+  }
+  .term:focus-visible { box-shadow: 0 0 0 2px var(--accent-soft), 0 0 0 4px var(--accent); border-radius: 3px; }
+  .term::after {
+    content: attr(data-tip);
+    position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
+    width: max-content; max-width: min(340px, 82vw);
+    background: var(--tip-bg); color: var(--tip-ink);
+    font-family: "Noto Sans SC", system-ui, sans-serif; font-weight: 400; font-size: .84rem; line-height: 1.6;
+    padding: 10px 12px; border-radius: 8px; box-shadow: var(--shadow);
+    white-space: normal; text-align: left; z-index: 20;
+    opacity: 0; pointer-events: none; transition: opacity .12s ease;
+  }
+  .term::before {
+    content: ""; position: absolute; left: 50%; bottom: calc(100% + 2px); transform: translateX(-50%);
+    border: 6px solid transparent; border-top-color: var(--tip-bg); opacity: 0; transition: opacity .12s ease; z-index: 21;
+  }
+  .term:hover::after, .term:hover::before, .term:focus-visible::after, .term:focus-visible::before, .term.open::after, .term.open::before { opacity: 1; }
+  .term.flip::after { bottom: auto; top: calc(100% + 8px); }
+  .term.flip::before { bottom: auto; top: calc(100% + 2px); border-top-color: transparent; border-bottom-color: var(--tip-bg); }
+  .term.left::after { left: 0; transform: none; }
+  .term.right::after { left: auto; right: 0; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .term::after, .term::before { transition: none; } }
+
+  /* 组件 */
+  .callout { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; margin: 14px 0 18px; }
+  .callout.danger { border-left-color: var(--danger); }
+  .callout.ok { border-left-color: var(--ok); }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .layers { display: grid; gap: 12px; margin: 14px 0 6px; }
+  .layer { display: grid; grid-template-columns: 44px 1fr; gap: 14px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .layer .n { font-family: "Noto Serif SC", serif; font-size: 1.5rem; font-weight: 700; color: var(--accent); line-height: 1; padding-top: 4px; }
+  .layer h3 { margin-bottom: 4px; }
+  .layer p { margin: 0; color: var(--ink-2); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .tablewrap { overflow-x: auto; margin: 12px 0 18px; border-radius: 8px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--surface-2); font-weight: 600; font-size: .82rem; letter-spacing: .04em; color: var(--ink-2); }
+  tr:last-child td { border-bottom: none; }
+  td.num { font-variant-numeric: tabular-nums; }
+
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .78rem; font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
+  .pill.s { background: var(--mode-s-soft); color: var(--mode-s); }
+  .pill.d { background: var(--mode-d-soft); color: var(--mode-d); }
+  .pill.key { background: var(--accent-soft); color: var(--accent-ink); }
+  .pill.bad { background: var(--danger-soft); color: var(--danger); }
+  .pill.good { background: var(--ok-soft); color: var(--ok); }
+  .pill.mono { font-family: "JetBrains Mono", monospace; font-weight: 500; }
+
+  /* 流程 */
+  .flow { display: grid; gap: 0; margin: 16px 0 8px; }
+  .step { display: grid; grid-template-columns: 34px 1fr; gap: 14px; position: relative; padding-bottom: 18px; }
+  .step::before { content: ""; position: absolute; left: 16px; top: 34px; bottom: 0; width: 2px; background: var(--line); }
+  .step:last-child::before { display: none; }
+  .step .dot { width: 34px; height: 34px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-family: "JetBrains Mono", monospace; font-size: .82rem; font-weight: 500; }
+  .step .body { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+  .step .body h3 { font-family: "Noto Sans SC", sans-serif; font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+  .step .body p { margin: 0; color: var(--ink-2); }
+  .step .outs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .step.branch .body { border-color: var(--mode-d); }
+  .branches { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  @media (max-width: 640px) { .branches { grid-template-columns: 1fr; } }
+  .branch { border-radius: 8px; padding: 10px 12px; font-size: .92rem; }
+  .branch.s { background: var(--mode-s-soft); border: 1px solid var(--mode-s); }
+  .branch.d { background: var(--mode-d-soft); border: 1px solid var(--mode-d); }
+  .branch b { display: block; margin-bottom: 4px; }
+  .branch.s b { color: var(--mode-s); } .branch.d b { color: var(--mode-d); }
+
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: .95rem; margin: 10px 0 16px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; }
+
+  .ws { display: grid; gap: 10px; margin: 14px 0; }
+  .ws .row { display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; align-items: baseline; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+  .ws .id { font-family: "JetBrains Mono", monospace; font-weight: 500; color: var(--accent-ink); }
+  .ws .who { font-size: .82rem; color: var(--muted); white-space: nowrap; }
+  @media (max-width: 640px) { .ws .row { grid-template-columns: 52px 1fr; } .ws .who { grid-column: 2; } }
+
+  .gloss { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; font-size: .95rem; }
+  .gloss dt { font-weight: 600; color: var(--accent-ink); }
+  .gloss dd { margin: 0 0 4px; color: var(--ink-2); }
+  @media (max-width: 640px) { .gloss { grid-template-columns: 1fr; } .gloss dd { margin-bottom: 12px; } }
+
+  .paths li { margin-bottom: 6px; }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: .84rem; }
+</style>
+
+<div class="shell">
+  <nav class="toc" aria-label="目录">
+    <div class="eyebrow">目录</div>
+    <ol>
+      <li><a href="#why">1 · 为什么要做</a></li>
+      <li><a href="#what">2 · 要做成什么样</a></li>
+      <li><a href="#scenes">3 · 四种客户场景</a></li>
+      <li><a href="#flow">4 · 一次调用怎么走</a></li>
+      <li><a href="#ui">5 · 界面上会多什么</a></li>
+      <li><a href="#design">6 · 设计要点</a></li>
+      <li><a href="#gloss">7 · 名词表</a></li>
+      <li><a href="#docs">8 · 文档在哪</a></li>
+    </ol>
+    <div class="hint">带虚线下划线的词，鼠标悬停（手机上点一下）会弹出解释。</div>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <div class="eyebrow">BiSheng · v3.0.0-beta1 · F053</div>
+      <h1>开放 API 鉴权导读</h1>
+      <p class="lede">给平台的对外接口装上锁、发钥匙、并且说清楚"每次调用是以谁的名义"。这页用大白话讲清需求和技术实现，适合刚接手的同学 10 分钟读完。</p>
+      <div class="meta">
+        <span>需求来源：PRD v2.4（2026-08-28）</span>
+        <span>设计定稿：2026-08-31</span>
+      </div>
+    </header>
+
+    <section id="why">
+      <h2>1 · 为什么要做</h2>
+      <p>BiSheng 除了自己的网页界面，还给客户的系统留了一组接口，叫 <span class="term" data-tip="路径以 /api/v2 开头的一组 HTTP 接口，给客户自己写的程序调用，比如让 OA 系统触发一条工作流、让 CRM 去知识库里搜东西。跟网页用的 /api/v1 是两套。">开放 API</span>。客户的 OA、CRM 这些系统通过它来触发工作流、检索知识库、跟助手对话。</p>
+      <div class="callout danger">
+        <p><strong>现在的问题：这扇门没锁。</strong>任何能连到服务器的人都能直接调，不需要任何凭证。更糟的是，请求里可以写一个 <code>user_id</code> 说"我是张三"，系统就真的按张三的权限给数据。等于"匿名"和"冒充"两个洞叠在一起。</p>
+      </div>
+      <p>而且现有的接口文档还建议客户把那个兜底账号配成超级管理员。最坏的情况是：<strong>任何人都能用超管权限、指定任意员工的身份、读走平台上全部知识库</strong>，还能调用没上线的草稿工作流。这在等保测评里是明确的失分项，"部署在内网"不算缓解。</p>
+    </section>
+
+    <section id="what">
+      <h2>2 · 要做成什么样：三层机制</h2>
+      <div class="layers">
+        <div class="layer">
+          <div class="n">一</div>
+          <div>
+            <h3>调用必须带钥匙</h3>
+            <p>每次调开放 API 都要带一把平台签发的 <span class="term" data-tip="一串随机字符，形如 bs-sak-xxxx 或 bs-pat-xxxx，放在请求头 Authorization: Bearer 里。服务器只存它的哈希值，数据库被拖走也还原不出来。明文只在创建那一刻显示一次。">密钥</span>，没带就返回 <span class="term" data-tip="HTTP 状态码，意思是「你是谁？没验证通过」。本项目里 401 = 没带钥匙或钥匙无效。">401</span>。老的"兜底用户"配置删掉，没有任何回落路径，也不设兼容开关。</p>
+          </div>
+        </div>
+        <div class="layer">
+          <div class="n">二</div>
+          <div>
+            <h3>钥匙必须有主人</h3>
+            <p>主人两种。<strong><span class="term" data-tip="一种不能登录网页的机器账号，专门给客户的系统用。管理员创建、管理员给它权限、不占用户席位。它的权限只来自管理员显式授予，不继承任何人。">服务账号</span></strong>：给公司的系统用，管理员建、管理员授权，建的时候要指定一个 <span class="term" data-tip="服务账号创建时必填的一个真人。服务账号通过 API 建出来的知识库等资源，都算这个人的，他在网页里能像自己建的一样看到和管理。这样资源不会变成没人认领的孤儿。">资源归属人</span>。<strong><span class="term" data-tip="Personal Access Token，前缀 bs-pat-。员工自己在个人中心一键领取，权限就是他本人当前的权限，离职/停用后立刻失效。本期只能用来检索知识库。">个人访问令牌</span></strong>：员工自己领，权限就是他自己的，场景是把 Claude Code、openclaw 这类个人 AI 助手接进来查公司知识库。</p>
+          </div>
+        </div>
+        <div class="layer">
+          <div class="n">三</div>
+          <div>
+            <h3>说清以谁的名义</h3>
+            <p>默认以钥匙主人自己的身份跑，叫 <span class="pill s">自身身份</span>。如果管理员给这把钥匙开了 <span class="term" data-tip="一个单独的权限开关（delegate）。开了之后这把钥匙每次调用都必须在请求头里说明代表哪个员工，系统按那个员工的权限执行、结果归那个员工。没开就不能代表任何人。">委托</span> 能力，每次调用就必须声明代表哪个员工，过五道检查后整个换成那个员工的身份执行，叫 <span class="pill d">代表他人</span>。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout">
+        <p><strong>一个容易混的点：</strong>"自身身份"的主人既可以是服务账号，也可以是员工本人（个人令牌）。判断是哪种模式，看的是<strong>权限基准是谁</strong>，不是钥匙主人是谁。</p>
+      </div>
+    </section>
+
+    <section id="scenes">
+      <h2>3 · 四种客户场景</h2>
+      <p class="sub">分类依据是客户接入时真的要做的判断：这把钥匙谁配的？背后有没有最终用户？这些用户在平台上有账号吗？</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>场景</th><th>例子</th><th>用什么钥匙</th><th>以谁身份</th></tr></thead>
+          <tbody>
+            <tr><td>系统集成</td><td>ERP 每天凌晨把新合同同步进知识库</td><td><span class="pill key">服务账号</span></td><td><span class="pill s">自身身份</span></td></tr>
+            <tr><td>平台同批用户</td><td><strong>中粮</strong>：员工在集团 OA 里提问，必须看到他在毕昇里能看的那些库，不多不少</td><td><span class="pill key">服务账号</span> + 委托</td><td><span class="pill d">代表他人</span>（代表张三）</td></tr>
+            <tr><td>外部用户</td><td>对外客服机器人，访客不是平台用户</td><td><span class="pill key">服务账号</span></td><td><span class="pill s">自身身份</span>，可带 <span class="term" data-tip="请求头 X-Bisheng-End-User，调用方随便填一个访客标识（如 crm-user-88）。它只用来给会话分区和审计留痕，不参与任何权限判定。平台不认识、不校验它。">访客标识</span> 只用于分会话</td></tr>
+            <tr><td>员工自助接入</td><td>员工把 Claude Code / openclaw 接进来查知识库</td><td><span class="pill key">个人令牌</span></td><td><span class="pill s">自身身份</span>（员工本人）</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout ok">
+        <p><strong>外部用户场景的关键澄清：</strong>客户常说"不要做权限过滤"。直接照做会变成无边界的数据出口。正确做法是<strong>过滤照做，基准换成服务账号</strong>：管理员给这个服务账号授权"对外可以开放的那几个库"，那就是这个机器人的边界。</p>
+      </div>
+    </section>
+
+    <section id="flow">
+      <h2>4 · 一次调用怎么走</h2>
+      <p class="sub">所有 <code>/api/v2</code> 请求走同一条检查管线，顺序固定。设计里叫"槽位"，后面加新检查只能插进既定位置，不能另起一条路。</p>
+      <div class="flow">
+        <div class="step"><div class="dot">①</div><div class="body"><h3>拿钥匙</h3><p>从请求头取 <code>Authorization: Bearer …</code>。两个 <span class="term" data-tip="WebSocket，长连接协议，工作流对话和助手对话用它。浏览器直连时没法加自定义请求头，所以免登录分享页改用 share-token（分享链接自带的票据）。">WebSocket</span> 接口另外接受分享页的票据。</p><div class="outs"><span class="pill bad">没带 / 格式错 → 401</span></div></div></div>
+        <div class="step"><div class="dot">②</div><div class="body"><h3>验钥匙</h3><p>算 <span class="term" data-tip="SHA-256 单向散列。把密钥明文算成一串固定长度的指纹存起来，只能比对不能还原。所以服务器根本不知道你的密钥明文是什么。">哈希</span>去数据库找，恒时比较，看有没有被 <span class="term" data-tip="管理员或持有人主动让密钥作废。是软撤销：数据库里的行不删，只打个时间戳，留给审计。撤销后 5 秒内所有节点都拒绝这把钥匙（主动清 Redis 缓存，不等过期）。">撤销</span>、有没有过期，再按主人类型解析主人是否有效。结果在 <span class="term" data-tip="内存数据库，这里用来缓存密钥校验结果（3 秒）、做限流计数、存幂等快照。Redis 挂了的话开放 API 整体拒绝服务，不会放行——这是刻意的。">Redis</span> 缓存 3 秒。</p><div class="outs"><span class="pill bad">无效 / 撤销 / 过期 → 401</span><span class="pill bad">主人被停用 → 401</span></div></div></div>
+        <div class="step"><div class="dot">③</div><div class="body"><h3>定租户 + 限流</h3><p>把请求锁定在钥匙所属的 <span class="term" data-tip="多租户部署下的「一个公司/一个子公司」。每把钥匙只属于一个租户，跨租户查数据永远是空。超级管理员的个人令牌也不例外。">租户</span>里；同时按这把钥匙做 <span class="term" data-tip="每分钟最多调多少次（令牌桶算法）。按钥匙计，不按访客标识计。超了返回 429。这一步放得很靠前：拿有效钥匙乱打被拒的请求也计数，防止有人用错误请求探测。">限流</span>。</p><div class="outs"><span class="pill bad">超限 → 429</span></div></div></div>
+        <div class="step"><div class="dot">④</div><div class="body"><h3>查权限位</h3><p>每个接口都标了需要哪个 <span class="term" data-tip="scope，钥匙上勾选的「能做哪一类事」：workflow:invoke（调工作流）、knowledge:read/write（读写知识库）、assistant:invoke、chat:invoke、delegate（委托）等。创建钥匙时默认一个都不勾。">权限位</span>。钥匙没勾对应的位就拒绝，而且错误信息会说缺哪一位。</p><div class="outs"><span class="pill bad">缺位 → <span class="term" data-tip="HTTP 状态码，意思是「知道你是谁，但你没这个权限」。本项目里 403 = 缺权限位、委托不被允许、IP 不在白名单等。">403</span></span></div></div></div>
+        <div class="step branch"><div class="dot">⑤</div><div class="body"><h3>定身份模式</h3><p>看请求头有没有 <span class="term" data-tip="请求头 X-Bisheng-On-Behalf-Of，值是一个平台用户 ID。带了它 = 我要代表这个人执行。只有开了委托的钥匙能带；开了委托的钥匙又必须带（漏了直接 400 报错，绝不静默按服务账号跑）。">代表谁</span>。</p>
+          <div class="branches">
+            <div class="branch s"><b>没带 → 自身身份</b>执行身份 = 钥匙主人。开了委托的钥匙漏带 → 400 报错，不降级。</div>
+            <div class="branch d"><b>带了 → 代表他人</b>过五道关：①钥匙有委托能力 ②目标是真人、存在、没禁用、同租户 ③目标不是管理员 ④目标在允许范围内 ⑤这个接口支持委托。全过才把身份换成目标。</div>
+          </div>
+          <div class="outs"><span class="pill bad">任一关不过 → 403</span><span class="pill bad">两个身份头一起传 → 400</span></div></div></div>
+        <div class="step"><div class="dot">⑥</div><div class="body"><h3>执行业务 + 记账</h3><p>按执行身份的资源权限过滤（走平台既有的 <span class="term" data-tip="平台的权限引擎（F048 / OpenFGA），判定「这个人对这个具体资源能不能做这个动作」。权限引擎挂了就直接报 5xx，绝不返回没过滤或只过滤了一半的结果——这叫 fail-closed。">权限引擎</span>）。响应完成后写一条 <span class="term" data-tip="每次调用记一行：哪把钥匙（actor）、以谁的名义（subject）、访客标识、接口、状态码、来源 IP、耗时。能同时回答「哪个系统调的」和「以谁的名义调的」，所以叫双归属。">调用审计</span>。</p><div class="outs"><span class="pill good">200</span><span class="pill bad">权限引擎不可用 → 503</span></div></div></div>
+      </div>
+      <div class="callout">
+        <p><strong>三条铁律贯穿全程：</strong>没凭据就拒绝；缺身份就报错、不降级；权限判定失败就报错、绝不返回没过滤干净的数据。设计里反复否决的都是"返回 200 加一个悄悄缩水或悄悄放大的结果集"这种形状。</p>
+      </div>
+    </section>
+
+    <section id="ui">
+      <h2>5 · 界面上会多什么</h2>
+      <h3>管理后台（platform）</h3>
+      <p>系统管理里新增一个菜单「服务账号」：建账号（填名称、描述、资源归属人）→ 发钥匙（勾权限位、可选开委托并圈范围、可选 IP 白名单和限流）→ 给它授权哪些知识库。明文只显示一次，必须勾"我已保存"才能关窗。旁边一个同级 tab「个人访问令牌」是管理员的台账：能看本租户谁领了令牌、最后什么时候用、能强制吊销；还有一个租户级开关和默认有效期（默认一年）。</p>
+      <h3>员工个人中心（client）</h3>
+      <p>头像菜单里多一项「API 令牌」：一键领、一人一把、不填任何参数。页面上还有一段可复制的<span class="term" data-tip="一段给 AI 助手看的指令，比如「请安装 BiSheng 知识检索技能，下载地址 …」。员工复制后直接粘给 Claude Code / openclaw，助手自己去下载技能包、装好、把密钥写进配置。">安装提示词</span>，贴给 AI 助手它就会自己去下载 <span class="term" data-tip="一个 zip 包，里面是 SKILL.md、接口说明、请求脚本、安全声明。告诉 AI 助手该调哪个接口、怎么带密钥、只允许把密钥发往本公司的地址。对标腾讯 ima 给 openclaw 做的技能包。">技能包</span>装好。</p>
+      <h3>升级影响</h3>
+      <div class="callout danger">
+        <p><strong>这是破坏性变更、不设兼容开关。</strong>客户升级后，所有老的开放 API 调用会立刻 401，必须先建服务账号、发钥匙、在调用代码里加请求头。请求参数里的裸 <code>user_id</code> 也一并移除。这要靠发布说明提前沟通，由客户安排窗口期。</p>
+      </div>
+    </section>
+
+    <section id="design">
+      <h2>6 · 设计要点</h2>
+      <p class="sub">下面是设计文档里最值得先知道的几条决定，每条都带"为什么"。</p>
+      <dl class="kv">
+        <dt>底座怎么来</dt>
+        <dd>从 <span class="term" data-tip="产品团队做「应用工场」功能的分支，叫 3.0-vibe。他们已经在那边把开放 API 的凭据底座（密钥表、校验器、服务账号、管理界面）做了一半，有 3000 行测试。我们把这部分挑过来用。">vibe 分支</span>直接 <span class="term" data-tip="git 操作：把另一条分支上的某几个提交原样搬到当前分支。这里搬 5 个提交，实测只有多语言文件等三处小冲突。">cherry-pick</span> 5 个提交，不重写。省 5～7 人天，还保住了测试。vibe 那边文档里"个人令牌整条否决"的结论已经被 PRD 推翻，接手的人别被误导。</dd>
+        <dt>为什么一条管线</dt>
+        <dd>多人并行开发，只有把检查顺序钉死，大家才不会各自在接口里补判断。任何新检查只能插进既定槽位。</dd>
+        <dt>"代表他人"为什么是纯替换</dt>
+        <dd>曾考虑"取被代表人和服务账号权限的交集"，否决：权限引擎不支持列举两个人的可见集求交，成本也翻倍。现在是整个换成目标员工的身份，服务账号自己的授权不参与。这意味着"代表他人"是<strong>提权有上界</strong>（最多拿到一个真实员工的真实权限），不是"恒为降权"。</dd>
+        <dt>个人令牌为什么不做快照</dt>
+        <dd>每次调用按持有人当时的权限算。做快照反而要多写代码，还会在授权撤销后继续放行。管理员的令牌照常享受管理员短路，但<strong>不跨租户</strong>——一把常驻在外部 AI 助手里的密钥不该横跨全平台。</dd>
+        <dt>检索为什么要补文件级过滤</dt>
+        <dd>现在开放 API 的检索只按"整个知识库能不能看"过滤，网页界面是按"单个文件能不能看"过滤的。不补的话，"代表张三"返回的结果会比张三自己在网页里搜到的多，连文件名带正文一起泄露。</dd>
+        <dt>审计为什么单独建表</dt>
+        <dd>逐次调用是高频访问日志，混进操作审计表会把审计页拖垮。用进程内队列每秒批量落库，代价是进程崩溃最多丢 1 秒记录，可接受。</dd>
+        <dt>对外对话接口用什么格式</dt>
+        <dd>用平台自己的业务语义（问什么、在哪个会话、挂哪些知识库、开哪些工具），不模仿 OpenAI。原因：OpenAI 那套是"模型侧"契约，要调用方自己拼消息历史和系统提示词，跟我们要开放的"应用侧"能力对不上。</dd>
+        <dt>P2 运营能力</dt>
+        <dd>限流（令牌桶）、日配额、IP 白名单、<span class="term" data-tip="Idempotency-Key 请求头。客户网络重试时带同一个键，平台保证同一个键 24 小时内只执行一次、返回第一次的结果。防止工作流被重复触发。">幂等键</span>，全部基于 Redis，且 Redis 挂了一律拒绝。平台现有那条并发槽位原语是 Redis 挂了就放行的，不能照抄。</dd>
+      </dl>
+    </section>
+
+
+    <section id="gloss">
+      <h2>7 · 名词表</h2>
+      <p class="sub">正文里悬停过的词，这里集中列一遍，方便查。</p>
+      <dl class="gloss">
+        <dt>开放 API</dt><dd><code>/api/v2</code> 开头的接口，给客户系统调；网页用的是 <code>/api/v1</code>。</dd>
+        <dt>密钥 / API Key</dt><dd><code>bs-sak-…</code>（服务账号）或 <code>bs-pat-…</code>（个人令牌），放在 <code>Authorization: Bearer</code> 请求头。服务器只存哈希。</dd>
+        <dt>服务账号</dt><dd>不能登录的机器账号，管理员建、管理员授权，不占席位，不出现在任何选人框里。</dd>
+        <dt>资源归属人</dt><dd>服务账号必填的一个真人，它经 API 创建的资源都算这个人的。</dd>
+        <dt>个人访问令牌（PAT）</dt><dd>员工自助领的密钥，权限动态继承本人，离职即失效，本期只能读知识库。</dd>
+        <dt>权限位（scope）</dt><dd>钥匙上勾的"能做哪类事"，模块 + 动作级，默认全不勾。</dd>
+        <dt>委托（delegate）</dt><dd>一个单独的权限位。开了就必须每次声明代表谁，并配一张"允许代表谁"的白名单（按人或按部门）。</dd>
+        <dt>自身身份 / 代表他人</dt><dd>两种身份模式，判据是权限基准是谁。内部简写 S / D，对外文档只用中文名。</dd>
+        <dt>X-Bisheng-On-Behalf-Of</dt><dd>请求头，值是用户 ID，表示"代表这个人"。</dd>
+        <dt>X-Bisheng-End-User</dt><dd>请求头，随便填的访客标识，只分会话、不影响权限。</dd>
+        <dt>租户</dt><dd>多租户下的一个公司 / 子公司。钥匙不跨租户。</dd>
+        <dt>撤销</dt><dd>让钥匙作废，软删除、留审计、5 秒内全节点生效。</dd>
+        <dt>fail-closed</dt><dd>拿不准就拒绝。Redis 挂、权限引擎挂、信息不足，一律报错，绝不放行。</dd>
+        <dt>审计双归属</dt><dd>每次调用同时记"哪把钥匙调的"和"以谁的名义调的"。</dd>
+        <dt>share-token</dt><dd>免登录分享链接自带的票据，只在两个 WebSocket 和分享专用接口上认。</dd>
+        <dt>限流 / 日配额 / 幂等键</dt><dd>按钥匙计的每分钟上限、每日上限、防重复执行的请求头。</dd>
+        <dt>技能包 / 安装提示词</dt><dd>给 AI 助手的 zip 包和一段安装指令，员工复制粘贴就能接入。</dd>
+        <dt>401 / 403 / 429 / 503</dt><dd>没验证通过 / 没权限 / 太频繁 / 后端依赖不可用（拒绝而非放行）。</dd>
+        <dt>错误码 260xx</dt><dd>本模块的业务错误码段，比如 26003 缺权限位、26016 开了委托却没说代表谁、26040 个人令牌功能没开。</dd>
+        <dt>vibe 分支 / cherry-pick</dt><dd>产品团队的 3.0-vibe 分支已做了一半底座，我们挑 5 个提交搬过来。</dd>
+      </dl>
+    </section>
+
+    <section id="docs">
+      <h2>8 · 文档在哪</h2>
+      <p class="sub">都在 <code>feat/3.0.0-beta1</code> 分支上，提交 <code>b94d0d0c5</code>。</p>
+      <ul class="paths">
+        <li><strong>需求（PRD v2.4）</strong>：<code>docs/product/3.0 开放 API 鉴权与身份传递 PRD.md</code> —— §4 是需求正文，§5 是验收标准，§7 是每个决定为什么这么定。</li>
+        <li><strong>设计</strong>：<code>features/v3.0.0-beta1/053-openapi-auth-and-identity/design.md</code> —— §3 管线图，§5 各部分的决策与备选，§6 共享契约，§8 坑。</li>
+        <li><strong>范围裁定与补充验收</strong>：同目录 <code>spec.md</code>。</li>
+        <li><strong>vibe 分支的参考文档</strong>：同目录 <code>reference/</code>，README 标了哪些结论已过期。</li>
+        <li><strong>调研记录</strong>：<code>features/v3.0.0-beta1/000-openapi-auth-discovery/discovery.md</code>。</li>
+      </ul>
+    </section>
+
+    <footer>本页是导读，不是真相来源。口径以 PRD 和 design.md 为准；两者冲突时以 PRD 的需求、design 的实现为准。</footer>
+  </main>
+</div>
+
+<script>
+(function () {
+  var terms = document.querySelectorAll('.term');
+  terms.forEach(function (el) {
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-label', el.textContent + '：' + el.getAttribute('data-tip'));
+    function place() {
+      el.classList.remove('flip', 'left', 'right');
+      var r = el.getBoundingClientRect();
+      if (r.top < 140) el.classList.add('flip');
+      if (r.left < 180) el.classList.add('left');
+      else if (window.innerWidth - r.right < 180) el.classList.add('right');
+    }
+    el.addEventListener('mouseenter', place);
+    el.addEventListener('focus', place);
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var was = el.classList.contains('open');
+      terms.forEach(function (t) { t.classList.remove('open'); });
+      if (!was) { place(); el.classList.add('open'); }
+    });
+  });
+  document.addEventListener('click', function () { terms.forEach(function (t) { t.classList.remove('open'); }); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') terms.forEach(function (t) { t.classList.remove('open'); }); });
+})();
+</script>

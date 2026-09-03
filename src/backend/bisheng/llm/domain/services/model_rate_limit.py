@@ -32,6 +32,7 @@ class ModelCallEntry:
 
 class ModelCallResumeMode:
     CHECKPOINT = "checkpoint"
+    REINVOKE = "reinvoke"
     READ_ONLY_REINVOKE = "read_only_reinvoke"
     CONTINUE = "continue"
 

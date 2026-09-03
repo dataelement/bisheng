@@ -68,12 +68,21 @@ async def _authorized_scope(
     )
     if not allowed:
         raise PermissionDeniedError()
-    return GrantSubjectScope(
-        tenant_id=int(target.tenant_id),
-        department_path=await grant_subject_service.resolve_department_space_path(
+    # A department-bound space normally confines its candidates to that department's
+    # subtree. A global super admin is not part of any department's chain of command
+    # and is expected to be able to place anyone in the tenant into any space, so the
+    # narrowing is skipped for them alone — tenant admins stay scoped.
+    department_path = (
+        None
+        if bool(getattr(login_user, "is_global_super", False))
+        else await grant_subject_service.resolve_department_space_path(
             resource_type,
             resource_id,
-        ),
+        )
+    )
+    return GrantSubjectScope(
+        tenant_id=int(target.tenant_id),
+        department_path=department_path,
         # F053: people the upstream directory marks hidden stay out of every
         # picker; administrators still see and can grant to them.
         include_hidden=bool(login_user.is_admin()),

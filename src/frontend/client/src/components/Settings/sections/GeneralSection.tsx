@@ -10,6 +10,7 @@ import {
     SelectValue,
 } from "~/components/ui/Select";
 import { useSyncExternalStore, useState } from "react";
+import { Radio, RadioGroup } from "@bisheng/ui";
 import { useLocalize } from "~/hooks";
 import store from "~/store";
 import {
@@ -20,7 +21,6 @@ import {
     subscribeFontSizeAvailability,
     type FontSizeLevel,
 } from "~/utils/fontSize";
-import { cn } from "~/utils";
 import { StorageSection } from "./StorageSection";
 
 interface SettingSelectProps {
@@ -58,47 +58,6 @@ export function SettingSelect({ value, options, onValueChange }: SettingSelectPr
     );
 }
 
-
-interface SettingSegmentedProps<T extends string> {
-    value: T;
-    options: { value: T; label: string }[];
-    onValueChange: (value: T) => void;
-    ariaLabel: string;
-}
-
-/**
- * Segmented control for settings rows with few, always-visible options.
- *
- * Deliberately not a Select: picking a font size rescales the whole page — the
- * open Settings dialog included — and a Select would be doing that with its own
- * popup open, re-running the flyout positioning this branch has already had to
- * fix twice. A segmented control never opens a layer, so the rescale happens
- * with nothing floating above it.
- */
-function SettingSegmented<T extends string>({ value, options, onValueChange, ariaLabel }: SettingSegmentedProps<T>) {
-    return (
-        <div role="radiogroup" aria-label={ariaLabel} className="flex h-8 min-w-[160px] items-center gap-0.5 rounded-md border border-[#ECECEC] bg-white p-0.5">
-            {options.map((option) => {
-                const active = option.value === value;
-                return (
-                    <button
-                        key={option.value}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        onClick={() => onValueChange(option.value)}
-                        className={cn(
-                            "h-full flex-1 whitespace-nowrap rounded px-2 text-sm font-normal transition-colors",
-                            active ? "bg-blue-500/[0.07] text-blue-500" : "text-gray-800 hover:bg-btn-fill-1",
-                        )}
-                    >
-                        {option.label}
-                    </button>
-                );
-            })}
-        </div>
-    );
-}
 
 /**
  * store.lang can hold legacy un-normalized values (e.g. "zh-CN" restored from
@@ -150,14 +109,23 @@ export function GeneralSection() {
             {fontSizeAvailable && (
                 <div className="flex items-center justify-between gap-4">
                     <span className="text-[14px] text-[#1d2129]">{localize("com_nav_page_font_size")}</span>
-                    <div className="shrink-0">
-                        <SettingSegmented
-                            value={fontSizeLevel}
-                            options={fontSizeOptions}
-                            onValueChange={changeFontSize}
-                            ariaLabel={localize("com_nav_page_font_size")}
-                        />
-                    </div>
+                    {/* Button-group radio, not a Select: picking a font size rescales
+                        the whole page — Settings dialog included — and doing that under
+                        an open popup re-runs the flyout positioning this branch already
+                        had to fix twice. The button group never opens a layer. */}
+                    <RadioGroup
+                        variant="button"
+                        className="shrink-0"
+                        value={fontSizeLevel}
+                        onValueChange={(level) => changeFontSize(level as FontSizeLevel)}
+                        aria-label={localize("com_nav_page_font_size")}
+                    >
+                        {fontSizeOptions.map((option) => (
+                            <Radio key={option.value} value={option.value}>
+                                {option.label}
+                            </Radio>
+                        ))}
+                    </RadioGroup>
                 </div>
             )}
 

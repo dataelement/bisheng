@@ -301,6 +301,7 @@ async def start_execute(
 async def continue_conversation(
     session_version_id: str = Body(..., description="Existing session version id to continue", embed=True),
     question: str = Body(..., description="Follow-up user message", embed=True),
+    model_id: str | int | None = Body(None, description="Optional replacement model id", embed=True),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> UnifiedResponseModel:
     """Continue an already-finished task-mode conversation (F035 multi-turn).
@@ -313,48 +314,18 @@ async def continue_conversation(
     flow (/workbench/user-input, resume); this endpoint is for new turns after a
     round has fully completed.
     """
-    session_version_model = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id=session_version_id)
-    if not session_version_model:
-        return NotFoundError.return_resp()
-
-    if login_user.user_id != session_version_model.user_id:
-        return UnAuthorizedError.return_resp()
-
-    if session_version_model.status not in [
-        SessionVersionStatusEnum.COMPLETED,
-        SessionVersionStatusEnum.FAILED,
-    ]:
-        # A running / parked session cannot take a new top-level turn; parked
-        # tasks are continued via /workbench/user-input instead.
-        return LinsightSessionVersionRunningError.return_resp()
-
-    await MessageSessionDao.touch_session(session_version_model.session_id)
-
-    # Flip back to IN_PROGRESS BEFORE enqueue so the worker's pre-flight
-    # non-terminal guard accepts the continue item.
-    await LinsightSessionVersionDao.batch_update_session_versions_status(
-        [session_version_id], SessionVersionStatusEnum.IN_PROGRESS
-    )
-
     try:
-        from bisheng.linsight.worker import LinsightQueue, encode_queue_item
-
-        redis_client = await get_redis_client()
-        queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
-        await queue.put(
-            data=encode_queue_item(
-                session_version_id,
-                continue_question=question,
-                tenant_id=session_version_model.tenant_id,
-            )
+        await LinsightWorkbenchImpl.continue_conversation(
+            session_version_id=session_version_id,
+            question=question,
+            login_user=login_user,
+            model_id=model_id,
         )
-    except Exception as e:
-        logger.error(f"Failed to continue the Ideas conversation: {e!s}")
-        # Roll back the status flip so the conversation isn't stuck IN_PROGRESS.
-        await LinsightSessionVersionDao.batch_update_session_versions_status(
-            [session_version_id], SessionVersionStatusEnum.COMPLETED
-        )
-        return LinsightStartTaskError.return_resp(data=str(e))
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance(data={})
+    except Exception:
+        logger.exception("Failed to continue Linsight conversation for session_version={}", session_version_id)
+        return LinsightStartTaskError.return_resp()
 
     return resp_200(data=True, message="Follow-up turn accepted; results stream via the message flow")
 

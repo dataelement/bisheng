@@ -495,20 +495,13 @@
   },
   "com_message": {
     "choose_model": "选择模型",
+    "document_preview": "文档预览",
     "model_busy_suffix": " · 服务繁忙",
     "rate_limit_busy_desc": "当前模型暂时繁忙，你可以重试，或更换其他模型继续。",
     "rate_limit_recovered_desc": "当前模型已恢复，可以重试当前请求。",
     "rate_limit_recovered_title": "模型服务已恢复",
     "rate_limit_recovering_desc": "当前模型响应较慢，系统正在尝试恢复，请稍候。",
     "rate_limit_title": "模型服务繁忙",
-    "still_busy_desc": "建议更换模型继续，本次输入和已有进度会为你保留。",
-    "still_busy_title": "当前模型仍未恢复",
-    "switch_model": "更换模型",
-    "switch_rejected": "所选模型当前不可用，请重新选择。",
-    "try_later": "稍后再试"
-  },
-  "com_message": {
-    "document_preview": "文档预览",
     "source_empty": "暂无参考资料",
     "source_load_failed": "溯源详情加载失败",
     "source_loading": "加载溯源详情...",
@@ -520,7 +513,13 @@
     "source_panel_label": "参考资料",
     "source_type_document": "文档",
     "source_type_web": "网页",
-    "source_untitled": "暂无标题"
+    "source_untitled": "暂无标题",
+    "still_busy_desc": "建议更换模型继续，本次输入和已有进度会为你保留。",
+    "still_busy_title": "当前模型仍未恢复",
+    "switch_model": "更换模型",
+    "switch_model_and_retry": "更换模型并重试",
+    "switch_rejected": "所选模型当前不可用，请重新选择。",
+    "try_later": "稍后再试"
   },
   "com_message_content_copied": "内容已复制",
   "com_notifications_approved": "已同意",

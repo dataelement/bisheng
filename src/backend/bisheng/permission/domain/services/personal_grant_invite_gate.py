@@ -18,6 +18,7 @@ the approval requirement cannot be bypassed by reaching a different endpoint.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 
@@ -88,6 +89,23 @@ class PersonalGrantInviteGate:
         )
 
         return build_runtime_resource_user_invite_application_service()
+
+    @asynccontextmanager
+    async def scenario_guard(self, *, tenant_id: int):
+        """Hold the invite scenario open for the duration of one mutation.
+
+        The guard row-locks the scenario, so an operator disabling confirmation
+        halfway through cannot leave the caller having raised some invites and
+        applied the rest directly. It raises ``ApprovalScenarioDisabledError``
+        when confirmation is already off, which is the caller's cue to degrade.
+        A service without a guard (older fakes in tests) is treated as enabled.
+        """
+        guard_factory = getattr(self._invite_service(), "scenario_guard", None)
+        if guard_factory is None:
+            yield
+            return
+        async with guard_factory(tenant_id=int(tenant_id)):
+            yield
 
     @staticmethod
     def _already_granted_user_ids(grants: tuple[GrantSnapshot, ...]) -> set[str]:
