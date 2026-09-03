@@ -44,7 +44,7 @@ function parseToValue(input, paramItem) {
             if (child.nodeName === 'BR') {
                 result += '\n'; // 换行符
             } else if (child.nodeType === Node.TEXT_NODE) {
-                result += child.textContent; // 文本内容
+                result += child.textContent.replace(/\u00a0/g, ' '); // 文本内容
             } else if (child.nodeType === Node.ELEMENT_NODE) {
                 result += traverseNodes(child); // 递归解析子元素
             }
