@@ -102,6 +102,16 @@ bisheng/knowledge/domain/services/knowledge_space_creation_application_service.p
 
 > 2026-09-03 那轮:902 自己也独立做了同样的整合,行为一致、写法更干净,于是这几个 hunk 取了 902 的,并删掉了 909 这边重复的 `visible_abnormal_exists`(两个同名闭包,后定义的会静默遮蔽前一个)。
 
+### 3.2b 后端 · 知识空间「设为私密 / 广场可见」路径
+
+**文件**:`knowledge_space_service.py` 的 `update_knowledge_space` 开头
+
+**根因**:主线 hotfix(`d53524e69`,广场可见性与权限解耦)删掉了 `old_square_visible` / `new_square_visible` 及其驱动的 `sync_public_reader`;909 在**同一位置**加了「部门绑定空间不允许转私密」的守卫。两边改同一段,必冲突。
+
+**处理方式**:删掉 `old_square_visible`(它的消费者已经没了),**保留 909 的部门守卫**。
+
+**别误删**:`sync_public_reader(..., enabled=False)` 那个调用**要留着** —— 主线也留着。hotfix 删的是**授予** public_reader 的路径,空间转私密时**清理**残留的那条是有意保留的。
+
 ### 3.3 后端 · 权限判定 seam
 
 **症状**:`_can_manage_space_cached`、`_filter_visible_child_items` 尾部等处,902 调 `_user_can_manage_space(...)`,909 调 `_check_action(..., "manage_permission")`。
@@ -262,6 +272,7 @@ cd src/backend && uv run pytest test/celery/ -q
 - **`git log <base>..<tip> -- <path>` 的路径是相对当前目录的。** 在 `src/backend/` 里跑 `-- src/backend/xxx` 会解析成 `src/backend/src/backend/xxx`,**静默返回空**,看起来像「这个文件没被改过」。查历史前先 `cd` 到仓库根。
 - **两条线之间可能有多个 merge base。** `git merge-base --all A B` 返回多个时,git 用的是递归虚拟基,这时候用 `git diff <某个base> <tip>` 推断「对方改了什么」会得到错误结论。要问「对方改了什么」,直接用 `git log A..B -- <path>`(在仓库根跑)。
 - **「定义了但没人调用」是丢集成点的典型信号。** f048 删服务那类合并特别容易出现:函数搬过来了,但调用点还留在被删的文件里。合并后可以扫一遍新增的导出符号有没有引用方。
+- **推之前先 `git fetch`。** 主线可能已经有人用 PR 合了同一个东西。2026-09-03 就撞上一次:本地合完 hotfix,推的时候被 non-fast-forward 拒绝,upstream 已经有 `d53524e69`(#2409),父提交和树跟本地的一模一样。这种情况**直接 `git reset --hard origin/<branch>` 用上游那个**,别造一个「两个相同合并再合一次」的提交。确认方法:`git diff <本地merge> <上游merge>` 为空。
 
 ---
 
@@ -283,3 +294,35 @@ cd src/backend && uv run pytest test/celery/ -q
 | 2026-09-03 | `2.8-common` → `3.0.0-beta1` | `0f0691a79` | 13 个冲突;excel 整合、失败文件可见性移植到 f048 seam |
 | 2026-09-03 | `3.0.0-beta1` → `909` | `4db02485a` | 4 个冲突;文件夹 rollup 整合、提示卡片 props 取并集 |
 | 2026-09-03 | `cofco-902` → `909` | `22790b986` | 29 个冲突;9 个 f048 已删服务、3 处行为移植;日常对话限流恢复未带过来 |
+| 2026-09-03 | `hotfix/3.0.0-beta1` → `3.0.0-beta1` | `d53524e69`(#2409) | 广场可见性与权限解耦;**改了 OpenFGA 授权模型**,见下方部署提醒 |
+| 2026-09-03 | `3.0.0-beta1` → `909` | `2efa486f7` | 1 个冲突(空间更新路径,见 §3.2b) |
+
+---
+
+## 附:部署提醒 — 授权模型变更
+
+`d53524e69` 把 `public_reader` 从 OpenFGA 授权模型里摘掉了,**模型 checksum 变了**:
+
+```
+98cc4927f62faa0f52e9b369e1f4a7b421d59585f0d72468a16442a840abc8a2   (变更前)
+0bf16de29460ed8021b9abd84a4ff405895bfdee23cb2862ec7f8a76b0b7fd8e   (变更后)
+```
+
+**后果**:所有已部署环境升上这个版本后,启动会卡在
+`Context 'permission_runtime' is in error state: authorization_model_migration_required`,
+**所有走权限的接口返回 500**。这是 F048 的设计行为(发现模型是前代就拒绝启动,等运维迁移),不是 bug。
+
+处置(容器内跑,先备份):
+
+```bash
+docker exec -w /app bisheng-backend python scripts/migrate_f048_permission_data.py migrate --apply
+docker exec -w /app bisheng-backend python scripts/migrate_f048_permission_data.py verify --run-id <id>
+# 然后重启 backend + worker
+```
+
+判断是否成功:`permission_catalog_release` 表有一行 `CURRENT`,日志出现
+`FGAClient initialized from discovered runtime`,且不再有 `migration_required`。
+
+此外旧 Store 里遗留的 `public_reader` tuple 需要单独清理,脚本和步骤见
+`src/backend/scripts/README.md` 的 `cleanup_f048_public_reader_tuples.py`(先 dry-run,
+apply 要带上一次 dry-run 打出的 store-id 和 checksum)。
