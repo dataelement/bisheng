@@ -19,7 +19,7 @@
 | PortalRecommendationFileProjection | F056-home-personalized-recommendation | 文件业务域、空间、推荐资格、权限范围和投影版本的在线推荐投影 |
 | PortalRecommendationPoolState | F056-home-personalized-recommendation | Redis 中租户级业务域池、通用兜底池、热门轮换状态及 active pool version |
 | PortalUserRecommendationState | F056-home-personalized-recommendation | Redis 中用户兴趣 Top 50、近 90 天浏览状态、行为版本和短期 Top N |
-| ShougangPortalAdminConfig（扩展） | F056-home-personalized-recommendation | 对齐远端 `domains[].department_ids`，并增加推荐数量、算法、影子模式和灰度参数 |
+| ShougangPortalAdminConfig（扩展） | F056-home-personalized-recommendation | 对齐远端 `domains[].department_ids`，并增加推荐数量、算法、影子模式和灰度参数；F061 移除分类卡片的知识空间绑定语义，导航统计不再消费业务域/分类卡片的空间绑定 |
 | PortalTelemetryEvent（扩展） | F056-home-personalized-recommendation | 新增 `portal_search`；阅读事件增加推荐场景和入口来源 |
 
 ### 复用对象（Owner 不变）
@@ -27,8 +27,8 @@
 | 领域对象 | 现有 Owner | Feature 使用方式 |
 |---------|------------|--------------|
 | Department / UserDepartment | department 模块（F002） | 只读取唯一主部门及部门 ID，不修改组织树和用户部门关系 |
-| Knowledge / KnowledgeFile / KnowledgeDocument / KnowledgeDocumentVersion | knowledge 模块 | F056 读取文件、空间、版本和状态并由写入事件触发投影刷新；F057 只通过既有知识文件清理边界删除已确认的部门重复文档；F059 通过 knowledge 模块领域服务扩展逻辑入口/清理字段、文档内容代次和入口级投影状态，转移管理归属并维护版本链，不取得这些模型的所有权 |
-| PermissionTuple / AuthorizationModel | permission 模块（F004） | F056 的最终文件权限检查统一调用既有权限服务；F057 只通过权限模块既有清理能力移除目标部门文件 tuple；F059 只通过 Permission Service 校验及迁移入口授权，复用既有 `share_file` |
+| Knowledge / KnowledgeFile / KnowledgeDocument / KnowledgeDocumentVersion / KnowledgeSpaceScope | knowledge 模块 | F056 读取文件、空间、版本和状态并由写入事件触发投影刷新；F057 只通过既有知识文件清理边界删除已确认的部门重复文档；F059 通过 knowledge 模块领域服务扩展逻辑入口/清理字段、文档内容代次和入口级投影状态，转移管理归属并维护版本链，不取得这些模型的所有权；F061 只读取 `KnowledgeSpaceScope.portal_discovery_enabled` 形成门户发现范围 |
+| PermissionTuple / AuthorizationModel | permission 模块（F004） | F056 的最终文件权限检查统一调用既有权限服务；F057 只通过权限模块既有清理能力移除目标部门文件 tuple；F059 只通过 Permission Service 校验及迁移入口授权，复用既有 `share_file`；F061 仅在首页统计、带特殊标记的搜索展示和推荐展示中跳过文件权限读取，预览、下载和审批继续走 Permission Service |
 | Config | config 模块 | 通过既有首钢门户聚合配置 Service 读写，不新建第二配置事实源 |
 | BaseTelemetryEvent | telemetry 模块 | ES 继续保存原始浏览和搜索事件；F056 只扩展门户事件类型和派生状态 |
 | ApprovalScenario / ApprovalInstance / ApprovalTask | approval 模块 | F059 复用既有发布审批，并通过 approval 模块注册固定两节点的部门文件分享审批，不旁路写审批状态 |
@@ -55,10 +55,10 @@
 | INV-SG-1 | 用户业务域只从当前租户聚合配置 `domains[].department_ids` 精确匹配唯一主部门；不读取次要部门，不向父部门或子部门继承 | ShougangPortalAdminConfig, UserDepartment | F056 |
 | INV-SG-2 | 业务域匹配只参与推荐打分，不授予 `view_space` 或 `view_file`，也不改变 `visible_space_ids` | ShougangPortalAdminConfig, PermissionTuple | F056 |
 | INV-SG-3 | 已读文章不从候选中排除，只根据最近浏览时间施加可配置算法中定义的固定四档扣分 | PortalUserRecommendationState | F056 |
-| INV-SG-4 | 个性化候选必须先轻量打分，再对最终返回候选做权限检查；非公共空间执行完整 `view_file` 校验 | PortalRecommendationFileProjection, PermissionTuple | F056 |
-| INV-SG-5 | 公共空间仅复用已确认的公开快速路径；非公共空间不能以投影、池命中或业务域匹配替代权限检查 | PortalRecommendationFileProjection, PermissionTuple | F056 |
-| INV-SG-6 | 无权文件的 ID、标题、摘要、标签和路径不得出现在响应或普通日志中；权限异常默认失败关闭 | KnowledgeFile, PortalRecommendationFileProjection | F056 |
-| INV-SG-7 | 第一阶段 custom ACL 文件不得进入共享池；投影滞后时仍由最终权限校验阻止越权 | PortalRecommendationFileProjection | F056 |
+| INV-SG-4 | 个性化推荐必须继续使用 F056 既有投影、来源池、召回、打分和排序；只在已有候选进入最终权限处理后，文件所属空间开启 `portal_discovery_enabled` 时可直接通过展示筛选，其他非公共空间仍执行完整 `view_file` 校验 | PortalRecommendationFileProjection, PermissionTuple, KnowledgeSpaceScope | F056, F061 |
+| INV-SG-5 | `portal_discovery_enabled` 只授予首页统计、带门户发现标记的搜索列表，以及已有推荐候选最终校验阶段的元数据展示资格，不授予文件预览、下载、问答、分享、编辑或审批权限；上述访问动作必须继续执行原权限与审批规则 | KnowledgeFile, PermissionTuple, KnowledgeSpaceScope | F056, F061 |
+| INV-SG-6 | 除明确进入门户发现范围的统计、搜索列表和推荐展示外，无权文件的 ID、标题、摘要、标签和路径不得出现在响应或普通日志中；权限异常默认失败关闭 | KnowledgeFile, PortalRecommendationFileProjection, KnowledgeSpaceScope | F056, F061 |
+| INV-SG-7 | 第一阶段 custom ACL 文件仍不得进入共享推荐池；若投影滞后导致候选进入最终筛选，仅所属空间实时开启 `portal_discovery_enabled` 时可按发现规则展示，否则仍由最终权限校验阻止返回 | PortalRecommendationFileProjection, KnowledgeSpaceScope | F056, F061 |
 | INV-SG-8 | 搜索原文和浏览原始事件以 ES 为事实源；Redis 只保存近 90 天浏览时间、派生兴趣、版本和短期结果，不持久化原始搜索词 | PortalTelemetryEvent, PortalUserRecommendationState | F056 |
 | INV-SG-9 | 所有推荐 Redis key 必须包含租户前缀；Celery 任务必须恢复租户上下文并沿用租户 fan-out | PortalRecommendationPoolState, PortalUserRecommendationState | F056 |
 | INV-SG-10 | 首钢门户配置只通过既有 `/api/v1/shougang-portal/config` 聚合接口同步；配置按当前租户持久化，版本由 BiSheng 服务端在租户内单调递增；`domains[].department_ids` 是唯一部门业务域事实源，不复制到独立字段或表 | ShougangPortalAdminConfig | F056 |
@@ -78,6 +78,12 @@
 | INV-SG-24 | canonical 内容变化与 `KnowledgeDocument.content_generation`、入口变化与对应 `KnowledgeFile` 的期望内容/入口代次必须在同一关系事务中提交；Worker 按入口期望/已应用双代次和 lease/CAS 幂等处理并恢复租户上下文，Celery 消息仅加速，定时任务必须补偿未完成或失败状态且不得伪报同步完成 | KnowledgeDocument, KnowledgeFile | F059 |
 | INV-SG-25 | F059 不扫描、推断、合并或回填上线前旧发布副本；新不变量只约束上线后由 F059 创建的逻辑入口关系 | KnowledgeDocument, KnowledgeFile | F059 |
 | INV-SG-26 | `knowledge_celery` 只允许标题提取、首次文件解析和文件解析重试三个白名单任务；PDF Artifact 继续使用 `knowledge_pdf_celery`，工作流/审批继续使用 `workflow_celery`，其余后台任务进入默认 `celery` | Celery task routing | F060 |
+| INV-SG-27 | 门户导航的业务域/分类数量与点击后的搜索结果必须使用同一 `portal_discovery_enabled=true` 空间快照口径，不读取卡片 `space_ids`，不合并当前用户额外可见空间，也不逐文件调用 OpenFGA | KnowledgeSpaceScope, KnowledgeFile, ShougangPortalAdminConfig | F061 |
+| INV-SG-28 | 门户发现范围必须由 BiSheng 当前租户中支持该开关且实时开启的全部知识空间计算；公共、部门、科室层级只按开关值纳入，不因空间层级、卡片绑定或登录身份隐式纳入 | KnowledgeSpaceScope | F061 |
+| INV-SG-29 | 首页跳转必须携带可刷新恢复的门户发现标记；搜索列表、筛选项、标签、分页和总数均使用同一发现范围，任何一条子请求不得回退到用户权限范围造成数量与结果口径漂移 | KnowledgeSpaceScope, KnowledgeFile | F061 |
+| INV-SG-30 | 门户发现展示不得返回或缓存“可下载/可预览”的授权结论；预览与下载入口必须在动作发生时重新按当前用户、文件实时 ACL 和审批状态校验，关闭开关后新请求立即退出发现范围 | KnowledgeFile, PermissionTuple, KnowledgeSpaceScope | F061 |
+| INV-SG-31 | 分类卡片不再持有知识空间绑定关系；旧配置中的 `category_cards[].space_ids` 只允许兼容读取并在下一次保存时清理，不得再影响导航、搜索、推荐、发布或其他业务逻辑 | ShougangPortalAdminConfig | F061 |
+| INV-SG-32 | `portal_discovery_enabled` 不得把空间或文件加入推荐投影、共享池、业务域池、兴趣池或兜底池，也不得改变推荐资格与评分；未被既有推荐链路召回的文件不能仅因开关开启而出现在推荐中 | PortalRecommendationFileProjection, PortalRecommendationPoolState, KnowledgeSpaceScope | F061 |
 
 INV-SG-1 的“不继承”只约束推荐业务域特征，不修改基线 INV-12 中部门管理员的权限继承语义。
 
@@ -104,6 +110,9 @@ INV-SG-1 的“不继承”只约束推荐业务域特征，不修改基线 INV-
 | F059-knowledge-publish-share-unification | F004-rebac-core, F008-resource-rebac-adaptation | 依赖统一入口权限检查、`share_file` 和 OpenFGA 失败补偿 |
 | F059-knowledge-publish-share-unification | 既有 approval / share_link 模块 | 复用发布审批，新增固定两节点分享审批，并兼容已有知识文件分享链接 |
 | F060-knowledge-parse-queue-isolation | 既有 Celery Worker 与 knowledge 文件解析任务 | 只调整任务路由所有权，不修改任务协议、解析实现或存量消息 |
+| F061-portal-enabled-home-discovery | F056-home-personalized-recommendation | 调整最终推荐展示权限快速路径，复用既有候选、排序与缓存，不改变推荐算法 |
+| F061-portal-enabled-home-discovery | 既有 knowledge / search / knowledge_space_scope 模块 | 复用 `portal_discovery_enabled` 事实源、门户搜索与文件统计能力；预览、下载、问答及审批边界保持不变 |
+| F061-portal-enabled-home-discovery | 既有 shougang_portal_config 模块 | 移除分类卡片空间绑定语义，并停止在导航计数和列表中消费卡片空间绑定 |
 
 ```text
 F001 ──┐
@@ -118,6 +127,10 @@ F056 ───────┘
 knowledge/version/search/QA/stats ──┬──> F059-knowledge-publish-share-unification
 F004/F008 ──────────────────────────┤
 approval/share_link ────────────────┘
+
+F056 ──────────────────────────────┐
+knowledge/search/space_scope ──────┼──> F061-portal-enabled-home-discovery
+shougang_portal_config ────────────┘
 ```
 
 ---
@@ -143,6 +156,7 @@ approval/share_link ────────────────┘
 | 2026-07-19 | 登记 F057 对既有知识、权限和推荐投影的复用边界，并增加公共数据保护、判重与安全执行不变量 | F057 |
 | 2026-07-27 | 登记 F059 对 `KnowledgeFile` 逻辑入口及 `KnowledgeDocument` 状态驱动投影补偿的扩展边界；不新增领域表，并增加单实体发布、同级分享、权限、检索去重、容量和旧链接兼容不变量 | F059 |
 | 2026-08-05 | 登记 F060 的 Celery 队列所有权：`knowledge_celery` 仅承载三个文件解析白名单任务 | F060 |
+| 2026-09-02 | 登记 F061 的门户发现范围：导航统计与带标记搜索使用所有已开启 `portal_discovery_enabled` 的空间；推荐来源池保持不变，仅在既有候选最终权限校验时放行开关空间文件；删除分类卡片空间绑定语义，同时保留预览、下载和审批的实时权限边界 | F061 |
 
 ---
 

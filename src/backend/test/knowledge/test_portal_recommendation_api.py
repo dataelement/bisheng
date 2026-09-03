@@ -206,6 +206,27 @@ def test_non_public_file_never_uses_public_fast_path_after_permission_revocation
     )
 
 
+def test_portal_enabled_recommendation_fast_path_requires_current_file_space_match():
+    enabled_file = SimpleNamespace(id=101, knowledge_id=20)
+    moved_file = SimpleNamespace(id=102, knowledge_id=21)
+
+    assert KnowledgeSpaceService._can_fast_allow_portal_enabled_recommendation(
+        enabled_file,
+        space_id=20,
+        portal_enabled_space_ids={20},
+    ) is True
+    assert KnowledgeSpaceService._can_fast_allow_portal_enabled_recommendation(
+        moved_file,
+        space_id=20,
+        portal_enabled_space_ids={20},
+    ) is False
+    assert KnowledgeSpaceService._can_fast_allow_portal_enabled_recommendation(
+        enabled_file,
+        space_id=20,
+        portal_enabled_space_ids=set(),
+    ) is False
+
+
 def test_public_fast_path_rejects_current_space_level_custom_binding():
     file = SimpleNamespace(id=101, knowledge_id=10, file_level_path=None)
 

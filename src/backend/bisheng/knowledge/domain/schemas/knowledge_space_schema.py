@@ -370,6 +370,7 @@ class ShougangPortalTagSearchReq(BaseModel):
         "public_and_department",
         "portal_public",
         "portal_configured",
+        "portal_enabled",
     ] = "legacy"
     space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
     space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
@@ -415,6 +416,7 @@ class ShougangPortalDomainFileCountReq(BaseModel):
         "public_and_department",
         "portal_public",
         "portal_configured",
+        "portal_enabled",
     ] = "legacy"
 
 
@@ -445,6 +447,7 @@ class ShougangPortalCategoryFileCountReq(BaseModel):
         "public_and_department",
         "portal_public",
         "portal_configured",
+        "portal_enabled",
     ] = "legacy"
 
 
@@ -494,6 +497,7 @@ class ShougangPortalFileBrowseReq(BaseModel):
         "public_and_department",
         "portal_public",
         "portal_configured",
+        "portal_enabled",
     ] = Field(
         default="legacy",
         description="Server-derived portal discovery scope",
@@ -655,6 +659,7 @@ class ShougangPortalAdvancedUploaderSearchReq(BaseModel):
         "public_and_department",
         "portal_public",
         "portal_configured",
+        "portal_enabled",
     ] = "legacy"
     space_ids: list[int] = Field(default_factory=list)
     space_level: KnowledgeSpaceLevelEnum | None = None
@@ -820,6 +825,7 @@ class ShougangPortalHomeReq(BaseModel):
         "public_and_department",
         "portal_public",
         "portal_configured",
+        "portal_enabled",
     ] = "legacy"
     space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
     space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")

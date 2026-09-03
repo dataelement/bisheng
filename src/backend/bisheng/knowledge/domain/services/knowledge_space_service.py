@@ -2574,8 +2574,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         *,
         scope: str,
+        persist_result: bool = True,
     ) -> PortalDiscoveryResult:
-        if scope not in {"portal_public", "portal_configured"}:
+        if scope not in {"portal_public", "portal_configured", "portal_enabled"}:
             raise ValueError(f"Unsupported portal discovery scope: {scope}")
         if self.knowledge_space_scope_repo is None:
             raise RuntimeError("KnowledgeSpaceScopeRepository is not configured")
@@ -2634,7 +2635,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if kind in {"public", "department", "clinic"}:
                 enabled = bool(item.portal_discovery_enabled)
                 configurable_scope_rows.append((kind, space_id, enabled))
-                if enabled and (scope == "portal_configured" or kind == "public"):
+                if enabled and (scope in {"portal_configured", "portal_enabled"} or kind == "public"):
                     discoverable_space_ids.add(space_id)
 
         explicit_space_ids: set[int] = set()
@@ -2792,10 +2793,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_kind_by_id=space_kind_by_id,
             snapshot=snapshot,
         )
-        self._portal_discovery_result = result
-        self._portal_explicit_file_ids = set(explicit_file_ids)
-        self._portal_grant_parent_space_ids = set(grant_parent_space_ids)
-        self._portal_space_kind_map = dict(space_kind_by_id)
+        if persist_result:
+            self._portal_discovery_result = result
+            self._portal_explicit_file_ids = set(explicit_file_ids)
+            self._portal_grant_parent_space_ids = set(grant_parent_space_ids)
+            self._portal_space_kind_map = dict(space_kind_by_id)
         return result
 
     async def _format_accessible_spaces(
@@ -5672,6 +5674,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 tag_map=tag_map,
                 spaces=spaces,
                 business_domain_code=normalized_business_domain_code,
+                discovery_scope=discovery_scope,
             )
         return sorted(tag_names)
 
@@ -5681,6 +5684,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         tag_map: dict[str, list[Any]],
         spaces: list[Knowledge],
         business_domain_code: str,
+        discovery_scope: str = "legacy",
     ) -> list[str]:
         all_tags = [
             tag
@@ -5699,7 +5703,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             order_sort="desc",
         )
         files = self._filter_shougang_portal_files_by_business_domain_code(files, business_domain_code)
-        visible_files = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
+        visible_files = await self._filter_shougang_portal_search_files(
+            files,
+            spaces=spaces,
+            defer_department_access=discovery_scope == "portal_enabled",
+        )
         visible_file_ids = {str(int(file.id)) for file in visible_files if file.id is not None}
         if not visible_file_ids:
             return []
@@ -5720,8 +5728,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         discovery_scope: str = "legacy",
     ) -> dict[str, int]:
         visible_scopes: dict[str, set[int]] = {}
-        if discovery_scope in {"portal_public", "portal_configured"}:
+        if discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}:
             discovery = await self.resolve_portal_discovery(scope=discovery_scope)
+            if discovery_scope == "portal_enabled":
+                enabled_space_ids = set(discovery.discoverable_space_ids)
+                return await KnowledgeFileDao.async_count_files_by_domain_scopes(
+                    {domain.code: set(enabled_space_ids) for domain in domains}
+                )
             full_space_ids = set(discovery.discoverable_space_ids) | set(discovery.explicitly_visible_space_ids)
             grant_only_parent_ids = set(discovery.grant_parent_space_ids) - full_space_ids
             visible_file_ids: dict[str, set[int]] = {}
@@ -5756,8 +5769,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> dict[str, int]:
         """Count SUCCESS files per document-type category in each card's visible bound spaces."""
         visible_scopes: dict[str, set[int]] = {}
-        if discovery_scope in {"portal_public", "portal_configured"}:
+        if discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}:
             discovery = await self.resolve_portal_discovery(scope=discovery_scope)
+            if discovery_scope == "portal_enabled":
+                enabled_space_ids = set(discovery.discoverable_space_ids)
+                return await KnowledgeFileDao.async_count_files_by_category_scopes(
+                    {category.code: set(enabled_space_ids) for category in categories}
+                )
             full_space_ids = set(discovery.discoverable_space_ids) | set(discovery.explicitly_visible_space_ids)
             grant_only_parent_ids = set(discovery.grant_parent_space_ids) - full_space_ids
             visible_file_ids: dict[str, set[int]] = {}
@@ -5927,7 +5945,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         effective_discovery_scope = (
             req.discovery_scope
-            if req.discovery_scope in {"portal_public", "portal_configured"}
+            if req.discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}
             else "public"
             if req.public_only
             else req.discovery_scope
@@ -5968,7 +5986,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         full_space_ids: list[int] | None = None
         explicit_file_ids: list[int] | None = None
-        if req.discovery_scope in {"portal_public", "portal_configured"} and discovery is not None:
+        if req.discovery_scope in {"portal_public", "portal_configured", "portal_enabled"} and discovery is not None:
             full_space_id_set = set(discovery.discoverable_space_ids) | set(discovery.explicitly_visible_space_ids)
             full_space_ids = sorted(full_space_id_set)
             grant_only_parent_ids = set(discovery.grant_parent_space_ids) - full_space_id_set
@@ -6009,7 +6027,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             discovery_scope=discovery_scope,
         )
         discovery = self._portal_discovery_result
-        if discovery is not None and discovery_scope in {"portal_public", "portal_configured"}:
+        if discovery is not None and discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}:
             discoverable_ids = set(discovery.discoverable_space_ids)
             explicit_space_ids = set(discovery.explicitly_visible_space_ids)
             grant_parent_ids = set(discovery.grant_parent_space_ids)
@@ -6709,7 +6727,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     visible_batch = await self._filter_shougang_portal_search_files(
                         valid_files,
                         spaces=spaces,
-                        defer_department_access=effective_discovery_scope == "public_and_department",
+                        defer_department_access=effective_discovery_scope
+                        in {"public_and_department", "portal_enabled"},
                     )
                 visible_ids = {int(file.id) for file in visible_batch}
                 sort_by_file_id = {hit.file_id: list(hit.sort_values) for hit in batch.hits}
@@ -6803,7 +6822,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         req: ShougangPortalAdvancedUploaderSearchReq,
     ) -> dict:
-        spaces, _, trusted_public_scope = await self._resolve_shougang_portal_advanced_search_spaces(req)
+        spaces, effective_discovery_scope, trusted_public_scope = (
+            await self._resolve_shougang_portal_advanced_search_spaces(req)
+        )
         if not spaces:
             return {"data": []}
         search_service, file_repository = self._require_shougang_portal_fulltext_dependencies()
@@ -6835,7 +6856,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             visible_files = await self._filter_shougang_portal_search_files(
                 valid_files,
                 spaces=spaces,
-                defer_department_access=False,
+                defer_department_access=effective_discovery_scope == "portal_enabled",
             )
         visible_ids = {int(file.id) for file in visible_files}
         supported_user_ids = {support.user_id for support in supports if visible_ids.intersection(support.file_ids)}
@@ -6863,7 +6884,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> tuple[list[Knowledge], str, bool]:
         effective_discovery_scope = (
             req.discovery_scope
-            if req.discovery_scope in {"portal_public", "portal_configured"}
+            if req.discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}
             else "public"
             if req.public_only
             else req.discovery_scope
@@ -7993,7 +8014,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         effective_discovery_scope = (
             req.discovery_scope
-            if req.discovery_scope in {"portal_public", "portal_configured"}
+            if req.discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}
             else "public"
             if req.public_only
             else req.discovery_scope
@@ -8084,7 +8105,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         trusted_public_scope = bool(req.public_only)
         effective_discovery_scope = (
             req.discovery_scope
-            if req.discovery_scope in {"portal_public", "portal_configured"}
+            if req.discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}
             else "public"
             if req.public_only
             else req.discovery_scope
@@ -8466,6 +8487,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             and (allowed_tag_file_ids is None or record.file_id in allowed_tag_file_ids)
         }
         public_space_ids = await self._get_shougang_portal_public_space_ids(space_ids, spaces=spaces)
+        try:
+            portal_enabled_discovery = await self.resolve_portal_discovery(
+                scope="portal_enabled",
+                persist_result=False,
+            )
+            portal_enabled_space_ids = set(portal_enabled_discovery.discoverable_space_ids) & visible_space_ids
+        except Exception as exc:
+            logger.warning(
+                "portal recommendation discovery fast-path unavailable; using normal permission checks: error={}",
+                type(exc).__name__,
+            )
+            portal_enabled_space_ids = set()
         now = datetime.now(timezone.utc)
 
         def candidate_for(key: tuple[int, int]) -> PortalRecommendationCandidate | None:
@@ -8562,20 +8595,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         permission_contexts: dict[int, dict] = {}
         public_permissions_by_space: dict[int, set[str]] = {}
         non_primary_file_ids_by_space: dict[int, set[int]] = {}
+        portal_enabled_fast_allowed_count = 0
 
         async def build_permission_context() -> dict:
-            try:
-                live_bindings = await PortalRecommendationProjectionService.load_bindings_strict()
-            except Exception as exc:
-                raise PortalRecommendationPermissionContextUnavailable(
-                    "failed to load current permission bindings"
-                ) from exc
-            return {"by_space": permission_contexts, "live_bindings": live_bindings}
+            # The binding snapshot is loaded lazily only if a candidate outside
+            # portal_enabled still needs the normal file permission path.
+            return {"by_space": permission_contexts, "live_bindings": None}
 
         async def check_permission_batch(
             _request_context: dict,
             candidates: list[PortalRecommendationCandidate],
         ) -> dict[tuple[int, int], bool | Exception]:
+            nonlocal portal_enabled_fast_allowed_count
             file_ids = [candidate.file_id for candidate in candidates]
             files = await KnowledgeFileDao.aget_file_by_space_filters(
                 knowledge_ids=space_ids,
@@ -8605,6 +8636,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         if candidate.file_id in non_primary:
                             result[candidate.key] = False
                             continue
+                    if self._can_fast_allow_portal_enabled_recommendation(
+                        item,
+                        space_id=candidate.space_id,
+                        portal_enabled_space_ids=portal_enabled_space_ids,
+                    ):
+                        # Discovery publication grants recommendation metadata
+                        # display only. Preview/download still perform their own
+                        # live checks, so never infer download capability here.
+                        self._portal_file_download_map[int(item.id)] = False
+                        result[candidate.key] = True
+                        portal_enabled_fast_allowed_count += 1
+                        authorization_state.fast_allowed_count += 1
+                        continue
+                    if _request_context["live_bindings"] is None:
+                        try:
+                            _request_context["live_bindings"] = (
+                                await PortalRecommendationProjectionService.load_bindings_strict()
+                            )
+                        except Exception as exc:
+                            raise PortalRecommendationPermissionContextUnavailable(
+                                "failed to load current permission bindings"
+                            ) from exc
                     result[candidate.key] = await self._check_portal_recommendation_item_permission(
                         item,
                         space_id=candidate.space_id,
@@ -8814,6 +8867,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "permission_time_budget_reached": authorization_state.time_budget_reached,
                     "pool_ready": pool_ready,
                     "pool_source": "redis" if active_pool_version else "projection",
+                    "portal_enabled_fast_allowed_count": portal_enabled_fast_allowed_count,
+                    "portal_enabled_space_count": len(portal_enabled_space_ids),
                     "personal_space_excluded_count": personal_space_excluded_count,
                     "redis_state_available": redis_state_available,
                     "requested_space_count": requested_space_count,
@@ -8922,6 +8977,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return int(file.knowledge_id) in public_space_ids and not PortalRecommendationProjectionService.has_custom_acl(
             file, live_bindings
         )
+
+    @staticmethod
+    def _can_fast_allow_portal_enabled_recommendation(
+        file: KnowledgeFile,
+        *,
+        space_id: int,
+        portal_enabled_space_ids: set[int],
+    ) -> bool:
+        """Allow recommendation display only when the live file still belongs to an enabled source space."""
+        return int(space_id) in portal_enabled_space_ids and int(file.knowledge_id) == int(space_id)
 
     async def _check_portal_recommendation_item_permission(
         self,
@@ -9308,7 +9373,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         discovery = getattr(self, "_portal_discovery_result", None)
         full_space_ids: list[int] | None = None
         explicit_file_ids: list[int] | None = None
-        if req.discovery_scope in {"portal_public", "portal_configured"} and discovery is not None:
+        if req.discovery_scope in {"portal_public", "portal_configured", "portal_enabled"} and discovery is not None:
             full_space_ids = sorted(set(discovery.discoverable_space_ids) | set(discovery.explicitly_visible_space_ids))
             explicit_file_ids = list(discovery.explicitly_visible_file_ids)
         while True:
@@ -9335,11 +9400,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
             files = self._filter_shougang_portal_files_by_subcategory_code(files, req.file_subcategory_code)
             files = self._filter_shougang_portal_files_by_business_domain_code(files, req.business_domain_code)
             if files:
-                visible_batch = (
-                    self._accept_shougang_portal_public_files(files)
-                    if trusted_public_scope
-                    else await self._filter_shougang_portal_visible_files(files, spaces=spaces)
-                )
+                if trusted_public_scope:
+                    visible_batch = self._accept_shougang_portal_public_files(files)
+                elif req.discovery_scope == "portal_enabled":
+                    visible_batch = await self._filter_shougang_portal_search_files(
+                        files,
+                        spaces=spaces,
+                        defer_department_access=True,
+                    )
+                else:
+                    visible_batch = await self._filter_shougang_portal_visible_files(
+                        files,
+                        spaces=spaces,
+                    )
                 visible_ids = {int(file.id) for file in visible_batch}
                 for file in files:
                     if int(file.id) not in visible_ids:
@@ -9461,7 +9534,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         safe_chunks = await self._filter_and_dedupe_portal_search_chunks(
             chunks=es_chunks + vector_chunks,
             spaces=spaces,
-            defer_department_access=req.discovery_scope == "public_and_department",
+            defer_department_access=req.discovery_scope in {"public_and_department", "portal_enabled"},
         )
         candidates = self._group_shougang_portal_chunks_by_file(safe_chunks)
         ranked_candidates = self._score_shougang_portal_file_candidates(candidates)
@@ -10924,7 +10997,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 requested_space_ids,
                 space_level,
             )
-        if discovery_scope in {"portal_public", "portal_configured"}:
+        if discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}:
             discovery = await self.resolve_portal_discovery(scope=discovery_scope)
             allowed_ids = set(discovery.query_space_ids)
             requested_ids = list(dict.fromkeys(int(space_id) for space_id in requested_space_ids if int(space_id) > 0))

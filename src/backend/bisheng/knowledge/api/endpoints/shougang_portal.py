@@ -126,13 +126,14 @@ async def list_shougang_portal_discoverable_spaces(
         "public_and_department",
         "portal_public",
         "portal_configured",
+        "portal_enabled",
     ] = "public_and_department",
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     spaces = await svc.list_shougang_portal_discoverable_spaces(discovery_scope=discovery_scope)
     payload: dict[str, Any] = {"spaces": spaces}
     discovery = getattr(svc, "_portal_discovery_result", None)
-    if discovery_scope in {"portal_public", "portal_configured"} and discovery is not None:
+    if discovery_scope in {"portal_public", "portal_configured", "portal_enabled"} and discovery is not None:
         payload["discovery_snapshot"] = discovery.snapshot
         payload["explicit_file_ids"] = discovery.explicitly_visible_file_ids
     return resp_200(payload)
@@ -572,6 +573,7 @@ PortalQaChildrenDiscoveryScope = Literal[
     "public_and_department",
     "portal_public",
     "portal_configured",
+    "portal_enabled",
 ]
 
 

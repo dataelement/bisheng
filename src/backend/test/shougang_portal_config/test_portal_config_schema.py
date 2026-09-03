@@ -129,6 +129,33 @@ def test_portal_document_type_generates_missing_child_codes():
     assert config.portal.document_types[0].description_examples == "例如：管理制度、通知公告"  # noqa: RUF001
 
 
+def test_legacy_category_space_bindings_are_accepted_but_removed_from_saved_config():
+    raw_config = _minimal_portal_config()
+    raw_config["category_cards"] = [
+        {
+            "code": "POL",
+            "name": "政策制度",
+            "image": "",
+            "enabled": True,
+            "space_ids": [10, 20],
+        }
+    ]
+
+    config = ShougangPortalAdminConfig(
+        portal=raw_config,
+        bisheng={"base_url": "http://bisheng.example.com"},
+        unified_auth={},
+    )
+    saved_card = config.model_dump(mode="json")["portal"]["category_cards"][0]
+
+    assert saved_card == {
+        "code": "POL",
+        "name": "政策制度",
+        "image": "",
+        "enabled": True,
+    }
+
+
 def test_portal_config_round_trips_unified_url_application():
     raw_config = _minimal_portal_config()
     raw_config["agent_config"] = {
