@@ -54,6 +54,39 @@ def _member(
 
 
 @pytest.mark.asyncio
+async def test_square_query_uses_numeric_join_key_for_member_business_id(monkeypatch):
+    from sqlalchemy.dialects import mysql
+
+    captured = {}
+
+    class _Result:
+        def all(self):
+            return []
+
+    class _Session:
+        async def exec(self, statement):
+            captured["statement"] = statement
+            return _Result()
+
+    @asynccontextmanager
+    async def _get_test_session():
+        yield _Session()
+
+    monkeypatch.setattr(knowledge_module, "get_async_db_session", _get_test_session)
+    await KnowledgeDao.async_get_public_spaces_paginated(
+        user_id=7,
+        page=1,
+        page_size=20,
+    )
+
+    sql = str(captured["statement"].compile(dialect=mysql.dialect()))
+    assert "CAST(knowledge.id AS CHAR" not in sql
+    assert "COLLATE" not in sql
+    assert "CAST(space_channel_member.business_id AS SIGNED INTEGER)" in sql
+    assert "CAST(anon_1.business_id AS SIGNED INTEGER)" in sql
+
+
+@pytest.mark.asyncio
 async def test_square_orders_unsubscribed_before_applied_then_by_unique_subscriber_count(monkeypatch):
     engine = create_async_engine(
         "sqlite+aiosqlite://",
