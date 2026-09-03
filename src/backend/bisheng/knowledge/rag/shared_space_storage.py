@@ -788,6 +788,8 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         metadata = dict(chunk.metadata or {})
         row: dict[str, Any] = {
             SHARED_MILVUS_TEXT_FIELD: chunk.text,
+            # 兼容现有共享 collection 的非空字段；当前系统固定写默认租户 1。
+            "tenant_id": 1,
             "canonical_document_id": int(identity.canonical_document_id),
             "canonical_version_id": int(identity.canonical_version_id),
             "content_file_id": int(identity.content_file_id),

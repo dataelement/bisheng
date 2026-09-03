@@ -76,7 +76,7 @@ def _dimensions() -> DimensionSnapshot:
 
 def test_build_report_maps_five_space_levels_to_one_actual_organization() -> None:
     report = build_report(
-        [CandidateFile(file_id=index, original_knowledge_id=99 + index) for index in range(1, 6)],
+        [CandidateFile(file_id=index, original_knowledge_id=99 + index, knowledge_id=101) for index in range(1, 6)],
         _dimensions(),
         generated_at=datetime.fromisoformat("2026-09-03T12:00:00+08:00"),
     )
@@ -122,6 +122,18 @@ def test_build_report_maps_five_space_levels_to_one_actual_organization() -> Non
         },
     ]
     assert report["summary"] == {"assigned": 5, "unassigned": 0, "total": 5}
+
+
+def test_build_report_falls_back_to_current_knowledge_when_original_is_missing() -> None:
+    report = build_report(
+        [CandidateFile(file_id=1, original_knowledge_id=None, knowledge_id=101)],
+        _dimensions(),
+    )
+
+    assert report["organizations"][0]["organization_id"] == 10
+    assert report["organizations"][0]["counts"]["department"] == 1
+    assert report["unassigned"]["missing_original_knowledge"] == 0
+    assert report["summary"] == {"assigned": 1, "unassigned": 0, "total": 1}
 
 
 def test_build_report_keeps_unresolvable_files_in_auditable_buckets() -> None:
@@ -252,7 +264,7 @@ async def test_eligible_query_counts_only_current_physical_business_documents(
         [
             _db_space(10),
             _db_space(20, favorite=True),
-            _db_file(1),
+            _db_file(1, original_knowledge_id=None),
             _db_file(2, entry_type=KnowledgeFileEntryType.PUBLISH.value),
             _db_file(3, entry_type=KnowledgeFileEntryType.SHARE.value),
             _db_file(4, entry_type=KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value),
@@ -287,3 +299,5 @@ async def test_eligible_query_counts_only_current_physical_business_documents(
     ]
 
     assert [candidate.file_id for candidate in candidates] == [1, 10]
+    assert [candidate.knowledge_id for candidate in candidates] == [10, 10]
+    assert [candidate.original_knowledge_id for candidate in candidates] == [None, 10]

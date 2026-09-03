@@ -20,6 +20,7 @@ __all__ = [
 SHARED_SPACE_METADATA_FIELD_KNOWLEDGE_IDS = "knowledge_ids"
 
 SHARED_SPACE_CONTENT_METADATA_SCHEMA: list[RagMetadataFieldSchema] = [
+    RagMetadataFieldSchema(field_name="tenant_id", field_type="int64", kwargs={"nullable": False}),
     RagMetadataFieldSchema(
         field_name="canonical_document_id", field_type="int64", kwargs={"nullable": False}
     ),

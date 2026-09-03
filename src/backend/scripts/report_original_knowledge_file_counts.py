@@ -60,6 +60,7 @@ class CandidateFile:
 
     file_id: int
     original_knowledge_id: int | None
+    knowledge_id: int | None = None
 
 
 @dataclass(slots=True)
@@ -115,6 +116,7 @@ async def iter_eligible_file_pages(
         statement = (
             select(
                 KnowledgeFile.id,
+                KnowledgeFile.knowledge_id,
                 KnowledgeFile.original_knowledge_id,
                 KnowledgeFile.user_metadata,
             )
@@ -147,8 +149,9 @@ async def iter_eligible_file_pages(
             CandidateFile(
                 file_id=int(file_id),
                 original_knowledge_id=_positive_int(original_knowledge_id),
+                knowledge_id=_positive_int(knowledge_id),
             )
-            for file_id, original_knowledge_id, user_metadata in rows
+            for file_id, knowledge_id, original_knowledge_id, user_metadata in rows
             if not is_legacy_distribution_copy(user_metadata)
         ]
         if page:
@@ -275,13 +278,15 @@ def _resolve_assignment(
     candidate: CandidateFile,
     dimensions: DimensionSnapshot,
 ) -> tuple[str | None, Any | None, list[dict[str, Any]] | None, str | None]:
-    original_knowledge_id = candidate.original_knowledge_id
-    if original_knowledge_id is None:
+    source_knowledge_id = candidate.original_knowledge_id
+    if source_knowledge_id is None:
+        source_knowledge_id = candidate.knowledge_id
+    if source_knowledge_id is None:
         return None, None, None, "missing_original_knowledge"
-    if original_knowledge_id not in dimensions.spaces:
+    if source_knowledge_id not in dimensions.spaces:
         return None, None, None, "original_knowledge_not_found"
 
-    scope = dimensions.scopes.get(original_knowledge_id)
+    scope = dimensions.scopes.get(source_knowledge_id)
     if scope is None:
         return None, None, None, "missing_space_scope"
     level = _enum_value(getattr(scope, "level", None))
@@ -301,7 +306,7 @@ def _resolve_assignment(
         KnowledgeSpaceLevelEnum.DEPARTMENT.value,
         KnowledgeSpaceLevelEnum.TEAM_KS.value,
     }:
-        organization_id = dimensions.bound_department_ids.get(original_knowledge_id)
+        organization_id = dimensions.bound_department_ids.get(source_knowledge_id)
     else:
         missing_reason = "missing_owner_organization"
         owner_id = (

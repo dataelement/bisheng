@@ -163,10 +163,15 @@ class TestMembershipFilter:
             {"terms": {"metadata.knowledge_ids": [11, 12]}},
         ]
 
-    def test_shared_metadata_schema_omits_tenant_id(self):
-        assert "tenant_id" not in {
-            field.field_name for field in sss.SHARED_SPACE_CONTENT_METADATA_SCHEMA
-        }
+    def test_shared_metadata_schema_keeps_legacy_tenant_id(self):
+        tenant_field = next(
+            field
+            for field in sss.SHARED_SPACE_CONTENT_METADATA_SCHEMA
+            if field.field_name == "tenant_id"
+        )
+
+        assert tenant_field.field_type == "int64"
+        assert tenant_field.kwargs == {"nullable": False}
 
 
 class _FakeEntity:
@@ -510,7 +515,7 @@ class TestMembershipRewrite:
 
 
 class TestContentRewrite:
-    def test_content_row_and_es_id_omit_tenant_id(self):
+    def test_content_row_and_es_metadata_supply_tenant_id_default(self):
         writer = object.__new__(sss.MilvusEsSharedSpaceStorageWriter)
         identity = ContentProjectionIdentity(
             tenant_id=1,
@@ -528,7 +533,8 @@ class TestContentRewrite:
             3,
         )
 
-        assert "tenant_id" not in row
+        assert row["tenant_id"] == 1
+        assert writer._es_doc_source(row)["metadata"]["tenant_id"] == 1
         assert writer._es_doc_id(identity, 0) == "8-9-2-0"
 
     async def test_complete_milvus_generation_still_removes_stale_es_chunks(self):
