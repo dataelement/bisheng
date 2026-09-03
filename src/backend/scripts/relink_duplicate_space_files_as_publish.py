@@ -142,6 +142,18 @@ class ReportWriteError(RuntimeError):
     """Raised when the audit checkpoint cannot be persisted safely."""
 
 
+class SkipRelinkUnit(Exception):
+    """Raised when one unit must be skipped without aborting the apply run."""
+
+    def __init__(self, reason_code: str, detail: str = "") -> None:
+        self.reason_code = reason_code
+        super().__init__(detail or reason_code)
+
+
+SOURCE_HAS_DISTRIBUTION_DEPENDENTS_ERROR = "source manager has distribution dependents"
+SOURCE_HAS_DISTRIBUTION_DEPENDENTS_REASON = "source_has_distribution_dependents"
+
+
 def _enum_value(value: Any) -> str:
     return str(getattr(value, "value", value))
 
@@ -794,6 +806,7 @@ SKIP_LABELS = {
     "unknown_space_level": "未知库级",
     "not_department_subordinate": "非本部门下属科室/团队库",
     "plan_drift": "写入前数据已变化",
+    SOURCE_HAS_DISTRIBUTION_DEPENDENTS_REASON: "下级已是有下游的 manager",
 }
 STATUS_LABELS = {
     "planned": "待执行",
@@ -887,6 +900,9 @@ def _report_aggregates(report: dict[str, Any]) -> dict[str, Any]:
     kind_counts: dict[str, int] = {}
     history_rows: list[dict[str, Any]] = []
     for entry in units:
+        if str(entry.get("status") or "") == "skipped":
+            reason = str(entry.get("reason_code") or "unknown")
+            skip_counts[reason] = skip_counts.get(reason, 0) + 1
         unit = entry.get("unit") or {}
         origin_level = str(unit.get("origin_level") or "")
         source_level = str(unit.get("source_level") or "")
@@ -1245,6 +1261,10 @@ class ApplyExecutor:
                 result = await result
         except ReportWriteError:
             raise
+        except SkipRelinkUnit:
+            step["status"] = "skipped"
+            step["finished_at"] = _utc_now()
+            raise
         except Exception as exc:
             step["status"] = "failed"
             step["error_type"] = type(exc).__name__
@@ -1309,6 +1329,12 @@ class ApplyExecutor:
                     entry["reason_code"] = "history_retained"
             except ReportWriteError:
                 raise
+            except SkipRelinkUnit as exc:
+                entry["status"] = "skipped"
+                entry["reason_code"] = exc.reason_code
+                entry["error_type"] = ""
+                self.checkpoint()
+                continue
             except Exception:
                 for remaining in entries[index + 1 :]:
                     if remaining.get("status") in {"planned", "pending"}:
@@ -1582,6 +1608,15 @@ def _delete_elasticsearch_sync(space: Knowledge, file_id: int) -> None:
     )
 
 
+def _skip_or_reraise_attach_error(exc: KnowledgeDocumentDistributionError) -> None:
+    if str(exc).strip() == SOURCE_HAS_DISTRIBUTION_DEPENDENTS_ERROR:
+        raise SkipRelinkUnit(
+            SOURCE_HAS_DISTRIBUTION_DEPENDENTS_REASON,
+            SOURCE_HAS_DISTRIBUTION_DEPENDENTS_ERROR,
+        ) from exc
+    raise exc
+
+
 def _distribution_service(session) -> KnowledgeDocumentDistributionService:
     file_repository = KnowledgeFileRepositoryImpl(session)
     return KnowledgeDocumentDistributionService(
@@ -1611,13 +1646,17 @@ class BishengRelinkOperations:
     async def attach(self, unit: RelinkUnit) -> dict[str, Any]:
         async with get_async_db_session() as session:
             service = _distribution_service(session)
-            result = await service.attach_existing_as_publish(
-                AttachExistingAsPublishCommand(
-                    tenant_id=self.tenant_id,
-                    origin_file_id=unit.origin_file_id,
-                    source_file_id=unit.source_file_id,
+            try:
+                result = await service.attach_existing_as_publish(
+                    AttachExistingAsPublishCommand(
+                        tenant_id=self.tenant_id,
+                        origin_file_id=unit.origin_file_id,
+                        source_file_id=unit.source_file_id,
+                    )
                 )
-            )
+            except KnowledgeDocumentDistributionError as exc:
+                _skip_or_reraise_attach_error(exc)
+                raise
         return {
             "document_id": result.document_id,
             "manager_file_id": result.manager_file_id,

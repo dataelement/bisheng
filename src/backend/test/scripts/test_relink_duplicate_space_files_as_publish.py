@@ -77,6 +77,23 @@ def _inventory(*files: script_mod.FileSnapshot, versions=()) -> script_mod.Inven
     return script_mod.Inventory(spaces=spaces, files=files, versions=tuple(versions))
 
 
+def test_skip_or_reraise_attach_error_skips_manager_with_dependents():
+    with pytest.raises(script_mod.SkipRelinkUnit) as raised:
+        script_mod._skip_or_reraise_attach_error(
+            script_mod.KnowledgeDocumentDistributionError(
+                script_mod.SOURCE_HAS_DISTRIBUTION_DEPENDENTS_ERROR
+            )
+        )
+    assert raised.value.reason_code == script_mod.SOURCE_HAS_DISTRIBUTION_DEPENDENTS_REASON
+
+
+def test_skip_or_reraise_attach_error_keeps_other_distribution_errors():
+    with pytest.raises(script_mod.KnowledgeDocumentDistributionError, match="source and origin"):
+        script_mod._skip_or_reraise_attach_error(
+            script_mod.KnowledgeDocumentDistributionError("source and origin must be different files")
+        )
+
+
 def test_parse_args_defaults_to_dry_run():
     args = script_mod.parse_args(["--space-id", "10", "--file-id", "201"])
     assert args.apply is False
@@ -242,6 +259,75 @@ async def test_apply_skips_when_revalidation_detects_drift(tmp_path: Path):
     assert payload["units"][0]["reason_code"] == "plan_drift"
     assert "跨库重复文件软链接报告" in markdown
     assert "写入前数据已变化" in markdown
+
+
+async def test_apply_skips_manager_with_distribution_dependents_and_continues(tmp_path: Path):
+    units = tuple(
+        script_mod.RelinkUnit(
+            match_kind="md5",
+            match_key="same-md5",
+            origin_file_id=100,
+            origin_space_id=1,
+            origin_level="public",
+            source_file_id=file_id,
+            source_space_id=10,
+            source_level="department",
+        )
+        for file_id in (200, 201)
+    )
+    plan = script_mod.RelinkPlan(tenant_id=1, units=units, skipped=(), unmatched_count=0)
+
+    class Reader:
+        async def build_plan(self, args):
+            return plan
+
+        async def revalidate(self, current):
+            return script_mod.RevalidationResult(valid=True, unit=current)
+
+    class Operations:
+        def __init__(self):
+            self.attached = []
+
+        async def attach(self, current):
+            if current.source_file_id == 200:
+                raise script_mod.SkipRelinkUnit(
+                    script_mod.SOURCE_HAS_DISTRIBUTION_DEPENDENTS_REASON,
+                    script_mod.SOURCE_HAS_DISTRIBUTION_DEPENDENTS_ERROR,
+                )
+            self.attached.append(current.source_file_id)
+            return {"manager_file_id": current.origin_file_id}
+
+        async def delete_vectors(self, current):
+            return None
+
+        async def delete_minio(self, current):
+            return None
+
+        async def enqueue_projection(self, current, *, manager_file_id):
+            return None
+
+        async def verify_linked(self, current):
+            return {}
+
+    args = script_mod.parse_args(["--report-dir", str(tmp_path), "--apply"])
+    operations = Operations()
+    exit_code = await script_mod.run(
+        args,
+        reader=Reader(),
+        operations_factory=lambda: operations,
+        manage_context=False,
+    )
+
+    assert exit_code == script_mod.EXIT_OK
+    assert operations.attached == [201]
+    payload = json.loads(next(tmp_path.glob("relink-*.json")).read_text(encoding="utf-8"))
+    markdown = next(tmp_path.glob("relink-*.md")).read_text(encoding="utf-8")
+    assert [item["status"] for item in payload["units"]] == ["skipped", "completed"]
+    assert payload["units"][0]["reason_code"] == script_mod.SOURCE_HAS_DISTRIBUTION_DEPENDENTS_REASON
+    assert payload["summary"]["skipped"] == 1
+    assert payload["summary"]["failed"] == 0
+    assert payload["summary"]["pending"] == 0
+    assert "下级已是有下游的 manager" in markdown
 
 
 async def test_apply_fails_fast_and_marks_remaining_units_pending(tmp_path: Path):
