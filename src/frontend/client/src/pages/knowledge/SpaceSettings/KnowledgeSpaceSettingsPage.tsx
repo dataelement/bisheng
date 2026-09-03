@@ -319,9 +319,9 @@ export function KnowledgeSpaceSettingsPage() {
                       placeholder={localize(
                         "com_subscription.enter_knowledge_space_name",
                       )}
-                      className="h-8 rounded-md bg-white pr-14 placeholder:text-[#999999]"
+                      className="h-8 rounded-md bg-white pr-14 placeholder:text-text-3"
                     />
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-body-sm text-[#999999]">
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-body-sm text-text-3">
                       {Math.ceil(getFullWidthLength(settings.form.name))}/
                       {MAX_NAME_LENGTH}
                     </span>
@@ -361,7 +361,7 @@ export function KnowledgeSpaceSettingsPage() {
                     placeholder={localize(
                       "com_subscription.enter_knowledge_space_description",
                     )}
-                    className="min-h-20 resize-none rounded-md bg-white shadow-none placeholder:text-[#999999]"
+                    className="min-h-20 resize-none rounded-md bg-white shadow-none placeholder:text-text-3"
                   />
                 </div>
               </div>
@@ -481,7 +481,7 @@ export function KnowledgeSpaceSettingsPage() {
                           placeholder={localize(
                             "com_knowledge.auto_tag_custom_tags_placeholder",
                           )}
-                          className="min-h-28 resize-none bg-white placeholder:text-[#999999]"
+                          className="min-h-28 resize-none bg-white placeholder:text-text-3"
                         />
                       </TabsContent>
                     </Tabs>

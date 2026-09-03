@@ -200,7 +200,7 @@ export function KnowledgeAiBottomDock({
             // outer pt = safe-area + 8px, inner row is a fixed h-11 (44px) with the px-4 gutter.
             <div className="shrink-0 pt-[calc(env(safe-area-inset-top,0px)+8px)]">
                 <div className="relative flex h-11 w-full min-w-0 items-center px-4">
-                    <h3 className="mx-auto truncate text-base font-medium leading-6 text-[#212121]">
+                    <h3 className="mx-auto truncate text-base font-medium leading-6 text-text-1">
                         {assistantTitle}
                     </h3>
                     {/* History · MessagePlus · DoubleDown — bare 16px icons, 12px gap, right-aligned (per Figma 11495:13085). */}
@@ -211,7 +211,7 @@ export function KnowledgeAiBottomDock({
                             aria-label={localize("com_knowledge.history_chat")}
                             className={cn(
                                 "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
-                                showHistory ? "text-blue-500" : "text-[#212121] hover:text-[#4e5969]",
+                                showHistory ? "text-blue-500" : "text-text-1 hover:text-text-2",
                             )}
                         >
                             <Outlined.History className="size-4" />
@@ -220,7 +220,7 @@ export function KnowledgeAiBottomDock({
                             type="button"
                             onClick={handleNewChat}
                             aria-label={localize("com_knowledge.create_chat")}
-                            className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
+                            className="inline-flex size-4 shrink-0 items-center justify-center text-text-1 transition-colors hover:text-text-2"
                         >
                             <Outlined.MessagePlus className="size-4" />
                         </button>
@@ -228,7 +228,7 @@ export function KnowledgeAiBottomDock({
                             type="button"
                             onClick={() => setOpen(false)}
                             aria-label={localize("com_ui_collapse")}
-                            className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
+                            className="inline-flex size-4 shrink-0 items-center justify-center text-text-3 transition-colors hover:text-text-2"
                         >
                             <Outlined.DoubleDown className="size-4" />
                         </button>
@@ -356,7 +356,7 @@ export function KnowledgeAiBottomDock({
                         // backdrop is pointer-events-none so the file list behind stays clickable).
                         "pointer-events-auto relative mx-auto flex w-full max-w-[800px] flex-col",
                         open &&
-                            "overflow-hidden rounded-[20px] border border-[#ECECEC] bg-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]",
+                            "overflow-hidden rounded-[20px] border border-border-base bg-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]",
                     )}
                 >
                     {/* Floating expand button — shown whenever any conversation exists.
@@ -372,7 +372,7 @@ export function KnowledgeAiBottomDock({
                                         type="button"
                                         onClick={handleExpand}
                                         aria-label={localize("com_ui_expand")}
-                                        className="absolute bottom-full right-0 z-10 mb-2 mr-2 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
+                                        className="absolute bottom-full right-0 z-10 mb-2 mr-2 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-text-3 drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-text-2"
                                     >
                                         <Outlined.DoubleDown className="size-4 rotate-180" />
                                     </button>
@@ -396,7 +396,7 @@ export function KnowledgeAiBottomDock({
                         <div className="flex h-[clamp(440px,70vh,calc(100vh_-_160px))] flex-col">
                             {/* Header */}
                             <div className="relative flex shrink-0 items-center gap-2 px-4 py-3">
-                                <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-[22px] text-[#212121]">
+                                <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-[22px] text-text-1">
                                     {assistantTitle}
                                 </h3>
                                 <div className="min-w-0 flex-1" aria-hidden />
@@ -411,7 +411,7 @@ export function KnowledgeAiBottomDock({
                                                     aria-label={localize("com_knowledge.history_chat")}
                                                     className={cn(
                                                         "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
-                                                        showHistory ? "text-blue-500" : "text-[#212121] hover:text-[#4e5969]",
+                                                        showHistory ? "text-blue-500" : "text-text-1 hover:text-text-2",
                                                     )}
                                                 >
                                                     <Outlined.History className="size-4 shrink-0" />
@@ -429,7 +429,7 @@ export function KnowledgeAiBottomDock({
                                                     type="button"
                                                     onClick={handleNewChat}
                                                     aria-label={localize("com_knowledge.create_chat")}
-                                                    className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
+                                                    className="inline-flex size-4 shrink-0 items-center justify-center text-text-1 transition-colors hover:text-text-2"
                                                 >
                                                     <Outlined.MessagePlus className="size-4 shrink-0" />
                                                 </button>
@@ -446,7 +446,7 @@ export function KnowledgeAiBottomDock({
                                                     type="button"
                                                     onClick={() => setOpen(false)}
                                                     aria-label={localize("com_ui_collapse")}
-                                                    className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
+                                                    className="inline-flex size-4 shrink-0 items-center justify-center text-text-3 transition-colors hover:text-text-2"
                                                 >
                                                     <Outlined.DoubleDown className="size-4 shrink-0" />
                                                 </button>

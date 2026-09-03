@@ -62,10 +62,16 @@ body {
   line-height: var(--leading-body) !important;
 }
 
-.rspress-doc p,
-.rspress-doc li,
-.rspress-doc td,
-.rspress-doc th {
+/* Live demos are exempt (`:not(.rspress-preview *)`): inside a preview card the
+   COMPONENT's own classes must win. Otherwise every <p> a real component renders
+   is flattened to 14/22/400/--text-1 and the demo shows something the app would
+   never show — caught on the 状态页 State page, whose result 标题 (16/24, 500)
+   rendered identical to the compact 主提示, i.e. exactly the hierarchy the
+   designer comes here to 目检. Prose keeps the doc body rules. */
+.rspress-doc p:not(.rspress-preview *),
+.rspress-doc li:not(.rspress-preview *),
+.rspress-doc td:not(.rspress-preview *),
+.rspress-doc th:not(.rspress-preview *) {
   font-size: var(--text-body) !important;
   line-height: var(--leading-body) !important;
   /* Base text color only (NOT !important): tables set per-cell muted colors
@@ -352,4 +358,74 @@ body {
 .aside-link.aside-active,
 .aside-link:hover {
   background-color: transparent !important;
+}
+
+/* ============================================================================
+ * Live demo blocks (@rspress/plugin-preview, internal mode) — antd-style
+ * container. The plugin ships the toggle as a right-hand column inside
+ * `.rspress-preview-card` (flex row); antd puts actions in a full-width bar
+ * BELOW the demo. Its markup (Container.tsx) isn't overridable without
+ * forking the package, so restack its stable class names here instead:
+ *   · demo area on top (24px padding)
+ *   · dashed-rule actions bar under it, "显示代码" toggle centered
+ *   · expanded code joins seamlessly below (shared frame, dashed rule)
+ * ==========================================================================*/
+.rspress-preview .rspress-preview-card {
+  flex-direction: column !important;
+  padding: 0 !important;
+  border-color: rgb(var(--border-base)) !important;
+}
+/* Demo area — the unclassed first child (its inline style only sets
+   overflow/flex, so padding is safe to add here). */
+.rspress-preview .rspress-preview-card > div:first-child {
+  padding: 24px;
+}
+/* Actions bar: full-width bottom strip, dashed rule above (antd's split
+   style), toggle centered. */
+.rspress-preview .rspress-preview-operations.web {
+  width: 100%;
+  padding: 6px 0;
+  border-top: 1px dashed rgb(var(--border-base));
+}
+/* The toggle: circle icon button → quiet text button (icon + label). */
+.rspress-preview .rspress-preview-operations.web button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  height: 28px;
+  margin-left: 0;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  background-color: transparent;
+  color: rgb(var(--text-3));
+  font-size: var(--text-body-sm);
+  line-height: var(--leading-body-sm);
+}
+.rspress-preview .rspress-preview-operations.web button:hover {
+  background-color: rgb(var(--fill-1));
+  color: rgb(var(--text-1));
+}
+/* Label lives in CSS because the markup is the plugin's (zh-only site; the
+   plugin's own aria-label is zh as well). */
+.rspress-preview .rspress-preview-operations.web button::after {
+  content: '显示代码';
+}
+.rspress-preview .rspress-preview-operations.web button.button-expanded::after {
+  content: '收起代码';
+}
+/* Expanded code: fuse onto the card — the card opens its bottom edge, the
+   code block carries the shared outer frame + bottom corners, and a dashed
+   rule (same as the actions-bar rule) separates bar from code. */
+.rspress-preview > div:has(> .rspress-preview-code-show) > .rspress-preview-card {
+  border-bottom: none !important;
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+.rspress-preview .rspress-preview-code-show {
+  margin-top: 0 !important;
+  border: 1px solid rgb(var(--border-base));
+  border-top: 1px dashed rgb(var(--border-base));
+  border-radius: 0 0 var(--rp-radius-small) var(--rp-radius-small);
+  overflow: hidden;
 }

@@ -187,10 +187,10 @@ export default function AppRoot() {
                             <button
                                 type="button"
                                 onClick={handleGoBack}
-                                className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-[#ebecf0] bg-white text-[#212121] shadow-sm transition-colors hover:bg-gray-50"
+                                className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border-base bg-white text-text-1 shadow-sm transition-colors hover:bg-gray-50"
                                 aria-label={localize('com_ui_go_back')}
                             >
-                                <ChevronLeft size={16} className="text-[#212121]" />
+                                <ChevronLeft size={16} className="text-text-1" />
                             </button>
                         </div>
                     )}

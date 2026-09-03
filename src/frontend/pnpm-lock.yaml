@@ -6,6 +6,9 @@ settings:
 
 catalogs:
   default:
+    '@radix-ui/react-dialog':
+      specifier: ^1.0.2
+      version: 1.1.20
     '@radix-ui/react-slot':
       specifier: ^1.1.0
       version: 1.3.0
@@ -538,6 +541,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@radix-ui/react-dialog':
+        specifier: 'catalog:'
+        version: 1.1.20(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-slot':
         specifier: 'catalog:'
         version: 1.3.0(@types/react@18.3.31)(react@18.3.1)

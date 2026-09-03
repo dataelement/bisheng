@@ -1,7 +1,7 @@
 /**
  * Typography migration ledger — DEV-ONLY.
  * The spec itself lives in the 「设计规范 → 字体」 page; this page tracks the
- * old-classname → semantic-token replacement work (docs-ui-refactor/基础-字体规范.md §8).
+ * old-classname → semantic-token replacement work (packages/ui/docs/基础-字体规范.mdx §8).
  */
 import { ComponentPage, ExampleGroup, CompareTable } from '../components/kit';
 
@@ -12,7 +12,7 @@ export function TypographyProgress() {
       eng="Typography Inventory"
       description={
         <>
-          九档 semantic token + 系统字体栈已落地（2026-07-14）。旧 Tailwind
+          十档 semantic token（含 10px caption-sm，2026-07-30 增）+ 系统字体栈已落地（2026-07-14）。旧 Tailwind
           默认档随组件改造逐步替换，<b>不批量改</b>。剩余工作：删死字体文件（Inter / 阿里普惠体 /
           Roboto Mono，待回归后）、清 typography.css、逐步迁移。
         </>

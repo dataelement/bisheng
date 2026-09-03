@@ -1544,7 +1544,14 @@
     "fullscreen": "全屏",
     "exit_fullscreen": "退出全屏",
     "volume": "音量",
-    "progress": "播放进度"
+    "progress": "播放进度",
+    "filter": "筛选",
+    "sort": "排序",
+    "list_view": "列表视图",
+    "card_view": "卡片视图",
+    "filter_file_status": "筛选文件状态",
+    "sort_by_size_label": "大小",
+    "select_all": "全选"
   },
   "com_subscription": {
     "tab_channel": "频道",

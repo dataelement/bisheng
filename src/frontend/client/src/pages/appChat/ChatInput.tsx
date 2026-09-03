@@ -83,7 +83,7 @@ export default function ChatInput({ readOnly, v }) {
                         </div> :
                         <button
                             id="bs-send-btn"
-                            className="btn-brand-primary size-8 flex items-center justify-center rounded-full bg-primary text-white transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
+                            className="btn-brand-primary size-8 flex items-center justify-center rounded-full bg-primary text-white transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-text-2"
                             disabled={inputDisabled || fileUploading || readOnly || audioOpening}
                             onClick={() => { !inputDisabled && !fileUploading && handleSendClick() }}>
                             <SendIcon size={18} />

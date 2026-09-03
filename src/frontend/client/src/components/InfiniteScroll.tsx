@@ -51,7 +51,7 @@ export function InfiniteScroll({
             {/* 底部状态显示 */}
             <div className="py-8 flex justify-center">
                 {isLoading && (
-                    <div className="flex items-center gap-2 text-[#86909c] text-sm">
+                    <div className="flex items-center gap-2 text-text-3 text-sm">
                         <Loader2 className="size-4 animate-spin" />
                         正在加载...
                     </div>

@@ -1,105 +1,255 @@
 # 弹窗 Modal
 
-承载业务内容（表单、列表、预览）的普通弹窗。**统一标准尚未定稿**——本页只演示「已定」的基准候选壳与过渡期写法；现状盘点（5 套壳 64 文件）、待决策清单见「文档 → 组件规范 → Modal 弹窗」。
+页面正中打开的打断式浮层，用来让用户当场做个决定或完成一小段任务。组件库 `@bisheng/ui` 导出 **`Modal`**：头部 / 主体 / 底部三段、四档尺寸与降档、遮罩、层级、动效、三条关闭路径全在壳里，业务页只传内容。规范全文见「文档 → 组件规范 → 弹窗 Modal」。
 
-## 基准候选壳
+**壳把规范写死的部分**：圆角 16px + 模态投影、头部高 56px、三段左右统一 16px、底部四边 16px（主体上下不另留）、标题 16px 字重 500、遮罩黑 40% 不加模糊、层级 `z-modal`（1000）、进 200ms / 出 160ms。这些没有 prop，改不了——要改就去改规范。
 
-当前推荐的新弹窗写法：`OGDialogTemplate`（壳已对齐 C 套视觉——圆角 16 / p-5 / 灰底毛玻璃，取消/确认按钮已统一两档）。
+## 基础用法
+
+`title` + 正文 + `footer`。`trigger` 里的元素会自动接上打开事件，也可以不给 `trigger`，改用 `open` / `onOpenChange` 自己控。底部按钮主按钮最右，`ModalClose` 包住的按钮点了就关。
 
 ```tsx
-import { RecoilRoot } from 'recoil';
-import '~/locales/i18n';
-import store from '~/store';
-import { Button } from '~/components/ui/Button';
-import { Input } from '~/components/ui/Input';
-import { OGDialog, OGDialogTrigger } from '~/components/ui/OriginalDialog';
-import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
+import { Button, Modal, ModalClose } from '@bisheng/ui';
+
+const field = {
+  width: '100%',
+  height: 32,
+  padding: '0 12px',
+  borderRadius: 6,
+  border: '1px solid rgb(var(--border-base))',
+  background: 'rgb(var(--bg-page))',
+  color: 'rgb(var(--text-1))',
+};
 
 export default () => (
-  <RecoilRoot initializeState={({ set }) => set(store.lang, 'zh-Hans')}>
-    <OGDialog>
-      <OGDialogTrigger asChild>
-        <Button color="default" variant="outlined">打开基准候选壳</Button>
-      </OGDialogTrigger>
-      <OGDialogTemplate
-        title="弹窗标题"
-        description="标题下的说明文字。"
-        className="max-w-md"
-        main={
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <p>这里是弹窗正文示例。观察内边距、行距与正文和标题/按钮的间距。</p>
-            <Input placeholder="示例输入框" />
-          </div>
-        }
-        selection={{
-          selectHandler: () => null,
-          selectVariant: 'primary',
-          selectText: '确定',
-        }}
-      />
-    </OGDialog>
-  </RecoilRoot>
+  <Modal
+    trigger={<Button color="default" variant="outlined">重命名</Button>}
+    title="重命名知识库"
+    footer={
+      <>
+        <ModalClose asChild>
+          <Button color="default" variant="outlined">取消</Button>
+        </ModalClose>
+        <Button>保存</Button>
+      </>
+    }
+  >
+    <label style={{ display: 'block', marginBottom: 8, color: 'rgb(var(--text-2))' }}>名称</label>
+    <input style={field} defaultValue="产品手册" />
+  </Modal>
 );
 ```
 
-## 壳规格（已定部分）
+## 四档尺寸
 
-与二次确认弹窗同一套壳：
-
-| 部位 | 值 | 备注 |
-|---|---|---|
-| 圆角 | `rounded-2xl`（16px） | 移动端是否保留直角/贴底待定 |
-| 内边距 | `p-5`（20px）· 区块间 `gap-4` | |
-| 遮罩 | `bg-gray-500/90` + `backdrop-blur-md` | 灰底毛玻璃 |
-| 边框 / 阴影 | border `#ebebeb` + 淡投影 | |
-| 标题 | `text-base font-medium leading-6` | |
-| 取消 / 确认按钮 | 白底描边 + danger / primary 两档 | 与二次确认一致 |
-
-仍待定：遮罩、圆角 8 vs 16、内边距 20 vs 24、标题字重、z-index 三档（50 / 100 / 110）收敛、footer 按钮间距、原语收敛方向（A 套 22 处直拼是最大人群）。
-
-## 过渡期规则
-
-- 新增业务弹窗优先 `OGDialogTemplate`；**不要再新增手拼 `AlertDialog` 弹窗**。
-- 纯「确认 / 取消」的二次确认不属于本页——用 `useConfirm()`（见「Confirm 二次确认」）。
-- 窄屏下弹层贴边距、footer 按钮等宽平铺（见「文档 → 设计规范 → 多端适配」）。
-
-## 反馈评论弹窗 CommentDialog（共享壳）
-
-「标题 + textarea + 取消/提交」的轻量共享壳（容器零 padding、header/body/footer 各 `px-5`、移动端 `calc(100%-48px)` 宽 + 标题居中 + 按钮等宽、每次打开重置草稿、可选 `submitting` 支持异步提交）。点踩反馈、权限申请等场景都用它，不要再手拼。
+**按内容的横向复杂度选档，不按内容长短选档**——内容长的解法是滚动，不是加宽。`large` 只装分栏内容与表格，长段落正文放 `medium`（一行 40 字，WCAG 1.4.8 给的中文行长上限）。窗口变窄时 `large` → `medium` → `small` 自动逐级降档（1280 / 1024 两个断点），任何情况都不超过「窗口宽度 − 32px」。把浏览器拉窄就能看见。
 
 ```tsx
 import { useState } from 'react';
-import { RecoilRoot } from 'recoil';
-import '~/locales/i18n';
-import store from '~/store';
-import { Button } from '~/components/ui/Button';
-import { CommentDialog } from '~/components/ui/CommentDialog';
+import { Button, Modal, ModalClose } from '@bisheng/ui';
 
-function Demo() {
-  const [open, setOpen] = useState(false);
-  const [last, setLast] = useState('—');
+const SIZES = [
+  { size: 'small', label: 'small 400', desc: '单字段表单、短提示' },
+  { size: 'medium', label: 'medium 600（默认）', desc: '分组表单、带列表的内容' },
+  { size: 'large', label: 'large 960', desc: '多列表单、数据表格、需要预览区的内容' },
+  { size: 'fullscreen', label: '全屏', desc: '文件预览、大表格——内容本身要占满整屏' },
+];
+
+export default () => {
+  const [open, setOpen] = useState(null);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <Button color="default" variant="outlined" onClick={() => setOpen(true)}>
-        打开 CommentDialog
-      </Button>
-      <span style={{ fontSize: 12, color: 'rgb(var(--text-3))' }}>最近提交：{last}</span>
-      <CommentDialog
-        open={open}
-        onOpenChange={setOpen}
-        title="接入申请"
-        placeholder="请填写申请原因（选填）"
-        onSubmit={(c) => setLast(c || '(空)')}
-      />
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+      {SIZES.map((item) => (
+        <Button key={item.size} color="default" variant="outlined" onClick={() => setOpen(item.size)}>
+          {item.label}
+        </Button>
+      ))}
+      {SIZES.map((item) => (
+        <Modal
+          key={item.size}
+          size={item.size}
+          open={open === item.size}
+          onOpenChange={(next) => setOpen(next ? item.size : null)}
+          title={`${item.label} 弹窗`}
+          footer={
+            <>
+              <ModalClose asChild>
+                <Button color="default" variant="outlined">取消</Button>
+              </ModalClose>
+              <Button>确定</Button>
+            </>
+          }
+        >
+          {item.desc}
+        </Modal>
+      ))}
     </div>
   );
-}
+};
+```
+
+全屏档四角直角、不带遮罩，**头尾结构和普通弹窗一样**——标题左、关闭「×」右，操作按钮在底部，且**等宽平铺占满一行**（卡片档才是右对齐原宽）。**手机档（< 576px）所有尺寸一律走全屏档**，四档宽度和降档表都不再生效——把窗口拉到 576px 以下，上面任意一个都会变成全屏。
+
+## 只有主体滚动
+
+内容装不下时**只有主体那一段滚动**，头部和底部始终固定。弹窗最高不超过「窗口高度 − 64px」。用户滚到哪里都能看见标题和「保存」，不用滚回去找。
+
+```tsx
+import { Button, Modal, ModalClose } from '@bisheng/ui';
 
 export default () => (
-  <RecoilRoot initializeState={({ set }) => set(store.lang, 'zh-Hans')}>
-    <Demo />
-  </RecoilRoot>
+  <Modal
+    trigger={<Button color="default" variant="outlined">打开长内容</Button>}
+    title="服务条款"
+    footer={
+      <>
+        <ModalClose asChild>
+          <Button color="default" variant="outlined">暂不同意</Button>
+        </ModalClose>
+        <Button>同意</Button>
+      </>
+    }
+  >
+    {Array.from({ length: 24 }, (_, i) => (
+      <p key={i} style={{ marginBottom: 12, color: 'rgb(var(--text-2))' }}>
+        第 {i + 1} 段：滚动时留意头部标题和底部按钮——它们不跟着走。
+      </p>
+    ))}
+  </Modal>
 );
 ```
 
-> demo 里的 `RecoilRoot` + `import '~/locales/i18n'` 只是文档站的挂载脚手架（组件内部用了 `useLocalize`）；业务页在 App 全局已具备，无需自己包。
+## 三条关闭路径
+
+普通弹窗给三条关闭路径，**一条都不能少**：头部的关闭按钮、点击遮罩、按 Esc。关闭「×」按**有没有取消按钮**决定：表单类弹窗必须有（那是它唯一的出口），带取消按钮的确认类用 `closable={false}` 去掉——两个出口说的是同一件事，反而让人犹豫该点哪个。
+
+```tsx
+import { Button, Modal, ModalClose } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+    <Modal
+      trigger={<Button color="default" variant="outlined">表单类：有「×」</Button>}
+      title="新建频道"
+      footer={<Button>创建</Button>}
+    >
+      表单弹窗的唯一出口就是右上角这个「×」，必须留着。
+    </Modal>
+    <Modal
+      closable={false}
+      trigger={<Button color="default" variant="outlined">确认类：无「×」</Button>}
+      title="要放弃这次编辑吗"
+      footer={
+        <>
+          <ModalClose asChild>
+            <Button color="default" variant="outlined">继续编辑</Button>
+          </ModalClose>
+          <Button color="danger">放弃</Button>
+        </>
+      }
+    >
+      底部两个按钮已经把话说完了，右上角不再给第二个出口。
+    </Modal>
+  </div>
+);
+```
+
+## 有未保存内容 / 提交进行中
+
+填了十分钟的表单，不能因为手滑点到遮罩就没了：`beforeClose` 返回 `false` 就把弹窗留住，业务页自己弹二次确认。提交进行中传 `submitting`，**三条路径全部禁用**，直到接口返回——接口还没回就关掉，用户不知道这一步到底成没成。
+
+```tsx
+import { useState } from 'react';
+import { Button, Modal, ModalClose } from '@bisheng/ui';
+
+export default () => {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [hint, setHint] = useState('');
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <Button color="default" variant="outlined" onClick={() => { setDraft(''); setHint(''); setOpen(true); }}>
+        打开表单
+      </Button>
+      <span style={{ fontSize: 12, color: 'rgb(var(--text-3))' }}>{hint}</span>
+      <Modal
+        open={open}
+        onOpenChange={setOpen}
+        title="填写反馈"
+        submitting={submitting}
+        beforeClose={(source) => {
+          if (!draft) return true;
+          setHint(`已拦截一次「${source}」关闭：内容还没保存`);
+          return false;
+        }}
+        footer={
+          <>
+            <ModalClose asChild>
+              <Button color="default" variant="outlined" disabled={submitting}>取消</Button>
+            </ModalClose>
+            <Button
+              disabled={submitting}
+              onClick={() => {
+                setSubmitting(true);
+                setHint('提交中，三条出口都锁住了');
+                window.setTimeout(() => { setSubmitting(false); setOpen(false); setHint('已提交'); }, 2000);
+              }}
+            >
+              {submitting ? '提交中…' : '提交'}
+            </Button>
+          </>
+        }
+      >
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="随便打几个字，再去点遮罩或按 Esc 试试"
+          style={{
+            width: '100%',
+            minHeight: 96,
+            padding: 12,
+            borderRadius: 6,
+            border: '1px solid rgb(var(--border-base))',
+            background: 'rgb(var(--bg-page))',
+            color: 'rgb(var(--text-1))',
+          }}
+        />
+      </Modal>
+    </div>
+  );
+};
+```
+
+> `ModalClose` 包住的按钮不走 `beforeClose`——那道拦截是给「误触的出口」用的，用户瞄准了按的取消不算误触。
+
+## API
+
+| prop | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `title` | `ReactNode` | 必填 | 头部标题，同时是弹窗的无障碍名称 |
+| `size` | `'small' \| 'medium' \| 'large' \| 'fullscreen'` | `'medium'` | 四档尺寸；手机档一律全屏 |
+| `open` / `defaultOpen` / `onOpenChange` | — | — | 受控 / 非受控开关 |
+| `trigger` | `ReactNode` | — | 打开弹窗的元素，自动接上打开事件 |
+| `children` | `ReactNode` | — | 主体内容，唯一会滚动的区域 |
+| `description` | `ReactNode` | — | 标题下的说明文字，排在主体最上方 |
+| `footer` | `ReactNode` | — | 底部操作区；不传则整段不出现 |
+| `closable` | `boolean` | `true` | 头部的关闭「×」 |
+| `closeLabel` | `string` | `'Close'` | 「×」的无障碍名称（组件库不含文案，由业务传） |
+| `maskClosable` / `escClosable` | `boolean` | `true` | 关掉其中一条关闭路径 |
+| `submitting` | `boolean` | `false` | 提交中：三条路径全部禁用 |
+| `beforeClose` | `(source) => boolean \| void` | — | 返回 `false` 留住弹窗；`source` 为 `'close-button' \| 'overlay' \| 'esc'` |
+| `className` / `bodyClassName` / `footerClassName` / `overlayClassName` | `string` | — | 局部覆盖；`overlayClassName` 用于叠在别的浮层上时把遮罩置空 |
+| `container` | `HTMLElement` | `document.body` | portal 挂载点 |
+
+## 不要用弹窗的场合
+
+- 信息在页面里就地展示得下 → 行内区域。每个弹窗都是一次强制打断。
+- 用户要一边看着页面内容一边改 → 抽屉 Drawer。
+- 只有几行文字或两三个操作 → 气泡卡片 Popover。
+- 只是告诉用户「刚才那步成了」→ 轻提示 Toast。
+- 内容有自己的地址、要能分享 → 独立页面。
+- 纯「确认 / 取消」的破坏性操作 → 二次确认（见「组件 → Confirm 二次确认」），不要用 `Modal` 手拼。
+
+**一次只开一个弹窗**：弹窗里不能再开弹窗，两层浮层叠着，用户数不清关几次才回得去。弹窗里可以开二次确认，那是一问一答，不算一层——那种情况给它的遮罩传 `overlayClassName="bg-transparent"`，同一时间只压暗一次页面。

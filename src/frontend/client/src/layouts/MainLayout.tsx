@@ -60,24 +60,24 @@ function SidebarItem({ icon, activeIcon, to, active, label, showLabel = false, o
       to={to}
       onClick={handleClick}
       className={cn(
-        'flex cursor-pointer rounded-lg transition-colors hover:bg-[#f2f3f5]',
+        'flex cursor-pointer rounded-lg transition-colors hover:bg-fill-2',
         showLabel
           ? 'mx-2 h-[44px] items-center justify-start gap-2 px-2 py-2'
           : 'w-14 flex-col items-center justify-center gap-0.5 py-2',
       )}
     >
       {React.cloneElement((active && activeIcon ? activeIcon : icon) as React.ReactElement, {
-        className: cn(showLabel ? 'size-4' : 'size-5', active ? 'text-blue-500' : 'text-[#818181]'),
+        className: cn(showLabel ? 'size-4' : 'size-5', active ? 'text-blue-500' : 'text-text-3'),
       })}
       {showLabel ? (
-        <span className={cn('text-[14px] leading-[20px]', active ? 'text-blue-500' : 'text-[#212121]')}>
+        <span className={cn('text-[14px] leading-[20px]', active ? 'text-blue-500' : 'text-text-1')}>
           {label}
         </span>
       ) : (
         <span
           className={cn(
-            'max-w-full break-words text-center text-[10px] leading-[18px]',
-            active ? 'font-medium text-blue-500' : 'text-[#818181]',
+            'max-w-full break-words text-center text-caption-sm',
+            active ? 'font-medium text-blue-500' : 'text-text-3',
           )}
         >
           {label}
@@ -249,14 +249,14 @@ function Sidebar({
                   alt={localize('com_nav_home')}
                 />
               ) : (
-                <div className="size-8 shrink-0 rounded-md bg-[#F2F3F5]" aria-hidden />
+                <div className="size-8 shrink-0 rounded-md bg-fill-2" aria-hidden />
               )}
               {onCloseMobileApps ? (
                 <button
                   type="button"
                   onClick={onCloseMobileApps}
                   aria-label={localize('com_nav_close_sidebar')}
-                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-text-2 hover:bg-fill-1"
                 >
                   <X className="size-4" />
                 </button>
@@ -297,13 +297,13 @@ function Sidebar({
             <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer" className="mb-2">
               <div
                 title={localize('com_nav_admin_panel')}
-                className="rounded-lg p-3 transition-colors hover:bg-[#f2f3f5]"
+                className="rounded-lg p-3 transition-colors hover:bg-fill-2"
               >
-                <Outlined.DeviceDesktopExchange className="size-5 text-[#818181]" />
+                <Outlined.DeviceDesktopExchange className="size-5 text-text-3" />
               </div>
             </a>
             {/* Divider only makes sense alongside the admin-panel entry; hide both together. */}
-            <div className="mb-4 w-full h-px bg-[#ececec]" />
+            <div className="mb-4 w-full h-px bg-fill-3" />
           </>
         )}
 
@@ -459,7 +459,7 @@ export default function MainLayout() {
   return (
     <div
       className={cn(
-        'relative flex w-screen bg-[#F8F8F8]',
+        'relative flex w-screen bg-fill-1',
         isMobile ? 'min-h-[100dvh] overflow-x-clip' : 'h-[100dvh] overflow-hidden',
       )}
     >
@@ -543,7 +543,7 @@ export default function MainLayout() {
                     type="button"
                     aria-label={localize('com_nav_open_sidebar')}
                     onClick={() => setSystemMenuOpen(true)}
-                    className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
+                    className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
                   >
                     <Outlined.SidebarMenu className="size-5" />
                   </button>
@@ -598,12 +598,12 @@ export default function MainLayout() {
                     type="button"
                     aria-label={localize('com_nav_open_sidebar')}
                     onClick={() => setSystemMenuOpen(true)}
-                    className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
+                    className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
                   >
                     <Outlined.SidebarMenu className="size-5" />
                   </button>
                   {/* Centered title — same style as the chat / knowledge / subscription headers. */}
-                  <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-[#212121]">
+                  <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-text-1">
                     {menuNames.apps}
                   </span>
                   <div className="min-w-0 flex-1" aria-hidden />

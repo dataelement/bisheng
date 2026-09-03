@@ -60,7 +60,7 @@ export function LoadMore({ onLoad, loading }: LoadMoreProps) {
     }, []);
 
     return (
-        <div ref={sentinelRef} className="flex h-10 w-full items-center justify-center text-xs text-[#86909c]">
+        <div ref={sentinelRef} className="flex h-10 w-full items-center justify-center text-xs text-text-3">
             {loading ? "..." : ""}
         </div>
     );

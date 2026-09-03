@@ -4,6 +4,7 @@ import { useState, type MouseEvent } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
 import { RoundCheckbox } from "~/components/ui/RoundCheckbox";
+import { SELECTION_CHECKBOX_CLASS } from "./selectionCheckboxStyles";
 import { Card, CardContent } from "~/components/ui/Card";
 import {
     DropdownMenu,
@@ -157,6 +158,9 @@ export function FileCard({
     // Inline-create placeholders (isCreating) are excluded — a freshly created
     // folder is a normal folder with a highlighted rename input, no scrim/tag.
     const isUploadingFolderPlaceholder = isFolder && isUploading && !isCreating;
+    // The frontend-only folder upload placeholder (no backend identity) keeps a
+    // disabled checkbox instead of dropping it, so the column stays put.
+    const isSelectable = !isUploadingFolderPlaceholder;
     /** Files that haven't finished parsing get the neutral grey skin (Figma 11671:34497). */
     const isNotParsed = !isFolder && !!file.status && file.status !== FileStatus.SUCCESS;
     /** Subset of isNotParsed that should show the "In progress" overlay tag. */
@@ -187,8 +191,8 @@ export function FileCard({
     // formatTime is now imported from ../knowledgeUtils
 
     const nameToneClass = isKnowledgeItemPreviewable(file)
-        ? "text-[#212121]"
-        : "text-[#999]";
+        ? "text-text-1"
+        : "text-text-3";
 
     /**
      * Status pill overlaid on the bottom-left of the preview area (Figma 11671:34497).
@@ -356,11 +360,13 @@ export function FileCard({
     const showVersionManagement = versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && Boolean(onOpenVersionManagement);
     const showVersionHistory = versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
     const showMoveItem = Boolean(onMove) && !isCreating;
-    // Placeholder has only a temp id (no backend identity) — suppress all row actions.
-    const showMoreMenu = !isUploadingFolderPlaceholder && (canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory);
-    /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
-    const showInlineDownloadButton = canDownload && !hideDownloadActions && !showMoreMenu;
     const showMenuDownloadItem = canDownload && !hideDownloadActions;
+    // Card view puts EVERY action behind the ⋮ menu, even a lone one, so a card
+    // never sprouts a second floating control over its thumbnail.
+    const hasReviewedMenuItems = showMenuDownloadItem || isAdmin || canRename || canDelete
+        || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory;
+    // Placeholder has only a temp id (no backend identity) — suppress all row actions.
+    const showMoreMenu = !isUploadingFolderPlaceholder && hasReviewedMenuItems;
     const showCardActions = moreMenuOpen || hovered;
     const cardOpensPreviewOrFolder =
         !isCreating &&
@@ -442,6 +448,9 @@ export function FileCard({
     const handleCardContextMenu = (e: MouseEvent<HTMLDivElement>) => {
         if (!showMoreMenu) return;
         e.preventDefault();
+        // Same lazy permission resolution as the "..." trigger, otherwise the
+        // right-click menu renders with unresolved (reduced) permissions.
+        onEnsureFilePermissions?.(file);
         setContextMenuPosition({ x: e.clientX, y: e.clientY });
         setContextMenuOpen(true);
     };
@@ -506,7 +515,7 @@ export function FileCard({
 
                     {/* Date + tags on a single line */}
                     <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden">
-                        <span className="shrink-0 text-xs leading-5 text-[#818181] tabular-nums">
+                        <span className="shrink-0 text-xs leading-5 text-text-3 tabular-nums">
                             {formatTimeCard(file.updatedAt)}
                         </span>
                         {!isFolder && file.tags && file.tags.length > 0 && (
@@ -523,10 +532,11 @@ export function FileCard({
                 </div>
 
                 {/* Circular selection checkbox on the far right */}
-                {!hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
+                {!hideSelectionCheckbox && (
                     <RoundCheckbox
                         className="shrink-0"
                         checked={isSelected}
+                        disabled={!isSelectable}
                         onCheckedChange={(checked) => onSelect(checked)}
                     />
                 )}
@@ -551,8 +561,8 @@ export function FileCard({
                         ? "bg-[#fbfbfb]"
                         : "bg-white",
                 isSelected
-                    ? "border-[#ECECEC] shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]"
-                    : "border-[#ECECEC] hover:border-[#c9cdd4]",
+                    ? "border-border-base shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]"
+                    : "border-border-base hover:border-border-deep",
                 hovered && "shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]",
                 // F034: highlight a folder card as the drop target — card border only
                 isFolderDragOver && "border-primary"
@@ -584,7 +594,7 @@ export function FileCard({
                             style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
                         />
                     </DropdownMenuTrigger>
-                    <ActionMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                    <ActionMenuContent align="start" width={140} onClick={(e) => e.stopPropagation()}>
                         {moreMenuItems}
                     </ActionMenuContent>
                 </DropdownMenu>
@@ -602,7 +612,11 @@ export function FileCard({
                 {!hideSelectionCheckbox && mobileListMode && (
                     <div className="hidden max-[767px]:flex max-[767px]:shrink-0 max-[767px]:items-center max-[767px]:justify-center max-[767px]:pl-1 max-[767px]:pr-0.5">
                         <Checkbox
-                            className={isSelected ? "border-primary" : "border-gray-400"}
+                            className={cn(
+                                SELECTION_CHECKBOX_CLASS,
+                                !isSelectable && "cursor-not-allowed opacity-50",
+                            )}
+                            disabled={!isSelectable}
                             checked={isSelected}
                             onCheckedChange={(checked) => onSelect(!!checked)}
                             onPointerDown={(e) => e.stopPropagation()}
@@ -631,7 +645,7 @@ export function FileCard({
                         {renderSimilarTag(true)}
                     </div>
 
-                    {!hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
+                    {!hideSelectionCheckbox && (
                         <div
                             className={cn(
                                 "absolute left-2 top-2 z-10 transition-opacity",
@@ -644,7 +658,11 @@ export function FileCard({
                             )}
                         >
                             <Checkbox
-                                className={isSelected ? "border-primary" : "border-gray-400"}
+                                className={cn(
+                                    SELECTION_CHECKBOX_CLASS,
+                                    !isSelectable && "cursor-not-allowed opacity-50",
+                                )}
+                                disabled={!isSelectable}
                                 checked={isSelected}
                                 onCheckedChange={(checked) => onSelect(!!checked)}
                                 onPointerDown={(e) => e.stopPropagation()}
@@ -665,17 +683,6 @@ export function FileCard({
                                     : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
                             )}
                         >
-                            {showInlineDownloadButton && (
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="w-5 h-5 rounded-md hover:bg-gray-100 shrink-0"
-                                    onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                                    title={localize("com_knowledge.download")}
-                                >
-                                    <Download className="size-3.5 text-[#4e5969] group-hover:text-[#1d2129]" />
-                                </Button>
-                            )}
                             {showMoreMenu && (
                                 <DropdownMenu open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange}>
                                     <DropdownMenuTrigger asChild>
@@ -685,12 +692,13 @@ export function FileCard({
                                             className="w-5 h-5 rounded-md shrink-0"
                                             onClick={(e) => e.stopPropagation()}
                                         >
-                                            <MoreVertical className="size-4 text-[#4e5969] group-hover:text-[#1d2129]" />
+                                            <MoreVertical className="size-4 text-text-2 group-hover:text-text-1" />
                                         </Button>
                                     </DropdownMenuTrigger>
 
                                     <ActionMenuContent
                                         align="end"
+                                        width={140}
                                         onClick={(e) => e.stopPropagation()}
                                     >
                                         {moreMenuItems}
@@ -718,7 +726,7 @@ export function FileCard({
                                 <TagGroup tags={file.tags} variant="text" highlightedTagIds={highlightedTagIds} />
                             )}
                         </div>
-                        <span className="shrink-0 text-[10px] leading-5 text-[#999] tabular-nums">{formatTimeCard(file.updatedAt)}</span>
+                        <span className="shrink-0 text-caption-sm leading-5 text-text-3 tabular-nums">{formatTimeCard(file.updatedAt)}</span>
                     </div>
                 </div>
 
@@ -741,7 +749,7 @@ export function FileCard({
                             onClick={(e) => { e.stopPropagation(); onDownload(); }}
                             title={localize("com_knowledge.download")}
                         >
-                            <Download className="size-3.5 text-[#4e5969]" />
+                            <Download className="size-3.5 text-text-2" />
                         </Button>
                     )}
                     {showMoreMenu && (
@@ -753,7 +761,7 @@ export function FileCard({
                                     className="h-5 w-5 shrink-0 rounded-md"
                                     onClick={(e) => e.stopPropagation()}
                                 >
-                                    <MoreVertical className="size-4 text-[#4e5969]" />
+                                    <MoreVertical className="size-4 text-text-2" />
                                 </Button>
                             </DropdownMenuTrigger>
                             <ActionMenuContent

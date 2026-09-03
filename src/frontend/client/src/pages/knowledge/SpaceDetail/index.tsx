@@ -45,7 +45,8 @@ import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
-import { FileTable } from "./FileTable";
+import { FileListToolbar } from "./FileListToolbar";
+import { FileListView } from "./FileListView";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
 import { MoveToDialog } from "./MoveToDialog";
@@ -176,7 +177,6 @@ export function KnowledgeSpaceContent({
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
     const fileListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
-    const tableScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         // In-progress folder upload: show its placeholder card (keyed to the space +
@@ -652,10 +652,9 @@ export function KnowledgeSpaceContent({
     };
 
     const handleStatusFilter = (status: FileStatus, checked: boolean) => {
-        const coupled = [status];
         const newFilter = checked
-            ? [...statusFilter, ...coupled.filter(s => !statusFilter.includes(s))]
-            : statusFilter.filter(s => !coupled.includes(s));
+            ? (statusFilter.includes(status) ? statusFilter : [...statusFilter, status])
+            : statusFilter.filter((s) => s !== status);
         setStatusFilter(newFilter);
         onFilterStatus(newFilter);
     };
@@ -940,6 +939,13 @@ export function KnowledgeSpaceContent({
         return null;
     };
 
+    // Toolbar select-all state — uploading folder placeholders (no backend
+    // identity) never count, mirroring handleSelectAll / handleSelectFile.
+    const selectableFiles = displayFiles.filter((f) => !isFolderUploadPlaceholder(f));
+    const isAllSelectedOnPage =
+        selectableFiles.length > 0 && selectableFiles.every((f) => selectedFiles.has(f.id));
+    const isSelectionIndeterminate =
+        !isAllSelectedOnPage && selectableFiles.some((f) => selectedFiles.has(f.id));
     const hasFailedFiles = displayFiles.some(f =>
         selectedFiles.has(f.id) && (
             f.status === FileStatus.FAILED ||
@@ -1018,7 +1024,7 @@ export function KnowledgeSpaceContent({
 
     return (
         <div
-            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg px-4 max-[767px]:overflow-hidden max-[767px]:px-0"
+            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg max-[767px]:overflow-hidden"
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
@@ -1064,7 +1070,7 @@ export function KnowledgeSpaceContent({
                                     handleSearch({ scope: currentPath.length === 0 ? "all" : "current", tagIds: [], keyword: "" });
                                     onCloseSearch?.();
                                 }}
-                                className="shrink-0 text-sm text-[#999]"
+                                className="shrink-0 text-sm text-text-3"
                             >
                                 {localize("com_knowledge.cancel")}
                             </button>
@@ -1088,7 +1094,7 @@ export function KnowledgeSpaceContent({
                                 aria-label={localize("com_nav_open_sidebar")}
                                 onClick={() => onOpenSystemMenu?.()}
                                 disabled={spaceListOpen}
-                                className={cn("inline-flex size-5 shrink-0 items-center justify-center text-[#212121]", spaceListOpen && "pointer-events-none text-[#C9CDD4]")}
+                                className={cn("inline-flex size-5 shrink-0 items-center justify-center text-text-1", spaceListOpen && "pointer-events-none text-text-4")}
                             >
                                 <Outlined.SidebarMenu className="size-5" />
                             </button>
@@ -1100,10 +1106,10 @@ export function KnowledgeSpaceContent({
                             aria-expanded={spaceListOpen}
                             className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
                         >
-                            <span className="truncate text-[16px] font-medium leading-6 text-[#212121]">
+                            <span className="truncate text-[16px] font-medium leading-6 text-text-1">
                                 {currentPath.length > 0 ? currentPath[currentPath.length - 1].name : space.name}
                             </span>
-                            <Outlined.Down className={cn("size-5 shrink-0 text-[#86909C] transition-transform", spaceListOpen && "rotate-180")} />
+                            <Outlined.Down className={cn("size-5 shrink-0 text-text-3 transition-transform", spaceListOpen && "rotate-180")} />
                         </button>
                         {/* Right group — same fixed width as the left group */}
                         <div className="flex min-w-[84px] shrink-0 items-center justify-end gap-3">
@@ -1111,7 +1117,7 @@ export function KnowledgeSpaceContent({
                                 type="button"
                                 aria-label={localize("com_knowledge.search")}
                                 onClick={() => onOpenSearch?.()}
-                                className={cn("inline-flex size-5 shrink-0 items-center justify-center text-[#212121]", spaceListOpen && "pointer-events-none text-[#C9CDD4]")}
+                                className={cn("inline-flex size-5 shrink-0 items-center justify-center text-text-1", spaceListOpen && "pointer-events-none text-text-4")}
                             >
                                 <Outlined.Search className="size-5" />
                             </button>
@@ -1120,13 +1126,13 @@ export function KnowledgeSpaceContent({
                                     <button
                                         type="button"
                                         aria-label={localize("com_knowledge.sort_field")}
-                                        className={cn("inline-flex size-5 shrink-0 items-center justify-center text-[#212121] outline-none", spaceListOpen && "pointer-events-none text-[#C9CDD4]")}
+                                        className={cn("inline-flex size-5 shrink-0 items-center justify-center text-text-1 outline-none", spaceListOpen && "pointer-events-none text-text-4")}
                                     >
                                         <Outlined.Sort className="size-5" />
                                     </button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
-                                    <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.sort_field")}</div>
+                                    <div className="px-2 py-1.5 text-xs font-medium text-text-3">{localize("com_knowledge.sort_field")}</div>
                                     {[
                                         { value: SortType.NAME, label: localize("com_knowledge.sort_by_name_label") },
                                         { value: SortType.TYPE, label: localize("com_knowledge.sort_by_type_label") },
@@ -1139,7 +1145,7 @@ export function KnowledgeSpaceContent({
                                         >
                                             <span>{opt.label}</span>
                                             {sortBy === opt.value && (
-                                                <span className="shrink-0 text-xs text-[#86909c]">
+                                                <span className="shrink-0 text-xs text-text-3">
                                                     {sortDirection === SortDirection.ASC ? "↑" : "↓"}
                                                 </span>
                                             )}
@@ -1155,7 +1161,7 @@ export function KnowledgeSpaceContent({
                                     <button
                                         type="button"
                                         aria-label={localize("com_knowledge.more")}
-                                        className={cn("inline-flex size-5 shrink-0 items-center justify-center text-[#212121] outline-none", spaceListOpen && "pointer-events-none text-[#C9CDD4]")}
+                                        className={cn("inline-flex size-5 shrink-0 items-center justify-center text-text-1 outline-none", spaceListOpen && "pointer-events-none text-text-4")}
                                     >
                                         <Outlined.MoreCircle className="size-5" />
                                     </button>
@@ -1211,17 +1217,7 @@ export function KnowledgeSpaceContent({
                 space={space}
                 currentPath={currentPath}
                 onNavigateFolder={onNavigateFolder}
-                searchQuery={searchQuery}
                 isSearching={isSearching}
-                onSearch={handleSearch}
-                viewMode={viewMode}
-                setViewMode={setViewMode}
-                enableCardMode={!isH5}
-                statusFilter={statusFilter}
-                onFilterStatus={handleStatusFilter}
-                sortBy={sortBy}
-                sortDirection={sortDirection}
-                onSort={handleSort}
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
                 onTriggerUploadFolder={triggerUploadFolder}
@@ -1248,6 +1244,28 @@ export function KnowledgeSpaceContent({
                 canManageMembers={canManageMembers}
             />
             </div>
+            )}
+
+            {/* Unified toolbar — shared by the list and card views (Figma 13198:75844).
+                Hidden in the full-page search view, which carries its own search box. */}
+            {!isH5 && !searchMode && (
+                <FileListToolbar
+                    spaceId={space.id}
+                    isRoot={currentPath.length === 0}
+                    onSearch={handleSearch}
+                    statusFilter={statusFilter}
+                    onFilterStatus={handleStatusFilter}
+                    showFilter={space.role !== SpaceRole.MEMBER}
+                    sortBy={sortBy}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                    viewMode={viewMode}
+                    setViewMode={setViewMode}
+                    isAllSelected={isAllSelectedOnPage}
+                    isIndeterminate={isSelectionIndeterminate}
+                    hasSelectableFiles={selectableFiles.length > 0}
+                    onSelectAll={() => handleSelectAll(isAllSelectedOnPage)}
+                />
             )}
 
             {/* Content Container：中间区域滚动；手机端分页栏在下方 shrink-0，不随列表滚走 */}
@@ -1306,7 +1324,7 @@ export function KnowledgeSpaceContent({
                         // centers in the visible region above it, matching the card grid.
                         <div className="flex h-full flex-1 flex-col items-center justify-center pb-[112px] pt-10 text-center">
                             <EmptyStateIllustration className="size-[120px] mb-4" />
-                            <p className="text-[14px] font-normal leading-6 text-[#999999]">
+                            <p className="text-[14px] font-normal leading-6 text-text-3">
                                 {searchQuery ? localize("com_knowledge.no_matched_file") : canUploadFile ? localize("com_knowledge.no_file_here_please") : localize("com_knowledge.no_file_here")}
                                 {canUploadFile && !searchQuery && (
                                     <span
@@ -1325,10 +1343,12 @@ export function KnowledgeSpaceContent({
                                 className={cn(
                                     // pb-[112px] reserves room for the bottom AI dock (40px gap + 56px input + 16px safe-area)
                                     // so the last card row clears the dock with a 40px visual gap above the input top.
-                                    "w-full min-w-0 pt-4 pb-[112px]",
+                                    "w-full min-w-0 pb-[112px]",
                                     effectiveViewMode === "list"
-                                        ? "grid grid-cols-1 gap-0"
-                                        : "grid gap-4"
+                                        // H5 list stays full-bleed — its rows carry their own px-4 so a
+                                        // selected row's background spans the full width.
+                                        ? "grid grid-cols-1 gap-0 pt-4"
+                                        : "grid gap-2 px-2 pt-1"
                                 )}
                                 style={
                                     effectiveViewMode === "card"
@@ -1378,16 +1398,14 @@ export function KnowledgeSpaceContent({
                             </div>
                         </div>
                     ) : (
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
-                            <div ref={tableScrollRevealRef} className="flex min-h-0 min-w-0 flex-1 flex-col border-t border-[#e5e6eb]">
-                                <FileTable files={displayFiles}
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                            <FileListView files={displayFiles}
                                     onEnsureFilePermissions={ensureFilePermissions}
                                     onScroll={handleListScroll}
                                     /* Reserve 112px under the last row so the bottom AI dock leaves
                                        a 40px visual gap above the input. */
                                     bottomSpacing={112}
                                     selectedFiles={selectedFiles}
-                                    handleSelectAll={handleSelectAll}
                                     handleSelectFile={handleSelectFile}
                                     isAdmin={isAdmin}
                                     currentUserRole={space.role}
@@ -1413,13 +1431,9 @@ export function KnowledgeSpaceContent({
                                     onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                                     onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                                     canManageMembers={canManageMembers}
-                                    sortBy={sortBy}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
                                     highlightedTagIds={searchTagIds}
                                     highlightKeyword={searchQuery}
-                                />
-                            </div>
+                            />
                         </div>
                     )}
                 </div>
@@ -1428,7 +1442,7 @@ export function KnowledgeSpaceContent({
             {/* Footer：仅在搜索且有选中时展示所选文件的路径面包屑（无分页器） */}
             {!isH5 && isSearching && selectedFiles.size > 0 && (
                 <div className="mt-auto w-full min-w-0 shrink-0">
-                    <div className="flex w-full min-w-0 flex-shrink-0 items-center gap-y-1 border-t border-[#e5e6eb] bg-white py-3">
+                    <div className="flex w-full min-w-0 flex-shrink-0 items-center gap-y-1 border-t border-border-base bg-white px-4 py-3">
                         <SelectionPathBreadcrumb
                             spaceId={space.id}
                             spaceName={space.name}
@@ -1445,16 +1459,16 @@ export function KnowledgeSpaceContent({
                 /* Floating capsule: 16px from left/right/bottom, 12px inner padding. Buttons share
                    width evenly (flex-1); a 12px-tall divider sits between them. */
                 <div className="absolute inset-x-0 bottom-[max(16px,env(safe-area-inset-bottom))] z-30 px-4">
-                    <div className="flex w-full items-center rounded-[20px] border border-[#EBECF0] bg-white p-3 shadow-[0_6px_24px_0_rgba(0,17,147,0.12)]">
+                    <div className="flex w-full items-center rounded-[20px] border border-border-base bg-white p-3 shadow-[0_6px_24px_0_rgba(0,17,147,0.12)]">
                         {inlineActions.map((a, i) => (
                             <Fragment key={a.key}>
-                                {i > 0 && <span className="h-3 w-px shrink-0 bg-[#EBECF0]" aria-hidden />}
+                                {i > 0 && <span className="h-3 w-px shrink-0 bg-fill-3" aria-hidden />}
                                 <button
                                     type="button"
                                     onClick={a.onClick}
                                     className={cn(
                                         "flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-4 py-[5px] text-sm",
-                                        a.danger ? "text-[#F53F3F]" : "text-[#212121]",
+                                        a.danger ? "text-[#F53F3F]" : "text-text-1",
                                     )}
                                 >
                                     <a.Icon className="size-4" />
@@ -1464,12 +1478,12 @@ export function KnowledgeSpaceContent({
                         ))}
                         {overflowActions.length > 0 && (
                             <>
-                                {inlineActions.length > 0 && <span className="h-3 w-px shrink-0 bg-[#EBECF0]" aria-hidden />}
+                                {inlineActions.length > 0 && <span className="h-3 w-px shrink-0 bg-fill-3" aria-hidden />}
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <button
                                             type="button"
-                                            className="flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-4 py-[5px] text-sm text-[#212121]"
+                                            className="flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-4 py-[5px] text-sm text-text-1"
                                         >
                                             <Outlined.More className="size-4" />
                                             {localize("com_knowledge.more")}
@@ -1546,7 +1560,7 @@ export function KnowledgeSpaceContent({
                         <DialogFooter>
                             <button
                                 type="button"
-                                className="inline-flex h-9 items-center justify-center rounded-md border border-[#e5e6eb] bg-white px-4 text-sm text-[#4e5969] hover:bg-[#f7f8fa]"
+                                className="inline-flex h-9 items-center justify-center rounded-md border border-border-base bg-white px-4 text-sm text-text-2 hover:bg-fill-1"
                                 onClick={() => setWebLinkDialogOpen(false)}
                                 disabled={webLinkSubmitting}
                             >

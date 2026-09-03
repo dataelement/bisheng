@@ -323,12 +323,7 @@ def _system_relation(
 ) -> dict:
     children: list[dict] = [_computed(f"system_{action}_marker")]
     if type_name in SYSTEM_SHARED_ACTION_TYPES[action]:
-        children.extend(
-            (
-                _computed("public_reader"),
-                _from("shared_with", "member"),
-            )
-        )
+        children.append(_from("shared_with", "member"))
     if parent_types:
         children.append(_from("parent", f"system_can_{action}"))
     return _union(*children)
@@ -336,7 +331,6 @@ def _system_relation(
 
 def _system_visible_relation(*, parent_types: tuple[str, ...]) -> dict:
     children: list[dict] = [
-        _computed("public_reader"),
         _from("shared_with", "member"),
     ]
     if parent_types:

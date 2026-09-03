@@ -93,7 +93,7 @@ export function SelectAllBelowBanner({ scrollRef, className }: SelectAllBelowBan
             {/* Calibration line: everything below this line gets selected on click. */}
             <div
                 aria-hidden
-                className="h-0 flex-1 border-t border-dashed border-[#E5E6EB]"
+                className="h-0 flex-1 border-t border-dashed border-border-base"
             />
         </div>
     );

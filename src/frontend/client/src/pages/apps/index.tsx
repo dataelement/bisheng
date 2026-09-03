@@ -115,7 +115,7 @@ export default function AppCenter() {
             className="flex shrink-0 items-center justify-center gap-[6px] rounded-lg px-[10px] py-[6px] transition-colors fine-pointer:hover:bg-gray-50"
         >
             <ChannelBlocksArrowsIcon className="size-4 text-blue-500" />
-            <span className="font-['PingFang_SC'] text-[#212121] text-[12px] leading-[20px] whitespace-nowrap">
+            <span className="font-['PingFang_SC'] text-text-1 text-[12px] leading-[20px] whitespace-nowrap">
                 {localize('com_app.explore_more')}
             </span>
         </Link>

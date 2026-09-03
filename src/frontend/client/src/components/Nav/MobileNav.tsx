@@ -56,7 +56,7 @@ export default function MobileNav({
   onToggleAppHistoryDropdown,
 }: MobileNavProps) {
   const mobileHeadIconBtnClassName =
-    'inline-flex size-5 shrink-0 items-center justify-center text-[#212121]';
+    'inline-flex size-5 shrink-0 items-center justify-center text-text-1';
   const localize = useLocalize();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -120,7 +120,7 @@ export default function MobileNav({
     );
 
   const appBackBtnClassName =
-    'inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-[#E5E6EB] bg-white text-[#212121] shadow-sm transition-colors hover:bg-[#F7F8FA]';
+    'inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-border-base bg-white text-text-1 shadow-sm transition-colors hover:bg-fill-1';
 
   return (
     <div
@@ -166,7 +166,7 @@ export default function MobileNav({
             aria-label={preferBackButton ? localize('com_ui_go_back') : localize('com_nav_open_sidebar')}
             className={cn(
               mobileHeadIconBtnClassName,
-              (historyDropdownOpen || appHistoryDropdownOpen) && 'pointer-events-none text-[#C9CDD4]',
+              (historyDropdownOpen || appHistoryDropdownOpen) && 'pointer-events-none text-text-4',
             )}
             onClick={preferBackButton ? (onBack ?? toggleSidebar) : () => { setHistoryDropdownOpen(false); setSystemMenuOpen(true); }}
           >
@@ -199,12 +199,12 @@ export default function MobileNav({
                     title={chatMobileHeader.title}
                     className="flex min-w-0 max-w-full items-center justify-center gap-1 outline-none"
                   >
-                    <span className="truncate text-[16px] font-medium leading-6 text-[#212121]">
+                    <span className="truncate text-[16px] font-medium leading-6 text-text-1">
                       {chatMobileHeader.title}
                     </span>
                     <Outlined.Down
                       className={cn(
-                        'size-4 shrink-0 text-[#86909C] transition-transform',
+                        'size-4 shrink-0 text-text-3 transition-transform',
                         appHistoryDropdownOpen && 'rotate-180',
                       )}
                     />
@@ -212,7 +212,7 @@ export default function MobileNav({
                 ) : (
                   <span
                     id="app-title"
-                    className="truncate text-center text-[16px] font-medium leading-6 text-[#212121]"
+                    className="truncate text-center text-[16px] font-medium leading-6 text-text-1"
                     title={chatMobileHeader.title}
                   >
                     {chatMobileHeader.title}
@@ -229,12 +229,12 @@ export default function MobileNav({
                   title={chatMobileHeader.title}
                   className="flex min-w-0 max-w-full items-center justify-center gap-1 outline-none"
                 >
-                  <span className="truncate text-[16px] font-medium leading-6 text-[#212121]">
+                  <span className="truncate text-[16px] font-medium leading-6 text-text-1">
                     {chatMobileHeader.title}
                   </span>
                   <Outlined.Down
                     className={cn(
-                      'size-4 shrink-0 text-[#86909C] transition-transform',
+                      'size-4 shrink-0 text-text-3 transition-transform',
                       historyDropdownOpen && 'rotate-180',
                     )}
                   />
@@ -254,7 +254,7 @@ export default function MobileNav({
                   buttonClassName={cn(
                     mobileHeadIconBtnClassName,
                     'p-0 hover:bg-transparent',
-                    mergedHistoryActive && 'pointer-events-none text-[#C9CDD4]',
+                    mergedHistoryActive && 'pointer-events-none text-text-4',
                   )}
                 />
               )}
@@ -286,12 +286,12 @@ export default function MobileNav({
                   aria-expanded={historyDropdownOpen}
                   className="flex min-w-0 max-w-full items-center justify-center gap-1 outline-none"
                 >
-                  <span className="truncate text-[16px] font-medium leading-6 text-[#212121]">
+                  <span className="truncate text-[16px] font-medium leading-6 text-text-1">
                     {localize('com_ui_chat_list')}
                   </span>
                   <Outlined.Down
                     className={cn(
-                      'size-4 shrink-0 text-[#86909C] transition-transform',
+                      'size-4 shrink-0 text-text-3 transition-transform',
                       historyDropdownOpen && 'rotate-180',
                     )}
                   />

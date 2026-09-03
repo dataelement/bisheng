@@ -261,7 +261,7 @@ export default function KnowledgeSquare({
                         <Button
                             variant="ghost"
                             onClick={onBack}
-                            className="h-7 w-7 p-0 rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] hover:text-blue-500"
+                            className="h-7 w-7 p-0 rounded-md border border-border-base bg-white text-text-2 hover:bg-fill-1 hover:text-blue-500"
                         >
                             <ArrowLeft className="size-3.5" />
                         </Button>
@@ -270,7 +270,7 @@ export default function KnowledgeSquare({
 
                 <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-6 pt-7">
                     <h1 className="mb-1 text-[26px] font-semibold text-blue-500">{tTitle}</h1>
-                    <p className="text-[13px] text-[#86909C]">{tSubtitle}</p>
+                    <p className="text-[13px] text-text-3">{tSubtitle}</p>
                 </div>
             </div>
 
@@ -293,18 +293,18 @@ export default function KnowledgeSquare({
                             onChange={handleSearch}
                             onCompositionStart={handleSearchCompositionStart}
                             onCompositionEnd={handleSearchCompositionEnd}
-                            className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
+                            className="pl-9 h-8 text-[12px] rounded-md bg-white border-border-base focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
                         />
                     </div>
                 </div>
 
                 <div className="flex-1 flex flex-col w-full max-w-[1032px] mx-auto px-4 py-4">
                     {loading && spaces.length === 0 ? (
-                        <div className="flex-1 flex items-center justify-center text-[#86909C]">{localize("com_knowledge.loading")}</div>
+                        <div className="flex-1 flex items-center justify-center text-text-3">{localize("com_knowledge.loading")}</div>
                     ) : visibleSpaces.length === 0 ? (
-                        <div className="flex-1 flex flex-col items-center justify-center text-[#86909c]">
+                        <div className="flex-1 flex flex-col items-center justify-center text-text-3">
                             <EmptyStateIllustration className="size-[120px] mb-4" />
-                            <p className="text-[14px] font-normal text-[#999999]">{tEmptyText}</p>
+                            <p className="text-[14px] font-normal text-text-3">{tEmptyText}</p>
                         </div>
                     ) : (
                         <div className="space-y-3">
@@ -327,7 +327,7 @@ export default function KnowledgeSquare({
                                 ))}
                             </div>
 
-                            <div className="h-10 flex items-center justify-center text-[12px] text-[#C9CDD4]">
+                            <div className="h-10 flex items-center justify-center text-[12px] text-text-4">
                                 {loadingMore ? localize("com_knowledge.loading") : !hasMorePage ? localize("com_knowledge.no_more_content") : ""}
                             </div>
                         </div>

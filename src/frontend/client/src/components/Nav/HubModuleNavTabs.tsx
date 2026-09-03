@@ -38,7 +38,7 @@ const hubNavItemClassName = (
   );
 
 const hubIconClassName = (on: boolean) =>
-  cn('size-5 shrink-0', on ? 'text-blue-500' : 'text-[#818181]');
+  cn('size-5 shrink-0', on ? 'text-blue-500' : 'text-text-3');
 
 export function useHubModuleLinks(): HubModuleLink[] {
   const { pathname } = useLocation();
@@ -138,7 +138,7 @@ export function HubModuleNavTabs({
   return (
     <div
       className={cn(
-        'flex shrink-0 gap-2 border-b border-[#e5e6eb] px-2 py-2 touch-mobile:border-b-0',
+        'flex shrink-0 gap-2 border-b border-border-base px-2 py-2 touch-mobile:border-b-0',
         equalWidth && 'w-full min-w-0',
         squareItems ? 'items-center justify-between' : equalWidth ? 'items-stretch' : 'items-center justify-center',
         className,
