@@ -1014,6 +1014,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "visible",
         ):
             return space, True
+        if self._is_square_preview_space(space):
+            return space, False
         raise SpacePermissionDeniedError()
 
     # ──────────────────────────── Space CRUD ──────────────────────────────────
@@ -1250,18 +1252,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ),
             actor=actor,
         )
-        if self._is_square_preview_space(knowledge_space):
-            current_record = await container_adapter.load_permission_record(
-                resource_type="knowledge_space",
-                resource_id=str(knowledge_space.id),
-            )
-            if current_record is None:
-                raise SpaceNotFoundError()
-            await container_adapter.sync_public_reader(
-                record=current_record,
-                actor=actor,
-                enabled=True,
-            )
         permission_result = None
         if initial_permissions is not None and initial_permissions.grants:
             if self.initial_grant_application is None or creation_request_id is None:
@@ -1692,8 +1682,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._require_action("knowledge_space", space_id, "edit")
 
         old_auth_type = space.auth_type
-        old_square_visible = self._is_square_preview_space(space)
-
         if name is not None:
             space.name = name
         if description is not None:
@@ -1737,8 +1725,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         space = await KnowledgeDao.async_update_space(space)
         new_auth_type = space.auth_type
-        new_square_visible = self._is_square_preview_space(space)
-
         # When switching to PRIVATE, remove all non-creator members
         if old_auth_type != AuthTypeEnum.PRIVATE and new_auth_type == AuthTypeEnum.PRIVATE:
             removed_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
@@ -1776,20 +1762,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     operator_user_id=self.login_user.user_id,
                 )
             await SpaceChannelMemberDao.async_delete_rejected_members(space_id)
-
-        if new_auth_type != AuthTypeEnum.PRIVATE and old_square_visible != new_square_visible:
-            container_adapter = await self._resource_adapter("knowledge_space")
-            current_record = await container_adapter.load_permission_record(
-                resource_type="knowledge_space",
-                resource_id=str(space_id),
-            )
-            if current_record is None:
-                raise SpaceNotFoundError()
-            await container_adapter.sync_public_reader(
-                record=current_record,
-                actor=await self._permission_actor(),
-                enabled=new_square_visible,
-            )
 
         return space
 
@@ -2195,7 +2167,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_ids_int,
             ("visible",),
         )
-        rows = [row for row in rows if "visible" in visible_map.get(str(row[0].id), frozenset())]
         user_map = {u.user_id: u for u in (creator_users or [])}
         resolved_subscription_status = {
             row[0].id: self._resolve_subscription_status_from_fields(row[1], row[2]) for row in rows
@@ -2217,6 +2188,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 user_subscription_status,
                 user_subscription_update_time,
             )
+            if (
+                subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+                and "visible" in visible_map.get(str(space.id), frozenset())
+            ):
+                subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
             result_list.append(
                 KnowledgeSpaceInfoResp(
                     **space.model_dump(),
