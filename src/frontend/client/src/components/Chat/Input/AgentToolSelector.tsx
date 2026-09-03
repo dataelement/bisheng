@@ -141,7 +141,12 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
         </div>
       </SelectTrigger>
       <SelectContent
-        className="bg-white rounded-2xl w-[200px] max-h-[320px] overflow-y-auto"
+        // Opens upward: the trigger sits in the composer at the bottom of the viewport,
+        // so downward has the least room of any direction. Height is left to the shared
+        // clamp (min(24rem, radix available height)) — a fixed max-h here overrode it, and
+        // under WeCom's large-font setting the list ran past the bottom edge and was cut off.
+        side="top"
+        className="bg-white rounded-2xl w-[200px] overflow-y-auto"
         viewportClassName="flex flex-col gap-1 p-3"
       >
         {availableTools.map((group) => (
