@@ -266,7 +266,7 @@ def test_inherit_uses_only_canonical_parent_and_projected_system_visibility_igno
     assert not custom_child.check("user:7", "can_download", child)
     assert not custom_child.check("user:7", "visible", child)
 
-    system_custom_child = ModelEvaluator(
+    public_reader_custom_child = ModelEvaluator(
         build_authorization_model_f048(),
         tuples - {("user:*", "inherit_mode", child)}
         | {
@@ -274,8 +274,8 @@ def test_inherit_uses_only_canonical_parent_and_projected_system_visibility_igno
             ("user:*", "public_reader", parent),
         },
     )
-    assert system_custom_child.check("user:99", "visible", child)
-    assert system_custom_child.check("user:99", "can_download", child)
+    assert not public_reader_custom_child.check("user:99", "visible", child)
+    assert not public_reader_custom_child.check("user:99", "can_download", child)
 
 
 def test_only_top_level_resources_use_pure_flat_visible() -> None:

@@ -25,6 +25,7 @@ class _Adapter:
         self.resolve_error = resolve_error
         self.authorized = 0
         self.resolved = 0
+        self.public_syncs = []
 
     async def authorize_created(self, **kwargs):
         self.authorized += 1
@@ -42,6 +43,9 @@ class _Adapter:
             resource_version=1,
             context_version="created:v1",
         )
+
+    async def sync_public_reader(self, **kwargs):
+        self.public_syncs.append(kwargs)
 
 
 class _InitialGrants:
@@ -160,6 +164,37 @@ async def test_legacy_payload_preserves_original_response_and_side_effects() -> 
     member.assert_awaited_once()
     audit.assert_awaited_once()
     lookup.assert_not_awaited()
+
+
+async def test_released_public_space_creation_does_not_sync_public_reader() -> None:
+    adapter = _Adapter()
+    service = _service(adapter)
+    inserted = _space()
+    inserted.is_released = True
+    inserted.auth_type = AuthTypeEnum.PUBLIC
+    patches = _creation_patches(inserted)
+    with (
+        patches[1],
+        patches[2],
+        patches[3],
+        patches[4] as member,
+        patches[5],
+        patches[6],
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aget_by_creation_request",
+            new_callable=AsyncMock,
+        ),
+    ):
+        result = await service.create_knowledge_space(
+            name="Space",
+            is_released=True,
+            auth_type=AuthTypeEnum.PUBLIC,
+        )
+
+    assert result.id == 101
+    assert adapter.authorized == 1
+    assert adapter.public_syncs == []
+    member.assert_awaited_once()
 
 
 async def test_new_payload_persists_hash_preserves_auto_tag_and_applies_grants() -> None:
