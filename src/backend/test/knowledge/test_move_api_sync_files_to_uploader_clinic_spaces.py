@@ -121,6 +121,33 @@ def test_find_folder_by_segments_walks_nested_path() -> None:
     assert script_mod.find_folder_by_segments([parent], ["安全生产", "消防安全"]) is None
 
 
+def test_resolve_uploader_id_uses_current_user_not_original() -> None:
+    record = _file(1, user_id=11)
+    record.original_uploader_id = 99
+    assert script_mod.resolve_uploader_id(record) == 11
+    record.user_id = None
+    assert script_mod.resolve_uploader_id(record) is None
+
+
+def test_plan_moves_targets_current_uploader_clinic() -> None:
+    record = _file(1, user_id=11)
+    record.original_uploader_id = 99
+    rows = _plan(
+        api_sync_files=[record],
+        uploader_rows=[
+            _uploader(11, clinic_space_id=20, clinic_space_name="上传人科室库"),
+            _uploader(99, clinic_space_id=30, clinic_space_name="原始上传人科室库"),
+        ],
+        clinic_spaces={
+            20: _space(20, "上传人科室库"),
+            30: _space(30, "原始上传人科室库"),
+        },
+    )
+    assert rows[0].status == "ready"
+    assert rows[0].clinic_space_id == 20
+    assert rows[0].clinic_space_name == "上传人科室库"
+
+
 def test_plan_moves_ready_when_clinic_exists() -> None:
     rows = _plan()
     assert len(rows) == 1

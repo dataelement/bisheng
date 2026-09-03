@@ -3,9 +3,9 @@
 
 Looks up a knowledge space and folder (possibly nested) by name, selects
 files whose ingest method is OpenAPI / filelib sync ("接口同步"), resolves
-each uploader's clinic space the same way as filelib_sync
-``responsible_person_id`` targeting, then copies those files into that
-clinic space.
+each file's current uploader (``user_id``, not ``original_uploader_id``)
+clinic space the same way as filelib_sync ``responsible_person_id``
+targeting, then copies those files into that clinic space.
 
 The destination folder is the input folder path. Missing segments are
 created in the clinic space. Nested source files are flattened into that
@@ -72,7 +72,6 @@ from scripts.audit_api_sync_uploader_clinic_spaces import (  # noqa: E402
     load_user_departments,
     load_users,
     primary_clinic_snapshot,
-    resolve_uploader_id,
 )
 from scripts.move_knowledge_space_files import (  # noqa: E402
     BishengMoveOperations,
@@ -127,6 +126,13 @@ class MoveReport:
     success_count: int
     failed_count: int
     rows: list[MoveRow] = field(default_factory=list)
+
+
+def resolve_uploader_id(file: KnowledgeFile) -> int | None:
+    """Resolve the current uploader. Clinic targeting uses user_id only."""
+    if file.user_id:
+        return int(file.user_id)
+    return None
 
 
 def needs_uploader_fix(source_file: KnowledgeFile, target_file: KnowledgeFile) -> bool:
@@ -766,6 +772,7 @@ async def _discover(
                 spaces=clinic_spaces,
                 sample_limit=8,
                 scopes=scopes,
+                resolve_user_id=resolve_uploader_id,
             )
             owner_ids = [int(space.user_id) for space in clinic_spaces.values() if space.user_id is not None]
             clinic_owners = await load_users(session, owner_ids)

@@ -302,6 +302,8 @@ PYTHONPATH=./ .venv/bin/python scripts/relink_duplicate_space_files_as_publish.p
 Safety and reports:
 
 - 库级从高到低：`public` > `department` > `team`/`team_ks` > `personal`。只转换严格下级。
+- 部门库只把**本部门组织树下**的科室库/团队库改成软链；其他部门的科室/团队库不挂到该部门。
+  公共库仍可对全租户下级做软链。未绑定组织节点的自由团队库不会挂到部门库。
 - 每个单元在写入前重新扫描并校验 origin/source/匹配键；数据漂移时跳过。
 - 报告同时写 JSON（机器可读，可 `--resume-report`）和 Markdown（中文汇总、库级分布、转换/跳过/历史版本明细，含文件名、库名、目录）。
 - `--apply` 不可逆地清空下级物理载荷；公共/最高库原文件和 OpenFGA 本地权限保留。

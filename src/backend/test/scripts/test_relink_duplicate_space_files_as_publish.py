@@ -18,11 +18,20 @@ _SPACE_NAMES = {
 }
 
 
-def _space(space_id: int, level: str, name: str | None = None) -> script_mod.SpaceSnapshot:
+def _space(
+    space_id: int,
+    level: str,
+    name: str | None = None,
+    *,
+    department_id: int | None = None,
+    department_path: str = "",
+) -> script_mod.SpaceSnapshot:
     return script_mod.SpaceSnapshot(
         space_id=space_id,
         level=level,
         name=_SPACE_NAMES.get(space_id, f"space-{space_id}") if name is None else name,
+        department_id=department_id,
+        department_path=department_path,
     )
 
 
@@ -58,9 +67,11 @@ def _inventory(*files: script_mod.FileSnapshot, versions=()) -> script_mod.Inven
     spaces = (
         _space(1, "public"),
         _space(2, "public"),
-        _space(10, "department"),
-        _space(11, "department"),
-        _space(20, "team_ks"),
+        _space(10, "department", department_id=100, department_path="/100"),
+        _space(11, "department", department_id=200, department_path="/200"),
+        _space(20, "team_ks", department_id=101, department_path="/100/101"),
+        _space(21, "team"),
+        _space(22, "team_ks", department_id=201, department_path="/200/201"),
         _space(30, "personal"),
     )
     return script_mod.Inventory(spaces=spaces, files=files, versions=tuple(versions))
@@ -315,8 +326,8 @@ def test_render_markdown_report_includes_chinese_labels_and_history():
 
     assert markdown.startswith("# 跨库重复文件软链接报告")
     assert "规范.pdf" in markdown
-    assert "公共知识库（公共）" in markdown
-    assert "部门知识库（部门）" in markdown
+    assert "公共知识库（公共，1）" in markdown
+    assert "部门知识库（部门，10）" in markdown
     assert "/制度" in markdown
     assert "/归档" in markdown
     assert "规范-旧版.pdf" in markdown
@@ -341,6 +352,80 @@ def test_plan_captures_file_name_space_name_and_directory():
     assert unit.source_file_name == "规范.pdf"
     assert unit.source_space_name == "部门知识库"
     assert unit.source_directory == "根目录"
+
+
+def test_department_relinks_own_clinic_and_skips_other_department_clinic():
+    plan = script_mod.build_relink_plan(
+        _inventory(
+            _file(100, 10, md5="same-md5"),
+            _file(200, 20, md5="same-md5"),
+            _file(300, 22, md5="same-md5"),
+        )
+    )
+
+    assert [(item.origin_space_id, item.source_space_id) for item in plan.units] == [(10, 20)]
+    assert plan.units[0].origin_department_id == 100
+    assert plan.units[0].source_department_id == 101
+    assert any(
+        item.reason_code == "not_department_subordinate" and 300 in item.file_ids
+        for item in plan.skipped
+    )
+
+
+def test_each_department_relinks_only_its_own_clinic():
+    plan = script_mod.build_relink_plan(
+        _inventory(
+            _file(100, 10, md5="same-md5", create_time="2026-01-01T00:00:00"),
+            _file(110, 11, md5="same-md5", create_time="2026-02-01T00:00:00"),
+            _file(200, 20, md5="same-md5"),
+            _file(300, 22, md5="same-md5"),
+        )
+    )
+
+    assert {(item.origin_space_id, item.source_space_id) for item in plan.units} == {
+        (10, 20),
+        (11, 22),
+    }
+
+
+def test_public_origin_still_relinks_other_department_clinic():
+    plan = script_mod.build_relink_plan(
+        _inventory(
+            _file(50, 1, md5="same-md5"),
+            _file(100, 10, md5="same-md5"),
+            _file(300, 22, md5="same-md5"),
+        )
+    )
+
+    assert {(item.origin_space_id, item.source_space_id) for item in plan.units} == {
+        (1, 10),
+        (1, 22),
+    }
+
+
+def test_department_does_not_relink_unbound_team():
+    plan = script_mod.build_relink_plan(
+        _inventory(
+            _file(100, 10, md5="same-md5"),
+            _file(210, 21, md5="same-md5"),
+        )
+    )
+
+    assert plan.units == ()
+    assert any(item.reason_code == "not_department_subordinate" for item in plan.skipped)
+
+
+def test_department_still_relinks_personal_copy():
+    plan = script_mod.build_relink_plan(
+        _inventory(
+            _file(100, 10, md5="same-md5"),
+            _file(300, 30, md5="same-md5"),
+        )
+    )
+
+    assert len(plan.units) == 1
+    assert plan.units[0].origin_space_id == 10
+    assert plan.units[0].source_space_id == 30
 
 
 async def test_dry_run_writes_json_and_markdown(tmp_path: Path):
@@ -373,7 +458,7 @@ async def test_dry_run_writes_json_and_markdown(tmp_path: Path):
     assert payload["units"][0]["unit"]["source_directory"] == "根目录"
     assert "跨库重复文件软链接报告" in markdown
     assert "same.pdf" in markdown
-    assert "公共知识库（公共）" in markdown
-    assert "部门知识库（部门）" in markdown
+    assert "公共知识库（公共，1）" in markdown
+    assert "部门知识库（部门，10）" in markdown
     assert "根目录" in markdown
     assert "200" in markdown

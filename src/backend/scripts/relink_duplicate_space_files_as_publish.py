@@ -4,9 +4,10 @@
 When the same current primary file exists in multiple knowledge spaces, the copy
 in the highest-level space stays the physical original (manager). Strictly lower
 spaces keep the same ``knowledgefile`` id but become ``entry_type=publish``
-soft links. Same-level duplicates are left untouched. Empty MD5 values fall
-back to ``file_name + file_size``. Unique historical versions in a lower
-document stay in that space and are listed for manual review.
+soft links. Same-level duplicates are left untouched. A department original may
+only claim team/clinic copies bound to that department or its org descendants.
+Empty MD5 values fall back to ``file_name + file_size``. Unique historical
+versions in a lower document stay in that space and are listed for manual review.
 
 Default mode is a read-only dry-run that writes JSON and Markdown reports. Pass ``--apply``
 only after reviewing that report. The command supports single-tenant
@@ -69,8 +70,13 @@ from bisheng.knowledge.domain.models.knowledge_file import (  # noqa: E402
     KnowledgeFileEntryType,
     KnowledgeFileStatus,
 )
+from bisheng.database.models.department import Department  # noqa: E402
+from bisheng.knowledge.domain.models.department_knowledge_space import (  # noqa: E402
+    DepartmentKnowledgeSpace,
+)
 from bisheng.knowledge.domain.models.knowledge_space_scope import (  # noqa: E402
     KnowledgeSpaceLevelEnum,
+    KnowledgeSpaceOwnerTypeEnum,
     KnowledgeSpaceScope,
 )
 from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (  # noqa: E402
@@ -120,6 +126,12 @@ SPACE_LEVEL_RANK: dict[str, int] = {
     KnowledgeSpaceLevelEnum.TEAM_KS.value: 2,
     KnowledgeSpaceLevelEnum.PERSONAL.value: 3,
 }
+TEAM_LIKE_LEVELS = frozenset(
+    {
+        KnowledgeSpaceLevelEnum.TEAM.value,
+        KnowledgeSpaceLevelEnum.TEAM_KS.value,
+    }
+)
 
 
 class PreflightError(RuntimeError):
@@ -132,6 +144,12 @@ class ReportWriteError(RuntimeError):
 
 def _enum_value(value: Any) -> str:
     return str(getattr(value, "value", value))
+
+
+def _optional_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    return int(value)
 
 
 def _utc_now() -> str:
@@ -158,6 +176,8 @@ class SpaceSnapshot:
     space_id: int
     level: str
     name: str = ""
+    department_id: int | None = None
+    department_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -230,9 +250,11 @@ class RelinkUnit:
     origin_file_name: str = ""
     origin_space_name: str = ""
     origin_directory: str = ""
+    origin_department_id: int | None = None
     source_file_name: str = ""
     source_space_name: str = ""
     source_directory: str = ""
+    source_department_id: int | None = None
     history_file_ids: tuple[int, ...] = ()
     kept_same_level_file_ids: tuple[int, ...] = ()
     history_files: tuple[FileDisplay, ...] = ()
@@ -370,6 +392,44 @@ def resolve_directory(file_level_path: str | None, folders_by_id: dict[int, str]
 
 def space_level_rank(level: str) -> int | None:
     return SPACE_LEVEL_RANK.get(str(level or ""))
+
+
+def parse_department_path_ids(path: str | None, department_id: int | None = None) -> tuple[int, ...]:
+    ids = [int(part) for part in str(path or "").split("/") if part.isdigit()]
+    if department_id is not None and int(department_id) not in ids:
+        ids.append(int(department_id))
+    return tuple(ids)
+
+
+def department_depth(space: SpaceSnapshot) -> int:
+    return len(parse_department_path_ids(space.department_path, space.department_id))
+
+
+def is_department_subtree(origin: SpaceSnapshot, source: SpaceSnapshot) -> bool:
+    """Return True when ``source`` is bound to ``origin``'s department or a descendant."""
+    origin_dept = origin.department_id
+    source_dept = source.department_id
+    if origin_dept is None or source_dept is None:
+        return False
+    if int(origin_dept) == int(source_dept):
+        return True
+    return int(origin_dept) in parse_department_path_ids(source.department_path, source_dept)
+
+
+def origin_can_claim(origin: SpaceSnapshot, source: SpaceSnapshot) -> bool:
+    """Whether a higher-level space may be the physical original for ``source``.
+
+    Department originals may only claim team/clinic spaces in the same org
+    subtree. Public originals stay tenant-wide. Personal copies are not
+    org-scoped.
+    """
+    origin_rank = space_level_rank(origin.level)
+    source_rank = space_level_rank(source.level)
+    if origin_rank is None or source_rank is None or origin_rank >= source_rank:
+        return False
+    if origin.level == KnowledgeSpaceLevelEnum.DEPARTMENT.value and source.level in TEAM_LIKE_LEVELS:
+        return is_department_subtree(origin, source)
+    return True
 
 
 def _is_current_primary(
@@ -522,14 +582,7 @@ def build_relink_plan(
         if len(ranked) < 2:
             continue
         min_rank = min(item[0] for item in ranked)
-        origin_candidates = [item for item in ranked if item[0] == min_rank]
-        origin_candidates.sort(key=lambda item: _origin_sort_key(item[1]))
-        origin_rank, origin_file, origin_space = origin_candidates[0]
-        kept_same_level = tuple(
-            sorted(int(item[1].file_id) for item in origin_candidates if int(item[1].file_id) != origin_file.file_id)
-        )
-        lower = [item for item in ranked if item[0] > origin_rank]
-        if not lower:
+        if all(item[0] == min_rank for item in ranked):
             skipped.append(
                 SkippedItem(
                     reason_code="same_level_only",
@@ -540,8 +593,35 @@ def build_relink_plan(
                 )
             )
             continue
-        lower.sort(key=lambda item: (item[0], int(item[1].file_id)))
-        for _rank, source_file, source_space in lower:
+        ranked.sort(key=lambda item: (item[0], int(item[1].file_id)))
+        for source_rank, source_file, source_space in ranked:
+            if source_rank == min_rank:
+                continue
+            higher = [item for item in ranked if item[0] < source_rank]
+            candidates = [item for item in higher if origin_can_claim(item[2], source_space)]
+            if not candidates:
+                if higher and source_space.level in TEAM_LIKE_LEVELS:
+                    skipped.append(
+                        SkippedItem(
+                            reason_code="not_department_subordinate",
+                            detail=(
+                                "team/clinic copy is not under the department that owns "
+                                "the higher-level original"
+                            ),
+                            file_ids=(source_file.file_id,),
+                            match_key=key,
+                            files=(_display_for(source_file),),
+                        )
+                    )
+                continue
+            candidates.sort(
+                key=lambda item: (
+                    item[0],
+                    -department_depth(item[2]),
+                    *_origin_sort_key(item[1]),
+                )
+            )
+            origin_rank, origin_file, origin_space = candidates[0]
             if (
                 allowed_spaces
                 and origin_file.space_id not in allowed_spaces
@@ -550,6 +630,13 @@ def build_relink_plan(
                 continue
             if allowed_files and source_file.file_id not in allowed_files:
                 continue
+            kept_same_level = tuple(
+                sorted(
+                    int(item[1].file_id)
+                    for item in ranked
+                    if item[0] == origin_rank and int(item[1].file_id) != origin_file.file_id
+                )
+            )
             origin_display = _display_for(origin_file)
             source_display = _display_for(source_file)
             history_ids = _history_file_ids(
@@ -570,9 +657,11 @@ def build_relink_plan(
                     origin_file_name=origin_display.file_name,
                     origin_space_name=origin_display.space_name,
                     origin_directory=origin_display.directory,
+                    origin_department_id=origin_space.department_id,
                     source_file_name=source_display.file_name,
                     source_space_name=source_display.space_name,
                     source_directory=source_display.directory,
+                    source_department_id=source_space.department_id,
                     history_file_ids=history_ids,
                     kept_same_level_file_ids=kept_same_level,
                     history_files=tuple(_display_for_id(file_id) for file_id in history_ids),
@@ -620,12 +709,14 @@ def _unit_to_dict(unit: RelinkUnit) -> dict[str, Any]:
         "origin_file_name": unit.origin_file_name,
         "origin_space_name": unit.origin_space_name,
         "origin_directory": unit.origin_directory,
+        "origin_department_id": unit.origin_department_id,
         "source_file_id": unit.source_file_id,
         "source_space_id": unit.source_space_id,
         "source_level": unit.source_level,
         "source_file_name": unit.source_file_name,
         "source_space_name": unit.source_space_name,
         "source_directory": unit.source_directory,
+        "source_department_id": unit.source_department_id,
         "history_file_ids": list(unit.history_file_ids),
         "kept_same_level_file_ids": list(unit.kept_same_level_file_ids),
         "history_files": [item.as_dict() for item in unit.history_files],
@@ -654,9 +745,11 @@ def _unit_from_dict(raw: Any) -> RelinkUnit:
         origin_file_name=str(raw.get("origin_file_name") or ""),
         origin_space_name=str(raw.get("origin_space_name") or ""),
         origin_directory=str(raw.get("origin_directory") or ""),
+        origin_department_id=_optional_int(raw.get("origin_department_id")),
         source_file_name=str(raw.get("source_file_name") or ""),
         source_space_name=str(raw.get("source_space_name") or ""),
         source_directory=str(raw.get("source_directory") or ""),
+        source_department_id=_optional_int(raw.get("source_department_id")),
         history_file_ids=tuple(int(item) for item in (raw.get("history_file_ids") or [])),
         kept_same_level_file_ids=tuple(int(item) for item in (raw.get("kept_same_level_file_ids") or [])),
         history_files=tuple(_file_display_from_raw(item) for item in (raw.get("history_files") or [])),
@@ -699,6 +792,7 @@ SKIP_LABELS = {
     "same_space_duplicate": "同库多份当前主版本",
     "blank_match_key": "无 MD5 且无法用文件名+大小匹配",
     "unknown_space_level": "未知库级",
+    "not_department_subordinate": "非本部门下属科室/团队库",
     "plan_drift": "写入前数据已变化",
 }
 STATUS_LABELS = {
@@ -739,10 +833,13 @@ def _directory_label(value: Any) -> str:
 def _space_cell(name: Any, level: Any, space_id: Any) -> str:
     label = str(name or "").strip()
     level_text = _level_label(level)
+    space_text = "" if space_id in (None, "", 0) else str(space_id)
+    if label and space_text:
+        return f"{_md_cell(label)}（{level_text}，{space_text}）"
     if label:
         return f"{_md_cell(label)}（{level_text}）"
-    if space_id not in (None, "", 0):
-        return f"空间 {_md_cell(space_id)}（{level_text}）"
+    if space_text:
+        return f"空间 {space_text}（{level_text}）"
     return level_text or "-"
 
 
@@ -1329,11 +1426,44 @@ class BishengPlanReader:
                     )
                 )
             published = {int(item.id): item for item in spaces if item.id is not None}
+            bindings = list((await session.exec(select(DepartmentKnowledgeSpace))).all())
+            space_department_ids: dict[int, int] = {
+                int(item.space_id): int(item.department_id) for item in bindings
+            }
+            for scope in scopes:
+                if int(scope.space_id) not in published:
+                    continue
+                if (
+                    _enum_value(scope.level) == KnowledgeSpaceLevelEnum.DEPARTMENT.value
+                    and _enum_value(scope.owner_type) == KnowledgeSpaceOwnerTypeEnum.DEPARTMENT.value
+                ):
+                    space_department_ids.setdefault(int(scope.space_id), int(scope.owner_id))
+            department_ids = sorted(set(space_department_ids.values()))
+            departments: list[Department] = []
+            for batch in _chunks(department_ids):
+                departments.extend(
+                    list(
+                        (
+                            await session.exec(
+                                select(Department).where(col(Department.id).in_(batch))
+                            )
+                        ).all()
+                    )
+                )
+            department_paths = {
+                int(item.id): str(item.path or "")
+                for item in departments
+                if item.id is not None
+            }
             space_snapshots = tuple(
                 SpaceSnapshot(
                     space_id=int(scope.space_id),
                     level=_enum_value(scope.level),
                     name=str(published[int(scope.space_id)].name or ""),
+                    department_id=space_department_ids.get(int(scope.space_id)),
+                    department_path=department_paths.get(space_department_ids[int(scope.space_id)], "")
+                    if int(scope.space_id) in space_department_ids
+                    else "",
                 )
                 for scope in scopes
                 if int(scope.space_id) in published

@@ -37,7 +37,7 @@ import json
 import os
 import sys
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -471,10 +471,11 @@ def build_uploader_audits(
     spaces: dict[int, Any],
     sample_limit: int,
     scopes: dict[int, Any] | None = None,
+    resolve_user_id: Callable[[KnowledgeFile], int | None] = resolve_uploader_id,
 ) -> tuple[list[MissingClinicSpaceUser], list[MissingClinicSpaceUser]]:
     files_by_user: dict[int | None, list[KnowledgeFile]] = defaultdict(list)
     for record in api_sync_files:
-        files_by_user[resolve_uploader_id(record)].append(record)
+        files_by_user[resolve_user_id(record)].append(record)
     scope_map = scopes or {}
 
     with_clinic: list[MissingClinicSpaceUser] = []
