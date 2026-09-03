@@ -872,8 +872,6 @@ class KnowledgeDao(KnowledgeBase):
 
         rejection_cutoff = datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW
 
-        kid_str = col(Knowledge.id).cast(String)
-
         # Subquery: count unique active subscribers per space
         subscriber_subq = (
             select(
@@ -898,13 +896,13 @@ class KnowledgeDao(KnowledgeBase):
             )
             .outerjoin(
                 SpaceChannelMember,
-                (kid_str == SpaceChannelMember.business_id)
+                (Knowledge.id == col(SpaceChannelMember.business_id).cast(Integer))
                 & (SpaceChannelMember.business_type == BusinessTypeEnum.SPACE)
                 & (SpaceChannelMember.user_id == user_id),
             )
             .outerjoin(
                 subscriber_subq,
-                kid_str == subscriber_subq.c.business_id,
+                Knowledge.id == col(subscriber_subq.c.business_id).cast(Integer),
             )
             .where(
                 Knowledge.type == KnowledgeTypeEnum.SPACE.value,
