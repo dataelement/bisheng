@@ -1,5 +1,12 @@
 # AGENTS.md
 
+> **本分支是中粮定制线** `feat/cofco-909-3.0.0-beta1`(中粮功能 + 3.0 底座)。
+> 定制功能**不能回流主版本**(`feat/*-common`、`feat/3.0.0-beta1`)。
+>
+> **合并任何分支进来之前,先读 [`docs/cofco-merge-playbook.md`](docs/cofco-merge-playbook.md)** —— 合并顺序(顺序错了工作量翻倍)、必冲突清单与各自的处理原则、验证清单(有三类问题会静默通过 lint 和 CI)。合并完把新踩的坑回写进去。
+>
+> 本段与该手册只在 909 维护;跟主线合并时若冲突,**永远取 909 这边**。
+
 ---
 
 ## 1. Project Identity
