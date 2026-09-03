@@ -181,6 +181,7 @@ _llm_node_type: Dict = {
     LLMServerType.MINIMAX.value: {'client': ChatMinimax, 'params_handler': _get_minimax_params},
     LLMServerType.ANTHROPIC.value: {'client': ChatAnthropic, 'params_handler': _get_anthropic_params},
     LLMServerType.DEEPSEEK.value: {'client': CustomChatDeepSeek, 'params_handler': _get_deepseek_params},
+    LLMServerType.ORCAROUTER.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
     LLMServerType.SPARK.value: {'client': ChatOpenAICompatible, 'params_handler': _get_spark_params},
     LLMServerType.TENCENT.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
     LLMServerType.MOONSHOT.value: {'client': ChatMoonshot, 'params_handler': _get_moonshot_params},
