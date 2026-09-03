@@ -122,6 +122,9 @@ linsight:
   retry_num: 3
   # 灵思任务执行过程中模型调用重试间隔时间（秒）
   retry_sleep: 5
+  # 技能文件（.md / .zip / .skill）上传体积上限，单位 MB。改这里即可，前后端都读它；
+  # 解压后内容仍固定 ≤ 100MB（防 zip 炸弹，与此无关）。
+  skill_upload_max_size_mb: 10
   # 生成SOP时，prompt里放的用户上传文件信息的数量
   max_file_num: 5
   # 生成SOP时，prompt里放的组织知识库的最大数量

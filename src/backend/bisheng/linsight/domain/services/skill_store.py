@@ -38,6 +38,22 @@ MAX_BUNDLE_SIZE = 10 * 1024 * 1024
 # itself is far below it. This line is the zip-bomb guard, not a second copy of the
 # upload limit. (deepagents' MAX_SKILL_FILE_SIZE is a per-SKILL.md cap, unrelated.)
 MAX_UNPACKED_SIZE = 100 * 1024 * 1024
+
+
+async def resolve_skill_upload_limit() -> int:
+    """The effective upload cap in bytes.
+
+    Read from 系统配置 (``linsight.skill_upload_max_size_mb``) so a deployment can raise it
+    without a release; MAX_BUNDLE_SIZE is only the fallback when the config is unreadable.
+    The unpacked cap stays fixed — it guards against zip bombs, not disk budget.
+    """
+    try:
+        megabytes = int((await bisheng_settings.aget_linsight_conf()).skill_upload_max_size_mb)
+    except Exception:
+        return MAX_BUNDLE_SIZE
+    if megabytes < 1:
+        return MAX_BUNDLE_SIZE
+    return megabytes * 1024 * 1024
 MAX_NAME_LEN = 64
 MAX_DESCRIPTION_LEN = 1024
 MAX_DISPLAY_NAME_LEN = 255

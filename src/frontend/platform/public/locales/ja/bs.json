@@ -1983,7 +1983,7 @@
       "requirementsTitle": "ファイル要件",
       "reqMd": ".md ファイルは YAML frontmatter（name と description 必須）を含むこと",
       "reqZip": ".zip / .skill はルートに SKILL.md を含むこと。付属ファイル可",
-      "reqSize": "アップロードファイル ≤ 10MB、解凍後の内容 ≤ 100MB",
+      "reqSize": "アップロードファイル ≤ {{size}}MB、解凍後の内容 ≤ {{unpacked}}MB",
       "githubUrlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill",
       "githubHint": "スキルディレクトリを指す GitHub URL を貼り付け（SKILL.md を含むこと）",
       "githubReqHost": "公開 github.com リポジトリのみ対応",
@@ -2001,7 +2001,7 @@
     "errors": {
       "validation": "検証に失敗：frontmatter またはスキル ID が不正",
       "validationDetail": "検証に失敗：{{detail}}",
-      "tooLarge": "アップロードファイルが 10MB の上限を超えています。整理して再アップロードしてください",
+      "tooLarge": "アップロードファイルが {{size}}MB の上限を超えています。整理して再アップロードしてください",
       "bundleTooLarge": "解凍後の内容が 100MB の上限を超えています。付属ファイルを整理して再アップロードしてください",
       "notFound": "スキルが見つかりません",
       "noPermission": "この操作の権限がありません",
