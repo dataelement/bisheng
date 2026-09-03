@@ -13,8 +13,9 @@ Frozen behaviour:
   file/folder/tag entry refs are kept per space for later narrowing.
 - ``build_backend_filter`` returns a backend-agnostic filter description.
   Rendering it into Milvus expressions / ES queries is F1+F3 internal work;
-  the description always carries ``tenant_id`` and, when resolving explicit
-  refs, canonical version constraints.
+  the description carries ``tenant_id`` for physical store routing and, when
+  resolving explicit refs, canonical version constraints. The tenant value is
+  not persisted in chunk metadata or repeated in backend filters.
 - ``map_and_authorize_hits`` takes Top-K canonical hits, maps them back to
   active entries of the *requested* spaces (O(Top-K), never O(space size)),
   runs OpenFGA + entry status + generation final checks, deduplicates per
@@ -85,7 +86,8 @@ class CanonicalGenerationConstraint:
 class BackendQueryFilter:
     """Backend-agnostic query description produced by the resolver.
 
-    Renderers must always include ``tenant_id`` and the membership filter;
+    Renderers must include the membership filter; ``tenant_id`` selects the
+    tenant-bound physical store and is not rendered into the data-plane query.
     ``canonical_*`` constraints narrow explicit file/folder/tag requests.
     "Fetch Top-K globally, then filter by space" is forbidden.
     """

@@ -58,6 +58,7 @@
 | INV-15 | 首钢门户范围内的动态部门展示统一为 `trim(short_name) or name`，部门路径逐级应用同一规则，搜索同时匹配正式名称和简称，展示排序按展示名称稳定排序；既有 `name` / `department_name` 继续表达正式名称，部门 ID、权限、同步匹配及历史审批快照不得被简称替代或批量改写。该不变量不适用于 Platform 组织架构、首页无部门 ID 的硬编码积分榜、Filelib/同步/遥测事实字段。 | Department, User, Knowledge, Permission, Approval, QAExpert | F083 |
 | INV-16 | `POST /api/v2/filelib/retrieve` 仅可为已通过 Developer Token 校验、且已按 F069 业务用户上下文通过文件 `view_file` 可见性过滤的检索结果签发原文件预签名 URL；签发不再要求 `download_file`，也不进入门户下载额度、审计、水印或分发限制链路。URL 是签发后 7 天内无需 Developer Token 的 Bearer 凭证，必须只指向原文件对象、不得记录完整签名；无权文件不得进入响应，文件记录或原对象缺失时对应 URL 必须为空。 | DeveloperToken, KnowledgeFile, Permission, MinIO | F084 |
 | INV-17 | 知识库 / 文件夹手动顺序只写已有 `knowledge.sort_weight` 与 `knowledgefile.sort_weight`；写路径资格由毕昇 `KnowledgeSpaceService` 按角色矩阵计算并在写接口再检，Client 下发的 `can_reorder*` 不得作为唯一鉴权。系统管理员既有排序能力不得回退。部门管理员只能移动管辖部门（含下级）在 `department_knowledge_space` 上已绑定的团队/科室库。运营岗不得写入 `is_admin()`。 | Knowledge, KnowledgeFile, DepartmentKnowledgeSpace | F106 |
+| INV-18 | SPACE 租户切换到共享存储路由后，上传解析与重解析只能直接写该租户共享 collection/index，失败时不得回退每空间旧存储；租户隔离由物理 collection/index 与路由控制面保证，chunk metadata 和存储内部过滤器不得重复持久化或筛选 `tenant_id`。 | Knowledge, KnowledgeFile, SharedSpaceStorage | F107 |
 
 **规则**：
 - 新增不变量：先在此表追加，再写 AC
@@ -85,6 +86,7 @@
 | F082-department-short-name | F002, F009, F014/F015 | 扩展 F002 的 Department 字段与既有创建/详情/更新链路；简称由本地维护，F009/F014/F015 组织同步不得覆盖 |
 | F083-portal-department-display-name | F082, F025, F060, F064, F065 | 只读 F082 的 `Department.short_name`，统一首钢门户、嵌入式知识门户、成员管理、审批、专家和水印展示；保留正式名称、历史快照、权限与同步契约，不新增领域对象或数据迁移 |
 | F106-knowledge-reorder-auth | F013, 现有 knowledge sort_weight、department_knowledge_space、运营岗身份 | 只扩展谁能写已有 `sort_weight` 并下发 `can_reorder*`；不取得 Knowledge / KnowledgeFile / 部门绑定表写所有权，不改置顶与个人库 |
+| F107-direct-shared-space-ingestion | 现有 SPACE shared storage routing、F059 document distribution | 共享路由后的上传解析直接写租户共享存储；保留租户物理隔离，移除 chunk tenant metadata 与旧库运行时 staging |
 
 ---
 
@@ -125,3 +127,4 @@
 | 2026-08-10 | 登记 F083 门户部门简称统一展示：新增 INV-11 与 F082/F025/F060/F064/F065 依赖；门户动态展示、搜索、排序和路径使用简称回退，正式名称字段、历史快照、部门 ID、权限及同步事实保持不变 | F083, F082, User, Knowledge, Permission, Approval, QAExpert |
 | 2026-08-21 | 登记 F084 Filelib 检索原文件链接：新增 INV-16 与 F069/F017 依赖，明确 `view_file` 可见结果可获得 7 天原文件 Bearer URL，并显式绕过 `download_file`、门户下载额度、审计、水印和分发限制；无权或原对象缺失时不得签发 | F084, F069, F017, DeveloperToken, KnowledgeFile, Permission, MinIO |
 | 2026-09-01 | 登记 F106 库/文件夹排序权限：新增 INV-17；不新增领域对象与错误码段，复用 18040/18041；部门管理员按绑定表，运营岗不得写入 `is_admin()` | F106, INV-17, Knowledge, KnowledgeFile |
+| 2026-09-03 | 登记 F107 共享知识空间直接解析入库：新增 INV-18，明确 shared route 禁止旧库 staging/fallback，并保留租户物理 collection/index 隔离但移除 chunk tenant metadata | F107, INV-18, Knowledge, KnowledgeFile, SharedSpaceStorage |

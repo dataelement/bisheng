@@ -83,6 +83,17 @@ class CanonicalManagerSnapshot:
 
 
 @dataclass(frozen=True)
+class SharedContentIngestionTarget:
+    tenant_id: int
+    canonical_document_id: int
+    canonical_version_id: int
+    content_file_id: int
+    content_generation: int
+    membership_generation: int
+    knowledge_ids: tuple[int, ...]
+
+
+@dataclass(frozen=True)
 class PublishKnowledgeDocumentCommand:
     tenant_id: int
     approval_instance_id: int
@@ -316,13 +327,20 @@ class KnowledgeDocumentDistributionService:
         *,
         tenant_id: int,
         source_file_id: int,
+        allow_processing: bool = False,
     ) -> tuple[KnowledgeFile, KnowledgeDocument]:
         source_file = await self.file_repository.find_by_id_for_update(source_file_id)
         if source_file is None:
             raise KnowledgeDocumentDistributionError("source file does not exist")
         if int(source_file.tenant_id or 0) != int(tenant_id):
             raise KnowledgeDocumentDistributionError("source tenant mismatch")
-        if source_file.file_type != FileType.FILE.value or source_file.status != KnowledgeFileStatus.SUCCESS.value:
+        allowed_statuses = {KnowledgeFileStatus.SUCCESS.value}
+        if allow_processing:
+            allowed_statuses.add(KnowledgeFileStatus.PROCESSING.value)
+        if (
+            source_file.file_type != FileType.FILE.value
+            or source_file.status not in allowed_statuses
+        ):
             raise KnowledgeDocumentDistributionError("only a parsed file can become manager")
         if source_file.entry_type in {
             KnowledgeFileEntryType.PUBLISH.value,
@@ -388,6 +406,142 @@ class KnowledgeDocumentDistributionService:
             original_uploader_id=source_file.original_uploader_id,
             original_knowledge_id=source_file.original_knowledge_id,
         )
+
+    async def prepare_shared_content_ingestion(
+        self,
+        *,
+        tenant_id: int,
+        source_file_id: int,
+    ) -> SharedContentIngestionTarget:
+        """为共享直写准备一个可幂等重试的 canonical generation。"""
+        from bisheng.knowledge.domain.services.shared_space_projection_support import (
+            aggregate_active_knowledge_ids,
+        )
+
+        source_file, document = await self._load_or_create_primary_document(
+            tenant_id=tenant_id,
+            source_file_id=source_file_id,
+            allow_processing=True,
+        )
+        version = await self.version_repository.find_by_knowledge_file_id(
+            source_file_id
+        )
+        if version is None or int(version.document_id) != int(document.id):
+            raise KnowledgeDocumentDistributionError(
+                "source canonical version is unavailable"
+            )
+
+        is_active_manager = (
+            int(source_file.reference_document_id or 0) == int(document.id)
+            and source_file.entry_type == KnowledgeFileEntryType.MANAGER.value
+            and source_file.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+        )
+        if not is_active_manager:
+            source_file.reference_document_id = int(document.id)
+            source_file.entry_type = KnowledgeFileEntryType.MANAGER.value
+            source_file.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
+            source_file.desired_entry_generation = (
+                int(source_file.desired_entry_generation or 0) + 1
+            )
+            source_file.applied_entry_generation = 0
+
+        current_generation = int(document.content_generation or 0)
+        desired_generation = int(source_file.desired_content_generation or 0)
+        applied_generation = int(source_file.applied_content_generation or 0)
+        reuse_pending_generation = (
+            desired_generation > applied_generation
+            and desired_generation == current_generation
+        )
+        if reuse_pending_generation:
+            content_generation = desired_generation
+            source_file.projection_status = (
+                KnowledgeFileProjectionStatus.PENDING.value
+            )
+            source_file.projection_retry_count = 0
+            source_file.projection_next_retry_at = None
+            source_file.projection_lease_owner = None
+            source_file.projection_lease_until = None
+            source_file.projection_last_error = None
+            self.session.add(source_file)
+            await self.session.flush()
+        else:
+            content_generation = current_generation + 1
+            document.content_generation = content_generation
+            self.session.add(document)
+            self.session.add(source_file)
+            await self.session.flush()
+            await self.file_repository.mark_document_entries_content_generation(
+                int(document.id),
+                content_generation,
+            )
+            source_file.desired_content_generation = content_generation
+            source_file.projection_status = (
+                KnowledgeFileProjectionStatus.PENDING.value
+            )
+            self.session.add(source_file)
+            await self.session.flush()
+
+        entries = await self.file_repository.find_distribution_entries_by_document_id(
+            int(document.id),
+            statuses={KnowledgeFileEntryStatus.ACTIVE.value},
+            for_update=True,
+        )
+        knowledge_ids = aggregate_active_knowledge_ids(entries)
+        if not knowledge_ids:
+            raise KnowledgeDocumentDistributionError(
+                "shared ingestion requires at least one active knowledge membership"
+            )
+        membership_generation = max(
+            [content_generation]
+            + [int(entry.desired_entry_generation or 0) for entry in entries]
+        )
+        await self._commit()
+        return SharedContentIngestionTarget(
+            tenant_id=int(tenant_id),
+            canonical_document_id=int(document.id),
+            canonical_version_id=int(version.id),
+            content_file_id=int(source_file.id),
+            content_generation=content_generation,
+            membership_generation=membership_generation,
+            knowledge_ids=knowledge_ids,
+        )
+
+    async def finalize_shared_content_ingestion(
+        self,
+        *,
+        target: SharedContentIngestionTarget,
+    ) -> None:
+        """共享存储均收敛后，将已准备的 generation 标记为就绪。"""
+        source_file = await self.file_repository.find_by_id_for_update(
+            int(target.content_file_id)
+        )
+        if source_file is None:
+            raise KnowledgeDocumentDistributionError(
+                "shared ingestion source file disappeared"
+            )
+        if (
+            int(source_file.tenant_id or 0) != int(target.tenant_id)
+            or int(source_file.reference_document_id or 0)
+            != int(target.canonical_document_id)
+            or int(source_file.desired_content_generation or 0)
+            != int(target.content_generation)
+        ):
+            raise KnowledgeDocumentDistributionError(
+                "shared ingestion target changed before finalization"
+            )
+        source_file.applied_content_generation = int(target.content_generation)
+        source_file.applied_entry_generation = int(
+            source_file.desired_entry_generation or 0
+        )
+        source_file.projection_status = KnowledgeFileProjectionStatus.READY.value
+        source_file.projection_retry_count = 0
+        source_file.projection_next_retry_at = None
+        source_file.projection_lease_owner = None
+        source_file.projection_lease_until = None
+        source_file.projection_last_error = None
+        self.session.add(source_file)
+        await self.session.flush()
+        await self._commit()
 
     async def normalize_manager(
         self,

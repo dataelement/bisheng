@@ -1158,6 +1158,10 @@ def test_add_embedding_enqueues_file_stat_after_success(monkeypatch):
 
     monkeypatch.setattr(knowledge_imp.KnowledgeDao, "query_by_id", staticmethod(lambda _knowledge_id: space))
     monkeypatch.setattr(
+        "bisheng.knowledge.rag.shared_space_storage.resolve_space_shared_routing",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
         knowledge_imp.KnowledgeRag,
         "init_knowledge_milvus_vectorstore_sync",
         staticmethod(lambda *_args, **_kwargs: object()),

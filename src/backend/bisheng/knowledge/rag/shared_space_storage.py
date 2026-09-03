@@ -121,7 +121,10 @@ def shared_index_alias(tenant_id: int, conf=None) -> str:
 
 def es_routing_value(tenant_id: int, canonical_document_id: int) -> str:
     """Routing key for the shared ES index when routing is enabled."""
-    return f"{int(tenant_id)}-{int(canonical_document_id)}"
+    # 物理 index 已按租户隔离，routing key 只需 canonical document，
+    # 不再把 tenant_id 带入数据面持久化键。
+    _ = tenant_id
+    return str(int(canonical_document_id))
 
 
 # ---------------------------------------------------------------------------
@@ -213,12 +216,16 @@ def unfreeze_tenant_writes(tenant_id: int) -> bool:
     return KnowledgeSpaceSharedStorageRoutingDao.set_write_frozen(int(tenant_id), False)
 
 
-def tenant_target_embedding_model_id(snapshot: TenantRoutingSnapshot) -> int:
+def tenant_target_embedding_model_id(
+    snapshot: TenantRoutingSnapshot,
+    *,
+    conf=None,
+) -> int:
     """The tenant-wide target embedding model (routing row wins, config is
     the fallback). Raises when neither is configured."""
     if snapshot.embedding_model_id is not None:
         return int(snapshot.embedding_model_id)
-    conf = get_shared_storage_conf()
+    conf = conf or get_shared_storage_conf()
     if conf.tenant_embedding_model_id is not None:
         return int(conf.tenant_embedding_model_id)
     raise SharedStorageContractError(
@@ -521,20 +528,18 @@ def ensure_shared_es_index(
 def build_milvus_membership_expr(
     tenant_id: int, space_ids: Sequence[int]
 ) -> str:
-    """Render the tenant + membership pre-filter (spec 3.6).
+    """在租户绑定的 collection 内渲染 membership 前置过滤条件。
 
-    Single space -> ``ARRAY_CONTAINS``; multiple spaces ->
-    ``ARRAY_CONTAINS_ANY``. The tenant boundary is always present.
+    单空间使用 ``ARRAY_CONTAINS``，多空间使用 ``ARRAY_CONTAINS_ANY``。
+    租户隔离由 reader 选中的物理 collection 提供。
     """
+    _ = tenant_id
     if not space_ids:
         raise ValueError("requested_space_ids must not be empty")
-    expr = f"tenant_id == {int(tenant_id)}"
     ids = [int(s) for s in space_ids]
     if len(ids) == 1:
-        expr += f" and ARRAY_CONTAINS(knowledge_ids, {ids[0]})"
-    else:
-        expr += f" and ARRAY_CONTAINS_ANY(knowledge_ids, [{', '.join(str(i) for i in ids)}])"
-    return expr
+        return f"ARRAY_CONTAINS(knowledge_ids, {ids[0]})"
+    return f"ARRAY_CONTAINS_ANY(knowledge_ids, [{', '.join(str(i) for i in ids)}])"
 
 
 def build_shared_es_filter(filter_: Any) -> list[dict[str, Any]]:
@@ -542,7 +547,6 @@ def build_shared_es_filter(filter_: Any) -> list[dict[str, Any]]:
     if not filter_.requested_space_ids:
         raise ValueError("requested_space_ids must not be empty")
     return [
-        {"term": {"metadata.tenant_id": int(filter_.tenant_id)}},
         {"terms": {"metadata.knowledge_ids": [int(s) for s in filter_.requested_space_ids]}},
     ]
 
@@ -723,10 +727,8 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         content_generation: int | None = None,
         generation_cmp: str | None = None,
     ) -> str:
-        expr = (
-            f"tenant_id == {int(tenant_id)} and "
-            f"canonical_document_id == {int(canonical_document_id)}"
-        )
+        _ = tenant_id
+        expr = f"canonical_document_id == {int(canonical_document_id)}"
         if canonical_version_id is not None:
             expr += f" and canonical_version_id == {int(canonical_version_id)}"
         if content_generation is not None:
@@ -745,8 +747,8 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         content_generation: int | None = None,
         generation_lt: bool = False,
     ) -> dict[str, Any]:
+        _ = tenant_id
         filters = [
-            {"term": {"metadata.tenant_id": int(tenant_id)}},
             {"term": {"metadata.canonical_document_id": int(canonical_document_id)}},
         ]
         if canonical_version_id is not None:
@@ -786,7 +788,6 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         metadata = dict(chunk.metadata or {})
         row: dict[str, Any] = {
             SHARED_MILVUS_TEXT_FIELD: chunk.text,
-            "tenant_id": int(identity.tenant_id),
             "canonical_document_id": int(identity.canonical_document_id),
             "canonical_version_id": int(identity.canonical_version_id),
             "content_file_id": int(identity.content_file_id),
@@ -821,9 +822,8 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
 
     def _es_doc_id(self, identity: Any, chunk_index: int) -> str:
         return (
-            f"{int(identity.tenant_id)}-{int(identity.canonical_document_id)}-"
-            f"{int(identity.canonical_version_id)}-{int(identity.content_generation)}-"
-            f"{int(chunk_index)}"
+            f"{int(identity.canonical_document_id)}-{int(identity.canonical_version_id)}-"
+            f"{int(identity.content_generation)}-{int(chunk_index)}"
         )
 
     def _es_doc_source(self, row: dict[str, Any]) -> dict[str, Any]:
@@ -952,10 +952,8 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
     async def _current_membership_generation(
         self, tenant_id: int, canonical_document_id: int
     ) -> int:
-        expr = (
-            f"tenant_id == {int(tenant_id)} and "
-            f"canonical_document_id == {int(canonical_document_id)}"
-        )
+        _ = tenant_id
+        expr = f"canonical_document_id == {int(canonical_document_id)}"
         result = await self._run_milvus(
             "query",
             expr=expr,
@@ -1142,7 +1140,7 @@ def build_shared_space_components_for_tenant(
             tenant_id=int(tenant_id),
         )
     spec = SharedStoreSchemaSpec(
-        embedding_model_id=snapshot.embedding_model_id or 0,
+        embedding_model_id=tenant_target_embedding_model_id(snapshot, conf=conf),
         # dimension is only used to recompute the fallback fingerprint; the
         # authoritative check is against the routing row's bootstrap
         # fingerprint, which the migration writes at switch time.

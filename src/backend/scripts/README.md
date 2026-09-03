@@ -1461,3 +1461,21 @@ Safety:
 - 不接受 `--transfer-to-user-id`，也不会修改任何资源 owner 或资源内容。
 - 跨租户迁移仅由该脚本绕过资源阻断；不会修改全局 `enforce_transfer_before_relocate` 配置。
 - `--apply` 会改变主部门与叶子租户。脚本不会修改管理员角色、账号状态、密码或其他次级部门关系；OpenFGA 同步遵循现有 `FailedTuple` 补偿机制。
+
+### `report_original_knowledge_file_counts.py`
+
+按原始上传知识库统计各组织下五类知识库的当前业务文件数量，并输出 UTF-8 JSON。公共库归属唯一启用的公司组织；部门库和科室库按知识库绑定组织归属；团队库和个人库按库所有者的当前主部门归属。脚本只读取默认租户数据，不写数据库。
+
+Usage:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/report_original_knowledge_file_counts.py \
+  --output ./knowledge_file_counts_by_original_organization.json
+
+# 仅在确认可以覆盖已有文件时使用
+PYTHONPATH=./ .venv/bin/python scripts/report_original_knowledge_file_counts.py \
+  --output ./knowledge_file_counts_by_original_organization.json \
+  --force
+```
+
+输出包含 `summary`、有文件的 `organizations` 和无法解析归属的 `unassigned`。脚本排除发布、分享、投影墓碑、收藏引用、历史非主版本和旧版发布复制记录；如启用了多租户模式则直接中止。
