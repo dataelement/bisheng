@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 // src/features/chat-config/ChatConfig.tsx
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { CardContent } from "@/components/bs-ui/card";
 import { Label } from "@/components/bs-ui/label";
@@ -694,6 +695,37 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
 
     const { toast } = useToast()
     const { reloadConfig } = useContext(locationContext)
+
+    /**
+     * Guard against persisting a form that never received the saved config.
+     *
+     * This form round-trips whatever the GET handed it, so two states are
+     * destructive to save blindly: `is_fallback` (backend served its built-in
+     * defaults because nothing resolved) and a null meta (the GET never
+     * resolved, leaving the form on its initial defaults). Both look exactly
+     * like a deliberate "reset everything" once written back — on 2026-08-13
+     * that silently replaced a live workstation config, tools and all.
+     */
+    const confirmBlindOverwrite = () =>
+        new Promise<boolean>((resolve) => {
+            bsConfirm({
+                title: t('chatConfig.blindOverwriteTitle'),
+                desc: t('chatConfig.blindOverwriteDesc'),
+                okTxt: t('chatConfig.blindOverwriteOk'),
+                canelTxt: t('cancel', { ns: 'bs' }),
+                onOk(next) {
+                    resolve(true);
+                    next();
+                },
+                // Fires on every close path (cancel button, X, overlay); the
+                // promise already settled when Ok was taken, so this is a no-op
+                // there and the cancel answer everywhere else.
+                onClose() {
+                    resolve(false);
+                },
+            });
+        });
+
     const handleSave = async () => {
         const { isValid, firstErrorRef, modelErrorMessages } = validateForm();
         if (!isValid) {
@@ -716,6 +748,11 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
                 }, 300);
             }
             return false;
+        }
+
+        if (!configMeta || configMeta.is_fallback) {
+            const proceed = await confirmBlindOverwrite();
+            if (!proceed) return false;
         }
 
         const dataToSave = {

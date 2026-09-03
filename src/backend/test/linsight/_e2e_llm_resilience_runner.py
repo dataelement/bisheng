@@ -161,7 +161,7 @@ async def _build_linsight_agent(model):
     # middleware, astream — is the real path. (settings is a pydantic model, so we
     # patch the class method, not the instance attribute.)
     with (
-        patch.object(agent_factory, "_resolve_model", return_value=model),
+        patch.object(agent_factory, "_resolve_model", return_value=(model, True)),
         patch.object(ConfigService, "get_all_config", return_value={}),
     ):
         agent = await agent_factory.create_linsight_agent(

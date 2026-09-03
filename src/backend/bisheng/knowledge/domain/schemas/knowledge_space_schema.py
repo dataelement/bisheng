@@ -1,23 +1,30 @@
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
-from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem
+from bisheng.permission.domain.schemas import GrantSubjectInput
 
 
-class InitialPermissionRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class InitialPermissionGrant(BaseModel):
+    model_key: str = Field(..., min_length=1, max_length=64)
+    subject: GrantSubjectInput
 
-    grants: list[AuthorizeGrantItem] = Field(default_factory=list)
+
+class InitialPermissionsRequest(BaseModel):
+    expected_catalog_release_id: int = Field(..., gt=0)
+    grants: list[InitialPermissionGrant] = Field(default_factory=list, max_length=50)
 
 
-class InitialPermissionResult(BaseModel):
-    status: Literal["success", "failed"]
+class InitialPermissionApplyResult(BaseModel):
+    status: Literal["succeeded", "failed"]
+    resource_version: int | None = None
+    assignee_ids: list[str] = Field(default_factory=list)
     error_code: int | None = None
+    message: str | None = None
 
 
 class SpaceSubscriptionStatusEnum(str, Enum):
@@ -25,6 +32,19 @@ class SpaceSubscriptionStatusEnum(str, Enum):
     PENDING = "pending"
     REJECTED = "rejected"
     NOT_SUBSCRIBED = "not_subscribed"
+
+
+class KnowledgeSpaceListItemResp(KnowledgeBase):
+    """Lightweight knowledge-space list item without detail-only counters or metadata."""
+
+    id: int = Field(..., description="Knowledge Space ID")
+    is_pinned: bool = Field(default=False, description="Knowledge Space pinned by current user or not")
+    is_followed: bool = Field(default=False, description="Knowledge Space followed by current user or not")
+    subscription_status: SpaceSubscriptionStatusEnum = Field(
+        default=SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED,
+        description="Current user subscription status",
+    )
+    user_role: UserRoleEnum | None = Field(default=None, description="Knowledge Space user role")
 
 
 class KnowledgeSpaceCreateReq(BaseModel):
@@ -43,18 +63,28 @@ class KnowledgeSpaceCreateReq(BaseModel):
             "upserted server-side."
         ),
     )
-    initial_permissions: InitialPermissionRequest | None = Field(
-        default=None,
-        description="Optional grants applied after the knowledge space is created",
-    )
+    creation_request_id: str | None = Field(default=None, min_length=1, max_length=64)
+    initial_permissions: InitialPermissionsRequest | None = None
+
+    @model_validator(mode="after")
+    def require_request_id_for_initial_permissions(self):
+        if self.initial_permissions is not None and self.creation_request_id is None:
+            raise ValueError("initial_permissions requires creation_request_id")
+        return self
+
+
+class KnowledgeSpaceCreateResp(KnowledgeBase):
+    id: int
+    initial_permission_result: InitialPermissionApplyResult | None = None
 
 
 class KnowledgeSpaceInfoResp(KnowledgeBase):
     id: int = Field(..., description="Knowledge Space ID")
     is_pinned: bool = Field(default=False, description="Knowledge Space pinned by current user or not")
     user_name: str = Field(default="", description="Knowledge Space creator name")
-    permission_ids: list[str] | None = Field(
-        default=None, description="Effective permission ids the current identity holds on this space"
+    actions: list[str] | None = Field(
+        default=None,
+        description="Effective F048 actions the current identity holds on this space",
     )
     avatar: str | None = Field(default=None, description="Knowledge Space creator avatar")
     follower_num: int = Field(1, description="Follower Number")

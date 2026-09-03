@@ -1,6 +1,7 @@
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { MarkdownView } from "./PreviewParagraph";
 import TxtFileViewer from "./TxtFileViewer";
 
@@ -151,8 +152,46 @@ function TextFromUrl({ fileUrl, section }: { fileUrl: string; section?: string }
   );
 }
 
-export default function RichPreviewFile({ file, previewData }: { file: any; previewData: PreviewData }) {
+/** Section headings the media parser writes into the transcript markdown.
+ *  These match backend output, so they are data rather than UI copy. */
+const RECOGNIZED_SECTION = "识别文本";
+const ENTRY_SECTION = "入库文本";
+
+/** Transcript pane of a media preview: recognized / stored text tabs over the
+ *  parsed markdown. Exported so citation previews render the same pane. */
+export function MediaTranscriptTabs({ fileUrl, className }: { fileUrl: string; className?: string }) {
+  const { t } = useTranslation();
   const [mediaTab, setMediaTab] = useState<MediaTab>("recognized");
+
+  return (
+    <div className={className || "flex min-h-[320px] flex-col overflow-hidden rounded-md border bg-white shadow-sm"}>
+      <div className="flex shrink-0 gap-2 border-b px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setMediaTab("recognized")}
+          className={`h-8 rounded-md px-3 text-sm ${mediaTab === "recognized" ? "bg-primary text-white" : "bg-gray-100 text-gray-600"}`}
+        >
+          {t("mediaPreview.recognizedText")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setMediaTab("entry")}
+          className={`h-8 rounded-md px-3 text-sm ${mediaTab === "entry" ? "bg-primary text-white" : "bg-gray-100 text-gray-600"}`}
+        >
+          {t("mediaPreview.entryText")}
+        </button>
+      </div>
+      {fileUrl ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <TextFromUrl fileUrl={fileUrl} section={mediaTab === "recognized" ? RECOGNIZED_SECTION : ENTRY_SECTION} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export default function RichPreviewFile({ file, previewData }: { file: any; previewData: PreviewData }) {
+  const { t } = useTranslation();
   const [webTab, setWebTab] = useState<WebTab>("html");
   const isMedia = isMediaPreview(previewData);
   const isVideo = isVideoPreview(previewData);
@@ -180,29 +219,7 @@ export default function RichPreviewFile({ file, previewData }: { file: any; prev
           </section>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-3 pt-3">
-          <div className="flex min-h-[320px] flex-col overflow-hidden rounded-md border bg-white shadow-sm">
-            <div className="flex shrink-0 gap-2 border-b px-3 py-2">
-              <button
-                type="button"
-                onClick={() => setMediaTab("recognized")}
-                className={`h-8 rounded-md px-3 text-sm ${mediaTab === "recognized" ? "bg-primary text-white" : "bg-gray-100 text-gray-600"}`}
-              >
-                识别文本
-              </button>
-              <button
-                type="button"
-                onClick={() => setMediaTab("entry")}
-                className={`h-8 rounded-md px-3 text-sm ${mediaTab === "entry" ? "bg-primary text-white" : "bg-gray-100 text-gray-600"}`}
-              >
-                入库文本
-              </button>
-            </div>
-            {mediaTextUrl ? (
-              <div className="min-h-0 flex-1 overflow-hidden">
-                <TextFromUrl fileUrl={mediaTextUrl} section={mediaTab === "recognized" ? "识别文本" : "入库文本"} />
-              </div>
-            ) : null}
-          </div>
+          <MediaTranscriptTabs fileUrl={mediaTextUrl} />
         </div>
       </div>
     );
@@ -217,20 +234,20 @@ export default function RichPreviewFile({ file, previewData }: { file: any; prev
             onClick={() => setWebTab("html")}
             className={`h-8 rounded-md px-3 text-sm ${webTab === "html" ? "bg-primary text-white" : "bg-gray-100 text-gray-600"}`}
           >
-            网页预览
+            {t("mediaPreview.webPreview")}
           </button>
           <button
             type="button"
             onClick={() => setWebTab("text")}
             className={`h-8 rounded-md px-3 text-sm ${webTab === "text" ? "bg-primary text-white" : "bg-gray-100 text-gray-600"}`}
           >
-            入库文本
+            {t("mediaPreview.entryText")}
           </button>
         </div>
         {sourceUrl ? (
           <a className="flex items-center gap-1 text-sm text-primary" href={sourceUrl} target="_blank" rel="noreferrer">
             <ExternalLink className="size-4" />
-            打开原网页
+            {t("mediaPreview.openSourcePage")}
           </a>
         ) : null}
       </div>
@@ -238,7 +255,7 @@ export default function RichPreviewFile({ file, previewData }: { file: any; prev
         {webTab === "html" ? (
           htmlUrl ? <TxtFileViewer html filePath={htmlUrl} /> : (
             <div className="flex h-full items-center justify-center text-sm text-gray-500">
-              暂无网页快照，请查看入库文本或打开原网页。
+              {t("mediaPreview.noWebSnapshot")}
             </div>
           )
         ) : textUrl ? (

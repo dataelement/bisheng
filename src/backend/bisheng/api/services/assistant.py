@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, Union
+from hashlib import sha256
+from typing import TYPE_CHECKING, Any, Union
 
 from fastapi import Request
 from loguru import logger
@@ -9,7 +10,6 @@ from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq, StreamData
-from bisheng.citation.domain.services.citation_prompt_helper import CITATION_PROMPT_RULES
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.assistant import (
@@ -25,38 +25,70 @@ from bisheng.common.services.base import BaseService
 from bisheng.core.cache import InMemoryCache
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import Assistant, AssistantDao, AssistantLinkDao, AssistantStatus
-from bisheng.database.models.flow import Flow, FlowDao, FlowType
+from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.llm.domain.services import LLMService
-from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
-from bisheng.permission.domain.workflow_app_permission import user_may_share_app
+from bisheng.permission.application.access import get_f048_resource_adapter
+from bisheng.permission.application.business_authorization import (
+    batch_check_business_actions,
+    check_business_action,
+    require_business_action,
+)
+from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import get_request_ip
 
+from .f048_application_permission import ApplicationPermissionRecord
+
+if TYPE_CHECKING:
+    from bisheng.common.schemas.api import PageInfiniteCursorData
+
 # F040/F027: keyset scan batch size for the assistant cursor list. A batch
 # shrunk by fine-grained ReBAC filtering is refilled from the next keyset
 # window, so this only bounds per-round DB/FGA fan-out, not the page size.
 _ASSISTANT_PERMISSION_SCAN_BATCH_SIZE = 200
+_AUTO_FLOW_PERMISSION_SCAN_BATCH_SIZE = 100
+
+
+class AssistantResourceAuthorizationPort:
+    """Bind the shared application adapter to assistant resources."""
+
+    def __init__(self, adapter) -> None:
+        self._adapter = adapter
+
+    async def resolve_permission_target(
+        self,
+        *,
+        resource_id: str,
+        actor,
+        action: str,
+    ):
+        return await self._adapter.resolve_permission_target(
+            resource_type="assistant",
+            resource_id=resource_id,
+            actor=actor,
+            action=action,
+        )
 
 
 class AssistantService(BaseService, AssistantUtils):
     UserCache: InMemoryCache = InMemoryCache()
 
     @classmethod
-    def get_assistant(
+    async def get_assistant(
         cls,
         user: UserPayload,
-        name: str = None,
+        name: str | None = None,
         status: int | None = None,
         tag_id: int | None = None,
         page: int = 1,
         limit: int = 20,
-        permission_id: str = "use_app",
+        action: str = "use",
     ) -> (list[AssistantSimpleInfo], int):
         """
         Get list of assistants
@@ -69,31 +101,25 @@ class AssistantService(BaseService, AssistantUtils):
                 return [], 0
 
         data = []
-        if user.is_admin():
-            res, total = AssistantDao.get_all_assistants(name, page, limit, assistant_ids, status)
-            editable_ids = None
-        else:
-            res, _ = AssistantDao.get_all_assistants(name, 0, 0, assistant_ids, status)
-            allowed_ids = ApplicationPermissionService.filter_object_ids_by_permission_sync(
-                user,
-                "assistant",
-                [one.id for one in res],
-                permission_id,
-            )
-            allowed_id_set = set(allowed_ids)
-            res = [one for one in res if str(one.id) in allowed_id_set]
-            total = len(res)
-            start_index = (page - 1) * limit
-            end_index = start_index + limit
-            res = res[start_index:end_index]
-            editable_ids = set(
-                ApplicationPermissionService.filter_object_ids_by_permission_sync(
-                    user,
-                    "assistant",
-                    [one.id for one in res],
-                    "edit_app",
-                )
-            )
+        res, _ = AssistantDao.get_all_assistants(
+            name,
+            0,
+            0,
+            assistant_ids,
+            status,
+        )
+        permission_map = await batch_check_business_actions(
+            user,
+            resource_type="assistant",
+            resource_ids=(one.id for one in res),
+            actions=(action, "edit"),
+        )
+        res = [one for one in res if action in permission_map.get(str(one.id), frozenset())]
+        total = len(res)
+        start_index = (page - 1) * limit
+        end_index = start_index + limit
+        res = res[start_index:end_index]
+        editable_ids = {resource_id for resource_id, actions in permission_map.items() if "edit" in actions}
 
         assistant_ids = [one.id for one in res]
 
@@ -104,10 +130,7 @@ class AssistantService(BaseService, AssistantUtils):
         for one in res:
             one.logo = cls.get_logo_share_link(one.logo)
             simple_assistant = cls.return_simple_assistant_info(one)
-            if one.user_id == user.user_id or user.is_admin():
-                simple_assistant.write = True
-            elif editable_ids is not None:
-                simple_assistant.write = str(one.id) in editable_ids
+            simple_assistant.write = str(one.id) in editable_ids
             simple_assistant.tags = flow_tags.get(one.id, [])
             data.append(simple_assistant)
         return data, total
@@ -122,21 +145,18 @@ class AssistantService(BaseService, AssistantUtils):
         assistant_ids: list[str] | None,
         cursor: Sequence | None,
         page_size: int,
-        permission_id: str,
-        is_admin: bool,
-    ) -> tuple[list[Assistant], bool, set | None]:
+        action: str,
+    ) -> tuple[list[Assistant], bool, set[str]]:
         """F040/F027 cursor-paginated scan mirroring ``_scan_visible_flows_cursor``:
         keep fetching DB batches via keyset, apply the SAME ReBAC fine-grained
-        filter the legacy offset path used (``get_app_permission_map_async`` →
-        keep rows whose effective ids contain ``permission_id``), accumulate
+        filter through concrete F048 actions, accumulate
         until ``page_size + 1`` visible rows (the +1 probes ``has_more``) or the
         DB is exhausted.
 
         Returns ``(visible[:page_size], has_more, editable_ids)`` where
-        ``editable_ids`` (``edit_app`` grants) drives the ``write`` flag and is
-        ``None`` for admins (admins are always writeable). Advancing the batch
-        cursor on the LAST DB row (not last visible) keeps rows filtered out
-        between keyset windows from being re-emitted.
+        ``editable_ids`` (``edit`` grants) drives the ``write`` flag. Advancing
+        the batch cursor on the LAST DB row (not last visible) keeps rows
+        filtered out between keyset windows from being re-emitted.
         """
         visible: list[Assistant] = []
         editable_ids: set[str] = set()
@@ -151,31 +171,27 @@ class AssistantService(BaseService, AssistantUtils):
                 _ASSISTANT_PERMISSION_SCAN_BATCH_SIZE,
             )
             if not batch:
-                return visible[:page_size], False, (None if is_admin else editable_ids)
+                return visible[:page_size], False, editable_ids
 
-            if is_admin:
-                kept = batch
-            else:
-                # Coalesce once so the permission-map request and the keep-filter
-                # agree (a None permission_id must not fetch 'use_app' yet filter
-                # on `None in <set>`, which would drop every row).
-                required_permission_id = permission_id or "use_app"
-                permission_map = await ApplicationPermissionService.get_app_permission_map_async(
-                    user,
-                    [{"id": one.id, "flow_type": FlowType.ASSISTANT.value} for one in batch],
-                    [required_permission_id, "edit_app"],
-                )
-                kept = [one for one in batch if required_permission_id in permission_map.get(str(one.id), set())]
-                editable_ids |= {str(app_id) for app_id, perms in permission_map.items() if "edit_app" in perms}
+            permission_map = await batch_check_business_actions(
+                user,
+                resource_type="assistant",
+                resource_ids=(one.id for one in batch),
+                actions=(action, "edit"),
+            )
+            kept = [one for one in batch if action in permission_map.get(str(one.id), frozenset())]
+            editable_ids |= {
+                resource_id for resource_id, action_codes in permission_map.items() if "edit" in action_codes
+            }
 
             for item in kept:
                 visible.append(item)
                 if len(visible) > page_size:
                     # Got the +1 probe — done scanning.
-                    return visible[:page_size], True, (None if is_admin else editable_ids)
+                    return visible[:page_size], True, editable_ids
 
             if not db_has_more:
-                return visible[:page_size], False, (None if is_admin else editable_ids)
+                return visible[:page_size], False, editable_ids
 
             last_db = batch[-1]
             batch_cursor = [last_db.update_time, last_db.id]
@@ -189,7 +205,7 @@ class AssistantService(BaseService, AssistantUtils):
         tag_id: int | None = None,
         cursor: str | None = None,
         page_size: int = 10,
-        permission_id: str = "use_app",
+        action: str = "use",
     ) -> "PageInfiniteCursorData":
         """F040/F027 cursor envelope for ``GET /api/v1/assistant``.
 
@@ -204,7 +220,7 @@ class AssistantService(BaseService, AssistantUtils):
         from bisheng.common.errcode.flow import AppInvalidCursorError
         from bisheng.common.schemas.api import PageInfiniteCursorData
 
-        context = f"assistant|sort=update_time|perm={permission_id}"
+        context = f"assistant|sort=update_time|action={action}"
         try:
             decoded = decode_cursor(cursor, expected_key_len=2, expected_context=context)
         except CursorDecodeError as exc:
@@ -224,7 +240,6 @@ class AssistantService(BaseService, AssistantUtils):
                     next_cursor=None,
                 )
 
-        is_admin = user.is_admin()
         rows, has_more, editable_ids = await cls._scan_visible_assistants_cursor(
             user=user,
             name=name,
@@ -232,8 +247,7 @@ class AssistantService(BaseService, AssistantUtils):
             assistant_ids=assistant_ids,
             cursor=decoded,
             page_size=page_size,
-            permission_id=permission_id,
-            is_admin=is_admin,
+            action=action,
         )
 
         flow_tags = TagDao.get_tags_by_resource(ResourceTypeEnum.ASSISTANT, [one.id for one in rows])
@@ -241,10 +255,7 @@ class AssistantService(BaseService, AssistantUtils):
         for one in rows:
             one.logo = cls.get_logo_share_link(one.logo)
             simple_assistant = cls.return_simple_assistant_info(one)
-            if one.user_id == user.user_id or is_admin:
-                simple_assistant.write = True
-            elif editable_ids is not None:
-                simple_assistant.write = str(one.id) in editable_ids
+            simple_assistant.write = str(one.id) in editable_ids
             simple_assistant.tags = flow_tags.get(one.id, [])
             data.append(simple_assistant)
 
@@ -290,11 +301,11 @@ class AssistantService(BaseService, AssistantUtils):
             share_assistant_id = str(meta_data.get("flowId") or share_link.resource_id or "")
             has_share_grant = share_assistant_id == str(assistant_id)
         # Check if you have permission to access the information
-        if not has_share_grant and not await ApplicationPermissionService.has_any_permission_async(
+        if not has_share_grant and not await check_business_action(
             login_user,
-            "assistant",
-            str(assistant.id),
-            ["view_app", "use_app"],
+            resource_type="assistant",
+            resource_id=assistant.id,
+            action="visible",
         ):
             raise UnAuthorizedError()
 
@@ -314,7 +325,12 @@ class AssistantService(BaseService, AssistantUtils):
                 logger.error(f"not expect link info: {one.model_dump()}")
         tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list, knowledge_list)
         assistant.logo = await cls.get_logo_share_link_async(assistant.logo)
-        can_share = await user_may_share_app(login_user, "assistant", assistant_id)
+        can_share = await check_business_action(
+            login_user,
+            resource_type="assistant",
+            resource_id=assistant_id,
+            action="share",
+        )
         return AssistantInfo(
             **assistant.model_dump(),
             tool_list=tool_list,
@@ -366,27 +382,15 @@ class AssistantService(BaseService, AssistantUtils):
 
         await cls.create_assistant_hook_async(request, assistant, login_user)
 
-        can_share = await user_may_share_app(login_user, "assistant", str(assistant.id))
+        can_share = await check_business_action(
+            login_user,
+            resource_type="assistant",
+            resource_id=assistant.id,
+            action="share",
+        )
         return AssistantInfo(
             **assistant.model_dump(), tool_list=[], flow_list=[], knowledge_list=[], can_share=can_share
         )
-
-    @classmethod
-    def create_assistant_hook(cls, request: Request, assistant: Assistant, user_payload: UserPayload) -> bool:
-        """
-        After successful creation of the assistanthook, perform some other business logic
-        """
-        # F008: Write owner tuple to OpenFGA (INV-2)
-        from bisheng.permission.domain.services.owner_service import OwnerService
-
-        OwnerService.write_owner_tuple_sync(user_payload.user_id, "assistant", str(assistant.id))
-
-        # Write Audit Log
-        AuditLogService.create_build_assistant(user_payload, get_request_ip(request), assistant.id)
-
-        # WritelogoCeacle
-        cls.get_logo_share_link(assistant.logo)
-        return True
 
     @classmethod
     async def create_assistant_hook_async(
@@ -396,12 +400,12 @@ class AssistantService(BaseService, AssistantUtils):
         Async variant for async FastAPI handlers; avoids sync-to-async bridge usage
         on the running event loop.
         """
-        from bisheng.permission.domain.services.owner_service import OwnerService
-
-        try:
-            await OwnerService.write_owner_tuple(user_payload.user_id, "assistant", str(assistant.id))
-        except Exception as e:
-            logger.warning("Failed to write owner tuple for assistant:%s: %s", assistant.id, e)
+        record = cls._new_permission_record(assistant)
+        adapter = await get_f048_resource_adapter("assistant")
+        await adapter.authorize_created(
+            record=record,
+            actor=await resolve_permission_actor(user_payload),
+        )
 
         AuditLogService.create_build_assistant(user_payload, get_request_ip(request), assistant.id)
         cls.get_logo_share_link(assistant.logo)
@@ -409,19 +413,33 @@ class AssistantService(BaseService, AssistantUtils):
 
     # Delete Assistant
     @classmethod
-    def delete_assistant(cls, request: Request, login_user: UserPayload, assistant_id: str) -> bool:
-        assistant = AssistantDao.get_one_assistant(assistant_id)
+    async def delete_assistant(
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        assistant_id: str,
+    ) -> bool:
+        assistant = await AssistantDao.aget_one_assistant(assistant_id)
         if not assistant:
             raise AssistantNotExistsError()
 
-        # Judgment Authorization
-        if not ApplicationPermissionService.has_any_permission_sync(
+        await require_business_action(
             login_user,
-            "assistant",
-            str(assistant.id),
-            ["delete_app"],
-        ):
-            raise UnAuthorizedError()
+            resource_type="assistant",
+            resource_id=assistant.id,
+            action="delete",
+        )
+        adapter = await get_f048_resource_adapter("assistant")
+        record = await adapter.load_permission_record(
+            resource_type="assistant",
+            resource_id=str(assistant.id),
+        )
+        if record is None:
+            raise AssistantNotExistsError()
+        await adapter.project_delete(
+            record=record,
+            actor=await resolve_permission_actor(login_user),
+        )
 
         AssistantDao.delete_assistant(assistant)
         telemetry_service.log_event_sync(
@@ -436,11 +454,6 @@ class AssistantService(BaseService, AssistantUtils):
         logger.info(f"delete_assistant_hook id: {assistant.id}, user: {login_user.user_id}")
         # Write Audit Log
         AuditLogService.delete_build_assistant(login_user, get_request_ip(request), assistant.id)
-
-        # F008: Clean up all FGA tuples (AC-03)
-        from bisheng.permission.domain.services.owner_service import OwnerService
-
-        OwnerService.delete_resource_tuples_sync("assistant", str(assistant.id))
 
         # Update session information
         MessageSessionDao.update_session_info_by_flow(
@@ -460,12 +473,6 @@ class AssistantService(BaseService, AssistantUtils):
         # Inisialisasillm
         auto_agent = AssistantAgent(assistant, "", login_user.user_id)
         await auto_agent.init_auto_update_llm()
-
-        # Only seed citation rules when the assistant actually has a linked knowledge base
-        # (the dominant retrieval case); chat-only assistants don't need them. Web-only
-        # assistants still get citations at runtime via the backstop.
-        links = await AssistantLinkDao.get_assistant_link(assistant_id)
-        has_knowledge = any(link.knowledge_id for link in links)
 
         # Streaming Generation Prompts
         final_prompt = ""
@@ -493,7 +500,11 @@ class AssistantService(BaseService, AssistantUtils):
         yield str(StreamData(event="message", data={"type": "tool_list", "message": tool_info}))
         yield str(StreamData(event="message", data={"type": "end", "message": ""}))
 
-        flow_info = await cls.get_auto_flow_info(assistant, auto_agent)
+        flow_info = await cls.get_auto_flow_info(
+            assistant,
+            auto_agent,
+            login_user,
+        )
         flow_info = [one.model_dump() for one in flow_info]
         yield str(StreamData(event="message", data={"type": "flow_list", "message": flow_info}))
 
@@ -541,7 +552,12 @@ class AssistantService(BaseService, AssistantUtils):
             AssistantLinkDao.update_assistant_knowledge(assistant.id, knowledge_list=req.knowledge_list, flow_id="")
         tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list, req.knowledge_list)
         cls.update_assistant_hook(request, login_user, assistant)
-        can_share = await user_may_share_app(login_user, "assistant", str(assistant.id))
+        can_share = await check_business_action(
+            login_user,
+            resource_type="assistant",
+            resource_id=assistant.id,
+            action="share",
+        )
         return AssistantInfo(
             **assistant.model_dump(),
             tool_list=tool_list,
@@ -568,15 +584,13 @@ class AssistantService(BaseService, AssistantUtils):
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             raise AssistantNotExistsError()
-        # Determine permissions
-        required_permission = "publish_app" if status == AssistantStatus.ONLINE.value else "unpublish_app"
-        if not await ApplicationPermissionService.has_any_permission_async(
+        required_action = "publish" if status == AssistantStatus.ONLINE.value else "unpublish"
+        await require_business_action(
             login_user,
-            "assistant",
-            str(assistant.id),
-            [required_permission],
-        ):
-            raise UnAuthorizedError()
+            resource_type="assistant",
+            resource_id=assistant.id,
+            action=required_action,
+        )
         # Equal status without modification
         if assistant.status == status:
             return True
@@ -638,37 +652,42 @@ class AssistantService(BaseService, AssistantUtils):
         return True
 
     @classmethod
-    def check_update_permission(cls, assistant: Assistant, user_payload: UserPayload) -> Any:
-        # Determine permissions
-        if not ApplicationPermissionService.has_any_permission_sync(
-            user_payload,
-            "assistant",
-            str(assistant.id),
-            ["edit_app"],
-        ):
-            raise UnAuthorizedError()
-
-        # Changes are not allowed when online
-        if assistant.status == AssistantStatus.ONLINE.value:
-            raise AssistantNotEditError()
-        return None
-
-    @classmethod
     async def check_update_permission_async(cls, assistant: Assistant, user_payload: UserPayload) -> Any:
-        if not await ApplicationPermissionService.has_any_permission_async(
+        await require_business_action(
             user_payload,
-            "assistant",
-            str(assistant.id),
-            ["edit_app"],
-        ):
-            raise UnAuthorizedError()
+            resource_type="assistant",
+            resource_id=assistant.id,
+            action="edit",
+        )
 
         if assistant.status == AssistantStatus.ONLINE.value:
             raise AssistantNotEditError()
         return None
 
+    @staticmethod
+    def _new_permission_record(
+        assistant: Assistant,
+    ) -> ApplicationPermissionRecord:
+        context_version = sha256(
+            (f"assistant|{assistant.id}|{assistant.tenant_id}|{assistant.user_id}|{assistant.status}").encode()
+        ).hexdigest()
+        return ApplicationPermissionRecord(
+            tenant_id=int(assistant.tenant_id or 0),
+            resource_type="assistant",
+            resource_id=str(assistant.id),
+            status=AssistantStatus(assistant.status).name,
+            owner_user_id=int(assistant.user_id or 0),
+            permission_version=0,
+            context_version=context_version,
+        )
+
     @classmethod
-    def get_link_info(cls, tool_list: list[int], flow_list: list[str], knowledge_list: list[int] = None):
+    def get_link_info(
+        cls,
+        tool_list: list[int],
+        flow_list: list[str],
+        knowledge_list: list[int] | None = None,
+    ):
         tool_list = GptsToolsDao.get_list_by_ids(tool_list) if tool_list else []
         flow_list = FlowDao.get_flow_by_ids(flow_list) if flow_list else []
         knowledge_list = KnowledgeDao.get_list_by_ids(knowledge_list) if knowledge_list else []
@@ -741,9 +760,46 @@ class AssistantService(BaseService, AssistantUtils):
         return res
 
     @classmethod
-    async def get_auto_flow_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> list[Flow]:
-        # Automatically select skills, Before picking50skills to make automatic selections
-        all_flow = await FlowDao.aget_user_access_online_flows(assistant.user_id, 1, 50)
+    async def get_auto_flow_info(
+        cls,
+        assistant: Assistant,
+        auto_agent: AssistantAgent,
+        login_user: UserPayload,
+    ) -> list[Flow]:
+        """Select at most 50 online workflows from business candidates.
+
+        The business Service owns candidate/status pagination; F048 only
+        evaluates the concrete ``visible`` action for each bounded batch.
+        """
+
+        visible_ids: list[str] = []
+        candidate_cursor: list | None = None
+        while len(visible_ids) < 50:
+            candidates, has_more = await FlowDao.aget_all_apps(
+                status=FlowStatus.ONLINE.value,
+                flow_type=FlowType.WORKFLOW.value,
+                limit=_AUTO_FLOW_PERMISSION_SCAN_BATCH_SIZE,
+                cursor=candidate_cursor,
+            )
+            if not candidates:
+                break
+            action_map = await batch_check_business_actions(
+                login_user,
+                resource_type="workflow",
+                resource_ids=[str(row["id"]) for row in candidates],
+                actions=("visible",),
+            )
+            visible_ids.extend(
+                str(row["id"]) for row in candidates if "visible" in action_map.get(str(row["id"]), frozenset())
+            )
+            if len(visible_ids) >= 50 or not has_more:
+                break
+            last = candidates[-1]
+            candidate_cursor = [last["update_time"], last["id"]]
+
+        ordered_ids = visible_ids[:50]
+        flow_by_id = {str(flow.id): flow for flow in await FlowDao.aget_flow_by_ids(ordered_ids)}
+        all_flow = [flow_by_id[flow_id] for flow_id in ordered_ids if flow_id in flow_by_id]
         flow_dict = {}
         flow_list = []
         for one in all_flow:

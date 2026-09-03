@@ -47,6 +47,21 @@ async def test_accessible_spaces_pin_comes_from_pin_table_and_sorts_first():
             f"{_KS}.KnowledgeSpaceUserPinDao.list_pinned_space_ids",
             new=AsyncMock(return_value={200}),
         ),
+        patch.object(
+            service,
+            "_batch_actions",
+            new=AsyncMock(
+                return_value={
+                    "100": frozenset({"visible"}),
+                    "200": frozenset({"visible"}),
+                }
+            ),
+        ),
+        patch.object(
+            service,
+            "_populate_root_file_counts",
+            new_callable=AsyncMock,
+        ),
         patch.object(service, "_decorate_department_metadata", new=AsyncMock(side_effect=lambda x: x)),
     ):
         result = await service._format_accessible_spaces([100, 200], "name")
@@ -76,10 +91,29 @@ async def test_member_spaces_pin_decoupled_from_member_row():
             f"{_KS}.KnowledgeSpaceUserPinDao.list_pinned_space_ids",
             new=AsyncMock(return_value={300}),
         ),
-        patch.object(service, "_decorate_department_metadata", new=AsyncMock(side_effect=lambda x: x)),
     ):
         result = await service._format_member_spaces([member], "name")
 
     assert len(result) == 1
     assert result[0].id == 300
     assert result[0].is_pinned is True
+    assert "file_num" not in result[0].model_dump()
+    assert "space_kind" not in result[0].model_dump()
+
+
+async def test_basic_spaces_only_adds_pin_state_and_preserves_database_order():
+    service = _service()
+    spaces = [_space(100, "alpha", user_id=9), _space(200, "beta", user_id=9)]
+
+    with (
+        patch(f"{_KS}.KnowledgeDao.async_get_spaces_by_ids", new=AsyncMock(return_value=spaces)),
+        patch(
+            f"{_KS}.KnowledgeSpaceUserPinDao.list_pinned_space_ids",
+            new=AsyncMock(return_value={200}),
+        ),
+    ):
+        result = await service._format_basic_spaces([100, 200], "name")
+
+    assert [item.id for item in result] == [200, 100]
+    assert all("file_num" not in item.model_dump() for item in result)
+    assert all("space_kind" not in item.model_dump() for item in result)

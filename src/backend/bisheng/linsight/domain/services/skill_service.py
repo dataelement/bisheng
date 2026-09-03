@@ -2,7 +2,7 @@
 
 Validation chain (design §7.4): size gate → unpack/parse → frontmatter +
 name/display_name checks → duplicate checks → disk bundle write → DB metadata
-→ best-effort owner tuple via PermissionService.authorize.
+→ durable F048 protected-owner projection.
 
 built-in skills never pass through here: any name that does not exist in the
 tenant's `linsight_skill` table is answered with 11053 (not-found), so their
@@ -11,7 +11,7 @@ existence is not leaked (design §7.5).
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import NamedTuple, Protocol
 
 from loguru import logger
 
@@ -24,6 +24,7 @@ from bisheng.common.errcode.linsight import (
 )
 from bisheng.common.schemas.api import PageData
 from bisheng.linsight.domain.models.linsight_skill import (
+    SKILL_SOURCE_BUILTIN,
     SKILL_SOURCE_MANUAL,
     LinsightSkill,
     LinsightSkillDao,
@@ -52,8 +53,6 @@ from bisheng.linsight.domain.services.skill_store import (
     unpack_zip_bytes,
     validate_skill_name,
 )
-from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem
-from bisheng.permission.domain.services.permission_service import PermissionService
 
 _ARCHIVE_SUFFIXES = (".zip", ".skill")
 
@@ -74,6 +73,44 @@ class SkillMeta(NamedTuple):
 SKILL_OBJECT_TYPE = "linsight_skill"
 
 
+class LinsightSkillOwnerProjectionPort(Protocol):
+    """Durable owner projection required before skill creation completes."""
+
+    async def authorize_created(
+        self,
+        *,
+        tenant_id: int,
+        resource_type: str,
+        resource_id: str,
+        owner_user_id: int,
+        resource_version: int,
+        context_version: str,
+        idempotency_key: str,
+    ): ...
+
+
+class _ConfiguredOwnerProjection:
+    async def authorize_created(self, **kwargs):
+        from bisheng.permission.application.process_runtime import get_f048_process_runtime
+
+        await get_f048_process_runtime()
+        if _owner_projection is None:
+            raise RuntimeError("F048 Linsight skill owner projection is not configured")
+        return await _owner_projection.authorize_created(**kwargs)
+
+
+_owner_projection: LinsightSkillOwnerProjectionPort | None = None
+
+
+def configure_linsight_skill_owner_projection(
+    projection: LinsightSkillOwnerProjectionPort,
+) -> None:
+    """Install the process-local durable owner projection adapter."""
+
+    global _owner_projection
+    _owner_projection = projection
+
+
 class SkillService:
     """All methods assume the tenant context is already established
     (endpoint dependency or worker context, design §6.5). Skills are
@@ -81,8 +118,13 @@ class SkillService:
     isolation on every read/write (no Root→child sharing), so a tenant only
     ever sees and mutates its own skills."""
 
-    def __init__(self, store: SkillStore | None = None):
+    def __init__(
+        self,
+        store: SkillStore | None = None,
+        owner_projection: LinsightSkillOwnerProjectionPort | None = None,
+    ):
         self.store = store or SkillStore()
+        self._owner_projection = owner_projection or _ConfiguredOwnerProjection()
 
     # ------------------------------------------------------------- queries --
     async def get_page(
@@ -103,24 +145,25 @@ class SkillService:
     async def get_detail(self, tenant_id: int, name: str) -> SkillDetail:
         skill = await self._get_or_404(name)
         try:
-            source_text = self.store.read_text(tenant_id, name)
+            source_text = self.store.read_text(tenant_id, name, skill.content_hash)
             _, body = parse_skill_md(source_text)
         except (FileNotFoundError, ValueError) as exc:
-            # Disk drifted from DB (shared-volume misconfig etc.) — surface, don't hide.
-            logger.warning("skill disk read failed for {}: {}", name, exc)
+            # Row exists but its bundle object doesn't (never migrated, or deleted
+            # out-of-band) — surface, don't hide.
+            logger.warning("skill bundle read failed for {}: {}", name, exc)
             source_text, body = "", ""
         detail = SkillDetail(
             **SkillBrief.from_model(skill).model_dump(),
             preview=body.strip(),
             source_text=source_text,
-            files=[SkillFileEntry(**e) for e in self.store.list_files(tenant_id, name)],
+            files=[SkillFileEntry(**e) for e in self.store.list_files(tenant_id, name, skill.content_hash)],
         )
         return detail
 
     async def read_bundle_file(self, tenant_id: int, name: str, path: str) -> SkillFileContent:
-        await self._get_or_404(name)
+        skill = await self._get_or_404(name)
         try:
-            content = self.store.read_text(tenant_id, name, path)
+            content = self.store.read_text(tenant_id, name, skill.content_hash, path)
         except ValueError:
             raise SkillValidationError(msg=f"illegal file path: {path}")
         except FileNotFoundError:
@@ -158,6 +201,18 @@ class SkillService:
         detail.normalized_from = meta.normalized_from
         return detail
 
+    @staticmethod
+    def _mark_forked(skill) -> None:
+        """An edited built-in skill becomes this tenant's own copy.
+
+        The startup seeder refreshes ``source='builtin'`` rows from the image on
+        every boot. Leaving the marker on an edited skill would silently revert
+        the customer's changes at the next upgrade, so the first edit opts that
+        copy out of re-seeding for good.
+        """
+        if skill.source == SKILL_SOURCE_BUILTIN:
+            skill.source = SKILL_SOURCE_MANUAL
+
     async def update_from_form(self, tenant_id: int, name: str, form: SkillCreateForm) -> SkillDetail:
         skill = await self._get_or_404(name)
         if form.name != name:
@@ -168,10 +223,12 @@ class SkillService:
         new_md = compose_skill_md(
             name=form.name, description=form.description, body=form.content, display_name=form.display_name
         ).encode("utf-8")
-        files = self._load_existing_bundle(tenant_id, name)
+        files = self._load_existing_bundle(tenant_id, name, skill.content_hash)
         files[SKILL_MD] = new_md
-        size = self.store.write_bundle(tenant_id, name, files)
-        skill.display_name, skill.description, skill.size = form.display_name, form.description, size
+        ref = self.store.write_bundle(tenant_id, name, files)
+        skill.display_name, skill.description = form.display_name, form.description
+        skill.size, skill.content_hash, skill.object_path = ref.size, ref.content_hash, ref.object_key
+        self._mark_forked(skill)
         await LinsightSkillDao.update(skill)
         return await self.get_detail(tenant_id, name)
 
@@ -182,8 +239,10 @@ class SkillService:
         if meta.name != name:
             raise SkillValidationError(msg=f"frontmatter name '{meta.name}' must equal skill ID '{name}'")
         await self._check_duplicate(name, meta.display_name, exclude_id=skill.id)
-        size = self.store.write_bundle(tenant_id, name, files)
-        skill.display_name, skill.description, skill.size = meta.display_name, meta.description, size
+        ref = self.store.write_bundle(tenant_id, name, files)
+        skill.display_name, skill.description = meta.display_name, meta.description
+        skill.size, skill.content_hash, skill.object_path = ref.size, ref.content_hash, ref.object_key
+        self._mark_forked(skill)
         await LinsightSkillDao.update(skill)
         detail = await self.get_detail(tenant_id, name)
         detail.normalized_from = meta.normalized_from
@@ -197,7 +256,7 @@ class SkillService:
         skill = await self._get_or_404(name)
         await LinsightSkillDao.delete_by_name(name)
         if not self.store.delete(tenant_id, name):
-            logger.warning("skill dir missing on delete: tenant={} name={}", tenant_id, skill.name)
+            logger.warning("skill bundle already absent on delete: tenant={} name={}", tenant_id, skill.name)
 
     # ----------------------------------------------------------- internals --
     async def _get_or_404(self, name: str) -> LinsightSkill:
@@ -276,12 +335,17 @@ class SkillService:
         if existing and existing.id != exclude_id:
             raise SkillNameDuplicateError()
 
-    def _load_existing_bundle(self, tenant_id: int, name: str) -> dict[str, bytes]:
-        base = self.store.skill_dir(tenant_id, name)
-        files: dict[str, bytes] = {}
-        for entry in self.store.list_files(tenant_id, name):
-            files[entry["path"]] = (base / entry["path"]).read_bytes()
-        return files
+    def _load_existing_bundle(self, tenant_id: int, name: str, content_hash: str) -> dict[str, bytes]:
+        """Read a stored bundle back as a file mapping (edit = read-modify-write).
+
+        Goes through the store's reader rather than joining paths itself; the
+        bundle's authoritative copy is an object, and only the store knows how a
+        version is materialized locally.
+        """
+        return {
+            entry["path"]: self.store.read_bytes(tenant_id, name, content_hash, entry["path"])
+            for entry in self.store.list_files(tenant_id, name, content_hash)
+        }
 
     async def _create(
         self,
@@ -294,7 +358,7 @@ class SkillService:
     ) -> SkillDetail:
         self._validate_fields(name, display_name, description)
         await self._check_duplicate(name, display_name)
-        size = self.store.write_bundle(tenant_id, name, files)
+        ref = self.store.write_bundle(tenant_id, name, files)
         skill = LinsightSkill(
             tenant_id=tenant_id,
             name=name,
@@ -302,20 +366,19 @@ class SkillService:
             description=description,
             enabled=True,
             source=SKILL_SOURCE_MANUAL,
-            object_path=self.store.object_path(tenant_id, name),
-            size=size,
+            object_path=ref.object_key,
+            content_hash=ref.content_hash,
+            size=ref.size,
             created_by=user_id,
         )
         skill = await LinsightSkillDao.create(skill)
-        try:
-            # Owner tuple is best-effort: PermissionService compensates failed
-            # writes via failed_tuples; the resource itself is never rolled back
-            # (design §7.4 step 6; FGA model registration tracked by TF-3).
-            await PermissionService.authorize(
-                object_type=SKILL_OBJECT_TYPE,
-                object_id=str(skill.id),
-                grants=[AuthorizeGrantItem(subject_type="user", subject_id=user_id, relation="owner")],
-            )
-        except Exception:
-            logger.exception("skill owner tuple write failed: skill_id={}", skill.id)
+        await self._owner_projection.authorize_created(
+            tenant_id=tenant_id,
+            resource_type=SKILL_OBJECT_TYPE,
+            resource_id=str(skill.id),
+            owner_user_id=user_id,
+            resource_version=0,
+            context_version=f"{SKILL_OBJECT_TYPE}:{skill.id}:v0",
+            idempotency_key=(f"{SKILL_OBJECT_TYPE}:create:{tenant_id}:{skill.id}"),
+        )
         return await self.get_detail(tenant_id, name)

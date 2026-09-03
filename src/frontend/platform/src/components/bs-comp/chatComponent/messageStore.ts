@@ -41,6 +41,7 @@ type Actions = {
     insetSystemMsg: (text: string) => void;
     insetBsMsg: (text: string) => void;
     setShowGuideQuestion: (text: boolean) => void;
+    closeDanglingRunLogs: () => void;
     clearMsgs: () => void;
 }
 
@@ -151,6 +152,24 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         } else {
             set({ historyEnd: true })
         }
+    },
+    /**
+     * A tool card only closes when its `end` frame arrives. Lose one — a
+     * serialization failure, a dropped socket — and the card spins forever, with
+     * nothing to recover it: the round is over and nothing was persisted. So on
+     * session close, settle whatever is still open and mark it interrupted
+     * rather than leaving a success tick it never earned.
+     */
+    closeDanglingRunLogs() {
+        const messages = get().messages
+        if (!messages.some(msg => runLogsTypes.includes(msg.category) && !msg.end)) return
+        set({
+            messages: messages.map(msg =>
+                runLogsTypes.includes(msg.category) && !msg.end
+                    ? { ...msg, end: true, interrupted: true }
+                    : msg
+            )
+        })
     },
     clearMsgs() {
         setTimeout(() => {

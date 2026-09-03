@@ -2,10 +2,19 @@ import { Outlined } from "bisheng-icons";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { VisibilityType } from "~/api/knowledge";
-import type { SubjectType } from "~/api/permission";
+import {
+  getCreationDepartmentChildren,
+  getCreationUserGroups,
+  searchCreationDepartments,
+  searchCreationUsers,
+  type SubjectType,
+} from "~/api/permission";
 import { NotificationSeverity } from "~/common";
 import { PermissionDraftPanel } from "~/components/permission/PermissionDraftPanel";
-import { PermissionDraftPickerDialog } from "~/components/permission/PermissionDraftPickerDialog";
+import {
+  PermissionDraftPickerDialog,
+  type PermissionDraftSearchApi,
+} from "~/components/permission/PermissionDraftPickerDialog";
 import {
   AccessModeSelector,
   SettingsFooter,
@@ -56,35 +65,48 @@ export function KnowledgeSpaceSettingsPage() {
   const relationModels = useMemo(
     () =>
       settings.relationModels.map((model) => ({
-        id: model.id,
-        name: model.is_system
-          ? localize(`com_permission.level_${model.relation}`)
-          : model.name,
-        relation: model.relation,
+        id: model.key,
+        name: model.name,
+        level: model.level,
       })),
-    [localize, settings.relationModels],
+    [settings.relationModels],
   );
   const creatorRow = useMemo<PermissionDraftRow | null>(() => {
     if (settings.mode !== "create" || !user) return null;
     const numericUserId = Number(user.id);
-    const ownerModel = relationModels.find(
-      (model) => model.relation === "owner",
-    );
+    const ownerModel =
+      relationModels.find((model) => model.id === "owner") ??
+      relationModels.find((model) => model.level === 4);
     return {
       subjectType: "user",
       subjectId: Number.isFinite(numericUserId) ? numericUserId : -1,
       subjectName: user.name || user.username || user.email,
-      relation: "owner",
-      modelId: ownerModel?.id ?? "owner",
-      immutableCreator: true,
+      modelKey: ownerModel?.id ?? "owner",
+      modelName: ownerModel?.name ?? localize("com_permission.level_owner"),
+      modelLevel: ownerModel?.level ?? 4,
+      protected: true,
+      editable: false,
     };
-  }, [relationModels, settings.mode, user]);
+  }, [localize, relationModels, settings.mode, user]);
   const displayedPermissionRows = useMemo(
     () =>
       creatorRow
         ? [creatorRow, ...settings.permissionRows]
         : settings.permissionRows,
     [creatorRow, settings.permissionRows],
+  );
+  const permissionSearchApi = useMemo<PermissionDraftSearchApi | undefined>(
+    () => settings.mode === "create" ? {
+      usersApi: (_type, _id, name, params, config) =>
+        searchCreationUsers("knowledge_space", name, params, config),
+      departmentChildrenApi: (_type, _id, parentId, config) =>
+        getCreationDepartmentChildren("knowledge_space", parentId, config),
+      departmentSearchApi: (_type, _id, keyword, limit, config) =>
+        searchCreationDepartments("knowledge_space", keyword, limit, config),
+      userGroupsApi: (_type, _id, config) =>
+        getCreationUserGroups("knowledge_space", config),
+    } : undefined,
+    [settings.mode],
   );
   const disabledIds = useMemo<Record<SubjectType, number[]>>(
     () => ({
@@ -535,7 +557,9 @@ export function KnowledgeSpaceSettingsPage() {
                         value={displayedPermissionRows}
                         onChange={(rows) =>
                           settings.replacePermissionRows(
-                            rows.filter((row) => !row.immutableCreator),
+                            settings.mode === "create"
+                              ? rows.filter((row) => !row.protected)
+                              : rows,
                           )
                         }
                         capabilities={permissionCapabilities}
@@ -580,6 +604,7 @@ export function KnowledgeSpaceSettingsPage() {
         relationModels={relationModels}
         canAddNonUserSubjects={settings.canAddNonUserSubjects}
         onConfirm={settings.addPermissionRows}
+        searchApi={permissionSearchApi}
       />
     </main>
   );

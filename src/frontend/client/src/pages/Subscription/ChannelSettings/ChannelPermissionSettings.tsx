@@ -90,7 +90,9 @@ export function ChannelPermissionSettings({
                 value={displayedPermissionRows}
                 onChange={(rows) =>
                   settings.permissionDraft.replaceRows(
-                    rows.filter((row) => !row.immutableCreator),
+                    settings.isEditMode
+                      ? rows
+                      : rows.filter((row) => !row.protected),
                   )
                 }
                 capabilities={permissionCapabilities}

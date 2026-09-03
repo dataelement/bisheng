@@ -3,6 +3,7 @@
  * Direct API calls for the AI chat system.
  */
 import http from "~/api/request";
+import { normalizeHistoryMediaFiles } from "~/utils/mediaAttachmentUtils";
 
 // --- Endpoints ---
 const API = {
@@ -282,13 +283,16 @@ function mapAgentResponseItem(row: any): ChatMessage {
         isCreatedByUser: !row.is_bot,
         createdAt: row.create_time,
         category,
-        files: Array.isArray(row.files) ? row.files : [],
+        files: normalizeHistoryMediaFiles(Array.isArray(row.files) ? row.files : []),
         citations: Array.isArray(row.citations) ? row.citations : null,
         liked: row.liked,
     };
 
     if (category === "question" && raw && typeof raw === "object") {
         base.text = raw.query ?? "";
+        if (!base.files?.length && Array.isArray(raw.files)) {
+            base.files = normalizeHistoryMediaFiles(raw.files);
+        }
         return base;
     }
 

@@ -1,14 +1,32 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field, model_validator
 
 from bisheng.channel.domain.models.channel import ChannelFilterRules, ChannelVisibilityEnum
-from bisheng.channel.domain.schemas.channel_authorization_schema import ChannelGrantItem
+from bisheng.permission.domain.schemas import GrantSubjectInput
 
 
-class SubscriptionStatusEnum(str, Enum):
+class ChannelInitialPermissionGrant(BaseModel):
+    model_key: str = Field(..., min_length=1, max_length=64)
+    subject: GrantSubjectInput
+
+
+class ChannelInitialPermissionsRequest(BaseModel):
+    expected_catalog_release_id: int = Field(..., gt=0)
+    grants: list[ChannelInitialPermissionGrant] = Field(default_factory=list, max_length=50)
+
+
+class ChannelInitialPermissionApplyResult(BaseModel):
+    status: Literal["succeeded", "failed"]
+    resource_version: int | None = None
+    assignee_ids: list[str] = Field(default_factory=list)
+    error_code: int | None = None
+    message: str | None = None
+
+
+class SubscriptionStatusEnum(StrEnum):
     """Subscription Status Enum"""
 
     SUBSCRIBED = "subscribed"
@@ -50,17 +68,6 @@ class KnowledgeSyncConfig(BaseModel):
     subs: list[KnowledgeSyncSubConfig] = Field(default_factory=list)
 
 
-class ChannelInitialPermissions(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    grants: list[ChannelGrantItem] = Field(default_factory=list)
-
-
-class ChannelInitialPermissionResult(BaseModel):
-    status: Literal["success", "failed"]
-    error_code: int | None = None
-
-
 class CreateChannelRequest(BaseModel):
     name: str = Field(..., description="Channel Name")
     source_list: list[str] = Field(default_factory=list, description="Data Source List")
@@ -69,10 +76,29 @@ class CreateChannelRequest(BaseModel):
     filter_rules: list[ChannelFilterRules] | None = Field(default_factory=list, description="Filter Conditions")
     is_released: bool = Field(default=False, description="Whether the channel is released")
     knowledge_sync: KnowledgeSyncConfig | None = Field(None, description="Knowledge space sync configuration")
-    initial_permissions: ChannelInitialPermissions | None = Field(
-        None,
-        description="Permission grants applied after the channel is created",
-    )
+    creation_request_id: str | None = Field(default=None, min_length=1, max_length=64)
+    initial_permissions: ChannelInitialPermissionsRequest | None = None
+
+    @model_validator(mode="after")
+    def require_request_id_for_initial_permissions(self):
+        if self.initial_permissions is not None and self.creation_request_id is None:
+            raise ValueError("initial_permissions requires creation_request_id")
+        return self
+
+
+class CreateChannelResponse(BaseModel):
+    id: str
+    name: str
+    source_list: list[str] = Field(default_factory=list)
+    visibility: ChannelVisibilityEnum
+    description: str | None = None
+    filter_rules: list[dict] = Field(default_factory=list)
+    user_id: int
+    is_released: bool = False
+    tenant_id: int | None = None
+    create_time: datetime | None = None
+    update_time: datetime | None = None
+    initial_permission_result: ChannelInitialPermissionApplyResult | None = None
 
 
 class UpdateChannelRequest(BaseModel):
@@ -95,14 +121,14 @@ class CrawlWebsiteRequest(BaseModel):
     url: str = Field(..., description="URL of the website to crawl")
 
 
-class QueryTypeEnum(str, Enum):
+class QueryTypeEnum(StrEnum):
     """Get My Channels Query Type Enum"""
 
     CREATED = "created"
     FOLLOWED = "followed"
 
 
-class SortByEnum(str, Enum):
+class SortByEnum(StrEnum):
     """Get My Channels Sort By Enum"""
 
     LATEST_UPDATE = "latest_update"
@@ -139,12 +165,18 @@ class ChannelItemResponse(BaseModel):
     create_time: datetime | None = Field(None, description="Channel Creation Time")
     user_role: str = Field(..., description="User Role in Channel: creator / admin / member")
     relation: str | None = Field(None, description="Channel relation: owner / manager / editor / viewer")
-    permission_ids: list[str] = Field(default_factory=list, description="Effective channel permission IDs")
+    actions: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Always empty on the list endpoint. Effective F048 channel actions "
+            "(edit / manage_permission / delete) are resolved lazily from the "
+            "channel-detail endpoint when a channel is opened."
+        ),
+    )
     is_pinned: bool = Field(default=False, description="Whether the channel is pinned by the user")
     subscribed_at: datetime | None = Field(
         None, description="The time when the user subscribed to the channel, null if not subscribed"
     )
-    unread_count: int = Field(default=0, description="Number of unread articles in this channel")
 
 
 class ChannelInfoSourceResponse(BaseModel):
@@ -176,7 +208,7 @@ class ChannelDetailResponse(BaseModel):
     # (lazy, in-channel only) — the dominant per-user ES cost no longer rides on detail.
     subscription_status: SubscriptionStatusEnum = Field(..., description="Current user subscription status")
     relation: str | None = Field(None, description="Current user channel relation: owner / manager / editor / viewer")
-    permission_ids: list[str] = Field(default_factory=list, description="Effective channel permission IDs")
+    actions: list[str] = Field(default_factory=list, description="Effective F048 channel actions")
     knowledge_sync: KnowledgeSyncConfig | None = Field(
         None,
         description="Knowledge space sync configuration; only populated for creators",

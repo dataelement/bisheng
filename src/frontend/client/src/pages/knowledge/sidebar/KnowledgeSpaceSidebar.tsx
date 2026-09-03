@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { KnowledgeSpace, SpaceRole, SpaceSortType, getMineSpacesApi, getJoinedSpacesApi, getDepartmentSpacesApi } from "~/api/knowledge";
+import { KnowledgeSpace, SpaceSortType, getMineSpacesApi, getJoinedSpacesApi, getDepartmentSpacesApi } from "~/api/knowledge";
 import { Button } from "~/components/ui/Button";
 import NavToggle from "~/components/Nav/NavToggle";
 import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
@@ -20,8 +20,8 @@ import { UserPopMenu } from "~/layouts/UserPopMenu";
 import { HubModuleNavTabs } from "~/components/Nav/HubModuleNavTabs";
 import { MobileSidebarHeaderTabs } from "~/components/Nav/MobileSidebarHeaderTabs";
 import {
-    hasKnowledgeSpacePermission,
-    useKnowledgeSpaceActionPermissions,
+    hasKnowledgeSpaceAction,
+    useKnowledgeSpaceActions,
 } from "../hooks/useKnowledgeSpacePermissions";
 import { useDynamicEllipsis } from "../hooks/useDynamicEllipsis";
 
@@ -195,24 +195,23 @@ export function KnowledgeSpaceSidebar({
         ])),
         [departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces],
     );
-    const { permissions: spaceActionPermissions, ensureSpacePermissions } = useKnowledgeSpaceActionPermissions(permissionSpaceIds);
+    const { actions: spaceActions, ensureSpaceActions } = useKnowledgeSpaceActions(permissionSpaceIds);
 
-    const getItemPermissions = (space: KnowledgeSpace, type: "created" | "joined" | "department") => {
-        const isCreator = type === "created" || space.role === SpaceRole.CREATOR;
-        const canEditSpace = hasKnowledgeSpacePermission(
-            spaceActionPermissions,
+    const getItemPermissions = (space: KnowledgeSpace) => {
+        const canEditSpace = hasKnowledgeSpaceAction(
+            spaceActions,
             space.id,
-            "edit_space",
+            "edit",
         );
-        const canDeleteSpace = isCreator || hasKnowledgeSpacePermission(
-            spaceActionPermissions,
+        const canDeleteSpace = hasKnowledgeSpaceAction(
+            spaceActions,
             space.id,
-            "delete_space",
+            "delete",
         );
-        const canManageMembers = hasKnowledgeSpacePermission(
-            spaceActionPermissions,
+        const canManageMembers = hasKnowledgeSpaceAction(
+            spaceActions,
             space.id,
-            "manage_space_relation",
+            "manage_permission",
         );
         return { canEditSpace, canDeleteSpace, canManageMembers };
     };
@@ -289,8 +288,8 @@ export function KnowledgeSpaceSidebar({
                 onLeave={handleLeaveSpace}
                 onPin={(id, pinned) => handlePinSpace(id, pinned, sectionType)}
                 onSettings={onSpaceSettings}
-                onMenuOpen={() => ensureSpacePermissions(s.id)}
-                {...getItemPermissions(s, sectionType)}
+                onMenuOpen={() => ensureSpaceActions(s.id)}
+                {...getItemPermissions(s)}
             />
         ) : (
             <KnowledgeSpaceItem
@@ -304,8 +303,8 @@ export function KnowledgeSpaceSidebar({
                 onLeave={handleLeaveSpace}
                 onPin={(id, pinned) => handlePinSpace(id, pinned, sectionType)}
                 onSettings={onSpaceSettings}
-                onMenuOpen={() => ensureSpacePermissions(s.id)}
-                {...getItemPermissions(s, sectionType)}
+                onMenuOpen={() => ensureSpaceActions(s.id)}
+                {...getItemPermissions(s)}
             />
         );
 
@@ -336,7 +335,7 @@ export function KnowledgeSpaceSidebar({
             hideMoreMenu
             compact
             onAfterNavigate={onNavigateAway}
-            {...getItemPermissions(s, sectionType)}
+            {...getItemPermissions(s)}
         />
     );
 
@@ -418,7 +417,7 @@ export function KnowledgeSpaceSidebar({
                         mobileDrawerMode && "hidden"
                     )}>
                         {!collapsed && !mobileDrawerMode && <div className="flex justify-between items-center pl-3">
-                            <span className="text-base font-semibold leading-8 text-[#1A1A1A]">{menuNames.knowledge}</span>
+                            <span className="text-base font-bold leading-8 text-[#1A1A1A]">{menuNames.knowledge}</span>
                         </div>}
                     </div>
                 </div>

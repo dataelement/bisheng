@@ -68,7 +68,7 @@
     "name": "Name",
     "enterMetadataName": "Enter metadata name"
   },
-  "everyRowsAsOneSegment": "Every {{count}} rows as one segment",
+  "everyRowsAsOneSegment": "At most {{count}} rows per segment",
   "confirmDeleteSelectedFiles": "Confirm delete selected files ({{count}})",
   "fileinfor": {
     "documentInfo": "Document Information",
@@ -95,7 +95,7 @@
     "changeFailed": "File change failed",
     "loadFailed": "Failed to load file list",
     "unnamedFile": "Unnamed File",
-    "excelRule": "Every {{length}} rows as a segment",
+    "excelRule": "At most {{length}} rows per segment",
     "noSearchResults": "No matching files found",
     "noFiles": "No files available",
     "noMoreFiles": "No more files"
@@ -422,7 +422,8 @@
   "bonly": "Row",
   "customRuleNotEmpty": "Custom rule cannot be empty",
   "errorMsg": "File parsed successfully, but {{value}} questions failed to upload. Please check the file and try again",
-  "every": "Every",
+  "maxRowsPerSegment": "At most",
+  "sliceLengthTooltip": "Oversized segments are split further automatically, so a segment may hold fewer rows than set",
   "gauge": "as header",
   "hfFilter": "Filter headers and footers",
   "keepImages": "Keep document images",
@@ -430,7 +431,6 @@
   "overlapGreaterThanChunkSize": "Overlap length cannot be greater than chunk size",
   "repreviewSegmentation": "Re-preview segmentation",
   "row": "row",
-  "segemnt": "as a segment",
   "setSeparately": "Set separately for each table",
   "split": "Split",
   "successMsg": "File uploaded successfully",

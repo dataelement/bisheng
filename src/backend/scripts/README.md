@@ -31,6 +31,448 @@ Options:
 
 ## Permission Scripts
 
+### `cleanup_f048_public_reader_tuples.py`
+
+Audit and delete stale `user:* public_reader -> knowledge_space:<id>` OpenFGA
+tuples written by older F048 public-space logic. Public square discovery is no
+longer a permission grant, so the hotfix model ignores these tuples; this
+script physically removes the old Store data after review.
+
+Run dry-run first from `src/backend/` with the live `config`:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python scripts/cleanup_f048_public_reader_tuples.py
+```
+
+The dry-run prints `store_id`, `model_id`, `stale_tuple_count`, the exact tuple
+list, and `cleanup_checksum`. Apply requires copying both confirmations from
+the immediately preceding dry-run:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/cleanup_f048_public_reader_tuples.py \
+  --apply \
+  --confirm-store-id <store-id> \
+  --confirm-cleanup-checksum <cleanup-checksum>
+```
+
+Use repeated `--object knowledge_space:<id>` flags for a scoped cleanup. Apply
+exits without deleting if the Store ID or checksum does not match.
+
+### `reconcile_f048_visible_projection.py`
+
+Audit and repair environments that already completed an older F048 data
+migration before the final flattened-visible design. The command is available
+in production as well as development/test; safety comes from the same
+maintenance and consistency gates, not from an environment-name allowlist.
+
+Run dry-run first from `src/backend/` with the live `config`:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py
+```
+
+The JSON report includes canonical Grant/assignee source counts, persisted
+source differences, and the deduplicated expected tuple count/checksum. Add an
+explicit Store scan to report missing and orphan direct `visible` tuple keys:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py \
+  --audit-orphan-tuples \
+  --orphan-object folder:97394
+```
+
+The audit treats the union of canonical Grant sources and every ACTIVE SQL
+visible-source contribution as supported, so non-Grant system/resource sources
+are not classified as orphans. With `--orphan-object`, it uses an exact OpenFGA
+Read for those resources and prints the scoped anomaly set plus a stable cleanup
+checksum. Repeat the flag to select more than one reviewed resource. Omit it to
+scan the whole Store and select every audited orphan.
+
+For apply, stop ingress traffic and all API/Worker/Linsight processes, wait for
+their F048 heartbeat TTL to expire, and copy the dry-run `store_id` into the
+explicit confirmation:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py \
+  --apply \
+  --confirm-store-id <store-id> \
+  --operator-id <operator-user-id> \
+  --allow-model-upgrade
+```
+
+`--allow-model-upgrade` is required only when dry-run reports that CURRENT
+still points at an older F048 model. Apply exits with code `3` before writing
+when Store confirmation differs, a runtime heartbeat or projection operation
+is active, the CURRENT Catalog has an unrelated/non-resumable fence, canonical
+SQL data is incomplete, or stale source projections would require a classified
+revocation. It publishes/reuses the final immutable model in the same Store,
+ensures every Grant-derived direct `visible` tuple in batches of at most 90
+with OpenFGA duplicate-ignore semantics, verifies them with higher consistency,
+then activates the rebuilt Grant source rows and publishes a no-op Catalog
+release bound to the new Authorization Model release. It does not create or modify a formal
+`permission_migration_run`. Re-running after an interruption is forward-only
+and idempotent.
+
+To delete reviewed orphan tuple keys, keep the maintenance window in place and
+copy both `store_id` and `orphan_tuple_checksum` from the immediately preceding
+dry-run:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py \
+  --apply \
+  --audit-orphan-tuples \
+  --orphan-object folder:97394 \
+  --cleanup-orphan-tuples \
+  --confirm-orphan-checksum <orphan-tuple-checksum> \
+  --confirm-store-id <store-id> \
+  --operator-id <operator-user-id>
+```
+
+Cleanup is an independent operation: it does not backfill or retire SQL source
+rows and does not publish an Authorization Model/Catalog release. It is refused
+if the selected orphan set changes. Each resource is fenced by its current
+permission version, each exact delete is recorded as a
+`VISIBLE_ORPHAN_CLEANUP` projection operation, and higher-consistency reads must
+confirm that no selected orphan direct tuple remains. Other unselected anomalies
+are untouched. Effective `visible` checks can still be true through an inherited
+parent; the audit verifies exact direct tuple presence instead.
+Restart all permission-using processes after success; they discover the latest
+model through the stable Store name and validate the new SQL CURRENT Catalog
+pin.
+
+### `reconcile_f048_projection_operations.py`
+
+Inspect and recover explicitly selected F048 permission projection ledger
+operations. The script validates tenant ownership, the live Catalog/OpenFGA
+Store and model pin, durable tuple rows, and the resource projection fence. It
+then delegates recovery to the normal projection reconciler; it never updates
+ledger status or OpenFGA tuples directly.
+
+Run from `src/backend/` with the same `config` value as the live service. The
+default is dry-run:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python \
+  scripts/reconcile_f048_projection_operations.py \
+  --tenant-id 1 11 15 18
+```
+
+After reviewing every `preflight` record, apply the recovery:
+
+```bash
+PYTHONPATH=./ .venv/bin/python \
+  scripts/reconcile_f048_projection_operations.py \
+  --tenant-id 1 11 15 18 --apply
+```
+
+The command exits with code `3` without writing if an operation is from a
+different tenant, uses a different Store/model pin, has an incomplete ledger,
+is `FAILED_CLOSED`, or no longer owns the expected resource projection fence.
+Exit code `4` indicates an unexpected runtime/infrastructure failure. Re-run
+is safe: already `FINALIZED` operations are verified and skipped. Catalog
+publish should only be retried when the final `remaining_active` report is
+empty.
+
+### `reconcile_f048_system_owned_resources.py`
+
+Audit and repair missing F048 projections for business-verified platform
+resources. The current inventory covers preset tool categories
+(`is_preset=1 AND user_id IS NULL`). Preset dashboards are intentionally
+excluded: they are ordinary resources owned by the first super administrator.
+The reconciler does not infer system ownership from the resource-type
+allowlist alone.
+
+The default dry-run reports missing/non-current modes for those tool
+categories:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python \
+  scripts/reconcile_f048_system_owned_resources.py
+```
+
+After reviewing the Store ID and exact resource list, apply with an explicit
+Store confirmation and audit operator:
+
+```bash
+PYTHONPATH=./ .venv/bin/python \
+  scripts/reconcile_f048_system_owned_resources.py \
+  --apply \
+  --confirm-store-id '<dry-run store_id>' \
+  --operator-id 1
+```
+
+Apply calls the regular `authorize_system_owned` facade. The resulting mode,
+durable projection operation/tuples, and OpenFGA marker tuples are therefore
+created by the same path as online resource creation. An existing
+non-`CURRENT` mode is a blocker and remains owned by the ordinary
+operation/FAILED_CLOSED recovery scripts.
+
+The general projection-operation reconciler cannot repair this case because a
+freshly seeded resource has no durable operation yet. The visible reconciler
+also cannot repair it because system-owned resources intentionally have no
+Grant/assignee source rows.
+
+### `recover_f048_failed_closed_projection.py`
+
+Forward-recover one explicitly selected F048 resource operation that has
+already entered `FAILED_CLOSED`. This is separate from ordinary reconcile: it
+uses the operation ledger's frozen AFTER state, reads the exact live tuples
+with higher consistency, and proposes only the missing writes and surplus
+deletes. It never derives authorization intent from staged SQL rows and never
+updates SQL or OpenFGA directly.
+
+Run a dry-run first from `src/backend/` with the same `config` as the service:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python \
+  scripts/recover_f048_failed_closed_projection.py \
+  --tenant-id 1 \
+  --resource-type knowledge_space \
+  --resource-id 4166
+```
+
+The dry-run prints the live Store/model pins and a
+`recovery_confirmation_checksum` bound to the exact correction proposal. Copy
+those three values into the apply command:
+
+```bash
+PYTHONPATH=./ .venv/bin/python \
+  scripts/recover_f048_failed_closed_projection.py \
+  --tenant-id 1 \
+  --resource-type knowledge_space \
+  --resource-id 4166 \
+  --apply \
+  --confirm-store-id '<dry-run store_id>' \
+  --confirm-model-id '<dry-run model_id>' \
+  --confirm-recovery-checksum '<dry-run recovery_confirmation_checksum>'
+```
+
+The script resolves the active operation from the resource mode row; operators
+do not need to discover or enter an operation ID. The resolved ID remains in
+the dry-run output for audit. Apply is refused when tenant, resource scope,
+operation ownership, expected
+version, CURRENT Catalog Store/model pin, durable ledger checksum, or the live
+tuple proposal changed after dry-run. The correction must fit one atomic
+OpenFGA write (at most 90 tuples). Only resource scopes are supported; external
+business-owned scopes such as department remain manual-analysis cases. A
+successful run higher-consistency verifies the full AFTER state, finalizes the
+staged SQL rows, advances the resource version, and ends at
+`operation=FINALIZED` plus `resource projection_state=CURRENT`. Re-running a
+finalized operation only verifies and skips it.
+
+### `migrate_f048_permission_data.py`
+
+Formal, forward-only migration from the legacy relation-model Config and
+resource tuples to the F048 Catalog / Model / Grant control plane. This is the
+only F048 business-data migration entry point. Alembic remains DDL-only, and
+the service never invokes this script from API startup, Celery, or Linsight.
+
+Run every command from `src/backend/` with the same `config` value as the live
+deployment.
+
+Normal Compose upgrade flow:
+
+```bash
+docker compose pull
+docker compose up -d
+docker exec -it <backend-container> bash
+
+cd /app
+PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py migrate --apply
+PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py verify --run-id <run-id>
+exit
+
+docker compose restart backend backend_worker
+```
+
+Migration traffic control is an operator responsibility; the application does
+not couple `/health` or a global HTTP/WebSocket middleware to F048 migration
+state. If the deployment splits Celery/Linsight into additional Compose
+services, include all backend process services in the final restart.
+API, Celery, and Linsight register the permission runtime as a lazy application
+Context; Store/model/Catalog validation and the ready heartbeat begin only on
+the first permission operation in that process. Department projection is a
+separate lazy Context and initializes only on the first department mutation
+that needs an OpenFGA projection.
+
+#### D0/D1 prerequisites
+
+1. Update the backend image and start the normal Compose services. Before
+   migration, use the deployment platform or ingress to stop business traffic.
+   When the latest OpenFGA model is still the predecessor model,
+   API/Worker/Linsight do not initialize the F048 permission runtime or publish
+   a ready heartbeat. Celery/Linsight task consumption remains paused until the
+   post-migration restart. Use the migration command output and exit code as the
+   authoritative operational status; `/health` remains a process-liveness
+   check.
+2. Enter the backend container. Confirm the configured stable OpenFGA Store
+   name. The script discovers the unique matching Store and latest source
+   model, persists both IDs in the durable migration run, and prints them for
+   the change ticket; operators do not query or copy them into configuration.
+3. The API entrypoint has already run `alembic upgrade head`. Verify the
+   database revision and the single code head:
+
+   ```bash
+   export config=config.yaml
+   PYTHONPATH=./ .venv/bin/alembic current
+   PYTHONPATH=./ .venv/bin/alembic heads
+   ```
+
+   Both commands must identify `f048_visible_source_projection` as the head.
+   Its predecessor `f048_migration_item_message_longtext` widens the frozen
+   source payload column before the data script records large legacy Config
+   values; the head then creates the single-slot visible source projection
+   table required by migration and D4 verification.
+4. Do not proceed if Redis is unavailable, a ready F048 runtime heartbeat
+   remains, dashboard tenant attribution is ambiguous, an unresolved failed
+   tuple exists, or the source watermark changes between scans.
+
+No Store/model ID or manual stop acknowledgement is required. The script
+checks schema, the unique named Store, Redis readiness heartbeats, and two
+identical source scans.
+
+#### D2/D3 migrate
+
+From the started backend container, use its normal OpenFGA
+connection/Store-name configuration:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py \
+  migrate \
+  --apply
+```
+
+The command creates one durable run, publishes one new immutable model in the
+same Store, writes SQL rows in batches of at most 500 and OpenFGA tuples in
+batches of at most 90, verifies target tuples with higher consistency, then
+removes only the recorded legacy tuples. The two legacy Config rows remain
+read-only as migration/debug evidence and are never used by the F048 runtime.
+The script prints the run ID; record it in the change ticket.
+
+If the process exits before `VERIFYING`, leave the automatic migration gate in
+place, fix the forward path, and resume the same run:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py \
+  migrate \
+  --run-id <run-id> \
+  --apply
+```
+
+Resume uses the frozen source facts stored in `permission_migration_item`; it
+does not infer a new plan from a partially rewritten Store. Repeating a
+completed batch is idempotent.
+
+#### D4 verify and runtime discovery
+
+After migrate reports `VERIFYING`, leave the automatic migration gate in place
+and do not restart the processes yet. Do not query Store/model/Catalog tables
+for values to copy into configuration. The migration always reuses the durable
+Store, source model and target model pinned by the original run; operators
+cannot replace them with command-line parameters. Then run:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py \
+  verify --run-id <run-id>
+```
+
+Verification independently rebuilds source and target checksums, requires one
+traceable visible contribution for every legal assignee, validates the
+deduplicated direct `visible` aggregate and complete streamed enumeration,
+checks high-risk dashboard/download semantics, preserves allowed Store facts,
+requires the run target release to be the one referenced by the SQL CURRENT
+Catalog, and requires unattributed visible tuples, legacy tuples and blockers
+to be zero. The report still records the retained legacy Config count for
+audit, but that count does not block verification. Success moves the run to
+`READY_TO_START`; restart API and Worker processes so they discover the new
+F048 model and automatically remove the migration gate.
+
+At D5 each process resolves the unique Store by stable `store_name`, selects
+its latest model, and requires the discovered Store/model/checksum to equal the
+ACTIVE authorization release referenced by the SQL CURRENT Catalog. Each
+Check/List/Write then sends that resolved model ID explicitly. A duplicate
+Store name or missing Store/model still fails startup. A predecessor checksum
+keeps the process alive but not ready for the explicit migration; after the
+post-migration restart, any model/Catalog mismatch fails readiness.
+
+There is no preview, dry-run, cleanup, rollback, Store replacement,
+intermediate permission model, relation-slot switch, second migration, or
+automatic API/Celery startup migration. A failure keeps maintenance active and
+is repaired only by a forward fix against the same run and target model.
+
+Exit codes:
+
+- `0`: command completed successfully
+- `3`: a migration or verification safety gate blocked progress
+- `4`: unexpected runtime/infrastructure failure; traceback is printed
+
+### `benchmark_f048_permission_paths.py`
+
+Reproducible BENCH-01 harness for the single F048 OpenFGA model. It prepares a
+deterministic dataset in an operator-created benchmark Store, then measures
+Check, BatchCheck 20/50/100, ListObjects direct/department/group/inherit/
+multi-grant and 10/100/1000 result sets, plus the default business
+cursor+BatchCheck path. The report contains P50/P95/P99, result checksums,
+error rate, and request-correlated OpenFGA `dispatch_count` /
+`datastore_query_count`.
+
+The script refuses production environment names, never creates or switches a
+Store, never runs data migration, and never maintains an old/new model pair.
+`prepare` writes only a new F048 model and the benchmark namespace into the
+explicit Store. Use a disposable Store.
+
+The repository fixture
+`test/permission/fixtures/f048_bench_contract.synthetic.json` is checksum-pinned
+but explicitly synthetic. It only validates the harness. A formal release
+BENCH-01 run must replace it with a checksum-pinned, production-derived
+sanitized distribution; `--allow-synthetic` can never produce
+`release_ready=true`.
+
+Prepare from `src/backend/`:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/benchmark_f048_permission_paths.py \
+  prepare \
+  --environment performance \
+  --api-url http://127.0.0.1:8080 \
+  --store-id <dedicated-benchmark-store> \
+  --expected-contract-checksum <fixture-checksum> \
+  --apply
+```
+
+Capture OpenFGA JSON logs for only the benchmark window, then run the model ID
+printed by `prepare`:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/benchmark_f048_permission_paths.py \
+  run \
+  --environment performance \
+  --api-url http://127.0.0.1:8080 \
+  --store-id <same-benchmark-store> \
+  --model-id <f048-model-id> \
+  --fixture <production-derived-sanitized-fixture.json> \
+  --expected-contract-checksum <fixture-checksum> \
+  --openfga-log <openfga-benchmark.jsonl> \
+  --output <bench-01-report.json>
+```
+
+Exit codes:
+
+- `0`: all performance/semantic/observability gates passed
+- `2`: unsafe environment, invalid fixture, or checksum/pin mismatch
+- `3`: a measured gate failed or the fixture is not release-eligible
+- `4`: unexpected runtime/infrastructure failure
+
+> F048 business-data conversion has exactly one entry point:
+> `migrate_f048_permission_data.py`. Legacy relation-template and permission
+> repair CLIs were removed because they cannot run against the F048 model.
+
 ### `migrate_workstation_models_to_workbench.py`
 
 One-off migration for moving the legacy daily-workbench model list from the
@@ -59,216 +501,12 @@ Options:
 
 - `--apply`: perform writes; default is dry-run
 
-### `migrate_channel_permissions_for_relation_models.py`
-
-Backfills channel-module default permissions into legacy **custom** relation
-models (资源权限模板) that were created before the channel module existed.
-
-Behavior:
-
-- reads the global `config.key = "permission_relation_models_v1"` JSON list
-- for each custom (`is_system = false`) model with **no** channel permission ids,
-  appends the channel defaults for its inherited level
-  (`owner` / `manager` / `editor` / `viewer`), sourced from
-  `channel_permission_template.default_permission_ids_for_relation`
-- skips system models (they compute channel defaults from the template at runtime)
-- skips custom models that already hold any channel permission id (never
-  overwrites an admin's explicit channel customization)
-- preserves all non-channel permissions
-
-Usage:
-
-```bash
-PYTHONPATH=./ .venv/bin/python scripts/migrate_channel_permissions_for_relation_models.py
-PYTHONPATH=./ .venv/bin/python scripts/migrate_channel_permissions_for_relation_models.py --apply
-
-bash scripts/migrate_channel_permissions_for_relation_models.sh
-bash scripts/migrate_channel_permissions_for_relation_models.sh apply
-```
-
-Options:
-
-- `--apply`: perform writes; default is dry-run
-
-### `backfill_relation_model_move_permissions.py`
-
-Backfills the F034 permissions `move_file` / `move_folder` into **frozen system**
-relation tiers (所有者 / 可管理 / 可编辑) whose checkbox snapshot was frozen
-before those permissions existed.
-
-> **Usually you don't need to run this.** The same idempotent backfill runs
-> automatically on every backend startup (wired into `main.py` lifespan), so a
-> normal upgrade + restart self-heals. This standalone script exists only for
-> fixing an environment without a restart, or for inspecting the change first.
-
-Behavior:
-
-- reads the global `config.key = "permission_relation_models_v1"` JSON list
-- for each **system** (`is_system = true`) model with `permissions_explicit = true`,
-  unions in `{move_file, move_folder} ∩ default_permission_ids_for_relation(relation)`
-  — owner/manager/editor get both, viewer gets none
-- skips dynamic (`permissions_explicit = false`) models — they already compute
-  the new permissions from the template at runtime
-- skips custom (`is_system = false`) models; preserves all other permissions
-- idempotent: once aligned, re-runs are no-ops
-
-Usage (from `src/backend/`):
-
-```bash
-config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_relation_model_move_permissions.py
-config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_relation_model_move_permissions.py --apply
-```
-
-Options:
-
-- `--apply`: perform writes; default is dry-run
-
-### `backfill_channel_member_rebac_grants.py`
-
-Repairs **already-active** channel subscribers that were activated before commit
-`c530bf375` and therefore never got a ReBAC grant written. The 成员管理 /
-authorization list is rendered from OpenFGA tuples, so such members are active in
-`space_channel_member` but invisible in the list.
-
-Behavior:
-
-- scans channels (all, or one via `--channel-id`) for `status = ACTIVE`,
-  non-`CREATOR`, **direct** (`grant_subject_type` in `NULL` / `self`) members
-- for each member with **no** existing FGA grant on the channel, writes the
-  viewer/manager grant + relation-model binding via
-  `ChannelService.sync_direct_channel_user_permissions` (idempotent)
-- skips the creator (owner is managed by `OwnerService`), `PENDING` / `REJECTED`
-  members, organisation-granted members, and members already present in FGA
-
-Usage:
-
-```bash
-PYTHONPATH=./ .venv/bin/python scripts/backfill_channel_member_rebac_grants.py
-PYTHONPATH=./ .venv/bin/python scripts/backfill_channel_member_rebac_grants.py --apply
-PYTHONPATH=./ .venv/bin/python scripts/backfill_channel_member_rebac_grants.py --channel-id <id> --apply
-
-bash scripts/backfill_channel_member_rebac_grants.sh
-bash scripts/backfill_channel_member_rebac_grants.sh apply
-bash scripts/backfill_channel_member_rebac_grants.sh --channel-id <id> apply
-```
-
-Options:
-
-- `--channel-id <id>`: restrict to a single channel; default is all channels
-- `--apply`: perform writes; default is dry-run
-
-### `clean_department_space_user_group_grants.py`
-
-One-off F033 cleanup. Department knowledge spaces no longer allow the **user-group**
-authorization dimension (the API rejects new user_group grants; the client hides
-the tab). This removes any historical user_group grant on a department space —
-revokes the OpenFGA tuple and drops the relation-model binding. Runtime code keeps
-no compatibility path for these grants.
-
-Behavior:
-
-- scans every department knowledge space (`DepartmentKnowledgeSpaceDao.aget_all`)
-- reports each `user_group` grant as `(space_id, group_id, relation, affected_users)`
-- with `--apply`, revokes the grant via `PermissionService.authorize` + removes the binding
-- only touches department spaces' `user_group` grants — never normal spaces, never user/department grants
-
-Usage:
-
-```bash
-export config=config.yaml
-PYTHONPATH=./ .venv/bin/python scripts/clean_department_space_user_group_grants.py            # dry-run
-PYTHONPATH=./ .venv/bin/python scripts/clean_department_space_user_group_grants.py --apply    # execute
-```
-
-Options:
-
-- `--apply`: perform the revokes; default is dry-run. Irreversible (revokes group members' access) — review dry-run output first.
-
-### `permission_migration.sh`
-
-Manual runner for the F006 historical permission migration from RBAC to ReBAC.
-
-Usage:
-
-```bash
-bash bisheng/script/permission_migration.sh
-bash bisheng/script/permission_migration.sh dry_run
-bash bisheng/script/permission_migration.sh verify
-bash bisheng/script/permission_migration.sh replay
-bash bisheng/script/permission_migration.sh replay 3
-```
-
-Modes:
-
-- `execute`: run migration normally
-- `dry_run`: preview migration statistics only
-- `verify`: compare old RBAC and new ReBAC permission results
-- `replay`: force replay from the specified step, ignoring previous completion state and clearing checkpoint
-- `force`: same behavior as `replay`, kept for compatibility
-
-Step map:
-
-- `1`: Super Admin
-- `2`: User Group Membership
-- `3`: Role Access Expansion
-- `4`: Space/Channel Members
-- `5`: Resource Owners
-- `6`: Folder Hierarchy
-- `7`: Department Membership
-- `8`: Group Resources
-
-### `reconcile_permission_migration_db.py`
-
-Business-level database reconciliation for the F006 RBAC -> ReBAC migration.
-
-This script does not replay the migration implementation. Instead, it rebuilds
-expected tuples directly from business tables such as `userrole`,
-`roleaccess`, `space_channel_member`, `knowledgefile`, `user_department`, and
-`groupresource`, then compares them with rows in the OpenFGA datastore's
-`tuple` table.
-
-Usage:
-
-```bash
-PYTHONPATH=./ .venv/bin/python scripts/reconcile_permission_migration_db.py \
-  --tuple-db-url "mysql+pymysql://user:pass@host:3306/openfga" \
-  --step 1
-
-PYTHONPATH=./ .venv/bin/python scripts/reconcile_permission_migration_db.py \
-  --tuple-db-url "mysql+pymysql://user:pass@host:3306/openfga" \
-  --step 3 --apply
-```
-
-Options:
-
-- `--tuple-db-url`: SQLAlchemy URL of the OpenFGA datastore
-- `--store-id`: optional OpenFGA store id; auto-resolved when omitted
-- `--step`: check exactly step `N` (`1` to `8`)
-- `--apply`: apply writes/deletes through OpenFGA API after diffing
-- `--sample-limit`: how many sample tuple diffs to print
-
-### `reconcile_permission_migration_db.sh`
-
-Shell wrapper for step-specific database-level reconciliation.
-
-Usage:
-
-```bash
-bash scripts/reconcile_permission_migration_db.sh check 1 "mysql+pymysql://user:pass@host:3306/openfga"
-bash scripts/reconcile_permission_migration_db.sh apply 3 "mysql+pymysql://user:pass@host:3306/openfga"
-```
-
-Arguments:
-
-- arg1: `check` or `apply`
-- arg2: step number (`1` to `8`)
-- arg3: OpenFGA tuple DB URL
-
-The 3rd argument can be omitted if one of these environment variables is set:
-
-- `OPENFGA_TUPLE_DB_URL`
-- `OPENFGA_DATASTORE_URL`
-- `OPENFGA_DATASTORE_URI`
+Legacy F006/F033/F034/F040 permission migration, relation-model backfill, and
+channel-member repair CLIs were removed by F048. They target retired
+`permission_id`/relation-template/Config semantics and are not valid after the
+formal F048 migration. Historical feature documents may still describe the
+commands that existed in those releases; do not reconstruct or run them on an
+F048 deployment.
 
 ## Linsight Scripts (F035)
 
@@ -281,7 +519,7 @@ The 3rd argument can be omitted if one of these environment variables is set:
 > the F035 upgrade checklist — see `docs/architecture/08-deployment.md` → 升级 checklist.
 
 One-shot migration of legacy `linsight_sop` rows into tenant custom skills
-(`linsight_skill` + `SKILLS_ROOT/data/skills/{tenant_id}/<name>/SKILL.md`).
+(a `linsight_skill` row + its bundle object in storage).
 `display_name` keeps the original (Chinese) SOP name; the skill ID is a
 pypinyin slug; `metadata.sop-id` makes re-runs idempotent. The skill description
 uses the SOP's own description, falling back to the SOP name when absent (no LLM
@@ -298,6 +536,50 @@ bash scripts/migrate_sop_to_skill.sh --tenant-id 2 apply   # single tenant
 
 Options: `--apply` (persist), `--tenant-id <id>`,
 `--report-file <path>` (default `./migrate_sop_to_skill_report.json`).
+
+### `migrate_skills_to_object_storage.py`
+
+> **Upgrade-required (→ v3.0) — run on EVERY host that has served the API.**
+> Startup performs a deliberately narrow version of this automatically; the script
+> is what resolves everything the self-heal refuses to guess at. See
+> `docs/architecture/08-deployment.md` → 升级 checklist.
+
+Skill bundles used to be authoritative on the node's local disk, so an upgraded
+deployment has rows whose `content_hash` is empty and whose bytes exist only on
+whichever host wrote them — those skills silently fail to load. This publishes
+them to object storage and repoints the row.
+
+The startup self-heal only publishes a bundle whose local byte count matches what
+the row recorded, and skips `source='builtin'` rows (the seeder republishes those
+from the image). Anything else — a size mismatch, or a bundle held by a different
+host — is logged **by name** and left for this script.
+
+Idempotent: a row that already resolves is skipped; publishing the same bundle
+twice writes the same content-addressed object. Dry-run by default.
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/migrate_skills_to_object_storage.py             # dry-run
+PYTHONPATH=./ .venv/bin/python scripts/migrate_skills_to_object_storage.py --apply
+```
+
+Options: `--apply`, `--tenant-id <id>`, `--legacy-root <path>` (defaults to
+`linsight_conf.skills_root`). Prints a JSON report; a non-empty `unresolved` list
+means those bundles live on another host — run it there too.
+
+### `restore_skills_to_local.py`
+
+> **Rollback aid only.** Needed before rolling BACK to a release that reads skill
+> bundles from `SKILLS_ROOT` instead of object storage.
+
+Writes every skill bundle back to the legacy on-disk layout. Skills created or
+edited while the newer release was running exist only as objects; the older code
+looks on local disk, finds nothing, and — because that path only warns — the skill
+silently stops working. Run on every host that will serve the older release.
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/restore_skills_to_local.py             # dry-run
+PYTHONPATH=./ .venv/bin/python scripts/restore_skills_to_local.py --apply
+```
 
 ### `backfill_linsight_task_mode_web_menu.py`
 
@@ -413,6 +695,29 @@ config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_media_no_asr_
 config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_media_no_asr_transcript.py --apply            # 执行收敛
 config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_media_no_asr_transcript.py --knowledge-id 123 # 限定单个知识库/空间
 config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_media_no_asr_transcript.py --file-id 456 --apply
+```
+
+### `converge_knowledge_rebuild_failed_state.py`
+
+把重建失败留下的**容器级** `FAILED` 状态收敛回 `PUBLISHED`。
+
+背景：重建 worker 过去只要有一个文件重建失败，就把整个知识库/知识空间标成
+`KnowledgeState.FAILED`。这个标记本是给"下次自动重建"用的，但失败文件已经不能自动
+重建、必须走重新解析，所以它只剩副作用：权限目标解析要求容器处于 `PUBLISHED`
+(`knowledge_permission_service.py`)，于是一个坏文件让整个空间在权限层面"不存在"，
+接口报 19003「资源类型或 ID 无效」，用户进不去。服务端已不再写这个状态
+(`rebuild_knowledge_worker.py`)；本脚本收敛存量。
+
+只改容器状态，**不碰文件状态**——哪些文件失败仍记录在 `knowledge_file` 上，重新解析
+要靠它。`--scope space`（默认）只处理知识空间；`all` 再加普通知识库与个人知识库。
+QA 知识库不在范围内，其 `FAILED` 由 `worker/knowledge/qa.py` 另行写入、语义未变。
+
+Usage (from `src/backend/`，默认 dry-run):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_knowledge_rebuild_failed_state.py
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_knowledge_rebuild_failed_state.py --apply
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_knowledge_rebuild_failed_state.py --scope all --apply
 ```
 
 ### `backfill_knowledge_space_user_pin.py`

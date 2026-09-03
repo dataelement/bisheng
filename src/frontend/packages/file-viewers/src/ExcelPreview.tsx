@@ -1,7 +1,18 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import * as XLSX from 'xlsx';
-import XlsxPopulate, { type Workbook } from 'xlsx-populate/browser/xlsx-populate';
+import XlsxPopulate from 'xlsx-populate/browser/xlsx-populate';
+import { ImageGallery } from './ImageGallery';
+import {
+  cleanData,
+  extractImageIdFromFormula,
+  getFileExtension,
+  getTableColumnCount,
+  numberToColumnLetters,
+  parseCSV,
+} from './sheetUtils';
+import type { ExtractedImage, ResolvedImage, SheetData, SheetImageIndex } from './types';
+import { extractSheetImages } from './xlsxImages';
 
 export interface ExcelPreviewProps {
   filePath: string;
@@ -11,205 +22,34 @@ export interface ExcelPreviewProps {
   loadingIcon?: ReactNode;
 }
 
-interface ExtractedImage {
-  id: string;
-  path: string;
-  ext: string;
-  base64: string;
-  mimeType: string;
+interface SheetCoordinateMaps {
+  rowMap: number[];
+  colMap: number[];
 }
 
-type SheetData = string[][];
+/**
+ * One download per URL while it is in flight. A preview that gets remounted (a
+ * re-rendering parent, a suspended boundary) would otherwise fire a fresh request
+ * for the same signed URL on every mount, which reads as a request storm against
+ * object storage.
+ */
+const inFlightDownloads = new Map<string, Promise<ArrayBuffer>>();
 
-const VALID_EXTENSIONS = ['csv', 'xlsx', 'xls', 'et', 'txt'];
+function downloadOnce(url: string, onNotOk: (status: number) => Error): Promise<ArrayBuffer> {
+  const pending = inFlightDownloads.get(url);
+  if (pending) return pending;
 
-const MIME_TYPES: Record<string, string> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  gif: 'image/gif',
-  bmp: 'image/bmp',
-  jfif: 'image/jpeg',
-  tiff: 'image/tiff',
-  tif: 'image/tiff',
-  svg: 'image/svg+xml',
-};
-
-function getFileExtension(filePath: string): string {
-  if (!filePath) return '';
-  const withoutQuery = filePath.split('?')[0];
-  const parts = withoutQuery.split('.');
-  if (parts.length < 2) return '';
-  const ext = parts.pop()?.toLowerCase() || '';
-  return VALID_EXTENSIONS.includes(ext) ? ext : '';
-}
-
-function numberToColumnLetters(num: number): string {
-  let result = '';
-  while (num >= 0) {
-    result = String.fromCharCode(65 + (num % 26)) + result;
-    num = Math.floor(num / 26) - 1;
-  }
-  return result;
-}
-
-function extractImageIdFromFormula(formula: unknown): string | null {
-  if (!formula || typeof formula !== 'string') return null;
-  const patterns = [
-    /DISPIMG\("([^"]+)"\)/i,
-    /DISPIMG\('([^']+)'\)/i,
-    /DISPIMG\("([^"]+)",\s*\d+\)/i,
-    /DISPIMG\('([^']+)',\s*\d+\)/i,
-  ];
-  for (const pattern of patterns) {
-    const match = formula.match(pattern);
-    if (match && match[1]) return match[1];
-  }
-  return null;
-}
-
-function parseCSV(csvStr: string): SheetData {
-  try {
-    if (!csvStr || typeof csvStr !== 'string') return [];
-    const lines = csvStr.split(/\r?\n/).filter((line) => line.trim() !== '');
-    const rows: SheetData = [];
-    const delimiters = [',', '\t', ';', '|'];
-
-    let detectedDelimiter = ',';
-    let maxColumns = 0;
-    for (const delimiter of delimiters) {
-      const testRow = lines[0]?.split(delimiter) || [];
-      if (testRow.length > maxColumns && testRow.some((col) => col.trim() !== '')) {
-        maxColumns = testRow.length;
-        detectedDelimiter = delimiter;
-      }
-    }
-
-    lines.forEach((line) => {
-      const columns = line.split(detectedDelimiter).map((col) => col.replace(/^["']|["']$/g, '').trim());
-      if (columns.some((col) => col !== '')) rows.push(columns);
+  const request = fetch(url)
+    .then((response) => {
+      if (!response.ok) throw onNotOk(response.status);
+      return response.arrayBuffer();
+    })
+    .finally(() => {
+      inFlightDownloads.delete(url);
     });
-    return rows;
-  } catch (err) {
-    console.error('CSV parsing error:', err);
-    return [];
-  }
-}
 
-function cleanData(data: unknown[][]): SheetData {
-  if (!Array.isArray(data) || data.length === 0) return [];
-
-  const nonEmptyRows = data.filter((row) =>
-    row.some((cell) => cell !== undefined && cell !== null && String(cell).trim() !== ''),
-  );
-  if (nonEmptyRows.length === 0) return [];
-
-  const columnCount = Math.max(...nonEmptyRows.map((row) => row.length));
-  const hasDataColumns: number[] = [];
-  for (let col = 0; col < columnCount; col++) {
-    const hasData = nonEmptyRows.some(
-      (row) => row[col] !== undefined && row[col] !== null && String(row[col]).trim() !== '',
-    );
-    if (hasData) hasDataColumns.push(col);
-  }
-
-  return nonEmptyRows.map((row) => hasDataColumns.map((colIndex) => (row[colIndex] ? String(row[colIndex]).trim() : '')));
-}
-
-function getTableColumnCount(data: SheetData): number {
-  if (!Array.isArray(data) || data.length === 0) return 0;
-  return Math.max(...data.map((row) => row.length));
-}
-
-async function extractImagesWithPositions(workbook: Workbook): Promise<{
-  images: ExtractedImage[];
-  imagePositions: Record<string, string[]>;
-}> {
-  interface PendingImage {
-    id: string;
-    path: string;
-    ext: string;
-    base64Promise: Promise<string>;
-  }
-  const pending: PendingImage[] = [];
-  const imagePositions: Record<string, string[]> = {};
-  const zip = workbook._zip;
-
-  zip.forEach((relativePath, zipEntry) => {
-    if (relativePath.startsWith('xl/media/') && !zipEntry.dir) {
-      const ext = relativePath.split('.').pop()?.toLowerCase() || '';
-      if (['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'jfif'].includes(ext)) {
-        const id = relativePath.split('/').pop() || relativePath;
-        pending.push({ id, path: relativePath, ext, base64Promise: zipEntry.async('base64') });
-      }
-    }
-  });
-
-  const drawingFiles = Object.keys(zip.files).filter((p) => p.startsWith('xl/drawings/') && p.endsWith('.xml'));
-  for (const drawingPath of drawingFiles) {
-    try {
-      const xmlStr = await zip.file(drawingPath)?.async('text');
-      if (!xmlStr) continue;
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlStr, 'text/xml');
-      const anchors = xmlDoc.getElementsByTagName('xdr:twoCellAnchor');
-
-      const relsPath = drawingPath.replace('drawings/', 'drawings/_rels/') + '.rels';
-      const rIdMap: Record<string, string> = {};
-      const relsEntry = zip.file(relsPath);
-      if (relsEntry) {
-        const relsXml = await relsEntry.async('text');
-        const relsDoc = parser.parseFromString(relsXml, 'text/xml');
-        const relationships = relsDoc.getElementsByTagName('Relationship');
-        for (let j = 0; j < relationships.length; j++) {
-          const r = relationships[j];
-          const id = r.getAttribute('Id');
-          const target = r.getAttribute('Target');
-          if (id && target) rIdMap[id] = target.split('/').pop() || target;
-        }
-      }
-
-      for (let i = 0; i < anchors.length; i++) {
-        const anchor = anchors[i];
-        const from = anchor.getElementsByTagName('xdr:from')[0];
-        const pic = anchor.getElementsByTagName('xdr:pic')[0];
-        if (!from || !pic) continue;
-
-        const colNode = from.getElementsByTagName('xdr:col')[0];
-        const rowNode = from.getElementsByTagName('xdr:row')[0];
-        const blip = pic.getElementsByTagName('a:blip')[0];
-        if (!colNode || !rowNode || !blip) continue;
-
-        const col = parseInt(colNode.textContent || '0', 10);
-        const row = parseInt(rowNode.textContent || '0', 10);
-        const cellAddress = numberToColumnLetters(col) + (row + 1);
-
-        const rId = blip.getAttribute('r:embed');
-        if (!rId || !rIdMap[rId]) continue;
-
-        const mediaFileName = rIdMap[rId];
-        if (pending.some((img) => img.id === mediaFileName)) {
-          if (!imagePositions[cellAddress]) imagePositions[cellAddress] = [];
-          imagePositions[cellAddress].push(mediaFileName);
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to parse drawing xml:', e);
-    }
-  }
-
-  const images: ExtractedImage[] = [];
-  for (const img of pending) {
-    images.push({
-      id: img.id,
-      path: img.path,
-      ext: img.ext,
-      base64: await img.base64Promise,
-      mimeType: MIME_TYPES[img.ext] || 'image/png',
-    });
-  }
-
-  return { images, imagePositions };
+  inFlightDownloads.set(url, request);
+  return request;
 }
 
 function DefaultSpinner() {
@@ -222,43 +62,81 @@ function DefaultSpinner() {
 }
 
 export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: ExcelPreviewProps) {
-  const { t } = useTranslation('shared', { keyPrefix: 'knowledge.excelPreview' });
+  // useSuspense: false — a suspending viewer gets torn down and remounted by the
+  // nearest boundary while the namespace settles, and every remount refetches the
+  // file. These labels are error text only, so resolving them a frame late is fine.
+  const { t } = useTranslation('shared', { keyPrefix: 'knowledge.excelPreview', useSuspense: false });
+  // The parse effect must not depend on `t`: react-i18next returns a new `t`
+  // whenever the namespace or language settles, and that identity change alone
+  // re-downloaded and re-parsed the whole workbook.
+  const tRef = useRef(t);
+  tRef.current = t;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sheets, setSheets] = useState<string[]>([]);
   const [activeSheet, setActiveSheet] = useState('');
   const [excelData, setExcelData] = useState<Record<string, SheetData>>({});
+  const [sheetMaps, setSheetMaps] = useState<Record<string, SheetCoordinateMaps>>({});
   const [images, setImages] = useState<ExtractedImage[]>([]);
-  const [imagePositions, setImagePositions] = useState<Record<string, string[]>>({});
+  const [sheetImages, setSheetImages] = useState<SheetImageIndex>({});
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
   const fileExt = fileExtProp || getFileExtension(filePath);
   const isCSV = fileExt === 'csv';
   const isXLSX = fileExt === 'xlsx' || fileExt === 'et';
 
+  /**
+   * Resolve the active sheet's pictures against the rendered grid. Anchors address
+   * the original grid, while cleanData() has dropped blank rows/columns — so the
+   * anchor coordinates are translated back through the row/column maps. Anything
+   * that lands outside the used range is shown below the table instead of silently
+   * disappearing.
+   */
+  const { placedImages, looseImages } = useMemo(() => {
+    const placed = new Map<string, ExtractedImage>();
+    const loose: ResolvedImage[] = [];
+    const anchors = sheetImages[activeSheet];
+    if (!anchors?.length) return { placedImages: placed, looseImages: loose };
+
+    const maps = sheetMaps[activeSheet];
+    const toRendered = (originals: number[] | undefined) =>
+      new Map((originals ?? []).map((original, rendered): [number, number] => [original, rendered]));
+    const rowIndexOf = toRendered(maps?.rowMap);
+    const colIndexOf = toRendered(maps?.colMap);
+
+    for (const anchor of anchors) {
+      const image = images.find((img) => img.id === anchor.imageId);
+      if (!image) continue;
+
+      const row = anchor.floating ? undefined : rowIndexOf.get(anchor.from.row);
+      const col = anchor.floating ? undefined : colIndexOf.get(anchor.from.col);
+      if (row === undefined || col === undefined) {
+        loose.push({ image, anchor });
+        continue;
+      }
+      placed.set(`${row}:${col}`, image);
+    }
+
+    return { placedImages: placed, looseImages: loose };
+  }, [sheetImages, sheetMaps, images, activeSheet]);
+
   const getCellImage = useCallback(
     (rowIndex: number, colIndex: number, cellContent: string): ExtractedImage | null => {
-      const cellAddress = `${numberToColumnLetters(colIndex)}${rowIndex + 1}`;
-      const imageIds = imagePositions[cellAddress];
+      const anchored = placedImages.get(`${rowIndex}:${colIndex}`);
+      if (anchored) return anchored;
 
-      if (imageIds?.length) {
-        const foundImage = images.find((img) => imageIds.includes(img.id));
-        if (foundImage) return foundImage;
-      }
-
-      if (cellContent && typeof cellContent === 'string' && cellContent.startsWith('=DISPIMG')) {
+      // WPS keeps in-cell pictures as a =DISPIMG("ID_...") formula, not a drawing anchor.
+      if (typeof cellContent === 'string' && cellContent.startsWith('=DISPIMG')) {
         const imageId = extractImageIdFromFormula(cellContent);
         if (imageId) {
-          const imageById = images.find((img) => img.path.includes(imageId) || img.id === imageId);
-          if (imageById) return imageById;
-          if (images.length > 0) return images[0];
+          return images.find((img) => img.path.includes(imageId) || img.id === imageId) ?? null;
         }
       }
 
       return null;
     },
-    [images, imagePositions],
+    [placedImages, images],
   );
 
   useEffect(() => {
@@ -266,20 +144,21 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
       try {
         setLoading(true);
         setImages([]);
-        setImagePositions({});
+        setSheetImages({});
         setExcelData({});
+        setSheetMaps({});
         setSheets([]);
         setActiveSheet('');
 
-        if (!filePath) throw new Error(t('filePathEmpty'));
+        if (!filePath) throw new Error(tRef.current('filePathEmpty'));
 
-        const response = await fetch(filePath);
-        if (!response.ok) throw new Error(`${t('fileLoadFailed')}: ${response.status}`);
-
-        const arrayBuffer = await response.arrayBuffer();
+        const arrayBuffer = await downloadOnce(
+          filePath,
+          (status) => new Error(`${tRef.current('fileLoadFailed')}: ${status}`),
+        );
 
         if (isCSV) {
-          if (arrayBuffer.byteLength === 0) throw new Error(t('fileContentEmpty'));
+          if (arrayBuffer.byteLength === 0) throw new Error(tRef.current('fileContentEmpty'));
 
           const uint8Array = new Uint8Array(arrayBuffer);
           let decodedStr = '';
@@ -296,8 +175,9 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
           }
           if (!decodedStr) decodedStr = new TextDecoder().decode(uint8Array);
 
-          const cleanedData = cleanData(parseCSV(decodedStr));
-          setExcelData({ Sheet1: cleanedData });
+          const cleaned = cleanData(parseCSV(decodedStr));
+          setExcelData({ Sheet1: cleaned.data });
+          setSheetMaps({ Sheet1: { rowMap: cleaned.rowMap, colMap: cleaned.colMap } });
           setSheets(['Sheet1']);
           setActiveSheet('Sheet1');
         } else if (isXLSX || fileExt === 'xls') {
@@ -308,19 +188,23 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
             wb = XLSX.read(arrayBuffer, { type: 'array' });
           } catch (e) {
             console.error('SheetJS parsing failed:', e);
-            throw new Error(t('excelParseFailed'));
+            throw new Error(tRef.current('excelParseFailed'));
           }
 
           const sheetNames = wb.SheetNames;
           const parsedData: Record<string, SheetData> = {};
+          const parsedMaps: Record<string, SheetCoordinateMaps> = {};
           sheetNames.forEach((sheetName) => {
             const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {
               header: 1,
               defval: '',
             }) as unknown[][];
-            parsedData[sheetName] = cleanData(aoa);
+            const cleaned = cleanData(aoa);
+            parsedData[sheetName] = cleaned.data;
+            parsedMaps[sheetName] = { rowMap: cleaned.rowMap, colMap: cleaned.colMap };
           });
           setExcelData(parsedData);
+          setSheetMaps(parsedMaps);
           setSheets(sheetNames);
           setActiveSheet(sheetNames[0] || '');
 
@@ -329,21 +213,21 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
           if (isXLSX) {
             try {
               const workbook = await XlsxPopulate.fromDataAsync(arrayBuffer);
-              const extracted = await extractImagesWithPositions(workbook);
+              const extracted = await extractSheetImages(workbook._zip);
               setImages(extracted.images);
-              setImagePositions(extracted.imagePositions);
+              setSheetImages(extracted.index);
             } catch (e) {
               console.warn('[ExcelPreview] image extraction failed, skipping:', e);
             }
           }
         } else {
-          throw new Error(t('unsupportedType', { type: fileExt }));
+          throw new Error(tRef.current('unsupportedType', { type: fileExt }));
         }
 
         setError(null);
       } catch (err) {
         console.error('File parsing failed:', err);
-        setError(err instanceof Error ? err.message : t('unknownError'));
+        setError(err instanceof Error ? err.message : tRef.current('unknownError'));
       } finally {
         setLoading(false);
       }
@@ -353,13 +237,21 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
       fetchAndParseFile();
     } else {
       setLoading(false);
-      setError(t('filePathEmpty'));
+      setError(tRef.current('filePathEmpty'));
     }
-  }, [filePath, fileExt, isCSV, isXLSX, t]);
+  }, [filePath, fileExt, isCSV, isXLSX]);
 
   const renderContent = () => {
     const sheetData = excelData[activeSheet];
     if (!Array.isArray(sheetData) || sheetData.length === 0) {
+      // A sheet can legitimately hold pictures and no cells at all.
+      if (looseImages.length > 0) {
+        return (
+          <div className="flex-1 min-h-0 overflow-auto border border-gray-200 bg-white p-4">
+            <ImageGallery items={looseImages} />
+          </div>
+        );
+      }
       return (
         <div className="flex flex-1 min-h-0 items-center justify-center text-gray-500">
           {t('currentSheetNoData')}
@@ -558,6 +450,12 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
                 })}
               </tbody>
             </table>
+
+            {looseImages.length > 0 && (
+              <div className="border-t border-gray-200 p-4">
+                <ImageGallery items={looseImages} title={t('imagesOutsideTable')} />
+              </div>
+            )}
           </div>
         </div>
       </div>

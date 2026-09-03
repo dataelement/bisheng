@@ -19,30 +19,53 @@ def _function_source(relative_path: str, function_name: str) -> str:
     return ast.get_source_segment(source, function)
 
 
-def test_chat_online_default_path_delegates_to_bounded_service_page():
+def test_chat_online_default_path_delegates_to_cursor_service():
     source = _function_source("bisheng/api/v1/chat.py", "get_online_chat")
-    assert "get_online_flows_page" in source
+    # Default ranked path is now an F027 cursor waterfall, not an offset scan.
+    assert "get_online_flows_cursor" in source
+    assert "get_all_flows_envelope" in source
+    assert "cursor=cursor" in source
     assert "MessageSessionDao" not in source
     assert "skip_pagination=True" not in source
     assert "data.sort" not in source
+    # The offset page helper must be gone from the default path.
+    assert "get_online_flows_page" not in source
+
+    cursor_source = _function_source("bisheng/api/services/workflow.py", "get_online_flows_cursor")
+    assert "additional_actions=()" in cursor_source
+    assert "writeable_ids=set()" in cursor_source
+    assert "_apply_page_can_share" not in cursor_source
 
 
-def test_uncategorized_path_has_no_sync_fetch_all_or_empty_link_short_circuit():
-    source = _function_source("bisheng/api/services/workflow.py", "get_uncategorized_flows")
+def test_uncategorized_path_is_cursor_waterfall_without_sync_fetch_all():
+    source = _function_source("bisheng/api/services/workflow.py", "get_uncategorized_flows_envelope")
+    assert "resolve_permission_actor" in source
+    assert "_collect_visible_app_ids" in source
+    assert "id_list=visible_id_list" in source
     assert "TagDao.asearch_tags" in source
     assert "TagDao.aget_resources_by_tags" in source
     assert "FlowDao.get_all_apps" not in source
     assert "return [], 0" not in source
-    assert "_scan_visible_apps_page" in source
+    # Cursor scan, not the retired offset page scan.
+    assert "_scan_visible_apps_cursor" in source
+    assert "additional_actions=()" in source
+    assert "_apply_page_can_share" not in source
+    assert "decode_cursor" in source
+    assert "encode_cursor" in source
+    assert "PageInfiniteCursorData" in source
 
 
-def test_compat_scan_uses_keyset_batches_and_page_bounded_target():
-    source = _function_source("bisheng/api/services/workflow.py", "_scan_visible_apps_page")
-    assert "while len(visible) < target_visible" in source
+def test_cursor_scan_uses_keyset_batches_and_page_size_bounded_probe():
+    source = _function_source("bisheng/api/services/workflow.py", "_scan_visible_apps_cursor")
+    # page_size + 1 probe instead of the old offset target_visible.
+    assert "while len(visible) <= normalized_page_size" in source
     assert "cursor=batch_cursor" in source
-    assert "target_visible = normalized_page * normalized_page_size" in source
-    assert "build_app_permission_context_async" in source
-    assert "context=permission_context" in source
+    assert "has_more = len(visible) > normalized_page_size" in source
+    assert "requested_actions" in source
+    assert "additional_actions" in source
+    assert "_application_action_map" in source
+    assert '"edit"' in source
+    assert '"share"' in source
 
 
 def test_ranked_dao_uses_dm8_safe_keyset_helper_with_mixed_directions():

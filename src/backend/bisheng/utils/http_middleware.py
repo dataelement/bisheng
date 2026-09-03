@@ -169,15 +169,18 @@ async def _check_is_global_super(
 
     is_super = False
     try:
-        from bisheng.core.openfga.manager import aget_fga_client
+        from bisheng.permission.application import (
+            PermissionObject,
+            PermissionSubject,
+            get_permission_relation_api,
+        )
 
-        fga = await aget_fga_client()
-        if fga is not None:
-            is_super = await fga.check(
-                user=f"user:{user_id}",
-                relation="super_admin",
-                object="system:global",
-            )
+        permissions = await get_permission_relation_api()
+        is_super = await permissions.check(
+            subject=PermissionSubject("user", str(user_id)),
+            relation="super_admin",
+            resource=PermissionObject("system", "global"),
+        )
     except Exception as exc:
         logger.debug("FGA super-admin check failed for user %d: %s", user_id, exc)
 

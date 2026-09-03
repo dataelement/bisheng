@@ -1,6 +1,7 @@
 // @ts-strict-ignore
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { generateUUID } from '~/utils';
+import { extractDroppedDirectories, readFolderFilesRecursive } from '~/utils/folderUpload';
 
 // Clipboard screenshots always arrive as an image File named "image.png" (or
 // with an empty name). InputFiles dedups by file name, so pasting a second
@@ -21,7 +22,12 @@ const uniquifyPastedFile = (file: File): File => {
     }
 };
 
-export const useFileDropAndPaste = ({ enabled, onFilesReceived }) => {
+/**
+ * @param allowFolders  Accept dropped DIRECTORIES, expanded recursively with the
+ *   folder tree preserved on each File's `webkitRelativePath`. Task mode only:
+ *   daily chat has no workspace to rebuild a tree in.
+ */
+export const useFileDropAndPaste = ({ enabled, onFilesReceived, allowFolders = false }) => {
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
 
@@ -59,6 +65,19 @@ export const useFileDropAndPaste = ({ enabled, onFilesReceived }) => {
             setIsDragging(false);
             dragCounter.current = 0;
 
+            // Directories must be pulled off the DataTransferItemList
+            // synchronously — it is invalidated the moment this handler returns.
+            // `dataTransfer.files` does not surface a dropped folder's contents at
+            // all, so without this a dropped folder silently did nothing.
+            const dirEntries = allowFolders ? extractDroppedDirectories(e.dataTransfer) : [];
+            if (dirEntries.length > 0) {
+                void Promise.all(dirEntries.map((dir) => readFolderFilesRecursive(dir, ''))).then((groups) => {
+                    const files = groups.flat();
+                    if (files.length > 0) onFilesReceived(files);
+                });
+                return;
+            }
+
             if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
                 onFilesReceived(e.dataTransfer.files);
                 e.dataTransfer.clearData();
@@ -76,7 +95,7 @@ export const useFileDropAndPaste = ({ enabled, onFilesReceived }) => {
             window.removeEventListener('dragover', handleDragOver);
             window.removeEventListener('drop', handleDrop);
         };
-    }, [enabled, onFilesReceived]);
+    }, [enabled, onFilesReceived, allowFolders]);
 
     // 2. pasete
     const handlePaste = useCallback((e) => {

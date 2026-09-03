@@ -21,6 +21,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     collect_rag_citation_registry_items,
     save_message_citations,
     select_registry_items_for_persistence,
+    strip_unregistered_citation_markers,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -88,19 +89,23 @@ class KnowledgeSpaceChatService:
     async def _require_space_view_permission(self, space_id: int):
         svc = self._permission_service()
         await svc._require_read_permission(space_id)
-        await svc._require_permission_id("knowledge_space", space_id, "view_space")
+        await svc._require_action("knowledge_space", space_id, "visible")
 
     async def _require_folder_view_permission(self, space_id: int, folder_id: int):
         svc = self._permission_service()
-        folder = await svc._require_folder_relation(space_id, folder_id, "can_read")
-        await svc._require_permission_id("folder", folder_id, "view_folder", space_id=space_id)
-        return folder
+        return await svc._require_folder_action(
+            space_id,
+            folder_id,
+            "visible",
+        )
 
     async def _require_file_view_permission(self, space_id: int, file_id: int):
         svc = self._permission_service()
-        file_record = await svc._require_file_relation(file_id, "can_read", space_id=space_id)
-        await svc._require_permission_id("knowledge_file", file_id, "view_file", space_id=space_id)
-        return file_record
+        return await svc._require_file_action(
+            file_id,
+            "visible",
+            space_id=space_id,
+        )
 
     @staticmethod
     async def _prepare_rag_citation_context(
@@ -231,6 +236,8 @@ class KnowledgeSpaceChatService:
             )
             reasoning_content += chunk_reasoning_content
             answer += one.content
+        cited_items = select_registry_items_for_persistence(citation_items, answer)
+        answer = strip_unregistered_citation_markers(answer, cited_items)
         messages = [
             ChatMessage(
                 category=MessageCategory.QUESTION,
@@ -259,7 +266,6 @@ class KnowledgeSpaceChatService:
             ),
         ]
         await ChatMessageDao.ainsert_batch(messages)
-        cited_items = select_registry_items_for_persistence(citation_items, answer)
         await save_message_citations(
             message_id=messages[1].id,
             items=cited_items,
@@ -307,7 +313,7 @@ class KnowledgeSpaceChatService:
             app_type=ApplicationTypeEnum.DAILY_CHAT,
             user_id=user_id,
         )
-        title = await generate_conversation_title_async(question=question, llm=llm, answer=answer)
+        title = await generate_conversation_title_async(question=question, llm=llm)
         await MessageSessionDao.update_session_name(chat_id, title)
 
     async def single_file_history(
@@ -544,7 +550,7 @@ class KnowledgeSpaceChatService:
                 for d in docs
                 if d.metadata and d.metadata.get("document_id") is not None
             }
-            permitted = await visibility.post_filter_visible_files(space.id, unique_file_ids)
+            permitted = await visibility.post_filter_retrievable_files(space.id, unique_file_ids)
             survivors = [d for d in docs if int(d.metadata.get("document_id", -1)) in permitted]
             dropped = len(docs) - len(survivors)
 
@@ -628,6 +634,8 @@ class KnowledgeSpaceChatService:
             )
             reasoning_content += chunk_reasoning_content
             answer += one.content
+        cited_items = select_registry_items_for_persistence(citation_items, answer)
+        answer = strip_unregistered_citation_markers(answer, cited_items)
         messages = [
             ChatMessage(
                 category=MessageCategory.QUESTION,
@@ -656,7 +664,6 @@ class KnowledgeSpaceChatService:
             ),
         ]
         await ChatMessageDao.ainsert_batch(messages)
-        cited_items = select_registry_items_for_persistence(citation_items, answer)
         await save_message_citations(
             message_id=messages[1].id,
             items=cited_items,
@@ -974,9 +981,9 @@ class KnowledgeSpaceChatService:
         from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 
         kb_id = kb.id
-        # KB-level read permission (raises UnAuthorizedError on denial → surfaced
+        # KB-level use permission (raises UnAuthorizedError on denial → surfaced
         # by the endpoint's BaseErrorCode handler).
-        await KnowledgeService.permission_service.ensure_knowledge_read_async(
+        await KnowledgeService.permission_service.ensure_knowledge_use_async(
             login_user=self.login_user,
             owner_user_id=kb.user_id,
             knowledge_id=kb_id,

@@ -9,11 +9,14 @@
  *
  * It does NOT import or touch any Chat/Messages (daily /c) component — the shared
  * visual tokens live in the task-mode primitives (CollapsibleTimelineItem /
- * TimelineRail / useElapsedTicker) and the Wave2 group components below.
+ * TimelineRail) and the Wave2 group components below.
  */
 import { useMemo } from 'react';
 import { DeepStepGroup } from './DeepStepGroup';
 import { useExecutionLive } from './executionLive';
+import { readIngestProgress, readSkillLoadFailure } from './execTypes';
+import { IngestPhaseRow } from './IngestPhaseRow';
+import { SkillLoadFailureRow } from './SkillLoadFailureRow';
 import { IntentRow } from './IntentRow';
 import { KnowledgeRow } from './KnowledgeRow';
 import { ToolRowLite } from './ToolRowLite';
@@ -37,8 +40,8 @@ export function ExecutionTimeline({ history }: ExecutionTimelineProps) {
     const nodes = useMemo(() => buildTimelineGroups(mergeStepFrames(history)), [sig]);
     // Container liveness (session turn / running task), provided by the carrier via
     // ExecutionLiveContext. The ACTIVE episode is the LAST node while the container
-    // is live — that one carries the live facets (正在 label, header pulse, ticking
-    // clock); every earlier node is done. (The fold itself opens collapsed for all
+    // is live — that one carries the live facets (正在 label, header pulse); every
+    // earlier node is done. (The fold itself opens collapsed for all
     // groups — see DeepStepGroup.) Passing this stable `active` down (instead of
     // letting each group read the volatile per-tool group.running) is what stops the
     // label/pulse from flickering on every tool call within one episode.
@@ -100,6 +103,12 @@ export function ExecutionTimeline({ history }: ExecutionTimelineProps) {
                 const { step } = node;
                 if (step.stepType === 'knowledge') {
                     return <KnowledgeRow key={step.callId} step={step} />;
+                }
+                if (readIngestProgress(step)) {
+                    return <IngestPhaseRow key={step.callId} step={step} />;
+                }
+                if (readSkillLoadFailure(step)) {
+                    return <SkillLoadFailureRow key={step.callId} step={step} />;
                 }
                 return <ToolRowLite key={step.callId} step={step} />;
             })}

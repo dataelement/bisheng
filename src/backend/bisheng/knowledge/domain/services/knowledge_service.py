@@ -46,12 +46,11 @@ from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.cache.utils import async_file_download, file_download
-from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_admin_scope_tenant_id, get_current_tenant_id
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 from bisheng.database.models.group_resource import (
     ResourceTypeEnum,
 )
-from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import (
@@ -64,6 +63,7 @@ from bisheng.knowledge.domain.models.knowledge import (
     KnowledgeUpdate,
 )
 from bisheng.knowledge.domain.models.knowledge_file import (
+    FileType,
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus,
@@ -78,21 +78,43 @@ from bisheng.knowledge.domain.schemas.knowledge_schema import (
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
-from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
+from bisheng.knowledge.domain.services.knowledge_permission_service import (
+    KnowledgeContainerPermissionRecord,
+    KnowledgeFilePermissionRecord,
+    KnowledgePermissionService,
+)
+from bisheng.common.services.metric_log import emit_metric
 from bisheng.llm.domain.const import LLMModelType
+from bisheng.permission.application.access import (
+    get_f048_resource_adapter,
+    get_f048_runtime,
+)
+from bisheng.permission.application.business_authorization import (
+    batch_check_business_actions,
+    require_business_action,
+)
+from bisheng.permission.application.identity import resolve_permission_actor
+from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_knowledge_index_name, generate_uuid
+from bisheng.utils.async_utils import run_async_safe
 
-_KNOWLEDGE_LIST_PERMISSION_IDS = [
-    "view_kb",
-    "use_kb",
-    "edit_kb",
-    "delete_kb",
-    "manage_kb_owner",
-    "manage_kb_manager",
-    "manage_kb_viewer",
+_KNOWLEDGE_LIST_ACTIONS = [
+    "visible",
+    "use",
+    "edit",
+    "delete",
+    "manage_permission",
 ]
-_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE = 50
+_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE = 100
+
+# Upper bound on the number of visible knowledge-library ids OpenFGA may return
+# for a regular user. Mirrors ``_JOINED_VISIBLE_MAX_RESULTS`` in
+# ``knowledge_space_service`` so the visible-first flows share the same
+# capacity envelope; the permission runtime emits ``capacity_80_percent``
+# telemetry as the population approaches this ceiling so a tenant nearing it
+# is flagged before the enumeration hits the schema-level 5 000 hard cap.
+_LIBRARY_VISIBLE_MAX_RESULTS = 5000
 
 
 class KnowledgeService(KnowledgeUtils):
@@ -108,15 +130,35 @@ class KnowledgeService(KnowledgeUtils):
         permission_service: KnowledgePermissionService = None,
         audit_telemetry_service: KnowledgeAuditTelemetryService = None,
         metadata_service: KnowledgeMetadataService = None,
+        f048_permission_adapter=None,
     ):
         self.knowledge_repository = knowledge_repository
         self.knowledge_file_repository = knowledge_file_repository
         self.permission_service = permission_service or self.__class__.permission_service
         self.audit_telemetry_service = audit_telemetry_service or self.__class__.audit_telemetry_service
+        self.f048_permission_adapter = f048_permission_adapter
         self.metadata_service = metadata_service or KnowledgeMetadataService(
             knowledge_repository=self.knowledge_repository,
             knowledge_file_repository=self.knowledge_file_repository,
             permission_service=self.permission_service,
+        )
+
+    async def resolve_permission_target(
+        self,
+        *,
+        resource_id: str,
+        actor,
+        action: str,
+    ):
+        """Load a library through its business adapter before F048 checks."""
+
+        if self.f048_permission_adapter is None:
+            raise RuntimeError("F048 knowledge-library adapter is not configured")
+        return await self.f048_permission_adapter.resolve_permission_target(
+            resource_type="knowledge_library",
+            resource_id=resource_id,
+            actor=actor,
+            action=action,
         )
 
     async def add_metadata_fields(self, login_user: UserPayload, add_metadata_fields: AddKnowledgeMetadataFieldsReq):
@@ -160,6 +202,178 @@ class KnowledgeService(KnowledgeUtils):
             login_user.user_id,
         )
         raise KnowledgeTenantMismatchError.http_exception()
+
+    @staticmethod
+    def _new_library_permission_record(
+        knowledge: Knowledge,
+        *,
+        context: str,
+    ) -> KnowledgeContainerPermissionRecord:
+        if knowledge.id is None or knowledge.tenant_id is None or knowledge.user_id is None:
+            raise NotFoundError(msg="knowledge not found")
+        return KnowledgeContainerPermissionRecord(
+            tenant_id=int(knowledge.tenant_id),
+            resource_type="knowledge_library",
+            resource_id=str(knowledge.id),
+            status=KnowledgeState(knowledge.state).name,
+            kind=KnowledgeTypeEnum(knowledge.type).name,
+            owner_user_id=int(knowledge.user_id),
+            permission_version=0,
+            context_version=context,
+        )
+
+    @classmethod
+    async def _project_library_created(
+        cls,
+        login_user: UserPayload,
+        knowledge: Knowledge,
+    ) -> None:
+        adapter = await get_f048_resource_adapter("knowledge_library")
+        await adapter.authorize_created(
+            record=cls._new_library_permission_record(
+                knowledge,
+                context=f"created:knowledge_library:{knowledge.id}",
+            ),
+            actor=await resolve_permission_actor(login_user),
+        )
+
+    @staticmethod
+    def _new_library_file_permission_record(
+        knowledge: Knowledge,
+        file: KnowledgeFile,
+    ) -> KnowledgeFilePermissionRecord:
+        if knowledge.id is None or knowledge.tenant_id is None or file.id is None or file.user_id is None:
+            raise NotFoundError(msg="knowledge file not found")
+        ancestors = tuple(part for part in (file.file_level_path or "").split("/") if part)
+        if ancestors:
+            parent_type = "folder"
+            parent_id = ancestors[-1]
+        else:
+            parent_type = "knowledge_library"
+            parent_id = str(knowledge.id)
+        resource_type = "folder" if file.file_type == FileType.DIR.value else "knowledge_file"
+        return KnowledgeFilePermissionRecord(
+            tenant_id=int(knowledge.tenant_id),
+            resource_type=resource_type,
+            resource_id=str(file.id),
+            status=("ACTIVE" if resource_type == "folder" else KnowledgeFileStatus(file.status).name),
+            owner_user_id=int(file.user_id),
+            permission_version=0,
+            context_version=f"created:{resource_type}:{file.id}",
+            parent_type=parent_type,
+            parent_id=parent_id,
+            mode="INHERIT",
+            ancestor_ids=ancestors,
+        )
+
+    @classmethod
+    async def _project_library_file_created(
+        cls,
+        login_user: UserPayload,
+        *,
+        knowledge: Knowledge,
+        file: KnowledgeFile,
+    ) -> None:
+        record = cls._new_library_file_permission_record(knowledge, file)
+        adapter = await get_f048_resource_adapter(record.resource_type)
+        await adapter.authorize_created(
+            record=record,
+            actor=await resolve_permission_actor(login_user),
+        )
+
+    @classmethod
+    async def _project_file_ids_deletion(
+        cls,
+        login_user: UserPayload,
+        file_ids: list[int],
+    ) -> None:
+        actor = await resolve_permission_actor(login_user)
+        for file_id in dict.fromkeys(file_ids):
+            row = await KnowledgeFileDao.query_by_id(file_id)
+            if row is None:
+                raise NotFoundError(msg="knowledge file not found")
+            resource_type = "folder" if row.file_type == FileType.DIR.value else "knowledge_file"
+            adapter = await get_f048_resource_adapter(resource_type)
+            record = await adapter.load_permission_record(
+                resource_type=resource_type,
+                resource_id=str(file_id),
+            )
+            if record is None:
+                raise NotFoundError(msg="knowledge file not found")
+            await adapter.project_delete(record=record, actor=actor)
+
+    @classmethod
+    async def _load_library_permission_record(
+        cls,
+        knowledge_id: int,
+    ) -> KnowledgeContainerPermissionRecord:
+        adapter = await get_f048_resource_adapter("knowledge_library")
+        record = await adapter.load_permission_record(
+            resource_type="knowledge_library",
+            resource_id=str(knowledge_id),
+        )
+        if record is None:
+            raise NotFoundError(msg="knowledge not found")
+        return record
+
+    @classmethod
+    async def _project_library_copy(
+        cls,
+        login_user: UserPayload,
+        *,
+        source: KnowledgeContainerPermissionRecord,
+        target: Knowledge,
+    ) -> None:
+        adapter = await get_f048_resource_adapter("knowledge_library")
+        await adapter.project_copy(
+            source=source,
+            target=cls._new_library_permission_record(
+                target,
+                context=f"copied:knowledge_library:{target.id}",
+            ),
+            actor=await resolve_permission_actor(login_user),
+            new_owner_user_id=login_user.user_id,
+        )
+
+    @classmethod
+    async def _project_library_deletion(
+        cls,
+        login_user: UserPayload,
+        *,
+        knowledge_id: int,
+        include_container: bool,
+    ) -> None:
+        actor = await resolve_permission_actor(login_user)
+        after_id: int | None = None
+        while True:
+            rows = await KnowledgeFileDao.alist_by_knowledge_id_cursor(
+                knowledge_id,
+                after_id=after_id,
+                limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
+            )
+            if not rows:
+                break
+            for row in rows:
+                resource_type = "folder" if row.file_type == FileType.DIR.value else "knowledge_file"
+                adapter = await get_f048_resource_adapter(resource_type)
+                record = await adapter.load_permission_record(
+                    resource_type=resource_type,
+                    resource_id=str(row.id),
+                )
+                if record is None:
+                    raise NotFoundError(msg="knowledge file not found")
+                await adapter.project_delete(record=record, actor=actor)
+            after_id = int(rows[-1].id)
+            if len(rows) < _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE:
+                break
+
+        if include_container:
+            container = await cls._load_library_permission_record(knowledge_id)
+            adapter = await get_f048_resource_adapter("knowledge_library")
+            await adapter.project_delete(
+                record=container,
+                actor=actor,
+            )
 
     async def list_metadata_fields(self, default_user, knowledge_id):
         return await self.metadata_service.list_metadata_fields(default_user, knowledge_id)
@@ -218,100 +432,6 @@ class KnowledgeService(KnowledgeUtils):
         return KnowledgeDao.get_first_knowledge()
 
     @classmethod
-    def _is_scoped_super_admin(cls, login_user: UserPayload) -> bool:
-        current_tid = get_current_tenant_id()
-        return bool(
-            getattr(login_user, "is_global_super", False)
-            and get_admin_scope_tenant_id() is not None
-            and current_tid is not None
-            and current_tid != DEFAULT_TENANT_ID
-        )
-
-    @classmethod
-    async def _scan_visible_knowledge(
-        cls,
-        *,
-        login_user: UserPayload,
-        candidate_ids: list[int],
-        knowledge_type: KnowledgeTypeEnum,
-        name: str | None,
-        sort_by: str,
-        page_num: int | None,
-        cursor: list | None,
-        page_size: int,
-        permission_id: str,
-        preferred_ids: list[int] | None,
-    ) -> tuple[list[Knowledge], dict[int, set[str]], int, int]:
-        """Scan bounded DB batches and refill rows removed by exact permission checks."""
-        visible: list[Knowledge] = []
-        permission_map: dict[int, set[str]] = {}
-        scanned_rows = 0
-        batch_count = 0
-
-        # Name sorting exposes an offset-style pseudo cursor. To preserve pages
-        # after permission filtering, scan from the start and skip preceding
-        # visible rows. Pinned first pages also require offset batches because
-        # their rank is not represented by the timestamp cursor.
-        offset_scan = sort_by == "name" or (cursor is None and bool(preferred_ids))
-        visible_start = ((page_num or 1) - 1) * page_size if sort_by == "name" else 0
-        target_visible_count = visible_start + page_size + 1
-        batch_page = 1
-        batch_cursor = list(cursor) if cursor else None
-        requested_permission_ids = list(dict.fromkeys([permission_id, *_KNOWLEDGE_LIST_PERMISSION_IDS]))
-
-        while len(visible) < target_visible_count:
-            batch = await KnowledgeDao.aget_user_knowledge(
-                login_user.user_id,
-                candidate_ids,
-                knowledge_type,
-                name,
-                sort_by,
-                page=batch_page if offset_scan else 0,
-                limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
-                preferred_ids=preferred_ids,
-                cursor=None if offset_scan else batch_cursor,
-            )
-            batch_count += 1
-            scanned_rows += len(batch)
-            if not batch:
-                break
-
-            batch_permission_map = await cls.permission_service.get_knowledge_permission_map_async(
-                login_user,
-                [int(one.id) for one in batch],
-                requested_permission_ids,
-            )
-            permission_map.update(batch_permission_map)
-            visible.extend(one for one in batch if permission_id in batch_permission_map.get(int(one.id), set()))
-
-            if len(batch) < _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE:
-                break
-            if offset_scan:
-                batch_page += 1
-                continue
-
-            last_db_row = batch[-1]
-            next_batch_cursor = [
-                last_db_row.create_time if sort_by == "create_time" else last_db_row.update_time,
-                last_db_row.id,
-            ]
-            if next_batch_cursor == batch_cursor:
-                logger.warning(
-                    "knowledge permission scan cursor did not advance: sort_by={} cursor={}",
-                    sort_by,
-                    batch_cursor,
-                )
-                break
-            batch_cursor = next_batch_cursor
-
-        return (
-            visible[visible_start : visible_start + page_size + 1],
-            permission_map,
-            scanned_rows,
-            batch_count,
-        )
-
-    @classmethod
     async def get_knowledge(
         cls,
         request: Request,
@@ -321,18 +441,29 @@ class KnowledgeService(KnowledgeUtils):
         sort_by: str = "update_time",
         cursor: str | None = None,
         page_size: int = 10,
-        permission_id: str = "use_kb",
+        action: str = "use",
         preferred_ids: list[int] | None = None,
     ) -> PageInfiniteCursorData[KnowledgeRead]:
-        """List knowledge bases with cursor-based pagination (F027).
+        """List knowledge libraries with cursor-based pagination (F027).
 
-        - ``sort_by`` ∈ {``update_time``, ``create_time``} → true keyset cursor;
-          cursor key = ``[sort_value, id]``.
-        - ``sort_by`` = ``name`` → pseudo-cursor (offset internally, AD-15);
-          cursor key = ``[page_num]``.
-        - ``has_more`` is detected by fetching ``page_size + 1`` rows; the
-          ``total`` field is no longer computed (the ReBAC scan it triggered
-          previously is gone).
+        Strategy — F048 visible-first:
+          * Super admins and tenant admins skip the permission system entirely
+            and scan the business DB directly; every returned row receives only
+            the minimal ``visible`` marker, matching regular-user list rows.
+            The premise is that these identities are effectively unrestricted,
+            and enumerating "all libraries in a tenant" through OpenFGA is both
+            wasteful and prone to trip the 5 000-object visible enumeration cap.
+          * Regular users first ask OpenFGA for the small set of libraries
+            they can see (``list_visible_objects``), then run the historical
+            keyset scan under an ``id IN (:visible_ids)`` filter. ``visible``
+            is the superset of every concrete action, so the pre-filter is
+            valid for ``action="use"``; the per-page BatchCheck below still
+            narrows the result to rows the user can actually ``use``.
+          * ``sort_by`` ∈ {``update_time``, ``create_time``} → true keyset
+            cursor with key ``[sort_value, id]``; ``sort_by="name"`` still
+            uses a pseudo-cursor (offset internally, AD-15) with key
+            ``[page_num]``. ``has_more`` is detected by fetching
+            ``page_size + 1`` rows; the ``total`` field is no longer computed.
         """
         total_start = perf_counter()
 
@@ -358,98 +489,173 @@ class KnowledgeService(KnowledgeUtils):
             page_num = None
             keyset_cursor = decoded  # None for first page, else [sort_value, id]
 
-        fetch_limit = page_size + 1  # "fetch one extra" probe for has_more
+        page_size = max(int(page_size or 1), 1)
+        fetch_limit = page_size + 1
 
-        # ---- 2. ReBAC + permission_map + DAO call ----
-        scoped_super_admin = cls._is_scoped_super_admin(login_user)
-        permission_map: dict[int, set[str]] = {}
-        # 列表候选先由 ReBAC can_read 给出，再按 knowledge_library 关系模型
-        # 的细粒度 permission ids 收口到真正具备目标权限的知识库。
-        accessible_ids = (
-            None if scoped_super_admin else await login_user.rebac_list_accessible("can_read", "knowledge_library")
-        )
-        if accessible_ids is not None:
-            filter_start = perf_counter()
-            creator_ids = await KnowledgeDao.aget_knowledge_ids_created_by(
-                login_user.user_id,
-                knowledge_type,
-            )
-            merged = {int(k) for k in accessible_ids} | set(creator_ids)
-            res, permission_map, scanned_rows, batch_count = await cls._scan_visible_knowledge(
-                login_user=login_user,
-                candidate_ids=list(merged),
-                knowledge_type=knowledge_type,
-                name=name,
-                sort_by=sort_by,
-                page_num=page_num,
-                cursor=keyset_cursor,
-                page_size=page_size,
-                permission_id=permission_id,
-                preferred_ids=preferred_ids,
-            )
-            logger.info(
-                "[perf][knowledge.list.filter] user_id={} permission_id={} type={} accessible_ids={} creator_ids={} "
-                "candidate_ids={} scanned_rows={} batches={} sort_by={} page_size={} rows={} took_ms={:.2f}",
-                login_user.user_id,
-                permission_id,
-                knowledge_type.value,
-                len(accessible_ids),
-                len(creator_ids),
-                len(merged),
-                scanned_rows,
-                batch_count,
-                sort_by,
-                page_size,
-                len(res),
-                (perf_counter() - filter_start) * 1000,
-            )
+        # ---- 2. Decide strategy: admin bypass vs visible-first ----
+        actor = await resolve_permission_actor(login_user)
+        is_admin = actor.super_admin or actor.current_tenant_id in actor.tenant_admin_tenant_ids
+
+        visible_ids: list[int] | None
+        fga_elapsed_ms = 0.0
+        if is_admin:
+            # Admin bypass: no F048 enumeration, DB filter left unbounded.
+            visible_ids = None
         else:
-            dao_start = perf_counter()
-            res = await KnowledgeDao.aget_all_knowledge(
-                name,
-                knowledge_type,
-                sort_by,
-                page=(page_num if is_name_sort else 0),
-                limit=fetch_limit,
-                preferred_ids=preferred_ids,
-                cursor=keyset_cursor,
-            )
-            # Admin / scoped-super-admin path bypasses ReBAC filtering, so seed the
-            # permission map with full perms for every returned row — otherwise
-            # aconvert_knowledge_read would emit empty permission_ids for KBs the
-            # admin did not personally create, hiding edit/delete in the UI.
-            full_perms = set(_KNOWLEDGE_LIST_PERMISSION_IDS)
-            permission_map = {int(one.id): set(full_perms) for one in res}
-            logger.info(
-                "[perf][knowledge.list.dao] user_id={} permission_id={} type={} sort_by={} page_size={} rows={} "
-                "took_ms={:.2f}",
-                login_user.user_id,
-                permission_id,
-                knowledge_type.value,
-                sort_by,
-                page_size,
-                len(res),
-                (perf_counter() - dao_start) * 1000,
-            )
+            fga_started = perf_counter()
+            try:
+                visible = await (await get_f048_runtime()).list_visible_objects(
+                    actor,
+                    resource_type="knowledge_library",
+                    max_results=_LIBRARY_VISIBLE_MAX_RESULTS,
+                )
+            except PermissionEnumerationIncompleteError:
+                fga_elapsed_ms = (perf_counter() - fga_started) * 1000
+                emit_metric(
+                    "permission_visible_list",
+                    tenant=actor.current_tenant_id,
+                    resource_type="knowledge_library",
+                    strategy="visible_ids_first_knowledge_list",
+                    candidate_count=0,
+                    visible_count=0,
+                    scanned_count=0,
+                    scan_amplification=0,
+                    stream_completed=False,
+                    capacity=_LIBRARY_VISIBLE_MAX_RESULTS,
+                    db_elapsed_ms=0,
+                    fga_elapsed_ms=fga_elapsed_ms,
+                    total_elapsed_ms=(perf_counter() - total_start) * 1000,
+                    alert="stream_incomplete",
+                )
+                raise
+            fga_elapsed_ms = (perf_counter() - fga_started) * 1000
+            try:
+                visible_ids = [int(resource_id) for resource_id in visible.object_ids]
+            except (TypeError, ValueError) as exc:
+                raise PermissionEnumerationIncompleteError(
+                    msg="Knowledge-library visible enumeration returned an invalid resource ID",
+                    exception=exc,
+                ) from exc
 
-        # ---- 3. has_more probe + truncate ----
+        # ---- 3. Bounded business scan (id_in for regular users, unfiltered for admins) ----
+        action_map: dict[int, set[str]] = {}
+        res: list[Knowledge] = []
+        filter_start = perf_counter()
+        # ``action`` values other than "visible" still require a per-page
+        # BatchCheck: visible ⊇ use ⊇ …, so the pre-filter is a superset. Admin
+        # bypass skips this because every action is granted.
+        needs_action_check = (not is_admin) and action != "visible"
+
+        empty_visible_set = (visible_ids is not None and not visible_ids)
+        if empty_visible_set:
+            # No visible resources → short-circuit to empty page without hitting
+            # the DB. Keyset cursor is also meaningless in this branch.
+            pass
+        elif is_name_sort:
+            page_start = (page_num - 1) * page_size
+            target_authorized = page_start + fetch_limit
+            candidate_page = 1
+            authorized: list[Knowledge] = []
+            while len(authorized) < target_authorized:
+                batch = await KnowledgeDao.aget_all_knowledge(
+                    name,
+                    knowledge_type,
+                    sort_by,
+                    page=candidate_page,
+                    limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
+                    preferred_ids=preferred_ids,
+                    id_in=visible_ids,
+                )
+                if not batch:
+                    break
+                if needs_action_check:
+                    batch_action_map = await cls.permission_service.get_knowledge_action_map_async(
+                        login_user,
+                        [int(one.id) for one in batch],
+                        [action],
+                    )
+                    authorized.extend(
+                        one for one in batch if action in batch_action_map.get(int(one.id), set())
+                    )
+                else:
+                    authorized.extend(batch)
+                if len(batch) < _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE:
+                    break
+                candidate_page += 1
+            res = authorized[page_start : page_start + fetch_limit]
+        else:
+            candidate_cursor = list(keyset_cursor) if keyset_cursor else None
+            while len(res) < fetch_limit:
+                batch = await KnowledgeDao.aget_all_knowledge(
+                    name,
+                    knowledge_type,
+                    sort_by,
+                    limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
+                    preferred_ids=preferred_ids,
+                    cursor=candidate_cursor,
+                    id_in=visible_ids,
+                )
+                if not batch:
+                    break
+                if needs_action_check:
+                    batch_action_map = await cls.permission_service.get_knowledge_action_map_async(
+                        login_user,
+                        [int(one.id) for one in batch],
+                        [action],
+                    )
+                    res.extend(one for one in batch if action in batch_action_map.get(int(one.id), set()))
+                else:
+                    res.extend(batch)
+                if len(res) >= fetch_limit or len(batch) < _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE:
+                    break
+                last_db = batch[-1]
+                candidate_cursor = [
+                    (last_db.create_time if sort_by == "create_time" else last_db.update_time),
+                    last_db.id,
+                ]
+        db_elapsed_ms = (perf_counter() - filter_start) * 1000
+        logger.info(
+            "[perf][knowledge.list.filter] user_id={} action={} type={} sort_by={} page_size={} rows={} took_ms={:.2f}",
+            login_user.user_id,
+            action,
+            knowledge_type.value,
+            sort_by,
+            page_size,
+            len(res),
+            db_elapsed_ms,
+        )
+
+        # ---- 4. has_more probe + truncate ----
         has_more = len(res) > page_size
         if has_more:
             res = res[:page_size]
 
-        # ---- 4. Enrich + build response ----
+        # ---- 5. Build the minimal list action map ----
+        # Every surviving row is already known to be visible: regular users
+        # came from the complete visible-id enumeration, while administrators
+        # use the reviewed tenant-scoped list bypass. Management actions are
+        # loaded for one resource only when its row menu is opened. Keeping
+        # that work out of the list avoids actions x rows target resolution and
+        # OpenFGA BatchCheck amplification.
+        action_map = {int(one.id): {"visible"} for one in res}
+
+        # ---- 6. Enrich + build response ----
         enrich_start = perf_counter()
-        result_data = await cls.aconvert_knowledge_read(login_user, res, permission_map=permission_map)
+        result_data = await cls.aconvert_knowledge_read(
+            login_user,
+            res,
+            action_map=action_map,
+        )
         logger.info(
-            "[perf][knowledge.list.enrich] user_id={} permission_id={} type={} rows={} took_ms={:.2f}",
+            "[perf][knowledge.list.enrich] user_id={} action={} type={} rows={} took_ms={:.2f}",
             login_user.user_id,
-            permission_id,
+            action,
             knowledge_type.value,
             len(result_data),
             (perf_counter() - enrich_start) * 1000,
         )
 
-        # ---- 5. Compute next_cursor (None if has_more is False) ----
+        # ---- 7. Compute next_cursor (None if has_more is False) ----
         next_cursor: str | None = None
         if has_more and result_data:
             last = result_data[-1]
@@ -460,17 +666,43 @@ class KnowledgeService(KnowledgeUtils):
             else:  # update_time
                 next_cursor = encode_cursor((last.update_time, last.id), context=context)
 
+        # ---- 8. Telemetry: visible-first amplification ----
+        if not is_admin:
+            visible_count = len(visible_ids) if visible_ids is not None else 0
+            emit_metric(
+                "permission_visible_list",
+                tenant=actor.current_tenant_id,
+                resource_type="knowledge_library",
+                strategy="visible_ids_first_knowledge_list",
+                candidate_count=visible_count,
+                visible_count=visible_count,
+                scanned_count=len(result_data),
+                scan_amplification=(visible_count / max(len(result_data), 1)) if visible_count else 0,
+                stream_completed=True,
+                capacity=_LIBRARY_VISIBLE_MAX_RESULTS,
+                db_elapsed_ms=db_elapsed_ms,
+                fga_elapsed_ms=fga_elapsed_ms,
+                total_elapsed_ms=(perf_counter() - total_start) * 1000,
+                returned_count=len(result_data),
+                alert=(
+                    "capacity_80_percent"
+                    if visible_count >= _LIBRARY_VISIBLE_MAX_RESULTS * 0.8
+                    else None
+                ),
+            )
+
         logger.info(
-            "[perf][knowledge.list.total] user_id={} permission_id={} type={} sort_by={} page_size={} rows={} "
-            "has_more={} took_ms={:.2f}",
+            "[perf][knowledge.list.total] user_id={} action={} type={} sort_by={} page_size={} rows={} "
+            "has_more={} took_ms={:.2f} strategy={}",
             login_user.user_id,
-            permission_id,
+            action,
             knowledge_type.value,
             sort_by,
             page_size,
             len(result_data),
             has_more,
             (perf_counter() - total_start) * 1000,
+            "admin_bypass" if is_admin else "visible_ids_first",
         )
         return PageInfiniteCursorData(
             data=result_data,
@@ -484,7 +716,7 @@ class KnowledgeService(KnowledgeUtils):
         cls,
         login_user: UserPayload,
         knowledge_list: list[Knowledge],
-        permission_map: dict[int, set[str]] | None = None,
+        action_map: dict[int, set[str]] | None = None,
     ) -> list[KnowledgeRead]:
         """异步组装列表项；避免在 async 路由里调用 sync access_check（_run_async_safe 易死锁/10s 超时）。"""
         if not knowledge_list:
@@ -492,52 +724,45 @@ class KnowledgeService(KnowledgeUtils):
         db_user_ids = {one.user_id for one in knowledge_list}
         db_user_info = UserDao.get_user_by_ids(list(db_user_ids))
         db_user_dict = {one.user_id: one.user_name for one in db_user_info}
-        owned_ids = {int(one.id) for one in knowledge_list if login_user.user_id == one.user_id}
-        if permission_map is None:
-            permission_map = await cls.permission_service.get_knowledge_permission_map_async(
+        if action_map is None:
+            action_map = await cls.permission_service.get_knowledge_action_map_async(
                 login_user,
-                [int(one.id) for one in knowledge_list if int(one.id) not in owned_ids],
-                _KNOWLEDGE_LIST_PERMISSION_IDS,
+                [int(one.id) for one in knowledge_list],
+                _KNOWLEDGE_LIST_ACTIONS,
             )
 
         def _row(one: Knowledge) -> KnowledgeRead:
-            if login_user.user_id == one.user_id:
-                copiable = True
-                permission_ids = list(_KNOWLEDGE_LIST_PERMISSION_IDS)
-            else:
-                permission_ids = sorted(permission_map.get(int(one.id), set()))
-                copiable = "edit_kb" in permission_ids
+            actions = sorted(action_map.get(int(one.id), set()))
+            copiable = "edit" in actions
             return KnowledgeRead(
                 **one.model_dump(),
                 user_name=db_user_dict.get(one.user_id, str(one.user_id)),
                 copiable=copiable,
-                permission_ids=permission_ids,
+                actions=actions,
             )
 
         return [_row(one) for one in knowledge_list]
 
     @classmethod
     def convert_knowledge_read(cls, login_user: UserPayload, knowledge_list: list[Knowledge]) -> list[KnowledgeRead]:
+        action_map = cls.permission_service.get_knowledge_action_map_sync(
+            login_user,
+            [int(one.id) for one in knowledge_list],
+            _KNOWLEDGE_LIST_ACTIONS,
+        )
         db_user_ids = {one.user_id for one in knowledge_list}
         db_user_info = UserDao.get_user_by_ids(list(db_user_ids))
         db_user_dict = {one.user_id: one.user_name for one in db_user_info}
         res = []
 
         for one in knowledge_list:
-            if login_user.user_id == one.user_id:
-                copiable = True
-            else:
-                copiable = cls.permission_service.check_access_sync(
-                    login_user=login_user,
-                    owner_user_id=one.user_id,
-                    knowledge_id=one.id,
-                    access_type=AccessType.KNOWLEDGE_WRITE,
-                )
+            actions = sorted(action_map.get(int(one.id), set()))
             res.append(
                 KnowledgeRead(
                     **one.model_dump(),
                     user_name=db_user_dict.get(one.user_id, str(one.user_id)),
-                    copiable=copiable,
+                    copiable="edit" in actions,
+                    actions=actions,
                 )
             )
         return res
@@ -546,13 +771,14 @@ class KnowledgeService(KnowledgeUtils):
     def get_knowledge_info(
         cls, request: Request, login_user: UserPayload, knowledge_id: list[int]
     ) -> list[KnowledgeRead]:
+        del request
         db_knowledge = KnowledgeDao.get_list_by_ids(knowledge_id)
-        filter_knowledge = db_knowledge
-        if not login_user.is_admin():
-            filter_knowledge = []
-            for one in db_knowledge:
-                if cls.permission_service.check_permission_id_sync(login_user, one.id, "view_kb"):
-                    filter_knowledge.append(one)
+        action_map = cls.permission_service.get_knowledge_action_map_sync(
+            login_user,
+            [int(one.id) for one in db_knowledge],
+            ["visible"],
+        )
+        filter_knowledge = [one for one in db_knowledge if "visible" in action_map.get(int(one.id), set())]
         if not filter_knowledge:
             return []
 
@@ -682,8 +908,6 @@ class KnowledgeService(KnowledgeUtils):
     async def acreate_knowledge_base(
         cls, request, login_user: UserPayload, db_knowledge: Knowledge, skip_hook: bool = False
     ) -> Knowledge:
-        from bisheng.permission.domain.services.owner_service import OwnerService
-
         db_knowledge.index_name = generate_knowledge_index_name()
         db_knowledge.collection_name = db_knowledge.index_name
         db_knowledge.user_id = login_user.user_id
@@ -712,7 +936,7 @@ class KnowledgeService(KnowledgeUtils):
                 logger.exception("create knowledge index name error")
 
         if not skip_hook:
-            await OwnerService.write_owner_tuple(login_user.user_id, "knowledge_library", str(db_knowledge.id))
+            await cls._project_library_created(login_user, db_knowledge)
             await run_in_threadpool(
                 cls.audit_telemetry_service.audit_create_knowledge,
                 login_user,
@@ -728,10 +952,10 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def create_knowledge_hook(cls, request: Request, login_user: UserPayload, knowledge: Knowledge):
-        # F008: Write owner tuple to OpenFGA (INV-2)
-        from bisheng.permission.domain.services.owner_service import OwnerService
-
-        OwnerService.write_owner_tuple_sync(login_user.user_id, "knowledge_library", str(knowledge.id))
+        run_async_safe(
+            cls._project_library_created(login_user, knowledge),
+            timeout=60,
+        )
 
         cls.audit_telemetry_service.audit_create_knowledge(login_user, request, knowledge)
         cls.audit_telemetry_service.telemetry_new_knowledge(login_user, knowledge)
@@ -792,6 +1016,15 @@ class KnowledgeService(KnowledgeUtils):
         except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
+        run_async_safe(
+            cls._project_library_deletion(
+                login_user,
+                knowledge_id=knowledge_id,
+                include_container=not only_clear,
+            ),
+            timeout=300,
+        )
+
         # Cleaned vectorData in
         cls.delete_knowledge_file_in_vector(knowledge)
 
@@ -845,11 +1078,6 @@ class KnowledgeService(KnowledgeUtils):
         logger.info(f"delete_knowledge_hook id={knowledge.id}, user: {login_user.user_id}")
 
         cls.audit_telemetry_service.audit_delete_knowledge(login_user, request, knowledge)
-
-        # F008: Clean up all FGA tuples for this resource (AC-03)
-        from bisheng.permission.domain.services.owner_service import OwnerService
-
-        OwnerService.delete_resource_tuples_sync("knowledge_library", str(knowledge.id))
 
     @classmethod
     def delete_knowledge_file_in_minio(cls, knowledge_id: int):
@@ -916,33 +1144,6 @@ class KnowledgeService(KnowledgeUtils):
 
         file_path = req_data.file_list[0].file_path
         excel_rule = req_data.file_list[0].excel_rule
-        cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path)
-
-        redis_client = await get_redis_client()
-
-        # Attempt to fetch from cache
-        if req_data.cache:
-            if cache_value := await cls.async_get_preview_cache(cache_key):
-                parse_type = await redis_client.aget(f"{cache_key}_parse_type")
-                file_share_url = await redis_client.aget(f"{cache_key}_file_path")
-                partitions = await redis_client.aget(f"{cache_key}_partitions")
-                res = []
-
-                # Sort by segment order
-                cache_value = dict(sorted(cache_value.items(), key=lambda x: int(x[0])))
-
-                for key, val in cache_value.items():
-                    res.append(FileChunk(text=val["text"], metadata=val["metadata"]))
-                return parse_type, file_share_url, res, partitions
-
-        filepath, file_name = await async_file_download(file_path)
-        file_ext = file_name.split(".")[-1].lower()
-        file_name = cls.get_upload_file_original_name(file_name)
-
-        # Split text using PreviewFilePipeline
-        from bisheng.api.v1.schemas import FileProcessBase
-        from bisheng.knowledge.rag.preview_file_pipeline import PreviewFilePipeline
-
         file_rule = FileProcessBase(
             knowledge_id=req_data.knowledge_id,
             split_mode=req_data.split_mode,
@@ -959,6 +1160,39 @@ class KnowledgeService(KnowledgeUtils):
             retain_images=req_data.retain_images,
             excel_rule=excel_rule,
         )
+        cache_key = cls.preview_cache_key_for_split_rule(req_data.knowledge_id, file_path, file_rule)
+        legacy_cache_key = cls.legacy_preview_cache_key(req_data.knowledge_id, file_path)
+
+        redis_client = await get_redis_client()
+
+        # Attempt to fetch from cache
+        if req_data.cache:
+            used_cache_key = cache_key
+            cache_value = await cls.async_get_preview_cache(cache_key)
+            if not cache_value and legacy_cache_key != cache_key:
+                cache_value = await cls.async_get_preview_cache(legacy_cache_key)
+                if cache_value:
+                    used_cache_key = legacy_cache_key
+            if cache_value:
+                parse_type = await redis_client.aget(f"{used_cache_key}_parse_type")
+                file_share_url = await redis_client.aget(f"{used_cache_key}_file_path")
+                partitions = await redis_client.aget(f"{used_cache_key}_partitions")
+                res = []
+
+                # Sort by segment order
+                cache_value = dict(sorted(cache_value.items(), key=lambda x: int(x[0])))
+
+                for key, val in cache_value.items():
+                    res.append(FileChunk(text=val["text"], metadata=val["metadata"]))
+                return parse_type, file_share_url, res, partitions
+
+        filepath, file_name = await async_file_download(file_path)
+        file_ext = file_name.split(".")[-1].lower()
+        file_name = cls.get_upload_file_original_name(file_name)
+
+        # Split text using PreviewFilePipeline
+        from bisheng.knowledge.rag.preview_file_pipeline import PreviewFilePipeline
+
         pipeline = PreviewFilePipeline(
             invoke_user_id=login_user.user_id,
             local_file_path=filepath,
@@ -1014,6 +1248,7 @@ class KnowledgeService(KnowledgeUtils):
 
         # Deposit Cache
         await cls.async_save_preview_cache(cache_key, mapping=cache_map)
+        await cls.async_bind_preview_cache_key(req_data.knowledge_id, file_path, cache_key)
         await redis_client.aset(f"{cache_key}_parse_type", parse_type)
         await redis_client.aset(f"{cache_key}_file_path", file_share_url)
         await redis_client.aset(f"{cache_key}_partitions", partitions)
@@ -1030,7 +1265,7 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id=knowledge.id,
         )
 
-        cache_key = cls.get_preview_cache_key(req_data.knowledge_id, req_data.file_path)
+        cache_key = await cls.async_resolve_preview_cache_key(req_data.knowledge_id, req_data.file_path)
         chunk_info = await cls.async_get_preview_cache(cache_key, req_data.chunk_index)
         if not chunk_info:
             raise NotFoundError.http_exception()
@@ -1050,7 +1285,7 @@ class KnowledgeService(KnowledgeUtils):
         except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
-        cache_key = cls.get_preview_cache_key(req_data.knowledge_id, req_data.file_path)
+        cache_key = cls.resolve_preview_cache_key_sync(req_data.knowledge_id, req_data.file_path)
         cls.delete_preview_cache(cache_key, chunk_index=req_data.chunk_index)
 
     @classmethod
@@ -1102,7 +1337,11 @@ class KnowledgeService(KnowledgeUtils):
                     if limit_bytes is not None and current_total_file_size > limit_bytes:
                         raise SpaceFileSizeLimitError()
                     # Get a preview cache of this filekey
-                    cache_key = cls.get_preview_cache_key(req_data.knowledge_id, one.file_path)
+                    cache_key = cls.preview_cache_key_for_split_rule(
+                        req_data.knowledge_id,
+                        one.file_path,
+                        {**split_rule_dict, "excel_rule": (one.excel_rule or ExcelRule()).model_dump()},
+                    )
                     preview_cache_keys.append(cache_key)
                     process_files.append(db_file)
                 else:
@@ -1112,6 +1351,13 @@ class KnowledgeService(KnowledgeUtils):
         except Exception:
             if created_file_ids:
                 try:
+                    run_async_safe(
+                        cls._project_file_ids_deletion(
+                            login_user,
+                            created_file_ids,
+                        ),
+                        timeout=300,
+                    )
                     KnowledgeFileDao.delete_batch(created_file_ids)
                 except Exception as cleanup_exc:
                     logger.warning(f"Failed to cleanup files after upload quota error: {cleanup_exc}")
@@ -1156,7 +1402,11 @@ class KnowledgeService(KnowledgeUtils):
                     current_total_file_size += int(db_file.file_size or 0)
                     if limit_bytes is not None and current_total_file_size > limit_bytes:
                         raise SpaceFileSizeLimitError()
-                    cache_key = cls.get_preview_cache_key(req_data.knowledge_id, one.file_path)
+                    cache_key = cls.preview_cache_key_for_split_rule(
+                        req_data.knowledge_id,
+                        one.file_path,
+                        {**split_rule_dict, "excel_rule": (one.excel_rule or ExcelRule()).model_dump()},
+                    )
                     preview_cache_keys.append(cache_key)
                     process_files.append(db_file)
                 else:
@@ -1166,6 +1416,10 @@ class KnowledgeService(KnowledgeUtils):
         except Exception:
             if created_file_ids:
                 try:
+                    await cls._project_file_ids_deletion(
+                        login_user,
+                        created_file_ids,
+                    )
                     await KnowledgeFileDao.adelete_batch(created_file_ids)
                 except Exception as cleanup_exc:
                     logger.warning(f"Failed to cleanup files after upload quota error: {cleanup_exc}")
@@ -1408,14 +1662,42 @@ class KnowledgeService(KnowledgeUtils):
             **file_kwargs if file_kwargs else {},
         )
         db_file = KnowledgeFileDao.add_file(db_file)
-        cls.audit_telemetry_service.telemetry_new_knowledge_file(login_user)
-        # Saving original files
-        db_file.object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, db_file.file_name)
-        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=db_file.object_name, file=filepath)
-        cls.remove_unused_file(file_info.file_path)
+        permission_projected = False
+        try:
+            if knowledge.type in {
+                KnowledgeTypeEnum.NORMAL.value,
+                KnowledgeTypeEnum.QA.value,
+            }:
+                run_async_safe(
+                    cls._project_library_file_created(
+                        login_user,
+                        knowledge=knowledge,
+                        file=db_file,
+                    ),
+                    timeout=60,
+                )
+                permission_projected = True
+            cls.audit_telemetry_service.telemetry_new_knowledge_file(login_user)
+            # Saving original files
+            db_file.object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, db_file.file_name)
+            minio_client.put_object_sync(
+                bucket_name=minio_client.bucket, object_name=db_file.object_name, file=filepath
+            )
+            cls.remove_unused_file(file_info.file_path)
 
-        logger.info("upload_original_file path={}", db_file.object_name)
-        KnowledgeFileDao.update(db_file)
+            logger.info("upload_original_file path={}", db_file.object_name)
+            KnowledgeFileDao.update(db_file)
+        except Exception:
+            if permission_projected:
+                run_async_safe(
+                    cls._project_file_ids_deletion(
+                        login_user,
+                        [int(db_file.id)],
+                    ),
+                    timeout=60,
+                )
+            KnowledgeFileDao.delete_batch([int(db_file.id)])
+            raise
         return db_file
 
     @classmethod
@@ -1510,11 +1792,10 @@ class KnowledgeService(KnowledgeUtils):
         return (
             finally_res,
             total,
-            cls.permission_service.check_access_sync(
+            cls.permission_service.check_action_sync(
                 login_user=login_user,
-                owner_user_id=db_knowledge.user_id,
                 knowledge_id=knowledge_id,
-                access_type=AccessType.KNOWLEDGE_WRITE,
+                action="edit",
             ),
         )
 
@@ -1574,11 +1855,10 @@ class KnowledgeService(KnowledgeUtils):
 
         finally_res = await cls._adecorate_knowledge_files(db_knowledge, res)
 
-        writeable = await cls.permission_service.check_access_async(
+        writeable = await cls.permission_service.check_action_async(
             login_user=login_user,
-            owner_user_id=db_knowledge.user_id,
             knowledge_id=knowledge_id,
-            access_type=AccessType.KNOWLEDGE_WRITE,
+            action="edit",
         )
         return finally_res, total, writeable
 
@@ -1684,11 +1964,10 @@ class KnowledgeService(KnowledgeUtils):
         finally_res = await cls._adecorate_knowledge_files(db_knowledge, res)
         next_cursor = encode_cursor((page_num + 1,), context=context) if has_more else None
 
-        writeable = await cls.permission_service.check_access_async(
+        writeable = await cls.permission_service.check_action_async(
             login_user=login_user,
-            owner_user_id=db_knowledge.user_id,
             knowledge_id=knowledge_id,
-            access_type=AccessType.KNOWLEDGE_WRITE,
+            action="edit",
         )
         page_data = PageInfiniteCursorData(
             data=finally_res,
@@ -1729,14 +2008,27 @@ class KnowledgeService(KnowledgeUtils):
         if not knowledge_file:
             raise NotFoundError.http_exception()
         db_knowledge = KnowledgeDao.query_by_id(knowledge_file[0].knowledge_id)
-        try:
-            cls.permission_service.ensure_knowledge_write_sync(
-                login_user=login_user,
-                owner_user_id=db_knowledge.user_id,
-                knowledge_id=db_knowledge.id,
-            )
-        except UnAuthorizedError:
+        if db_knowledge is None or any(file.knowledge_id != db_knowledge.id for file in knowledge_file):
+            raise NotFoundError.http_exception()
+        action_map = run_async_safe(
+            batch_check_business_actions(
+                login_user,
+                resource_type="knowledge_file",
+                resource_ids=[int(file.id) for file in knowledge_file],
+                actions=("delete",),
+            ),
+            timeout=60,
+        )
+        if any("delete" not in action_map.get(str(file.id), frozenset()) for file in knowledge_file):
             raise UnAuthorizedError.http_exception()
+
+        run_async_safe(
+            cls._project_file_ids_deletion(
+                login_user,
+                [int(file.id) for file in knowledge_file],
+            ),
+            timeout=300,
+        )
 
         # <g id="Bold">Medical Treatment:</g>vectordb
         delete_knowledge_file_vectors(file_ids)
@@ -1766,17 +2058,21 @@ class KnowledgeService(KnowledgeUtils):
         cls.audit_telemetry_service.audit_delete_knowledge_file(login_user, request, knowledge_id, file_list)
 
     @classmethod
-    def judge_knowledge_access(cls, login_user: UserPayload, knowledge_id: int, access_type: AccessType) -> Knowledge:
+    def judge_knowledge_access(
+        cls,
+        login_user: UserPayload,
+        knowledge_id: int,
+        action: str,
+    ) -> Knowledge:
         db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
         if not db_knowledge:
             raise NotFoundError.http_exception()
 
         try:
-            cls.permission_service.ensure_access_sync(
+            cls.permission_service.ensure_action_sync(
                 login_user=login_user,
-                owner_user_id=db_knowledge.user_id,
                 knowledge_id=knowledge_id,
-                access_type=access_type,
+                action=action,
             )
         except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
@@ -1784,18 +2080,20 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     async def ajudge_knowledge_access(
-        cls, login_user: UserPayload, knowledge_id: int, access_type: AccessType
+        cls,
+        login_user: UserPayload,
+        knowledge_id: int,
+        action: str,
     ) -> Knowledge:
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
             raise NotFoundError.http_exception()
 
         try:
-            await cls.permission_service.ensure_access_async(
+            await cls.permission_service.ensure_action_async(
                 login_user=login_user,
-                owner_user_id=db_knowledge.user_id,
                 knowledge_id=knowledge_id,
-                access_type=access_type,
+                action=action,
             )
         except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
@@ -1812,7 +2110,11 @@ class KnowledgeService(KnowledgeUtils):
         page: int = None,
         limit: int = None,
     ) -> (list[FileChunk], int):
-        db_knowledge = cls.judge_knowledge_access(login_user, knowledge_id, AccessType.KNOWLEDGE)
+        db_knowledge = cls.judge_knowledge_access(
+            login_user,
+            knowledge_id,
+            "visible",
+        )
 
         es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
 
@@ -1920,7 +2222,11 @@ class KnowledgeService(KnowledgeUtils):
         text: str,
         bbox: str,
     ):
-        db_knowledge = cls.judge_knowledge_access(login_user, knowledge_id, AccessType.KNOWLEDGE_WRITE)
+        db_knowledge = cls.judge_knowledge_access(
+            login_user,
+            knowledge_id,
+            "edit",
+        )
 
         logger.info(f"act=update_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
@@ -1984,7 +2290,11 @@ class KnowledgeService(KnowledgeUtils):
         file_id: int,
         chunk_index: int,
     ):
-        db_knowledge = cls.judge_knowledge_access(login_user, knowledge_id, AccessType.KNOWLEDGE_WRITE)
+        db_knowledge = cls.judge_knowledge_access(
+            login_user,
+            knowledge_id,
+            "edit",
+        )
 
         logger.info(f"act=delete_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
@@ -2022,13 +2332,14 @@ class KnowledgeService(KnowledgeUtils):
         file = KnowledgeFileDao.query_by_id_sync(file_id)
         if not file:
             raise NotFoundError(msg="file not found")
-        knowledge_info = KnowledgeDao.query_by_id(file.knowledge_id)
-        if not knowledge_info:
-            raise NotFoundError(msg="knowledge not found")
-        cls.permission_service.ensure_knowledge_read_sync(
-            login_user=login_user,
-            owner_user_id=knowledge_info.user_id,
-            knowledge_id=knowledge_info.id,
+        run_async_safe(
+            require_business_action(
+                login_user,
+                resource_type="knowledge_file",
+                resource_id=file_id,
+                action="download",
+            ),
+            timeout=60,
         )
         return cls.get_file_share_url(file=file)
 
@@ -2045,22 +2356,12 @@ class KnowledgeService(KnowledgeUtils):
         file = await KnowledgeFileDao.query_by_id(file_id)
         if not file:
             raise NotFoundError(msg="file not found")
-        knowledge_info = await KnowledgeDao.aquery_by_id(file.knowledge_id)
-        if not knowledge_info:
-            raise NotFoundError(msg="knowledge not found")
-        if knowledge_info.type == KnowledgeTypeEnum.SPACE.value:
-            # Delegate to the knowledge space permission model.
-            from bisheng.knowledge.domain.services.knowledge_space_service import (
-                KnowledgeSpaceService,
-            )
-
-            space_service = KnowledgeSpaceService(request=request, login_user=login_user)
-            result = await space_service.get_file_preview(file_id)
-            return result["original_url"], result["preview_url"]
-        await cls.permission_service.ensure_knowledge_read_async(
-            login_user=login_user,
-            owner_user_id=knowledge_info.user_id,
-            knowledge_id=knowledge_info.id,
+        del request
+        await require_business_action(
+            login_user,
+            resource_type="knowledge_file",
+            resource_id=file_id,
+            action="download",
         )
         return await run_in_threadpool(cls.get_file_share_url, file=file)
 
@@ -2127,6 +2428,7 @@ class KnowledgeService(KnowledgeUtils):
     ) -> Any:
         from bisheng.worker.knowledge import file_worker
 
+        source_permission = await cls._load_library_permission_record(int(knowledge.id))
         await KnowledgeDao.async_update_state(knowledge.id, KnowledgeState.COPYING, update_time=knowledge.update_time)
         knowldge_dict = knowledge.model_dump()
         knowldge_dict.pop("id")
@@ -2144,6 +2446,23 @@ class KnowledgeService(KnowledgeUtils):
             request,
             login_user,
             knowledge_new,
+            True,
+        )
+        await cls._project_library_copy(
+            login_user,
+            source=source_permission,
+            target=target_knowlege,
+        )
+        await run_in_threadpool(
+            cls.audit_telemetry_service.audit_create_knowledge,
+            login_user,
+            request,
+            target_knowlege,
+        )
+        await run_in_threadpool(
+            cls.audit_telemetry_service.telemetry_new_knowledge,
+            login_user,
+            target_knowlege,
         )
 
         params = {
@@ -2162,6 +2481,7 @@ class KnowledgeService(KnowledgeUtils):
         qa_knowledge: Knowledge,
         knowledge_name: str = None,
     ) -> Any:
+        source_permission = await cls._load_library_permission_record(int(qa_knowledge.id))
         await KnowledgeDao.async_update_state(
             qa_knowledge.id, KnowledgeState.COPYING, update_time=qa_knowledge.update_time
         )
@@ -2177,9 +2497,19 @@ class KnowledgeService(KnowledgeUtils):
         qa_knowledge_new = Knowledge(**qa_knowldge_dict)
         target_qa_knowlege = await KnowledgeDao.async_insert_one(qa_knowledge_new)
 
+        await cls._project_library_copy(
+            login_user,
+            source=source_permission,
+            target=target_qa_knowlege,
+        )
         await run_in_threadpool(
-            cls.create_knowledge_hook,
+            cls.audit_telemetry_service.audit_create_knowledge,
+            login_user,
             request,
+            target_qa_knowlege,
+        )
+        await run_in_threadpool(
+            cls.audit_telemetry_service.telemetry_new_knowledge,
             login_user,
             target_qa_knowlege,
         )
@@ -2238,7 +2568,11 @@ class KnowledgeService(KnowledgeUtils):
             raise NotFoundError()
         if db_knowledge.type != KnowledgeTypeEnum.QA.value:
             raise KnowledgeNotQAError()
-        if not cls.permission_service.check_permission_id_sync(login_user, qa_knowledge_id, "view_kb"):
+        if not cls.permission_service.check_action_sync(
+            login_user,
+            qa_knowledge_id,
+            "visible",
+        ):
             raise UnAuthorizedError.http_exception()
         return db_knowledge
 
@@ -2249,7 +2583,11 @@ class KnowledgeService(KnowledgeUtils):
             raise NotFoundError()
         if db_knowledge.type != KnowledgeTypeEnum.QA.value:
             raise KnowledgeNotQAError()
-        if not await cls.permission_service.check_permission_id_async(login_user, qa_knowledge_id, "view_kb"):
+        if not await cls.permission_service.check_action_async(
+            login_user,
+            qa_knowledge_id,
+            "visible",
+        ):
             raise UnAuthorizedError.http_exception()
         return db_knowledge
 
@@ -2267,25 +2605,35 @@ class KnowledgeService(KnowledgeUtils):
         - ≥2 files → pack into a ZIP archive named ``{knowledge_name}{YYYYMMDD_HHMM}.zip``,
           upload to the MinIO *tmp* bucket, and return a presigned URL valid for 7 days.
 
-        Permission: the caller must have at least ``AccessType.KNOWLEDGE`` (read) access.
+        Permission: every returned file must allow the concrete ``download`` action.
         """
         import os
         import tempfile
         import zipfile
         from pathlib import Path
 
-        # ── 1. Permission check ──────────────────────────────────────────────────
-        knowledge = await cls._get_readable_knowledge(login_user, knowledge_id)
-
         if not file_ids:
             raise NotFoundError(msg="file_ids must not be empty")
 
-        # ── 2. Query file records ────────────────────────────────────────────────
+        # ── 1. Load business-owned candidates ───────────────────────────────────
+        knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if not knowledge:
+            raise NotFoundError(msg="knowledge not found")
         db_files: list[KnowledgeFile] = KnowledgeFileDao.select_list(file_ids)
         # Keep only files that actually belong to this knowledge base
         db_files = [f for f in db_files if f.knowledge_id == knowledge_id]
         if not db_files:
             raise NotFoundError(msg="no valid files found")
+
+        # ── 2. Exact download permission for every returned original ─────────────
+        action_map = await batch_check_business_actions(
+            login_user,
+            resource_type="knowledge_file",
+            resource_ids=[int(file.id) for file in db_files],
+            actions=("download",),
+        )
+        if any("download" not in action_map.get(str(file.id), frozenset()) for file in db_files):
+            raise UnAuthorizedError()
 
         minio_client = get_minio_storage_sync()
 

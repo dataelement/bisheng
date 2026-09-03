@@ -37,6 +37,7 @@ def _make_service(user_id: int = 42) -> KnowledgeSpaceChatService:
     svc.version_repo = MagicMock()
     svc.version_repo.find_non_primary_file_ids_by_knowledge_ids = AsyncMock(return_value=[])
     svc._require_space_view_permission = AsyncMock()
+    svc._attach_document_update_time = AsyncMock()
     return svc
 
 
@@ -92,7 +93,7 @@ async def test_aretrieve_chunks_tag_match_mode_all_raises_400():
 
 async def test_aretrieve_chunks_merges_results_and_tags_knowledge_id():
     svc = _make_service()
-    svc._aretrieve_chunks_for_kb = AsyncMock(side_effect=[
+    svc._aretrieve_chunks_dispatch = AsyncMock(side_effect=[
         [(1, _doc("a", document_id=10, document_name="A.pdf", chunk_index=0))],
         [(2, _doc("b", document_id=20, document_name="B.pdf", chunk_index=1))],
     ])
@@ -102,7 +103,7 @@ async def test_aretrieve_chunks_merges_results_and_tags_knowledge_id():
     assert [kb_id for kb_id, _ in result] == [1, 2]
     assert [d.page_content for _, d in result] == ["a", "b"]
     # Each KB delegate received its own tag_names slot (empty by default).
-    calls = svc._aretrieve_chunks_for_kb.await_args_list
+    calls = svc._aretrieve_chunks_dispatch.await_args_list
     assert {c.args[0] for c in calls} == {1, 2}
     for c in calls:
         assert c.kwargs["tag_names"] == []
@@ -110,7 +111,7 @@ async def test_aretrieve_chunks_merges_results_and_tags_knowledge_id():
 
 async def test_aretrieve_chunks_truncates_to_top_k():
     svc = _make_service()
-    svc._aretrieve_chunks_for_kb = AsyncMock(side_effect=[
+    svc._aretrieve_chunks_dispatch = AsyncMock(side_effect=[
         [(1, _doc(f"a{i}", document_id=i, document_name="A.pdf", chunk_index=i)) for i in range(3)],
         [(2, _doc(f"b{i}", document_id=i + 100, document_name="B.pdf", chunk_index=i)) for i in range(3)],
     ])
@@ -124,7 +125,7 @@ async def test_aretrieve_chunks_truncates_to_top_k():
 
 async def test_aretrieve_chunks_passes_filter_tags_to_kb_delegate():
     svc = _make_service()
-    svc._aretrieve_chunks_for_kb = AsyncMock(return_value=[])
+    svc._aretrieve_chunks_dispatch = AsyncMock(return_value=[])
 
     await svc.aretrieve_chunks(
         query="hello",
@@ -133,8 +134,8 @@ async def test_aretrieve_chunks_passes_filter_tags_to_kb_delegate():
         max_content=8000,
     )
 
-    svc._aretrieve_chunks_for_kb.assert_awaited_once()
-    call = svc._aretrieve_chunks_for_kb.await_args
+    svc._aretrieve_chunks_dispatch.assert_awaited_once()
+    call = svc._aretrieve_chunks_dispatch.await_args
     assert call.args == (7,)
     assert call.kwargs["tag_names"] == ["alpha", "beta"]
     assert call.kwargs["max_content"] == 8000

@@ -33,7 +33,7 @@
   },
   "src/api/channels.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 41
+      "count": 36
     }
   },
   "src/api/chat/actions.ts": {
@@ -65,12 +65,12 @@
   },
   "src/api/chatApi.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 15
+      "count": 16
     }
   },
   "src/api/index.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 7
+      "count": 8
     }
   },
   "src/api/knowledge.ts": {
@@ -113,11 +113,6 @@
   "src/api/notifications.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 4
-    }
-  },
-  "src/api/permission.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 8
     }
   },
   "src/api/quota.ts": {
@@ -304,7 +299,7 @@
   },
   "src/components/Chat/ChatView.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 28
+      "count": 27
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -350,6 +345,9 @@
   "src/components/Chat/Input/AttachmentBar.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 13
+    },
+    "react-hooks/rules-of-hooks": {
+      "count": 1
     }
   },
   "src/components/Chat/Input/AudioRecorder.tsx": {
@@ -598,9 +596,6 @@
     "no-restricted-imports": {
       "count": 1
     },
-    "no-restricted-syntax": {
-      "count": 17
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -741,11 +736,6 @@
       "count": 1
     }
   },
-  "src/components/Chat/Messages/DeepThinkingGroup.tsx": {
-    "no-restricted-syntax": {
-      "count": 6
-    }
-  },
   "src/components/Chat/Messages/HoverButtons.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
@@ -836,6 +826,11 @@
       "count": 2
     },
     "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/components/Chat/attachments/MediaAttachmentChip.tsx": {
+    "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
   },
@@ -1120,7 +1115,7 @@
   },
   "src/components/Linsight/Input/TaskModeInput.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 19
+      "count": 22
     },
     "no-restricted-imports": {
       "count": 1
@@ -1740,21 +1735,6 @@
       "count": 1
     }
   },
-  "src/components/permission/PermissionBadge.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/components/permission/PermissionGrantTab.tsx": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "src/components/permission/PermissionListTab.tsx": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
   "src/components/svg/DownIcon.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -2268,10 +2248,10 @@
   },
   "src/hooks/useAiChat.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 12
+      "count": 14
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
+      "count": 5
     },
     "no-console": {
       "count": 4
@@ -2285,7 +2265,7 @@
   },
   "src/hooks/useAiChatSSE.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 4
+      "count": 5
     },
     "no-console": {
       "count": 3
@@ -2401,6 +2381,14 @@
       "count": 1
     }
   },
+  "src/hooks/useToast.ts": {
+    "no-restricted-imports": {
+      "count": 1
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
   "src/hooks/useVersionManagementEnabled.ts": {
     "no-restricted-imports": {
       "count": 1
@@ -2453,7 +2441,7 @@
   },
   "src/pages/ChannelSquare.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 6
+      "count": 7
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
@@ -2467,7 +2455,7 @@
   },
   "src/pages/ChannelSquareCard.tsx": {
     "no-restricted-syntax": {
-      "count": 1
+      "count": 2
     }
   },
   "src/pages/DevLogin/index.tsx": {
@@ -2593,6 +2581,9 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 3
     },
+    "no-restricted-syntax": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -2649,11 +2640,6 @@
       "count": 1
     }
   },
-  "src/pages/Subscription/channelUtils.ts": {
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
   "src/pages/Subscription/hooks/useArticleShare.ts": {
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -2697,9 +2683,6 @@
     "@typescript-eslint/no-explicit-any": {
       "count": 3
     },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "no-console": {
       "count": 2
     },
@@ -2724,7 +2707,7 @@
   },
   "src/pages/_gallery/progress/ColorProgress.tsx": {
     "no-restricted-syntax": {
-      "count": 25
+      "count": 35
     }
   },
   "src/pages/_gallery/progress/ConfirmProgress.tsx": {
@@ -2739,7 +2722,7 @@
   },
   "src/pages/_gallery/progress/ProgressOverview.tsx": {
     "no-restricted-syntax": {
-      "count": 99
+      "count": 100
     }
   },
   "src/pages/_gallery/progress/TypographyProgress.tsx": {
@@ -2898,7 +2881,16 @@
     }
   },
   "src/pages/appChat/components/InputFiles.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 6
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
     "no-console": {
+      "count": 2
+    },
+    "react-hooks/exhaustive-deps": {
       "count": 2
     }
   },
@@ -2907,6 +2899,9 @@
       "count": 3
     },
     "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "no-restricted-imports": {
       "count": 1
     }
   },
@@ -2935,6 +2930,11 @@
       "count": 2
     },
     "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/appChat/components/MessageBsChoose.tsx": {
+    "@typescript-eslint/no-wrapper-object-types": {
       "count": 1
     }
   },
@@ -3011,12 +3011,18 @@
   },
   "src/pages/appChat/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
+      "count": 5
+    },
+    "@typescript-eslint/no-unused-expressions": {
+      "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
+      "count": 5
     },
     "no-case-declarations": {
+      "count": 2
+    },
+    "no-empty": {
       "count": 2
     },
     "no-restricted-imports": {
@@ -3025,11 +3031,14 @@
     "no-restricted-syntax": {
       "count": 3
     },
+    "prefer-const": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     },
     "react-hooks/rules-of-hooks": {
-      "count": 16
+      "count": 17
     }
   },
   "src/pages/appChat/store/appSidebarAtoms.ts": {
@@ -3059,7 +3068,7 @@
       "count": 2
     },
     "no-case-declarations": {
-      "count": 2
+      "count": 3
     },
     "no-console": {
       "count": 1
@@ -3113,10 +3122,7 @@
   },
   "src/pages/appChat/useWebsocket.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
+      "count": 2
     },
     "no-console": {
       "count": 4
@@ -3177,10 +3183,10 @@
   },
   "src/pages/apps/explore.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 5
+      "count": 4
     },
     "react-hooks/exhaustive-deps": {
-      "count": 2
+      "count": 1
     }
   },
   "src/pages/apps/hooks/useAppCenter.ts": {
@@ -3314,12 +3320,15 @@
       "count": 1
     }
   },
-  "src/pages/knowledge/SpaceDetail/KnowledgeSpaceHeader.tsx": {
+  "src/pages/knowledge/SpaceDetail/FileTable.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 1
+      "count": 4
     }
   },
-  "src/pages/knowledge/SpaceDetail/KnowledgeSpaceShareDialog.tsx": {
+  "src/pages/knowledge/SpaceDetail/KnowledgeSpaceHeader.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 5
+    },
     "no-restricted-imports": {
       "count": 1
     }
@@ -3637,6 +3646,11 @@
       "count": 1
     }
   },
+  "src/store/toast.ts": {
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
   "src/store/user.ts": {
     "no-restricted-imports": {
       "count": 1
@@ -3702,6 +3716,11 @@
       "count": 4
     }
   },
+  "src/utils/mediaAttachmentUtils.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
   "src/utils/resetConvo.ts": {
     "no-console": {
       "count": 1
@@ -3714,7 +3733,7 @@
   },
   "src/vite-env.d.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
+      "count": 1
     }
   },
   "tailwind.config.cjs": {

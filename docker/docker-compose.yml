@@ -22,7 +22,9 @@ services:
 
   openfga-migrate:
     container_name: bisheng-openfga-migrate
-    image: openfga/openfga:latest
+    # Formal deployments set OPENFGA_IMAGE to the reviewed v1.15.1 tag@digest.
+    # The default remains version-pinned for local development; ``latest`` is forbidden.
+    image: ${OPENFGA_IMAGE:-openfga/openfga:v1.15.1}
     command: migrate
     environment:
       OPENFGA_DATASTORE_ENGINE: mysql
@@ -33,7 +35,7 @@ services:
 
   openfga:
     container_name: bisheng-openfga
-    image: openfga/openfga:latest
+    image: ${OPENFGA_IMAGE:-openfga/openfga:v1.15.1}
     command: run
     environment:
       OPENFGA_DATASTORE_METRICS_ENABLED: "true"
@@ -50,6 +52,9 @@ services:
       OPENFGA_CACHE_CONTROLLER_TTL: 10s
       OPENFGA_DATASTORE_MAX_OPEN_CONNS: 80
       OPENFGA_DATASTORE_MAX_IDLE_CONNS: 40
+      OPENFGA_METRICS_ENABLE_RPC_HISTOGRAMS: "true"
+      OPENFGA_RESOLVE_NODE_LIMIT: "${OPENFGA_RESOLVE_NODE_LIMIT:-25}"
+      OPENFGA_LIST_OBJECTS_MAX_RESULTS: 1000
     ports:
       - "8080:8080"
       - "8081:8081"
@@ -81,7 +86,7 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v2.6.0-fix2
+    image: dataelement/bisheng-backend:v3.0.0-beta1
     ports:
       - "7860:7860"
     environment:
@@ -123,7 +128,7 @@ services:
 
   backend_worker:
     container_name: bisheng-backend-worker
-    image: dataelement/bisheng-backend:v2.6.0-fix2
+    image: dataelement/bisheng-backend:v3.0.0-beta1
     environment:
       TZ: Asia/Shanghai
       BS_SSO_SYNC__GATEWAY_HMAC_SECRET: "bisheng-local-hmac-20260422"
@@ -156,7 +161,7 @@ services:
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v2.6.0-fix2
+    image: dataelement/bisheng-frontend:v3.0.0-beta1
     ports:
       - "3001:3001"
     environment:

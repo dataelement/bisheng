@@ -17,7 +17,7 @@ vi.mock("@/pages/SystemPage/components/OrgSync", () => ({
   default: () => <div data-testid="org-sync" />,
 }));
 vi.mock("@/pages/SystemPage/components/RolesAndPermissions", () => ({
-  default: () => <div data-testid="roles" />,
+  RolesAndPermissions: () => <div data-testid="roles" />,
 }));
 vi.mock("@/pages/SystemPage/theme", () => ({
   default: () => <div data-testid="theme" />,
@@ -48,7 +48,7 @@ const renderWithUser = (user: UserShape) => {
 const ORG = "system.orgAndMembers";
 const ROLE = "system.roleAndPermissions";
 const SYSCFG = "system.systemConfiguration";
-const THEME = "system.themeColor";
+const THEME = "system.appearanceSettings";
 const ORG_SYNC = "orgSync:title";
 const USER_GROUP = "system.userGroupsM";
 const LEGACY = "system.userManagement";

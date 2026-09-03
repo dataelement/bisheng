@@ -5,7 +5,7 @@ Covers:
 - ``assert_parent_chain_exists`` raises 19312 on missing or soft-deleted
   rows (strict mode per Phase-3 decision).
 - ``upsert_from_sync_payload`` forwards the correct fields to
-  ``aupsert_by_external_id`` and never passes ``is_tenant_root`` /
+  the atomic topology projection gate and never passes ``is_tenant_root`` /
   ``mounted_tenant_id`` (ensures the DAO preserves those by construction).
 - Parent resolution: top-level items → ``parent_id=None, path='/'``;
   nested items derive ``path`` from the parent's own ``path + parent_id``.
@@ -119,7 +119,8 @@ class TestUpsertFromSyncPayload:
             ts=100,
         )
         with patch(
-            "bisheng.sso_sync.domain.services.dept_upsert_service.DepartmentDao.aupsert_by_external_id",
+            "bisheng.department.domain.services.department_service."
+            "DepartmentTopologyProjectionService.aupsert_synced_department",
             new_callable=AsyncMock,
             return_value=_dept("TOP", id=99),
         ) as upsert_mock:
@@ -135,7 +136,7 @@ class TestUpsertFromSyncPayload:
         assert kwargs["name"] == "Root Dept"
         assert kwargs["parent_id"] == 1
         # path = root.path → final_path appends own id → '/1/99/'
-        assert kwargs["path"] == "/1/"
+        assert kwargs["parent_path"] == "/1/"
         assert kwargs["sort_order"] == 2
         assert kwargs["last_sync_ts"] == 100
         # Verify we never pass mount-related fields.
@@ -159,7 +160,8 @@ class TestUpsertFromSyncPayload:
             ts=100,
         )
         with patch(
-            "bisheng.sso_sync.domain.services.dept_upsert_service.DepartmentDao.aupsert_by_external_id",
+            "bisheng.department.domain.services.department_service."
+            "DepartmentTopologyProjectionService.aupsert_synced_department",
             new_callable=AsyncMock,
             return_value=_dept("TOP", id=99),
         ) as upsert_mock:
@@ -174,7 +176,7 @@ class TestUpsertFromSyncPayload:
         assert kwargs["parent_id"] is None
         # Top-level fallback passes empty parent-path; the DAO appends the
         # row's own id to materialise '/self_id/'.
-        assert kwargs["path"] == ""
+        assert kwargs["parent_path"] == ""
 
     async def test_nested_upsert_derives_path_from_parent(self):
         from bisheng.sso_sync.domain.services.dept_upsert_service import (
@@ -196,7 +198,8 @@ class TestUpsertFromSyncPayload:
                 return_value=parent,
             ),
             patch(
-                "bisheng.sso_sync.domain.services.dept_upsert_service.DepartmentDao.aupsert_by_external_id",
+                "bisheng.department.domain.services.department_service."
+                "DepartmentTopologyProjectionService.aupsert_synced_department",
                 new_callable=AsyncMock,
                 return_value=_dept("C", id=9),
             ) as upsert_mock,
@@ -211,7 +214,7 @@ class TestUpsertFromSyncPayload:
         assert kwargs["parent_id"] == 5
         # Service passes the parent's own path ('/2/'); the DAO appends the
         # child's id to materialise '/2/9/'.
-        assert kwargs["path"] == "/2/"
+        assert kwargs["parent_path"] == "/2/"
 
     async def test_missing_parent_raises_19312(self):
         from bisheng.sso_sync.domain.services.dept_upsert_service import (
@@ -232,7 +235,8 @@ class TestUpsertFromSyncPayload:
                 return_value=None,
             ),
             patch(
-                "bisheng.sso_sync.domain.services.dept_upsert_service.DepartmentDao.aupsert_by_external_id",
+                "bisheng.department.domain.services.department_service."
+                "DepartmentTopologyProjectionService.aupsert_synced_department",
                 new_callable=AsyncMock,
             ) as upsert_mock,
         ):
@@ -264,7 +268,8 @@ class TestUpsertFromSyncPayload:
                 return_value=dead_parent,
             ),
             patch(
-                "bisheng.sso_sync.domain.services.dept_upsert_service.DepartmentDao.aupsert_by_external_id",
+                "bisheng.department.domain.services.department_service."
+                "DepartmentTopologyProjectionService.aupsert_synced_department",
                 new_callable=AsyncMock,
             ),
         ):
@@ -314,7 +319,8 @@ class TestUpsertFromSyncPayload:
                 new=_reject,
             ),
             patch(
-                "bisheng.sso_sync.domain.services.dept_upsert_service.DepartmentDao.aupsert_by_external_id",
+                "bisheng.department.domain.services.department_service."
+                "DepartmentTopologyProjectionService.aupsert_synced_department",
                 new_callable=AsyncMock,
             ) as upsert_mock,
         ):
@@ -358,7 +364,8 @@ class TestUpsertFromSyncPayload:
                 new=gate,
             ),
             patch(
-                "bisheng.sso_sync.domain.services.dept_upsert_service.DepartmentDao.aupsert_by_external_id",
+                "bisheng.department.domain.services.department_service."
+                "DepartmentTopologyProjectionService.aupsert_synced_department",
                 new_callable=AsyncMock,
                 return_value=existing,
             ),

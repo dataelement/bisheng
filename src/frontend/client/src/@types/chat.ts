@@ -117,6 +117,8 @@ export type BishengConfig = {
   uploaded_files_maximum_size: number;
   /** 音视频单文件最大上传大小 mb */
   uploaded_media_maximum_size?: number;
+  /** 是否开启音视频上传（工作流 / 工作台 / 知识库统一） */
+  enable_media_upload?: boolean;
   /** System YAML `env.workbench_menu_unavailable_message` — plain text on /menu-unavailable */
   workbench_menu_unavailable_message?: string;
   /** 是否部署 ETL4LM  */
@@ -127,5 +129,9 @@ export type BishengConfig = {
       enabled: boolean;
       simhash_similarity_threshold?: number;
     };
+  };
+  /** Standalone workflow conversation behavior */
+  workflow?: {
+    auto_rerun_on_open?: boolean;
   };
 };

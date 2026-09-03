@@ -228,6 +228,8 @@
   "allTypes": "全部类型",
   "document": "文档",
   "image": "图片",
+  "media": "音视频",
+  "noFileTypesSelected": "未选择文件类型",
   "enterValidNumber": "请输入有效的数字",
   "numberExceedsMaxLimit": "数字大小不能超过2的32次方。",
   "unknownKnowledgeBase": "未知知识库",

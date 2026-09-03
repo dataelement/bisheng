@@ -18,6 +18,7 @@ from loguru import logger
 from bisheng_langchain.gpts.tools.code_interpreter.base_executor import (
     OUTPUT_DIR_NAME,
     BaseExecutor,
+    clip_middle,
     path_namespace_rules,
 )
 
@@ -159,6 +160,29 @@ class LocalExecutor(BaseExecutor):
             return "powershell"
         raise NotImplementedError(f"{lang} not recognized in code execution")
 
+    @staticmethod
+    def _child_env(work_dir: str | None) -> dict[str, str]:
+        """Environment for the executed script.
+
+        ``HOME`` is pointed at the working directory. Otherwise ``expanduser('~')``
+        resolves to the SERVICE account's home (``/root`` in the shipped image),
+        which is shared by every user's runs and holds the download cache of their
+        uploads — and reaching for ``~`` is exactly what a model does when it goes
+        looking for "the file I was given". Paired with
+        ``workspace_escape_guard``: the guard rejects the obvious spellings, this
+        makes the ones it cannot see (``os.environ['HOME']``, a library resolving
+        ``~`` internally) land inside the workspace instead of on the host.
+
+        ``MPLCONFIGDIR`` is pinned to matplotlib's current cache dir FIRST, because
+        moving ``HOME`` would otherwise send matplotlib to a fresh, empty config
+        dir and make it rebuild the font cache on every single run.
+        """
+        env = os.environ.copy()
+        if work_dir:
+            env.setdefault("MPLCONFIGDIR", matplotlib.get_cachedir())
+            env["HOME"] = work_dir
+        return env
+
     @classmethod
     def _execute_code(
         cls,
@@ -178,6 +202,7 @@ class LocalExecutor(BaseExecutor):
         proc = subprocess.Popen(
             cmd,
             cwd=work_dir,
+            env=cls._child_env(work_dir),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -363,6 +388,9 @@ class LocalExecutor(BaseExecutor):
                 continue
             file_ext = os.path.splitext(rel)[-1]
             file_list.append(self.upload_minio(f"{uuid.uuid4().hex}.{file_ext}", file_name))
+        # Mirror the same set into the session workspace so the file tools and the
+        # next turn can see what this run produced (see sync_to_workspace).
+        self.sync_to_workspace(dir_path, touched)
         # 同步执行结果文件到本地同步目录
         if self.local_sync_path and os.path.exists(self.local_sync_path):
             files_info = list(os.scandir(dir_path))
@@ -378,6 +406,13 @@ class LocalExecutor(BaseExecutor):
 
     def run(self, code: str) -> Any:
         original_code = code
+        # Checked BEFORE anything executes: this executor is a subprocess on the
+        # shared backend host, so by the time an escaping read has run, another
+        # user's document is already in the model's context.
+        escape_notice = self.workspace_escape_guard(original_code)
+        if escape_notice:
+            logger.warning("code interpreter: rejected a run that reaches outside the working directory")
+            return {"exitcode": 1, "log": escape_notice, "file_list": []}
         code_blocks = self.extract_code(code)
         logs_all = ""
         all_file_list = []
@@ -406,6 +441,11 @@ class LocalExecutor(BaseExecutor):
                 return {"exitcode": exit_code, "log": self._tail(logs_all) + self.absolute_path_advisory(original_code)}
             all_file_list += file_list
 
+        # Clip BEFORE appending the advisory, same as the failure path above: the
+        # advisory is the one instruction the model must act on next turn, so the
+        # truncation must not be able to eat it. ``file_list`` is never clipped —
+        # not seeing it is exactly what makes the model conclude nothing was written.
+        logs_all = clip_middle(logs_all)
         # Deterministic safety net: if the script wrote a deliverable to an absolute
         # /output//scratch path it escaped the harvested working dir and silently
         # vanished (see base_executor). Append a corrective notice so the model

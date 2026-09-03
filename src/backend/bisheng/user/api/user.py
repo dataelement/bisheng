@@ -1,6 +1,5 @@
 import asyncio
 import hashlib
-import json
 import random
 from base64 import b64encode
 from datetime import datetime
@@ -27,7 +26,6 @@ from bisheng.database.models.department import DepartmentDao, UserDepartment
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
-from bisheng.database.models.role_access import AccessType, RoleAccessDao, RoleRefresh
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
@@ -82,6 +80,7 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
                     user_exist.user_id,
                     [AdminRole],
                 )
+                await UserService.areconcile_first_user_dashboard_permissions(user_exist.user_id)
             else:
                 # Create as Normal User
                 user_exist = await UserDao.add_user_and_configured_default_auth(
@@ -203,11 +202,15 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
     leaf_tenant_id: int | None = None
     leaf_tenant_name: str | None = None
     try:
-        from bisheng.core.openfga.manager import aget_fga_client
         from bisheng.database.models.tenant import (
             ROOT_TENANT_ID,
             TenantDao,
             UserTenantDao,
+        )
+        from bisheng.permission.application import (
+            PermissionObject,
+            PermissionSubject,
+            get_permission_relation_api,
         )
         from bisheng.utils.http_middleware import _check_is_global_super
 
@@ -219,13 +222,12 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         leaf_tenant = await TenantDao.aget_by_id(leaf_tenant_id)
         leaf_tenant_name = leaf_tenant.tenant_name if leaf_tenant else ""
         if leaf_tenant_id != ROOT_TENANT_ID and not is_global_super:
-            fga = await aget_fga_client()
-            if fga is not None:
-                is_child_admin = await fga.check(
-                    user=f"user:{user_id}",
-                    relation="admin",
-                    object=f"tenant:{leaf_tenant_id}",
-                )
+            permissions = await get_permission_relation_api()
+            is_child_admin = await permissions.check(
+                subject=PermissionSubject("user", str(user_id)),
+                relation="admin",
+                resource=PermissionObject("tenant", str(leaf_tenant_id)),
+            )
     except Exception as exc:
         logger.debug("admin-flag detection failed: %s", exc)
 
@@ -308,21 +310,13 @@ async def _tenant_admin_scoped_user_ids(
     Root 租户由 super_admin 负责（``is_admin()`` 已短路），此 helper 直接返回 None。
     """
     from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
-    from bisheng.permission.domain.services.permission_service import (
-        PermissionService,
-    )
+    from bisheng.permission.application import is_tenant_admin
 
     tenant_id = getattr(login_user, "tenant_id", None)
     if tenant_id is None or int(tenant_id) == ROOT_TENANT_ID:
         return None
     try:
-        is_tenant_admin = await PermissionService.check(
-            user_id=login_user.user_id,
-            relation="admin",
-            object_type="tenant",
-            object_id=str(tenant_id),
-            login_user=login_user,
-        )
+        tenant_admin = await is_tenant_admin(login_user.user_id, int(tenant_id))
     except Exception:
         logger.exception(
             "tenant admin scope check failed user=%s tenant=%s",
@@ -330,7 +324,7 @@ async def _tenant_admin_scoped_user_ids(
             tenant_id,
         )
         return None
-    if not is_tenant_admin:
+    if not tenant_admin:
         return None
 
     tenant = await TenantDao.aget_by_id(int(tenant_id))
@@ -460,9 +454,11 @@ async def list_user(
                 org_scoped_ids.update(tenant_scoped_ids)
 
         if not managed_groups:
-            # 仅部门 / 子租户管理员：仅能看其管辖范围内用户
-            if org_scoped_ids is None:
-                raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
+            # 仅部门 / 子租户管理员：仅能看其管辖范围内用户。
+            # 「没有组织管辖范围」和「管辖范围为空」对调用方是同一件事——通过这个
+            # 接口你看不到任何人——所以同样返回空页，而不是 500。原先前者报错，
+            # 让持有资源 manage_permission 但不属于任何组织管理员角色的用户
+            # （例如知识空间管理员）在授权选人时直接拿到 500，对话框整个用不了。
             if not org_scoped_ids:
                 return resp_200({"data": [], "total": 0})
             user_ids = list(org_scoped_ids)
@@ -618,21 +614,13 @@ async def _tenant_admin_can_manage_member_account_status(
     """
     from bisheng.database.models.department import Department
     from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
-    from bisheng.permission.domain.services.permission_service import (
-        PermissionService,
-    )
+    from bisheng.permission.application import is_tenant_admin
 
     tenant_id = getattr(login_user, "tenant_id", None)
     if tenant_id is None or int(tenant_id) == ROOT_TENANT_ID:
         return False
     try:
-        is_tenant_admin = await PermissionService.check(
-            user_id=login_user.user_id,
-            relation="admin",
-            object_type="tenant",
-            object_id=str(tenant_id),
-            login_user=login_user,
-        )
+        tenant_admin = await is_tenant_admin(login_user.user_id, int(tenant_id))
     except Exception:
         logger.exception(
             "tenant admin check failed user=%s tenant=%s",
@@ -640,7 +628,7 @@ async def _tenant_admin_can_manage_member_account_status(
             tenant_id,
         )
         return False
-    if not is_tenant_admin:
+    if not tenant_admin:
         return False
 
     tenant = await TenantDao.aget_by_id(int(tenant_id))
@@ -903,7 +891,7 @@ async def user_addrole(
 
     if not login_user.is_admin():
         from bisheng.database.models.department import DepartmentDao
-        from bisheng.permission.domain.services.permission_service import PermissionService
+        from bisheng.permission.application import is_tenant_admin
         from bisheng.role.domain.services.role_service import RoleService
 
         # Determine which user groups you have administrative access to
@@ -923,21 +911,15 @@ async def user_addrole(
             )
             admin_depts = []
         try:
-            is_tenant_admin = await PermissionService.check(
-                user_id=login_user.user_id,
-                relation="admin",
-                object_type="tenant",
-                object_id=str(login_user.tenant_id),
-                login_user=login_user,
-            )
+            tenant_admin = await is_tenant_admin(login_user.user_id, int(login_user.tenant_id))
         except Exception:
             logger.exception(
                 "user_addrole: tenant admin check failed user=%s",
                 getattr(login_user, "user_id", None),
             )
-            is_tenant_admin = False
+            tenant_admin = False
 
-        if admin_depts or is_tenant_admin:
+        if admin_depts or tenant_admin:
             visible_roles = await RoleService.list_roles(
                 keyword=None,
                 page=1,
@@ -999,150 +981,6 @@ def update_user_role_hook(
         note += role_dict[one] + "、"
     note = note.rstrip("、")
     AuditLogService.update_user(login_user, get_request_ip(request), user_id, group_ids, note)
-
-
-# AccessType.value → (fga_object_type, fga_relation)
-_ACCESS_TYPE_TO_FGA: dict[int, tuple] = {
-    1: ("knowledge_library", "viewer"),
-    3: ("knowledge_library", "editor"),
-    5: ("assistant", "viewer"),
-    6: ("assistant", "editor"),
-    7: ("tool", "viewer"),
-    8: ("tool", "editor"),
-    9: ("workflow", "viewer"),
-    10: ("workflow", "editor"),
-    11: ("dashboard", "viewer"),
-    12: ("dashboard", "editor"),
-}
-
-
-def _has_resource_permission_user_binding(
-    obj_type: str,
-    resource_id: str,
-    relation: str,
-    user_id: int,
-    bindings: list[dict],
-) -> bool:
-    check_types = {obj_type}
-    if obj_type == "knowledge_library":
-        check_types.add("knowledge_space")
-    elif obj_type == "knowledge_space":
-        check_types.add("knowledge_library")
-
-    return any(
-        binding.get("resource_type") in check_types
-        and str(binding.get("resource_id")) == str(resource_id)
-        and binding.get("subject_type") == "user"
-        and str(binding.get("subject_id")) == str(user_id)
-        and binding.get("relation") == relation
-        for binding in bindings
-    )
-
-
-async def _get_resource_permission_bindings() -> list[dict]:
-    from bisheng.common.models.config import ConfigDao
-
-    row = await ConfigDao.aget_config_by_key("permission_relation_model_bindings_v1")
-    if not row or not (row.value or "").strip():
-        return []
-    try:
-        bindings = json.loads(row.value or "[]")
-    except Exception:
-        logger.warning("Failed to parse resource permission bindings config")
-        return []
-    if not isinstance(bindings, list):
-        return []
-    return [binding for binding in bindings if isinstance(binding, dict)]
-
-
-async def _sync_role_access_fga(
-    role_id: int,
-    access_type: int,
-    old_ids: set[str],
-    new_ids: set[str],
-) -> None:
-    await LegacyRBACSyncService.sync_role_access_change(
-        role_id,
-        access_type,
-        old_ids,
-        new_ids,
-    )
-
-
-async def _can_use_legacy_role_access_endpoint(
-    db_role,
-    login_user: LoginUser,
-    *,
-    for_mutation: bool,
-) -> bool:
-    if getattr(db_role, "group_id", None) and await login_user.async_check_group_admin(db_role.group_id):
-        return True
-    try:
-        from bisheng.role.domain.services.role_service import RoleService
-
-        await RoleService._check_role_permission(login_user)
-        if for_mutation:
-            await RoleService._ensure_role_mutation_access(db_role, login_user)
-        else:
-            await RoleService._ensure_role_scope_access(db_role, login_user, for_mutation=False)
-        return True
-    except Exception:
-        logger.exception(
-            "legacy role_access permission denied role_id=%s user=%s mutation=%s",
-            getattr(db_role, "id", None),
-            getattr(login_user, "user_id", None),
-            for_mutation,
-        )
-        return False
-
-
-@router.post("/role_access/refresh", status_code=200)
-async def access_refresh(
-    *, request: Request, data: RoleRefresh, login_user: LoginUser = Depends(LoginUser.get_login_user)
-):
-    db_role = await RoleDao.aget_role_by_id(data.role_id)
-    if not db_role:
-        raise NotFoundError().http_exception()
-    if db_role.id == AdminRole:
-        raise UnAuthorizedError.http_exception()
-    if not await _can_use_legacy_role_access_endpoint(db_role, login_user, for_mutation=True):
-        raise UnAuthorizedError.http_exception()
-
-    role_id = data.role_id
-    access_type = data.type
-    access_id = data.access_id
-
-    old_records = await RoleAccessDao.aget_role_access([role_id], AccessType(access_type))
-    old_ids = {str(r.third_id) for r in old_records}
-
-    await RoleAccessDao.update_role_access_all(role_id, AccessType(access_type), access_id)
-
-    await _sync_role_access_fga(role_id, access_type, old_ids, {str(aid) for aid in access_id})
-
-    update_role_hook(request, login_user, db_role)
-    return resp_200()
-
-
-@router.get("/role_access/list", status_code=200)
-async def access_list(
-    *,
-    role_id: int,
-    access_type: int | None = Query(default=None, alias="type"),
-    login_user: LoginUser = Depends(LoginUser.get_login_user),
-):
-    db_role = await RoleDao.aget_role_by_id(role_id)
-    if not db_role:
-        raise NotFoundError().http_exception()
-
-    if not await _can_use_legacy_role_access_endpoint(db_role, login_user, for_mutation=False):
-        return UnAuthorizedError.return_resp()
-
-    access_type = None
-    if access_type:
-        access_type = AccessType(access_type)
-    res = await RoleAccessDao.aget_role_access([role_id], access_type)
-
-    return resp_200({"data": res, "total": len(res)})
 
 
 @router.get("/user/get_captcha", status_code=200)
@@ -1283,9 +1121,6 @@ async def has_mark_access(*, request: Request, login_user: LoginUser = Depends(L
     """
     Get whether the current user has annotation permission,Determine if the current user isadmin Or a user group administrator
     """
-    user_groups = UserGroupDao.get_user_group(login_user.user_id)
-    user_group_ids = [one.group_id for one in user_groups]
-
     has_mark_access = False
     # Check if there are administrative permissions for the group
     task = MarkTaskDao.get_task(login_user.user_id)

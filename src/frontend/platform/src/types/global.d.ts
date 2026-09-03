@@ -36,6 +36,16 @@ declare global {
     }
 
     const __VCONSOLE_ENABLED__: boolean;
+
+    /** Build-time app config, injected by vite `define` (see vite.config.mts). */
+    const __APP_ENV__: {
+        /** Sub-path the app is served under (e.g. `/custom`); empty for root. */
+        BASE_URL: string;
+        /** Origin of the end-user client app; empty when it shares ours. */
+        WORKSPACE_ORIGIN: string;
+        /** Origin the OnlyOffice Document Server can reach us at; empty in production. */
+        OFFICE_PUBLIC_ORIGIN: string;
+    };
 }
 
 declare module "*.png" {
@@ -47,4 +57,14 @@ declare module "*.png" {
 declare module "*.svg" {
     const content: any;
     export default content;
+}
+
+// `silent` is read by the response interceptor in `@/controllers/request.ts`:
+// it skips the global error handling and rejects with the response envelope
+// instead of a bare message string, so a caller can read the business error's
+// `data`. Declared here so passing it no longer needs an `as any` cast.
+declare module "axios" {
+  export interface AxiosRequestConfig {
+    silent?: boolean
+  }
 }

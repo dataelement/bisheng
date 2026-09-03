@@ -23,6 +23,11 @@ interface PlusMenuProps {
     disabled?: boolean;
     /** Opens the hidden file picker (InputFiles imperative ref). */
     onUploadFile: () => void;
+    /**
+     * Opens the hidden DIRECTORY picker. Task mode only — omit it and the entry
+     * is hidden, which is what daily mode wants (no workspace, no tree to keep).
+     */
+    onUploadFolder?: () => void;
     taskModeActive: boolean;
     onToggleTaskMode: () => void;
     selectedSkills: TaskModeSkill[];
@@ -34,6 +39,7 @@ interface PlusMenuProps {
 export function PlusMenu({
     disabled = false,
     onUploadFile,
+    onUploadFolder,
     taskModeActive,
     onToggleTaskMode,
     selectedSkills,
@@ -49,7 +55,7 @@ export function PlusMenu({
                     type="button"
                     aria-label={localize('com_ui_upload_files')}
                     className={cn(
-                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-text-2 outline-none transition-colors hover:bg-black/5',
+                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#4E5969] outline-none transition-colors hover:bg-black/5',
                         disabled && 'cursor-not-allowed opacity-50',
                     )}
                 >
@@ -68,11 +74,25 @@ export function PlusMenu({
                     onSelect={() => onUploadFile()}
                     className="flex h-8 cursor-pointer items-center gap-3 rounded-lg px-2 outline-none"
                 >
-                    <Outlined.Attachment size={16} className="shrink-0 text-text-2" />
+                    <Outlined.Attachment size={16} className="shrink-0 text-[#4E5969]" />
                     <span className="text-[14px] font-normal text-slate-700">
                         {localize('com_ui_upload_files')}
                     </span>
                 </DropdownMenuItem>
+
+                {/* Upload folder — task mode only; the whole directory tree is
+                    rebuilt inside the task workspace. */}
+                {onUploadFolder && (
+                    <DropdownMenuItem
+                        onSelect={() => onUploadFolder()}
+                        className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none"
+                    >
+                        <Outlined.FolderClose size={16} className="shrink-0 text-slate-600" />
+                        <span className="text-[14px] font-normal text-slate-700">
+                            {localize('com_ui_upload_folder')}
+                        </span>
+                    </DropdownMenuItem>
+                )}
 
                 {/* Divider between upload and the mode entries (spec §1) */}
                 <div className="my-1 h-px bg-slate-100" />
@@ -82,7 +102,7 @@ export function PlusMenu({
                     onSelect={() => onToggleTaskMode()}
                     className="flex h-8 cursor-pointer items-center gap-3 rounded-lg px-2 outline-none"
                 >
-                    <Outlined.ListSuccess size={16} className={cn(taskModeActive ? 'text-blue-500' : 'text-text-2')} />
+                    <Outlined.ListSuccess size={16} className={cn(taskModeActive ? 'text-blue-500' : 'text-[#4E5969]')} />
                     <span
                         className={cn(
                             'flex-1 text-[14px] font-normal',
@@ -107,7 +127,7 @@ export function PlusMenu({
                                 <div className="relative">
                                     <Outlined.Newspaper
                                         size={16}
-                                        className={cn(selectedSkills.length > 0 ? 'text-blue-500' : 'text-text-2')}
+                                        className={cn(selectedSkills.length > 0 ? 'text-blue-500' : 'text-[#4E5969]')}
                                     />
                                     {selectedSkills.length > 0 && (
                                         <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />

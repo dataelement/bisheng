@@ -115,7 +115,7 @@ async def test_space_filter_open_runtime_drops_unauthorized():
     vis.build_index_prefilter = AsyncMock(
         return_value=IndexFilter(strategy="in", milvus_expr="document_id in [1, 2]", es_filter=[], accessible_size=2)
     )
-    vis.post_filter_visible_files = AsyncMock(return_value={1})  # only file 1 visible
+    vis.post_filter_retrievable_files = AsyncMock(return_value={1})  # only file 1 is retrievable
     vis._config = MagicMock(
         return_value=SimpleNamespace(retrieval_initial_multiplier=1, retrieval_expansion_multiplier=2)
     )
@@ -150,7 +150,7 @@ async def test_space_filter_close_author_identity():
     vis.build_index_prefilter = AsyncMock(
         return_value=IndexFilter(strategy="in", milvus_expr="document_id in [1]", es_filter=[], accessible_size=1)
     )
-    vis.post_filter_visible_files = AsyncMock(return_value={1})
+    vis.post_filter_retrievable_files = AsyncMock(return_value={1})
     vis._config = MagicMock(
         return_value=SimpleNamespace(retrieval_initial_multiplier=1, retrieval_expansion_multiplier=2)
     )

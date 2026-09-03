@@ -12,8 +12,24 @@ from __future__ import annotations
 from datetime import datetime
 from types import SimpleNamespace
 
+import pytest
+
+import bisheng.channel.domain.services.channel_service as channel_service_module
 from bisheng.channel.domain.models.channel import ChannelVisibilityEnum
 from bisheng.channel.domain.services.channel_service import ChannelService
+
+
+@pytest.fixture(autouse=True)
+def _stub_visibility(monkeypatch):
+    """The square/recommend subscription flag now derives from F048 ``visible``.
+    These recommendation tests only assert article-count ordering + total, so stub
+    visibility to "nothing visible" (the empty-state discovery case) instead of
+    standing up the whole F048 stack."""
+
+    async def _none_visible(login_user, *, resource_type, resource_ids):
+        return {str(rid): False for rid in resource_ids}
+
+    monkeypatch.setattr(channel_service_module, "batch_check_business_visible", _none_visible)
 
 
 def _async_return(value):

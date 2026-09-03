@@ -96,6 +96,25 @@ def set_preferred_bridge_loop(loop: asyncio.AbstractEventLoop | None) -> None:
     _preferred_loop = loop
 
 
+def get_bridge_loop_for_sync_init() -> asyncio.AbstractEventLoop:
+    """Pick an event loop for building async clients from a sync caller.
+
+    Celery task threads and other sync contexts have no running loop, but
+    aiohttp connectors still need one at construction time. Prefer the caller's
+    loop when inside async code, otherwise the registered Celery bridge loop,
+    then the persistent ``run_async_safe`` background loop.
+    """
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+
+    if _preferred_loop is not None and not _preferred_loop.is_closed():
+        return _preferred_loop
+
+    return _background_loop._ensure_loop()
+
+
 def run_async_safe(coro: Awaitable[Any], *, timeout: float = 10) -> Any:
     """Run an async coroutine from a sync context.
 

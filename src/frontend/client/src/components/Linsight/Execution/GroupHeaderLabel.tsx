@@ -1,24 +1,27 @@
 /**
- * GroupHeaderLabel — the live "用时 N 秒" header text for a DeepStepGroup, split
- * out as its OWN component so the 100ms elapsed ticker re-renders ONLY this label,
- * never the group body (thinking passages + tool rows).
+ * GroupHeaderLabel — the header text for a DeepStepGroup.
  *
- * Why the split (perf): useElapsedTicker fires a 100ms setInterval while the group
- * is the live tail. When the ticker lived in DeepStepGroup, every tick re-rendered
- * the whole group — its thinking <p> blocks and every ToolRowLite — ten times a
- * second, on top of the per-WS-frame timeline rebuild. That main-thread pressure
- * starved the timer callback and made the counter advance unevenly / skip seconds.
- * Isolating the ticker here means a tick touches only this one-line label; the
- * group body re-renders solely when its steps actually change (a real WS frame).
+ * **No duration (2026-08-13).** This used to end in "（用时 N 秒）", driven by a
+ * 100ms ticker. It was removed on purpose, and the reasoning is worth keeping:
  *
- * The label math is unchanged from the old in-group useMemo (whole-second format,
- * the subagent-goal / activity-summary / pure-reasoning branches, the noDuration
- * gate), so the rendered text — and the DeepStepGroup label tests — are identical.
+ * A live counter is a promise that the number matters. For agent reasoning it
+ * does not — nobody decides anything on "1416". What it does do is measure how
+ * long you have been waiting, with no denominator to reason against, at a
+ * precision (seconds) that implies the operation should have been quick. On a
+ * 20-minute run the header read "读取 6 个文件 · 执行 1 步操作（用时 1416 秒）"
+ * and the product looked broken rather than busy. Liveness is carried by the
+ * narration line and the running glyph instead, which say what is happening
+ * rather than how long it has hurt.
+ *
+ * Dropping it also removed the component's original reason to exist: it was split
+ * out of DeepStepGroup so a 100ms setInterval would re-render one line instead of
+ * the whole group (thinking passages + every tool row) ten times a second. That
+ * timer is gone, so the surface displaying "how slow this is" is no longer itself
+ * a source of slowness. The split is kept because the branch logic below is worth
+ * isolating and testing on its own.
  */
 import { useLocalize } from '~/hooks';
-import { formatSeconds } from '~/utils';
 import { firstLine } from './stepUtils';
-import { useElapsedTicker } from './useElapsedTicker';
 
 /**
  * Subagent header budget: the delegation goal is the `task` tool's `description`
@@ -33,50 +36,30 @@ export interface GroupHeaderLabelProps {
     activityText: string;
     /** Subagent context when this group is an exploded subagent segment. */
     subagent?: { goal: string; idx: number };
-    /** Drilldown (inside a subagent card): drop the "（用时 N 秒）" clause. */
-    compact: boolean;
-    /** Group clock start/end in ms (null ⇒ no clock; caller scaled second→ms). */
-    startMs: number | null;
-    endMs: number | null;
-    /** True while this group is the live tail episode (drives 正在/已 + the ticker). */
+    /** True while this group is the live tail episode (drives 正在/已). */
     running: boolean;
 }
 
-export function GroupHeaderLabel({ activityText, subagent, compact, startMs, endMs, running }: GroupHeaderLabelProps) {
+export function GroupHeaderLabel({ activityText, subagent, running }: GroupHeaderLabelProps) {
     const localize = useLocalize();
-    // Owns the 100ms live ticker. setTick re-renders THIS component only, so a
-    // running group's "用时" advances without re-rendering the group body.
-    const { elapsedMs } = useElapsedTicker(startMs, endMs, running);
 
-    // No useMemo: elapsedMs advances on every 100ms tick (and reads Date.now()
-    // fresh each render), so a memo keyed on it would never hit — the label is
-    // recomputed every render regardless. Inline string-building is cheaper.
-    const seconds = formatSeconds(elapsedMs);
-    // Drop the duration clause when nested (compact) OR when the measured span is 0
-    // (a single second-level frame would read a misleading "用时 0 秒").
-    const noDuration = compact || elapsedMs <= 0;
     let label: string;
     if (subagent) {
-        // R3 完全拆平: a subagent segment is headed by its delegation GOAL + 用时.
-        // The goal is the subagent's identity, so it OWNS the header line — show
-        // only its GIST (firstLine), falling back to the activity summary and
-        // finally the "子智能体 N" label for a goal-less (degraded) subagent.
+        // R3 完全拆平: a subagent segment is headed by its delegation GOAL. The goal
+        // is the subagent's identity, so it OWNS the header line — show only its
+        // GIST (firstLine), falling back to the activity summary and finally the
+        // "子智能体 N" label for a goal-less (degraded) subagent.
         const goalGist = firstLine(subagent.goal, SUBAGENT_GOAL_TITLE_MAX);
-        const core = goalGist || activityText || localize('com_linsight_subagent_track', { 0: String(subagent.idx) });
-        label = noDuration ? core : localize('com_linsight_act_summary', { 0: core, 1: seconds });
+        label = goalGist || activityText || localize('com_linsight_subagent_track', { 0: String(subagent.idx) });
     } else if (activityText) {
         // Activity-summary header (verbs + counts), the primary case.
-        label = noDuration ? activityText : localize('com_linsight_act_summary', { 0: activityText, 1: seconds });
-    } else if (noDuration) {
-        // Pure-reasoning fallback (no measurable span): the compact 深度思考 label.
+        label = activityText;
+    } else {
+        // Pure-reasoning fallback: the compact 深度思考 label. The `_compact`
+        // variants are the duration-free wording, which is now the only wording —
+        // the "（用时 N 秒）" pair they were the counterpart to no longer renders.
         label = localize(
             running ? 'com_linsight_deep_thinking_running_compact' : 'com_linsight_deep_thinking_done_compact',
-        );
-    } else {
-        // Pure-reasoning fallback with a duration.
-        label = localize(
-            running ? 'com_linsight_deep_thinking_running' : 'com_linsight_deep_thinking_done',
-            { 0: seconds },
         );
     }
 

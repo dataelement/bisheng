@@ -138,7 +138,14 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
         [sessionSteps.length, sessionSteps[sessionSteps.length - 1]?.status, sessionSteps[sessionSteps.length - 1]?.call_id],
     );
 
-    const planning = running && !queueing && !tasks.length && !pendingInput && !hasSessionTimeline;
+    // Attachment ingest was moved off the submit request into the worker, which
+    // claims the session (IN_PROGRESS ⇒ running) BEFORE parsing uploads/*. For a
+    // large batch that is minutes with no task, no step and no queue position —
+    // the panel had nothing to render and the run looked hung. Own that window
+    // explicitly: nothing is being planned yet, so the planning row must not
+    // claim it (the two are mutually exclusive by construction).
+    const preparing = running && noProgressYet && !queueing;
+    const planning = running && !queueing && !tasks.length && !pendingInput && !hasSessionTimeline && !preparing;
 
     const handleClarifySubmit = (taskId: string, ans: string) => {
         sendInput({ task_id: taskId || versionId, user_input: ans, files: [] });
@@ -201,6 +208,10 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
                 renders as an inline IntentRow at its chronological position here
                 (时序内联) instead of being hoisted above the timeline. */}
             <ExecutionTimeline history={sessionSteps} />
+
+            {/* pre-output breathing row: the worker holds us but has emitted
+                nothing yet (deferred attachment ingest / run startup) */}
+            {preparing && <BreathingRow state="preparing" />}
 
             {/* planning breathing row */}
             {planning && <BreathingRow state="planning" />}

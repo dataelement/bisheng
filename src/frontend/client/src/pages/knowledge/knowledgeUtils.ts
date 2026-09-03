@@ -1,6 +1,5 @@
 import { FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
 import i18next from "i18next";
-import { knowledgeUploadCapabilities } from "./knowledgeUploadCapabilities";
 
 /** List/card: only folders and successfully parsed files are clickable; violation files stay grayed out. */
 export function isKnowledgeItemPreviewable(file: KnowledgeFile): boolean {
@@ -81,14 +80,12 @@ export const ALLOWED_EXTENSIONS = [
     "pdf", "ofd", "txt", "docx", "ppt", "pptx", "md", "html",
     "xls", "xlsx", "csv", "doc", "png", "jpg", "jpeg", "bmp",
     "wps", "dps", "et",
-    ...(knowledgeUploadCapabilities.media ? MEDIA_FILE_EXTENSIONS : []),
 ] as const;
 
 /** Subset used when ETL4LM is NOT deployed — drops images. */
 const ALLOWED_EXTENSIONS_NO_ETL4LM: readonly string[] = [
     "pdf", "ofd", "txt", "docx", "doc", "ppt", "pptx", "md", "html", "xls", "xlsx", "csv",
     "wps", "dps", "et",
-    ...(knowledgeUploadCapabilities.media ? MEDIA_FILE_EXTENSIONS : []),
 ];
 
 const MEDIA_MIME_TYPES = [
@@ -112,7 +109,6 @@ export const ALLOWED_MIME_TYPES = [
     "application/vnd.openxmlformats-officedocument.presentationml.presentation", // pptx
     "text/markdown", "text/html", "text/csv",
     "image/png", "image/jpeg", "image/bmp",
-    ...(knowledgeUploadCapabilities.media ? MEDIA_MIME_TYPES : []),
     "application/vnd.ms-works", "application/kswps", "application/wps-office.wps", // wps
     "application/vnd.wps-presentation", "application/kswps", // dps
     "application/vnd.ms-excel", "application/kset", // et
@@ -129,7 +125,7 @@ export const FILE_INPUT_ACCEPT = ALLOWED_EXTENSIONS.map(e => `.${e}`).join(",");
 /** Returns extension list based on whether ETL4LM is deployed. */
 export function getAllowedExtensions(
     enableEtl4lm: boolean,
-    mediaEnabled: boolean = knowledgeUploadCapabilities.media
+    mediaEnabled = false
 ): readonly string[] {
     const extensions = enableEtl4lm ? ALLOWED_EXTENSIONS : ALLOWED_EXTENSIONS_NO_ETL4LM;
     const extensionsWithoutMedia = extensions.filter(
@@ -143,7 +139,7 @@ export function getAllowedExtensions(
 /** Returns MIME-type list based on whether ETL4LM is deployed. */
 export function getAllowedMimeTypes(
     enableEtl4lm: boolean,
-    mediaEnabled: boolean = knowledgeUploadCapabilities.media
+    mediaEnabled = false
 ): readonly string[] {
     const mimeTypes = enableEtl4lm ? ALLOWED_MIME_TYPES : ALLOWED_MIME_TYPES_NO_ETL4LM;
     const mimeTypesWithoutMedia = mimeTypes.filter(
@@ -157,7 +153,7 @@ export function getAllowedMimeTypes(
 /** Returns the `<input accept="">` value for the current ETL4LM mode. */
 export function getFileInputAccept(
     enableEtl4lm: boolean,
-    mediaEnabled: boolean = knowledgeUploadCapabilities.media
+    mediaEnabled = false
 ): string {
     return getAllowedExtensions(enableEtl4lm, mediaEnabled).map((e) => `.${e}`).join(",");
 }

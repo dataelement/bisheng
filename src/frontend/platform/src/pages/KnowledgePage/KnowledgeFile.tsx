@@ -15,6 +15,7 @@ import { BookIcon } from "@/components/bs-icons/knowledge";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { toast, useToast } from "@/components/bs-ui/toast/use-toast";
@@ -42,11 +43,18 @@ const enum KnowledgeBaseStatus {
     Failed = 4       // Document knowledge base rebuild failed status
 }
 
-const KB_MANAGE_PERMISSION_IDS = [
-    'manage_kb_owner',
-    'manage_kb_manager',
-    'manage_kb_viewer',
-]
+const KB_MANAGE_ACTION = 'manage_permission'
+const KB_ROW_ACTIONS = ['edit', 'delete', KB_MANAGE_ACTION]
+
+interface KnowledgeListRow {
+    id: string | number;
+    state: number;
+    actions?: string[];
+    name: string;
+    description?: string;
+    update_time: string;
+    user_name?: string;
+}
 
 function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }) {
     const { t } = useTranslation('knowledge')
@@ -338,40 +346,47 @@ export default function KnowledgeFile() {
     // Permission management state
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
+    const {
+        actions: rowActions,
+        loading: rowActionsLoading,
+        load: loadRowActions,
+    } = useLazyResourceActions('knowledge_library', KB_ROW_ACTIONS);
 
     // F027: cursor-based infinite scroll; no `total` / `page` anymore.
     const { data: datalist, loading, hasMore, search, reload, loadMore } = useInfiniteCursorTable(
         { cancelLoadingWhenReload: true },
         (param) =>
-            readFileLibDatabase({ cursor: param.cursor, pageSize: param.pageSize, name: param.keyword, permissionId: 'view_kb' }),
+            readFileLibDatabase({ cursor: param.cursor, pageSize: param.pageSize, name: param.keyword, action: 'visible' }),
     )
 
     // Permission levels for badge display
     // 列表已由后端 get_knowledge 按 ReBAC 过滤；勿再用批量 check 二次过滤，否则与 FGA/缓存短暂不同步时会出现「接口有数据但表格空白」。
     const visibleLibs = datalist;
-    const hasListPermission = (el: any, permissionId: string) =>
-        Array.isArray(el.permission_ids) && el.permission_ids.includes(permissionId);
-    const canEdit = (el: any) =>
-        hasListPermission(el, 'edit_kb');
-    const canDelete = (el: any) =>
-        hasListPermission(el, 'delete_kb');
+    const hasAction = (el: KnowledgeListRow, action: string) =>
+        Array.isArray(el.actions) && el.actions.includes(action);
+    const hasRowAction = (el: KnowledgeListRow, action: string) =>
+        rowActions[String(el.id)]?.includes(action) ?? false;
+    const canEdit = (el: KnowledgeListRow) =>
+        hasRowAction(el, 'edit');
+    const canDelete = (el: KnowledgeListRow) =>
+        hasRowAction(el, 'delete');
     // PRD 3.3.3：「创建」「复制」与 ReBAC 编辑权解耦，由 WEB_MENU `create_knowledge` 控制（对齐「创建应用」+ 列表「复制」）
     const canCreateLibrary =
         user.role === 'admin' ||
         (user.web_menu || []).includes('create_knowledge');
-    const canReadRow = (el: any) =>
-        hasListPermission(el, 'view_kb');
+    const canReadRow = (el: KnowledgeListRow) =>
+        hasAction(el, 'visible');
     /** 与 apps.tsx 一致：create_knowledge 菜单 + 对目标库具备使用/可见（can_read） */
-    const canUseCopy = (el: any) => canCreateLibrary && canReadRow(el);
-    const canManageKb = (el: any) =>
-        KB_MANAGE_PERMISSION_IDS.some((permissionId) => hasListPermission(el, permissionId));
-    const isLibraryBusy = (el: any) =>
+    const canUseCopy = (el: KnowledgeListRow) => canCreateLibrary && canReadRow(el);
+    const canManageKb = (el: KnowledgeListRow) =>
+        hasRowAction(el, KB_MANAGE_ACTION);
+    const isLibraryBusy = (el: KnowledgeListRow) =>
         [KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state);
-    const canCopy = (el: any) =>
+    const canCopy = (el: KnowledgeListRow) =>
         canUseCopy(el) && el.state === KnowledgeBaseStatus.Published;
-    const hasRowActions = (el: any) =>
+    const hasRowActions = (el: KnowledgeListRow) =>
         canManageKb(el) || canCopy(el) || canEdit(el) || canDelete(el);
-    const showOperationsColumn = visibleLibs.some((el: any) => isLibraryBusy(el) || hasRowActions(el));
+    const showOperationsColumn = visibleLibs.length > 0;
 
     // Enable polling during copying
     useEffect(() => {
@@ -464,6 +479,25 @@ export default function KnowledgeFile() {
         i18n.loadNamespaces('knowledge');
     }, [i18n]);
 
+    const handleRowMenuOpenChange = async (el: KnowledgeListRow, isOpen: boolean) => {
+        const resourceId = String(el.id);
+        if (!isOpen) {
+            setSelectOpenId((current) => current === resourceId ? null : current);
+            return;
+        }
+        if (isLibraryBusy(el) || copyLoadingId === resourceId) return;
+
+        setSelectOpenId(resourceId);
+        const result = await loadRowActions(resourceId);
+        if (result.hasError) {
+            setSelectOpenId((current) => current === resourceId ? null : current);
+            message({
+                variant: 'error',
+                description: t('error.checkFailed', { ns: 'permission' }),
+            });
+        }
+    };
+
     // Copy knowledge base
     const handleCopy = async (elem) => {
         const newName = `${elem.name}${t('copySuffix')}`;
@@ -483,7 +517,7 @@ export default function KnowledgeFile() {
             return;
         }
 
-        setCopyLoadingId(elem.id);
+        setCopyLoadingId(String(elem.id));
         doing[elem.id] = true;
 
         try {
@@ -530,7 +564,7 @@ export default function KnowledgeFile() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {visibleLibs.map((el: any) => (
+                        {visibleLibs.map((el: KnowledgeListRow) => (
                             <TableRow
                                 key={el.id}
                                 className=""
@@ -579,18 +613,10 @@ export default function KnowledgeFile() {
 
                                 {showOperationsColumn && <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-2">
-                                        {(isLibraryBusy(el) || hasRowActions(el)) && <Select
+                                        {(isLibraryBusy(el) || canReadRow(el)) && <Select
                                             key={`${el.id}-${modalKey}`}
-                                            open={selectOpenId === el.id}
-                                            onOpenChange={(isOpen) => {
-                                                if (isLibraryBusy(el) || !hasRowActions(el)) return;
-                                                if (copyLoadingId !== el.id) {
-                                                    setSelectOpenId(isOpen ? el.id : null);
-                                                } else if (!isOpen) {
-                                                    // If in copying state and about to close, allow closing
-                                                    setSelectOpenId(null);
-                                                }
-                                            }}
+                                            open={selectOpenId === String(el.id)}
+                                            onOpenChange={(isOpen) => void handleRowMenuOpenChange(el, isOpen)}
                                             onValueChange={(selectedValue) => {
                                                 setSelectOpenId(null);
                                                 console.log("Selected value:", selectedValue, "for lib:", el.id);
@@ -615,7 +641,7 @@ export default function KnowledgeFile() {
                                         >
                                             <SelectTrigger
                                                 showIcon={false}
-                                                disabled={copyLoadingId === el.id}
+                                                disabled={copyLoadingId === String(el.id)}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                 }}
@@ -629,16 +655,24 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </>
                                                 ) : (
-                                                    hasRowActions(el) && <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
+                                                    <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
                                                 )}
                                             </SelectTrigger>
-                                            {hasRowActions(el) && <SelectContent
+                                            <SelectContent
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                 }}
                                                 className="z-50 overflow-visible"
                                             >
-                                                {canManageKb(el) && (
+                                                {rowActionsLoading[String(el.id)] && (
+                                                    <SelectItem showIcon={false} value="loading" disabled>
+                                                        <div className="flex gap-2 items-center">
+                                                            <LoaderCircle className="w-4 h-4 animate-spin" />
+                                                            {t('knowledgeRowActions.loading', { ns: 'permission' })}
+                                                        </div>
+                                                    </SelectItem>
+                                                )}
+                                                {!rowActionsLoading[String(el.id)] && canManageKb(el) && (
                                                     <SelectItem showIcon={false} value="permission">
                                                         <div className="flex gap-2 items-center">
                                                             <Shield className="w-4 h-4" />
@@ -646,11 +680,11 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </SelectItem>
                                                 )}
-                                                {canCopy(el) && (
+                                                {!rowActionsLoading[String(el.id)] && canCopy(el) && (
                                                     <SelectItem
                                                         showIcon={false}
                                                         value="copy"
-                                                        disabled={copyLoadingId === el.id}
+                                                        disabled={copyLoadingId === String(el.id)}
                                                     >
                                                         <div className="flex gap-2 items-center" >
                                                             <Copy className="w-4 h-4" />
@@ -658,7 +692,7 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </SelectItem>
                                                 )}
-                                                {canEdit(el) && (
+                                                {!rowActionsLoading[String(el.id)] && canEdit(el) && (
                                                     <SelectItem
                                                         value="set"
                                                         showIcon={false}
@@ -669,7 +703,7 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </SelectItem>
                                                 )}
-                                                {canDelete(el) && (
+                                                {!rowActionsLoading[String(el.id)] && canDelete(el) && (
                                                     <SelectItem
                                                         value="delete"
                                                         showIcon={false}
@@ -680,7 +714,12 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </SelectItem>
                                                 )}
-                                            </SelectContent>}
+                                                {!rowActionsLoading[String(el.id)] && !hasRowActions(el) && (
+                                                    <SelectItem showIcon={false} value="empty" disabled>
+                                                        {t('knowledgeRowActions.empty', { ns: 'permission' })}
+                                                    </SelectItem>
+                                                )}
+                                            </SelectContent>
                                         </Select>}
                                     </div>
                                 </TableCell>}

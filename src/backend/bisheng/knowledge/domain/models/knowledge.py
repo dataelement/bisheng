@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Optional, Union
 
 from pydantic import BaseModel, field_validator
-from sqlalchemy import Boolean, Integer, String
+from sqlalchemy import Boolean, Index, Integer, String
 from sqlmodel import Column, DateTime, Field, case, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
@@ -13,13 +13,16 @@ from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, name_sort_clauses
 from bisheng.core.database.manager import get_database_connection
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
-from bisheng.user.domain.models.user import UserDao
 
 
 class KnowledgeTypeEnum(Enum):
     QA = 1  # QAThe knowledge base upon
     NORMAL = 0  # Docly Knowledge Base
-    PRIVATE = 2  # Workbench Personal Knowledge Base
+    # Deprecated: the workbench personal knowledge base was retired; kept only
+    # so historical rows with type=2 continue to decode. New code must not
+    # create PRIVATE knowledge bases and existing list endpoints stop serving
+    # them (see /api/v1/knowledge).
+    PRIVATE = 2  # Workbench Personal Knowledge Base (deprecated)
     SPACE = 3  # Knowledge Space
 
 
@@ -114,7 +117,26 @@ class KnowledgeBase(SQLModelSerializable):
 
 
 class Knowledge(KnowledgeBase, table=True):
+    __table_args__ = (
+        Index(
+            "uq_knowledge_creation_request",
+            "tenant_id",
+            "user_id",
+            "type",
+            "creation_request_id",
+            unique=True,
+        ),
+    )
+
     id: int | None = Field(default=None, primary_key=True)
+    creation_request_id: str | None = Field(
+        default=None,
+        sa_column=Column(String(64), nullable=True),
+    )
+    creation_payload_hash: str | None = Field(
+        default=None,
+        sa_column=Column(String(64), nullable=True),
+    )
 
 
 class KnowledgeRead(KnowledgeBase):
@@ -122,7 +144,7 @@ class KnowledgeRead(KnowledgeBase):
     user_name: str | None = None
     copiable: bool | None = None
     is_pinned: bool | None = False
-    permission_ids: list[str] | None = None
+    actions: list[str] | None = None
 
 
 class KnowledgeUpdate(BaseModel):
@@ -165,6 +187,24 @@ class KnowledgeCreate(BaseModel):
 
 
 class KnowledgeDao(KnowledgeBase):
+    @classmethod
+    async def aget_by_creation_request(
+        cls,
+        *,
+        tenant_id: int,
+        user_id: int,
+        knowledge_type: int,
+        creation_request_id: str,
+    ) -> Knowledge | None:
+        async with get_async_db_session() as session:
+            statement = select(Knowledge).where(
+                Knowledge.tenant_id == tenant_id,
+                Knowledge.user_id == user_id,
+                Knowledge.type == knowledge_type,
+                Knowledge.creation_request_id == creation_request_id,
+            )
+            return (await session.exec(statement)).first()
+
     @classmethod
     def insert_one(cls, data: Knowledge) -> Knowledge:
         with get_sync_db_session() as session:
@@ -440,73 +480,6 @@ class KnowledgeDao(KnowledgeBase):
             return session.scalar(select(Knowledge.id).where(*filters))
 
     @classmethod
-    def judge_knowledge_permission(cls, user_name: str, knowledge_ids: list[int]) -> list[Knowledge]:
-        """Filter knowledge_ids to those the user can read.
-
-        F008 follow-up: delegates to ReBAC via PermissionService instead of
-        the legacy role_access table. Admin still gets the full set; owners
-        and tenant-admin scope are picked up by list_accessible_ids' implicit
-        scope expansion.
-        """
-        if not knowledge_ids:
-            return []
-        user_info = UserDao.get_user_by_username(user_name)
-        if not user_info:
-            return []
-
-        from bisheng.permission.domain.services.owner_service import _run_async_safe
-        from bisheng.permission.domain.services.permission_service import PermissionService
-        from bisheng.user.domain.services.auth import LoginUser
-
-        login_user = LoginUser.init_login_user_sync(
-            user_id=user_info.user_id,
-            user_name=user_name,
-        )
-        accessible_ids = _run_async_safe(
-            PermissionService.list_accessible_ids(
-                user_id=login_user.user_id,
-                relation="can_read",
-                object_type="knowledge_library",
-                login_user=login_user,
-            ),
-        )
-        if accessible_ids is None:
-            return cls.get_list_by_ids(knowledge_ids)
-
-        accessible_set = {int(x) for x in accessible_ids}
-        filtered = [kid for kid in knowledge_ids if int(kid) in accessible_set]
-        return cls.get_list_by_ids(filtered) if filtered else []
-
-    @classmethod
-    async def ajudge_knowledge_permission(cls, user_name: str, knowledge_ids: list[int]) -> list[Knowledge]:
-        """Async variant of :meth:`judge_knowledge_permission`. Same semantics."""
-        if not knowledge_ids:
-            return []
-        user_info = await UserDao.aget_user_by_username(user_name)
-        if not user_info:
-            return []
-
-        from bisheng.permission.domain.services.permission_service import PermissionService
-        from bisheng.user.domain.services.auth import LoginUser
-
-        login_user = await LoginUser.init_login_user(
-            user_id=user_info.user_id,
-            user_name=user_name,
-        )
-        accessible_ids = await PermissionService.list_accessible_ids(
-            user_id=login_user.user_id,
-            relation="can_read",
-            object_type="knowledge_library",
-            login_user=login_user,
-        )
-        if accessible_ids is None:
-            return await cls.aget_list_by_ids(knowledge_ids)
-
-        accessible_set = {int(x) for x in accessible_ids}
-        filtered = [kid for kid in knowledge_ids if int(kid) in accessible_set]
-        return await cls.aget_list_by_ids(filtered) if filtered else []
-
-    @classmethod
     def filter_knowledge_by_ids(
         cls, knowledge_ids: list[int], keyword: str = None, page: int = 0, limit: int = 0
     ) -> (list[Knowledge], int):
@@ -533,9 +506,26 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
-    def generate_all_knowledge_filter(cls, statement, name: str = None, knowledge_type: KnowledgeTypeEnum = None):
+    def generate_all_knowledge_filter(
+        cls,
+        statement,
+        name: str = None,
+        knowledge_type: KnowledgeTypeEnum = None,
+        id_in: list[int] | None = None,
+    ):
         if knowledge_type is not None:
             statement = statement.where(Knowledge.type == knowledge_type.value)
+
+        # F048 visible-first refactor: `id_in` narrows the DB scan to the set
+        # of ids the caller can already see (via OpenFGA ListObjects). An empty
+        # list is treated as "nothing visible" so the caller does not need to
+        # short-circuit separately. `None` keeps the historical unfiltered
+        # semantics (admin-bypass path).
+        if id_in is not None:
+            if not id_in:
+                statement = statement.where(text("0=1"))
+            else:
+                statement = statement.where(Knowledge.id.in_(id_in))
 
         if name:
             conditions = [col(Knowledge.name).like(f"%{name}%"), col(Knowledge.description).like(f"%{name}%")]
@@ -572,11 +562,23 @@ class KnowledgeDao(KnowledgeBase):
         limit: int = 0,
         preferred_ids: list[int] | None = None,
         cursor: Sequence | None = None,
+        id_in: list[int] | None = None,
     ) -> list[Knowledge]:
         """Admin/scoped-super-admin path; same cursor semantics as
-        ``aget_user_knowledge`` (F027 AD-15)."""
+        ``aget_user_knowledge`` (F027 AD-15).
+
+        ``id_in`` optionally scopes the SELECT to a pre-computed set of
+        visible ids. Callers on the F048 visible-first path pass the id set
+        returned by ``F048PermissionRuntime.list_visible_objects``; the admin
+        bypass path passes ``None``.
+        """
         statement = select(Knowledge)
-        statement = cls.generate_all_knowledge_filter(statement, name=name, knowledge_type=knowledge_type)
+        statement = cls.generate_all_knowledge_filter(
+            statement,
+            name=name,
+            knowledge_type=knowledge_type,
+            id_in=id_in,
+        )
 
         if cursor is not None:
             statement = cls._apply_keyset_where(statement, sort_by, cursor)
@@ -775,6 +777,31 @@ class KnowledgeDao(KnowledgeBase):
             return result.all()
 
     @classmethod
+    async def async_get_joined_spaces_by_visible_ids(
+        cls,
+        space_ids: list[int],
+        *,
+        tenant_id: int,
+        exclude_creator_id: int,
+        order_by: str = "update_time",
+    ) -> list[Knowledge]:
+        """Load one bounded joined-space ID chunk under canonical DB filters."""
+
+        if not space_ids:
+            return []
+        statement = select(Knowledge).where(
+            Knowledge.id.in_(space_ids),
+            Knowledge.tenant_id == tenant_id,
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            Knowledge.state == KnowledgeState.PUBLISHED.value,
+            Knowledge.user_id != exclude_creator_id,
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     def get_public_spaces(cls, order_by: str = "update_time") -> list[Knowledge]:
         """Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square)"""
         statement = select(Knowledge).where(
@@ -952,8 +979,8 @@ class KnowledgeDao(KnowledgeBase):
     @staticmethod
     def _apply_space_order(statement, order_by: str):
         if order_by == "create_time":
-            return statement.order_by(Knowledge.create_time.desc())
+            return statement.order_by(Knowledge.create_time.desc(), Knowledge.id.desc())
         elif order_by == "name":
-            return statement.order_by(Knowledge.name.asc())
+            return statement.order_by(Knowledge.name.asc(), Knowledge.id.asc())
         else:
-            return statement.order_by(Knowledge.update_time.desc())
+            return statement.order_by(Knowledge.update_time.desc(), Knowledge.id.desc())

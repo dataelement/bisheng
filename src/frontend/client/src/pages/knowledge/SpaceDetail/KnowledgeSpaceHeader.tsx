@@ -14,6 +14,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
+import { useRecoilValue } from "recoil";
+import { bishengConfState } from "~/pages/appChat/store/atoms";
 
 /**
  * Space header: identity (name / info / share) on the left, batch + add actions
@@ -89,6 +91,7 @@ export function KnowledgeSpaceHeader({
     canManageMembers = false,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
+    const bishengConfig = useRecoilValue(bishengConfState);
     const isH5 = usePrefersMobileLayout();
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
@@ -204,7 +207,7 @@ export function KnowledgeSpaceHeader({
                                                 className="z-[999] max-w-md"
                                             >
                                                 {localize(
-                                                    knowledgeUploadCapabilities.media
+                                                    bishengConfig?.enable_media_upload
                                                         ? "com_knowledge.upload_file_types_tip"
                                                         : "com_knowledge.upload_file_types_tip_without_media",
                                                 )}

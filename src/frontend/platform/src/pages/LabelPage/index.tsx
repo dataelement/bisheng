@@ -21,14 +21,14 @@ import { Link } from "react-router-dom";
 const useAppsOptions = () => {
     const [options, setOptions] = useState([])
     const optionsRef = useRef([])
-    const pageRef = useRef(1)
+    const cursorRef = useRef<string | null>(null)
     const keywordRef = useRef("")
     // 未标注数map
     const unmarkedMap = useRef({})
-    const loadApps = () => {
-        const page = pageRef.current
-        getChatOnlineApi(page, keywordRef.current, -1).then((res: any) => {
-            const newOptions = res.map(el => {
+    const loadApps = (append = false) => {
+        getChatOnlineApi(append ? cursorRef.current : null, keywordRef.current, -1).then((res: any) => {
+            const list = res.list || []
+            const newOptions = list.map(el => {
                 unmarkedMap.current[el.id] = el.count
                 return {
                     label: el.name,
@@ -36,8 +36,9 @@ const useAppsOptions = () => {
                     count: el.count
                 }
             })
-            optionsRef.current = page === 1 ? newOptions : [...optionsRef.current, ...newOptions]
+            optionsRef.current = append ? [...optionsRef.current, ...newOptions] : newOptions
             setOptions(optionsRef.current)
+            cursorRef.current = res.nextCursor
         })
     }
     useEffect(() => {
@@ -49,15 +50,14 @@ const useAppsOptions = () => {
         unmarkedMap: unmarkedMap.current,
         reload: () => {
             keywordRef.current = ''
-            pageRef.current = 1
+            cursorRef.current = null
             loadApps()
         },
         loadMore: () => {
-            pageRef.current++
-            loadApps()
+            loadApps(true)
         },
         search: (keyword) => {
-            pageRef.current = 1
+            cursorRef.current = null
             keywordRef.current = keyword
             loadApps()
         }

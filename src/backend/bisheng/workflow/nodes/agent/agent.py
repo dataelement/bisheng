@@ -130,7 +130,10 @@ class WorkflowCitationToolWrapper(BaseTool):
         if not self._has_knowledge_rag_tool():
             return self.tool.invoke({"query": query}, config=config)
 
-        retrieval_result = self.tool.knowledge_retriever_tool.invoke({"query": query}, config=config)
+        # Called directly rather than through `invoke`: the retriever is this
+        # wrapper's internal step, and opening a run for it adds a stray tool
+        # entry named after the retriever instead of the knowledge base.
+        retrieval_result = self.tool.knowledge_retriever_tool._run(query)
         return self._format_knowledge_results(retrieval_result)
 
     async def _arun(self, query: str, config: RunnableConfig = None, **kwargs: Any) -> Any:
@@ -139,7 +142,7 @@ class WorkflowCitationToolWrapper(BaseTool):
         if not self._has_knowledge_rag_tool():
             return await self.tool.ainvoke({"query": query}, config=config)
 
-        retrieval_result = await self.tool.knowledge_retriever_tool.ainvoke({"query": query}, config=config)
+        retrieval_result = await self.tool.knowledge_retriever_tool._arun(query)
         return await self._aformat_knowledge_results(retrieval_result)
 
 

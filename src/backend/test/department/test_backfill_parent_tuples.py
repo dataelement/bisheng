@@ -32,9 +32,11 @@ def _patch_edges(edges):
 
 
 def _patch_writer():
+    permissions = AsyncMock()
+    permissions.apply_changes = AsyncMock()
     return patch(
-        "bisheng.permission.domain.services.permission_service.PermissionService.batch_write_tuples",
-        new_callable=AsyncMock,
+        "bisheng.permission.application.get_permission_relation_api",
+        new=AsyncMock(return_value=permissions),
     )
 
 
@@ -57,8 +59,18 @@ class TestRun:
             rc = await mod.run(apply=True)
         assert rc == 0
         writer.assert_awaited_once()
-        ops = writer.await_args.args[0]
-        assert [(o.action, o.user, o.relation, o.object) for o in ops] == [
-            ("write", "department:1", "parent", "department:5"),
-            ("write", "department:5", "parent", "department:9"),
+        permissions = writer.return_value
+        permissions.apply_changes.assert_awaited_once()
+        changes = permissions.apply_changes.await_args.args[0]
+        assert [
+            (
+                change.action,
+                change.relation.subject.subject_id,
+                change.relation.relation,
+                change.relation.resource.resource_id,
+            )
+            for change in changes
+        ] == [
+            ("grant", "1", "parent", "5"),
+            ("grant", "5", "parent", "9"),
         ]

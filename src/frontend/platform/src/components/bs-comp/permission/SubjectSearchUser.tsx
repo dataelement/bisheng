@@ -1,9 +1,7 @@
 import { Checkbox } from "@/components/bs-ui/checkBox"
-import { getResourceGrantUsersApi } from "@/controllers/API/permission"
-import { getGroupUsersApi, getUserMembershipGroupsApi, getUsersApi } from "@/controllers/API/user"
-import { userContext } from "@/contexts/userContext"
 import { Search, User as UserIcon } from "lucide-react"
-import { useCallback, useContext, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { getGrantSubjectUsersApi } from "@/controllers/API/permission"
 import { useTranslation } from "react-i18next"
 import { ResourceType } from "./types"
 import { SelectedSubject } from "./types"
@@ -35,7 +33,6 @@ export function SubjectSearchUser({
   disabledIds = [],
 }: SubjectSearchUserProps) {
   const { t } = useTranslation('permission')
-  const { user } = useContext(userContext)
   const [keyword, setKeyword] = useState('')
   const [results, setResults] = useState<UserSearchResult[]>([])
   const [hasMore, setHasMore] = useState(true)
@@ -47,11 +44,6 @@ export function SubjectSearchUser({
   // Latest keyword captured for the in-flight fetch chain — guards against
   // races where a new search starts while an older page is still resolving.
   const activeKeywordRef = useRef('')
-  // Peers ("my fellow group members") aren't returned by `/user/list` for
-  // non-admin users, who only see the admin-scoped union from the backend.
-  // We fetch the peer set once per session and filter it client-side on
-  // each search so we don't pay the N×getGroupUsersApi cost on every keystroke.
-  const peerCacheRef = useRef<UserSearchResult[] | null>(null)
   // IntersectionObserver can fire several `isIntersecting` callbacks while a
   // page is still in flight; React state updates are async, so a `useState`
   // gate isn't tight enough. The refs below are written synchronously, which
@@ -61,94 +53,28 @@ export function SubjectSearchUser({
   const loadingRef = useRef(false)
   const loadingMoreRef = useRef(false)
 
-  const filterPeerUsers = useCallback((users: UserSearchResult[], name: string) => {
-    const keywordLower = name.trim().toLowerCase()
-    if (!keywordLower) return users
-    return users.filter((item) => {
-      const fields = [
-        item.user_name,
-        item.person_id,
-        item.external_id,
-        item.department_path,
-        item.primary_department_path,
-      ]
-      return fields.some((field) => String(field || '').toLowerCase().includes(keywordLower))
-    })
-  }, [])
 
   // Merge sources preserving the FIRST appearance order — a later source's
   // duplicate row only contributes its non-empty fields. This used to sort
   // alphabetically, which scrambled paginated appends (the backend orders by
   // user_id desc, so a new page can land anywhere in the alphabet) and made
   // newly-loaded rows look "missing" from the user's perspective.
-  const mergeUserResults = useCallback((sources: UserSearchResult[][]) => {
-    const merged = new Map<number, UserSearchResult>()
-    for (const rows of sources) {
-      for (const row of rows) {
-        const existing = merged.get(row.user_id)
-        if (!existing) {
-          merged.set(row.user_id, row)
-          continue
-        }
-        merged.set(row.user_id, {
-          ...existing,
-          person_id: existing.person_id || row.person_id,
-          external_id: existing.external_id || row.external_id,
-          department_path: existing.department_path || row.department_path,
-          primary_department_path: existing.primary_department_path || row.primary_department_path,
-        })
-      }
-    }
-    return Array.from(merged.values())
-  }, [])
 
-  const loadAllPeerUsers = useCallback(async (controller: AbortController): Promise<UserSearchResult[]> => {
-    if (peerCacheRef.current) return peerCacheRef.current
-    const currentUserId = Number(user?.user_id)
-    if (!currentUserId || controller.signal.aborted) return []
-
-    const groups = await getUserMembershipGroupsApi(currentUserId, { signal: controller.signal })
-    if (controller.signal.aborted || !Array.isArray(groups) || groups.length === 0) {
-      peerCacheRef.current = []
-      return []
-    }
-
-    const memberSets = await Promise.allSettled(
-      groups
-        .map((group) => Number(group?.id))
-        .filter((groupId) => Number.isFinite(groupId) && groupId > 0)
-        .map((groupId) => getGroupUsersApi(groupId)),
-    )
-    if (controller.signal.aborted) return []
-
-    const peers = memberSets.flatMap((result) => {
-      if (result.status !== 'fulfilled' || !Array.isArray(result.value)) return []
-      return result.value as UserSearchResult[]
-    })
-    peerCacheRef.current = peers
-    return peers
-  }, [user?.user_id])
 
   const fetchUsersPage = useCallback(async (
     name: string,
     pageNum: number,
     signal: AbortSignal,
   ): Promise<UserSearchResult[]> => {
-    if (resourceType && resourceId) {
-      const rows = await getResourceGrantUsersApi(resourceType, resourceId, {
-        keyword: name,
-        page: pageNum,
-        page_size: PAGE_SIZE,
-      })
-      if (signal.aborted) return []
-      return Array.isArray(rows) ? rows : []
-    }
-    const res = await getUsersApi(
-      { name, page: pageNum, pageSize: PAGE_SIZE },
+    if (!resourceType || !resourceId) return []
+    const res = await getGrantSubjectUsersApi(
+      resourceType,
+      resourceId,
+      { keyword: name, page: pageNum, pageSize: PAGE_SIZE },
       { signal },
     )
     if (signal.aborted) return []
-    return res?.data || []
+    return (res?.data || []) as UserSearchResult[]
   }, [resourceId, resourceType])
 
   const resetAndLoad = useCallback(async (name: string) => {
@@ -164,14 +90,12 @@ export function SubjectSearchUser({
     setResults([])
     setHasMore(true)
     try {
-      const usersTask = fetchUsersPage(name, 1, controller.signal)
-      const peersTask = resourceType && resourceId
-        ? Promise.resolve<UserSearchResult[]>([])
-        : loadAllPeerUsers(controller)
-      const [users, peers] = await Promise.all([usersTask, peersTask])
+      const users = await fetchUsersPage(name, 1, controller.signal)
       if (controller.signal.aborted || activeKeywordRef.current !== name) return
-      const filteredPeers = filterPeerUsers(peers, name)
-      setResults(mergeUserResults([users, filteredPeers]))
+      // No peer supplement any more: the resource-scoped endpoint already
+      // returns everyone this manager may grant, so the extra group lookups the
+      // org-management endpoint needed are gone.
+      setResults(users)
       // Backend `_list_knowledge_space_grant_users` filters soft-deleted users
       // AFTER paginating, so a page may legitimately return fewer than
       // PAGE_SIZE rows while more pages still exist. Treat any non-empty
@@ -186,7 +110,7 @@ export function SubjectSearchUser({
         setLoading(false)
       }
     }
-  }, [fetchUsersPage, filterPeerUsers, loadAllPeerUsers, mergeUserResults, resourceId, resourceType])
+  }, [fetchUsersPage])
 
   const loadNext = useCallback(async () => {
     // Sync gate: refs flip synchronously so back-to-back observer fires can't
@@ -202,11 +126,9 @@ export function SubjectSearchUser({
     try {
       const rows = await fetchUsersPage(name, nextPage, controller.signal)
       if (controller.signal.aborted || activeKeywordRef.current !== name) return
-      // Dedupe against rows already in the displayed list (peers may overlap).
       setResults((prev) => {
         const seen = new Set(prev.map((r) => r.user_id))
-        const additions = rows.filter((r) => !seen.has(r.user_id))
-        return mergeUserResults([prev, additions])
+        return [...prev, ...rows.filter((r) => !seen.has(r.user_id))]
       })
       pageRef.current = nextPage
       hasMoreRef.current = rows.length > 0
@@ -217,7 +139,7 @@ export function SubjectSearchUser({
       loadingMoreRef.current = false
       setLoadingMore(false)
     }
-  }, [fetchUsersPage, mergeUserResults])
+  }, [fetchUsersPage])
 
   useEffect(() => {
     resetAndLoad('')
@@ -239,6 +161,7 @@ export function SubjectSearchUser({
     }
     const root = scrollRef.current
     if (!node || !root) return
+    if (typeof IntersectionObserver === 'undefined') return
     observerRef.current = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) loadNext()

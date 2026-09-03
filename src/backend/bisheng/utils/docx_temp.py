@@ -1,7 +1,7 @@
 import os
 import tempfile
 from pathlib import Path
-from typing import IO, Dict, List, Any, Tuple
+from typing import IO, Any
 from urllib.parse import unquote, urlparse
 
 import pandas as pd
@@ -28,10 +28,10 @@ def find_lcs(str1, str2):
                     maxNum = record[i + 1][j + 1]
                     p = i + 1
 
-    return str1[p - maxNum: p], maxNum
+    return str1[p - maxNum : p], maxNum
 
 
-class DocxTemplateRender(object):
+class DocxTemplateRender:
     def __init__(self, filepath: str = None, file_content: IO[bytes] = None):
         self.filepath = filepath
         self.file_content = file_content
@@ -58,10 +58,14 @@ class DocxTemplateRender(object):
 
                 # Insert an image with a maximum width of6Inch
                 run = paragraph.runs[0] if paragraph.runs else paragraph.add_run()
-                logger.debug(f"[Simple Illustration] Ready atrunInsert a picture in therunQuantity: {len(paragraph.runs)}")
+                logger.debug(
+                    f"[Simple Illustration] Ready atrunInsert a picture in therunQuantity: {len(paragraph.runs)}"
+                )
 
                 run.add_picture(image_path, width=Inches(6))
-                logger.info(f"[Simple Illustration] ✅ Successfully inserted image: {image_path}, size: {file_size}byte")
+                logger.info(
+                    f"[Simple Illustration] ✅ Successfully inserted image: {image_path}, size: {file_size}byte"
+                )
             else:
                 # Image file does not exist, use original path
                 logger.error(f"[Simple Illustration] ❌ Image file does not exist: {image_path}")
@@ -71,7 +75,9 @@ class DocxTemplateRender(object):
                     paragraph.add_run(image_path)
         except Exception as e:
             # Inserting image failed, show originalURL
-            logger.error(f"[Simple Illustration] ❌ Failed to insert image: {image_path}, Error type: {type(e).__name__}, Error-free: {str(e)}")
+            logger.error(
+                f"[Simple Illustration] ❌ Failed to insert image: {image_path}, Error type: {type(e).__name__}, Error-free: {e!s}"
+            )
             if paragraph.runs:
                 paragraph.runs[0].text = image_path
             else:
@@ -181,16 +187,20 @@ class DocxTemplateRender(object):
             # Check file size and format
             file_size = os.path.getsize(image_path)
             file_ext = os.path.splitext(image_path)[1].lower()
-            logger.debug(f"[Image Rendering] Ready to insert image: path={image_path}, size={file_size}byte, ext={file_ext}")
+            logger.debug(
+                f"[Image Rendering] Ready to insert image: path={image_path}, size={file_size}byte, ext={file_ext}"
+            )
 
             # Directly in the currentrunInsert image in
             run.add_picture(image_path, width=Inches(4))  # Default Width4Inch
             # Emptyruntext in to avoid displaying excess text
             run.text = ""
-            logger.info(f"[Image Rendering] InsiderunLocation Insert Picture Successful: {image_path}, size={file_size}byte")
+            logger.info(
+                f"[Image Rendering] InsiderunLocation Insert Picture Successful: {image_path}, size={file_size}byte"
+            )
         except Exception as e:
             logger.error(f"[Image Rendering] runLocation Insert Picture Failed: {image_path}, Error-free: {e}")
-            logger.debug(f"[Image Rendering] Error Details of error: {type(e).__name__}: {str(e)}")
+            logger.debug(f"[Image Rendering] Error Details of error: {type(e).__name__}: {e!s}")
             try:
                 # Use original insertion method as backup
                 logger.info(f"[Image Rendering] Try alternate insertion methods: {image_path}")
@@ -203,13 +213,17 @@ class DocxTemplateRender(object):
                 self._insert_image(para_obj, image_path, alt_text)
                 logger.info(f"[Image Rendering] Alternate method inserted successfully: {image_path}")
             except Exception as backup_e:
-                logger.error(f"[Image Rendering] Alternate insertion methods also failed: {image_path}, Error-free: {backup_e}")
-                logger.error(f"[Image Rendering] Alternate Method Detail Error: {type(backup_e).__name__}: {str(backup_e)}")
+                logger.error(
+                    f"[Image Rendering] Alternate insertion methods also failed: {image_path}, Error-free: {backup_e}"
+                )
+                logger.error(
+                    f"[Image Rendering] Alternate Method Detail Error: {type(backup_e).__name__}: {backup_e!s}"
+                )
                 # If all methods fail, use the original path
                 run.text = image_path
                 logger.warning(f"[Image Rendering] All insert methods failed, use original path text: {image_path}")
 
-    def _replace_placeholder_in_structured_paragraph(self, paragraph, placeholder: str, table_data: List[List[str]]):
+    def _replace_placeholder_in_structured_paragraph(self, paragraph, placeholder: str, table_data: list[list[str]]):
         """
         Simplified table replacement: insert the table directly at the placeholder without adding any structural tags
         """
@@ -286,7 +300,7 @@ class DocxTemplateRender(object):
         Work with hybrid placeholders in paragraphs in positional order
 
         Args:
-            doc: WordDocument object  
+            doc: WordDocument object
             placeholder_map: Placeholder Mapping Dictionary
         """
         # Work with placeholders in all paragraphs
@@ -302,18 +316,20 @@ class DocxTemplateRender(object):
             for placeholder, resource_info in placeholder_map.items():
                 pos = paragraph_text.find(placeholder)
                 if pos != -1:
-                    placeholders_with_positions.append({
-                        'placeholder': placeholder,
-                        'resource_info': resource_info,
-                        'position': pos,
-                        'end_position': pos + len(placeholder)
-                    })
+                    placeholders_with_positions.append(
+                        {
+                            "placeholder": placeholder,
+                            "resource_info": resource_info,
+                            "position": pos,
+                            "end_position": pos + len(placeholder),
+                        }
+                    )
 
             if not placeholders_with_positions:
                 continue
 
             # Sort by location from to post-processing
-            placeholders_with_positions.sort(key=lambda x: x['position'])
+            placeholders_with_positions.sort(key=lambda x: x["position"])
 
             # Split paragraph into text segments and placeholder segments
             self._process_mixed_content_paragraph(doc, p, placeholders_with_positions, paragraph_text)
@@ -341,13 +357,14 @@ class DocxTemplateRender(object):
                                             # Marker placeholder processed, no need to update text
                                             cell_text = ""
                                         except Exception as e:
-                                            logger.error(f"❌ Table Cell Insert Picture Failed: {str(e)}")
+                                            logger.error(f"❌ Table Cell Insert Picture Failed: {e!s}")
                                             # Show file name on failure
                                             cell_text = cell_text.replace(placeholder, os.path.basename(image_path))
                                     else:
                                         # Image file does not exist, display path
-                                        cell_text = cell_text.replace(placeholder,
-                                                                      resource_info.get("path", placeholder))
+                                        cell_text = cell_text.replace(
+                                            placeholder, resource_info.get("path", placeholder)
+                                        )
                                 elif resource_info["type"] == "excel":
                                     cell_text = cell_text.replace(placeholder, "[ExcelTable Filter]")
                                 elif resource_info["type"] == "csv":
@@ -368,7 +385,7 @@ class DocxTemplateRender(object):
     def _process_mixed_content_paragraph(self, doc, paragraph, placeholders_with_positions, original_text):
         """
         Working with paragraphs with mixed content - Insert images and tables inline
-        
+
         Args:
             doc: WordDocument object
             paragraph: Original paragraph
@@ -384,31 +401,23 @@ class DocxTemplateRender(object):
 
         for item in placeholders_with_positions:
             # Add text before placeholder
-            if item['position'] > last_end:
-                text_before = original_text[last_end:item['position']]
+            if item["position"] > last_end:
+                text_before = original_text[last_end : item["position"]]
                 if text_before:  # Keep all text, including whitespaces
-                    segments.append({
-                        'type': 'text',
-                        'content': text_before
-                    })
+                    segments.append({"type": "text", "content": text_before})
 
             # Add the resource corresponding to the placeholder
-            segments.append({
-                'type': 'resource',
-                'placeholder': item['placeholder'],
-                'resource_info': item['resource_info']
-            })
+            segments.append(
+                {"type": "resource", "placeholder": item["placeholder"], "resource_info": item["resource_info"]}
+            )
 
-            last_end = item['end_position']
+            last_end = item["end_position"]
 
         # Add last remaining text
         if last_end < len(original_text):
             text_after = original_text[last_end:]
             if text_after:
-                segments.append({
-                    'type': 'text',
-                    'content': text_after
-                })
+                segments.append({"type": "text", "content": text_after})
 
         # Clear original paragraph
         paragraph.clear()
@@ -420,24 +429,25 @@ class DocxTemplateRender(object):
         while i < len(segments):
             segment = segments[i]
 
-            if segment['type'] == 'text':
+            if segment["type"] == "text":
                 # Add text content directly without any cleanup
-                current_paragraph.add_run(segment['content'])
+                current_paragraph.add_run(segment["content"])
 
-            elif segment['type'] == 'resource':
-                resource_info = segment['resource_info']
+            elif segment["type"] == "resource":
+                resource_info = segment["resource_info"]
 
-                if resource_info['type'] == 'image':
+                if resource_info["type"] == "image":
                     # Images can be really inlined in paragraphs
-                    self._insert_inline_image(current_paragraph, resource_info['path'],
-                                              resource_info.get('alt_text', ''))
+                    self._insert_inline_image(
+                        current_paragraph, resource_info["path"], resource_info.get("alt_text", "")
+                    )
 
-                elif resource_info['type'] in ['excel', 'csv', 'markdown_table']:
+                elif resource_info["type"] in ["excel", "csv", "markdown_table"]:
                     # Table Inline Processing: Insert the table at its current position, then create a new paragraph for subsequent content
-                    if resource_info['type'] == 'markdown_table':
+                    if resource_info["type"] == "markdown_table":
                         table_data, alignments = self._markdown_table_to_data(resource_info["content"])
                     else:
-                        table_data = resource_info.get('table_data', [["Table data parsing failed"]])
+                        table_data = resource_info.get("table_data", [["Table data parsing failed"]])
                         alignments = None
 
                     # Insert table immediately after current paragraph
@@ -453,8 +463,9 @@ class DocxTemplateRender(object):
 
                     # Create a new paragraph for the subsequent text and update itcurrent_paragraph
                     if i + 1 < len(segments):
-                        next_paragraph = self._create_new_paragraph_after_table(paragraph_parent, paragraph_index + 1,
-                                                                                original_style_info)
+                        next_paragraph = self._create_new_paragraph_after_table(
+                            paragraph_parent, paragraph_index + 1, original_style_info
+                        )
                         current_paragraph = next_paragraph
 
             i += 1
@@ -462,13 +473,13 @@ class DocxTemplateRender(object):
     def _insert_table_inline(self, current_paragraph, table_data, segments, current_index):
         """
         Insert tables inline for text continuity
-        
+
         Args:
             current_paragraph: Current paragraph
             table_data: Form Data
             segments: All phrases
             current_index: Current Snippet Index
-            
+
         Returns:
             int: Number of subsequent text fragments skipped
         """
@@ -477,8 +488,8 @@ class DocxTemplateRender(object):
         self._insert_table(table_paragraph, table_data)
 
         # 2. Check if there is a subsequent text fragment and create a new one if there is one
-        remaining_segments = segments[current_index + 1:]
-        text_segments = [seg for seg in remaining_segments if seg['type'] == 'text']
+        remaining_segments = segments[current_index + 1 :]
+        text_segments = [seg for seg in remaining_segments if seg["type"] == "text"]
 
         if text_segments:
             # Create a new paragraph for the subsequent text
@@ -486,7 +497,7 @@ class DocxTemplateRender(object):
 
             # Add all subsequent text fragments to the new paragraph
             for j, seg in enumerate(text_segments):
-                next_text_paragraph.add_run(seg['content'])
+                next_text_paragraph.add_run(seg["content"])
 
             # Returns the number of text fragments skipped (so that the main loop no longer processes these fragments)
             skipped_count = len(text_segments)
@@ -497,10 +508,10 @@ class DocxTemplateRender(object):
     def _create_new_paragraph_after(self, paragraph):
         """
         Create a new paragraph after the specified paragraph
-        
+
         Args:
             paragraph: Topic Paragraph reference
-            
+
         Returns:
             Newly created paragraph object
         """
@@ -513,8 +524,7 @@ class DocxTemplateRender(object):
 
         # Insert a new paragraph after the current paragraph
         paragraph._element.getparent().insert(
-            list(paragraph._element.getparent()).index(paragraph._element) + 1,
-            new_p_element
+            list(paragraph._element.getparent()).index(paragraph._element) + 1, new_p_element
         )
 
         # Returns the wrapped paragraph object
@@ -530,21 +540,22 @@ class DocxTemplateRender(object):
             run.add_picture(image_path, width=Inches(4.0))
             logger.info(f"[Inline Image] ✅ Successfully inserted image inline: {image_path}")
         except Exception as e:
-            logger.error(f"[Inline Image] ❌ Failed to insert image: {str(e)}")
+            logger.error(f"[Inline Image] ❌ Failed to insert image: {e!s}")
             # Insert original image path
             paragraph.add_run(image_path)
 
     def _insert_image_in_table_cell(self, cell, image_path: str):
         """
         Insert a picture in a table cell
-        
+
         Args:
             cell: Table Cell Object
             image_path: Image file path
         """
         try:
-            from docx.shared import Inches
             import os
+
+            from docx.shared import Inches
 
             if not os.path.exists(image_path):
                 logger.warning(f"[Table Cell Picture] Image file does not exist: {image_path}")
@@ -564,10 +575,10 @@ class DocxTemplateRender(object):
             logger.info(f"[Table Cell Picture] ✅ Successfully inserted image: {image_path}")
 
         except Exception as e:
-            logger.error(f"[Table Cell Picture] ❌ Failed to insert: {str(e)}")
+            logger.error(f"[Table Cell Picture] ❌ Failed to insert: {e!s}")
             raise e
 
-    def _csv_to_table(self, csv_path: str) -> List[List[str]]:
+    def _csv_to_table(self, csv_path: str) -> list[list[str]]:
         """
         will beCSVConvert file to table data
 
@@ -580,6 +591,7 @@ class DocxTemplateRender(object):
         try:
             # read outCSVfiles, automatically detecting encodings and delimiters
             import csv
+
             import chardet
 
             # Test file code
@@ -595,7 +607,7 @@ class DocxTemplateRender(object):
 
             for delimiter in delimiters:
                 try:
-                    with open(csv_path, "r", encoding=encoding, newline="") as f:
+                    with open(csv_path, encoding=encoding, newline="") as f:
                         # Read a small part first to detect the delimiter
                         sample = f.read(1024)
                         f.seek(0)
@@ -614,12 +626,12 @@ class DocxTemplateRender(object):
                             break
 
                 except Exception as e:
-                    logger.debug(f"Try Delimiter '{delimiter}' Kalah: {str(e)}")
+                    logger.debug(f"Try Delimiter '{delimiter}' Kalah: {e!s}")
                     continue
 
             if not table_data:
                 # If all delimiters fail, try a simple line-by-line read
-                with open(csv_path, "r", encoding=encoding) as f:
+                with open(csv_path, encoding=encoding) as f:
                     lines = f.readlines()
                     table_data = [[line.strip()] for line in lines if line.strip()]
 
@@ -634,10 +646,10 @@ class DocxTemplateRender(object):
             return cleaned_data
 
         except Exception as e:
-            logger.error(f"analyzingCSVFile failed: {csv_path}, Error-free: {str(e)}")
+            logger.error(f"analyzingCSVFile failed: {csv_path}, Error-free: {e!s}")
             return [["CSVFile parsing failed", str(e)]]
 
-    def _excel_to_table(self, excel_path: str) -> List[List[str]]:
+    def _excel_to_table(self, excel_path: str) -> list[list[str]]:
         """
         will beExcelConvert files to tabular data, preserving data formats and types
 
@@ -725,10 +737,10 @@ class DocxTemplateRender(object):
             return table_data
 
         except Exception as e:
-            logger.error(f"analyzingExcelFile failed: {excel_path}, Error-free: {str(e)}")
+            logger.error(f"analyzingExcelFile failed: {excel_path}, Error-free: {e!s}")
             return [["ExcelFile parsing failed", str(e)]]
 
-    def _markdown_table_to_data(self, markdown_table: str) -> Tuple[List[List[str]], List[str]]:
+    def _markdown_table_to_data(self, markdown_table: str) -> tuple[list[list[str]], list[str]]:
         """
         will beMarkdownTable to table data and parse alignment information
 
@@ -742,7 +754,9 @@ class DocxTemplateRender(object):
             lines = [line.strip() for line in markdown_table.strip().split("\n") if line.strip()]
 
             if len(lines) < 2:
-                logger.warning("MarkdownTable format is incomplete, at least table header and delimiter lines are required")
+                logger.warning(
+                    "MarkdownTable format is incomplete, at least table header and delimiter lines are required"
+                )
                 return [["Format salah.", "The form is incomplete."]], ["left"]
 
             table_data = []
@@ -789,7 +803,7 @@ class DocxTemplateRender(object):
             return table_data, alignments
 
         except Exception as e:
-            logger.error(f"analyzingMarkdownTable failed: {str(e)}")
+            logger.error(f"analyzingMarkdownTable failed: {e!s}")
             return [["MarkdownTable parsing failed", str(e)]], ["left"]
 
     def _is_separator_line(self, line: str) -> bool:
@@ -807,7 +821,7 @@ class DocxTemplateRender(object):
         if not content:
             return False
 
-        # The delimiter line should mainly contain-And:characters. 
+        # The delimiter line should mainly contain-And:characters.
         cells = [cell.strip() for cell in content.split("|")]
 
         for cell in cells:
@@ -820,7 +834,7 @@ class DocxTemplateRender(object):
 
         return True
 
-    def _parse_alignments(self, separator_line: str) -> List[str]:
+    def _parse_alignments(self, separator_line: str) -> list[str]:
         """
         Parse column alignment from delimiter rows
 
@@ -849,7 +863,7 @@ class DocxTemplateRender(object):
 
         return alignments
 
-    def _parse_table_row(self, line: str) -> List[str]:
+    def _parse_table_row(self, line: str) -> list[str]:
         """
         Parse table rows, handle escapes and special characters
 
@@ -925,7 +939,7 @@ class DocxTemplateRender(object):
 
         return cleaned
 
-    def _insert_markdown_table(self, paragraph, table_data: List[List[str]], alignments: List[str]):
+    def _insert_markdown_table(self, paragraph, table_data: list[list[str]], alignments: list[str]):
         """
         Insert ExclusivelyMarkdownTable with support for alignment information
 
@@ -1027,10 +1041,10 @@ class DocxTemplateRender(object):
             logger.info(f"Succesfully insertedMarkdownTable, Size: {rows}x{cols}Align: {alignments}")
 
         except Exception as e:
-            paragraph.add_run(f"Table insertion failed: {str(e)}")
-            logger.error(f"InsertMarkdownTable failed: {str(e)}")
+            paragraph.add_run(f"Table insertion failed: {e!s}")
+            logger.error(f"InsertMarkdownTable failed: {e!s}")
 
-    def _insert_table_at_position(self, paragraph, table_data: List[List[str]]):
+    def _insert_table_at_position(self, paragraph, table_data: list[list[str]]):
         """
         Insert a table at the current position of the paragraph, and the table will appear before the paragraph
 
@@ -1062,10 +1076,10 @@ class DocxTemplateRender(object):
             self._fill_and_style_table(table, table_data)
 
         except Exception as e:
-            paragraph.add_run(f"[Table insertion failed: {str(e)}]")
-            logger.error(f"Failed to insert table: {str(e)}")
+            paragraph.add_run(f"[Table insertion failed: {e!s}]")
+            logger.error(f"Failed to insert table: {e!s}")
 
-    def _insert_table(self, paragraph, table_data: List[List[str]]):
+    def _insert_table(self, paragraph, table_data: list[list[str]]):
         """
         Insert high quality table after paragraph
 
@@ -1098,13 +1112,13 @@ class DocxTemplateRender(object):
             self._fill_and_style_table(table, table_data)
 
         except Exception as e:
-            paragraph.add_run(f"[Table insertion failed: {str(e)}]")
-            logger.error(f"Failed to insert table: {str(e)}")
+            paragraph.add_run(f"[Table insertion failed: {e!s}]")
+            logger.error(f"Failed to insert table: {e!s}")
 
-    def _fill_and_style_table(self, table, table_data: List[List[str]]):
+    def _fill_and_style_table(self, table, table_data: list[list[str]]):
         """
         Fill in the table data and style it
-        
+
         Args:
             table: WordTable Object
             table_data: Form Data
@@ -1195,13 +1209,13 @@ class DocxTemplateRender(object):
 
         logger.info(f"Successfully set table style and data, size: {rows}x{cols}")
 
-    def _create_table_element(self, table_data: List[List[str]]):
+    def _create_table_element(self, table_data: list[list[str]]):
         """
         Create a table element
-        
+
         Args:
             table_data: Form Data [[row1_col1, row1_col2], [row2_col1, row2_col2]]
-        
+
         Returns:
             Form Elements
         """
@@ -1233,18 +1247,18 @@ class DocxTemplateRender(object):
             return table._tbl
 
         except Exception as e:
-            logger.exception(f"Form element creation failed: {str(e)}")
+            logger.exception(f"Form element creation failed: {e!s}")
             return None
 
     def _create_new_paragraph_after_table(self, parent, table_index, style_info=None):
         """
         Create new paragraph after table
-        
+
         Args:
             parent: Parent Container
             table_index: Index of the table in the parent container
             style_info: Style information dictionary for applying to new paragraphs
-        
+
         Returns:
             New Paragraph Object
         """
@@ -1259,6 +1273,7 @@ class DocxTemplateRender(object):
             else:
                 # Back of pocket: set to left alignment
                 from docx.enum.text import WD_ALIGN_PARAGRAPH
+
                 new_paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
                 alignment_info = "Default left alignment"
 
@@ -1270,63 +1285,59 @@ class DocxTemplateRender(object):
             return new_paragraph
 
         except Exception as e:
-            logger.exception(f"Failed to create new paragraph: {str(e)}")
+            logger.exception(f"Failed to create new paragraph: {e!s}")
             return None
 
     def _extract_paragraph_style_info(self, paragraph):
         """
         Extract full style information for paragraphs
-        
+
         Args:
             paragraph: Paragraph object
-            
+
         Returns:
             dict: Dictionary containing paragraph style information
         """
         try:
-            style_info = {
-                'alignment': paragraph.alignment,
-                'paragraph_format': {},
-                'style_name': None
-            }
+            style_info = {"alignment": paragraph.alignment, "paragraph_format": {}, "style_name": None}
 
             # Extract paragraph formatting information
-            if hasattr(paragraph, 'paragraph_format'):
+            if hasattr(paragraph, "paragraph_format"):
                 pf = paragraph.paragraph_format
-                style_info['paragraph_format'] = {
-                    'space_before': pf.space_before,
-                    'space_after': pf.space_after,
-                    'line_spacing': pf.line_spacing,
-                    'left_indent': pf.left_indent,
-                    'right_indent': pf.right_indent,
-                    'first_line_indent': pf.first_line_indent,
+                style_info["paragraph_format"] = {
+                    "space_before": pf.space_before,
+                    "space_after": pf.space_after,
+                    "line_spacing": pf.line_spacing,
+                    "left_indent": pf.left_indent,
+                    "right_indent": pf.right_indent,
+                    "first_line_indent": pf.first_line_indent,
                 }
 
             # Extract Style Name
-            if hasattr(paragraph, 'style') and paragraph.style:
-                style_info['style_name'] = paragraph.style.name
+            if hasattr(paragraph, "style") and paragraph.style:
+                style_info["style_name"] = paragraph.style.name
 
             return style_info
 
         except Exception as e:
-            logger.warning(f"Failed to extract paragraph style: {str(e)}")
-            return {'alignment': None, 'paragraph_format': {}, 'style_name': None}
+            logger.warning(f"Failed to extract paragraph style: {e!s}")
+            return {"alignment": None, "paragraph_format": {}, "style_name": None}
 
     def _apply_style_info(self, paragraph, style_info):
         """
         Apply style information to paragraphs
-        
+
         Args:
             paragraph: Target Paragraph Object
             style_info: Style Information Dictionary
         """
         try:
             # Apply alignment
-            if style_info.get('alignment') is not None:
-                paragraph.alignment = style_info['alignment']
+            if style_info.get("alignment") is not None:
+                paragraph.alignment = style_info["alignment"]
 
             # Apply Paragraph Formatting
-            paragraph_format = style_info.get('paragraph_format', {})
+            paragraph_format = style_info.get("paragraph_format", {})
             if paragraph_format:
                 pf = paragraph.paragraph_format
 
@@ -1338,7 +1349,7 @@ class DocxTemplateRender(object):
                             pass  # Ignore formatting application failed
 
             # Apply style name
-            style_name = style_info.get('style_name')
+            style_name = style_info.get("style_name")
             if style_name:
                 try:
                     paragraph.style = style_name
@@ -1346,7 +1357,7 @@ class DocxTemplateRender(object):
                     pass  # Ignore style application failed
 
         except Exception as e:
-            logger.warning(f"Failed to apply style information: {str(e)}")
+            logger.warning(f"Failed to apply style information: {e!s}")
 
     def _is_number(self, text: str) -> bool:
         """
@@ -1370,7 +1381,7 @@ class DocxTemplateRender(object):
         except ValueError:
             return False
 
-    def render(self, template_def, resources: Dict[str, List[Dict[str, Any]]] = None):
+    def render(self, template_def, resources: dict[str, list[dict[str, Any]]] = None):
         """
         Render templates for image and table insertion
 
@@ -1440,23 +1451,28 @@ class DocxTemplateRender(object):
                                             if resource_info["type"] == "image":
                                                 # Insert Actual Picture in Table Cell
                                                 image_path = resource_info.get("local_path") or resource_info.get(
-                                                    "path", "")
+                                                    "path", ""
+                                                )
                                                 if image_path and os.path.exists(image_path):
                                                     try:
                                                         # Clear cell text
                                                         cell_text = cell_text.replace(placeholder, "")
                                                         # Insert Picture in Cell
                                                         self._insert_image_in_table_cell(cell, image_path)
-                                                        logger.info(f"✅ Picture successfully inserted in table cell: {image_path}")
+                                                        logger.info(
+                                                            f"✅ Picture successfully inserted in table cell: {image_path}"
+                                                        )
                                                     except Exception as e:
-                                                        logger.error(f"❌ Table Cell Insert Picture Failed: {str(e)}")
+                                                        logger.error(f"❌ Table Cell Insert Picture Failed: {e!s}")
                                                         # Show file name on failure
-                                                        cell_text = cell_text.replace(placeholder,
-                                                                                      os.path.basename(image_path))
+                                                        cell_text = cell_text.replace(
+                                                            placeholder, os.path.basename(image_path)
+                                                        )
                                                 else:
                                                     # Image file does not exist, display path
-                                                    cell_text = cell_text.replace(placeholder, resource_info.get("path",
-                                                                                                                 placeholder))
+                                                    cell_text = cell_text.replace(
+                                                        placeholder, resource_info.get("path", placeholder)
+                                                    )
                                             elif resource_info["type"] == "excel":
                                                 cell_text = cell_text.replace(placeholder, "[ExcelTable Filter]")
                                             elif resource_info["type"] == "csv":
@@ -1551,10 +1567,10 @@ class DocxTemplateRender(object):
             # Check for unprocessedfile contentlabel
             for i, paragraph in enumerate(doc.paragraphs):
                 paragraph_text = paragraph.text.strip()
-                if paragraph_text and 'file content' in paragraph_text.lower():
+                if paragraph_text and "file content" in paragraph_text.lower():
                     logger.warning(f"Unprocessed foundfile contentLabel, paragraph{i}: {paragraph_text[:200]}...")
         except Exception as e:
-            logger.error(f"Failed to check document content: {str(e)}")
+            logger.error(f"Failed to check document content: {e!s}")
 
 
 def test_replace_string(template_file, kv_dict: dict, file_name: str):

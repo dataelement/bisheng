@@ -1,3 +1,4 @@
+import os
 import re
 from abc import ABC, abstractmethod
 from datetime import timedelta
@@ -42,6 +43,49 @@ ABSOLUTE_PROVISIONED_PATH_NOTICE = (
     "FileNotFoundError. Nothing was lost or discarded — the file simply was not "
     "read. Re-run with the same path minus the leading slash, e.g. "
     "`skills/<name>/SKILL.md` or `uploads/<file>`."
+)
+
+# --- Workspace escape ------------------------------------------------------
+# The local executor is a subprocess on the SHARED backend host, not a sandbox:
+# a script can read anything the service account can. That is how a daily-chat
+# turn once answered from `/root/.cache/bisheng/bisheng/` — the global download
+# cache, where EVERY user's uploads pile up under a flat sha256 name. Reading
+# another tenant's document is not a feature we want to keep, so these patterns
+# reject the run outright (unlike the advisories above, which only annotate).
+#
+# Matching an ACCESS VERB rather than a bare string literal is deliberate: code
+# may legitimately mention such a path in prose it prints back to the user.
+_FS_ACCESS_VERBS = (
+    "open|walk|scandir|listdir|glob|iglob|rglob|Path|PosixPath|copy|copy2|copyfile|copytree|"
+    "move|rename|remove|unlink|rmtree|stat|lstat|getsize|exists|isfile|isdir|read_text|read_bytes"
+)
+# Host directories that are never part of a workspace. The workspace's own
+# absolute-looking zones (/output /scratch /skills /uploads) are handled by
+# ``absolute_path_advisory`` and are deliberately absent here.
+_HOST_ROOTS = "root|home|etc|proc|sys|boot|opt|srv|usr|var|app|data|mnt|media"
+# Group 2 captures the whole literal so the caller can tell "somewhere on the
+# host" from "my own working dir, spelled absolutely" — linsight hands the model
+# host paths of its own workspace, so those must stay legal.
+_HOST_PATH_ACCESS_RE = re.compile(
+    rf"""\b(?:{_FS_ACCESS_VERBS})\s*\([^)\n]{{0,120}}?(['"])(/(?:{_HOST_ROOTS})[^'"\n]*)\1"""
+)
+# ``expanduser("~")`` / ``Path.home()`` resolve to the SERVICE account's home.
+# A model hunting for "the file I was given" reaches for ``~`` early.
+_HOME_EXPANSION_RE = re.compile(r"""expanduser\s*\(\s*['"]~|Path\s*\.\s*home\s*\(""")
+# A scan rooted at ``/`` walks the entire container.
+_ROOT_SCAN_RE = re.compile(r"""\b(?:walk|glob|iglob|scandir|listdir)\s*\(\s*['"]/['"]""")
+
+WORKSPACE_ESCAPE_NOTICE = (
+    "[SYSTEM NOTICE] This run was REJECTED and nothing was executed: the code reaches OUTSIDE "
+    "the working directory — a host path (/root, /etc, /app, /home, ...), the expanded home "
+    "directory (`~`), or a scan rooted at `/`. Those locations are shared infrastructure that "
+    "may hold other users' data; they are not yours to read.\n"
+    "Your current working directory IS your workspace. Use RELATIVE paths only: "
+    "`uploads/<file>` for provided sources, `output/<file>` for deliverables, `scratch/<file>` "
+    "for intermediates.\n"
+    "If what you are looking for is not under the working directory, it was NOT provided to you "
+    "on this turn. Say so plainly and ask for it — do not search the filesystem for it, and do "
+    "not answer from memory of an earlier turn as if you had re-read the file."
 )
 
 # Delivery zones of the executor working dir. ``output/`` is the ONLY zone the
@@ -98,12 +142,56 @@ RELOCATED_PATH_NOTICE_HEADER = (
     "files to `scratch/` directly.\n"
 )
 
+# A SUCCESSFUL run's log is unbounded today, and nothing downstream bounds it either.
+# Once the serialized result crosses ~80000 chars, the deepagents FilesystemMiddleware
+# offloads it to /large_tool_results/<tool_call_id> and replaces the content with a
+# preview. That preview is computed PER LINE — but ToolNode serializes the dict result
+# with json.dumps, which turns every newline into a literal \n, so the whole result is
+# ONE line and the preview degrades to line[:1000] with no truncation marker at all.
+# The model then sees `{"exitcode": 0, "log": "…` and nothing else: no file_list, no
+# ending, and no sign that the rest exists elsewhere. Measured on 114, 2026-08-14: a
+# 112744-byte result put a kimi-k3 run into a 79-turn / 78-minute / 13.8M-token loop
+# re-sending the exact same script, because re-running was the only way it could think
+# of to get the data back.
+#
+# Capping here keeps the output INSIDE the context (head + tail, ~30x more than the
+# 1000 chars the offload path actually delivers) instead of behind a pointer the model
+# does not follow. 30000 sits far above the measured p90 (~8000; only 11.7% of calls
+# exceed 8000) so ordinary runs are untouched, and far below the eviction line even
+# after file_list URLs are added.
+MAX_SUCCESS_LOG_CHARS = 30000
+LOG_MIDDLE_TRUNCATED_NOTICE = (
+    "\n[... {omitted} characters of output omitted from the middle. Re-running this "
+    "code will NOT return more — the output itself is too long. Print less (summarize, "
+    "or print only what you need), or write the bulk to a file under `scratch/` and read "
+    "it back in chunks with read_file ...]\n"
+)
+
+
+def clip_middle(logs: str, limit: int = MAX_SUCCESS_LOG_CHARS) -> str:
+    """Cap ``logs`` keeping BOTH ends, dropping the middle.
+
+    Deliberately not ``LocalExecutor._tail``: that one keeps only the tail, which is
+    right for a FAILING run (a traceback states its cause on the last lines) and wrong
+    for a succeeding one — the head holds what the script actually printed (its
+    conclusions), and the tail holds the advisories the model must act on next turn.
+    """
+    if len(logs) <= limit:
+        return logs
+    notice = LOG_MIDDLE_TRUNCATED_NOTICE.format(omitted=len(logs) - limit)
+    head_len = limit // 2
+    return logs[:head_len] + notice + logs[-(limit - head_len) :]
+
 
 class BaseExecutor(ABC):
     def __init__(self, minio: dict, **kwargs):
         self.minio = minio
         # 将代码生成的文件同步到本地的路径
         self.local_sync_path = kwargs.get("local_sync_path", None)
+        # Object-storage prefix of the session workspace (``workspace/<svid>``).
+        # Set by the linsight tool binder; empty for every other caller, which
+        # simply disables the mirror in ``sync_to_workspace``.
+        self.workspace_prefix = kwargs.get("workspace_prefix", None)
 
     @abstractmethod
     def run(self, code: str) -> Any:
@@ -134,6 +222,37 @@ class BaseExecutor(ABC):
             notices += ABSOLUTE_PROVISIONED_PATH_NOTICE
         return notices
 
+    def workspace_escape_guard(self, code: str) -> str:
+        """Rejection notice when ``code`` reaches outside the working dir; "" if clean.
+
+        Unlike ``absolute_path_advisory`` (annotates a completed run), a hit here
+        means the run must NOT happen: the local executor shares a filesystem with
+        the backend service, so a read of ``/root/.cache/...`` returns other users'
+        uploaded documents. Blocking after the fact would be pointless — the data
+        would already be in the model's context.
+
+        Two deliberate exemptions keep legitimate code running:
+
+        - Matching is VERB-anchored, so prose stays legal: a script may print
+          "nothing under /root/.cache" without being rejected; only an actual
+          ``open`` / ``os.walk`` / ``glob`` against a host root trips it.
+        - A literal under ``local_sync_path`` is this run's OWN workspace written
+          absolutely. ``path_namespace_rules`` shows the model exactly such host
+          paths, so rejecting them would break the thing we told it to expect.
+        """
+        if not code:
+            return ""
+        work_dir = (self.local_sync_path or "").rstrip("/")
+        for match in _HOST_PATH_ACCESS_RE.finditer(code):
+            path = match.group(2)
+            if work_dir and (path == work_dir or path.startswith(f"{work_dir}/")):
+                continue
+            return WORKSPACE_ESCAPE_NOTICE
+        # `~` and `/` are never the workspace, so no exemption applies.
+        if _HOME_EXPANSION_RE.search(code) or _ROOT_SCAN_RE.search(code):
+            return WORKSPACE_ESCAPE_NOTICE
+        return ""
+
     @staticmethod
     def relocation_advisory(moved: list[tuple[str, str]]) -> str:
         """Corrective notice listing ``(old_rel, new_rel)`` relocations into
@@ -147,6 +266,69 @@ class BaseExecutor(ABC):
             return ""
         lines = "\n".join(f"- {old} -> {new}" for old, new in moved)
         return RELOCATED_PATH_NOTICE_HEADER + lines
+
+    def sync_to_workspace(self, dir_path: str, rel_paths: list[str]) -> int:
+        """Mirror this run's files into the session workspace prefix. Returns the count.
+
+        The executor writes to a LOCAL working dir that is deleted when the task
+        ends (``_cleanup_resources``), while ``workspace/<svid>/`` in object storage
+        is what the file tools (``ls`` / ``read_file``) actually see and what the
+        next turn inherits via ``seed_workspace_from_previous``. Without this
+        mirror a code-generated deliverable exists ONLY on that local disk, which
+        produced two long-standing defects:
+
+          * the model cannot ``ls`` the file it just wrote (the prompt had to carry
+            an explicit "trust exitcode 0, do not go looking for it" caveat);
+          * a follow-up turn runs under a fresh svid whose workspace seeds from the
+            previous one's ``output/`` — empty, because nothing was ever written
+            there — so "把封面加个副标题" finds no deck and can only regenerate.
+
+        Deletions are deliberately NOT mirrored: this runs off a created/modified
+        diff, and reconciling removals would mean trusting a partially-failed run
+        to delete objects the harvester may still need.
+
+        Best-effort by design — a mirror failure must never fail the run. The local
+        copy is still what ``get_final_result_file`` harvests, so the user gets the
+        deliverable either way.
+        """
+        if not self.minio or not self.workspace_prefix or not rel_paths:
+            return 0
+
+        bucket = self.minio.get("public_bucket") or "bisheng"
+        prefix = self.workspace_prefix.strip("/")
+        try:
+            minio_client = self._minio_client()
+        except Exception:
+            logger.exception("workspace mirror: minio client init failed; local copy is unaffected")
+            return 0
+
+        synced = 0
+        for rel in rel_paths:
+            # Normalise once: a leading slash would make os.path.join return the
+            # absolute path and silently skip the file.
+            rel_key = rel.replace(os.sep, "/").lstrip("/")
+            local_path = os.path.join(dir_path, rel_key)
+            if not os.path.isfile(local_path):
+                continue
+            object_name = f"{prefix}/{rel_key}"
+            try:
+                minio_client.fput_object(bucket_name=bucket, object_name=object_name, file_path=local_path)
+                synced += 1
+            except Exception:
+                # One unmirrored file degrades ls/continuity for that file only.
+                logger.exception("workspace mirror failed for {}", object_name)
+        if synced:
+            logger.debug("workspace mirror: {} file(s) -> {}/{}", synced, bucket, prefix)
+        return synced
+
+    def _minio_client(self) -> Minio:
+        return Minio(
+            endpoint=self.minio.get("endpoint"),
+            access_key=self.minio.get("access_key"),
+            secret_key=self.minio.get("secret_key"),
+            secure=self.minio.get("schema") or self.minio.get("secure"),
+            cert_check=self.minio.get("cert_check"),
+        )
 
     def upload_minio(
         self,

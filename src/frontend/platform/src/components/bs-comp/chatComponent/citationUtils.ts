@@ -254,9 +254,12 @@ export function getCitationDocumentFileType(detail?: ChatCitation | null) {
   return String(fileType).toLowerCase();
 }
 
+/** Renderable stand-in for the file: the transcript of a clip, the PDF a pptx
+ *  was converted to, the parsed markdown of a web page. Falls back to the
+ *  original for formats the backend renders as-is (pdf, images, docx). */
 export function getCitationDocumentPreviewUrl(detail?: ChatCitation | null) {
   const payload = detail?.sourcePayload;
-  return payload?.downloadUrl || "";
+  return payload?.previewUrl || payload?.downloadUrl || "";
 }
 
 export function getCitationDocumentDownloadUrl(detail?: ChatCitation | null) {
@@ -276,6 +279,17 @@ export function isRagCitationMissingPreviewUrl(detail?: ChatCitation | null) {
 
 export function getCitationDocumentUrl(detail?: ChatCitation | null) {
   return getCitationDocumentDownloadUrl(detail);
+}
+
+const MEDIA_CITATION_EXTENSIONS = new Set([
+  "mp3", "wav", "m4a", "aac", "flac", "ogg",
+  "mp4", "mov", "avi", "mkv", "webm",
+]);
+
+/** Whether the cited file is a clip. Decided from the file name, not the URL:
+ *  a media file's preview URL points at its transcript (`.md`). */
+export function isMediaCitation(detail?: ChatCitation | null) {
+  return MEDIA_CITATION_EXTENSIONS.has(getCitationDocumentFileType(detail));
 }
 
 export function toAbsolutePreviewUrl(url?: string | null) {

@@ -3,7 +3,7 @@ import TipPng from "@/assets/tip.jpg";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { DelIcon, LoadIcon } from "@/components/bs-icons";
-import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
+import { hasResourceAction, useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
@@ -31,13 +31,11 @@ import { ChatTest } from "./FlowChat/ChatTest";
 import useFlowStore from "./flowStore";
 import Notification from "./Notification";
 
-const APP_HEADER_PERMISSION_IDS = [
-    'edit_app',
-    'publish_app',
-    'unpublish_app',
-    'manage_app_owner',
-    'manage_app_manager',
-    'manage_app_viewer',
+const APP_HEADER_ACTIONS = [
+    'edit',
+    'publish',
+    'unpublish',
+    'manage_permission',
 ]
 
 const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFlow }) => {
@@ -53,16 +51,12 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     const { state } = useLocation();
     const loca = state?.flow; // 获取传递的 flow 数据
     const flowId = flow?.id ? String(flow.id) : '';
-    const { permissions: permIds } = usePermissionIds('workflow', flowId ? [flowId] : [], APP_HEADER_PERMISSION_IDS);
-    const canEdit = flowId ? hasPermissionId(permIds, flowId, 'edit_app') : false;
-    const canPublish = flowId ? hasPermissionId(permIds, flowId, 'publish_app') : false;
-    const canUnpublish = flowId ? hasPermissionId(permIds, flowId, 'unpublish_app') : false;
+    const { actions } = useResourceActions('workflow', flowId ? [flowId] : [], APP_HEADER_ACTIONS);
+    const canEdit = flowId ? hasResourceAction(actions, flowId, 'edit') : false;
+    const canPublish = flowId ? hasResourceAction(actions, flowId, 'publish') : false;
+    const canUnpublish = flowId ? hasResourceAction(actions, flowId, 'unpublish') : false;
     /** 与构建列表卡片「权限」盾牌一致：所有者 / 管理者可管理应用成员与权限 */
-    const canManage = flowId ? (
-        hasPermissionId(permIds, flowId, 'manage_app_owner') ||
-        hasPermissionId(permIds, flowId, 'manage_app_manager') ||
-        hasPermissionId(permIds, flowId, 'manage_app_viewer')
-    ) : false;
+    const canManage = flowId ? hasResourceAction(actions, flowId, 'manage_permission') : false;
 
     // console.log('flow :>> ', flow);
 

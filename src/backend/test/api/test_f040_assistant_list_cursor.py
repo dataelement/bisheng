@@ -1,11 +1,10 @@
-"""F040 (C) T6a: the assistant list endpoint moves from the fetch-all → ReBAC
-filter → Python-slice anti-pattern to a keyset cursor scan.
+"""Assistant F048 action filtering over the F040 keyset cursor scan.
 
 Equivalence is the safety red line: the cursor scan must surface the SAME visible
 assistants, in the SAME order, as the legacy offset path — across page boundaries,
-with no duplicates and no gaps even when fine-grained ReBAC filtering thins a batch.
-These tests pin that by simulating the keyset DAO in-memory and a sparse permission
-map, then walking every page via `next_cursor`.
+with no duplicates and no gaps even when concrete-action filtering thins a batch.
+These tests pin that by simulating the keyset DAO in-memory and the F048
+``batch_check_business_actions`` facade, then walking every page via ``next_cursor``.
 """
 
 from __future__ import annotations
@@ -38,7 +37,7 @@ def _make_rows(n: int):
             SimpleNamespace(
                 id=f"a{i:03d}",
                 update_time=base - timedelta(minutes=i),
-                user_id=999,  # not the requesting user → write flag driven by edit_app
+                user_id=999,  # not the requester → write flag is driven by the concrete edit action
             )
         )
     # already descending by update_time (and id ties broken desc); keep as-is.
@@ -68,11 +67,23 @@ def _fake_dao_factory(all_rows):
     return _fake
 
 
-async def _collect_all_pages(user, *, allowed_ids, all_rows, page_size, permission_id="use_app"):
+async def _collect_all_pages(user, *, allowed_ids, all_rows, page_size, action="use"):
     """Walk the scan helper page-by-page via the (update_time, id) cursor."""
 
-    async def _fake_pmap(login_user, batch, perms):
-        return {str(r["id"]): ({"use_app", "edit_app"} if r["id"] in allowed_ids else set()) for r in batch}
+    async def _fake_action_map(
+        login_user,
+        *,
+        resource_type,
+        resource_ids,
+        actions,
+    ):
+        assert login_user is user
+        assert resource_type == "assistant"
+        requested_actions = set(actions)
+        return {
+            resource_id: frozenset(requested_actions & {"use", "edit"} if resource_id in allowed_ids else ())
+            for resource_id in map(str, resource_ids)
+        }
 
     collected = []
     cursor = None
@@ -80,8 +91,8 @@ async def _collect_all_pages(user, *, allowed_ids, all_rows, page_size, permissi
     with (
         patch(f"{_AS}.AssistantDao.aget_all_assistants_cursor", new=_fake_dao_factory(all_rows)),
         patch(
-            f"{_AS}.ApplicationPermissionService.get_app_permission_map_async",
-            new=AsyncMock(side_effect=_fake_pmap),
+            f"{_AS}.batch_check_business_actions",
+            new=AsyncMock(side_effect=_fake_action_map),
         ),
     ):
         while True:
@@ -94,8 +105,7 @@ async def _collect_all_pages(user, *, allowed_ids, all_rows, page_size, permissi
                 assistant_ids=None,
                 cursor=cursor,
                 page_size=page_size,
-                permission_id=permission_id,
-                is_admin=user.is_admin(),
+                action=action,
             )
             collected.extend(visible)
             if not has_more or not visible:
@@ -139,13 +149,26 @@ async def test_scan_refills_across_thinned_batches():
     assert {r.id for r in collected} == allowed
 
 
-async def test_admin_bypasses_permission_filter():
-    """Admins see every row, no permission map consulted, editable=None."""
+async def test_admin_still_uses_concrete_action_facade():
+    """System identity policy stays behind the sole F048 authorization facade."""
     all_rows = _make_rows(6)
-    pmap = AsyncMock()
+
+    async def _allow_all(
+        login_user,
+        *,
+        resource_type,
+        resource_ids,
+        actions,
+    ):
+        assert login_user.is_admin()
+        assert resource_type == "assistant"
+        assert tuple(actions) == ("use", "edit")
+        return {resource_id: frozenset({"use", "edit"}) for resource_id in map(str, resource_ids)}
+
+    action_map = AsyncMock(side_effect=_allow_all)
     with (
         patch(f"{_AS}.AssistantDao.aget_all_assistants_cursor", new=_fake_dao_factory(all_rows)),
-        patch(f"{_AS}.ApplicationPermissionService.get_app_permission_map_async", new=pmap),
+        patch(f"{_AS}.batch_check_business_actions", new=action_map),
     ):
         visible, has_more, editable = await AssistantService._scan_visible_assistants_cursor(
             user=_User(admin=True),
@@ -154,27 +177,34 @@ async def test_admin_bypasses_permission_filter():
             assistant_ids=None,
             cursor=None,
             page_size=10,
-            permission_id="use_app",
-            is_admin=True,
+            action="use",
         )
     assert [r.id for r in visible] == [r.id for r in all_rows]
     assert has_more is False
-    assert editable is None
-    pmap.assert_not_awaited()
+    assert editable == {r.id for r in all_rows}
+    action_map.assert_awaited_once()
 
 
 async def test_has_more_probe_is_exact_at_page_boundary():
     """Exactly page_size visible rows ⇒ has_more False (no phantom extra page)."""
     all_rows = _make_rows(8)
 
-    async def _fake_pmap(login_user, batch, perms):
-        return {str(r["id"]): {"use_app"} for r in batch}
+    async def _fake_action_map(
+        login_user,
+        *,
+        resource_type,
+        resource_ids,
+        actions,
+    ):
+        assert resource_type == "assistant"
+        assert tuple(actions) == ("use", "edit")
+        return {resource_id: frozenset({"use"}) for resource_id in map(str, resource_ids)}
 
     with (
         patch(f"{_AS}.AssistantDao.aget_all_assistants_cursor", new=_fake_dao_factory(all_rows)),
         patch(
-            f"{_AS}.ApplicationPermissionService.get_app_permission_map_async",
-            new=AsyncMock(side_effect=_fake_pmap),
+            f"{_AS}.batch_check_business_actions",
+            new=AsyncMock(side_effect=_fake_action_map),
         ),
     ):
         visible, has_more, _ = await AssistantService._scan_visible_assistants_cursor(
@@ -184,8 +214,7 @@ async def test_has_more_probe_is_exact_at_page_boundary():
             assistant_ids=None,
             cursor=None,
             page_size=8,
-            permission_id="use_app",
-            is_admin=False,
+            action="use",
         )
     assert len(visible) == 8
     assert has_more is False

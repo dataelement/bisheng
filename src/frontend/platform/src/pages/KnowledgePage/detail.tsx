@@ -1,7 +1,7 @@
 import { Tabs, TabsContent } from "@/components/bs-ui/tabs";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { checkPermission } from "@/controllers/API/permission";
+import { checkResourceActionApi } from "@/controllers/API/permission";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -31,13 +31,13 @@ export default function FilesPage() {
             }
             const [result, editResult, deleteResult] = await Promise.all([
                 captureAndAlertRequestErrorHoc(
-                    checkPermission('knowledge_library', String(knowledgeId), 'can_read', 'view_kb')
+                    checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'visible' })
                 ),
                 captureAndAlertRequestErrorHoc(
-                    checkPermission('knowledge_library', String(knowledgeId), 'can_edit', 'edit_kb')
+                    checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'edit' })
                 ),
                 captureAndAlertRequestErrorHoc(
-                    checkPermission('knowledge_library', String(knowledgeId), 'can_delete', 'delete_kb')
+                    checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'delete' })
                 ),
             ]);
             const allowed = !!result?.allowed;

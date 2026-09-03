@@ -190,7 +190,6 @@ def _make_worker(queue, fake_redis):
     node_manager = MagicMock()
     node_manager.node_id = "node-test"
     node_manager.register_task_ownership = AsyncMock()
-    node_manager.release_task_ownership = AsyncMock()
     worker.node_manager = node_manager
     return worker
 
@@ -371,6 +370,7 @@ def _build_session(user_id=1):
     session = MagicMock()
     session.user_id = user_id
     session.session_id = "sess-1"
+    session.tenant_id = 1
     return session
 
 

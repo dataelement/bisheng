@@ -34,7 +34,6 @@ Usage:
 
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from contextvars import ContextVar
-from typing import FrozenSet, Optional
 
 DEFAULT_TENANT_ID: int = 1
 
@@ -42,32 +41,38 @@ DEFAULT_TENANT_ID: int = 1
 # v2.5.0 baseline (signatures preserved — do not change).
 # ---------------------------------------------------------------------------
 
-current_tenant_id: ContextVar[Optional[int]] = ContextVar(
-    'current_tenant_id', default=None,
+current_tenant_id: ContextVar[int | None] = ContextVar(
+    "current_tenant_id",
+    default=None,
 )
 
 _bypass_tenant_filter: ContextVar[bool] = ContextVar(
-    '_bypass_tenant_filter', default=False,
+    "_bypass_tenant_filter",
+    default=False,
 )
 
 # ---------------------------------------------------------------------------
 # v2.5.1 F012 extensions.
 # ---------------------------------------------------------------------------
 
-visible_tenant_ids: ContextVar[Optional[FrozenSet[int]]] = ContextVar(
-    'visible_tenant_ids', default=None,
+visible_tenant_ids: ContextVar[frozenset[int] | None] = ContextVar(
+    "visible_tenant_ids",
+    default=None,
 )
 
 _strict_tenant_filter: ContextVar[bool] = ContextVar(
-    '_strict_tenant_filter', default=False,
+    "_strict_tenant_filter",
+    default=False,
 )
 
-_admin_scope_tenant_id: ContextVar[Optional[int]] = ContextVar(
-    '_admin_scope_tenant_id', default=None,
+_admin_scope_tenant_id: ContextVar[int | None] = ContextVar(
+    "_admin_scope_tenant_id",
+    default=None,
 )
 
 _is_management_api: ContextVar[bool] = ContextVar(
-    '_is_management_api', default=False,
+    "_is_management_api",
+    default=False,
 )
 
 
@@ -75,7 +80,8 @@ _is_management_api: ContextVar[bool] = ContextVar(
 # Public helpers — current_tenant_id (v2.5.0 signature preserved).
 # ---------------------------------------------------------------------------
 
-def get_current_tenant_id() -> Optional[int]:
+
+def get_current_tenant_id() -> int | None:
     """Return the current tenant ID, honouring the F019 admin-scope override.
 
     **v2.5.1 priority** (v2.5.0 callers see no behavioural change until
@@ -140,7 +146,8 @@ def is_tenant_filter_bypassed() -> bool:
 # v2.5.1 F012 helpers — visible_tenant_ids / strict / admin-scope.
 # ---------------------------------------------------------------------------
 
-def get_visible_tenant_ids() -> Optional[FrozenSet[int]]:
+
+def get_visible_tenant_ids() -> frozenset[int] | None:
     """Return the IN-list of tenant ids the current request can see.
 
     ``None`` means "no IN-list filter injected" — used for global super
@@ -152,7 +159,7 @@ def get_visible_tenant_ids() -> Optional[FrozenSet[int]]:
     return visible_tenant_ids.get()
 
 
-def set_visible_tenant_ids(ids: Optional[FrozenSet[int]]):
+def set_visible_tenant_ids(ids: frozenset[int] | None):
     """Set the visible tenant ids frozenset. Returns a reset token."""
     return visible_tenant_ids.set(ids)
 
@@ -177,12 +184,12 @@ def is_strict_tenant_filter() -> bool:
     return _strict_tenant_filter.get()
 
 
-def get_admin_scope_tenant_id() -> Optional[int]:
+def get_admin_scope_tenant_id() -> int | None:
     """Return the F019 admin-scope override, or None if unset."""
     return _admin_scope_tenant_id.get()
 
 
-def set_admin_scope_tenant_id(tenant_id: Optional[int]):
+def set_admin_scope_tenant_id(tenant_id: int | None):
     """Set the F019 admin-scope override. Returns a reset token."""
     return _admin_scope_tenant_id.set(tenant_id)
 

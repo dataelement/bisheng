@@ -112,55 +112,6 @@ export async function getSysConfigApi(): Promise<string> {
 export async function setSysConfigApi(data) {
   return await axios.post(`/api/v1/config/save`, data);
 }
-/**
- * 根据角色获取技能列表
- */
-export async function getRoleSkillsApi(
-  params
-): Promise<{ data: any[]; total: number }> {
-  return await axios.get(`/api/v1/role_access/flow`, { params });
-}
-/**
- * 根据角色获取技能列表
- */
-export async function getRoleAssistApi(
-  params
-): Promise<{ data: any[]; total: number }> {
-  return await axios.get(`/api/v1/role_access/list_type`, { params });
-}
-/**
- * 根据角色获取知识库列表
- */
-export async function getRoleLibsApi(
-  params
-): Promise<{ data: any[]; total: number }> {
-  return await axios.get(`/api/v1/role_access/knowledge`, { params });
-}
-/**
- * 根据用户组获取资源列表
- */
-export async function getGroupResourcesApi(
-  params: {
-    group_id: string,
-    resource_type: number,
-    name: string,
-    page_size: number,
-    page_num: number
-  }
-): Promise<{ data: any[]; total: number }> {
-  return await axios.get(`/api/v1/group/get_group_resources`, { params });
-}
-/**
- * 新增角色
- */
-export async function createRole(groupId, name) {
-  return await axios.post(`/api/v1/role/add`, {
-    group_id: groupId,
-    role_name: name,
-    remark: "手动创建用户",
-  });
-}
-
 // v2.5 角色管理（去用户组绑定）
 export async function getRolesPageApi(params: {
   keyword?: string
@@ -174,7 +125,7 @@ export async function getRolesPageApi(params: {
 export async function createRoleV2Api(data: {
   role_name: string
   department_id?: number | null
-  quota_config?: Record<string, number>
+  quota_config?: Record<string, unknown>
   remark?: string
   menu_ids?: string[]
 }) {
@@ -186,7 +137,7 @@ export async function updateRoleV2Api(
   data: {
     role_name?: string
     department_id?: number | null
-    quota_config?: Record<string, number>
+    quota_config?: Record<string, unknown>
     remark?: string
     menu_ids?: string[]
   }
@@ -205,58 +156,6 @@ export async function getRoleMenuV2Api(roleId: number): Promise<string[]> {
 export async function updateRoleMenuV2Api(roleId: number, menu_ids: string[]) {
   return await axios.post(`/api/v1/roles/${roleId}/menu`, { menu_ids })
 }
-/**
- * 更新角色权限
- */
-enum ACCESS_TYPE {
-  USE_LIB = 1,
-  USE_SKILL,
-  MANAGE_LIB,
-  ASSISTANT = 5,
-  TOOL = 4,
-  MENU = 99
-}
-export async function updateRolePermissionsApi(data: {
-  role_id: number;
-  access_id: number[];
-  type: ACCESS_TYPE;
-}) {
-  return await axios.post(`/api/v1/role_access/refresh`, data);
-}
-
-/**
- * 获取角色下的权限
- */
-export async function getRolePermissionsApi(
-  roleId
-): Promise<{ data: any[]; total: number }> {
-  const params = { role_id: roleId, page_size: 200, page_num: 1 };
-  return axios.get(`/api/v1/role_access/list`, { params });
-  // return Promise.all([
-  //     axios.get(url, { params: { ...params, type: 1 } }),
-  //     axios.get(url, { params: { ...params, type: 2 } }),
-  //     axios.get(url, { params: { ...params, type: 3 } })
-  // ])
-}
-
-/**
- * 更新角色基本信息
- */
-export async function updateRoleNameApi(roleId, name, knowledgeSpaceFileLimit) {
-  return axios.patch(`/api/v1/role/${roleId}`, {
-    role_name: name,
-    remark: "手动创建用户",
-    knowledge_space_file_limit: knowledgeSpaceFileLimit
-  });
-}
-
-/**
- * 删除角色
- */
-export async function delRoleApi(roleId) {
-  return axios.delete(`/api/v1/role/${roleId}`);
-}
-
 /** 用户组列表（后端 data 为 { records: GroupRead[] }，此处统一为数组） */
 export async function getUserGroupsApi(config?: { signal?: AbortSignal }) {
   const data = await axios.get(`/api/v1/group/list`, {

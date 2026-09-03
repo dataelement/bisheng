@@ -1,4 +1,5 @@
 import json
+from hashlib import sha256
 from typing import Any
 
 from fastapi import BackgroundTasks, Request
@@ -39,9 +40,16 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import Knowl
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain.schemas import WorkbenchModelConfig
 from bisheng.llm.domain.services import LLMService
+from bisheng.permission.application.access import get_f048_runtime
+from bisheng.permission.application.system_resource_reconcile import (
+    SYSTEM_RESOURCE_BOOTSTRAP_OPERATOR_ID,
+    SystemOwnedResourceSpec,
+    reconcile_system_owned_resources,
+)
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType
+from bisheng.tool.domain.services.f048_tool_permission import SYSTEM_TOOL_ACTIONS
 
 from ..models import TenantWorkstationConfigDao
 
@@ -243,16 +251,49 @@ class WorkStationService(BaseService):
         await TenantWorkstationConfigDao.aupsert(cls._current_tenant_id(), key.value, payload)
 
     @classmethod
+    def _read_tool_rows(cls, tool_type_ids: list) -> tuple[dict, dict]:
+        """Read the parent types + their children for ``tool_type_ids``."""
+        tool_type_info = GptsToolsDao.get_all_tool_type(tool_type_ids)
+        exists_tool_type = {tool.id: tool for tool in tool_type_info}
+        tool_info = GptsToolsDao.get_list_by_type(list(exists_tool_type.keys()))
+        return exists_tool_type, {tool.id: tool for tool in tool_info}
+
+    @classmethod
     def sync_tool_info(cls, tools: list[dict]) -> list[dict]:
-        """Synchronize tool metadata from persistent storage."""
+        """Synchronize tool metadata from persistent storage.
+
+        Tools the lookup cannot find are dropped — that is how an admin's
+        deletion propagates into saved configs. But "not found" is also what a
+        narrowed visible-tenant IN-list produces for the config owner's own
+        rows, and the caller cannot tell the two apart: the config page
+        round-trips what it is shown, so a filtered read would persist as a
+        cleared tool pool. When anything fails to resolve, re-read pinned to the
+        tenant that owns the config (``strict_tenant_filter`` narrows to
+        ``tenant_id = current`` — it never widens) before believing the drop.
+        """
         if not tools:
             return []
         normalized_tools = [cls._to_plain_dict(tool) for tool in tools]
         tool_type_ids = [tool.get("id") for tool in normalized_tools if tool]
-        tool_type_info = GptsToolsDao.get_all_tool_type(tool_type_ids)
-        exists_tool_type = {tool.id: tool for tool in tool_type_info}
-        tool_info = GptsToolsDao.get_list_by_type(list(exists_tool_type.keys()))
-        exists_tool_info = {tool.id: tool for tool in tool_info}
+        exists_tool_type, exists_tool_info = cls._read_tool_rows(tool_type_ids)
+
+        missing = [tid for tid in tool_type_ids if tid not in exists_tool_type]
+        if missing:
+            with strict_tenant_filter():
+                strict_type, strict_info = cls._read_tool_rows(tool_type_ids)
+            # Keep whichever read resolved more; a genuine deletion resolves
+            # neither way and still drops out below.
+            if len(strict_type) > len(exists_tool_type):
+                logger.warning(
+                    "workstation config tool sync: {} of {} tool group(s) unresolved under the request's "
+                    "tenant filter, recovered {} with a strict re-read (tenant={})",
+                    len(missing),
+                    len(tool_type_ids),
+                    len(strict_type) - len(exists_tool_type),
+                    cls._current_tenant_id(),
+                )
+                exists_tool_type, exists_tool_info = strict_type, strict_info
+
         new_tools = []
         for tool in normalized_tools:
             if not tool:
@@ -512,6 +553,47 @@ class WorkStationService(BaseService):
         return [app_id for app_id in recommended_apps if app_id in keep]
 
     @classmethod
+    async def afilter_tools_by_use_permission(
+        cls,
+        tools: list[dict] | None,
+        login_user: UserPayload,
+    ) -> list[dict]:
+        """Drop the tool groups this user is not allowed to use.
+
+        The workbench tool list is curated by an admin, but a tool still carries
+        its own resource permission (and often its own credentials), so a user
+        should not be offered one they cannot run: ``ToolExecutor`` refuses the
+        call at request time, which without this filter shows up as a tool that
+        is selectable but silently fails.
+
+        Groups are checked by their tool-type id, the same resource the tool
+        management page checks. A group with no id cannot be verified, so it is
+        dropped rather than offered — the projection always carries one, and a
+        shape that does not is worth seeing in the log.
+        """
+        from bisheng.permission.application.business_authorization import batch_check_business_actions
+
+        if not tools:
+            return []
+
+        identified = [group for group in tools if group.get("id") is not None]
+        if len(identified) != len(tools):
+            logger.warning(
+                "[workstation.tools] dropped {} tool group(s) without an id while filtering by use permission",
+                len(tools) - len(identified),
+            )
+        if not identified:
+            return []
+
+        action_map = await batch_check_business_actions(
+            login_user,
+            resource_type="tool",
+            resource_ids=[group["id"] for group in identified],
+            actions=("use",),
+        )
+        return [group for group in identified if "use" in action_map.get(str(group["id"]), frozenset())]
+
+    @classmethod
     async def _aproject_daily_config_for_current_tenant(
         cls,
         config: WorkstationConfig | None,
@@ -691,18 +773,36 @@ class WorkStationService(BaseService):
         return await cls.get_daily_chat_config()
 
     @classmethod
-    async def get_daily_chat_config_with_meta(cls) -> tuple[WorkstationConfig | None, bool, int, bool]:
+    async def get_daily_chat_config_with_meta(cls) -> tuple[WorkstationConfig | None, bool, int, bool, bool]:
+        """Resolve the daily config plus its provenance.
+
+        The fifth element is ``is_fallback``: True when nothing was stored for
+        this tenant (or Root) and the returned config is the built-in default
+        rather than anything an admin saved. Callers that write the config back
+        must not treat a fallback as "the admin's current settings" — the admin
+        UI round-trips what it is given, so persisting a fallback silently
+        replaces a real config with defaults.
+        """
         value, inherited, source_tenant_id, has_override = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
         config = type("TenantConfigValue", (), {"value": value}) if value else None
         ret = cls.parse_config(config)
+        is_fallback = ret is None
         if ret is None:
+            logger.warning(
+                "daily workstation config falling back to built-in defaults: tenant={} source_tenant={} "
+                "inherited={} has_override={} (no stored value resolved)",
+                cls._current_tenant_id(),
+                source_tenant_id,
+                inherited,
+                has_override,
+            )
             ret = await cls._abuild_default_daily_config()
         if ret and not inherited:
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
             ret = await cls._aproject_daily_config_for_current_tenant(ret, source_tenant_id)
         ret = cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
-        return ret, inherited, source_tenant_id, has_override
+        return ret, inherited, source_tenant_id, has_override, is_fallback
 
     @classmethod
     async def get_linsight_config(cls) -> LinsightConfig | None:
@@ -813,6 +913,7 @@ class WorkStationService(BaseService):
             "created_types": 0,
             "created_tools": 0,
             "skipped_tools": 0,
+            "projected_types": 0,
         }
         if tenant_id == DEFAULT_TENANT_ID:
             return result
@@ -908,6 +1009,29 @@ class WorkStationService(BaseService):
                 session.add(new_tool)
                 result["created_tools"] += 1
             await session.commit()
+            system_types = tuple(child_type_by_name.values())
+        if not settings.openfga.enabled:
+            return result
+        invalid_types = tuple(row for row in system_types if row.id is None or row.user_id is not None)
+        if invalid_types:
+            raise RuntimeError("copied preset tool category does not satisfy the system-owned predicate")
+        specs = tuple(
+            SystemOwnedResourceSpec(
+                tenant_id=tenant_id,
+                resource_type="tool",
+                resource_id=str(row.id),
+                action_codes=tuple(sorted(SYSTEM_TOOL_ACTIONS)),
+                context_version=sha256(f"tool|{row.id}|{tenant_id}|{row.user_id}|{row.is_preset}".encode()).hexdigest(),
+            )
+            for row in system_types
+        )
+        report = await reconcile_system_owned_resources(
+            await get_f048_runtime(),
+            specs,
+            apply=True,
+            operator_id=SYSTEM_RESOURCE_BOOTSTRAP_OPERATOR_ID,
+        )
+        result["projected_types"] = report.current_count
         return result
 
     @classmethod
@@ -1051,18 +1175,16 @@ class WorkStationService(BaseService):
 
         Returns the docs unchanged when:
         - the input is empty,
-        - the login_user is admin (short-circuit), or
         - the kb belongs to the org bucket (AC-14, legacy knowledge_library).
 
         Otherwise resolves the unique document_id set via
-        ``KnowledgeFileVisibilityService.post_filter_visible_files`` and
-        retains only chunks whose file_id survived.
+        ``KnowledgeFileVisibilityService.post_filter_retrievable_files`` and
+        retains only chunks whose file_id is both visible and the current
+        primary version.
         """
         if not docs:
             return []
         if not is_space_bucket:
-            return docs
-        if login_user.is_admin():
             return docs
 
         from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
@@ -1082,7 +1204,7 @@ class WorkStationService(BaseService):
                 continue
         if not unique_file_ids:
             return []
-        permitted = await visibility.post_filter_visible_files(int(kb_id), unique_file_ids)
+        permitted = await visibility.post_filter_retrievable_files(int(kb_id), unique_file_ids)
         return [d for d in docs if int((getattr(d, "metadata", {}) or {}).get("document_id", -1)) in permitted]
 
     @classmethod
@@ -1113,10 +1235,10 @@ class WorkStationService(BaseService):
 
             org_kb_ids = [int(x) for x in visibility_filter["org_kb_ids"]]
             if org_kb_ids and not login_user.is_admin():
-                permitted_org_ids = await KnowledgePermissionService().filter_knowledge_ids_by_permission_async(
+                permitted_org_ids = await KnowledgePermissionService().filter_knowledge_ids_by_action_async(
                     login_user,
                     org_kb_ids,
-                    "use_kb",
+                    "use",
                 )
                 denied_org_ids = [kb_id for kb_id in org_kb_ids if kb_id not in set(permitted_org_ids)]
                 for kb_id in denied_org_ids:
@@ -1287,6 +1409,19 @@ class WorkStationService(BaseService):
             logger.exception(f"queryChunksFromDB error: {exc}")
             return [], None, failures
 
+    @staticmethod
+    def _attachment_display_name(file_item: dict) -> str:
+        """Best-effort display name for one attachment row.
+
+        Daily uploads and task-mode ingests disagree on the key, so try each in
+        turn rather than assuming one shape.
+        """
+        for key in ("file_name", "filename", "name", "original_filename"):
+            value = file_item.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
+
     @classmethod
     async def get_chat_history(cls, chat_id: str, size: int = 4, max_tokens: int | None = None):
         """Build LLM-consumable chat history, backward compatible with both
@@ -1322,10 +1457,16 @@ class WorkStationService(BaseService):
         for one in messages:
             raw = one.message or ""
             if one.category == MessageCategory.QUESTION.value:
-                # Try new JSON format: {"query": "..."}
+                # Try new JSON format: {"query": "...", "files": [...]}
+                attachments: list[dict] = []
                 try:
                     parsed = json.loads(raw)
-                    content = parsed.get("query", raw) if isinstance(parsed, dict) else raw
+                    if isinstance(parsed, dict):
+                        content = parsed.get("query", raw)
+                        files = parsed.get("files")
+                        attachments = [f for f in files if isinstance(f, dict)] if isinstance(files, list) else []
+                    else:
+                        content = raw
                 except (json.JSONDecodeError, TypeError):
                     content = raw
                 # Legacy rows may carry a rewritten prompt in `extra.prompt`.
@@ -1335,6 +1476,15 @@ class WorkStationService(BaseService):
                         content = extra["prompt"]
                 except (json.JSONDecodeError, TypeError):
                     pass
+                # Name the attachments of past turns. Their extracted text is NOT
+                # replayed (it was already truncated into that turn's prompt, and
+                # replaying it would blow the history budget), but a model that
+                # cannot see the file at all tends to answer from its own summary
+                # of an earlier turn — inventing page citations it never read.
+                # Knowing a file was attached is what lets it say so instead.
+                names = [n for n in (cls._attachment_display_name(f) for f in attachments) if n]
+                if names:
+                    content = f"{content}\n[attachments] {', '.join(names)}"
                 chat_history.append(HumanMessage(content=content))
 
             elif one.category == MessageCategory.AGENT_ANSWER.value:

@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import logging
 import secrets
+from dataclasses import dataclass
+from hashlib import sha256
+from types import SimpleNamespace
 
 from sqlalchemy import and_, delete, func, or_, update
 from sqlalchemy.exc import IntegrityError
@@ -34,6 +37,8 @@ from bisheng.common.errcode.department import (
     DepartmentRootExistsError,
     DepartmentSourceReadonlyError,
 )
+from bisheng.common.errcode.permission import PermissionInvalidResourceError
+from bisheng.common.services.config_service import settings
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import (
     Department,
@@ -58,7 +63,16 @@ from bisheng.department.domain.schemas.department_schema import (
 from bisheng.department.domain.services.department_change_handler import (
     DepartmentChangeHandler,
 )
+from bisheng.department.domain.services.department_projection_scope import (
+    DepartmentProjectionRuntime,
+    PreparedDepartmentProjection,
+)
+from bisheng.permission.domain.services.department_change_handler import (
+    DepartmentProjectionContext,
+    F048DepartmentChangeHandler,
+)
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
+from bisheng.permission.domain.services.projection_plan import ProjectionPlan
 
 logger = logging.getLogger(__name__)
 
@@ -66,21 +80,8 @@ logger = logging.getLogger(__name__)
 _ADMIN_ROLE_ID = 1
 
 
-async def _aget_fga_client_with_fallback():
-    """Return the async FGA client, with sync fallback for degraded contexts."""
-    from bisheng.core.openfga.manager import aget_fga_client, get_fga_client
-
-    fga = await aget_fga_client()
-    if fga is not None:
-        return fga
-    return get_fga_client()
-
-
 def _is_admin(login_user) -> bool:
-    """Temporary admin check — F004 will replace with PermissionService.check().
-
-    Checks if AdminRole (id=1) is in login_user.user_role.
-    """
+    """Check the legacy system-admin identity on the login payload."""
     if bool(getattr(login_user, "is_global_super", False)):
         return True
     if hasattr(login_user, "user_role") and isinstance(login_user.user_role, list):
@@ -92,41 +93,38 @@ async def _check_permission(
     login_user,
     dept_internal_id: int | None = None,
 ) -> None:
-    """Two-tier permission check: system admin OR department admin via OpenFGA.
+    """Check system, department, then tenant administration.
 
     Args:
         login_user: Current user payload.
         dept_internal_id: Database ID of the target department. When provided,
-            checks if the user is an admin of that department (or any ancestor
-            via OpenFGA's parent-admin inheritance).
+            checks if the user is an admin of that department or an ancestor.
 
-    When OpenFGA is missing ``department:parent#parent department:child`` tuples,
-    inherited ``admin`` checks on the child can fail while MySQL ``path`` still
-    places the node under an admin's subtree (left tree vs member API mismatch).
-    In that case we walk ``parent_id`` in DB and re-use ``PermissionService.check``
-    on each ancestor — same outcome as a fully synced FGA graph without widening
-    scope beyond the org tree.
+    The DB parent walk is a compatibility fallback for incomplete historical
+    department projection data and never widens scope beyond the org tree.
     """
     # L1: System admin → pass
     if _is_admin(login_user):
         return
-    # L2: Department admin → check via OpenFGA
+    # L2: Department admin through the permission application.
     if dept_internal_id is not None:
         try:
-            from bisheng.permission.domain.services.permission_service import (
-                PermissionService,
+            from bisheng.permission.application import (
+                PermissionObject,
+                PermissionSubject,
+                get_permission_relation_api,
             )
 
-            is_dept_admin = await PermissionService.check(
-                user_id=login_user.user_id,
+            permissions = await get_permission_relation_api()
+            subject = PermissionSubject("user", str(login_user.user_id))
+            is_dept_admin = await permissions.check(
+                subject=subject,
                 relation="admin",
-                object_type="department",
-                object_id=str(dept_internal_id),
-                login_user=login_user,
+                resource=PermissionObject("department", str(dept_internal_id)),
             )
             if is_dept_admin:
                 return
-            # L2b: DB parent chain — tolerate missing FGA ``parent`` edges on some nodes
+            # L2b: tolerate incomplete historical parent projection.
             seen: set[int] = {int(dept_internal_id)}
             row = await DepartmentDao.aget_by_id(int(dept_internal_id))
             while row is not None and row.parent_id is not None:
@@ -134,18 +132,16 @@ async def _check_permission(
                 if pid in seen:
                     break
                 seen.add(pid)
-                if await PermissionService.check(
-                    user_id=login_user.user_id,
+                if await permissions.check(
+                    subject=subject,
                     relation="admin",
-                    object_type="department",
-                    object_id=str(pid),
-                    login_user=login_user,
+                    resource=PermissionObject("department", str(pid)),
                 ):
                     return
                 row = await DepartmentDao.aget_by_id(pid)
         except Exception:
             logger.warning(
-                "PermissionService.check failed for dept admin, user=%d dept=%d",
+                "Permission check failed for dept admin, user=%d dept=%d",
                 login_user.user_id,
                 dept_internal_id,
             )
@@ -168,20 +164,12 @@ async def _is_tenant_admin(login_user) -> bool:
     if tenant_id is None:
         return False
     try:
-        from bisheng.permission.domain.services.permission_service import (
-            PermissionService,
-        )
+        from bisheng.permission.application import is_tenant_admin
 
-        return await PermissionService.check(
-            user_id=login_user.user_id,
-            relation="admin",
-            object_type="tenant",
-            object_id=str(tenant_id),
-            login_user=login_user,
-        )
+        return await is_tenant_admin(login_user.user_id, int(tenant_id))
     except Exception as e:
         logger.warning(
-            "PermissionService.check failed for tenant admin, user=%s tenant=%s: %s",
+            "Permission check failed for tenant admin, user=%s tenant=%s: %s",
             getattr(login_user, "user_id", None),
             tenant_id,
             e,
@@ -413,6 +401,587 @@ async def _ensure_department_can_purge(session, dept: Department) -> None:
         raise DepartmentHasMembersError()
 
 
+@dataclass(frozen=True, slots=True)
+class DepartmentProjectionRecord:
+    tenant_id: int
+    department_id: int
+    parent_id: int | None
+    path: str
+    status: str
+
+
+class DepartmentProjectionAuthorizationPort:
+    """Pass only business-verified department topology to F048 projection."""
+
+    def __init__(self, handler: F048DepartmentChangeHandler) -> None:
+        self._handler = handler
+
+    async def project_moved(
+        self,
+        *,
+        context: DepartmentProjectionContext,
+        department: DepartmentProjectionRecord,
+        new_parent: DepartmentProjectionRecord,
+    ):
+        ancestor_ids = tuple(_parse_path_ids(new_parent.path))
+        if (
+            department.department_id != context.department_id
+            or department.tenant_id != context.tenant_id
+            or new_parent.tenant_id != context.tenant_id
+            or department.status != "active"
+            or new_parent.status != "active"
+            or department.parent_id is None
+            or new_parent.department_id == department.department_id
+            or new_parent.department_id not in ancestor_ids
+            or department.department_id in ancestor_ids
+            or new_parent.path.startswith(department.path)
+        ):
+            raise PermissionInvalidResourceError()
+        return await self._handler.project_moved(
+            context=context,
+            old_parent_id=department.parent_id,
+            new_parent_id=new_parent.department_id,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedDepartmentProjection:
+    runtime: DepartmentProjectionRuntime
+    prepared: PreparedDepartmentProjection
+
+
+def _uses_f048_department_projection() -> bool:
+    """Use the lazy projection context whenever OpenFGA is enabled."""
+
+    return settings.openfga.enabled
+
+
+async def _prepare_department_projection(
+    *,
+    department: Department,
+    login_user,
+    operation_type: str,
+    operation_facts: tuple[object, ...],
+    plan_builder,
+) -> _PreparedDepartmentProjection | None:
+    """Prepare a durable plan from facts already verified by DepartmentService."""
+
+    if not _uses_f048_department_projection():
+        return None
+    if department.id is None or department.tenant_id is None:
+        raise PermissionInvalidResourceError(msg="Department projection identity is incomplete")
+
+    from bisheng.department.domain.services.department_projection_scope import (
+        get_department_projection_runtime,
+    )
+    from bisheng.permission.application.access import get_f048_runtime
+
+    runtime = await get_department_projection_runtime()
+    permission_runtime = await get_f048_runtime()
+    catalog = await permission_runtime.current_catalog()
+    operator_id = int(getattr(login_user, "user_id", 0) or 0)
+    if operator_id < 0:
+        raise PermissionInvalidResourceError(msg="Department projection operator is invalid")
+    nonce = secrets.token_hex(16)
+    canonical = "|".join(
+        str(value)
+        for value in (
+            department.tenant_id,
+            department.id,
+            department.permission_projection_version,
+            operation_type,
+            *operation_facts,
+            nonce,
+        )
+    )
+    idempotency_key = "f048:department:" + sha256(canonical.encode("utf-8")).hexdigest()[:47]
+    context = DepartmentProjectionContext(
+        tenant_id=int(department.tenant_id),
+        department_id=int(department.id),
+        expected_version=int(department.permission_projection_version or 0),
+        store_id=catalog.store_id,
+        model_id=catalog.model_id,
+        operator_id=operator_id,
+        idempotency_key=idempotency_key,
+    )
+    plan: ProjectionPlan = plan_builder(runtime.handler, context)
+    prepared = await runtime.prepare(plan)
+    return _PreparedDepartmentProjection(
+        runtime=runtime,
+        prepared=prepared,
+    )
+
+
+async def _bind_department_projection(
+    session,
+    attempt: _PreparedDepartmentProjection | None,
+) -> None:
+    if attempt is not None:
+        await attempt.runtime.bind(session, attempt.prepared)
+
+
+async def _abandon_department_projection(
+    attempt: _PreparedDepartmentProjection | None,
+    error: Exception,
+) -> None:
+    if attempt is None:
+        return
+    try:
+        await attempt.runtime.abandon(attempt.prepared, error)
+    except Exception:
+        logger.exception("Failed to abandon department projection after business rollback")
+
+
+async def _execute_department_projection(
+    attempt: _PreparedDepartmentProjection | None,
+) -> None:
+    if attempt is not None:
+        await attempt.runtime.execute(attempt.prepared)
+
+
+async def _resume_department_projection_if_needed(
+    department: Department,
+) -> bool:
+    """Resume the operation durably bound to a PROJECTING department row."""
+
+    if (
+        not _uses_f048_department_projection()
+        or department.permission_projection_state != "PROJECTING"
+        or not department.permission_projection_operation_id
+    ):
+        return False
+    from bisheng.department.domain.services.department_projection_scope import (
+        get_department_projection_runtime,
+    )
+
+    runtime = await get_department_projection_runtime()
+    outcome = await runtime.reconcile_operation(
+        int(department.permission_projection_operation_id),
+    )
+    department.permission_projection_version = outcome.target_version
+    department.permission_projection_state = "CURRENT"
+    return True
+
+
+class DepartmentMembershipProjectionService:
+    """Mutate one membership and its F048 identity tuple as one operation."""
+
+    @classmethod
+    async def aadd_member(
+        cls,
+        *,
+        user_id: int,
+        department_id: int,
+        is_primary: int,
+        source: str,
+        operator_id: int = 0,
+    ) -> bool:
+        projection = None
+        business_committed = False
+        try:
+            async with get_async_db_session() as session:
+                department = (await session.exec(select(Department).where(Department.id == department_id))).first()
+                if department is None or department.status != "active":
+                    raise DepartmentNotFoundError()
+                await _resume_department_projection_if_needed(department)
+                existing = (
+                    await session.exec(
+                        select(UserDepartment).where(
+                            UserDepartment.user_id == user_id,
+                            UserDepartment.department_id == department_id,
+                        )
+                    )
+                ).first()
+                if existing is not None:
+                    return False
+
+                projection = await _prepare_department_projection(
+                    department=department,
+                    login_user=SimpleNamespace(user_id=operator_id),
+                    operation_type="DEPARTMENT_MEMBERS_ADD",
+                    operation_facts=(user_id,),
+                    plan_builder=lambda handler, context: handler.build_members_added_plan(
+                        context=context,
+                        user_ids=(int(user_id),),
+                    ),
+                )
+                session.add(
+                    UserDepartment(
+                        user_id=user_id,
+                        department_id=department_id,
+                        is_primary=is_primary,
+                        source=source,
+                    )
+                )
+                await _bind_department_projection(session, projection)
+                await session.commit()
+                business_committed = True
+        except Exception as exc:
+            if not business_committed:
+                await _abandon_department_projection(projection, exc)
+            raise
+
+        await _execute_department_projection(projection)
+        if projection is None:
+            await DepartmentChangeHandler.execute_async(
+                DepartmentChangeHandler.on_members_added(
+                    department_id,
+                    [user_id],
+                )
+            )
+        return True
+
+    @classmethod
+    async def aremove_member(
+        cls,
+        *,
+        user_id: int,
+        department_id: int,
+        operator_id: int = 0,
+    ) -> bool:
+        projection = None
+        business_committed = False
+        try:
+            async with get_async_db_session() as session:
+                department = (await session.exec(select(Department).where(Department.id == department_id))).first()
+                if department is None:
+                    raise DepartmentNotFoundError()
+                await _resume_department_projection_if_needed(department)
+                membership = (
+                    await session.exec(
+                        select(UserDepartment).where(
+                            UserDepartment.user_id == user_id,
+                            UserDepartment.department_id == department_id,
+                        )
+                    )
+                ).first()
+                if membership is None:
+                    return False
+
+                projection = await _prepare_department_projection(
+                    department=department,
+                    login_user=SimpleNamespace(user_id=operator_id),
+                    operation_type="DEPARTMENT_MEMBER_REMOVE",
+                    operation_facts=(user_id,),
+                    plan_builder=lambda handler, context: handler.build_member_removed_plan(
+                        context=context,
+                        user_id=int(user_id),
+                    ),
+                )
+                await session.delete(membership)
+                await _bind_department_projection(session, projection)
+                await session.commit()
+                business_committed = True
+        except Exception as exc:
+            if not business_committed:
+                await _abandon_department_projection(projection, exc)
+            raise
+
+        await _execute_department_projection(projection)
+        if projection is None:
+            await DepartmentChangeHandler.execute_async(
+                DepartmentChangeHandler.on_member_removed(
+                    department_id,
+                    user_id,
+                )
+            )
+        return True
+
+
+class DepartmentTopologyProjectionService:
+    """Mutate verified topology and project its parent edge through the ledger."""
+
+    @staticmethod
+    def _synced_path(parent_path: str, department_id: int) -> str:
+        base = (parent_path or "").strip()
+        if base and not base.endswith("/"):
+            base = f"{base}/"
+        if not base.startswith("/"):
+            base = f"/{base}" if base else "/"
+        return f"{base}{department_id}/".replace("//", "/")
+
+    @classmethod
+    async def aupsert_synced_department(
+        cls,
+        *,
+        source: str,
+        external_id: str,
+        name: str,
+        parent_id: int | None,
+        parent_path: str,
+        sort_order: int,
+        last_sync_ts: int,
+        tenant_id: int = 1,
+        operator_id: int = 0,
+    ) -> Department:
+        """Commit an SSO upsert and its parent projection binding atomically."""
+
+        normalized_parent_id = int(parent_id) if parent_id else None
+        projection = None
+        business_committed = False
+        topology_changed = False
+        old_parent_id: int | None = None
+        department: Department | None = None
+        try:
+            async with get_async_db_session() as session:
+                statement = (
+                    select(Department)
+                    .where(
+                        Department.source == source,
+                        Department.external_id == external_id,
+                    )
+                    .with_for_update()
+                )
+                department = (await session.exec(statement)).first()
+                was_active = bool(
+                    department is not None and department.status == "active" and int(department.is_deleted or 0) == 0
+                )
+                if was_active:
+                    old_parent_id = int(department.parent_id) if department.parent_id else None
+
+                if department is None:
+                    department = Department(
+                        dept_id=f"{source.upper()}@{external_id}",
+                        name=name,
+                        parent_id=normalized_parent_id,
+                        tenant_id=tenant_id,
+                        path=parent_path,
+                        sort_order=sort_order,
+                        source=source,
+                        external_id=external_id,
+                        status="active",
+                        is_deleted=0,
+                        last_sync_ts=last_sync_ts,
+                    )
+                    session.add(department)
+                    await session.flush()
+                else:
+                    department.name = name
+                    department.parent_id = normalized_parent_id
+                    department.sort_order = sort_order
+                    department.status = "active"
+                    department.is_deleted = 0
+                    department.last_sync_ts = last_sync_ts
+
+                if department.id is None:
+                    raise PermissionInvalidResourceError(msg="Synced department has no durable ID")
+                department.path = cls._synced_path(
+                    parent_path,
+                    int(department.id),
+                )
+                session.add(department)
+                await session.flush()
+
+                topology_changed = old_parent_id != normalized_parent_id
+                if topology_changed:
+                    if old_parent_id is None and normalized_parent_id is not None:
+
+                        def plan_builder(handler, context):
+                            return handler.build_created_plan(
+                                context=context,
+                                parent_id=normalized_parent_id,
+                            )
+
+                        operation_type = "DEPARTMENT_CREATE"
+                    elif old_parent_id is not None and normalized_parent_id is None:
+
+                        def plan_builder(handler, context):
+                            return handler.build_archived_plan(
+                                context=context,
+                                parent_id=old_parent_id,
+                            )
+
+                        operation_type = "DEPARTMENT_PARENT_REMOVE"
+                    else:
+
+                        def plan_builder(handler, context):
+                            return handler.build_moved_plan(
+                                context=context,
+                                old_parent_id=int(old_parent_id),
+                                new_parent_id=int(normalized_parent_id),
+                            )
+
+                        operation_type = "DEPARTMENT_MOVE"
+                    projection = await _prepare_department_projection(
+                        department=department,
+                        login_user=SimpleNamespace(user_id=operator_id),
+                        operation_type=operation_type,
+                        operation_facts=(
+                            old_parent_id,
+                            normalized_parent_id,
+                            source,
+                            external_id,
+                        ),
+                        plan_builder=plan_builder,
+                    )
+                    await _bind_department_projection(session, projection)
+
+                await session.commit()
+                business_committed = True
+        except Exception as exc:
+            if not business_committed:
+                await _abandon_department_projection(projection, exc)
+            raise
+
+        await _execute_department_projection(projection)
+        if projection is None and topology_changed:
+            await DepartmentChangeHandler.execute_async(
+                DepartmentChangeHandler.on_reparented(
+                    int(department.id),
+                    old_parent_id,
+                    normalized_parent_id,
+                )
+            )
+        return department
+
+    @classmethod
+    async def aarchive_synced_department(
+        cls,
+        *,
+        department_id: int,
+        last_sync_ts: int,
+        operator_id: int = 0,
+    ) -> Department | None:
+        """Commit an SSO archive and removal of its parent edge atomically."""
+
+        projection = None
+        business_committed = False
+        topology_changed = False
+        old_parent_id: int | None = None
+        department: Department | None = None
+        try:
+            async with get_async_db_session() as session:
+                statement = select(Department).where(Department.id == department_id).with_for_update()
+                department = (await session.exec(statement)).first()
+                if department is None:
+                    return None
+                if department.status == "active" and int(department.is_deleted or 0) == 0:
+                    old_parent_id = int(department.parent_id) if department.parent_id else None
+                topology_changed = old_parent_id is not None
+                if topology_changed:
+                    projection = await _prepare_department_projection(
+                        department=department,
+                        login_user=SimpleNamespace(user_id=operator_id),
+                        operation_type="DEPARTMENT_ARCHIVE",
+                        operation_facts=(
+                            old_parent_id,
+                            last_sync_ts,
+                        ),
+                        plan_builder=lambda handler, context: handler.build_archived_plan(
+                            context=context,
+                            parent_id=int(old_parent_id),
+                        ),
+                    )
+
+                department.status = "archived"
+                department.is_deleted = 1
+                department.last_sync_ts = last_sync_ts
+                session.add(department)
+                await session.flush()
+                await _bind_department_projection(session, projection)
+                await session.commit()
+                business_committed = True
+        except Exception as exc:
+            if not business_committed:
+                await _abandon_department_projection(projection, exc)
+            raise
+
+        await _execute_department_projection(projection)
+        if projection is None and topology_changed:
+            await DepartmentChangeHandler.execute_async(
+                DepartmentChangeHandler.on_reparented(
+                    department_id,
+                    old_parent_id,
+                    None,
+                )
+            )
+        return department
+
+    @classmethod
+    async def areconcile_parent_change(
+        cls,
+        *,
+        department_id: int,
+        old_parent_id: int | None,
+        new_parent_id: int | None,
+        operator_id: int = 0,
+    ) -> bool:
+        old_parent_id = int(old_parent_id) if old_parent_id else None
+        new_parent_id = int(new_parent_id) if new_parent_id else None
+        if old_parent_id == new_parent_id:
+            return False
+        if old_parent_id is None and new_parent_id is None:
+            return False
+
+        projection = None
+        business_committed = False
+        try:
+            async with get_async_db_session() as session:
+                department = (await session.exec(select(Department).where(Department.id == department_id))).first()
+                if department is None:
+                    raise DepartmentNotFoundError()
+                if new_parent_id is not None and int(department.parent_id or 0) != new_parent_id:
+                    raise PermissionInvalidResourceError(msg=("Department parent changed before permission projection"))
+
+                if old_parent_id is None:
+
+                    def plan_builder(handler, context):
+                        return handler.build_created_plan(
+                            context=context,
+                            parent_id=int(new_parent_id),
+                        )
+
+                    operation_type = "DEPARTMENT_CREATE"
+                elif new_parent_id is None:
+
+                    def plan_builder(handler, context):
+                        return handler.build_archived_plan(
+                            context=context,
+                            parent_id=int(old_parent_id),
+                        )
+
+                    operation_type = "DEPARTMENT_ARCHIVE"
+                else:
+
+                    def plan_builder(handler, context):
+                        return handler.build_moved_plan(
+                            context=context,
+                            old_parent_id=int(old_parent_id),
+                            new_parent_id=int(new_parent_id),
+                        )
+
+                    operation_type = "DEPARTMENT_MOVE"
+
+                projection = await _prepare_department_projection(
+                    department=department,
+                    login_user=SimpleNamespace(user_id=operator_id),
+                    operation_type=operation_type,
+                    operation_facts=(
+                        old_parent_id,
+                        new_parent_id,
+                    ),
+                    plan_builder=plan_builder,
+                )
+                await _bind_department_projection(session, projection)
+                await session.commit()
+                business_committed = True
+        except Exception as exc:
+            if not business_committed:
+                await _abandon_department_projection(projection, exc)
+            raise
+
+        await _execute_department_projection(projection)
+        if projection is None:
+            await DepartmentChangeHandler.execute_async(
+                DepartmentChangeHandler.on_reparented(
+                    department_id,
+                    old_parent_id,
+                    new_parent_id,
+                )
+            )
+        return True
+
+
 class DepartmentService:
     @classmethod
     async def acreate_department(
@@ -422,62 +991,82 @@ class DepartmentService:
     ) -> Department:
         await _check_permission(login_user, dept_internal_id=data.parent_id)
 
-        async with get_async_db_session() as session:
-            # Validate parent exists and is active
-            parent = (await session.exec(select(Department).where(Department.id == data.parent_id))).first()
-            if not parent or parent.status != "active":
-                raise DepartmentNotFoundError(msg="Parent department not found")
+        projection = None
+        business_committed = False
+        try:
+            async with get_async_db_session() as session:
+                # Validate parent exists and is active
+                parent = (await session.exec(select(Department).where(Department.id == data.parent_id))).first()
+                if not parent or parent.status != "active":
+                    raise DepartmentNotFoundError(msg="Parent department not found")
 
-            # Check name duplicate at same level
-            dup = (
-                await session.exec(
-                    select(Department).where(
-                        Department.parent_id == data.parent_id,
-                        Department.name == data.name,
-                        Department.status == "active",
+                # Check name duplicate at same level
+                dup = (
+                    await session.exec(
+                        select(Department).where(
+                            Department.parent_id == data.parent_id,
+                            Department.name == data.name,
+                            Department.status == "active",
+                        )
                     )
+                ).first()
+                if dup:
+                    raise DepartmentNameDuplicateError()
+
+                # Generate dept_id with retry (3 attempts + 1 fallback).
+                dept_id = None
+                for _ in range(3):
+                    candidate = generate_dept_id(_get_dept_id_prefix())
+                    existing = (await session.exec(select(Department).where(Department.dept_id == candidate))).first()
+                    if not existing:
+                        dept_id = candidate
+                        break
+                if dept_id is None:
+                    dept_id = f"BS@{secrets.token_hex(6)}"
+
+                # INSERT department
+                dept = Department(
+                    dept_id=dept_id,
+                    name=data.name,
+                    parent_id=data.parent_id,
+                    tenant_id=getattr(parent, "tenant_id", None),
+                    sort_order=data.sort_order,
+                    default_role_ids=data.default_role_ids,
+                    source="local",
+                    external_id=dept_id,
+                    status="active",
+                    create_user=login_user.user_id,
                 )
-            ).first()
-            if dup:
-                raise DepartmentNameDuplicateError()
+                session.add(dept)
+                await session.flush()
+                await session.refresh(dept)
 
-            # Generate dept_id with retry (3 attempts + 1 fallback with longer hex)
-            dept_id = None
-            for _ in range(3):
-                candidate = generate_dept_id(_get_dept_id_prefix())
-                existing = (await session.exec(select(Department).where(Department.dept_id == candidate))).first()
-                if not existing:
-                    dept_id = candidate
-                    break
-            if dept_id is None:
-                # Fallback: longer hex to minimize collision
-                dept_id = f"BS@{secrets.token_hex(6)}"
+                # UPDATE path (two-phase: need auto_increment id first)
+                dept.path = f"{parent.path}{dept.id}/"
+                session.add(dept)
+                projection = await _prepare_department_projection(
+                    department=dept,
+                    login_user=login_user,
+                    operation_type="DEPARTMENT_CREATE",
+                    operation_facts=(parent.id,),
+                    plan_builder=lambda handler, context: handler.build_created_plan(
+                        context=context,
+                        parent_id=int(parent.id),
+                    ),
+                )
+                await _bind_department_projection(session, projection)
+                await session.commit()
+                business_committed = True
+                await session.refresh(dept)
+        except Exception as exc:
+            if not business_committed:
+                await _abandon_department_projection(projection, exc)
+            raise
 
-            # INSERT department
-            dept = Department(
-                dept_id=dept_id,
-                name=data.name,
-                parent_id=data.parent_id,
-                sort_order=data.sort_order,
-                default_role_ids=data.default_role_ids,
-                source="local",
-                external_id=dept_id,
-                status="active",
-                create_user=login_user.user_id,
-            )
-            session.add(dept)
-            await session.flush()
-            await session.refresh(dept)
-
-            # UPDATE path (two-phase: need auto_increment id first)
-            dept.path = f"{parent.path}{dept.id}/"
-            session.add(dept)
-            await session.commit()
-            await session.refresh(dept)
-
-        # Fire change handler (outside session)
-        ops = DepartmentChangeHandler.on_created(dept.id, parent.id)
-        await DepartmentChangeHandler.execute_async(ops)
+        await _execute_department_projection(projection)
+        if projection is None:
+            ops = DepartmentChangeHandler.on_created(dept.id, parent.id)
+            await DepartmentChangeHandler.execute_async(ops)
 
         # Set initial admins if provided
         if data.admin_user_ids:
@@ -647,6 +1236,31 @@ class DepartmentService:
         return {"roots": roots, "total_matches": 1, "truncated": False}
 
     @classmethod
+    async def abuild_forest_within_subtree(
+        cls,
+        seeds,
+        matched_ids: set[int],
+        *,
+        confined_to_path: str | None = None,
+        include_archived: bool = False,
+    ) -> list[dict]:
+        """The same pruned-forest assembly, for a caller whose scope is a
+        department subtree rather than an administrator's scope.
+
+        The grant-subject pickers (F048) ask "who may be granted this resource",
+        so their visibility is the resource's own department binding — not who
+        the caller administers. ``confined_to_path=None`` means the whole tenant.
+        """
+
+        return await cls._abuild_pruned_forest(
+            seeds,
+            matched_ids,
+            confined_to_path is None,
+            {confined_to_path} if confined_to_path else set(),
+            include_archived,
+        )
+
+    @classmethod
     async def _abuild_pruned_forest(
         cls, seeds, matched_ids: set[int], is_sys_admin: bool, admin_paths: set[str], include_archived: bool
     ) -> list[dict]:
@@ -776,20 +1390,44 @@ class DepartmentService:
 
     @classmethod
     async def adelete_department(cls, dept_id: str, login_user) -> None:
-        async with get_async_db_session() as session:
-            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-            if dept.dept_id == "BS@guest":
-                raise DepartmentPermissionDeniedError(msg="Guest department cannot be deleted")
+        projection = None
+        business_committed = False
+        try:
+            async with get_async_db_session() as session:
+                dept = await _get_dept_and_check_permission(
+                    session,
+                    dept_id,
+                    login_user,
+                )
+                if dept.dept_id == "BS@guest":
+                    raise DepartmentPermissionDeniedError(msg="Guest department cannot be deleted")
 
-            await _ensure_department_can_archive(session, dept)
+                await _ensure_department_can_archive(session, dept)
 
-            parent_id = dept.parent_id
-            dept.status = "archived"
-            session.add(dept)
-            await session.commit()
+                parent_id = dept.parent_id
+                if parent_id is not None:
+                    projection = await _prepare_department_projection(
+                        department=dept,
+                        login_user=login_user,
+                        operation_type="DEPARTMENT_ARCHIVE",
+                        operation_facts=(parent_id,),
+                        plan_builder=lambda handler, context: handler.build_archived_plan(
+                            context=context,
+                            parent_id=int(parent_id),
+                        ),
+                    )
+                dept.status = "archived"
+                session.add(dept)
+                await _bind_department_projection(session, projection)
+                await session.commit()
+                business_committed = True
+        except Exception as exc:
+            if not business_committed:
+                await _abandon_department_projection(projection, exc)
+            raise
 
-        # Fire change handler
-        if parent_id is not None:
+        await _execute_department_projection(projection)
+        if projection is None and parent_id is not None:
             ops = DepartmentChangeHandler.on_archived(dept.id, parent_id)
             await DepartmentChangeHandler.execute_async(ops)
 
@@ -836,28 +1474,20 @@ class DepartmentService:
             await session.delete(dept)
             await session.commit()
 
-        # Collect admin user_ids from OpenFGA
+        # Collect direct department admins through the permission application.
         admin_user_ids: list[int] = []
-        from bisheng.core.openfga.manager import aget_fga_client
+        try:
+            from bisheng.permission.application import PermissionObject, get_permission_relation_api
 
-        fga = await aget_fga_client()
-        if fga is not None:
-            try:
-                tuples = await fga.read_tuples(
-                    relation="admin",
-                    object=f"department:{dept_internal_id}",
-                )
-                for t in tuples:
-                    user_str = t.get("user", "") if isinstance(t, dict) else ""
-                    if not user_str and isinstance(t.get("key"), dict):
-                        user_str = t["key"].get("user", "")
-                    if user_str.startswith("user:"):
-                        try:
-                            admin_user_ids.append(int(user_str.split(":", 1)[1]))
-                        except ValueError:
-                            continue
-            except Exception:
-                logger.warning("FGA read_tuples failed during purge of department %s", dept_id)
+            permissions = await get_permission_relation_api()
+            admin_ids = await permissions.list_subject_ids(
+                resource=PermissionObject("department", str(dept_internal_id)),
+                relation="admin",
+                subject_type="user",
+            )
+            admin_user_ids = [int(user_id) for user_id in admin_ids if user_id.isdigit()]
+        except Exception:
+            logger.warning("Permission lookup failed during purge of department %s", dept_id)
 
         # Clean up OpenFGA tuples
         ops = DepartmentChangeHandler.on_purged(dept_internal_id, member_user_ids, admin_user_ids)
@@ -866,19 +1496,48 @@ class DepartmentService:
     @classmethod
     async def arestore_department(cls, dept_id: str, login_user) -> None:
         """Restore an archived department to active status."""
-        async with get_async_db_session() as session:
-            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-            if dept.status != "archived":
-                raise DepartmentNotArchivedError(msg="Only archived departments can be restored")
+        projection = None
+        business_committed = False
+        try:
+            async with get_async_db_session() as session:
+                dept = await _get_dept_and_check_permission(
+                    session,
+                    dept_id,
+                    login_user,
+                )
+                if dept.status != "archived":
+                    raise DepartmentNotArchivedError(msg="Only archived departments can be restored")
 
-            if dept.parent_id is not None:
-                parent = await DepartmentDao.aget_by_id(dept.parent_id)
-                if parent and parent.status == "archived":
-                    raise DepartmentParentArchivedError()
+                parent_id = dept.parent_id
+                if parent_id is not None:
+                    parent = (await session.exec(select(Department).where(Department.id == parent_id))).first()
+                    if parent and parent.status == "archived":
+                        raise DepartmentParentArchivedError()
+                    projection = await _prepare_department_projection(
+                        department=dept,
+                        login_user=login_user,
+                        operation_type="DEPARTMENT_RESTORE",
+                        operation_facts=(parent_id,),
+                        plan_builder=lambda handler, context: handler.build_restored_plan(
+                            context=context,
+                            parent_id=int(parent_id),
+                        ),
+                    )
 
-            dept.status = "active"
-            session.add(dept)
-            await session.commit()
+                dept.status = "active"
+                session.add(dept)
+                await _bind_department_projection(session, projection)
+                await session.commit()
+                business_committed = True
+        except Exception as exc:
+            if not business_committed:
+                await _abandon_department_projection(projection, exc)
+            raise
+
+        await _execute_department_projection(projection)
+        if projection is None and parent_id is not None:
+            ops = DepartmentChangeHandler.on_created(dept.id, parent_id)
+            await DepartmentChangeHandler.execute_async(ops)
 
     @classmethod
     async def amove_department(
@@ -887,48 +1546,86 @@ class DepartmentService:
         data: DepartmentMoveRequest,
         login_user,
     ) -> Department:
-        async with get_async_db_session() as session:
-            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+        projection = None
+        business_committed = False
+        try:
+            async with get_async_db_session() as session:
+                dept = await _get_dept_and_check_permission(
+                    session,
+                    dept_id,
+                    login_user,
+                )
 
-            # Load new parent
-            new_parent = (await session.exec(select(Department).where(Department.id == data.new_parent_id))).first()
-            if not new_parent or new_parent.status != "active":
-                raise DepartmentNotFoundError(msg="New parent department not found")
+                # Load new parent
+                new_parent = (await session.exec(select(Department).where(Department.id == data.new_parent_id))).first()
+                if not new_parent or new_parent.status != "active":
+                    raise DepartmentNotFoundError(msg="New parent department not found")
 
-            # Circular detection: can't move to self
-            if data.new_parent_id == dept.id:
-                raise DepartmentCircularMoveError()
+                # Circular detection: can't move to self or own subtree.
+                if data.new_parent_id == dept.id:
+                    raise DepartmentCircularMoveError()
+                if new_parent.path.startswith(dept.path):
+                    raise DepartmentCircularMoveError()
 
-            # Circular detection: can't move to own subtree
-            if new_parent.path.startswith(dept.path):
-                raise DepartmentCircularMoveError()
+                # INV-T1: reject moves under another mount point.
+                await DepartmentDao.aassert_reparent_legal(
+                    dept.id,
+                    new_parent.id,
+                )
 
-            # INV-T1 (2-layer lock): reject moves that would land a mounted
-            # subtree under another mount point. Single chokepoint shared
-            # with F014 SSO upsert and F009 org-sync move.
-            await DepartmentDao.aassert_reparent_legal(dept.id, new_parent.id)
+                old_parent_id = dept.parent_id
+                if old_parent_id is None:
+                    raise DepartmentPermissionDeniedError(msg="Root department cannot be moved")
+                old_path = dept.path
+                new_path = f"{new_parent.path}{dept.id}/"
+                projection = await _prepare_department_projection(
+                    department=dept,
+                    login_user=login_user,
+                    operation_type="DEPARTMENT_MOVE",
+                    operation_facts=(
+                        old_parent_id,
+                        data.new_parent_id,
+                    ),
+                    plan_builder=lambda handler, context: handler.build_moved_plan(
+                        context=context,
+                        old_parent_id=int(old_parent_id),
+                        new_parent_id=int(data.new_parent_id),
+                    ),
+                )
 
-            old_parent_id = dept.parent_id
-            old_path = dept.path
-            new_path = f"{new_parent.path}{dept.id}/"
+                # Batch update subtree paths.
+                await session.execute(
+                    update(Department)
+                    .where(Department.path.like(f"{old_path}%"))
+                    .values(
+                        path=func.replace(
+                            Department.path,
+                            old_path,
+                            new_path,
+                        )
+                    )
+                )
 
-            # Batch update subtree paths
-            await session.execute(
-                update(Department)
-                .where(Department.path.like(f"{old_path}%"))
-                .values(path=func.replace(Department.path, old_path, new_path))
+                dept.parent_id = data.new_parent_id
+                dept.path = new_path
+                session.add(dept)
+                await _bind_department_projection(session, projection)
+                await session.commit()
+                business_committed = True
+                await session.refresh(dept)
+        except Exception as exc:
+            if not business_committed:
+                await _abandon_department_projection(projection, exc)
+            raise
+
+        await _execute_department_projection(projection)
+        if projection is None:
+            ops = DepartmentChangeHandler.on_moved(
+                dept.id,
+                old_parent_id,
+                data.new_parent_id,
             )
-
-            # Update department itself
-            dept.parent_id = data.new_parent_id
-            dept.path = new_path
-            session.add(dept)
-            await session.commit()
-            await session.refresh(dept)
-
-        # Fire change handler
-        ops = DepartmentChangeHandler.on_moved(dept.id, old_parent_id, data.new_parent_id)
-        await DepartmentChangeHandler.execute_async(ops)
+            await DepartmentChangeHandler.execute_async(ops)
 
         # Re-derive user_tenant for primary users under the moved subtree —
         # crossing into a different parent's subtree may change the resolved
@@ -1057,39 +1754,69 @@ class DepartmentService:
     ) -> None:
         default_role_ids_snapshot: list[int] = []
         is_primary_add = int(data.is_primary or 0) == 1
-        async with get_async_db_session() as session:
-            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-            if dept.status == "archived":
-                raise DepartmentArchivedReadonlyError()
-            raw_defaults = dept.default_role_ids or []
-            default_role_ids_snapshot = [int(x) for x in raw_defaults if x is not None]
-
-            # Batch check for existing members (single query instead of N)
-            existing_result = await session.exec(
-                select(UserDepartment.user_id).where(
-                    UserDepartment.user_id.in_(data.user_ids),
-                    UserDepartment.department_id == dept.id,
+        projection = None
+        resumed_projection = False
+        business_committed = False
+        try:
+            async with get_async_db_session() as session:
+                dept = await _get_dept_and_check_permission(
+                    session,
+                    dept_id,
+                    login_user,
                 )
-            )
-            existing_ids = existing_result.all()
-            if existing_ids:
-                raise DepartmentMemberExistsError(
-                    msg=f"Users {existing_ids} are already members of this department",
+                if dept.status == "archived":
+                    raise DepartmentArchivedReadonlyError()
+                resumed_projection = await _resume_department_projection_if_needed(
+                    dept,
                 )
+                raw_defaults = dept.default_role_ids or []
+                default_role_ids_snapshot = [int(x) for x in raw_defaults if x is not None]
 
-            if not is_primary_add:
-                # Secondary add: bulk insert + single FGA dispatch keeps the
-                # batch path cheap (no leaf-tenant change to sync).
-                for uid in data.user_ids:
-                    session.add(
-                        UserDepartment(
-                            user_id=uid,
-                            department_id=dept.id,
-                            is_primary=0,
-                            source="local",
-                        )
+                # Batch check for existing members (single query instead of N).
+                existing_result = await session.exec(
+                    select(UserDepartment.user_id).where(
+                        UserDepartment.user_id.in_(data.user_ids),
+                        UserDepartment.department_id == dept.id,
                     )
-                await session.commit()
+                )
+                existing_ids = existing_result.all()
+                if existing_ids:
+                    if not (resumed_projection and set(existing_ids) == set(data.user_ids)):
+                        raise DepartmentMemberExistsError(
+                            msg=(f"Users {existing_ids} are already members of this department"),
+                        )
+
+                if not is_primary_add and not existing_ids:
+                    projection = await _prepare_department_projection(
+                        department=dept,
+                        login_user=login_user,
+                        operation_type="DEPARTMENT_MEMBERS_ADD",
+                        operation_facts=tuple(sorted(set(data.user_ids))),
+                        plan_builder=lambda handler, context: handler.build_members_added_plan(
+                            context=context,
+                            user_ids=tuple(data.user_ids),
+                        ),
+                    )
+                    # Secondary add: bulk insert + one atomic FGA dispatch.
+                    for uid in data.user_ids:
+                        session.add(
+                            UserDepartment(
+                                user_id=uid,
+                                department_id=dept.id,
+                                is_primary=0,
+                                source="local",
+                            )
+                        )
+                    await _bind_department_projection(
+                        session,
+                        projection,
+                    )
+                    await session.commit()
+                    business_committed = True
+        except Exception as exc:
+            if not business_committed:
+                await _abandon_department_projection(projection, exc)
+            raise
 
         if is_primary_add:
             # F012: setting is_primary=1 is a primary-department change. Route
@@ -1107,10 +1834,16 @@ class DepartmentService:
                 await UserDepartmentService.change_primary_department(
                     int(uid),
                     int(dept.id),
+                    operator_id=int(login_user.user_id),
                 )
         else:
-            ops = DepartmentChangeHandler.on_members_added(dept.id, data.user_ids)
-            await DepartmentChangeHandler.execute_async(ops)
+            await _execute_department_projection(projection)
+            if projection is None and not resumed_projection:
+                ops = DepartmentChangeHandler.on_members_added(
+                    dept.id,
+                    data.user_ids,
+                )
+                await DepartmentChangeHandler.execute_async(ops)
 
         # 部门「默认角色」：加入本部门后自动授予（可分配域内、且用户尚未拥有）
         await cls._grant_default_roles_to_users(
@@ -1127,29 +1860,64 @@ class DepartmentService:
         user_id: int,
         login_user,
     ) -> None:
-        async with get_async_db_session() as session:
-            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-            if dept.status == "archived":
-                raise DepartmentArchivedReadonlyError()
-
-            # Check member exists
-            ud = (
-                await session.exec(
-                    select(UserDepartment).where(
-                        UserDepartment.user_id == user_id,
-                        UserDepartment.department_id == dept.id,
-                    )
+        projection = None
+        resumed_projection = False
+        business_committed = False
+        try:
+            async with get_async_db_session() as session:
+                dept = await _get_dept_and_check_permission(
+                    session,
+                    dept_id,
+                    login_user,
                 )
-            ).first()
-            if not ud:
-                raise DepartmentMemberNotFoundError()
+                if dept.status == "archived":
+                    raise DepartmentArchivedReadonlyError()
+                resumed_projection = await _resume_department_projection_if_needed(
+                    dept,
+                )
 
-            await session.delete(ud)
-            await session.commit()
+                ud = (
+                    await session.exec(
+                        select(UserDepartment).where(
+                            UserDepartment.user_id == user_id,
+                            UserDepartment.department_id == dept.id,
+                        )
+                    )
+                ).first()
+                if not ud and not resumed_projection:
+                    raise DepartmentMemberNotFoundError()
 
-        # Fire change handler：移除成员同时卸掉该部门的部门管理员（FGA）
-        ops = DepartmentChangeHandler.on_member_removed(dept.id, user_id) + DepartmentChangeHandler.on_admin_removed(
-            dept.id, [user_id]
+                if ud is not None:
+                    projection = await _prepare_department_projection(
+                        department=dept,
+                        login_user=login_user,
+                        operation_type="DEPARTMENT_MEMBER_REMOVE",
+                        operation_facts=(user_id,),
+                        plan_builder=lambda handler, context: handler.build_member_removed_plan(
+                            context=context,
+                            user_id=int(user_id),
+                        ),
+                    )
+                    await session.delete(ud)
+                    await _bind_department_projection(session, projection)
+                    await session.commit()
+                    business_committed = True
+        except Exception as exc:
+            if not business_committed:
+                await _abandon_department_projection(projection, exc)
+            raise
+
+        await _execute_department_projection(projection)
+        if projection is None and not resumed_projection:
+            ops = DepartmentChangeHandler.on_member_removed(
+                dept.id,
+                user_id,
+            )
+        else:
+            ops = []
+        ops += DepartmentChangeHandler.on_admin_removed(
+            dept.id,
+            [user_id],
         )
         await DepartmentChangeHandler.execute_async(ops)
         await DepartmentAdminGrantDao.adelete(user_id, int(dept.id))
@@ -1167,22 +1935,19 @@ class DepartmentService:
 
     @classmethod
     async def _aget_department_admin_user_ids(cls, dept_internal_id: int) -> set[int]:
-        """OpenFGA：在 department:{id} 上具有 admin 关系的用户 ID 集合。"""
-        fga = await _aget_fga_client_with_fallback()
-        if fga is None:
-            return set(
-                await DepartmentAdminGrantDao.aget_user_ids_by_department(
-                    int(dept_internal_id),
-                )
-            )
+        """Return direct department admins from the permission application."""
         try:
-            tuples = await fga.read_tuples(
+            from bisheng.permission.application import PermissionObject, get_permission_relation_api
+
+            permissions = await get_permission_relation_api()
+            user_ids = await permissions.list_subject_ids(
+                resource=PermissionObject("department", str(dept_internal_id)),
                 relation="admin",
-                object=f"department:{dept_internal_id}",
+                subject_type="user",
             )
         except Exception:
             logger.warning(
-                "FGA read_tuples failed for department admin ids dept=%s",
+                "Permission lookup failed for department admin ids dept=%s",
                 dept_internal_id,
             )
             return set(
@@ -1190,17 +1955,7 @@ class DepartmentService:
                     int(dept_internal_id),
                 )
             )
-        user_ids: set[int] = set()
-        for t in tuples:
-            user_str = t.get("user", "") if isinstance(t, dict) else ""
-            if not user_str and isinstance(t.get("key"), dict):
-                user_str = t["key"].get("user", "")
-            if user_str.startswith("user:"):
-                try:
-                    user_ids.add(int(user_str.split(":", 1)[1]))
-                except ValueError:
-                    continue
-        return user_ids
+        return {int(user_id) for user_id in user_ids if user_id.isdigit()}
 
     @classmethod
     async def aget_admins(
@@ -1208,7 +1963,7 @@ class DepartmentService:
         dept_id: str,
         login_user,
     ) -> list[dict]:
-        """Get admin users of a department from OpenFGA."""
+        """Get admin users of a department from the permission service."""
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 
@@ -1855,19 +2610,43 @@ class DepartmentService:
             final_role_ids,
         )
 
-        async with get_async_db_session() as session:
-            dept = await _get_dept_or_raise(session, dept_id)
-            ud = UserDepartment(
-                user_id=user.user_id,
-                department_id=dept.id,
-                is_primary=1,
-                source="local",
-            )
-            session.add(ud)
-            await session.commit()
+        projection = None
+        business_committed = False
+        try:
+            async with get_async_db_session() as session:
+                dept = await _get_dept_or_raise(session, dept_id)
+                projection = await _prepare_department_projection(
+                    department=dept,
+                    login_user=login_user,
+                    operation_type="DEPARTMENT_MEMBERS_ADD",
+                    operation_facts=(user.user_id,),
+                    plan_builder=lambda handler, context: handler.build_members_added_plan(
+                        context=context,
+                        user_ids=(int(user.user_id),),
+                    ),
+                )
+                ud = UserDepartment(
+                    user_id=user.user_id,
+                    department_id=dept.id,
+                    is_primary=1,
+                    source="local",
+                )
+                session.add(ud)
+                await _bind_department_projection(session, projection)
+                await session.commit()
+                business_committed = True
+        except Exception as exc:
+            if not business_committed:
+                await _abandon_department_projection(projection, exc)
+            raise
 
-        ops = DepartmentChangeHandler.on_members_added(dept.id, [user.user_id])
-        await DepartmentChangeHandler.execute_async(ops)
+        await _execute_department_projection(projection)
+        if projection is None:
+            ops = DepartmentChangeHandler.on_members_added(
+                dept.id,
+                [user.user_id],
+            )
+            await DepartmentChangeHandler.execute_async(ops)
 
         # F012: a brand-new user has no UserTenant row yet — without sync the
         # tenant user list (queries UserTenant) would not show this user
@@ -1942,6 +2721,7 @@ class DepartmentService:
         cls,
         user_id: int,
         new_dept_id: int,
+        login_user=None,
     ) -> None:
         """将本地用户主部门切到 new_dept_id：从原主部门移除，不再保留为附属。
 
@@ -1953,50 +2733,119 @@ class DepartmentService:
         """
         old_dept_id_for_fga: int | None = None
         fga_add_new: bool = False
-        async with get_async_db_session() as session:
-            uds = list(
-                (
-                    await session.exec(
-                        select(UserDepartment).where(UserDepartment.user_id == user_id),
-                    )
-                ).all()
-            )
-            primary_rows = [u for u in uds if int(u.is_primary or 0) == 1]
-            old_primary = primary_rows[0] if primary_rows else None
-
-            if old_primary and int(old_primary.department_id) == int(new_dept_id):
-                return
-
-            target_ud = next(
-                (u for u in uds if int(u.department_id) == int(new_dept_id)),
-                None,
-            )
-
-            if old_primary is not None:
-                old_dept_id_for_fga = int(old_primary.department_id)
-                await session.delete(old_primary)
-
-            if target_ud:
-                target_ud.is_primary = 1
-                session.add(target_ud)
-            else:
-                session.add(
-                    UserDepartment(
-                        user_id=user_id,
-                        department_id=new_dept_id,
-                        is_primary=1,
-                        source="local",
-                    )
+        projections: list[_PreparedDepartmentProjection] = []
+        business_committed = False
+        projection_actor = login_user or SimpleNamespace(user_id=user_id)
+        try:
+            async with get_async_db_session() as session:
+                uds = list(
+                    (
+                        await session.exec(
+                            select(UserDepartment).where(UserDepartment.user_id == user_id),
+                        )
+                    ).all()
                 )
-                fga_add_new = True
+                primary_rows = [u for u in uds if int(u.is_primary or 0) == 1]
+                old_primary = primary_rows[0] if primary_rows else None
 
-            await session.commit()
+                if old_primary and int(old_primary.department_id) == int(new_dept_id):
+                    return
+
+                target_ud = next(
+                    (u for u in uds if int(u.department_id) == int(new_dept_id)),
+                    None,
+                )
+
+                if _uses_f048_department_projection():
+                    projection_dept_ids = {int(new_dept_id)}
+                    if old_primary is not None:
+                        projection_dept_ids.add(int(old_primary.department_id))
+                    departments = (
+                        await session.exec(select(Department).where(Department.id.in_(sorted(projection_dept_ids))))
+                    ).all()
+                    department_by_id = {int(item.id): item for item in departments}
+                    if len(department_by_id) != len(projection_dept_ids):
+                        raise DepartmentNotFoundError()
+
+                    if old_primary is not None:
+                        old_department_id = int(old_primary.department_id)
+                        old_projection = await _prepare_department_projection(
+                            department=department_by_id[old_department_id],
+                            login_user=projection_actor,
+                            operation_type=("DEPARTMENT_MEMBER_REMOVE"),
+                            operation_facts=(user_id,),
+                            plan_builder=lambda handler, context: handler.build_member_removed_plan(
+                                context=context,
+                                user_id=int(user_id),
+                            ),
+                        )
+                        if old_projection is not None:
+                            projections.append(old_projection)
+                    if target_ud is None:
+                        new_projection = await _prepare_department_projection(
+                            department=department_by_id[int(new_dept_id)],
+                            login_user=projection_actor,
+                            operation_type=("DEPARTMENT_MEMBERS_ADD"),
+                            operation_facts=(user_id,),
+                            plan_builder=lambda handler, context: handler.build_members_added_plan(
+                                context=context,
+                                user_ids=(int(user_id),),
+                            ),
+                        )
+                        if new_projection is not None:
+                            projections.append(new_projection)
+
+                if old_primary is not None:
+                    old_dept_id_for_fga = int(old_primary.department_id)
+                    await session.delete(old_primary)
+
+                if target_ud:
+                    target_ud.is_primary = 1
+                    session.add(target_ud)
+                else:
+                    session.add(
+                        UserDepartment(
+                            user_id=user_id,
+                            department_id=new_dept_id,
+                            is_primary=1,
+                            source="local",
+                        )
+                    )
+                    fga_add_new = True
+
+                for projection in projections:
+                    await _bind_department_projection(
+                        session,
+                        projection,
+                    )
+                await session.commit()
+                business_committed = True
+        except Exception as exc:
+            if not business_committed:
+                for projection in projections:
+                    await _abandon_department_projection(
+                        projection,
+                        exc,
+                    )
+            raise
+
+        for projection in projections:
+            await _execute_department_projection(projection)
 
         if old_dept_id_for_fga is not None:
             # 离开原部门后不再担任该部门的部门管理员（仅 FGA admin 关系）
-            ops_rm = DepartmentChangeHandler.on_member_removed(
-                old_dept_id_for_fga, user_id
-            ) + DepartmentChangeHandler.on_admin_removed(old_dept_id_for_fga, [user_id])
+            ops_rm = (
+                []
+                if projections
+                else DepartmentChangeHandler.on_member_removed(
+                    old_dept_id_for_fga,
+                    user_id,
+                )
+            )
+            ops_rm += DepartmentChangeHandler.on_admin_removed(
+                old_dept_id_for_fga,
+                [user_id],
+            )
             await DepartmentChangeHandler.execute_async(ops_rm)
             await DepartmentAdminGrantDao.adelete(user_id, int(old_dept_id_for_fga))
             # 撤销部门管理员后，清理其在原部门知识空间的派生绑定
@@ -2009,7 +2858,7 @@ class DepartmentService:
                 department_id=int(old_dept_id_for_fga),
                 user_ids=[user_id],
             )
-        if fga_add_new:
+        if fga_add_new and not projections:
             ops_add = DepartmentChangeHandler.on_members_added(new_dept_id, [user_id])
             await DepartmentChangeHandler.execute_async(ops_add)
 
@@ -2119,29 +2968,72 @@ class DepartmentService:
         uds = await UserDepartmentDao.aget_user_departments(user_id)
         dept_ids = [int(u.department_id) for u in uds]
 
-        async with get_async_db_session() as session:
-            await session.exec(delete(UserDepartment).where(UserDepartment.user_id == user_id))
-            await session.exec(
-                delete(UserRole).where(
-                    UserRole.user_id == user_id,
-                    UserRole.role_id != AdminRole,
-                ),
-            )
-            await session.exec(delete(UserGroup).where(UserGroup.user_id == user_id))
-            db_user = (await session.exec(select(User).where(User.user_id == user_id))).first()
-            if db_user:
-                db_user.delete = 1
-                session.add(db_user)
-            await session.commit()
+        projections: list[_PreparedDepartmentProjection] = []
+        business_committed = False
+        try:
+            async with get_async_db_session() as session:
+                if dept_ids and _uses_f048_department_projection():
+                    departments = (await session.exec(select(Department).where(Department.id.in_(dept_ids)))).all()
+                    department_by_id = {int(item.id): item for item in departments}
+                    if len(department_by_id) != len(set(dept_ids)):
+                        raise DepartmentNotFoundError()
+                    for did in dict.fromkeys(dept_ids):
+                        projection = await _prepare_department_projection(
+                            department=department_by_id[did],
+                            login_user=login_user,
+                            operation_type=("DEPARTMENT_MEMBER_REMOVE"),
+                            operation_facts=(user_id,),
+                            plan_builder=lambda handler, context: handler.build_member_removed_plan(
+                                context=context,
+                                user_id=int(user_id),
+                            ),
+                        )
+                        if projection is not None:
+                            projections.append(projection)
+
+                await session.exec(delete(UserDepartment).where(UserDepartment.user_id == user_id))
+                await session.exec(
+                    delete(UserRole).where(
+                        UserRole.user_id == user_id,
+                        UserRole.role_id != AdminRole,
+                    ),
+                )
+                await session.exec(delete(UserGroup).where(UserGroup.user_id == user_id))
+                db_user = (await session.exec(select(User).where(User.user_id == user_id))).first()
+                if db_user:
+                    db_user.delete = 1
+                    session.add(db_user)
+                for projection in projections:
+                    await _bind_department_projection(
+                        session,
+                        projection,
+                    )
+                await session.commit()
+                business_committed = True
+        except Exception as exc:
+            if not business_committed:
+                for projection in projections:
+                    await _abandon_department_projection(
+                        projection,
+                        exc,
+                    )
+            raise
+
+        for projection in projections:
+            await _execute_department_projection(projection)
 
         if db_user:
             from bisheng.user.domain.services.user import UserService
 
             await UserService.ainvalidate_jwt_after_account_disabled(user_id)
 
-        for did in dept_ids:
-            ops = DepartmentChangeHandler.on_member_removed(did, user_id)
-            await DepartmentChangeHandler.execute_async(ops)
+        if not projections:
+            for did in dept_ids:
+                ops = DepartmentChangeHandler.on_member_removed(
+                    did,
+                    user_id,
+                )
+                await DepartmentChangeHandler.execute_async(ops)
 
     @classmethod
     async def aget_member_edit_form(
@@ -2352,7 +3244,11 @@ class DepartmentService:
             primary_row = await UserDepartmentDao.aget_user_primary_department(user_id)
             cur_pid = int(primary_row.department_id) if primary_row else None
             if cur_pid is None or cur_pid != int(target.id):
-                await cls._apply_local_primary_department_change(user_id, int(target.id))
+                await cls._apply_local_primary_department_change(
+                    user_id,
+                    int(target.id),
+                    login_user,
+                )
 
         if edit_mode != "affiliate" and data.group_ids is not None:
             from bisheng.user_group.domain.services.user_group_service import (

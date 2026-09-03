@@ -99,11 +99,25 @@ async def get_all_files_from_session(
 #   uploads/ — the user's own source files
 #   skills/  — skill bundles the platform copies in at task start
 #              (skill_provisioning.WORKSPACE_SKILLS_DIR)
+#
+# The last two are written by deepagents itself, through the same WorkspaceBackend:
+#   large_tool_results/   — a tool result too big to inline (FilesystemMiddleware)
+#   conversation_history/ — history evicted by the summarization middleware
+# They are context-overflow spill, not something the agent authored. Without them
+# here, a run that ends with an empty output/ falls through to the baseline-diff
+# branch of ``select_deliverables`` and hands the user a raw tool dump as its
+# "deliverable" — and because an offloaded file is named after a tool_call_id it
+# usually has NO extension, which sorts it AHEAD of any real .png chart. bisheng
+# cannot stop deepagents writing these, so they are excluded here instead.
 OUTPUT_ZONE = "output"
 SCRATCH_ZONE = "scratch"
 UPLOADS_ZONE = "uploads"
 SKILLS_ZONE = "skills"
-NON_DELIVERABLE_ZONES = frozenset({SCRATCH_ZONE, UPLOADS_ZONE, SKILLS_ZONE})
+LARGE_TOOL_RESULTS_ZONE = "large_tool_results"
+CONVERSATION_HISTORY_ZONE = "conversation_history"
+NON_DELIVERABLE_ZONES = frozenset(
+    {SCRATCH_ZONE, UPLOADS_ZONE, SKILLS_ZONE, LARGE_TOOL_RESULTS_ZONE, CONVERSATION_HISTORY_ZONE}
+)
 
 
 def snapshot_file_paths(file_dir: str) -> set[str]:
@@ -596,6 +610,34 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
             return
 
 
+async def enqueue_session_for_execution(session_model: LinsightSessionVersion) -> None:
+    """Hand a task-mode session to the Linsight worker queue.
+
+    Single entry point for enqueueing, shared by the unified submit path and the
+    ``/workbench/start-execute`` endpoint.
+
+    Enqueueing used to be the CLIENT's job: submit created the session, streamed a
+    handoff event, and the browser then called start-execute. Anything that cut
+    the stream before that second call — a refresh, a closed tab, a proxy timeout
+    — left the session parked at NOT_STARTED with nothing to pick it up. That is
+    not hypothetical: a task with 12 attachments spent 19 minutes parsing them
+    INSIDE the submit request, the user gave up waiting, and the session sat in
+    the table untouched (the conversation lost its task row too, so even the
+    task-mode badge disappeared). Ingestion has since moved into the worker, so
+    the submit request is short again — but server-side enqueue stays, because
+    "the task runs" must not depend on the client still listening.
+
+    Enqueueing twice is harmless: the executor re-reads the session and bails via
+    ``_is_session_in_progress`` when it is already running, so the client's
+    start-execute stays a safe no-op / late retry.
+    """
+    from bisheng.linsight.worker import LinsightQueue, encode_queue_item
+
+    redis_client = await get_redis_client()
+    queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
+    await queue.put(data=encode_queue_item(session_model.id, tenant_id=session_model.tenant_id))
+
+
 async def persist_task_turn_message(session_model: LinsightSessionVersion) -> ChatMessage:
     """F035 Track J (TJ-3): upsert the task turn into the unified conversation.
 
@@ -672,11 +714,23 @@ async def get_task_feedback_by_version(session_id: str) -> dict[str, dict]:
     return result
 
 
-async def persist_task_user_turn(chat_id: str, user_id: int, question: str, files: list | None = None) -> ChatMessage:
+async def persist_task_user_turn(
+    chat_id: str,
+    user_id: int,
+    question: str,
+    files: list | None = None,
+    session_version_id: str | None = None,
+) -> ChatMessage:
     """F035 Track J (TJ-3): persist the task user turn into the unified conversation.
 
     Mirrors the daily-chat question envelope (workstation/chat_service) so the
     user turn renders identically whether or not task mode was on for the round.
+
+    ``session_version_id`` is stamped into ``extra`` the same way the bot task
+    turn carries it. That pointer is what lets the worker find this exact row
+    again: with the attachment ingest deferred, everything the parse learns about
+    the files (the video poster frame above all) only exists minutes after this
+    row is written.
     """
     return await ChatMessageDao.ainsert_one(
         ChatMessage(
@@ -689,10 +743,62 @@ async def persist_task_user_turn(chat_id: str, user_id: int, question: str, file
             category="question",
             message=json.dumps({"query": question or "", "files": files or []}, ensure_ascii=False),
             files=json.dumps(files) if files else None,
-            extra="{}",
+            extra=json.dumps({"linsight_session_version_id": session_version_id}) if session_version_id else "{}",
             source=0,
         )
     )
+
+
+async def annotate_task_user_turn_files(session_model: LinsightSessionVersion) -> bool:
+    """Back-fill the question row's attachment chips with the ingest result.
+
+    Submit writes the question turn before a single byte has been touched, so the
+    per-file parse result it used to carry (``valid`` / ``parsing_status`` /
+    ``error_message``, and the video ``cover_filepath`` the chip actually renders)
+    has to be written back once the worker has it. Without this a task-mode video
+    loses its thumbnail on every reload — the live session only has it because
+    the client stamps its own copy in memory.
+
+    ``object_name`` is deliberately left alone: submit already promoted each
+    attachment out of the temp bucket, and that key is the one conversation
+    deletion sweeps. Returns True when a row was actually rewritten.
+    """
+    from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
+
+    processed = session_model.files or []
+    if not processed or not session_model.session_id:
+        return False
+
+    rows = await ChatMessageDao.aget_messages_by_chat_id(
+        chat_id=session_model.session_id, category_list=["question"], limit=1000
+    )
+    for row in reversed(rows):
+        if row.is_bot:
+            continue
+        try:
+            row_svid = json.loads(row.extra or "{}").get("linsight_session_version_id")
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if row_svid != session_model.id:
+            continue
+
+        try:
+            payload = json.loads(row.message or "{}")
+        except (json.JSONDecodeError, TypeError):
+            return False
+        files = payload.get("files") if isinstance(payload, dict) else None
+        if not files:
+            return False
+
+        annotated = LinsightWorkbenchImpl.annotate_display_files(files, processed)
+        if annotated == files:
+            return False
+        payload["files"] = annotated
+        row.message = json.dumps(payload, ensure_ascii=False)
+        row.files = json.dumps(annotated)
+        await ChatMessageDao.aupdate_message_model(row)
+        return True
+    return False
 
 
 def _extract_user_query(message: str | None) -> str:

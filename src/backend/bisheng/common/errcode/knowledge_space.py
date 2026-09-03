@@ -9,7 +9,7 @@ class SpaceNotFoundError(BaseErrorCode):
 
 class SpaceLimitError(BaseErrorCode):
     Code: int = 18001
-    Msg: str = "You can create a maximum of 30 Knowledge Spaces"
+    Msg: str = "You have reached the maximum number of Knowledge Spaces you can create"
 
 
 class DepartmentKnowledgeSpaceExistsError(BaseErrorCode):
@@ -83,6 +83,11 @@ class SpaceSubscribeLimitError(BaseErrorCode):
 class SpaceOrganizationGrantExitDeniedError(BaseErrorCode):
     Code: int = 18071
     Msg: str = "本空间通过部门/用户组授权给你，暂无法退出"
+
+
+class SpaceCreationRequestConflictError(BaseErrorCode):
+    Code: int = 18072
+    Msg: str = "Knowledge Space creation request conflicts with an earlier payload"
 
 
 # ── Move (F034) ───────────────────────────────────────────────────────────────

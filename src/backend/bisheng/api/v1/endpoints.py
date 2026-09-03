@@ -92,6 +92,12 @@ def get_env():
     env["version"] = __version__
     env["enable_etl4lm"] = image_parser_enabled
     env["multi_tenant_enabled"] = bisheng_settings.multi_tenant.enabled
+    try:
+        workflow_auto_rerun_on_open = bisheng_settings.get_workflow_conf().auto_rerun_on_open
+    except Exception as exc:
+        logger.warning(f"Failed to load workflow auto-rerun config, using disabled: {exc}")
+        workflow_auto_rerun_on_open = False
+    env["workflow"] = {"auto_rerun_on_open": workflow_auto_rerun_on_open}
 
     # Expose knowledge-space version management flag so the client can toggle UI affordances.
     vm = getattr(bisheng_settings.get_knowledge(), "version_management", None)

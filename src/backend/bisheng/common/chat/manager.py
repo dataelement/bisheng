@@ -3,18 +3,18 @@ import json
 import time
 from collections import defaultdict
 from queue import Queue
-from typing import Any, Dict, List
+from typing import Any
 
 from fastapi import Request, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.workflow import WorkFlowService
-from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
+from bisheng.api.v1.schemas import ChatMessage, FileResponse
 from bisheng.common.chat.client import ChatClient
 from bisheng.common.chat.clients.workflow_client import WorkflowClient
 from bisheng.common.chat.types import IgnoreException, WorkType
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData
 from bisheng.common.services import telemetry_service
@@ -22,7 +22,9 @@ from bisheng.core.cache.flow import InMemoryCache
 from bisheng.core.cache.manager import Subject, cache_manager
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
-from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
+from bisheng.permission.application.business_authorization import (
+    check_business_action,
+)
 from bisheng.utils import generate_uuid
 from bisheng.utils.util import get_cache_key
 
@@ -31,7 +33,7 @@ class ChatHistory(Subject):
 
     def __init__(self):
         super().__init__()
-        self.history: Dict[str, List[ChatMessage]] = defaultdict(list)
+        self.history: dict[str, list[ChatMessage]] = defaultdict(list)
 
     def add_message(
             self,
@@ -71,17 +73,17 @@ class ChatHistory(Subject):
 class ChatManager:
 
     def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}
+        self.active_connections: dict[str, WebSocket] = {}
         self.chat_history = ChatHistory()
         self.cache_manager = cache_manager
         self.cache_manager.attach(self.update)
         self.in_memory_cache = InMemoryCache()
-        self.task_manager: List[asyncio.Task] = []
+        self.task_manager: list[asyncio.Task] = []
         # Connected clients
-        self.active_clients: Dict[str, ChatClient] = {}
+        self.active_clients: dict[str, ChatClient] = {}
 
         # Record Streaming Output Results
-        self.stream_queue: Dict[str, Queue] = {}
+        self.stream_queue: dict[str, Queue] = {}
 
     def update(self):
         if self.cache_manager.current_client_id in self.active_connections:
@@ -106,7 +108,12 @@ class ChatManager:
         self.active_connections[get_cache_key(client_id, chat_id)] = websocket
         self.stream_queue[get_cache_key(client_id, chat_id)] = Queue()
 
-    def disconnect(self, client_id: str, chat_id: str, key: str = None):
+    def disconnect(
+        self,
+        client_id: str,
+        chat_id: str,
+        key: str | None = None,
+    ):
         if key:
             logger.debug('disconnect_ws key={}', key)
             self.active_connections.pop(key, None)
@@ -132,7 +139,7 @@ class ChatManager:
                                chat_id: str,
                                code: int,
                                reason: str,
-                               key_list: List[str] = None):
+                               key_list: list[str] | None = None):
         """close and clean ws"""
         if websocket := self.active_connections.get(get_cache_key(flow_id, chat_id)):
             try:
@@ -186,18 +193,18 @@ class ChatManager:
                 if 'after sending' in str(exc):
                     logger.error(exc)
 
-    async def _has_use_app_permission(
+    async def _has_use_action(
             self,
             login_user: UserPayload,
             work_type: WorkType,
             client_id: str,
     ) -> bool:
         object_type = 'assistant' if work_type == WorkType.GPTS else 'workflow'
-        return await ApplicationPermissionService.has_any_permission_async(
+        return await check_business_action(
             login_user,
-            object_type,
-            str(client_id),
-            ['use_app'],
+            resource_type=object_type,
+            resource_id=client_id,
+            action="use",
         )
 
     async def dispatch_client(
@@ -208,7 +215,7 @@ class ChatManager:
             login_user: UserPayload,
             work_type: WorkType,
             websocket: WebSocket,
-            graph_data: dict = None):
+            graph_data: dict | None = None):
         start_time = time.time()
         client_key = generate_uuid()
         if work_type == WorkType.GPTS:
@@ -238,7 +245,7 @@ class ChatManager:
                 try:
                     json_payload_receive = await asyncio.wait_for(websocket.receive_json(),
                                                                   timeout=2.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 try:
                     payload = json.loads(json_payload_receive) if json_payload_receive else {}
@@ -246,7 +253,11 @@ class ChatManager:
                     payload = json_payload_receive
                 # clientHandle your own business logic internally
                 # TODO zgq: Here you can increase the thread pool to prevent blocking
-                if not await self._has_use_app_permission(login_user, work_type, client_id):
+                if not await self._has_use_action(
+                    login_user,
+                    work_type,
+                    client_id,
+                ):
                     logger.warning(
                         'close_client permission_revoked client_key={} client_id={} user_id={}',
                         client_key,

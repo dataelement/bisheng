@@ -235,7 +235,9 @@ class RagUtils(BaseNode):
             rerank=self._rerank_model,
             sort_by_source_and_index=True,
         )
-        finally_docs = knowledge_retriever_tool.invoke(input={"query": question})
+        # Direct call: this retriever is an internal step of the node, not a tool
+        # call of its own, and `invoke` would surface it as one in the run log.
+        finally_docs = knowledge_retriever_tool._run(question)
         all_file_id = set([one.metadata.get("document_id") for one in finally_docs])
         file_map = {}
         if finally_docs:

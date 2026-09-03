@@ -21,7 +21,7 @@ import { TaskTurnPanel } from "~/components/Linsight/Execution/TaskTurnPanel";
 import type { ArtifactFile } from "~/components/Linsight/Artifacts/artifactUtils";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
-import { ChatErrorCard, isTransientErrorType } from "~/components/ChatErrorCard";
+import { isTransientErrorType } from "~/components/ChatErrorCard";
 import { MessageFeedbackButtons } from "~/components/Chat/MessageFeedbackButtons";
 import { likeChatApi, disLikeCommentApi } from "~/api/apps";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
@@ -33,8 +33,11 @@ import {
 } from "~/components/Chat/MessageSelection";
 import { copyText, cn } from "~/utils";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
-import { getFileTypeIcon, isImageFileName } from "~/components/ui/icon/File/FileIcon";
+import { MediaAttachmentChip, isMediaChipFile } from "~/components/Chat/attachments/MediaAttachmentChip";
+import { ChatHistoryFileRow } from "~/components/Chat/attachments/ChatHistoryFileRow";
+import { isImageFileName } from "~/components/ui/icon/File/FileIcon";
 import { MessageImage } from "~/components/Chat/Messages/Content/MessageImage";
+import { ServiceBusyNotice } from "~/components/ServiceBusyNotice";
 
 // Transient/retryable backend error codes surfaced by daily-mode chat — LLM rate
 // limit (12046), generic busy (429/503), thread-pool full (10540), dept concurrency
@@ -44,21 +47,19 @@ import { MessageImage } from "~/components/Chat/Messages/Content/MessageImage";
 const RETRYABLE_ERROR_CODES = new Set([12046, 429, 503, 10540, 12045]);
 
 /**
- * Uploaded-file list for a user message: a type icon + filename per row, never a
- * content preview. Stacks vertically and scrolls past 120px. A linear-gradient
- * mask softly fades the top/bottom edge (instead of a hard clip) whenever there
- * is more content to scroll in that direction — same fade trick used elsewhere.
+ * Uploaded-file list for a user message. All attachments render as square
+ * thumbnails in a single horizontal row (media + documents/images).
  */
 function UploadedFileList({ files, conversationId }: { files: any[]; conversationId?: string }) {
     const scrollRef = useRef<HTMLDivElement>(null);
-    const [fade, setFade] = useState({ top: false, bottom: false });
+    const [fade, setFade] = useState({ left: false, right: false });
 
     const updateFade = useCallback(() => {
         const el = scrollRef.current;
         if (!el) return;
-        const top = el.scrollTop > 0;
-        const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
-        setFade((prev) => (prev.top === top && prev.bottom === bottom ? prev : { top, bottom }));
+        const left = el.scrollLeft > 0;
+        const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+        setFade((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
     }, []);
 
     useEffect(() => {
@@ -66,10 +67,10 @@ function UploadedFileList({ files, conversationId }: { files: any[]; conversatio
     }, [files, updateFade]);
 
     const maskStyle = useMemo(() => {
-        if (!fade.top && !fade.bottom) return undefined;
-        const topStop = fade.top ? "16px" : "0";
-        const bottomStop = fade.bottom ? "calc(100% - 16px)" : "100%";
-        const value = `linear-gradient(to bottom, transparent, #000 ${topStop}, #000 ${bottomStop}, transparent)`;
+        if (!fade.left && !fade.right) return undefined;
+        const leftStop = fade.left ? "16px" : "0";
+        const rightStop = fade.right ? "calc(100% - 16px)" : "100%";
+        const value = `linear-gradient(to right, transparent, #000 ${leftStop}, #000 ${rightStop}, transparent)`;
         return { maskImage: value, WebkitMaskImage: value };
     }, [fade]);
 
@@ -82,6 +83,9 @@ function UploadedFileList({ files, conversationId }: { files: any[]; conversatio
 
     return (
         <>
+            {/* Images get their own row and their own component: the link stored on
+                the message expires, so it is re-issued at render time — a plain <img>
+                on the stored URL is what used to show "图片已失效". */}
             {images.length > 0 && (
                 <div className="mb-2 mt-1 flex flex-wrap justify-end gap-2">
                     {images.map((file, i) => (
@@ -96,26 +100,25 @@ function UploadedFileList({ files, conversationId }: { files: any[]; conversatio
                 </div>
             )}
             {others.length > 0 && (
-                <div
-                    ref={scrollRef}
-                    onScroll={updateFade}
-                    style={maskStyle}
-                    className="scrollbar-os mb-2 mt-1 flex max-h-[120px] max-w-sm flex-col gap-3 overflow-y-auto"
-                >
-                    {others.map((file, i) => {
-                        const fileName = file.name || file.file_name || "File";
-                        const FileTypeIcon = getFileTypeIcon(fileName);
-                        return (
-                            <div key={i} className="flex shrink-0 items-center gap-1 text-text-3">
-                                <FileTypeIcon size={12} className="shrink-0 text-[#CCCCCC]" />
-                                <div className="min-w-0 flex-1 overflow-hidden">
-                                    <div className="truncate text-xs" title={fileName}>
-                                        {fileName}
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
+                <div className="mb-2 mt-1 flex max-w-sm flex-col gap-2">
+                    <div
+                        ref={scrollRef}
+                        onScroll={updateFade}
+                        style={maskStyle}
+                        className="scrollbar-os flex gap-2 overflow-x-auto"
+                    >
+                        {others.map((file, i) =>
+                            isMediaChipFile(file) ? (
+                                <MediaAttachmentChip
+                                    key={`media-${i}`}
+                                    file={file}
+                                    variant="message"
+                                />
+                            ) : (
+                                <ChatHistoryFileRow key={`file-${i}`} file={file} />
+                            ),
+                        )}
+                    </div>
                 </div>
             )}
         </>
@@ -163,11 +166,11 @@ function CopyButton({ text }: { text: string }) {
         <button
             type="button"
             onClick={handleCopy}
-            className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-fill-1"
+            className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]"
             title={localize('com_ui_copy')}
             aria-label={localize('com_ui_copy')}
         >
-            {copied ? <Outlined.Copied size={14} className="text-blue-500" /> : <Outlined.Copy size={14} className="text-text-3" />}
+            {copied ? <Outlined.Copied size={14} className="text-blue-500" /> : <Outlined.Copy size={14} className="text-[#818181]" />}
         </button>
     );
 }
@@ -445,14 +448,14 @@ function UserBubble({
                                 // box shrinks and the URL wraps inside max-w-full.
                                 "w-fit max-w-full px-3 py-2 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-lg",
                                 knowledgeChatLayout
-                                    ? "bg-fill-2 text-text-2 text-[14px] leading-[22px]"
-                                    : "rounded-[10px] bg-blue-500/[0.07] text-text-1 text-sm"
+                                    ? "bg-[#F2F3F5] text-[#4E5969] text-[14px] leading-[22px]"
+                                    : "rounded-[10px] bg-blue-500/[0.07] text-[#1d2129] text-sm"
                             )}
                         >
                             {tag && (
                                 <span
                                     className={cn(
-                                        "mr-1 inline-flex max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-1 align-middle text-text-1 select-none",
+                                        "mr-1 inline-flex max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-1 align-middle text-[#212121] select-none",
                                         knowledgeChatLayout
                                             ? "text-[14px] font-normal leading-[22px]"
                                             : "h-5 text-xs font-medium leading-none align-middle"
@@ -707,7 +710,7 @@ function AssistantBubble({
                             "bs-mkdown message-content overflow-hidden break-words [word-break:break-all]",
                             knowledgeChatLayout
                                 ? "rounded-[2px] border-0 bg-transparent px-0 py-1 text-[14px] leading-[22px] [--markdown-font-size:14px]"
-                                : "rounded-[10px] bg-white border border-border-base px-3 py-2 text-sm"
+                                : "rounded-[10px] bg-white border border-[#E5E6EB] px-3 py-2 text-sm"
                         )}
                     >
 
@@ -730,20 +733,33 @@ function AssistantBubble({
                 )}
 
                 {/* Error state — replaces the body when nothing streamed in, and sits
-                    below it when a partial answer did. Same card as task mode:
-                    localized title + explanation + hint, with the upstream text
-                    (which file, which service, what it actually said) behind
-                    "view details"; transient hiccups render as the calm notice +
-                    Retry, terminal ones as the red card. */}
+                    below it when a partial answer did. */}
                 {!showWaiting && message.error && (
-                    <div className={cn(hasAnswerBody && "mt-2")}>
-                        <ChatErrorCard
-                            errorType={resolvedErrorType}
-                            detail={message.errorDetail}
-                            fallbackMessage={errorNotice}
-                            onRetry={isTransientError ? onRegenerate : undefined}
+                    isTransientError ? (
+                        // Transient upstream hiccup (rate limit / busy): calm neutral
+                        // notice + Retry (re-sends the last user message via regenerate),
+                        // never the red error bubble.
+                        <ServiceBusyNotice
+                            desc={
+                                hasAnswerBody
+                                    ? errorNotice
+                                    : message.errorText || localize("api_errors.12046")
+                            }
+                            onRetry={onRegenerate}
                         />
-                    </div>
+                    ) : (
+                        <div
+                            className={cn(
+                                "text-red-500 bg-red-50 px-3 py-2",
+                                hasAnswerBody && "mt-2",
+                                knowledgeChatLayout
+                                    ? "rounded-[2px] text-[14px] leading-[22px]"
+                                    : "text-sm rounded-[10px]"
+                            )}
+                        >
+                            {errorNotice}
+                        </div>
+                    )
                 )}
 
                 {/* Action buttons (only show when not streaming). Suppressed on the
@@ -783,7 +799,7 @@ function AssistantBubble({
                                         />
                                     )}
                                     <TextToSpeechButton
-                                        className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-fill-1"
+                                        className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]"
                                         messageId={message.messageId || ""}
                                         text={regularContent}
                                     />

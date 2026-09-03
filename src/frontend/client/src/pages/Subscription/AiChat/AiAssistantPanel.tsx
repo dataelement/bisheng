@@ -94,6 +94,10 @@ export function AiAssistantPanel({
         regenerate,
     } = activeChat;
 
+    // Media parsing state only exists on the workstation hook; channel/file chat
+    // never upload media, so they have no such flag to read off activeChat.
+    const isParsingMedia = isSimpleMode ? false : workstationChat.isParsingMedia;
+
     const { data: bsConfig } = useGetBsConfig();
     const { user } = useAuthContext();
     const [chatModel, setChatModel] = useRecoilState(store.chatModel);
@@ -218,6 +222,7 @@ export function AiAssistantPanel({
                     disabled={allowModelSelect ? !bsConfig?.models?.length : false}
                     placeholder={localize("com_subscription.input_question_placeholder")}
                     isStreaming={isStreaming}
+                    isParsingMedia={isParsingMedia}
                     onScrollToBottom={() => { }}
                     modelOptions={allowModelSelect ? bsConfig?.models : undefined}
                     modelValue={allowModelSelect ? chatModel.id : undefined}

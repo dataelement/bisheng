@@ -23,7 +23,7 @@ export const createTool = async (data: any): Promise<any> => {
 
 export const getToolsApi = async (
     type: 'all' | 'default' | 'custom' | 'mcp',
-    options: { permissionId?: 'view_tool' | 'use_tool' } = {}
+    options: { action?: 'visible' | 'use' } = {}
 ): Promise<any> => {
     const params = new URLSearchParams();
     const preset = {
@@ -33,7 +33,7 @@ export const getToolsApi = async (
         mcp: '2'
     }[type];
     if (preset) params.set('is_preset', preset);
-    if (options.permissionId) params.set('permission_id', options.permissionId);
+    if (options.action) params.set('action', options.action);
     const query = params.toString();
     return await axios.get(`/api/v1/tool${query ? `?${query}` : ''}`)
 };

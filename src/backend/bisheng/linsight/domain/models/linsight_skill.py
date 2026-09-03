@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Integer, update
+from sqlalchemy import Integer, func, update
 from sqlmodel import Column, DateTime, Field, String, Text, UniqueConstraint, col, or_, select, text
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -16,14 +16,23 @@ from bisheng.database.base import async_get_count
 # Skill source markers (C3/C7 contract).
 SKILL_SOURCE_MANUAL = "manual"
 SKILL_SOURCE_SOP_MIGRATED = "sop_migrated"
+# Shipped with the kernel and seeded into every tenant at startup
+# (services/builtin_skill_seeder.py). Editing one through the API flips it to
+# ``manual``, which permanently opts that tenant's copy out of re-seeding.
+SKILL_SOURCE_BUILTIN = "builtin"
 
 
 class LinsightSkillBase(SQLModelSerializable):
     """Tenant-scoped custom skill metadata (F035).
 
-    The skill body lives on disk under ``SKILLS_ROOT/data/skills/{tenant_id}/<name>/SKILL.md``
-    (see design §7.1); this table only owns the metadata. Built-in skills are
-    never persisted here and never exposed through the ``/skill`` API.
+    The skill body lives in object storage, keyed by ``object_path`` (which embeds
+    ``content_hash``); this table only owns the metadata and the pointer. Nodes
+    materialize the bundle into a local cache on demand, so every API replica and
+    every Linsight worker resolves the same bytes regardless of which host wrote
+    them. Kernel built-in skills
+    are seeded into this same table (``source='builtin'``) so they share one
+    runtime path with uploaded ones — the picker, the enable/disable toggle and
+    ``materialize_session_skills`` need no special case for them.
     """
 
     tenant_id: int = Field(
@@ -52,19 +61,24 @@ class LinsightSkillBase(SQLModelSerializable):
     )
     source: str = Field(
         default=SKILL_SOURCE_MANUAL,
-        description="manual | sop_migrated",
+        description="manual | sop_migrated | builtin",
         sa_column=Column(
             String(32), nullable=False, server_default=text(f"'{SKILL_SOURCE_MANUAL}'"), comment="Skill origin"
         ),
     )
     object_path: str = Field(
         ...,
-        description="Relative disk path under SKILLS_ROOT",
-        sa_column=Column(String(512), nullable=False, comment="SKILL.md relative path"),
+        description="Object-storage key of the bundle archive",
+        sa_column=Column(String(512), nullable=False, comment="Bundle object key"),
+    )
+    content_hash: str = Field(
+        default="",
+        description="sha256 of the bundle's file mapping; '' means not yet on object storage",
+        sa_column=Column(String(64), nullable=False, server_default=text("''"), comment="Bundle content hash"),
     )
     size: int | None = Field(
         default=0,
-        description="SKILL.md file size in bytes",
+        description="Total bundle size in bytes",
         sa_column=Column(Integer, nullable=False, server_default=text("0"), comment="File size in bytes"),
     )
     created_by: int | None = Field(
@@ -107,6 +121,11 @@ class LinsightSkillDao:
     @classmethod
     async def create(cls, skill: LinsightSkill) -> LinsightSkill:
         async with get_async_db_session() as session:
+            # A never-edited skill still needs a modified time: the management
+            # list sorts on it, and NULL sinks a freshly imported skill to the
+            # last page (MySQL orders NULL last under DESC).
+            if skill.update_time is None:
+                skill.update_time = skill.create_time
             session.add(skill)
             await session.commit()
             await session.refresh(skill)
@@ -148,6 +167,11 @@ class LinsightSkillDao:
             pattern = f"%{keyword}%"
             statement = statement.where(
                 or_(
+                    # `name` is searchable so the list can find what the
+                    # duplicate check (name + display_name) already rejects;
+                    # otherwise a Chinese display name makes its ASCII skill id
+                    # unsearchable.
+                    col(LinsightSkill.name).ilike(pattern),
                     col(LinsightSkill.display_name).ilike(pattern),
                     col(LinsightSkill.description).ilike(pattern),
                 )
@@ -157,8 +181,16 @@ class LinsightSkillDao:
         with strict_tenant_filter():
             async with get_async_db_session() as session:
                 total = await async_get_count(session, statement)
+                # COALESCE keeps legacy rows with a NULL update_time in
+                # creation order instead of sinking them; the id tiebreaker makes
+                # OFFSET paging deterministic — skills seeded in one batch share
+                # an update_time to the second, and without it the same row can
+                # repeat on two pages while another is never listed at all.
                 statement = (
-                    statement.order_by(col(LinsightSkill.update_time).desc())
+                    statement.order_by(
+                        func.coalesce(col(LinsightSkill.update_time), col(LinsightSkill.create_time)).desc(),
+                        col(LinsightSkill.id).desc(),
+                    )
                     .offset((page - 1) * page_size)
                     .limit(page_size)
                 )

@@ -247,6 +247,25 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return await session.scalar(statement)
 
     @classmethod
+    async def alist_by_knowledge_id_cursor(
+        cls,
+        knowledge_id: int,
+        *,
+        after_id: int | None = None,
+        limit: int = 100,
+    ) -> list[KnowledgeFile]:
+        statement = (
+            select(KnowledgeFile)
+            .where(KnowledgeFile.knowledge_id == knowledge_id)
+            .order_by(col(KnowledgeFile.id).asc())
+            .limit(limit)
+        )
+        if after_id is not None:
+            statement = statement.where(KnowledgeFile.id > after_id)
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
     async def async_count_success_files_batch(cls, knowledge_ids: list[int]) -> dict:
         """Async: Batch count SUCCESS files for multiple knowledge spaces.
 

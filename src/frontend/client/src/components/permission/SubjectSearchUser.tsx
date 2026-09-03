@@ -1,24 +1,19 @@
 import { Checkbox } from "~/components/ui/Checkbox";
-import {
-  getCreationGrantSubjects,
-  getResourceGrantUsers,
-  searchUsers,
-} from "~/api/permission";
+import { searchUsers } from "~/api/permission";
 import type { GrantUser, ResourceType, SelectedSubject } from "~/api/permission";
 import { User as UserIcon, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
-import { PermissionEmptyState } from "./PermissionEmptyState";
 
-interface SubjectSearchUserProps {
+export interface SubjectSearchUserProps {
   value: SelectedSubject[];
   onChange: (v: SelectedSubject[]) => void;
   resourceType?: ResourceType;
   resourceId?: string;
-  mode?: "create" | "resource";
   disabledIds?: number[];
-  grantUsersApi?: typeof getResourceGrantUsers;
-  creationGrantSubjectsApi?: typeof getCreationGrantSubjects;
+  /** subjectId -> the permission model(s) that subject already holds here. */
+  grantedLabels?: Record<string, string>;
+  usersApi?: typeof searchUsers;
 }
 
 type UserRow = GrantUser;
@@ -30,10 +25,9 @@ export function SubjectSearchUser({
   onChange,
   resourceType,
   resourceId,
-  mode = "resource",
   disabledIds = [],
-  grantUsersApi,
-  creationGrantSubjectsApi,
+  grantedLabels = {},
+  usersApi,
 }: SubjectSearchUserProps) {
   const localize = useLocalize();
   const [keyword, setKeyword] = useState("");
@@ -62,32 +56,10 @@ export function SubjectSearchUser({
       pageNum: number,
       signal: AbortSignal,
     ): Promise<UserRow[]> => {
-      if (mode === "create") {
-        if (resourceType !== "knowledge_space" && resourceType !== "channel") return [];
-        const getCreationSubjects = creationGrantSubjectsApi ?? getCreationGrantSubjects;
-        const rows = await getCreationSubjects({
-          resourceType,
-          subjectType: "user",
-          operation: "list",
-          keyword: name,
-          page: pageNum,
-          pageSize: PAGE_SIZE,
-        }, { signal });
-        if (signal.aborted) return [];
-        return Array.isArray(rows) ? rows : [];
-      }
-      if (resourceType && resourceId) {
-        const getGrantUsers = grantUsersApi ?? getResourceGrantUsers;
-        const rows = await getGrantUsers(
-          resourceType,
-          resourceId,
-          { keyword: name, page: pageNum, page_size: PAGE_SIZE },
-          { signal },
-        );
-        if (signal.aborted) return [];
-        return Array.isArray(rows) ? rows : [];
-      }
-      const res = await searchUsers(
+      if (!resourceType || !resourceId) return [];
+      const res = await (usersApi ?? searchUsers)(
+        resourceType,
+        resourceId,
         name,
         { page: pageNum, pageSize: PAGE_SIZE },
         { signal },
@@ -95,7 +67,7 @@ export function SubjectSearchUser({
       if (signal.aborted) return [];
       return res.data || [];
     },
-    [creationGrantSubjectsApi, grantUsersApi, mode, resourceId, resourceType],
+    [resourceId, resourceType, usersApi],
   );
 
   const resetAndLoad = useCallback(
@@ -202,13 +174,13 @@ export function SubjectSearchUser({
     timerRef.current = setTimeout(() => resetAndLoad(val), 300);
   };
 
-  const selectedIds = new Set(value.filter((s) => s.type === "user").map((s) => s.id));
+  const selectedIds = new Set(value.map((s) => s.id));
   const disabledIdSet = new Set(disabledIds);
 
   const toggle = (user: UserRow) => {
     if (disabledIdSet.has(user.user_id)) return;
     if (selectedIds.has(user.user_id)) {
-      onChange(value.filter((s) => s.type !== "user" || s.id !== user.user_id));
+      onChange(value.filter((s) => s.id !== user.user_id));
     } else {
       onChange([
         ...value,
@@ -239,11 +211,14 @@ export function SubjectSearchUser({
           </div>
         )}
         {!loading && results.length === 0 && (
-          <PermissionEmptyState message={localize("com_permission.empty_search")} />
+          <div className="py-4 text-center text-sm text-gray-500">
+            {localize("com_permission.empty_search")}
+          </div>
         )}
         {!loading &&
           results.map((user) => {
             const isDisabled = disabledIdSet.has(user.user_id);
+            const grantedLabel = grantedLabels[String(user.user_id)];
             // User id (external_id) renders right after the username; the dedicated
             // column shows only the org/department path.
             const departmentPath = user.primary_department_path ?? "";
@@ -260,7 +235,9 @@ export function SubjectSearchUser({
               >
                 <Checkbox
                   className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
-                  checked={selectedIds.has(user.user_id)}
+                  // Already-granted rows read as checked: the picker shows who holds
+                  // the resource, so an empty box next to the badge reads as a bug.
+                  checked={selectedIds.has(user.user_id) || isDisabled}
                   disabled={isDisabled}
                 />
                 {/* Name column: username + user id (external_id) after it; the next
@@ -277,9 +254,13 @@ export function SubjectSearchUser({
                   {/* "Already granted" badge sits right after the name/id; it stays at
                       full width while the username truncates, so it never crowds the
                       department column on the right. */}
-                  {isDisabled && (
+                  {(grantedLabel || isDisabled) && (
                     <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
-                      {localize("com_permission.already_granted")}
+                      {grantedLabel
+                        ? localize("com_permission.already_granted_as", {
+                            model: grantedLabel,
+                          })
+                        : localize("com_permission.already_granted")}
                     </span>
                   )}
                 </div>

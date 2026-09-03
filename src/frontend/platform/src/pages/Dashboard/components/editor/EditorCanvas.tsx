@@ -13,7 +13,7 @@ import "react-grid-layout/css/styles.css"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery, useQueryClient } from "react-query"
 import "react-resizable/css/styles.css"
-import { DashboardsQueryKey } from "../../hook"
+import { DashboardsQueryKey, useDashboardPermissions } from "../../hook"
 import { DashboardComponent } from "../../types/dataConfig"
 import { ComponentConfigDrawer } from "../config/ComponentConfigDrawer"
 import { ComponentWrapper } from "./ComponentWrapper"
@@ -48,6 +48,14 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
         queryFn: getDashboards,
         // enabled: isHovered // Only fetch when hovered
     })
+    const { permissions: dashboardPermissions, privileged } = useDashboardPermissions(
+        dashboards.map((dashboard) => String(dashboard.id)),
+    )
+    // Same rule as the editor gate: an admin is privileged with an empty map, so
+    // filtering on the map alone left the "copy to" menu empty for admins.
+    const editableDashboards = dashboards.filter(
+        (dashboard) => privileged || dashboardPermissions[String(dashboard.id)]?.includes("edit"),
+    )
 
     const theme = currentDashboard?.style_config?.theme
 
@@ -279,7 +287,7 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
                                     {currentDashboard.components.map((component) => (
                                         <div key={component.id} className={`drag-handle`}>
                                             <ComponentWrapper
-                                                dashboards={dashboards}
+                                                dashboards={editableDashboards}
                                                 component={component}
                                                 isDark={theme === 'dark'}
                                                 isPreviewMode={isPreviewMode}

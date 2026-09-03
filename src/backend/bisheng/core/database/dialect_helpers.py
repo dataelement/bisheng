@@ -193,6 +193,19 @@ def _compile_update_time_default_sqlite(element, compiler, **kw):
 UPDATE_TIME_SERVER_DEFAULT = _UpdateTimeServerDefault()
 
 
+def is_update_time_server_default(server_default) -> bool:
+    """True if a column's ``server_default`` is the shared update_time default.
+
+    Takes a ``Column.server_default`` (a ``DefaultClause`` wrapping the marker,
+    or the marker itself) so callers can ask the question without reaching for
+    the private class: the schema-drift check and its migration both need to
+    know which tables promised ON UPDATE semantics.
+    """
+    if server_default is None:
+        return False
+    return isinstance(getattr(server_default, "arg", server_default), _UpdateTimeServerDefault)
+
+
 class JsonType(TypeDecorator):
     """Stores Python dicts/lists as JSON.
 

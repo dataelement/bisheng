@@ -13,7 +13,9 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.database.models.assistant import Assistant
-from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
+from bisheng.permission.application.business_authorization import (
+    require_business_action,
+)
 from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
@@ -30,8 +32,10 @@ async def get_assistant(
     tag_id: int = Query(default=None, description="labelID"),
     page_size: int | None = Query(default=10, gt=0, description="Items per page"),
     status: int | None = Query(default=None, description="Is online status"),
-    permission_id: str = Query(
-        default="use_app", description="Fine-grained permission id for assistant list visibility"
+    action: str = Query(
+        default="use",
+        pattern="^(visible|use)$",
+        description="Concrete action required for each assistant",
     ),
     cursor: str | None = Query(
         default=None,
@@ -53,7 +57,7 @@ async def get_assistant(
         tag_id=tag_id,
         cursor=cursor,
         page_size=page_size,
-        permission_id=permission_id,
+        action=action,
     )
     return resp_200(data=result)
 
@@ -72,11 +76,11 @@ async def get_assistant_info(
 
 
 @router.post("/delete")
-def delete_assistant(
+async def delete_assistant(
     *, request: Request, assistant_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)
 ):
     """Delete Assistant"""
-    AssistantService.delete_assistant(request, login_user, assistant_id)
+    await AssistantService.delete_assistant(request, login_user, assistant_id)
     return resp_200()
 
 
@@ -129,13 +133,12 @@ async def auto_update_assistant_task(
     assistant_id: str = Body(description="Assistant UniqueID"),
     prompt: str = Body(description="User-filled prompts"),
 ):
-    if not await ApplicationPermissionService.has_any_permission_async(
+    await require_business_action(
         login_user,
-        "assistant",
-        str(assistant_id),
-        ["edit_app"],
-    ):
-        raise UnAuthorizedError()
+        resource_type="assistant",
+        resource_id=assistant_id,
+        action="edit",
+    )
     # Deposit Cache
     task_id = generate_uuid()
     redis_client = await get_redis_client()
@@ -220,18 +223,18 @@ async def chat(
     login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws),
 ):
     try:
-        if not await ApplicationPermissionService.has_any_permission_async(
+        await require_business_action(
             login_user,
-            "assistant",
-            str(assistant_id),
-            ["use_app"],
-        ):
-            await websocket.close(
-                code=http_status.WS_1008_POLICY_VIOLATION,
-                reason="No permission to use this app",
-            )
-            return
+            resource_type="assistant",
+            resource_id=assistant_id,
+            action="use",
+        )
         await chat_manager.dispatch_client(websocket, assistant_id, chat_id, login_user, WorkType.GPTS, websocket)
+    except UnAuthorizedError:
+        await websocket.close(
+            code=http_status.WS_1008_POLICY_VIOLATION,
+            reason="No permission to use this app",
+        )
     except WebSocketException as exc:
         logger.error(f"Websocket exception: {exc!s}")
         await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(exc))

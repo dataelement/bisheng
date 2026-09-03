@@ -371,6 +371,8 @@
     "menuEnableAll": "Enable all",
     "menuDisableAll": "Disable all",
     "channelQuotaLimit": "Channel creation limit",
+    "spaceCreateQuotaLimit": "Knowledge space creation limit",
+    "spaceCreateQuotaLimitDesc": "Limit how many knowledge spaces users with this role can create",
     "spaceSubscribeQuotaLimit": "Knowledge space join limit",
     "spaceSubscribeQuotaLimitDesc": "Limit how many knowledge spaces users with this role can join (subscribe to)",
     "roleListKnowledgeSpaceUploadLimit": "Knowledge space upload limit",
@@ -521,6 +523,8 @@
     "fileUploadFailed": "File upload failed: {{name}}",
     "fileExceedRemoved": "File: {{name}} exceeds {{size}}MB and has been removed",
     "fileTypeNotAllowed": "Unsupported file type: {{type}}",
+    "mediaFileTooMany": "You cannot upload more than 5 audio/video files.",
+    "noFileSelected": "No file selected",
     "uploadFailedCheckFormat": "Upload failed, please check file format",
     "sourceTooltip": "Source Paragraph",
     "filterLabel": "Filter Labels",
@@ -546,7 +550,20 @@
     "confirmed": "Confirmed",
     "confirm": "Confirm",
     "runNewWorkflow": "Run New Chat",
-    "chatEndMessage": "This chat has ended"
+    "chatEndMessage": "This chat has ended",
+    "runLog": {
+      "used": "Used",
+      "using": "Using",
+      "searched": "Searched",
+      "searching": "Searching",
+      "done": "Done",
+      "thinking": "Thinking",
+      "flowOffline": "{{name}} is offline",
+      "flowDeleted": "The skill has been deleted, its name is unavailable",
+      "toolDeleted": "The tool has been deleted, its name is unavailable",
+      "knowledgeDeleted": "The knowledge base has been deleted, its name is unavailable",
+      "interrupted": "The tool call returned no result (the session ended)"
+    }
   },
   "importLinsight": {
     "title": "Import Guidebook from Run Records",
@@ -693,7 +710,10 @@
     "internationalization": "You are a knowledge base Q&A assistant:\n1. Answer questions in the language used by the user, and ensure the answers are rigorous and professional.\n2. You need to answer based on the content in the following [Reference Text]. Only respond when the [Reference Text] has relevant information directly related to the user's question. Do not provide answers based on your own knowledge. If the relevant content includes images, output the image source file directly. If placeholders like `![image](path/IMAGE_1.png)` are found, please retain these placeholders without modifying or deleting them.\n3. If the document contains tables, do not make any modifications or return the table in markdown format.\n4. Since the [Reference Text] may contain information from different sources, which might lead to different or conflicting answers, please list these answers if discrepancies arise. If there is no conflict, provide the final result only.\n5. If the content in the [Reference Text] is not related to the user's question, reply with \"No relevant content found.\"\n\n# Reference Text\n{retrieved_file_content}\n\n# User's Question\n{question}",
     "taskModeName": "Task Mode Display Name",
     "taskModeInputPlaceholder": "Task Mode Input Placeholder",
-    "taskModeFullName": "Task Mode"
+    "taskModeFullName": "Task Mode",
+    "blindOverwriteTitle": "Save these settings?",
+    "blindOverwriteDesc": "This page is showing default settings — the saved workbench configuration could not be loaded. If one already exists, saving will overwrite it entirely with defaults. Refresh the page to check before saving.",
+    "blindOverwriteOk": "Save anyway"
   },
   "save": "Save",
   "model": {
@@ -753,6 +773,9 @@
     "actions": "Actions",
     "modelType": "Model Type",
     "onlineOfflineOperation": "Online/Offline",
+    "statusUpdateTime": "Status Updated At",
+    "updateStatus": "Update Status",
+    "statusUpdated": "Status updated",
     "available": "Available",
     "abnormal": "Abnormal",
     "unknown": "Unknown",
@@ -900,6 +923,8 @@
     "reportDescription": "Report generation description...",
     "newButton": "New",
     "importButton": "Import",
+    "saveTemplate": "Save",
+    "saveSuccess": "Saved",
     "start": "start",
     "requiredLabel": "Required",
     "isRequired": "is Required",
@@ -1080,7 +1105,7 @@
     "modelDescription": "Description",
     "modelDescriptionPlaceholder": "Shown in the model picker",
     "vision": "Vision",
-    "visionText": "When enabled, the model will answer based on image content (supports PNG, JPEG, WEBP, non-animated GIF formats). Note that only multimodal models support this capability.",
+    "visionText": "When enabled, the model will answer based on image content (supports PNG, JPEG, WEBP, non-animated GIF formats). Note that only multimodal models support this capability. While it is off, Linsight task mode will not hand images to this model either.",
     "webSearchPrompt": "Web Search Prompt",
     "confirmDelete": "Are you sure you want to delete?",
     "deleteFailed": "Delete failed",
@@ -2063,5 +2088,30 @@
       "githubRateLimit": "GitHub rate limit exceeded, please retry later",
       "unknown": "Operation failed, please retry"
     }
+  },
+  "citation": {
+    "unsupportedPreview": "Preview is not supported for this file type",
+    "loadingPreview": "Loading document preview...",
+    "noPreviewUrl": "No previewable file address",
+    "documentPreview": "Document preview",
+    "downloadDocument": "Download document",
+    "closeDocumentPreview": "Close document preview",
+    "web": "Web",
+    "document": "Document",
+    "untitled": "Untitled",
+    "loadingDetail": "Loading source details...",
+    "loadDetailFailed": "Failed to load source details",
+    "policyDocument": "Policy document",
+    "references": "References",
+    "closeReferences": "Close references",
+    "backToReferences": "Back to reference list",
+    "noDownloadUrl": "No downloadable file address"
+  },
+  "mediaPreview": {
+    "recognizedText": "Recognized text",
+    "entryText": "Stored text",
+    "webPreview": "Web preview",
+    "openSourcePage": "Open source page",
+    "noWebSnapshot": "No web snapshot yet — check the stored text or open the source page."
   }
 }

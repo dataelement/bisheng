@@ -28,10 +28,10 @@ import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup";
 import type { PermissionDraftRow } from "./usePermissionDraft";
 
 export interface PermissionDraftSearchApi {
-  grantUsersApi?: ComponentProps<typeof SubjectSearchUser>["grantUsersApi"];
-  grantDepartmentChildrenApi?: ComponentProps<typeof SubjectSearchDepartment>["grantDepartmentChildrenApi"];
-  grantDepartmentSearchApi?: ComponentProps<typeof SubjectSearchDepartment>["grantDepartmentSearchApi"];
-  grantUserGroupsApi?: ComponentProps<typeof SubjectSearchUserGroup>["grantUserGroupsApi"];
+  usersApi?: ComponentProps<typeof SubjectSearchUser>["usersApi"];
+  departmentChildrenApi?: ComponentProps<typeof SubjectSearchDepartment>["departmentChildrenApi"];
+  departmentSearchApi?: ComponentProps<typeof SubjectSearchDepartment>["departmentSearchApi"];
+  userGroupsApi?: ComponentProps<typeof SubjectSearchUserGroup>["userGroupsApi"];
 }
 
 export interface PermissionDraftPickerDialogProps {
@@ -64,14 +64,9 @@ export function PermissionDraftPickerDialog({
   const [subjects, setSubjects] = useState<SelectedSubject[]>([]);
   const [includeChildren, setIncludeChildren] = useState(true);
   const [selectedModelId, setSelectedModelId] = useState("");
-  const selectableModels = useMemo(
-    () => subjectType === "user"
-      ? relationModels
-      : relationModels.filter((model) => model.relation !== "owner"),
-    [relationModels, subjectType],
-  );
+  const selectableModels = useMemo(() => relationModels, [relationModels]);
   const activeModel = selectableModels.find((model) => model.id === selectedModelId)
-    ?? selectableModels.find((model) => model.relation === "viewer")
+    ?? selectableModels.find((model) => model.level === 1)
     ?? selectableModels[0];
 
   useEffect(() => {
@@ -96,8 +91,9 @@ export function PermissionDraftPickerDialog({
       subjectType: subject.type,
       subjectId: subject.id,
       subjectName: subject.name,
-      relation: activeModel.relation,
-      modelId: activeModel.id,
+      modelKey: activeModel.id,
+      modelName: activeModel.name,
+      modelLevel: activeModel.level,
       includeChildren: subject.type === "department" ? includeChildren : undefined,
     })));
     onOpenChange(false);
@@ -106,7 +102,7 @@ export function PermissionDraftPickerDialog({
   const searchProps = {
     mode,
     resourceType,
-    resourceId,
+    resourceId: resourceId ?? "__creation__",
     value: subjects,
     onChange: setSubjects,
     disabledIds: disabledIds[subjectType],
@@ -157,18 +153,18 @@ export function PermissionDraftPickerDialog({
             )}
           </div>
           <TabsContent value="user" className="mt-3 min-h-0 flex-1 overflow-hidden p-0">
-            <SubjectSearchUser {...searchProps} grantUsersApi={searchApi?.grantUsersApi} />
+            <SubjectSearchUser {...searchProps} usersApi={searchApi?.usersApi} />
           </TabsContent>
           <TabsContent value="department" className="mt-3 min-h-0 flex-1 overflow-hidden p-0">
             <SubjectSearchDepartment
               {...searchProps}
               includeChildren={includeChildren}
-              grantDepartmentChildrenApi={searchApi?.grantDepartmentChildrenApi}
-              grantDepartmentSearchApi={searchApi?.grantDepartmentSearchApi}
+              departmentChildrenApi={searchApi?.departmentChildrenApi}
+              departmentSearchApi={searchApi?.departmentSearchApi}
             />
           </TabsContent>
           <TabsContent value="user_group" className="mt-3 min-h-0 flex-1 overflow-hidden p-0">
-            <SubjectSearchUserGroup {...searchProps} grantUserGroupsApi={searchApi?.grantUserGroupsApi} />
+            <SubjectSearchUserGroup {...searchProps} userGroupsApi={searchApi?.userGroupsApi} />
           </TabsContent>
         </Tabs>
         {/* Mobile stacks the relation picker above a full-width action pair, with

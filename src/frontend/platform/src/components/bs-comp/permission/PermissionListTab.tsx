@@ -1,70 +1,43 @@
 // @ts-strict-ignore
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
+import { Button } from "@/components/bs-ui/button"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/bs-ui/dropdownMenu"
-import { Portal, Tooltip, TooltipContent, TooltipTrigger } from "@/components/bs-ui/tooltip"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import {
-  authorizeResource,
-  getGrantableRelationModelsApi,
-  getResourcePermissions,
-  type RelationModel,
+  getGrantablePermissionModelsApi,
+  getMyResourcePermissionsApi,
+  getResourcePermissionGrantsApi,
+  mutateResourceGrantsApi,
+  type GrantablePermissionModel,
+  type MutateResourceGrantsResult,
+  type MyResourcePermissions,
+  type PermissionGrantAssignee,
+  type PermissionResourceType,
+  type ResourcePermissionContext,
 } from "@/controllers/API/permission"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { cn } from "@/utils"
-import { Building2, ChevronDown, Loader2, RotateCcw, Search, User, Users } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  AlertTriangle,
+  Building2,
+  Loader2,
+  LockKeyhole,
+  Search,
+  Trash2,
+  User,
+  Users,
+} from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { RelationModelOption } from "./RelationSelect"
-import { PermissionEntry, RelationLevel, ResourceType, RevokeItem } from "./types"
+import { canMutatePermissionAssignee } from "./assigneePolicy"
+import { SourceBadge } from "./SourceBadge"
+import type { SubjectType } from "./types"
 
-// Tooltip that only shows when the wrapped element's text is truncated.
-function TruncatedTip({
-  content,
-  side = "top",
-  styleClasses,
-  className,
-  as: Tag = "span",
-  children,
-}: {
-  content: string
-  side?: "top" | "right" | "bottom" | "left"
-  styleClasses?: string
-  className?: string
-  as?: "span" | "p" | "div"
-  children: React.ReactNode
-}) {
-  const ref = useRef<HTMLElement | null>(null)
-  const [open, setOpen] = useState(false)
-
-  const handleOpenChange = (next: boolean) => {
-    if (!next) {
-      setOpen(false)
-      return
-    }
-    const el = ref.current
-    if (el && (el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight)) {
-      setOpen(true)
-    }
-  }
-
-  return (
-    <Tooltip open={open} onOpenChange={handleOpenChange} delayDuration={200}>
-      <TooltipTrigger asChild>
-        <Tag ref={ref as React.RefObject<HTMLElement>} className={className}>{children}</Tag>
-      </TooltipTrigger>
-      <Portal>
-        <TooltipContent className={cn(styleClasses, "text-sm shadow-md")} side={side}>
-          <div className="max-w-96 text-left break-all whitespace-normal">{content}</div>
-        </TooltipContent>
-      </Portal>
-    </Tooltip>
-  )
+interface PermissionListTabProps {
+  resourceType: PermissionResourceType
+  resourceId: string
+  context: ResourcePermissionContext
+  refreshKey?: number
+  pageSize?: number
+  fixedSubjectType?: SubjectType
+  onRosterChange?: (assignees: PermissionGrantAssignee[]) => void
+  onMutationSuccess?: (result: MutateResourceGrantsResult) => void
 }
 
 const SUBJECT_ICONS = {
@@ -73,521 +46,430 @@ const SUBJECT_ICONS = {
   user_group: Users,
 }
 
-interface PermissionListTabProps {
-  resourceType: ResourceType
-  resourceId: string
-  refreshKey: number
-  prefetchedGrantableModels?: RelationModel[]
-  prefetchedGrantableModelsLoaded?: boolean
-  prefetchedUseDefaultModels?: boolean
-  skipGrantableModelsRequest?: boolean
-  fixedSubjectType?: ListSubjectType
+function createMutationIdempotencyKey(): string {
+  return `grant-mutate-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-const DEFAULT_MODELS: RelationModelOption[] = [
-  { id: 'owner', name: '所有者', relation: 'owner' },
-  { id: 'manager', name: '可管理', relation: 'manager' },
-  { id: 'editor', name: '可编辑', relation: 'editor' },
-  { id: 'viewer', name: '可查看', relation: 'viewer' },
-]
+function getAvatarLabel(assignee: PermissionGrantAssignee): string {
+  const name = assignee.subject.name?.trim() || assignee.subject.id
+  return (name.charAt(0) || "U").toUpperCase()
+}
 
-const LIST_SUBJECT_TYPES = ['user', 'department', 'user_group'] as const
-type ListSubjectType = (typeof LIST_SUBJECT_TYPES)[number]
+function getInheritedSourceLabel(
+  assignee: PermissionGrantAssignee,
+  translate: (key: string) => string,
+): string {
+  const resolvedName = assignee.inherited_from_name?.trim()
+  if (resolvedName) return resolvedName
+
+  const resourceType = assignee.inherited_from?.split(":", 1)[0]
+  if (resourceType === "folder") return translate("roster.parentFolder")
+  if (
+    resourceType === "knowledge_space" ||
+    resourceType === "knowledge_library"
+  ) {
+    return translate("roster.parentKnowledgeSpace")
+  }
+  return translate("roster.parentResource")
+}
+
+interface RosterRowProps {
+  assignee: PermissionGrantAssignee
+  context: ResourcePermissionContext
+  models: GrantablePermissionModel[]
+  pending: boolean
+  onMove: (assignee: PermissionGrantAssignee, modelKey: string) => void
+  onRemove: (assignee: PermissionGrantAssignee) => void
+}
+
+function RosterRow({
+  assignee,
+  context,
+  models,
+  pending,
+  onMove,
+  onRemove,
+}: RosterRowProps) {
+  const { t } = useTranslation("permission")
+  const SubjectIcon = SUBJECT_ICONS[assignee.subject.type]
+  const editable = canMutatePermissionAssignee(assignee, context, models)
+  const displayName =
+    assignee.subject.name ||
+    `${assignee.subject.type}:${assignee.subject.id}`
+  const currentIsGrantable = models.some(
+    (model) => model.key === assignee.model.key,
+  )
+
+  return (
+    <article
+      data-testid={`permission-assignee-${assignee.assignee_id}`}
+      data-editable={String(editable)}
+      className="flex min-h-[58px] items-center gap-4 border-b border-[#F2F3F5] py-3 last:border-b-0"
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        {assignee.subject.type === "user" ? (
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#C9CDD4] text-sm font-semibold text-white">
+            {getAvatarLabel(assignee)}
+          </span>
+        ) : (
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <SubjectIcon aria-hidden="true" className="size-4" />
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-[#212121]">
+            {displayName}
+          </p>
+          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1 text-xs text-[#86909C]">
+            <SourceBadge source={assignee.source} />
+            <span>{t(`scope.${assignee.scope.toLowerCase()}`)}</span>
+            {assignee.inherited_from && (
+              <span className="truncate">
+                · {t("roster.inheritedFrom")}:{" "}
+                {getInheritedSourceLabel(assignee, t)}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex w-[176px] shrink-0 items-center justify-end gap-1">
+        {editable ? (
+          <>
+            <select
+              aria-label={`grant.model.${assignee.assignee_id}`}
+              value={assignee.model.key}
+              disabled={pending}
+              onChange={(event) => onMove(assignee, event.target.value)}
+              className="h-8 min-w-0 flex-1 cursor-pointer rounded-[6px] border-0 bg-transparent px-2 text-right text-sm text-[#4E5969] outline-none hover:bg-[#F7F7F7] focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {!currentIsGrantable && (
+                <option value={assignee.model.key}>
+                  {assignee.model.name}
+                </option>
+              )}
+              {models.map((model) => (
+                <option key={model.key} value={model.key}>
+                  {model.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              aria-label={`${t("grant.remove")}.${assignee.assignee_id}`}
+              disabled={pending}
+              className="flex size-8 shrink-0 items-center justify-center rounded-[6px] text-[#86909C] transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => onRemove(assignee)}
+            >
+              <Trash2 aria-hidden="true" className="size-4" />
+            </button>
+          </>
+        ) : (
+          <span className="inline-flex items-center gap-1 truncate text-sm text-[#86909C]">
+            {assignee.model.name}
+            {assignee.protected && (
+              <LockKeyhole
+                aria-label={t("roster.protected")}
+                className="size-3.5 shrink-0"
+              />
+            )}
+          </span>
+        )}
+      </div>
+    </article>
+  )
+}
+
+function SummaryView({ summary }: { summary: MyResourcePermissions }) {
+  const { t } = useTranslation("permission")
+  return (
+    <section className="rounded-lg border border-[#EBECF0] bg-[#F7F8FA] p-4">
+      <p className="text-sm font-medium text-[#212121]">
+        {t("roster.summaryOnly")}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {summary.actions.map((action) => (
+          <span
+            key={action}
+            className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+          >
+            {action}
+          </span>
+        ))}
+      </div>
+    </section>
+  )
+}
 
 export function PermissionListTab({
   resourceType,
   resourceId,
-  refreshKey,
-  prefetchedGrantableModels,
-  prefetchedGrantableModelsLoaded = false,
-  prefetchedUseDefaultModels = false,
-  skipGrantableModelsRequest = false,
-  fixedSubjectType,
+  context,
+  refreshKey = 0,
+  pageSize = 50,
+  fixedSubjectType = "user",
+  onRosterChange,
+  onMutationSuccess,
 }: PermissionListTabProps) {
-  const { t } = useTranslation('permission')
-  const { message } = useToast()
-  const [entries, setEntries] = useState<PermissionEntry[]>([])
-  const [listTab, setListTab] = useState<ListSubjectType>(fixedSubjectType ?? 'user')
+  const { t } = useTranslation("permission")
+  const [assignees, setAssignees] = useState<PermissionGrantAssignee[]>([])
+  const [models, setModels] = useState<GrantablePermissionModel[]>([])
+  const [summary, setSummary] = useState<MyResourcePermissions | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(false)
-  const [grantableModels, setGrantableModels] = useState<RelationModel[]>(prefetchedGrantableModels || [])
-  const [useDefaultModels, setUseDefaultModels] = useState(prefetchedUseDefaultModels)
-  const [userSelectedTab, setUserSelectedTab] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [isListScrolling, setIsListScrolling] = useState(false)
-  const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    setError(false)
-    const res = await captureAndAlertRequestErrorHoc(
-      getResourcePermissions(resourceType, resourceId),
-      () => { setError(true); return true },
-    )
-    if (res) {
-      setEntries(res)
-    }
-    setLoading(false)
-  }, [resourceType, resourceId])
-
-  useEffect(() => { loadData() }, [loadData, refreshKey])
-
-  const subjectEntries = useMemo(
-    () => entries.filter((entry) => entry.subject_type === listTab),
-    [entries, listTab],
-  )
-  const ownerEntryCount = useMemo(
-    () => entries.filter((entry) => entry.subject_type === 'user' && entry.relation === 'owner').length,
-    [entries],
-  )
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [pendingAssigneeId, setPendingAssigneeId] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
-    setListTab(fixedSubjectType ?? 'user')
-    setUserSelectedTab(false)
-    setSearchQuery('')
-  }, [resourceId, fixedSubjectType])
+    onRosterChange?.(assignees)
+  }, [assignees, onRosterChange])
 
   useEffect(() => {
-    if (fixedSubjectType || userSelectedTab || entries.length === 0 || subjectEntries.length > 0) return
-    const firstNonEmptyTab = LIST_SUBJECT_TYPES.find((subjectType) =>
-      entries.some((entry) => entry.subject_type === subjectType),
-    )
-    if (firstNonEmptyTab) setListTab(firstNonEmptyTab)
-  }, [entries, fixedSubjectType, subjectEntries.length, userSelectedTab])
+    setSearchQuery("")
+  }, [fixedSubjectType, resourceId])
 
   useEffect(() => {
-    return () => {
-      if (listScrollTimerRef.current) clearTimeout(listScrollTimerRef.current)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (skipGrantableModelsRequest) {
-      if (!prefetchedGrantableModelsLoaded) return
-      setGrantableModels(prefetchedGrantableModels || [])
-      setUseDefaultModels(prefetchedUseDefaultModels)
+    if (!context.can_manage_permission || context.mode !== "CUSTOM") {
+      setModels([])
       return
     }
+    let cancelled = false
+    void getGrantablePermissionModelsApi(resourceType, resourceId)
+      .then((result) => {
+        if (!cancelled) setModels(result.filter((model) => model.active))
+      })
+      .catch(() => {
+        if (!cancelled) setModels([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [context.can_manage_permission, context.mode, resourceId, resourceType])
 
-    captureAndAlertRequestErrorHoc(
-      getGrantableRelationModelsApi(resourceType, resourceId),
-      () => true,
-    ).then((res) => {
-      if (res === false) {
-        setUseDefaultModels(false)
-        setGrantableModels([])
-        return
-      }
-      if (!res) return
-      setUseDefaultModels(false)
-      setGrantableModels(res)
-    })
+  const loadRosterPage = useCallback(
+    async (cursor: string | null) => {
+      const page = await getResourcePermissionGrantsApi(
+        resourceType,
+        resourceId,
+        { cursor, page_size: pageSize },
+      )
+      setAssignees((current) =>
+        cursor ? [...current, ...page.data] : page.data,
+      )
+      setNextCursor(page.next_cursor)
+      setHasMore(page.has_more)
+    },
+    [pageSize, resourceId, resourceType],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    setAssignees([])
+    setSummary(null)
+    setNextCursor(null)
+    setHasMore(false)
+    setFailed(false)
+    setLoading(true)
+
+    const request = context.can_manage_permission
+      ? getResourcePermissionGrantsApi(resourceType, resourceId, {
+          cursor: null,
+          page_size: pageSize,
+        })
+      : getMyResourcePermissionsApi(resourceType, resourceId)
+
+    void request
+      .then((result) => {
+        if (cancelled) return
+        if (context.can_manage_permission) {
+          const page = result as Awaited<
+            ReturnType<typeof getResourcePermissionGrantsApi>
+          >
+          setAssignees(page.data)
+          setNextCursor(page.next_cursor)
+          setHasMore(page.has_more)
+        } else {
+          setSummary(result as MyResourcePermissions)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [
-    prefetchedGrantableModels,
-    prefetchedGrantableModelsLoaded,
-    prefetchedUseDefaultModels,
+    context.can_manage_permission,
+    pageSize,
     refreshKey,
     resourceId,
     resourceType,
-    skipGrantableModelsRequest,
   ])
 
-  const grantableModelOptions = useMemo<RelationModelOption[]>(() => {
-    if (useDefaultModels) return DEFAULT_MODELS
-
-    return grantableModels.map((model) => ({
-      id: model.id,
-      name: model.is_system ? t(`level.${model.relation}`, { defaultValue: model.relation }) : model.name,
-      relation: model.relation as RelationLevel,
-    }))
-  }, [grantableModels, t, useDefaultModels])
-
-  const displayModels = useMemo<RelationModelOption[]>(() => {
-    const opts = [...grantableModelOptions]
-    const ids = new Set(opts.map((option) => option.id))
-    for (const entry of entries) {
-      if (!entry.model_id || ids.has(entry.model_id)) continue
-      ids.add(entry.model_id)
-      opts.push({
-        id: entry.model_id,
-        name: entry.model_name || entry.relation,
-        relation: entry.relation as RelationLevel,
-      })
-    }
-    return opts.length ? opts : DEFAULT_MODELS
-  }, [entries, grantableModelOptions])
-
-  // F038: the backend already resolves a department's full ancestor path into
-  // subject_name (父/子/孙), so no per-grant path-tree lookup is needed here.
-  function getEntryDisplayName(entry: PermissionEntry) {
-    return entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`
-  }
-
-  const normalizedSearchQuery = searchQuery.trim().toLowerCase()
-  const visibleEntries = useMemo(() => {
-    if (!normalizedSearchQuery) return subjectEntries
-
-    return subjectEntries.filter((entry) => {
-      const name = getEntryDisplayName(entry).toLowerCase()
-      const groupNames = entry.subject_group_names?.join(' ') ?? ''
-      const memberNames = entry.subject_member_names?.join(' ') ?? ''
-      const includeChildrenText =
-        entry.subject_type === 'department' && entry.include_children ? t('includeChildren') : ''
-      return `${name} ${groupNames} ${memberNames} ${includeChildrenText}`
+  const visibleAssignees = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    return assignees.filter((assignee) => {
+      if (assignee.subject.type !== fixedSubjectType) return false
+      if (!query) return true
+      return [
+        assignee.subject.name,
+        assignee.subject.id,
+        assignee.model.name,
+        assignee.source.type,
+        assignee.inherited_from,
+      ]
+        .filter(Boolean)
+        .join(" ")
         .toLowerCase()
-        .includes(normalizedSearchQuery)
+        .includes(query)
     })
-  }, [normalizedSearchQuery, subjectEntries, t])
+  }, [assignees, fixedSubjectType, searchQuery])
 
-  const handleModify = async (entry: PermissionEntry, modelId: string) => {
-    const model = grantableModelOptions.find((item) => item.id === modelId)
-    const newLevel = (model?.relation || 'viewer') as RelationLevel
-    if (newLevel === entry.relation && (entry.model_id || entry.relation) === modelId) return
-    const res = await captureAndAlertRequestErrorHoc(
-      authorizeResource(
-        resourceType, resourceId,
-        [{
-          subject_type: entry.subject_type,
-          subject_id: entry.subject_id,
-          relation: newLevel,
-          model_id: modelId,
-          ...(entry.subject_type === 'department'
-            ? { include_children: Boolean(entry.include_children) }
-            : {}),
-        }],
-        [{
-          subject_type: entry.subject_type,
-          subject_id: entry.subject_id,
-          relation: entry.relation,
-          ...(entry.subject_type === 'department'
-            ? { include_children: Boolean(entry.include_children) }
-            : {}),
-        }],
-      ),
-      () => {
-        if (entry.relation !== 'owner') return false
-        message({ title: t('error.lastOwner'), variant: 'error' })
-        return true
-      },
-    )
-    if (res !== false) {
-      message({ title: t('success.modify'), variant: 'success' })
-      loadData()
+  const mutateAssignee = async (
+    assignee: PermissionGrantAssignee,
+    change:
+      | { op: "MOVE"; target_model_key: string }
+      | { op: "REMOVE" },
+  ) => {
+    if (pendingAssigneeId !== null) return
+    setPendingAssigneeId(assignee.assignee_id)
+    setFailed(false)
+    try {
+      const result = await mutateResourceGrantsApi(resourceType, resourceId, {
+        idempotency_key: createMutationIdempotencyKey(),
+        expected_resource_version: context.resource_version,
+        expected_catalog_release_id: context.catalog_release_id,
+        changes: [
+          change.op === "MOVE"
+            ? {
+                op: "MOVE",
+                assignee_id: assignee.assignee_id,
+                expected_assignee_version: assignee.assignee_version,
+                target_model_key: change.target_model_key,
+              }
+            : {
+                op: "REMOVE",
+                assignee_id: assignee.assignee_id,
+                expected_assignee_version: assignee.assignee_version,
+              },
+        ],
+      })
+      setAssignees(result.items)
+      onMutationSuccess?.(result)
+    } catch {
+      setFailed(true)
+    } finally {
+      setPendingAssigneeId(null)
     }
   }
 
-  const getSubjectEntries = useCallback(
-    (entry: PermissionEntry) =>
-      entries.filter(
-        (candidate) =>
-          candidate.subject_type === entry.subject_type &&
-          candidate.subject_id === entry.subject_id,
-      ),
-    [entries],
-  )
-
-  const canManageEntry = useCallback(
-    (entry: PermissionEntry) => {
-      const currentModelId = entry.model_id || entry.relation
-      return grantableModelOptions.some((model) => model.id === currentModelId)
-    },
-    [grantableModelOptions],
-  )
-
-  const canDeleteSubject = useCallback(
-    (entry: PermissionEntry) => {
-      if (!canManageEntry(entry)) return false
-      const relatedEntries = getSubjectEntries(entry)
-      if (relatedEntries.some((candidate) => !canManageEntry(candidate))) return false
-      const subjectOwnerCount = relatedEntries.filter(
-        (candidate) => candidate.subject_type === 'user' && candidate.relation === 'owner',
-      ).length
-      return subjectOwnerCount === 0 || ownerEntryCount > subjectOwnerCount
-    },
-    [canManageEntry, getSubjectEntries, ownerEntryCount],
-  )
-
-  const buildRevokeItemsForSubject = (entry: PermissionEntry): RevokeItem[] => {
-    const seen = new Set<string>()
-    return getSubjectEntries(entry).reduce<RevokeItem[]>((items, candidate) => {
-      const includeChildrenValues =
-        candidate.subject_type === 'department'
-          ? (candidate.include_children ? [true, false] : [false])
-          : [undefined]
-
-      for (const includeChildren of includeChildrenValues) {
-        const key = [
-          candidate.subject_type,
-          candidate.subject_id,
-          candidate.relation,
-          includeChildren === undefined ? '' : String(includeChildren),
-        ].join(':')
-        if (seen.has(key)) continue
-        seen.add(key)
-        items.push({
-          subject_type: candidate.subject_type,
-          subject_id: candidate.subject_id,
-          relation: candidate.relation,
-          ...(candidate.subject_type === 'department'
-            ? { include_children: includeChildren }
-            : {}),
-        })
-      }
-      return items
-    }, [])
-  }
-
-  const handleDeleteSubject = (entry: PermissionEntry) => {
+  const handleRemove = (assignee: PermissionGrantAssignee) => {
     bsConfirm({
-      desc: t('action.confirmRevoke'),
+      desc: t("action.confirmRevoke"),
       onOk(next) {
-        const revokes = buildRevokeItemsForSubject(entry)
-        if (revokes.length === 0) {
-          next()
-          return
-        }
-        captureAndAlertRequestErrorHoc(
-          authorizeResource(resourceType, resourceId, [], revokes),
-          () => {
-            if (entry.relation !== 'owner') return false
-            message({ title: t('error.lastOwner'), variant: 'error' })
-            return true
-          },
-        ).then((res) => {
-          if (res !== false) {
-            message({ title: t('success.revoke'), variant: 'success' })
-            loadData()
-          }
-        })
+        void mutateAssignee(assignee, { op: "REMOVE" })
         next()
       },
     })
   }
 
-  const subjectLabel = (type: ListSubjectType) => {
-    const map: Record<ListSubjectType, string> = {
-      user: t('subject.user'),
-      department: t('subject.department'),
-      user_group: t('subject.userGroup'),
+  const handleLoadMore = async () => {
+    if (!nextCursor || loadingMore) return
+    setLoadingMore(true)
+    try {
+      await loadRosterPage(nextCursor)
+    } catch {
+      setFailed(true)
+    } finally {
+      setLoadingMore(false)
     }
-    return map[type]
   }
 
-  const getPermissionLabel = (entry: PermissionEntry) => {
-    const currentModelId = entry.model_id || entry.relation
-    return (
-      displayModels.find((item) => item.id === currentModelId)?.name ||
-      entry.model_name ||
-      t(`level.${entry.relation}`, { defaultValue: entry.relation })
-    )
-  }
-
-  const getSearchPlaceholder = (type: ListSubjectType) => {
-    const map: Record<ListSubjectType, string> = {
-      user: t('search.user'),
-      department: t('search.department'),
-      user_group: t('search.userGroup'),
-    }
-    return map[type]
-  }
-
-  const getEntryCaption = (entry: PermissionEntry) => {
-    if (entry.subject_type === 'user') {
-      return entry.subject_group_names?.join('、') ?? ''
-    }
-    if (entry.subject_type === 'department') {
-      return entry.include_children
-        ? `${t('subject.department')} · ${t('includeChildren')}`
-        : t('subject.department')
-    }
-    return entry.subject_member_names?.join('、') ?? t('subject.userGroup')
-  }
-
-  const getAvatarLabel = (name: string) => {
-    const trimmed = name.trim()
-    return (trimmed.charAt(0) || 'U').toUpperCase()
-  }
-
-  const handleListScroll = () => {
-    setIsListScrolling(true)
-    if (listScrollTimerRef.current) clearTimeout(listScrollTimerRef.current)
-    listScrollTimerRef.current = setTimeout(() => setIsListScrolling(false), 500)
-  }
+  const searchPlaceholder =
+    fixedSubjectType === "user_group"
+      ? t("search.userGroup")
+      : t(`search.${fixedSubjectType}`)
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <div
+        className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground"
+        role="status"
+      >
+        <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+        {t("roster.loading")}
       </div>
     )
   }
 
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-2 py-12">
-        <span className="text-sm text-muted-foreground">{t('error.permissionDenied')}</span>
-        <button
-          className="flex items-center gap-1 text-sm text-primary hover:underline"
-          onClick={loadData}
-        >
-          <RotateCcw className="h-3.5 w-3.5" /> {t('retry', { ns: 'bs' })}
-        </button>
-      </div>
-    )
-  }
-
-  if (entries.length === 0) {
-    return (
-      <div className="py-12 text-center text-sm text-muted-foreground">
-        {t('empty.permissions')}
-      </div>
-    )
-  }
+  if (summary) return <SummaryView summary={summary} />
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {!fixedSubjectType && (
-        <div className="flex w-fit shrink-0 gap-1 rounded-md bg-muted p-1">
-          {LIST_SUBJECT_TYPES.map((subjectType) => (
-            <button
-              key={subjectType}
-              type="button"
-              className={`rounded px-3 py-1.5 text-sm transition-colors ${
-                listTab === subjectType
-                  ? 'bg-background text-foreground shadow'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-              onClick={() => {
-                setUserSelectedTab(true)
-                setListTab(subjectType)
-                setSearchQuery('')
-              }}
-            >
-              {subjectLabel(subjectType)}
-            </button>
-          ))}
-        </div>
+      <div className="relative shrink-0">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder={searchPlaceholder}
+          aria-label={searchPlaceholder}
+          className="h-9 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-sm text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-primary focus:ring-2 focus:ring-primary/10"
+        />
+      </div>
+
+      {failed && (
+        <p
+          className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900"
+          role="alert"
+        >
+          <AlertTriangle aria-hidden="true" className="size-4" />
+          {t("roster.loadFailed")}
+        </p>
       )}
 
-      <div className={cn("flex min-h-0 flex-1 flex-col gap-3", !fixedSubjectType && "mt-4")}>
-        <div className="relative shrink-0">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={getSearchPlaceholder(listTab)}
-            className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
+      <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
+        {visibleAssignees.map((assignee) => (
+          <RosterRow
+            key={assignee.assignee_id}
+            assignee={assignee}
+            context={context}
+            models={models}
+            pending={pendingAssigneeId === assignee.assignee_id}
+            onMove={(item, modelKey) =>
+              void mutateAssignee(item, {
+                op: "MOVE",
+                target_model_key: modelKey,
+              })
+            }
+            onRemove={handleRemove}
           />
-        </div>
-
-        <div
-          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
-          onScroll={handleListScroll}
-          data-scrolling={isListScrolling ? "true" : "false"}
-        >
-          {visibleEntries.length === 0 ? (
-            <div className="py-10 text-center text-sm text-muted-foreground">
-              {normalizedSearchQuery && listTab === 'user'
-                ? t('empty.searchResults')
-                : t('list.emptyForSubject')}
-            </div>
-          ) : (
-            <div className="flex flex-col">
-              {visibleEntries.map((entry, index) => {
-                const Icon = SUBJECT_ICONS[entry.subject_type] || User
-                const currentModelId = entry.model_id || entry.relation
-                const isOwner = entry.relation === 'owner'
-                const canManageOwnerEntry = isOwner && ownerEntryCount > 1
-                const canModifyEntry = canManageEntry(entry) && grantableModelOptions.length > 0
-                const canDeleteEntrySubject = canDeleteSubject(entry)
-                const displayName = getEntryDisplayName(entry)
-                const entryCaption = getEntryCaption(entry)
-
-                return (
-                  <div
-                    key={`${entry.subject_type}-${entry.subject_id}-${index}`}
-                    className="flex items-center gap-4 border-b border-[#F2F3F5] py-3 last:border-b-0"
-                  >
-                    <div className="flex w-[200px] shrink-0 items-center gap-2">
-                      {entry.subject_type === 'user' ? (
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#C9CDD4] text-[14px] font-bold leading-[14px] text-white">
-                          {getAvatarLabel(displayName)}
-                        </span>
-                      ) : (
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#EEF2FF] text-[#335CFF]">
-                          <Icon className="h-4 w-4" />
-                        </span>
-                      )}
-                      <TruncatedTip content={displayName} styleClasses="z-[120]" className="truncate text-[14px] leading-[22px] text-[#212121]">
-                        {displayName}
-                      </TruncatedTip>
-                    </div>
-
-                    <TruncatedTip content={entryCaption} styleClasses="z-[120]" as="p" className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[#999999]">
-                      {entryCaption}
-                    </TruncatedTip>
-
-                    <div className="flex w-[136px] shrink-0 items-center justify-end gap-1">
-                      {(canModifyEntry && (!isOwner || canManageOwnerEntry)) || canDeleteEntrySubject ? (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              type="button"
-                              className="inline-flex h-8 w-[96px] items-center justify-end gap-1 rounded-[6px] px-2 text-[14px] leading-[22px] text-[#999999] transition-colors hover:bg-[#F7F7F7]"
-                            >
-                              <span className="truncate">{getPermissionLabel(entry)}</span>
-                              <ChevronDown className="size-3.5 shrink-0 text-[#999999]" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto overscroll-none rounded-[8px] border-0 bg-white p-1 shadow-[0px_6px_20px_1px_rgba(117,145,212,0.12)] scrollbar-hide [&::-webkit-scrollbar]:!w-0 [&::-webkit-scrollbar]:!h-0"
-                          >
-                            {canModifyEntry && (!isOwner || canManageOwnerEntry) && grantableModelOptions.map((model) => {
-                              const active = model.id === currentModelId
-                              return (
-                                <DropdownMenuItem
-                                  key={model.id}
-                                  className={cn(
-                                    "rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px]",
-                                    active
-                                      ? "bg-[#E6EDFC] text-[#335CFF] focus:bg-[#E6EDFC] focus:text-[#335CFF]"
-                                      : "text-[#212121] focus:bg-[#F7F7F7] focus:text-[#212121]",
-                                  )}
-                                  onSelect={() => {
-                                    void handleModify(entry, model.id)
-                                  }}
-                                >
-                                  {model.name}
-                                </DropdownMenuItem>
-                              )
-                            })}
-                            {canModifyEntry && (!isOwner || canManageOwnerEntry) && canDeleteEntrySubject && (
-                              <DropdownMenuSeparator className="my-1 bg-[#EBECF0]" />
-                            )}
-                            {canDeleteEntrySubject && (
-                              <DropdownMenuItem
-                                className="rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px] text-[#F53F3F] focus:bg-[#FFF2F0] focus:text-[#F53F3F]"
-                                onSelect={() => handleDeleteSubject(entry)}
-                              >
-                                {t('action.remove')}
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : (
-                        <span className="truncate text-[14px] leading-[22px] text-[#999999]">
-                          {getPermissionLabel(entry)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
+        ))}
+        {visibleAssignees.length === 0 && (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            {searchQuery.trim()
+              ? t("empty.searchResults")
+              : t("list.emptyForSubject")}
+          </p>
+        )}
+        {hasMore && (
+          <Button
+            type="button"
+            variant="outline"
+            className="mx-auto mt-3 flex min-h-9"
+            disabled={loadingMore}
+            onClick={() => void handleLoadMore()}
+          >
+            {loadingMore ? t("roster.loadingMore") : t("roster.loadMore")}
+          </Button>
+        )}
       </div>
     </div>
   )

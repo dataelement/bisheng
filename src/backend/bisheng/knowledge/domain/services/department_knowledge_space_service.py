@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import Iterable, Sequence
 
 from fastapi import Request
@@ -16,12 +15,12 @@ from bisheng.common.models.space_channel_member import (
     SpaceChannelMemberDao,
     UserRoleEnum,
 )
-from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+from bisheng.database.models.department import DepartmentDao
 from bisheng.department.domain.services.department_service import DepartmentService
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
-from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeDao, KnowledgeRead
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     DepartmentKnowledgeSpaceBatchCreateReq,
     DepartmentKnowledgeSpaceVisibilityReq,
@@ -32,10 +31,12 @@ from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceInfoResp,
     KnowledgeSpaceService,
 )
-from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
-from bisheng.permission.domain.services.permission_service import PermissionService
-
-_logger = logging.getLogger(__name__)
+from bisheng.permission.application.access import get_f048_resource_adapter
+from bisheng.permission.application.business_authorization import (
+    batch_check_business_actions,
+    check_business_action,
+)
+from bisheng.user.domain.models.user import UserDao
 
 
 class DepartmentKnowledgeSpaceService:
@@ -85,20 +86,32 @@ class DepartmentKnowledgeSpaceService:
                         existing.user_role = UserRoleEnum.ADMIN
                         existing.status = MembershipStatusEnum.ACTIVE
                         await SpaceChannelMemberDao.update(existing)
-                    await cls._grant_department_admin_manager(space_id=space_id, user_id=admin_user_id)
+                    await cls._grant_department_admin_manager(
+                        space_id=space_id,
+                        user_id=admin_user_id,
+                        operator_user_id=login_user.user_id,
+                    )
                     continue
                 if existing.user_role == UserRoleEnum.ADMIN:
                     if existing.status != MembershipStatusEnum.ACTIVE:
                         existing.status = MembershipStatusEnum.ACTIVE
                         await SpaceChannelMemberDao.update(existing)
-                    await cls._grant_department_admin_manager(space_id=space_id, user_id=admin_user_id)
+                    await cls._grant_department_admin_manager(
+                        space_id=space_id,
+                        user_id=admin_user_id,
+                        operator_user_id=login_user.user_id,
+                    )
                     continue
                 existing.department_admin_promoted_from_role = existing.user_role.value
                 existing.user_role = UserRoleEnum.ADMIN
                 existing.status = MembershipStatusEnum.ACTIVE
                 existing.membership_source = "department_admin"
                 await SpaceChannelMemberDao.update(existing)
-                await cls._grant_department_admin_manager(space_id=space_id, user_id=admin_user_id)
+                await cls._grant_department_admin_manager(
+                    space_id=space_id,
+                    user_id=admin_user_id,
+                    operator_user_id=login_user.user_id,
+                )
                 continue
 
             member = SpaceChannelMember(
@@ -110,53 +123,43 @@ class DepartmentKnowledgeSpaceService:
                 membership_source="department_admin",
             )
             await SpaceChannelMemberDao.async_insert_member(member)
-            await cls._grant_department_admin_manager(space_id=space_id, user_id=admin_user_id)
-
-    @classmethod
-    async def _grant_department_admin_manager(cls, *, space_id: int, user_id: int) -> None:
-        try:
-            await PermissionService.authorize(
-                object_type="knowledge_space",
-                object_id=str(space_id),
-                grants=[
-                    AuthorizeGrantItem(
-                        subject_type="user",
-                        subject_id=user_id,
-                        relation="manager",
-                        include_children=False,
-                    ),
-                ],
-            )
-        except Exception as e:
-            _logger.warning(
-                "Failed to write department admin manager tuple for space %s user %s: %s",
-                space_id,
-                user_id,
-                e,
+            await cls._grant_department_admin_manager(
+                space_id=space_id,
+                user_id=admin_user_id,
+                operator_user_id=login_user.user_id,
             )
 
     @classmethod
-    async def _revoke_department_admin_manager(cls, *, space_id: int, user_id: int) -> None:
-        try:
-            await PermissionService.authorize(
-                object_type="knowledge_space",
-                object_id=str(space_id),
-                revokes=[
-                    AuthorizeRevokeItem(
-                        subject_type="user",
-                        subject_id=user_id,
-                        relation="manager",
-                        include_children=False,
-                    ),
-                ],
-            )
-        except Exception as e:
-            _logger.warning(
-                "Failed to delete department admin manager tuple for space %s user %s: %s",
-                space_id,
-                user_id,
-                e,
-            )
+    async def _grant_department_admin_manager(
+        cls,
+        *,
+        space_id: int,
+        user_id: int,
+        operator_user_id: int,
+    ) -> None:
+        await KnowledgeSpaceService.sync_direct_space_user_permissions(
+            space_id,
+            user_id,
+            UserRoleEnum.ADMIN,
+            is_active=True,
+            operator_user_id=operator_user_id,
+        )
+
+    @classmethod
+    async def _revoke_department_admin_manager(
+        cls,
+        *,
+        space_id: int,
+        user_id: int,
+        operator_user_id: int,
+    ) -> None:
+        await KnowledgeSpaceService.sync_direct_space_user_permissions(
+            space_id,
+            user_id,
+            None,
+            is_active=False,
+            operator_user_id=operator_user_id,
+        )
 
     @classmethod
     async def _grant_department_members_viewer(
@@ -164,27 +167,16 @@ class DepartmentKnowledgeSpaceService:
         *,
         space_id: int,
         department_id: int,
+        operator_user_id: int,
     ) -> None:
-        try:
-            await PermissionService.authorize(
-                object_type="knowledge_space",
-                object_id=str(space_id),
-                grants=[
-                    AuthorizeGrantItem(
-                        subject_type="department",
-                        subject_id=department_id,
-                        relation="viewer",
-                        include_children=False,
-                    ),
-                ],
-            )
-        except Exception as e:
-            _logger.warning(
-                "Failed to write department viewer tuple for space %s department %s: %s",
-                space_id,
-                department_id,
-                e,
-            )
+        adapter = await get_f048_resource_adapter("knowledge_space")
+        await adapter.sync_department(
+            resource_id=str(space_id),
+            operator_user_id=operator_user_id,
+            department_id=department_id,
+            model_key="viewer",
+            include_children=False,
+        )
 
     @classmethod
     async def _sync_added_admin(
@@ -205,20 +197,32 @@ class DepartmentKnowledgeSpaceService:
                 existing.user_role = UserRoleEnum.ADMIN
                 existing.status = MembershipStatusEnum.ACTIVE
                 await SpaceChannelMemberDao.update(existing)
-                await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
+                await cls._grant_department_admin_manager(
+                    space_id=space_id,
+                    user_id=user_id,
+                    operator_user_id=login_user.user_id,
+                )
                 return
             if existing.user_role == UserRoleEnum.ADMIN:
                 if existing.status != MembershipStatusEnum.ACTIVE:
                     existing.status = MembershipStatusEnum.ACTIVE
                     await SpaceChannelMemberDao.update(existing)
-                await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
+                await cls._grant_department_admin_manager(
+                    space_id=space_id,
+                    user_id=user_id,
+                    operator_user_id=login_user.user_id,
+                )
                 return
             existing.department_admin_promoted_from_role = existing.user_role.value
             existing.user_role = UserRoleEnum.ADMIN
             existing.status = MembershipStatusEnum.ACTIVE
             existing.membership_source = "department_admin"
             await SpaceChannelMemberDao.update(existing)
-            await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
+            await cls._grant_department_admin_manager(
+                space_id=space_id,
+                user_id=user_id,
+                operator_user_id=login_user.user_id,
+            )
             return
 
         member = SpaceChannelMember(
@@ -230,7 +234,36 @@ class DepartmentKnowledgeSpaceService:
             membership_source="department_admin",
         )
         await SpaceChannelMemberDao.async_insert_member(member)
-        await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
+        await cls._grant_department_admin_manager(
+            space_id=space_id,
+            user_id=user_id,
+            operator_user_id=login_user.user_id,
+        )
+
+    @classmethod
+    async def _user_has_space_action(
+        cls,
+        *,
+        user_id: int,
+        space_id: int,
+        action: str,
+    ) -> bool:
+        user = await UserDao.aget_user(user_id)
+        if user is None:
+            return False
+
+        from bisheng.user.domain.services.auth import LoginUser
+
+        login_user = await LoginUser.init_login_user(
+            user_id=user_id,
+            user_name=user.user_name,
+        )
+        return await check_business_action(
+            login_user,
+            resource_type="knowledge_space",
+            resource_id=space_id,
+            action=action,
+        )
 
     @classmethod
     async def _sync_removed_admin(
@@ -254,16 +287,34 @@ class DepartmentKnowledgeSpaceService:
         existing = await SpaceChannelMemberDao.async_find_member(space_id, user_id)
         if existing is None or existing.user_role == UserRoleEnum.CREATOR:
             return
+        if space_service is not None:
+            operator_user_id = space_service.login_user.user_id
+        else:
+            space = await KnowledgeDao.aquery_by_id(space_id)
+            if space is None or space.user_id is None:
+                return
+            operator_user_id = int(space.user_id)
         if existing.membership_source == "department_admin":
             previous_role = existing.department_admin_promoted_from_role
             if previous_role:
-                existing.user_role = UserRoleEnum(previous_role)
+                restored_role = UserRoleEnum(previous_role)
+                existing.user_role = restored_role
                 existing.membership_source = "manual"
                 existing.department_admin_promoted_from_role = None
                 existing.status = MembershipStatusEnum.ACTIVE
                 await SpaceChannelMemberDao.update(existing)
-                await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
-                if space_service is not None and not await space_service._user_can_manage_space(user_id, space_id):
+                await KnowledgeSpaceService.sync_direct_space_user_permissions(
+                    space_id,
+                    user_id,
+                    restored_role,
+                    is_active=True,
+                    operator_user_id=operator_user_id,
+                )
+                if space_service is not None and not await cls._user_has_space_action(
+                    user_id=user_id,
+                    space_id=space_id,
+                    action="manage_permission",
+                ):
                     await space_service._send_space_event_notification(
                         action_code=SPACE_ADMIN_REVOKED_MESSAGE,
                         receiver_user_ids=[user_id],
@@ -272,8 +323,16 @@ class DepartmentKnowledgeSpaceService:
                     )
                 return
             await SpaceChannelMemberDao.delete_space_member(space_id, user_id)
-            await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
-            if space_service is not None and not await space_service._user_can_read_space(user_id, space_id):
+            await cls._revoke_department_admin_manager(
+                space_id=space_id,
+                user_id=user_id,
+                operator_user_id=operator_user_id,
+            )
+            if space_service is not None and not await cls._user_has_space_action(
+                user_id=user_id,
+                space_id=space_id,
+                action="visible",
+            ):
                 await space_service._send_space_event_notification(
                     action_code=SPACE_MEMBER_REMOVED_MESSAGE,
                     receiver_user_ids=[user_id],
@@ -283,7 +342,11 @@ class DepartmentKnowledgeSpaceService:
             return
         if existing.user_role == UserRoleEnum.ADMIN:
             return
-        await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
+        await cls._revoke_department_admin_manager(
+            space_id=space_id,
+            user_id=user_id,
+            operator_user_id=operator_user_id,
+        )
 
     @classmethod
     async def batch_create_spaces(
@@ -330,6 +393,7 @@ class DepartmentKnowledgeSpaceService:
             await cls._grant_department_members_viewer(
                 space_id=space.id,
                 department_id=dept.id,
+                operator_user_id=login_user.user_id,
             )
             admin_rows = await DepartmentService.aget_admins(dept.dept_id, login_user)
             await cls._grant_default_department_admins(
@@ -404,63 +468,21 @@ class DepartmentKnowledgeSpaceService:
         request: Request,
         login_user: UserPayload,
         order_by: str = "update_time",
-    ) -> list[KnowledgeSpaceInfoResp]:
-        is_admin = login_user.is_admin()
-        members = await SpaceChannelMemberDao.async_get_user_space_members(login_user.user_id)
-
-        if is_admin:
-            # Super admin sees every department knowledge space, not only the
-            # ones bound to their own departments. The view_space pre-filter is
-            # disabled below because admin passes every gate; keeping it would
-            # wrongly drop spaces the admin has no explicit binding to.
-            all_bindings = await DepartmentKnowledgeSpaceDao.aget_all()
-            space_ids = {int(binding.space_id) for binding in all_bindings}
-        else:
-            user_departments = await UserDepartmentDao.aget_user_departments(login_user.user_id)
-            department_ids = [
-                int(row.department_id) for row in user_departments if getattr(row, "department_id", None) is not None
-            ]
-            department_bindings = await DepartmentKnowledgeSpaceDao.aget_by_department_ids(department_ids)
-            department_space_ids = {int(binding.space_id) for binding in department_bindings}
-
-            member_space_ids = [int(member.business_id) for member in members]
-            member_bound_space_ids = set(
-                (await DepartmentKnowledgeSpaceDao.aget_department_ids_by_space_ids(member_space_ids)).keys()
-            )
-
-            # A user can also gain access to a department space through an ad-hoc
-            # authorization (viewer/editor/manager granted on the permission panel).
-            # That path writes only an FGA relation — no membership row, and the
-            # user need not be a member of the bound department — so neither branch
-            # above catches it and the space would only surface under "我加入的".
-            # Intersect the user's FGA-readable spaces with the department-bound set
-            # so an individually-authorized user sees it under 部门知识空间 instead.
-            accessible_ids = await PermissionService.list_accessible_ids(
-                user_id=login_user.user_id,
-                relation="can_read",
-                object_type="knowledge_space",
-                login_user=login_user,
-            )
-            authorized_bound_space_ids: set[int] = set()
-            if accessible_ids:
-                accessible_int_ids = [int(sid) for sid in accessible_ids if str(sid).isdigit()]
-                if accessible_int_ids:
-                    authorized_bound_space_ids = set(
-                        (await DepartmentKnowledgeSpaceDao.aget_department_ids_by_space_ids(accessible_int_ids)).keys()
-                    )
-
-            space_ids = department_space_ids | member_bound_space_ids | authorized_bound_space_ids
+    ) -> list[KnowledgeRead]:
+        all_bindings = await DepartmentKnowledgeSpaceDao.aget_all()
+        candidate_ids = [int(binding.space_id) for binding in all_bindings]
+        action_map = await batch_check_business_actions(
+            login_user,
+            resource_type="knowledge_space",
+            resource_ids=candidate_ids,
+            actions=("visible",),
+        )
+        space_ids = [space_id for space_id in candidate_ids if "visible" in action_map.get(str(space_id), frozenset())]
 
         if not space_ids:
             return []
-        filtered_members = [member for member in members if int(member.business_id) in space_ids]
         svc = KnowledgeSpaceService(request=request, login_user=login_user)
-        return await svc._format_accessible_spaces(
-            list(space_ids),
-            order_by,
-            memberships=filtered_members,
-            required_permission_id=None if is_admin else "view_space",
-        )
+        return await svc._format_basic_spaces(space_ids, order_by)
 
     @classmethod
     async def get_all_department_spaces(

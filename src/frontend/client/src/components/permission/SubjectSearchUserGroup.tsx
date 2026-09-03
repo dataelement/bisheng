@@ -1,28 +1,24 @@
 import { Checkbox } from "~/components/ui/Checkbox";
-import {
-  getCreationGrantSubjects,
-  getResourceGrantUserGroups,
-  getUserGroups,
-} from "~/api/permission";
-import type {
-  GrantUserGroup,
-  ResourceType,
-  SelectedSubject,
-} from "~/api/permission";
+import { getUserGroups } from "~/api/permission";
+import type { ResourceType, SelectedSubject } from "~/api/permission";
 import { Users, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocalize } from "~/hooks";
-import { PermissionEmptyState } from "./PermissionEmptyState";
 
-interface SubjectSearchUserGroupProps {
+interface UserGroup {
+  id: number;
+  group_name: string;
+}
+
+export interface SubjectSearchUserGroupProps {
   value: SelectedSubject[];
   onChange: (v: SelectedSubject[]) => void;
   resourceType?: ResourceType;
   resourceId?: string;
-  mode?: "create" | "resource";
   disabledIds?: number[];
-  grantUserGroupsApi?: typeof getResourceGrantUserGroups;
-  creationGrantSubjectsApi?: typeof getCreationGrantSubjects;
+  /** subjectId -> the permission model(s) that subject already holds here. */
+  grantedLabels?: Record<string, string>;
+  userGroupsApi?: typeof getUserGroups;
 }
 
 export function SubjectSearchUserGroup({
@@ -30,43 +26,21 @@ export function SubjectSearchUserGroup({
   onChange,
   resourceType,
   resourceId,
-  mode = "resource",
   disabledIds = [],
-  grantUserGroupsApi,
-  creationGrantSubjectsApi,
+  grantedLabels = {},
+  userGroupsApi,
 }: SubjectSearchUserGroupProps) {
   const localize = useLocalize();
-  const [groups, setGroups] = useState<GrantUserGroup[]>([]);
+  const [groups, setGroups] = useState<UserGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState("");
-  const requestKeyword = mode === "create" ? keyword : "";
 
   useEffect(() => {
     const controller = new AbortController();
-    const getGrantUserGroups = grantUserGroupsApi ?? getResourceGrantUserGroups;
-    let request: Promise<GrantUserGroup[]>;
-    if (mode === "create") {
-      if (resourceType !== "knowledge_space" && resourceType !== "channel") {
-        request = Promise.resolve([]);
-      } else {
-        const getCreationSubjects = creationGrantSubjectsApi ?? getCreationGrantSubjects;
-        request = getCreationSubjects({
-          resourceType,
-          subjectType: "user_group",
-          operation: "list",
-          keyword: requestKeyword,
-        }, { signal: controller.signal });
-      }
-    } else if (resourceType && resourceId) {
-      request = getGrantUserGroups(
-        resourceType,
-        resourceId,
-        undefined,
-        { signal: controller.signal },
-      );
-    } else {
-      request = getUserGroups({ signal: controller.signal });
-    }
+    if (!resourceType || !resourceId) return;
+    const request = (userGroupsApi ?? getUserGroups)(resourceType, resourceId, {
+      signal: controller.signal,
+    });
 
     setLoading(true);
     request
@@ -75,15 +49,12 @@ export function SubjectSearchUserGroup({
           setGroups(Array.isArray(res) ? res : []);
         }
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setGroups([]);
-      })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
 
     return () => controller.abort();
-  }, [creationGrantSubjectsApi, grantUserGroupsApi, mode, requestKeyword, resourceId, resourceType]);
+  }, [resourceId, resourceType, userGroupsApi]);
 
   const filtered = useMemo(() => {
     if (!keyword) return groups;
@@ -91,13 +62,13 @@ export function SubjectSearchUserGroup({
     return groups.filter((g) => g.group_name.toLowerCase().includes(lower));
   }, [groups, keyword]);
 
-  const selectedIds = new Set(value.filter((s) => s.type === "user_group").map((s) => s.id));
+  const selectedIds = new Set(value.map((s) => s.id));
   const disabledIdSet = new Set(disabledIds);
 
-  const toggle = (group: GrantUserGroup) => {
+  const toggle = (group: UserGroup) => {
     if (disabledIdSet.has(group.id)) return;
     if (selectedIds.has(group.id)) {
-      onChange(value.filter((s) => s.type !== "user_group" || s.id !== group.id));
+      onChange(value.filter((s) => s.id !== group.id));
     } else {
       onChange([
         ...value,
@@ -125,11 +96,14 @@ export function SubjectSearchUserGroup({
           </div>
         )}
         {!loading && filtered.length === 0 && (
-          <PermissionEmptyState message={localize("com_permission.empty_user_groups")} />
+          <div className="py-4 text-center text-sm text-gray-500">
+            {localize("com_permission.empty_user_groups")}
+          </div>
         )}
         {!loading &&
           filtered.map((group) => {
             const isDisabled = disabledIdSet.has(group.id);
+            const grantedLabel = grantedLabels[String(group.id)];
             return (
               <div
                 key={group.id}
@@ -142,14 +116,18 @@ export function SubjectSearchUserGroup({
               >
                 <Checkbox
                   className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
-                  checked={selectedIds.has(group.id)}
+                  checked={selectedIds.has(group.id) || isDisabled}
                   disabled={isDisabled}
                 />
                 <Users className="h-4 w-4 text-gray-400" />
                 <span className="min-w-0 flex-1 truncate text-sm">{group.group_name}</span>
-                {isDisabled && (
+                {(grantedLabel || isDisabled) && (
                   <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
-                    {localize("com_permission.already_granted")}
+                    {grantedLabel
+                      ? localize("com_permission.already_granted_as", {
+                          model: grantedLabel,
+                        })
+                      : localize("com_permission.already_granted")}
                   </span>
                 )}
               </div>

@@ -41,3 +41,4 @@ captureAndAlertRequestErrorHoc(getSomething()).then(res => { ... })
 
 ## Known Pitfalls
 - **MinIO Image Proxy**: Vite `fileServiceTarget` must match backend `config.yaml` `object_storage.minio.sharepoint`, otherwise image requests get 403.
+- **OnlyOffice report editor hangs on "loading" in local dev**: the Document Server downloads the template and POSTs the save callback **itself, server-side**, so it must reach *us* — and `location.origin` is `localhost:3001` on a dev machine, which it resolves to its own container. The dev proxy does not help (it only covers browser → backend). Fix: `VITE_OFFICE_PUBLIC_ORIGIN=http://<your-LAN-IP>:3001` (or a tunnel). All document-server-facing URLs go through `utils/officeUrl.ts` — never rebuild them from `location.origin`.

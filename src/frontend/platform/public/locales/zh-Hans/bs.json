@@ -374,6 +374,8 @@
     "menuEnableAll": "全开",
     "menuDisableAll": "全关",
     "channelQuotaLimit": "创建频道数量上限",
+    "spaceCreateQuotaLimit": "创建知识空间数量上限",
+    "spaceCreateQuotaLimitDesc": "限制该角色用户最多可创建的知识空间数量",
     "spaceSubscribeQuotaLimit": "加入知识空间数量上限",
     "spaceSubscribeQuotaLimitDesc": "限制该角色用户最多可加入（订阅）的知识空间数量",
     "roleListKnowledgeSpaceUploadLimit": "知识空间上传限额",
@@ -516,6 +518,8 @@
     "fileUploadFailed": "文件上传失败: {{name}}",
     "fileExceedRemoved": "文件：{{name}}超过{{size}}M，已移除",
     "fileTypeNotAllowed": "不支持文件类型：{{type}}",
+    "mediaFileTooMany": "上传文件个数不能超过5个",
+    "noFileSelected": "没有选择文件",
     "uploadFailedCheckFormat": "上传失败,请检查文件格式",
     "sourceTooltip": "来源段落",
     "filterLabel": "筛选标签",
@@ -541,7 +545,20 @@
     "confirmed": "已确认",
     "confirm": "确认",
     "runNewWorkflow": "开启新会话",
-    "chatEndMessage": "本轮会话已结束"
+    "chatEndMessage": "本轮会话已结束",
+    "runLog": {
+      "used": "已使用",
+      "using": "正在使用",
+      "searched": "已搜索",
+      "searching": "正在搜索",
+      "done": "完成",
+      "thinking": "思考中",
+      "flowOffline": "{{name}} 已下线",
+      "flowDeleted": "技能已被删除，无法获取技能名",
+      "toolDeleted": "工具已被删除，无法获取工具名",
+      "knowledgeDeleted": "知识库已被删除，无法获取知识库名",
+      "interrupted": "工具调用未返回结果（会话已结束）"
+    }
   },
   "model": {
     "addSuccess": "添加成功",
@@ -600,6 +617,9 @@
     "actions": "操作",
     "modelType": "模型类型",
     "onlineOfflineOperation": "上下线操作",
+    "statusUpdateTime": "状态更新时间",
+    "updateStatus": "更新状态",
+    "statusUpdated": "状态已更新",
     "available": "可用",
     "abnormal": "异常",
     "unknown": "未知",
@@ -747,6 +767,8 @@
     "reportDescription": "报告生成描述...",
     "newButton": "新建",
     "importButton": "导入",
+    "saveTemplate": "保存",
+    "saveSuccess": "保存成功",
     "start": "开始",
     "requiredLabel": "必填",
     "isRequired": "是必填项",
@@ -900,7 +922,10 @@
     "internationalization": "你是一个知识库问答助手：\n1. 按照用户使用的语言回答问题，并且答案要严谨专业。\n2. 你需要依据以下【参考文本】中的内容来回答，当【参考文本】中有明确与用户问题相关的内容时才进行回答，不可根据自己的知识来回答。若相关内容中包含图片内容的，请直接输出图片源文件，若占位符（例如：`![image](路径/IMAGE_1.png)`），回答时请保留这些占位符，不要修改或删除。\n3. 如果文档中包含表格，请不要做任何修改，或返回表格格式的markdown。\n4. 由于【参考文本】可能包含多个来自不同信息源的信息，所以根据这些不同的信息源可能得出有差异甚至冲突的答案，当发现这种情况时，这些答案都列举出来；如果没有冲突或差异，则只需要给出一个最终结果。\n5. 若【参考文本】中内容与用户问题不相关则回复“没有找到相关内容”。\n\n# 参考文本\n{retrieved_file_content}\n\n# 用户问题\n{question}",
     "taskModeName": "任务模式展示名称",
     "taskModeInputPlaceholder": "任务模式输入框提示语",
-    "taskModeFullName": "任务模式"
+    "taskModeFullName": "任务模式",
+    "blindOverwriteTitle": "确认保存为当前配置？",
+    "blindOverwriteDesc": "当前页面展示的是默认配置，未读取到已保存的工作台配置。若此前已有配置，保存将把它整体覆盖为默认值。建议先刷新页面确认，再决定是否保存。",
+    "blindOverwriteOk": "仍然保存"
   },
   "build": {
     "create": "创建",
@@ -1069,7 +1094,7 @@
     "modelDescription": "描述信息",
     "modelDescriptionPlaceholder": "将展示在模型选择器中",
     "vision": "视觉",
-    "visionText": "开启后，模型将结合图像内容（支持PNG、JPEG、WEBP、非动画GIF格式）进行回答，注意仅多模态模型支持此能力。",
+    "visionText": "开启后，模型将结合图像内容（支持PNG、JPEG、WEBP、非动画GIF格式）进行回答，注意仅多模态模型支持此能力。未开启时，灵思任务模式也不会把图片交给该模型阅读。",
     "webSearchPrompt": "联网搜索提示词",
     "confirmDelete": "确定要删除吗?",
     "deleteFailed": "删除失败",
@@ -2008,5 +2033,30 @@
       "githubRateLimit": "GitHub 访问已达速率限制，请稍后再试",
       "unknown": "操作失败，请重试"
     }
+  },
+  "citation": {
+    "unsupportedPreview": "该类型文件不支持预览",
+    "loadingPreview": "加载文档预览...",
+    "noPreviewUrl": "暂无可预览文件地址",
+    "documentPreview": "文档预览",
+    "downloadDocument": "下载文档",
+    "closeDocumentPreview": "关闭文档预览",
+    "web": "网页",
+    "document": "文档",
+    "untitled": "暂无标题",
+    "loadingDetail": "加载溯源详情...",
+    "loadDetailFailed": "溯源详情加载失败",
+    "policyDocument": "政策文件",
+    "references": "参考资料",
+    "closeReferences": "关闭参考资料",
+    "backToReferences": "返回参考资料列表",
+    "noDownloadUrl": "暂无可下载文件地址"
+  },
+  "mediaPreview": {
+    "recognizedText": "识别文本",
+    "entryText": "入库文本",
+    "webPreview": "网页预览",
+    "openSourcePage": "打开原网页",
+    "noWebSnapshot": "暂无网页快照，请查看入库文本或打开原网页。"
   }
 }

@@ -58,6 +58,25 @@ def test_scratch_uploads_and_skills_are_never_deliverables():
     assert select_deliverables(details, baseline_paths=baseline) == []
 
 
+def test_deepagents_spill_never_becomes_the_result():
+    """Regression (114, 2026-08-14): deepagents writes its own overflow through the
+    same WorkspaceBackend — offloaded tool results into ``large_tool_results/`` and
+    evicted history into ``conversation_history/``. The looping session that day ended
+    with an empty ``output/``, so had it hit recursion_limit instead of being stopped
+    by hand, criterion 2 would have handed the user a raw tool dump as the deliverable.
+    Worse, an offloaded file is named after a tool_call_id and usually has NO
+    extension, which sorts it AHEAD of any real .png chart."""
+    details = [
+        _detail("large_tool_results/bisheng_code_interpreter:0", mtime=9.0),
+        _detail("conversation_history/db2b91b9d14d492da265e75715aa65bd.md", mtime=8.0),
+    ]
+    assert select_deliverables(details, baseline_paths=set()) == []
+
+    # a real chart alongside the spill wins, and wins alone
+    details.append(_detail("output/chart.png", mtime=1.0))
+    assert _names(select_deliverables(details, baseline_paths=set())) == ["output/chart.png"]
+
+
 def test_provisioned_skill_bundles_never_become_the_result():
     """Regression (114, 2026-07-28): skill bundles are copied into the workspace at
     task START — after the baseline snapshot — so criterion 2 saw ~100 SKILL.md /

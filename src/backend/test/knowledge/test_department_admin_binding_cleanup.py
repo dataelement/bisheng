@@ -67,14 +67,23 @@ def patches(monkeypatch):
     monkeypatch.setattr(mod.SpaceChannelMemberDao, "async_find_member", find)
     monkeypatch.setattr(mod.SpaceChannelMemberDao, "delete_space_member", delete)
     monkeypatch.setattr(mod.SpaceChannelMemberDao, "update", update)
-    authorize = AsyncMock()
-    monkeypatch.setattr(mod.PermissionService, "authorize", authorize)
+    monkeypatch.setattr(
+        mod.KnowledgeDao,
+        "aquery_by_id",
+        AsyncMock(return_value=SimpleNamespace(user_id=1)),
+    )
+    sync_permissions = AsyncMock()
+    monkeypatch.setattr(
+        mod.KnowledgeSpaceService,
+        "sync_direct_space_user_permissions",
+        sync_permissions,
+    )
     return SimpleNamespace(
         space_lookup=space_lookup,
         find=find,
         delete=delete,
         update=update,
-        authorize=authorize,
+        sync_permissions=sync_permissions,
     )
 
 
@@ -90,11 +99,13 @@ def test_cleanup_deletes_binding_and_revokes_manager(patches):
     )
 
     patches.delete.assert_awaited_once_with(139, 139439)
-    # knowledge_space#manager tuple revoked (authorize called with revokes only).
-    patches.authorize.assert_awaited_once()
-    _, kwargs = patches.authorize.call_args
-    assert kwargs.get("revokes")
-    assert not kwargs.get("grants")
+    patches.sync_permissions.assert_awaited_once_with(
+        139,
+        139439,
+        None,
+        is_active=False,
+        operator_user_id=1,
+    )
 
 
 def test_cleanup_demotes_back_to_promoted_role(patches):
@@ -114,7 +125,13 @@ def test_cleanup_demotes_back_to_promoted_role(patches):
     assert updated.user_role == UserRoleEnum.MEMBER
     assert updated.membership_source == "manual"
     assert updated.department_admin_promoted_from_role is None
-    patches.authorize.assert_awaited_once()  # manager tuple still revoked
+    patches.sync_permissions.assert_awaited_once_with(
+        139,
+        139439,
+        UserRoleEnum.MEMBER,
+        is_active=True,
+        operator_user_id=1,
+    )
 
 
 def test_cleanup_noop_when_department_has_no_space(patches):

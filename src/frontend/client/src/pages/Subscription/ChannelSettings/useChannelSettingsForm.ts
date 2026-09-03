@@ -1,21 +1,24 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { generateUUID } from "~/utils";
 import {
-  authorizeChannelApi,
   createManagerChannelApi,
   getChannelDetailApi,
-  getChannelGrantableRelationModelsApi,
-  getChannelPermissionsApi,
   updateChannelApi,
   type Channel,
   type ChannelDetailResponse,
+  ChannelRole,
 } from "~/api/channels";
 import {
-  getCreationGrantableRelationModels,
-  type GrantItem,
-  type PermissionEntry,
-  type RelationModel,
+  getCreationPermissionContext,
+  getAllResourcePermissionGrants,
+  getGrantablePermissionModels,
+  getResourcePermissionContext,
+  mutateResourceGrants,
+  type GrantablePermissionModel,
+  type CreationPermissionContext,
+  type ResourcePermissionContext,
 } from "~/api/permission";
 import {
   usePermissionDraft,
@@ -36,27 +39,30 @@ const EMPTY_SYNC_DRAFT: KnowledgeSyncDraft = {
   subs: [],
 };
 
-const MANAGE_PERMISSION_IDS = new Set([
-  "manage_channel_user",
-  "manage_channel_manager",
-  "manage_channel_owner",
-]);
-
 interface AuthorizationRecovery {
   channelId: string;
-  grants: GrantItem[];
   errorCode: number | null;
 }
 
-function toPermissionDraftRows(entries: PermissionEntry[]): PermissionDraftRow[] {
+function toPermissionDraftRows(
+  entries: Awaited<ReturnType<typeof getAllResourcePermissionGrants>>,
+): PermissionDraftRow[] {
   return entries.map((entry) => ({
-    subjectType: entry.subject_type,
-    subjectId: entry.subject_id,
-    subjectName: entry.subject_name || String(entry.subject_id),
-    relation: entry.relation,
-    modelId: entry.model_id,
-    includeChildren: entry.include_children,
-    immutableCreator: entry.is_creator === true,
+    subjectType: entry.subject.type,
+    subjectId: Number(entry.subject.id),
+    subjectName: entry.subject.name || entry.subject.id,
+    modelKey: entry.model.key,
+    modelName: entry.model.name,
+    modelLevel: entry.model.level,
+    includeChildren: entry.source.include_children,
+    assigneeId: entry.assignee_id,
+    assigneeVersion: entry.assignee_version,
+    sourceType: entry.source.type,
+    scope: entry.scope,
+    inheritedFrom: entry.inherited_from,
+    inheritedFromName: entry.inherited_from_name,
+    protected: entry.protected,
+    editable: entry.editable,
   }));
 }
 
@@ -71,17 +77,13 @@ function toChannel(detail: ChannelDetailResponse): Channel {
     subscriberCount: detail.subscriber_count,
     articleCount: detail.article_count,
     unreadCount: 0,
-    role: detail.relation ?? "viewer",
-    permissionIds: detail.permission_ids ?? [],
+    role: ChannelRole.MEMBER,
+    actions: detail.actions ?? [],
     isPinned: false,
     createdAt: detail.create_time ?? "",
     updatedAt: detail.latest_article_update_time ?? "",
     subChannels: [],
   };
-}
-
-function hasManagePermission(detail?: ChannelDetailResponse): boolean {
-  return (detail?.permission_ids ?? []).some((id) => MANAGE_PERMISSION_IDS.has(id));
 }
 
 export function useChannelSettingsForm(channelId?: string) {
@@ -94,6 +96,8 @@ export function useChannelSettingsForm(channelId?: string) {
   const [knowledgeSync, setKnowledgeSync] = useState<KnowledgeSyncDraft>(EMPTY_SYNC_DRAFT);
   const [submitting, setSubmitting] = useState(false);
   const [authorizationRecovery, setAuthorizationRecovery] = useState<AuthorizationRecovery | null>(null);
+  const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null);
+  const creationRequestId = useMemo(() => generateUUID(32), []);
   const initBusinessFromChannel = business.initFromChannel;
   const setBusinessSources = business.setSources;
   const loadBusinessSourcesByIds = business.loadSourcesByIds;
@@ -106,26 +110,34 @@ export function useChannelSettingsForm(channelId?: string) {
     retry: false,
   });
   const detail = detailQuery.data;
-  const canEditBusiness = !isEditMode || (detail?.permission_ids ?? []).includes("edit_channel");
+  const canEditBusiness = !isEditMode || Boolean(detail?.actions?.includes("edit"));
   const canManagePermissions = isEditMode
-    ? hasManagePermission(detail)
+    ? Boolean(detail?.actions?.includes("manage_permission"))
     : true;
   // The backend returns knowledge_sync only to the actual creator. An owner
   // relation may be granted to another user, so relation names are not an
   // authority signal for this creator-only business setting.
   const isChannelCreator = !isEditMode || detail?.knowledge_sync != null;
 
+  const permissionContextQuery = useQuery<
+    ResourcePermissionContext | CreationPermissionContext
+  >({
+    queryKey: ["channel-settings", channelId ?? "create", "permission-context"],
+    queryFn: () => channelId
+      ? getResourcePermissionContext("channel", channelId)
+      : getCreationPermissionContext("channel"),
+    enabled: !isEditMode || canManagePermissions,
+    retry: false,
+  });
   const relationModelsQuery = useQuery({
     queryKey: ["channel-settings", channelId ?? "create", "relation-models"],
-    queryFn: () => channelId
-      ? getChannelGrantableRelationModelsApi(channelId)
-      : getCreationGrantableRelationModels("channel"),
-    enabled: !isEditMode || canManagePermissions,
+    queryFn: () => getGrantablePermissionModels("channel", channelId as string),
+    enabled: isEditMode && canManagePermissions,
     retry: false,
   });
   const permissionQuery = useQuery({
     queryKey: ["channel-settings", channelId, "permissions"],
-    queryFn: () => getChannelPermissionsApi(channelId as string),
+    queryFn: () => getAllResourcePermissionGrants("channel", channelId as string),
     enabled: isEditMode && canManagePermissions,
     retry: false,
   });
@@ -148,15 +160,29 @@ export function useChannelSettingsForm(channelId?: string) {
   }, [detail, initBusinessFromChannel, loadBusinessSourcesByIds, setBusinessSources]);
 
   useEffect(() => {
-    if (!permissionQuery.data) return;
-    resetPermissionDraft(toPermissionDraftRows(permissionQuery.data));
-  }, [permissionQuery.data, resetPermissionDraft]);
+    const context = permissionContextQuery.data;
+    if (!context) return;
+    setCatalogReleaseId(context.catalog_release_id);
+    if (!permissionQuery.data || !("resource_version" in context)) return;
+    resetPermissionDraft(toPermissionDraftRows(permissionQuery.data), {
+      resourceVersion: context.resource_version,
+      catalogReleaseId: context.catalog_release_id,
+    });
+  }, [permissionContextQuery.data, permissionQuery.data, resetPermissionDraft]);
 
-  const relationModels = useMemo<RelationModel[]>(
-    () => relationModelsQuery.data ?? [],
-    [relationModelsQuery.data],
+  const relationModels = useMemo<GrantablePermissionModel[]>(
+    () => channelId
+      ? (relationModelsQuery.data ?? [])
+      : (permissionContextQuery.data && "grantable_models" in permissionContextQuery.data
+          ? permissionContextQuery.data.grantable_models
+          : []),
+    [channelId, permissionContextQuery.data, relationModelsQuery.data],
   );
   const showPermissionSection = canManagePermissions && relationModels.length > 0;
+  const accessDenied = isEditMode
+    && detail != null
+    && !canEditBusiness
+    && !canManagePermissions;
 
   const formData = useMemo<CreateChannelFormData>(() => ({
     sources: business.sources,
@@ -197,16 +223,21 @@ export function useChannelSettingsForm(channelId?: string) {
     try {
       if (!channelId) {
         const grants = showPermissionSection && formData.visibility !== "private"
-          ? permissionDraft.diff.grants
+          ? permissionDraft.diff.changes.filter((change) => change.op === "ADD")
           : [];
         const result = await createManagerChannelApi({
           ...buildCreateChannelPayload(formData),
-          ...(grants.length > 0 ? { initialPermissions: { grants } } : {}),
+          creationRequestId,
+          ...(grants.length > 0 && catalogReleaseId != null ? {
+            initialPermissions: {
+              expected_catalog_release_id: catalogReleaseId,
+              grants: grants.map((grant) => ({ model_key: grant.model_key, subject: grant.subject })),
+            },
+          } : {}),
         });
         if (result.initialPermissionResult?.status === "failed") {
           setAuthorizationRecovery({
             channelId: result.id,
-            grants,
             errorCode: result.initialPermissionResult.errorCode,
           });
           return { status: "permission_failed" as const, channelId: result.id };
@@ -230,7 +261,13 @@ export function useChannelSettingsForm(channelId?: string) {
         && formData.visibility !== "private"
         && permissionDraft.hasChanges
       ) {
-        await authorizeChannelApi(channelId, permissionDraft.diff);
+        const latestContext = await getResourcePermissionContext("channel", channelId);
+        await mutateResourceGrants("channel", channelId, {
+          idempotency_key: generateUUID(32),
+          expected_resource_version: latestContext.resource_version,
+          expected_catalog_release_id: latestContext.catalog_release_id,
+          changes: permissionDraft.diff.changes,
+        });
       }
       await finish(channelId);
       return { status: "success" as const, channelId };
@@ -240,6 +277,8 @@ export function useChannelSettingsForm(channelId?: string) {
   }, [
     canEditBusiness,
     channelId,
+    catalogReleaseId,
+    creationRequestId,
     finish,
     formData,
     isChannelCreator,
@@ -252,25 +291,31 @@ export function useChannelSettingsForm(channelId?: string) {
     if (!authorizationRecovery) return;
     setSubmitting(true);
     try {
-      await authorizeChannelApi(authorizationRecovery.channelId, {
-        grants: authorizationRecovery.grants,
-        revokes: [],
+      const context = await getResourcePermissionContext("channel", authorizationRecovery.channelId);
+      await mutateResourceGrants("channel", authorizationRecovery.channelId, {
+        idempotency_key: generateUUID(32),
+        expected_resource_version: context.resource_version,
+        expected_catalog_release_id: context.catalog_release_id,
+        changes: permissionDraft.diff.changes,
       });
       await finish(authorizationRecovery.channelId);
     } finally {
       setSubmitting(false);
     }
-  }, [authorizationRecovery, finish]);
+  }, [authorizationRecovery, finish, permissionDraft.diff.changes]);
 
   return {
     localize,
     isEditMode,
     isLoading: (isEditMode && detailQuery.isLoading)
+      || permissionContextQuery.isFetching
       || relationModelsQuery.isFetching
       || permissionQuery.isFetching,
-    loadError: detailQuery.error || (
+    loadError: detailQuery.error || (accessDenied
+      ? new Error("Channel settings access denied")
+      : null) || (
       isEditMode && canManagePermissions
-        ? relationModelsQuery.error || permissionQuery.error
+        ? permissionContextQuery.error || relationModelsQuery.error || permissionQuery.error
         : null
     ),
     business,

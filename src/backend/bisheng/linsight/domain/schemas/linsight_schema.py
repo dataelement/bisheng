@@ -29,6 +29,16 @@ class SubmitFileSchema(BaseModel):
     # linsight parses it on-the-fly via TempFilePipeline at ingestion instead of
     # resolving a linsight Redis temp_info / pre-parsed markdown.
     file_url: str | None = Field(None, description="Daily-bucket raw file path (workstation upload)")
+    # Folder upload: this file's path relative to the folder the user dropped,
+    # e.g. ``年报/2024/Q1.xlsx``. None/empty means a plain single-file upload and
+    # keeps the historical flat ``uploads/<name>`` layout. The workspace rebuilds
+    # the directory tree from this value, so it is sanitized segment-wise
+    # (``_safe_relpath``) before it ever reaches an object key.
+    relative_path: str | None = Field(None, description="Path relative to the uploaded folder root")
+    # Client-reported size, used ONLY for the batch-level folder-upload gate
+    # (all-or-nothing UX, mirroring knowledge-space ``FolderUploadItem.size``).
+    # The authoritative per-file size check runs at the upload endpoint.
+    size: int = Field(0, ge=0, description="File size in bytes (client-reported, batch gate only)")
 
 
 # Submit a problemSchema

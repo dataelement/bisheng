@@ -3,21 +3,17 @@
 Global context manager with integrated lazy loading and caching
 Provides easy dependency injection and lifecycle management
 """
+
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
-from typing import Optional, Dict, Any, TypeVar, List, Union
+from typing import Any, TypeVar, Union
 
 from loguru import logger
 
 from bisheng.core.config.settings import Settings
-from bisheng.core.context.base import (
-    ContextRegistry,
-    BaseContextManager,
-    ContextState,
-    ContextError
-)
+from bisheng.core.context.base import BaseContextManager, ContextError, ContextRegistry, ContextState
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class ApplicationContextManager:
@@ -31,11 +27,12 @@ class ApplicationContextManager:
         self._registry = ContextRegistry()
         self._initialized = False
         self._initialization_lock = asyncio.Lock()
-        self._initialization_order: List[str] = []
-        self._dependencies: Dict[str, List[str]] = {}
+        self._initialization_order: list[str] = []
+        self._dependencies: dict[str, list[str]] = {}
         self._optional_contexts: set[str] = set()
+        self._lazy_contexts: set[str] = set()
 
-    async def initialize(self, config: Settings) -> None:
+    async def initialize(self, config: Settings, *, instance_role: str = "api") -> None:
         """Initialize app context
 
         Args:
@@ -51,7 +48,7 @@ class ApplicationContextManager:
 
             try:
                 # Register default context manager
-                self._register_default_contexts(config or {})
+                self._register_default_contexts(config or {}, instance_role=instance_role)
 
                 # Initialize all contexts in dependency order
                 await self._initialize_contexts_in_order()
@@ -65,41 +62,63 @@ class ApplicationContextManager:
                 await self.async_close()
                 raise ContextError(f"Application context initialization failed: {e}") from e
 
-    def _register_default_contexts(self, config: Settings) -> None:
+    def _register_default_contexts(self, config: Settings, *, instance_role: str) -> None:
         """Register default context manager"""
         try:
-
             from bisheng.core.database.manager import DatabaseManager
-            self.register_context(DatabaseManager(
-                database_url=config.database_url,
-                engine_config=config.database_pool.as_engine_kwargs(),
-            ))
+
+            self.register_context(
+                DatabaseManager(
+                    database_url=config.database_url,
+                    engine_config=config.database_pool.as_engine_kwargs(),
+                )
+            )
 
             from bisheng.core.cache.redis_manager import RedisManager
+
             self.register_context(RedisManager(redis_url=config.redis_url))
 
             from bisheng.core.storage.minio.minio_manager import MinioManager
+
             self.register_context(MinioManager(minio_config=config.object_storage.minio))
 
             from bisheng.core.search.elasticsearch.manager import EsConnManager, statistics_es_name
-            self.register_context(EsConnManager(es_hosts=config.get_search_conf().elasticsearch_url,
-                                                **config.get_search_conf().ssl_verify))
-            self.register_context(EsConnManager(es_hosts=config.get_telemetry_conf().elasticsearch_url,
-                                                name=statistics_es_name,
-                                                **config.get_telemetry_conf().ssl_verify))
+
+            self.register_context(
+                EsConnManager(
+                    es_hosts=config.get_search_conf().elasticsearch_url, **config.get_search_conf().ssl_verify
+                )
+            )
+            self.register_context(
+                EsConnManager(
+                    es_hosts=config.get_telemetry_conf().elasticsearch_url,
+                    name=statistics_es_name,
+                    **config.get_telemetry_conf().ssl_verify,
+                )
+            )
 
             from bisheng.core.external.http_client.http_client_manager import HttpClientManager
+
             self.register_context(HttpClientManager())
 
             from bisheng.core.prompts.manager import PromptManager
+
             self.register_context(PromptManager())
 
             if config.openfga.enabled:
                 try:
                     from bisheng.core.openfga.manager import FGAManager
-                    self.register_context(FGAManager(openfga_config=config.openfga), optional=True)
-                except Exception as e:
-                    logger.warning(f"Failed to register FGAManager (OpenFGA may not be available): {e}")
+
+                    self.register_context(
+                        FGAManager(
+                            openfga_config=config.openfga,
+                            instance_role=instance_role,
+                        ),
+                        optional=False,
+                        lazy=True,
+                    )
+                except ImportError as e:
+                    raise RuntimeError("OpenFGA is enabled but FGAManager cannot be imported") from e
 
             logger.debug("Default contexts registered")
         except ImportError as e:
@@ -117,6 +136,8 @@ class ApplicationContextManager:
         initialized = set()
 
         for context_name in self._initialization_order:
+            if context_name in self._lazy_contexts:
+                continue
             if context_name not in initialized:
                 await self._initialize_context_with_dependencies(context_name, initialized)
 
@@ -147,6 +168,7 @@ class ApplicationContextManager:
 
     async def async_get_instance(self, name: str) -> T:
         """Gets the context instance of the specified name asynchronously"""
+        await self._initialize_context_with_dependencies(name, set())
         context = self.get_context(name)
         return await context.async_get_instance()
 
@@ -160,11 +182,12 @@ class ApplicationContextManager:
         return self._registry.get_context(name)
 
     def register_context(
-            self,
-            context: BaseContextManager,
-            dependencies: Optional[List[str]] = None,
-            initialize_order: Optional[int] = None,
-            optional: bool = False,
+        self,
+        context: BaseContextManager,
+        dependencies: list[str] | None = None,
+        initialize_order: int | None = None,
+        optional: bool = False,
+        lazy: bool = False,
     ) -> None:
         """Register a new context manager
 
@@ -180,6 +203,8 @@ class ApplicationContextManager:
         self._registry.register(context)
         if optional:
             self._optional_contexts.add(context.name)
+        if lazy:
+            self._lazy_contexts.add(context.name)
 
         # Record dependencies
         if dependencies:
@@ -194,7 +219,7 @@ class ApplicationContextManager:
             insert_pos = 0
             for i, existing_name in enumerate(self._initialization_order):
                 existing_context = self._registry.get_context(existing_name)
-                if getattr(existing_context, '_initialize_order', float('inf')) > initialize_order:
+                if getattr(existing_context, "_initialize_order", float("inf")) > initialize_order:
                     insert_pos = i
                     break
                 insert_pos = i + 1
@@ -210,7 +235,7 @@ class ApplicationContextManager:
         """Log out of the context manager"""
         self._registry.unregister(name)
 
-    async def health_check(self, include_details: bool = False) -> Union[Dict[str, bool], Dict[str, Dict[str, Any]]]:
+    async def health_check(self, include_details: bool = False) -> Union[dict[str, bool], dict[str, dict[str, Any]]]:
         """Perform a health check
 
         Args:
@@ -230,16 +255,13 @@ class ApplicationContextManager:
             try:
                 context = self._registry.get_context(name)
                 detailed_results[name] = {
-                    'healthy': is_healthy,
-                    'state': context.get_state().value,
-                    'error': str(context.get_error()) if context.get_error() else None,
-                    'info': context.get_info() if hasattr(context, 'get_info') else {}
+                    "healthy": is_healthy,
+                    "state": context.get_state().value,
+                    "error": str(context.get_error()) if context.get_error() else None,
+                    "info": context.get_info() if hasattr(context, "get_info") else {},
                 }
             except Exception as e:
-                detailed_results[name] = {
-                    'healthy': False,
-                    'error': f"Failed to get context info: {e}"
-                }
+                detailed_results[name] = {"healthy": False, "error": f"Failed to get context info: {e}"}
 
         return detailed_results
 
@@ -259,6 +281,7 @@ class ApplicationContextManager:
             self._initialized = False
             self._initialization_order.clear()
             self._dependencies.clear()
+            self._lazy_contexts.clear()
 
             logger.info("Application context closed successfully")
         except Exception as e:
@@ -293,18 +316,18 @@ class ApplicationContextManager:
         """
         return self._registry
 
-    def get_context_info(self) -> Dict[str, Any]:
+    def get_context_info(self) -> dict[str, Any]:
         """Get app context details
 
         Returns:
             Dict[str, Any]: Dictionary with app context details
         """
         return {
-            'initialized': self._initialized,
-            'context_count': len(self._registry),
-            'initialization_order': self._initialization_order.copy(),
-            'dependencies': self._dependencies.copy(),
-            'context_states': self._registry.get_context_states()
+            "initialized": self._initialized,
+            "context_count": len(self._registry),
+            "initialization_order": self._initialization_order.copy(),
+            "dependencies": self._dependencies.copy(),
+            "context_states": self._registry.get_context_states(),
         }
 
     @contextmanager
@@ -385,7 +408,7 @@ class ApplicationContextManager:
         await self.async_get_instance(context_name)  # Trigger reinitialization
         logger.info(f"Context '{context_name}' restarted successfully")
 
-    def list_contexts(self, state_filter: Optional[ContextState] = None) -> List[str]:
+    def list_contexts(self, state_filter: ContextState | None = None) -> list[str]:
         """List all context names
 
         Args:
@@ -398,8 +421,7 @@ class ApplicationContextManager:
             return list(self._registry.get_all_contexts().keys())
 
         return [
-            name for name, context in self._registry.get_all_contexts().items()
-            if context.get_state() == state_filter
+            name for name, context in self._registry.get_all_contexts().items() if context.get_state() == state_filter
         ]
 
 
@@ -407,14 +429,14 @@ class ApplicationContextManager:
 app_context = ApplicationContextManager()
 
 
-async def initialize_app_context(config: Settings) -> None:
+async def initialize_app_context(config: Settings, *, instance_role: str = "api") -> None:
     """
     Initialize global app context
     :param config:
     :return:
     """
 
-    await app_context.initialize(config)
+    await app_context.initialize(config, instance_role=instance_role)
 
 
 def get_context(name: str) -> BaseContextManager:
@@ -470,10 +492,11 @@ async def close_app_context() -> None:
 
 
 def register_context(
-        context: BaseContextManager,
-        dependencies: Optional[List[str]] = None,
-        initialize_order: Optional[int] = None,
-        optional: bool = False,
+    context: BaseContextManager,
+    dependencies: list[str] | None = None,
+    initialize_order: int | None = None,
+    optional: bool = False,
+    lazy: bool = False,
 ) -> None:
     """Convenient way to register a context
 
@@ -487,10 +510,16 @@ def register_context(
         # Register a cache context that depends on the database
         register_context(cache_manager, dependencies=['database'], initialize_order=10)
     """
-    app_context.register_context(context, dependencies, initialize_order, optional=optional)
+    app_context.register_context(
+        context,
+        dependencies,
+        initialize_order,
+        optional=optional,
+        lazy=lazy,
+    )
 
 
-async def health_check(include_details: bool = False) -> Union[Dict[str, bool], Dict[str, Dict[str, Any]]]:
+async def health_check(include_details: bool = False) -> Union[dict[str, bool], dict[str, dict[str, Any]]]:
     """Convenient way to perform a health check
 
     Args:

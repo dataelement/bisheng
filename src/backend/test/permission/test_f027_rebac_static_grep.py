@@ -3,7 +3,7 @@
 Consolidates the spec §2.3 static grep checklist into one test file so a
 single ``pytest -k f027_rebac_static_grep`` confirms the cursor refactor
 removed all the old count / OFFSET / scan-everything code paths and kept the
-two boundary cases (single-dept GET + resource-permission tree) intact.
+single-department GET boundary intact.
 
 Why this file exists alongside T010/T012/T014's per-module asserts: the
 per-module checks scope their AST to a single function; this file runs a
@@ -15,7 +15,6 @@ from __future__ import annotations
 import re
 import subprocess
 from pathlib import Path
-
 
 _BISHENG = Path(__file__).resolve().parents[2] / "bisheng"
 
@@ -32,7 +31,7 @@ def _grep_count(pattern: str, *paths: str, extra_args: list[str] | None = None) 
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode == 1:  # 1 = no matches, normal
         return 0
-    lines = [l for l in proc.stdout.splitlines() if l.strip()]
+    lines = [line for line in proc.stdout.splitlines() if line.strip()]
     return len(lines)
 
 
@@ -110,7 +109,7 @@ def test_scan_visible_child_items_has_cursor_loop_invariants():
     body = m.group(0)
     assert "batch_cursor" in body
     assert "_compute_ext_rank_python" in body
-    assert re.search(r"len\(visible_page_items\)\s*>\s*page_size", body)
+    assert re.search(r"len\(visible_page_items\)\s*==\s*page_size", body)
     # The old OFFSET-style scan_page state is gone
     assert "scan_page" not in body
 
@@ -130,15 +129,3 @@ def test_aget_department_still_uses_member_count():
     assert m, "aget_department not found"
     body = m.group(0)
     assert "member_count" in body, "single-dept GET must retain member_count (AC-15)"
-
-
-# ---------------------------------------------------------------------------
-# AC-16: resource_permission endpoint still emits member_count (boundary)
-# ---------------------------------------------------------------------------
-
-
-def test_resource_permission_endpoint_still_emits_member_count():
-    src = (_BISHENG / "permission" / "api" / "endpoints" / "resource_permission.py").read_text()
-    assert "member_count" in src, (
-        "resource_permission.py must retain member_count emission (AC-16)"
-    )

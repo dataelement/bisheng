@@ -2,7 +2,7 @@
 import { LoadIcon } from "@/components/bs-icons";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
+import { hasResourceAction, useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
@@ -12,7 +12,7 @@ import { refreshMcpApi } from "@/controllers/API/assistant";
 import { getToolsApi } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { CpuIcon, Star, User } from "lucide-react";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import McpServerDialog from "./EditMcp";
@@ -25,12 +25,6 @@ const MANAGED_TOOLS = [
     'Firecrawl', 'Jina AI', 'SiliconFlow',
     '发送邮件', '飞书消息', '联网搜索', '代码执行器', '经济金融数据'
 ];
-
-const TOOL_MANAGE_PERMISSION_IDS = [
-    'manage_tool_owner',
-    'manage_tool_manager',
-    'manage_tool_viewer',
-]
 
 interface TabToolsProps {
     select?: any;
@@ -54,19 +48,25 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     // Permission management state
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
-    const toolIds = allData.map((el: any) => String(el.id));
-    const { permissions: permIds } = usePermissionIds('tool', toolIds, TOOL_MANAGE_PERMISSION_IDS);
+    const isBuiltinTool = type === "";
+    const { actions, load: loadToolActions } = useLazyResourceActions('tool', ['edit', 'delete', 'manage_permission']);
+    // Built-in tools expose no resource-level management actions. Their separate
+    // configuration entry is restricted to the global super admin below.
     const canManageTool = (id: string | number) =>
-        TOOL_MANAGE_PERMISSION_IDS.some((permissionId) => hasPermissionId(permIds, id, permissionId));
+        !isBuiltinTool && hasResourceAction(actions, id, 'manage_permission');
+    const handleHoverToolPermissions = useCallback((tool) => {
+        if (isBuiltinTool || !tool?.id) return;
+        void loadToolActions(String(tool.id));
+    }, [isBuiltinTool, loadToolActions]);
 
     const loadData = async (_type = "custom") => {
-        await getToolsApi(_type, { permissionId: 'view_tool' }).then((res) => {
+        await getToolsApi(_type, { action: 'visible' }).then((res) => {
             setAllData(res);
         });
         setLoading(false)
     };
     const loadMcpData = async () => {
-        await getToolsApi('mcp', { permissionId: 'view_tool' }).then((res) => {
+        await getToolsApi('mcp', { action: 'visible' }).then((res) => {
             setAllData(res);
         });
         setLoading(false)
@@ -89,14 +89,17 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                 return el.name + el.desc + param
             }).join("-") || ''}`
             return targetStr.toLowerCase().includes(keyword.trim().toLowerCase());
-        });
-    }, [keyword, type, allData]);
+        }).map((el) => ({
+            ...el,
+            write: isBuiltinTool
+                ? Boolean(user?.is_global_super)
+                : hasResourceAction(actions, el.id, 'edit'),
+            delete: !isBuiltinTool && hasResourceAction(actions, el.id, 'delete'),
+        }));
+    }, [actions, allData, isBuiltinTool, keyword, type, user?.is_global_super]);
 
     const hasSet = (name) => {
-        const canManageBuiltinTools = Boolean(
-            user?.is_global_super || user?.role === 'admin' || user?.is_child_admin
-        );
-        if (!canManageBuiltinTools) return false
+        if (!user?.is_global_super) return false
         return MANAGED_TOOLS.includes(name)
     }
 
@@ -199,6 +202,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                                         onPermission={canManageTool(el.id)
                                             ? (tool) => { setPermTarget({ id: String(tool.id), name: tool.name }); setPermDialogOpen(true); }
                                             : null}
+                                        onHoverPermissions={handleHoverToolPermissions}
                                     ></ToolItem>
                                 ))
                             ) : (

@@ -31,8 +31,22 @@ whatever their origin (checkpoint replay, a future tool, a human attachment).
 ``video`` in particular MUST die here: it raises inside langchain-core before any
 HTTP call, so ``llm_error_classifier`` never sees a status code to bucket.
 
-``image`` blocks are left alone on purpose — they are the one multimodal shape
-mainstream providers do accept, and dropping them would break vision models.
+``image`` blocks get their own two-part treatment, because two independent things
+can make an image unsendable:
+
+- **Can this model see at all?** ``supports_vision`` is the admin-declared
+  ``WSModel.visual`` flag behind the 视觉 checkbox in 系统模型设置 → 工作台模型
+  (daily chat already gates attachments on it, ``chat_service._process_agent_files``).
+  When it is off, an image is refused at the TOOL layer with an actionable hint —
+  the model never receives a payload its endpoint would reject.
+- **Where is the model willing to see it?** deepagents' ``read_file`` returns an
+  image as a block on the TOOL message (``deepagents/middleware/filesystem.py``),
+  a shape some endpoints refuse outright: Kimi K3 answers ``image_url parts are
+  supported only in user messages`` with a 400 that kills the session. Every
+  provider accepts an image in the USER role, so ``_sanitize_messages`` MOVES it
+  there rather than maintaining a per-vendor table that would always lag the next
+  model. Dropping it instead was rejected — it would regress the scanned-page
+  workflow this passthrough exists for.
 """
 
 from __future__ import annotations
@@ -41,7 +55,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from langchain.agents.middleware.types import AgentMiddleware, ModelRequest, ModelResponse
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 from loguru import logger
@@ -57,6 +71,11 @@ CODE_INTERPRETER_TOOL = "bisheng_code_interpreter"
 # Content-block types that no mainstream OpenAI-compatible endpoint accepts from
 # us. `image` is intentionally absent (see module docstring).
 _BLOCKED_BLOCK_TYPES = frozenset({"file", "audio", "video", "input_audio"})
+
+# The two shapes an image arrives in: deepagents' standard block (`image` +
+# `base64`) and the OpenAI-native `image_url`. Both convert to the same outgoing
+# `image_url` part, so both need relocating.
+_IMAGE_BLOCK_TYPES = frozenset({"image", "image_url"})
 
 # A `decode("utf-8", errors="replace")` of binary bytes is dominated by U+FFFD.
 # Real text files carry a few at most (a stray mis-encoded byte), so a small
@@ -96,6 +115,34 @@ def _binary_read_hint(file_path: str, has_code_interpreter: bool) -> str:
         f"- 不要再对该路径重复调用 read_file，结果不会变。\n"
         f"[System] `{file_path}` is a raw binary file and cannot be read as text. "
         f"{route_en} Do not call read_file on this path again."
+    )
+
+
+def _no_vision_hint(file_path: str, has_code_interpreter: bool) -> str:
+    """Replacement for an image read when the run's model has no vision.
+
+    Deliberately names the cause: a model that silently receives nothing and is
+    left to guess will confabulate a description of the page. Telling it plainly
+    that it cannot see, and that saying so is the correct outcome, is the honest
+    behaviour — the deliverable then carries "not visually verified" instead of an
+    invented reading.
+    """
+    if has_code_interpreter:
+        route_zh = "- 若内容重要：用 bisheng_code_interpreter 从图片的来源文件中提取文字/数据（例如用 fitz 抽 PDF 那一页的文本）。\n"
+        route_en = "If the content matters, extract it from the source file with bisheng_code_interpreter instead."
+    else:
+        route_zh = "- 本次没有可用的代码执行工具，无法从原件提取内容。\n"
+        route_en = "No code execution tool is available this run to extract it from the source."
+    return (
+        f"[System] `{file_path}` 是图片，而本次运行所用的模型未被标记为具备视觉能力"
+        f"（系统模型设置 → 工作台模型的「视觉」列），因此无法把图片交给你查看。\n"
+        f"{route_zh}"
+        f"- 不要再对该路径重复调用 read_file，结果不会变。\n"
+        f"- 不要凭猜测描述图片内容；如果确实无法获得，请在交付物中如实说明该处未经视觉核对。\n"
+        f"[System] `{file_path}` is an image and the model configured for this run is not marked "
+        f"vision-capable, so it cannot be shown to you. {route_en} Do not call read_file on this "
+        f"path again, and never guess at the image's contents — state plainly in the deliverable "
+        f"that it could not be checked visually."
     )
 
 
@@ -148,6 +195,13 @@ def _is_valid_base64(value: Any) -> bool:
     return set(head) <= _B64_CHARS
 
 
+def _has_image_block(content: Any) -> bool:
+    """True when ``content`` carries at least one image block, in either shape."""
+    if not isinstance(content, list):
+        return False
+    return any(isinstance(b, dict) and b.get("type") in _IMAGE_BLOCK_TYPES for b in content)
+
+
 def _broken_image_payload(block: dict) -> bool:
     """True when an ``image`` block carries a payload that is not valid base64.
 
@@ -178,11 +232,15 @@ class BinaryReadGuardMiddleware(AgentMiddleware):
         has_code_interpreter: whether the sandboxed code interpreter is bound for
             this run. Keeps the hint's suggested route in lockstep with the tools
             actually available (same contract as the uploaded-files pointer block).
+        supports_vision: whether the run's model is declared vision-capable
+            (``WSModel.visual``). Defaults to False — fail closed, the same way an
+            unset checkbox reads in daily chat.
     """
 
-    def __init__(self, has_code_interpreter: bool = False) -> None:
+    def __init__(self, has_code_interpreter: bool = False, supports_vision: bool = False) -> None:
         super().__init__()
         self._has_code_interpreter = has_code_interpreter
+        self._supports_vision = supports_vision
 
     async def awrap_tool_call(
         self,
@@ -221,6 +279,13 @@ class BinaryReadGuardMiddleware(AgentMiddleware):
             logger.info("[linsight-binary-guard] read_file returned an invalid image payload for {}", file_path)
             return _replace_tool_content(result, _binary_read_hint(file_path, self._has_code_interpreter))
 
+        # A model with no declared vision capability cannot use an image block: the
+        # endpoint 400s on it, and a text-only model that somehow accepted it would
+        # see nothing. Refuse here, where the hint can still name the reason.
+        if not self._supports_vision and _has_image_block(content):
+            logger.info("[linsight-binary-guard] image read on a non-vision model for {}", file_path)
+            return _replace_tool_content(result, _no_vision_hint(file_path, self._has_code_interpreter))
+
         return result
 
 
@@ -240,39 +305,116 @@ class ModelContentGuardMiddleware(AgentMiddleware):
         has_code_interpreter: whether the sandboxed code interpreter is bound this
             run. Gates the replacement text's suggested route, same lockstep rule
             as ``BinaryReadGuardMiddleware`` and the uploaded-files pointer block.
+        supports_vision: whether the run's model is declared vision-capable. The
+            tool guard already refuses image reads when it is off, so this is the
+            backstop for images that entered some other way — a replayed
+            checkpoint from a turn that ran on a vision model, most of all.
     """
 
-    def __init__(self, has_code_interpreter: bool = False) -> None:
+    def __init__(self, has_code_interpreter: bool = False, supports_vision: bool = False) -> None:
         super().__init__()
         self._has_code_interpreter = has_code_interpreter
+        self._supports_vision = supports_vision
 
     async def awrap_model_call(
         self,
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
-        sanitized, stripped = _sanitize_messages(request.messages, self._has_code_interpreter)
+        sanitized, stripped, relocated = _sanitize_messages(
+            request.messages, self._has_code_interpreter, supports_vision=self._supports_vision
+        )
         if stripped:
             logger.warning("[linsight-content-guard] stripped {} block(s) before model call", sorted(stripped))
+        if relocated:
+            logger.info("[linsight-content-guard] relocated {} tool-message image(s) into a user turn", relocated)
+        if stripped or relocated:
             request = request.override(messages=sanitized)
         return await handler(request)
 
 
-def _sanitize_messages(messages: list, has_code_interpreter: bool = False) -> tuple[list, set[str]]:
-    """Return ``(messages, stripped_types)`` with blocked blocks turned into text."""
+def _image_source_path(message: Any) -> str:
+    """Best-effort path of the file a tool-message image came from.
+
+    deepagents stamps ``read_file_path`` on the multimodal branch; anything else
+    (a future tool, a replayed checkpoint written by an older build) has no marker
+    and gets an empty label rather than a fabricated one.
+    """
+    kwargs = getattr(message, "additional_kwargs", None)
+    if isinstance(kwargs, dict):
+        return str(kwargs.get("read_file_path") or "")
+    return ""
+
+
+def _relocated_image_message(entries: list[tuple[str, dict]]) -> HumanMessage:
+    """Carry tool-returned images into a synthesized USER turn.
+
+    The header exists to stop the model reading this as a fresh instruction from
+    the human: it arrives in the user role for protocol reasons only. Each image
+    is preceded by its own label so several relocated reads stay distinguishable.
+    """
+    content: list[dict] = [
+        {
+            "type": "text",
+            "text": (
+                "[System] Image(s) returned by a tool call are relayed here because this model "
+                "endpoint only accepts images in user messages. This is NOT a new instruction "
+                "from the user — continue the task in progress."
+            ),
+        }
+    ]
+    for path, block in entries:
+        label = f"Image from `{path}`:" if path else "Image from the preceding tool call:"
+        content.append({"type": "text", "text": label})
+        content.append(block)
+    return HumanMessage(content=content)
+
+
+def _sanitize_messages(
+    messages: list, has_code_interpreter: bool = False, *, supports_vision: bool = False
+) -> tuple[list, set[str], int]:
+    """Return ``(messages, stripped_types, relocated_count)``.
+
+    Three transforms, all request-only — the persisted history and the checkpoint
+    keep the original shape, so this is reversible and never corrupts state:
+
+    1. blocked block types (``file``/``audio``/``video``) become text;
+    2. with ``supports_vision`` off, images become text wherever they sit;
+    3. otherwise images inside a ``ToolMessage`` are MOVED into a synthesized user
+       turn (``pending``/``flush`` below carry the ordering rule).
+    """
     route = (
         " Use bisheng_code_interpreter to inspect the original file instead."
         if has_code_interpreter
         else " No code execution tool is available this run; answer from the parsed text view."
     )
     stripped: set[str] = set()
-    out = []
+    relocated = 0
+    out: list = []
+    # Images pulled out of the tool run currently being walked, in encounter order.
+    # An OpenAI-compatible endpoint requires every tool message answering one
+    # assistant `tool_calls` batch to be CONTIGUOUS and to precede any other role,
+    # so the carrier turn cannot go straight after the image-bearing tool message:
+    # it is flushed when the tool run ends (or at the end of the list, which is the
+    # common case — the model reads an image and the request goes out right there).
+    pending: list[tuple[str, dict]] = []
+
+    def flush() -> None:
+        if pending:
+            out.append(_relocated_image_message(list(pending)))
+            pending.clear()
+
     for message in messages:
+        is_tool = isinstance(message, ToolMessage)
+        if not is_tool:
+            flush()
+
         content = getattr(message, "content", None)
         if not isinstance(content, list):
             out.append(message)
             continue
 
+        source_path = _image_source_path(message) if is_tool else ""
         new_content = []
         changed = False
         for block in content:
@@ -287,9 +429,9 @@ def _sanitize_messages(messages: list, has_code_interpreter: bool = False) -> tu
                     }
                 )
                 continue
-            # `image` stays (it is the one shape endpoints accept) — unless its
-            # payload is not real base64, in which case forwarding it either 400s
-            # the request or feeds the model noise it will confabulate over.
+            # Checked BEFORE the relocation branch: forwarding a corrupt payload
+            # either 400s the request or feeds the model noise it will confabulate
+            # over, and moving it to a user turn would not make it any more valid.
             if isinstance(block, dict) and _broken_image_payload(block):
                 stripped.add("image:invalid-base64")
                 changed = True
@@ -298,6 +440,31 @@ def _sanitize_messages(messages: list, has_code_interpreter: bool = False) -> tu
                         "type": "text",
                         "text": "[System] An image attachment was removed here: its payload is not "
                         f"valid base64 and cannot be rendered.{route}",
+                    }
+                )
+                continue
+            if isinstance(block, dict) and block.get("type") in _IMAGE_BLOCK_TYPES and not supports_vision:
+                stripped.add("image:no-vision")
+                changed = True
+                new_content.append(
+                    {
+                        "type": "text",
+                        "text": "[System] An image was removed here: the model configured for this "
+                        "run is not marked vision-capable, so it cannot be shown one. Do not guess "
+                        f"at its contents.{route}",
+                    }
+                )
+                continue
+            if is_tool and isinstance(block, dict) and block.get("type") in _IMAGE_BLOCK_TYPES:
+                pending.append((source_path, block))
+                relocated += 1
+                changed = True
+                where = f"`{source_path}`" if source_path else "this path"
+                new_content.append(
+                    {
+                        "type": "text",
+                        "text": f"[System] The image read from {where} is attached to the user message "
+                        f"that follows this tool batch; read it from there.",
                     }
                 )
                 continue
@@ -312,18 +479,23 @@ def _sanitize_messages(messages: list, has_code_interpreter: bool = False) -> tu
             new_content = [{"type": "text", "text": "[System] Unsupported attachment removed."}]
         out.append(message.model_copy(update={"content": new_content}))
 
-    return out, stripped
+    flush()
+    return out, stripped, relocated
 
 
-def build_binary_guards(has_code_interpreter: bool) -> list[AgentMiddleware]:
+def build_binary_guards(has_code_interpreter: bool, *, supports_vision: bool) -> list[AgentMiddleware]:
     """The pair of guards every graph that owns ``read_file`` must carry.
 
     Middleware is per-subgraph in langgraph: a subagent's model and tool calls are
     NOT wrapped by the parent graph's stack, so each one needs its own instances.
     Returning them from a single factory means a new subagent (e.g. the planned
     data-analyst) gets both by construction instead of by remembering to.
+
+    ``supports_vision`` is keyword-only and has NO default on purpose: both guards
+    fail closed, so a new call site that forgot it would silently switch image
+    reads off rather than raise. Make the caller state it.
     """
     return [
-        BinaryReadGuardMiddleware(has_code_interpreter=has_code_interpreter),
-        ModelContentGuardMiddleware(has_code_interpreter=has_code_interpreter),
+        BinaryReadGuardMiddleware(has_code_interpreter=has_code_interpreter, supports_vision=supports_vision),
+        ModelContentGuardMiddleware(has_code_interpreter=has_code_interpreter, supports_vision=supports_vision),
     ]

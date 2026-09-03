@@ -2,9 +2,9 @@
 
 Covers:
 - Root tenant guard (id == 1 fast path AND parent_tenant_id IS NULL defensive)
-- grant/revoke success path forwards correct FGA tuple
-- FGA unavailable raises OpenFGAConnectionError
-- list_tenant_admins returns [] for Root, parses user ids from tuples
+- grant/revoke success path forwards semantic permission relations
+- permission service unavailable raises the stable tenant error
+- list_tenant_admins returns [] for Root and parses user IDs
 """
 
 from types import SimpleNamespace
@@ -14,10 +14,26 @@ import pytest
 
 from bisheng.common.errcode.tenant import TenantNotFoundError
 from bisheng.common.errcode.tenant_fga import (
-    OpenFGAConnectionError,
+    PermissionBackendUnavailableError,
     RootTenantAdminNotAllowedError,
 )
-from bisheng.permission.domain.services.tenant_admin_service import TenantAdminService
+from bisheng.permission.application import PermissionObject, PermissionRelation, PermissionSubject
+from bisheng.tenant.domain.services.tenant_admin_service import TenantAdminService
+
+
+def _permissions(*, user_ids: tuple[str, ...] = ()):
+    permissions = MagicMock()
+    permissions.grant = AsyncMock()
+    permissions.revoke = AsyncMock()
+    permissions.list_subject_ids = AsyncMock(return_value=user_ids)
+    return permissions
+
+
+def _patch_permissions(permissions):
+    return patch(
+        "bisheng.tenant.domain.services.tenant_admin_service.get_permission_relation_api",
+        AsyncMock(return_value=permissions),
+    )
 
 
 # ── _guard_not_root ──────────────────────────────────────────────
@@ -25,20 +41,22 @@ from bisheng.permission.domain.services.tenant_admin_service import TenantAdminS
 
 @pytest.mark.asyncio
 async def test_grant_rejects_root_by_id_short_circuit():
-    """tenant_id == 1 must short-circuit before any DB / FGA call."""
-    with patch('bisheng.permission.domain.services.tenant_admin_service.TenantDao') as dao, \
-         patch('bisheng.permission.domain.services.tenant_admin_service._aget_fga_client_with_fallback') as get_fga:
+    """tenant_id == 1 must short-circuit before DB or permission calls."""
+    with (
+        patch("bisheng.tenant.domain.services.tenant_admin_service.TenantDao") as dao,
+        patch("bisheng.tenant.domain.services.tenant_admin_service.get_permission_relation_api") as get_permissions,
+    ):
         with pytest.raises(RootTenantAdminNotAllowedError):
             await TenantAdminService.grant_tenant_admin(tenant_id=1, user_id=10)
         dao.aget_by_id.assert_not_called()
-        get_fga.assert_not_called()
+        get_permissions.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_grant_rejects_when_parent_tenant_id_null():
     """Defensive: any tenant with parent_tenant_id=None is treated as Root."""
     fake_tenant = SimpleNamespace(id=99, parent_tenant_id=None)
-    with patch('bisheng.permission.domain.services.tenant_admin_service.TenantDao') as dao:
+    with patch("bisheng.tenant.domain.services.tenant_admin_service.TenantDao") as dao:
         dao.aget_by_id = AsyncMock(return_value=fake_tenant)
         with pytest.raises(RootTenantAdminNotAllowedError):
             await TenantAdminService.grant_tenant_admin(tenant_id=99, user_id=10)
@@ -47,7 +65,7 @@ async def test_grant_rejects_when_parent_tenant_id_null():
 @pytest.mark.asyncio
 async def test_grant_raises_tenant_not_found_when_missing():
     """Missing tenant now raises TenantNotFoundError (20000) — distinct from Root (19204)."""
-    with patch('bisheng.permission.domain.services.tenant_admin_service.TenantDao') as dao:
+    with patch("bisheng.tenant.domain.services.tenant_admin_service.TenantDao") as dao:
         dao.aget_by_id = AsyncMock(return_value=None)
         with pytest.raises(TenantNotFoundError):
             await TenantAdminService.grant_tenant_admin(tenant_id=99, user_id=10)
@@ -59,28 +77,35 @@ async def test_grant_raises_tenant_not_found_when_missing():
 @pytest.mark.asyncio
 async def test_grant_success_for_child_tenant():
     fake_tenant = SimpleNamespace(id=5, parent_tenant_id=1)
-    fake_fga = MagicMock()
-    fake_fga.write_tuples = AsyncMock()
+    permissions = _permissions()
 
-    with patch('bisheng.permission.domain.services.tenant_admin_service.TenantDao') as dao, \
-         patch('bisheng.permission.domain.services.tenant_admin_service._aget_fga_client_with_fallback',
-               AsyncMock(return_value=fake_fga)):
+    with patch("bisheng.tenant.domain.services.tenant_admin_service.TenantDao") as dao, _patch_permissions(permissions):
         dao.aget_by_id = AsyncMock(return_value=fake_tenant)
         await TenantAdminService.grant_tenant_admin(tenant_id=5, user_id=10)
 
-    fake_fga.write_tuples.assert_awaited_once_with(writes=[{
-        'user': 'user:10', 'relation': 'admin', 'object': 'tenant:5',
-    }])
+    permissions.grant.assert_awaited_once_with(
+        (
+            PermissionRelation(
+                subject=PermissionSubject("user", "10"),
+                relation="admin",
+                resource=PermissionObject("tenant", "5"),
+            ),
+        )
+    )
 
 
 @pytest.mark.asyncio
 async def test_grant_raises_when_fga_unavailable():
     fake_tenant = SimpleNamespace(id=5, parent_tenant_id=1)
-    with patch('bisheng.permission.domain.services.tenant_admin_service.TenantDao') as dao, \
-         patch('bisheng.permission.domain.services.tenant_admin_service._aget_fga_client_with_fallback',
-               AsyncMock(return_value=None)):
+    with (
+        patch("bisheng.tenant.domain.services.tenant_admin_service.TenantDao") as dao,
+        patch(
+            "bisheng.tenant.domain.services.tenant_admin_service.get_permission_relation_api",
+            AsyncMock(side_effect=RuntimeError("permission down")),
+        ),
+    ):
         dao.aget_by_id = AsyncMock(return_value=fake_tenant)
-        with pytest.raises(OpenFGAConnectionError):
+        with pytest.raises(PermissionBackendUnavailableError):
             await TenantAdminService.grant_tenant_admin(tenant_id=5, user_id=10)
 
 
@@ -90,23 +115,26 @@ async def test_grant_raises_when_fga_unavailable():
 @pytest.mark.asyncio
 async def test_revoke_success_for_child_tenant():
     fake_tenant = SimpleNamespace(id=5, parent_tenant_id=1)
-    fake_fga = MagicMock()
-    fake_fga.write_tuples = AsyncMock()
+    permissions = _permissions()
 
-    with patch('bisheng.permission.domain.services.tenant_admin_service.TenantDao') as dao, \
-         patch('bisheng.permission.domain.services.tenant_admin_service._aget_fga_client_with_fallback',
-               AsyncMock(return_value=fake_fga)):
+    with patch("bisheng.tenant.domain.services.tenant_admin_service.TenantDao") as dao, _patch_permissions(permissions):
         dao.aget_by_id = AsyncMock(return_value=fake_tenant)
         await TenantAdminService.revoke_tenant_admin(tenant_id=5, user_id=10)
 
-    fake_fga.write_tuples.assert_awaited_once_with(deletes=[{
-        'user': 'user:10', 'relation': 'admin', 'object': 'tenant:5',
-    }])
+    permissions.revoke.assert_awaited_once_with(
+        (
+            PermissionRelation(
+                subject=PermissionSubject("user", "10"),
+                relation="admin",
+                resource=PermissionObject("tenant", "5"),
+            ),
+        )
+    )
 
 
 @pytest.mark.asyncio
 async def test_revoke_rejects_root_short_circuit():
-    with patch('bisheng.permission.domain.services.tenant_admin_service.TenantDao') as dao:
+    with patch("bisheng.tenant.domain.services.tenant_admin_service.TenantDao") as dao:
         with pytest.raises(RootTenantAdminNotAllowedError):
             await TenantAdminService.revoke_tenant_admin(tenant_id=1, user_id=10)
         dao.aget_by_id.assert_not_called()
@@ -117,30 +145,27 @@ async def test_revoke_rejects_root_short_circuit():
 
 @pytest.mark.asyncio
 async def test_list_admins_returns_empty_for_root():
-    """Root short-circuits without touching FGA."""
-    with patch('bisheng.permission.domain.services.tenant_admin_service._aget_fga_client_with_fallback') as get_fga:
+    """Root short-circuits without touching the permission service."""
+    with patch("bisheng.tenant.domain.services.tenant_admin_service.get_permission_relation_api") as get_permissions:
         result = await TenantAdminService.list_tenant_admins(tenant_id=1)
     assert result == []
-    get_fga.assert_not_called()
+    get_permissions.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_list_admins_returns_empty_when_fga_unavailable():
-    with patch('bisheng.permission.domain.services.tenant_admin_service._aget_fga_client_with_fallback',
-               AsyncMock(return_value=None)):
+    with patch(
+        "bisheng.tenant.domain.services.tenant_admin_service.get_permission_relation_api",
+        AsyncMock(side_effect=RuntimeError("permission down")),
+    ):
         result = await TenantAdminService.list_tenant_admins(tenant_id=5)
     assert result == []
 
 
 @pytest.mark.asyncio
 async def test_list_admins_parses_user_ids():
-    fake_fga = MagicMock()
-    fake_fga.read_tuples = AsyncMock(return_value=[
-        {'user': 'user:7', 'relation': 'admin', 'object': 'tenant:5'},
-        {'user': 'user:9', 'relation': 'admin', 'object': 'tenant:5'},
-    ])
-    with patch('bisheng.permission.domain.services.tenant_admin_service._aget_fga_client_with_fallback',
-               AsyncMock(return_value=fake_fga)):
+    permissions = _permissions(user_ids=("7", "9"))
+    with _patch_permissions(permissions):
         result = await TenantAdminService.list_tenant_admins(tenant_id=5)
 
     assert sorted(result) == [7, 9]
@@ -148,31 +173,24 @@ async def test_list_admins_parses_user_ids():
 
 @pytest.mark.asyncio
 async def test_list_admins_skips_non_numeric_users():
-    fake_fga = MagicMock()
-    fake_fga.read_tuples = AsyncMock(return_value=[
-        {'user': 'user:7'},
-        {'user': 'user:foo'},  # malformed; skipped
-        {'user': 'department:5#member'},  # not a user; skipped
-    ])
-    with patch('bisheng.permission.domain.services.tenant_admin_service._aget_fga_client_with_fallback',
-               AsyncMock(return_value=fake_fga)):
+    permissions = _permissions(user_ids=("7", "foo"))
+    with _patch_permissions(permissions):
         result = await TenantAdminService.list_tenant_admins(tenant_id=5)
 
     assert result == [7]
 
 
 @pytest.mark.asyncio
-async def test_grant_uses_sync_fallback_when_async_accessor_misses():
+async def test_grant_uses_permission_application_protocol():
     fake_tenant = SimpleNamespace(id=5, parent_tenant_id=1)
-    fake_fga = MagicMock()
-    fake_fga.write_tuples = AsyncMock()
+    permissions = _permissions()
 
-    with patch('bisheng.permission.domain.services.tenant_admin_service.TenantDao') as dao, \
-         patch('bisheng.core.openfga.manager.aget_fga_client', AsyncMock(return_value=None)) as async_get_fga, \
-         patch('bisheng.core.openfga.manager.get_fga_client', return_value=fake_fga) as sync_get_fga:
+    with (
+        patch("bisheng.tenant.domain.services.tenant_admin_service.TenantDao") as dao,
+        _patch_permissions(permissions) as get_permissions,
+    ):
         dao.aget_by_id = AsyncMock(return_value=fake_tenant)
         await TenantAdminService.grant_tenant_admin(tenant_id=5, user_id=10)
 
-    async_get_fga.assert_awaited_once()
-    sync_get_fga.assert_called_once()
-    fake_fga.write_tuples.assert_awaited_once()
+    get_permissions.assert_awaited_once()
+    permissions.grant.assert_awaited_once()

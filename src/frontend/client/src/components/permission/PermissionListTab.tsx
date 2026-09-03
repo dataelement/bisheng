@@ -1,26 +1,46 @@
-import { useToastContext, useConfirm } from "~/Providers";
+import { Outlined } from "bisheng-icons";
 import {
-  authorizeResource,
-  getGrantableRelationModels,
-  getResourcePermissions,
+  AlertTriangle,
+  Building2,
+  Loader2,
+  LockKeyhole,
+  Search,
+  Trash2,
+  User,
+  Users,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  getGrantablePermissionModels,
+  getMyResourcePermissions,
+  getResourcePermissionGrants,
+  mutateResourceGrants,
 } from "~/api/permission";
 import type {
-  PermissionEntry,
-  RelationLevel,
+  GrantablePermissionModel,
+  MutateResourceGrantsResult,
+  MyResourcePermissions,
+  PermissionGrantAssignee,
+  ResourcePermissionContext,
   ResourceType,
-  RelationModel,
-  RevokeItem,
+  SubjectType,
 } from "~/api/permission";
-import { Avatar, AvatarName } from "~/components/ui/Avatar";
-import { PermissionEmptyState } from "./PermissionEmptyState";
-import { Building2, RotateCcw, Search, User, Users } from "lucide-react";
-import { LoadingIcon } from "~/components/ui/icon/Loading";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Button } from "~/components/ui";
 import { useLocalize } from "~/hooks";
-import { cn } from "~/utils";
-import { PermissionLevelMenu } from "./PermissionLevelMenu";
-import { RelationModelOption } from "./RelationSelect";
-import { TruncatedTooltip } from "./TruncatedTooltip";
+import { useConfirm } from "~/Providers";
+import { canMutatePermissionAssignee } from "./assigneePolicy";
+import { SourceBadge } from "./SourceBadge";
+
+interface PermissionListTabProps {
+  resourceType: ResourceType;
+  resourceId: string;
+  context: ResourcePermissionContext;
+  refreshKey?: number;
+  pageSize?: number;
+  fixedSubjectType?: SubjectType;
+  onRosterChange?: (assignees: PermissionGrantAssignee[]) => void;
+  onMutationSuccess?: (result: MutateResourceGrantsResult) => void;
+}
 
 const SUBJECT_ICONS = {
   user: User,
@@ -28,555 +48,462 @@ const SUBJECT_ICONS = {
   user_group: Users,
 };
 
-const LIST_SUBJECT_TYPES = ["user", "department", "user_group"] as const;
-type ListSubjectType = (typeof LIST_SUBJECT_TYPES)[number];
-
-export interface PermissionApiAdapter {
-  getPermissions: typeof getResourcePermissions;
-  authorize: typeof authorizeResource;
-  getGrantableRelationModels: typeof getGrantableRelationModels;
+function createMutationIdempotencyKey(): string {
+  return `grant-mutate-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
 }
 
-interface PermissionListTabProps {
-  resourceType: ResourceType;
-  resourceId: string;
-  refreshKey: number;
-  prefetchedGrantableModels?: RelationModel[];
-  prefetchedGrantableModelsLoaded?: boolean;
-  prefetchedUseDefaultModels?: boolean;
-  skipGrantableModelsRequest?: boolean;
-  // UI-only: when provided, hides the internal subject type switcher
-  // and locks the list to the given subject type.
-  fixedSubjectType?: ListSubjectType;
-  permissionApi?: PermissionApiAdapter;
-  // When set, the current user's own row is locked (no modify/remove): you cannot
-  // change your own permission, which would strip your management access and lock
-  // you out of the dialog.
-  currentUserId?: string | number;
-  onChanged?: () => void;
+function getAvatarLabel(assignee: PermissionGrantAssignee): string {
+  const name = assignee.subject.name?.trim() || assignee.subject.id;
+  return (name.charAt(0) || "U").toUpperCase();
 }
 
-const DEFAULT_MODELS: RelationModelOption[] = [
-  { id: "owner", name: "所有者", relation: "owner" },
-  { id: "manager", name: "可管理", relation: "manager" },
-  { id: "editor", name: "可编辑", relation: "editor" },
-  { id: "viewer", name: "可查看", relation: "viewer" },
-];
+function getInheritedSourceLabel(
+  assignee: PermissionGrantAssignee,
+  localize: (key: string) => string,
+): string {
+  const resolvedName = assignee.inherited_from_name?.trim();
+  if (resolvedName) return resolvedName;
 
-const DEFAULT_PERMISSION_API: PermissionApiAdapter = {
-  getPermissions: getResourcePermissions,
-  authorize: authorizeResource,
-  getGrantableRelationModels,
-};
+  const resourceType = assignee.inherited_from?.split(":", 1)[0];
+  if (resourceType === "folder") {
+    return localize("f048_permission.roster.parent_folder");
+  }
+  if (
+    resourceType === "knowledge_space" ||
+    resourceType === "knowledge_library"
+  ) {
+    return localize("f048_permission.roster.parent_knowledge_space");
+  }
+  return localize("f048_permission.roster.parent_resource");
+}
+
+interface RosterRowProps {
+  assignee: PermissionGrantAssignee;
+  context: ResourcePermissionContext;
+  models: GrantablePermissionModel[];
+  pending: boolean;
+  onMove: (assignee: PermissionGrantAssignee, modelKey: string) => void;
+  onRemove: (assignee: PermissionGrantAssignee) => void;
+}
+
+function RosterRow({
+  assignee,
+  context,
+  models,
+  pending,
+  onMove,
+  onRemove,
+}: RosterRowProps) {
+  const localize = useLocalize();
+  const SubjectIcon = SUBJECT_ICONS[assignee.subject.type];
+  const editable = canMutatePermissionAssignee(assignee, context, models);
+  const displayName =
+    assignee.subject.name ||
+    `${assignee.subject.type}:${assignee.subject.id}`;
+  const currentIsGrantable = models.some(
+    (model) => model.key === assignee.model.key,
+  );
+
+  return (
+    <article
+      data-testid={`permission-assignee-${assignee.assignee_id}`}
+      data-editable={String(editable)}
+      className="flex min-h-[58px] items-center gap-4 border-b border-[#F2F3F5] py-3 last:border-b-0"
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        {assignee.subject.type === "user" ? (
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#C9CDD4] text-sm font-semibold text-white">
+            {getAvatarLabel(assignee)}
+          </span>
+        ) : (
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-500/[0.07] text-blue-500">
+            <SubjectIcon aria-hidden="true" className="size-4" />
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-[#212121]">
+            {displayName}
+          </p>
+          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1 text-xs text-[#86909C]">
+            <SourceBadge source={assignee.source} />
+            <span>
+              {localize(
+                `f048_permission.scope.${assignee.scope.toLowerCase()}`,
+              )}
+            </span>
+            {assignee.inherited_from && (
+              <span className="truncate">
+                · {localize("f048_permission.roster.inherited_from")}: {" "}
+                {getInheritedSourceLabel(assignee, localize)}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex w-[176px] shrink-0 items-center justify-end gap-1 max-[560px]:w-[132px]">
+        {editable ? (
+          <>
+            {/* The native select arrow is painted over right-aligned text, so hide
+                it and reserve room for our own chevron. `bg-none` also drops the
+                chevron the global `select` rule paints as a background image —
+                without it the row showed two overlapping arrows. */}
+            <div className="relative flex min-w-0 flex-1 items-center">
+              <select
+                aria-label={`grant.model.${assignee.assignee_id}`}
+                value={assignee.model.key}
+                disabled={pending}
+                onChange={(event) => onMove(assignee, event.target.value)}
+                className="h-8 w-full min-w-0 cursor-pointer appearance-none rounded-md border-0 bg-transparent bg-none pl-2 pr-6 text-right text-sm text-[#4E5969] outline-none hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {!currentIsGrantable && (
+                  <option value={assignee.model.key}>
+                    {assignee.model.name}
+                  </option>
+                )}
+                {models.map((model) => (
+                  <option key={model.key} value={model.key}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+              <Outlined.Down
+                aria-hidden="true"
+                className="pointer-events-none absolute right-1.5 size-3.5 text-[#86909C]"
+              />
+            </div>
+            <button
+              type="button"
+              aria-label={`${localize("f048_permission.grant.remove")}.${
+                assignee.assignee_id
+              }`}
+              disabled={pending}
+              className="flex size-8 shrink-0 items-center justify-center rounded-md text-[#86909C] transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => onRemove(assignee)}
+            >
+              <Trash2 aria-hidden="true" className="size-4" />
+            </button>
+          </>
+        ) : (
+          <span className="inline-flex items-center gap-1 truncate text-sm text-[#86909C]">
+            {assignee.model.name}
+            {assignee.protected && (
+              <LockKeyhole
+                aria-label={localize("f048_permission.roster.protected")}
+                className="size-3.5 shrink-0"
+              />
+            )}
+          </span>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function SummaryView({ summary }: { summary: MyResourcePermissions }) {
+  const localize = useLocalize();
+  return (
+    <section className="rounded-lg border border-[#EBECF0] bg-black/[0.02] p-4">
+      <p className="text-sm font-medium text-[#212121]">
+        {localize("f048_permission.roster.summary_only")}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {summary.actions.map((action) => (
+          <span
+            key={action}
+            className="rounded-full bg-blue-500/[0.07] px-2.5 py-1 text-xs font-medium text-blue-500"
+          >
+            {action}
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export function PermissionListTab({
   resourceType,
   resourceId,
-  refreshKey,
-  prefetchedGrantableModels,
-  prefetchedGrantableModelsLoaded = false,
-  prefetchedUseDefaultModels = false,
-  skipGrantableModelsRequest = false,
-  fixedSubjectType,
-  permissionApi,
-  currentUserId,
-  onChanged,
+  context,
+  refreshKey = 0,
+  pageSize = 50,
+  fixedSubjectType = "user",
+  onRosterChange,
+  onMutationSuccess,
 }: PermissionListTabProps) {
   const localize = useLocalize();
-  const { showToast } = useToastContext();
   const confirm = useConfirm();
-  const activePermissionApi = permissionApi ?? DEFAULT_PERMISSION_API;
-  const [entries, setEntries] = useState<PermissionEntry[]>([]);
-  const [listTab, setListTab] = useState<ListSubjectType>(fixedSubjectType ?? "user");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-  const [grantableModels, setGrantableModels] = useState<RelationModel[]>(
-    prefetchedGrantableModels || [],
-  );
-  const [useDefaultModels, setUseDefaultModels] = useState(prefetchedUseDefaultModels);
-  const [userSelectedTab, setUserSelectedTab] = useState(false);
+  const [assignees, setAssignees] = useState<PermissionGrantAssignee[]>([]);
+  const [models, setModels] = useState<GrantablePermissionModel[]>([]);
+  const [summary, setSummary] = useState<MyResourcePermissions | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isListScrolling, setIsListScrolling] = useState(false);
-  const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
-      const res = await activePermissionApi.getPermissions(resourceType, resourceId);
-      if (res) setEntries(res);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [activePermissionApi, resourceType, resourceId]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [pendingAssigneeId, setPendingAssigneeId] = useState<string | null>(
+    null,
+  );
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, [loadData, refreshKey]);
+    onRosterChange?.(assignees);
+  }, [assignees, onRosterChange]);
 
   useEffect(() => {
-    setListTab(fixedSubjectType ?? "user");
-    setUserSelectedTab(false);
     setSearchQuery("");
-  }, [resourceId, fixedSubjectType]);
+  }, [fixedSubjectType, resourceId]);
 
   useEffect(() => {
-    return () => {
-      if (listScrollTimerRef.current) clearTimeout(listScrollTimerRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (skipGrantableModelsRequest) {
-      if (!prefetchedGrantableModelsLoaded) return;
-      setGrantableModels(prefetchedGrantableModels || []);
-      setUseDefaultModels(prefetchedUseDefaultModels);
+    if (!context.can_manage_permission || context.mode !== "CUSTOM") {
+      setModels([]);
       return;
     }
-
-    activePermissionApi.getGrantableRelationModels(resourceType, resourceId)
-      .then((res) => {
-        setUseDefaultModels(false);
-        setGrantableModels(Array.isArray(res) ? res : []);
+    let cancelled = false;
+    void getGrantablePermissionModels(resourceType, resourceId)
+      .then((result) => {
+        if (!cancelled) setModels(result.filter((model) => model.active));
       })
       .catch(() => {
-        setUseDefaultModels(false);
-        setGrantableModels([]);
+        if (!cancelled) setModels([]);
       });
+    return () => {
+      cancelled = true;
+    };
+  }, [context.can_manage_permission, context.mode, resourceId, resourceType]);
+
+  const loadPage = useCallback(
+    async (cursor: string | null) => {
+      const page = await getResourcePermissionGrants(
+        resourceType,
+        resourceId,
+        { cursor, page_size: pageSize },
+      );
+      setAssignees((current) =>
+        cursor ? [...current, ...page.data] : page.data,
+      );
+      setNextCursor(page.next_cursor);
+      setHasMore(page.has_more);
+    },
+    [pageSize, resourceId, resourceType],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setAssignees([]);
+    setSummary(null);
+    setNextCursor(null);
+    setHasMore(false);
+    setFailed(false);
+    setLoading(true);
+
+    const request = context.can_manage_permission
+      ? getResourcePermissionGrants(resourceType, resourceId, {
+          cursor: null,
+          page_size: pageSize,
+        })
+      : getMyResourcePermissions(resourceType, resourceId);
+
+    void request
+      .then((result) => {
+        if (cancelled) return;
+        if (context.can_manage_permission) {
+          const page = result as Awaited<
+            ReturnType<typeof getResourcePermissionGrants>
+          >;
+          setAssignees(page.data);
+          setNextCursor(page.next_cursor);
+          setHasMore(page.has_more);
+        } else {
+          setSummary(result as MyResourcePermissions);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [
-    activePermissionApi,
-    prefetchedGrantableModels,
-    prefetchedGrantableModelsLoaded,
-    prefetchedUseDefaultModels,
+    context.can_manage_permission,
+    pageSize,
     refreshKey,
     resourceId,
     resourceType,
-    skipGrantableModelsRequest,
   ]);
 
-  const grantableModelOptions = useMemo<RelationModelOption[]>(() => {
-    if (useDefaultModels) return DEFAULT_MODELS;
-
-    return (grantableModels || []).map((m) => ({
-      id: m.id,
-      name: m.is_system ? localize(`com_permission.level_${m.relation}`) : m.name,
-      relation: m.relation as RelationLevel,
-    }));
-  }, [grantableModels, localize, useDefaultModels]);
-
-  const displayModels = useMemo<RelationModelOption[]>(() => {
-    const opts = [...grantableModelOptions];
-    const ids = new Set(opts.map((o) => o.id));
-    for (const entry of entries) {
-      if (!entry.model_id || ids.has(entry.model_id)) continue;
-      ids.add(entry.model_id);
-      opts.push({
-        id: entry.model_id,
-        name: entry.model_name || entry.relation,
-        relation: entry.relation as RelationLevel,
-      });
-    }
-    return opts.length ? opts : DEFAULT_MODELS;
-  }, [entries, grantableModelOptions]);
-
-  const subjectEntries = useMemo(
-    () => entries.filter((entry) => entry.subject_type === listTab),
-    [entries, listTab],
-  );
-  const ownerEntryCount = useMemo(
-    () => entries.filter((entry) => entry.subject_type === "user" && entry.relation === "owner").length,
-    [entries],
-  );
-
-  useEffect(() => {
-    if (fixedSubjectType || userSelectedTab || entries.length === 0 || subjectEntries.length > 0) return;
-    const firstNonEmptyTab = LIST_SUBJECT_TYPES.find((subjectType) =>
-      entries.some((entry) => entry.subject_type === subjectType),
-    );
-    if (firstNonEmptyTab) setListTab(firstNonEmptyTab);
-  }, [entries, fixedSubjectType, subjectEntries.length, userSelectedTab]);
-
-  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
-
-  // F038: the backend already resolves a department's full ancestor path into
-  // subject_name (父/子/孙), so no per-grant path-tree lookup is needed here.
-  const getEntryDisplayName = useCallback(
-    (entry: PermissionEntry) =>
-      entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`,
-    [],
-  );
-
-  const visibleEntries = useMemo(() => {
-    if (!normalizedSearchQuery) {
-      return subjectEntries;
-    }
-
-    return subjectEntries.filter((entry) => {
-      const name = getEntryDisplayName(entry);
-      const groupNames = entry.subject_group_names?.join(" ") ?? "";
-      const memberNames = entry.subject_member_names?.join(" ") ?? "";
-      const includeChildrenText =
-        entry.subject_type === "department" && entry.include_children
-          ? localize("com_permission.include_children")
-          : "";
-      return `${name} ${groupNames} ${memberNames} ${includeChildrenText}`
+  const visibleAssignees = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return assignees.filter((assignee) => {
+      if (assignee.subject.type !== fixedSubjectType) return false;
+      if (!query) return true;
+      return [
+        assignee.subject.name,
+        assignee.subject.id,
+        assignee.model.name,
+        assignee.source.type,
+        assignee.inherited_from,
+      ]
+        .filter(Boolean)
+        .join(" ")
         .toLowerCase()
-        .includes(normalizedSearchQuery);
+        .includes(query);
     });
-  }, [getEntryDisplayName, localize, normalizedSearchQuery, subjectEntries]);
+  }, [assignees, fixedSubjectType, searchQuery]);
 
-  const handleModify = async (entry: PermissionEntry, modelId: string) => {
-    const model = grantableModelOptions.find((item) => item.id === modelId);
-    const newLevel = (model?.relation || "viewer") as RelationLevel;
-    if (newLevel === entry.relation && (entry.model_id || entry.relation) === modelId) return;
-    // When only the relation model changes but the underlying relation stays the
-    // same, this is a binding-only update: the grant rewrites the binding while
-    // the FGA tuple is unchanged. Skip the revoke so we don't delete the very
-    // tuple the grant re-adds (which would drop the member from the list).
-    const relationChanged = newLevel !== entry.relation;
-    const revokes = relationChanged
-      ? [
-          {
-            subject_type: entry.subject_type,
-            subject_id: entry.subject_id,
-            relation: entry.relation,
-            ...(entry.subject_type === "department"
-              ? { include_children: Boolean(entry.include_children) }
-              : {}),
-          },
-        ]
-      : [];
+  const mutateAssignee = async (
+    assignee: PermissionGrantAssignee,
+    change:
+      | { op: "MOVE"; target_model_key: string }
+      | { op: "REMOVE" },
+  ) => {
+    if (pendingAssigneeId !== null) return;
+    setPendingAssigneeId(assignee.assignee_id);
+    setFailed(false);
     try {
-      await activePermissionApi.authorize(
-        resourceType,
-        resourceId,
-        [
-          {
-            subject_type: entry.subject_type,
-            subject_id: entry.subject_id,
-            relation: newLevel,
-            model_id: modelId,
-            ...(entry.subject_type === "department"
-              ? { include_children: Boolean(entry.include_children) }
-              : {}),
-          },
+      const result = await mutateResourceGrants(resourceType, resourceId, {
+        idempotency_key: createMutationIdempotencyKey(),
+        expected_resource_version: context.resource_version,
+        expected_catalog_release_id: context.catalog_release_id,
+        changes: [
+          change.op === "MOVE"
+            ? {
+                op: "MOVE",
+                assignee_id: assignee.assignee_id,
+                expected_assignee_version: assignee.assignee_version,
+                target_model_key: change.target_model_key,
+              }
+            : {
+                op: "REMOVE",
+                assignee_id: assignee.assignee_id,
+                expected_assignee_version: assignee.assignee_version,
+              },
         ],
-        revokes,
-      );
-      showToast({ message: localize("com_permission.success_modify"), status: "success" });
-      onChanged?.();
-      loadData();
-    } catch {
-      showToast({
-        message: entry.relation === "owner"
-          ? localize("com_permission.error_last_owner")
-          : localize("com_permission.error_revoke_failed"),
-        status: "error",
       });
+      setAssignees(result.items);
+      onMutationSuccess?.(result);
+    } catch {
+      setFailed(true);
+    } finally {
+      setPendingAssigneeId(null);
     }
   };
 
-  const getSubjectEntries = useCallback(
-    (entry: PermissionEntry) =>
-      entries.filter(
-        (candidate) =>
-          candidate.subject_type === entry.subject_type &&
-          candidate.subject_id === entry.subject_id,
-      ),
-    [entries],
-  );
-
-  const canManageEntry = useCallback(
-    (entry: PermissionEntry) => {
-      const currentModelId = entry.model_id || entry.relation;
-      return grantableModelOptions.some((model) => model.id === currentModelId);
-    },
-    [grantableModelOptions],
-  );
-
-  const canDeleteSubject = useCallback(
-    (entry: PermissionEntry) => {
-      if (!canManageEntry(entry)) return false;
-      const relatedEntries = getSubjectEntries(entry);
-      if (relatedEntries.some((candidate) => !canManageEntry(candidate))) return false;
-      const subjectOwnerCount = relatedEntries.filter(
-        (candidate) => candidate.subject_type === "user" && candidate.relation === "owner",
-      ).length;
-      return subjectOwnerCount === 0 || ownerEntryCount > subjectOwnerCount;
-    },
-    [canManageEntry, getSubjectEntries, ownerEntryCount],
-  );
-
-  const buildRevokeItemsForSubject = (entry: PermissionEntry): RevokeItem[] => {
-    const seen = new Set<string>();
-    return getSubjectEntries(entry).reduce<RevokeItem[]>((items, candidate) => {
-      const includeChildrenValues =
-        candidate.subject_type === "department"
-          ? (candidate.include_children ? [true, false] : [false])
-          : [undefined];
-
-      for (const includeChildren of includeChildrenValues) {
-        const key = [
-          candidate.subject_type,
-          candidate.subject_id,
-          candidate.relation,
-          includeChildren === undefined ? "" : String(includeChildren),
-        ].join(":");
-        if (seen.has(key)) {
-          continue;
-        }
-        seen.add(key);
-        items.push({
-          subject_type: candidate.subject_type,
-          subject_id: candidate.subject_id,
-          relation: candidate.relation,
-          ...(candidate.subject_type === "department"
-            ? { include_children: includeChildren }
-            : {}),
-        });
-      }
-      return items;
-    }, []);
-  };
-
-  const handleDeleteSubject = async (entry: PermissionEntry) => {
-    const ok = await confirm({
-      title: localize("com_permission.action_revoke"),
-      description: localize("com_permission.confirm_revoke"),
+  const handleRemove = async (assignee: PermissionGrantAssignee) => {
+    const confirmed = await confirm({
+      variant: "destructive",
+      title: localize("com_permission.confirm_revoke"),
+      description: assignee.subject.name || assignee.subject.id,
       confirmText: localize("com_permission.action_revoke"),
-      cancelText: localize("com_ui_cancel"),
     });
-    if (!ok) return;
-    const revokes = buildRevokeItemsForSubject(entry);
-    if (revokes.length === 0) return;
+    if (!confirmed) return;
+    await mutateAssignee(assignee, { op: "REMOVE" });
+  };
+
+  const handleLoadMore = async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
     try {
-      await activePermissionApi.authorize(
-        resourceType,
-        resourceId,
-        [],
-        revokes,
-      );
-      showToast({ message: localize("com_permission.success_revoke"), status: "success" });
-      onChanged?.();
-      loadData();
+      await loadPage(nextCursor);
     } catch {
-      showToast({
-        message: entry.relation === "owner"
-          ? localize("com_permission.error_last_owner")
-          : localize("com_permission.error_revoke_failed"),
-        status: "error",
-      });
+      setFailed(true);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
-  const subjectLabel = (type: ListSubjectType) => {
-    const map: Record<ListSubjectType, string> = {
-      user: localize("com_permission.subject_user"),
-      department: localize("com_permission.subject_department"),
-      user_group: localize("com_permission.subject_user_group"),
-    };
-    return map[type];
-  };
-
-  const getPermissionLabel = (entry: PermissionEntry) => {
-    const currentModelId = entry.model_id || entry.relation;
-    return (
-      displayModels.find((item) => item.id === currentModelId)?.name ||
-      entry.model_name ||
-      localize(`com_permission.level_${entry.relation}`)
-    );
-  };
-
-  const getSearchPlaceholder = (type: ListSubjectType) => {
-    const map: Record<ListSubjectType, string> = {
-      user:
-        localize("com_subscription.search_user_placeholder") ||
-        localize("com_permission.search_user"),
-      department: localize("com_permission.search_department"),
-      user_group: localize("com_permission.search_user_group"),
-    };
-    return map[type];
-  };
-
-  const getEntryCaption = (entry: PermissionEntry) => {
-    if (entry.subject_type === "user") {
-      return entry.subject_group_names?.join("、") ?? "";
-    }
-
-    if (entry.subject_type === "department") {
-      return entry.include_children
-        ? `${localize("com_permission.subject_department")} · ${localize("com_permission.include_children")}`
-        : localize("com_permission.subject_department");
-    }
-
-    return entry.subject_member_names?.join("、") ?? localize("com_permission.subject_user_group");
-  };
-
-  const handleListScroll = () => {
-    setIsListScrolling(true);
-    if (listScrollTimerRef.current) clearTimeout(listScrollTimerRef.current);
-    listScrollTimerRef.current = setTimeout(() => setIsListScrolling(false), 500);
-  };
+  const searchPlaceholder = localize(
+    fixedSubjectType === "user_group"
+      ? "com_permission.search_user_group"
+      : `com_permission.search_${fixedSubjectType}`,
+  );
 
   if (loading) {
     return (
-      <div className="flex h-full flex-1 items-center justify-center">
-        <LoadingIcon className="size-20 text-primary" />
+      <div
+        className="flex min-h-40 items-center justify-center gap-2 text-sm text-[#818181]"
+        role="status"
+      >
+        <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+        {localize("f048_permission.roster.loading")}
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-2 py-12">
-        <span className="text-sm text-gray-500">{localize("com_permission.error_permission_denied")}</span>
-        <button
-          className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
-          onClick={loadData}
-        >
-          <RotateCcw className="h-3.5 w-3.5" /> {localize("com_ui_retry")}
-        </button>
-      </div>
-    );
-  }
-
-  if (entries.length === 0) {
-    return (
-      <div className="py-12 text-center text-sm text-gray-500">
-        {localize("com_permission.empty_permissions")}
-      </div>
-    );
-  }
+  if (summary) return <SummaryView summary={summary} />;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      {!fixedSubjectType && (
-        <div className="flex w-fit shrink-0 gap-1 rounded-md bg-gray-100 p-1">
-          {LIST_SUBJECT_TYPES.map((subjectType) => (
-            <button
-              key={subjectType}
-              type="button"
-              className={`rounded px-3 py-1.5 text-sm transition-colors ${
-                listTab === subjectType
-                  ? "bg-white text-gray-900 shadow"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-              onClick={() => {
-                setUserSelectedTab(true);
-                setListTab(subjectType);
-                setSearchQuery("");
-              }}
-            >
-              {subjectLabel(subjectType)}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className={cn("flex min-h-0 flex-1 flex-col gap-3", !fixedSubjectType && "mt-4")}>
+    <>
+      <div className="flex h-full min-h-0 flex-col">
         <div className="relative shrink-0">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
           <input
-            type="text"
+            type="search"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={getSearchPlaceholder(listTab)}
-            className="h-8 w-full rounded-md border border-border-base bg-white pl-9 pr-3 text-[14px] text-text-1 outline-none transition-colors placeholder:text-text-3 focus:border-border-deep"
+            placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
+            className="h-9 w-full rounded-md border border-[#EBECF0] bg-white pl-9 pr-3 text-sm text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
           />
         </div>
 
-        <div
-          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto scroll-on-scroll"
-          onScroll={handleListScroll}
-          data-scrolling={isListScrolling ? "true" : "false"}
-        >
-          {visibleEntries.length === 0 ? (
-            <PermissionEmptyState
-              message={
-                normalizedSearchQuery && listTab === "user"
-                  ? localize("com_permission.empty_search")
-                  : localize("com_permission.list_empty_for_subject")
+        {failed && (
+          <div
+            className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+            role="alert"
+          >
+            <AlertTriangle aria-hidden="true" className="size-4" />
+            {localize("f048_permission.roster.load_failed")}
+          </div>
+        )}
+
+        <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
+          {visibleAssignees.map((assignee) => (
+            <RosterRow
+              key={assignee.assignee_id}
+              assignee={assignee}
+              context={context}
+              models={models}
+              pending={pendingAssigneeId === assignee.assignee_id}
+              onMove={(item, modelKey) =>
+                void mutateAssignee(item, {
+                  op: "MOVE",
+                  target_model_key: modelKey,
+                })
               }
+              onRemove={(item) => void handleRemove(item)}
             />
-          ) : (
-            <div className="flex flex-col">
-              {visibleEntries.map((entry, index) => {
-                const Icon = SUBJECT_ICONS[entry.subject_type] || User;
-                const currentModelId = entry.model_id || entry.relation;
-                const isOwner = entry.relation === "owner";
-                const canManageOwnerEntry = isOwner && ownerEntryCount > 1;
-                // Only users can be owners; departments and user groups cannot be
-                // granted the owner relation, so hide owner models for them.
-                const entryModelOptions = entry.subject_type === "user"
-                  ? grantableModelOptions
-                  : grantableModelOptions.filter((model) => model.relation !== "owner");
-                // The channel creator's permission level is permanent: never
-                // show the modify/remove dropdown — render the level as static text.
-                const isCreatorEntry = entry.is_creator === true;
-                // You cannot modify/remove your OWN permission row — that would
-                // strip your management access and lock you out of the dialog.
-                const isSelfEntry =
-                  entry.subject_type === "user" &&
-                  currentUserId != null &&
-                  String(entry.subject_id) === String(currentUserId);
-                const canModifyEntry =
-                  !isCreatorEntry && !isSelfEntry && canManageEntry(entry) && entryModelOptions.length > 0;
-                const canDeleteEntrySubject = !isCreatorEntry && !isSelfEntry && canDeleteSubject(entry);
-                const displayName = getEntryDisplayName(entry);
-                const entryCaption = getEntryCaption(entry);
-
-                return (
-                  <div
-                    key={`${entry.subject_type}-${entry.subject_id}-${index}`}
-                    className="flex items-center gap-4 border-b border-fill-2 py-3 last:border-b-0"
-                  >
-                    <div className="flex w-[200px] min-w-0 shrink items-center gap-2">
-                      {entry.subject_type === "user" ? (
-                        <Avatar className="h-8 w-8 shrink-0">
-                          <AvatarName
-                            name={displayName}
-                            className="text-[14px] font-bold leading-[14px]"
-                          />
-                        </Avatar>
-                      ) : (
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-500">
-                          <Icon className="h-4 w-4" />
-                        </span>
-                      )}
-                      <TruncatedTooltip content={displayName} className="truncate text-[14px] leading-[22px] text-text-1">
-                        {displayName}
-                      </TruncatedTooltip>
-                    </div>
-
-                    <TruncatedTooltip content={entryCaption} as="p" className="min-w-0 flex-1 truncate text-[12px] leading-5 text-text-3">
-                      {entryCaption}
-                    </TruncatedTooltip>
-
-                    <div className="flex w-[136px] shrink-0 items-center justify-end gap-1">
-                      <PermissionLevelMenu
-                        label={getPermissionLabel(entry)}
-                        options={entryModelOptions}
-                        activeId={currentModelId}
-                        canChangeLevel={canModifyEntry && (!isOwner || canManageOwnerEntry)}
-                        onChange={(modelId) => {
-                          void handleModify(entry, modelId);
-                        }}
-                        onRemove={canDeleteEntrySubject
-                          ? () => {
-                            void handleDeleteSubject(entry);
-                          }
-                          : undefined}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          ))}
+          {visibleAssignees.length === 0 && (
+            <p className="py-10 text-center text-sm text-[#818181]">
+              {searchQuery.trim()
+                ? localize("com_permission.empty_search")
+                : localize("com_permission.list_empty_for_subject")}
+            </p>
+          )}
+          {hasMore && (
+            <Button
+              type="button"
+              color="default"
+              variant="outlined"
+              size="medium"
+              className="mx-auto mt-3 flex"
+              disabled={loadingMore}
+              onClick={() => void handleLoadMore()}
+            >
+              {loadingMore
+                ? localize("f048_permission.roster.loading_more")
+                : localize("f048_permission.roster.load_more")}
+            </Button>
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }

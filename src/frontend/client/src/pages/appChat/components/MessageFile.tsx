@@ -1,10 +1,7 @@
-import { MessageImage } from "~/components/Chat/Messages/Content/MessageImage"
-import { isImageFileName } from "~/components/ui/icon/File/FileIcon"
 import { formatStrTime } from "~/utils"
-import ChatFile from "./ChatFile"
+import { AppChatFileList } from "./AppChatFileList"
 
 export default function MessageFile({ data, title, logo }) {
-    const files = data.files || []
 
     return <div className="flex w-full">
         <div className="w-fit group max-w-[90%]">
@@ -19,21 +16,7 @@ export default function MessageFile({ data, title, logo }) {
                     {logo}
                     <div>
                         <p className="select-none font-semibold text-base mb-2">{title}</p>
-                        {/* Pictures show as pictures; anything else stays the
-                            download card it has always been. */}
-                        <div className="flex flex-wrap gap-2">
-                            {files.map((file, i) => {
-                                const fileName = file.file_name || file.filename
-                                return isImageFileName(fileName)
-                                    ? <MessageImage
-                                        key={file.file_id ?? i}
-                                        conversationId={data.chat_id}
-                                        fileId={file.file_id}
-                                        altText={fileName}
-                                    />
-                                    : <ChatFile key={file.file_id ?? i} fileName={fileName} filePath={file.file_url} />
-                            })}
-                        </div>
+                        <AppChatFileList files={data.files} />
                     </div>
                 </div>
             </div>

@@ -63,7 +63,10 @@ bower_components
 build/Release
 
 # Dependency directories
-node_modules/
+# No trailing slash: a symlinked node_modules (e.g. a worktree pointing at
+# another checkout's install) is a file to git, and `node_modules/` would not
+# match it — it got committed once that way.
+node_modules
 jspm_packages/
 
 # TypeScript v1 declaration files
@@ -298,3 +301,16 @@ docs-ui-refactor/
 # CoAligne local state + sync config (per-developer; the tool rewrites them itself)
 .coaligne/
 .coaligneignore
+
+# design-sync (claude.ai/design) — generated component bundle + local tooling.
+# All generated/scaffolding, produced by syncing the Linsight UI; not versioned
+# here. To version .ds-sync-gen hand-authored build inputs for a fresh clone,
+# `git add -f` them explicitly.
+/ds-bundle/
+/.ds-sync/
+/.design-sync/
+/src/frontend/client/.ds-sync-gen/
+
+# Packaged Linsight skill bundles (scripts/pack_linsight_skill.sh output)
+/dist/
+.pnpm-store/

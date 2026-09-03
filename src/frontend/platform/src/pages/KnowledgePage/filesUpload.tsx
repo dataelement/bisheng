@@ -4,7 +4,7 @@ import { Button } from "@/components/bs-ui/button";
 import StepProgress from "@/components/bs-ui/step";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
-import { checkPermission } from "@/controllers/API/permission";
+import { checkResourceActionApi } from "@/controllers/API/permission";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -74,7 +74,9 @@ export default function FilesUpload() {
         setHasEditPermission(false);
         return;
       }
-      const result = await captureAndAlertRequestErrorHoc(checkPermission('knowledge_library', String(knowledgeId), 'can_edit', 'edit_kb'));
+      const result = await captureAndAlertRequestErrorHoc(
+        checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'edit' })
+      );
       const allowed = !!result?.allowed;
       setHasEditPermission(allowed);
       setPermissionChecked(true);

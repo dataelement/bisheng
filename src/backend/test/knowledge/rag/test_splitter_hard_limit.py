@@ -10,10 +10,9 @@ because they rewrite tables to per-row markdown before splitting.
 
 from langchain_core.documents import Document
 
+from bisheng.common.constants.knowledge import KNOWLEDGE_MAX_CHUNK_CHARS
 from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransformer
 
-# On this branch SplitterTransformer hardcodes the cap rather than reading a shared constant.
-KNOWLEDGE_MAX_CHUNK_CHARS = 10000
 DEFAULT_SEPARATORS = ["\n\n", "\n", "。", "\\."]
 CHUNK_SIZE = 1000
 

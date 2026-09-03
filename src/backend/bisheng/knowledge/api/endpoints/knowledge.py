@@ -33,6 +33,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeNoEmbeddingError,
     KnowledgeNotExistError,
     KnowledgeCPEmptyError,
+    KnowledgeSpaceListNotSupportedError,
 )
 from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
 from bisheng.common.schemas.api import resp_200, resp_500, UnifiedResponseModel
@@ -40,7 +41,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.core.logger import trace_id_var
-from bisheng.database.models.role_access import AccessType, WebMenuResource
+from bisheng.database.models.role_access import WebMenuResource
 from bisheng.knowledge.api.dependencies import get_knowledge_service, get_knowledge_file_service
 from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
@@ -70,6 +71,9 @@ from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router
 router = APIRouter(prefix="/knowledge", tags=["Knowledge"])
+
+FILE_PREVIEW_PERMISSION_ACTION = None
+FILE_DOWNLOAD_PERMISSION_ACTION = "download"
 
 
 @router.post("/upload")
@@ -378,7 +382,7 @@ async def get_knowledge(
     *,
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
-    permission_id: Literal["view_kb", "use_kb"] = Query(default="use_kb"),
+    action: Literal["visible", "use"] = Query(default="use"),
     name: str = None,
     knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value, alias="type"),
     sort_by: Literal["create_time", "update_time", "name"] = Query(default="update_time"),
@@ -405,6 +409,14 @@ async def get_knowledge(
     infinite-scroll loading on the client.
     """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
+    # Knowledge spaces have their own dedicated list endpoints; this handler
+    # covers document/QA libraries only. Rejecting SPACE here keeps the
+    # response uniform across identities — the previous behaviour returned an
+    # empty page for regular users and the full set for super admins because
+    # the resource-type mismatch was only detected inside F048 target
+    # resolution, which super_admin bypasses.
+    if knowledge_type is KnowledgeTypeEnum.SPACE:
+        raise KnowledgeSpaceListNotSupportedError.http_exception()
     pinned: Optional[List[int]] = None
     if preferred_ids:
         parsed: List[int] = []
@@ -425,7 +437,7 @@ async def get_knowledge(
         sort_by=sort_by,
         cursor=cursor,
         page_size=page_size,
-        permission_id=permission_id,
+        action=action,
         preferred_ids=pinned,
     )
     return resp_200(data=result)
@@ -530,7 +542,7 @@ async def get_QA_list(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Get knowledge base file information."""
-    db_knowledge = await KnowledgeService.ajudge_qa_knowledge_view(login_user, qa_knowledge_id)
+    await KnowledgeService.ajudge_qa_knowledge_view(login_user, qa_knowledge_id)
 
     qa_list, total_count = await knowledge_imp.list_qa_by_knowledge_id(
         qa_knowledge_id, page_size, page_num, question, answer, keyword, status
@@ -547,11 +559,10 @@ async def get_QA_list(
         {
             "data": data,
             "total": total_count,
-            "writeable": await KnowledgeService.permission_service.check_access_async(
+            "writeable": await KnowledgeService.permission_service.check_action_async(
                 login_user=login_user,
-                owner_user_id=db_knowledge.user_id,
                 knowledge_id=qa_knowledge_id,
-                access_type=AccessType.KNOWLEDGE_WRITE,
+                action="edit",
             ),
         }
     )

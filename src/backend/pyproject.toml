@@ -1,6 +1,6 @@
 [project]
 name = "backend"
-version = "2.6.0"
+version = "3.0.0-beta1"
 description = "BISHENG backend service"
 readme = "README.md"
 license = "Apache 2.0"
@@ -103,7 +103,7 @@ dependencies = [
     # Previously available transitively; the LangChain 1.x dependency graph no
     # longer pulls it in, but bisheng.user / sso_sync import it directly.
     "rsa>=4.9",
-    "deepagents>=0.6.3,<0.7",
+    "deepagents>=0.6.12,<0.7",
     "pypinyin>=0.55.0",
 ]
 

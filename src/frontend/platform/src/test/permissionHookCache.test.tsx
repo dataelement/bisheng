@@ -1,12 +1,13 @@
 import { userContext } from "@/contexts/userContext"
-import { usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels"
+import { useResourceActions } from "@/components/bs-comp/permission/useResourceActions"
 import { render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
-const checkPermission = vi.fn()
+const getMyResourcePermissionsApi = vi.fn()
 
 vi.mock("@/controllers/API/permission", () => ({
-  checkPermission: (...args: unknown[]) => checkPermission(...args),
+  getMyResourcePermissionsApi: (...args: unknown[]) =>
+    getMyResourcePermissionsApi(...args),
 }))
 
 vi.mock("@/components/bs-ui/toast/use-toast", () => ({
@@ -14,10 +15,10 @@ vi.mock("@/components/bs-ui/toast/use-toast", () => ({
 }))
 
 function PermissionProbe() {
-  const { loading } = usePermissionIds(
+  const { loading } = useResourceActions(
     "workflow",
     ["workflow-cache-test"],
-    ["edit_app", "publish_app"],
+    ["edit", "publish"],
   )
 
   return <span>{loading ? "loading" : "ready"}</span>
@@ -38,14 +39,18 @@ function renderProbe() {
   )
 }
 
-describe("usePermissionIds cache", () => {
+describe("useResourceActions cache", () => {
   it("reuses a workflow permission result after the header remounts", async () => {
-    checkPermission.mockResolvedValue({ allowed: true })
+    getMyResourcePermissionsApi.mockResolvedValue({
+      resource_type: "workflow",
+      resource_id: "workflow-cache-test",
+      actions: ["edit", "publish", "visible"],
+    })
 
     const firstRender = renderProbe()
     await waitFor(() => {
       expect(screen.getByText("ready")).toBeInTheDocument()
-      expect(checkPermission).toHaveBeenCalledTimes(2)
+      expect(getMyResourcePermissionsApi).toHaveBeenCalledTimes(1)
     })
 
     firstRender.unmount()
@@ -54,6 +59,6 @@ describe("usePermissionIds cache", () => {
     await waitFor(() => {
       expect(screen.getByText("ready")).toBeInTheDocument()
     })
-    expect(checkPermission).toHaveBeenCalledTimes(2)
+    expect(getMyResourcePermissionsApi).toHaveBeenCalledTimes(1)
   })
 })

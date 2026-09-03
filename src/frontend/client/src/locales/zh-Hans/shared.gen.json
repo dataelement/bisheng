@@ -15,7 +15,8 @@
       "previewFailed": "预览失败",
       "downloadOriginal": "下载原始文件",
       "imageLoadFailed": "图片加载失败",
-      "imageRef": "图片引用"
+      "imageRef": "图片引用",
+      "imagesOutsideTable": "表格区域外的图片"
     }
   }
 }

@@ -4,7 +4,6 @@ Provides async and sync functions for generating conversation titles using LLM.
 """
 
 import logging
-from typing import Optional
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
@@ -20,14 +19,17 @@ DEFAULT_TITLE = "New Chat"
 async def generate_conversation_title_async(
         question: str,
         llm: BaseChatModel,
-        answer: Optional[str] = None,
 ) -> str:
-    """Generate a conversation title asynchronously.
+    """Generate a conversation title asynchronously, from the QUESTION alone.
+
+    The assistant's answer used to be fed in as well, which forced the whole
+    title step to wait for the round to finish. The question already carries the
+    topic, so dropping the answer lets a title be produced as soon as the user
+    submits — and removes a dependency on a reply that may never arrive.
 
     Args:
         question: The user's question content.
         llm: The BaseChatModel instance to use for generation.
-        answer: Optional assistant's answer content.
 
     Returns:
         Generated title string, or default title if generation fails.
@@ -38,7 +40,6 @@ async def generate_conversation_title_async(
             "gen_title",
             "conversation_title",
             human=question or "",
-            assistant=answer or "",
         )
 
         messages = [HumanMessage(content=prompt_obj.prompt)]
@@ -55,14 +56,14 @@ async def generate_conversation_title_async(
 def generate_conversation_title_sync(
         question: str,
         llm: BaseChatModel,
-        answer: Optional[str] = None,
 ) -> str:
-    """Generate a conversation title synchronously.
+    """Generate a conversation title synchronously, from the QUESTION alone.
+
+    See ``generate_conversation_title_async`` for why the answer is not used.
 
     Args:
         question: The user's question content.
         llm: The BaseChatModel instance to use for generation.
-        answer: Optional assistant's answer content.
 
     Returns:
         Generated title string, or default title if generation fails.
@@ -73,7 +74,6 @@ def generate_conversation_title_sync(
             "gen_title",
             "conversation_title",
             human=question or "",
-            assistant=answer or "",
         )
 
         messages = [HumanMessage(content=prompt_obj.prompt)]

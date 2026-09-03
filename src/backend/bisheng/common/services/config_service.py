@@ -134,6 +134,191 @@ class ConfigService(Settings):
                 except Exception as e:
                     logger.exception(e)
                     await session.rollback()
+                return
+
+            # The row exists, so the branch above will never run again on this
+            # install — which used to mean a setting shipped in a later release
+            # never reached the database at all. Backfill the missing keys (values
+            # already stored are left exactly as they are, so an operator's tuning
+            # survives every upgrade).
+            await self._backfill_missing_config(session, config, config_content, all_config_key)
+
+    async def _backfill_missing_config(
+        self, session, config: list[Config], config_content: str, all_config_key: str
+    ) -> None:
+        """Add newly shipped config keys to the stored config; never overwrite.
+
+        Best-effort by design: a failure here must not stop the service from
+        booting, because the code paths that read these settings all have their
+        own defaults.
+        """
+        try:
+            db_row = next((conf for conf in config if conf.key == all_config_key), None)
+            if db_row is None or not db_row.value:
+                return
+            merged, added = self.merge_missing_config(config_content, db_row.value)
+            if not added:
+                return
+            # Re-parse before writing: a malformed merge must never replace a
+            # working configuration.
+            yaml.safe_load(merged)
+            db_row.value = merged
+            session.add(db_row)
+            await session.commit()
+            # The read path caches this row in redis for 100s; drop it so the new
+            # keys are visible immediately instead of after the TTL.
+            try:
+                get_redis_client_sync().delete("config:initdb_config")
+            except Exception:
+                logger.warning("config backfill: redis cache eviction failed; new keys apply within 100s")
+            logger.info(f"config backfill: added {len(added)} missing key(s) to initdb_config: {added}")
+        except Exception:
+            logger.exception("config backfill failed; stored configuration left untouched")
+            try:
+                await session.rollback()
+            except Exception:
+                logger.warning("config backfill: rollback failed")
+
+    @staticmethod
+    def _extract_block(lines: list[str], key: str, indent: str) -> list[str]:
+        """Lines of ``<indent>key:`` and everything nested under it, plus the
+        comment lines directly above it.
+
+        Text-level on purpose: a yaml.safe_load/dump round-trip would drop every
+        comment in the file, and those comments are what operators read in the
+        system-config page.
+        """
+        prefix = f"{indent}{key}:"
+        for i, line in enumerate(lines):
+            if not (line == prefix.rstrip() or line.startswith(f"{prefix} ") or line.startswith(prefix)):
+                continue
+            # Walk up over the comment block that documents this key.
+            start = i
+            while start > 0 and lines[start - 1].strip().startswith("#"):
+                start -= 1
+            # Walk down while lines are blank or nested deeper than this key.
+            end = i + 1
+            while end < len(lines):
+                nxt = lines[end]
+                if not nxt.strip():
+                    end += 1
+                    continue
+                if len(nxt) - len(nxt.lstrip()) > len(indent):
+                    end += 1
+                    continue
+                break
+            # Trailing blank lines belong to the separation, not to the block.
+            while end > i + 1 and not lines[end - 1].strip():
+                end -= 1
+            return lines[start:end]
+        return []
+
+    @staticmethod
+    def _section_child_indent(lines: list[str], anchor: int) -> str:
+        """Return the indentation already used by a stored section's children."""
+        for line in lines[anchor + 1 :]:
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            leading = line[: len(line) - len(line.lstrip())]
+            if not leading:
+                break
+            return leading
+        return "  "
+
+    @staticmethod
+    def _reindent_block(block: list[str], source_indent: str, target_indent: str) -> list[str]:
+        """Move a raw YAML block while preserving its relative indentation."""
+        if source_indent == target_indent:
+            return block
+        return [
+            f"{target_indent}{line[len(source_indent) :]}" if line.startswith(source_indent) else line
+            for line in block
+        ]
+
+    @staticmethod
+    def merge_missing_config(file_config: str, db_config: str) -> tuple[str, list[str]]:
+        """Add keys that exist in the shipped yaml but not in the stored config.
+
+        Returns ``(merged_text, added_paths)``; ``added_paths`` is empty when the
+        stored config already covers the file.
+
+        Why this exists: ``init_config`` only ever WRITES the yaml when the DB has
+        no ``initdb_config`` row at all, so on any environment that has been
+        installed once, a newly shipped setting never reaches the database. Values
+        then silently fall back to the Field defaults in ``settings.py`` — and only
+        for as long as nobody writes that section from the config page. A release
+        that adds ``linsight.max_model_turns`` is invisible to every existing
+        install; that is exactly how a 115-turn budget stayed in force after the
+        default had moved on.
+
+        Rules, in order of importance:
+          1. NEVER overwrite a value the DB already has — an operator's tuning
+             always wins, which is what makes running this on every boot safe.
+          2. Keys the DB has and the file does not are kept untouched.
+          3. New keys are carried over as RAW TEXT together with their comments.
+          4. Two levels deep: a missing top-level section comes over whole
+             (nested content included); inside a section that already exists, only
+             its missing direct children are inserted.
+        """
+        file_cfg = yaml.safe_load(file_config) or {}
+        db_cfg = yaml.safe_load(db_config) or {}
+        if not isinstance(file_cfg, dict) or not isinstance(db_cfg, dict):
+            return db_config, []
+
+        added: list[str] = []
+        file_lines = file_config.split("\n")
+        out_lines = db_config.split("\n")
+
+        for key, file_value in file_cfg.items():
+            if key not in db_cfg:
+                block = ConfigService._extract_block(file_lines, key, "")
+                if block:
+                    while out_lines and not out_lines[-1].strip():
+                        out_lines.pop()
+                    out_lines.extend(["", "", *block])
+                    added.append(key)
+                continue
+
+            # Section present on both sides — fill in only its missing children.
+            db_value = db_cfg.get(key)
+            if not isinstance(file_value, dict) or not isinstance(db_value, dict):
+                continue
+            missing = [sub for sub in file_value if sub not in db_value]
+            if not missing:
+                continue
+
+            section = ConfigService._extract_block(file_lines, key, "")
+            if not section:
+                continue
+            # Re-locate the section on every key: earlier insertions shift the lines.
+            anchor = None
+            for i, line in enumerate(out_lines):
+                if line.startswith(f"{key}:"):
+                    anchor = i
+                    break
+            if anchor is None:
+                continue
+            end = anchor + 1
+            while end < len(out_lines):
+                nxt = out_lines[end]
+                if not nxt.strip() or nxt.startswith((" ", "\t")):
+                    end += 1
+                    continue
+                break
+            while end > anchor + 1 and not out_lines[end - 1].strip():
+                end -= 1
+
+            insert: list[str] = []
+            target_indent = ConfigService._section_child_indent(out_lines, anchor)
+            for sub in missing:
+                block = ConfigService._extract_block(section, sub, "  ")
+                if block:
+                    insert.extend(ConfigService._reindent_block(block, "  ", target_indent))
+                    added.append(f"{key}.{sub}")
+            if insert:
+                out_lines[end:end] = insert
+
+        return "\n".join(out_lines), added
 
     @staticmethod
     def merge_old_config(new_config: str, old_db_config: list[Config], old_db_keys: dict[str, str]):

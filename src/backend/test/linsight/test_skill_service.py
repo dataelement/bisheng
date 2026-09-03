@@ -4,6 +4,7 @@ fake; disk IO runs against a tmp SkillStore."""
 
 import io
 import zipfile
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -19,6 +20,8 @@ from bisheng.linsight.domain.models.linsight_skill import LinsightSkill
 from bisheng.linsight.domain.schemas.skill_schema import SkillCreateForm
 from bisheng.linsight.domain.services import skill_service as service_module
 from bisheng.linsight.domain.services.skill_service import SkillService
+from test.linsight.fixtures.fake_minio import FakeMinioStorage
+
 from bisheng.linsight.domain.services.skill_store import (
     MAX_BUNDLE_SIZE,
     MAX_UNPACKED_SIZE,
@@ -89,8 +92,11 @@ class FakeSkillDao:
 def service(tmp_path, monkeypatch):
     FakeSkillDao.reset()
     monkeypatch.setattr(service_module, "LinsightSkillDao", FakeSkillDao)
-    monkeypatch.setattr(service_module.PermissionService, "authorize", AsyncMock())
-    return SkillService(store=SkillStore(root=tmp_path))
+    owner_projection = SimpleNamespace(authorize_created=AsyncMock())
+    return SkillService(
+        store=SkillStore(root=tmp_path, minio=FakeMinioStorage()),
+        owner_projection=owner_projection,
+    )
 
 
 def _form(**overrides) -> SkillCreateForm:
@@ -126,10 +132,10 @@ class TestCreate:
         assert detail.enabled is True
         assert detail.source == "manual"
         # SKILL.md rendered with display-name metadata
-        text = service.store.read_text(TENANT, detail.name)
+        text = detail.source_text
         assert "display-name: 季度财报分析" in text
-        # owner tuple written best-effort
-        service_module.PermissionService.authorize.assert_awaited_once()
+        # F048 protected owner is durably projected before returning.
+        service._owner_projection.authorize_created.assert_awaited_once()
 
     async def test_duplicate_name_rejected(self, service):
         await service.create_from_form(TENANT, USER, _form())
@@ -246,7 +252,7 @@ class TestUpdateDelete:
         )
         assert detail.display_name == "演示技能v2"
         assert {f.path for f in detail.files} == {SKILL_MD, "scripts/a.py"}
-        assert "# 新正文" in service.store.read_text(TENANT, "demo-skill")
+        assert "# 新正文" in detail.source_text
 
     async def test_update_form_cannot_change_id(self, service):
         await service.create_from_form(TENANT, USER, _form())
@@ -280,7 +286,7 @@ class TestUpdateDelete:
     async def test_delete_removes_db_and_disk(self, service):
         await service.create_from_form(TENANT, USER, _form())
         await service.delete(TENANT, "ji-du-cai-bao-fen-xi")
-        assert not service.store.exists(TENANT, "ji-du-cai-bao-fen-xi")
+        assert service.store.minio.keys("linsight/skills/") == []  # every version removed
         with pytest.raises(SkillNotFoundError):
             await service.get_detail(TENANT, "ji-du-cai-bao-fen-xi")
 
@@ -291,13 +297,18 @@ class TestImportNameNormalization:
     the form-create path stays strict — the user typed that ID explicitly."""
 
     async def test_uppercase_name_normalized_on_upload(self, service):
-        md = b"---\nname: Presentations\ndescription: Create or edit PowerPoint decks.\n---\n\n# body\n"
+        md = (
+            b"---\n"
+            b"name: Presentations\n"
+            b"description: Create or edit PowerPoint decks.\n"
+            b"---\n\n# body\n"
+        )
         detail = await service.create_from_upload(TENANT, USER, "presentations.md", md)
         assert detail.name == "presentations"
         assert detail.display_name == "Presentations"
         assert detail.normalized_from == "Presentations"
         # stored SKILL.md is rewritten so frontmatter name == bundle dir name
-        text = service.store.read_text(TENANT, "presentations")
+        text = detail.source_text
         assert "name: presentations" in text
         assert "display-name: Presentations" in text
 
@@ -309,9 +320,16 @@ class TestImportNameNormalization:
         assert detail.normalized_from == "演示文稿"
 
     async def test_foreign_frontmatter_keys_survive_rewrite(self, service):
-        md = b"---\nname: My-Skill\ndescription: demo\nlicense: Apache-2.0\nallowed-tools: Bash, Read\n---\n\nbody"
-        await service.create_from_upload(TENANT, USER, "s.md", md)
-        text = service.store.read_text(TENANT, "my-skill")
+        md = (
+            b"---\n"
+            b"name: My-Skill\n"
+            b"description: demo\n"
+            b"license: Apache-2.0\n"
+            b"allowed-tools: Bash, Read\n"
+            b"---\n\nbody"
+        )
+        detail = await service.create_from_upload(TENANT, USER, "s.md", md)
+        text = detail.source_text
         assert "license: Apache-2.0" in text
         assert "allowed-tools: Bash, Read" in text
 
@@ -326,7 +344,7 @@ class TestImportNameNormalization:
         )
         detail = await service.create_from_upload(TENANT, USER, "s.md", md)
         assert detail.display_name == "演示技能"
-        text = service.store.read_text(TENANT, "presentations")
+        text = detail.source_text
         assert "display-name: 演示技能" in text
         assert "display-name: Presentations" not in text
 
@@ -334,7 +352,7 @@ class TestImportNameNormalization:
         raw = _md_bytes()
         detail = await service.create_from_upload(TENANT, USER, "demo-skill.md", raw)
         assert detail.normalized_from is None
-        assert service.store.read_text(TENANT, "demo-skill").encode() == raw
+        assert detail.source_text.encode() == raw
 
     async def test_unsalvageable_name_still_rejected(self, service):
         md = b"---\nname: '!!!'\ndescription: demo\n---\n\nbody"

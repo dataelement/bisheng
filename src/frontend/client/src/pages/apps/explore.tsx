@@ -28,9 +28,9 @@ export default function ExplorePlaza() {
     const [loadingMore, setLoadingMore] = useState(false)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
 
-    // --- 新增滚动加载相关状态 ---
-    const [page, setPage] = useState(1);
+    // --- 游标瀑布流加载状态 ---
     const [hasMore, setHasMore] = useState(true);
+    const cursorRef = useRef<string | null>(null);
     const loaderRef = useRef<HTMLDivElement>(null);
     const loadMoreLockRef = useRef(false);
     const pageSize = 20;
@@ -51,17 +51,17 @@ export default function ExplorePlaza() {
         return 1;
     }, [isAtLeast768, isAtLeast1024]);
 
-    // Modify Fetch Function
-    const fetchAgents = useCallback(async (query: string, categoryId: number | string, currentPage: number, isAppend: boolean) => {
+    // Fetch one cursor page. `cursor === null` starts a fresh list (first page).
+    const fetchAgents = useCallback(async (query: string, categoryId: number | string, cursor: string | null, isAppend: boolean) => {
         if (loading || loadingMore) return;
         if (isAppend) setLoadingMore(true);
         else setLoading(true);
         try {
             const result = categoryId === 'uncategorized'
-                ? await getUncategorized(currentPage, pageSize, query)
-                : await getChatOnlineApi(currentPage, query, categoryId as number, pageSize);
+                ? await getUncategorized(cursor, pageSize, query)
+                : await getChatOnlineApi(cursor, query, categoryId as number, pageSize);
 
-            const pageData = (result as any).data || [];
+            const pageData = result.list || [];
 
             const formattedResults = pageData.map((item: any) => ({
                 ...item,
@@ -71,7 +71,8 @@ export default function ExplorePlaza() {
             }));
 
             setAgents(prev => isAppend ? [...prev, ...formattedResults] : formattedResults);
-            setHasMore(pageData.length >= pageSize);
+            cursorRef.current = result.nextCursor;
+            setHasMore(!!result.hasMore);
         } catch (error) {
             console.error("Failed to fetch agents:", error);
             if (!isAppend) setAgents([]);
@@ -83,17 +84,11 @@ export default function ExplorePlaza() {
 
     useEffect(() => {
         if (activeTabId === null) return;
-        setPage(1);
+        cursorRef.current = null;
         setHasMore(true);
         loadMoreLockRef.current = false;
-        fetchAgents(searchQuery, activeTabId, 1, false);
+        fetchAgents(searchQuery, activeTabId, null, false);
     }, [searchQuery, activeTabId, refreshTrigger]);
-
-    useEffect(() => {
-        if (page > 1 && activeTabId !== null) {
-            fetchAgents(searchQuery, activeTabId, page, true);
-        }
-    }, [page]);
 
     useEffect(() => {
         if (!loadingMore) {
@@ -109,10 +104,11 @@ export default function ExplorePlaza() {
                 !loading &&
                 !loadingMore &&
                 hasMore &&
+                activeTabId !== null &&
                 !loadMoreLockRef.current
             ) {
                 loadMoreLockRef.current = true;
-                setPage(prev => prev + 1);
+                fetchAgents(searchQuery, activeTabId, cursorRef.current, true);
             }
         }, { threshold: 0, rootMargin: '400px 0px' });
 
@@ -121,7 +117,7 @@ export default function ExplorePlaza() {
         }
 
         return () => observer.disconnect();
-    }, [loading, loadingMore, hasMore]);
+    }, [loading, loadingMore, hasMore, searchQuery, activeTabId, fetchAgents]);
 
     // The spinner also covers the wait for the navigation's tags, which decide
     // the default tab. `loading` itself must stay false until a request is

@@ -128,7 +128,7 @@ from bisheng.common.services.config_service import settings  # YAML → env → 
 
 ### 6.2 App context (infra clients)
 
-The API service builds its runtime context in the FastAPI lifespan via `initialize_app_context(config=settings)` (`bisheng/main.py`). A bare script does **not** — only the lazily-registered **database** context exists. So raw DB reads/writes work without any setup, but anything that needs another engine — **OpenFGA/ReBAC** (`PermissionService.authorize`), **Redis** caches, **Milvus**, **Elasticsearch** — will fail (e.g. `FGAClient not available`) until you initialize the full context yourself.
+The API service builds its runtime context in the FastAPI lifespan via `initialize_app_context(config=settings)` (`bisheng/main.py`). A bare script does **not** — only the lazily-registered **database** context exists. So raw DB reads/writes work without any setup, but anything that needs another engine — **OpenFGA/ReBAC**, **Redis** caches, **Milvus**, **Elasticsearch** — will fail (e.g. `FGAClient not available`) until you initialize the full context yourself.
 
 If your script touches anything beyond the database, mirror the lifespan: initialize at startup, **always** close on teardown.
 
@@ -146,7 +146,9 @@ async def _main() -> int:
 asyncio.run(_main())
 ```
 
-Reference scripts that do this correctly: `backfill_channel_member_rebac_grants.py`, `clean_department_space_user_group_grants.py`.
+Reference script that does this correctly:
+`migrate_f048_permission_data.py` (composition in
+`f048_migration_runtime.py`).
 
 **Rule of thumb:** DB-only script → `get_async_db_session()` is enough (§7). Touches FGA / Redis / Milvus / ES → you **must** call `initialize_app_context` first.
 
@@ -167,6 +169,24 @@ with bypass_tenant_filter():
 Without `bypass_tenant_filter()`, every query gets `WHERE tenant_id = NULL` injected and returns zero rows.
 
 For async DB work use `get_async_db_session()` + `asyncio.run(main())`; for sync use `get_sync_db_session()`. Don't mix the two in one transaction.
+
+### 7.1 SQLModel async query API
+
+`get_async_db_session()` returns SQLModel's `AsyncSession`. For ORM/select
+queries, use `session.exec()` and consume the typed result directly:
+
+```python
+statement = select(ResourcePermissionMode).where(...)
+row = (await session.exec(statement)).first()
+```
+
+Do **not** use the SQLAlchemy-style
+`(await session.execute(statement)).scalars().first()` for SQLModel selects.
+It emits a production `DeprecationWarning` telling operators to use
+`session.exec()`, adds noise to maintenance-script output, and makes real
+recovery warnings easier to miss. Use `session.execute()` only when a script
+specifically needs SQLAlchemy `Row` semantics or an API unsupported by
+`session.exec()`; document that exception next to the call.
 
 ---
 

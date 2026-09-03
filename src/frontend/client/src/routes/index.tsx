@@ -50,6 +50,7 @@ const FilePreviewPage = lazy(() => import('~/pages/knowledge/FilePreview/FilePre
 const ArticlePage = lazy(() => import('~/pages/Subscription/Article/ArticlePage'));
 const DevLogin = lazy(() => import('~/pages/DevLogin'));
 const StandaloneChatPage = lazy(() => import('~/pages/standaloneChat/StandaloneChatPage'));
+const MediaPlaybackPage = lazy(() => import('~/pages/media/MediaPlaybackPage'));
 
 function RouteLoading() {
   return (
@@ -164,6 +165,14 @@ export const router = createBrowserRouter([
             element: <Root />,
             children: [
               { index: true, element: <HomeEntryRedirect /> },
+              {
+                path: 'c/media-playback',
+                element: (
+                  <MenuApprovalPluginGate pluginId="home">
+                    {suspended(<MediaPlaybackPage />)}
+                  </MenuApprovalPluginGate>
+                ),
+              },
               {
                 path: 'c/:conversationId?',
                 element: (

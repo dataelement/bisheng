@@ -4,7 +4,67 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+from bisheng.common.errcode.permission import PermissionFGAUnavailableError
+from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.services.executor import ToolExecutor, ToolInitializationError
+
+
+@pytest.mark.asyncio
+async def test_preset_tool_execution_still_checks_exact_use_action(monkeypatch):
+    check_action = AsyncMock(return_value=True)
+    check_global_super = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.executor.check_business_action",
+        check_action,
+    )
+    monkeypatch.setattr(
+        "bisheng.utils.http_middleware._check_is_global_super",
+        check_global_super,
+    )
+    tool_type = SimpleNamespace(
+        id=10,
+        tenant_id=5,
+        is_preset=ToolPresetType.PRESET.value,
+    )
+
+    await ToolExecutor._ensure_use_permission_async(tool_type, user_id=7)
+
+    login_user = check_action.await_args.args[0]
+    assert login_user.user_id == 7
+    assert login_user.tenant_id == 5
+    assert login_user.is_global_super is True
+    check_global_super.assert_awaited_once_with(7)
+    assert check_action.await_args.kwargs == {
+        "resource_type": "tool",
+        "resource_id": 10,
+        "action": "use",
+    }
+
+
+@pytest.mark.asyncio
+async def test_preset_tool_execution_never_falls_back_when_fga_fails(
+    monkeypatch,
+):
+    check_action = AsyncMock(side_effect=PermissionFGAUnavailableError())
+    monkeypatch.setattr(
+        "bisheng.utils.http_middleware._check_is_global_super",
+        AsyncMock(return_value=False),
+    )
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.executor.check_business_action",
+        check_action,
+    )
+    tool_type = SimpleNamespace(
+        id=10,
+        tenant_id=5,
+        is_preset=ToolPresetType.PRESET.value,
+    )
+
+    with pytest.raises(PermissionFGAUnavailableError):
+        await ToolExecutor._ensure_use_permission_async(tool_type, user_id=7)
+
+    login_user = check_action.await_args.args[0]
+    assert login_user.is_global_super is False
 
 
 @pytest.mark.asyncio

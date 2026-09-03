@@ -8,6 +8,7 @@ from loguru import logger
 import bisheng.worker.tenant_context  # noqa: F401 — register tenant signals
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.context import close_app_context, initialize_app_context
 from bisheng.core.logger import set_logger_config
 
 
@@ -47,23 +48,33 @@ def worker_alive_beat(all_queues: list[str]):
     logger.debug("Worker alive beat stopped.")
 
 
-async def _init_worker_openfga() -> None:
-    """Initialize OpenFGA context in Celery workers for retry/reconcile tasks."""
+def _register_worker_permission_contexts() -> None:
+    """Register lazy permission contexts for Celery task execution."""
+
     if not settings.openfga.enabled:
         return
-    try:
-        from bisheng.core.context.manager import app_context
-        from bisheng.core.openfga.manager import FGAManager, aget_fga_client
 
-        try:
-            app_context.get_context("openfga")
-        except KeyError:
-            app_context.register_context(FGAManager(openfga_config=settings.openfga), optional=True)
+    from bisheng.api.services.f048_permission_runtime import (
+        initialize_f048_worker_runtime,
+    )
+    from bisheng.department.domain.services.department_projection_scope import (
+        get_department_projection_scope,
+        register_department_projection_runtime_context,
+    )
+    from bisheng.permission.application.process_runtime import (
+        register_f048_permission_runtime_context,
+    )
 
-        await aget_fga_client()
-        logger.info("Celery worker OpenFGA context initialized.")
-    except Exception as e:
-        logger.warning("Celery worker OpenFGA context initialization failed: {}", e)
+    async def initialize(client):
+        return await initialize_f048_worker_runtime(
+            client,
+            external_scopes={
+                "department": get_department_projection_scope(),
+            },
+        )
+
+    register_f048_permission_runtime_context(initialize)
+    register_department_projection_runtime_context()
 
 
 @celeryd_after_setup.connect
@@ -73,7 +84,8 @@ def on_worker_init(*args, **kwargs):
     from bisheng.worker._asyncio_utils import get_worker_loop, run_async_task
 
     get_worker_loop()  # start the persistent loop thread before any task arrives
-    run_async_task(_init_worker_openfga)
+    run_async_task(lambda: initialize_app_context(settings, instance_role="celery"))
+    _register_worker_permission_contexts()
     queues = bisheng_celery.amqp.queues
     all_queues = []
     for queue_name, _ in queues.items():
@@ -89,6 +101,9 @@ def on_worker_shutdown(*args, **kwargs):
     logger.debug("Celery worker shutting down.")
     global _WORKER_START
     _WORKER_START = False
+    from bisheng.worker._asyncio_utils import run_async_task
+
+    run_async_task(close_app_context)
     # Stop routing run_async_safe onto the worker loop as it is torn down.
     from bisheng.utils.async_utils import set_preferred_bridge_loop
 

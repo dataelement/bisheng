@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react-swc";
+import fs from "fs";
 import path from "path";
 import { defineConfig, loadEnv } from "vite";
 import { createHtmlPlugin } from 'vite-plugin-html';
@@ -15,7 +16,6 @@ const app_env = { BASE_URL: '' } // /custom
 
 const commonProxyOptions = {
   changeOrigin: true,
-  withCredentials: true,
   secure: false,
   ws: true
 };
@@ -39,16 +39,20 @@ const warnMinioSignatureMismatch = (targetHost: string, requestUrl: string) => {
   );
 };
 
-const createProxyConfig = (target: string, rewrite = true, isMinio = false) => ({
+const createProxyConfig = (target: string, rewrite = true, isMinio = false, verbose = false) => ({
   ...commonProxyOptions,
   target,
   ...(rewrite && {
     rewrite: (p: string) => p.replace(new RegExp(`^${app_env.BASE_URL}`), '')
   }),
   configure: (proxy: import('http-proxy').ProxyServer) => {
-    proxy.on('proxyReq', (proxyReq) => {
-      console.log('Proxying request to:', proxyReq.path);
-    });
+    // Per-request logging is opt-in (VITE_PROXY_LOG=1): on by default it prints
+    // dozens of lines per page load and buries the warnings that matter.
+    if (verbose) {
+      proxy.on('proxyReq', (proxyReq) => {
+        console.log('Proxying request to:', proxyReq.path);
+      });
+    }
     if (isMinio) {
       const targetHost = new URL(target).host;
       proxy.on('proxyRes', (proxyRes, req) => {
@@ -63,12 +67,39 @@ const createProxyConfig = (target: string, rewrite = true, isMinio = false) => (
 const apiRoutes = ["/api/", "/health"];
 const fileServiceRoutes = ["/bisheng", "/tmp-dir"];
 
+function resolveMinioProxyTarget(env: Record<string, string>): string {
+  if (env.VITE_MINIO_PROXY_TARGET) {
+    const configured = env.VITE_MINIO_PROXY_TARGET.trim();
+    return configured.endsWith('/') ? configured : `${configured}/`;
+  }
+
+  const configCandidates = [
+    path.resolve(__dirname, '../../../3.0/config.yaml'),
+  ];
+  for (const configPath of configCandidates) {
+    try {
+      if (!fs.existsSync(configPath)) continue;
+      const content = fs.readFileSync(configPath, 'utf8');
+      const sharepointMatch = content.match(/sharepoint:\s*["']?([^"'\n#]+)["']?/);
+      const schemaMatch = content.match(/schema:\s*(true|false)/);
+      if (sharepointMatch) {
+        const schema = schemaMatch?.[1] === 'true' ? 'https' : 'http';
+        return `${schema}://${sharepointMatch[1].trim()}/`;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return 'http://127.0.0.1:9000/';
+}
+
 export default defineConfig(({ command, mode }) => {
   // 必须从 .env.development.local 等文件加载；仅用 process.env 时配置阶段读不到 VITE_ 变量，会回落到 7860，
   // 导致 /api/department-limit/*（仅 Gateway 提供）打到 bisheng 出现 404。
   const env = loadEnv(mode, path.resolve(__dirname), "");
-  const target = env.VITE_PROXY_TARGET || "http://192.168.106.120:3002/";
-  const fileServiceTarget = env.VITE_MINIO_PROXY_TARGET || "http://192.168.106.120:3002/";
+  const target = env.VITE_PROXY_TARGET || "http://127.0.0.1:7860/";
+  const fileServiceTarget = resolveMinioProxyTarget(env);
   // MinIO presigned URLs sign the Host header; this proxy's host MUST equal the
   // backend config.yaml object_storage.minio.sharepoint or every object 403s.
   if (command === 'serve') {
@@ -80,10 +111,16 @@ export default defineConfig(({ command, mode }) => {
   const app_env_define = {
     ...app_env,
     WORKSPACE_ORIGIN: env.VITE_WORKSPACE_ORIGIN || '',
+    // Origin the OnlyOffice Document Server can reach us at. It downloads the report
+    // template and POSTs the save callback server-side, so `location.origin`
+    // (localhost in dev) is unreachable for it — set this to your LAN IP / tunnel.
+    // Empty in production: document server and app share a reachable origin.
+    OFFICE_PUBLIC_ORIGIN: env.VITE_OFFICE_PUBLIC_ORIGIN || '',
   };
 
-  const apiProxyConfig = createProxyConfig(target);
-  const fileServiceProxyConfig = createProxyConfig(fileServiceTarget, true, true);
+  const proxyLog = env.VITE_PROXY_LOG === '1';
+  const apiProxyConfig = createProxyConfig(target, true, false, proxyLog);
+  const fileServiceProxyConfig = createProxyConfig(fileServiceTarget, true, true, proxyLog);
   const proxyTargets: Record<string, ReturnType<typeof createProxyConfig>> = {};
   apiRoutes.forEach(route => {
     proxyTargets[`${app_env.BASE_URL}${route}`] = apiProxyConfig;
@@ -141,7 +178,9 @@ export default defineConfig(({ command, mode }) => {
         minify: true,
         inject: {
           data: {
-            aceScriptSrc: `<script src="${process.env.NODE_ENV === 'production' ? app_env.BASE_URL : ''}/node_modules/ace-builds/src-min-noconflict/ace.js" type="text/javascript"></script>`,
+            // `command` is vite's own signal; process.env.NODE_ENV isn't reliably
+            // set during the config phase.
+            aceScriptSrc: `<script src="${command === 'build' ? app_env.BASE_URL : ''}/node_modules/ace-builds/src-min-noconflict/ace.js" type="text/javascript"></script>`,
             baseUrl: app_env.BASE_URL
           }
         }

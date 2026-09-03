@@ -114,11 +114,11 @@ const WebResultChip: FC<{ item: any; chip: string }> = ({ item, chip }) => {
 
     const content = (
         <span
-            className="inline-flex items-center gap-1 rounded-[4px] bg-[#F7F7F7] px-2 py-[2px] text-xs leading-5 text-text-1"
+            className="inline-flex items-center gap-1 rounded-sm bg-[#F7F7F7] px-2 py-[2px] text-xs leading-5 text-[#1D2129]"
             title={chip}
         >
             {showFavicon ? (
-                <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full border-[0.5px] border-border-base bg-white">
+                <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full border-[0.5px] border-[#ECECEC] bg-white">
                     <img
                         src={`https://${host}/favicon.ico`}
                         alt=""
@@ -225,13 +225,13 @@ function normaliseKnowledgeResults(
 
 const variantStyles = {
     knowledge: {
-        icon: <Outlined.BookOpenText size={16} className="shrink-0 text-text-3" />,
+        icon: <Outlined.BookOpenText size={16} className="shrink-0 text-[#999999]" />,
     },
     web: {
-        icon: <Outlined.Earth size={16} className="shrink-0 text-text-3" />,
+        icon: <Outlined.Earth size={16} className="shrink-0 text-[#999999]" />,
     },
     tool: {
-        icon: <Outlined.Hammer size={16} className="shrink-0 text-text-3" />,
+        icon: <Outlined.Hammer size={16} className="shrink-0 text-[#999999]" />,
     },
 } as const;
 
@@ -322,8 +322,8 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
                     onClick={hasDetails && !toolCall.inflight ? () => setExpanded((v) => !v) : undefined}
                     disabled={!hasDetails || toolCall.inflight}
                     className={cn(
-                        "group flex w-fit max-w-full items-center gap-1 text-sm leading-[22px] text-text-3",
-                        hasDetails && !toolCall.inflight && "transition-colors hover:text-text-1",
+                        "group flex w-fit max-w-full items-center gap-1 text-sm leading-[22px] text-[#999999]",
+                        hasDetails && !toolCall.inflight && "transition-colors hover:text-[#212121]",
                         toolCall.inflight && "animate-pulse",
                     )}
                 >
@@ -361,10 +361,10 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
                                     <span
                                         key={kb.id || `${kb.name}-${i}`}
                                         className={cn(
-                                            "inline-flex items-center gap-1 rounded-[4px] px-2 py-[2px] text-xs leading-5",
+                                            "inline-flex items-center gap-1 rounded-sm px-2 py-[2px] text-xs leading-5",
                                             kb.error
                                                 ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-300"
-                                                : "bg-[#F7F7F7] text-text-1",
+                                                : "bg-[#F7F7F7] text-[#1D2129]",
                                         )}
                                         title={kb.error ? `${kb.name} 检索失败：${kb.error}` : kb.name}
                                     >
