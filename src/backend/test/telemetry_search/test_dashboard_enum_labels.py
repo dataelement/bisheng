@@ -306,6 +306,52 @@ async def test_dashboard_enum_search_matches_readable_labels(
     assert result["enums"] == expected_values
 
 
+@pytest.mark.asyncio
+async def test_space_level_name_options_use_fixed_customer_order_not_es_key_order(monkeypatch):
+    """知识库大类 dropdown: 公共库/部门库/科室库/团队库/个人库 fixed order agreed with the
+    customer — not the ES terms-agg's default `_key` (alphabetical Unicode) order."""
+    es_arbitrary_order = ["个人库", "科室库", "公共库", "团队库", "部门库"]
+
+    result, _ = await _get_field_options(
+        monkeypatch,
+        dataset_code="mid_knowledge_space_content_stat",
+        field="space_level_name",
+        values=es_arbitrary_order,
+    )
+
+    assert [option["value"] for option in result["options"]] == [
+        "公共库", "部门库", "科室库", "团队库", "个人库",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_space_level_code_field_with_name_label_field_also_uses_fixed_order(monkeypatch):
+    """The dashboard config UI (DimensionFilterConfigurator) auto-pairs the raw
+    space_level (code) field with space_level_name as its label_field and hides
+    space_level_name from the picker — so in practice the configured widget has
+    field="space_level" (value=code) with label_field="space_level_name" (label=Chinese
+    text), not field="space_level_name" directly. The fixed order must still apply here,
+    sorted on the resolved label."""
+    codes_in_arbitrary_order = ["personal", "team_ks", "public", "team", "department"]
+    labels_in_same_order = ["个人库", "科室库", "公共库", "团队库", "部门库"]
+
+    result, _ = await _get_field_options(
+        monkeypatch,
+        dataset_code="mid_knowledge_space_content_stat",
+        field="space_level",
+        label_field="space_level_name",
+        values=codes_in_arbitrary_order,
+        raw_labels=labels_in_same_order,
+    )
+
+    assert [option["label"] for option in result["options"]] == [
+        "公共库", "部门库", "科室库", "团队库", "个人库",
+    ]
+    assert [option["value"] for option in result["options"]] == [
+        "public", "department", "team_ks", "team", "personal",
+    ]
+
+
 def test_dashboard_dataset_seed_exposes_readable_tool_and_parse_dimensions():
     from bisheng.telemetry_search.domain.init_dataset import DASHBOARD_DATASET
 

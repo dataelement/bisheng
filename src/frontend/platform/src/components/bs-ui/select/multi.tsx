@@ -151,9 +151,12 @@ const MultiSelect = ({
             onChange?.(newValues);
         };
 
-        // 单选
+        // 单选：再点已选项则清空
         if (!multiple) {
-            const newValues = onScrollLoad ? [{ label, value }] : [value]
+            const selected = onScrollLoad
+                ? (values as Option[]).some((item) => String(item.value) === String(value))
+                : (values as any[]).some((item) => String(item) === String(value))
+            const newValues = selected ? [] : (onScrollLoad ? [{ label, value }] : [value])
             updateValues(newValues);
             // 关闭弹窗
             const element = triggerRef.current;
@@ -171,13 +174,13 @@ const MultiSelect = ({
         }
 
         if (onScrollLoad) {
-            const newValues = (values as Option[]).some(item => item.value === value)
-                ? (values as Option[]).filter(item => item.value !== value)
+            const newValues = (values as Option[]).some(item => String(item.value) === String(value))
+                ? (values as Option[]).filter(item => String(item.value) !== String(value))
                 : [...(values as Option[]), { label, value }];
             updateValues(newValues);
         } else {
-            const newValues = (values as string[]).includes(value)
-                ? (values as string[]).filter(item => item !== value)
+            const newValues = (values as string[]).some(item => String(item) === String(value))
+                ? (values as string[]).filter(item => String(item) !== String(value))
                 : [...(values as string[]), value];
             updateValues(newValues);
         }
@@ -256,7 +259,7 @@ const MultiSelect = ({
                     </div> : <div className="flex flex-wrap w-full">
                         {
                             // 使用key反推label
-                            options.filter(option => (values as string[]).includes(option.value)).map(option =>
+                            options.filter(option => (values as string[]).some((item) => String(item) === String(option.value))).map(option =>
                                 <Badge onPointerDown={(e) => e.stopPropagation()} key={option.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] break-all  11">
                                     {option.label}
                                     {lockedValues.includes(option.value as string) || <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(option.value)}></X>}
@@ -300,7 +303,7 @@ const MultiSelect = ({
                             {expandedGroups[group.value] !== false && group.options.map((item) => (
                                 <div className="pl-4" key={item.value}>
                                     <MultiItem
-                                        active={values.some(val => val === item.value || val.value === item.value)}
+                                        active={values.some(val => String((val as Option).value ?? val) === String(item.value))}
                                         value={item.value}
                                         onClick={handleSwitch}
                                     >{item.label}</MultiItem>
@@ -310,7 +313,7 @@ const MultiSelect = ({
                     )) : optionFilter.map((item) => (
                         <MultiItem
                             key={item.value}
-                            active={values.some(val => val === item.value || val.value === item.value)}
+                            active={values.some(val => String((val as Option).value ?? val) === String(item.value))}
                             value={item.value}
                             onClick={handleSwitch}
                         >{item.label}</MultiItem>

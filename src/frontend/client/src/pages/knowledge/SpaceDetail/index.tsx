@@ -39,7 +39,6 @@ import {
     resolveFolderReorderNeighbours,
     type FolderDropPosition,
 } from "./resolveFolderReorderNeighbours";
-import store from "~/store";
 import { SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
 import { BatchCategoryModal } from "./BatchCategoryModal";
@@ -92,7 +91,7 @@ interface KnowledgeSpaceContentProps {
     onSearch: (params: SearchParams) => void;
     onFilterStatus: (status: FileStatus[]) => void;
     onSort: (sortBy: SortType | undefined, direction: SortDirection | undefined) => void;
-    onNavigateFolder: (folderId?: string) => void;
+    onNavigateFolder: (folderId?: string, folderName?: string) => void;
     onUploadFile: (files?: FileList | File[]) => void;
     onUploadFolder: (
         files: FileList | File[],
@@ -152,6 +151,8 @@ interface KnowledgeSpaceContentProps {
     clearPendingDeletion: (ids: Array<string | number>) => void;
     setFiles: React.Dispatch<React.SetStateAction<KnowledgeFile[]>>;
     setTotal: React.Dispatch<React.SetStateAction<number>>;
+    /** 当前父目录能否拖拽文件夹, 来自 /children 的 can_reorder_folders. */
+    canReorderFolders?: boolean;
 }
 
 export function KnowledgeSpaceContent({
@@ -215,6 +216,7 @@ export function KnowledgeSpaceContent({
     clearPendingDeletion,
     setFiles,
     setTotal,
+    canReorderFolders = false,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -928,20 +930,14 @@ export function KnowledgeSpaceContent({
         };
     }, [isAdmin, permissionEntryProbeKey, space.id, space.spaceLevel]);
 
-    // Folder manual ordering is admin-defined and shared by everyone, so it follows the
-    // same gate as knowledge-space ordering: system admins only.
-    const currentUser = useRecoilValue(store.user);
-    const isSystemAdmin = currentUser?.role === "admin";
-
-    // Card view drags the same folders as the list view; the grid wrapper carries the
-    // handlers so FileCard itself stays unaware of ordering.
+    // Folder order follows /children can_reorder_folders, not a local admin-only gate.
+    const folderReorderEnabled = canReorderFolders && !sortBy;
     const [cardDraggingFolderId, setCardDraggingFolderId] = useState<string | null>(null);
     const [cardFolderDropTarget, setCardFolderDropTarget] = useState<{ id: string; position: FolderDropPosition } | null>(null);
-    const cardFolderReorderEnabled = isSystemAdmin && !sortBy;
 
     const isCardDraggableFolder = useCallback((file: KnowledgeFile) => (
-        cardFolderReorderEnabled && file.type === FileType.FOLDER && !file.isCreating
-    ), [cardFolderReorderEnabled]);
+        folderReorderEnabled && file.type === FileType.FOLDER && !file.isCreating
+    ), [folderReorderEnabled]);
 
     const handleCardFolderDragEnd = useCallback(() => {
         setCardDraggingFolderId(null);
@@ -1857,7 +1853,7 @@ export function KnowledgeSpaceContent({
                                             onDelete={() => handleDelete(file.id)}
                                             onEditTags={() => handleOpenEditTags(file.id)}
                                             onRetry={() => handleSingleRetry(file.id)}
-                                            onNavigateFolder={() => onNavigateFolder(file.id)}
+                                            onNavigateFolder={() => onNavigateFolder(file.id, file.name)}
                                             onPreview={handlePreviewFile}
                                             onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                             onCancelCreate={onCancelCreateFolder}
@@ -1905,8 +1901,8 @@ export function KnowledgeSpaceContent({
                                     onRetry={(id) => handleSingleRetry(id)}
                                     onAcceptAlias={onAcceptAlias}
                                     onRejectAlias={onRejectAlias}
-                                    onNavigateFolder={(id) => onNavigateFolder(id)}
-                                    canReorderFolders={isSystemAdmin}
+                                    onNavigateFolder={(id, name) => onNavigateFolder(id, name)}
+                                    canReorderFolders={canReorderFolders}
                                     onReorderFolder={(folderId, prevFolderId, nextFolderId) =>
                                         void handleReorderFolder(folderId, prevFolderId, nextFolderId)
                                     }

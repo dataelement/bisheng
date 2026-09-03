@@ -8,8 +8,8 @@ import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/bs-ui/table";
+import { ClearableFilterSelect } from "../ClearableFilterSelect";
 import { ResizableTableHead, TruncatedTableCell } from "@/components/bs-ui/table/TruncatedTableCell";
 import { useResizableColumns } from "@/components/bs-ui/table/useResizableColumns";
 import { TooltipProvider } from "@/components/bs-ui/tooltip";
@@ -308,31 +308,31 @@ export default function AppUseLog() {
                 <FilterByUsergroup value={filters.userGroup} placeholder={t('log.userGroup')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userGroup']: value } })} />
                 <FilterByDate value={filters.dateRange} placeholders={[`${t('log.startDate')}`, `${t('log.endDate')}`]} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['dateRange']: value } })} />
                 <div className="w-[200px] relative">
-                    <Select value={filters.feedback} onValueChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['feedback']: value } })}>
-                        <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder={t('log.userFeedbackPlaceholder')} />
-                        </SelectTrigger>
-                        <SelectContent className="max-w-[200px] break-all">
-                            <SelectGroup>
-                                <SelectItem value={'like'}>{t('log.likeFeedback')}</SelectItem>
-                                <SelectItem value={'dislike'}>{t('log.dislikeFeedback')}</SelectItem>
-                                <SelectItem value={'copied'}>{t('log.copyFeedback')}</SelectItem>
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
+                    <ClearableFilterSelect
+                        value={filters.feedback || ""}
+                        placeholder={t('log.userFeedbackPlaceholder')}
+                        triggerClassName="w-[200px]"
+                        contentClassName="max-w-[200px] break-all"
+                        options={[
+                            { value: "like", label: t('log.likeFeedback') },
+                            { value: "dislike", label: t('log.dislikeFeedback') },
+                            { value: "copied", label: t('log.copyFeedback') },
+                        ]}
+                        onValueChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['feedback']: value } })}
+                    />
                 </div>
                 {appConfig.isPro && <div className="w-[200px] relative">
-                    <Select value={filters.sensitive_status} onValueChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['sensitive_status']: value } })} >
-                        <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder={t('log.sensitiveReviewResult')} />
-                        </SelectTrigger>
-                        <SelectContent className="max-w-[200px] break-all">
-                            <SelectGroup>
-                                <SelectItem value={'2'}>{t('log.sensitiveViolation')}</SelectItem>
-                                <SelectItem value={'1'}>{t('log.sensitivePass')}</SelectItem>
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
+                    <ClearableFilterSelect
+                        value={filters.sensitive_status || ""}
+                        placeholder={t('log.sensitiveReviewResult')}
+                        triggerClassName="w-[200px]"
+                        contentClassName="max-w-[200px] break-all"
+                        options={[
+                            { value: "2", label: t('log.sensitiveViolation') },
+                            { value: "1", label: t('log.sensitivePass') },
+                        ]}
+                        onValueChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['sensitive_status']: value } })}
+                    />
                 </div>}
                 <Button onClick={() => {
                     const dateRange = filters.dateRange || [];

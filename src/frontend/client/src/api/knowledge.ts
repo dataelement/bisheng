@@ -203,6 +203,8 @@ export interface KnowledgeSpace {
     businessDomainCodes?: string[];
     /** Whether this configurable space participates in portal knowledge discovery */
     portalDiscoveryEnabled?: boolean;
+    /** 当前用户能否拖拽这一条库 (服务端矩阵, 与 sort 写接口一致) */
+    canReorder?: boolean;
 }
 
 export interface KnowledgeSpaceCreateOptions {
@@ -684,6 +686,7 @@ interface RawKnowledgeSpace {
     department_short_name?: string;
     department_display_name?: string;
     portal_discovery_enabled?: boolean | null;
+    can_reorder?: boolean;
 }
 
 export interface KnowledgeSpaceTagLibraryListItem {
@@ -873,6 +876,7 @@ export function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
             raw.portal_discovery_enabled === null || raw.portal_discovery_enabled === undefined
                 ? undefined
                 : Boolean(raw.portal_discovery_enabled),
+        canReorder: Boolean((raw as any).can_reorder ?? (raw as any).canReorder ?? false),
     };
 }
 
@@ -1416,9 +1420,9 @@ export async function getPortalDiscoverableSpacesApi(): Promise<KnowledgeSpace[]
 }
 
 /**
- * Move a space between two neighbours in its level's admin-defined order.
+ * Move a space between two neighbours in its reorder workset.
  * Pass the ids it was dropped between; either is null at the list edges.
- * System admin only.
+ * Eligibility is decided by the server matrix, not a local admin-only gate.
  */
 export async function reorderSpaceApi(
     spaceId: string,
@@ -1431,9 +1435,10 @@ export async function reorderSpaceApi(
 }
 
 /**
- * Move a folder between two sibling folders in its directory's admin-defined order.
+ * Move a folder between two sibling folders in its directory order.
  * Pass the ids it was dropped between; either is null at the list edges.
- * System admin only; only folders participate in this ordering.
+ * Eligibility is the current parent directory can_manage, not a local admin-only gate.
+ * Only folders participate in this ordering.
  */
 export async function reorderFolderApi(
     spaceId: string,
@@ -2508,10 +2513,16 @@ export async function getSpaceChildrenApi(params: {
     order_field?: string;
     order_sort?: string;
     file_status?: number[];
-}): Promise<{ data: KnowledgeFile[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
+}): Promise<{
+    data: KnowledgeFile[];
+    page_size: number;
+    has_more: boolean;
+    next_cursor: string | null;
+    can_reorder_folders: boolean;
+}> {
     const { space_id, ...queryParams } = params;
     if (!space_id) {
-        return { data: [], page_size: queryParams.page_size ?? 20, has_more: false, next_cursor: null };
+        return { data: [], page_size: queryParams.page_size ?? 20, has_more: false, next_cursor: null, can_reorder_folders: false };
     }
     const res = await request.get<ApiResponse<any>>(
         `/api/v1/knowledge/space/${space_id}/children`,
@@ -2535,6 +2546,7 @@ export async function getSpaceChildrenApi(params: {
         page_size: Number(payload?.page_size ?? queryParams.page_size ?? 20),
         has_more: !!payload?.has_more,
         next_cursor: payload?.next_cursor ?? null,
+        can_reorder_folders: Boolean(payload?.can_reorder_folders),
     };
 }
 

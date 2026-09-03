@@ -147,7 +147,7 @@ export function TagFilterBar({ filters, showStatus, onChange, onSearch, onReset 
                     />
                 </Field>
 
-                <Field label={t("build.tagConsole.submitter", "提报者")}>
+                <Field label={t("build.tagConsole.submitter", "创建者")}>
                     <FilterByUser
                         value={pickValue(filters.submitter)}
                         placeholder={t("build.tagConsole.selectUser", "请选择用户")}

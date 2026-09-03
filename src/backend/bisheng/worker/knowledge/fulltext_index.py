@@ -549,6 +549,7 @@ async def _run_logical_entry_projection_repair(
             document_repository=KnowledgeDocumentRepositoryImpl(session),
             version_repository=KnowledgeDocumentVersionRepositoryImpl(session),
             tenant_id=tenant_id,
+            allow_legacy_content_loader=True,
         )
         result = await service.process_entry(
             tenant_id=tenant_id,

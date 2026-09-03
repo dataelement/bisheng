@@ -9,6 +9,36 @@ import {
   DashboardComponent,
   DimensionFilterConfig,
 } from "../../types/dataConfig"
+import { ORG_LEVEL_ORDER, orgLevelForField } from "../../utils/groupCrossTabRows"
+
+// Customer feedback (2026-09-01): the "上传人名称" filter dropdown must show each
+// uploader's department alongside their name ("部门-姓名"), to disambiguate same-named
+// uploaders — but ONLY in this one dropdown, not in the crosstab/chart legends (those
+// already have their own separate person+department merge, see mergePersonDedupValues
+// in groupCrossTabRows.ts). The dropdown the customer actually configures has
+// fieldId=="uploader_user_id" (DimensionFilterConfigurator auto-pairs it with
+// uploader_user_name as labelFieldId and hides uploader_user_name itself from the picker —
+// see selectableDimensions there), so uploader_user_name is checked too, defensively, in
+// case a component is ever configured directly on it. The backend's label_field
+// sub-aggregation only carries one secondary field per call, and that slot is already
+// spent pairing id->username, so the department name needs a second call, scoped via
+// exactValues to just the ids/names the first call returned.
+const UPLOADER_ID_FIELD_ID = "uploader_user_id"
+const UPLOADER_NAME_FIELD_ID = "uploader_user_name"
+const UPLOADER_DEPARTMENT_FIELD_ID = "uploader_department_name"
+
+// F058 AC-03: among configured org-hierarchy fields (公司/部门/科室/班组，both "所属"
+// belonging_* and "原始上传库" uploader_* variants), enforce a fixed relative display
+// order — company -> dept -> office -> squad. Non-org fields keep their configured
+// position; org fields are only reordered relative to each other (stable sort).
+function sortDimensionFilterFields<T extends { fieldId: string }>(fields: T[]): T[] {
+  return [...fields].sort((a, b) => {
+    const levelA = orgLevelForField(a.fieldId)
+    const levelB = orgLevelForField(b.fieldId)
+    if (!levelA || !levelB) return 0
+    return ORG_LEVEL_ORDER.indexOf(levelA) - ORG_LEVEL_ORDER.indexOf(levelB)
+  })
+}
 
 interface DimensionFilterProps {
   component: DashboardComponent
@@ -64,10 +94,35 @@ export function DimensionFilter({ component, isDark }: DimensionFilterProps) {
         pageSize: 50,
         keyword,
       })
-      const nextOptions = (response.options || response.enums || []).map((option: any) => ({
+      let nextOptions = (response.options || response.enums || []).map((option: any) => ({
         label: String(option?.label ?? option),
         value: String(option?.value ?? option),
       }))
+      if (
+        (fieldId === UPLOADER_ID_FIELD_ID || fieldId === UPLOADER_NAME_FIELD_ID) &&
+        nextOptions.length
+      ) {
+        const deptResponse = await getFieldEnums({
+          dataset_code: component.dataset_code,
+          field: fieldId,
+          labelField: UPLOADER_DEPARTMENT_FIELD_ID,
+          exactValues: nextOptions.map(option => option.value),
+          page: 1,
+          pageSize: nextOptions.length,
+        })
+        const deptByValue = new Map(
+          (deptResponse.options || []).map((option: any) => [
+            String(option?.value ?? option),
+            String(option?.label ?? option),
+          ])
+        )
+        nextOptions = nextOptions.map(option => {
+          const department = deptByValue.get(option.value)
+          return department && department !== option.value
+            ? { ...option, label: `${department}-${option.label}` }
+            : option
+        })
+      }
       if (
         !isExactLookup &&
         listRequestVersions.current[fieldId] === requestVersion
@@ -107,58 +162,84 @@ export function DimensionFilter({ component, isDark }: DimensionFilterProps) {
     )
   }
 
+  const sortedFields = sortDimensionFilterFields(config.fields)
+
   return (
     <div
       className={`flex size-full items-center gap-3 overflow-x-auto px-2 ${
         isDark ? "text-slate-100" : "text-slate-900"
       }`}
     >
-      {config.fields.map(field => (
-        <div key={field.id} className="min-w-52 flex-1 space-y-1">
-          <label
-            htmlFor={`${component.id}-${field.id}`}
-            className="block truncate text-xs font-medium text-muted-foreground"
-            title={field.displayName}
-          >
-            {field.displayName}
-          </label>
-          <MultiSelect
-            id={`${component.id}-${field.id}`}
-            options={options[field.fieldId] || []}
-            value={selectedValues[field.fieldId] || []}
-            onValueChange={values => {
-              const nextValues = { ...selectedValues, [field.fieldId]: values }
-              setSelectedValues(nextValues)
-              refreshCharts(component, nextValues)
-            }}
-            onSearch={keyword => {
-              void loadOptions(field.fieldId, field.labelFieldId, keyword)
-            }}
-            onFetchByIds={async ids => {
-              const result = await loadOptions(
-                field.fieldId,
-                field.labelFieldId,
-                "",
-                ids
-              )
-              const exact = new Map(
-                result.map(option => [option.value, option])
-              )
-              return ids.map(id => exact.get(id) || { label: id, value: id })
-            }}
-            loading={loading[field.fieldId]}
-            multiple
-            searchable
-            clearable
-            maxDisplayed={2}
-            placeholder={`全部${field.displayName}`}
-            searchPlaceholder={`搜索${field.displayName}`}
-            emptyMessage="暂无可选项"
-            triggerClassName="no-drag h-9 bg-background"
-            contentClassName="min-w-64"
-          />
-        </div>
-      ))}
+      {sortedFields.map(field => {
+        const isOrgField = Boolean(orgLevelForField(field.fieldId))
+        const fieldOptions = options[field.fieldId] || []
+        const handleSelectAll = () => {
+          const nextValues = {
+            ...selectedValues,
+            [field.fieldId]: fieldOptions.map(option => option.value),
+          }
+          setSelectedValues(nextValues)
+          refreshCharts(component, nextValues)
+        }
+        return (
+          <div key={field.id} className="min-w-52 flex-1 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <label
+                htmlFor={`${component.id}-${field.id}`}
+                className="block truncate text-xs font-medium text-muted-foreground"
+                title={field.displayName}
+              >
+                {field.displayName}
+              </label>
+              {isOrgField && (
+                <button
+                  type="button"
+                  className="shrink-0 text-xs text-primary hover:underline disabled:pointer-events-none disabled:opacity-50"
+                  disabled={!fieldOptions.length}
+                  onClick={handleSelectAll}
+                >
+                  全选
+                </button>
+              )}
+            </div>
+            <MultiSelect
+              id={`${component.id}-${field.id}`}
+              options={fieldOptions}
+              value={selectedValues[field.fieldId] || []}
+              onValueChange={values => {
+                const nextValues = { ...selectedValues, [field.fieldId]: values }
+                setSelectedValues(nextValues)
+                refreshCharts(component, nextValues)
+              }}
+              onSearch={keyword => {
+                void loadOptions(field.fieldId, field.labelFieldId, keyword)
+              }}
+              onFetchByIds={async ids => {
+                const result = await loadOptions(
+                  field.fieldId,
+                  field.labelFieldId,
+                  "",
+                  ids
+                )
+                const exact = new Map(
+                  result.map(option => [option.value, option])
+                )
+                return ids.map(id => exact.get(id) || { label: id, value: id })
+              }}
+              loading={loading[field.fieldId]}
+              multiple
+              searchable
+              clearable
+              maxDisplayed={2}
+              placeholder={`全部${field.displayName}`}
+              searchPlaceholder={`搜索${field.displayName}`}
+              emptyMessage="暂无可选项"
+              triggerClassName="no-drag h-9 bg-background"
+              contentClassName="min-w-64"
+            />
+          </div>
+        )
+      })}
     </div>
   )
 }

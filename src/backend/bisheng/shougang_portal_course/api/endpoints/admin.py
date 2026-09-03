@@ -3,15 +3,20 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timedelta
+from io import BytesIO
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from kombu.exceptions import KombuError
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.portal_course import (
+    PortalCourseImportError,
     PortalCourseNotFoundError,
     PortalCourseSourceInvalidError,
     PortalCourseVideoNotFoundError,
+    PortalCourseVideoNotSupportedError,
 )
 from bisheng.common.schemas.api import resp_200
 from bisheng.core.context.tenant import get_current_tenant_id
@@ -21,11 +26,18 @@ from bisheng.shougang_portal_course.domain.repositories.portal_course_repository
     PortalCourseRepository,
 )
 from bisheng.shougang_portal_course.domain.schemas.portal_course_schema import (
+    CourseBatchDelete,
     CourseCreate,
     CourseUpdate,
     OrderUpdate,
     UrlVideoCreate,
     VideoUpdate,
+)
+from bisheng.shougang_portal_course.domain.services.catalog_service import (
+    PortalCourseCatalogService,
+)
+from bisheng.shougang_portal_course.domain.services.course_import_service import (
+    PortalCourseImportService,
 )
 from bisheng.shougang_portal_course.domain.services.course_service import (
     PortalCourseService,
@@ -96,19 +108,29 @@ async def _admin_course_read(tenant_id: int, course_id: str):
 
 @router.get("/courses")
 async def list_courses(
+    catalog_id: str | None = Query(default=None, min_length=32, max_length=32),
+    include_descendants: bool = Query(default=True),
     admin_user: UserPayload = Depends(UserPayload.get_admin_user),
 ):
+    tenant_id = _tenant_id(admin_user)
     storage = await get_minio_storage()
     async with get_async_db_session() as session:
+        catalog_ids = None
+        if catalog_id:
+            catalog_ids = await PortalCourseCatalogService(session).resolve_catalog_ids(
+                tenant_id=tenant_id,
+                catalog_id=catalog_id,
+                include_descendants=include_descendants,
+                public_only=False,
+            )
         items = await PortalCourseService(session).list_read_models(
-            tenant_id=_tenant_id(admin_user),
+            tenant_id=tenant_id,
             public_only=False,
             media_service=PortalCourseMediaService(storage=storage),
             include_videos=True,
+            catalog_ids=catalog_ids,
         )
-    return resp_200(
-        {"items": [item.model_dump(mode="json", exclude_none=True) for item in items]}
-    )
+    return resp_200({"items": [item.model_dump(mode="json", exclude_none=True) for item in items]})
 
 
 @router.post("/courses")
@@ -129,6 +151,65 @@ async def create_course(
     return resp_200(item.model_dump(mode="json", exclude_none=True))
 
 
+async def _excel_bytes(file: UploadFile) -> bytes:
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise PortalCourseImportError(msg="请上传 xlsx 或 xls 文件")
+    content = await file.read()
+    if not content:
+        raise PortalCourseImportError(msg="导入文件为空")
+    return content
+
+
+@router.get("/courses/template")
+async def download_course_import_template(
+    admin_user: UserPayload = Depends(UserPayload.get_admin_user),
+):
+    del admin_user
+    data = PortalCourseImportService.build_template()
+    return StreamingResponse(
+        BytesIO(data),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="course-import-template.xlsx"; '
+                f"filename*=UTF-8''{quote('第三方课程导入模板.xlsx', safe='')}"
+            )
+        },
+    )
+
+
+@router.post("/courses/import/preview")
+async def preview_course_import(
+    file: UploadFile = File(...),
+    admin_user: UserPayload = Depends(UserPayload.get_admin_user),
+):
+    content = await _excel_bytes(file)
+    async with get_async_db_session() as session:
+        result = await PortalCourseImportService(session).preview_excel(
+            tenant_id=_tenant_id(admin_user),
+            content=content,
+        )
+    return resp_200(result.model_dump())
+
+
+@router.post("/courses/import")
+async def import_courses(
+    file: UploadFile = File(...),
+    force: bool = Query(default=False),
+    admin_user: UserPayload = Depends(UserPayload.get_admin_user),
+):
+    content = await _excel_bytes(file)
+    async with get_async_db_session() as session:
+        async with session.begin():
+            result = await PortalCourseImportService(session).import_excel(
+                tenant_id=_tenant_id(admin_user),
+                user_id=admin_user.user_id,
+                content=content,
+                force=force,
+            )
+    return resp_200(result.model_dump())
+
+
 @router.put("/courses/order")
 async def update_course_order(
     payload: OrderUpdate,
@@ -141,6 +222,22 @@ async def update_course_order(
                 payload=payload,
             )
     return resp_200({"updated": True})
+
+
+@router.post("/courses/batch-delete")
+async def batch_delete_courses(
+    payload: CourseBatchDelete,
+    admin_user: UserPayload = Depends(UserPayload.get_admin_user),
+):
+    tenant_id = _tenant_id(admin_user)
+    async with get_async_db_session() as session:
+        async with session.begin():
+            job_ids = await PortalCourseService(session).delete_courses(
+                tenant_id=tenant_id,
+                course_ids=payload.ids,
+            )
+    _enqueue_cleanup(job_ids, tenant_id)
+    return resp_200({"deleted": True, "count": len(payload.ids)})
 
 
 @router.put("/courses/{course_id}")
@@ -214,6 +311,8 @@ async def create_upload_video(
         )
         if course is None:
             raise PortalCourseNotFoundError()
+        if course.course_type == "external":
+            raise PortalCourseVideoNotSupportedError()
     storage = await get_minio_storage()
     uploaded = await PortalCourseMediaService(storage=storage).save_upload(
         file,

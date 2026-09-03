@@ -90,7 +90,7 @@ from bisheng.common.models.space_channel_member import (
     SpaceChannelMemberDao,
     UserRoleEnum,
 )
-from bisheng.common.schemas.api import PageData, PageInfiniteCursorData
+from bisheng.common.schemas.api import PageData
 from bisheng.common.schemas.telemetry.event_data_schema import (
     PortalDocumentDownloadEventData,
     PortalDocumentReadEventData,
@@ -200,6 +200,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchAliasActionResult,
     BatchAliasFailure,
     GroupedKnowledgeSpacesResp,
+    KnowledgeSpaceChildrenPage,
     KnowledgeSpaceCreateOptionDepartment,
     KnowledgeSpaceCreateOptionDepartmentsResp,
     KnowledgeSpaceCreateOptionsResp,
@@ -308,6 +309,16 @@ from bisheng.knowledge.domain.services.portal_recommendation_service import (
     PortalRecommendationService,
 )
 from bisheng.knowledge.domain.services.space_list_cache import SpaceListCache
+from bisheng.knowledge.domain.services.space_reorder_auth import (
+    assert_can_reorder_folders,
+    assert_neighbours_in_workset,
+    assert_space_in_workset,
+    attach_can_reorder_flags,
+    can_reorder_folders,
+    folder_parent_id,
+    is_system_admin,
+    resolve_space_reorder_workset_ids,
+)
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
 from bisheng.knowledge.domain.services.web_link_import_service import (
     KnowledgeWebLinkImportService,
@@ -356,6 +367,7 @@ from bisheng.shougang_portal_config.domain.services.portal_config_service import
 )
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
 from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.services.platform_operator import has_platform_operator_role
 from bisheng.utils import get_request_ip
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
@@ -2562,8 +2574,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         *,
         scope: str,
+        persist_result: bool = True,
     ) -> PortalDiscoveryResult:
-        if scope not in {"portal_public", "portal_configured"}:
+        if scope not in {"portal_public", "portal_configured", "portal_enabled"}:
             raise ValueError(f"Unsupported portal discovery scope: {scope}")
         if self.knowledge_space_scope_repo is None:
             raise RuntimeError("KnowledgeSpaceScopeRepository is not configured")
@@ -2622,7 +2635,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if kind in {"public", "department", "clinic"}:
                 enabled = bool(item.portal_discovery_enabled)
                 configurable_scope_rows.append((kind, space_id, enabled))
-                if enabled and (scope == "portal_configured" or kind == "public"):
+                if enabled and (scope in {"portal_configured", "portal_enabled"} or kind == "public"):
                     discoverable_space_ids.add(space_id)
 
         explicit_space_ids: set[int] = set()
@@ -2780,10 +2793,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_kind_by_id=space_kind_by_id,
             snapshot=snapshot,
         )
-        self._portal_discovery_result = result
-        self._portal_explicit_file_ids = set(explicit_file_ids)
-        self._portal_grant_parent_space_ids = set(grant_parent_space_ids)
-        self._portal_space_kind_map = dict(space_kind_by_id)
+        if persist_result:
+            self._portal_discovery_result = result
+            self._portal_explicit_file_ids = set(explicit_file_ids)
+            self._portal_grant_parent_space_ids = set(grant_parent_space_ids)
+            self._portal_space_kind_map = dict(space_kind_by_id)
         return result
 
     async def _format_accessible_spaces(
@@ -2969,7 +2983,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             decorate_ms,
             (time.perf_counter() - t0) * 1000,
         )
-        return result
+        return await self._attach_space_reorder_flags(result)
 
     async def _require_write_permission(self, space_id: int) -> None:
         """
@@ -4584,6 +4598,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     self.login_user.user_id,
                 )
 
+        await self._attach_space_reorder_flags([result])
         return result
 
     async def get_shougang_portal_space_levels(self) -> list[dict]:
@@ -5659,6 +5674,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 tag_map=tag_map,
                 spaces=spaces,
                 business_domain_code=normalized_business_domain_code,
+                discovery_scope=discovery_scope,
             )
         return sorted(tag_names)
 
@@ -5668,6 +5684,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         tag_map: dict[str, list[Any]],
         spaces: list[Knowledge],
         business_domain_code: str,
+        discovery_scope: str = "legacy",
     ) -> list[str]:
         all_tags = [
             tag
@@ -5686,7 +5703,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             order_sort="desc",
         )
         files = self._filter_shougang_portal_files_by_business_domain_code(files, business_domain_code)
-        visible_files = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
+        visible_files = await self._filter_shougang_portal_search_files(
+            files,
+            spaces=spaces,
+            defer_department_access=discovery_scope == "portal_enabled",
+        )
         visible_file_ids = {str(int(file.id)) for file in visible_files if file.id is not None}
         if not visible_file_ids:
             return []
@@ -5707,8 +5728,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         discovery_scope: str = "legacy",
     ) -> dict[str, int]:
         visible_scopes: dict[str, set[int]] = {}
-        if discovery_scope in {"portal_public", "portal_configured"}:
+        if discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}:
             discovery = await self.resolve_portal_discovery(scope=discovery_scope)
+            if discovery_scope == "portal_enabled":
+                enabled_space_ids = set(discovery.discoverable_space_ids)
+                return await KnowledgeFileDao.async_count_files_by_domain_scopes(
+                    {domain.code: set(enabled_space_ids) for domain in domains}
+                )
             full_space_ids = set(discovery.discoverable_space_ids) | set(discovery.explicitly_visible_space_ids)
             grant_only_parent_ids = set(discovery.grant_parent_space_ids) - full_space_ids
             visible_file_ids: dict[str, set[int]] = {}
@@ -5743,8 +5769,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> dict[str, int]:
         """Count SUCCESS files per document-type category in each card's visible bound spaces."""
         visible_scopes: dict[str, set[int]] = {}
-        if discovery_scope in {"portal_public", "portal_configured"}:
+        if discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}:
             discovery = await self.resolve_portal_discovery(scope=discovery_scope)
+            if discovery_scope == "portal_enabled":
+                enabled_space_ids = set(discovery.discoverable_space_ids)
+                return await KnowledgeFileDao.async_count_files_by_category_scopes(
+                    {category.code: set(enabled_space_ids) for category in categories}
+                )
             full_space_ids = set(discovery.discoverable_space_ids) | set(discovery.explicitly_visible_space_ids)
             grant_only_parent_ids = set(discovery.grant_parent_space_ids) - full_space_ids
             visible_file_ids: dict[str, set[int]] = {}
@@ -5914,7 +5945,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         effective_discovery_scope = (
             req.discovery_scope
-            if req.discovery_scope in {"portal_public", "portal_configured"}
+            if req.discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}
             else "public"
             if req.public_only
             else req.discovery_scope
@@ -5955,7 +5986,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         full_space_ids: list[int] | None = None
         explicit_file_ids: list[int] | None = None
-        if req.discovery_scope in {"portal_public", "portal_configured"} and discovery is not None:
+        if req.discovery_scope in {"portal_public", "portal_configured", "portal_enabled"} and discovery is not None:
             full_space_id_set = set(discovery.discoverable_space_ids) | set(discovery.explicitly_visible_space_ids)
             full_space_ids = sorted(full_space_id_set)
             grant_only_parent_ids = set(discovery.grant_parent_space_ids) - full_space_id_set
@@ -5996,7 +6027,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             discovery_scope=discovery_scope,
         )
         discovery = self._portal_discovery_result
-        if discovery is not None and discovery_scope in {"portal_public", "portal_configured"}:
+        if discovery is not None and discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}:
             discoverable_ids = set(discovery.discoverable_space_ids)
             explicit_space_ids = set(discovery.explicitly_visible_space_ids)
             grant_parent_ids = set(discovery.grant_parent_space_ids)
@@ -6696,7 +6727,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     visible_batch = await self._filter_shougang_portal_search_files(
                         valid_files,
                         spaces=spaces,
-                        defer_department_access=effective_discovery_scope == "public_and_department",
+                        defer_department_access=effective_discovery_scope
+                        in {"public_and_department", "portal_enabled"},
                     )
                 visible_ids = {int(file.id) for file in visible_batch}
                 sort_by_file_id = {hit.file_id: list(hit.sort_values) for hit in batch.hits}
@@ -6790,7 +6822,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         req: ShougangPortalAdvancedUploaderSearchReq,
     ) -> dict:
-        spaces, _, trusted_public_scope = await self._resolve_shougang_portal_advanced_search_spaces(req)
+        spaces, effective_discovery_scope, trusted_public_scope = (
+            await self._resolve_shougang_portal_advanced_search_spaces(req)
+        )
         if not spaces:
             return {"data": []}
         search_service, file_repository = self._require_shougang_portal_fulltext_dependencies()
@@ -6822,7 +6856,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             visible_files = await self._filter_shougang_portal_search_files(
                 valid_files,
                 spaces=spaces,
-                defer_department_access=False,
+                defer_department_access=effective_discovery_scope == "portal_enabled",
             )
         visible_ids = {int(file.id) for file in visible_files}
         supported_user_ids = {support.user_id for support in supports if visible_ids.intersection(support.file_ids)}
@@ -6850,7 +6884,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> tuple[list[Knowledge], str, bool]:
         effective_discovery_scope = (
             req.discovery_scope
-            if req.discovery_scope in {"portal_public", "portal_configured"}
+            if req.discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}
             else "public"
             if req.public_only
             else req.discovery_scope
@@ -7941,8 +7975,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if (
                     space is not None
                     and int(space.type) == KnowledgeTypeEnum.SPACE.value
-                    and int(getattr(space, "tenant_id", 0) or 0)
-                    == int(self.login_user.tenant_id)
+                    and int(getattr(space, "tenant_id", 0) or 0) == int(self.login_user.tenant_id)
                 ):
                     return file, [space]
             return None, []
@@ -7981,7 +8014,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         effective_discovery_scope = (
             req.discovery_scope
-            if req.discovery_scope in {"portal_public", "portal_configured"}
+            if req.discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}
             else "public"
             if req.public_only
             else req.discovery_scope
@@ -8072,7 +8105,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         trusted_public_scope = bool(req.public_only)
         effective_discovery_scope = (
             req.discovery_scope
-            if req.discovery_scope in {"portal_public", "portal_configured"}
+            if req.discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}
             else "public"
             if req.public_only
             else req.discovery_scope
@@ -8454,6 +8487,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             and (allowed_tag_file_ids is None or record.file_id in allowed_tag_file_ids)
         }
         public_space_ids = await self._get_shougang_portal_public_space_ids(space_ids, spaces=spaces)
+        try:
+            portal_enabled_discovery = await self.resolve_portal_discovery(
+                scope="portal_enabled",
+                persist_result=False,
+            )
+            portal_enabled_space_ids = set(portal_enabled_discovery.discoverable_space_ids) & visible_space_ids
+        except Exception as exc:
+            logger.warning(
+                "portal recommendation discovery fast-path unavailable; using normal permission checks: error={}",
+                type(exc).__name__,
+            )
+            portal_enabled_space_ids = set()
         now = datetime.now(timezone.utc)
 
         def candidate_for(key: tuple[int, int]) -> PortalRecommendationCandidate | None:
@@ -8550,20 +8595,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         permission_contexts: dict[int, dict] = {}
         public_permissions_by_space: dict[int, set[str]] = {}
         non_primary_file_ids_by_space: dict[int, set[int]] = {}
+        portal_enabled_fast_allowed_count = 0
 
         async def build_permission_context() -> dict:
-            try:
-                live_bindings = await PortalRecommendationProjectionService.load_bindings_strict()
-            except Exception as exc:
-                raise PortalRecommendationPermissionContextUnavailable(
-                    "failed to load current permission bindings"
-                ) from exc
-            return {"by_space": permission_contexts, "live_bindings": live_bindings}
+            # The binding snapshot is loaded lazily only if a candidate outside
+            # portal_enabled still needs the normal file permission path.
+            return {"by_space": permission_contexts, "live_bindings": None}
 
         async def check_permission_batch(
             _request_context: dict,
             candidates: list[PortalRecommendationCandidate],
         ) -> dict[tuple[int, int], bool | Exception]:
+            nonlocal portal_enabled_fast_allowed_count
             file_ids = [candidate.file_id for candidate in candidates]
             files = await KnowledgeFileDao.aget_file_by_space_filters(
                 knowledge_ids=space_ids,
@@ -8593,6 +8636,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         if candidate.file_id in non_primary:
                             result[candidate.key] = False
                             continue
+                    if self._can_fast_allow_portal_enabled_recommendation(
+                        item,
+                        space_id=candidate.space_id,
+                        portal_enabled_space_ids=portal_enabled_space_ids,
+                    ):
+                        # Discovery publication grants recommendation metadata
+                        # display only. Preview/download still perform their own
+                        # live checks, so never infer download capability here.
+                        self._portal_file_download_map[int(item.id)] = False
+                        result[candidate.key] = True
+                        portal_enabled_fast_allowed_count += 1
+                        authorization_state.fast_allowed_count += 1
+                        continue
+                    if _request_context["live_bindings"] is None:
+                        try:
+                            _request_context["live_bindings"] = (
+                                await PortalRecommendationProjectionService.load_bindings_strict()
+                            )
+                        except Exception as exc:
+                            raise PortalRecommendationPermissionContextUnavailable(
+                                "failed to load current permission bindings"
+                            ) from exc
                     result[candidate.key] = await self._check_portal_recommendation_item_permission(
                         item,
                         space_id=candidate.space_id,
@@ -8627,7 +8692,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         cached_candidates = [candidate_for(key) for key in cached_top_n_ids]
         cached_candidates = [candidate for candidate in cached_candidates if candidate is not None]
         selected = []
-        cache_stable = cached_top_n_hit and not cached_top_n_ids
+        cache_stable = False
         if cached_candidates:
             selected = await recommendation_service.select_authorized_top_n(
                 cached_candidates,
@@ -8636,7 +8701,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 check_permission_batch=check_permission_batch,
                 state=authorization_state,
             )
-            cache_stable = len(selected) == len(cached_top_n_ids) == len(cached_candidates)
+            cache_stable = self._personalized_recommendation_cached_selection_is_stable(
+                cached_top_n_hit=cached_top_n_hit,
+                cached_top_n_ids=cached_top_n_ids,
+                cached_candidates=cached_candidates,
+                selected=selected,
+            )
         if not cache_stable and len(selected) < target_count:
             selected = []
             ordered = score(first_candidates)
@@ -8730,7 +8800,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_subcategory_code=req.file_subcategory_code,
             include_source_paths=True,
         )
-        if uses_top_n_cache:
+        cache_write_allowed = uses_top_n_cache and self._personalized_recommendation_cache_write_allowed(
+            selected_count=len(selected),
+            result_count=len(items),
+            authorization_state=authorization_state,
+        )
+        if cache_write_allowed:
             try:
                 await redis_repository.set_top_n(
                     tenant_id,
@@ -8778,6 +8853,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "cache_candidate_count": len(cached_candidates),
                     "cache_hit": cached_top_n_hit,
                     "cache_stable": cache_stable,
+                    "cache_write_allowed": cache_write_allowed,
                     "candidate_count": ordered_candidate_count,
                     "domain_candidate_count": len(domain_candidates),
                     "duration_ms": round((time.monotonic() - diagnostic_started_at) * 1000, 2),
@@ -8791,6 +8867,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "permission_time_budget_reached": authorization_state.time_budget_reached,
                     "pool_ready": pool_ready,
                     "pool_source": "redis" if active_pool_version else "projection",
+                    "portal_enabled_fast_allowed_count": portal_enabled_fast_allowed_count,
+                    "portal_enabled_space_count": len(portal_enabled_space_ids),
                     "personal_space_excluded_count": personal_space_excluded_count,
                     "redis_state_available": redis_state_available,
                     "requested_space_count": requested_space_count,
@@ -8808,6 +8886,37 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ),
         )
         return self._build_shougang_portal_search_response(items, limit=target_count)
+
+    @staticmethod
+    def _personalized_recommendation_cached_selection_is_stable(
+        *,
+        cached_top_n_hit: bool,
+        cached_top_n_ids: list[tuple[int, int]],
+        cached_candidates: list[PortalRecommendationCandidate],
+        selected: list[PortalRecommendationCandidate],
+    ) -> bool:
+        # An empty cached payload can be produced by a transient permission failure.
+        # Recompute instead of treating it as a stable empty recommendation.
+        return bool(
+            cached_top_n_hit and cached_top_n_ids and len(selected) == len(cached_top_n_ids) == len(cached_candidates)
+        )
+
+    @staticmethod
+    def _personalized_recommendation_cache_write_allowed(
+        *,
+        selected_count: int,
+        result_count: int,
+        authorization_state: PortalRecommendationAuthorizationState,
+    ) -> bool:
+        # Do not replace a usable Top-N with a transient or partially authorized result.
+        return bool(
+            selected_count > 0
+            and result_count == selected_count
+            and not authorization_state.unavailable
+            and not authorization_state.time_budget_reached
+            and not authorization_state.check_limit_reached
+            and authorization_state.error_count == 0
+        )
 
     @staticmethod
     def _personalized_recommendation_target_count(
@@ -8868,6 +8977,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return int(file.knowledge_id) in public_space_ids and not PortalRecommendationProjectionService.has_custom_acl(
             file, live_bindings
         )
+
+    @staticmethod
+    def _can_fast_allow_portal_enabled_recommendation(
+        file: KnowledgeFile,
+        *,
+        space_id: int,
+        portal_enabled_space_ids: set[int],
+    ) -> bool:
+        """Allow recommendation display only when the live file still belongs to an enabled source space."""
+        return int(space_id) in portal_enabled_space_ids and int(file.knowledge_id) == int(space_id)
 
     async def _check_portal_recommendation_item_permission(
         self,
@@ -9254,7 +9373,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         discovery = getattr(self, "_portal_discovery_result", None)
         full_space_ids: list[int] | None = None
         explicit_file_ids: list[int] | None = None
-        if req.discovery_scope in {"portal_public", "portal_configured"} and discovery is not None:
+        if req.discovery_scope in {"portal_public", "portal_configured", "portal_enabled"} and discovery is not None:
             full_space_ids = sorted(set(discovery.discoverable_space_ids) | set(discovery.explicitly_visible_space_ids))
             explicit_file_ids = list(discovery.explicitly_visible_file_ids)
         while True:
@@ -9281,11 +9400,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
             files = self._filter_shougang_portal_files_by_subcategory_code(files, req.file_subcategory_code)
             files = self._filter_shougang_portal_files_by_business_domain_code(files, req.business_domain_code)
             if files:
-                visible_batch = (
-                    self._accept_shougang_portal_public_files(files)
-                    if trusted_public_scope
-                    else await self._filter_shougang_portal_visible_files(files, spaces=spaces)
-                )
+                if trusted_public_scope:
+                    visible_batch = self._accept_shougang_portal_public_files(files)
+                elif req.discovery_scope == "portal_enabled":
+                    visible_batch = await self._filter_shougang_portal_search_files(
+                        files,
+                        spaces=spaces,
+                        defer_department_access=True,
+                    )
+                else:
+                    visible_batch = await self._filter_shougang_portal_visible_files(
+                        files,
+                        spaces=spaces,
+                    )
                 visible_ids = {int(file.id) for file in visible_batch}
                 for file in files:
                     if int(file.id) not in visible_ids:
@@ -9407,7 +9534,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         safe_chunks = await self._filter_and_dedupe_portal_search_chunks(
             chunks=es_chunks + vector_chunks,
             spaces=spaces,
-            defer_department_access=req.discovery_scope == "public_and_department",
+            defer_department_access=req.discovery_scope in {"public_and_department", "portal_enabled"},
         )
         candidates = self._group_shougang_portal_chunks_by_file(safe_chunks)
         ranked_candidates = self._score_shougang_portal_file_candidates(candidates)
@@ -10870,7 +10997,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 requested_space_ids,
                 space_level,
             )
-        if discovery_scope in {"portal_public", "portal_configured"}:
+        if discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}:
             discovery = await self.resolve_portal_discovery(scope=discovery_scope)
             allowed_ids = set(discovery.query_space_ids)
             requested_ids = list(dict.fromkeys(int(space_id) for space_id in requested_space_ids if int(space_id) > 0))
@@ -12571,6 +12698,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
             )
         result = await self._decorate_department_metadata(spaces)
+        result = await self._attach_space_reorder_flags(result)
         return await KnowledgeSpacePinService.apply_pins(result, self.login_user.user_id)
 
     async def get_my_created_spaces(self, order_by: str = "update_time") -> list[KnowledgeRead]:
@@ -12835,6 +12963,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if user_role is not None:
                 payload["user_role"] = user_role.value
             result.append(payload)
+        result = await self._attach_space_reorder_flags(result)
         return await KnowledgeSpacePinService.apply_pins(result, self.login_user.user_id)
 
     async def global_search_files(
@@ -12978,21 +13107,71 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space.sort_weight = weights[int(space.id)]
         return weights
 
+    async def _space_reorder_admin_department_ids(self) -> set[int]:
+        """部门管理员管辖子树; 系统管理员与运营岗不需要."""
+        if is_system_admin(self.login_user) or has_platform_operator_role(self.login_user):
+            return set()
+        return await self._admin_department_ids()
+
+    async def _attach_space_reorder_flags(self, items: list) -> list:
+        """批量写入 can_reorder, 每个 level 只算一次工作集."""
+        if not items:
+            return items
+        await attach_can_reorder_flags(
+            self.login_user,
+            items,
+            admin_department_ids=await self._space_reorder_admin_department_ids(),
+        )
+        return items
+
+    async def _visible_ids_for_space_reorder(self, level: KnowledgeSpaceLevelEnum) -> set[int] | None:
+        """写接口可见集. None 表示不再与可见集求交.
+
+        不用 get_spaces_by_level: 那条路径会拉成员表和列表装饰, 写鉴权只要 ID.
+        运营岗 TEAM 工作集为空, 这里直接空集, 避免无意义的可见查询.
+        """
+        if is_system_admin(self.login_user):
+            return None
+        if has_platform_operator_role(self.login_user):
+            if level in {
+                KnowledgeSpaceLevelEnum.PUBLIC,
+                KnowledgeSpaceLevelEnum.DEPARTMENT,
+            }:
+                return None
+            return set()
+        if level not in {KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceLevelEnum.TEAM_KS}:
+            return set()
+        if not await self._space_reorder_admin_department_ids():
+            return set()
+        readable = await PermissionService.list_accessible_ids(
+            user_id=self.login_user.user_id,
+            relation="can_read",
+            object_type="knowledge_space",
+            login_user=self.login_user,
+        )
+        if readable is None:
+            return None
+        manageable = await PermissionService.list_accessible_ids(
+            user_id=self.login_user.user_id,
+            relation="can_manage",
+            object_type="knowledge_space",
+            login_user=self.login_user,
+        )
+        visible = {int(space_id) for space_id in readable if str(space_id).isdigit()}
+        visible |= {int(space_id) for space_id in (manageable or []) if str(space_id).isdigit()}
+        return visible
+
     async def reorder_space(
         self,
         space_id: int,
         prev_space_id: int | None = None,
         next_space_id: int | None = None,
     ) -> None:
-        """Move a space between two neighbours in its level's admin-defined order.
+        """按当前用户工作集移动一条库的 sort_weight.
 
-        Callers pass the ids the space is dropped between (either may be None at the
-        list edges); the new weight is the midpoint, so only this row is written no
-        matter how many spaces the level holds.
+        传入拖拽后左右邻居 ID (列表首/尾时一侧为空); 只改被拖动这一行.
+        工作集外 18040; 邻居不在工作集 18041; 个人库 18041.
         """
-        if not self.login_user.is_admin():
-            raise SpacePermissionDeniedError()
-
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
@@ -13007,15 +13186,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
             # Personal spaces are per-user and have no shared order to define.
             raise SpaceInvalidLevelError()
 
-        spaces = await self._load_level_spaces_in_display_order(level)
+        workset = await resolve_space_reorder_workset_ids(
+            self.login_user,
+            dragged_level=level,
+            visible_space_ids=await self._visible_ids_for_space_reorder(level),
+            admin_department_ids=await self._space_reorder_admin_department_ids(),
+        )
+        assert_space_in_workset(space_id, workset)
+        assert_neighbours_in_workset(prev_space_id, next_space_id, workset)
+
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(list(workset), order_by="sort_weight")
         space_by_id = {int(item.id): item for item in spaces}
         if int(space_id) not in space_by_id:
             raise SpaceNotFoundError()
-        for neighbour_id in (prev_space_id, next_space_id):
-            if neighbour_id is not None and int(neighbour_id) not in space_by_id:
-                # Neighbour from another level (or a stale client view) would place the
-                # space against an order it isn't part of.
-                raise SpaceInvalidLevelError()
 
         if any(item.sort_weight is None for item in spaces):
             # First drag in this level: freeze the order currently on screen, then move.
@@ -13087,12 +13270,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         how many folders the directory holds. Only folders take part — files keep a NULL
         weight and their existing ordering.
         """
-        if not self.login_user.is_admin():
-            raise SpacePermissionDeniedError()
-
         folder = await KnowledgeFileDao.query_by_id(folder_id)
         if not folder or int(folder.knowledge_id) != int(space_id) or folder.file_type != FileType.DIR.value:
             raise SpaceFolderNotFoundError()
+        await assert_can_reorder_folders(
+            self.login_user,
+            space_id=space_id,
+            parent_folder_id=folder_parent_id(folder.file_level_path),
+        )
 
         folders = await self._load_sibling_folders_in_display_order(folder)
         folder_by_id = {int(item.id): item for item in folders}
@@ -14614,10 +14799,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             primary_versions = await self.version_repo.find_primary_versions_by_file_ids(
                 [int(one.id) for one in file_items]
             )
-            doc_by_file = {
-                int(version.knowledge_file_id): int(version.document_id)
-                for version in primary_versions
-            }
+            doc_by_file = {int(version.knowledge_file_id): int(version.document_id) for version in primary_versions}
         for one in file_items:
             document_id = doc_by_file.get(int(one.id))
             if document_id is None and one.reference_document_id:
@@ -14698,9 +14880,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         pending_publish_start = time.perf_counter()
         pending_publish_file_ids = (
-            await self._find_pending_publish_approval_file_ids(res)
-            if enrich_files and file_ids
-            else set()
+            await self._find_pending_publish_approval_file_ids(res) if enrich_files and file_ids else set()
         )
         pending_publish_ms = (time.perf_counter() - pending_publish_start) * 1000
 
@@ -14986,17 +15166,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_type: int | None = None,
         enrich_files: bool = True,
         folder_count_mode: str = "none",
-    ) -> "PageInfiniteCursorData":
+    ) -> "KnowledgeSpaceChildrenPage":
         """F027 cursor-paginated listing of direct children under a parent folder.
 
-        Response shape (PageInfiniteCursorData): ``{data, page_size, has_more,
-        next_cursor}``. Legacy ``total`` / ``page`` fields removed (AC-03);
+        Response shape: ``{data, page_size, has_more, next_cursor, can_reorder_folders}``.
+        Legacy ``total`` / ``page`` fields removed (AC-03);
         clients drive infinite-scroll via ``has_more`` + ``next_cursor``.
         """
         perf_start = time.perf_counter()
         from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
         from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
-        from bisheng.common.schemas.api import PageInfiniteCursorData
         from bisheng.knowledge.domain.models.knowledge_space_file import (
             build_child_order_cursor_key,
             child_order_cursor_key_len,
@@ -15099,11 +15278,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             extra_info_ms,
             (time.perf_counter() - perf_start) * 1000,
         )
-        return PageInfiniteCursorData(
+        can_reorder = await can_reorder_folders(
+            self.login_user,
+            space_id=space_id,
+            parent_folder_id=parent_id,
+        )
+        return KnowledgeSpaceChildrenPage(
             data=data,
             page_size=page_size,
             has_more=has_more,
             next_cursor=next_cursor,
+            can_reorder_folders=can_reorder,
         )
 
     async def resolve_qa_scope_file_ids(
@@ -16560,7 +16745,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         allow_duplicate_name: bool = False,
         allow_duplicate_content: bool = False,
         skip_space_business_domain_check: bool = False,
+        award_points: bool = True,
     ) -> list[KnowledgeSpaceFileResponse]:
+        """向知识空间添加文件.
+
+        award_points 为 False 时不挂钩积分, 供接口同步使用; 页面直传保持默认 True.
+        """
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             enqueue_current_pdf_artifact,
         )
@@ -16791,23 +16981,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         await self.update_folder_update_time(file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
-        # 积分旁路：直传人即发布人，上传成功记分，失败不影响返回。
-        try:
-            from bisheng.points.domain.services.points_award_hooks import notify_space_files_ready
+        # 页面直传记分; 接口同步传 award_points=False, 失败不影响返回.
+        if award_points:
+            try:
+                from bisheng.points.domain.services.points_award_hooks import notify_space_files_ready
 
-            await notify_space_files_ready(
-                tenant_id=int(getattr(db_knowledge, "tenant_id", None) or self.login_user.tenant_id or 1),
-                space_id=int(knowledge_id),
-                files=process_files,
-                uploader_id=int(self.login_user.user_id),
-                publisher_id=int(self.login_user.user_id),
-                is_favorite_space=bool(getattr(db_knowledge, "is_favorite", False)),
-            )
-        except Exception:
-            _logger.exception(
-                "points.award.hooks add_file notify failed knowledge_id=%s",
-                knowledge_id,
-            )
+                await notify_space_files_ready(
+                    tenant_id=int(getattr(db_knowledge, "tenant_id", None) or self.login_user.tenant_id or 1),
+                    space_id=int(knowledge_id),
+                    files=process_files,
+                    uploader_id=int(self.login_user.user_id),
+                    publisher_id=int(self.login_user.user_id),
+                    is_favorite_space=bool(getattr(db_knowledge, "is_favorite", False)),
+                )
+            except Exception:
+                _logger.exception(
+                    "points.award.hooks add_file notify failed knowledge_id=%s",
+                    knowledge_id,
+                )
         return failed_files + process_files
 
     @staticmethod

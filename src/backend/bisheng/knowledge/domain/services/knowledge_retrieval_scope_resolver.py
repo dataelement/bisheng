@@ -829,13 +829,13 @@ def render_milvus_expr(query_filter: BackendQueryFilter) -> str:
     """Render the membership pre-filter as a Milvus boolean expression (spec 3.6).
 
     Single space uses ``ARRAY_CONTAINS``; multi-space uses
-    ``ARRAY_CONTAINS_ANY``. The expression always carries the tenant
-    boundary; "global Top-K then filter" cannot be expressed here.
+    ``ARRAY_CONTAINS_ANY``. The reader already selected the tenant-bound
+    physical collection, so the data-plane filter does not repeat tenant_id.
     """
     spaces = [int(s) for s in query_filter.requested_space_ids]
     if not spaces:
         raise ValueError("BackendQueryFilter without requested spaces is not renderable")
-    parts = [f"tenant_id == {int(query_filter.tenant_id)}"]
+    parts = []
     if len(spaces) == 1:
         parts.append(f"ARRAY_CONTAINS(knowledge_ids, {spaces[0]})")
     else:
@@ -854,10 +854,7 @@ def render_es_membership_query(query_filter: BackendQueryFilter) -> dict:
     spaces = [int(s) for s in query_filter.requested_space_ids]
     if not spaces:
         raise ValueError("BackendQueryFilter without requested spaces is not renderable")
-    filters = [
-        {"term": {"metadata.tenant_id": int(query_filter.tenant_id)}},
-        {"terms": {"metadata.knowledge_ids": spaces}},
-    ]
+    filters = [{"terms": {"metadata.knowledge_ids": spaces}}]
     if query_filter.canonical_document_ids is not None:
         filters.append(
             {"terms": {"metadata.canonical_document_id": [int(i) for i in query_filter.canonical_document_ids]}}

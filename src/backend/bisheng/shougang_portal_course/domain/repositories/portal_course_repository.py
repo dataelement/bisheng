@@ -26,12 +26,26 @@ class PortalCourseRepository:
         tenant_id: int,
         public_only: bool,
         home_only: bool = False,
+        catalog_ids: list[str] | None = None,
+        keyword: str | None = None,
     ) -> list[PortalCourse]:
         statement = select(PortalCourse).where(PortalCourse.tenant_id == tenant_id)
         if public_only:
             statement = statement.where(PortalCourse.enabled.is_(True))
             if home_only:
                 statement = statement.where(PortalCourse.show_on_home.is_(True))
+        if catalog_ids is not None:
+            statement = statement.where(PortalCourse.catalog_id.in_(catalog_ids))
+        needle = (keyword or "").strip()
+        if needle:
+            statement = statement.where(
+                or_(
+                    PortalCourse.name.contains(needle, autoescape=True),
+                    PortalCourse.description.contains(needle, autoescape=True),
+                    PortalCourse.instructor.contains(needle, autoescape=True),
+                    PortalCourse.tags_json.contains(needle, autoescape=True),
+                )
+            )
         statement = statement.order_by(
             PortalCourse.sort_order.asc(),
             PortalCourse.create_time.desc(),
@@ -53,6 +67,24 @@ class PortalCourseRepository:
         )
         if public_only:
             statement = statement.where(PortalCourse.enabled.is_(True))
+        if for_update:
+            statement = statement.with_for_update()
+        return (await self.session.exec(statement)).first()
+
+    async def get_course_by_external_id(
+        self,
+        *,
+        tenant_id: int,
+        external_id: str,
+        for_update: bool = False,
+    ) -> PortalCourse | None:
+        text = (external_id or "").strip()
+        if not text:
+            return None
+        statement = select(PortalCourse).where(
+            PortalCourse.tenant_id == tenant_id,
+            PortalCourse.external_id == text,
+        )
         if for_update:
             statement = statement.with_for_update()
         return (await self.session.exec(statement)).first()
@@ -102,14 +134,8 @@ class PortalCourseRepository:
             PortalCourseVideo.enabled.is_(True),
             PortalCourseVideo.duration_seconds > 0,
             or_(
-                (
-                    (PortalCourseVideo.source_type == "upload")
-                    & PortalCourseVideo.object_name.is_not(None)
-                ),
-                (
-                    (PortalCourseVideo.source_type == "url")
-                    & PortalCourseVideo.source_url.is_not(None)
-                ),
+                ((PortalCourseVideo.source_type == "upload") & PortalCourseVideo.object_name.is_not(None)),
+                ((PortalCourseVideo.source_type == "url") & PortalCourseVideo.source_url.is_not(None)),
             ),
         )
         return int((await self.session.exec(statement)).one())

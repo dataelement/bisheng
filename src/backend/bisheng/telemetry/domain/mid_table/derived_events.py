@@ -10,6 +10,10 @@ from loguru import logger
 
 from bisheng.common.services import telemetry_service
 from bisheng.core.search.elasticsearch.manager import get_statistics_es_connection_sync
+from bisheng.telemetry.domain.mid_table.user_engagement_shared import (
+    METRIC_SOURCE_ACTIVE_USER,
+    USER_ENGAGEMENT_ES_INDEX,
+)
 
 
 def keyword_text_field() -> dict[str, Any]:
@@ -185,8 +189,8 @@ class ScanEventJob(BaseDerivedEventJob):
 
 
 class MidActiveUserJob(BaseDerivedEventJob):
-    index_name = "mid_active_user"
-    es_mapping = build_mapping()
+    index_name = USER_ENGAGEMENT_ES_INDEX
+    es_mapping = build_mapping({"metric_source": keyword_text_field()})
     event_types = (
         "user_login",
         "new_message_session",
@@ -266,11 +270,13 @@ class MidActiveUserJob(BaseDerivedEventJob):
         source = hit.get("_source", {})
         user_context = source.get("user_context", {})
         user_id = user_context.get("user_id")
+        doc_id = f"active_{user_id}_{date_key}" if date_key and user_id else f"active_{hit.get('_id')}"
         return {
             "_index": self.index_name,
-            "_id": f"{user_id}_{date_key}" if date_key and user_id else hit.get("_id"),
+            "_id": doc_id,
             "_source": {
                 "timestamp": source.get("timestamp"),
+                "metric_source": METRIC_SOURCE_ACTIVE_USER,
                 **user_doc_fields(user_context),
             },
         }

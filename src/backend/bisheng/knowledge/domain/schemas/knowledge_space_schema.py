@@ -12,6 +12,7 @@ from pydantic import (
 )
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
+from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.knowledge.domain import knowledge_fulltext_constants
 from bisheng.knowledge.domain.constants import normalize_business_domain_code, normalize_file_category_code
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
@@ -92,6 +93,10 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
         description="Current user subscription status",
     )
     can_unsubscribe: bool = Field(default=False, description="Whether current user can unsubscribe from this space")
+    can_reorder: bool = Field(
+        default=False,
+        description="Whether the current user can drag this knowledge space in its sidebar group",
+    )
     user_role: UserRoleEnum | None = Field(default=None, description="Knowledge Space user role")
     space_kind: Literal["normal", "department"] = Field(default="normal", description="Knowledge space kind")
     is_clinic: bool = Field(
@@ -365,6 +370,7 @@ class ShougangPortalTagSearchReq(BaseModel):
         "public_and_department",
         "portal_public",
         "portal_configured",
+        "portal_enabled",
     ] = "legacy"
     space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
     space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
@@ -410,6 +416,7 @@ class ShougangPortalDomainFileCountReq(BaseModel):
         "public_and_department",
         "portal_public",
         "portal_configured",
+        "portal_enabled",
     ] = "legacy"
 
 
@@ -440,6 +447,7 @@ class ShougangPortalCategoryFileCountReq(BaseModel):
         "public_and_department",
         "portal_public",
         "portal_configured",
+        "portal_enabled",
     ] = "legacy"
 
 
@@ -489,6 +497,7 @@ class ShougangPortalFileBrowseReq(BaseModel):
         "public_and_department",
         "portal_public",
         "portal_configured",
+        "portal_enabled",
     ] = Field(
         default="legacy",
         description="Server-derived portal discovery scope",
@@ -650,6 +659,7 @@ class ShougangPortalAdvancedUploaderSearchReq(BaseModel):
         "public_and_department",
         "portal_public",
         "portal_configured",
+        "portal_enabled",
     ] = "legacy"
     space_ids: list[int] = Field(default_factory=list)
     space_level: KnowledgeSpaceLevelEnum | None = None
@@ -739,9 +749,7 @@ class ShougangPortalFileItemResp(BaseModel):
     applied_entry_generation: int = 0
     projection_status: str = "ready"
     projection_ready: bool = True
-    capabilities: KnowledgeDocumentEntryCapabilities = Field(
-        default_factory=KnowledgeDocumentEntryCapabilities
-    )
+    capabilities: KnowledgeDocumentEntryCapabilities = Field(default_factory=KnowledgeDocumentEntryCapabilities)
 
     @model_serializer(mode="wrap")
     def serialize_with_content_access_allowlist(self, handler):
@@ -817,6 +825,7 @@ class ShougangPortalHomeReq(BaseModel):
         "public_and_department",
         "portal_public",
         "portal_configured",
+        "portal_enabled",
     ] = "legacy"
     space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
     space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
@@ -1267,10 +1276,23 @@ class KnowledgeSpaceFolderStatsResp(BaseModel):
     )
 
 
+class KnowledgeSpaceFileTagItem(BaseModel):
+    """File tag shown on the knowledge-space children list."""
+
+    id: int
+    name: str
+    resource_type: str | None = None
+    review_status: int | None = None
+
+
 class KnowledgeSpaceFileResponse(KnowledgeFileRead):
     """Knowledge Space File Response"""
 
     summary: str = Field(default="", description="Read-only summary mapped from file abstract")
+    tags: list[KnowledgeSpaceFileTagItem] = Field(
+        default_factory=list,
+        description="Approved file tags plus pending review tags for list display",
+    )
     old_file_level_path: str | None = Field(None, description="Old File Level Path")
     approval_request_id: int | None = Field(None, description="Approval request id for pending uploads")
     approval_status: str | None = Field(None, description="Approval status for pending uploads")
@@ -1293,8 +1315,15 @@ class KnowledgeSpaceFileResponse(KnowledgeFileRead):
     manager_space_id: int | None = None
     distribution_invalid_reason: str | None = None
     projection_ready: bool = True
-    capabilities: KnowledgeDocumentEntryCapabilities = Field(
-        default_factory=KnowledgeDocumentEntryCapabilities
+    capabilities: KnowledgeDocumentEntryCapabilities = Field(default_factory=KnowledgeDocumentEntryCapabilities)
+
+
+class KnowledgeSpaceChildrenPage(PageInfiniteCursorData[KnowledgeSpaceFileResponse]):
+    """知识空间当前目录的分页列表, 附带本目录能否拖拽文件夹."""
+
+    can_reorder_folders: bool = Field(
+        default=False,
+        description="Whether the current user can reorder folders under this parent directory",
     )
 
 

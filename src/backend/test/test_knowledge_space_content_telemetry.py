@@ -386,12 +386,121 @@ def test_content_sync_keeps_team_and_clinic_levels_separate(
         {},
         space_scope_map={3: SimpleNamespace(level=level)},
         space_department_map={3: None},
+        # file_record has no original_knowledge_id, so 原始上传库 falls back to the current
+        # space (id 3) — same fixture as space_scope_map/space_department_map above.
+        original_space_scope_map={3: SimpleNamespace(level=level)},
+        original_space_department_map={3: None},
         primary_department_map={},
         category_label_cache={1: ({}, {})},
     )
 
     assert records[0].space_level == level
     assert records[0].space_level_name == expected_name
+
+
+def test_original_upload_organization_follows_original_space_not_current_uploader_department(monkeypatch):
+    """Customer correction (2026-09-01): 原始上传库XX is a NEW, separate dimension — the
+    library->org mapping of the file's ORIGINAL upload space (frozen forever, via
+    KnowledgeFile.original_knowledge_id — see F081), not "whichever department the
+    uploading person currently sits in". A file originally uploaded into dept-库A (bound
+    to department A), later moved to dept-库B (bound to department B) by a DIFFERENT user
+    who now belongs to department B, must report 原始上传库部门=A (frozen at the original
+    space) while 上传人部门 keeps its OLD, UNCHANGED meaning — the current uploader-of-record's
+    current department, B — and belonging follows the CURRENT space, also B."""
+    worker_module = _import_worker_mid_table()
+    monkeypatch.setattr(
+        worker_module,
+        "get_user_from_ids_with_cache",
+        lambda _ids, user_map: user_map,
+    )
+    department_a = SimpleNamespace(id=101, org_level="dept", name="部门A", path="/101", status="active")
+    department_b = SimpleNamespace(id=102, org_level="dept", name="部门B", path="/102", status="active")
+    monkeypatch.setattr(
+        worker_module,
+        "_get_dimension_department_map",
+        lambda _departments: {101: department_a, 102: department_b},
+    )
+
+    # Current entry: file now lives in space 20 (bound to department B), moved there by
+    # user 2, who — per primary_department_map — currently sits in department B. Under the
+    # OLD (buggy) logic, 原始上传库 would resolve to department B via this mover's own
+    # department; under the fix it must resolve to department A (space 10, where the file
+    # was ORIGINALLY uploaded), regardless of who moved it or where they sit today.
+    file_record = SimpleNamespace(
+        id=11,
+        tenant_id=1,
+        user_id=2,
+        user_name="搬运者",
+        original_knowledge_id=10,
+        create_time=None,
+        file_name="方案.pdf",
+        file_type=1,
+        split_rule=None,
+        file_subcategory_code=None,
+        file_encoding=None,
+    )
+    current_space = SimpleNamespace(id=20, tenant_id=1, name="部门B知识库")
+
+    records, _ = worker_module._build_knowledge_space_content_records(
+        [(file_record, current_space)],
+        {},
+        space_scope_map={20: SimpleNamespace(level="department")},
+        space_department_map={20: department_b},
+        original_space_scope_map={10: SimpleNamespace(level="department")},
+        original_space_department_map={10: department_a},
+        primary_department_map={2: department_b},
+        category_label_cache={1: ({}, {})},
+    )
+
+    record = records[0]
+    assert record.original_upload_department_name == "部门A"
+    assert record.uploader_department_name == "部门B"
+    assert record.belonging_department_name == "部门B"
+
+
+def test_original_upload_organization_falls_back_to_current_space_when_original_id_missing(monkeypatch):
+    """Files created before 2026-08-10 (or not yet covered by
+    backfill_knowledge_file_original_origin.py) have original_knowledge_id=None — 原始上传库
+    must degrade to the current space's library->org mapping (still correct-shaped, just
+    not frozen), not crash and not silently fall back to zero/empty."""
+    worker_module = _import_worker_mid_table()
+    monkeypatch.setattr(
+        worker_module,
+        "get_user_from_ids_with_cache",
+        lambda _ids, user_map: user_map,
+    )
+    department_a = SimpleNamespace(id=101, org_level="dept", name="部门A", path="/101", status="active")
+    monkeypatch.setattr(worker_module, "_get_dimension_department_map", lambda _departments: {101: department_a})
+
+    file_record = SimpleNamespace(
+        id=12,
+        tenant_id=1,
+        user_id=3,
+        user_name="老用户",
+        original_knowledge_id=None,
+        create_time=None,
+        file_name="旧文件.pdf",
+        file_type=1,
+        split_rule=None,
+        file_subcategory_code=None,
+        file_encoding=None,
+    )
+    space = SimpleNamespace(id=30, tenant_id=1, name="部门A知识库")
+
+    records, _ = worker_module._build_knowledge_space_content_records(
+        [(file_record, space)],
+        {},
+        space_scope_map={30: SimpleNamespace(level="department")},
+        space_department_map={30: department_a},
+        original_space_scope_map={30: SimpleNamespace(level="department")},
+        original_space_department_map={30: department_a},
+        # Any value works here (department-level resolution doesn't consult it) — it only
+        # needs to cover user_id=3 so the missing-id branch doesn't hit a real DB session.
+        primary_department_map={3: department_a},
+        category_label_cache={1: ({}, {})},
+    )
+
+    assert records[0].original_upload_department_name == "部门A"
 
 
 def test_knowledge_space_content_mapping_excludes_tenant_and_common_user_context():
@@ -1048,6 +1157,10 @@ def test_add_embedding_enqueues_file_stat_after_success(monkeypatch):
             return SimpleNamespace(documents=[])
 
     monkeypatch.setattr(knowledge_imp.KnowledgeDao, "query_by_id", staticmethod(lambda _knowledge_id: space))
+    monkeypatch.setattr(
+        "bisheng.knowledge.rag.shared_space_storage.resolve_space_shared_routing",
+        lambda *_args, **_kwargs: None,
+    )
     monkeypatch.setattr(
         knowledge_imp.KnowledgeRag,
         "init_knowledge_milvus_vectorstore_sync",

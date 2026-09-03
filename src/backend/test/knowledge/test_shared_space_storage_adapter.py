@@ -126,17 +126,29 @@ class TestResolveRouting:
         snap = TenantRoutingSnapshot.from_row(row)
         assert (snap.tenant_id, snap.shared_enabled, snap.routing_version, snap.write_frozen) == (5, True, 9, True)
 
+    def test_embedding_model_uses_config_fallback(self):
+        snapshot = _snapshot()
+        snapshot = TenantRoutingSnapshot(
+            **{
+                **snapshot.__dict__,
+                "embedding_model_id": None,
+            }
+        )
+
+        assert sss.tenant_target_embedding_model_id(
+            snapshot,
+            conf=_conf(tenant_embedding_model_id=13),
+        ) == 13
+
 
 class TestMembershipFilter:
     def test_single_space_uses_array_contains(self):
         expr = build_milvus_membership_expr(1, [11])
-        assert expr == "tenant_id == 1 and ARRAY_CONTAINS(knowledge_ids, 11)"
+        assert expr == "ARRAY_CONTAINS(knowledge_ids, 11)"
 
     def test_multi_space_uses_array_contains_any(self):
         expr = build_milvus_membership_expr(1, [11, 12, 13])
-        assert expr == (
-            "tenant_id == 1 and ARRAY_CONTAINS_ANY(knowledge_ids, [11, 12, 13])"
-        )
+        assert expr == "ARRAY_CONTAINS_ANY(knowledge_ids, [11, 12, 13])"
 
     def test_empty_spaces_rejected(self):
         with pytest.raises(ValueError):
@@ -147,8 +159,19 @@ class TestMembershipFilter:
             tenant_id=1, requested_space_ids=(11, 12), routing_version=1
         )
         clauses = build_shared_es_filter(filter_)
-        assert {"term": {"metadata.tenant_id": 1}} in clauses
-        assert {"terms": {"metadata.knowledge_ids": [11, 12]}} in clauses
+        assert clauses == [
+            {"terms": {"metadata.knowledge_ids": [11, 12]}},
+        ]
+
+    def test_shared_metadata_schema_keeps_legacy_tenant_id(self):
+        tenant_field = next(
+            field
+            for field in sss.SHARED_SPACE_CONTENT_METADATA_SCHEMA
+            if field.field_name == "tenant_id"
+        )
+
+        assert tenant_field.field_type == "int64"
+        assert tenant_field.kwargs == {"nullable": False}
 
 
 class _FakeEntity:
@@ -289,7 +312,7 @@ class TestSharedSpaceStorageReader:
         )
 
         assert "routing" not in calls[0]
-        assert calls[1]["routing"] == "1-10,1-11"
+        assert calls[1]["routing"] == "10,11"
 
 
 class TestESQueryRendering:
@@ -492,6 +515,28 @@ class TestMembershipRewrite:
 
 
 class TestContentRewrite:
+    def test_content_row_and_es_metadata_supply_tenant_id_default(self):
+        writer = object.__new__(sss.MilvusEsSharedSpaceStorageWriter)
+        identity = ContentProjectionIdentity(
+            tenant_id=1,
+            canonical_document_id=8,
+            canonical_version_id=9,
+            content_file_id=10,
+            content_generation=2,
+            embedding_model_id="7",
+        )
+
+        row = writer._build_chunk_row(
+            identity,
+            SharedContentChunk(chunk_index=0, text="first", vector=[0.1] * 4),
+            (10,),
+            3,
+        )
+
+        assert row["tenant_id"] == 1
+        assert writer._es_doc_source(row)["metadata"]["tenant_id"] == 1
+        assert writer._es_doc_id(identity, 0) == "8-9-2-0"
+
     async def test_complete_milvus_generation_still_removes_stale_es_chunks(self):
         writer = object.__new__(sss.MilvusEsSharedSpaceStorageWriter)
         writer.tenant_id = 1

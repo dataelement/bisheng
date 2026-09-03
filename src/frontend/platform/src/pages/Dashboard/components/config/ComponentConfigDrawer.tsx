@@ -822,7 +822,8 @@ export function ComponentConfigDrawer() {
                 } : {
                   type: 'all' as const
                 }
-              }
+              },
+              dimensionFields: chartLinkConfig.dimensionFields || []
             }
 
             console.log('生成的 QueryConfig:', queryConfig)

@@ -91,11 +91,14 @@ def test_probe_accepts_only_browser_compatible_combinations(
 ):
     path = tmp_path / "media"
     (_write_mp4 if kind == "mp4" else _write_webm)(path)
-    service = PortalCourseMediaService(storage=AsyncMock(), runner=lambda *a, **k: _result(
-        container=container,
-        video=video,
-        audio=audio,
-    ))
+    service = PortalCourseMediaService(
+        storage=AsyncMock(),
+        runner=lambda *a, **k: _result(
+            container=container,
+            video=video,
+            audio=audio,
+        ),
+    )
 
     probe = service.probe(path)
 
@@ -183,11 +186,14 @@ def test_probe_rejects_unsupported_codecs(
         _write_mp4(path)
     else:
         _write_webm(path)
-    service = PortalCourseMediaService(storage=AsyncMock(), runner=lambda *a, **k: _result(
-        container=container,
-        video=video,
-        audio=audio,
-    ))
+    service = PortalCourseMediaService(
+        storage=AsyncMock(),
+        runner=lambda *a, **k: _result(
+            container=container,
+            video=video,
+            audio=audio,
+        ),
+    )
 
     with pytest.raises(PortalCourseMediaUnsupportedError):
         service.probe(path)

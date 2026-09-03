@@ -429,3 +429,32 @@ async def test_source_space_metadata_query_returns_department_name_without_extra
         11: ("无绑定知识库", "", None, ""),
     }
     session.exec.assert_awaited_once()
+
+
+def test_children_page_keeps_file_tags_on_response_schema():
+    """list_space_children wraps extra_info dicts in KnowledgeSpaceFileResponse.
+
+    tags must be a declared field, otherwise Pydantic strips them and the
+    file list always shows '--' even when TagLink rows already exist.
+    """
+    from bisheng.knowledge.domain.schemas.knowledge_space_schema import KnowledgeSpaceChildrenPage
+
+    page = KnowledgeSpaceChildrenPage(
+        data=[
+            {
+                "id": 9992193,
+                "knowledge_id": 40,
+                "file_name": "建筑工程施工安全操作规程》（DB11T1833-2021）.pdf",
+                "tags": [
+                    {"id": 101, "name": "安全生产规程", "resource_type": "system_tag"},
+                    {"id": 102, "name": "岗位操作规程", "resource_type": "system_tag"},
+                ],
+            }
+        ],
+        page_size=20,
+        has_more=False,
+    )
+
+    assert [item.name for item in page.data[0].tags] == ["安全生产规程", "岗位操作规程"]
+    dumped = page.model_dump()
+    assert dumped["data"][0]["tags"][0]["name"] == "安全生产规程"

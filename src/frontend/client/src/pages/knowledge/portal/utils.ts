@@ -23,6 +23,10 @@ export function isFolder(file: KnowledgeFile) {
     return file.type === FileType.FOLDER;
 }
 
+export function isFallbackFolderName(folderId: string | number, name?: string | null): boolean {
+    return typeof name === "string" && name.trim() === `文件夹 ${folderId}`;
+}
+
 export function normalizePortalFileCategoryOptions(rawOptions: unknown): PortalFileCategoryOption[] {
     if (!Array.isArray(rawOptions)) {
         return DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS;
@@ -171,6 +175,7 @@ export function mergeRootTreeNodesPreservingLoadedFolders(
     previous: PortalFileTreeNode[],
     rootFiles: KnowledgeFile[],
     currentFolderId?: string,
+    spaceId?: string,
 ): PortalFileTreeNode[] {
     const nextNodes = dedupeFilesById(rootFiles).map((file) => {
         const next = createTreeNode(file);
@@ -190,11 +195,52 @@ export function mergeRootTreeNodesPreservingLoadedFolders(
             nextCursor: prevNode.nextCursor,
         };
     });
-    if (!currentFolderId) return nextNodes;
+    if (!currentFolderId || !spaceId) return nextNodes;
     if (findTreeNode(nextNodes, currentFolderId)) return nextNodes;
+
+    const existingPath = findTreeNodePath(previous, currentFolderId);
     const currentFolderNode = findTreeNode(previous, currentFolderId);
     if (!currentFolderNode) return nextNodes;
-    return dedupeTreeNodesByFileId([currentFolderNode, ...nextNodes]);
+
+    // For a root-level current folder we can keep it at the top level.
+    if (existingPath.length <= 1) {
+        return dedupeTreeNodesByFileId([currentFolderNode, ...nextNodes]);
+    }
+
+    // For a nested current folder, preserve its full ancestor chain instead of
+    // hoisting it to the root, which would break the breadcrumb path.
+    const insertIntoPath = (
+        nodes: PortalFileTreeNode[],
+        path: Array<{ id?: string; name: string }>,
+    ): PortalFileTreeNode[] => {
+        if (!path.length) return nodes;
+        const [head, ...tail] = path;
+        const headId = String(head.id);
+        const index = nodes.findIndex((node) => String(node.file.id) === headId);
+        if (index >= 0) {
+            const node = nodes[index];
+            const nextChildren = tail.length
+                ? insertIntoPath(node.children, tail)
+                : dedupeTreeNodesByFileId([
+                    currentFolderNode,
+                    ...node.children.filter((child) => String(child.file.id) !== String(currentFolderNode.file.id)),
+                ]);
+            return [
+                ...nodes.slice(0, index),
+                { ...node, expanded: true, children: nextChildren },
+                ...nodes.slice(index + 1),
+            ];
+        }
+        const rootFile = rootFiles.find((f) => String(f.id) === headId);
+        const placeholderName = rootFile?.name ?? head.name;
+        const placeholderFile = createRestoredFolderFile(spaceId, headId, placeholderName);
+        const newNode: PortalFileTreeNode = tail.length
+            ? { ...createTreeNode(placeholderFile), expanded: true, children: insertIntoPath([], tail) }
+            : currentFolderNode;
+        return [...nodes, newNode];
+    };
+
+    return insertIntoPath(nextNodes, existingPath);
 }
 
 export function dedupeFilesById(files: KnowledgeFile[]): KnowledgeFile[] {
@@ -237,7 +283,7 @@ export function collectTreeFileIds(nodes: PortalFileTreeNode[]): string[] {
 
 export function findTreeNode(nodes: PortalFileTreeNode[], fileId: string): PortalFileTreeNode | null {
     for (const node of nodes) {
-        if (node.file.id === fileId) return node;
+        if (String(node.file.id) === String(fileId)) return node;
         const child = findTreeNode(node.children, fileId);
         if (child) return child;
     }
@@ -251,11 +297,21 @@ export function findTreeNodePath(
 ): Array<{ id?: string; name: string }> {
     for (const node of nodes) {
         const nextPath = [...path, { id: node.file.id, name: node.file.name }];
-        if (node.file.id === fileId) return nextPath;
+        if (String(node.file.id) === String(fileId)) return nextPath;
         const childPath = findTreeNodePath(node.children, fileId, nextPath);
         if (childPath.length) return childPath;
     }
     return [];
+}
+
+/** Remove every occurrence of a file id from the tree. */
+export function removeTreeNode(nodes: PortalFileTreeNode[], fileId: string): PortalFileTreeNode[] {
+    return nodes
+        .filter((node) => String(node.file.id) !== String(fileId))
+        .map((node) => ({
+            ...node,
+            children: removeTreeNode(node.children, fileId),
+        }));
 }
 
 export function updateTreeNode(
@@ -264,7 +320,7 @@ export function updateTreeNode(
     updater: (node: PortalFileTreeNode) => PortalFileTreeNode,
 ): PortalFileTreeNode[] {
     return nodes.map((node) => {
-        if (node.file.id === fileId) {
+        if (String(node.file.id) === String(fileId)) {
             return updater(node);
         }
         if (!node.children.length) return node;
@@ -273,6 +329,64 @@ export function updateTreeNode(
             children: updateTreeNode(node.children, fileId, updater),
         };
     });
+}
+
+export function createRestoredFolderFile(
+    spaceId: string,
+    folderId: string,
+    folderName?: string,
+): KnowledgeFile {
+    const name = folderName?.trim() || `文件夹 ${folderId}`;
+    return {
+        id: folderId,
+        name,
+        type: FileType.FOLDER,
+        tags: [],
+        path: name,
+        spaceId,
+        createdAt: "",
+        updatedAt: "",
+    };
+}
+
+/**
+ * Ensure a chain of ancestor folders exists in the tree, creating placeholder
+ * nodes for any missing segments. Used when restoring a deep-linked/returned
+ * folder so the breadcrumb can show the full path instead of only the deepest
+ * folder.
+ */
+export function ensureFolderPath(
+    nodes: PortalFileTreeNode[],
+    path: Array<{ id: string; name: string }>,
+    spaceId: string,
+): PortalFileTreeNode[] {
+    if (!path.length) return nodes;
+    const [head, ...tail] = path;
+    const headId = String(head.id);
+    const index = nodes.findIndex((node) => String(node.file.id) === headId);
+    if (index >= 0) {
+        const node = nodes[index];
+        const shouldRefreshName =
+            head.name &&
+            !isFallbackFolderName(headId, head.name) &&
+            isFallbackFolderName(headId, node.file.name);
+        const nextFile = shouldRefreshName
+            ? { ...node.file, name: head.name, path: head.name }
+            : node.file;
+        const nextNode: PortalFileTreeNode = {
+            ...node,
+            file: nextFile,
+            expanded: true,
+            children: ensureFolderPath(node.children, tail, spaceId),
+        };
+        return [...nodes.slice(0, index), nextNode, ...nodes.slice(index + 1)];
+    }
+    const newNode: PortalFileTreeNode = {
+        ...createTreeNode(createRestoredFolderFile(spaceId, headId, head.name)),
+        expanded: true,
+        children: ensureFolderPath([], tail, spaceId),
+    };
+    return [...nodes, newNode];
 }
 
 export function createUploadFolderNode(item: { id: number | string; file_name?: string; name?: string }): PortalUploadFolderNode {

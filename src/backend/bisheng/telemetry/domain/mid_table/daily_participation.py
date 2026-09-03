@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, ClassVar, Iterable
+from typing import Any, ClassVar
 
 from elasticsearch import helpers
 from loguru import logger
@@ -10,7 +11,10 @@ from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable, BaseRecord
-
+from bisheng.telemetry.domain.mid_table.user_engagement_shared import (
+    METRIC_SOURCE_PARTICIPATION,
+    USER_ENGAGEMENT_ES_INDEX,
+)
 
 CHINA_STANDARD_TIME = timezone(timedelta(hours=8))
 
@@ -78,6 +82,7 @@ def aggregate_historical_login_hits(
 
 
 class DailyParticipationRecord(BaseRecord):
+    metric_source: str = METRIC_SOURCE_PARTICIPATION
     tenant_id: int = DEFAULT_TENANT_ID
     local_date: str
     active_employee: int = 1
@@ -95,13 +100,14 @@ class DailyParticipationRecord(BaseRecord):
 class DailyParticipationFact(BaseMidTable):
     """One mutable document per tenant, business date and active employee."""
 
-    _index_name = "mid_user_daily_participation_fact"
+    _index_name = USER_ENGAGEMENT_ES_INDEX
     _update_mappings_on_existing = True
     ROSTER_SCHEDULED_KEY: ClassVar[str] = (
         "telemetry:user_daily_participation:roster_scheduled"
     )
     ROSTER_SCHEDULE_TTL_SECONDS: ClassVar[int] = 5
     _mappings: dict[str, Any] = {
+        "metric_source": {"type": "keyword"},
         "tenant_id": {"type": "keyword"},
         "local_date": {"type": "keyword"},
         "active_employee": {"type": "integer"},
@@ -213,6 +219,7 @@ class DailyParticipationFact(BaseMidTable):
             else None
         )
         base_document = {
+            "metric_source": METRIC_SOURCE_PARTICIPATION,
             "tenant_id": normalized_tenant_id,
             "timestamp": day_timestamp,
             "user_id": int(user_id),

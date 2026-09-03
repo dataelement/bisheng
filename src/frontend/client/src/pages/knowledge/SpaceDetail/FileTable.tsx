@@ -727,7 +727,7 @@ interface FileTableProps {
     onRetry: (id: string) => void;
     onAcceptAlias?: (id: string) => void;
     onRejectAlias?: (id: string) => void;
-    onNavigateFolder: (id: string) => void;
+    onNavigateFolder: (id: string, folderName?: string) => void;
     /** System admins may drag folders to define the shared order within a directory. */
     canReorderFolders?: boolean;
     onReorderFolder?: (folderId: string, prevFolderId: string | null, nextFolderId: string | null) => void;
@@ -1038,7 +1038,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onRetry={() => onRetry?.(file.id)}
                                 onAcceptAlias={onAcceptAlias ? () => onAcceptAlias(file.id) : undefined}
                                 onRejectAlias={onRejectAlias ? () => onRejectAlias(file.id) : undefined}
-                                onNavigateFolder={() => onNavigateFolder?.(file.id)}
+                                onNavigateFolder={() => onNavigateFolder?.(file.id, file.name)}
                                 draggableFolder={isDraggableFolder(file)}
                                 dragging={draggingFolderId === file.id}
                                 dropPosition={folderDropTarget?.id === file.id ? folderDropTarget.position : null}

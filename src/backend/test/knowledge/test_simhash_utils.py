@@ -48,3 +48,26 @@ def test_similarity_unrelated_text_low():
     h_b = compute_simhash_64_hex("足球运动员转会市场的经济学分析与球队预算管理")
     # Just assert it's strictly less than 1 — exact value depends on tokenization
     assert similarity(h_a, h_b) < 1.0
+
+
+def test_similarity_unrelated_latin_text_not_1():
+    """Regression test for the whitespace-token collision bug.
+
+    jieba.lcut splits Latin-script runs word-by-word but emits every space
+    between words as its own token. Before filtering those out,
+    Simhash(tokens, f=64) — an unweighted list where a repeated token's hash
+    is counted once per occurrence — let the space token's hash dominate the
+    bit vote for any text with a lot of English/code content, so unrelated
+    English/Latin sentences with a similar word/space ratio collapsed onto
+    the exact same 64-bit fingerprint (similarity == 1.0) regardless of what
+    they actually said.
+    """
+    h_a = compute_simhash_64_hex(
+        "The quick brown fox jumps over the lazy dog near the riverbank "
+        "while birds sing in the morning sun."
+    )
+    h_b = compute_simhash_64_hex(
+        "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do "
+        "eiusmod tempor incididunt ut labore."
+    )
+    assert similarity(h_a, h_b) < 1.0

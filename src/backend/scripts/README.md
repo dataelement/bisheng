@@ -39,6 +39,23 @@ PYTHONPATH=./ .venv/bin/python scripts/execute_sql.py \
   --config config_3002.yaml --sql "SELECT * FROM user" --max-rows 0
 ```
 
+### `sql/fill_mysql_table_column_comments.sql`
+
+一次性 MySQL 脚本，给 COMMENT 为空的表和字段补中文备注。已有备注不覆盖，表或字段不存在则跳过，可重复执行。字段通过 `MODIFY COLUMN` 写 COMMENT，会保留原类型、默认值和自增。
+
+必须用 mysql 客户端执行（含 `DELIMITER`，不能走 `execute_sql.py`）。请先备份，并在低峰执行：
+
+```bash
+mysql -u USER -p DATABASE < src/backend/scripts/sql/fill_mysql_table_column_comments.sql
+```
+
+文案来自 `scripts/_gen_fill_mysql_comments.py`。ORM 变更后如需重生成：
+
+```bash
+cd src/backend
+PYTHONPATH=./ uv run python scripts/_gen_fill_mysql_comments.py
+```
+
 ### `backfill_department_short_names.py`
 
 根据直接父部门全称回填历史活动部门的简称。脚本扫描所有租户和所有部门来源，只处理
@@ -252,6 +269,54 @@ Exit codes:
 - `3`：扫描或初始化失败。
 - `4`：真实删除、分步核验或恢复执行失败。
 - `5`：审计报告无法持久化；脚本不会在该状态下继续新的业务删除。
+
+### `relink_duplicate_space_files_as_publish.py`
+
+把多知识空间中的相同当前主版本转成 F059 软链接：最高级空间保留物理原文件（`manager`），
+严格下级空间原地改成 `entry_type=publish`（保留 `file_id`，预览走原文件，默认禁止下载）。
+同级多库（例如两个部门库同一 MD5）不互转。空 MD5 用 `文件名+大小` 兜底。下级独有历史版本
+留在原空间，并写入报告供人工处理。仅支持未启用多租户的部署。
+
+默认 dry-run，报告同时写 JSON 和 Markdown 到 `migration_reports/knowledge_file_relink/`
+（`relink-{run_id}.json` / `relink-{run_id}.md`）；只有 `--apply` 才会改库、
+删除下级副本的 Milvus/ES/MinIO，并入队投影。从已有 JSON 恢复时仍只认 `.json`。
+
+用法：
+
+```bash
+# 全量只读扫描
+PYTHONPATH=./ .venv/bin/python scripts/relink_duplicate_space_files_as_publish.py
+
+# 按空间 / 文件 / MD5 收窄；参数可重复
+PYTHONPATH=./ .venv/bin/python scripts/relink_duplicate_space_files_as_publish.py \
+  --space-id 10 --file-id 201 --md5 same-md5 --limit 20
+
+# 审核 dry-run 报告并安排维护窗口后执行
+PYTHONPATH=./ .venv/bin/python scripts/relink_duplicate_space_files_as_publish.py --apply
+
+# 从上次 apply 报告恢复未完成单元
+PYTHONPATH=./ .venv/bin/python scripts/relink_duplicate_space_files_as_publish.py \
+  --apply --resume-report migration_reports/knowledge_file_relink/relink-RUN_ID.json
+```
+
+Safety and reports:
+
+- 库级从高到低：`public` > `department` > `team`/`team_ks` > `personal`。只转换严格下级。
+- 部门库只把**本部门组织树下**的科室库/团队库改成软链；其他部门的科室/团队库不挂到该部门。
+  公共库仍可对全租户下级做软链。未绑定组织节点的自由团队库不会挂到部门库。
+- 每个单元在写入前重新扫描并校验 origin/source/匹配键；数据漂移时跳过。
+- 下级已是带分发下游的 manager（例如已正式发布到科室并留下 publish/share）时跳过该条，不中止整轮。
+- 报告同时写 JSON（机器可读，可 `--resume-report`）和 Markdown（中文汇总、库级分布、转换/跳过/历史版本明细，含文件名、库名、目录）。
+- `--apply` 不可逆地清空下级物理载荷；公共/最高库原文件和 OpenFGA 本地权限保留。
+  正式执行前必须备份、审核 dry-run、单文件烟测和小批量灰度。
+
+Exit codes:
+
+- `0`：dry-run 完成，或所有 apply 单元已完成/安全跳过。
+- `2`：参数、单租户约束或恢复报告预检失败。
+- `3`：扫描或初始化失败。
+- `4`：转换、外部清理或核验失败。
+- `5`：审计报告无法持久化。
 
 ### `strip_abstract_labels.py`
 
@@ -640,6 +705,121 @@ Safety:
 - `--include-inflight` / `--only-inflight` 可能与正在运行的任务重复解析，只能在明确需要时使用。
 - 数据库状态提交与 Celery 发布不是原子事务；网络异常存在 broker 已接受但客户端未收到确认的不确定窗口。
 
+### `retry_failed_knowledge_space_folder_files.py`
+
+按知识空间名称和目录名称（支持多级路径）查找该目录及其子目录下状态为 `FAILED` 的文件，
+默认 dry-run 只列出文件；传入 `--apply` 后复用 `enqueue_reparse_knowledge_space_files.py`
+把重试任务发到 `knowledge_celery` worker。
+
+Usage:
+
+```bash
+export config=/path/to/config.yaml
+cd src/backend
+
+# 先预览失败文件，不改数据
+bash scripts/retry_failed_knowledge_space_folder_files.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全"
+
+# 确认无误后再入队重解析
+bash scripts/retry_failed_knowledge_space_folder_files.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全" \
+  --apply
+
+# 整个知识空间（含根目录和所有子目录）下的失败文件
+bash scripts/retry_failed_knowledge_space_folder_files.sh \
+  --space-name "admin的知识库" \
+  --folder /
+
+# 目录名在空间内唯一时可只写最后一级
+bash scripts/retry_failed_knowledge_space_folder_files.sh \
+  --space-name "安全生产知识库" \
+  --folder "消防安全"
+
+# 同名知识空间用租户 ID 区分；需要时连 TIMEOUT 一起重试
+bash scripts/retry_failed_knowledge_space_folder_files.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全" \
+  --tenant-id 1 \
+  --include-timeout \
+  --apply
+```
+
+`--folder` 支持 `/`、`>`、`->` 分隔多级目录。解析范围包含该目录及其所有子目录。
+`--folder /`（或 `root`）表示整个知识空间，包括根目录下的文件。
+
+Safety:
+
+- 默认只选 `FAILED`。`--include-timeout` 才会加上 `TIMEOUT`。
+- `--apply` 前必须先跑 dry-run，并确认 broker 与 knowledge worker 可用。
+- 成功输出只表示任务已入队，不表示解析已经完成。
+
+### `audit_api_sync_uploader_clinic_spaces.py`
+
+按知识空间名称和目录名称（支持多级路径）列出该目录及其子目录下入库方式为「接口同步」
+（`user_metadata.filelib_sync_endpoint` 或 `external_file_id`）的文件，再按上传人
+（优先 `original_uploader_id`，否则 `user_id`）按主部门组织树上溯查找科室库绑定。只读；输出命中的
+科室库、已有科室库的上传人、以及没有科室库的上传人。
+
+判定：与 filelib_sync 责任人科室库相同——从上传人主部门沿组织树（自己→上级→根）查找第一个
+科室库绑定（空间 level 为 team/team_ks 且 owner_type=user）。不看 org_level。班组人员可以命中
+上级科室的库。无上传人、用户不存在、没有部门、整条链都没有科室库才会进入缺失名单。
+
+Usage:
+
+```bash
+export config=/path/to/config.yaml
+cd src/backend
+
+bash scripts/audit_api_sync_uploader_clinic_spaces.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全"
+
+# 整个知识空间
+bash scripts/audit_api_sync_uploader_clinic_spaces.sh \
+  --space-name "安全生产知识库" \
+  --folder /
+
+# JSON 输出；同名空间用租户 ID 区分
+bash scripts/audit_api_sync_uploader_clinic_spaces.sh \
+  --space-name "安全生产知识库" \
+  --folder "消防安全" \
+  --tenant-id 1 \
+  --format json
+```
+
+`--folder` 规则与 `retry_failed_knowledge_space_folder_files.py` 相同。脚本不写库。
+
+### `move_api_sync_files_to_uploader_clinic_spaces.py`
+
+按知识空间名称和目录路径选出入库方式为「接口同步」的文件，解析每位上传人的科室库
+（规则与 `audit_api_sync_uploader_clinic_spaces.py` / filelib_sync 责任人科室库相同），
+再把文件迁到对应科室库。目标目录就是输入的目录路径；不存在则按段创建。
+来源子目录下的文件会平铺到该目标目录。默认为 dry-run；`--apply` 才会建目录并迁移。
+
+Usage:
+
+```bash
+export config=/path/to/config.yaml
+cd src/backend
+
+# 仅预检
+bash scripts/move_api_sync_files_to_uploader_clinic_spaces.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全"
+
+# 执行迁移
+bash scripts/move_api_sync_files_to_uploader_clinic_spaces.sh \
+  --space-name "安全生产知识库" \
+  --folder "安全生产/消防安全" \
+  --apply
+```
+
+没有科室库、解析未成功、目标重名、嵌入模型不一致的文件会跳过并打出原因。
+输出每行包含迁移文件、科室库名称、上传人和科室名称。
+
 ### `move_knowledge_space_files.py`
 
 扫描一个或多个来源知识空间的 `SUCCESS` 真实文件，可按来源文件夹、门户一级分类 code、
@@ -836,6 +1016,38 @@ JSON 报告：
   旧目标不会自动恢复，需要根据 JSONL 人工清理残留。
 - `--apply` 会删除来源文件并生成新的目标文件 ID。收藏、分享链接及其他保存旧文件 ID 的引用不会迁移，
   执行前必须先审核 dry-run 报告并确认这些引用中断的影响。
+
+## Telemetry / Dashboard Scripts
+
+### `migrate_user_engagement_indices.py`
+
+F058 后续改造：`用户规模统计`(mid_user_increment) / `活跃用户规模统计`(mid_active_user) /
+`全员每日参与度`(mid_user_daily_participation_fact) 三个原本独立的 ES 索引，写入侧已经
+改成共写一个新的合并索引（`mid_user_engagement_stat`，见
+`bisheng/telemetry/domain/mid_table/user_engagement_shared.py`）。这个脚本把三个旧索引里
+**历史**数据搬进新索引，让合并后的看板还能看到切换之前的数据。旧的三个索引本身不改、不删，
+脚本只读它们。每条记录按来源打 `metric_source` 标记，`_id` 按来源加前缀（`increment_`/
+`active_`，`participation` 本来就带前缀不用改），跟线上写入逻辑用的是同一套前缀规则，
+重复跑这个脚本是幂等的（同一条历史记录每次都会覆盖成同样的内容，不会重复插入）。
+默认 dry-run，`--apply` 才写库。
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py
+PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py --apply --source increment
+PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py --apply --batch-size 2000
+PYTHONPATH=./ .venv/bin/python scripts/migrate_user_engagement_indices.py --apply --limit 500  # 先小批量验证
+
+bash scripts/migrate_user_engagement_indices.sh --apply
+```
+
+说明：
+
+- `--source`：只迁移一个来源(`increment`/`active_user`/`participation`)，默认三个都迁。
+- `--limit`：每个来源最多扫描多少条，用于先小批量验证。
+- `--apply` 时脚本会先复用线上写入代码本身的建表逻辑（`UserIncrement`/`DailyParticipationFact`/
+  `MidActiveUserJob` 各自的 `ensure_index_exists`）把目标索引的 mapping 建/补齐，不在脚本里
+  另外维护一份 mapping 定义。
 
 ## OpenAPI Verification Scripts
 
@@ -1249,3 +1461,21 @@ Safety:
 - 不接受 `--transfer-to-user-id`，也不会修改任何资源 owner 或资源内容。
 - 跨租户迁移仅由该脚本绕过资源阻断；不会修改全局 `enforce_transfer_before_relocate` 配置。
 - `--apply` 会改变主部门与叶子租户。脚本不会修改管理员角色、账号状态、密码或其他次级部门关系；OpenFGA 同步遵循现有 `FailedTuple` 补偿机制。
+
+### `report_original_knowledge_file_counts.py`
+
+按原始上传知识库统计各组织下五类知识库的当前业务文件数量，并输出 UTF-8 JSON。文件缺少有效的 `original_knowledge_id` 时回退到当前 `knowledge_id`。公共库归属唯一启用的公司组织；部门库和科室库按知识库绑定组织归属；团队库和个人库按库所有者的当前主部门归属。脚本只读取默认租户数据，不写数据库。
+
+Usage:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/report_original_knowledge_file_counts.py \
+  --output ./knowledge_file_counts_by_original_organization.json
+
+# 仅在确认可以覆盖已有文件时使用
+PYTHONPATH=./ .venv/bin/python scripts/report_original_knowledge_file_counts.py \
+  --output ./knowledge_file_counts_by_original_organization.json \
+  --force
+```
+
+输出包含 `summary`、有文件的 `organizations` 和无法解析归属的 `unassigned`。脚本排除发布、分享、投影墓碑、收藏引用、历史非主版本和旧版发布复制记录；如启用了多租户模式则直接中止。

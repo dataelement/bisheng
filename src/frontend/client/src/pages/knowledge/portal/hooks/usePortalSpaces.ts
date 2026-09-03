@@ -244,16 +244,17 @@ export function usePortalSpaces({
         if (!deepLinkFileId || !preferredSpace) return null;
         return isOutOfSidebarPersonalSpace(preferredSpace, selectableSpaces) ? preferredSpace : null;
     }, [deepLinkFileId, preferredSpace, selectableSpaces]);
+    /**
+     * Only skip activating the preferred space when it is confirmed to be an
+     * out-of-sidebar personal space (preview-only mode). While the preferred
+     * space is still loading we must NOT fall back to the default personal
+     * space; doing so reports spaceId=1 to the parent frame and produces a
+     * visible intermediate URL jump before the real deep-link space resolves.
+     */
     const skipPreferredSpaceActivation = Boolean(
         deepLinkFileId
         && preferredSpaceId
-        && (
-            previewOnlyTargetSpace
-            || (
-                !preferredSpace
-                && !selectableSpaces.some((space) => String(space.id) === String(preferredSpaceId))
-            )
-        ),
+        && previewOnlyTargetSpace,
     );
     const fullAccessSpaceIds = useMemo(
         () => selectableSpaces

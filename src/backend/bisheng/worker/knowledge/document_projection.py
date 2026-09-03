@@ -86,12 +86,12 @@ async def _build_document_projection_service(
     version_repository,
     deleting_entry_finalizer=None,
     tenant_id: int | None = None,
+    allow_legacy_content_loader: bool = False,
 ):
     from bisheng.knowledge.domain.services.knowledge_document_projection_service import (
         KnowledgeDocumentProjectionService,
     )
     from bisheng.knowledge.domain.services.shared_space_projection_support import (
-        load_shared_content_chunks_from_legacy,
         resolve_shared_space_storage_enabled,
     )
     from bisheng.knowledge.rag.shared_space_storage import get_shared_storage_conf
@@ -112,13 +112,20 @@ async def _build_document_projection_service(
             kwargs = {
                 "shared_storage_writer": writer,
                 "shared_storage_enabled": True,
-                "shared_content_chunk_loader": load_shared_content_chunks_from_legacy,
                 "shared_embedding_model_id": writer.schema_spec.embedding_model_id,
                 "max_retry_attempts": int(shared_conf.projection_max_retries),
             }
+            if allow_legacy_content_loader:
+                from bisheng.knowledge.domain.services.shared_space_projection_support import (
+                    load_shared_content_chunks_from_legacy,
+                )
+
+                kwargs["shared_content_chunk_loader"] = (
+                    load_shared_content_chunks_from_legacy
+                )
             logger.info(
-                "F059 projection using shared dual projection mode "
-                "(content + membership)"
+                "F059 projection using shared mode legacy_content_loader=%s",
+                allow_legacy_content_loader,
             )
         elif tenant_id is not None:
             # no routing row / switch off for this tenant: legacy projection

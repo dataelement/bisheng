@@ -20,6 +20,10 @@ def test_knowledge_space_content_dataset_exposes_new_organization_dimensions_onl
         "belonging_department_name": "所属部门",
         "belonging_office_name": "所属科室",
         "belonging_squad_name": "所属班组",
+        "original_upload_company_name": "原始上传库公司",
+        "original_upload_department_name": "原始上传库部门",
+        "original_upload_office_name": "原始上传库科室",
+        "original_upload_squad_name": "原始上传库班组",
     }.items() <= dimensions.items()
     assert not {
         "primary_department_id",

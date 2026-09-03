@@ -110,6 +110,10 @@ class DepartmentTreeNode(BaseModel):
     id: int
     dept_id: str
     name: str
+    short_name: str | None = None
+    #: company/dept/office/squad tag (see telemetry.knowledge_space_content_dimensions.ORG_LEVEL_FIELD_NAMES).
+    #: Exposed read-only so dashboard filters (F058) can flatten the tree per tier without a second query.
+    org_level: str | None = None
     parent_id: int | None = None
     path: str
     sort_order: int = 0

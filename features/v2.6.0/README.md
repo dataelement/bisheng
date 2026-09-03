@@ -19,6 +19,7 @@
 | F083 | [portal-department-display-name](./083-portal-department-display-name/) | P0 | ✅ 已实现，人工 E2E 待执行 | F082, F025, F060, F064, F065 |
 | F098 | [distribution-aware-container-delete](./098-distribution-aware-container-delete/) | P0 | ✅ 已实现并通过 171 端到端验证 | F059, F071 |
 | F100 | [migration-preserve-link](./100-migration-preserve-link/) | P1 | 🚧 实现中 | F059, F098, 知识迁移批次 |
+| F106 | [knowledge-reorder-auth](./106-knowledge-reorder-auth/) | P0 | 🔲 方案+用例+tasks 待确认 | 现有 sort_weight、F013、部门绑定、运营岗身份 |
 
 ---
 
@@ -40,6 +41,7 @@
 | 日期 | 变更 |
 |------|------|
 | 2026-05-18 | 初始化 v2.6.0 版本目录，并迁入 **F025-approval-center-unification** 规格与任务。 |
+| 2026-09-01 | 新增 **F106-knowledge-reorder-auth**：系统管理员排序能力保留，按矩阵向运营岗/部门管理员/库与文件夹管理员开放拖拽；无 DDL。 |
 | 2026-08-26 | 新增 **F098-distribution-aware-container-delete**：容器删除不再被软链拦截，三条删除路径统一为一条分发规则。 |
 | 2026-07-14 | 登记并完成 **F054-file-publish-submit-performance** 第一阶段：定向目标校验、发布通知异步化、审批任务批量写入与分段性能日志。 |
 | 2026-08-07 | 登记 **F079-tag-management-console**：独立页面标签管理控制台（左右布局、统一分页、批量审核、审核留痕字段）。相似标签处理、正文高亮与上下切换、AI标签开关本期不做。 |

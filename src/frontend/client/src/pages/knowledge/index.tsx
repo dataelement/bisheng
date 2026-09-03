@@ -786,6 +786,7 @@ export default function Knowledge() {
                                         pageSize={fileManager.pageSize}
                                         total={fileManager.total}
                                         hasMore={fileManager.hasMore}
+                                        canReorderFolders={fileManager.canReorderFolders}
                                         onPageChange={fileManager.handlePageChange}
                                         loading={fileManager.loading}
                                         onSearch={fileManager.handleSearch}

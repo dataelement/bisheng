@@ -16,12 +16,30 @@ from bisheng.database.models.role_access import AccessType, WebMenuResource
 from bisheng.user.domain.services.user import UserService
 from bisheng.utils import generate_uuid, get_request_ip
 
+from bisheng.department.domain.services.department_service import DepartmentService
+from bisheng.telemetry.domain.mid_table.knowledge_space_content_dimensions import ORG_LEVEL_FIELD_NAMES
+
 from ..models.dashboard import Dashboard, DashboardComponent, DashboardDefault, DashboardStatus, DashboardType
 from ..models.dashboard_dao import DashboardDao
 from ..repositories.implementations.dataset_repository_impl import DashboardDatasetRepositoryImpl
 from ..schemas.dashboard import DashboardCreate, DashboardRead
 from ..services.component import ComponentDataConfig, DataQueryService, TimeFilter
 from ..utils import is_commercial
+from .department_label_resolver import resolve_short_name
+
+# F058: dashboard org-hierarchy dimensions (both "所属"/belonging_* and "原始上传库"/uploader_*
+# variants) are name-text snapshots of Department rows at ETL time, not a live join. Filter
+# options for these fields must come from the live Department tree (AC-01: show org units with
+# no data too), not from an ES terms aggregation over the dataset index.
+_NAME_FIELD_TO_ORG_LEVEL: Dict[str, str] = {value: key for key, value in ORG_LEVEL_FIELD_NAMES.items()}
+_ORG_FIELD_PREFIXES = ("belonging_", "uploader_", "original_upload_")
+
+
+def _org_level_for_field(field: str) -> str | None:
+    for prefix in _ORG_FIELD_PREFIXES:
+        if field.startswith(prefix):
+            return _NAME_FIELD_TO_ORG_LEVEL.get(field[len(prefix):])
+    return None
 
 
 class DashboardService(BaseModel):
@@ -42,6 +60,11 @@ class DashboardService(BaseModel):
         "team_ks": "科室库",
         "personal": "个人库",
     }
+    # 知识库大类 filter dropdown: fixed display order agreed with the customer, not the ES
+    # terms-agg's default `_key` (alphabetical Unicode) order. `space_level_name` holds the
+    # literal Chinese label text at ETL time (see knowledge_space_content.py::SPACE_LEVEL_LABELS),
+    # so this list keys off that same text, not the `space_level` code.
+    SPACE_LEVEL_NAME_ORDER: ClassVar[list[str]] = ["公共库", "部门库", "科室库", "团队库", "个人库"]
     APPLICATION_TYPE_LABELS: ClassVar[dict[str, str]] = {
         "workflow": "工作流",
         "assistant": "助手",
@@ -162,8 +185,14 @@ class DashboardService(BaseModel):
             for component in components
         )
 
+    def _can_operate_dashboards(self) -> bool:
+        """超管或运营岗: 看板列表/实时写与超管同一口径."""
+        from bisheng.user.domain.services.platform_operator import can_platform_operate
+
+        return can_platform_operate(self.login_user)
+
     async def _is_department_admin(self) -> bool:
-        if self.login_user.is_admin():
+        if self._can_operate_dashboards():
             return True
         from bisheng.database.models.department import DepartmentDao
 
@@ -178,7 +207,7 @@ class DashboardService(BaseModel):
         dashboard_id: int,
         incoming_components: Sequence[DashboardComponent] = (),
     ) -> None:
-        if self.login_user.is_admin():
+        if self._can_operate_dashboards():
             return
         existing_components = await DashboardDao.get_components(dashboard_id)
         if self._uses_realtime_dataset(
@@ -212,7 +241,7 @@ class DashboardService(BaseModel):
             filter_types = [DashboardType.PRESET_COMMERCIAL, DashboardType.CUSTOM]
         is_department_admin = False
         components_by_dashboard_id = {}
-        if self.login_user.is_admin():
+        if self._can_operate_dashboards():
             res = await DashboardDao.get_dashboards(keyword=keyword, dashboard_type=filter_types)
         else:
             # find extra dashboard ids
@@ -259,7 +288,7 @@ class DashboardService(BaseModel):
             if components is None:
                 components = await DashboardDao.get_components(one.id)
             uses_realtime = self._uses_realtime_dataset(components)
-            if uses_realtime and not self.login_user.is_admin():
+            if uses_realtime and not self._can_operate_dashboards():
                 if (
                     one.status != DashboardStatus.PUBLISHED.value
                     or not is_department_admin
@@ -274,7 +303,7 @@ class DashboardService(BaseModel):
                     tmp.user_id == self.login_user.user_id
                     or tmp.id in manage_ids
                 )
-            ) or self.login_user.is_admin():
+            ) or self._can_operate_dashboards():
                 tmp.write = True
             result.append(tmp)
         return result
@@ -398,6 +427,7 @@ class DashboardService(BaseModel):
             raise NotFoundError()
         if not is_commercial() and dashboard.dashboard_type != DashboardType.PRESET_OSS.value:
             raise NotFoundError()
+        can_operate = self._can_operate_dashboards()
         write_flag = await self.login_user.async_access_check(dashboard.user_id, target_id=str(dashboard.id),
                                                               access_type=AccessType.DASHBOARD_WRITE)
         read_flag = write_flag or await self.login_user.async_access_check(
@@ -405,12 +435,16 @@ class DashboardService(BaseModel):
             target_id=str(dashboard.id),
             access_type=AccessType.DASHBOARD,
         )
+        # 运营岗/超管列表已走 admin 口径; 详情与组件查询不能再卡 ReBAC 读 tuple.
+        if can_operate:
+            read_flag = True
+            write_flag = True
         components = await DashboardDao.get_components(dashboard_id)
         uses_realtime = self._uses_realtime_dataset(components)
         department_realtime_view = (
             uses_realtime
             and dashboard.status == DashboardStatus.PUBLISHED.value
-            and not self.login_user.is_admin()
+            and not self._can_operate_dashboards()
             and await self._is_department_admin()
         )
         if not read_flag and not department_realtime_view:
@@ -419,7 +453,7 @@ class DashboardService(BaseModel):
 
             raise UnAuthorizedError()
 
-        if uses_realtime and not self.login_user.is_admin():
+        if uses_realtime and not self._can_operate_dashboards():
             if (
                 dashboard.status != DashboardStatus.PUBLISHED.value
                 or not await self._is_department_admin()
@@ -427,7 +461,7 @@ class DashboardService(BaseModel):
                 raise UnAuthorizedError()
         result = DashboardRead.model_validate(dashboard)
         result.write = write_flag and (
-            self.login_user.is_admin() or not uses_realtime
+            self._can_operate_dashboards() or not uses_realtime
         )
         default_dashboard = await DashboardDao.get_default_dashboard(user_id=self.login_user.user_id)
         if default_dashboard and default_dashboard.dashboard_id == result.id:
@@ -536,10 +570,31 @@ class DashboardService(BaseModel):
         dimension_filters=None,
     ) -> Any:
         """ query component telemetry data """
+        _dashboard, component = await self._authorize_component_access(
+            dashboard_id, component_id, component,
+        )
+        data_config = ComponentDataConfig(**component.data_config)
+        res = await DataQueryService(
+            dataset_code=component.dataset_code,
+            data_config=data_config,
+            time_filters=time_filters,
+            dimension_filters=dimension_filters or [],
+        ).query_telemetry_data()
+        return res
+
+    async def _authorize_component_access(
+        self,
+        dashboard_id: int,
+        component_id: str = None,
+        component: DashboardComponent = None,
+    ) -> "tuple[Dashboard, DashboardComponent]":
+        """Shared access + component-ownership check for anything that reads one
+        dashboard component's telemetry data (chart query, F058 detail/all export).
+        Do not duplicate this logic elsewhere — extend it here instead."""
         dashboard = await DashboardDao.get_one(dashboard_id)
         if not dashboard:
             raise NotFoundError()
-        read_flag = await self.login_user.async_access_check(
+        read_flag = True if self._can_operate_dashboards() else await self.login_user.async_access_check(
             dashboard.user_id,
             target_id=str(dashboard.id),
             access_type=AccessType.DASHBOARD,
@@ -564,18 +619,11 @@ class DashboardService(BaseModel):
             raise NotFoundError()
         if (
             component.dataset_code in self.REALTIME_DATASETS
-            and not self.login_user.is_admin()
+            and not self._can_operate_dashboards()
             and dashboard.status != DashboardStatus.PUBLISHED.value
         ):
             raise UnAuthorizedError()
-        data_config = ComponentDataConfig(**component.data_config)
-        res = await DataQueryService(
-            dataset_code=component.dataset_code,
-            data_config=data_config,
-            time_filters=time_filters,
-            dimension_filters=dimension_filters or [],
-        ).query_telemetry_data()
-        return res
+        return dashboard, component
 
     @staticmethod
     async def get_dataset_options() -> Sequence[Row[Any] | RowMapping | Any]:
@@ -587,9 +635,11 @@ class DashboardService(BaseModel):
         async with get_async_db_session() as session:
             dashboard_dataset_repository = DashboardDatasetRepositoryImpl(session)
             if is_commercial():
-                datasets = await dashboard_dataset_repository.find_all()
+                datasets = await dashboard_dataset_repository.find_all(is_visible=True)
             else:
-                datasets = await dashboard_dataset_repository.find_all(is_commercial_only=False)
+                datasets = await dashboard_dataset_repository.find_all(
+                    is_commercial_only=False, is_visible=True,
+                )
 
         return datasets
 
@@ -622,6 +672,12 @@ class DashboardService(BaseModel):
             label_field and label_field not in allowed_fields
         ):
             raise UnAuthorizedError()
+        org_level = _org_level_for_field(field)
+        if org_level is not None:
+            return await self._get_org_unit_field_enums(
+                org_level=org_level, keyword=keyword, size=size, page=page,
+            )
+
         label_dimension = dimension_by_field[label_field or field]
         label_field_type = label_dimension.get("field_type") or label_dimension.get("type")
 
@@ -754,8 +810,65 @@ class DashboardService(BaseModel):
             else:
                 label = enum_labels.get(str(value), label)
             options.append({"value": value, "label": label})
+        if "space_level_name" in {field, label_field}:
+            # DimensionFilterConfigurator auto-pairs the raw "空间级别编码"(space_level) field
+            # with its "_name" sibling as label_field and hides space_level_name from the
+            # picker — so in practice the widget the customer configures almost always has
+            # field=="space_level" (value=code) with label_field=="space_level_name" (label=
+            # the Chinese text), not field=="space_level_name" directly. Sort on the LABEL
+            # (always the Chinese text either way) so the fixed order applies regardless of
+            # which of the two is the primary field.
+            fixed_order = self.SPACE_LEVEL_NAME_ORDER
+            options.sort(
+                key=lambda option: (
+                    fixed_order.index(option["label"]) if option["label"] in fixed_order else len(fixed_order)
+                )
+            )
         return {
             "total": total,
             "enums": enums,
+            "options": options,
+        }
+
+    async def _get_org_unit_field_enums(
+        self, org_level: str, keyword: str | None, size: int, page: int,
+    ) -> Dict[str, Any]:
+        """F058 AC-01/AC-02/AC-03: full Department roster for one org tier, independent of
+        whether the tier has any data in the current dataset's ES index."""
+        roots = await DepartmentService.aget_tree(self.login_user)
+
+        matches = []
+
+        def _walk(nodes) -> None:
+            for node in nodes:
+                if node.status == "active" and node.org_level == org_level:
+                    matches.append(node)
+                _walk(node.children)
+
+        _walk(roots)
+
+        if keyword:
+            normalized_keyword = keyword.casefold()
+            matches = [
+                node
+                for node in matches
+                if normalized_keyword in node.name.casefold()
+                or (node.short_name and normalized_keyword in node.short_name.casefold())
+            ]
+
+        matches.sort(key=lambda node: (node.sort_order, node.name))
+
+        total = len(matches)
+        skip = (page - 1) * size
+        page_matches = matches[skip: skip + size]
+
+        options = []
+        for node in page_matches:
+            label = await resolve_short_name(department_id=node.id, name_text=node.name)
+            options.append({"value": node.name, "label": label})
+
+        return {
+            "total": total,
+            "enums": [option["value"] for option in options],
             "options": options,
         }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { getActionsApi, getActionsByModuleApi } from "@/controllers/API/log";
+import { toggleFilterValue } from "@/pages/LogPage/ClearableFilterSelect";
 import { actionToI18nKey } from "@/pages/LogPage/systemLog";
 
 describe("audit log actions", () => {
@@ -70,5 +71,11 @@ describe("audit log actions", () => {
         },
       ]),
     );
+  });
+
+  it("clears a filter when the already-selected option is clicked again", () => {
+    expect(toggleFilterValue("approval", "approval")).toBe("");
+    expect(toggleFilterValue("approval", "tenant")).toBe("tenant");
+    expect(toggleFilterValue("", "approval")).toBe("approval");
   });
 });

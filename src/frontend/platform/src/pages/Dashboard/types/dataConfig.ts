@@ -259,6 +259,20 @@ export interface DataConfig {
   isConfigured: boolean // 配置完成
 }
 
+export interface DimensionFilterField {
+  id: string
+  fieldId: string
+  labelFieldId?: string
+  fieldName: string
+  displayName: string
+  defaultValues?: string[]
+  // Only set (and only needed) by the Query component's dimensionFields: unlike
+  // DimensionFilterConfig, which is scoped to one component.dataset_code, a Query
+  // component's dimension conditions are picked from a union across all datasets — this
+  // records which dataset the field's enum options should be fetched from.
+  datasetCode?: string
+}
+
 // 查询组件配置
 export interface QueryConfig {
   linkedComponentIds: string[]    // 关联的图表组件ID列表（查询时会更新这些组件）
@@ -269,15 +283,11 @@ export interface QueryConfig {
     hasDefaultValue: boolean        // 是否设置默认值
     defaultValue?: TimeFilter // 默认值配置
   }// 查询条件列表
-}
-
-export interface DimensionFilterField {
-  id: string
-  fieldId: string
-  labelFieldId?: string
-  fieldName: string
-  displayName: string
-  defaultValues?: string[]
+  // 客户反馈(2026-09-01): 查询组件除了时间，还要支持知识库大类/知识分类/组织架构/业务域
+  // 作为可选查询条件，跟维度筛选组件的字段结构一致，用同一套枚举加载逻辑。可选（旧的已保存
+  // 查询组件没有这个字段，视为空数组，行为不变）。图表没有配置的维度，条件对它不生效——由后端
+  // convert_filters 静默跳过（见 component.py），不是前端过滤，避免前后端判断口径不一致。
+  dimensionFields?: DimensionFilterField[]
 }
 
 export interface DimensionFilterConfig {
@@ -298,7 +308,8 @@ export const createDefaultDataConfig = (type: ChartType): ComponentConfig => (
         defaultValue: {
           type: TimeRangeType.ALL
         }
-      }
+      },
+      dimensionFields: []
     }
     : type === ChartType.DimensionFilter
       ? {

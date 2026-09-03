@@ -72,6 +72,15 @@ class KnowledgeSpaceContentRecord(BaseModel):
     belonging_department_name: str | None = None
     belonging_office_name: str | None = None
     belonging_squad_name: str | None = None
+    # 原始上传库XX (2026-09-01): 库->组织映射规则同 belonging_*, but evaluated against the
+    # file's ORIGINAL upload space (KnowledgeFile.original_knowledge_id, F081) and frozen
+    # forever once set — never recomputed from who currently holds the file or their
+    # department. Kept separate from uploader_* (which stays on its original "current
+    # uploader's current department" logic, per product's own naming/semantics).
+    original_upload_company_name: str | None = None
+    original_upload_department_name: str | None = None
+    original_upload_office_name: str | None = None
+    original_upload_squad_name: str | None = None
 
     def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         kwargs.setdefault("exclude_none", True)
@@ -298,6 +307,10 @@ return removed
                 "belonging_department_name",
                 "belonging_office_name",
                 "belonging_squad_name",
+                "original_upload_company_name",
+                "original_upload_department_name",
+                "original_upload_office_name",
+                "original_upload_squad_name",
             )
         },
     }
@@ -953,6 +966,7 @@ return removed
         space_level: str | None = None,
         uploader_organization: OrganizationNameSnapshot | None = None,
         belonging_organization: OrganizationNameSnapshot | None = None,
+        original_upload_organization: OrganizationNameSnapshot | None = None,
         file_category_labels: dict[str, str] | None = None,
         file_subcategory_labels: dict[str, str] | None = None,
         sync_run_id: str | None = None,
@@ -961,6 +975,7 @@ return removed
         uploader_user_name = file_record.user_name or (uploader.user_name if uploader else str(uploader_user_id or ""))
         uploader_organization = uploader_organization or OrganizationNameSnapshot()
         belonging_organization = belonging_organization or OrganizationNameSnapshot()
+        original_upload_organization = original_upload_organization or OrganizationNameSnapshot()
         normalized_space_level = str(getattr(space_level, "value", space_level) or "unknown").strip().lower()
         if normalized_space_level not in SPACE_LEVEL_LABELS:
             normalized_space_level = "unknown"
@@ -994,6 +1009,7 @@ return removed
             uploader_user_name=uploader_user_name,
             **uploader_organization.prefixed("uploader"),
             **belonging_organization.prefixed("belonging"),
+            **original_upload_organization.prefixed("original_upload"),
         )
 
     @classmethod

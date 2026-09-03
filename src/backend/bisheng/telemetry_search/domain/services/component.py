@@ -585,7 +585,13 @@ class DataQueryService(BaseModel):
                 continue
             dimension_config = dimension_map.get(runtime_filter.field_id)
             if not dimension_config:
-                raise QueryDimensionNotFoundError()
+                # A dimension/query filter component can be linked to several charts whose
+                # datasets don't all share the same fields (e.g. a 查询组件 configured with
+                # 知识库大类 linked to both a knowledge-space chart and an unrelated user
+                # chart). Unlike the chart's own authored `filters` config above (a real
+                # misconfiguration bug that should raise), a runtime filter that doesn't
+                # apply to THIS chart's dataset is expected and must be a no-op, not an error.
+                continue
             runtime_filters.append(
                 TermsOp(
                     field=dimension_config.field,

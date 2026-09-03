@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from bisheng.common.errcode import portal_course as errors
 from bisheng.shougang_portal_course.api import router as course_router_module
-from bisheng.shougang_portal_course.api.endpoints import admin, catalog, learning
+from bisheng.shougang_portal_course.api.endpoints import admin, catalog, catalog_admin, learning
 from bisheng.shougang_portal_course.domain.schemas.portal_course_schema import (
     CourseUpdate,
     ProgressRead,
@@ -32,24 +32,40 @@ def test_portal_course_error_codes_are_stable_and_unique():
         errors.PortalCourseSourceInvalidError,
         errors.PortalCourseProbeFailedError,
         errors.PortalCourseSourceReplaceError,
+        errors.PortalCourseCatalogNotFoundError,
+        errors.PortalCourseCatalogParentInvalidError,
+        errors.PortalCourseCatalogInUseError,
+        errors.PortalCourseCatalogNameDuplicateError,
+        errors.PortalCourseCatalogImportError,
+        errors.PortalCourseCatalogDepthExceededError,
+        errors.PortalCourseVideoNotSupportedError,
+        errors.PortalCourseExternalUrlRequiredError,
+        errors.PortalCourseImportError,
     ]
-    assert [item.Code for item in classes] == list(range(25001, 25010))
-    assert len({item.Code for item in classes}) == 9
+    assert [item.Code for item in classes] == list(range(25001, 25019))
+    assert len({item.Code for item in classes}) == 18
 
 
 def test_course_router_exposes_catalog_admin_and_learning_resources():
-    routes = {
-        (method, route.path)
-        for route in course_router_module.router.routes
-        for method in route.methods
-    }
+    routes = {(method, route.path) for route in course_router_module.router.routes for method in route.methods}
     expected = {
         ("GET", "/shougang-portal/course-catalog/courses"),
         ("GET", "/shougang-portal/course-catalog/courses/{course_id}"),
+        ("GET", "/shougang-portal/course-catalog/catalogs"),
+        ("GET", "/shougang-portal/course-catalog/list-catalogs"),
         ("GET", "/shougang-portal/course-admin/courses"),
         ("POST", "/shougang-portal/course-admin/courses"),
+        ("GET", "/shougang-portal/course-admin/courses/template"),
+        ("POST", "/shougang-portal/course-admin/courses/import"),
+        ("POST", "/shougang-portal/course-admin/courses/import/preview"),
+        ("POST", "/shougang-portal/course-admin/courses/batch-delete"),
         ("POST", "/shougang-portal/course-admin/courses/{course_id}/videos/upload"),
         ("POST", "/shougang-portal/course-admin/courses/{course_id}/videos/url"),
+        ("GET", "/shougang-portal/course-admin/catalogs"),
+        ("POST", "/shougang-portal/course-admin/catalogs"),
+        ("GET", "/shougang-portal/course-admin/catalogs/template"),
+        ("POST", "/shougang-portal/course-admin/catalogs/import"),
+        ("POST", "/shougang-portal/course-admin/catalogs/import/preview"),
         ("GET", "/shougang-portal/course-learning/courses/{course_id}/progress"),
         ("PUT", "/shougang-portal/course-learning/videos/{video_id}/progress"),
     }
@@ -59,10 +75,14 @@ def test_course_router_exposes_catalog_admin_and_learning_resources():
 def test_route_groups_use_the_expected_authentication_dependencies():
     catalog_source = inspect.getsource(catalog)
     admin_source = inspect.getsource(admin)
+    catalog_admin_source = inspect.getsource(catalog_admin)
     learning_source = inspect.getsource(learning)
 
     assert "Depends(UserPayload.get_login_user)" in catalog_source
     assert "Depends(UserPayload.get_admin_user)" in admin_source
+    assert "Depends(UserPayload.get_admin_user)" in catalog_admin_source
+    assert "force: bool = Query(default=False)" in catalog_admin_source
+    assert "force: bool = Query(default=False)" in admin_source
     assert "Depends(UserPayload.get_login_user)" in learning_source
     assert "_MAX_PROGRESS_WRITE_ATTEMPTS = 2" in learning_source
     assert "except IntegrityError" in learning_source
@@ -99,6 +119,8 @@ def test_progress_body_rejects_forged_identity_fields():
         pytest.param(CourseUpdate, "enabled", id="course-enabled"),
         pytest.param(CourseUpdate, "show_on_home", id="course-show-on-home"),
         pytest.param(CourseUpdate, "sort_order", id="course-sort-order"),
+        pytest.param(CourseUpdate, "course_type", id="course-type"),
+        pytest.param(CourseUpdate, "external_url", id="course-external-url"),
         pytest.param(VideoUpdate, "title", id="video-title"),
         pytest.param(VideoUpdate, "duration_seconds", id="video-duration"),
         pytest.param(VideoUpdate, "enabled", id="video-enabled"),
@@ -110,6 +132,20 @@ def test_update_schemas_reject_explicit_null_but_allow_omitted_fields(schema, fi
 
     with pytest.raises(ValidationError):
         schema.model_validate({field: None})
+
+
+def test_course_update_allows_explicit_null_catalog_id_to_uncategorize():
+    omitted = CourseUpdate.model_validate({})
+    assert omitted.catalog_id is None
+    assert "catalog_id" not in omitted.model_fields_set
+
+    cleared = CourseUpdate.model_validate({"catalog_id": None})
+    assert cleared.catalog_id is None
+    assert "catalog_id" in cleared.model_fields_set
+
+    blank = CourseUpdate.model_validate({"catalog_id": "  "})
+    assert blank.catalog_id is None
+    assert "catalog_id" in blank.model_fields_set
 
 
 @pytest.mark.parametrize(
@@ -142,8 +178,7 @@ def test_cleanup_enqueue_broker_failure_is_best_effort(monkeypatch, enqueue_erro
     admin._enqueue_cleanup(["j" * 32], 7)
 
     warning.assert_called_once_with(
-        "portal course media cleanup enqueue failed tenant_id=%s job_ids=%s "
-        "error_type=%s; recovery scan will retry",
+        "portal course media cleanup enqueue failed tenant_id=%s job_ids=%s error_type=%s; recovery scan will retry",
         7,
         ["j" * 32],
         type(enqueue_error).__name__,
@@ -222,8 +257,7 @@ async def test_progress_endpoint_retries_a_concurrent_first_insert(monkeypatch):
     assert attempts == 2
     assert reports == 2
     warning.assert_called_once_with(
-        "portal course progress write conflict tenant_id=%s user_id=%s "
-        "video_id=%s attempt=%s",
+        "portal course progress write conflict tenant_id=%s user_id=%s video_id=%s attempt=%s",
         1,
         9,
         "v" * 32,

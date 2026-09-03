@@ -1,8 +1,8 @@
 import { Button } from "@/components/bs-ui/button";
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import MultiSelect from "@/components/bs-ui/select/multi";
+import { ClearableFilterSelect } from "../ClearableFilterSelect";
 import { Table, TableBody, TableCell, TableFooter, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi, getOperatorsApi, getResponsiblePersonsApi } from "@/controllers/API/log";
 import { getUserGroupsApi } from "@/controllers/API/user";
@@ -199,16 +199,15 @@ export default function SystemLog() {
                     ></MultiSelect>
                 </div>
                 <div className="w-[200px] relative">
-                    <Select onOpenChange={loadData} value={keys.groupId} onValueChange={(value) => setKeys({ ...keys, groupId: value })}>
-                        <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder={t('log.selectUserGroup')} />
-                        </SelectTrigger>
-                        <SelectContent className="max-w-[200px] break-all">
-                            <SelectGroup>
-                                {groups.map(g => <SelectItem value={g.id} key={g.id}>{g.group_name}</SelectItem>)}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
+                    <ClearableFilterSelect
+                        value={keys.groupId}
+                        placeholder={t('log.selectUserGroup')}
+                        triggerClassName="w-[200px]"
+                        contentClassName="max-w-[200px] break-all"
+                        options={groups.map((g: any) => ({ value: String(g.id), label: g.group_name }))}
+                        onOpenChange={(open) => { if (open) loadData() }}
+                        onValueChange={(value) => setKeys({ ...keys, groupId: value })}
+                    />
                 </div>
                 <div className="w-[180px] relative">
                     <DatePicker value={keys.start} placeholder={t('log.startDate')} onChange={(t) => setKeys({ ...keys, start: t })} />
@@ -217,28 +216,24 @@ export default function SystemLog() {
                     <DatePicker value={keys.end} placeholder={t('log.endDate')} onChange={(t) => setKeys({ ...keys, end: t })} />
                 </div>
                 <div className="w-[180px] relative">
-                    <Select value={keys.moduleId} onOpenChange={loadModules} onValueChange={(value) => setKeys({ ...keys, action: '', moduleId: value })}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder={t('log.systemModule')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {modules.map(m => <SelectItem value={m.value} key={m.value}>{t(m.name)}</SelectItem>)}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
+                    <ClearableFilterSelect
+                        value={keys.moduleId}
+                        placeholder={t('log.systemModule')}
+                        triggerClassName="w-[180px]"
+                        options={modules.map((m: any) => ({ value: String(m.value), label: t(m.name) }))}
+                        onOpenChange={(open) => { if (open) loadModules() }}
+                        onValueChange={(value) => setKeys({ ...keys, action: "", moduleId: value })}
+                    />
                 </div>
                 <div className="w-[180px] relative">
-                    <Select value={keys.action} onOpenChange={handleActionOpen} onValueChange={(value) => setKeys({ ...keys, action: value })}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder={t('log.actionBehavior')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {actions.map(a => <SelectItem value={a.value} key={a.value}>{t(a.name)}</SelectItem>)}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
+                    <ClearableFilterSelect
+                        value={keys.action}
+                        placeholder={t('log.actionBehavior')}
+                        triggerClassName="w-[180px]"
+                        options={actions.map((a: any) => ({ value: String(a.value), label: t(a.name) }))}
+                        onOpenChange={(open) => { if (open) void handleActionOpen() }}
+                        onValueChange={(value) => setKeys({ ...keys, action: value })}
+                    />
                 </div>
                 <div>
                     <Button className="mr-3 px-6" onClick={handleSearch}>

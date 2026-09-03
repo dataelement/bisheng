@@ -47,7 +47,7 @@ const TOOLBAR_COMPACT_MAX_WIDTH = 1040;
 interface KnowledgeSpaceHeaderProps {
     space: KnowledgeSpace;
     currentPath: Array<{ id?: string; name: string }>;
-    onNavigateFolder: (folderId?: string) => void;
+    onNavigateFolder: (folderId?: string, folderName?: string) => void;
     searchQuery: string;
     isSearching: boolean;
     onSearch: (params: SearchParams) => void;
@@ -572,7 +572,7 @@ export function KnowledgeSpaceHeader({
                                         type="button"
                                         onClick={() => {
                                             const parent = currentPath[currentPath.length - 2];
-                                            onNavigateFolder(parent?.id);
+                                            onNavigateFolder(parent?.id, parent?.name);
                                         }}
                                         aria-label={localize("com_ui_go_back")}
                                         className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
@@ -607,7 +607,7 @@ export function KnowledgeSpaceHeader({
                                             ) : (
                                                 <button
                                                     type="button"
-                                                    onClick={() => onNavigateFolder(seg.id)}
+                                                    onClick={() => onNavigateFolder(seg.id, seg.name)}
                                                     className="max-w-[min(40%,12rem)] shrink-0 truncate text-left text-base text-[#1d2129] hover:text-[#165dff] hover:underline"
                                                 >
                                                     {seg.name}

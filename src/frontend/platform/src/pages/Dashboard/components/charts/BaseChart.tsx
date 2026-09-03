@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { colorSchemes, convertToEChartsTheme } from '../../colorSchemes'
 import { ChartDataResponse, PieDataItem } from '../../types/chartData'
+import { useComponentExport } from '../export/useComponentExport'
 import { unitConversion } from './MetricCard'
 import { applyPieResultLimit } from './pieChartData'
 
@@ -38,6 +39,10 @@ interface BaseChartProps {
   isDark: boolean
   dataConfig?: ComponentConfig // Chart component configuration.
   styleConfig: ComponentStyleConfig
+  // F058 AC-09: optional — omit (e.g. unsaved draft component) to disable
+  // click-a-category-to-export-its-detail.
+  dashboardId?: string
+  componentId?: string
 }
 
 type AxisLabelTooltip = {
@@ -70,8 +75,15 @@ export const getTruncatedAxisLabelText = (params: any) => {
   return formatCategoryAxisLabel(text) === text ? null : text
 }
 
-export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: BaseChartProps) {
+export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig, dashboardId, componentId }: BaseChartProps) {
   const { t } = useTranslation("dashboard")
+
+  // F058 AC-09: click a chart category (bar segment, pie slice, ...) to export that
+  // category's detail rows. dataConfig.dimensions[0] is the chart's category axis.
+  const { exportDetail } = useComponentExport({
+    dashboardId: dashboardId || "",
+    componentId: componentId || "",
+  })
 
   const chartRef = useRef<any>(null)
   const domRef = useRef<HTMLDivElement>(null)
@@ -153,6 +165,18 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
 
       chartRef.current.on('mouseover', handleAxisLabelMouseOver)
       chartRef.current.on('mouseout', handleAxisLabelMouseOut)
+
+      // F058 AC-09: click-to-export-detail, only for chart types with a real category
+      // axis / pie slice (a metric card or a bare line-with-no-dimension has nothing
+      // meaningful to drill into).
+      const categoryDimensionField = dataConfig?.dimensions?.[0]?.fieldId
+      if (dashboardId && componentId && categoryDimensionField) {
+        chartRef.current.on('click', (params: any) => {
+          const categoryValue = params?.name
+          if (categoryValue === undefined || categoryValue === null || categoryValue === '') return
+          void exportDetail(categoryDimensionField, categoryValue)
+        })
+      }
 
       renderChart();
     } catch (err) {
@@ -472,7 +496,10 @@ const getCartesianChartOption = (
     if (styleConfig.showDataLabel) {
       item.label = {
         show: true,
-        position: chartType === ChartType.GroupedHorizontalBar ? 'right' : 'top',
+        // F058 AC-05: all horizontal-orientation bar types (not just the grouped
+        // variant) must show the value at the bar's end, not the vertical 'top'
+        // position (which reads as "middle of the bar" when the axis is horizontal).
+        position: isHorizontal ? 'right' : 'top',
         fontSize: 10,
         color: "#666",
         formatter: (params: any) => unitConversion(params.value, dataConfig).join('')

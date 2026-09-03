@@ -25,6 +25,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileEntryStatus,
     KnowledgeFileEntryType,
+    KnowledgeFileProjectionStatus,
     KnowledgeFileStatus,
 )
 from bisheng.knowledge.domain.schemas.knowledge_parse_queue_schema import KnowledgeParseAttemptKind
@@ -128,17 +129,29 @@ async def _advance_manager_projection_after_parse(
             and file_record.entry_type == KnowledgeFileEntryType.MANAGER.value
             and file_record.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
         )
-        if not is_active_manager:
-            knowledge = await session.get(Knowledge, int(file_record.knowledge_id))
-            if (
-                knowledge is None
-                or resolve_space_shared_routing(
-                    tenant_id=int(tenant_id),
-                    knowledge_type=int(knowledge.type),
-                )
-                is None
-            ):
-                return False
+        knowledge = await session.get(Knowledge, int(file_record.knowledge_id))
+        shared_routing = (
+            resolve_space_shared_routing(
+                tenant_id=int(tenant_id),
+                knowledge_type=int(knowledge.type),
+            )
+            if knowledge is not None
+            else None
+        )
+        if not is_active_manager and shared_routing is None:
+            return False
+        if (
+            is_active_manager
+            and shared_routing is not None
+            and file_record.projection_status
+            == KnowledgeFileProjectionStatus.READY.value
+            and int(file_record.desired_content_generation or 0) > 0
+            and int(file_record.applied_content_generation or 0)
+            >= int(file_record.desired_content_generation or 0)
+        ):
+            # 共享直写已完成当前 generation。返回 True 以继续调度其他待处理
+            # membership entry，但不能再次递增 content generation。
+            return True
         document_repository = KnowledgeDocumentRepositoryImpl(session)
         version_repository = (
             KnowledgeDocumentVersionRepositoryImpl(session)

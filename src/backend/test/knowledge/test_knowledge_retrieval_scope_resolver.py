@@ -513,7 +513,7 @@ async def test_render_milvus_expr_single_and_multi_space():
     )
     assert (
         render_milvus_expr(single)
-        == f"tenant_id == {TENANT} and ARRAY_CONTAINS(knowledge_ids, 20)"
+        == "ARRAY_CONTAINS(knowledge_ids, 20)"
     )
 
     multi = BackendQueryFilter(
@@ -525,7 +525,7 @@ async def test_render_milvus_expr_single_and_multi_space():
     )
     assert (
         render_milvus_expr(multi)
-        == f"tenant_id == {TENANT} and ARRAY_CONTAINS_ANY(knowledge_ids, [20, 10]) "
+        == "ARRAY_CONTAINS_ANY(knowledge_ids, [20, 10]) "
         f"and canonical_document_id in [{DOC}] and canonical_version_id in [{V1}]"
     )
 
@@ -549,7 +549,6 @@ async def test_render_es_membership_query():
     assert render_es_membership_query(query_filter) == {
         "bool": {
             "filter": [
-                {"term": {"metadata.tenant_id": TENANT}},
                 {"terms": {"metadata.knowledge_ids": [20, 10]}},
                 {"terms": {"metadata.canonical_document_id": [DOC]}},
             ]

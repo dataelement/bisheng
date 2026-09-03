@@ -57,6 +57,7 @@ from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import (
 from bisheng.knowledge.domain.services.knowledge_space_review_tag_service import KnowledgeSpaceReviewTagService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
+from bisheng.knowledge.rag.pipeline.types import PipelineConfig, PipelineStage
 from bisheng.llm.domain.services import LLMService
 from bisheng.sensitive_word.domain.services.exceptions import ContentSafetyViolation
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
@@ -335,19 +336,38 @@ def addEmbedding(
     """Adding Files to Vector SumsesCunene"""
 
     knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
-    logger.info("start init Milvus")
-    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
-        knowledge_files[0].updater_id, knowledge=knowledge_info, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
+    from bisheng.knowledge.rag.shared_space_storage import (
+        resolve_space_shared_routing,
     )
-    vector_client = KnowledgeUtils.ensure_milvus_schema_ready(
-        invoke_user_id=knowledge_files[0].updater_id,
-        knowledge=knowledge_info,
-        vector_client=vector_client,
+
+    tenant_id = int(
+        getattr(knowledge_info, "tenant_id", None)
+        or getattr(knowledge_files[0], "tenant_id", None)
+        or 1
     )
-    logger.info("start init ES")
-    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(
-        knowledge=knowledge_info, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
+    shared_routing = resolve_space_shared_routing(
+        tenant_id=tenant_id,
+        knowledge_type=knowledge_info.type,
     )
+    vector_client = None
+    es_client = None
+    if shared_routing is None:
+        logger.info("start init Milvus")
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+            knowledge_files[0].updater_id,
+            knowledge=knowledge_info,
+            metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA,
+        )
+        vector_client = KnowledgeUtils.ensure_milvus_schema_ready(
+            invoke_user_id=knowledge_files[0].updater_id,
+            knowledge=knowledge_info,
+            vector_client=vector_client,
+        )
+        logger.info("start init ES")
+        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(
+            knowledge=knowledge_info,
+            metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA,
+        )
     for index, db_file in enumerate(knowledge_files):
         # Try to get chunks of a file from the cache
         db_file.parse_type = ParseType.UN_ETL4LM.value
@@ -362,9 +382,28 @@ def addEmbedding(
                 db_file=db_file,
                 preview_cache_key=preview_cache_key,
                 need_thumbnail=knowledge_info.type == KnowledgeTypeEnum.SPACE.value,
-                vector_store=[vector_client, es_client],
+                vector_store=(
+                    []
+                    if shared_routing is not None
+                    else [vector_client, es_client]
+                ),
             )
-            pipeline_result = knowledge_file_pipeline.run()
+            if shared_routing is not None:
+                pipeline_result = knowledge_file_pipeline.run(
+                    PipelineConfig(stop_at=PipelineStage.TRANSFORMER)
+                )
+                from bisheng.knowledge.domain.services.shared_space_direct_ingestion_service import (
+                    SharedSpaceDirectIngestionService,
+                )
+
+                SharedSpaceDirectIngestionService.ingest_documents_sync(
+                    knowledge=knowledge_info,
+                    file_record=db_file,
+                    documents=pipeline_result.documents,
+                    routing=shared_routing,
+                )
+            else:
+                pipeline_result = knowledge_file_pipeline.run()
             db_file.status = KnowledgeFileStatus.SUCCESS.value
 
             from bisheng.api.services.workstation import WorkStationService

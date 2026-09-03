@@ -61,8 +61,7 @@ class PortalCourseCleanupService:
                 job.update_time = now
                 await self.repository.add(job)
                 logger.warning(
-                    "portal course media cleanup retry tenant_id=%s job_id=%s "
-                    "attempt=%s error_type=%s",
+                    "portal course media cleanup retry tenant_id=%s job_id=%s attempt=%s error_type=%s",
                     tenant_id,
                     job_id,
                     job.attempt_count,

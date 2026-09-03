@@ -29,6 +29,7 @@ class _FakeAsyncEs:
 
 
 def test_realtime_dashboard_seed_contains_three_target_datasets():
+    from bisheng.telemetry.domain.mid_table.user_engagement_shared import USER_ENGAGEMENT_ES_INDEX
     from bisheng.telemetry_search.domain.init_dataset import DASHBOARD_DATASET
 
     datasets = {dataset.dataset_code: dataset for dataset in DASHBOARD_DATASET}
@@ -48,7 +49,10 @@ def test_realtime_dashboard_seed_contains_three_target_datasets():
         aggregation["type"]
         for aggregation in metrics["participation_rate"]["aggregations"]
     } == {"value_count"}
-    assert participation.es_index_name == "mid_user_daily_participation_fact"
+    # F058 follow-up (2026-09-01): mid_user_daily_participation's ES index was repointed to
+    # the merged user-engagement index (see user_engagement_shared.py / init_dataset.py) —
+    # the dataset_code itself, and its role as a REALTIME_DATASETS entry, are unchanged.
+    assert participation.es_index_name == USER_ENGAGEMENT_ES_INDEX
     assert "department_source" in {
         dimension["field"]
         for dimension in participation.schema_config["dimensions"]
@@ -357,6 +361,32 @@ async def test_runtime_dimension_filters_are_combined_with_and():
         "business_domain_code",
     ]
     assert dumped["filters"][0]["value"] == ["public", "team"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_dimension_filter_for_a_field_missing_from_this_chart_is_a_silent_noop():
+    """A dimension/query filter component can be linked to several charts whose datasets
+    don't all share the same fields (e.g. a 查询组件 configured with 知识库大类 linked to a
+    chart whose dataset has no such field). That must not apply to this chart — and must
+    not raise — unlike a genuinely misconfigured filter on the chart's own `filters` list."""
+    from bisheng.telemetry_search.domain.schemas.component import (
+        ComponentDataConfig,
+        DimensionQueryFilter,
+    )
+    from bisheng.telemetry_search.domain.services.component import DataQueryService
+
+    service = DataQueryService(
+        dataset_code="mid_user_increment",
+        data_config=ComponentDataConfig(),
+        dimension_filters=[
+            DimensionQueryFilter(fieldId="space_level", values=["public"]),
+        ],
+    )
+
+    filters, time_range = await service.convert_filters({}, {})
+
+    assert filters == []
+    assert time_range == []
 
 
 @pytest.mark.asyncio

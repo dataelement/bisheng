@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import XlsxPopulate from 'xlsx-populate/browser/xlsx-populate';
 import { LoadingIcon } from "~/components/ui/icon/Loading";
+import { formatExcelHeaderValue } from "./excelPreviewUtils";
 
 const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fileExt?: string }) => {
     const t = useMemo((str) => () => str, [])
@@ -558,8 +559,11 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
                                             }}
                                         >
                                             <div className="flex items-center justify-between">
-                                                <span className="truncate font-semibold" title={String(header)}>
-                                                    {String(header || t('defaultColumnName', { index: index + 1 }))}
+                                                <span
+                                                    className="truncate font-semibold"
+                                                    title={formatExcelHeaderValue(header)}
+                                                >
+                                                    {formatExcelHeaderValue(header)}
                                                 </span>
                                             </div>
                                         </th>
