@@ -121,6 +121,7 @@ async def test_sync_same_name_upload_cleans_duplicates_before_add_file():
     service._cleanup_duplicate_files_before_sync.assert_awaited_once()
     assert knowledge_space_service.add_file.await_args.kwargs["allow_duplicate_name"] is True
     assert knowledge_space_service.add_file.await_args.kwargs["allow_duplicate_content"] is True
+    assert knowledge_space_service.add_file.await_args.kwargs["award_points"] is False
     assert result.version_link_pending is False
     assert result.replaced_file_id == 55
 

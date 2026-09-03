@@ -16745,7 +16745,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         allow_duplicate_name: bool = False,
         allow_duplicate_content: bool = False,
         skip_space_business_domain_check: bool = False,
+        award_points: bool = True,
     ) -> list[KnowledgeSpaceFileResponse]:
+        """向知识空间添加文件.
+
+        award_points 为 False 时不挂钩积分, 供接口同步使用; 页面直传保持默认 True.
+        """
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             enqueue_current_pdf_artifact,
         )
@@ -16976,23 +16981,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         await self.update_folder_update_time(file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
-        # 积分旁路：直传人即发布人，上传成功记分，失败不影响返回。
-        try:
-            from bisheng.points.domain.services.points_award_hooks import notify_space_files_ready
+        # 页面直传记分; 接口同步传 award_points=False, 失败不影响返回.
+        if award_points:
+            try:
+                from bisheng.points.domain.services.points_award_hooks import notify_space_files_ready
 
-            await notify_space_files_ready(
-                tenant_id=int(getattr(db_knowledge, "tenant_id", None) or self.login_user.tenant_id or 1),
-                space_id=int(knowledge_id),
-                files=process_files,
-                uploader_id=int(self.login_user.user_id),
-                publisher_id=int(self.login_user.user_id),
-                is_favorite_space=bool(getattr(db_knowledge, "is_favorite", False)),
-            )
-        except Exception:
-            _logger.exception(
-                "points.award.hooks add_file notify failed knowledge_id=%s",
-                knowledge_id,
-            )
+                await notify_space_files_ready(
+                    tenant_id=int(getattr(db_knowledge, "tenant_id", None) or self.login_user.tenant_id or 1),
+                    space_id=int(knowledge_id),
+                    files=process_files,
+                    uploader_id=int(self.login_user.user_id),
+                    publisher_id=int(self.login_user.user_id),
+                    is_favorite_space=bool(getattr(db_knowledge, "is_favorite", False)),
+                )
+            except Exception:
+                _logger.exception(
+                    "points.award.hooks add_file notify failed knowledge_id=%s",
+                    knowledge_id,
+                )
         return failed_files + process_files
 
     @staticmethod

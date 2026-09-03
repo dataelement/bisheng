@@ -231,6 +231,7 @@ class FilelibSyncService:
                     staged_upload_path,
                 )
                 business_domain_code = domain.code if domain is not None else None
+                # 接口同步不计分: 只跳过挂钩, 页面直传仍走 add_file 默认 award_points=True.
                 upload_results = await self.knowledge_space_service.add_file(
                     knowledge_id=int(target.space.id),
                     file_path=[staged_upload_path],
@@ -247,6 +248,7 @@ class FilelibSyncService:
                         or domain is None
                         or target.used_responsible_person_personal
                     ),
+                    award_points=False,
                 )
             if len(upload_results) != 1 or upload_results[0].status == KnowledgeFileStatus.FAILED.value:
                 raise FilelibSyncConflictError(msg="duplicate file content or name")

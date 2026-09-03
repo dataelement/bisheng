@@ -700,6 +700,7 @@ def test_regular_upload_keeps_enqueue_processing_enabled_by_default():
 
         default = inspect.signature(KnowledgeSpaceService.add_file)
     assert default.parameters["enqueue_processing"].default is True
+    assert default.parameters["award_points"].default is True
 
 
 async def test_missing_multipart_fields_returns_actual_422():
@@ -925,6 +926,7 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
         "allow_duplicate_name": True,
         "allow_duplicate_content": True,
         "skip_space_business_domain_check": True,
+        "award_points": False,
     }
     assert persist_update.call_args_list == [call(knowledge_file), call(knowledge_file)]
     assert events.method_calls == [
@@ -1009,6 +1011,7 @@ async def test_sync_orchestration_skips_business_domain_when_dynamic_resolution_
     add_kwargs = knowledge_space_service.add_file.await_args.kwargs
     assert add_kwargs["business_domain_code"] is None
     assert add_kwargs["skip_space_business_domain_check"] is True
+    assert add_kwargs["award_points"] is False
 
 
 def test_external_file_id_is_not_reserved_by_sync_service():

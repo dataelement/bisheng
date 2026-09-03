@@ -263,6 +263,7 @@ async def test_sync_from_staged_file_re_stages_local_file_with_display_name(tmp_
     )
     knowledge_space_service.add_file.assert_awaited_once()
     assert knowledge_space_service.add_file.await_args.kwargs["file_path"] == [minio_path]
+    assert knowledge_space_service.add_file.await_args.kwargs["award_points"] is False
 
 
 @pytest.mark.asyncio
