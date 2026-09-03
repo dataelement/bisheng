@@ -314,7 +314,19 @@ export function FileCard({
             // z-20 keeps the tag crisp above the translucent uploading scrim (z-10).
             return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
         }
-        if (!isAdmin || isFolder) return null;
+        // Folder rollup: 存在异常 is not an admin-only signal — anyone who can see the files
+        // needs to know their folder holds one that needs attention. Checked before the
+        // isAdmin gate that guards the per-file status tags.
+        if (isFolder) {
+            if (file.hasAbnormalFiles !== true) return null;
+            const pill = (
+                <Tag size="small" dot color="danger" className="whitespace-nowrap">
+                    {localize("com_knowledge.folder_abnormal")}
+                </Tag>
+            );
+            return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
+        }
+        if (!isAdmin) return null;
         if (file.status === FileStatus.SUCCESS) return null;
 
         const approvalLabel = approvalStatusLabel;

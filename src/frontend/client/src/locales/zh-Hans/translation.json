@@ -507,6 +507,21 @@
     "switch_rejected": "所选模型当前不可用，请重新选择。",
     "try_later": "稍后再试"
   },
+  "com_message": {
+    "document_preview": "文档预览",
+    "source_empty": "暂无参考资料",
+    "source_load_failed": "溯源详情加载失败",
+    "source_loading": "加载溯源详情...",
+    "source_name_fallback_document": "政策文件",
+    "source_name_fallback_web": "网页",
+    "source_panel_back": "返回参考资料列表",
+    "source_panel_close": "关闭参考资料",
+    "source_panel_download": "下载文档",
+    "source_panel_label": "参考资料",
+    "source_type_document": "文档",
+    "source_type_web": "网页",
+    "source_untitled": "暂无标题"
+  },
   "com_message_content_copied": "内容已复制",
   "com_notifications_approved": "已同意",
   "com_notifications_rejected": "已拒绝",
@@ -1655,7 +1670,8 @@
     "batch_withdraw_partial": "已撤回 {{0}} 项，{{1}} 项失败",
     "batch_withdraw_failed": "批量撤回失败",
     "sort_by_size_label": "大小",
-    "select_all": "全选"
+    "select_all": "全选",
+    "folder_abnormal": "存在异常"
   },
   "com_deep_thinking": {
     "running": "正在深度思考（已用 {{0}} 秒）...",
@@ -1927,7 +1943,8 @@
     "wechat_link_retry_hint": "请检查并修改{{link}}。修改完成后，按回车重新识别。",
     "wechat_link_label": "公众号链接",
     "wechat_article_link_label": "公众号文章链接",
-    "wechat_link_copy_tip": "点击文章右上角「···」，选择「复制链接」，或选择「在浏览器打开」后复制地址栏中的链接。"
+    "wechat_link_copy_tip": "点击文章右上角「···」，选择「复制链接」，或选择「在浏览器打开」后复制地址栏中的链接。",
+    "channel_unavailable_or_no_permission": "该频道已失效或暂无查看权限"
   },
   "com_ui": {
     "system_notice_acknowledge": "我知道了",
@@ -2303,17 +2320,6 @@
   "com_settings_lang_ja": "日本語",
   "com_settings_lang_zh": "中文",
   "com_citation.no_download_url": "暂无可下载文件地址",
-  "com_citation.web": "网页",
-  "com_citation.document": "文档",
-  "com_citation.untitled": "暂无标题",
-  "com_citation.loading_detail": "加载溯源详情...",
-  "com_citation.load_detail_failed": "溯源详情加载失败",
-  "com_citation.policy_document": "政策文件",
-  "com_citation.document_preview": "文档预览",
-  "com_citation.no_references": "暂无参考资料",
-  "com_citation.close_references": "关闭参考资料",
-  "com_citation.back_to_references": "返回参考资料列表",
-  "com_citation.download_document": "下载文档",
   "com_message_approval_title": "消息与审批",
   "com_message_approval_notifications": "通知",
   "com_notifications_tab_unread": "未读",

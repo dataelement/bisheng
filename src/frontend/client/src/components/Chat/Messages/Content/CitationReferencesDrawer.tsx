@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Outlined } from 'bisheng-icons';
+import { Badge, Tag } from '@bisheng/ui';
 import { useSetRecoilState } from 'recoil';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
@@ -63,22 +64,17 @@ export type CitationReferencesDesktopPayload = {
 type CitationDesktopView = 'list' | 'document-preview';
 const CITATION_PANEL_EXPANDED_BREAKPOINT = 768;
 
+/** 组件-Tag标签.md §1 判别表 — this says WHAT the source is, so it is a Tag.
+ * Its two colors match the citation badge marking the same source inside the
+ * answer (组件-Badge徽标.md §2): brand for a document, the frozen purple for a
+ * web page. */
 function SourceTypeBadge({ preview, type }: { preview: CitationPreview | null; type?: string }) {
   const localize = useLocalize();
   const isWeb = normalizeCitationType(preview?.type || type) === 'web';
   return (
-    <div
-      className={cn(
-        'inline-flex h-[18px] min-w-[16px] items-center justify-center rounded-md px-1 text-[12px] font-normal leading-[18px]',
-        // Same two source colors as the citation badge (组件-Badge徽标.md §2),
-        // read from the tokens rather than re-typed as hex. This chip says WHAT
-        // the source is, so it is a Tag by the 判别表 — migrating the markup is
-        // still pending; the color drift is not worth keeping until then.
-        isWeb ? 'bg-citation-web-tint text-citation-web' : 'bg-blue-50 text-blue-600',
-      )}
-    >
-      {isWeb ? localize('com_citation.web') : localize('com_citation.document')}
-    </div>
+    <Tag size="small" color={isWeb ? 'web' : 'brand'}>
+        {localize(isWeb ? 'com_message.source_type_web' : 'com_message.source_type_document')}
+    </Tag>
   );
 }
 
@@ -119,7 +115,7 @@ function CitationReferenceCard({
   const preview = item.legacyPreview ?? buildCitationDocumentPreview(detail, item.data);
   const type = preview?.type || item.data.type;
   const isWeb = normalizeCitationType(type) === 'web';
-  const title = preview?.title || localize('com_citation.untitled');
+  const title = preview?.title || localize('com_message.source_untitled');
   const canOpenDocument = !!detail && isRagCitation(detail, type);
   const { name: documentName, extension: documentExtension } = splitDocumentTitle(title, detail, preview);
 
@@ -181,10 +177,10 @@ function CitationReferenceCard({
         {isLoading ? (
           <span className="inline-flex items-center gap-2 text-text-3">
             <Outlined.Loading className="size-3.5 animate-spin" />
-            {localize('com_citation.loading_detail')}
+            {localize('com_message.source_loading')}
           </span>
         ) : hasError ? (
-          <span className="text-text-3">{localize('com_citation.load_detail_failed')}</span>
+          <span className="text-text-3">{localize('com_message.source_load_failed')}</span>
         ) : (
           null
         )}
@@ -196,13 +192,13 @@ function CitationReferenceCard({
             <div className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border-base bg-white">
               <CitationSourceIcon detail={detail} preview={preview} type={type} />
             </div>
-            <span className="truncate">{preview?.sourceName || localize('com_citation.web')}</span>
+            <span className="truncate">{preview?.sourceName || localize('com_message.source_name_fallback_web')}</span>
             {preview?.sourceMeta ? <span className="shrink-0">{preview.sourceMeta}</span> : null}
           </>
         ) : (
           <>
             <CitationSourceIcon detail={detail} preview={preview} type={type} ragIconVariant="knowledge" clipAsCircle={false} />
-            <span className="truncate">{preview?.sourceName || localize('com_citation.policy_document')}</span>
+            <span className="truncate">{preview?.sourceName || localize('com_message.source_name_fallback_document')}</span>
           </>
         )}
       </div>
@@ -530,7 +526,7 @@ export default function CitationReferencesDrawer({
       documentPreview.detail,
       null,
     )
-    : { name: localize('com_citation.document_preview'), extension: '' };
+    : { name: localize('com_message.document_preview'), extension: '' };
   // The "centered reading card" layout (max-w-[464/480]) only makes sense for the
   // citation list. When previewing a document, both header and body fill the
   // panel so they line up flush — capping the header alone leaves the body
@@ -567,9 +563,9 @@ export default function CitationReferencesDrawer({
           <h2 className="truncate text-sm font-medium leading-[22px] text-text-1">
             {localize('com_msg_source_reference')}
           </h2>
-          <span className="flex h-[18px] min-w-[16px] shrink-0 items-center justify-center rounded-full bg-gray-100 px-1.5 text-caption-sm text-[#666]">
-            {references.length}
-          </span>
+          {/* 组件-Badge徽标.md §2 — the standalone number. Neutral panel, so it
+              passes its own ink fill instead of Badge's brand default. */}
+          <Badge count={references.length} className="shrink-0 bg-text-1/5 text-text-1" />
         </div>
         <button
           type="button"
@@ -580,7 +576,7 @@ export default function CitationReferencesDrawer({
               ? 'size-8 rounded-md hover:bg-fill-2 hover:text-text-2'
               : 'h-7 w-7 rounded-lg text-text-3 hover:bg-gray-100',
           )}
-          aria-label={localize('com_citation.close_references')}
+          aria-label={localize('com_message.source_panel_close')}
         >
           <Outlined.Close className="size-4" />
         </button>
@@ -610,7 +606,7 @@ export default function CitationReferencesDrawer({
           })
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-text-3">
-            {localize('com_citation.no_references')}
+            {localize('com_message.source_empty')}
           </div>
         )}
       </div>
@@ -630,7 +626,7 @@ export default function CitationReferencesDrawer({
             setDocumentPreview(null);
           }}
           className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-text-3 transition-colors hover:bg-gray-100"
-          aria-label={localize('com_citation.back_to_references')}
+          aria-label={localize('com_message.source_panel_back')}
         >
           <Outlined.ArrowLeft className="size-4" />
         </button>
@@ -655,7 +651,7 @@ export default function CitationReferencesDrawer({
             desktopButtonSize,
             desktopDownloadButtonClass,
           )}
-          aria-label={localize('com_citation.download_document')}
+          aria-label={localize('com_message.source_panel_download')}
         >
           <Outlined.Download className="size-4" strokeWidth={1.75} />
         </button>
@@ -667,7 +663,7 @@ export default function CitationReferencesDrawer({
             desktopButtonSize,
             desktopCloseButtonClass,
           )}
-          aria-label={localize('com_citation.close_references')}
+          aria-label={localize('com_message.source_panel_close')}
         >
           <Outlined.Close className={desktopButtonIconSize} />
         </button>
@@ -686,7 +682,7 @@ export default function CitationReferencesDrawer({
       <>
         <section
           className={cn('flex h-full min-h-0 flex-col bg-[#FBFBFB]', !isNarrowLayout && `w-full ${desktopPanelMaxWidth}`, panelClassName)}
-          aria-label={localize('com_msg_source_reference')}
+          aria-label={localize('com_message.source_panel_label')}
         >
           {panelContent}
         </section>
@@ -730,7 +726,7 @@ export default function CitationReferencesDrawer({
             <CitationSourceIconStack icons={referenceEntryIcons} />
           </div>
           <div className="flex h-5 w-16 shrink-0 items-center whitespace-nowrap">
-            <span className="w-12 whitespace-nowrap text-[12px] font-normal leading-5 text-text-3">{localize('com_msg_source_reference')}</span>
+            <span className="w-12 whitespace-nowrap text-[12px] font-normal leading-5 text-text-3">{localize('com_message.source_panel_label')}</span>
             <Outlined.Right className="size-4 text-text-3" strokeWidth={1.5} />
           </div>
         </button>
@@ -743,7 +739,7 @@ export default function CitationReferencesDrawer({
           isFullBleedMobile ? (
             <aside
               className="fixed inset-0 z-[130] flex min-h-0 flex-col overflow-hidden overscroll-contain bg-white [height:var(--bs-dvh,100dvh)]"
-              aria-label={localize('com_msg_source_reference')}
+              aria-label={localize('com_message.source_panel_label')}
             >
               {panelContent}
             </aside>
@@ -753,7 +749,7 @@ export default function CitationReferencesDrawer({
                 'fixed inset-y-0 right-0 z-[130] flex min-h-0 w-[min(520px,calc(var(--bs-vw,100vw)-24px))] min-w-0 flex-col overflow-hidden bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300',
                 'rounded-tl-lg',
               )}
-              aria-label={localize('com_msg_source_reference')}
+              aria-label={localize('com_message.source_panel_label')}
               onClick={(event) => event.stopPropagation()}
               onPointerDown={(event) => event.stopPropagation()}
             >

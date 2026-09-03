@@ -13,7 +13,7 @@
  * move and is kept — renaming ~20 keys across three locales would change nothing
  * a user sees.
  */
-import { ChevronDown, ChevronRight, CircleAlert } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { useState } from 'react';
 import { useLocalize } from '~/hooks';
 import { ServiceBusyNotice } from '~/components/ServiceBusyNotice';
@@ -29,6 +29,7 @@ interface ChatErrorCardProps {
         ExecutionFlow via continueConversation and on daily chat via regenerate;
         omitted on /c and history views. */
     onRetry?: () => void;
+    /** disables the retry button + spins its icon while a retry is in flight */
     retrying?: boolean;
     rateLimitState?: 'normal' | 'recovering' | 'busy';
     onSwitchModel?: () => void;
@@ -103,6 +104,10 @@ export function ChatErrorCard({
             <ServiceBusyNotice
                 title={title}
                 desc={desc}
+                // The animated gauge is reserved for the rate-limit (service
+                // load) family; timeout / unavailable are outages, so they get
+                // the static gray attention mark.
+                icon={isRateLimit ? 'gauge' : 'attention'}
                 detail={isRateLimit ? undefined : rawDetail}
                 onRetry={onRetry}
                 retrying={retrying}
@@ -113,28 +118,30 @@ export function ChatErrorCard({
         );
     }
 
-    // Terminal / unknown → the informative (red) failure card.
+    // Terminal / unknown → the informative failure card. Same neutral surface
+    // and text ramp as ServiceBusyNotice — the warning-orange is confined to
+    // the icon, so a wall of failed turns doesn't read as a wall of color.
     return (
-        <div className="my-2 rounded-2xl border border-red-100 bg-red-50/60 p-4 text-sm">
+        <div className="my-2 rounded-2xl border border-border bg-bg-page p-4 text-sm">
             <div className="flex items-start gap-2.5">
-                <CircleAlert size={18} className="mt-0.5 shrink-0 text-red-500" />
+                <Outlined.Attention size={16} className="mt-0.5 shrink-0 text-warning" />
                 <div className="min-w-0 flex-1">
-                    <div className="font-medium text-red-700">{title}</div>
-                    <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed text-red-600/90">{desc}</p>
-                    {hint && <p className="mt-1.5 leading-relaxed text-red-600/80">{hint}</p>}
+                    <div className="font-medium text-text-2">{title}</div>
+                    <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed text-text-3">{desc}</p>
+                    {hint && <p className="mt-1.5 leading-relaxed text-text-3">{hint}</p>}
 
                     {rawDetail && (
-                        <div className="mt-3">
+                        <div className="mt-2.5">
                             <button
                                 type="button"
                                 onClick={() => setShowDetail((v) => !v)}
-                                className="inline-flex items-center gap-1 text-xs text-red-600/70 transition-colors hover:text-red-700"
+                                className="inline-flex items-center gap-1 text-body text-gray-400 transition-colors hover:text-gray-600"
                             >
-                                {showDetail ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                                 {localize(showDetail ? 'com_linsight_error_hide_detail' : 'com_linsight_error_view_detail')}
+                                {showDetail ? <Outlined.Down size={14} /> : <Outlined.Right size={14} />}
                             </button>
                             {showDetail && (
-                                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-red-100/50 p-2.5 text-xs leading-relaxed text-red-700/80">
+                                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-100 p-2.5 text-xs leading-relaxed text-gray-500">
                                     {rawDetail}
                                 </pre>
                             )}

@@ -286,6 +286,25 @@ export default function Knowledge() {
             try {
                 const detail = await getSpaceInfoApi(detailSpaceId);
                 if (cancelled) return;
+                // Membership is decided here, at open time — not by whoever sent the link.
+                // /info answers for non-members too (that is how the square shows an intro), so
+                // a former member following an old notification would otherwise land inside a
+                // space whose file list the server then refuses. Send them to the same
+                // intro-and-apply preview the square uses; only a follower, or someone
+                // granted view_space, enters the space itself.
+                // The creator is listed too: the share route bounces creators straight back to
+                // /knowledge/space/:id, so diverting one there would ping-pong between the two.
+                const canEnter =
+                    detail.role === SpaceRole.CREATOR
+                    || Boolean(detail.isFollowed)
+                    || (detail.permissionIds ?? []).includes("view_space");
+                if (!canEnter) {
+                    // The share route, deliberately not ?square=1&previewSpace=: that pair opens
+                    // the preview on top of the square, which a space never published to the
+                    // square must not do. Same reasoning as the channel deep link.
+                    navigateRef.current(`/knowledge/share/${encodeURIComponent(detailSpaceId)}`, { replace: true });
+                    return;
+                }
                 setActiveSpace({ ...detail, id: detailSpaceId });
             } catch {
                 if (cancelled) return;

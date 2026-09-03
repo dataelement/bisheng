@@ -8,11 +8,60 @@
  * by the Linsight task-mode failure card and the daily-mode chat error bubble so
  * both surfaces read identically.
  */
-import { ChevronDown, ChevronRight, Clock, RefreshCw } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { useState } from 'react';
 import { useLocalize } from '~/hooks';
 import { Button } from '~/components/ui/Button';
 import { cn } from '~/utils';
+
+/**
+ * Animated dashboard-gauge icon (designer-supplied SVG, SMIL animation baked
+ * in): the needle sweeps back and forth — the visual for "service under
+ * load". Strokes use currentColor so the host's text color drives it.
+ */
+function BusyGaugeIcon({ size = 16, className }: { size?: number; className?: string }) {
+    return (
+        <svg
+            width={size}
+            height={size}
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+            className={className}
+        >
+            <path
+                d="M14.9985 10.9781C14.9985 10.9781 13.4608 15.3126 12.73 16.0693C11.9993 16.826 10.7934 16.8471 10.0367 16.1163C9.27995 15.3855 9.25891 14.1797 9.98967 13.423C10.7204 12.6662 14.9985 10.9781 14.9985 10.9781Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinejoin="round"
+            >
+                <animateTransform
+                    attributeName="transform"
+                    type="rotate"
+                    values="-180 11.36 14.77; 92 11.36 14.77; -180 11.36 14.77"
+                    keyTimes="0; 0.5; 1"
+                    calcMode="spline"
+                    keySplines="0.45 0 0.55 1; 0.45 0 0.55 1"
+                    dur="2.4s"
+                    repeatCount="indefinite"
+                />
+            </path>
+            <path
+                d="M19.071 20.5355C20.8807 18.7259 22 16.2259 22 13.4645C22 7.94162 17.5229 3.46448 12 3.46448C6.47714 3.46448 2 7.94162 2 13.4645C2 16.2259 3.11929 18.7259 4.92893 20.5355"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+            <path d="M12 3.94067V5.84544" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M19.0692 7.34167L17.5889 8.54034" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M20.8203 15.0039L18.9644 14.5754" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M3.17969 15.0039L5.03563 14.5754" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M4.93091 7.34167L6.41118 8.54039" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+}
 
 interface ServiceBusyNoticeProps {
     /** localized one-line description, e.g. "当前使用人数较多，请稍后再试。" */
@@ -31,6 +80,9 @@ interface ServiceBusyNoticeProps {
     onSwitchModel?: () => void;
     /** Leaves the original request untouched and dismisses any parent UI. */
     onLater?: () => void;
+    /** Header icon: the animated 'gauge' (service under load, default) or the
+        static gray 'attention' mark (e.g. network timeout — not a load issue). */
+    icon?: 'gauge' | 'attention';
     className?: string;
 }
 
@@ -43,6 +95,7 @@ export function ServiceBusyNotice({
     rateLimitState,
     onSwitchModel,
     onLater,
+    icon = 'gauge',
     className,
 }: ServiceBusyNoticeProps) {
     const localize = useLocalize();
@@ -64,65 +117,85 @@ export function ServiceBusyNotice({
         )
         : desc;
 
+    // Right-aligned action group. It rides the description's last line when
+    // there is no detail disclosure, and the 查看详情 row when there is one —
+    // rendered from this one element so the two placements can't drift. A
+    // rate-limited execution offers two more ways out than a plain failure:
+    // move the same request to another model, or leave it be.
+    const actions = onRetry || onSwitchModel || onLater ? (
+        <div className="flex shrink-0 items-center gap-2">
+            {onRetry && (
+                <Button
+                    color="default"
+                    variant="filled"
+                    size="small"
+                    icon={<Outlined.Refresh />}
+                    loading={retrying}
+                    onClick={onRetry}
+                >
+                    {localize('com_error_retry')}
+                </Button>
+            )}
+            {onSwitchModel && (
+                <Button
+                    color="primary"
+                    variant="filled"
+                    size="small"
+                    disabled={retrying}
+                    onClick={onSwitchModel}
+                >
+                    {localize('com_message.switch_model')}
+                </Button>
+            )}
+            {onLater && (
+                <Button
+                    color="default"
+                    variant="text"
+                    size="small"
+                    disabled={retrying}
+                    onClick={onLater}
+                >
+                    {localize('com_message.try_later')}
+                </Button>
+            )}
+        </div>
+    ) : null;
+
     return (
         <div
             role="status"
-            className={cn('my-2 rounded-2xl border border-border bg-fill-1 p-4 text-sm', className)}
+            className={cn('my-2 rounded-2xl border border-border bg-bg-page p-4 text-sm', className)}
         >
             <div className="flex items-start gap-2.5">
-                <Clock size={18} className="mt-0.5 shrink-0 text-text-3" />
+                {icon === 'attention' ? (
+                    <Outlined.Attention size={16} className="mt-0.5 shrink-0 text-text-3" />
+                ) : (
+                    <BusyGaugeIcon size={16} className="mt-0.5 shrink-0 text-text-3" />
+                )}
                 <div className="min-w-0 flex-1">
                     {displayTitle && <div className="font-medium text-text-2">{displayTitle}</div>}
-                    <p className={cn('leading-relaxed text-text-3', displayTitle && 'mt-1')}>
-                        {displayDescription}
-                    </p>
+                    {/* No detail disclosure → the actions share the description's
+                        row, bottom-aligned so they read as centered on its LAST
+                        line (24px button ≈ the ~23px line box). */}
+                    <div className={cn('flex items-end gap-3', displayTitle && 'mt-1')}>
+                        <p className="min-w-0 flex-1 leading-relaxed text-text-3">{displayDescription}</p>
+                        {!detail && actions}
+                    </div>
 
-                    {(onRetry || onSwitchModel || onLater || detail) && (
-                        <div className="mt-2.5 flex items-center gap-3">
-                            {onRetry && (
-                                <Button
-                                    variant="secondaryBrand"
-                                    size="sm"
-                                    className="h-7 gap-1 px-2.5"
-                                    disabled={retrying}
-                                    onClick={onRetry}
-                                >
-                                    <RefreshCw size={13} className={retrying ? 'animate-spin' : undefined} />
-                                    {localize('com_error_retry')}
-                                </Button>
-                            )}
-                            {onSwitchModel && (
-                                <Button
-                                    variant="secondaryBrand"
-                                    size="sm"
-                                    className="h-7 px-2.5"
-                                    disabled={retrying}
-                                    onClick={onSwitchModel}
-                                >
-                                    {localize('com_message.switch_model')}
-                                </Button>
-                            )}
-                            {onLater && (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 px-2.5"
-                                    disabled={retrying}
-                                    onClick={onLater}
-                                >
-                                    {localize('com_message.try_later')}
-                                </Button>
-                            )}
-                            {detail && (
-                                <button
-                                    type="button"
-                                    onClick={() => setShowDetail((v) => !v)}
-                                    className="inline-flex items-center gap-1 text-xs text-gray-400 transition-colors hover:text-gray-600"
-                                >
-                                    {showDetail ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                                    {localize(showDetail ? 'com_linsight_error_hide_detail' : 'com_linsight_error_view_detail')}
-                                </button>
-                            )}
+                    {/* With a detail disclosure the actions move down here instead,
+                        vertically centered on the 查看详情 row (toggle left, buttons
+                        right). */}
+                    {detail && (
+                        <div className="mt-2.5 flex items-center justify-between gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowDetail((v) => !v)}
+                                className="inline-flex items-center gap-1 text-body text-gray-400 transition-colors hover:text-gray-600"
+                            >
+                                {localize(showDetail ? 'com_linsight_error_hide_detail' : 'com_linsight_error_view_detail')}
+                                {showDetail ? <Outlined.Down size={14} /> : <Outlined.Right size={14} />}
+                            </button>
+                            {actions}
                         </div>
                     )}
 

@@ -2464,6 +2464,48 @@ class KnowledgeSpaceService(KnowledgeUtils):
             from bisheng.core.database import get_async_db_session
 
             effective_tenant_id = self._file_change_visibility_service().require_explicit_tenant()
+
+            # 存在异常 only counts files the *current user* may see. A viewer cannot see
+            # other people's failed uploads, nor anything a pending file-change request
+            # hides, so a folder must not light up over rows invisible to them. The
+            # aggregate below says whether anything abnormal exists at all; only then is
+            # the dearer visibility pass worth running. The permission context is built
+            # once per space and shared across that space's folders.
+            permission_contexts: dict[int, dict] = {}
+            excluded_ids = file_change_excluded_ids or set()
+
+            async def visible_abnormal_exists(
+                knowledge_id: int,
+                prefix: str,
+                abnormal_statuses: set[int],
+            ) -> bool:
+                candidates_stmt = select(KnowledgeFile).where(
+                    KnowledgeFile.tenant_id == effective_tenant_id,
+                    KnowledgeFile.knowledge_id == knowledge_id,
+                    KnowledgeFile.file_type == FileType.FILE.value,
+                    col(KnowledgeFile.status).in_(sorted(abnormal_statuses)),
+                    or_(
+                        col(KnowledgeFile.file_level_path) == prefix,
+                        col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
+                    ),
+                )
+                async with get_async_db_session() as session:
+                    candidates = [
+                        row
+                        for row in (await session.exec(candidates_stmt)).all()
+                        if int(row.id) not in excluded_ids
+                    ]
+                if not candidates:
+                    return False
+                if knowledge_id not in permission_contexts:
+                    permission_contexts[knowledge_id] = await self._build_child_permission_context(knowledge_id)
+                visible = await self._filter_visible_child_items(
+                    candidates,
+                    space_id=knowledge_id,
+                    context=permission_contexts[knowledge_id],
+                )
+                return bool(visible)
+
             folders = [f for f in res if f.file_type == FileType.DIR]
             folder_scopes = {
                 int(folder.id): (
@@ -2527,7 +2569,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 KnowledgeFileStatus.FAILED.value,
                 KnowledgeFileStatus.VIOLATION.value,
             }
-            raw_counts = {folder_id: {"success": 0, "processing": 0, "failed": 0} for folder_id in folder_scopes}
+            # What the folder rollup calls 存在异常 — everything needing the user to step
+            # in. Deliberately wider than retryable_statuses: a timed-out file is an
+            # anomaly the folder must surface, but batch retry does not act on it, so the
+            # display signal and the retry signal stay separate instead of one doing
+            # double duty.
+            abnormal_statuses = retryable_statuses | {KnowledgeFileStatus.TIMEOUT.value}
+            raw_counts = {
+                folder_id: {"success": 0, "processing": 0, "failed": 0, "abnormal": 0}
+                for folder_id in folder_scopes
+            }
             for folder_id, status, count in aggregate_rows:
                 normalized_folder_id = int(folder_id)
                 if status == KnowledgeFileStatus.SUCCESS.value:
@@ -2536,6 +2587,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     raw_counts[normalized_folder_id]["processing"] += int(count)
                 elif status in retryable_statuses:
                     raw_counts[normalized_folder_id]["failed"] += int(count)
+                # Not an elif: the abnormal set overlaps retryable rather than excluding it.
+                if status in abnormal_statuses:
+                    raw_counts[normalized_folder_id]["abnormal"] += int(count)
 
             for _file_id, row_knowledge_id, status, file_level_path in hidden_rows:
                 normalized_path = str(file_level_path or "")
@@ -2551,13 +2605,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     elif status in retryable_statuses:
                         counter = "failed"
                     else:
-                        continue
-                    raw_counts[folder_id][counter] = max(0, raw_counts[folder_id][counter] - 1)
+                        counter = None
+                    if counter is not None:
+                        raw_counts[folder_id][counter] = max(0, raw_counts[folder_id][counter] - 1)
+                    # A hidden TIMEOUT row carries no counter of its own but still has to
+                    # come off the abnormal tally, or the folder keeps its 存在异常 mark.
+                    if status in abnormal_statuses:
+                        raw_counts[folder_id]["abnormal"] = max(0, raw_counts[folder_id]["abnormal"] - 1)
 
-            for folder_id in folder_scopes:
+            for folder_id, (knowledge_id, prefix) in folder_scopes.items():
                 counts = raw_counts[folder_id]
                 folder_counts[folder_id] = {
                     "has_failed_files": counts["failed"] > 0,
+                    "has_abnormal_files": counts["abnormal"] > 0
+                    and await visible_abnormal_exists(knowledge_id, prefix, abnormal_statuses),
                     "success_file_num": counts["success"],
                     "processing_file_num": counts["processing"],
                 }
@@ -2579,7 +2640,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if one.file_type == FileType.DIR:
                 counts = folder_counts.get(
                     one.id,
-                    {"has_failed_files": False, "success_file_num": 0, "processing_file_num": 0},
+                    {
+                        "has_failed_files": False,
+                        "has_abnormal_files": False,
+                        "success_file_num": 0,
+                        "processing_file_num": 0,
+                    },
                 )
                 item.update(counts)
             else:
@@ -2679,7 +2745,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         {"visible"} if visible_map.get(str(resource_id), False) else set()
                     )
         visible_keys = {key for key, value in permissions.items() if value}
-        return [
+        visible = [
             item
             for item in items
             if (
@@ -2688,6 +2754,58 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             in visible_keys
         ]
+        return await self._hide_others_failed_files(visible, space_id=space_id)
+
+    async def _can_manage_space_cached(self, space_id: int) -> bool:
+        """Admin / space manager check, resolved once per space per request."""
+        if self.login_user.is_admin():
+            return True
+        cache = self.__dict__.setdefault("_can_manage_space_cache", {})
+        normalized = int(space_id)
+        if normalized not in cache:
+            cache[normalized] = await self._check_action(
+                "knowledge_space",
+                normalized,
+                "manage_permission",
+            )
+        return cache[normalized]
+
+    async def _hide_others_failed_files(
+        self,
+        items: list[KnowledgeFile],
+        *,
+        space_id: int,
+    ) -> list[KnowledgeFile]:
+        """A parse failure is only the uploader's (and the managers') business.
+
+        Everyone else in the space sees neither the row nor, through the folder rollup that
+        reuses this filter, any hint of it. The rule lives here rather than in the client's
+        `file_status` query so listing, folder rollup and any other reader agree — the query
+        param it replaces hid the row from the uploader too, and left the file reachable by
+        anyone who called the API directly.
+
+        Timeout and violation are deliberately NOT covered: they stayed visible to every
+        member under the old client rule, and a violation in particular is the space's
+        business, not just the uploader's.
+        """
+        failed_items = [
+            item
+            for item in items
+            if item.file_type != FileType.DIR.value and item.status == KnowledgeFileStatus.FAILED.value
+        ]
+        if not failed_items:
+            return items
+        if await self._can_manage_space_cached(space_id):
+            return items
+        user_id = self.login_user.user_id
+        hidden = {
+            int(item.id)
+            for item in failed_items
+            if getattr(item, "user_id", None) != user_id
+        }
+        if not hidden:
+            return items
+        return [item for item in items if int(item.id) not in hidden]
 
     async def _scan_visible_child_items(
         self,

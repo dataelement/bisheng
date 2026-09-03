@@ -21,6 +21,7 @@ from bisheng.common.errcode.tenant_quota import (
     TenantRoleQuotaExceededError,
     TenantStorageQuotaExceededError,
 )
+from bisheng.database.constants import AdminRole
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tenant import TenantDao
 from bisheng.user.domain.models.user_role import UserRoleDao
@@ -746,9 +747,17 @@ class QuotaService:
         """
         if not candidate_source_ids:
             return
-        effective = await cls.get_effective_quota(
-            user_id, QuotaResourceType.INFO_SOURCE_SUBSCRIBE, tenant_id, login_user=login_user
-        )
+        if login_user and login_user.is_admin():
+            return
+        # The quota owner is not necessarily the operator (managers/editors can add
+        # sources to someone else's channel), so get_effective_quota's login_user
+        # short-circuit never sees an admin OWNER. AdminRole carries no -1
+        # quota_config — without this check a manager editing an admin's channel
+        # would trip the owner's 200 default even though admins are quota-exempt.
+        owner_role_ids = [r.role_id for r in await UserRoleDao.aget_user_roles(user_id)]
+        if AdminRole in owner_role_ids:
+            return
+        effective = await cls.get_effective_quota(user_id, QuotaResourceType.INFO_SOURCE_SUBSCRIBE, tenant_id)
         if effective == -1:
             return
         used_ids = await cls._distinct_info_source_ids("user_id", user_id)

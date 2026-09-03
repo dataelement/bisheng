@@ -132,11 +132,19 @@ const StatusBadge = ({ file, onOpenApprovalDetail }: {
         );
     }
 
-    if (status === FileStatus.SUCCESS && !approvalStatusLabel) return null;
+    // Folder rollup: a folder whose subtree holds a failed / timed-out / flagged file reads
+    // 存在异常, and that wins over any in-progress state below it. The backend walks the whole
+    // subtree by path prefix, so every ancestor level lights up, not just the direct parent.
+    const isFolderWithAbnormal = file.type === FileType.FOLDER && file.hasAbnormalFiles === true;
+
+    if (status === FileStatus.SUCCESS && !approvalStatusLabel && !isFolderWithAbnormal) return null;
 
     let label: string;
     let tone: KnowledgeStatusTone;
-    if (approvalStatusLabel) {
+    if (isFolderWithAbnormal) {
+        label = localize("com_knowledge.folder_abnormal");
+        tone = "danger";
+    } else if (approvalStatusLabel) {
         label = approvalStatusLabel;
         // `finalize_failed` lands in `approving` blue with the rest of the
         // non-rejected approval labels — that is what this row painted before
@@ -167,8 +175,9 @@ const StatusBadge = ({ file, onOpenApprovalDetail }: {
         </Tag>
     );
 
-    // Queueing carries no actionable reason — skip the tooltip there.
-    if (!statusReason || status === FileStatus.WAITING) return pill;
+    // Queueing carries no actionable reason — skip the tooltip there. The folder rollup
+    // deliberately shows no reason either: the user opens the folder to see which file failed.
+    if (!statusReason || status === FileStatus.WAITING || isFolderWithAbnormal) return pill;
     return (
         <Tooltip>
             <TooltipTrigger asChild>
