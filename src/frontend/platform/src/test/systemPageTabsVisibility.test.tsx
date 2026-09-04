@@ -28,6 +28,12 @@ vi.mock("@/pages/SystemPage/components/UserGroup", () => ({
 vi.mock("@/pages/SystemPage/components/Users", () => ({
   default: () => <div data-testid="legacy-users" />,
 }));
+vi.mock("@/pages/SystemPage/components/ServiceAccount", () => ({
+  ServiceAccount: () => <div data-testid="service-accounts" />,
+}));
+vi.mock("@/pages/SystemPage/components/PersonalToken", () => ({
+  PersonalToken: () => <div data-testid="personal-tokens" />,
+}));
 
 type UserShape = Record<string, unknown>;
 
@@ -52,6 +58,8 @@ const THEME = "system.appearanceSettings";
 const ORG_SYNC = "orgSync:title";
 const USER_GROUP = "system.userGroupsM";
 const LEGACY = "system.userManagement";
+const SERVICE_ACCOUNT = "openApiManagement.serviceAccount.title";
+const PERSONAL_TOKEN = "openApiManagement.personalToken.title";
 
 describe("SystemPage tab visibility (PRD §3.3)", () => {
   it("global super admin sees org/userGroup/role/orgSync/system/theme; legacy user table hidden", () => {
@@ -63,6 +71,8 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
     expect(screen.getByText(SYSCFG)).toBeInTheDocument();
     expect(screen.getByText(THEME)).toBeInTheDocument();
     expect(screen.queryByText(LEGACY)).toBeNull();
+    expect(screen.getByText(SERVICE_ACCOUNT)).toBeInTheDocument();
+    expect(screen.getByText(PERSONAL_TOKEN)).toBeInTheDocument();
   });
 
   it("Child Admin sees org/role but NOT system config / theme / org sync (instance-level only)", () => {
@@ -73,6 +83,8 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
     expect(screen.queryByText(THEME)).toBeNull();
     expect(screen.queryByText(ORG_SYNC)).toBeNull();
     expect(screen.queryByText(LEGACY)).toBeNull();
+    expect(screen.getByText(SERVICE_ACCOUNT)).toBeInTheDocument();
+    expect(screen.getByText(PERSONAL_TOKEN)).toBeInTheDocument();
   });
 
   it("Department Admin sees org/role but NOT system config / theme / org sync", () => {
@@ -82,6 +94,8 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
     expect(screen.queryByText(SYSCFG)).toBeNull();
     expect(screen.queryByText(THEME)).toBeNull();
     expect(screen.queryByText(ORG_SYNC)).toBeNull();
+    expect(screen.queryByText(SERVICE_ACCOUNT)).toBeNull();
+    expect(screen.queryByText(PERSONAL_TOKEN)).toBeNull();
   });
 
   it("plain user sees neither org nor role; falls back to legacy user table", () => {
@@ -92,6 +106,8 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
     expect(screen.queryByText(THEME)).toBeNull();
     expect(screen.queryByText(ORG_SYNC)).toBeNull();
     expect(screen.getByText(LEGACY)).toBeInTheDocument();
+    expect(screen.queryByText(SERVICE_ACCOUNT)).toBeNull();
+    expect(screen.queryByText(PERSONAL_TOKEN)).toBeNull();
   });
 
   it("user-group manager sees the user-group tab even without admin flags", () => {

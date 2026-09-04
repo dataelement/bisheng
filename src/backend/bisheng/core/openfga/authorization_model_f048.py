@@ -12,7 +12,7 @@ import json
 from hashlib import sha256
 from typing import Any
 
-MODEL_VERSION = "f048-v2"
+MODEL_VERSION = "f048-v3"
 
 DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "manage_permission",
@@ -137,6 +137,7 @@ def _wildcard_user_type() -> dict:
 def _subject_types() -> list[dict]:
     return [
         {"type": "user"},
+        {"type": "service_account"},
         {"type": "department", "relation": "member"},
         {"type": "department", "relation": "subtree_member"},
         {"type": "user_group", "relation": "member"},
@@ -157,6 +158,7 @@ def _visible_subject_types() -> list[dict]:
 def _base_type_definitions() -> list[dict]:
     return [
         {"type": "user", "relations": {}, "metadata": None},
+        {"type": "service_account", "relations": {}, "metadata": None},
         {
             "type": "system",
             "relations": {"super_admin": _this()},

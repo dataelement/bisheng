@@ -1437,6 +1437,16 @@
     "optional": "可选",
     "exampleValue": "示例值",
     "copySuccess": "复制成功",
+    "publicWorkflow": {
+      "title": "已发布工作流 API",
+      "description": "启用免登录访问并发布后，这些 v3 接口无需 API 密钥即可调用。",
+      "copyExample": "复制示例",
+      "contractTitle": "调用流程",
+      "stepInvoke": "使用 workflow_id 启动工作流，并保存返回的 session_id。",
+      "stepEvents": "读取 SSE 事件，直至工作流结束或请求输入。",
+      "stepInput": "请求输入时，携带 input、message_id 和 session_id 再次调用 invoke。",
+      "stepClose": "使用 workflow_id 和 session_id 调用 stop 可终止运行。"
+    },
     "apiRequestExample": "API 请求示例",
     "sdkNote": "可以直接使用OpenAI官方SDK中的ChatOpenAI组件去使用助手（只支持文档内有的参数。官方组件里其他的例如n、top_p、max_token等参数暂不支持）",
     "exampleCode": "示例代码",
@@ -2054,6 +2064,16 @@
     "closeReferences": "关闭参考资料",
     "backToReferences": "返回参考资料列表",
     "noDownloadUrl": "暂无可下载文件地址"
+  },
+  "openApiManagement": {
+    "empty": "暂无记录",
+    "fields": { "name": "名称", "description": "描述", "ownerUserId": "资源归属人用户 ID", "owner": "资源归属人", "status": "状态", "activeKeys": "有效密钥", "lastUsed": "最后使用", "createdAt": "创建时间", "expiresAt": "过期时间" },
+    "status": { "active": "有效", "disabled": "已停用", "revoked": "已吊销" },
+    "actions": { "back": "返回", "details": "详情", "enable": "启用", "disable": "停用", "revoke": "吊销", "revokeHolder": "按持有人吊销", "copy": "复制", "load": "加载资源" },
+    "serviceAccount": { "title": "服务账号", "create": "创建服务账号", "createHint": "资源归属人必须是当前租户内的有效自然人。", "search": "搜索服务账号", "overview": "概览", "keys": "API 密钥", "grants": "资源授权" },
+    "keys": { "issue": "签发 API 密钥", "issueHint": "仅配置基本信息、权限位和委托配置。", "once": "请立即复制此密钥，之后将无法再次查看。", "saved": "我已安全保存此密钥", "mask": "密钥", "permissions": "权限位", "delegateScopes": "委托范围", "delegatePlaceholder": "user:12, department:34", "delegateRequired": "委托至少需要一个用户或部门范围。" },
+    "grants": { "resourceType": "资源类型", "resourceId": "资源 ID", "model": "权限模型", "source": "授权来源", "scope": "范围", "grantModel": "授予 {{model}}" },
+    "personalToken": { "title": "个人访问令牌", "settings": "租户策略", "deploymentDisabled": "部署级个人访问令牌开关已关闭。", "tenantEnabled": "允许员工使用令牌", "ttlDays": "最长有效期（天）", "holder": "持有人", "adminRisk": "管理员风险" }
   },
   "mediaPreview": {
     "recognizedText": "识别文本",

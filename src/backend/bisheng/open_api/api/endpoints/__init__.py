@@ -1,0 +1,1 @@
+"""Open API endpoint adapters."""

@@ -123,6 +123,8 @@ export type BishengConfig = {
   workbench_menu_unavailable_message?: string;
   /** 是否部署 ETL4LM  */
   enable_etl4lm: boolean;
+  /** Whether employees may manage a personal access token in account settings. */
+  personal_token_enabled?: boolean;
   /** Knowledge space feature flags */
   knowledges?: {
     version_management?: {

@@ -99,6 +99,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.finetune.domain.models.preset_train",
     "bisheng.finetune.domain.models.model_deploy",
     "bisheng.finetune.domain.models.finetune",
+    "bisheng.open_api.domain.models",
 )
 
 

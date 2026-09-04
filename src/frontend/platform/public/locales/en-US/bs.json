@@ -1492,6 +1492,16 @@
     "optional": "Optional",
     "exampleValue": "Example",
     "copySuccess": "Copy Success",
+    "publicWorkflow": {
+      "title": "Published workflow API",
+      "description": "These v3 endpoints are available without an API key when guest access and publishing are enabled.",
+      "copyExample": "Copy example",
+      "contractTitle": "Invocation flow",
+      "stepInvoke": "Start the workflow with workflow_id and keep the returned session_id.",
+      "stepEvents": "Read SSE events until the workflow closes or requests input.",
+      "stepInput": "When input is requested, call invoke again with input, message_id, and session_id.",
+      "stepClose": "Use stop with workflow_id and session_id to terminate an active run."
+    },
     "apiRequestExample": "API Request Example",
     "sdkNote": "You can use the ChatOpenAI component from OpenAI's official SDK to use the assistant (only parameters in the document are supported. Others like n, top_p, max_tokens in the official component are not supported).",
     "exampleCode": "Example Code",
@@ -2109,6 +2119,16 @@
     "closeReferences": "Close references",
     "backToReferences": "Back to reference list",
     "noDownloadUrl": "No downloadable file address"
+  },
+  "openApiManagement": {
+    "empty": "No records",
+    "fields": { "name": "Name", "description": "Description", "ownerUserId": "Resource owner user ID", "owner": "Resource owner", "status": "Status", "activeKeys": "Active keys", "lastUsed": "Last used", "createdAt": "Created", "expiresAt": "Expires" },
+    "status": { "active": "Active", "disabled": "Disabled", "revoked": "Revoked" },
+    "actions": { "back": "Back", "details": "Details", "enable": "Enable", "disable": "Disable", "revoke": "Revoke", "revokeHolder": "Revoke holder", "copy": "Copy", "load": "Load resource" },
+    "serviceAccount": { "title": "Service accounts", "create": "Create service account", "createHint": "The resource owner must be an active user in this tenant.", "search": "Search service accounts", "overview": "Overview", "keys": "API keys", "grants": "Resource grants" },
+    "keys": { "issue": "Issue API key", "issueHint": "Configure basic information, permissions, and delegation only.", "once": "Copy this key now. It will not be shown again.", "saved": "I have saved the key securely", "mask": "Key", "permissions": "Permissions", "delegateScopes": "Delegation scopes", "delegatePlaceholder": "user:12, department:34", "delegateRequired": "At least one user or department is required for delegation." },
+    "grants": { "resourceType": "Resource type", "resourceId": "Resource ID", "model": "Permission model", "source": "Grant source", "scope": "Scope", "grantModel": "Grant {{model}}" },
+    "personalToken": { "title": "Personal access tokens", "settings": "Tenant policy", "deploymentDisabled": "Personal access tokens are disabled at deployment level.", "tenantEnabled": "Allow employee tokens", "ttlDays": "Maximum lifetime (days)", "holder": "Holder", "adminRisk": "Administrator risk" }
   },
   "mediaPreview": {
     "recognizedText": "Recognized text",

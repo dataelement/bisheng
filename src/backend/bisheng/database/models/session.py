@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import Integer
+from sqlalchemy import BigInteger, Index, Integer, String
 from sqlmodel import Column, DateTime, Field, col, func, select, text, update
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -40,6 +40,18 @@ class MessageSessionBase(SQLModelSerializable):
             comment="F017: user leaf tenant for INV-T13 derived-data attribution",
         ),
     )
+    api_subject_type: str | None = Field(
+        default=None,
+        sa_column=Column(String(32), nullable=True),
+    )
+    api_subject_id: int | None = Field(
+        default=None,
+        sa_column=Column(BigInteger().with_variant(Integer, "sqlite"), nullable=True),
+    )
+    external_user_id: str | None = Field(
+        default=None,
+        sa_column=Column(String(128), nullable=True),
+    )
     group_ids: list[int] | None = Field(
         default=None, sa_column=Column(JsonType), description="Belongs to a user groupIDVertical"
     )
@@ -60,6 +72,15 @@ class MessageSessionBase(SQLModelSerializable):
 
 class MessageSession(MessageSessionBase, table=True):
     __tablename__ = "message_session"
+    __table_args__ = (
+        Index(
+            "idx_message_session_api_subject",
+            "tenant_id",
+            "api_subject_type",
+            "api_subject_id",
+            "update_time",
+        ),
+    )
 
 
 class MessageSessionDao(MessageSessionBase):
@@ -192,6 +213,13 @@ class MessageSessionDao(MessageSessionBase):
             statement = statement.order_by(MessageSession.create_time.desc())
         with get_sync_db_session() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    def get_statement_results_sync(cls, statement, page: int = 0, limit: int = 0) -> list[MessageSession]:
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        with get_sync_db_session() as session:
+            return list(session.exec(statement).all())
 
     @classmethod
     async def afilter_session(

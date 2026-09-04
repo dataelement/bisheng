@@ -490,6 +490,7 @@ class KnowledgeSpaceChatService:
         query: str,
         candidate_file_ids: list[int] | None,
         max_content: int,
+        sort_by_source_and_index: bool = True,
     ) -> list[Document]:
         """F029: two-layer view_file filter retrieval loop (AD-01 / AD-03).
 
@@ -541,7 +542,7 @@ class KnowledgeSpaceChatService:
                 vector_retriever=vector_retriever,
                 elastic_retriever=es_retriever,
                 max_content=max_content,
-                sort_by_source_and_index=True,
+                sort_by_source_and_index=sort_by_source_and_index,
             )
             docs: list[Document] = await retriever_tool.ainvoke(query)
 
@@ -913,22 +914,13 @@ class KnowledgeSpaceChatService:
         if tag_names and not target_file_ids:
             return []
 
-        milvus_kwargs, es_kwargs = await self._build_folder_search_kwargs(kb_id, target_file_ids)
-        if milvus_kwargs is None and es_kwargs is None:
-            return []
-
-        milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=space)
-        es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-        vector_retriever = milvus_vector.as_retriever(search_kwargs=milvus_kwargs)
-        es_retriever = es_vector.as_retriever(search_kwargs=es_kwargs)
-
-        retriever_tool = KnowledgeRetrieverTool(
-            vector_retriever=vector_retriever,
-            elastic_retriever=es_retriever,
+        docs = await self._retrieve_and_filter(
+            space=space,
+            query=query,
+            candidate_file_ids=target_file_ids,
             max_content=max_content,
             sort_by_source_and_index=False,
         )
-        docs: list[Document] = await retriever_tool.ainvoke(query)
         return [(kb_id, d) for d in docs]
 
     async def _aretrieve_chunks_dispatch(
@@ -993,32 +985,13 @@ class KnowledgeSpaceChatService:
         if tag_names and not target_file_ids:
             return []
 
-        if target_file_ids:
-            milvus_kwargs: dict = {
-                "k": 100,
-                "param": {"ef": 110},
-                "expr": f"document_id in {target_file_ids}",
-            }
-            es_kwargs: dict = {
-                "k": 100,
-                "filter": [{"terms": {"metadata.document_id": target_file_ids}}],
-            }
-        else:
-            milvus_kwargs = {"k": 100, "param": {"ef": 110}}
-            es_kwargs = {"k": 100}
-
-        milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=kb)
-        es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=kb)
-        vector_retriever = milvus_vector.as_retriever(search_kwargs=milvus_kwargs)
-        es_retriever = es_vector.as_retriever(search_kwargs=es_kwargs)
-
-        retriever_tool = KnowledgeRetrieverTool(
-            vector_retriever=vector_retriever,
-            elastic_retriever=es_retriever,
+        docs = await self._retrieve_and_filter(
+            space=kb,
+            query=query,
+            candidate_file_ids=target_file_ids,
             max_content=max_content,
             sort_by_source_and_index=False,
         )
-        docs: list[Document] = await retriever_tool.ainvoke(query)
         return [(kb_id, d) for d in docs]
 
     async def _resolve_kb_file_ids_by_tags(
