@@ -3375,9 +3375,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 5
     }
   },
   "src/pages/ModelPage/manage/tabs/WorkbenchModel.tsx": {
