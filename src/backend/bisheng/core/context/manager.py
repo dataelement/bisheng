@@ -99,6 +99,9 @@ class ApplicationContextManager:
             from bisheng.core.prompts.manager import PromptManager
             self.register_context(PromptManager())
 
+            from bisheng.knowledge.rag.async_retrieval_runtime import AsyncRetrievalRuntimeManager
+            self.register_context(AsyncRetrievalRuntimeManager(config))
+
             if config.openfga.enabled:
                 try:
                     from bisheng.core.openfga.manager import FGAManager

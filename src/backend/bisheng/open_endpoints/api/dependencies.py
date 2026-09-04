@@ -36,6 +36,10 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository 
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
 from bisheng.knowledge.domain.services.knowledge_file_service import KnowledgeFileService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.rag.async_retrieval_runtime import (
+    AsyncRetrievalRuntime,
+    get_async_retrieval_runtime,
+)
 from bisheng.open_endpoints.domain.repositories.implementations.filelib_sync_repository_impl import (
     FilelibSyncRepositoryImpl,
 )
@@ -129,10 +133,12 @@ async def get_filelib_user_context_service(
 
 async def get_filelib_retrieve_source_service(
     file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
+    retrieval_runtime: AsyncRetrievalRuntime = Depends(get_async_retrieval_runtime),
 ) -> FilelibRetrieveSourceService:
     return FilelibRetrieveSourceService(
         file_repository=file_repository,
         storage=await get_minio_storage(),
+        max_concurrency=retrieval_runtime.config.max_source_link_concurrency,
     )
 
 
@@ -176,6 +182,7 @@ def build_knowledge_space_chat_service_for_openapi(
     version_repo: KnowledgeDocumentVersionRepository,
     doc_repo: KnowledgeDocumentRepository,
     file_repo: KnowledgeFileRepository | None = None,
+    retrieval_runtime: AsyncRetrievalRuntime | None = None,
 ) -> "KnowledgeSpaceChatService":
     """Build the retrieval service inside the resolved Filelib user context."""
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
@@ -184,6 +191,7 @@ def build_knowledge_space_chat_service_for_openapi(
     service.version_repo = version_repo
     service.doc_repo = doc_repo
     service.file_repo = file_repo
+    service.retrieval_runtime = retrieval_runtime
     return service
 
 

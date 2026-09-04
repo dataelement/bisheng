@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from datetime import datetime
@@ -44,6 +45,10 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository 
     KnowledgeFileRepository,
 )
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.rag.async_retrieval_runtime import (
+    AsyncRetrievalRuntime,
+    get_async_retrieval_runtime,
+)
 from bisheng.open_endpoints.api.dependencies import (
     build_knowledge_space_chat_service_for_openapi,
     get_filelib_developer_token_principal,
@@ -692,28 +697,30 @@ async def retrieve_chunks(
             get_filelib_retrieve_source_service
         ),
         file_repo: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
+        retrieval_runtime: AsyncRetrievalRuntime = Depends(get_async_retrieval_runtime),
 ):
     """Retrieve top-k chunks across one or more knowledge bases (no LLM generation).
 
     Designed for external retrieval-tool integrations (e.g. agents that bring
     their own LLM). The resolved request user controls permissions and scope.
     """
-    async with user_context_service.use_user(principal, req.external_id) as login_user:
-        chat_svc = build_knowledge_space_chat_service_for_openapi(
-            request=request,
-            request_user=login_user,
-            version_repo=version_repo,
-            doc_repo=doc_repo,
-            file_repo=file_repo,
-        )
-        kb_filters = None
-        if req.filters and req.filters.knowledge_base_filters:
-            kb_filters = {
-                f.knowledge_base_id: {"tags": f.tags, "tag_match_mode": f.tag_match_mode}
-                for f in req.filters.knowledge_base_filters
-            }
+    async def _execute_retrieval():
+        async with user_context_service.use_user(principal, req.external_id) as login_user:
+            chat_svc = build_knowledge_space_chat_service_for_openapi(
+                request=request,
+                request_user=login_user,
+                version_repo=version_repo,
+                doc_repo=doc_repo,
+                file_repo=file_repo,
+                retrieval_runtime=retrieval_runtime,
+            )
+            kb_filters = None
+            if req.filters and req.filters.knowledge_base_filters:
+                kb_filters = {
+                    f.knowledge_base_id: {"tags": f.tags, "tag_match_mode": f.tag_match_mode}
+                    for f in req.filters.knowledge_base_filters
+                }
 
-        try:
             results = await chat_svc.aretrieve_chunks(
                 query=req.query,
                 knowledge_base_ids=req.knowledge_base_ids,
@@ -721,42 +728,61 @@ async def retrieve_chunks(
                 top_k=req.top_k,
                 max_content=req.max_content,
             )
-        except BaseErrorCode as e:
-            return e.return_resp_instance()
+            prepared_results = [
+                (
+                    kb_id,
+                    doc,
+                    int(doc.metadata.get("document_id", 0)),
+                )
+                for kb_id, doc in results
+            ]
+            document_ids = list(
+                dict.fromkeys(
+                    document_id
+                    for _, _, document_id in prepared_results
+                    if document_id > 0
+                )
+            )
+            try:
+                source_links = await asyncio.wait_for(
+                    source_service.resolve_links(document_ids),
+                    timeout=retrieval_runtime.config.source_link_timeout_seconds,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "openapi retrieve source link resolution timed out document_count={}",
+                    len(document_ids),
+                )
+                source_links = {}
+            return prepared_results, source_links
 
-        prepared_results = [
-            (
-                kb_id,
-                doc,
-                int(doc.metadata.get("document_id", 0)),
-            )
-            for kb_id, doc in results
-        ]
-        document_ids = list(
-            dict.fromkeys(
-                document_id
-                for _, _, document_id in prepared_results
-                if document_id > 0
-            )
+    try:
+        prepared_results, source_links = await asyncio.wait_for(
+            _execute_retrieval(),
+            timeout=retrieval_runtime.config.total_timeout_seconds,
         )
-        source_links = await source_service.resolve_links(document_ids)
-        chunks = []
-        for kb_id, doc, document_id in prepared_results:
-            document_name = str(doc.metadata.get("document_name", ""))
-            source_link = source_links.get(
-                document_id,
-                EMPTY_RETRIEVE_SOURCE_LINK,
-            )
-            chunks.append(RetrieveChunk(
-                content=doc.page_content,
-                knowledge_id=kb_id,
-                document_id=document_id,
-                document_name=document_name,
-                chunk_index=int(doc.metadata.get("chunk_index", 0)),
-                source_url=source_link.source_url,
-                source_full_url=source_link.source_full_url,
-            ))
-        return resp_200(data=RetrieveResp(chunks=chunks, total=len(chunks)))
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(status_code=504, detail="knowledge retrieval timed out") from exc
+
+    chunks = []
+    for kb_id, doc, document_id in prepared_results:
+        document_name = str(doc.metadata.get("document_name", ""))
+        source_link = source_links.get(
+            document_id,
+            EMPTY_RETRIEVE_SOURCE_LINK,
+        )
+        chunks.append(RetrieveChunk(
+            content=doc.page_content,
+            knowledge_id=kb_id,
+            document_id=document_id,
+            document_name=document_name,
+            chunk_index=int(doc.metadata.get("chunk_index", 0)),
+            source_url=source_link.source_url,
+            source_full_url=source_link.source_full_url,
+        ))
+    return resp_200(data=RetrieveResp(chunks=chunks, total=len(chunks)))
 
 
 @router.post('/query_qa', status_code=200)
