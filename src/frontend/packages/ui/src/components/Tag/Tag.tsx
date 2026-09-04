@@ -46,10 +46,12 @@ import { Tooltip } from '../Tooltip';
 export type TagSize = 'small' | 'medium';
 
 /**
- * §3.1 — five semantic colors plus the two frozen exceptions. `approving` and
- * `skill` are separate values rather than `brand`: they are pinned to blue and
- * purple in BOTH brand themes (色彩规范 §4), which is exactly what `brand`
- * cannot promise.
+ * §3.1 — five semantic colors plus the three frozen exceptions. `approving`,
+ * `skill` and `web` are separate values rather than `brand`: they are pinned
+ * to blue and purple in BOTH brand themes (色彩规范 §4), which is exactly what
+ * `brand` cannot promise. `web` is the same purple as `skill` under its own
+ * use-name — it labels a web source, and it has to match the citation badge
+ * marking that same source in the answer (组件-Badge徽标.md §2).
  */
 export type TagColor =
   | 'default'
@@ -58,7 +60,8 @@ export type TagColor =
   | 'warning'
   | 'danger'
   | 'approving'
-  | 'skill';
+  | 'skill'
+  | 'web';
 
 /** §3.1 — tint background + main-color text, both from the token layer, so
  * dark mode arrives on its own (the dark tints are deep saturated washes, not
@@ -71,6 +74,7 @@ const COLOR: Record<TagColor, string> = {
   danger: 'bg-danger-tint text-danger',
   approving: 'bg-tag-approving-tint text-tag-approving',
   skill: 'bg-tag-skill-tint text-tag-skill',
+  web: 'bg-citation-web-tint text-citation-web',
 };
 
 /** §6 — one disabled look for every color: the tag is still there, it just

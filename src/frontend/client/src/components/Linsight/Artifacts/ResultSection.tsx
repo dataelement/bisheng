@@ -5,6 +5,7 @@
  */
 import { useCallback } from 'react';
 import { Outlined } from 'bisheng-icons';
+import { Badge } from '@bisheng/ui';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import { useLocalize } from '~/hooks';
 import '~/markdown.css';
@@ -117,9 +118,11 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                         <span className="text-[14px] leading-[22px] text-text-3">
                             {localize('com_linsight_output_files', { 0: '' }).trim()}
                         </span>
-                        <span className="flex h-4 min-w-4 items-center justify-center rounded-md bg-[#212121]/5 px-1 text-caption-sm font-semibold text-text-1">
-                            {files.length}
-                        </span>
+                        {/* 组件-Badge徽标.md §2 — the standalone number. This
+                            card is neutral, so it passes its own ink fill the
+                            way a neutral Tabs row does, rather than taking
+                            Badge's brand default. */}
+                        <Badge count={files.length} className="bg-text-1/5 text-text-1" />
                     </div>
 
                     {/* file list (design node 12221-40681) — each row is name on

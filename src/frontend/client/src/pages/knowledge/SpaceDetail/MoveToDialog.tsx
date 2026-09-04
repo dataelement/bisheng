@@ -11,8 +11,6 @@ import {
     getSpaceChildrenApi,
     type KnowledgeFile,
     type KnowledgeSpace,
-    SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED,
-    SpaceRole,
 } from "~/api/knowledge";
 import { listUploadableSpacesApi } from "~/api/messageExport";
 import { Button } from "~/components/ui/Button";
@@ -65,11 +63,6 @@ interface Selection {
     folderName?: string;
 }
 
-/** MEMBER-role users hide FAILED items; admins/creators see everything. */
-function statusFilterFor(space?: KnowledgeSpace): number[] | undefined {
-    return space?.role === SpaceRole.MEMBER ? SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED : undefined;
-}
-
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "bmp", "gif", "webp"];
 
 /** Right-panel file glyph — mirrors the list-mode icon (FileIcon.tsx). */
@@ -115,7 +108,8 @@ function SpaceRow({
     const localize = useLocalize();
     // The space row is "selected" only when its own root is the target (no folder).
     const rootSelected = selection.spaceId === space.id && selection.folderId == null;
-    const fileStatus = statusFilterFor(space);
+    // No status filter: the server decides whose parse failures are visible.
+    const fileStatus = undefined;
 
     return (
         <div className="flex flex-col gap-0.5">
@@ -275,14 +269,7 @@ export function MoveToDialog({
         });
     }, [open, categories, currentSpaceId, selection.spaceId, selection.folderId]);
 
-    // Flat lookup for selected-space metadata (role/name).
-    const spaceById = useMemo(() => {
-        const map = new Map<string, KnowledgeSpace>();
-        for (const s of [...departmentSpaces, ...createdSpaces, ...joinedSpaces]) map.set(s.id, s);
-        return map;
-    }, [departmentSpaces, createdSpaces, joinedSpaces]);
     const selectedSpaceId = selection.spaceId;
-    const selectedSpace = selectedSpaceId ? spaceById.get(selectedSpaceId) : undefined;
 
     // Right panel: contents (folders + files) of the selected location.
     const { data: children, isLoading } = useQuery({
@@ -295,7 +282,6 @@ export function MoveToDialog({
                 space_id: selectedSpaceId,
                 parent_id: selection.folderId ?? undefined,
                 page_size: 200,
-                file_status: statusFilterFor(selectedSpace),
             });
         },
         enabled: open && !!selectedSpaceId,

@@ -3,8 +3,6 @@ import {
     FileStatus,
     KnowledgeFile,
     KnowledgeSpace,
-    SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED,
-    SpaceRole,
     SortDirection,
     SortType,
     fileStatusToNumber,
@@ -141,10 +139,12 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             }
             try {
                 const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
-                const isMember = activeSpace.role === SpaceRole.MEMBER;
+                // No implicit status filter: the server hides other people's parse failures
+                // (uploader and space managers still see them), so the client asks for
+                // everything and lets that rule apply uniformly.
                 const fileStatusNums = statusFilter.length > 0
                     ? statusFilter.map(fileStatusToNumber)
-                    : isMember ? SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED : undefined;
+                    : undefined;
 
                 // Search path: backend still page-numbered; compute next page.
                 const searchPageToFetch = isSearching
@@ -329,10 +329,9 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         if (currentFiles.length === 0) return;
 
         try {
-            const isMember = activeSpace.role === SpaceRole.MEMBER;
             const fileStatusNums = statusFilter.length > 0
                 ? statusFilter.map(fileStatusToNumber)
-                : isMember ? SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED : undefined;
+                : undefined;
             // Cap the poll fetch at 100 to bound the request — pending files
             // (recent update_time) sit at the top under default sort anyway.
             const fetchSize = Math.min(currentFiles.length, 100);
@@ -365,7 +364,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         } catch {
             // Silent — polling failure must not toast.
         }
-    }, [enabled, activeSpace?.id, activeSpace?.role, searchQuery, searchTagIds, statusFilter, sortBy, sortDirection, currentFolderId]);
+    }, [enabled, activeSpace?.id, searchQuery, searchTagIds, statusFilter, sortBy, sortDirection, currentFolderId]);
 
     const refreshLoadedStatusesRef = useRef(refreshLoadedStatuses);
     refreshLoadedStatusesRef.current = refreshLoadedStatuses;
