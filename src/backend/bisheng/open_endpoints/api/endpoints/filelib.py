@@ -14,6 +14,9 @@ from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
+from bisheng.common.errcode.open_api import OpenApiAuthDependencyUnavailableError
+from bisheng.common.errcode.permission import PermissionServiceUnavailableError
+from bisheng.common.errcode.tenant_fga import PermissionBackendUnavailableError
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.utils import async_file_download, save_download_file
 from bisheng.core.logger import trace_id_var
@@ -37,6 +40,7 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+from bisheng.open_api.domain.scopes import open_api_scope
 from bisheng.open_endpoints.domain.schemas.filelib import (
     APIAddQAParam,
     APIAppendQAParam,
@@ -45,7 +49,7 @@ from bisheng.open_endpoints.domain.schemas.filelib import (
     RetrieveReq,
     RetrieveResp,
 )
-from bisheng.open_endpoints.domain.utils import get_default_operator, get_default_operator_async, resolve_operator
+from bisheng.open_endpoints.domain.utils import get_open_api_operator, get_open_api_operator_async
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.utils.util import sync_func_to_async
 
@@ -74,6 +78,7 @@ def _build_space_service(
 
 
 @router.post('/', status_code=201)
+@open_api_scope("knowledge:write")
 async def create(
         request: Request,
         knowledge: KnowledgeCreate,
@@ -82,10 +87,11 @@ async def create(
 ):
     """Create a knowledge resource (F030 facade, dispatch by ``type``).
 
-    type 0/1 → 文档 / QA 知识库（KnowledgeService）；type 3 → 知识空间
-    （KnowledgeSpaceService，忽略 model，用 workbench embedding）；type 2 / 非法 → 不支持。
+    Types 0/1 create document or QA libraries through KnowledgeService;
+    type 3 creates a knowledge space through KnowledgeSpaceService with the
+    workbench embedding model. Type 2 and invalid values are unsupported.
     """
-    login_user = await get_default_operator_async()
+    login_user = await get_open_api_operator_async()
     if knowledge.type in _KB_TYPES:
         # auth_type / is_released only apply to knowledge spaces (AD-07);
         # force defaults so they have no effect on knowledge bases.
@@ -121,6 +127,7 @@ async def create(
 
 
 @router.put('/', status_code=201)
+@open_api_scope("knowledge:write")
 async def update_knowledge(
         *,
         request: Request,
@@ -129,7 +136,7 @@ async def update_knowledge(
         doc_repo: KnowledgeDocumentRepository = Depends(get_knowledge_document_repository),
 ):
     """Update name/description of a knowledge resource (F030, dispatch by row.type)."""
-    login_user = await get_default_operator_async()
+    login_user = await get_open_api_operator_async()
     row = await KnowledgeDao.aquery_by_id(knowledge.knowledge_id)
     if not row:
         raise NotFoundError.http_exception()
@@ -155,6 +162,7 @@ async def update_knowledge(
 
 
 @router.get('/', status_code=200)
+@open_api_scope("knowledge:read")
 async def get_knowledge(
         *,
         request: Request,
@@ -163,17 +171,15 @@ async def get_knowledge(
         sort_by: str = Query(default='update_time'),
         page_size: int | None = 10,
         cursor: str | None = Query(default=None),
-        user_id: int | None = None,
         version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
         doc_repo: KnowledgeDocumentRepository = Depends(get_knowledge_document_repository),
 ):
     """List knowledge resources by ``type`` (F030 cursor pagination, INV-6).
 
-    Params align with v1 ``GET /api/v1/knowledge``. ``user_id`` scopes the list
-    to that user's visibility; omit to use the default operator (AD-02).
+    Identity delegation is supplied only through ``X-On-Behalf-Of``.
     Response is ``PageInfiniteCursorData`` (data/page_size/has_more/next_cursor).
     """
-    login_user = await resolve_operator(user_id)
+    login_user = await get_open_api_operator_async()
     if knowledge_type in _KB_TYPES:
         page = await KnowledgeService.get_knowledge(
             request,
@@ -195,6 +201,7 @@ async def get_knowledge(
 
 
 @router.delete('/{knowledge_id}', status_code=200)
+@open_api_scope("knowledge:write")
 async def delete_knowledge_api(
         *,
         request: Request,
@@ -208,7 +215,7 @@ async def delete_knowledge_api(
     files/folders + ReBAC tuple cleanup + members). Knowledge base (0/1) →
     ``KnowledgeService.delete_knowledge``.
     """
-    login_user = await get_default_operator_async()
+    login_user = await get_open_api_operator_async()
     row = await KnowledgeDao.aquery_by_id(knowledge_id)
     if not row:
         raise NotFoundError.http_exception()
@@ -225,6 +232,7 @@ async def delete_knowledge_api(
 
 # Empty all knowledge resource contents (keep the resource itself).
 @router.delete('/clear/{knowledge_id}', status_code=200)
+@open_api_scope("knowledge:write")
 async def clear_knowledge_files(
         *,
         request: Request,
@@ -238,7 +246,7 @@ async def clear_knowledge_files(
     files/folders + child tuples, keep the space). Knowledge base (0/1) →
     ``KnowledgeService.delete_knowledge(only_clear=True)``.
     """
-    login_user = await get_default_operator_async()
+    login_user = await get_open_api_operator_async()
     row = await KnowledgeDao.aquery_by_id(knowledge_id)
     if not row:
         raise NotFoundError.http_exception()
@@ -254,6 +262,7 @@ async def clear_knowledge_files(
 
 
 @router.post('/file/{knowledge_id}')
+@open_api_scope("knowledge:write")
 async def upload_file(
         request: Request,
         knowledge_id: int,
@@ -298,7 +307,7 @@ async def upload_file(
     else:
         file_path, file_name = await async_file_download(file_url)
 
-    loging_user = await get_default_operator_async()
+    loging_user = await get_open_api_operator_async()
 
     db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
     if not db_knowledge:
@@ -344,30 +353,32 @@ async def upload_file(
 
 
 @router.delete('/file/{file_id}', status_code=200)
+@open_api_scope("knowledge:write")
 def delete_knowledge_file(request: Request, file_id: int):
     """ Delete files in the Knowledge Base """
-    login_user = get_default_operator()
+    login_user = get_open_api_operator()
     KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
     return resp_200()
 
 
 @router.post('/delete_file', status_code=200)
+@open_api_scope("knowledge:write")
 def delete_file_batch_api(request: Request, file_ids: list[int]):
     """ Bulk delete knowledge file information """
-    login_user = get_default_operator()
+    login_user = get_open_api_operator()
     KnowledgeService.delete_knowledge_file(request, login_user, file_ids)
     return resp_200()
 
 
 @router.get('/file/list', status_code=200)
+@open_api_scope("knowledge:read")
 async def get_filelist(request: Request,
                        knowledge_id: int,
                        parent_id: int | None = None,
-                       keyword: str = None,
+                       keyword: str | None = None,
                        status: list[int] = Query(default=None),
                        page_size: int = 10,
                        cursor: str | None = Query(default=None),
-                       user_id: int | None = None,
                        version_repo: KnowledgeDocumentVersionRepository = Depends(
                            get_knowledge_document_version_repository),
                        doc_repo: KnowledgeDocumentRepository = Depends(get_knowledge_document_repository)):
@@ -375,10 +386,9 @@ async def get_filelist(request: Request,
 
     Knowledge base (0/1) → flat cursor list (``aget_knowledge_files_cursor``,
     ``parent_id`` ignored). Knowledge space (3) → hierarchical cursor list
-    (``list_space_children``) under ``parent_id`` (root when omitted). ``user_id``
-    scopes visibility to that user (AD-02). Returns ``PageInfiniteCursorData`` + ``writeable``.
+    (``list_space_children``) under ``parent_id`` (root when omitted).
     """
-    login_user = await resolve_operator(user_id)
+    login_user = await get_open_api_operator_async()
     db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
     if not db_knowledge:
         raise NotFoundError.http_exception()
@@ -423,6 +433,7 @@ async def get_filelist(request: Request,
 
 
 @router.post('/chunks')
+@open_api_scope("knowledge:write")
 async def post_chunks(request: Request,
                       knowledge_id: int = Form(...),
                       metadata: str = Form(...),
@@ -441,7 +452,7 @@ async def post_chunks(request: Request,
         return resp_500(message='file name must be not empty')
     file_path = await sync_func_to_async(save_download_file)(file.file, 'bisheng', file_name)
 
-    login_user = await get_default_operator_async()
+    login_user = await get_open_api_operator_async()
 
     req_data = KnowledgeFileProcess(knowledge_id=knowledge_id,
                                     split_mode=split_mode,
@@ -463,6 +474,7 @@ async def post_chunks(request: Request,
 
 
 @router.post('/chunks_string')
+@open_api_scope("knowledge:write")
 async def post_string_chunks(request: Request, document: ChunkInput):
     """ Get knowledge base file information. """
 
@@ -472,7 +484,7 @@ async def post_string_chunks(request: Request, document: ChunkInput):
     file_name = document.documents[0].metadata.get('source')
     file_path = await sync_func_to_async(save_download_file)(content_bytes, 'bisheng', file_name)
 
-    login_user = await get_default_operator_async()
+    login_user = await get_open_api_operator_async()
 
     req_data = KnowledgeFileProcess(knowledge_id=document.knowledge_id,
                                     separator=['\n\n'],
@@ -494,6 +506,7 @@ async def post_string_chunks(request: Request, document: ChunkInput):
 
 
 @router.get('/download_statistic')
+@open_api_scope("knowledge:read", modes=("S",))
 def download_statistic_file(file_path: str):
     suffix = file_path.split('.')[-1]
     if suffix != 'log':
@@ -507,13 +520,12 @@ def download_statistic_file(file_path: str):
 
 
 @router.post('/add_qa')
+@open_api_scope("knowledge:write")
 def add_qa(*,
            knowledge_id: int = Body(embed=True),
-           data: list[APIAddQAParam] = Body(embed=True),
-           user_id: int | None = Body(default=None, embed=True)):
+           data: list[APIAddQAParam] = Body(embed=True)):
     # Seed the tenant ContextVar (multi-tenant safe) — QAKnowledge is tenant-aware.
-    login_user = get_default_operator()
-    user_id = user_id if user_id else login_user.user_id
+    login_user = get_open_api_operator()
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
     logger.info('add_qa_data knowledge_id={} size={}', knowledge_id, len(data))
     res = []
@@ -521,7 +533,7 @@ def add_qa(*,
         qa_insert = QAKnowledgeUpsert(knowledge_id=knowledge_id,
                                       questions=[item.question],
                                       answers=item.answer,
-                                      user_id=user_id,
+                                      user_id=login_user.user_id,
                                       extra_meta=json.dumps(item.extra),
                                       source=3)
 
@@ -531,12 +543,12 @@ def add_qa(*,
 
 
 @router.post('/add_relative_qa')
+@open_api_scope("knowledge:write")
 def append_qa(*,
               knowledge_id: int = Body(embed=True),
-              data: APIAppendQAParam = Body(embed=True),
-              user_id: int | None = Body(default=None, embed=True)):
+              data: APIAppendQAParam = Body(embed=True)):
     # Seed the tenant ContextVar (multi-tenant safe) — QAKnowledge is tenant-aware.
-    get_default_operator()
+    get_open_api_operator()
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
     qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(data.id)
     if not qa_db:
@@ -551,10 +563,11 @@ def append_qa(*,
 
 
 @router.delete('/qa/{qa_id}', status_code=200)
+@open_api_scope("knowledge:write")
 def delete_qa_data(*, qa_id: int, question: str | None = None):
     """ Deleteqa Question to Information """
     # Seed the tenant ContextVar before any tenant-aware read/write.
-    login_user = get_default_operator()
+    login_user = get_open_api_operator()
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(qa_id)
     if not qa:
         raise HTTPException(status_code=404, detail='qa Does not exist')
@@ -578,6 +591,7 @@ def delete_qa_data(*, qa_id: int, question: str | None = None):
 
 
 @router.post('/update_qa', status_code=200)
+@open_api_scope("knowledge:write")
 def update_qa(
         *,
         id: int = Body(embed=True),
@@ -587,7 +601,7 @@ def update_qa(
 ):
     """ Deleteqa Question to Information """
     # Seed the tenant ContextVar before any tenant-aware read/write.
-    get_default_operator()
+    get_open_api_operator()
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
 
     if not qa:
@@ -612,15 +626,17 @@ def update_qa(
 
 
 @router.get('/detail_qa', status_code=200)
+@open_api_scope("knowledge:read")
 def detail_qa(*, id: int):
     """ Get questions on information """
     # Seed the tenant ContextVar before the tenant-aware read.
-    get_default_operator()
+    get_open_api_operator()
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
     return resp_200(qa)
 
 
 @router.post('/retrieve')
+@open_api_scope("knowledge:read")
 async def retrieve_chunks(
         request: Request,
         req: RetrieveReq,
@@ -628,16 +644,13 @@ async def retrieve_chunks(
 ):
     """Retrieve top-k chunks across one or more knowledge bases (no LLM generation).
 
-    Designed for external retrieval-tool integrations (e.g. agents that bring
-    their own LLM). F030: runs as the configured default operator by default;
-    when ``req.user_id`` is set, retrieval is scoped to that user's visible
-    resources/files (the "代用户检索" protocol F029 deferred). Per-knowledge-base
-    tag filtering keeps the existing ``filters`` structure (no flat tags).
+    Designed for external retrieval-tool integrations. Delegation is supplied
+    only through ``X-On-Behalf-Of``.
     """
     # F030 AD-02: bind the chat service to the resolved acting identity so the
     # existing per-user view_file/view_space filtering in aretrieve_chunks
     # (INV-7) applies to the target user instead of always the default operator.
-    login_user = await resolve_operator(req.user_id)
+    login_user = await get_open_api_operator_async()
     chat_svc = KnowledgeSpaceChatService(request=request, login_user=login_user)
     chat_svc.version_repo = version_repo
 
@@ -656,6 +669,8 @@ async def retrieve_chunks(
             top_k=req.top_k,
             max_content=req.max_content,
         )
+    except (PermissionBackendUnavailableError, PermissionServiceUnavailableError) as exc:
+        raise OpenApiAuthDependencyUnavailableError() from exc
     except BaseErrorCode as e:
         return e.return_resp_instance()
 
@@ -674,10 +689,11 @@ async def retrieve_chunks(
 
 
 @router.post('/query_qa', status_code=200)
+@open_api_scope("knowledge:read")
 def query_qa(QueryQAParam: QueryQAParam):
     """ Deleteqa Question to Information """
     # Seed the tenant ContextVar before the tenant-aware read.
-    get_default_operator()
+    get_open_api_operator()
     sources = [1, 2]  # 3 Yes apiInverted
     qa_list = QAKnoweldgeDao.query_by_condition_v1(source=sources,
                                                    create_start=QueryQAParam.timeRange[0],

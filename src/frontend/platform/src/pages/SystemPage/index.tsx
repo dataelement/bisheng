@@ -14,6 +14,8 @@ import { RolesAndPermissions } from "./components/RolesAndPermissions"
 import Theme from "./theme"
 import UserGroups from "./components/UserGroup"
 import Users from "./components/Users"
+import { PersonalToken } from "./components/PersonalToken"
+import { ServiceAccount } from "./components/ServiceAccount"
 
 export default function index() {
   const { user } = useContext(userContext)
@@ -31,7 +33,7 @@ export default function index() {
    *  instance-level CSS vars/logo. Neither has per-Tenant semantics,
    *  so restrict to global super admin only. */
   const canAccessSystemConfig = isSuperAdmin
-  /** 组织同步仅超级管理员可见（网关掉对接口推送后，本页只读看记录与日志） */
+  /** Organization sync is read-only here and visible only to global administrators. */
   const showOrgSyncTab = isSuperAdmin
   /** PRD §4.5: Child Admin manages own tenant's user groups. Backend now
    *  flips can_manage_user_groups true for Child Admin too; the explicit
@@ -42,6 +44,7 @@ export default function index() {
     || !!user?.is_child_admin
   /** Legacy flat user table is for accounts without org-tab access. */
   const showLegacyUserTab = !showOrgTab
+  const showOpenApiManagement = isSuperAdmin || isChildAdmin
 
   const defaultTab = showOrgTab
     ? "organization"
@@ -70,7 +73,13 @@ export default function index() {
             <TabsTrigger value="role">{t("system.roleAndPermissions")}</TabsTrigger>
           )}
           {showOrgSyncTab && (
-            <TabsTrigger value="orgSync">{t("orgSync:title", "组织同步")}</TabsTrigger>
+            <TabsTrigger value="orgSync">{t("orgSync:title")}</TabsTrigger>
+          )}
+          {showOpenApiManagement && (
+            <TabsTrigger value="serviceAccount">{t("openApiManagement.serviceAccount.title")}</TabsTrigger>
+          )}
+          {showOpenApiManagement && (
+            <TabsTrigger value="personalToken">{t("openApiManagement.personalToken.title")}</TabsTrigger>
           )}
           {canAccessSystemConfig && (
             <TabsTrigger value="system">{t("system.systemConfiguration")}</TabsTrigger>
@@ -102,6 +111,16 @@ export default function index() {
         {showOrgSyncTab && (
           <TabsContent value="orgSync" className="min-h-0 flex-1 overflow-hidden">
             <OrgSync />
+          </TabsContent>
+        )}
+        {showOpenApiManagement && (
+          <TabsContent value="serviceAccount" className="min-h-0 flex-1 overflow-hidden">
+            <ServiceAccount />
+          </TabsContent>
+        )}
+        {showOpenApiManagement && (
+          <TabsContent value="personalToken" className="min-h-0 flex-1 overflow-hidden">
+            <PersonalToken />
           </TabsContent>
         )}
         {canAccessSystemConfig && (

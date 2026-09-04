@@ -49,6 +49,7 @@ import { FileListToolbar } from "./FileListToolbar";
 import { FileListView } from "./FileListView";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
+import { LoadMore } from "./LoadMore";
 import { MoveToDialog } from "./MoveToDialog";
 import { VersionManagementDialog } from "./VersionManagementDialog";
 import { VersionHistorySheet } from "./VersionHistorySheet";
@@ -75,6 +76,8 @@ import {
 } from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
+import { useRefreshEffectiveQuota } from "~/hooks/useEffectiveQuota";
+import { useStorageQuotaGuard } from "~/hooks/usePersonalStorageQuota";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -85,6 +88,8 @@ interface KnowledgeSpaceContentProps {
     /** Whether more pages remain to load. */
     hasMore: boolean;
     loading: boolean;
+    loadError?: boolean;
+    loadMoreError?: boolean;
     onSearch: (params: SearchParams) => void;
     onFilterStatus: (status: FileStatus[]) => void;
     onSort: (sortBy: SortType | undefined, direction: SortDirection | undefined) => void;
@@ -142,6 +147,8 @@ export function KnowledgeSpaceContent({
     onLoadMore,
     hasMore,
     loading,
+    loadError = false,
+    loadMoreError = false,
     onSearch,
     onFilterStatus,
     onSort,
@@ -381,9 +388,28 @@ export function KnowledgeSpaceContent({
     const canUseAddActions = (canCreateFolder || canUploadFile) && !isSearching;
     // Blank-area right-click menu opens when the user can upload a file OR create a folder.
     const canUseContextMenuActions = (canUploadFile || canCreateFolder) && !isSearching;
+    const listBottomStatus = displayFiles.length > 0 ? (
+        <>
+            {hasMore && !loadMoreError ? (
+                <LoadMore
+                    onLoad={onLoadMore}
+                    loading={loading}
+                    disabled={loading}
+                    loadingText={localize("com_list_loading_more")}
+                />
+            ) : null}
+            {!hasMore ? (
+                <div className="col-span-full flex h-10 w-full items-center justify-center text-xs text-text-4">
+                    {loadMoreError ? localize("com_list_load_failed") : localize("com_list_all_loaded")}
+                </div>
+            ) : null}
+        </>
+    ) : null;
 
     const { showToast } = useToastContext();
     const confirm = useConfirm();
+    const isStorageBlocked = useStorageQuotaGuard();
+    const refreshQuota = useRefreshEffectiveQuota();
 
     useEffect(() => {
         let cancelled = false;
@@ -508,6 +534,7 @@ export function KnowledgeSpaceContent({
         queryClient.invalidateQueries({ queryKey: ["file-versions"] });
         dispatchKnowledgeSpaceFilesRefresh(space.id);
         onDeleteFile("");
+        void refreshQuota();
     };
 
     const resetWebLinkDialog = () => {
@@ -516,6 +543,7 @@ export function KnowledgeSpaceContent({
     };
 
     const submitWebLink = async (overwrite = false) => {
+        if (isStorageBlocked()) return;
         const trimmedUrl = webLinkUrl.trim();
         const normalizedTitle = normalizeWebLinkTitle(webLinkTitle);
         if (!trimmedUrl) {
@@ -1316,8 +1344,13 @@ export function KnowledgeSpaceContent({
                         // showing the previous space's contents while the API responds.
                         // A folder upload no longer hits this branch: its placeholder card
                         // lives in the grid (displayFiles), keeping the rest interactive.
-                        <div className="flex h-full flex-1 flex-col items-center justify-center pb-[112px] pt-10 text-center">
+                        <div className="flex h-full flex-1 flex-col items-center justify-center gap-3 pb-[112px] pt-10 text-center text-text-3">
                             <LoadingIcon className="size-20 text-primary" />
+                            <span className="text-sm">{localize("com_list_loading")}</span>
+                        </div>
+                    ) : loadError && displayFiles.length === 0 ? (
+                        <div className="flex h-full flex-1 flex-col items-center justify-center pb-[112px] pt-10 text-center">
+                            <p className="text-[14px] font-normal leading-6 text-text-3">{localize("com_list_load_failed")}</p>
                         </div>
                     ) : displayFiles.length === 0 ? (
                         // pb-[112px] reserves room for the floating AI dock so the empty state
@@ -1395,6 +1428,7 @@ export function KnowledgeSpaceContent({
                                         />
                                     </div>
                                 ))}
+                                {listBottomStatus}
                             </div>
                         </div>
                     ) : (
@@ -1433,6 +1467,7 @@ export function KnowledgeSpaceContent({
                                     canManageMembers={canManageMembers}
                                     highlightedTagIds={searchTagIds}
                                     highlightKeyword={searchQuery}
+                                    footer={listBottomStatus}
                             />
                         </div>
                     )}

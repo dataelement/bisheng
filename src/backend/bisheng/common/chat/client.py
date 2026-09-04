@@ -1,11 +1,11 @@
 import asyncio
 import json
 import time
+from collections.abc import Callable
 from queue import Queue
-from typing import Dict, Callable, List
 
-from fastapi import WebSocket, Request
-from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, ToolMessage
+from fastapi import Request, WebSocket
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from loguru import logger
 
 from bisheng.api.services.assistant_agent import AssistantAgent
@@ -19,19 +19,19 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     strip_unregistered_citation_markers,
 )
 from bisheng.common.chat.types import WorkType
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.assistant import (AssistantDeletedError, AssistantNotOnlineError,
-                                              AssistantOtherError)
-from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, ApplicationProcessEventData
+from bisheng.common.errcode.assistant import AssistantDeletedError, AssistantNotOnlineError, AssistantOtherError
+from bisheng.common.schemas.telemetry.event_data_schema import ApplicationProcessEventData, NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.flow import FlowType
-from bisheng.database.models.message import ChatMessageDao, ChatMessage as ChatMessageModel
+from bisheng.database.models.message import ChatMessage as ChatMessageModel
+from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.llm.domain import LLMService
 from bisheng.utils import get_request_ip
@@ -51,6 +51,7 @@ class ChatClient:
         self.work_type = work_type
         self.websocket = websocket
         self.kwargs = kwargs
+        self.session_subject = kwargs.get("session_subject")
 
         # Business Custom Parameters
         self.db_assistant = None
@@ -63,6 +64,7 @@ class ChatClient:
         self.gpts_conf = settings.get_from_db('gpts')
         # Asynchronous Task List
         self.task_ids = []
+        self.background_tasks: set[asyncio.Task] = set()
         # A queue of streaming outputs to accept the content of the streaming output, processing newquestionEmpty at all times
         self.stream_queue = Queue()
 
@@ -75,7 +77,7 @@ class ChatClient:
     async def send_json(self, message: ChatMessage):
         await self.websocket.send_json(message.dict())
 
-    async def handle_message(self, message: Dict[any, any]):
+    async def handle_message(self, message: dict[any, any]):
         logger.info(f'client_id={self.client_key} handle_message start, message: {message}')
         trace_id = trace_id_var.get()
         # Handling messages from clients, Submit to Thread Pool for Execution
@@ -95,7 +97,7 @@ class ChatClient:
         try:
             # Execute Handling Functions
             await fn(*args, **kwargs)
-        except Exception as e:
+        except Exception:
             logger.exception("handle message error")
         finally:
             # When the execution is complete, the task will beidRemove from list
@@ -139,13 +141,16 @@ class ChatClient:
         ))
         # Log Audit Logs, Is New Session
         if len(self.chat_history) <= 1:
-            self.new_session = MessageSessionDao.insert_one(MessageSession(
+            session = MessageSession(
                 chat_id=self.chat_id,
                 flow_id=self.client_id,
                 flow_name=self.db_assistant.name,
                 flow_type=FlowType.ASSISTANT.value,
                 user_id=self.user_id,
-            ))
+            )
+            if self.session_subject is not None:
+                session = self.session_subject.stamp(session)
+            self.new_session = MessageSessionDao.insert_one(session)
 
             # RecordTelemetryJournal
             await telemetry_service.log_event(user_id=self.user_id,
@@ -167,9 +172,9 @@ class ChatClient:
             msg_type: str,
             message: str,
             intermediate_steps: str = '',
-            message_id: int = None,
-            citation_registry_items: List[CitationRegistryItemSchema] | None = None,
-            citations: List[CitationRegistryItemSchema] | None = None,
+            message_id: int | None = None,
+            citation_registry_items: list[CitationRegistryItemSchema] | None = None,
+            citations: list[CitationRegistryItemSchema] | None = None,
     ):
         is_bot = 0 if msg_type == 'human' else 1
         if citations is None:
@@ -246,7 +251,7 @@ class ChatClient:
                     'remark': one.remark
                 })
 
-    async def get_latest_history(self) -> List[BaseMessage]:
+    async def get_latest_history(self) -> list[BaseMessage]:
         # Invalid historical messages need to be culled and only complete Q&A sessions are included
         tmp = []
         find_i = 0
@@ -283,7 +288,7 @@ class ChatClient:
         })]
         self.gpts_async_callback = async_callbacks
 
-    async def stop_handle_message(self, message: Dict[any, any]):
+    async def stop_handle_message(self, message: dict[any, any]):
         # Abort Streaming Output, Because the latest taskidis to abort the task.id, you can't cancel yourself
         logger.info(f'need stop agent, client_key: {self.client_key}, message: {message}')
 
@@ -313,7 +318,7 @@ class ChatClient:
         while not self.stream_queue.empty():
             self.stream_queue.get()
 
-    async def handle_gpts_message(self, message: Dict[any, any]):
+    async def handle_gpts_message(self, message: dict[any, any]):
         if not message:
             return
         logger.debug(f'receive client message, client_key: {self.client_key} message: {message}')
@@ -411,7 +416,9 @@ class ChatClient:
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} question:{input_msg}')
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} answer:{answer}')
 
-            asyncio.create_task(self.generate_session_title(input_msg))
+            title_task = asyncio.create_task(self.generate_session_title(input_msg))
+            self.background_tasks.add(title_task)
+            title_task.add_done_callback(self.background_tasks.discard)
 
         except BaseErrorCode as e:
             logger.exception('handle gpts message error: ')

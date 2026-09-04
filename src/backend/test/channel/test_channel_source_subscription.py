@@ -28,9 +28,18 @@ _CS = "bisheng.channel.domain.services.channel_service"
 
 @pytest.fixture(autouse=True)
 def _stub_channel_quota():
-    with patch(
-        f"{_CS}.QuotaService.get_effective_quota",
-        new=AsyncMock(return_value=-1),
+    # The subscribe quota check looks the channel owner's roles up first (an admin
+    # owner is exempt regardless of the configured limit), so the role lookup has to
+    # be stubbed too or these tests hit the database for a quota they do not exercise.
+    with (
+        patch(
+            "bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
+            f"{_CS}.QuotaService.get_effective_quota",
+            new=AsyncMock(return_value=-1),
+        ),
     ):
         yield
 
@@ -290,7 +299,16 @@ def _update_membership():
 
 @pytest.mark.asyncio
 async def test_update_add_never_subscribes_and_refreshes_metadata():
-    channel = SimpleNamespace(id="channel-1", name="c", source_list=["A"], visibility=ChannelVisibilityEnum.PUBLIC)
+    # user_id/tenant_id: the subscribe quota is charged to the channel's creator, not
+    # to whoever is editing it.
+    channel = SimpleNamespace(
+        id="channel-1",
+        name="c",
+        source_list=["A"],
+        visibility=ChannelVisibilityEnum.PUBLIC,
+        user_id=7,
+        tenant_id=1,
+    )
     channel_repository = SimpleNamespace(
         find_by_id=AsyncMock(return_value=channel),
         update=AsyncMock(return_value=channel),

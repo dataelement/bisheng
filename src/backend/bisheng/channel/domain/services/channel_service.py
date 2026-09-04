@@ -462,6 +462,16 @@ class ChannelService:
             if len(existing_channels) >= effective:
                 raise ChannelCreateLimitExceededError(quota=effective)
 
+        if channel_data.source_list:
+            # Role/tenant quota on deduped subscribed info sources (`info_source_subscribe`,
+            # default 200; 0 = adding sources prohibited). Checked before the channel is
+            # persisted so a limit error aborts creation without side effects, mirroring
+            # the channel-count gate above. No subscribe call happens here any more —
+            # the reconcile worker converges the information service asynchronously.
+            await QuotaService.check_info_source_subscribe_limit(
+                login_user.user_id, login_user.tenant_id, channel_data.source_list, login_user=login_user
+            )
+
         channel_model = Channel(
             name=channel_data.name,
             source_list=channel_data.source_list,
@@ -1870,6 +1880,18 @@ class ChannelService:
             # Mark as changed if there are any additions or removals
             if to_add_sources or to_remove_sources:
                 source_list_changed = True
+
+            if to_add_sources:
+                # Enforce the `info_source_subscribe` quota against the channel CREATOR's
+                # allowance — the spec's quota owner — not the operator's: managers and
+                # editors can add sources to someone else's channel, and those sources
+                # count toward the creator's deduped total in every later check.
+                await QuotaService.check_info_source_subscribe_limit(
+                    channel.user_id,
+                    channel.tenant_id or login_user.tenant_id,
+                    to_add_sources,
+                    login_user=login_user,
+                )
 
             channel.source_list = req.source_list
 

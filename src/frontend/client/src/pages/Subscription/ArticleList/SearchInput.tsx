@@ -16,9 +16,10 @@ export function SearchInput({ value, onChange, placeholder, className }: SearchI
     const isMobileAndTablet = useMediaQuery("(max-width: 768px)");
     const shouldUseCollapsedSearch = !isMobileAndTablet;
     // Only recolor the resting border to border-base; leave the focused border
-    // (#DDDDDD) untouched so focus still shows a border-color change.
+    // (border-deep, from ExpandableSearchField) untouched so focus still shows
+    // a border-color change.
     const resolvedContainerClassName = cn(
-        "rounded-md [&:not(:focus-within)]:border-border-base",
+        "[&:not(:focus-within)]:border-border-base",
         shouldUseCollapsedSearch ? "min-w-0" : className,
     );
 

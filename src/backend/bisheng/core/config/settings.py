@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from bisheng.core.config.llm import LLMConf
 from bisheng.core.config.multi_tenant import MultiTenantConf
+from bisheng.core.config.open_platform import OpenApiConf, OpenPlatformConf
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.config.reconcile import ReconcileConf
 from bisheng.core.config.sso_sync import SSOSyncConf
@@ -830,6 +831,8 @@ class Settings(BaseModel):
     information_conf: IntelligenceCenterConf = IntelligenceCenterConf()
     mcp: McpConf = McpConf()
     multi_tenant: MultiTenantConf = MultiTenantConf()
+    open_platform: OpenPlatformConf = OpenPlatformConf()
+    open_api: OpenApiConf = OpenApiConf()
     openfga: OpenFGAConf = OpenFGAConf()
     user_tenant_sync: UserTenantSyncConf = UserTenantSyncConf()
     sso_sync: SSOSyncConf = SSOSyncConf()

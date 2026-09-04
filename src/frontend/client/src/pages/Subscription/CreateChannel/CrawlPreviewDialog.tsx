@@ -55,12 +55,9 @@ function PreviewBody({ url, status, previewData, errorCode, noHoverDevice }: Pre
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4 sm:px-6">
             <div>
-                <Input
-                    value={url}
-                    readOnly
-                    disabled
-                    className="h-8 text-[14px] bg-fill-1 text-text-3 border-border-base"
-                />
+                {/* readonly, not disabled (组件-Input输入框.md §5.2): the URL is valid
+                    content the user may select and copy. */}
+                <Input value={url} readOnly />
             </div>
 
             {status === "loading" && (
@@ -427,7 +424,7 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogAction className="h-8 rounded-md px-4 inline-flex items-center justify-center leading-none bg-blue-500 hover:bg-blue-400">
+                        <AlertDialogAction className="btn-brand-primary h-8 rounded-md px-4 inline-flex items-center justify-center leading-none bg-blue-500 hover:bg-blue-400">
                             {localize("com_subscription.ok")}
                         </AlertDialogAction>
                     </AlertDialogFooter>

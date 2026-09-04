@@ -55,7 +55,7 @@ export function PlusMenu({
                     type="button"
                     aria-label={localize('com_ui_upload_files')}
                     className={cn(
-                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#4E5969] outline-none transition-colors hover:bg-black/5',
+                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-text-2 outline-none transition-colors hover:bg-black/5',
                         disabled && 'cursor-not-allowed opacity-50',
                     )}
                 >
@@ -74,7 +74,7 @@ export function PlusMenu({
                     onSelect={() => onUploadFile()}
                     className="flex h-8 cursor-pointer items-center gap-3 rounded-lg px-2 outline-none"
                 >
-                    <Outlined.Attachment size={16} className="shrink-0 text-[#4E5969]" />
+                    <Outlined.Attachment size={16} className="shrink-0 text-text-2" />
                     <span className="text-[14px] font-normal text-slate-700">
                         {localize('com_ui_upload_files')}
                     </span>
@@ -102,7 +102,7 @@ export function PlusMenu({
                     onSelect={() => onToggleTaskMode()}
                     className="flex h-8 cursor-pointer items-center gap-3 rounded-lg px-2 outline-none"
                 >
-                    <Outlined.ListSuccess size={16} className={cn(taskModeActive ? 'text-blue-500' : 'text-[#4E5969]')} />
+                    <Outlined.ListSuccess size={16} className={cn(taskModeActive ? 'text-blue-500' : 'text-text-2')} />
                     <span
                         className={cn(
                             'flex-1 text-[14px] font-normal',
@@ -127,7 +127,7 @@ export function PlusMenu({
                                 <div className="relative">
                                     <Outlined.Newspaper
                                         size={16}
-                                        className={cn(selectedSkills.length > 0 ? 'text-blue-500' : 'text-[#4E5969]')}
+                                        className={cn(selectedSkills.length > 0 ? 'text-blue-500' : 'text-text-2')}
                                     />
                                     {selectedSkills.length > 0 && (
                                         <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />

@@ -238,15 +238,15 @@ class CatalogPublishRequest(StrictRequestModel):
 
 
 class GrantSubjectInput(StrictRequestModel):
-    type: Literal["user", "department", "user_group"]
+    type: Literal["user", "service_account", "department", "user_group"]
     id: str = Field(min_length=1, max_length=64)
     userset_relation: str | None = Field(default=None, max_length=64)
     include_children: bool = False
 
     @model_validator(mode="after")
     def validate_subject_options(self) -> GrantSubjectInput:
-        if self.type == "user" and (self.userset_relation or self.include_children):
-            raise ValueError("direct users cannot use userset options")
+        if self.type in {"user", "service_account"} and (self.userset_relation or self.include_children):
+            raise ValueError("direct subjects cannot use userset options")
         if self.include_children and self.type != "department":
             raise ValueError("include_children is only valid for departments")
         return self

@@ -1,3 +1,4 @@
+import { Radio, RadioGroup } from "@bisheng/ui";
 import { useLocalize } from "~/hooks";
 import { RefreshCcw, SquarePlus, X } from "lucide-react";
 import { useRef, useState, type KeyboardEvent } from "react";
@@ -113,17 +114,17 @@ function KeywordTagInput({ keywords, onChange }: KeywordTagInputProps) {
 
     return (
         <div
-            className="min-h-[32px] w-full rounded-md border border-[#EBECF0] bg-white px-[8px] py-[3px] flex flex-wrap items-center gap-[4px] cursor-text focus-within:border-[#DDDDDD] focus-within:ring-2 focus-within:ring-[#F1F5F9]"
+            className="min-h-[32px] w-full rounded-md border border-border-base bg-white px-[8px] py-[3px] flex flex-wrap items-center gap-[4px] cursor-text focus-within:border-border-deep focus-within:shadow-focus"
             onClick={() => inputRef.current?.focus()}
         >
             {keywords.map((kw, idx) => (
                 <span
                     key={`${kw}-${idx}`}
-                    className="inline-flex items-center gap-[2px] rounded-sm bg-[#F2F3F5] pl-[8px] pr-[4px] py-[1px] text-[14px] leading-[22px] text-[#4E5969] max-w-[180px]"
+                    className="inline-flex items-center gap-[2px] rounded-[4px] bg-fill-2 pl-[8px] pr-[4px] py-[1px] text-[14px] leading-[22px] text-text-2 max-w-[180px]"
                 >
                     <span className="truncate">{kw}</span>
                     <X
-                        className="size-3 shrink-0 cursor-pointer text-[#86909C] hover:text-[#4E5969]"
+                        className="size-3 shrink-0 cursor-pointer text-text-3 hover:text-text-2"
                         onMouseDown={(e) => {
                             // Keep the input focused so the tag row doesn't lose focus-within styling.
                             e.preventDefault();
@@ -143,7 +144,7 @@ function KeywordTagInput({ keywords, onChange }: KeywordTagInputProps) {
                 onKeyDown={handleKeyDown}
                 onBlur={() => commit(draft)}
                 placeholder={keywords.length === 0 ? localize("com_subscription.input_keyword_press_enter") : ""}
-                className="min-w-[80px] flex-1 border-0 bg-white text-[14px] text-[#212121] outline-none placeholder:text-[#999999]"
+                className="min-w-[80px] flex-1 border-0 bg-white text-[14px] text-text-1 outline-none placeholder:text-text-3"
             />
         </div>
     );
@@ -234,10 +235,10 @@ export function FilterConditionEditor({
                 <button
                     type="button"
                     onClick={addCondition}
-                    className="inline-flex items-center gap-[4px] rounded-md border border-[#EBECF0] bg-white px-[12px] py-[3px] text-[14px] leading-[22px] text-[#212121] hover:bg-[#F8F8F8]"
+                    className="inline-flex items-center gap-[4px] rounded-md border border-border-base bg-white px-[12px] py-[3px] text-[14px] leading-[22px] text-text-1 hover:bg-fill-1"
                     title={localize("com_subscription.add_condition")}
                 >
-                    <SquarePlus className="size-4 shrink-0 text-[#212121]" strokeWidth={1.5} />
+                    <SquarePlus className="size-4 shrink-0 text-text-1" strokeWidth={1.5} />
                     <span>{localize("com_subscription.add_condition")}</span>
                 </button>
             </div>
@@ -269,7 +270,7 @@ export function FilterConditionEditor({
                         <RefreshCcw className="absolute size-3.5 opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none text-blue-500" />
                     </button>
                     {/* 连接线（包住所有条件行） */}
-                    <div className="pointer-events-none absolute left-[25px] top-[14px] bottom-[14px] w-[9px] rounded-l-lg border-l border-y border-[#C9CDD4]" />
+                    <div className="pointer-events-none absolute left-[25px] top-[14px] bottom-[14px] w-[9px] rounded-l-lg border-l border-y border-border-deep" />
                 </>
             )}
 
@@ -282,32 +283,22 @@ export function FilterConditionEditor({
                             className="flex items-start gap-[4px]"
                         >
                             {/* 包含 / 不包含 切换 */}
-                            <div className="mt-0 flex flex-shrink-0 rounded-md bg-[#F8F8F8] p-[3px]">
-                                <button
-                                    type="button"
-                                    onClick={() => updateCondition(condIndex, { include: true })}
-                                    className={cn(
-                                        "whitespace-nowrap rounded-sm px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors",
-                                        cond.include
-                                            ? "bg-blue-500/15 text-blue-500 font-medium"
-                                            : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"
-                                    )}
-                                >
+                            <RadioGroup
+                                variant="button"
+                                value={cond.include ? "include" : "exclude"}
+                                aria-label={localize("com_subscription.set_article_filter_conditions")}
+                                className="shrink-0"
+                                onValueChange={(value) =>
+                                    updateCondition(condIndex, { include: value === "include" })
+                                }
+                            >
+                                <Radio value="include">
                                     {localize("com_subscription.includes")}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => updateCondition(condIndex, { include: false })}
-                                    className={cn(
-                                        "whitespace-nowrap rounded-sm px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors",
-                                        !cond.include
-                                            ? "bg-blue-500/15 text-blue-500 font-medium"
-                                            : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"
-                                    )}
-                                >
+                                </Radio>
+                                <Radio value="exclude">
                                     {localize("com_subscription.excludes")}
-                                </button>
-                            </div>
+                                </Radio>
+                            </RadioGroup>
 
                             {/* 关键词 Tag 输入 */}
                             <div className="flex-1 min-w-0">
@@ -323,7 +314,7 @@ export function FilterConditionEditor({
                                     <button
                                         type="button"
                                         onClick={() => removeCondition(condIndex)}
-                                        className="w-8 h-8 flex items-center justify-center text-[#86909C] hover:text-[#F53F3F] transition-colors"
+                                        className="w-8 h-8 flex items-center justify-center text-text-3 hover:text-[#F53F3F] transition-colors"
                                         title={localize("com_subscription.delete_this_condition")}
                                     >
                                         <ChannelMinusIcon className={FILTER_COND_ICON_MD} />
@@ -341,10 +332,10 @@ export function FilterConditionEditor({
                     <button
                         type="button"
                         onClick={addCondition}
-                        className="inline-flex items-center gap-[4px] rounded-md border border-[#EBECF0] bg-white px-[12px] py-[3px] text-[14px] leading-[22px] text-[#212121] hover:bg-[#F8F8F8]"
+                        className="inline-flex items-center gap-[4px] rounded-md border border-border-base bg-white px-[12px] py-[3px] text-[14px] leading-[22px] text-text-1 hover:bg-fill-1"
                         title={localize("com_subscription.add_condition")}
                     >
-                        <SquarePlus className="size-4 shrink-0 text-[#212121]" strokeWidth={1.5} />
+                        <SquarePlus className="size-4 shrink-0 text-text-1" strokeWidth={1.5} />
                         <span>{localize("com_subscription.add_condition")}</span>
                     </button>
                 </div>

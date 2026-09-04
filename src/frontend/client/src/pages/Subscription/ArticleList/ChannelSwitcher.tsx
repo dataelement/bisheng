@@ -4,8 +4,9 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Channel, SortType, getChannelsApi } from "~/api/channels";
 import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/Popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { useLocalize, useWorkbenchMenuNames } from "~/hooks";
+import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
+import { ChannelSquareTabs } from "../ChannelSquareTabs";
 import { useChannelActions } from "../hooks/useChannelActions";
 
 interface ChannelSwitcherProps {
@@ -17,11 +18,12 @@ interface ChannelSwitcherProps {
     onChannelSquare?: () => void;
     /** Channel info shown in a tooltip when hovering the title (PC variant only). */
     infoContent?: ReactNode;
+    /** PC only: center the title on the pane's absolute midpoint (browse mode, no
+     *  article open). When false, it centers between its flex neighbours instead
+     *  (reading mode, where the narrowed pane needs exact-truncation). */
+    absoluteCenterTitle?: boolean;
     /** "default" = PC top-title popover. "mobile" = H5 below-titlebar fixed panel + backdrop. */
     variant?: "default" | "mobile";
-    /** Mobile: extra classes for the trigger button (e.g. left-align in a justify-between row).
-     *  Defaults to a centered, flex-1 trigger when omitted. */
-    mobileTriggerClassName?: string;
     /** Mobile: CSS `top` for the dropdown panel (just under the H5 title bar). */
     mobileTopOffset?: string;
     /** Optional controlled open state (callers can force-close, e.g. when search opens). */
@@ -39,9 +41,10 @@ export const SERIF_FONT_STACK =
 
 /**
  * Channel switcher — picks an active channel from "我创建的" / "我关注的".
- * PC variant: 32px title trigger + Radix Popover.
- * Mobile variant: 20px title trigger + fixed full-width panel anchored under the H5 title bar,
- *   with a dimmed backdrop tap-to-close and an interactive pin toggle per row.
+ * PC variant: borderless 切换频道 button on the left + centered channel-name title;
+ *   the panel is a Radix Popover under the button that slides in from the left.
+ * Mobile variant: borderless 切换频道 text trigger + fixed full-width panel anchored
+ *   under the H5 title bar, with an interactive pin toggle per row.
  */
 export function ChannelSwitcher({
     activeChannelId,
@@ -50,15 +53,13 @@ export function ChannelSwitcher({
     onCreateChannel,
     onChannelSquare,
     infoContent,
+    absoluteCenterTitle = false,
     variant = "default",
-    mobileTriggerClassName,
     mobileTopOffset,
     open: openProp,
     onOpenChange,
 }: ChannelSwitcherProps) {
     const localize = useLocalize();
-    // 模块标题跟随后台配置的菜单显示名称
-    const menuNames = useWorkbenchMenuNames();
     const queryClient = useQueryClient();
     const isMobile = variant === "mobile";
     const [internalOpen, setInternalOpen] = useState(false);
@@ -72,10 +73,6 @@ export function ChannelSwitcher({
     const [createdSortBy, setCreatedSortBy] = useState<SortType>(SortType.RECENT_UPDATE);
     const [subscribedSortBy, setSubscribedSortBy] = useState<SortType>(SortType.RECENT_UPDATE);
     const listRef = useRef<HTMLDivElement>(null);
-    const titleRef = useRef<HTMLDivElement>(null);
-    // Left floor for the dropdown: it stays centered on the arrow but never moves left of the
-    // title's left edge (= content-area left + header padding), measured when opening.
-    const [collisionLeft, setCollisionLeft] = useState(40);
 
     const { data: createdChannels = [] } = useQuery({
         queryKey: ["channels", "created", createdSortBy],
@@ -108,8 +105,6 @@ export function ChannelSwitcher({
     // On open, default to the group the active channel belongs to.
     const handleOpenChange = (next: boolean) => {
         if (next) {
-            const left = titleRef.current?.getBoundingClientRect().left;
-            if (left != null) setCollisionLeft(Math.round(left));
             if (subscribedChannels.some((c) => c.id === activeChannelId)) {
                 setGroup("subscribed");
             } else if (createdChannels.some((c) => c.id === activeChannelId)) {
@@ -157,9 +152,10 @@ export function ChannelSwitcher({
                 </span>
                 <Outlined.Exchange className="size-4" />
             </button>
-            {/* Each action is a 20px hit-box wrapping a 16px icon; 12px between them. */}
+            {/* Each action is a 20px hit-box wrapping a 16px icon; 12px between them.
+                The + shortcut is mobile-only: PC creates from the header 创建频道 button. */}
             <div className="flex items-center gap-3">
-                {group === "created" && onCreateChannel ? (
+                {isMobile && group === "created" && onCreateChannel ? (
                     <button
                         type="button"
                         onClick={() => { onCreateChannel(); setOpen(false); }}
@@ -246,20 +242,17 @@ export function ChannelSwitcher({
     if (isMobile) {
         return (
             <>
+                {/* Borderless text trigger — sits left of the 仅看未读 button; the channel
+                    name itself is a plain title rendered by the caller. */}
                 <button
                     type="button"
                     onClick={() => handleOpenChange(!open)}
                     aria-expanded={open}
-                    className={cn(
-                        "flex min-w-0 items-center gap-1 outline-none",
-                        mobileTriggerClassName ?? "flex-1 justify-center",
-                    )}
+                    className="flex shrink-0 items-center gap-0.5 whitespace-nowrap py-[3px] text-sm text-text-1 outline-none"
                 >
-                    <span className="truncate text-[16px] font-medium leading-6 text-text-1">
-                        {channelName}
-                    </span>
+                    <span>{localize("com_subscription.switch_channel")}</span>
                     <Outlined.Down className={cn(
-                        "size-5 shrink-0 text-text-3 transition-transform",
+                        "size-4 shrink-0 text-text-3 transition-transform",
                         open && "rotate-180",
                     )} />
                 </button>
@@ -287,52 +280,93 @@ export function ChannelSwitcher({
     }
 
     return (
-        <div
-            ref={titleRef}
-            className="flex min-w-0 items-center gap-2 text-[32px] leading-[40px] text-text-1 font-bold"
-            style={{ fontFamily: SERIF_FONT_STACK }}
-        >
-            <span className="shrink-0">{menuNames.channel}</span>
-            <span className="shrink-0 text-text-4">·</span>
-            {/* Info popover is scoped to the channel name. The name is not clickable — only the
-                arrow opens the switcher menu. */}
-            <Tooltip open={Boolean(infoContent) && infoOpen && !open} onOpenChange={setInfoOpen}>
-                <TooltipTrigger asChild>
-                    <span
-                        className={cn("truncate text-text-1 transition-colors", !open && "fine-pointer:hover:text-[#878787]")}
-                        onMouseEnter={() => setInfoOpen(true)}
-                        onMouseLeave={() => setInfoOpen(false)}
+        <div className="relative flex h-10 w-full min-w-0 items-center gap-6">
+            {/* Borderless 切换频道 + 创建频道 group. -ml-2 cancels the buttons' own px-2
+                so their labels sit optically flush with the 40px content edge. */}
+            <div className="-ml-2 flex shrink-0 items-center gap-1">
+                <Popover open={open} onOpenChange={handleOpenChange}>
+                    <PopoverTrigger asChild>
+                        <button
+                            type="button"
+                            aria-haspopup="menu"
+                            aria-expanded={open}
+                            className={cn(
+                                "flex shrink-0 items-center gap-1 rounded-md px-2 py-[5px] text-sm leading-[22px] text-text-2 outline-none transition-colors",
+                                open ? "bg-fill-1 text-text-1" : "fine-pointer:hover:bg-fill-1 fine-pointer:hover:text-text-1",
+                            )}
+                        >
+                            <Outlined.ListTree className="size-4 shrink-0" />
+                            <span>{localize("com_subscription.switch_channel")}</span>
+                        </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                        align="start"
+                        sideOffset={8}
+                        // 32px gap above the MainLayout white card's bottom edge: the card is
+                        // inset 8px from the viewport (py-2), so 32 + 8 = 40 viewport padding.
+                        collisionPadding={{ bottom: 40 }}
+                        // Fixed height (h-, not max-h-): the panel always stretches down to the
+                        // 32px bottom gap regardless of how many channels it lists.
+                        // `!` overrides the base PopoverContent motion (slide-from-top + zoom)
+                        // so the panel purely slides in from the left and back out to the left.
+                        className="flex h-[var(--radix-popover-content-available-height)] w-[320px] flex-col gap-2 rounded-lg border-0 bg-white p-3 shadow-[0px_4px_20px_0px_rgba(23,0,176,0.1)] data-[state=open]:!zoom-in-100 data-[state=open]:!slide-in-from-left-6 data-[side=bottom]:!slide-in-from-top-0 data-[state=closed]:!zoom-out-100 data-[state=closed]:slide-out-to-left-6"
                     >
-                        {channelName}
-                    </span>
-                </TooltipTrigger>
-                {infoContent ? (
-                    <TooltipContent noArrow side="bottom" align="start" className="w-[240px] max-w-md bg-white px-3 py-2 text-gray-800 shadow-md">
-                        {infoContent}
-                    </TooltipContent>
-                ) : null}
-            </Tooltip>
-            <Popover open={open} onOpenChange={handleOpenChange}>
-                <PopoverTrigger asChild>
+                        {renderSectionHeader()}
+                        {renderChannelList()}
+                    </PopoverContent>
+                </Popover>
+                {/* 创建频道 — PC keeps creation next to the switcher (the panel and the
+                    top-right ⋯ menu deliberately do NOT carry it on PC). */}
+                {onCreateChannel ? (
                     <button
                         type="button"
-                        aria-haspopup="menu"
-                        aria-expanded={open}
-                        className={cn("flex size-8 shrink-0 items-center justify-center rounded-md outline-none transition-colors", !open && "fine-pointer:hover:bg-fill-1")}
+                        onClick={onCreateChannel}
+                        className="flex shrink-0 items-center gap-1 rounded-md px-2 py-[5px] text-sm leading-[22px] text-text-2 outline-none transition-colors fine-pointer:hover:bg-fill-1 fine-pointer:hover:text-text-1"
                     >
-                        <Outlined.Down className={cn("size-6 text-text-3 transition-transform", open && "rotate-180")} />
+                        <Outlined.Plus className="size-4 shrink-0" />
+                        <span>{localize("com_subscription.create_channel")}</span>
                     </button>
-                </PopoverTrigger>
-                <PopoverContent
-                    align="center"
-                    sideOffset={8}
-                    collisionPadding={{ left: collisionLeft, bottom: 40 }}
-                    className="flex max-h-[var(--radix-popover-content-available-height)] w-[320px] flex-col gap-2 rounded-lg border-0 bg-white p-3 shadow-[0px_4px_20px_0px_rgba(23,0,176,0.1)]"
-                >
-                    {renderSectionHeader()}
-                    {renderChannelList()}
-                </PopoverContent>
-            </Popover>
+                ) : null}
+            </div>
+            {/* Channel-name title. Info tooltip is scoped to the name; the name itself
+                is not clickable — switching lives on the left button.
+                Two centering modes (per design):
+                - pane full width (no article open): ABSOLUTE center of the content pane,
+                  clamped so it still cannot overlap the side groups;
+                - article detail open (narrow pane): a flex sibling with 24px gaps that
+                  truncates to exactly the space its neighbours leave. */}
+            <div
+                className={cn(
+                    absoluteCenterTitle
+                        ? "pointer-events-none absolute left-1/2 top-1/2 flex max-w-[clamp(96px,calc(100%-480px),600px)] -translate-x-1/2 -translate-y-1/2"
+                        : "flex min-w-0 flex-1 justify-center",
+                )}
+            >
+                <Tooltip open={Boolean(infoContent) && infoOpen && !open} onOpenChange={setInfoOpen}>
+                    <TooltipTrigger asChild>
+                        <span
+                            className="pointer-events-auto max-w-full truncate text-[32px] font-bold leading-[40px] text-text-1"
+                            style={{ fontFamily: SERIF_FONT_STACK }}
+                            onMouseEnter={() => setInfoOpen(true)}
+                            onMouseLeave={() => setInfoOpen(false)}
+                        >
+                            {channelName}
+                        </span>
+                    </TooltipTrigger>
+                    {infoContent ? (
+                        <TooltipContent noArrow side="bottom" align="center" className="rounded-lg w-[240px] max-w-md bg-white px-3 py-2 text-gray-800 shadow-popup">
+                            {infoContent}
+                        </TooltipContent>
+                    ) : null}
+                </Tooltip>
+            </div>
+            {absoluteCenterTitle ? <div className="min-w-0 flex-1" aria-hidden /> : null}
+            {/* Invisible clone of the persistent 频道/广场 toggle (overlaid at the row's
+                right edge by Subscription/index): reserves exactly its width, so the
+                flex-mode title keeps a real 24px gap to it and never slides underneath. */}
+            <div className="invisible shrink-0" aria-hidden>
+                <ChannelSquareTabs active="channel" />
+            </div>
         </div>
     );
 }

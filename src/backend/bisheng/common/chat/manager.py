@@ -215,7 +215,10 @@ class ChatManager:
             login_user: UserPayload,
             work_type: WorkType,
             websocket: WebSocket,
-            graph_data: dict | None = None):
+            graph_data: dict | None = None,
+            session_subject=None,
+            execution_snapshot: dict | None = None,
+    ):
         start_time = time.time()
         client_key = generate_uuid()
         if work_type == WorkType.GPTS:
@@ -227,7 +230,9 @@ class ChatManager:
                                      login_user,
                                      work_type,
                                      websocket,
-                                     graph_data=graph_data)
+                                     graph_data=graph_data,
+                                     session_subject=session_subject,
+                                     execution_snapshot=execution_snapshot)
         else:
             chat_client = WorkflowClient(request,
                                          client_key,
@@ -236,7 +241,9 @@ class ChatManager:
                                          login_user.user_id,
                                          login_user,
                                          work_type,
-                                         websocket)
+                                         websocket,
+                                         session_subject=session_subject,
+                                         execution_snapshot=execution_snapshot)
         await self.accept_client(client_key, chat_client, websocket)
         logger.debug(
             f'act=accept_client client_key={client_key} client_id={client_id} chat_id={chat_id}')

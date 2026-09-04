@@ -74,7 +74,10 @@
 
 **头部和底部始终固定，只有主体滚动。** 用户滚到哪里都能看见标题和「保存」，不用滚回去找。
 
-**关闭「×」按有没有取消按钮决定**：表单类弹窗必须有，那是它唯一的出口；带取消按钮的确认类不给「×」——两个出口说的是同一件事，反而让人犹豫该点哪个。
+**关闭「×」按弹窗类型决定：**
+
+- **表单类**（填了才有结果的）：**「×」和取消都给**。取消挨着主按钮，是用户看完整张表后就地放弃的出口；「×」在右上角，是随手关掉浮层的常规位置。两个都通向「不保存就走」，但用户的视线落点不同——只留一个，另一头的人就得满弹窗找出口。
+- **确认类**（一问一答）：只有底部两个按钮，**不给「×」**——问题本身已经摆在按钮上了，右上角再开一个出口只会让人犹豫该点哪个。这类走[二次确认](组件-Confirm二次确认.md)。
 
 底部按钮直接用 Button 组件，排列顺序、间距与最小宽度见 [组件-Button按钮.md](组件-Button按钮.md)：主按钮最右，危险场景主位放危险红实心。
 
@@ -82,7 +85,9 @@
 
 **遮罩用黑色 40% 不透明，不加模糊。** 遮罩的作用是把页面压暗、让注意力收到弹窗上；一旦模糊到认不出底下是什么，用户会以为自己跳到了新页面，然后去按返回键。
 
-**同一时间只有一层遮罩。** 弹窗里再开二次确认，不叠第二层——叠两层等于把页面又压暗一次，用户会以为自己陷得更深了。
+**弹窗之上再开二次确认，二次确认自带遮罩叠上去。** 那层遮罩压暗的是**下面那个弹窗**：不叠的话，确认框和下面弹窗的白底连成一片，看起来像嵌在表单里的一块，而不是一个必须先回答的新层。叠了之后下面的弹窗一起变暗，确认框才明显是当下唯一能动的东西。
+
+> 两层 40% 叠起来的实际暗度约 64%。这是目前的取值，若觉得偏重，可单独给第二层定一个更浅的值——改这里即可，壳不写死。
 
 浮层的前后关系分四档，新增浮层一律从这四档里选，不自造数值：
 
@@ -128,9 +133,10 @@
 **壳已落地为组件库组件 `@bisheng/ui` 的 `Modal`**（`packages/ui/src/components/Modal/Modal.tsx`，实时预览见 components/modal.mdx）：本文 §2–§7 的取值——四档宽度与降档表、遮罩、层级、结构与间距、200/160ms 动效、三条关闭路径与提交锁、手机档全屏——全部写死在壳里，业务页只传内容。下列条目是它的实现口径，同时记录尚未收口的部分。
 
 - **降档断点用 1024 / 1280**，即 Tailwind 的 `lg:` / `xl:`。二者属桌面档（>768）内部的细分排版，不是新增档位断点，符合[基础-多端适配原则.md](基础-多端适配原则.md)「不自造断点」。档位断点仍只有 576 / 768 两个。
+- 主体区不留上下内边距，但它同时是滚动容器（`overflow-y: auto`），而滚动容器在**内边距盒**处裁切——padding 为 0 时，排在最上 / 最下的输入框那 2px 聚焦环会被削掉半圈。壳里用 `py-0.5 -my-0.5` 解决：内边距给环留出 2px，负外边距把这 2px 从布局里减回去，视觉间距一点不变。
 - 宽度实现：`width: min(<档位>, calc(100vw - 32px))`，降档表用 `lg:` / `xl:` 前缀覆盖，不写 JS 计算。高度：`max-height: calc(100vh - 64px)`，body 区 `overflow-y: auto` + `overscroll-behavior: contain`。
 - 遮罩落地：`rgba(0, 0, 0, 0.4)`，**不加模糊**。毛玻璃已于 2026-08-04 随全站 `backdrop-blur` 清除下线（client 33 处 + platform 7 处），现存三套壳都不带模糊，**只剩颜色要迁**：A 套的 `bg-black/40` 数值即最终值，B / C 套的 `bg-gray-500/90` 改过来——二次确认那 16 处随 `ConfirmContext` 一处生效。
-- 嵌套时不叠遮罩：二次确认开在弹窗之上时，把它的遮罩置为透明（弹窗那层已经在压暗页面）。
+- 嵌套时照常叠遮罩：二次确认开在弹窗之上时用它自己那层默认遮罩，不传 `overlayClassName`。`overlayClassName` 只留作特例口子（例如要给第二层单独调浅），不再是嵌套的标准写法。
 - z-index 四档已写成 token（`--z-modal: 1000` / `--z-popover: 1100` / `--z-toast: 1200` / `--z-tooltip: 1300`）：`design-token.cjs` 的 `Z_INDEX` 表为名称与取值的 SSOT，两个运行时载体（`packages/ui/src/styles/tokens.css` + `client/src/style.css`）与两份 Tailwind 配置同步落地，类名 `z-modal` / `z-popover` / `z-toast` / `z-tooltip`；组件库 Toaster 容器的临时值 `z-[9999]` 已归并到 1200。**client 现存的 `z-50` / `z-[100]` / `z-[110]` 随两套壳收敛时替换，尚未动。** 本表为层级唯一事实源，[01-设计规范.md](01-设计规范.md) §5 改为指针。
 - 动效曲线：进出统一 `cubic-bezier(0.2, 0, 0, 1)`；200ms / 160ms。缩放只做入场，出场纯淡出（缩小会让人误以为「收回到某处」）。落地为 `modal-overlay-in/out` + `modal-content-in/out` 四条 keyframes（两份 Tailwind 配置同步）。两个坑：入场缩放写**独立的 `scale` 属性**而不是 `transform: scale()`，否则会和居中用的 `translate(-50%, -50%)` 打架（手机档又是 `inset: 0`，两档不能共用一条 transform）；卡片不能再包一层居中 div——`Dialog.Portal` 会给每个子节点各套一个 `Presence`，没有自己动画的那层 div 一关就整棵卸载，出场动画根本来不及播。
 - 无障碍：`role="dialog"` + `aria-modal="true"` + `aria-labelledby` 指向标题；焦点陷阱在弹窗内，关闭后归还触发元素。全屏档同样带 `aria-modal`。
@@ -203,7 +209,7 @@ BISHENG client 有两套弹窗，都包着同一个 Radix `@radix-ui/react-dialo
 | 遮罩 | 黑色系低不透明度：M3 32% / Fluent 40%（暗色 50%）/ antd 45% / SLDS 50% / Arco 深灰 60%。毛玻璃仅 antd 提供且默认关 | 黑 40% 无模糊。原候选 `bg-gray-500/90` 比七家都重一大截，设计师拍板淘汰 |
 | 内边距 | 24 最主流（M3 / Fluent / antd 横向）；TDesign 32、SLDS 16 | 16，主体只留左右（定稿时为四边 20，设计师 2026-08-20 对着预览页收窄，落在 SLDS 一档）|
 | 标题 | 中文体系一致 16px（antd / Arco / TDesign）；字重 antd 600 / TDesign 600 / Arco 500。西方体系更大（M3 24 / Fluent 20） | 16px / 字重 500，与抽屉、二次确认现状一致 |
-| 关闭「×」 | antd / Arco / TDesign 默认有；M3 basic dialog 无、Fluent 规定「无取消按钮时才加」、Apple alert 无 | 按有无取消按钮决定 |
+| 关闭「×」 | antd / Arco / TDesign 默认有；M3 basic dialog 无、Fluent 规定「无取消按钮时才加」、Apple alert 无 | 按弹窗类型决定：表单类「×」+ 取消都给，确认类只留底部两个按钮（2026-08-20 设计师改口径，原为「按有无取消按钮决定」） |
 | footer 按钮 | 主按钮在右为压倒性共识（antd / Arco / TDesign / M3 / Apple / SLDS），仅 Fluent 在左；间距 8（antd / M3 / Fluent）、Arco 12 | 主按钮最右；间距沿用《Button 按钮》已定的 12px，本文不另立 |
 | z-index | 基数 + 逐层加：antd 1000 / Arco 1001 / TDesign 2500 / SLDS 9000 | 1000 / 1100 / 1200 / 1300 四档 |
 | 移动端 | 仅 M3 给显式断点（<600dp 转全屏）；Fluent 用 480px / 359px CSS 断点；Apple、SLDS 无公开数值 | 沿用本站 576 断点，转全屏档 |
@@ -226,6 +232,8 @@ BISHENG client 有两套弹窗，都包着同一个 Radix `@radix-ui/react-dialo
 | 2026-08-20 | **v1 规范落地为组件库组件**：`@bisheng/ui` 新增 `Modal`（四档尺寸 + 降档表、黑 40% 无模糊遮罩、结构与间距、三条关闭路径 + `beforeClose` 拦截 + `submitting` 锁、手机档全屏、焦点陷阱与 `aria-modal`），底层沿用 `@radix-ui/react-dialog`；层级四档写成 token（`Z_INDEX` 进 design-token.cjs，两个 CSS 载体 + 两份 Tailwind 配置同步），Toaster 的 `z-[9999]` 归并到 `z-toast`；动效四条 keyframes 落地；文档站 components/modal.mdx 重写为实时预览 + API。**client 两套旧壳未动**（迁移批次见待决策清单） | `packages/ui/src/components/Modal/*`（新）、`packages/ui/src/index.ts`、`packages/ui/design-token.cjs`、`packages/ui/src/styles/tokens.css`、`packages/ui/tailwind-preset.cjs`、`packages/ui/src/components/Toast/Toaster.tsx`、`packages/ui/docs/components/modal.mdx`、`packages/ui/docs/design-token.mdx`、`client/src/style.css`、`client/tailwind.config.cjs`、`packages/ui/package.json` + `pnpm-workspace.yaml`（radix dialog 进 catalog） | 待提交 |
 
 | 2026-08-20 | 设计师对着预览页调整内边距：**三段左右 20 → 16px**、**底部上下 12 → 16px**（底部即四边 16）、**主体上下内边距去掉**（上下空隙交给头部高度和底部内边距）；头部仍靠 56px 定高。§4 表、手机档安全区公式、台账目标值与 §1.4 调研取值同步 | 本文件、`packages/ui/src/components/Modal/Modal.tsx`、`packages/ui/docs/components/modal.mdx` | 待提交 |
+| 2026-08-20 | 设计师对着预览页改嵌套遮罩口径：**弹窗之上的二次确认要自带遮罩叠上去**，原「同一时间只有一层遮罩、嵌套时把第二层置为透明」作废——不叠时确认框和下面弹窗的白底连成一片，读起来像嵌在表单里的一块。两层 40% 实际约 64%，如需更浅再单独定值。§5 与给实现窗口同步，预览页 demo 去掉 `overlayClassName="bg-transparent"` | 本文件、01-设计规范.md、`packages/ui/docs/components/modal.mdx`、`packages/ui/src/components/Modal/Modal.tsx`（注释） | 待提交 |
+| 2026-08-20 | 设计师对着预览页改「×」口径：**表单类弹窗「×」和取消按钮都要有**（原写法是「表单类的「×」是它唯一的出口」，等于不给取消）。§4 那条规则从「按有没有取消按钮决定」改成**按弹窗类型决定**——表单类两个都给，确认类只留底部两个按钮。组件不变（`closable` 默认 `true`，取消按钮本就由业务页传），改的是规范与预览页示例 | 本文件、00-总纲.md、`packages/ui/docs/components/modal.mdx`、`packages/ui/src/components/Modal/Modal.tsx`（注释） | 待提交 |
 | 2026-08-20 | 遮罩现状回填：三套壳的毛玻璃 2026-08-04 已随全站 `backdrop-blur` 清除（client 33 + platform 7），文档里「灰底毛玻璃 / `+ blur`」的旧描述全部作废——**遮罩只剩颜色待迁**（B / C 套 `bg-gray-500/90` → 黑 40%）。二次确认预览页规格表同步 | 本文件、`packages/ui/docs/components/confirm.mdx` | 待提交 |
 | 2026-08-20 | 设计师对着预览页调整全屏档：**关闭「×」回到右上角、主操作回到底部**，原「左侧关闭 + 右侧主操作」的头部作废——全屏档与普通弹窗共用同一套头尾位置；**底部按钮等宽平铺占满一行**（与手机档同一条规则，卡片档仍是右对齐原宽）。组件同步删掉为它开的 `headerAction` prop | 本文件、`packages/ui/src/components/Modal/Modal.tsx`、`packages/ui/docs/components/modal.mdx` | 待提交 |
 

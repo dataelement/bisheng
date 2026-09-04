@@ -123,6 +123,8 @@ export interface KnowledgeSpace {
 
     // Used only by the "square explore" UI
     isFollowed?: boolean;
+    /** Effective permission ids the current user holds on the space (from /info). */
+    permissionIds?: string[];
     isPending?: boolean;
     // join | joined | pending | rejected (square list & preview)
     squareStatus?: "join" | "joined" | "pending" | "rejected";
@@ -187,8 +189,10 @@ export interface KnowledgeFile {
     sensitiveCheck?: KnowledgeFileSensitiveCheck;
     /** Number of successfully parsed files (folders only) */
     successFileNum?: number;
-    /** Whether the folder contains at least one FAILED/VIOLATION child (folders only) */
+    /** Whether the folder contains at least one FAILED/VIOLATION child (folders only) — drives batch retry */
     hasFailedFiles?: boolean;
+    /** Whether the folder's subtree holds any FAILED/TIMEOUT/VIOLATION file (folders only) — drives the 存在异常 pill */
+    hasAbnormalFiles?: boolean;
     /** Number of files in PROCESSING/WAITING/REBUILDING (folders only) */
     processingFileNum?: number;
     /** Source of the file, e.g. 'channel' for subscription channel files */
@@ -244,6 +248,7 @@ interface RawKnowledgeSpace {
     auto_tag_custom_tags?: string[] | null;
     is_pending?: boolean;
     is_followed?: boolean;
+    permission_ids?: string[];
     subscription_status?: string;
     initial_permission_result?: RawInitialPermissionResult | null;
     actions?: string[];
@@ -322,6 +327,15 @@ export interface UploadFileResponse {
     repeat: boolean;
     repeat_file_name: string | null;
     repeat_update_time: string | null;
+    /**
+     * Set when the space already holds a file with this name. The check is
+     * space-wide and name-only in practice: the backend compares
+     * `md5 OR file_name`, but `KnowledgeFile.md5` stores the upload's uuid
+     * object name, never a content hash, so the md5 branch can't match.
+     */
+    repeat?: boolean;
+    repeat_file_name?: string | null;
+    repeat_update_time?: string | null;
 }
 
 // ─────────────────────────────────────────────
@@ -356,6 +370,7 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
             : null,
         isPending: raw.is_pending ?? false,
         isFollowed: raw.is_followed ?? false,
+        permissionIds: Array.isArray(raw.permission_ids) ? raw.permission_ids : undefined,
         // Some detail endpoints may carry subscription_status; keep it if present.
         subscriptionStatus:
             (raw as any).subscription_status ??
@@ -650,6 +665,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
         successFileNum: raw?.success_file_num !== undefined ? Number(raw.success_file_num) : undefined,
         hasFailedFiles: raw?.has_failed_files !== undefined ? Boolean(raw.has_failed_files) : undefined,
+        hasAbnormalFiles: raw?.has_abnormal_files !== undefined ? Boolean(raw.has_abnormal_files) : undefined,
         processingFileNum: raw?.processing_file_num !== undefined ? Number(raw.processing_file_num) : undefined,
         fileSource: raw?.file_source,
         oldFileLevelPath: raw?.old_file_level_path,
@@ -726,9 +742,6 @@ export function fileStatusToNumber(status: FileStatus): number {
         default: return 0;
     }
 }
-
-/** Backend `/children` filter for members: keep violation visible, exclude generic failed files. */
-export const SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED: number[] = [1, 2, 4, 5, 6, 7];
 
 /** Backend `/children` filter: SUCCESS (2) only. Used for 广场预览 when user is not an active space member. */
 export const SPACE_CHILDREN_STATUS_SUCCESS_ONLY: number[] = [2];
@@ -1215,7 +1228,7 @@ export async function deleteSpaceApi(space_id: string): Promise<void> {
 export async function getFolderParentPathApi(
     spaceId: string,
     folderId: string
-     
+
 ): Promise<Array<{ id: string; name: string }>> {
     const res = await request.get<ApiResponse<any>>(
         `/api/v1/knowledge/space/${spaceId}/folders/${folderId}/parent`
@@ -1261,8 +1274,8 @@ export async function listKnowledgeFolders(params: {
     parent_id?: string | number | null;
     /**
      * Status filter — must mirror what the right-side file panel sends so the
-     * tree and the panel stay consistent. For MEMBER-role users this should be
-     * SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED; omit for admins/creators.
+     * tree and the panel stay consistent. Omit it unless the user picked a status:
+     * hiding other people's parse failures is the server's job, not a query param.
      */
     file_status?: number[];
 }): Promise<{ items: KnowledgeFolderNode[]; total: number }> {

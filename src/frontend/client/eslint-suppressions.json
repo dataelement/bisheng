@@ -65,7 +65,7 @@
   },
   "src/api/chatApi.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 16
+      "count": 15
     }
   },
   "src/api/index.ts": {
@@ -102,7 +102,7 @@
   },
   "src/api/message.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 7
+      "count": 6
     }
   },
   "src/api/messageExport.ts": {
@@ -139,20 +139,6 @@
   "src/common/types.ts": {
     "no-restricted-imports": {
       "count": 1
-    }
-  },
-  "src/components/AccountInfoDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 3
-    },
-    "no-useless-escape": {
-      "count": 2
     }
   },
   "src/components/Artifacts/Artifact.tsx": {
@@ -1428,20 +1414,6 @@
       "count": 1
     }
   },
-  "src/components/NotificationsDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 23
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    },
-    "no-console": {
-      "count": 8
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 3
-    }
-  },
   "src/components/PreviewFile/DocxFileViewer.tsx": {
     "no-useless-escape": {
       "count": 1
@@ -1616,11 +1588,6 @@
       "count": 1
     }
   },
-  "src/components/SidePanel/Parameters/DynamicTags.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "src/components/SidePanel/Parameters/DynamicTextarea.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -1694,17 +1661,6 @@
   "src/components/Voice/textToSpeechStore.tsx": {
     "no-restricted-imports": {
       "count": 1
-    }
-  },
-  "src/components/approval/ApprovalCenterDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 16
-    },
-    "no-restricted-syntax": {
-      "count": 4
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 3
     }
   },
   "src/components/icons/DocxIcon.tsx": {
@@ -2381,14 +2337,6 @@
       "count": 1
     }
   },
-  "src/hooks/useToast.ts": {
-    "no-restricted-imports": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "src/hooks/useVersionManagementEnabled.ts": {
     "no-restricted-imports": {
       "count": 1
@@ -2409,14 +2357,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
-    }
-  },
-  "src/layouts/UserPopMenu.tsx": {
-    "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
     }
   },
   "src/locales/i18n.ts": {
@@ -2441,21 +2381,15 @@
   },
   "src/pages/ChannelSquare.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 7
+      "count": 5
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 7
-    },
-    "react-hooks/exhaustive-deps": {
       "count": 1
     }
   },
   "src/pages/ChannelSquareCard.tsx": {
     "no-restricted-syntax": {
-      "count": 2
+      "count": 1
     }
   },
   "src/pages/DevLogin/index.tsx": {
@@ -2581,9 +2515,6 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 3
     },
-    "no-restricted-syntax": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -2688,91 +2619,6 @@
     },
     "no-restricted-imports": {
       "count": 1
-    }
-  },
-  "src/pages/_gallery/GalleryApp.tsx": {
-    "no-restricted-syntax": {
-      "count": 35
-    }
-  },
-  "src/pages/_gallery/components/kit.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "src/pages/_gallery/progress/ButtonProgress.tsx": {
-    "no-restricted-syntax": {
-      "count": 56
-    }
-  },
-  "src/pages/_gallery/progress/ColorProgress.tsx": {
-    "no-restricted-syntax": {
-      "count": 35
-    }
-  },
-  "src/pages/_gallery/progress/ConfirmProgress.tsx": {
-    "no-restricted-syntax": {
-      "count": 83
-    }
-  },
-  "src/pages/_gallery/progress/ModalProgress.tsx": {
-    "no-restricted-syntax": {
-      "count": 128
-    }
-  },
-  "src/pages/_gallery/progress/ProgressOverview.tsx": {
-    "no-restricted-syntax": {
-      "count": 100
-    }
-  },
-  "src/pages/_gallery/progress/TypographyProgress.tsx": {
-    "no-restricted-syntax": {
-      "count": 23
-    }
-  },
-  "src/pages/_gallery/sections/ButtonSection.tsx": {
-    "no-restricted-syntax": {
-      "count": 89
-    }
-  },
-  "src/pages/_gallery/sections/ColorSection.tsx": {
-    "no-restricted-syntax": {
-      "count": 102
-    }
-  },
-  "src/pages/_gallery/sections/ConfirmDialogSection.tsx": {
-    "no-restricted-syntax": {
-      "count": 37
-    }
-  },
-  "src/pages/_gallery/sections/FeedbackSection.tsx": {
-    "no-restricted-syntax": {
-      "count": 15
-    }
-  },
-  "src/pages/_gallery/sections/IllustrationSection.tsx": {
-    "no-restricted-syntax": {
-      "count": 29
-    }
-  },
-  "src/pages/_gallery/sections/ModalSection.tsx": {
-    "no-restricted-syntax": {
-      "count": 43
-    }
-  },
-  "src/pages/_gallery/sections/OverviewSection.tsx": {
-    "no-restricted-syntax": {
-      "count": 29
-    }
-  },
-  "src/pages/_gallery/sections/ResponsiveSection.tsx": {
-    "no-restricted-syntax": {
-      "count": 58
-    }
-  },
-  "src/pages/_gallery/sections/TypographySection.tsx": {
-    "no-restricted-syntax": {
-      "count": 42
     }
   },
   "src/pages/appChat/AppChatEntry.tsx": {
@@ -3028,9 +2874,6 @@
     "no-restricted-imports": {
       "count": 1
     },
-    "no-restricted-syntax": {
-      "count": 3
-    },
     "prefer-const": {
       "count": 1
     },
@@ -3085,7 +2928,7 @@
   },
   "src/pages/appChat/useChatHelpers.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 12
+      "count": 11
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -3191,14 +3034,6 @@
   },
   "src/pages/apps/hooks/useAppCenter.ts": {
     "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "src/pages/apps/index.tsx": {
-    "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
   },
@@ -3320,14 +3155,9 @@
       "count": 1
     }
   },
-  "src/pages/knowledge/SpaceDetail/FileTable.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    }
-  },
   "src/pages/knowledge/SpaceDetail/KnowledgeSpaceHeader.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
+      "count": 1
     },
     "no-restricted-imports": {
       "count": 1
@@ -3382,7 +3212,7 @@
   },
   "src/pages/knowledge/hooks/useFileManager.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 2
     }
   },
   "src/pages/knowledge/hooks/useFileUpload.test.ts": {
@@ -3646,11 +3476,6 @@
       "count": 1
     }
   },
-  "src/store/toast.ts": {
-    "no-restricted-imports": {
-      "count": 1
-    }
-  },
   "src/store/user.ts": {
     "no-restricted-imports": {
       "count": 1
@@ -3734,11 +3559,6 @@
   "src/vite-env.d.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    }
-  },
-  "tailwind.config.cjs": {
-    "@typescript-eslint/no-require-imports": {
-      "count": 3
     }
   },
   "tailwind.docs.config.cjs": {

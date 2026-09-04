@@ -231,6 +231,8 @@ export function AiAssistantPanel({
                         setChatModel({
                             id: Number(val),
                             name: model?.displayName || "",
+                            manual: true,
+                            mode: 'daily',
                         });
                     } : undefined}
                     onSend={handleSend}

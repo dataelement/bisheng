@@ -135,6 +135,64 @@ def test_loader_stages_pictures_and_emits_a_chunk_per_sheet(tmp_path, monkeypatc
     assert [doc.metadata["chunk_index"] for doc in documents] == list(range(len(documents)))
 
 
+def test_picture_only_first_sheet_comes_before_the_data_sheet(tmp_path, monkeypatch):
+    """A report whose cover sheet is one screenshot must segment as [picture, table]."""
+    monkeypatch.setattr(BaseBishengLoader, "_minio_bucket", property(lambda self: "bisheng"))
+
+    xlsx = str(tmp_path / "report.xlsx")
+    _write_real_workbook(xlsx, str(tmp_path / "pic.png"))
+
+    loader = ExcelLoader(
+        file_path=xlsx,
+        file_metadata={},
+        file_extension="xlsx",
+        tmp_dir=str(tmp_path / "work"),
+        image_object_dir="knowledge/images/1/2",
+    )
+    documents = loader.load()
+
+    assert len(documents) == 2, "one segment per sheet for this workbook"
+    assert documents[0].page_content.startswith("## Portlet")
+    assert "2026-05-08" in documents[1].page_content
+    assert [doc.metadata["chunk_index"] for doc in documents] == [0, 1]
+
+
+def test_picture_on_a_data_sheet_follows_that_sheets_table(tmp_path, monkeypatch):
+    """Sheet order wins over file numbering: 'Notes' is empty, so its picture
+    must land between the two data sheets' tables, not after all of them."""
+    monkeypatch.setattr(BaseBishengLoader, "_minio_bucket", property(lambda self: "bisheng"))
+    png_path = str(tmp_path / "pic.png")
+    PILImage.new("RGB", (4, 4), "white").save(png_path)
+
+    workbook = openpyxl.Workbook()
+    first = workbook.active
+    first.title = "First"
+    first.append(["a", "b"])
+    first.append([1, 2])
+    notes = workbook.create_sheet("Notes")
+    notes.add_image(OpenpyxlImage(png_path), "A1")
+    last = workbook.create_sheet("Last")
+    last.append(["c", "d"])
+    last.append([3, 4])
+    xlsx = str(tmp_path / "three.xlsx")
+    workbook.save(xlsx)
+
+    loader = ExcelLoader(
+        file_path=xlsx,
+        file_metadata={},
+        file_extension="xlsx",
+        tmp_dir=str(tmp_path / "work"),
+        image_object_dir="knowledge/images/1/2",
+    )
+    documents = loader.load()
+
+    heads = [doc.page_content.split("\n", 1)[0] for doc in documents]
+    assert heads[1] == "## Notes"
+    assert "| a | b |" in documents[0].page_content
+    assert "| c | d |" in documents[2].page_content
+    assert [doc.metadata["chunk_index"] for doc in documents] == [0, 1, 2]
+
+
 def test_loader_leaves_pictureless_workbooks_untouched(tmp_path, monkeypatch):
     monkeypatch.setattr(BaseBishengLoader, "_minio_bucket", property(lambda self: "bisheng"))
 

@@ -209,7 +209,9 @@ export function ConversationHistory({
                                             value={renameValue}
                                             onChange={(e) => setRenameValue(e.target.value)}
                                             disabled={renameSubmitting}
-                                            className="h-6 flex-1 px-2 py-0 text-sm font-medium border-border-deep focus-visible:ring-1"
+                                            size="small"
+                                            className="flex-1 border-border-deep"
+                                            inputClassName="font-medium"
                                             onClick={(e) => e.stopPropagation()}
                                             onKeyDown={(e) => {
                                                 if (e.key === "Enter") {

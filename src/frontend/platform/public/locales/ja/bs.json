@@ -374,6 +374,9 @@
     "channelQuotaLimit": "チャンネル作成上限",
     "spaceCreateQuotaLimit": "ナレッジスペース作成上限",
     "spaceCreateQuotaLimitDesc": "このロールのユーザーが作成できるナレッジスペースの最大数を制限します",
+    "infoSourceSubscribeQuotaLimit": "情報ソース購読数の上限",
+    "infoSourceSubscribeQuotaLimitDesc": "このロールが作成したチャネル全体で購読できる情報ソースの総数の上限（重複を除く）",
+    "infoSourceSubscribeQuotaInvalid": "0～10000 の整数を入力してください",
     "spaceSubscribeQuotaLimit": "ナレッジスペース参加上限",
     "spaceSubscribeQuotaLimitDesc": "このロールのユーザーが参加（購読）できるナレッジスペースの最大数を制限します",
     "roleListKnowledgeSpaceUploadLimit": "ナレッジスペース・アップロード上限",
@@ -1434,6 +1437,16 @@
     "optional": "任意",
     "exampleValue": "サンプル値",
     "copySuccess": "コピーに成功しました",
+    "publicWorkflow": {
+      "title": "公開ワークフロー API",
+      "description": "ゲストアクセスと公開が有効な場合、これらの v3 エンドポイントは API キーなしで利用できます。",
+      "copyExample": "サンプルをコピー",
+      "contractTitle": "呼び出しフロー",
+      "stepInvoke": "workflow_id でワークフローを開始し、返された session_id を保持します。",
+      "stepEvents": "ワークフローが終了するか入力を要求するまで SSE イベントを読み取ります。",
+      "stepInput": "入力要求時は input、message_id、session_id を指定して invoke を再度呼び出します。",
+      "stepClose": "実行中の処理は workflow_id と session_id を指定した stop で終了します。"
+    },
     "apiRequestExample": "API リクエスト例",
     "sdkNote": "OpenAI 公式 SDK の ChatOpenAI コンポーネントを使用してアシスタントを利用できます（このドキュメントに記載されているパラメータのみサポート。公式コンポーネントの n、top_p、max_token などのパラメータは現在サポートしていません）。",
     "exampleCode": "サンプルコード",
@@ -2051,6 +2064,16 @@
     "closeReferences": "参考資料を閉じる",
     "backToReferences": "参考資料一覧に戻る",
     "noDownloadUrl": "ダウンロード可能なファイルアドレスがありません"
+  },
+  "openApiManagement": {
+    "empty": "レコードがありません",
+    "fields": { "name": "名前", "description": "説明", "ownerUserId": "リソース所有者のユーザー ID", "owner": "リソース所有者", "status": "状態", "activeKeys": "有効なキー", "lastUsed": "最終使用", "createdAt": "作成日時", "expiresAt": "有効期限" },
+    "status": { "active": "有効", "disabled": "無効", "revoked": "失効済み" },
+    "actions": { "back": "戻る", "details": "詳細", "enable": "有効化", "disable": "無効化", "revoke": "失効", "revokeHolder": "所有者単位で失効", "copy": "コピー", "load": "リソースを読み込む" },
+    "serviceAccount": { "title": "サービスアカウント", "create": "サービスアカウントを作成", "createHint": "リソース所有者はこのテナントの有効なユーザーである必要があります。", "search": "サービスアカウントを検索", "overview": "概要", "keys": "API キー", "grants": "リソース権限" },
+    "keys": { "issue": "API キーを発行", "issueHint": "基本情報、権限、委任設定のみを構成します。", "once": "今すぐこのキーをコピーしてください。再表示はできません。", "saved": "キーを安全に保存しました", "mask": "キー", "permissions": "権限", "delegateScopes": "委任範囲", "delegatePlaceholder": "user:12, department:34", "delegateRequired": "委任にはユーザーまたは部門が少なくとも 1 つ必要です。" },
+    "grants": { "resourceType": "リソースタイプ", "resourceId": "リソース ID", "model": "権限モデル", "source": "付与元", "scope": "範囲", "grantModel": "{{model}} を付与" },
+    "personalToken": { "title": "個人アクセストークン", "settings": "テナントポリシー", "deploymentDisabled": "個人アクセストークンはデプロイ設定で無効化されています。", "tenantEnabled": "従業員トークンを許可", "ttlDays": "最大有効期間（日）", "holder": "所有者", "adminRisk": "管理者リスク" }
   },
   "mediaPreview": {
     "recognizedText": "認識テキスト",

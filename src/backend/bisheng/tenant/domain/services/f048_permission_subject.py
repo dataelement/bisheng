@@ -10,6 +10,7 @@ from bisheng.database.models.department import (
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.open_api.domain.repositories.service_account_repository import ServiceAccountRepository
 from bisheng.permission.domain.services import grant_subject_service
 from bisheng.permission.domain.services.grant_source_service import (
     GrantSourceRecord,
@@ -114,7 +115,9 @@ class TenantPermissionSubjectDirectory:
         self,
         actor: PermissionActor,
     ) -> frozenset[str]:
-        projected = {f"user:{actor.user_id}"}
+        if actor.subject_type == "service_account":
+            return frozenset({actor.fga_subject})
+        projected = {actor.fga_subject}
         memberships = await UserDepartmentDao.aget_user_departments(actor.user_id)
         departments = await DepartmentDao.aget_by_ids([row.department_id for row in memberships])
         for department in departments:
@@ -152,6 +155,10 @@ class TenantPermissionSubjectDirectory:
         if normalized_type == "user":
             rows = await UserTenantDao.aget_user_tenants(identifier)
             valid = any(row.tenant_id == tenant_id and row.status == "active" and row.is_active == 1 for row in rows)
+            source_type = "DIRECT"
+        elif normalized_type == "service_account":
+            row = await ServiceAccountRepository.get(identifier)
+            valid = bool(row and row.is_enabled and row.tenant_id == tenant_id)
             source_type = "DIRECT"
         elif normalized_type == "department":
             row = await DepartmentDao.aget_by_id(identifier)
@@ -191,13 +198,20 @@ class TenantPermissionSubjectDirectory:
             for subject_type, subject_id in subjects
             if subject_type == "user_group" and subject_id.isdigit()
         ]
+        service_account_ids = [
+            int(subject_id)
+            for subject_type, subject_id in subjects
+            if subject_type == "service_account" and subject_id.isdigit()
+        ]
         users = await UserDao.aget_user_by_ids(user_ids) if user_ids else []
         departments = await DepartmentDao.aget_by_ids(department_ids) if department_ids else []
         groups = await GroupDao.aget_group_by_ids(group_ids) if group_ids else []
+        service_accounts = await ServiceAccountRepository.get_by_ids(service_account_ids)
         return {
             **{("user", str(row.user_id)): row.user_name for row in users or () if row.user_id is not None},
             **{("department", str(row.id)): row.name for row in departments if row.id is not None},
             **{("user_group", str(row.id)): row.group_name for row in groups if row.id is not None},
+            **{("service_account", str(row.id)): row.name for row in service_accounts if row.id is not None},
         }
 
     async def resource_display_names(

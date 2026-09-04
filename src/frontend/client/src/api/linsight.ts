@@ -98,6 +98,8 @@ export function getSelectableSkills(): Promise<SelectableSkill[]> {
 export interface LinsightModelConfig {
     models?: { id: string | number; name?: string; displayName?: string }[];
     linsight_default_model_id?: string | null;
+    /** Admin-configured default model for new daily-mode conversations. */
+    chat_default_model_id?: string | null;
 }
 
 export function getLinsightModelConfig(): Promise<LinsightModelConfig> {

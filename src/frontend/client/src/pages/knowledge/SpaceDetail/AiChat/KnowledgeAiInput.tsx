@@ -265,6 +265,8 @@ export function KnowledgeAiInput({
                 setChatModel({
                     id: Number(val),
                     name: model?.displayName || "",
+                    manual: true,
+                    mode: 'daily',
                 });
             }}
         />

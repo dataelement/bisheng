@@ -1,28 +1,24 @@
 import * as React from 'react';
-import * as CheckboxPrimitive from '@radix-ui/react-checkbox';
-import { Check, Minus } from 'lucide-react';
-import { cn } from '../../utils';
+import { Checkbox as UICheckbox } from '@bisheng/ui';
+import type { CheckboxProps } from '@bisheng/ui';
+import { cn } from '~/utils';
 
-const Checkbox = React.forwardRef<
-  React.ElementRef<typeof CheckboxPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>
->(({ className = '', ...props }, ref) => (
-  <CheckboxPrimitive.Root
-    ref={ref}
-    className={cn(
-      'group peer h-4 w-4 shrink-0 rounded-md border border-primary focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50',
-      'data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground',
-      'data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground',
-      className,
-    )}
-    {...props}
-  >
-    <CheckboxPrimitive.Indicator className={cn('flex items-center justify-center text-primary-foreground')}>
-      <Check className="h-3.5 w-3.5 group-data-[state=indeterminate]:hidden" />
-      <Minus className="hidden h-2.5 w-2.5 stroke-[3] group-data-[state=indeterminate]:block" />
-    </CheckboxPrimitive.Indicator>
-  </CheckboxPrimitive.Root>
-));
-Checkbox.displayName = CheckboxPrimitive.Root.displayName;
+/**
+ * Re-export shim (packages/ui AGENTS DoD #3): the spec Checkbox now lives in
+ * @bisheng/ui (组件-Checkbox复选框.md v1 — 14/16/18 ladder, 4px radius, gray→
+ * brand state chain, three-signal disabled); call sites keep this import path.
+ * Default size (medium, 16px) matches the old shadcn box, so bare call sites
+ * render the same footprint.
+ */
+
+const Checkbox = React.forwardRef<HTMLButtonElement, CheckboxProps>(
+  ({ className, ...props }, ref) => (
+    // `peer` preserved: the old shadcn checkbox shipped it and legacy labels
+    // style off `peer-*` (e.g. ExportModal's peer-disabled).
+    <UICheckbox ref={ref} className={cn('peer', className)} {...props} />
+  ),
+);
+Checkbox.displayName = 'Checkbox';
 
 export { Checkbox };
+export type { CheckboxProps };

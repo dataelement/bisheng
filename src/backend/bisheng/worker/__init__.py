@@ -23,6 +23,9 @@ from bisheng.worker.knowledge.scheduler import (
     reconcile_file_scheduler_task,
     trigger_dispatch_task,
 )
+from bisheng.worker.knowledge.stale_projection_reconciler import (
+    reconcile_stale_parent_projections as reconcile_stale_parent_projections,
+)
 from bisheng.worker.permission.retry_failed_tuples import (
     cleanup_succeeded_failed_tuples,
     retry_failed_tuples,

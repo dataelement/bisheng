@@ -112,25 +112,6 @@
       "count": 4
     }
   },
-  "src/components/bs-comp/apiComponent/ApiAccess.tsx": {
-    "no-empty-pattern": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 5
-    }
-  },
-  "src/components/bs-comp/apiComponent/ApiAccessFlow.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 10
-    },
-    "no-restricted-syntax": {
-      "count": 188
-    },
-    "no-useless-escape": {
-      "count": 6
-    }
-  },
   "src/components/bs-comp/apiComponent/ApiAccessSkill.tsx": {
     "no-empty-pattern": {
       "count": 1
@@ -3495,9 +3476,6 @@
     }
   },
   "src/pages/SystemPage/index.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    },
     "react-hooks/rules-of-hooks": {
       "count": 2
     }

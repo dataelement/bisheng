@@ -2,7 +2,6 @@ import ast
 import json
 import re
 from enum import Enum
-from typing import Dict, List
 from urllib.parse import unquote, urlparse
 
 from langchain_classic.chains import LLMChain
@@ -78,7 +77,7 @@ async def extract_answer_keys_async(answer, llm):
     return keywords
 
 
-def sync_judge_source(result, source_document, chat_id, extra: Dict):
+def sync_judge_source(result, source_document, chat_id, extra: dict):
     source = SourceType.NOT_SUPPORT.value
     if isinstance(result, Document):
         metadata = result.metadata
@@ -127,11 +126,11 @@ def sync_judge_source(result, source_document, chat_id, extra: Dict):
     return source, result
 
 
-async def judge_source(result, source_document, chat_id, extra: Dict):
+async def judge_source(result, source_document, chat_id, extra: dict):
     return sync_judge_source(result, source_document, chat_id, extra)
 
 
-def sync_process_source_document(source_document: List[Document], chat_id, message_id, answer):
+def sync_process_source_document(source_document: list[Document], chat_id, message_id, answer):
     if not source_document or not message_id:
         return
 
@@ -161,7 +160,7 @@ def sync_process_source_document(source_document: List[Document], chat_id, messa
             db_session.commit()
 
 
-async def process_source_document(source_document: List[Document], chat_id, message_id, answer):
+async def process_source_document(source_document: list[Document], chat_id, message_id, answer):
     logger.debug(f"process_source_document: {len(source_document)} message_id: {message_id}")
 
     if not source_document or not message_id:
@@ -194,7 +193,7 @@ async def process_source_document(source_document: List[Document], chat_id, mess
     logger.debug(f"process_source_document_over: {len(source_document)} message_id: {message_id}")
 
 
-def process_node_data(node_data: List[Dict]) -> Dict:
+def process_node_data(node_data: list[dict]) -> dict:
     tweak = {}
     for nd in node_data:
         if nd.get("id") not in tweak:

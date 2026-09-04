@@ -2,6 +2,7 @@ import { Download, MoreVertical, GitBranch, History, FileSearch } from "lucide-r
 import { Outlined } from "bisheng-icons";
 import { useState, type MouseEvent } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
+import { Tag } from "@bisheng/ui";
 import { Button, Checkbox } from "~/components";
 import { RoundCheckbox } from "~/components/ui/RoundCheckbox";
 import { SELECTION_CHECKBOX_CLASS } from "./selectionCheckboxStyles";
@@ -15,7 +16,7 @@ import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
+import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading, type KnowledgeStatusTone } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 
@@ -197,48 +198,58 @@ export function FileCard({
     /**
      * Status pill overlaid on the bottom-left of the preview area (Figma 11671:34497).
      * Covers all non-success states: parsing-like (neutral grey) + error / approval (colored).
+     * Drawn by the design-system Tag in its status form (组件-Tag标签.md §5); the
+     * status → color mapping is deliberately kept next to each surface rather
+     * than shared with FileListRow — the two differ on an unknown status (this
+     * one renders nothing, the row falls back to the queueing label).
      */
     const renderStatusOverlayTag = (inline = false) => {
         // Uploading folder placeholder: a neutral "uploading" pill in the same
         // bottom-left slot as the file status tags — no spinner over the icon.
         if (isUploadingFolderPlaceholder) {
             const pill = (
-                <div className="inline-flex items-center justify-center gap-1 rounded-sm bg-[#f2f4f7] px-2">
-                    <span className="size-1 shrink-0 rounded-full bg-[#6b7785]" />
-                    <span className="whitespace-nowrap text-xs leading-5 text-[#6b7785]">
-                        {localize("com_knowledge.uploading_status")}
-                    </span>
-                </div>
+                <Tag size="small" dot className="whitespace-nowrap">
+                    {localize("com_knowledge.uploading_status")}
+                </Tag>
             );
             // z-20 keeps the tag crisp above the translucent uploading scrim (z-10).
             return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
         }
-        if (!isAdmin || isFolder) return null;
+        // Folder rollup: 存在异常 is not an admin-only signal — anyone who can see the files
+        // needs to know their folder holds one that needs attention. Checked before the
+        // isAdmin gate that guards the per-file status tags.
+        if (isFolder) {
+            if (file.hasAbnormalFiles !== true) return null;
+            const pill = (
+                <Tag size="small" dot color="danger" className="whitespace-nowrap">
+                    {localize("com_knowledge.folder_abnormal")}
+                </Tag>
+            );
+            return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
+        }
+        if (!isAdmin) return null;
         if (file.status === FileStatus.SUCCESS) return null;
 
         const approvalLabel = approvalStatusLabel;
         const statusReason = failureMessage || approvalReason;
 
-        type Tone = { bg: string; text: string; dot: string };
-        const neutralTone: Tone = { bg: "bg-[#f2f4f7]", text: "text-[#6b7785]", dot: "bg-[#6b7785]" };
-        const errorTone: Tone = { bg: "bg-[#fff2f0]", text: "text-[#f53f3f]", dot: "bg-[#f53f3f]" };
-        const infoTone: Tone = { bg: "bg-blue-50", text: "text-blue-500", dot: "bg-blue-500" };
-
         let label: string | null = null;
-        let tone: Tone = neutralTone;
+        let tone: KnowledgeStatusTone = "default";
 
         if (approvalLabel) {
             label = approvalLabel;
-            tone = isKnowledgeApprovalRejected(file) ? errorTone : infoTone;
+            // Same call as the list row: everything not rejected keeps the blue
+            // it had before the migration, `finalize_failed` included.
+            tone = isKnowledgeApprovalRejected(file) ? "danger" : "approving";
         } else {
-            const config: Record<string, { label: string; tone: Tone }> = {
-                [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), tone: neutralTone },
-                [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), tone: neutralTone },
-                [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), tone: neutralTone },
-                [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), tone: neutralTone },
-                [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), tone: errorTone },
-                [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), tone: errorTone },
-                [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), tone: errorTone },
+            const config: Record<string, { label: string; tone: KnowledgeStatusTone }> = {
+                [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), tone: "default" },
+                [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), tone: "default" },
+                [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), tone: "default" },
+                [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), tone: "default" },
+                [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), tone: "danger" },
+                [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), tone: "danger" },
+                [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), tone: "danger" },
             };
             const item = file.status ? config[file.status] : undefined;
             if (!item) return null;
@@ -248,11 +259,12 @@ export function FileCard({
 
         if (!label) return null;
 
+        // 组件-Tag标签.md §5 — the status form, `small` rung; identical drawing
+        // to the desktop list row (FileListRow), overlaid here on the preview.
         const pill = (
-            <div className={cn("inline-flex items-center justify-center gap-1 rounded-sm px-2", tone.bg)}>
-                <span className={cn("size-1 shrink-0 rounded-full", tone.dot)} />
-                <span className={cn("whitespace-nowrap text-xs leading-5", tone.text)}>{label}</span>
-            </div>
+            <Tag size="small" dot color={tone} className="whitespace-nowrap">
+                {label}
+            </Tag>
         );
 
         const wrapped = statusReason ? (
@@ -307,7 +319,7 @@ export function FileCard({
                         onBlur={handleRenameSubmit}
                         onKeyDown={handleKeyDown}
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full h-6 px-1.5 text-sm border border-[#DDDDDD] rounded outline-none shadow-[0_0_0_2px_#F1F5F9] bg-white font-normal"
+                        className="w-full h-6 px-1.5 text-sm border border-border-deep rounded outline-none shadow-focus bg-white font-normal"
                     />
                 </div>
             );
@@ -493,7 +505,7 @@ export function FileCard({
                             onBlur={handleRenameSubmit}
                             onKeyDown={handleKeyDown}
                             onClick={(e) => e.stopPropagation()}
-                            className="h-6 w-full rounded border border-[#DDDDDD] bg-white px-1.5 text-sm font-normal shadow-[0_0_0_2px_#F1F5F9] outline-none"
+                            className="h-6 w-full rounded border border-border-deep bg-white px-1.5 text-sm font-normal shadow-focus outline-none"
                         />
                     ) : (
                         <div className="flex min-w-0 items-center gap-1.5">

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.errcode.open_api import ServiceAccountOperationForbiddenError
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.permission.api.actors import permission_actor
 from bisheng.permission.api.dependencies import (
@@ -122,6 +123,10 @@ async def mutate_resource_grants(
     api: ResourcePermissionApiPort = Depends(get_resource_permission_api),
 ) -> UnifiedResponseModel:
     try:
+        if any(change.subject is not None and change.subject.type == "service_account" for change in body.changes):
+            # Service-account grants are intentionally available only from the
+            # account detail management API, never the generic resource picker.
+            raise ServiceAccountOperationForbiddenError()
         data = await api.mutate_grants(
             resource_type=resource_type,
             resource_id=resource_id,

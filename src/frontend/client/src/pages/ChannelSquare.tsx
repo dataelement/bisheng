@@ -1,8 +1,7 @@
-import { memo, useCallback, useEffect, useMemo, useState, type UIEvent } from "react";
-import { Search } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { Outlined } from "bisheng-icons";
-import { Input } from "~/components/ui/Input";
+import { SearchInput } from "@bisheng/ui";
 import { ChannelSquareCard } from "./ChannelSquareCard";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
@@ -24,6 +23,20 @@ interface SquareChannel {
   status: SquareStatus;
   visibility?: "public" | "private" | "review";
   isHighlighted?: boolean;
+}
+
+const CHANNEL_PAGE_SIZE = 20;
+
+function mergeChannelsById(existing: SquareChannel[], incoming: SquareChannel[]) {
+  const seenIds = new Set(existing.map((channel) => channel.id));
+  return [
+    ...existing,
+    ...incoming.filter((channel) => {
+      if (seenIds.has(channel.id)) return false;
+      seenIds.add(channel.id);
+      return true;
+    }),
+  ];
 }
 
 interface ChannelSquareProps {
@@ -67,10 +80,14 @@ function ChannelSquare({
   const [page, setPage] = useState(1);
   const [hasMorePage, setHasMorePage] = useState(true);
   const [allChannels, setAllChannels] = useState<SquareChannel[]>([]);
-  // Track only the very first page-1 fetch so the empty state never flashes
-  // before data arrives. Subsequent search/refresh reloads keep the existing
-  // list (search filters client-side), so we don't re-enter the loading view.
   const [initialLoading, setInitialLoading] = useState(true);
+  const [initialError, setInitialError] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState(false);
+  const allChannelsRef = useRef<SquareChannel[]>([]);
+  const requestSeqRef = useRef(0);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreLockRef = useRef(false);
   const { showToast } = useToastContext();
   const localize = useLocalize();
   const [joiningId, setJoiningId] = useState<string | null>(null);
@@ -87,10 +104,19 @@ function ChannelSquare({
   const tTitle = title || localize("com_subscription.explore_channel_plaza");
   const tSubtitle = subtitle || localize("com_subscription.explore_more_channel");
   const tSearchPlaceholder = searchPlaceholder || localize("com_subscription.enter_channel_search");
-  const tEmptyText = emptyText || "无相关内容，请重新搜索";
+  const tEmptyText = emptyText || localize("com_list_no_results");
   const tJoinPrefix = joinToastPrefix || localize("applied_join_channel");
+  const noDescriptionText = localize("com_knowledge.no_description");
 
-  const handleJoinChannel = (channelId: string, channelTitle: string) => {
+  const updateAllChannels = useCallback((updater: (prev: SquareChannel[]) => SquareChannel[]) => {
+    setAllChannels((prev) => {
+      const next = updater(prev);
+      allChannelsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const handleJoinChannel = (channelId: string) => {
     const target = allChannels.find((c) => c.id === channelId);
     if (!target || target.status !== "join" || joiningId) return;
 
@@ -101,7 +127,7 @@ function ChannelSquare({
           target.visibility === "public" ? "joined" : "pending";
 
         // 先乐观更新为目标状态
-        setAllChannels((prev) =>
+        updateAllChannels((prev) =>
           prev.map((c) => (c.id === channelId ? { ...c, status: nextStatus } : c))
         );
 
@@ -115,35 +141,26 @@ function ChannelSquare({
             root?.status_message ||
             root?.message ||
             localize("channel_subscribe_failed") ||
-            "订阅频道失败，请稍后重试";
+            localize("com_knowledge.operation_failed_retry");
           throw new Error(msg);
         }
         if (target.visibility === "public") {
           showToast({
-            message: localize("subscribe_success") || "订阅成功",
+            message: localize("subscribe_success"),
             severity: NotificationSeverity.SUCCESS
           });
         } else {
           showToast({
-            message: localize("com_subscription.apply_sent") || "申请已发送",
+            message: localize("com_subscription.apply_sent"),
             severity: NotificationSeverity.SUCCESS
           });
         }
         // 与服务端对齐订阅态（含需审核频道的 pending），避免仅乐观更新与接口不一致
         load(1);
-      } catch (e: any) {
-        // 失败时回滚状态
-        setAllChannels((prev) =>
+      } catch {
+        updateAllChannels((prev) =>
           prev.map((c) => (c.id === channelId ? { ...c, status: target.status } : c))
         );
-        // use interceptors toast
-        // showToast({
-        //   message:
-        //     e?.message ||
-        //     localize("channel_subscribe_failed") ||
-        //     "订阅频道失败，请稍后重试",
-        //   severity: NotificationSeverity.ERROR
-        // });
       } finally {
         setJoiningId(null);
       }
@@ -165,14 +182,31 @@ function ChannelSquare({
 
   const load = useCallback(
     async (nextPage: number) => {
+      const isFirstPage = nextPage === 1;
+      const requestId = ++requestSeqRef.current;
+
+      if (isFirstPage) {
+        setInitialLoading(true);
+        setLoadingMore(false);
+        setInitialError(false);
+        setLoadMoreError(false);
+        loadMoreLockRef.current = false;
+        allChannelsRef.current = [];
+        setAllChannels([]);
+      } else {
+        setLoadMoreError(false);
+      }
+
       try {
         const res = fetchApi
-          ? await fetchApi({ keyword: searchQuery.trim() || undefined, page: nextPage, page_size: 20 })
+          ? await fetchApi({ keyword: searchQuery.trim() || undefined, page: nextPage, page_size: CHANNEL_PAGE_SIZE })
           : await getChannelSquareApi({
             keyword: searchQuery.trim() || undefined,
             page: nextPage,
-            page_size: 20
+            page_size: CHANNEL_PAGE_SIZE
           });
+        if (requestId !== requestSeqRef.current) return;
+
         const root: any = res;
         const payload = root.data ?? root;
         const list = (payload?.data || payload?.list || []) as any[];
@@ -189,7 +223,7 @@ function ChannelSquare({
             return {
               id: String(rawId),
               title: String(item.name ?? item.title ?? ""),
-              description: String(item.description ?? item.desc ?? "") || "暂无简介",
+              description: String(item.description ?? item.desc ?? "") || noDescriptionText,
               creator: String(item.creator ?? item.creator_name ?? ""),
               creatorAvatars: avatars,
               articleCount: Number(item.article_count ?? item.articleCount ?? 0),
@@ -209,18 +243,44 @@ function ChannelSquare({
           })
           .filter((c): c is SquareChannel => c !== null);
 
-        setAllChannels(prev =>
-          nextPage === 1 ? mapped : [...prev, ...mapped]
-        );
-        setHasMorePage(mapped.length >= 20);
+        const rawTotal = payload?.total ?? root?.total;
+        const total = Number(rawTotal);
+        const hasExplicitTotal = rawTotal !== undefined && rawTotal !== null && Number.isFinite(total);
+        const previous = isFirstPage ? [] : allChannelsRef.current;
+        const nextChannels = isFirstPage ? mapped : mergeChannelsById(previous, mapped);
+        const uniqueAddedCount = nextChannels.length - previous.length;
+
+        if (hasExplicitTotal && nextChannels.length < total && (mapped.length === 0 || (!isFirstPage && uniqueAddedCount === 0))) {
+          if (isFirstPage) {
+            allChannelsRef.current = [];
+            setAllChannels([]);
+            setInitialError(true);
+          } else {
+            setLoadMoreError(true);
+          }
+          setHasMorePage(false);
+          return;
+        }
+
+        allChannelsRef.current = nextChannels;
+        setAllChannels(nextChannels);
+        setHasMorePage(hasExplicitTotal ? nextChannels.length < total : mapped.length >= CHANNEL_PAGE_SIZE);
         setPage(nextPage);
       } catch {
-        // 出错时不打断现有列表
+        if (requestId !== requestSeqRef.current) return;
+        if (isFirstPage) {
+          allChannelsRef.current = [];
+          setAllChannels([]);
+          setInitialError(true);
+        } else {
+          setLoadMoreError(true);
+        }
+        setHasMorePage(false);
       } finally {
-        if (nextPage === 1) setInitialLoading(false);
+        if (requestId === requestSeqRef.current && isFirstPage) setInitialLoading(false);
       }
     },
-    [searchQuery]
+    [fetchApi, noDescriptionText, searchQuery]
   );
 
   // 根据搜索词 / 外部刷新信号加载频道广场数据
@@ -228,30 +288,43 @@ function ChannelSquare({
     load(1);
   }, [searchQuery, load, refreshKey]);
 
-  const filteredChannels = searchQuery
-    ? allChannels.filter(
-      (channel) =>
-        channel.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        channel.description.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    : allChannels;
+  const visibleChannels = allChannels;
 
-  const visibleChannels = filteredChannels;
+  const handleLoadMore = useCallback(() => {
+    if (loadMoreLockRef.current || initialLoading || loadingMore || loadMoreError || !hasMorePage) return;
+    loadMoreLockRef.current = true;
+    setLoadingMore(true);
+    load(page + 1).finally(() => {
+      setLoadingMore(false);
+      loadMoreLockRef.current = false;
+    });
+  }, [hasMorePage, initialLoading, load, loadMoreError, loadingMore, page]);
 
   const handleListScroll = useCallback(
     (e: UIEvent<HTMLDivElement>) => {
       const node = e.currentTarget;
-      if (loadingMore || !hasMorePage) return;
       const threshold = 60;
       if (node.scrollTop + node.clientHeight >= node.scrollHeight - threshold) {
-        setLoadingMore(true);
-        load(page + 1).finally(() => {
-          setLoadingMore(false);
-        });
+        handleLoadMore();
       }
     },
-    [hasMorePage, loadingMore, load, page]
+    [handleLoadMore]
   );
+
+  useEffect(() => {
+    const root = scrollRef.current;
+    const target = loadMoreRef.current;
+    if (!root || !target) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) handleLoadMore();
+      },
+      { root, rootMargin: "60px 0px", threshold: 0 }
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [handleLoadMore, visibleChannels.length]);
 
   return (
     <div className="h-full w-full flex flex-col bg-white overflow-hidden">
@@ -312,31 +385,30 @@ function ChannelSquare({
 
       {/* 频道列表区域 */}
       <div
+        ref={scrollRef}
         className="flex-1 flex flex-col overflow-y-auto scrollbar-os bg-white"
         onScroll={handleListScroll}
       >
         <div className={cn("mx-auto mb-6 mt-6 w-full max-w-[480px]", isH5 && "px-4")}>
-          <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
-            <Input
-              type="text"
-              placeholder={tSearchPlaceholder}
-              value={searchQuery}
-              onChange={handleSearch}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  // 回车触发，当前为实时搜索，保留该交互语义
-                }
-              }}
-              className="pl-9 h-8 text-[12px] rounded-md bg-white border-border-base focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
-            />
-          </div>
+          {/* Spec search field (@bisheng/ui): magnifier prefix, Enter is a no-op
+              here because the filter is realtime via onChange. */}
+          <SearchInput
+            placeholder={tSearchPlaceholder}
+            value={searchQuery}
+            onChange={handleSearch}
+            clearLabel={localize("com_ui_clear")}
+          />
         </div>
         <div className="flex-1 flex flex-col w-full max-w-[1032px] mx-auto px-4 pb-4 pt-0">
 
           {initialLoading ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-text-3">
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-text-3">
               <LoadingIcon className="size-20 text-primary" />
+              <span className="text-sm">{localize("com_list_loading")}</span>
+            </div>
+          ) : initialError ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-text-3">
+              <p className="text-[14px] font-normal text-text-3">{localize("com_list_load_failed")}</p>
             </div>
           ) : visibleChannels.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-text-3">
@@ -362,16 +434,18 @@ function ChannelSquare({
                       visibility={channel.visibility}
                       isHighlighted={channel.isHighlighted}
                       onPreview={() => onPreviewChannel?.(channel.id)}
-                      onAction={() => handleJoinChannel(channel.id, channel.title)}
+                      onAction={() => handleJoinChannel(channel.id)}
                     />
                 ))}
               </div>
-              <div className="h-10 flex items-center justify-center text-[12px] text-text-4">
+              <div ref={loadMoreRef} className="h-10 flex items-center justify-center text-[12px] text-text-4">
                 {loadingMore
-                  ? "加载中..."
-                  : !hasMorePage
-                    ? "没有更多内容了"
-                    : ""}
+                  ? localize("com_list_loading_more")
+                  : loadMoreError
+                    ? localize("com_list_load_failed")
+                    : !hasMorePage
+                      ? localize("com_list_all_loaded")
+                      : ""}
               </div>
             </div>
           )}

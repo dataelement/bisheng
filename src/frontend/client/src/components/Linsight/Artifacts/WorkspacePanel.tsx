@@ -54,22 +54,24 @@ export function WorkspacePanel({
             key={file.file_id || file.file_url}
             role="button"
             tabIndex={0}
-            className="group/row flex cursor-pointer items-center gap-1 rounded-lg py-2 pl-1 pr-2 hover:bg-[#F7F7F7]"
+            /* has-[[data-state=open]]: hold the hover look while this row's own
+               "另存为" menu is open — the pointer is on the panel by then. */
+            className="group/row flex cursor-pointer items-center justify-between gap-2 rounded-lg py-2 pl-1 pr-1 hover:bg-[#F7F7F7] has-[[data-state=open]]:bg-[#F7F7F7]"
             onClick={() => onPreview(file)}
             onKeyDown={(e) => e.key === 'Enter' && onPreview(file)}
         >
             {/* File-type icon hidden for now; keep for an easy future re-enable. */}
             { }
             {/* <FileIcon type={getFileExtension(file.file_name) as any} className="size-5 min-w-5" /> */}
-            {/* min-w-0 without flex-1 so the action stays next to the NAME, not
-                pushed to the panel edge; the name truncates only when it must. */}
-            <span className="min-w-0 truncate text-sm text-text-1 group-hover/row:text-blue-500">
-                {file.file_name}
+            <span className="flex min-w-0 items-center gap-1.5">
+                <span className="min-w-0 truncate text-sm text-text-1 group-hover/row:text-blue-500 group-has-[[data-state=open]]/row:text-blue-500">
+                    {file.file_name}
+                </span>
+                <NewTabHint file={file} />
             </span>
-            <NewTabHint file={file} />
-            {/* Downloading a listed file no longer requires opening it first —
-                which HTML reports never allowed, since they leave for a new tab. */}
-            <SaveAsButton file={file} versionId={versionId} />
+            {/* Always-visible worded action at the row's end — same treatment as
+                the delivery card's rows, so the two file lists read as one. */}
+            <SaveAsButton file={file} versionId={versionId} variant="labeled" />
         </div>
     );
 

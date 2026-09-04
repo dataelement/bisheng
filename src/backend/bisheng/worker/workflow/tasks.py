@@ -4,11 +4,15 @@ from loguru import logger
 
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao
+from bisheng.open_api.domain.services.execution_context import restore_execution_context
+from bisheng.permission.application.business_authorization import require_business_action
+from bisheng.utils.async_utils import run_async_safe
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.worker.main import bisheng_celery
 from bisheng.worker.utils.stateful_worker import StatefulWorker
@@ -96,12 +100,29 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
 
 
 @bisheng_celery.task
-def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
+def execute_workflow(
+    unique_id: str,
+    workflow_id: str,
+    chat_id: str,
+    user_id: int,
+    source: str = "platform",
+    execution_snapshot: dict | None = None,
+):
     """Implementationworkflow"""
     trace_id_var.set(unique_id)
     start_time = time.time()
     try:
-        _execute_workflow(unique_id, workflow_id, chat_id, user_id, source)
+        with restore_execution_context(execution_snapshot):
+            if execution_snapshot is not None:
+                run_async_safe(
+                    require_business_action(
+                        UserPayload(user_id=user_id, user_role=[], tenant_id=execution_snapshot["tenant_id"]),
+                        resource_type="workflow",
+                        resource_id=workflow_id,
+                        action="use",
+                    )
+                )
+            _execute_workflow(unique_id, workflow_id, chat_id, user_id, source)
     finally:
         end_time = time.time()
         workflow_info = WorkFlowService.get_one_workflow_simple_info_sync(workflow_id)
@@ -147,12 +168,29 @@ def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: 
 
 
 @bisheng_celery.task
-def continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
+def continue_workflow(
+    unique_id: str,
+    workflow_id: str,
+    chat_id: str,
+    user_id: int,
+    source: str = "platform",
+    execution_snapshot: dict | None = None,
+):
     """Resumeworkflow"""
     trace_id_var.set(unique_id)
     start_time = time.time()
     try:
-        _continue_workflow(unique_id, workflow_id, chat_id, user_id, source)
+        with restore_execution_context(execution_snapshot):
+            if execution_snapshot is not None:
+                run_async_safe(
+                    require_business_action(
+                        UserPayload(user_id=user_id, user_role=[], tenant_id=execution_snapshot["tenant_id"]),
+                        resource_type="workflow",
+                        resource_id=workflow_id,
+                        action="use",
+                    )
+                )
+            _continue_workflow(unique_id, workflow_id, chat_id, user_id, source)
     finally:
         end_time = time.time()
         workflow_info = WorkFlowService.get_one_workflow_simple_info_sync(workflow_id)
