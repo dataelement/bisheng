@@ -2,6 +2,9 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
+from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
 ExternalUserId = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=255),
@@ -21,6 +24,12 @@ class APIAppendQAParam(BaseModel):
 
 class QueryQAParam(BaseModel):
     timeRange: list[str]
+
+
+class FilelibKnowledgeRead(KnowledgeRead):
+    """Filelib 知识资源列表项, 知识空间额外返回门户层级。"""
+
+    space_level: KnowledgeSpaceLevelEnum | None = None
 
 
 class KnowledgeBaseFilter(BaseModel):

@@ -441,23 +441,23 @@ async def test_aconvert_knowledge_read_uses_permission_service_async_bridge_for_
 
     with patch.object(
         service_module.UserDao,
-        'get_user_by_ids',
+        'aget_user_by_ids',
+        new_callable=AsyncMock,
         return_value=[SimpleNamespace(user_id=15, user_name='owner')],
     ), patch.object(
         KnowledgeService.permission_service,
-        'check_access_async',
+        'get_knowledge_permission_map_async',
         new_callable=AsyncMock,
-        return_value=True,
-    ) as mock_check_access:
+        return_value={81: {'edit_kb'}},
+    ) as mock_permission_map:
         result = await KnowledgeService.aconvert_knowledge_read(login_user, [knowledge])
 
     assert len(result) == 1
     assert result[0].copiable is True
-    mock_check_access.assert_awaited_once_with(
-        login_user=login_user,
-        owner_user_id=15,
-        knowledge_id=81,
-        access_type=AccessType.KNOWLEDGE_WRITE,
+    mock_permission_map.assert_awaited_once_with(
+        login_user,
+        [81],
+        service_module._KNOWLEDGE_LIST_PERMISSION_IDS,
     )
 
 

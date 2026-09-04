@@ -12858,6 +12858,119 @@ class KnowledgeSpaceService(KnowledgeUtils):
         grouped.personal_spaces.sort(key=lambda space: not bool(getattr(space, "is_favorite", False)))
         return grouped
 
+    async def get_existing_portal_visible_space_levels(
+        self,
+    ) -> dict[int, KnowledgeSpaceLevelEnum]:
+        """返回与门户侧栏一致的可见空间及层级, 但不补建个人库。
+
+        公共库对所有当前租户用户可见; 部门、团队和科室库沿用门户的
+        ``view_space``、管理关系与有效成员关系; 个人库仅返回当前用户已经
+        存在的两个固定空间。
+        """
+        (
+            public_ids,
+            department_ids,
+            team_ids,
+            clinic_ids,
+            memberships,
+            readable_ids,
+            manageable_ids,
+            creator_ids,
+            favorite_space,
+            default_space,
+        ) = await asyncio.gather(
+            KnowledgeSpaceScopeDao.aget_space_ids_by_level(KnowledgeSpaceLevelEnum.PUBLIC),
+            KnowledgeSpaceScopeDao.aget_space_ids_by_level(KnowledgeSpaceLevelEnum.DEPARTMENT),
+            KnowledgeSpaceScopeDao.aget_space_ids_by_level(KnowledgeSpaceLevelEnum.TEAM),
+            KnowledgeSpaceScopeDao.aget_space_ids_by_level(KnowledgeSpaceLevelEnum.TEAM_KS),
+            SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id),
+            PermissionService.list_accessible_ids(
+                user_id=self.login_user.user_id,
+                relation="can_read",
+                object_type="knowledge_space",
+                login_user=self.login_user,
+            ),
+            PermissionService.list_accessible_ids(
+                user_id=self.login_user.user_id,
+                relation="can_manage",
+                object_type="knowledge_space",
+                login_user=self.login_user,
+            ),
+            KnowledgeDao.aget_knowledge_ids_created_by(
+                self.login_user.user_id,
+                KnowledgeTypeEnum.SPACE,
+            ),
+            self._find_favorite_space(),
+            self._find_personal_default_space(),
+        )
+
+        level_by_id: dict[int, KnowledgeSpaceLevelEnum] = {
+            int(space_id): KnowledgeSpaceLevelEnum.PUBLIC for space_id in public_ids
+        }
+        non_public_level_by_id = {
+            **{int(space_id): KnowledgeSpaceLevelEnum.DEPARTMENT for space_id in department_ids},
+            **{int(space_id): KnowledgeSpaceLevelEnum.TEAM for space_id in team_ids},
+            **{int(space_id): KnowledgeSpaceLevelEnum.TEAM_KS for space_id in clinic_ids},
+        }
+        non_public_candidate_ids = set(non_public_level_by_id)
+        member_ids = {int(member.business_id) for member in memberships if str(member.business_id).isdigit()}
+        creator_id_set = {int(space_id) for space_id in creator_ids}
+
+        is_global_admin = bool(self.login_user.is_admin())
+        if is_global_admin or readable_ids is None:
+            visible_non_public_ids = set(non_public_candidate_ids)
+        else:
+            readable_id_set = {int(space_id) for space_id in readable_ids if str(space_id).isdigit()}
+            manageable_id_set = {int(space_id) for space_id in (manageable_ids or []) if str(space_id).isdigit()}
+            relation_visible_ids = readable_id_set | manageable_id_set
+            visible_non_public_ids = non_public_candidate_ids & (
+                relation_visible_ids | member_ids | creator_id_set
+            )
+
+            # 门户允许有效成员和创建者直接查看; 关系授权若绑定了自定义权限
+            # 模型, 则仍需确认模型实际包含 view_space。
+            permission_check_ids = visible_non_public_ids - member_ids - creator_id_set
+            if permission_check_ids:
+                models, bindings = await asyncio.gather(
+                    self._get_relation_models_map(),
+                    self._get_relation_bindings(),
+                )
+                custom_model_space_ids = {
+                    int(binding["resource_id"])
+                    for binding in bindings
+                    if (
+                        binding.get("resource_type") == "knowledge_space"
+                        and str(binding.get("resource_id", "")).isdigit()
+                        and (model := models.get(binding.get("model_id"))) is not None
+                        and not model.get("is_system")
+                    )
+                }
+                custom_check_ids = permission_check_ids & custom_model_space_ids
+                if custom_check_ids:
+                    semaphore = asyncio.Semaphore(8)
+
+                    async def _has_view_permission(space_id: int) -> tuple[int, bool]:
+                        async with semaphore:
+                            permission_ids = await self._get_effective_permission_ids(
+                                "knowledge_space",
+                                space_id,
+                            )
+                        return space_id, "view_space" in permission_ids
+
+                    decisions = await asyncio.gather(*[_has_view_permission(space_id) for space_id in custom_check_ids])
+                    visible_non_public_ids.difference_update(space_id for space_id, allowed in decisions if not allowed)
+
+        level_by_id.update({space_id: non_public_level_by_id[space_id] for space_id in visible_non_public_ids})
+
+        # 与门户固定个人库定义保持一致, 但刻意不调用 _ensure_personal_spaces。
+        for personal_space in (favorite_space, default_space):
+            if personal_space is None or getattr(personal_space, "id", None) is None:
+                continue
+            if int(personal_space.user_id) != int(self.login_user.user_id):
+                continue
+            level_by_id[int(personal_space.id)] = KnowledgeSpaceLevelEnum.PERSONAL
+        return level_by_id
+
     async def get_spaces_by_level(
         self,
         space_level: KnowledgeSpaceLevelEnum | str,

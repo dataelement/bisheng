@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 from datetime import datetime
-from typing import Any, List, Literal, Optional
+from typing import Annotated, Any, List, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from loguru import logger
@@ -69,6 +69,7 @@ from bisheng.open_endpoints.domain.schemas.filelib import (
     RetrieveReq,
     RetrieveResp,
 )
+from bisheng.open_endpoints.domain.services.filelib_knowledge_list_service import FilelibKnowledgeListService
 from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service import (
     EMPTY_RETRIEVE_SOURCE_LINK,
     FilelibRetrieveSourceService,
@@ -86,6 +87,24 @@ OPENAPI_FILE_CATEGORY_GROUP_CLASS_CODE = '分类编码测试'
 OPENAPI_FILE_DOC_TYPE_CODE = '分类赋码测试'
 OPENAPI_TEXT_OBJECT_SUFFIXES = ('.md', '.markdown', '.txt')
 OPENAPI_FILE_CONTENT_PAGE_SIZE = 1000
+
+
+def _resolve_filelib_knowledge_type(
+    type_value: int,
+    compatibility_value: int | None,
+    *,
+    type_was_provided: bool,
+) -> KnowledgeTypeEnum:
+    if type_was_provided and compatibility_value is not None and type_value != compatibility_value:
+        raise HTTPException(
+            status_code=422,
+            detail="type and knowledge_type must be identical when both are provided",
+        )
+    raw_value = compatibility_value if compatibility_value is not None and not type_was_provided else type_value
+    try:
+        return KnowledgeTypeEnum(raw_value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="unsupported knowledge resource type") from exc
 
 
 def _get_file_item_id(file_item: Any) -> int | None:
@@ -299,22 +318,36 @@ def update_knowledge(*, request: Request, knowledge: KnowledgeUpdate):
 @router.get('/', status_code=200)
 async def get_knowledge(*,
                         request: Request,
-                        knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value,
-                                                    alias='type'),
-                        name: str = None,
-                        page_size: Optional[int] = 10,
-                        cursor: Optional[str] = None,
+                        knowledge_type: Annotated[int, Query(alias='type')] = KnowledgeTypeEnum.NORMAL.value,
+                        compatibility_knowledge_type: Annotated[
+                            int | None,
+                            Query(alias='knowledge_type'),
+                        ] = None,
+                        name: str | None = None,
+                        page_size: Annotated[int, Query(ge=1)] = 10,
+                        cursor: str | None = None,
                         login_user: UserPayload = Depends(get_filelib_request_user)):
     """ Read all knowledge base information. """
-    knowledge_type = KnowledgeTypeEnum(knowledge_type)
-    result = await KnowledgeService.get_knowledge(
-        request,
-        login_user,
+    resolved_type = _resolve_filelib_knowledge_type(
         knowledge_type,
-        name=name,
-        cursor=cursor,
-        page_size=page_size,
+        compatibility_knowledge_type,
+        type_was_provided='type' in request.query_params,
     )
+    if resolved_type is KnowledgeTypeEnum.SPACE:
+        result = await FilelibKnowledgeListService(request=request, login_user=login_user).list_spaces(
+            name=name,
+            cursor=cursor,
+            page_size=page_size,
+        )
+    else:
+        result = await KnowledgeService.get_knowledge(
+            request,
+            login_user,
+            resolved_type,
+            name=name,
+            cursor=cursor,
+            page_size=page_size,
+        )
     return resp_200(data=result)
 
 

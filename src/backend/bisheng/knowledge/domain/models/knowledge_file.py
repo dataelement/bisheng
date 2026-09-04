@@ -1864,6 +1864,18 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_knowledge_ids_by_name(cls, file_name: str) -> list[int]:
+        """异步查询文件名命中的知识库 ID, 供异步列表接口使用。"""
+        statement = (
+            select(KnowledgeFile.knowledge_id)
+            .where(KnowledgeFile.file_name.like(f"%{file_name}%"))
+            .group_by(KnowledgeFile.knowledge_id)
+        )
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return [int(knowledge_id) for knowledge_id in result.all()]
+
+    @classmethod
     def update_status_bulk(cls, file_ids: list[int], status: KnowledgeFileStatus, remark: str = "") -> None:
         """
         Batch update file status
