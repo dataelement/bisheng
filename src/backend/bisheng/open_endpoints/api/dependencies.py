@@ -133,10 +133,14 @@ async def get_filelib_user_context_service(
 
 async def get_filelib_retrieve_source_service(
     file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
+    version_repository: KnowledgeDocumentVersionRepository = Depends(
+        get_knowledge_document_version_repository
+    ),
     retrieval_runtime: AsyncRetrievalRuntime = Depends(get_async_retrieval_runtime),
 ) -> FilelibRetrieveSourceService:
     return FilelibRetrieveSourceService(
         file_repository=file_repository,
+        version_repository=version_repository,
         storage=await get_minio_storage(),
         max_concurrency=retrieval_runtime.config.max_source_link_concurrency,
     )

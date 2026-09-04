@@ -765,14 +765,6 @@ class KnowledgeSpaceChatService:
 
         runtime = await self._get_retrieval_runtime()
         knowledge_base_ids = list(dict.fromkeys(int(item) for item in knowledge_base_ids))
-        if len(knowledge_base_ids) > runtime.config.max_knowledge_base_count:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "knowledge_base_ids exceeds maximum "
-                    f"{runtime.config.max_knowledge_base_count}"
-                ),
-            )
 
         kb_id_set = set(knowledge_base_ids)
         filters_by_kb: dict[int, dict[str, Any]] = {}

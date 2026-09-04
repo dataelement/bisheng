@@ -718,7 +718,6 @@ class KnowledgeRetrievalRuntimeConf(BaseModel):
     milvus_timeout_seconds: float = Field(default=15, gt=0, le=300)
     elasticsearch_timeout_seconds: float = Field(default=15, gt=0, le=300)
     source_link_timeout_seconds: float = Field(default=8, gt=0, le=300)
-    max_knowledge_base_count: int = Field(default=60, ge=1, le=200)
     max_knowledge_base_concurrency: int = Field(default=8, ge=1, le=32)
     max_embedding_concurrency: int = Field(default=16, ge=1, le=64)
     max_milvus_concurrency: int = Field(default=16, ge=1, le=128)

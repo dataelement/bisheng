@@ -72,6 +72,7 @@ from bisheng.open_endpoints.domain.schemas.filelib import (
 from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service import (
     EMPTY_RETRIEVE_SOURCE_LINK,
     FilelibRetrieveSourceService,
+    RetrieveSourceRef,
 )
 from bisheng.open_endpoints.domain.services.filelib_user_context_service import FilelibUserContextService
 from bisheng.open_endpoints.domain.utils import get_default_operator, get_default_operator_async
@@ -732,26 +733,30 @@ async def retrieve_chunks(
                 (
                     kb_id,
                     doc,
-                    int(doc.metadata.get("document_id", 0)),
+                    RetrieveSourceRef(
+                        entry_file_id=int(doc.metadata.get("document_id", 0)),
+                        canonical_document_id=doc.metadata.get("canonical_document_id"),
+                        canonical_version_id=doc.metadata.get("canonical_version_id"),
+                    ),
                 )
                 for kb_id, doc in results
             ]
-            document_ids = list(
+            source_refs = list(
                 dict.fromkeys(
-                    document_id
-                    for _, _, document_id in prepared_results
-                    if document_id > 0
+                    source_ref
+                    for _, _, source_ref in prepared_results
+                    if source_ref.entry_file_id > 0
                 )
             )
             try:
                 source_links = await asyncio.wait_for(
-                    source_service.resolve_links(document_ids),
+                    source_service.resolve_links(source_refs),
                     timeout=retrieval_runtime.config.source_link_timeout_seconds,
                 )
             except asyncio.TimeoutError:
                 logger.warning(
                     "openapi retrieve source link resolution timed out document_count={}",
-                    len(document_ids),
+                    len(source_refs),
                 )
                 source_links = {}
             return prepared_results, source_links
@@ -767,7 +772,8 @@ async def retrieve_chunks(
         raise HTTPException(status_code=504, detail="knowledge retrieval timed out") from exc
 
     chunks = []
-    for kb_id, doc, document_id in prepared_results:
+    for kb_id, doc, source_ref in prepared_results:
+        document_id = source_ref.entry_file_id
         document_name = str(doc.metadata.get("document_name", ""))
         source_link = source_links.get(
             document_id,

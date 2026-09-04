@@ -36,6 +36,7 @@ from bisheng.open_endpoints.api.endpoints.filelib import (
 )
 from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service import (
     RetrieveSourceLink,
+    RetrieveSourceRef,
 )
 
 
@@ -74,7 +75,6 @@ def _retrieval_runtime():
             milvus_timeout_seconds=5,
             elasticsearch_timeout_seconds=3,
             source_link_timeout_seconds=3,
-            max_knowledge_base_count=20,
             max_knowledge_base_concurrency=4,
             max_embedding_concurrency=8,
             max_source_link_concurrency=8,
@@ -84,13 +84,23 @@ def _retrieval_runtime():
     )
 
 
-def _doc(content: str, *, document_id: int, document_name: str, chunk_index: int) -> Document:
+def _doc(
+    content: str,
+    *,
+    document_id: int,
+    document_name: str,
+    chunk_index: int,
+    canonical_document_id: int | None = None,
+    canonical_version_id: int | None = None,
+) -> Document:
     return Document(
         page_content=content,
         metadata={
             "document_id": document_id,
             "document_name": document_name,
             "chunk_index": chunk_index,
+            "canonical_document_id": canonical_document_id,
+            "canonical_version_id": canonical_version_id,
         },
     )
 
@@ -105,8 +115,28 @@ async def test_retrieve_chunks_maps_original_links_without_changing_chunk_order(
         yield request_user
 
     results = [
-        (7, _doc("first", document_id=9, document_name="report.pdf", chunk_index=3)),
-        (7, _doc("second", document_id=9, document_name="report.pdf", chunk_index=4)),
+        (
+            7,
+            _doc(
+                "first",
+                document_id=9,
+                document_name="report.pdf",
+                chunk_index=3,
+                canonical_document_id=109,
+                canonical_version_id=209,
+            ),
+        ),
+        (
+            7,
+            _doc(
+                "second",
+                document_id=9,
+                document_name="report.pdf",
+                chunk_index=4,
+                canonical_document_id=109,
+                canonical_version_id=209,
+            ),
+        ),
         (8, _doc("missing", document_id=10, document_name="missing.docx", chunk_index=1)),
     ]
     chat_service = SimpleNamespace(aretrieve_chunks=AsyncMock(return_value=results))
@@ -141,7 +171,16 @@ async def test_retrieve_chunks_maps_original_links_without_changing_chunk_order(
         retrieval_runtime=_retrieval_runtime(),
     )
 
-    source_service.resolve_links.assert_awaited_once_with([9, 10])
+    source_service.resolve_links.assert_awaited_once_with(
+        [
+            RetrieveSourceRef(
+                entry_file_id=9,
+                canonical_document_id=109,
+                canonical_version_id=209,
+            ),
+            RetrieveSourceRef(entry_file_id=10),
+        ]
+    )
     assert response.data.total == 3
     assert [chunk.content for chunk in response.data.chunks] == [
         "first",
@@ -534,6 +573,21 @@ async def test_aretrieve_chunks_empty_kb_ids_raises_400():
     with pytest.raises(HTTPException) as exc:
         await svc.aretrieve_chunks(query="q", knowledge_base_ids=[])
     assert exc.value.status_code == 400
+
+
+async def test_aretrieve_chunks_does_not_limit_knowledge_base_count():
+    svc = _make_service()
+    svc._is_shared_storage_active = AsyncMock(return_value=False)
+    svc._aretrieve_chunks_for_kb = AsyncMock(return_value=[])
+    knowledge_base_ids = list(range(1, 62))
+
+    result = await svc.aretrieve_chunks(
+        query="q",
+        knowledge_base_ids=knowledge_base_ids,
+    )
+
+    assert result == []
+    assert svc._aretrieve_chunks_for_kb.await_count == len(knowledge_base_ids)
 
 
 async def test_aretrieve_chunks_filter_references_unknown_kb_raises_400():
