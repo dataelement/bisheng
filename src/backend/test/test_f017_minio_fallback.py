@@ -8,7 +8,7 @@ tenant_{code}/ prefix to an empty prefix and retry.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -17,7 +17,6 @@ from bisheng.core.storage.minio.minio_storage import (
     _is_no_such_key_error,
     _translate_to_root_prefix,
 )
-
 
 # ── Helpers ──────────────────────────────────────────────────────
 
@@ -29,6 +28,8 @@ def _make_storage() -> MinioStorage:
     storage.bucket = 'bisheng'
     storage.tmp_bucket = 'tmp-dir'
     storage.minio_client_sync = MagicMock()
+    storage.minio_client = MagicMock()
+    storage.minio_client.stat_object = AsyncMock()
     return storage
 
 
@@ -178,3 +179,18 @@ def test_object_exists_returns_false_when_fallback_disabled_and_missing():
     with patch('bisheng.core.storage.minio.minio_storage._should_fallback_to_root',
                return_value=False):
         assert storage.object_exists_sync(object_name='tenant_subA/file.pdf') is False
+
+
+async def test_object_exists_async_falls_back_to_root_without_blocking_wrapper():
+    storage = _make_storage()
+    storage.minio_client.stat_object.side_effect = [
+        _nosuchkey_exc(),
+        MagicMock(),
+    ]
+
+    with patch('bisheng.core.storage.minio.minio_storage._should_fallback_to_root',
+               return_value=True):
+        exists = await storage.object_exists(object_name='tenant_subA/file.pdf')
+
+    assert exists is True
+    assert storage.minio_client.stat_object.await_args_list[1].args[1] == 'file.pdf'

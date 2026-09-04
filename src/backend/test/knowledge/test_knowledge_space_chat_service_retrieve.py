@@ -7,6 +7,7 @@ filter validation, tag-name resolution, KB-not-found, multi-KB merge and
 top_k truncation, and the per-chunk knowledge_id annotation.
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
 from inspect import signature
@@ -18,10 +19,6 @@ from fastapi import HTTPException
 from langchain_core.documents import Document
 
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
-from bisheng.knowledge.domain.contracts.errors import (
-    SharedStorageContractError,
-    SharedStorageErrorCode,
-)
 from bisheng.knowledge.domain.services import knowledge_space_chat_service as svc_mod
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.open_endpoints.api.dependencies import (
@@ -65,7 +62,26 @@ def _make_service(user_id: int = 42) -> KnowledgeSpaceChatService:
     svc.doc_repo = MagicMock()
     svc.doc_repo.find_by_ids = AsyncMock(return_value=[])
     svc._require_space_view_permission = AsyncMock()
+    svc.retrieval_runtime = _retrieval_runtime()
     return svc
+
+
+def _retrieval_runtime():
+    return SimpleNamespace(
+        config=SimpleNamespace(
+            total_timeout_seconds=15,
+            embedding_timeout_seconds=8,
+            milvus_timeout_seconds=5,
+            elasticsearch_timeout_seconds=3,
+            source_link_timeout_seconds=3,
+            max_knowledge_base_count=20,
+            max_knowledge_base_concurrency=4,
+            max_embedding_concurrency=8,
+            max_source_link_concurrency=8,
+        ),
+        embed_query=AsyncMock(return_value=[0.1]),
+        search_milvus=AsyncMock(return_value=[]),
+    )
 
 
 def _doc(content: str, *, document_id: int, document_name: str, chunk_index: int) -> Document:
@@ -121,6 +137,8 @@ async def test_retrieve_chunks_maps_original_links_without_changing_chunk_order(
         version_repo=MagicMock(),
         doc_repo=MagicMock(),
         source_service=source_service,
+        file_repo=MagicMock(),
+        retrieval_runtime=_retrieval_runtime(),
     )
 
     source_service.resolve_links.assert_awaited_once_with([9, 10])
@@ -140,6 +158,78 @@ async def test_retrieve_chunks_maps_original_links_without_changing_chunk_order(
     )
     assert response.data.chunks[2].source_url == ""
     assert response.data.chunks[2].source_full_url == ""
+
+
+async def test_retrieve_chunks_source_link_timeout_degrades_to_empty_link(monkeypatch):
+    @asynccontextmanager
+    async def use_user(principal, external_id):
+        yield MagicMock()
+
+    chat_service = SimpleNamespace(
+        aretrieve_chunks=AsyncMock(
+            return_value=[(7, _doc("hit", document_id=9, document_name="report.pdf", chunk_index=0))]
+        )
+    )
+    monkeypatch.setattr(
+        filelib_mod,
+        "build_knowledge_space_chat_service_for_openapi",
+        MagicMock(return_value=chat_service),
+    )
+
+    async def slow_links(document_ids):
+        await asyncio.sleep(0.05)
+        return {}
+
+    runtime = _retrieval_runtime()
+    runtime.config.total_timeout_seconds = 1
+    runtime.config.source_link_timeout_seconds = 0.01
+    response = await filelib_mod.retrieve_chunks(
+        request=MagicMock(),
+        req=filelib_mod.RetrieveReq(query="q", knowledge_base_ids=[7]),
+        principal=MagicMock(),
+        user_context_service=SimpleNamespace(use_user=use_user),
+        version_repo=MagicMock(),
+        doc_repo=MagicMock(),
+        source_service=SimpleNamespace(resolve_links=slow_links),
+        file_repo=MagicMock(),
+        retrieval_runtime=runtime,
+    )
+
+    assert response.data.total == 1
+    assert response.data.chunks[0].source_url == ""
+
+
+async def test_retrieve_chunks_total_deadline_returns_504(monkeypatch):
+    @asynccontextmanager
+    async def use_user(principal, external_id):
+        yield MagicMock()
+
+    async def slow_retrieve(**kwargs):
+        await asyncio.sleep(0.05)
+        return []
+
+    monkeypatch.setattr(
+        filelib_mod,
+        "build_knowledge_space_chat_service_for_openapi",
+        MagicMock(return_value=SimpleNamespace(aretrieve_chunks=slow_retrieve)),
+    )
+    runtime = _retrieval_runtime()
+    runtime.config.total_timeout_seconds = 0.01
+
+    with pytest.raises(HTTPException) as exc:
+        await filelib_mod.retrieve_chunks(
+            request=MagicMock(),
+            req=filelib_mod.RetrieveReq(query="q", knowledge_base_ids=[7]),
+            principal=MagicMock(),
+            user_context_service=SimpleNamespace(use_user=use_user),
+            version_repo=MagicMock(),
+            doc_repo=MagicMock(),
+            source_service=SimpleNamespace(resolve_links=AsyncMock(return_value={})),
+            file_repo=MagicMock(),
+            retrieval_runtime=runtime,
+        )
+
+    assert exc.value.status_code == 504
 
 
 def test_openapi_chat_service_builder_uses_resolved_request_user():
@@ -513,6 +603,35 @@ async def test_aretrieve_chunks_skips_unauthorized_kb_and_keeps_authorized_resul
     assert [(kb_id, doc.page_content) for kb_id, doc in result] == [(2, "allowed")]
 
 
+async def test_aretrieve_chunks_keeps_successful_kb_when_another_backend_fails():
+    svc = _make_service()
+    svc._aretrieve_chunks_for_kb = AsyncMock(
+        side_effect=[
+            HTTPException(status_code=503, detail="backend unavailable"),
+            [(2, _doc("available", document_id=20, document_name="B.pdf", chunk_index=1))],
+        ]
+    )
+
+    result = await svc.aretrieve_chunks(query="hello", knowledge_base_ids=[1, 2])
+
+    assert [(kb_id, doc.page_content) for kb_id, doc in result] == [(2, "available")]
+
+
+async def test_aretrieve_chunks_returns_503_when_all_kb_backends_fail():
+    svc = _make_service()
+    svc._aretrieve_chunks_for_kb = AsyncMock(
+        side_effect=[
+            HTTPException(status_code=503, detail="backend unavailable"),
+            HTTPException(status_code=503, detail="backend unavailable"),
+        ]
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.aretrieve_chunks(query="hello", knowledge_base_ids=[1, 2])
+
+    assert exc.value.status_code == 503
+
+
 async def test_aretrieve_chunks_truncates_to_top_k():
     svc = _make_service()
     svc._aretrieve_chunks_for_kb = AsyncMock(
@@ -576,8 +695,8 @@ async def test_shared_path_missing_dependencies_fails_closed(monkeypatch):
         AsyncMock(return_value=SimpleNamespace(tenant_id=1, type=3)),
     )
     monkeypatch.setattr(
-        "bisheng.knowledge.rag.shared_space_storage.resolve_space_shared_routing",
-        MagicMock(
+        "bisheng.knowledge.rag.shared_space_storage.aresolve_space_shared_routing",
+        AsyncMock(
             return_value=SimpleNamespace(
                 routing_version=8,
                 collection_name="col_space_shared_1",
@@ -586,10 +705,10 @@ async def test_shared_path_missing_dependencies_fails_closed(monkeypatch):
         ),
     )
 
-    with pytest.raises(SharedStorageContractError) as exc:
+    with pytest.raises(HTTPException) as exc:
         await svc.aretrieve_chunks(query="hello", knowledge_base_ids=[7])
 
-    assert exc.value.code == SharedStorageErrorCode.RETRIEVAL_BACKEND_UNAVAILABLE
+    assert exc.value.status_code == 503
     svc._aretrieve_chunks_for_kb.assert_not_awaited()
 
 
@@ -609,8 +728,8 @@ async def test_shared_path_applies_space_scope_before_file_and_tag_filters(monke
         AsyncMock(return_value=SimpleNamespace(tenant_id=1, type=3)),
     )
     monkeypatch.setattr(
-        "bisheng.knowledge.rag.shared_space_storage.resolve_space_shared_routing",
-        MagicMock(
+        "bisheng.knowledge.rag.shared_space_storage.aresolve_space_shared_routing",
+        AsyncMock(
             return_value=SimpleNamespace(
                 routing_version=8,
                 collection_name="col_space_shared_1",
@@ -650,20 +769,15 @@ async def test_shared_path_applies_space_scope_before_file_and_tag_filters(monke
         "bisheng.knowledge.rag.shared_space_storage.SharedSpaceStorageReader",
         MagicMock(return_value=reader),
     )
+    embedding = SimpleNamespace(aembed_query=AsyncMock(return_value=[0.1]))
     monkeypatch.setattr(
         svc_mod.LLMService,
-        "get_knowledge_default_embedding",
-        MagicMock(return_value=SimpleNamespace(embed_query=MagicMock(return_value=[0.1]))),
+        "aget_knowledge_default_embedding",
+        AsyncMock(return_value=embedding),
     )
     monkeypatch.setattr(
-        svc_mod.KnowledgeRag,
-        "init_milvus_vectorstore",
-        MagicMock(return_value=SimpleNamespace(col=object())),
-    )
-    monkeypatch.setattr(
-        svc_mod.KnowledgeRag,
-        "init_es_vectorstore_sync",
-        MagicMock(return_value=SimpleNamespace(client=object())),
+        "bisheng.core.search.elasticsearch.manager.get_es_connection",
+        AsyncMock(return_value=MagicMock()),
     )
 
     result = await svc._aretrieve_chunks_shared(
@@ -746,22 +860,36 @@ async def test_aretrieve_chunks_for_kb_returns_empty_when_search_kwargs_none(mon
 
 async def test_aretrieve_chunks_for_kb_invokes_retriever_and_tags_kb_id(monkeypatch):
     svc = _make_service()
-    space = MagicMock(id=1)
+    space = SimpleNamespace(id=1, model=9, collection_name="col_1")
     monkeypatch.setattr(svc_mod.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=space))
     svc._resolve_kb_target_file_ids = AsyncMock(return_value=None)
     svc._build_folder_search_kwargs = AsyncMock(return_value=({"k": 100}, {"k": 100}))
 
-    milvus_retriever = MagicMock()
-    es_retriever = MagicMock()
-    milvus_store = MagicMock()
-    milvus_store.as_retriever.return_value = milvus_retriever
+    embedding = SimpleNamespace(aembed_query=AsyncMock(return_value=[0.1]))
+    monkeypatch.setattr(
+        svc_mod.LLMService,
+        "get_bisheng_knowledge_embedding",
+        AsyncMock(return_value=embedding),
+    )
+    svc.retrieval_runtime.search_milvus = AsyncMock(
+        return_value=[[
+            {
+                "entity": {
+                    "text": "dense-hit",
+                    "document_id": 10,
+                    "document_name": "A.pdf",
+                    "chunk_index": 0,
+                }
+            }
+        ]]
+    )
+    es_retriever = SimpleNamespace(
+        ainvoke=AsyncMock(
+            return_value=[_doc("sparse-hit", document_id=10, document_name="A.pdf", chunk_index=1)]
+        )
+    )
     es_store = MagicMock()
     es_store.as_retriever.return_value = es_retriever
-    monkeypatch.setattr(
-        svc_mod.KnowledgeRag,
-        "init_knowledge_milvus_vectorstore",
-        AsyncMock(return_value=milvus_store),
-    )
     monkeypatch.setattr(
         svc_mod.KnowledgeRag,
         "init_knowledge_es_vectorstore",
@@ -772,8 +900,8 @@ async def test_aretrieve_chunks_for_kb_invokes_retriever_and_tags_kb_id(monkeypa
         _doc("hit-1", document_id=10, document_name="A.pdf", chunk_index=0),
         _doc("hit-2", document_id=10, document_name="A.pdf", chunk_index=1),
     ]
-    retrieve_visible = AsyncMock(return_value=docs)
-    svc._retrieve_visible_documents = retrieve_visible
+    merge_visible = AsyncMock(return_value=docs)
+    svc._merge_visible_documents = merge_visible
 
     out = await svc._aretrieve_chunks_for_kb(
         kb_id=1,
@@ -784,14 +912,124 @@ async def test_aretrieve_chunks_for_kb_invokes_retriever_and_tags_kb_id(monkeypa
 
     assert [kb_id for kb_id, _ in out] == [1, 1]
     assert [d.page_content for _, d in out] == ["hit-1", "hit-2"]
-    retrieve_visible.assert_awaited_once_with(
-        query="hello",
-        vector_retriever=milvus_retriever,
-        es_retriever=es_retriever,
-        max_content=12345,
-        sort_by_source_and_index=False,
-        knowledge_id=1,
+    merge_visible.assert_awaited_once()
+    merge_call = merge_visible.await_args.kwargs
+    assert [doc.page_content for doc in merge_call["vector_documents"]] == ["dense-hit"]
+    assert [doc.page_content for doc in merge_call["es_documents"]] == ["sparse-hit"]
+    assert merge_call["query"] == "hello"
+    assert merge_call["max_content"] == 12345
+    assert merge_call["sort_by_source_and_index"] is False
+    assert merge_call["knowledge_id"] == 1
+    svc.retrieval_runtime.search_milvus.assert_awaited_once_with(
+        collection_name="col_1",
+        vector=[0.1],
+        limit=100,
+        expr=None,
+        search_params={"metric_type": "L2", "params": {}},
     )
+    es_retriever.ainvoke.assert_awaited_once_with("hello")
+
+
+async def test_aretrieve_chunks_for_kb_uses_sparse_result_when_dense_fails(monkeypatch):
+    svc = _make_service()
+    space = SimpleNamespace(id=1, model=9, collection_name="col_1")
+    monkeypatch.setattr(svc_mod.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=space))
+    svc._resolve_kb_target_file_ids = AsyncMock(return_value=None)
+    svc._build_folder_search_kwargs = AsyncMock(return_value=({"k": 10}, {"k": 10}))
+    monkeypatch.setattr(
+        svc_mod.LLMService,
+        "get_bisheng_knowledge_embedding",
+        AsyncMock(return_value=SimpleNamespace()),
+    )
+    svc.retrieval_runtime.embed_query = AsyncMock(side_effect=RuntimeError("embedding down"))
+
+    sparse_doc = _doc("sparse", document_id=10, document_name="A.pdf", chunk_index=1)
+    es_retriever = SimpleNamespace(ainvoke=AsyncMock(return_value=[sparse_doc]))
+    es_store = MagicMock()
+    es_store.as_retriever.return_value = es_retriever
+    monkeypatch.setattr(
+        svc_mod.KnowledgeRag,
+        "init_knowledge_es_vectorstore",
+        AsyncMock(return_value=es_store),
+    )
+    svc._merge_visible_documents = AsyncMock(side_effect=lambda **kwargs: kwargs["es_documents"])
+
+    result = await svc._aretrieve_chunks_for_kb(
+        kb_id=1,
+        query="hello",
+        tag_names=[],
+        max_content=15000,
+    )
+
+    assert [(kb_id, doc.page_content) for kb_id, doc in result] == [(1, "sparse")]
+
+
+async def test_aretrieve_chunks_for_kb_uses_dense_result_when_sparse_fails(monkeypatch):
+    svc = _make_service()
+    space = SimpleNamespace(id=1, model=9, collection_name="col_1")
+    monkeypatch.setattr(svc_mod.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=space))
+    svc._resolve_kb_target_file_ids = AsyncMock(return_value=None)
+    svc._build_folder_search_kwargs = AsyncMock(return_value=({"k": 10}, {"k": 10}))
+    monkeypatch.setattr(
+        svc_mod.LLMService,
+        "get_bisheng_knowledge_embedding",
+        AsyncMock(return_value=SimpleNamespace()),
+    )
+    svc.retrieval_runtime.search_milvus = AsyncMock(
+        return_value=[[
+            {
+                "entity": {
+                    "text": "dense",
+                    "document_id": 10,
+                    "document_name": "A.pdf",
+                    "chunk_index": 0,
+                }
+            }
+        ]]
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeRag,
+        "init_knowledge_es_vectorstore",
+        AsyncMock(side_effect=RuntimeError("elasticsearch down")),
+    )
+    svc._merge_visible_documents = AsyncMock(side_effect=lambda **kwargs: kwargs["vector_documents"])
+
+    result = await svc._aretrieve_chunks_for_kb(
+        kb_id=1,
+        query="hello",
+        tag_names=[],
+        max_content=15000,
+    )
+
+    assert [(kb_id, doc.page_content) for kb_id, doc in result] == [(1, "dense")]
+
+
+async def test_aretrieve_chunks_for_kb_returns_503_when_dense_and_sparse_fail(monkeypatch):
+    svc = _make_service()
+    space = SimpleNamespace(id=1, model=9, collection_name="col_1")
+    monkeypatch.setattr(svc_mod.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=space))
+    svc._resolve_kb_target_file_ids = AsyncMock(return_value=None)
+    svc._build_folder_search_kwargs = AsyncMock(return_value=({"k": 10}, {"k": 10}))
+    monkeypatch.setattr(
+        svc_mod.LLMService,
+        "get_bisheng_knowledge_embedding",
+        AsyncMock(side_effect=RuntimeError("embedding down")),
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeRag,
+        "init_knowledge_es_vectorstore",
+        AsyncMock(side_effect=RuntimeError("elasticsearch down")),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await svc._aretrieve_chunks_for_kb(
+            kb_id=1,
+            query="hello",
+            tag_names=[],
+            max_content=15000,
+        )
+
+    assert exc.value.status_code == 503
 
 
 async def test_filter_projection_documents_rejects_stale_generation(monkeypatch):

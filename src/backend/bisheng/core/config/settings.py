@@ -710,6 +710,21 @@ class KnowledgeChunkingConf(BaseModel):
     )
 
 
+class KnowledgeRetrievalRuntimeConf(BaseModel):
+    """知识检索读链路的超时与进程级并发保护。"""
+
+    total_timeout_seconds: float = Field(default=60, gt=0, le=300)
+    embedding_timeout_seconds: float = Field(default=15, gt=0, le=300)
+    milvus_timeout_seconds: float = Field(default=15, gt=0, le=300)
+    elasticsearch_timeout_seconds: float = Field(default=15, gt=0, le=300)
+    source_link_timeout_seconds: float = Field(default=8, gt=0, le=300)
+    max_knowledge_base_count: int = Field(default=60, ge=1, le=200)
+    max_knowledge_base_concurrency: int = Field(default=8, ge=1, le=32)
+    max_embedding_concurrency: int = Field(default=16, ge=1, le=64)
+    max_milvus_concurrency: int = Field(default=16, ge=1, le=128)
+    max_source_link_concurrency: int = Field(default=8, ge=1, le=64)
+
+
 class KnowledgeConf(BaseModel):
     """Knowledge Configure"""
 
@@ -736,6 +751,10 @@ class KnowledgeConf(BaseModel):
     chunking: KnowledgeChunkingConf = Field(
         default_factory=KnowledgeChunkingConf,
         description="Knowledge chunking safety limits",
+    )
+    retrieval: KnowledgeRetrievalRuntimeConf = Field(
+        default_factory=KnowledgeRetrievalRuntimeConf,
+        description="Knowledge retrieval runtime limits",
     )
 
     @property

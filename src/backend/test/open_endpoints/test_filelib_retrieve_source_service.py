@@ -125,7 +125,7 @@ async def test_resolve_links_keeps_empty_values_for_missing_rows_paths_and_objec
 
 
 @pytest.mark.parametrize("failure_stage", ["exists", "sign"])
-async def test_resolve_links_propagates_non_missing_storage_errors(
+async def test_resolve_links_degrades_non_missing_storage_errors_to_empty_links(
     failure_stage: str,
     caplog,
 ) -> None:
@@ -139,9 +139,9 @@ async def test_resolve_links_propagates_non_missing_storage_errors(
         storage.get_share_link.side_effect = RuntimeError("signing unavailable")
     service = FilelibRetrieveSourceService(repository, storage)
 
-    with pytest.raises(RuntimeError):
-        await service.resolve_links([11])
+    result = await service.resolve_links([11])
 
+    assert result == {11: EMPTY_RETRIEVE_SOURCE_LINK}
     assert sensitive_url not in caplog.text
 
 

@@ -216,6 +216,48 @@ def upload_telemetry_log(self: 'BishengBase', start_time: float, end_time: float
         logger.exception(f"upload telemetry log failed")
 
 
+async def upload_telemetry_log_async(
+    self: 'BishengBase',
+    start_time: float,
+    end_time: float,
+    first_token_cost_time: int,
+    status: StatusEnum,
+    is_stream: bool = False,
+    result: Any = None,
+) -> None:
+    """异步记录模型调用，避免 async wrapper 回落到同步 ES/DB。"""
+    try:
+        input_token, output_token, cache_token, total_token = 0, 0, 0, 0
+        if self.model_info.model_type in ['llm']:
+            input_token, output_token, cache_token, total_token = parse_token_usage(result)
+        await telemetry_service.log_event(
+            user_id=self.user_id,
+            event_type=BaseTelemetryTypeEnum.MODEL_INVOKE,
+            trace_id=trace_id_var.get(),
+            event_data=ModelInvokeEventData(
+                model_id=self.model_id,
+                model_name=self.model_name,
+                model_type=self.model_info.model_type,
+                model_server_id=self.server_info.id,
+                model_server_name=self.server_info.name,
+                app_id=self.app_id,
+                app_name=self.app_name,
+                app_type=self.app_type,
+                start_time=int(start_time),
+                end_time=int(end_time),
+                first_token_cost_time=first_token_cost_time,
+                status=status,
+                is_stream=is_stream,
+                input_token=input_token,
+                output_token=output_token,
+                cache_token=cache_token,
+                total_token=total_token,
+            ),
+        )
+    except Exception:
+        logger.exception("upload telemetry log async failed")
+
+
 def wrapper_bisheng_model_limit_check(func):
     """
     Number of calls to check the decorator
@@ -284,7 +326,14 @@ def wrapper_bisheng_model_limit_check_async(func):
         finally:
             end_time = time.time()
             first_token_cost_time = telemetry_callback.first_token_time if telemetry_callback else 0
-            upload_telemetry_log(self, start_time, end_time, first_token_cost_time, telemetry_status, result=result)
+            await upload_telemetry_log_async(
+                self,
+                start_time,
+                end_time,
+                first_token_cost_time,
+                telemetry_status,
+                result=result,
+            )
             await args[0].update_model_status(status, remark)
 
     return wrapper

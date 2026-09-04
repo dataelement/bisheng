@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
 import logging
 from collections.abc import Mapping, Sequence
@@ -165,6 +166,12 @@ def load_tenant_routing_snapshot(tenant_id: int) -> TenantRoutingSnapshot | None
     return TenantRoutingSnapshot.from_row(row) if row is not None else None
 
 
+async def aload_tenant_routing_snapshot(tenant_id: int) -> TenantRoutingSnapshot | None:
+    """通过异步 SQL 会话读取租户路由快照。"""
+    row = await KnowledgeSpaceSharedStorageRoutingDao.aget_by_tenant(int(tenant_id))
+    return TenantRoutingSnapshot.from_row(row) if row is not None else None
+
+
 def resolve_space_shared_routing(
     tenant_id: int,
     knowledge_type: int | None,
@@ -189,6 +196,24 @@ def resolve_space_shared_routing(
         return None
     provider = routing_provider or load_tenant_routing_snapshot
     snapshot = provider(int(tenant_id))
+    if snapshot is None or not snapshot.shared_enabled:
+        return None
+    return snapshot
+
+
+async def aresolve_space_shared_routing(
+    tenant_id: int,
+    knowledge_type: int | None,
+    *,
+    conf=None,
+) -> TenantRoutingSnapshot | None:
+    """异步解析读取链路应使用的共享存储路由。"""
+    conf = conf or get_shared_storage_conf()
+    if not conf.enabled:
+        return None
+    if knowledge_type is None or int(knowledge_type) != KnowledgeTypeEnum.SPACE.value:
+        return None
+    snapshot = await aload_tenant_routing_snapshot(int(tenant_id))
     if snapshot is None or not snapshot.shared_enabled:
         return None
     return snapshot
@@ -1180,11 +1205,10 @@ def build_shared_space_components_for_tenant(
     )
     reader = SharedSpaceStorageReader(
         tenant_id=int(tenant_id),
-        collection=collection,
-        es_client=es_client,
+        collection_name=name,
         expected_routing_version=snapshot.routing_version,
         conf=conf,
-        routing_provider=provider,
+        routing_provider=routing_provider,
     )
     return writer, reader
 
@@ -1224,20 +1248,22 @@ class SharedSpaceStorageReader:
         self,
         *,
         tenant_id: int,
-        collection: Collection,
-        es_client: Any,
+        collection_name: str,
         expected_routing_version: int,
+        milvus_runtime: Any | None = None,
+        es_client: Any | None = None,
         conf=None,
-        routing_provider: Callable[[int], TenantRoutingSnapshot | None] | None = None,
+        routing_provider: Callable[[int], Any] | None = None,
     ) -> None:
         self.tenant_id = int(tenant_id)
-        self.collection = collection
+        self.collection_name = collection_name
+        self.milvus_runtime = milvus_runtime
         self.es_client = es_client
         self.expected_routing_version = int(expected_routing_version)
         self.conf = conf
-        self._routing_provider = routing_provider or load_tenant_routing_snapshot
+        self._routing_provider = routing_provider or aload_tenant_routing_snapshot
 
-    def _assert_readable(self) -> TenantRoutingSnapshot:
+    async def _assert_readable(self) -> TenantRoutingSnapshot:
         conf = self.conf or get_shared_storage_conf()
         if not conf.enabled:
             raise SharedStorageContractError(
@@ -1246,6 +1272,8 @@ class SharedSpaceStorageReader:
                 tenant_id=self.tenant_id,
             )
         snapshot = self._routing_provider(self.tenant_id)
+        if inspect.isawaitable(snapshot):
+            snapshot = await snapshot
         if snapshot is None:
             raise SharedStorageContractError(
                 SharedStorageErrorCode.ROUTING_NOT_CONFIGURED,
@@ -1266,6 +1294,22 @@ class SharedSpaceStorageReader:
                 tenant_id=self.tenant_id,
             )
         return snapshot
+
+    async def _get_milvus_runtime(self) -> Any:
+        if self.milvus_runtime is None:
+            from bisheng.knowledge.rag.async_retrieval_runtime import (
+                get_async_retrieval_runtime,
+            )
+
+            self.milvus_runtime = await get_async_retrieval_runtime()
+        return self.milvus_runtime
+
+    async def _get_es_client(self) -> Any:
+        if self.es_client is None:
+            from bisheng.core.search.elasticsearch.manager import get_es_connection
+
+            self.es_client = await get_es_connection()
+        return self.es_client
 
     @staticmethod
     def _full_expr(filter_: Any) -> str:
@@ -1363,18 +1407,23 @@ class SharedSpaceStorageReader:
     def _to_hits(rows: Sequence[Any]) -> list[CanonicalChunkHit]:
         hits: list[CanonicalChunkHit] = []
         for row in rows:
-            entity = getattr(row, "entity", row)
+            entity = row.get("entity", row) if isinstance(row, dict) else getattr(row, "entity", row)
             get = (
                 entity.get
                 if hasattr(entity, "get")
                 else (lambda key, default=None, item=entity: getattr(item, key, default))
+            )
+            score = (
+                row.get("distance", row.get("score", 0.0))
+                if isinstance(row, dict)
+                else getattr(row, "distance", getattr(row, "score", 0.0))
             )
             hits.append(
                 CanonicalChunkHit(
                     canonical_document_id=CanonicalDocumentId(int(get("canonical_document_id"))),
                     canonical_version_id=CanonicalVersionId(int(get("canonical_version_id"))),
                     chunk_index=int(get("chunk_index", 0) or 0),
-                    score=float(getattr(row, "distance", getattr(row, "score", 0.0)) or 0.0),
+                    score=float(score or 0.0),
                     text=get("text"),
                     content_generation=int(get("content_generation", 0) or 0),
                     membership_generation=int(get("membership_generation", 0) or 0),
@@ -1391,7 +1440,7 @@ class SharedSpaceStorageReader:
         search_params: Mapping[str, Any] | None = None,
     ) -> list[CanonicalChunkHit]:
         """Dense ANN search with membership pre-filter. Returns Top-K hits."""
-        self._assert_readable()
+        await self._assert_readable()
         params = dict(search_params or {"metric_type": "L2", "params": {"ef": 64}})
         hnsw_params = dict(params.get("params") or {})
         try:
@@ -1403,13 +1452,14 @@ class SharedSpaceStorageReader:
         # so a fixed ef=64 makes an otherwise valid shared-store query fail.
         hnsw_params["ef"] = max(configured_ef, int(limit) + 1)
         params["params"] = hnsw_params
-        results = await asyncio.to_thread(
-            self.collection.search,
-            data=[list(vector)],
-            anns_field=SHARED_MILVUS_VECTOR_FIELD,
-            param=params,
-            expr=self._full_expr(filter_),
+        milvus_runtime = await self._get_milvus_runtime()
+        results = await milvus_runtime.search_milvus(
+            collection_name=self.collection_name,
+            vector=list(vector),
             limit=int(limit),
+            anns_field=SHARED_MILVUS_VECTOR_FIELD,
+            search_params=params,
+            expr=self._full_expr(filter_),
             output_fields=list(_READER_OUTPUT_FIELDS),
         )
         rows = results[0] if results else []
@@ -1423,7 +1473,7 @@ class SharedSpaceStorageReader:
         limit: int,
     ) -> list[CanonicalChunkHit]:
         """BM25 search on the shared index with membership pre-filter."""
-        snapshot = self._assert_readable()
+        snapshot = await self._assert_readable()
         body = {
             "size": int(limit),
             "query": {
@@ -1450,7 +1500,8 @@ class SharedSpaceStorageReader:
                 es_routing_value(self.tenant_id, document_id)
                 for document_id in filter_.canonical_document_ids
             )
-        response = await asyncio.to_thread(self.es_client.search, **kwargs)
+        es_client = await self._get_es_client()
+        response = await es_client.search(**kwargs)
         hits: list[CanonicalChunkHit] = []
         for row in response.get("hits", {}).get("hits", []):
             source = row.get("_source", {})

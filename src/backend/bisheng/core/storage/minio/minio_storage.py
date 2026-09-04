@@ -14,6 +14,7 @@ from loguru import logger
 from minio.commonconfig import Filter
 from minio.error import S3Error
 from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
+from miniopy_async.error import S3Error as AsyncS3Error
 from urllib3 import BaseHTTPResponse
 
 from bisheng.common.services.config_service import settings as _bisheng_settings
@@ -31,7 +32,7 @@ _TENANT_PREFIX_RE = re.compile(r'^tenant_[^/]+/')
 
 def _is_no_such_key_error(exc: Exception) -> bool:
     """True only for the minio-py S3 NoSuchKey response (S3Error.code)."""
-    return isinstance(exc, S3Error) and getattr(exc, 'code', None) == 'NoSuchKey'
+    return isinstance(exc, (S3Error, AsyncS3Error)) and getattr(exc, 'code', None) == 'NoSuchKey'
 
 
 def _translate_to_root_prefix(object_name: str) -> Optional[str]:
@@ -87,6 +88,12 @@ class MinioStorage(BaseStorage, ABC):
             access_key=minio_config.access_key,
             secret_key=minio_config.secret_key,
             secure=minio_config.secure,
+        )
+        self.share_minio_client_async = miniopy_async.Minio(
+            endpoint=minio_config.sharepoint,
+            access_key=minio_config.access_key,
+            secret_key=minio_config.secret_key,
+            secure=minio_config.share_schema,
         )
         self._init_bucket_conf()
 
@@ -417,8 +424,26 @@ class MinioStorage(BaseStorage, ABC):
                 raise StorageSharingFallbackError() from e2
 
     async def object_exists(self, bucket_name: Optional[str] = None, object_name: str = None) -> bool:
-
-        return await asyncio.to_thread(self.object_exists_sync, bucket_name=bucket_name, object_name=object_name)
+        bucket_name = bucket_name or self.bucket
+        if not object_name:
+            logger.warning("object_exists: object_name must be provided")
+            return False
+        try:
+            await self.minio_client.stat_object(bucket_name, object_name)
+            return True
+        except Exception as exc:
+            if not _is_no_such_key_error(exc):
+                raise
+            if not _should_fallback_to_root():
+                return False
+            root_name = _translate_to_root_prefix(object_name)
+            if root_name is None:
+                return False
+            try:
+                await self.minio_client.stat_object(bucket_name, root_name)
+                return True
+            except Exception:
+                return False
 
     def object_exists_sync(self, bucket_name: Optional[str] = None, object_name: str = None) -> bool:
 
@@ -450,10 +475,10 @@ class MinioStorage(BaseStorage, ABC):
             raise e
 
     async def stat_object(self, bucket_name: str, object_name: str) -> ObjectMetadata:
-        return await asyncio.to_thread(
-            self.stat_object_sync,
-            bucket_name=bucket_name,
-            object_name=object_name,
+        result = await self.minio_client.stat_object(bucket_name, object_name)
+        return ObjectMetadata(
+            size=int(result.size),
+            content_type=getattr(result, "content_type", None),
         )
 
     def stat_object_sync(self, bucket_name: str, object_name: str) -> ObjectMetadata:
@@ -522,8 +547,15 @@ class MinioStorage(BaseStorage, ABC):
         :return:
         """
 
-        return await asyncio.to_thread(self.get_share_link_sync, object_name, bucket=bucket, clear_host=clear_host,
-                                       expire_days=expire_days, response_headers=response_headers)
+        bucket = bucket or self.bucket
+        object_name = object_name.lstrip('/')
+        share_link = await self.share_minio_client_async.presigned_get_object(
+            bucket,
+            object_name,
+            expires=timedelta(days=expire_days),
+            response_headers=response_headers,
+        )
+        return self.clear_minio_share_host(share_link) if clear_host else share_link
 
     def get_share_link_sync(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7,
                             response_headers: dict[str, str] | None = None) -> str:
@@ -569,8 +601,10 @@ class MinioStorage(BaseStorage, ABC):
 
     async def close(self) -> None:
         """Close Minio Client link"""
-        # await self.minio_client.close_session()
-        pass
+        await asyncio.gather(
+            self.minio_client.close_session(),
+            self.share_minio_client_async.close_session(),
+        )
 
     def close_sync(self) -> None:
         """Sync off Minio Client link"""
