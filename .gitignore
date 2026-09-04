@@ -314,3 +314,4 @@ docs-ui-refactor/
 # Packaged Linsight skill bundles (scripts/pack_linsight_skill.sh output)
 /dist/
 .pnpm-store/
+src/backend/migration_reports
