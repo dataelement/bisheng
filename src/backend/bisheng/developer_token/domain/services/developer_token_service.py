@@ -785,7 +785,7 @@ class DeveloperTokenService:
             except Exception:
                 logger.exception("developer token last-used update failed token_id=%s", token.id)
 
-            roles = [role.role_id for role in UserRoleDao.get_user_roles(user.user_id)]
+            roles = [role.role_id for role in await UserRoleDao.aget_user_roles(user.user_id)]
             user_payload = UserPayload(
                 user_id=user.user_id,
                 user_name=user.user_name,

@@ -130,7 +130,7 @@ class KnowledgeRag:
     async def init_knowledge_es_vectorstore(cls, knowledge: Knowledge = None, knowledge_id: int = None,
                                             **kwargs) -> AsyncElasticsearchStore:
         knowledge = await cls._get_knowledge(knowledge, knowledge_id)
-        return cls.init_es_vectorstore(knowledge.index_name, **kwargs)
+        return await ElasticsearchFactory.ainit_vectorstore(knowledge.index_name, **kwargs)
 
     @classmethod
     def init_knowledge_es_vectorstore_sync(cls, knowledge: Knowledge = None, knowledge_id: int = None,

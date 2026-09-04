@@ -84,6 +84,7 @@ GET /api/v2/filelib/
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---:|---|---|
 | `type` | integer | 否 | `0` | 知识资源类型。 |
+| `knowledge_type` | integer | 否 | `null` | `type` 的兼容参数；两者同时传入时值必须一致，否则返回 HTTP `422`。 |
 | `name` | string | 否 | `null` | 知识资源名称，模糊匹配。 |
 | `page_size` | integer | 否 | `10` | 每页数量。 |
 | `cursor` | string | 否 | `null` | 游标分页令牌。首次请求不传；下一页传上次响应的 `next_cursor`。 |
@@ -97,6 +98,15 @@ GET /api/v2/filelib/
 | `1` | QA 知识库 |
 | `2` | 个人知识库 |
 | `3` | 知识空间 |
+
+当类型为 `3` 时，接口返回指定业务用户在门户知识库侧栏可见的知识空间并集：
+
+- 全部公共库；
+- 用户具有查看、管理权限或有效成员关系的部门库；
+- 用户具有查看、管理权限或有效成员关系的团队库和科室库；
+- 当前用户已经存在的“我的收藏”和默认个人知识库。
+
+该查询不会自动创建缺失的个人库。对于尚未访问过门户、固定个人库尚未生成的用户，个人库可能为空。
 
 ### 2.3 请求示例
 
@@ -119,6 +129,7 @@ curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/?type=3&page_size=10&external_
         "user_name": "zhangsan",
         "name": "GR00011",
         "type": 3,
+        "space_level": "department",
         "description": "知识资源描述",
         "model": null,
         "collection_name": null,
@@ -159,6 +170,7 @@ curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/?type=3&page_size=10&external_
 | `user_name` | string / null | 创建用户名。 |
 | `name` | string | 知识资源名称。 |
 | `type` | integer | 知识资源类型。 |
+| `space_level` | string / null | `type=3` 时返回知识空间层级：`public`、`department`、`team`、`team_ks` 或 `personal`；其他类型不返回该扩展值。 |
 | `description` | string / null | 描述。 |
 | `model` | string / null | 模型配置。 |
 | `collection_name` | string / null | 向量集合名称。 |

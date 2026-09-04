@@ -849,6 +849,21 @@ class LLMService:
                                                         invoke_user_id=invoke_user_id)
 
     @classmethod
+    async def aget_knowledge_default_embedding(
+        cls,
+        invoke_user_id: int,
+        tenant_id: Optional[int] = None,
+    ) -> Optional[Embeddings]:
+        """异步获取知识库默认 Embedding 客户端。"""
+        knowledge_llm = await cls.aget_knowledge_llm(tenant_id=tenant_id)
+        if not knowledge_llm.embedding_model_id:
+            return None
+        return await cls.get_bisheng_knowledge_embedding(
+            model_id=knowledge_llm.embedding_model_id,
+            invoke_user_id=invoke_user_id,
+        )
+
+    @classmethod
     async def _base_update_llm_config(
         cls, data: Dict, key: ConfigKeyEnum, tenant_id: Optional[int] = None,
     ) -> Dict:

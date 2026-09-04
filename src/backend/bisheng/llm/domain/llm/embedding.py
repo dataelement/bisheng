@@ -1,3 +1,6 @@
+import asyncio
+import concurrent.futures
+import contextvars
 import json
 from typing import Optional, Dict, List
 
@@ -12,7 +15,20 @@ from bisheng.core.ai import OllamaEmbeddings, OpenAIEmbeddings, AzureOpenAIEmbed
 from bisheng.llm.domain.const import LLMServerType, LLMModelType
 from .base import BishengBase
 from ..models import LLMModel, LLMServer
-from ..utils import wrapper_bisheng_model_limit_check
+from ..utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async
+
+
+_SYNC_EMBEDDING_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=8,
+    thread_name_prefix="embedding-fallback",
+)
+
+
+async def _run_sync_embedding(func, *args):
+    """在独立有界线程池中兼容没有原生 async API 的 provider。"""
+    loop = asyncio.get_running_loop()
+    context = contextvars.copy_context()
+    return await loop.run_in_executor(_SYNC_EMBEDDING_EXECUTOR, context.run, func, *args)
 
 
 def _get_user_kwargs(model_config: dict) -> dict:
@@ -178,4 +194,34 @@ class BishengEmbedding(BishengBase, Embeddings):
         ret = self.embeddings.embed_query(text)
         if np.linalg.norm(ret) != 1:
             ret = (np.array(ret) / np.linalg.norm(ret)).tolist()
+        return ret
+
+    @wrapper_bisheng_model_limit_check_async
+    async def aembed_documents(self, texts: List[str]) -> List[List[float]]:
+        """优先调用 provider 原生异步 API，必要时使用专用线程池。"""
+        provider_method = type(self.embeddings).aembed_documents
+        if provider_method is Embeddings.aembed_documents:
+            ret = await _run_sync_embedding(self.embeddings.embed_documents, texts)
+        else:
+            ret = await self.embeddings.aembed_documents(texts)
+        if ret:
+            ret = [
+                (np.array(vector) / np.linalg.norm(vector)).tolist()
+                if np.linalg.norm(vector) not in {0, 1}
+                else vector
+                for vector in ret
+            ]
+        return ret
+
+    @wrapper_bisheng_model_limit_check_async
+    async def aembed_query(self, text: str) -> List[float]:
+        """异步生成查询向量，避免占用 Uvicorn 事件循环。"""
+        provider_method = type(self.embeddings).aembed_query
+        if provider_method is Embeddings.aembed_query:
+            ret = await _run_sync_embedding(self.embeddings.embed_query, text)
+        else:
+            ret = await self.embeddings.aembed_query(text)
+        norm = np.linalg.norm(ret)
+        if norm not in {0, 1}:
+            ret = (np.array(ret) / norm).tolist()
         return ret

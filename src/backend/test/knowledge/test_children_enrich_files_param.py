@@ -97,6 +97,41 @@ async def test_extra_info_enriches_files_by_default():
 
 
 @pytest.mark.asyncio
+async def test_portal_recommendation_display_snapshot_skips_effective_permission_lookup_for_batch():
+    svc = _make_svc()
+    svc._entry_permission_ids_by_file = {}
+    svc._portal_file_download_map = {}
+    svc._get_effective_permission_ids = AsyncMock(
+        return_value={"view_file", "download_file", "rename_file", "delete_file"}
+    )
+    files = [_make_file(9001 + offset) for offset in range(20)]
+
+    for file in files:
+        assert svc._try_fast_allow_portal_enabled_recommendation(
+            file,
+            space_id=10,
+            portal_enabled_space_ids={10},
+        ) is True
+    result = await svc._load_document_distribution_info(files)
+
+    svc._get_effective_permission_ids.assert_not_awaited()
+    assert svc._portal_file_download_map == {int(file.id): False for file in files}
+    expected_capabilities = {
+        "can_view": True,
+        "can_preview": True,
+        "can_download": False,
+        "can_move": False,
+        "can_manage_members": False,
+        "can_edit_content": False,
+        "can_publish": False,
+        "can_share": False,
+        "can_delete": False,
+    }
+    assert len(result) == 20
+    assert all(item["capabilities"] == expected_capabilities for item in result.values())
+
+
+@pytest.mark.asyncio
 async def test_logical_entry_reuses_current_primary_tags_without_leaking_source_id():
     svc = _make_svc()
     logical = _make_file(9001)

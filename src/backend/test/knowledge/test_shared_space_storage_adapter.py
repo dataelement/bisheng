@@ -191,21 +191,23 @@ class _FakeHit:
 class TestSharedSpaceStorageReader:
     def _reader(self, *, routing_version: int = 3, enabled: bool = True):
         conf = _conf() if enabled else KnowledgeSpaceSharedStorageConf()
-        collection = SimpleNamespace(
-            search=lambda **kw: [[_FakeHit(
+        milvus_runtime = SimpleNamespace(
+            search_milvus=AsyncMock(return_value=[[
                 {
+                    "entity": {
                     "canonical_document_id": 10,
                     "canonical_version_id": 100,
                     "content_generation": 4,
                     "membership_generation": 5,
                     "chunk_index": 0,
                     "text": "hello",
-                },
-                0.42,
-            )]]
+                    },
+                    "distance": 0.42,
+                }
+            ]])
         )
         es_client = SimpleNamespace(
-            search=lambda **kw: {
+            search=AsyncMock(return_value={
                 "hits": {
                     "hits": [
                         {
@@ -223,11 +225,12 @@ class TestSharedSpaceStorageReader:
                         }
                     ]
                 }
-            }
+            })
         )
         return SharedSpaceStorageReader(
             tenant_id=1,
-            collection=collection,
+            collection_name="col_space_shared_1",
+            milvus_runtime=milvus_runtime,
             es_client=es_client,
             expected_routing_version=routing_version,
             conf=conf,
@@ -245,21 +248,32 @@ class TestSharedSpaceStorageReader:
         assert hits[0].score == pytest.approx(0.42)
         assert hits[0].content_generation == 4
 
+    async def test_reader_awaits_async_routing_provider(self):
+        reader = self._reader()
+        reader._routing_provider = AsyncMock(return_value=_snapshot())
+        filter_ = BackendQueryFilter(
+            tenant_id=1, requested_space_ids=(11,), routing_version=3
+        )
+
+        await reader.search_milvus(filter_, vector=[0.1] * 4, limit=5)
+
+        reader._routing_provider.assert_awaited_once_with(1)
+
     async def test_milvus_search_raises_ef_above_large_top_k(self):
         reader = self._reader()
-        reader.collection.search = MagicMock(return_value=[[]])
+        reader.milvus_runtime.search_milvus = AsyncMock(return_value=[[]])
         filter_ = BackendQueryFilter(
             tenant_id=1, requested_space_ids=(11,), routing_version=3
         )
 
         await reader.search_milvus(filter_, vector=[0.1] * 4, limit=100)
 
-        params = reader.collection.search.call_args.kwargs["param"]
+        params = reader.milvus_runtime.search_milvus.await_args.kwargs["search_params"]
         assert params["params"]["ef"] == 101
 
     async def test_milvus_search_preserves_larger_custom_ef(self):
         reader = self._reader()
-        reader.collection.search = MagicMock(return_value=[[]])
+        reader.milvus_runtime.search_milvus = AsyncMock(return_value=[[]])
         filter_ = BackendQueryFilter(
             tenant_id=1, requested_space_ids=(11,), routing_version=3
         )
@@ -271,7 +285,7 @@ class TestSharedSpaceStorageReader:
             search_params={"metric_type": "L2", "params": {"ef": 256}},
         )
 
-        params = reader.collection.search.call_args.kwargs["param"]
+        params = reader.milvus_runtime.search_milvus.await_args.kwargs["search_params"]
         assert params["params"]["ef"] == 256
 
     async def test_es_search_returns_canonical_hits(self):
@@ -287,9 +301,11 @@ class TestSharedSpaceStorageReader:
         calls = []
         reader = self._reader()
         reader.conf = _conf(es_routing_enabled=True)
-        reader.es_client.search = lambda **kwargs: (
-            calls.append(kwargs) or {"hits": {"hits": []}}
-        )
+        async def _search(**kwargs):
+            calls.append(kwargs)
+            return {"hits": {"hits": []}}
+
+        reader.es_client.search = _search
 
         await reader.search_es(
             BackendQueryFilter(
@@ -343,7 +359,8 @@ class TestESQueryRendering:
         conf = _conf()
         reader = SharedSpaceStorageReader(
             tenant_id=1,
-            collection=SimpleNamespace(search=lambda **kw: []),
+            collection_name="col_space_shared_1",
+            milvus_runtime=SimpleNamespace(search_milvus=AsyncMock(return_value=[])),
             es_client=SimpleNamespace(),
             expected_routing_version=3,
             conf=conf,

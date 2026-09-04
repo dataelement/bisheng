@@ -421,6 +421,49 @@ class KnowledgeDao(KnowledgeBase):
             return (await session.exec(statement)).all()
 
     @classmethod
+    async def aget_knowledge_by_ids_cursor(
+        cls,
+        knowledge_ids: list[int],
+        *,
+        knowledge_type: KnowledgeTypeEnum,
+        name: str | None = None,
+        sort_by: str = "update_time",
+        limit: int = 10,
+        cursor: Sequence | None = None,
+    ) -> list[Knowledge]:
+        """严格限定候选 ID 的异步游标查询, 不隐式并入创建者资源。"""
+        normalized_ids = sorted({int(knowledge_id) for knowledge_id in knowledge_ids})
+        if not normalized_ids:
+            return []
+
+        statement = select(Knowledge).where(
+            Knowledge.id.in_(normalized_ids),
+            Knowledge.type == knowledge_type.value,
+            Knowledge.state != KnowledgeState.DELETING.value,
+        )
+        if name:
+            conditions = [
+                col(Knowledge.name).like(f"%{name}%"),
+                col(Knowledge.description).like(f"%{name}%"),
+            ]
+            file_knowledge_ids = await KnowledgeFileDao.aget_knowledge_ids_by_name(name)
+            if file_knowledge_ids:
+                conditions.append(Knowledge.id.in_(file_knowledge_ids))
+            statement = statement.where(or_(*conditions))
+
+        if cursor is not None:
+            statement = cls._apply_keyset_where(statement, sort_by, cursor)
+
+        if sort_by == "create_time":
+            statement = statement.order_by(Knowledge.create_time.desc(), Knowledge.id.desc())
+        else:
+            statement = statement.order_by(Knowledge.update_time.desc(), Knowledge.id.desc())
+        statement = statement.limit(limit)
+
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
     def _apply_keyset_where(cls, statement, sort_by: str, cursor: Sequence):
         """F027: inject keyset WHERE for cursor continuation.
 

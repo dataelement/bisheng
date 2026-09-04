@@ -10,6 +10,7 @@ from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service impo
     EMPTY_RETRIEVE_SOURCE_LINK,
     FilelibRetrieveSourceService,
     RetrieveSourceLink,
+    RetrieveSourceRef,
 )
 
 
@@ -60,6 +61,12 @@ def _storage() -> MagicMock:
     return storage
 
 
+def _version_repository() -> MagicMock:
+    repository = MagicMock()
+    repository.find_by_ids = AsyncMock(return_value=[])
+    return repository
+
+
 async def test_resolve_links_batches_deduplicates_and_reuses_one_signature_per_file() -> None:
     repository = MagicMock()
     repository.find_by_ids = AsyncMock(
@@ -73,7 +80,11 @@ async def test_resolve_links_batches_deduplicates_and_reuses_one_signature_per_f
         "https://files.example.com/public/original/12.docx?X-Amz-Signature=AAA",
         "https://files.example.com/public/persisted/original-report.pdf?X-Amz-Signature=BBB",
     ]
-    service = FilelibRetrieveSourceService(repository, storage)
+    service = FilelibRetrieveSourceService(
+        repository,
+        storage,
+        version_repository=_version_repository(),
+    )
 
     result = await service.resolve_links([12, 11, 12, None, 0, -1, True])
 
@@ -98,6 +109,115 @@ async def test_resolve_links_batches_deduplicates_and_reuses_one_signature_per_f
     }
 
 
+async def test_resolve_links_uses_canonical_version_file_for_authorized_share_entries() -> None:
+    entries = [
+        SimpleNamespace(
+            id=entry_id,
+            file_name="shared.xlsx",
+            object_name=None,
+            reference_document_id=2694,
+            allow_download=False,
+        )
+        for entry_id in (3058, 3059)
+    ]
+    manager = SimpleNamespace(
+        id=3040,
+        file_name="shared.xlsx",
+        object_name="original/3040.xlsx",
+        reference_document_id=2694,
+    )
+    version = SimpleNamespace(
+        id=2702,
+        document_id=2694,
+        knowledge_file_id=3040,
+    )
+    repository = MagicMock()
+    repository.find_by_ids = AsyncMock(side_effect=[entries, [manager]])
+    version_repository = MagicMock()
+    version_repository.find_by_ids = AsyncMock(return_value=[version])
+    storage = _storage()
+    storage.get_share_link.return_value = (
+        "https://files.example.com/public/original/3040.xlsx?X-Amz-Signature=AAA"
+    )
+    service = FilelibRetrieveSourceService(
+        repository,
+        storage,
+        version_repository=version_repository,
+    )
+
+    result = await service.resolve_links(
+        [
+            RetrieveSourceRef(
+                entry_file_id=3058,
+                canonical_document_id=2694,
+                canonical_version_id=2702,
+            ),
+            RetrieveSourceRef(
+                entry_file_id=3059,
+                canonical_document_id=2694,
+                canonical_version_id=2702,
+            ),
+        ]
+    )
+
+    expected_link = RetrieveSourceLink(
+        source_url="/public/original/3040.xlsx?X-Amz-Signature=AAA",
+        source_full_url=(
+            "https://files.example.com/public/original/3040.xlsx"
+            "?X-Amz-Signature=AAA"
+        ),
+    )
+    assert result == {3058: expected_link, 3059: expected_link}
+    assert repository.find_by_ids.await_args_list == [
+        call([3058, 3059]),
+        call([3040]),
+    ]
+    version_repository.find_by_ids.assert_awaited_once_with([2702])
+    storage.object_exists.assert_awaited_once_with(
+        bucket_name="public",
+        object_name="original/3040.xlsx",
+    )
+    storage.get_share_link.assert_awaited_once_with(
+        "original/3040.xlsx",
+        clear_host=False,
+        expire_days=7,
+    )
+
+
+async def test_resolve_links_rejects_mismatched_canonical_document() -> None:
+    entry = SimpleNamespace(
+        id=3058,
+        file_name="shared.xlsx",
+        object_name=None,
+        reference_document_id=2694,
+    )
+    repository = MagicMock()
+    repository.find_by_ids = AsyncMock(return_value=[entry])
+    version_repository = MagicMock()
+    version_repository.find_by_ids = AsyncMock()
+    storage = _storage()
+    service = FilelibRetrieveSourceService(
+        repository,
+        storage,
+        version_repository=version_repository,
+    )
+
+    result = await service.resolve_links(
+        [
+            RetrieveSourceRef(
+                entry_file_id=3058,
+                canonical_document_id=9999,
+                canonical_version_id=2702,
+            )
+        ]
+    )
+
+    assert result == {3058: EMPTY_RETRIEVE_SOURCE_LINK}
+    version_repository.find_by_ids.assert_not_awaited()
+    storage.object_exists.assert_not_awaited()
+    storage.get_share_link.assert_not_awaited()
+
+
 async def test_resolve_links_keeps_empty_values_for_missing_rows_paths_and_objects() -> None:
     repository = MagicMock()
     repository.find_by_ids = AsyncMock(
@@ -108,7 +228,11 @@ async def test_resolve_links_keeps_empty_values_for_missing_rows_paths_and_objec
     )
     storage = _storage()
     storage.object_exists.return_value = False
-    service = FilelibRetrieveSourceService(repository, storage)
+    service = FilelibRetrieveSourceService(
+        repository,
+        storage,
+        version_repository=_version_repository(),
+    )
 
     result = await service.resolve_links([11, 12, 13])
 
@@ -125,7 +249,7 @@ async def test_resolve_links_keeps_empty_values_for_missing_rows_paths_and_objec
 
 
 @pytest.mark.parametrize("failure_stage", ["exists", "sign"])
-async def test_resolve_links_propagates_non_missing_storage_errors(
+async def test_resolve_links_degrades_non_missing_storage_errors_to_empty_links(
     failure_stage: str,
     caplog,
 ) -> None:
@@ -137,11 +261,15 @@ async def test_resolve_links_propagates_non_missing_storage_errors(
         storage.object_exists.side_effect = RuntimeError("storage unavailable")
     else:
         storage.get_share_link.side_effect = RuntimeError("signing unavailable")
-    service = FilelibRetrieveSourceService(repository, storage)
+    service = FilelibRetrieveSourceService(
+        repository,
+        storage,
+        version_repository=_version_repository(),
+    )
 
-    with pytest.raises(RuntimeError):
-        await service.resolve_links([11])
+    result = await service.resolve_links([11])
 
+    assert result == {11: EMPTY_RETRIEVE_SOURCE_LINK}
     assert sensitive_url not in caplog.text
 
 
@@ -149,7 +277,11 @@ async def test_resolve_links_skips_repository_for_empty_input() -> None:
     repository = MagicMock()
     repository.find_by_ids = AsyncMock()
     storage = _storage()
-    service = FilelibRetrieveSourceService(repository, storage)
+    service = FilelibRetrieveSourceService(
+        repository,
+        storage,
+        version_repository=_version_repository(),
+    )
 
     assert await service.resolve_links([None, 0, -1, True]) == {}
     repository.find_by_ids.assert_not_awaited()

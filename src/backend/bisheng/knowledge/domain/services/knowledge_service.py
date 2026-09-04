@@ -722,7 +722,7 @@ class KnowledgeService(KnowledgeUtils):
         if not knowledge_list:
             return []
         db_user_ids = {one.user_id for one in knowledge_list}
-        db_user_info = UserDao.get_user_by_ids(list(db_user_ids))
+        db_user_info = await UserDao.aget_user_by_ids(list(db_user_ids))
         db_user_dict = {one.user_id: one.user_name for one in db_user_info}
         owned_ids = {int(one.id) for one in knowledge_list if login_user.user_id == one.user_id}
         if permission_map is None:

@@ -171,6 +171,37 @@ def test_minio_stat_object_maps_size_and_content_type_without_download() -> None
     storage.minio_client_sync.get_object.assert_not_called()
 
 
+async def test_minio_stat_object_async_uses_native_async_client() -> None:
+    storage = MinioStorage.__new__(MinioStorage)
+    storage.minio_client = MagicMock()
+    storage.minio_client.stat_object = AsyncMock(
+        return_value=SimpleNamespace(size=128, content_type="image/png")
+    )
+
+    metadata = await storage.stat_object("tmp-dir", "a.png")
+
+    assert metadata == ObjectMetadata(size=128, content_type="image/png")
+    storage.minio_client.stat_object.assert_awaited_once_with("tmp-dir", "a.png")
+
+
+async def test_minio_share_link_async_uses_native_async_client() -> None:
+    storage = MinioStorage.__new__(MinioStorage)
+    storage.bucket = "bisheng"
+    storage.share_minio_client_async = MagicMock()
+    storage.share_minio_client_async.presigned_get_object = AsyncMock(
+        return_value="https://files.example/bisheng/a.png"
+    )
+
+    url = await storage.get_share_link("/a.png", clear_host=False, expire_days=1)
+
+    assert url == "https://files.example/bisheng/a.png"
+    storage.share_minio_client_async.presigned_get_object.assert_awaited_once()
+    assert storage.share_minio_client_async.presigned_get_object.await_args.args[:2] == (
+        "bisheng",
+        "a.png",
+    )
+
+
 def test_active_or_unknown_attachment_types_are_not_served_as_executable_content() -> None:
     assert inline_response_headers("qa-expert/1/question/attachment/page.html") == {
         "response-content-disposition": "inline",

@@ -72,6 +72,14 @@ class KnowledgeSpaceChatService:
         self.file_repo = None
         self.doc_repo = None
         self.version_repo = None
+        self.retrieval_runtime = None
+
+    async def _get_retrieval_runtime(self):
+        if self.retrieval_runtime is None:
+            from bisheng.knowledge.rag.async_retrieval_runtime import get_async_retrieval_runtime
+
+            self.retrieval_runtime = await get_async_retrieval_runtime()
+        return self.retrieval_runtime
 
     def _permission_service(self):
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
@@ -755,6 +763,9 @@ class KnowledgeSpaceChatService:
         if not knowledge_base_ids:
             raise HTTPException(status_code=400, detail="knowledge_base_ids must not be empty")
 
+        runtime = await self._get_retrieval_runtime()
+        knowledge_base_ids = list(dict.fromkeys(int(item) for item in knowledge_base_ids))
+
         kb_id_set = set(knowledge_base_ids)
         filters_by_kb: dict[int, dict[str, Any]] = {}
         if kb_filters:
@@ -775,29 +786,50 @@ class KnowledgeSpaceChatService:
         # B1: shared-storage fast path — when the tenant is routed to the shared
         # store, use the resolver + shared reader instead of per-space tooling.
         if await self._is_shared_storage_active(knowledge_base_ids):
-            return await self._aretrieve_chunks_shared(
-                query=query,
-                knowledge_base_ids=knowledge_base_ids,
-                kb_filters=filters_by_kb or None,
-                top_k=top_k,
-                max_content=max_content,
+            from bisheng.knowledge.domain.contracts.errors import (
+                SharedStorageContractError,
+                SharedStorageErrorCode,
             )
 
-        per_kb_results = await asyncio.gather(
-            *(
-                self._aretrieve_chunks_for_kb(
+            try:
+                return await self._aretrieve_chunks_shared(
+                    query=query,
+                    knowledge_base_ids=knowledge_base_ids,
+                    kb_filters=filters_by_kb or None,
+                    top_k=top_k,
+                    max_content=max_content,
+                )
+            except SharedStorageContractError as exc:
+                if exc.code == SharedStorageErrorCode.RETRIEVAL_BACKEND_UNAVAILABLE:
+                    raise HTTPException(
+                        status_code=503,
+                        detail="retrieval backends unavailable",
+                    ) from exc
+                raise
+
+        kb_semaphore = asyncio.Semaphore(runtime.config.max_knowledge_base_concurrency)
+
+        async def _retrieve_one(kb_id: int):
+            async with kb_semaphore:
+                return await self._aretrieve_chunks_for_kb(
                     kb_id,
                     query=query,
                     tag_names=(filters_by_kb.get(kb_id) or {}).get("tags") or [],
                     file_ids=(filters_by_kb.get(kb_id) or {}).get("file_ids"),
                     max_content=max_content,
                 )
+
+        per_kb_results = await asyncio.gather(
+            *(
+                _retrieve_one(kb_id)
                 for kb_id in knowledge_base_ids
             ),
-            return_exceptions=skip_unauthorized,
+            return_exceptions=True,
         )
 
         flattened: list[tuple[int, Document]] = []
+        successful_kb_count = 0
+        backend_failures: list[BaseException] = []
         for kb_id, chunks in zip(knowledge_base_ids, per_kb_results, strict=True):
             if isinstance(chunks, SpacePermissionDeniedError) and skip_unauthorized:
                 logger.info(
@@ -807,8 +839,19 @@ class KnowledgeSpaceChatService:
                 )
                 continue
             if isinstance(chunks, BaseException):
+                if isinstance(chunks, HTTPException) and chunks.status_code == 503:
+                    backend_failures.append(chunks)
+                    logger.warning(
+                        "knowledge retrieval backend unavailable: user_id={} space_id={}",
+                        self.login_user.user_id,
+                        kb_id,
+                    )
+                    continue
                 raise chunks
+            successful_kb_count += 1
             flattened.extend(chunks)
+        if successful_kb_count == 0 and backend_failures:
+            raise HTTPException(status_code=503, detail="retrieval backends unavailable")
         return self._dedupe_cross_knowledge_chunks(flattened)[:top_k]
 
     async def _is_shared_storage_active(
@@ -830,7 +873,7 @@ class KnowledgeSpaceChatService:
         from bisheng.knowledge.domain.services.shared_space_projection_support import (
             resolve_shared_space_storage_enabled,
         )
-        from bisheng.knowledge.rag.shared_space_storage import resolve_space_shared_routing
+        from bisheng.knowledge.rag.shared_space_storage import aresolve_space_shared_routing
 
         if not knowledge_base_ids:
             return False
@@ -841,7 +884,7 @@ class KnowledgeSpaceChatService:
             return False
         routed: list[bool] = []
         for space in spaces:
-            snapshot = resolve_space_shared_routing(
+            snapshot = await aresolve_space_shared_routing(
                 int(getattr(space, 'tenant_id', None) or 1),
                 getattr(space, 'type', None),
             )
@@ -886,9 +929,8 @@ class KnowledgeSpaceChatService:
         )
         from bisheng.knowledge.rag.shared_space_storage import (
             SharedSpaceStorageReader,
-            resolve_space_shared_routing,
+            aresolve_space_shared_routing,
             shared_collection_name,
-            shared_index_name,
         )
 
         # Determine tenant from the first space.
@@ -899,7 +941,7 @@ class KnowledgeSpaceChatService:
                 f"knowledge space {knowledge_base_ids[0]} disappeared after shared routing resolution",
             )
         tenant_id = int(getattr(first_space, 'tenant_id', None) or 1)
-        snapshot = resolve_space_shared_routing(
+        snapshot = await aresolve_space_shared_routing(
             tenant_id,
             getattr(first_space, 'type', None),
         )
@@ -956,97 +998,94 @@ class KnowledgeSpaceChatService:
                 routing_version=int(snapshot.routing_version),
             ),
         )
-        # Initialize the shared-store reader.  ``snapshot`` carries
-        # ``collection_name`` / ``index_name`` (strings), not client
-        # objects — we initialize Milvus/ES through the existing
-        # ``KnowledgeRag`` bootstrap paths (idempotent).
+        # ``snapshot`` 只携带存储名称；连接由应用级异步客户端统一复用。
         collection_name = snapshot.collection_name or shared_collection_name(tenant_id)
-        index_name = snapshot.index_name or shared_index_name(tenant_id)
-        from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
         from bisheng.llm.domain import LLMService
 
-        embeddings = LLMService.get_knowledge_default_embedding(
-            self.login_user.user_id,
-            tenant_id=tenant_id,
-        )
-        if embeddings is None:
-            raise SharedStorageContractError(
-                SharedStorageErrorCode.RETRIEVAL_BACKEND_UNAVAILABLE,
-                "shared retrieval embedding model is unavailable",
-                tenant_id=tenant_id,
-            )
+        runtime = await self._get_retrieval_runtime()
+        from bisheng.core.search.elasticsearch.manager import get_es_connection
+
+        es_client = await get_es_connection()
+        embeddings = None
+        query_vector = None
         try:
-            milvus_vector = KnowledgeRag.init_milvus_vectorstore(
-                collection_name=collection_name,
-                embeddings=embeddings,
+            embeddings = await asyncio.wait_for(
+                LLMService.aget_knowledge_default_embedding(
+                    self.login_user.user_id,
+                    tenant_id=tenant_id,
+                ),
+                timeout=runtime.config.embedding_timeout_seconds,
             )
-            es_client = KnowledgeRag.init_es_vectorstore_sync(index_name=index_name)
-        except Exception as exc:
+            if embeddings is not None:
+                query_vector = await runtime.embed_query(embeddings, query)
+        except Exception:
             logger.exception(
-                "shared_storage_reader_init_failed tenant=%s",
+                "shared_storage_embedding_failed tenant={}",
                 tenant_id,
             )
-            raise SharedStorageContractError(
-                SharedStorageErrorCode.RETRIEVAL_BACKEND_UNAVAILABLE,
-                "shared retrieval backend initialization failed",
-                tenant_id=tenant_id,
-            ) from exc
 
         reader = SharedSpaceStorageReader(
             tenant_id=tenant_id,
-            collection=milvus_vector.col,
-            es_client=es_client.client,
+            collection_name=collection_name,
+            milvus_runtime=runtime,
+            es_client=es_client,
             expected_routing_version=snapshot.routing_version,
         )
 
         over_fetch = min(top_k * 2, 100)
-        try:
-            query_vector = embeddings.embed_query(query)
-        except Exception as exc:
-            raise SharedStorageContractError(
-                SharedStorageErrorCode.RETRIEVAL_BACKEND_UNAVAILABLE,
-                "shared retrieval query embedding failed",
-                tenant_id=tenant_id,
-            ) from exc
 
         chunks: list[tuple[int, Document]] = []
 
         async def _search_shared(backend_filter, kb_id: int, limit: int):
-            try:
-                dense_hits = await reader.search_milvus(
+            async def _dense_search():
+                if query_vector is None:
+                    raise RuntimeError("shared retrieval embedding is unavailable")
+                return await reader.search_milvus(
                     filter_=backend_filter,
                     vector=query_vector,
                     limit=limit,
                 )
-            except SharedStorageContractError:
-                raise
-            except Exception as exc:
-                logger.exception(
-                    "shared_storage_milvus_search_failed tenant=%s space=%s",
+
+            async def _sparse_search():
+                return await asyncio.wait_for(
+                    reader.search_es(
+                        filter_=backend_filter,
+                        query_text=query,
+                        limit=limit,
+                    ),
+                    timeout=runtime.config.elasticsearch_timeout_seconds,
+                )
+
+            dense_result, sparse_result = await asyncio.gather(
+                _dense_search(),
+                _sparse_search(),
+                return_exceptions=True,
+            )
+            for result in (dense_result, sparse_result):
+                if isinstance(result, SharedStorageContractError):
+                    raise result
+            if isinstance(dense_result, BaseException):
+                logger.warning(
+                    "shared_storage_milvus_search_failed tenant={} space={} error={}",
                     tenant_id,
                     kb_id,
+                    type(dense_result).__name__,
                 )
+            if isinstance(sparse_result, BaseException):
+                logger.debug(
+                    "shared_storage_es_search_failed tenant={} space={} error={}",
+                    tenant_id,
+                    kb_id,
+                    type(sparse_result).__name__,
+                )
+            if isinstance(dense_result, BaseException) and isinstance(sparse_result, BaseException):
                 raise SharedStorageContractError(
                     SharedStorageErrorCode.RETRIEVAL_BACKEND_UNAVAILABLE,
-                    f"shared dense retrieval failed for space {kb_id}",
+                    f"shared retrieval failed for space {kb_id}",
                     tenant_id=tenant_id,
-                ) from exc
-
-            sparse_hits: list = []
-            try:
-                sparse_hits = await reader.search_es(
-                    filter_=backend_filter,
-                    query_text=query,
-                    limit=limit,
                 )
-            except SharedStorageContractError:
-                raise
-            except Exception:
-                logger.debug(
-                    "shared_storage_es_search_failed tenant=%s space=%s (non-fatal)",
-                    tenant_id,
-                    kb_id,
-                )
+            dense_hits = [] if isinstance(dense_result, BaseException) else dense_result
+            sparse_hits = [] if isinstance(sparse_result, BaseException) else sparse_result
             return (dense_hits or []) + (sparse_hits or [])
 
         for kb_id in knowledge_base_ids:
@@ -1185,20 +1224,81 @@ class KnowledgeSpaceChatService:
         if milvus_kwargs is None and es_kwargs is None:
             return []
 
-        milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=space)
-        es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-        vector_retriever = milvus_vector.as_retriever(search_kwargs=milvus_kwargs)
-        es_retriever = es_vector.as_retriever(search_kwargs=es_kwargs)
+        runtime = await self._get_retrieval_runtime()
 
-        docs = await self._retrieve_visible_documents(
+        async def _dense_search() -> list[Document]:
+            embeddings = await asyncio.wait_for(
+                LLMService.get_bisheng_knowledge_embedding(
+                    invoke_user_id=self.login_user.user_id,
+                    model_id=int(space.model),
+                ),
+                timeout=runtime.config.embedding_timeout_seconds,
+            )
+            vector = await runtime.embed_query(embeddings, query)
+            raw_param = dict(milvus_kwargs.get("param") or {})
+            search_params = (
+                raw_param
+                if "metric_type" in raw_param or "params" in raw_param
+                else {"metric_type": "L2", "params": raw_param}
+            )
+            rows = await runtime.search_milvus(
+                collection_name=space.collection_name,
+                vector=vector,
+                limit=int(milvus_kwargs.get("k", 100)),
+                expr=milvus_kwargs.get("expr"),
+                search_params=search_params,
+            )
+            return self._documents_from_milvus_rows(rows)
+
+        async def _sparse_search() -> list[Document]:
+            es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
+            es_retriever = es_vector.as_retriever(search_kwargs=es_kwargs)
+            return await asyncio.wait_for(
+                es_retriever.ainvoke(query),
+                timeout=runtime.config.elasticsearch_timeout_seconds,
+            )
+
+        dense_result, sparse_result = await asyncio.gather(
+            _dense_search(),
+            _sparse_search(),
+            return_exceptions=True,
+        )
+        if isinstance(dense_result, BaseException):
+            logger.warning(
+                "milvus retrieval failed: space_id={} error={}",
+                kb_id,
+                type(dense_result).__name__,
+            )
+        if isinstance(sparse_result, BaseException):
+            logger.warning(
+                "elasticsearch retrieval failed: space_id={} error={}",
+                kb_id,
+                type(sparse_result).__name__,
+            )
+        if isinstance(dense_result, BaseException) and isinstance(sparse_result, BaseException):
+            raise HTTPException(status_code=503, detail=f"retrieval backends unavailable for space {kb_id}")
+
+        docs = await self._merge_visible_documents(
+            vector_documents=[] if isinstance(dense_result, BaseException) else dense_result,
+            es_documents=[] if isinstance(sparse_result, BaseException) else sparse_result,
             query=query,
-            vector_retriever=vector_retriever,
-            es_retriever=es_retriever,
             max_content=max_content,
             sort_by_source_and_index=False,
             knowledge_id=kb_id,
         )
         return [(kb_id, d) for d in docs]
+
+    @staticmethod
+    def _documents_from_milvus_rows(rows: list[list[dict[str, Any]]]) -> list[Document]:
+        if not rows:
+            return []
+        documents: list[Document] = []
+        for row in rows[0]:
+            entity = dict(row.get("entity") or {})
+            page_content = str(entity.pop("text", "") or "")
+            entity.pop("vector", None)
+            documents.append(Document(page_content=page_content, metadata=entity))
+        return documents
 
     @staticmethod
     def _canonical_metadata(document: Document) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -1416,6 +1516,33 @@ class KnowledgeSpaceChatService:
             )
         if es_retriever is not None:
             es_documents = await es_retriever.ainvoke(query)
+
+        return await self._merge_visible_documents(
+            vector_documents=vector_documents,
+            es_documents=es_documents,
+            query=query,
+            max_content=max_content,
+            sort_by_source_and_index=sort_by_source_and_index,
+            knowledge_id=knowledge_id,
+            preauthorized_file_ids=preauthorized_file_ids,
+            vector_retriever=vector_retriever,
+            es_retriever=es_retriever,
+        )
+
+    async def _merge_visible_documents(
+        self,
+        *,
+        vector_documents: list[Document],
+        es_documents: list[Document],
+        query: str,
+        max_content: int,
+        sort_by_source_and_index: bool,
+        knowledge_id: int | None,
+        preauthorized_file_ids: set[int] | None = None,
+        vector_retriever=None,
+        es_retriever=None,
+    ) -> list[Document]:
+        """统一执行权限过滤和 RRF，不再负责调用外部检索后端。"""
 
         if knowledge_id is not None:
             tagged_documents = [

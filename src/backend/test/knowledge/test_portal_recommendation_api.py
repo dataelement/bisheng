@@ -227,6 +227,30 @@ def test_portal_enabled_recommendation_fast_path_requires_current_file_space_mat
     ) is False
 
 
+def test_portal_enabled_recommendation_fast_path_caches_display_only_permissions():
+    service = object.__new__(KnowledgeSpaceService)
+    service._entry_permission_ids_by_file = {}
+    service._portal_file_download_map = {}
+    enabled_file = SimpleNamespace(id=101, knowledge_id=20)
+    moved_file = SimpleNamespace(id=102, knowledge_id=21)
+
+    assert service._try_fast_allow_portal_enabled_recommendation(
+        enabled_file,
+        space_id=20,
+        portal_enabled_space_ids={20},
+    ) is True
+    assert service._entry_permission_ids_by_file == {101: {"view_file"}}
+    assert service._portal_file_download_map == {101: False}
+
+    assert service._try_fast_allow_portal_enabled_recommendation(
+        moved_file,
+        space_id=20,
+        portal_enabled_space_ids={20},
+    ) is False
+    assert 102 not in service._entry_permission_ids_by_file
+    assert 102 not in service._portal_file_download_map
+
+
 def test_public_fast_path_rejects_current_space_level_custom_binding():
     file = SimpleNamespace(id=101, knowledge_id=10, file_level_path=None)
 

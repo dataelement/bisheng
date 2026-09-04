@@ -82,3 +82,18 @@ class ElasticsearchFactory:
             **kwargs
         )
         return es_client
+
+    @staticmethod
+    async def ainit_vectorstore(index_name: str, **kwargs) -> AsyncElasticsearchStore:
+        """使用应用级 AsyncElasticsearch 连接构造异步向量库。"""
+        from bisheng.core.search.elasticsearch.manager import get_es_connection
+
+        metadata_schemas: Optional[List[RagMetadataFieldSchema]] = kwargs.pop('metadata_schemas', None)
+        metadata_mappings = generate_metadata_mappings(metadata_schemas)
+        return AsyncElasticsearchStore(
+            index_name=index_name,
+            strategy=AsyncBM25Strategy(),
+            es_connection=await get_es_connection(),
+            metadata_mappings=metadata_mappings,
+            **kwargs,
+        )

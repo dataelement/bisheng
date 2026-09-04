@@ -57,6 +57,67 @@ async def test_gate_rejects_once_full(gate):
     await asyncio.gather(*tasks)
 
 
+async def test_gate_logs_wait_start_and_acquired(caplog):
+    gate = OpenFgaConcurrencyGate()
+    gate.configure(enabled=True, max_in_flight=1, reject_ratio=1.0, acquire_timeout=0.1)
+    holder_ready = asyncio.Event()
+    release = asyncio.Event()
+
+    async def hold():
+        async with gate.slot():
+            holder_ready.set()
+            await release.wait()
+
+    async def wait_for_slot():
+        async with gate.slot():
+            pass
+
+    holder = asyncio.create_task(hold())
+    await holder_ready.wait()
+
+    with caplog.at_level("INFO", logger=OpenFgaConcurrencyGate.__module__):
+        waiter = asyncio.create_task(wait_for_slot())
+        await asyncio.sleep(0)
+        assert "event=openfga_gate_wait_start" in caplog.text
+
+        release.set()
+        await asyncio.gather(holder, waiter)
+
+    assert "event=openfga_gate_wait_acquired" in caplog.text
+    assert "in_flight=1 capacity=1" in caplog.text
+    assert "waited_ms=" in caplog.text
+
+
+async def test_gate_logs_wait_timeout_before_error(caplog):
+    gate = OpenFgaConcurrencyGate()
+    gate.configure(enabled=True, max_in_flight=1, reject_ratio=1.0, acquire_timeout=0.02)
+    holder_ready = asyncio.Event()
+    release = asyncio.Event()
+
+    async def hold():
+        async with gate.slot():
+            holder_ready.set()
+            await release.wait()
+
+    holder = asyncio.create_task(hold())
+    await holder_ready.wait()
+
+    with (
+        caplog.at_level("INFO", logger=OpenFgaConcurrencyGate.__module__),
+        pytest.raises(FGAOverloadError),
+    ):
+        async with gate.slot():
+            pass
+
+    assert "event=openfga_gate_wait_start" in caplog.text
+    assert "event=openfga_gate_wait_timeout" in caplog.text
+    assert "in_flight=1 capacity=1" in caplog.text
+    assert "waited_ms=" in caplog.text
+
+    release.set()
+    await holder
+
+
 async def test_overloaded_at_configured_threshold(gate):
     """Shedding starts at the threshold, not only when the gate is completely full."""
     release = asyncio.Event()

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from abc import ABC
 from typing import Union
@@ -30,9 +31,7 @@ class MinioManager(BaseContextManager[MinioStorage]):
 
     async def _async_initialize(self) -> MinioStorage:
         """Inisialisasi Minio Storage Manager"""
-        return MinioStorage(
-            self.minio_config
-        )
+        return await asyncio.to_thread(MinioStorage, self.minio_config)
 
     def _sync_initialize(self) -> MinioStorage:
         """Synchronization Initialization"""
