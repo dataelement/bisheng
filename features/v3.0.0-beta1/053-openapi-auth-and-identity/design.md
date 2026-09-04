@@ -2,7 +2,7 @@
 
 > **本文档定位 — 总体设计 + 分工边界（Why this How）**
 >
-> - 需求的 **What** 以上游 PRD（`docs/product/3.0 开放 API 鉴权与身份传递 PRD.md` v2.4）为基础；本文按 2026-09-04 的范围裁定覆盖其中已变更部分：R8 / P2 不做、现有分享链接链路不改、服务账号不进入 `user` 表、日常模式复用既有 v1 契约、免登录发布接口迁至 v3。
+> - 需求的 **What** 以上游 PRD（`docs/product/3.0 开放 API 鉴权与身份传递 PRD.md` v2.4）为基础；本文按 2026-09-04 的范围裁定覆盖其中已变更部分：R8 / P2 不做、现有分享链接链路不改、服务账号不进入 `user` 表、日常模式复用既有 v1 能力但收窄对外请求字段、免登录发布接口迁至 v3。
 > - 本文回答 **怎么做、为什么这么做、谁做哪块、接口在哪对齐**。6 个工作流（WS-A～F）通过 §6 的共享契约协作。
 > - `reference/vibe-049-design.md` 只作为凭据生命周期、管理界面和端点标记的实现参考；其“服务账号复用 User”“新增分享凭据通道”“P2 运营能力”均不继承。
 > - `文件:行号` 会漂移，落地前以符号名和路由清单重新定位。
@@ -79,9 +79,9 @@
 | K18 | **授权主体与业务归属人必须分开** | 模式 S 服务账号以 SA 做 F048 Check，但业务资源的 owner / creator 仍写其 `resource_owner_user_id` |
 | K19 | **审计复用现有 `audit_log`** | 不建 `open_api_call_log`；调用字段写入 `audit_log.metadata`，公共列只承载可稳定索引的字段 |
 | K20 | **请求头不携带产品品牌** | 只使用 `X-On-Behalf-Of` 与 `X-End-User`；旧品牌头不作为别名继续接受 |
-| K21 | **日常模式不造第二套业务契约** | v2 五个接口复用 v1 路径、schema、信封与 SSE；只替换认证和执行身份适配 |
+| K21 | **日常模式不造第二套业务实现** | v2 五个接口复用 v1 路径、业务服务、信封与 SSE；chat/completions 的对外 schema 以 v1 为底稿，但删除 `use_knowledge_base`、`task_mode` |
 | K22 | **v3 是显式 allowlist** | 仅 §5.F 列出的发布接口存在于 v3；知识库、日常模式、管理接口不得挂入 v3 |
-| K23 | **静默降级零容忍** | v2 日常接口收到 `task_mode=true`、异步字段、旧品牌身份头或裸 `user_id` 时明确拒绝 |
+| K23 | **静默降级零容忍** | v2 日常接口收到已删除的 `task_mode` / `use_knowledge_base`、异步字段、旧品牌身份头或裸 `user_id` 时明确拒绝；不能静默忽略调用方字段 |
 | K24 | **异步边界必须显式传递身份** | v2 工作流进入 Celery 时携带不可变执行快照；worker 不得从 `user_id`、默认操作员或缺失的请求 ContextVar 重建授权主体 |
 
 **Constitution Check（自查）**：C1 `open_api/` 与 `public_endpoints/` 分层，v2/v3 API 层共享 domain service 而不互相 import；C2 只做 §7 所列 DDL，JSON 使用 `JsonType`；C3 `service_account`、`api_credential`、委托范围与会话来源字段均带租户约束，凭据校验后显式设置 ContextVar；C4 F048 扩展统一 actor，不在业务模块旁路授权；C5 260 段错误码统一登记；C6 明文密钥、请求体和敏感头不入审计；C7 前端只经各自 request wrapper。
@@ -299,7 +299,7 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 
 | v2 端点 | 复用来源 | scope | v2 行为差异 |
 |---|---|---|---|
-| `POST /api/v2/workstation/chat/completions` | `/api/v1/workstation/chat/completions` | `chat:invoke` | 只允许日常模式；复用 `APIChatCompletion` 与原 SSE |
+| `POST /api/v2/workstation/chat/completions` | `/api/v1/workstation/chat/completions` | `chat:invoke` | 只允许日常模式；对外请求以 `APIChatCompletion` 为底稿删除 `use_knowledge_base`、`task_mode`，保留 `files`，返回原 SSE |
 | `GET /api/v2/workstation/config` | `/api/v1/workstation/config` | `chat:invoke` | 只返回 `models[]`、`tools[]`，工具按密钥执行主体权限过滤 |
 | `GET /api/v2/chat/list` | `/api/v1/chat/list` | `chat:invoke` | 按 §5.C.6 的 API 会话主体列举 |
 | `POST /api/v2/knowledge/upload` | `/api/v1/knowledge/upload` | `chat:invoke` | 复用 multipart 限制与 `UploadFileResponse`，文件绑定当前调用主体 |
@@ -307,9 +307,11 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 
 **E2：只替换认证适配，不改 v1。** 五个 v1 端点的当前登录/匿名语义原样保留；五个 v2 端点不声明 `Depends(UserPayload.get_login_user)`，也不读 cookie/JWT，只消费 `get_open_api_execution`。即使调用方已登录，缺少 `bs-*` 密钥仍返回 401；有密钥但没有 JWT 可以正常调用。
 
-**E3：共享业务实现。** 将端点内编排下沉或复用已有 domain service：聊天调用 `workstation.domain.services.chat_service.stream_chat_completion`，配置调用 `WorkStationService`，会话调用 `ChatSessionService`，上传调用 `KnowledgeService` / storage helper。v2 adapter 禁止 import `bisheng.workstation.api.*`、`bisheng.chat_session.api.*` 或 `bisheng.knowledge.api.*`，也禁止内部 HTTP 转调 v1。
+**E3：共享业务实现。** 将端点内编排下沉或复用已有 domain service：聊天调用 `workstation.domain.services.chat_service.stream_chat_completion`，配置调用 `WorkStationService`，会话调用 `ChatSessionService`，上传调用 `KnowledgeService` / storage helper。v2 adapter 把对外请求转换成内部 `APIChatCompletion` 时固定写入 `task_mode=False`、`use_knowledge_base=None`；`files` 原样保留并继续使用 `/api/v2/knowledge/upload` 返回的文件引用。v2 adapter 禁止 import `bisheng.workstation.api.*`、`bisheng.chat_session.api.*` 或 `bisheng.knowledge.api.*`，也禁止内部 HTTP 转调 v1。
 
-**E4：契约与拒绝规则。** chat/completions 的请求字段、SSE 顺序和持久化结果与 v1 保持一致；`task_mode=true` 返回 `26017`。若调用方传入已知异步意图字段则返回 `26015`，其它契约外字段 400，不能静默忽略。配置端点不得透出 `linsightConfig`、邀请码、部署专属字段等非开放信息。
+**E4：对外请求收窄。** 新建 `OpenDailyChatCompletionReq` 作为 v2 请求模型，其字段等于当前 `APIChatCompletion` 去掉 `use_knowledge_base`、`task_mode` 后的集合；`files` 仍在对外模型中，日常对话继续支持临时文件附件，但不支持选择个人知识库、组织知识库或知识空间。对外 schema 使用 `extra='forbid'`：调用方传 `use_knowledge_base` 返回 400；传任何 `task_mode` 值均返回 400，要求任务模式时使用 `26017`。端点内部不读取调用方的运行模式，调用共享服务前无条件补 `task_mode=False`，所以外部请求无法切入灵思任务分支。
+
+**E5：返回与其它拒绝规则。** chat/completions 的 SSE 顺序和持久化结果与 v1 保持一致。若调用方传入已知异步意图字段则返回 `26015`，其它契约外字段 400，不能静默忽略。配置端点不得透出 `linsightConfig`、邀请码、部署专属字段等非开放信息。
 
 ### 5.F 工作流 / 知识助手免登录发布面 v3
 
@@ -474,7 +476,7 @@ v2 请求头只有：`Authorization: Bearer <key>`、`X-On-Behalf-Of: <user_id>`
 | 身份传递 | 五道准入逐条；新头有效；旧品牌头拒绝；裸 user_id 拒绝；文件级过滤异常 503 且无数据 |
 | 审计 | `audit_log.action='open_api.call'`；metadata actor/subject 双归属完整；无密钥/请求体；SA operator_id=0；DM8 可批量写 |
 | PAT | 一人一把、两层开关、级联失效、只 knowledge:read、超管不跨 tenant、OBO 拒绝 |
-| 日常模式 | 五个 v2 端点与 v1 schema/信封/SSE 对齐；config 只有 models/tools；SA/PAT/D 会话归属矩阵；跨主体 chat/file 统一 404 |
+| 日常模式 | 五个 v2 端点复用 v1 业务/信封/SSE；请求 schema 删除 `use_knowledge_base`、`task_mode` 但保留 `files`；内部固定 `task_mode=False`；config 只有 models/tools；SA/PAT/D 会话归属矩阵；跨主体 chat/file 统一 404 |
 | v3 发布面 | 九路由 allowlist；未发布/开关关拒绝；两个 WS 正常；history/title/stop 不能跨资源；`/api/v3/assistant/list` 真 404 |
 | 前端/网关 | guest 页面所有 v3 HTTP/WS 无 v2 遗留；发布示例为 v3；密钥文档为 v2；商业网关可转发 v3 WS |
 
@@ -527,6 +529,7 @@ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/v2/assistant/info/$ASSISTANT
 - 任务模式、异步作业、按轮结果新契约不做；日常模式只复用现有同步链路。
 - 密钥级资源白名单、OAuth 授权服务器、Webhook 回调鉴权、企业网关签发令牌不做。
 - 日常模式反馈、消息回填等未列入 §5.E 的接口不开放。
+- 日常对话支持临时文件附件，但不开放 `use_knowledge_base`，不能从请求中选择个人知识库、组织知识库或知识空间；`task_mode` 也不是对外字段，内部恒为 `False`。
 - 与 `3.0-vibe` 合并时以 §2.1 为差异清单，禁止把 User 影子账号、分享凭据或 P2 代码重新带入。
 
 ---
@@ -538,3 +541,4 @@ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/v2/assistant/info/$ASSISTANT
 | 2026-08-31 | 初版：P0 + P1 + P2、7 工作流 | 初始总体设计 |
 | 2026-08-31 | `/sdd-review design` 自查修订 | 初版评审 |
 | 2026-09-04 | 重写：移除 R8/P2 与分享链路改造；请求头去品牌；审计改复用 `audit_log.metadata`；服务账号改独立主体且不写 User；日常模式改为五个 v1 同路径 v2 接口；工作流/知识助手免登录发布接口迁至 v3，与 v2 密钥面彻底分离 | 用户新范围裁定 |
+| 2026-09-04 | 收窄日常对话请求：对外删除 `use_knowledge_base`、`task_mode`，内部固定 `task_mode=False`；`files` 与临时文件上传能力保持不变 | 用户补充裁定 |
