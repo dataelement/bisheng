@@ -1,6 +1,7 @@
 # ruff: noqa: RUF002
 """排行榜读路径：按当前用户公司隔离 + 展示字段补齐。"""
 
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -99,6 +100,33 @@ async def test_display_maps_uses_org_level_dept_not_leaf():
 
     assert names[423] == "gzx01204"
     assert depts[423] == "二级积分部门1"
+
+
+@pytest.mark.asyncio
+async def test_primary_department_lookup_runs_outside_event_loop_thread():
+    """同步部门查询不得阻塞首页请求共用的事件循环。"""
+    event_loop_thread_id = threading.get_ident()
+    lookup_thread_ids: list[int] = []
+
+    def load_primary_departments(_user_ids):
+        lookup_thread_ids.append(threading.get_ident())
+        return {}
+
+    with (
+        patch.object(
+            UserDao,
+            "aget_user_by_ids",
+            AsyncMock(return_value=[SimpleNamespace(user_id=7, user_name="nobody")]),
+        ),
+        patch(
+            "bisheng.database.models.department.UserDepartmentDao.get_primary_department_map_by_user_ids",
+            side_effect=load_primary_departments,
+        ),
+    ):
+        await PointsQueryService._leaderboard_display_maps([7])
+
+    assert lookup_thread_ids
+    assert lookup_thread_ids[0] != event_loop_thread_id
 
 
 @pytest.mark.asyncio

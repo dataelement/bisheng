@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime
@@ -94,7 +95,10 @@ class PointsQueryService:
         from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
         from bisheng.points.domain.services.points_rank_service import resolve_company_id
 
-        primary_map = UserDepartmentDao.get_primary_department_map_by_user_ids([int(user_id)])
+        primary_map = await asyncio.to_thread(
+            UserDepartmentDao.get_primary_department_map_by_user_ids,
+            [int(user_id)],
+        )
         primary = primary_map.get(int(user_id))
         all_depts = await DepartmentDao.aget_all_active()
         dept_by_id = {int(d.id): d for d in all_depts}
@@ -259,7 +263,10 @@ class PointsQueryService:
 
         users = await UserDao.aget_user_by_ids(user_ids) or []
         name_by_user = {int(u.user_id): str(getattr(u, "user_name", None) or u.user_id) for u in users}
-        primary_map = UserDepartmentDao.get_primary_department_map_by_user_ids(user_ids)
+        primary_map = await asyncio.to_thread(
+            UserDepartmentDao.get_primary_department_map_by_user_ids,
+            user_ids,
+        )
         dept_by_id: dict[int, object] = {}
         ancestor_ids: set[int] = set()
         for dept in primary_map.values():
