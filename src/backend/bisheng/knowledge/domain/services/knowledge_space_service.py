@@ -466,6 +466,7 @@ PORTAL_SEARCH_RERANK_MODEL_ID = ""
 PORTAL_SEARCH_RERANK_MODEL_ID_ENV = "BISHENG_PORTAL_SEARCH_RERANK_MODEL_ID"
 SHOUGANG_PORTAL_RECOMMENDATION_LATEST_SELECTED = "latest_selected"
 SHOUGANG_PORTAL_QA_DISABLED_REASON = "申请后可用于问答"
+_PORTAL_RECOMMENDATION_DISPLAY_PERMISSION_IDS = frozenset({"view_file"})
 PORTAL_SEARCH_TITLE_MATCH_STOPWORDS = (
     "如何",
     "怎么",
@@ -8636,15 +8637,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         if candidate.file_id in non_primary:
                             result[candidate.key] = False
                             continue
-                    if self._can_fast_allow_portal_enabled_recommendation(
+                    if self._try_fast_allow_portal_enabled_recommendation(
                         item,
                         space_id=candidate.space_id,
                         portal_enabled_space_ids=portal_enabled_space_ids,
                     ):
-                        # Discovery publication grants recommendation metadata
-                        # display only. Preview/download still perform their own
-                        # live checks, so never infer download capability here.
-                        self._portal_file_download_map[int(item.id)] = False
                         result[candidate.key] = True
                         portal_enabled_fast_allowed_count += 1
                         authorization_state.fast_allowed_count += 1
@@ -8987,6 +8984,30 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> bool:
         """Allow recommendation display only when the live file still belongs to an enabled source space."""
         return int(space_id) in portal_enabled_space_ids and int(file.knowledge_id) == int(space_id)
+
+    def _try_fast_allow_portal_enabled_recommendation(
+        self,
+        file: KnowledgeFile,
+        *,
+        space_id: int,
+        portal_enabled_space_ids: set[int],
+    ) -> bool:
+        if not self._can_fast_allow_portal_enabled_recommendation(
+            file,
+            space_id=space_id,
+            portal_enabled_space_ids=portal_enabled_space_ids,
+        ):
+            return False
+
+        file_id = int(file.id)
+        # Cache a display-only capability snapshot so response enrichment does
+        # not expand the file ACL again. Preview and download routes still run
+        # their own live authorization and approval checks.
+        self._entry_permission_ids_by_file[file_id] = set(
+            _PORTAL_RECOMMENDATION_DISPLAY_PERMISSION_IDS
+        )
+        self._portal_file_download_map[file_id] = False
+        return True
 
     async def _check_portal_recommendation_item_permission(
         self,
