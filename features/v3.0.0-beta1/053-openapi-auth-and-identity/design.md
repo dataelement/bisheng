@@ -1,16 +1,14 @@
-# Design: 开放 API 鉴权与身份传递（全量：P0 底座 · P1 身份传递 / 个人访问令牌 / 日常模式会话 · P2 运营能力）
+# Design: 开放 API 鉴权与身份传递（P0 底座 · P1 身份传递 / 个人访问令牌 / 日常模式会话）
 
 > **本文档定位 — 总体设计 + 分工边界（Why this How）**
 >
-> - 需求的 **What** 在上游 PRD（`docs/product/3.0 开放 API 鉴权与身份传递 PRD.md` **v2.4**，2026-08-27/28）：§4 是需求正文、§5 是验收标准（AC-1～50、AC-P1～P22）。本 Feature **不另写一份复述 PRD 的 spec.md**，`spec.md` 只登记范围裁定与 PRD 之外的补充 AC（share-token、P2 细则）。
-> - 本文回答 **怎么做、为什么这么做、谁做哪块、接口在哪对齐**。7 个工作流（WS-A～G）可由不同人并行，§4 是分工总表，§6 是所有人必须对齐的共享契约。
-> - 底座部分（凭据 / 服务账号 / 管理界面 / 端点接入 / share-token）**沿用 `3.0-vibe` 的 049 设计**（`reference/vibe-049-design.md`，D1–D13 决策 + 27 条坑），本文只写差异与增量，不重抄；引用格式 `vibe-049 D5` / `vibe-049 坑 14`。
-> - 调整原则见 `docs/SDD-Guide.md` §3–§4：实现变化 → 覆盖本文、只留今天的状态；推翻已 ★ 确认的决策 → 停下重新确认。
->
-> **代码事实口径**：`feat/3.0.0-beta1` @ `972397fbe`（2026-08-31 核实）；vibe 侧 `3.0-vibe` @ `b63a320f2`+。`文件:行号` 会漂移，符号名不会——落地前以符号名重定位。
+> - 需求的 **What** 以上游 PRD（`docs/product/3.0 开放 API 鉴权与身份传递 PRD.md` v2.4）为基础；本文按 2026-09-04 的范围裁定覆盖其中已变更部分：R8 / P2 不做、现有分享链接链路不改、服务账号不进入 `user` 表、日常模式复用既有 v1 契约、免登录发布接口迁至 v3。
+> - 本文回答 **怎么做、为什么这么做、谁做哪块、接口在哪对齐**。6 个工作流（WS-A～F）通过 §6 的共享契约协作。
+> - `reference/vibe-049-design.md` 只作为凭据生命周期、管理界面和端点标记的实现参考；其“服务账号复用 User”“新增分享凭据通道”“P2 运营能力”均不继承。
+> - `文件:行号` 会漂移，落地前以符号名和路由清单重新定位。
 
 **关联**: [discovery.md](../000-openapi-auth-discovery/discovery.md) · [spec.md](./spec.md) · [tasks.md](./tasks.md) · [release-contract.md](../release-contract.md) · [reference/](./reference/README.md)
-**版本**: v3.0.0-beta1 · **Feature 编号**: F053 · **最后更新**: 2026-08-31（初版，待 ★ 用户确认）
+**版本**: v3.0.0-beta1 · **Feature 编号**: F053 · **最后更新**: 2026-09-04（按范围新裁定重写，待 ★ 用户确认）
 
 ---
 
@@ -18,539 +16,518 @@
 
 | 你是 | 先读 | 再读 |
 |---|---|---|
-| 把控者 / 评审 | §1 目标范围 · §3 总体架构图 · §4 分工总表 | §6 共享契约 · §10 发布 |
-| WS-A 底座与端点接入 | §4 · §5.A · `reference/vibe-049-design.md` 全文 | §6 · §8 坑 |
-| WS-B 管理界面（platform） | §4 · §5.B · §6.2 API 契约 | vibe-049 design §4.3 platform 行 |
-| WS-C 身份传递 | §4 · §5.C · `reference/vibe-050-spec.md` §3–§4 | §6.1 Principal · §6.3 错误码 |
-| WS-D 个人访问令牌 | §4 · §5.D · PRD §4.10 全文 | §6 · §8 |
-| WS-E 日常模式会话 | §4 · §5.E · PRD §4.6.3 · `reference/vibe-058-spec.md` §4 | §6.2 |
-| WS-F P2 运营能力 | §4 · §5.F · PRD §4.8 | §6.3 · §8 |
-| WS-G share-token 通道 | §4 · §5.G · vibe-049 D8 | §6.2 |
+| 把控者 / 评审 | §1 目标范围 · §3 总体架构 · §6.2 路由分面 | §7 迁移 · §10 发布 |
+| WS-A 底座与权限主体 | §3.1～§3.3 · §5.A | §6.1 Principal · §6.4 数据 |
+| WS-B 管理界面（platform） | §4 · §5.B · §6.2 管理 API | 当前设计规范与 landed 组件总览 |
+| WS-C 身份传递与审计 | §3.2 · §5.C | §6.1 · §6.3 · §6.4 |
+| WS-D 个人访问令牌 | §5.D · PRD §4.10 | §6 · §8 |
+| WS-E 日常模式会话 | §5.E · §6.2 | 既有五个 v1 端点实现 |
+| WS-F 免登录发布面 v3 | §3.1 · §5.F · §6.2 | client guest 页与网关路由 |
 
 ---
 
 ## 1. 目标与范围
 
-**目标**：给 `/api/v2/**` 建立唯一一条凭据校验管线——凡调用必持密钥、密钥必绑主体、身份必显式声明——并把匿名超管通道彻底关掉；在同一管线上交付两类主体（服务账号 `bs-sak-` / 自然人 `bs-pat-`）、两种身份模式（自身 S / 代表他人 D）、日常模式会话的对外开放，以及按密钥的限流 / 配额 / IP 白名单 / 幂等。
+**目标**：建立彼此独立、不可互相兜底的三种访问面：
 
-**范围（按 PRD 需求编号）**：
+1. `/api/v1/**` 继续服务站内前端：登录/管理接口沿用既有登录鉴权，现有分享与其它免登录接口也保持原语义；
+2. `/api/v2/**` 作为密钥开放面，只接受平台签发的 `bs-sak-` / `bs-pat-`，不接受登录态代替密钥，也不回落默认操作员；
+3. `/api/v3/**` 只承接工作流和知识助手对外发布所需的既有免登录接口，不做密钥鉴权。
 
-| PRD | 需求 | 阶段 | 归属工作流 |
-|---|---|---|---|
-| R1 | 凭据体系 | P0 | **WS-A**（移植 vibe 底座）；P2 属性列由 WS-F 追加 |
-| R4 | 服务账号主体（含资源归属人） | P0 | **WS-A** |
-| R5 | 端点接入（38 HTTP + 2 WS、6 端点不暴露、4 处既有缺陷） | P0 | **WS-A**（HTTP）+ **WS-G**（WS 与分享页） |
-| R6 | 管理界面（服务账号 / 密钥 / 资源授权） | P0 | **WS-B** |
-| R9 | 升级须知（零迁移、移除 `default_operator` / `enable_guest_access`） | P0 | **WS-A** + 发布说明 |
-| R3 铁律 1–3 | 无凭据拒绝 / 缺身份报错 / 评估失败报错 | P0 | **WS-A** |
-| R2 / R3 委托 / R7 | 两种身份模式、外部用户标识头、五道准入、审计双归属、裸 `user_id` 收口、检索文件级过滤 | P1 | **WS-C**（后端）+ **WS-B**（委托配置区 UI） |
-| R10 | 个人访问令牌（自然人主体、自助签发、级联失效、治理三闸门、技能包） | P1 | **WS-D**（后端 + client）+ **WS-B**（管理员台账 / 开关 UI） |
-| §4.6.3 | 日常模式会话开放（`chat:invoke` 的消费端点） | P1 | **WS-E** |
-| R8 | 限流 / 配额 / IP 白名单 / 幂等 | P2 | **WS-F**（后端）+ **WS-B**（签发表单网络组） |
-| §4.6.1 浏览器直连 | share-token 通道（两个免登录分享页） | P0 附带 | **WS-G** |
+在 v2 密钥面交付独立服务账号主体、自然人个人访问令牌、两种身份模式、逐调用审计，以及复用既有 v1 能力的日常模式会话接口。
 
-**非目标**（PRD §六原样继承）：密钥级资源白名单、完整 OAuth 2.0、最终用户令牌透传、即时建号、`/api/v1` 鉴权改造、按单个端点的细粒度权限、第二套并行会话契约、Webhook 回调方向鉴权、任务模式（灵思）与异步执行（明确报错留位）；PAT 本期只开 `knowledge:read`。**应用工场三面（MCP / 模型协议面 / CLI）不在 beta1**——三扩展位代码随底座原样移植但 `open_platform.enabled` 默认关、不建三面（讨论见 §2.2）。
+### 1.1 本期范围
 
-**发版约束**：WS-A 与 WS-C 必须**同版发布**（PRD §4.9：裸 `user_id` 随本版一并移除、不留过渡期；WS-A 单独上线时仍留有一条经参数指定身份的残余路径）。其余工作流可各自晚于该基线合入。
+| PRD / 裁定 | 需求 | 归属工作流 |
+|---|---|---|
+| R1 | 凭据体系：签发、哈希存储、撤销、过期、权限位、最后使用时间 | WS-A |
+| R4 | 服务账号独立主体表、资源归属人、F048 `service_account:{id}` 授权主体 | WS-A |
+| R5 | v2 存量开放端点接入密钥鉴权；发布类端点拆出 v3 免登录面 | WS-A / WS-F |
+| R6 | 服务账号、密钥、资源授权、PAT 管理界面 | WS-B / WS-D |
+| R9 | v2 移除默认操作员回落；默认操作员和 `enable_guest_access` 仅保留给 v3 发布面 | WS-A / WS-F |
+| R2 / R3 / R7 | 自身身份 / 代表他人、外部用户标识、五道准入、审计双归属、裸 `user_id` 收口、检索文件级过滤 | WS-C |
+| R10 | 个人访问令牌：自助签发、级联失效、治理开关、技能包 | WS-D |
+| §4.6.3 新裁定 | 以五个既有 v1 接口为契约，在相同子路径增加 v2 密钥接口 | WS-E |
+
+### 1.2 明确移出本期
+
+- **R8 与全部 P2 需求不做**：不设计、不建表、不留运行时代码，包括 IP 白名单、限流、日配额和幂等。
+- **现有分享链接链路原样保留**：不改 `share_link` 表，不增加 `share_link.share_scope`，不改分享链接接口、前端参数或鉴权方式。
+- **不改 `user` 表承载服务账号**：不增加 `user.user_type`，不为服务账号创建 `user` / `user_tenant` 行。
+- 不建设 MCP / 模型协议面 / CLI；三扩展权限位默认不展示、不签发。
+- 任务模式（灵思）和异步执行不开放；v2 日常对话只允许日常模式的现有同步 SSE 链路。
+
+### 1.3 发版约束
+
+- WS-A 与 WS-C 必须同版发布：裸 `user_id` 与默认操作员回落必须在 v2 同时消失。
+- WS-A 的 F048 服务账号主体支持必须先于任何服务账号密钥启用。
+- WS-F 后端 v3 路由必须先上线，再把 client guest 页、platform 发布文档和商业网关从 v2 切到 v3，避免免登录发布页中断。
 
 ---
 
 ## 2. 关键约束
 
-> 全局铁律（DDD 分层 / 双 DB / 多租户自动注入 / 权限唯一入口 / 错误码 / 无硬编码密钥 / 前端 store 不直连 HTTP）遵循 `docs/constitution.md` C1–C7，不重抄。**vibe-049 K1–K12 全部沿用**（撤销 5 秒内主动失效、fail-closed、有效性单一判据、v2 面真 HTTP 状态、DM8 双库、密钥表禁批量写、多节点默认、开关三段式、凭据校验先于租户上下文且必须覆盖 ContextVar、错误码 260 段）。以下只写本 Feature 新增的。
+> DDD 分层、双 DB、多租户、权限唯一入口、错误码、安全和前端 HTTP 边界遵循 `docs/constitution.md` C1–C7。
 
-| # | 约束 | 出处 / 后果 |
+| # | 约束 | 后果 |
 |---|---|---|
-| K13 | **一条管线、固定顺序**（§3 图）：凭据 → 租户 → 能力开关 → IP → 权限位 → 身份模式与准入 → 限流配额 → 构造身份 → 业务。任何工作流新增的检查只能**插进既定槽位**，不得另起第二条校验路径或在端点体内补判 | AC-1 / AC-29「不存在绕过该路径的端点」；分工并行的前提 |
-| K14 | **主体解析按 `subject_kind` 分派**（`SUBJECT_RESOLVERS` 注册表）：新主体 = 新枚举值 + 新解析函数，不改表、不改管线 | PRD 附录 E.6；WS-D 只注册 `natural_person` |
-| K15 | **模式 D 是纯替换**：执行身份整个换成被代表用户，服务账号自身授权不参与；**被代表用户的身份构造与准入检查 3 都以权限运行时的系统级放行谓词为准**（`PermissionActor.super_admin` / `tenant_admin_tenant_ids` 的计算源） | PRD §7.2 / vibe-050 §3；判漏 = 一把窄权限密钥换到管理员无界权限，全 Feature 最重单点 |
-| K16 | **PAT 权限动态继承、不做快照**；管理员短路照常，但可见租户集合恒按密钥所属租户计算，`super_admin` 不放开租户过滤 | PRD §4.10.3 / §4.10.4 / D17；`_visible_tenant_ids` 副本对任何主体都按密钥租户算 |
-| K17 | **静默降级零容忍**：异步 → `26015`、任务模式 → `26017`、未知工具类型 → 400 指名、契约外字段 → 400 指名、`delegate` 漏头 → `26016`。**不存在**「接受了但不生效」的字段 | PRD §4.6.3 三.2 / AC-34 / AC-35 / AC-38 / AC-50 |
-| K18 | **P2 检查全部 fail-closed**：Redis 不可用时限流 / 配额 / 幂等一律拒绝（`26030` 503），不沿用部门并发槽位那条 fail-open 原语 | PRD 附录 E.5 |
-| K19 | **审计双归属是硬要求**：逐调用记录同时含 actor（密钥）与 subject（以谁名义）；模式 S 的 subject 为空、外部标识另列 | PRD §4.4.5 / §4.8.1 / AC-23 / AC-P13 |
-| K20 | **同一能力一套契约**（D12）；日常模式会话用平台自有命名，不冒用第三方契约的名字 | PRD §4.6.3 五 / vibe-058 决议-6 |
-| K21 | **对客文档改名**：「服务账号模式」→「自身身份模式」，随 WS-D 交付（AC-P22）；对外一律用中文名不用 S / D 字母 | PRD §4.10.8 / 附录 F |
+| K13 | **登录鉴权、密钥鉴权、免登录发布是三条不同通道** | v1 JWT、v2 API Key、v3 guest policy 不得共用“缺失则回落”的依赖 |
+| K14 | **v2 只有一条固定管线**：凭据 → 租户 → PAT 开关 → 权限位 → 身份模式 → 授权主体 → 业务 | 任一 v2 端点漏标记均 fail-closed；端点体不得另行解析身份 |
+| K15 | **服务账号是独立主体** | F048 actor 必须能表达 `service_account:{id}`；禁止用资源归属人的 `UserPayload` 冒充授权主体 |
+| K16 | **模式 D 是纯替换** | 授权主体、会话归属与资源归属均换成被代表用户，服务账号自身授权不参与 |
+| K17 | **PAT 动态继承自然人权限** | PAT 主体直接查 `User` + 活跃租户；因服务账号不在 `User`，无需 `user_type` 区分 |
+| K18 | **授权主体与业务归属人必须分开** | 模式 S 服务账号以 SA 做 F048 Check，但业务资源的 owner / creator 仍写其 `resource_owner_user_id` |
+| K19 | **审计复用现有 `audit_log`** | 不建 `open_api_call_log`；调用字段写入 `audit_log.metadata`，公共列只承载可稳定索引的字段 |
+| K20 | **请求头不携带产品品牌** | 只使用 `X-On-Behalf-Of` 与 `X-End-User`；旧品牌头不作为别名继续接受 |
+| K21 | **日常模式不造第二套业务契约** | v2 五个接口复用 v1 路径、schema、信封与 SSE；只替换认证和执行身份适配 |
+| K22 | **v3 是显式 allowlist** | 仅 §5.F 列出的发布接口存在于 v3；知识库、日常模式、管理接口不得挂入 v3 |
+| K23 | **静默降级零容忍** | v2 日常接口收到 `task_mode=true`、异步字段、旧品牌身份头或裸 `user_id` 时明确拒绝 |
+| K24 | **异步边界必须显式传递身份** | v2 工作流进入 Celery 时携带不可变执行快照；worker 不得从 `user_id`、默认操作员或缺失的请求 ContextVar 重建授权主体 |
 
-**Constitution Check（自查）**：C1 新模块 `open_api/` 按 `api/ + domain/` 分层，v2 端点只 import `open_api.domain.scopes`（domain 级）；C2 全部 Alembic 变更列于 §7、新表 `create_all`、`VARCHAR` 不用 `CHAR`、JSON 列不在 SQL 里按位过滤；C3 密钥表 / 委托范围表 / 调用日志表物理带 `tenant_id` 并注册 `_TENANT_AWARE_MODEL_MODULES`，按哈希查凭据在 `bypass_tenant_filter()` 下、校验后无条件 `set_current_tenant_id`；C4 授权写路径只经 F048 runtime、反查走 SQL 投影账本、模式 D 不改 `PermissionActor` 只换入参；C5 错误码 260 段登记（§6.3）；C6 明文不落盘不进日志、幂等缓存不存请求头；C7 前端只经 `controllers/API/`（platform）/ `~/api`（client）。
+**Constitution Check（自查）**：C1 `open_api/` 与 `public_endpoints/` 分层，v2/v3 API 层共享 domain service 而不互相 import；C2 只做 §7 所列 DDL，JSON 使用 `JsonType`；C3 `service_account`、`api_credential`、委托范围与会话来源字段均带租户约束，凭据校验后显式设置 ContextVar；C4 F048 扩展统一 actor，不在业务模块旁路授权；C5 260 段错误码统一登记；C6 明文密钥、请求体和敏感头不入审计；C7 前端只经各自 request wrapper。
 
-### 2.2 与 vibe 底座的差异清单（移植时逐条处理）
+### 2.1 与 vibe-049 参考实现的差异
 
-| # | vibe-049 的写法 | beta1 上的处置 | 责任 |
-|---|---|---|---|
-| 1 | 排除项「个人访问令牌整条否决；全平台只有服务账号一类主体」 | **作废**（PRD D13）。`credential_service.issue` 与 `credential_validator` 的前缀提取按 `subject_kind` 参数化（附录 E.6 两处约 5 行） | WS-A 移植时即改，WS-D 消费 |
-| 2 | 三扩展位 `model:invoke` / `identity:read` / `app:manage` 的运行期消费随 F051–F053 | **三面不建**。注册表保留、`requires_open_platform=True`、`open_platform.enabled` 默认 `false` → 表单不出现、签发被拒（`26023`）。**不删**：零成本且避免日后与 vibe 合并冲突 | WS-A |
-| 3 | `hosted_app` 主体（托管应用运行期凭据） | 不注册解析器、不登记 kind；`subject_kind` 仍是可扩展枚举 | WS-A |
-| 4 | 「服务账号详情页接入信息区（MCP 地址 / CLI）」 | 不做 | WS-B |
-| 5 | 「文件级检索过滤随 F052 统一检索门面」 | beta1 无 F052 → **WS-C 直接改两个检索分支**（§5.C.6） | WS-C |
-| 6 | 「HTTP 逐调用审计本期只落结构化日志，表化随 F050」 | 表化随 **WS-C**（§5.C.5），WS-A 期先落 `open_api.call` 日志行 | WS-A → WS-C |
-| 7 | `api_credential` / `service_account` 无 Alembic、靠 `create_all` | **补 Alembic revision**（§7）——beta1 已有生产客户，`create_all(checkfirst)` 只对空库友好 | WS-A |
-| 8 | D13 MVP-114 纵切 Wave 划分 | 不适用；本文 §4 按工作流重排 | — |
-| 9 | 错误码 `26004` 在 F049 期借作「身份传递能力尚未启用」 | 同样借用；WS-C 上线后收窄为「未授予委托 / 不在范围」（vibe-050 决议-4） | WS-A → WS-C |
-| 10 | vibe 提交携带的 `features/v3.0.0/049-*` 文档 | 不搬（已拷入 `reference/`）；`docs/constitution.md` C5 登记表改动**要搬** | WS-A |
+| vibe-049 写法 | 本方案处置 |
+|---|---|
+| 服务账号复用 `User` + `user_type` | 作废；改为独立 `service_account` + F048 新主体类型 |
+| 服务账号构造假的 `UserPayload` | 作废；改为 `OpenApiPrincipal` + 通用 `PermissionActor`，业务归属人单独传递 |
+| 删除 `default_operator` / `enable_guest_access` | 只从 v2 移除；v3 发布面继续使用并统一加 guest policy |
+| 两个 WS 并入密钥或分享凭据管线 | v2 WS 走密钥；另建相同能力的 v3 免登录 WS，二者路由隔离 |
+| 新增分享凭据链路和分享表字段 | 全部不采纳；现有分享链接链路不动 |
+| 新建逐调用日志表 | 作废；写现有 `audit_log.metadata` |
+| IP / 限流 / 配额 / 幂等 | 全部不采纳 |
+| 日常模式新造 `/workbench/chat` 三端点 | 作废；按 §5.E 复用五个既有 v1 契约 |
+| 品牌化身份请求头 | 改为 `X-On-Behalf-Of` / `X-End-User` |
+| PAT 主体判断依赖 `user_type='human'` | 删除；存在且启用的 `User` + 活跃 `UserTenant` 即自然人主体 |
 
 ---
 
 ## 3. 总体架构
 
-### 3.1 请求处理管线（`/api/v2/**`，HTTP 与 WebSocket 同一函数 `verify_open_api_access`）
+### 3.1 三种访问面
 
-```
-                 Authorization: Bearer bs-sak-… / bs-pat-…        ?share_token=…（仅 2 个 WS）
-                                   │                                      │
-  ┌──① 提取凭据 ───────────────────┴──────────────────────────────────────┘
-  │   无 / 格式非法 → 401 26001                                                    [WS-A · WS-G]
-  │
-  ├──② 凭据校验（Redis 3s 缓存 → miss 时 bypass 查 api_credential）
-  │   sha256 → 恒时比较 → 未撤销 → 未过期 → SUBJECT_RESOLVERS[subject_kind](…)
-  │     service_account : 主体存在 ∧ user_type=service ∧ 未停用/删除 ∧ 活跃租户==密钥租户      [WS-A]
-  │     natural_person  : 存在 ∧ delete=0 ∧ user_type=human ∧ 活跃租户==密钥租户 → 26043      [WS-D]
-  │     share_link      : ACTIVE ∧ 未过期 ∧ share_scope=app ∧ resource_id==路径 id             [WS-G]
-  │   失败 → 401 26002 / 26043 / 26027；Redis/DB 异常 → 503 26030（fail-closed）
-  │
-  ├──③ 租户：DISABLED_TENANT_KEY 黑名单 → set_current_tenant_id(密钥租户) + set_visible_tenant_ids({leaf,1}|{1})
-  │        ★ 对任何主体都按密钥租户算，超管 PAT 也不放开（K16）                                 [WS-A · WS-D]
-  │
-  ├──③′ 限流（凭据一旦解析成功即计，按 credential_id 令牌桶）：超限 → 429 26009                  [WS-F]
-  │     ★ 放在权限位 / 准入之前：随后被 403 拒绝的请求也计入，防止用错误请求探测；无有效凭据的请求
-  │       没有计量维度、不计（它们在 ② 已 401）
-  │
-  ├──④ 能力开关（仅 natural_person）：部署级 ∧ 租户级，任一关 → 403 26040                        [WS-D]
-  │
-  ├──⑤ IP 白名单（凭据配置了 ip_allowlist 时）：来源 IP ∉ CIDR → 403 26008                      [WS-F]
-  │
-  ├──⑥ 权限位：读 conn.scope["endpoint"] 上的 @open_api_scope 标记
-  │   无标记 → 500 26031 │ scope=None → 跳过 │ 缺位 → 403 26003 (data.required=缺哪位)         [WS-A]
-  │
-  ├──⑦ 身份模式与准入（读 X-Bisheng-On-Behalf-Of / X-Bisheng-End-User）                          [WS-C]
-  │   两头并存 → 400 26010 │ End-User 超限/不可打印 → 400 26018
-  │   有 OBO：凭据无 delegate → 403 26004；PAT → 403 26004（文案「个人密钥不支持委托」）
-  │           五道准入：①delegate ②目标自然人/存在/未禁用/同租户(26005 无差异) ③非超管非租户管理员(26007)
-  │                    ④在委托范围内(26004) ⑤端点 modes 含 D(26006)  → 模式 D，effective_user=目标
-  │   无 OBO：凭据持 delegate → 400 26016（不落回 S）；否则 模式 S，effective_user=主体
-  │           （End-User 头：session=True 的端点写分区键；缺省记 WARN；无会话语义端点只留审计）
-  │   （WS-A 期：任一身份头存在 → 403 26004，WS-C 上线后替换为本槽位）
-  │
-  ├──⑧ 日配额（按 credential_id，只对通过 ①–⑦ 的请求计数）：超限 → 429 26009                     [WS-F]
-  │
-  ├──⑨ 构造身份：UserPayload(effective_user) + OpenApiPrincipal → ContextVar + conn.scope        [WS-A · WS-C · WS-D]
-  │   service_account : is_global_super=False, user_role=[]（不调 init_login_user，vibe-049 D2）
-  │   natural_person  : 取角色 + _check_is_global_super（管理员短路照常，K16），写入凭据缓存载荷
-  │   模式 D 目标     : 同 natural_person 构造；检查 ③ 已保证非特权
-  │
-  ├──⑩ 幂等（仅 idempotent=True 的端点，Idempotency-Key 头）：命中 → 直接返回首次响应；
-  │      同键在途 → 409 26011；同键不同请求体 → 409 26011                                     [WS-F]
-  │
-  ├──⑪ 最后使用时间节流写（SET NX EX 60 + 单行 UPDATE）                                       [WS-A]
-  │
-  ▼  端点体：Depends(get_open_api_login_user) → 业务 Service → F048 require_business_action
-     （资源级失败回业务既有错误码，与 26003 可区分；FGA 不可用 → 503，铁律 3）
-     创建类端点：模式 S → owner=资源归属人 + 回授服务账号（vibe-049 D5）；模式 D → owner=被代表用户、不回授
-  ▼
-  ⑫ 响应后（纯 ASGI 中间件，只挂 /api/v2 前缀）：读 conn.scope["open_api_principal"] → 逐调用审计入队
-     （actor=凭据/主体 · subject=被代表用户 · end_user · endpoint · status · ip · latency）        [WS-C]
+| 访问面 | 调用方 | 身份来源 | 缺少该面凭据时 | 默认操作员 |
+|---|---|---|---|---|
+| `/api/v1` 既有面 | platform / client 与现有分享链路 | 各端点现有 JWT / cookie / 免登录语义 | 保持现状，不接收 v2 API Key 作为登录态替代 | 按现状 |
+| `/api/v2` 密钥面 | 系统集成、个人 Agent | `Authorization: Bearer bs-sak-… / bs-pat-…` | HTTP 401 `26001`；登录 JWT 不能替代 | **禁止回落** |
+| `/api/v3` 发布面 | 工作流 / 知识助手免登录访问者 | 无登录、无 API Key；由发布开关 + 资源状态准入 | 按 guest policy 返回 403 / 404 | **仅此面使用** |
+
+路由层必须物理分开：`router_rpc(prefix='/api/v2', dependencies=[verify_open_api_access])` 与 `router_public(prefix='/api/v3', dependencies=[verify_public_access])` 分别注册，不通过 path if/else 在同一个依赖里分流。
+
+### 3.2 v2 密钥请求处理管线（HTTP / WebSocket 共用）
+
+```text
+Authorization: Bearer bs-sak-… / bs-pat-…
+        │
+        ├─ ① 提取凭据：无头、JWT、格式非法 → 401 26001
+        │
+        ├─ ② 校验 api_credential：sha256 + 恒时比较 + 未撤销 + 未过期
+        │      service_account → service_account 行存在、tenant 一致、未停用/删除
+        │      natural_person  → User 存在、delete=0、活跃 UserTenant 与凭据 tenant 一致
+        │      Redis / DB 异常 → 503 26030（fail-closed）
+        │
+        ├─ ③ 写租户上下文：tenant 黑名单 → current_tenant_id + visible_tenant_ids
+        │
+        ├─ ④ PAT 部署级 / 租户级开关：任一关闭 → 403 26040
+        │
+        ├─ ⑤ 读取 @open_api_scope(scope, modes, session)
+        │      无标记 → 500 26031；缺权限位 → 403 26003
+        │
+        ├─ ⑥ 解析 X-On-Behalf-Of / X-End-User
+        │      冲突、非法、强制委托漏头、端点模式不匹配 → 对应 260xx
+        │
+        ├─ ⑦ 构造 OpenApiPrincipal 与 PermissionActor
+        │      SA 模式 S → service_account:{id}
+        │      PAT 模式 S / 模式 D → user:{user_id}
+        │
+        ├─ ⑧ 最后使用时间节流更新
+        │
+        ▼
+业务 Service → F048 require_business_action（读取统一 PermissionActor）
+        │
+        ▼
+响应 / 断连后 → audit_log(action='open_api.call', metadata={actor, subject, endpoint, result…})
 ```
 
-### 3.2 模块图
+v2 WebSocket 的密钥从 `Authorization` 头读取，不接受 query 参数密钥。握手失败使用 `WebSocketException(1008)`；连接建立后每 3 秒复查凭据状态，撤销、过期、账号停用或租户停用后 5 秒内关闭。
 
+### 3.3 独立服务账号与既有业务模型的衔接
+
+```text
+                         F048 授权主体              业务 owner / creator
+SA · 自身身份        service_account:{sa_id}   resource_owner_user_id
+SA · 代表他人        user:{target_user_id}      target_user_id
+PAT · 自身身份       user:{holder_user_id}      holder_user_id
 ```
-bisheng/open_api/                          ← 新模块（WS-A 移植 + 各 WS 增量）
+
+- `PermissionActor` 从只含 `user_id` 扩为 `subject_type + subject_id + tenant_id + admin facts`。用户 actor 的行为不变；服务账号 actor 的 `super_admin=False`、`tenant_admin_tenant_ids=∅`。
+- OpenFGA 模型新增 `service_account` type，并把它加入业务资源直接授权关系允许的主体类型。`permission_grant_assignee.subject_type/subject_id` 已是通用列，不新增授权表。
+- `canonical_source` / display name / grant mutation 支持 `service_account`，但通用“选用户/部门/用户组”接口仍不返回服务账号；服务账号授权只能从服务账号详情页发起。
+- 权限运行时使用通用 `current_permission_actor` ContextVar。v2 适配器设置它；v1 JWT 未设置时仍由 `resolve_permission_actor(login_user)` 构造用户 actor。permission 模块不反向 import `open_api`。
+- 模式 S 创建资源时，业务行的自然人 creator 写 `resource_owner_user_id`；同一 F048 创建计划追加一条 `subject_type='service_account'` 的可撤销回授。模式 D 不回授服务账号。
+- 需要 `UserPayload` 的遗留 Service 由 v2 adapter 使用资源归属人构造兼容 payload，但权限判定只能读取 `current_permission_actor`；必须用反向测试证明归属人有权而服务账号无权时仍拒绝。
+- 会话表增加 API 来源主体字段。SA 模式 S 的 `message_session.user_id` 为资源归属人（兼容既有非空列），同时写 `api_subject_type='service_account' / api_subject_id=sa_id`；v1 会话列表排除这类行，v2 列表按 API 来源主体读取，避免会话泄漏给资源归属人。模式 D / PAT 仍以自然人 `user_id` 归属，可在 v1 工作台看见。
+- v2 工作流 `invoke / continue` 跨 Celery 边界时序列化 `OpenApiExecutionSnapshot`，至少包含 tenant、actor、authorization subject、业务归属人、identity mode、credential id 与 trace id，**不包含明文密钥**。worker 在任务入口设置 tenant / permission actor ContextVar，并在 `finally` 中 reset；不能只沿用现有 `user_id` 参数。v3 发布任务继续传默认操作员用户身份，但同样使用明确的 `channel='public_v3'` 快照，避免与 v2 密钥主体混淆。
+
+### 3.4 模块图
+
+```text
+bisheng/open_api/
 ├─ api/
-│  ├─ dependencies.py        verify_open_api_access / open_api_subject(scope) / get_service_account_admin
-│  ├─ exception_handlers.py  /api/v2 真 HTTP 状态；WS → WebSocketException(1008)
-│  ├─ middleware.py          [WS-C] 调用审计 ASGI 中间件（只挂 /api/v2）
-│  ├─ idempotency.py         [WS-F] Idempotency-Key 依赖
-│  ├─ router.py              /api/v1/service-accounts · /api/v1/personal-tokens · /api/v1/me/api-token · /api/v2/auth
-│  └─ endpoints/
-│     ├─ auth.py                     GET /api/v2/auth/whoami
-│     ├─ service_account.py          [WS-A] CRUD / 启停 / 删除
-│     ├─ service_account_keys.py     [WS-A] 签发 / 编辑 / 撤销 / 批量撤销 / scopes 目录；[WS-C] 委托范围；[WS-F] ip/限流字段
-│     ├─ service_account_grants.py   [WS-A] 主体侧授权页读 + mutate + revoke-all
-│     ├─ personal_token_self.py      [WS-D] 员工自助：GET/POST/DELETE /api/v1/me/api-token · install-prompt
-│     ├─ personal_token_admin.py     [WS-D] 台账 / 强制吊销 / 租户开关与 TTL
-│     └─ skill_pack.py               [WS-D] GET /api/v1/open-api/skills/{pack}.zip（匿名）
+│  ├─ dependencies.py        verify_open_api_access / get_open_api_execution
+│  ├─ exception_handlers.py  v2 真 HTTP 状态；WS 1008
+│  ├─ middleware.py          v2 调用审计采集
+│  ├─ router.py              v1 管理端点 + /api/v2/auth/whoami
+│  └─ endpoints/             服务账号、密钥、授权、PAT、技能包
 ├─ domain/
-│  ├─ scopes.py              OPEN_API_SCOPES 注册表 + @open_api_scope(scope, modes, session, allow_share_token, idempotent)
-│  ├─ context.py             OpenApiPrincipal（§6.1）+ ContextVar
-│  ├─ models/
-│  │  ├─ api_credential.py           [WS-A] + [WS-F] ip_allowlist / rate_limit_rpm / quota_daily_calls 列
-│  │  ├─ service_account.py          [WS-A]
-│  │  ├─ credential_delegate_scope.py [WS-C] 委托范围条目
-│  │  ├─ open_api_call_log.py        [WS-C] 逐调用审计
-│  │  └─ open_api_tenant_setting.py  [WS-D] 租户级 PAT 开关 / TTL
-│  ├─ services/
-│  │  ├─ credential_service.py       [WS-A] issue/update/revoke/revoke_by_subject/touch/expire
-│  │  ├─ credential_validator.py     [WS-A] 8 步校验 + SUBJECT_RESOLVERS；[WS-D] natural_person 解析器
-│  │  ├─ service_account_service.py  [WS-A]
-│  │  ├─ identity_service.py         [WS-C] 身份头解析、五道准入、模式分流、目标身份构造
-│  │  ├─ delegate_scope_service.py   [WS-C] 范围 CRUD + 保存期自然人校验 + department 子树判定
-│  │  ├─ call_audit_service.py       [WS-C] 审计队列 + 批量落库
-│  │  ├─ personal_token_service.py   [WS-D] 一人一把、重新获取、级联失效、台账、开关
-│  │  ├─ skill_pack_service.py       [WS-D] zip 内存打包（Base URL / 白名单在下发时填）
-│  │  ├─ rate_limit_service.py       [WS-F] 令牌桶 Lua + 日配额
-│  │  └─ idempotency_service.py      [WS-F]
-│  └─ schemas/…
-├─ skill_packs/bisheng-knowledge-search/   [WS-D] SKILL.md · meta.json · references/api.md · scripts/
-bisheng/open_endpoints/                    ← 既有 v2 端点：加标记、身份改 ContextVar、删 chat.py           [WS-A]
-bisheng/workstation/… + open_endpoints/api/endpoints/workbench.py   ← 日常模式会话 V2 面                  [WS-E]
-bisheng/share_link/                        ← share_scope 列、作用域端点、/app-shares 管理端点               [WS-G]
-bisheng/worker/open_api/tasks.py           ← Beat：到期兜底 [WS-A]、调用日志清理 [WS-C]
-platform: pages/SystemPage/components/ServiceAccount/  [WS-B]；PersonalToken/  [WS-B]
-client:   layouts/UserPopMenu → PersonalTokenDialog     [WS-D]；pages/standaloneChat 带 share_token [WS-G]
+│  ├─ scopes.py              OPEN_API_SCOPES + @open_api_scope(scope,modes,session)
+│  ├─ context.py             OpenApiPrincipal
+│  ├─ models/                api_credential / service_account / delegate_scope / tenant_setting
+│  └─ services/              credential / service_account / identity / audit / PAT
+└─ skill_packs/
+
+bisheng/permission/           PermissionActor 与 F048 支持 service_account subject
+bisheng/open_endpoints/       v2 密钥适配器；不再读取 default_operator
+bisheng/public_endpoints/     v3 免登录发布适配器；只含 allowlist
+bisheng/workstation/          日常模式共享 domain service
+bisheng/chat_session/         会话列表 / 详情共享 domain service
+bisheng/knowledge/            临时文件上传共享 domain service
+
+platform: ServiceAccount / PersonalToken 管理页；发布 API 示例切 v3
+client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 ```
 
-### 3.3 关键模块职责（做什么 / 不做什么）
+### 3.5 关键模块职责
 
 | 模块 | 做什么 | 不做什么 |
 |---|---|---|
-| `open_api/api/dependencies.py` | 管线 ①–⑪ 的唯一入口；HTTP / WS 同函数；写 ContextVar + `conn.scope` | 不判具体资源权限（交 F048）；不解析业务参数；不写审计（交中间件） |
-| `open_api/api/middleware.py` | 响应后取 `conn.scope["open_api_principal"]` 入审计队列 | 不做任何拒绝决策；principal 缺失（① 就 401 的请求）也记一条、subject 为空 |
-| `open_api/domain/services/credential_validator.py` | 凭据校验 8 步 + `SUBJECT_RESOLVERS` 分派 + 缓存 | 不认识端点、不判权限位、不解析身份头 |
-| `open_api/domain/services/identity_service.py` | 身份头解析、五道准入、目标身份构造 | 不读端点体、不改 `PermissionActor` 结构、不做资源级判定 |
-| `open_api/domain/services/personal_token_service.py` | 一人一把 / 重签 / 删除 / 台账 / 开关读写 / 级联失效入口 | 不签发服务账号密钥（走 `credential_service`）；不判权限 |
-| `open_api/domain/services/rate_limit_service.py` · `idempotency_service.py` | Redis 侧计量 / 快照 | 不落库、不做业务判断；Redis 异常向上抛 `26030` |
-| `open_api/domain/services/call_audit_service.py` | 有界队列 + 批量落库 + 清理 | 不阻塞请求；不做统计聚合（查询面另立） |
-| `open_api/domain/services/skill_pack_service.py` | 仓内目录 → 内存 zip，渲染 Base URL / 白名单 | 不管理版本、不做 CLI 分发（那是 vibe `dev_toolkit`） |
-| `open_endpoints/api/endpoints/*.py` | 打标记、身份改 `Depends(get_open_api_login_user)`、业务调用 | 不再解析任何身份 / 配置身份；不 import `open_api.api.*`、`workstation.api.*` |
-| `workstation/domain/services/chat_service.py` `run_daily_turn` | 产内部 `TurnEvent` 流，供工作台 SSE 与 V2 SSE 两个适配器 | 不知道 V2 契约字段名；不做入参清洗（适配器做） |
-| `share_link/`（WS-G） | share-token 校验、作用域端点、`/app-shares` 管理 | 不出现在 v2 HTTP 面；不承载身份头 |
-| platform `SystemPage/components/{ServiceAccount,PersonalToken}/` | 管理界面 | 不直连 HTTP（C7）；不硬编码权限位清单（走 `GET /scopes`） |
-| client `PersonalTokenDialog.tsx` | 员工自助面 | 不展示他人令牌；开关关时不渲染入口 |
+| `open_api/api/dependencies.py` | v2 管线唯一入口，设置 principal、tenant 与 permission actor | 不处理 v1 JWT；不允许默认操作员回落 |
+| `public_endpoints/api/dependencies.py` | v3 guest 开关、资源发布状态与默认操作员解析 | 不解析 API Key / 身份传递头；不挂到 v2 |
+| `credential_validator.py` | 凭据校验、主体分派、短缓存 | 不认识具体业务资源 |
+| `identity_service.py` | 无品牌身份头、委托准入、执行主体构造 | 不直接查业务资源权限 |
+| `call_audit_service.py` | 组装 `AuditLog` 并批量写现有表 | 不建新表；不写请求体 / 密钥 / 敏感头 |
+| `permission/application/identity.py` | 为 user / service_account 生成统一 PermissionActor | 不读取服务账号业务表以外的信息来赋管理员能力 |
+| v1 / v2 / v3 endpoint adapter | 校验本面的 schema，调用共享 domain service，渲染既有响应 | 不跨模块 import 别的 API 层；不内部 HTTP 转调 |
 
 ---
 
 ## 4. 工作流拆分与分工
 
-> **并行原则**：WS-A 是地基，其 **Wave 1（移植，约 2 天）** 落地后其余六个工作流即可并行；各工作流之间只通过 §6 的共享契约耦合，不共享未定义的代码。每个工作流自带 tasks（`tasks.md` 按 WS 分节）、自带测试、各起一条分支 `feat/v3.0.0-beta1/053-ws-<x>-<name>`，合回 `feat/v3.0.0-beta1/053-openapi-auth-and-identity` 集成分支。
+| WS | 名称 | 交付物 | 前置 / 对接 |
+|---|---|---|---|
+| A | 底座 + 独立服务账号 + v2 接入 | 凭据表、独立 SA 表、F048 新主体、v2 统一依赖、端点标记、资源归属/回授、到期兜底 | 为 B/C/D/E 提供 Principal、scopes、管理 API |
+| B | 管理界面（platform） | SA 列表/详情/密钥/资源授权、委托配置、PAT 台账；移除网络配置组；发布 API 示例切 v3 | 依赖 A/C/D/F 契约 |
+| C | 身份传递 + 审计 | 新请求头、五道准入、委托范围、文件级过滤、裸参数收口、会话来源字段、复用 `audit_log` | 依赖 A；供 E 使用会话隔离 |
+| D | 个人访问令牌 | natural_person resolver、自助/管理端点、两层开关、级联失效、技能包、client 入口 | 依赖 A/C 文件级过滤 |
+| E | 日常模式 v2 | 五个 v2 端点、共享 service 提取、会话归属校验、模型/工具过滤、对外文档 | 依赖 A/C |
+| F | 免登录发布面 v3 | v3 allowlist、共享 service 提取、guest policy、client/platform/gateway 路由切换 | 后端先发，前端后切 |
 
-| WS | 名称 | 范围（交付物） | 前置 | 与谁对接 | 人力 / 估算 |
-|---|---|---|---|---|---|
-| **A** | 底座移植 + 存量端点接入 | ① cherry-pick vibe 5 提交 + 解冲突 + 补 Alembic（Wave 1）；② 38 端点打标 + router 级依赖抬到 `router_rpc` + 删 6 个 `/chat/*` + 删 `get_default_operator*` + `resolve_operator` 收紧 + `default_operator` / `enable_guest_access` 移除；③ 4 处既有缺陷（未上线校验 / stop 归属 / `download_statistic` 收口 / 助手 WS 裸崩）；④ 资源归属人接缝（vibe D5 三条创建路径）；⑤ 对账豁免 / 配额排除 / 管理接口拒绝矩阵；⑥ 到期 Beat 兜底；⑦ `open_api.call` 结构化日志；⑧ 主体侧授权读端点 + mutate 编排（后端） | 无 | 向所有 WS 提供 §6.1 Principal、`@open_api_scope`、`SUBJECT_RESOLVERS`、管理端点 | 后端 1 人 · **7～8 人天**（Wave 1 = 2 天） |
-| **B** | 管理界面（platform） | ① 移植 vibe 8 个组件（列表 / 新建 / 概览 / 密钥 / 签发 / 明文弹窗）并对齐 beta1 设计规范；② 「资源授权」tab（反查列表、来源列、全部撤销排除回授、AC-64 提示、`delegate` 存在时的显著提示）；③ 签发 / 编辑表单「委托配置」分组（范围选择 user+department、必填、互斥硬阻断、风险提示）；④ 「个人访问令牌」管理员台账 tab（元数据、单个 / 按人吊销、租户开关 + 默认 TTL、部署级未开置灰说明）；⑤ 签发表单「网络」组（IP 白名单 CIDR、限流 rpm、日配额）；⑥ 审计页 lockstep（action 枚举三语）；⑦ `ApiAccess*.tsx` 示例改 `bs-sak-`、`ChatLink` 免登录 URL 带 share_token | A Wave 1（管理端点契约 §6.2） | A / C / D / F 各自的管理端点 | 前端 1 人 · **8～10 人天** |
-| **C** | 身份传递 | ① 身份头解析 + 模式分流 + 五道准入（`identity_service`）；② 委托范围表 + 保存期校验 + department 子树调用期展开；③ 端点 `modes` 声明落地（附录 B.1 允许模式列；仅 S：`download_statistic`、asr / tts）；④ 两个 WS 握手期准入；⑤ `MessageSession.external_user_id` + `ChatMessage` 冗余 + DAO 过滤参数（只写不读）；⑥ 逐调用审计表 + ASGI 中间件 + 批量落库 + 清理 Beat；⑦ 裸 `user_id` 收口（6 端点 → `26019`）+ `add_relative_qa` 死参数；⑧ `POST /filelib/retrieve` 补文件级过滤（两个检索分支）；⑨ 定义 6 与模式 D 的优先级（模式 D 不回授）；⑩ `26004` 语义收窄 + 错误码 26005–26007 / 26010 / 26016 / 26018 / 26019 三语 | A Wave 1 | B（委托配置区）· E（消费模式分流与分区键）· D（PAT 拒 OBO） | 后端 1 人 · **12～14 人天** |
-| **D** | 个人访问令牌 | ① `natural_person` 解析器（角色 + 超管探测入缓存载荷；租户不放开）；② 一人一把签发 / 重新获取 / 删除（`personal_token_service`）+ 白名单校验（只 `knowledge:read`，`26041`）+ 租户默认 TTL（`26042`）；③ 级联失效三触发点（禁用 / 删除 / 换租户）+ 校验期兜底（`26043`）；④ 两层开关（Settings + `open_api_tenant_setting` 表）+ `26040`；⑤ 管理员台账 / 强制吊销端点；⑥ 技能包 `bisheng-knowledge-search`（SKILL.md / meta.json / api.md / 请求脚本 / 安全声明）+ zip 分发端点 + 安装提示词端点（动态 Base URL）；⑦ client 个人中心「API 令牌」弹窗（获取 / 状态 / 删除 / 重新获取 / 明文一次 / 安装提示词 / curl 示例）；⑧ 对客文档改名「自身身份模式」 | A Wave 1；检索文件级过滤依赖 C-⑧（AC-P7） | B（台账 / 开关 UI）· C（文件级过滤） | 后端 1 人 + client 前端 0.5 人 · **12～15 人天** |
-| **E** | 日常模式会话开放 | ① V2 契约（§5.E：`POST /api/v2/workbench/chat` · `GET /api/v2/workbench/turns/{id}` · `POST /api/v2/workbench/files`）；② 入参清洗（9 个死字段、`clientTimestamp` 改可选）+ 白名单式拒绝（契约外 400 指名）；③ 复用 `stream_chat_completion` 的适配层：模型按名解析、知识库 / 平台工具 / 附件 / 业务上下文指令映射；④ 语义可分的 SSE 事件 + 非流式聚合；⑤ 归属校验（模式 S 分区键 / 模式 D 被代表用户，不匹配 404）；⑥ `26015` / `26017` 留位；⑦ 对外文档逐项；⑧ 清 `chat:invoke` 的 `pending_note_key` | A Wave 1 + C（模式 D 主场，不可只出 S 版本） | C（分区键 / 归属）· B（无 UI） | 后端 1 人 · **8～10 人天**（D9 改判后已下调） |
-| **F** | P2 运营能力 | ① 凭据表加 `ip_allowlist` / `rate_limit_rpm` / `quota_daily_calls`；② 令牌桶 Lua（fail-closed）+ 日配额计数；③ IP 白名单（来源 IP 取值规则）；④ 幂等键（`idempotent=True` 端点：`workflow/invoke`、`workbench/chat` 非流式、`filelib/add_qa`）；⑤ 429 / 26008 / 26009 / 26011 三语；⑥ 管理端点字段透传 | A Wave 1 | B（表单网络组）· E（幂等挂到 chat 端点） | 后端 1 人 · **6～8 人天** |
-| **G** | share-token 通道 | vibe-049 D8 全部：`share_link.share_scope` 列 + 相对秒有效期强制 + 撤销端点；3 个匿名作用域端点（豁免前缀）+ `/api/v1/app-shares` 登录态管理端点（非豁免前缀）；两个 WS 接受 `?share_token=` + 3s watchdog；client guest 页改造（不再打任何 v2 HTTP）；platform `ChatLink` URL | A Wave 1 | A（WS 依赖同函数）· B（`ChatLink`） | 全栈 1 人 · **5～6 人天** |
-
-**关键路径**：A-Wave1（2d）→ A-②③ 与 C-①② 并行 → C-⑧ 文件级过滤（D 的 AC-P7 前提）→ E（依赖 C 模式分流）。总工期以 3 后端 + 1.5 前端 并行计约 **3～4 周**。
+**关键路径**：A 的凭据 + PermissionActor → A/C 的 v2 端点接入 → E 日常模式；F 可与 C/D/E 并行，但必须按“后端 v3 先发、调用方后切”集成。
 
 **集成里程碑**：
-- **M1（A Wave 1 落地）**：beta1 上 `GET /api/v2/auth/whoami` 用 `bs-sak-` 通、平台可建号发钥；其余 WS 开工。
-- **M2（A + C + G 完成）**：全端点鉴权、模式 D 可用、分享页不断 → **可对外发版的最小集**。
-- **M3（B + D 完成）**：管理界面完整、PAT 端到端（装包 → 配密钥 → 提问）。
-- **M4（E + F 完成）**：日常模式会话开放、限流 / 幂等。
+
+- M1：独立服务账号可签发密钥，`GET /api/v2/auth/whoami` 可用，数据库没有对应 `user` 行。
+- M2：存量 v2 全部密钥化，模式 D 与审计可用。
+- M3：v3 发布面上线并完成 guest 页面 / 发布文档 / 网关切换。
+- M4：PAT 与五个日常模式 v2 端点完成。
 
 ---
 
 ## 5. 各工作流设计
 
-### 5.A 底座移植与存量端点接入
+### 5.A 底座、权限主体与存量 v2 接入
 
-**决策 A1：整体 cherry-pick，不重写。** 顺序 `a15f06135 → 86e52f90b → 43e73bfc5 → c5989ffd6 → e31c35732`（已在临时 worktree 实测：85 文件 / +10.5k 行；真冲突只有 `api_errors` 三语 × 3 处生成物、`api/v1/endpoints.py get_env`、`test_f048_schema_contract.py`）。不搬 `features/v3.0.0/049-*`（已入 `reference/`）；`docs/constitution.md` C5 改动要搬。备选「按设计重写」——多 5～7 人天且失去 3000 行测试，否决。**何时重新考虑**：vibe 在移植后又对 `open_api/` 做了大改（合并时按文件对比即可）。
+**A1：选择性复用 vibe-049，不整体 cherry-pick。** 可复用密钥生成、hash、掩码、撤销、短缓存、最后使用时间节流、scope 标记与大部分测试；必须排除 `user.user_type`、服务账号 User/UserTenant 建号、登录守卫、分享链路、逐调用新表和 P2 代码。采用“按目录/提交拆取后逐文件对照”的方式，避免先搬入错误数据模型再反向删除。
 
-**A2：补 Alembic。** vibe 靠 `create_all(checkfirst=True)` 建 `api_credential` / `service_account`，beta1 面向存量客户升级，两表**必须有 revision**（模板 `v2_5_1_f012_user_token_version.py`；DDL 只建表建索引，不写数据，INV-26 同向）。`user.user_type` 的 revision 随提交带来，检查 `down_revision` 接到 beta1 当前 head（vibe 分叉后 beta1 可能新增了 revision → 改 `down_revision` 而非重排）。
+**A2：服务账号独立建模。** `service_account` 自己持有 `id / tenant_id / name / description / resource_owner_user_id / created_by / disabled_at / deleted_at / create_time / update_time`。创建只插这一张表；归属人必须是同租户、有效的自然人。停用 / 删除的唯一状态源是本表时间戳，随后撤销或使其名下密钥失效。`api_credential(subject_kind='service_account', subject_id=service_account.id)` 逻辑关联，不在 `user` 中造影子行。
 
-**A3：端点接入沿用 vibe D3（标记 + router 级统一判定）。** 38 端点映射已在 `scopes.py` 写死并有 import-time 断言；beta1 上多出的 1 个 HTTP 端点（43 vs 42）落 spec 时重数并补进映射（同时补 PRD 附录 B.1 回写）。**标记签名扩展为**
-`@open_api_scope(scope: str | None, *, modes=("S", "D"), session=False, allow_share_token=False, idempotent=False)`——`modes` 由 WS-C 消费、`session` 标 ⧗ 端点（End-User 头写分区键 + 缺省 WARN）、`idempotent` 由 WS-F 消费。WS-A 落标记时**一次把四个参数按附录 B.1 填好**，避免三个工作流各改一遍同一行。仅 S 的端点：`GET /filelib/download_statistic`、`POST /llm/workbench/asr`、`/tts`；`session=True`：`workflow/invoke`、两个 WS、`assistant/chat/completions`、日常模式会话三端点。
+**A3：F048 新主体。** OpenFGA authorization model 增加 `service_account`；权限 Check 使用 `service_account:{id}`。授权投影、反查、显示名和 mutation 支持该 subject type。服务账号不能成为资源 owner、租户管理员或超级管理员，只能获得资源直接授权 / 创建回授。旧 user actor 的 tuple、授权结果和 API 不变。
 
-**A4：`resolve_operator` 在 WS-A 期保留（收紧：目标 `delete==0` ∧ 目标活跃租户 == 密钥租户，否则 403），WS-C 移除。** 这是 WS-A 与 WS-C 必须同版发布的原因。
+**A4：v2 统一依赖与端点清单。** `router_rpc` 统一挂 `verify_open_api_access`；每个路由必须有 `@open_api_scope`。`GET /api/v2/auth/whoami` 显式标 `scope=None`。现有 `/chat/{history,gen_title,liked,solved,comment,sync/messages}` 不作为密钥开放能力继续暴露；其中发布页需要的 history / gen_title 仅进入 v3。完整性测试枚举实际 `app.routes`，禁止依赖手写数量。
 
-**A5：其余全部沿用 vibe-049 D1 / D2 / D4 / D5 / D6 / D7 / D9 / D10 / D11 / D12**（主体形态、校验位置与缓存、6 端点真 404、资源归属人接缝、授权页反查、选人排除、权限位注册表与开关、错误码、审计 lockstep、配置移除），本文不重抄；实现者以 `reference/vibe-049-design.md` §3–§5 为准，差异只有 §2.2 列出的十条。
+**A5：资源归属与回授。** 模式 S 的知识库、知识空间和文件创建路径显式接收 `resource_owner_user_id` 与 `PermissionActor`：业务 creator 写自然人归属人，F048 回授给 SA；INHERIT 型文件/文件夹不重复落本地回授，沿用父资源授权。模式 D creator=目标用户且不回授 SA。
+
+**A6：异步身份传递。** 改造 `execute_workflow / continue_workflow` 的任务载荷，使 v2 传 `OpenApiExecutionSnapshot` 而不是把资源归属人的 `user_id` 当作调用身份。任务入队前完成密钥和资源权限检查，worker 仍用快照恢复租户与 F048 actor，并对实际读取/执行动作再次授权；快照里的 `credential_id` 仅用于审计关联，不允许 worker 凭此绕过主体状态或权限检查。
 
 ### 5.B 管理界面（platform）
 
-**B1：组件原样移植，按设计规范核对视觉。** platform 仍以 `@/components/bs-ui` 为组件库（beta1 上 335 个文件在用、`@bisheng/ui` 零引用），vibe 8 个组件同样基于 `bs-ui`，**直接搬、不换组件**；移植后按 `src/frontend/packages/ui/docs/` 的设计规范（字体 / 色彩 / 圆角阴影 / 组件使用规则）核对一遍，视觉改动需设计师确认（root AGENTS.md §4 Ownership）。`react-query` 冻结（vibe 坑 24）仍成立，用 `useTable` / `useState+useEffect`。
+**B1：页面结构。** 系统管理提供“服务账号”和“个人访问令牌”两个同级入口。服务账号详情含概览、API 密钥、资源授权；PAT 台账与开关不放进某个服务账号详情。实现前以 `src/frontend/packages/ui/docs/` 当前规范和 landed 组件为准；platform 沿用自己的 Zustand、request wrapper 与 bs-ui，不混用 client 技术栈。
 
-**B2：一个菜单，四个 tab。** 系统管理 → 「服务账号」（列表 / 新建 / 详情三 tab：概览 · API 密钥 · 资源授权）；「个人访问令牌」作为**同级 tab**（不是服务账号的子 tab——PRD §4.7「两者不共用界面、不共用入口、互不可见」），内含：租户开关（部署级未开 → 置灰 + 说明「需运维在 config.yaml 开启 `open_api.pat_enabled` 并重启」）、默认有效期（天，默认 365）、台账表（持有人 / 掩码 / 创建 / 最后使用 / 有效期 / 权限位 / 管理员高亮标记）、单个吊销、按人批量吊销。单租户部署只显示租户级那一个开关（`appConfig.multiTenantEnabled` 已有）。
+**B2：密钥表单只有三组。** 基本信息、权限位、委托配置。原“网络”组及 IP 白名单 / 限流 / 日配额字段全部删除。委托范围为空不能保存；`delegate` 与未部署的扩展位保持互斥。
 
-**B3：签发 / 编辑表单四组**（PRD §4.7.3）：基本（名称 / 过期）· 权限位（7 个开关 + toolkit 组仅 `openPlatformEnabled`）· 委托配置（勾 `delegate` 展开：范围选择器 = `DepartmentUsersSelect` 多选 + 部门树多选，两类混用；范围为空保存禁用；与 toolkit 三位互斥硬阻断，文案「配了委托的密钥不能用于本地开发，请另签一把」；风险提示「每次调用必须声明被代表用户，漏传即 400」）· 网络（IP 白名单 CIDR 多行、限流 rpm、日配额；留空 = 不限）。编辑与签发同一表单、同一校验。**委托配置在 WS-C 端点未就绪前隐藏**（按 `GET /scopes` 是否返回 `delegate` 位判断，不加前端开关）。
+**B3：资源授权。** 服务账号详情页调用主体侧授权接口，mutation 固定写 `subject_type='service_account' / subject_id=sa_id`；通用用户选择器不增加服务账号。来源列区分管理员授予与创建回授，“全部撤销”不删除保障当前集成继续访问父资源所需的回授行。
 
-**B4：资源授权 tab 沿用 vibe D6**：`GET /{id}/grants` 反查 + 来源列（管理员授予 / 创建时自动回授 / 异常来源）+ `grants:mutate` 逐条反馈 + 「全部撤销」排除回授 + 顶部展示名下密钥与权限位并对「本页已授权但无密钥持对应位」的资源提示 + 名下存在 `delegate` 密钥时显著提示「委托生效时本页授权不参与判定」。
+**B4：发布文档。** `ApiAccess.tsx`、`ApiAccessFlow.tsx` 等“对外发布、无需密钥”的示例统一改 `/api/v3`。密钥开放 API 文档继续使用 `/api/v2`，示例必须携带 `Authorization: Bearer <key>`，两者不得出现在同一个无鉴权示例里。
 
-### 5.C 身份传递
+### 5.C 身份传递、文件过滤与审计
 
-**C1：身份头解析与模式分流放在管线槽位 ⑦，实现在 `identity_service.resolve_identity(principal, headers, endpoint_marker) -> ResolvedIdentity`。** 备选「每个端点自己解析」——违反 K13，否决。解析结果写进 `OpenApiPrincipal.mode / effective_user_id / on_behalf_of_user_id / end_user_id`（§6.1）。OBO 头值**只接受用户 ID**（vibe-050 决议-1）；End-User 头形式约束：≤128 字节、可打印 ASCII，超限 `26018`。**何时该重新考虑**：出现「同一把密钥必须在同一连接内切换被代表用户」的场景（WebSocket 上目前握手期定身份、连接期不可变）——那时需要逐消息准入，成本是每条消息一次五道检查。
+**C1：请求头与模式分流。** 管线只读取 `X-On-Behalf-Of` 与 `X-End-User`。旧品牌头即使单独出现也返回 400，错误信息指向新头，不做兼容别名，避免迁移期同一请求出现两个真相。OBO 值只接受用户 ID；End-User ≤128 字节且为可打印 ASCII。
 
-**C2：委托范围 = 独立表 `api_credential_delegate_scope(id, tenant_id, credential_id, subject_type∈{user,department}, subject_id, create_time)`**，索引 `(credential_id, subject_type, subject_id)`。备选「存进 `api_credential` 的一个 JSON 列」——DM8 上 `JsonType` 落 CLOB、无法在 SQL 里按条目判命中（vibe K5），调用期判定就得把整列取回 Python 遍历；范围可达数百条部门时热路径退化。独立表让检查 4 是一次索引点查。**何时该重新考虑**：范围条目数在真实客户处始终 ≤ 5 且从不按部门（那时 JSON 列 + 缓存载荷内联更省一次查询）。`delegate` 位本身仍在 `api_credential.scopes` JSON 里（唯一开关）。编辑时去掉 `delegate` → 同事务删全部范围行（vibe-050 决议-5，不留「范围非空但未勾」的死配置）。保存 `user` 条目校验自然人（`26021` 同族，早报错）；**department 子树在调用期展开**：`UserDepartment` join `Department.path LIKE '{path}%'`（现有物化路径），一次索引查询判目标是否命中任一条目。
+**C2：委托范围。** 使用独立表 `api_credential_delegate_scope`，支持 user / department 条目。编辑密钥去掉 `delegate` 时同事务清空范围。user 条目只需验证目标存在于 `User`、`delete=0` 且同租户活跃；服务账号不存在于 User，因此无需 `user_type` 判断。department 子树在调用期按物化路径展开。
 
-**C3：五道准入的实现顺序与取证**：① `'delegate' in scopes` → 否则 `26004`；② 取目标 `User` 行：不存在 / `delete!=0` / `user_type!='human'` / 活跃租户 != 密钥租户 → **同一个 `26005`，响应体与耗时形状一致**（四种情形走同一分支、同一序列化，不 early-return 差异化消息）；③ **超管 / 租户管理员判定复用权限运行时的谓词**（`_check_is_global_super` + `is_tenant_admin`，与 `resolve_permission_actor` 同源；默认租户下无租户管理员档，测试按租户分别设计）→ `26007`；④ 范围命中（C2）→ 否则 `26004`；⑤ `'D' in marker.modes` → 否则 `26006`。全部通过后**目标身份构造**：`init_login_user`-等价的 `UserPayload`（角色列表取全，`is_global_super` 必为 False——③ 已保证；`resolve_permission_actor` 会按目标算 `tenant_admin_tenant_ids`，同样为空）。PAT 携带 OBO → 在 ① 之前拦：`26004` + 文案「个人密钥不支持委托」（AC-P15，不静默忽略）。
+**C3：五道准入。** 依次检查：①凭据有 `delegate`；②目标 User 存在、启用、同租户；③目标不是超级管理员 / 租户管理员；④目标命中委托范围；⑤端点允许 D。失败分别落 `26004 / 26005 / 26007 / 26004 / 26006`。全部通过后，授权主体直接改为 `user:{target_id}`。PAT 携带 OBO 在检查 ① 前拒绝。
 
-**C4：模式 D 的会话与资源归属**：`effective_user` = 目标 → `MessageSession.user_id` = 目标（会话回到员工工作台，vibe-050 决议-8）；创建类端点 owner = 目标、**不回授服务账号**（决议-9）——在 vibe D5 接缝处按 `principal.mode == 'D'` 分支：`owner_user_id=effective_user`、`autogrant_user_id=None`。
+**C4：裸参数收口与检索过滤。** 原 v2 `filelib` 的裸 `user_id` 和 `/assistant/list` 死参数一律拒绝并指向 `X-On-Behalf-Of`。`POST /filelib/retrieve` 两个召回分支都执行文件级 prefilter + post-filter；权限服务异常向上返回 503，不能降级成全量结果。
 
-**C5：逐调用审计 = 新表 `open_api_call_log` + 纯 ASGI 中间件（只挂 `/api/v2`）+ 进程内有界队列批量落库。** 备选：a) 复用 `audit_log` 表——它是操作审计（低频、有 UI 语义），逐调用是高频访问日志，混表会把审计页拖垮；b) 每请求同步 INSERT——DM8 写放大（vibe 坑 20 同形）；c) Celery——每请求一条消息进 Redis，开销比批量落库大。选 **c) 之外的批量**：中间件在响应 `send` 完成后把记录放进 `asyncio.Queue(maxsize=10000)`，lifespan 启动的 flusher 每 1s 或攒满 200 条批量 `INSERT`——**按 `tenant_id` 分组、每组 `set_current_tenant_id(tid)` 后插入**（同 `worker/tenant_reconcile/tasks.py` 的「枚举在 bypass 内、写入按行切租户」写法，不用 bypass 直写、C3 自动填充照常生效）；队列满 → 丢弃并计数（日志 `open_api.audit.dropped`），进程退出前 flush 一次。flusher 只需在 API 进程注册（只有它服务 `/api/v2`，C8「每个需要的进程角色都注册」满足）。**已知代价**：进程崩溃丢最多 1s 记录——审计不是计费，可接受；WS 建连一条（复用 `open_api.ws.connect`）、断连一条。字段见 §6.4。保留期 Beat 清理（默认 90 天，`open_api.call_log_retention_days`）。**何时该重新考虑**：合规要求「零丢失」（那时改为每请求同步 INSERT + DM8 分区表，接受写放大）；或调用量使单表月增 > 千万行（那时按月分表或转 ClickHouse 类存储，中间件与队列不变、只换 flusher 的落点）。**Principal 传递**：依赖把 principal 同时写 ContextVar 与 `conn.scope["open_api_principal"]`——ASGI 中间件在外层任务、读不到内层 ContextVar 的修改，只能读共享的 scope dict（坑 §8-4）。
+**C5：逐调用审计复用 `audit_log`。** ASGI 中间件只包 v2 密钥面，响应或 WS 终止后向进程内有界队列写标准 `AuditLog` 对象；flusher 调用现有 `AuditLogDao.ainsert_audit_logs` 批量写现有表。映射如下：
 
-**C6：`POST /filelib/retrieve` 补文件级过滤**：`_aretrieve_chunks_for_kb` 与 `_aretrieve_chunks_for_knowledge_base` 两个分支改为与 `_retrieve_and_filter`（`knowledge_space_chat_service.py:486`）同强度：先 `KnowledgeFileVisibilityService.build_index_prefilter(user, kb_ids)`（阈值 5000）下推向量库 / ES，再 `post_filter_visible_files` 兜底。执行身份 = `effective_user`（模式 S 服务账号 / 模式 D 目标 / PAT 持有人）。**铁律 3 专项**：过滤器抛异常必须向上抛成 503，不得被 `except: pass` 吞成全量——落地时对两分支加「异常 → `PermissionServiceUnavailableError`」并写反向测试（mock 过滤器抛错 → 断言 503 且 body 无 chunk）。文档知识库无文件级模型，按库级（PRD §4.10.8 边界）。
+- `action='open_api.call'`；`target_type='api_endpoint'`；`target_id` 使用路由模板（如 `POST /api/v2/filelib/retrieve`）；
+- `tenant_id / operator_tenant_id` 均为密钥租户；PAT 的 `operator_id=holder_user_id`，SA 的 `operator_id=0`、`operator_name=service_account.name`；
+- Python 字段 `audit_metadata`（数据库 JSON 列 `metadata`）保存 `credential_id / actor_kind / actor_id / identity_mode / authorization_subject_type / authorization_subject_id / on_behalf_of_user_id / end_user_id / scope / http_status / error_code / latency_ms / trace_id`；
+- `ip_address` 使用现有列；不写 Authorization、原始请求体、文件内容或其它请求头；
+- `open_api.call` 不加入旧“系统操作”页面白名单，避免高频调用淹没管理操作；需要查询时走结构化 action 查询；
+- 不新增独立清理任务，保留期跟随项目统一审计数据策略。队列满或批量写失败时记录 `open_api.audit.write_failed` 结构化日志，不影响业务响应。
 
-**C7：裸 `user_id` 收口**：`POST /filelib/retrieve`、`GET /filelib/`、`GET /filelib/file/list`、`POST /filelib/add_qa` 四处真实读写 + `GET /assistant/list`、`POST /filelib/add_relative_qa` 两处死参数——请求体 / 查询串出现 `user_id` → 400 `26019`「参数已移除，请改用 X-Bisheng-On-Behalf-Of」；`resolve_operator` 删除。用 pydantic `extra='forbid'` 拦不住查询参数，在端点体显式判。
+依赖同时把 principal 写入 ContextVar 与 `conn.scope['open_api_principal']`，外层 ASGI 中间件从 scope 读取，规避 ContextVar 子任务回传问题。
 
-**C8：分区键**：`MessageSession.external_user_id VARCHAR(128) NULL` + 索引；`ChatMessage.external_user_id` 冗余（照抄 `tenant_id` 双写）；`filter_session / afilter_session / filter_session_count` 加可选参数、本版无调用方传值（只写不读）。share-token 会话写 `share_link_id` 作分区值（vibe-049 D8 已知代价的后续项，本版顺手写入、不摘出列表）。
+**C6：会话来源与隔离。** `message_session` 增加 `api_subject_type / api_subject_id / external_user_id`。模式 S 的 SA 会话按 `(tenant_id, service_account, sa_id, end_user_id)` 隔离；未传 End-User 时按 SA 粒度并记录 WARN。模式 D / PAT 以自然人归属。`chat/list`、`chat/info`、续聊和附件归属校验使用同一规则，不只比较兼容字段 `user_id`。
 
 ### 5.D 个人访问令牌
 
-**D1：主体 = `subject_kind='natural_person'`，前缀 `bs-pat-`，同一张 `api_credential` 表。** 解析器：`aget_user(user_id)` → `delete==0 ∧ user_type=='human'` → `aget_active_user_tenant(user_id).tenant_id == credential.tenant_id`（离开租户即失效）→ **取角色 + `_check_is_global_super`（Redis `user:{id}:is_super` 缓存）写入凭据缓存载荷**（`roles`, `is_global_super`）；构造 `UserPayload(user_role=roles, is_global_super=…)` 让 `resolve_permission_actor` 得到正常的管理员短路；**但 `set_visible_tenant_ids` 恒为 `{leaf,1}`/`{1}`，不因超管返回 None**（K16 / 附录 E.6）。失败 → `26043`（与 `26002` 区分：持有人要知道「是账号停了」）。
+**D1：主体与校验。** `subject_kind='natural_person'`、前缀 `bs-pat-`，`subject_id=user_id`。resolver 校验 User 存在、`delete=0`、活跃租户与凭据 tenant 一致，再加载角色与管理员事实；不读取 `user_type`。可见租户集合始终按密钥租户限制，不因持有人是超管而放开跨租户过滤。
 
-**D2：一人一把、无名称。** `personal_token_service.obtain(user)`：若已有有效令牌 → 先 `revoke(reason='regenerated')` 再签；`delete(user)` → `revoke(reason='manual')`；两者都主动删缓存键。`scopes` 固定 `['knowledge:read']`；直调管理端点传其它位 → `26041`；传 `expires_at` 超过租户 TTL → `26042`（员工 UI 不出现该字段）。管理员持有人签发时响应带 `warn_admin_full_read=true`（前端二次确认「可读取本租户全部知识」），有效期取 `min(租户默认, open_api.pat_admin_ttl_days 默认 90)`。
+**D2：一人一把与权限白名单。** 获取新 PAT 时撤销旧 PAT；员工删除、管理员吊销、用户禁用/删除/换租户均主动失效。权限位本期固定 `knowledge:read`，不支持 delegate。管理员持有人按既有 PRD 规则警示并收紧 TTL。
 
-**D3：两层开关。** 部署级 `Settings.open_api.pat_enabled: bool = False`（config.yaml，重启生效，三段式同 `open_platform`，经 `GET /api/v1/env.pat_deploy_enabled` 透给前端）；租户级新表 `open_api_tenant_setting(tenant_id PK, pat_enabled bool default false, pat_ttl_days int default 365, update_time)`——备选「复用 workstation 租户配置」：那套配置是工作台偏好、混入治理开关语义不清且要核实其是否真按租户存，否决。管线槽位 ④ 读两层（租户级走 Redis 缓存 60s + 写时主动失效，保证「关闭 5 秒内不可用」）。**关闭 = 停用不撤销**：不写 `revoked_at`，重开即恢复（AC-P1a）。开关按主体类型独立——服务账号密钥不受影响（硬规则 2）。**何时该重新考虑**：平台出现统一的「租户级治理配置」对象（多个 Feature 都要租户开关时）——那时把本表并入，字段语义不变。
+**D3：两层开关。** 部署级 `open_api.pat_enabled=false` 与租户级 `open_api_tenant_setting.pat_enabled=false` 均默认关闭；关闭只让校验拒绝，不改撤销位，重新开启可恢复未过期令牌。
 
-**D4：级联失效 = 三个触发点 + 校验期兜底。** 触发点：① `/user/update` 走 `update_user_delete_hook` 置 `delete=1`（`user/api/user.py:726`）；② 用户删除路径（同文件 / `UserService`）；③ `user_tenant_sync_service.sync_user` 判定租户变更时。三处调既有 `revoke_all_by_subject('natural_person', user_id, reason)`（`subject_disabled` / `subject_deleted` / `subject_disabled`）+ `invalidate_subject_cache`。兜底：解析器每次 miss 重判（3s 缓存），5 秒上界成立。
-
-**D5：员工自助端点（登录态，`/api/v1/me/api-token`）**：`GET`（状态：掩码 / 状态 / 有效期至 / 创建 / 最后使用；无令牌返回 `null`）· `POST`（获取 / 重新获取 → 唯一返回明文处）· `DELETE` · `GET /install-prompt`（按 `request.base_url` 生成三行提示词 + curl 示例；Base URL 取反向代理头 `X-Forwarded-Proto/Host` 优先）。**管理员端点（`/api/v1/personal-tokens`，`get_service_account_admin` 同门禁）**：`GET`（分页台账，只返元数据，含 `holder_is_admin` 标记）· `POST /{id}/revoke` · `POST /revoke-by-user/{user_id}` · `GET/PUT /settings`（租户开关 + TTL；部署级未开时 `PUT enabled=true` → `26040`）。
-
-**D6：技能包 = 仓内目录 + 内存 zip。** `bisheng/open_api/skill_packs/bisheng-knowledge-search/{SKILL.md, meta.json, references/api.md, scripts/bs_request.py, SECURITY.md}`；`GET /api/v1/open-api/skills/bisheng-knowledge-search.zip`（匿名，路径加入 `TENANT_CHECK_EXEMPT_PATHS`；zip 内 `SKILL.md` 的 Base URL 与 `SECURITY.md` 的出站白名单在下发时按当前实例地址渲染，`mtime=0` 可复现）。备选「移植 vibe `dev_toolkit/`」——它是应用工场 CLI 的分发面、带 tarball 与版本清单，为一个 zip 搬整个模块不值，否决；**何时重新考虑**：beta1 后续合并 vibe 时把本端点并入 `dev_toolkit`。SKILL.md 要写清：先调 `GET /api/v2/filelib/` 拿知识空间清单再 `POST /filelib/retrieve`；凭据从 `BISHENG_API_KEY` 环境变量优先、回落 `~/.bisheng/credentials.json`；错误码 401/403/429 分层处理；触发词「知识库 / 检索 / 搜一下有没有」。
-
-**D7：client 个人中心落点**：`layouts/UserPopMenu.tsx` 新增菜单项「API 令牌」→ `components/PersonalTokenDialog.tsx`（Recoil + shadcn；四件事：获取 / 状态 / 删除·重新获取 / 安装提示词 + curl 示例；明文一次性展示复用「必须勾选已保存」交互，**不搬 platform 的 `KeyRevealDialog`**（技术栈不同，行为对齐即可）；开关未开时菜单项隐藏——`GET /api/v1/env` 增 `pat_enabled`（部署 ∧ 租户）。`Nav/AccountSettings.tsx` 是死代码不用（附录 E.6）。
-
-**D8：对客文档改名**：`docs/api/*.md` 与 platform `ApiAccess*.tsx` 中「服务账号模式」→「自身身份模式」，错误码表处置建议列同改（AC-P22）。
+**D4：端点与技能包。** 员工面 `/api/v1/me/api-token`（状态 / 获取或重签 / 删除 / install-prompt）走 JWT；管理员面 `/api/v1/personal-tokens` 走管理员鉴权；技能包下载端点沿用匿名分发。技能包文档使用新身份头名称，API Key 环境变量仍可沿用 `BISHENG_API_KEY`，因为本裁定只去除 HTTP 请求头中的品牌字样。
 
 ### 5.E 日常模式会话开放
 
-**E1：契约形态 = 平台自有业务语义契约（不对标 OpenAI Responses / Chat Completions）。** 备选：a) Responses 子集——PRD D9 已述语义错配（模型侧契约承接应用侧能力）、兼容承诺被拒绝清单掏空、任务模式的 `ask_user` / MinIO 产物表达不了；b) Dify 风格 `/chat-messages`——形态合适但名字与语义借用同样是兑现不了的暗示（K20）。选 **自有命名**，形态借鉴 Dify 的「业务入参 + 事件流」结构。**何时重新考虑**：出现「某第三方生态工具必须直连本面且既有 `POST /api/v2/assistant/chat/completions` 无法替代」的确认客户。
+**E1：按 v1 原路径增加五个 v2 端点。** 不再设计 `/workbench/chat`、`/workbench/turns`、`/workbench/files`，也不发明另一套事件格式。
 
-**E2：三个端点（均 `chat:invoke`，S/D，`session=True`）**：
-
-```
-POST /api/v2/workbench/chat            发起一轮（流式 / 非流式）        idempotent=True（仅非流式）
-GET  /api/v2/workbench/turns/{turn_id} 按标识取回单轮结果（不透明 id；不匹配 404）
-POST /api/v2/workbench/files           上传会话附件（multipart；沿用工作台限制）
-```
-
-请求体（白名单式，契约外字段 400 指名）：
-
-| 字段 | 类型 | 必填 | 映射到内部 |
+| v2 端点 | 复用来源 | scope | v2 行为差异 |
 |---|---|---|---|
-| `query` | string | 是 | `APIChatCompletion.messages[-1].content` |
-| `model` | string | 是 | 模型管理页原名精确匹配，跨服务商同名 → 400 要求限定名 |
-| `session_id` | string | 否（多轮必填） | `MessageSession.chat_id`；首轮由平台返回 |
-| `knowledge` | `[{id}]` | 否 | 挂载知识库；模式 S 传个人知识库 → 400 |
-| `tools` | `[{type:"bisheng_tool", tool_key}]` | 否 | 其它 `type` → 400 指名（AC-34） |
-| `attachments` | `[{file_id}]` | 否 | 只接受本面上传得到的 id |
-| `instructions` | string | 否 | 叠加于平台系统提示词之上，不替换 |
-| `stream` | bool | 否，默认 `false` | 传输形态 |
-| `run_mode` | `"daily"` | 否，默认 `daily` | `"task"` / 其它 → 400 `26017` |
-| `execution` | `"sync"` | 否，默认 `sync` | `"async"` / 其它 → 400 `26015` |
+| `POST /api/v2/workstation/chat/completions` | `/api/v1/workstation/chat/completions` | `chat:invoke` | 只允许日常模式；复用 `APIChatCompletion` 与原 SSE |
+| `GET /api/v2/workstation/config` | `/api/v1/workstation/config` | `chat:invoke` | 只返回 `models[]`、`tools[]`，工具按密钥执行主体权限过滤 |
+| `GET /api/v2/chat/list` | `/api/v1/chat/list` | `chat:invoke` | 按 §5.C.6 的 API 会话主体列举 |
+| `POST /api/v2/knowledge/upload` | `/api/v1/knowledge/upload` | `chat:invoke` | 复用 multipart 限制与 `UploadFileResponse`，文件绑定当前调用主体 |
+| `GET /api/v2/chat/info?chat_id=` | `/api/v1/chat/info?chat_id=` | `chat:invoke` | 校验 chat_id 归属后返回同形状信封 |
 
-响应（非流式）：`{session_id, turn_id, answer, citations:[…], tool_calls:[{tool_key, input, output}], usage, finished_at}`。流式 SSE 事件类型（每事件 `{event, turn_id, session_id, data}`）：`turn.started` · `thinking.delta` · `answer.delta` · `tool.call` · `tool.result` · `citation` · `turn.completed`（终态，含聚合结果）| `turn.failed`（终态）。每轮**有且仅有一个终态**；非流式返回 = `turn.completed.data`。失败轮次不留存（vibe-058 决议-9）。
+**E2：只替换认证适配，不改 v1。** 五个 v1 端点的当前登录/匿名语义原样保留；五个 v2 端点不声明 `Depends(UserPayload.get_login_user)`，也不读 cookie/JWT，只消费 `get_open_api_execution`。即使调用方已登录，缺少 `bs-*` 密钥仍返回 401；有密钥但没有 JWT 可以正常调用。
 
-**E3：复用映射**：`POST /api/v1/workstation/chat/completions` 的 `stream_chat_completion`（`workstation/api/endpoints/chat.py:97`）→ 抽 `WorkstationChatService.run_daily_turn(login_user, DailyTurnInput) -> AsyncIterator[TurnEvent]`（把现有 SSE 文本流改为先产内部事件、再由两个适配器分别渲染工作台 SSE 与 V2 SSE——**不复制一条链路**）。**C1 / RULE-5 约束**：V2 端点文件 `open_endpoints/api/endpoints/workbench.py` 只能 import `bisheng.workstation.domain.services.*`，**禁止** import `bisheng.workstation.api.*`（API 层跨模块导入即 arch-guard VIOLATION）——这正是必须先抽 service 的原因，不是可选重构。备选「V2 端点内部 HTTP 转调 `/api/v1/workstation/chat/completions`」——多一跳、身份要伪造成 JWT、审计断链，否决。**何时该重新考虑**：工作台链路自身重构为事件驱动（那时 V2 适配器直接消费其事件总线）；入参清洗把 `clientTimestamp` 改可选（附录 E.3 陷阱）；`task_mode` 恒 False。附件上传复用 `workstation/api/endpoints/knowledge.py upload_file`。
+**E3：共享业务实现。** 将端点内编排下沉或复用已有 domain service：聊天调用 `workstation.domain.services.chat_service.stream_chat_completion`，配置调用 `WorkStationService`，会话调用 `ChatSessionService`，上传调用 `KnowledgeService` / storage helper。v2 adapter 禁止 import `bisheng.workstation.api.*`、`bisheng.chat_session.api.*` 或 `bisheng.knowledge.api.*`，也禁止内部 HTTP 转调 v1。
 
-**E4：归属**：`session_id` / `turn_id` / `file_id` 三处校验基准 = 会话归属主体（模式 S：服务账号 + `end_user_id` 分区键；模式 D：目标用户）；不匹配 / 跨租户 / 不存在一律 404 且形状一致（vibe-058 决议-3）。模式 S 未传 End-User 只 WARN。
+**E4：契约与拒绝规则。** chat/completions 的请求字段、SSE 顺序和持久化结果与 v1 保持一致；`task_mode=true` 返回 `26017`。若调用方传入已知异步意图字段则返回 `26015`，其它契约外字段 400，不能静默忽略。配置端点不得透出 `linsightConfig`、邀请码、部署专属字段等非开放信息。
 
-### 5.F P2 运营能力
+### 5.F 工作流 / 知识助手免登录发布面 v3
 
-**F1：凭据表加三列**：`ip_allowlist JsonType(list[str] CIDR) NULL`、`rate_limit_rpm INT NULL`、`quota_daily_calls INT NULL`（NULL = 不限）。Alembic 加列。签发 / 编辑端点透传，编辑即时生效（缓存载荷含三列、主动失效）。
+**F1：v3 allowlist。** 以下路由从当前 v2 免登录实现迁移为 v3；相同业务能力的 v2 路由保留为密钥鉴权版本。除下表外不注册其它 v3 路由。
 
-**F2：限流 = Redis 令牌桶 Lua，按 `credential_id`，fail-closed；日配额 = 独立计数器。** 备选：a) 固定窗口计数（`INCR` + `EXPIRE`）——实现最简，但窗口边界可双倍突发，对"每分钟 N 次"的合同语义不准；b) 滑动日志（ZSET）——精确但每请求 O(log n) 且键膨胀；c) **令牌桶 Lua**——一次 `EVAL` 原子取令牌、允许合理突发、键恒定大小。选 c。key `oapi:rl:{credential_id}`，容量 = rpm、速率 = rpm/60；Redis 异常 → `26030` 503（K18）。日配额：`oapi:quota:{credential_id}:{YYYYMMDD}` `INCR` + `EXPIREAT` 次日零点（租户时区取平台配置）；超限 → `26009` 429，响应头 `X-RateLimit-Limit / Remaining / Reset`。**不按外部标识计量**（PRD §4.3.4）。**两个槽位不同**（§3.1）：限流在 ③′（凭据解析成功即计，随后被 403 拒的请求也计入——防用错误请求探测）；日配额在 ⑧（只对通过全部校验、真正要执行的请求计数——配额是"用了多少"不是"打了多少"）。**何时该重新考虑**：出现按租户总量而非按密钥的合同需求（那时在 ⑧ 加一层租户级计数器，不动 ③′）；Redis 单点成为瓶颈（令牌桶键按 credential 分散，可分片，不需改算法）。
+| v3 免登录端点 | 用途 | 对应 v2 密钥端点 |
+|---|---|---|
+| `POST /api/v3/workflow/invoke` | 发布工作流执行 | `/api/v2/workflow/invoke` |
+| `POST /api/v3/workflow/stop` | 停止本发布会话 | `/api/v2/workflow/stop` |
+| `WS /api/v3/workflow/chat/{workflow_id}` | 发布工作流对话 | `/api/v2/workflow/chat/{workflow_id}` |
+| `POST /api/v3/assistant/chat/completions` | 发布知识助手 Chat Completions | `/api/v2/assistant/chat/completions` |
+| `GET /api/v3/assistant/info/{assistant_id}` | 发布页助手详情 | `/api/v2/assistant/info/{assistant_id}` |
+| `WS /api/v3/assistant/chat/{assistant_id}` | 发布知识助手对话 | `/api/v2/assistant/chat/{assistant_id}` |
+| `GET /api/v3/flows/{flow_id}` | 发布页工作流详情 | `/api/v2/flows/{flow_id}` |
+| `GET /api/v3/chat/history` | 发布页当前会话历史 | v2 不开放此端点 |
+| `POST /api/v3/chat/gen_title` | 发布页会话标题 | v2 不开放此端点 |
 
-**F3：IP 白名单**：来源 IP 取值 = 若 `settings.open_api.trusted_proxies` 非空且直连 IP 在其中 → 取 `X-Forwarded-For` 最右一个不在 trusted 的地址；否则用直连 IP。`ipaddress.ip_address in ip_network` 逐条匹配；不在 → `26008`。列表为空 = 不限。
+`GET /assistant/list` 不是单个已发布资源所需能力，不进入 v3；它只保留 v2 密钥版本。
 
-**F4：幂等 = `Idempotency-Key` 头 + Redis 响应快照。** 只对 `idempotent=True` 端点生效；key `oapi:idem:{credential_id}:{sha256(key)}`，值 `{fingerprint, status, body, created}`，TTL 24h；流程：`SET NX` 占位（`in_flight`）→ 执行 → 写快照；命中已完成 → 直接返回快照 + 头 `Idempotent-Replayed: true`；命中 `in_flight` → 409 `26011`；命中但请求体指纹（`sha256(method+path+body)`）不同 → 409 `26011`。实现为依赖 `Depends(idempotency_guard)` 挂在标记端点上（依赖需读 body：用 `await request.body()` 后 Starlette 会缓存，端点体再读不受影响）；快照只存响应体不存请求头。流式响应不支持幂等（`stream=true` 时忽略该头并在响应头声明 `Idempotent-Replayed: unsupported`）。备选「落库存快照」——幂等窗口只有 24h、快照是响应体副本不是业务真相，进 DB 只增加 DM8 写放大与清理任务，否决。**何时该重新考虑**：客户要求幂等窗口 > Redis 内存可承受（如 7 天）或要求幂等记录可审计——那时改为 DB 表 + Redis 只做在途锁。
+**F2：guest policy。** v3 不校验 JWT 和 API Key，统一校验 `default_operator.enable_guest_access=true`、默认操作员存在且启用、目标工作流/助手处于可发布状态。初次定位资源允许在受控 bypass 中按 ID 查询，随后必须设置资源所属 tenant ContextVar 再进入业务 Service。任一 `X-On-Behalf-Of` / `X-End-User` 头均拒绝，防止匿名调用方伪造身份。
 
-### 5.G share-token 通道
+**F3：会话绑定。** v3 创建的会话标记 `api_subject_type='public_v3'`，并绑定资源 ID / 默认操作员；history、gen_title、stop、续聊都校验该来源与资源匹配。不得仅凭随机 chat_id 读取或停止其它 v1/v2 会话。
 
-**沿用 vibe-049 D8 全部**（`share_scope` 列 + 相对秒有效期 + `POST /api/v1/app-shares/{id}/revoke` / `GET /api/v1/app-shares` 登录态管理端点挂非豁免前缀 + 3 个匿名作用域端点 `GET /api/v1/share-link/{token}/{resource|chat/history}` / `POST …/chat/gen_title` + 两个 WS `?share_token=` + 3s watchdog + 执行主体 = 分享创建者 + 审计 `open_api.ws.connect`），client guest 页从 query 取 token、不再打任何 `/api/v2` HTTP；platform `ChatLink` URL 改 `${origin}${BASE_URL}/workspace/chat/{flow|assistant}/{id}?share_token=…`。beta1 上核实：`client/pages/standaloneChat/StandaloneChatPage.tsx` guest 分支仍是 `apiVersion='v2'`，`useChatHelpers.ts` 拼 WS URL 处即改动点。**增量**：会话写 `external_user_id = 'share:{share_link_id}'`（C8）。
+**F4：代码复用和切换。** v2/v3 endpoint 只做各自鉴权和 schema 适配，工作流/助手执行逻辑下沉到共享 domain service。client guest 模式 `apiVersion` 类型扩为 `v1 | v2 | v3` 且取 `v3`；platform 两个发布 API 页面改 v3；商业网关中显式代理/拦截的 assistant、workflow、chat 路径同步增加 v3。现有分享链接代码、URL 参数与 header 不在此工作流修改。
 
 ---
 
-## 6. 共享契约（所有工作流对齐的单一来源）
+## 6. 共享契约
 
-### 6.1 `OpenApiPrincipal`（`open_api/domain/context.py`，frozen pydantic）
+### 6.1 `OpenApiPrincipal`
 
 ```python
 class OpenApiPrincipal(BaseModel, frozen=True):
-    credential_id: int | None            # share_link 时 None
-    subject_kind: Literal["service_account", "natural_person", "share_link"]
-    subject_user_id: int                 # 密钥主体的 user_id（share_link = 分享创建者）
-    resource_owner_user_id: int | None   # 仅 service_account
-    share_link_id: int | None
-    scopes: frozenset[str]
+    credential_id: int
+    actor_kind: Literal["service_account", "natural_person"]
+    actor_id: int                         # SA id 或 PAT holder user_id
+    actor_name: str
     tenant_id: int
-    mode: Literal["S", "D"] = "S"        # [WS-C] 填；WS-A 期恒 S
-    effective_user_id: int               # 执行身份：S = subject_user_id；D = on_behalf_of_user_id
+    resource_owner_user_id: int | None   # 仅 SA
+    scopes: frozenset[str]
+    mode: Literal["S", "D"] = "S"
+    authorization_subject_type: Literal["service_account", "user"]
+    authorization_subject_id: int
+    effective_user_id: int | None         # SA 模式 S 为 None；PAT / D 为自然人 id
     on_behalf_of_user_id: int | None = None
-    end_user_id: str | None = None       # X-Bisheng-End-User 原值（形式校验后）
-    def has_scope(self, code: str) -> bool: ...
+    end_user_id: str | None = None
 ```
 
-写入点：`verify_open_api_access` 同时 `current_open_api_principal.set(p)` 与 `conn.scope["open_api_principal"] = p`。`UserPayload.open_api_principal` 指向同一对象；`UserPayload.user_id == effective_user_id`。**任何工作流不得自行构造第二个 principal**。
+`verify_open_api_access` 同时写 `current_open_api_principal`、`conn.scope['open_api_principal']` 与 permission 层的 `current_permission_actor`。业务代码不得从 `resource_owner_user_id` 反推授权主体。
 
-### 6.2 端点与 API 契约总表
+跨进程任务使用 `OpenApiExecutionSnapshot`，它是 `OpenApiPrincipal` 的最小可序列化投影：保留 `tenant_id / actor_kind / actor_id / authorization_subject_type / authorization_subject_id / resource_owner_user_id / effective_user_id / mode / credential_id / trace_id / channel`，去掉 scopes 以外的凭据材料。`channel` 仅允许 `open_api_v2 | public_v3`；worker 根据 channel 恢复对应执行上下文，不能执行 HTTP 层的 JWT、API Key 或 guest fallback。
 
-| 面 | 端点 | 鉴权 | 归属 |
+### 6.2 路由与鉴权契约
+
+| 面 | 端点 | 鉴权 |
+|---|---|---|
+| v2 密钥面 | 现有 knowledge / filelib / citation / llm / flow / assistant / workflow 开放端点（排除旧 chat 六端点） | API Key + scope + S/D |
+| | `GET /api/v2/auth/whoami` | API Key，`scope=None` |
+| | §5.E 五个日常模式端点 | API Key + `chat:invoke` + S/D |
+| v3 发布面 | §5.F 九个 allowlist 端点 | 无 JWT / 无 API Key；guest policy |
+| v1 管理面 | `/service-accounts/**`、`/personal-tokens/**` | JWT + 租户管理员及以上 |
+| v1 员工面 | `/me/api-token/**` | JWT |
+| v1 站内与分享 | 所有既有接口 | **保持现状** |
+
+v2 请求头只有：`Authorization: Bearer <key>`、`X-On-Behalf-Of: <user_id>`、`X-End-User: <≤128 可打印 ASCII>`。本期没有 `Idempotency-Key` 或限流响应头契约。
+
+### 6.3 错误码分配（模块 260）
+
+| 段 | 码 | 含义 | HTTP |
 |---|---|---|---|
-| 开放面 `/api/v2` | 既有 38 HTTP + 2 WS（附录 B.1） | Bearer；WS 另接受 `?share_token=` | A / G |
-| | `GET /auth/whoami` | Bearer，`scope=None` | A |
-| | `POST /workbench/chat` · `GET /workbench/turns/{id}` · `POST /workbench/files` | Bearer `chat:invoke`，S/D | E |
-| 管理面 `/api/v1`（管理员） | `/service-accounts/**`（vibe §4.2 全表）+ `PATCH /{id}/keys/{key_id}` 增 `delegate_scope[] / ip_allowlist / rate_limit_rpm / quota_daily_calls` | JWT + `get_service_account_admin` | A / C / F |
-| | `/personal-tokens`（台账）· `/personal-tokens/{id}/revoke` · `/personal-tokens/revoke-by-user/{uid}` · `/personal-tokens/settings` | 同上 | D |
-| | `/app-shares`（列表 / 撤销） | JWT，创建者或管理员 | G |
-| 员工面 `/api/v1` | `/me/api-token`（GET / POST / DELETE）· `/me/api-token/install-prompt` | JWT | D |
-| 匿名 | `/open-api/skills/{pack}.zip` · `/share-link/{token}/{resource,chat/history,chat/gen_title}` | 无（豁免前缀） | D / G |
-| 环境 | `GET /env` 增 `open_platform_enabled` / `pat_deploy_enabled` / `pat_enabled` | — | A / D |
+| v2 凭据 | 26001 缺少/非法密钥 · 26002 无效/撤销/过期 · 26003 缺权限位 · 26030 依赖不可用 · 26031 端点未登记 | 401 / 401 / 403 / 503 / 500 |
+| 身份传递 | 26004 未授予委托/不在范围 · 26005 委托目标无效 · 26006 端点不支持代表模式 · 26007 目标为特权主体 · 26010 身份头冲突 · 26016 持 delegate 漏头 · 26018 End-User 非法 · 26019 裸 `user_id` 或旧品牌头已移除 | 403 / 403 / 403 / 403 / 400 / 400 / 400 / 400 |
+| 日常模式 | 26015 异步未开放 · 26017 任务模式未开放 | 400 / 400 |
+| PAT | 26040 能力未开启 · 26041 权限位不在白名单 · 26042 有效期超上限 · 26043 持有人失效 | 403 / 400 / 400 / 401 |
+| 管理面 | 26020 账号不存在 · 26021 归属人/委托目标无效 · 26022 禁止操作 · 26023 扩展位未部署 · 26024 委托配置无效 · 26025 未知权限位 · 26026 密钥不存在 · 26027 账号停用 · 26029 服务账号不能作为资源 owner | v1 信封 |
+| 预留 | 26008 / 26009 / 26011 / 26012 / 26013 / 26014 / 26028、26032～26039、26044～26049 | 不在本期复用 |
 
-请求头：`Authorization: Bearer <key>` · `X-Bisheng-On-Behalf-Of: <user_id>` · `X-Bisheng-End-User: <≤128 可打印>` · `Idempotency-Key: <≤255>`。响应头（P2）：`X-RateLimit-Limit / -Remaining / -Reset`、`Idempotent-Replayed`。
-
-### 6.3 错误码分配（模块 260，落码时按 C5 回写 `docs/constitution.md`）
-
-| 段 | 码 | 含义 | HTTP | 归属 |
-|---|---|---|---|---|
-| 开放面 | 26001 缺少/非法密钥 · 26002 无效/撤销/过期 · 26003 缺权限位（`data.required`）· 26004 未授予委托/不在范围（WS-A 期借作「身份传递未启用」）· 26012 服务账号禁止登录 | 401/401/403/403/403 | A |
-| | 26005 委托目标无效（四情形无差异）· 26006 端点不支持代表模式 · 26007 目标为特权主体 · 26010 身份头冲突 · 26016 持 delegate 漏头 · **26018** End-User 形式非法 · **26019** 裸 `user_id` 已移除 | 403/403/403/400/400/400/400 | C |
-| | 26008 IP 不在白名单 · 26009 超限流/配额 · 26011 幂等键冲突 | 403/429/409 | F |
-| | 26015 异步未开放 · 26017 任务模式未开放 | 400/400 | E |
-| | 26040 PAT 能力未开启 · 26041 权限位不在白名单 · 26042 有效期超上限 · 26043 持有人已停用/删除/离开租户 | 403/400/400/401 | D |
-| 管理面 | 26020–26029（vibe D10：账号不存在 / 归属人无效 / 禁止操作 / 扩展位未部署 / 委托未启用 / 未知位 / 密钥不存在 / 账号停用 / 分享链接无效 / SA 不可作资源侧主体）· 26030 依赖不可用 · 26031 端点未登记 | 信封 / 503 / 500 | A / G |
-| 预留 | 26013 / 26014 已废止不复用；26032–26039 留给管理面增量；26044–26049 留 PAT | | |
-
-三语文案只落 `packages/locales/src/api_errors/*.json`，生成物跑脚本不手改。
+三语文案只落 `src/frontend/packages/locales/src/api_errors/*.json`，生成物由脚本产生。
 
 ### 6.4 数据契约
 
-| 对象 | 字段 | 归属 |
+| 对象 | 字段 / 变化 |
+|---|---|
+| `service_account` | `id · tenant_id · name · description · resource_owner_user_id · created_by · disabled_at · deleted_at · create_time · update_time`；不关联 User |
+| `api_credential` | 凭据 hash / prefix / mask / subject_kind / subject_id / scopes / expires / revoked / last_used 等底座字段；`subject_kind∈{service_account,natural_person}`；无 P2 字段 |
+| `api_credential_delegate_scope` | `id · tenant_id · credential_id · subject_type(user|department) · subject_id · create_time`；唯一键覆盖 credential/type/id |
+| `open_api_tenant_setting` | `tenant_id PK · pat_enabled · pat_ttl_days · update_time` |
+| `message_session` 增列 | `api_subject_type VARCHAR(32) NULL · api_subject_id BIGINT NULL · external_user_id VARCHAR(128) NULL`；索引 `(tenant_id, api_subject_type, api_subject_id, update_time)` |
+| `audit_log` | **无 DDL**；逐调用数据按 §5.C.5 写现有公共列 + `metadata JsonType` |
+| Settings | `open_platform.enabled`、`open_api.credential_cache_ttl_seconds`、`open_api.service_account_idle_days`、`open_api.pat_enabled`、`open_api.pat_admin_ttl_days`；保留现有 `default_operator.enable_guest_access` 给 v3 |
+| Redis | `oapi:cred:{sha256}` · `oapi:cred:lastused:{id}` · `oapi:tenant:{tid}:pat`；无 rate/quota/idempotency key |
+| 审计 action | `open_api.call`、`open_api.service_account.*`、`open_api.api_key.*`、`open_api.grant.*`、`open_api.pat.*` |
+
+### 6.5 外部依赖与风险点
+
+| 依赖 | 谁用 | 风险 |
 |---|---|---|
-| `api_credential`（vibe §4.2）+ 增列 | `ip_allowlist JSON NULL` · `rate_limit_rpm INT NULL` · `quota_daily_calls INT NULL`；`subject_kind` 取值增 `natural_person`；`revoke_reason` 取值增 `regenerated` | A / F / D |
-| `api_credential_delegate_scope` | `id · tenant_id · credential_id · subject_type VARCHAR(16) · subject_id INT · create_time`；idx `(credential_id, subject_type, subject_id)` | C |
-| `open_api_call_log` | `id · tenant_id · credential_id NULL · subject_kind · subject_user_id · mode CHAR→VARCHAR(1) · on_behalf_of_user_id NULL · end_user_id VARCHAR(128) NULL · share_link_id NULL · method · path VARCHAR(255) · scope VARCHAR(32) NULL · http_status · error_code NULL · client_ip VARCHAR(45) · latency_ms · create_time`；idx `(tenant_id, create_time)`、`(credential_id, create_time)`、`(on_behalf_of_user_id, create_time)` | C |
-| `open_api_tenant_setting` | `tenant_id PK · pat_enabled BOOL default 0 · pat_ttl_days INT default 365 · update_time` | D |
-| `message_session.external_user_id` / `chat_message.external_user_id` | `VARCHAR(128) NULL`，索引 | C |
-| `share_link.share_scope` | `VARCHAR(16) server_default 'session'` | G |
-| Settings（config.yaml） | `open_platform.enabled`(F) · `open_api.credential_cache_ttl_seconds`(3) · `open_api.service_account_idle_days`(90) · `open_api.pat_enabled`(F) · `open_api.pat_admin_ttl_days`(90) · `open_api.call_log_retention_days`(90) · `open_api.trusted_proxies`([]) | A / D / C / F |
-| Redis key | `oapi:cred:{sha256}` · `oapi:cred:lastused:{id}` · `oapi:tenant:{tid}:pat` · `oapi:rl:{cid}` · `oapi:quota:{cid}:{ymd}` · `oapi:idem:{cid}:{sha256}` | 各自 |
-| 审计 action（`audit_log`） | `open_api.service_account.*` · `open_api.api_key.*`（增 `regenerate`）· `open_api.grant.*` · `open_api.share_link.*` · `open_api.ws.connect` · `open_api.pat.{obtain,regenerate,delete,admin_revoke,setting_update}` | A / D / G |
-
-### 6.5 我依赖别人的（Incoming）与风险点
-
-底座部分的依赖清单见 `reference/vibe-049-design.md` §6.2（`user` / `user_tenant` / F048 runtime / `share_link` / Redis / MySQL·DM8 / `AuditLogDao` / Settings / FastAPI·Starlette 版本 / platform 组件 / client guest 页），在 beta1 上逐条仍成立。以下是本 Feature **新增**的依赖：
-
-| 依赖 | 形式 | 谁用 | 风险点（什么变化会破坏我） |
-|---|---|---|---|
-| `permission/application/identity.py resolve_permission_actor` + `_check_is_global_super`（`utils/http_middleware.py`）+ `is_tenant_admin` | 内部 Python API（系统级放行谓词） | C 检查 3、D 管理员短路 | 谓词换源（如超管改从新表判）而准入检查 3 没跟 → 窄权限密钥换到管理员无界权限（K15，最重单点）；用例矩阵按租户分别设计 |
-| `UserDepartment` + `Department.path` 物化路径 | ORM | C 检查 4 部门子树 | 路径分隔符 / 前缀规则变更 → `LIKE '{path}%'` 命中错；部门树重建期间路径暂不一致 |
-| `KnowledgeFileVisibilityService.build_index_prefilter / post_filter_visible_files`、`_retrieve_and_filter` | 内部 Python API | C-⑥ 文件级过滤、D（AC-P7） | 阈值 5000 语义变 / 返回形状变 → 过滤退化为资源级而无报错；铁律 3 反向测试是唯一防线 |
-| `MessageSessionDao.filter_session / afilter_session / filter_session_count`、`MessageSession` / `ChatMessage` 模型 | ORM + DAO | C-⑧ 分区键、E 归属校验 | 会话模块重构列名或列举路径 → 分区键写了没人读、归属校验漏 |
-| `workstation/domain/services/chat_service.py`（`stream_chat_completion` → 抽 `run_daily_turn`）、`APIChatCompletion` schema、`upload_file` | 内部 Python API（**本 Feature 主动重构它**） | E | 工作台日常模式是活跃功能，抽 service 会动它的 SSE 渲染——**工作台前端零改动**是硬约束，需回归工作台聊天；`clientTimestamp` 必填死字段（坑 11） |
-| `user/api/user.py update_user_delete_hook`、用户删除路径、`user_tenant_sync_service.sync_user` | 触发点（本 Feature 在其中加调用） | D 级联失效 | 新增第 4 条「用户失效」路径（如批量导入覆盖）而没加触发 → 令牌残活到校验期兜底（≤3s 缓存 + 下次 miss），5 秒上界仍成立但审计少一条 |
-| `GET /api/v1/env`（`api/v1/endpoints.py get_env`）与 platform `appConfig` / client env 读取 | 配置三段式 | A / D 前端显隐 | 新增字段忘了透传 → 前端把开关当 `false`（安全方向） |
-| `TENANT_CHECK_EXEMPT_PATHS`（`utils/http_middleware.py`） | 常量（本 Feature 加 2 个前缀） | D 技能包、G 作用域端点 | 前缀是 `startswith` 且命中即整链 bypass（坑 14）——登录态端点绝不可放在这些前缀下 |
-| Redis Lua `EVAL`（`redis_manager` 异步连接） | 基础设施 | F 限流 / 幂等 | Redis Cluster 下多 key 脚本要同 slot（本设计每脚本单 key，安全）；Redis 不可用 = 开放面整体 503（K18 刻意） |
-| `Department.path`、`Department` 根部门唯一性（`DepartmentRootExistsError`） | 业务不变量 | C「填根部门 = 全员」 | 多根部门出现 → 「根 = 全员」不再成立，委托范围要多填 |
-| `docs/api/*.md`、platform `ApiAccess*.tsx` | 文档 | D-⑧ 改名 | 别的 Feature 又写回「服务账号模式」——CI 无法拦，靠 review |
+| OpenFGA F048 authorization model + grant projection | A | 漏加某资源关系的 `service_account` 允许类型会导致 SA 已授权但恒拒；需模型契约测试覆盖全部 registry 类型 |
+| `current_permission_actor` | A/C/E | 清理不当会在连接复用中串身份；请求 / WS 生命周期必须 token reset |
+| Celery 工作流任务载荷 | A/F | 现状只传 `user_id`，无法表达 SA 主体；改为执行快照并在 worker `finally` reset tenant / actor ContextVar |
+| `AuditLogDao` 与 `audit_log.metadata JsonType` | C | 批量 API 必须兼容 MySQL / DM8；不能用 JSON SQL 表达式做核心鉴权 |
+| `KnowledgeFileVisibilityService` | C/D | 异常若被吞会扩大检索结果，必须反向测试 fail-closed |
+| `WorkStationService` / `stream_chat_completion` | E | v1 活跃功能，抽共享 service 后必须保证 v1 SSE 零变化 |
+| `ChatSessionService` / `MessageSessionDao` | C/E/F | 只按 `user_id` 校验会把 SA 或 public_v3 会话误归属给默认/归属用户 |
+| `default_operator` 配置 | F | 只允许 v3 使用；静态检查禁止 v2 endpoint import `get_default_operator*` |
+| client guest `apiVersion` 与 platform 发布示例 | F | 后端未先发 v3 即切前端会导致发布页白屏 |
+| 商业网关路由 | F | 仍只代理 v2 时 v3 WS/HTTP 在商业版 404 或被登录网关拦截 |
 
 ---
 
-## 7. 数据模型变更总表（Alembic，按 WS）
+## 7. 数据模型与权限模型变更
+
+### 7.1 Alembic
 
 | revision（命名） | DDL | WS |
 |---|---|---|
-| `v3_0_0_f049_user_user_type`（随 cherry-pick 带来，改 `down_revision` 接 beta1 head；**文件名与 revision id 保留 vibe 原样**——日后合并 vibe 时同一 revision 自动去重，改名反而会让两边各加一次同名列） | `user.user_type` + idx | A |
-| `v3_0_0b1_f053_api_credential_tables` | 建 `api_credential`、`service_account`（vibe 模型原样） | A |
-| `v3_0_0b1_f053_delegate_scope_and_session_partition` | 建 `api_credential_delegate_scope`；`message_session` / `chat_message` 加 `external_user_id` + idx | C |
-| `v3_0_0b1_f053_open_api_call_log` | 建 `open_api_call_log` + 3 索引 | C |
+| `v3_0_0b1_f053_api_credential_tables` | 建 `api_credential`、独立 `service_account`；不改 `user` / `user_tenant` | A |
+| `v3_0_0b1_f053_delegate_scope_and_session_subject` | 建委托范围表；`message_session` 加 API 来源主体与外部用户标识列/索引 | C |
 | `v3_0_0b1_f053_pat_tenant_setting` | 建 `open_api_tenant_setting` | D |
-| `v3_0_0b1_f053_credential_p2_columns` | `api_credential` 加 `ip_allowlist / rate_limit_rpm / quota_daily_calls` | F |
-| `v3_0_0b1_f053_share_link_scope` | `share_link.share_scope` | G |
 
-规则：只 DDL、不写数据（INV-26 同向）；`VARCHAR` 不用 `CHAR`；JSON 列用 `JsonType`；每个 revision 独立可回滚；新表模块路径全部登记 `_TENANT_AWARE_MODEL_MODULES`（`bisheng.open_api.domain.models` 一次登记覆盖全部）。多人并行时 **revision 链由集成分支维护者串**（各 WS 先用 `down_revision = None` 占位，合入时改）。
+明确不存在以下 revision：`user_user_type`、`open_api_call_log`、credential P2 columns、`share_link` scope。
 
----
+全部 revision 只做 DDL、不做数据回填；`VARCHAR` 不用 `CHAR`；JSON 用 `JsonType`；新租户表注册到 tenant-aware model 模块。当前功能尚未落表，因此没有服务账号 User 行的迁移/清理任务。
 
-## 8. 已知坑 / 反直觉事实（新增；vibe-049 坑 1–27 全部沿用）
+### 7.2 OpenFGA 模型
 
-| # | 事实 | 不知道会怎样 | 处理 |
-|---|---|---|---|
-| 1 | vibe 049 spec / design 写着「个人访问令牌整条否决、全平台只有 `bs-sak-`」 | 接手的人把 PAT 当成漏网旧方案再删一遍 | `reference/README.md` 与 §2.2-1 显式标注；PRD §7.6 记录了两次裁定的关系 |
-| 2 | vibe 与 beta1 的 **F049–F052 编号撞车**（vibe 指开放 API 系列，beta1 指知识空间读优化等） | 文档互相引用错对象 | 本 Feature 编号 F053；引用 vibe 文档一律加 `vibe-` 前缀 |
-| 3 | 三扩展位代码随移植进入 beta1，但三面不存在 | 有人在 beta1 上把 `open_platform.enabled` 打开 → 表单出现三位、签出的密钥没有任何端点可打 | 默认关；`docs/architecture` 加一句说明；不删（§2.2-2） |
-| 4 | **ASGI 中间件读不到依赖里 set 的 ContextVar**（Starlette 把 app 跑在子任务，ContextVar 修改不回传） | 审计中间件拿到的 principal 永远是 None | 依赖同时写 `conn.scope["open_api_principal"]`（§5.C.5） |
-| 5 | `_compute_visible_tenant_ids` 对 `is_global_super` 返回 `None`（整体关闭租户过滤） | 超管的 PAT 一把密钥横跨全平台租户 | 校验器内的副本对任何主体都按密钥租户算（K16 / 附录 E.6） |
-| 6 | 默认租户下**没有「租户管理员」这一档**（身份解析只在 `tenant_id != DEFAULT` 时查） | 在默认租户构造「租户管理员目标」期待 `26007` 的测试永远失败 | 准入检查 3 的测试按租户分别设计（PRD 附录 E.5） |
-| 7 | `department` 委托范围在**调用期**才展开；服务账号可能被组织侧兜底进「临时访客」部门（根之下） | 保存期校验过了、调用期一把密钥代表了另一个服务账号 | 检查 2 在调用期判 `user_type=='human'`，与范围类型无关（PRD §7.3） |
-| 8 | 检索路径有两条强度不同：`/filelib/retrieve` 只做资源级校验；`filelib.py` 注释宣称「已有 per-user 过滤」**与实现不符** | 以为文件级过滤已做 → 模式 D / PAT 返回真超集（文件名 + 正文双泄露） | §5.C.6；权限关系名统一 `visible`（无 `view_file` / `view_space`） |
-| 9 | `MessageSession` 没有任何可承载外部标识的列；`group_ids` 是用户组语义不可挪用 | 把 End-User 写进 `group_ids` 或只写 `ChatMessage` → 列表接口救不了 | 新列 `external_user_id`，落 `MessageSession` 且冗余到 `ChatMessage`（附录 E.3） |
-| 10 | 内部 `task_mode` 分流的两个分支**都是同步 SSE**，任务模式真正的异步在后续 start-execute + WS 段 | 把「运行模式」和「同步/异步」做成一个开关 | `run_mode` 与 `execution` 两个字段各自校验（D11） |
-| 11 | `clientTimestamp` 是内部入参的**必填死字段** | 直接复用内部 schema → V2 调用 422 | 适配层补默认值或改可选（附录 E.3） |
-| 12 | 部门并发槽位那条 Redis Lua 原语在 Redis 故障时 **fail-open** | 照抄做限流 → Redis 一抖限流全失效 | 新写 Lua，异常 → 503（K18） |
-| 13 | FastAPI 依赖里 `await request.body()` 后 Starlette 缓存 body，端点体可再读；但**流式请求 / multipart** 不适用 | 幂等依赖挂到上传端点 → 大文件全进内存 | 幂等只挂三个 JSON 端点，`stream=true` 忽略（§5.F.4） |
-| 14 | `TENANT_CHECK_EXEMPT_PATHS` 是 `startswith` 前缀且命中即整链 bypass + 跳过 token_version | 把登录态管理端点放 `/share-link*` 或 `/open-api*` 前缀下 → 跨租户可见 | 匿名端点前缀 `/api/v1/open-api/skills`、`/api/v1/share-link/{token}`；登录态端点用 `/personal-tokens`、`/app-shares`、`/me/api-token`（vibe 坑 26） |
-| 15 | beta1 上 `/api/v2` 实际 **43** 个 HTTP 端点（PRD 与 vibe 映射按 42 写） | `scopes.py` import-time 断言失败 / 完整性测试报未登记端点 | WS-A 打标时重数、补映射、回写 PRD 附录 B.1 |
-| 16 | 平台 `handle_http_exception` 把一切压成 HTTP 200 + 信封 | v2 面 401/403/429/409/503 全部失真 | vibe D2 专属 handler；**新错误码必须继承 `OpenApiAuthError` 才带真 HTTP 状态**（WS-C/D/E/F 都要注意） |
+新增 `service_account` type，并将其加入各业务资源可直接授权关系的 `directly_related_user_types`。发布模型前运行 schema contract：registry 中每个支持直接授权的资源类型都允许 `service_account`，owner / tenant admin / super admin 关系均不允许。模型升级是向后兼容添加，不重写既有 user / department / group tuple。
 
 ---
 
-## 9. 测试策略与 PRD 验收映射
+## 8. 已知坑 / 反直觉事实
 
-**分层**：单元（`test/open_api/`，无外部依赖）· 集成（pytest + httpx，连 test 中间件 MySQL / Redis / OpenFGA，`asyncio_mode=auto`，断言 v2 面**真 HTTP 状态**、管理面**信封码**）· E2E（`/e2e-test`，页面手动清单）· DM8（105 回归：建 ≥2 个服务账号、PAT 一人一把重签、call_log 批量写）。
-
-| PRD AC | WS | 关键用例 |
+| # | 事实 | 处理 |
 |---|---|---|
-| AC-1～5, 21, 22, 40 | A / B | 无头 401 无回落；明文一次；撤销 ≤5s；缺位 403 指名；跨租户列表空；编辑不轮换 |
-| AC-14～17, 42～47 | A | 登录矩阵 10 入口 26012；选人 8 处不见 SA；对账不改写；配额不计；归属人三路径；回授可撤且不进「全部撤销」 |
-| AC-18～20, 32, 34～36, 50 | A / E / G | WS 握手拒绝优雅关闭；未上线 13010；stop 归属 403；模式 D 会话回工作台；未知工具 400；异步 26015；任务模式 26017 |
-| AC-6～13, 23, 26, 37, 38, 41, 48, 49 | C | 五道准入逐条 + 26005 四情形形状一致 + 26007；范围空一律拒；漏头 26016 无业务数据；两头 26010；End-User 不改权限；模式 D 集合相等；FGA 不可用 503 无结果；审计双归属；裸 user_id 26019；delegate ⊗ 扩展位 |
-| AC-24, 25 | F | 限流 429 + 头；同键只执行一次、异体 409；Redis 断 → 503 |
-| AC-27 | A | 升级前后「默认操作员」用户零变化（快照对比） |
-| AC-P1～P22 | D / B / C | 两层开关 5s 停用可逆；无有效期选项；只 knowledge:read；集合相等（正例）+ 无权文件不出现（反例）；三触发点级联；一人一把重签旧的失效；台账无明文；审计 actor/subject；PAT+OBO 拒；跨租户空；管理员短路 + 不跨租户；安装提示词带实例地址；zip 可解包；端到端装包→配密钥→提问 |
-| vibe-049 AC-55～58（share-token） | G | 坏 token 拒；资源不符拒；撤销 / 过期 ≤5s（watchdog）；guest 页零 v2 HTTP |
+| 1 | 同一路径能力会同时存在 v2 密钥版与 v3 免登录版 | 物理分 router；路由枚举测试同时断言 auth dependency |
+| 2 | 登录 JWT 与 API Key 都可能占用 Authorization Bearer | v2 只接受 `bs-sak-` / `bs-pat-` 前缀；JWT 一律 26001 |
+| 3 | 服务账号 id 与 user_id 都是整数，数值可能碰撞 | 所有授权、缓存、审计和会话键都使用 `(subject_type, subject_id)`，不得裸用 id |
+| 4 | 资源归属人有真实 UserPayload，但不是 SA 的授权身份 | permission actor ContextVar 优先；反向测试“owner 有权、SA 无权”必须拒绝 |
+| 5 | `User` 中不再有服务账号 | 自然人判断不需要 `user_type`；任何服务账号筛选/登录守卫代码都是错误移植 |
+| 6 | v1 会话列表按 `user_id`，SA 会话兼容写资源归属人 | v1 列表排除 `api_subject_type='service_account'`；v2 按来源主体查 |
+| 7 | ASGI 外层读不到依赖子任务写回的 ContextVar | principal 同时写 `conn.scope`，审计从 scope 取 |
+| 8 | `/api/v1/workstation/config` 含部署配置，不全是模型/工具 | v2 明确投影只返回 `models` / `tools` |
+| 9 | `clientTimestamp` 是 v1 schema 的历史必填字段 | v2 既然复用契约就保持一致；不得另造字段映射或悄悄补值 |
+| 10 | v3 无 JWT 时中间件不会自动建立租户 ContextVar | guest resolver 受控查询资源后显式设置 tenant，再进入业务查询 |
+| 11 | v3 history / gen_title 当前只靠 chat_id 容易越界 | 增加 `public_v3` 会话来源校验并绑定资源 |
+| 12 | client guest 页面除 WS 外还会请求 flow/info/history/title | v3 allowlist 必须覆盖完整调用图，端到端验证浏览器 Network |
+| 13 | commercial gateway 目前显式写有 v2 assistant/chat 规则 | v3 HTTP + WS 路由必须同步调整并做商业版回归 |
+| 14 | 平台全局 HTTP handler 会把部分异常压成 200 信封 | v2 新异常继承 `OpenApiAuthError` 并返回真实 401/403/500/503；v3 沿用发布面既有形状 |
 
-**手动验证一遍**（以租户管理员账号登录 platform，非 `admin`，避免超管短路掩盖问题；`$BASE` = 实例地址）：
+---
+
+## 9. 测试策略与验收映射
+
+**分层**：单元测试 `test/open_api/`；HTTP / WS 集成测试；MySQL + Redis + OpenFGA CI；DM8 105 回归；最后运行 `/e2e-test`。重点不是手写端点数，而是从 `app.routes` 生成实际清单。
+
+| 范围 | 关键用例 |
+|---|---|
+| 三面隔离 | v1 JWT 正常；v2 已登录但无 key 仍 401；v2 只有 key 可调用；v3 无 JWT/key 可访问已发布资源；v3 不接受身份传递头 |
+| 独立 SA | 创建 SA 后 User/UserTenant 行数不变；两 SA id 与 user id 碰撞不串权；SA 无 admin shortcut；停用/删除 5 秒内失效 |
+| F048 | direct grant / revoke / create autogrant；owner 有权而 SA 无权仍拒；模式 D 不使用 SA grant |
+| 异步身份 | v2 SA / PAT / D 三类快照往返后 actor、tenant 不变；队列载荷无明文 key；worker 串行处理两个 tenant 后 ContextVar 不串；v3 快照不能进入 v2 分支 |
+| 身份传递 | 五道准入逐条；新头有效；旧品牌头拒绝；裸 user_id 拒绝；文件级过滤异常 503 且无数据 |
+| 审计 | `audit_log.action='open_api.call'`；metadata actor/subject 双归属完整；无密钥/请求体；SA operator_id=0；DM8 可批量写 |
+| PAT | 一人一把、两层开关、级联失效、只 knowledge:read、超管不跨 tenant、OBO 拒绝 |
+| 日常模式 | 五个 v2 端点与 v1 schema/信封/SSE 对齐；config 只有 models/tools；SA/PAT/D 会话归属矩阵；跨主体 chat/file 统一 404 |
+| v3 发布面 | 九路由 allowlist；未发布/开关关拒绝；两个 WS 正常；history/title/stop 不能跨资源；`/api/v3/assistant/list` 真 404 |
+| 前端/网关 | guest 页面所有 v3 HTTP/WS 无 v2 遗留；发布示例为 v3；密钥文档为 v2；商业网关可转发 v3 WS |
+
+**手动验证**（`$BASE` 为实例地址）：
 
 ```bash
-# M1 · 底座：建号 → 签发 → whoami
-# platform：系统管理 → 服务账号 → 新建（归属人 = 自己）→ 直达签发 → 勾 knowledge:read → 复制明文 → 勾「我已保存」
-curl -s -H "Authorization: Bearer $SAK" $BASE/api/v2/auth/whoami            # 200，scopes 含 knowledge:read
-curl -s -o /dev/null -w '%{http_code}\n' $BASE/api/v2/auth/whoami           # 401（真 HTTP 状态，非 200 信封）
-curl -s -H "Authorization: Bearer $SAK" $BASE/api/v2/assistant/list         # 403 26003，data.required=assistant:read
-curl -s -H "Authorization: Bearer $SAK" $BASE/api/v2/chat/history           # 404（6 端点不暴露）
-# platform 撤销该密钥 → 3 秒内再 curl whoami → 401 26002
+# v2：登录态不能替代密钥；服务账号密钥可用
+curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/v2/auth/whoami"                    # 401
+curl -s -H "Authorization: Bearer $SAK" "$BASE/api/v2/auth/whoami"                    # 200
 
-# M2 · 身份传递
-curl -s -H "Authorization: Bearer $SAK" -H "X-Bisheng-On-Behalf-Of: 1" $BASE/api/v2/filelib/     # 403 26004（未授予 delegate）
-# platform 编辑密钥：勾 delegate + 范围=销售部；再签一把不带 delegate 的 $SAK2
-curl -s -H "Authorization: Bearer $SAK" $BASE/api/v2/filelib/                                   # 400 26016（持 delegate 漏头）
-curl -s -H "Authorization: Bearer $SAK" -H "X-Bisheng-On-Behalf-Of: <销售部张三 id>" \
-     -X POST $BASE/api/v2/filelib/retrieve -d '{"query":"合同","knowledge_id":[...]}'          # 200，结果 = 张三在工作台检索所得
-curl -s -H "Authorization: Bearer $SAK" -H "X-Bisheng-On-Behalf-Of: <admin id>" $BASE/api/v2/filelib/   # 403 26007
-curl -s -H "Authorization: Bearer $SAK2" -H "X-Bisheng-End-User: crm-88" -X POST $BASE/api/v2/workflow/invoke ...  # 200，会话分区键写入
-# 审计：SELECT * FROM open_api_call_log ORDER BY id DESC LIMIT 5 → 上述调用各一行，模式 D 行 on_behalf_of_user_id=张三
+# 新身份头
+curl -s -H "Authorization: Bearer $SAK" -H "X-On-Behalf-Of: $USER_ID" \
+  "$BASE/api/v2/filelib/"                                                               # 按委托规则
+# 旧品牌身份头或裸 user_id → 400 26019
 
-# M3 · 个人令牌（先在 config.yaml 开 open_api.pat_enabled，再在 platform「个人访问令牌」tab 开租户开关）
-# client：头像菜单 → API 令牌 → 获取 → 复制 $PAT 与安装提示词
-curl -s -H "Authorization: Bearer $PAT" $BASE/api/v2/auth/whoami                                 # 200，subject_kind=natural_person
-curl -s -H "Authorization: Bearer $PAT" -X POST $BASE/api/v2/filelib/retrieve -d '{...}'          # 200，与本人工作台检索集合相等
-curl -s -H "Authorization: Bearer $PAT" -H "X-Bisheng-On-Behalf-Of: 1" $BASE/api/v2/filelib/     # 403 26004「个人密钥不支持委托」
-curl -s -o pack.zip $BASE/api/v1/open-api/skills/bisheng-knowledge-search.zip && unzip -l pack.zip   # 含 SKILL.md，Base URL = $BASE
-# platform 关租户开关 → 3 秒内 curl whoami → 403 26040；重开 → 恢复；platform 禁用该用户 → 401 26043
-# 把安装提示词贴给 Claude Code / openclaw → 提问「知识库里有没有 X」→ 结果与工作台一致（AC-P21）
+# 日常模式：五个 v2 端点只需密钥，不需 JWT
+curl -s -H "Authorization: Bearer $SAK_CHAT" "$BASE/api/v2/workstation/config"         # data 仅 models/tools
+curl -N -H "Authorization: Bearer $SAK_CHAT" -H 'Content-Type: application/json' \
+  -d '{"clientTimestamp":"2026-09-04T00:00:00Z","model":"<id>","text":"你好"}' \
+  "$BASE/api/v2/workstation/chat/completions"                                            # 与 v1 同形 SSE
+curl -s -H "Authorization: Bearer $SAK_CHAT" "$BASE/api/v2/chat/list?page=1&limit=10"
 
-# M4 · 会话与 P2
-curl -N -H "Authorization: Bearer $SAK2" -X POST $BASE/api/v2/workbench/chat \
-     -d '{"query":"你好","model":"<模型名>","stream":true}'                                      # SSE：turn.started … turn.completed
-curl -s -H "Authorization: Bearer $SAK2" -X POST $BASE/api/v2/workbench/chat -d '{"query":"x","model":"m","execution":"async"}'   # 400 26015
-for i in $(seq 1 70); do curl -s -o /dev/null -w '%{http_code} ' -H "Authorization: Bearer $SAK2" $BASE/api/v2/auth/whoami; done  # rpm=60 时第 61 起 429
-curl -s -H "Authorization: Bearer $SAK2" -H "Idempotency-Key: k1" -X POST $BASE/api/v2/workflow/invoke -d '{...}'   # 两次 → 第二次头 Idempotent-Replayed: true
+# v3：发布面无 key；v2 同能力仍要求 key
+curl -s "$BASE/api/v3/assistant/info/$ASSISTANT_ID"                                       # 已发布且 guest 开关开 → 200
+curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/v2/assistant/info/$ASSISTANT_ID"     # 401
+
+# 审计写现有表
+# SELECT action, operator_id, metadata FROM audit_log WHERE action='open_api.call' ORDER BY create_time DESC;
 ```
 
-**可观测**：结构化日志 `open_api.call`（WS-A 期）→ 表化后保留日志行作为 Redis / DB 故障时的兜底；`open_api.auth.reject{code}` 计数；`open_api.audit.dropped`；`open_api.ratelimit.hit`；watchdog 断连原因。
+**可观测**：`open_api.call` 结构化日志、`open_api.auth.reject{code}`、`open_api.audit.write_failed`、`public_api.reject{reason}`、WS 关闭原因。不再定义 P2 相关指标。
 
 ---
 
 ## 10. 发布与升级
 
-1. **部署顺序**（vibe 坑 22）：先发代码 → 再在 `config.yaml` 加 `open_platform:` / `open_api:` 顶层键 → 重启。未知顶层键会拒启。
-2. **Alembic**：§7 七个 revision 按 WS 合入顺序串链；升级前备份 `share_link`、`message_session`。
-3. **发布说明四项**（PRD §4.9，WS-A 交付）：升级后管理员三步；接入空窗；6 个不暴露端点清单；`download_statistic` 入参 `file_path → file_name`、裸 `user_id` 移除、存量裸分享链接失效。加：技能包与 PAT 的开启方式（默认关）。
-4. **对客文档**：`docs/api/*.md` 删「网络层负责访问控制」「建议配置超级管理员」；身份模式改名「自身身份模式 / 代表他人模式」；错误码表 260 段；secret scanning 前缀 `bs-sak-` 与 `bs-pat-` 两条规则。
-5. **最小可发版集** = M2（A + C + G）；B 缺失时管理员可用 API 建号发钥（不推荐对外）。
+1. 执行 §7 三个 Alembic revision；无需 `user`、审计表或分享表备份/变更。
+2. 先发布向后兼容的 OpenFGA `service_account` 模型，再部署后端；在模型就绪前保持服务账号签发入口关闭。
+3. 先上线 v3 后端九个路由并验证 HTTP / WS，再切 client guest、platform 发布示例和商业网关；旧 v2 发布 URL 在同一版本移除免登录语义，不能继续匿名调用。
+4. v2 发布后不再读取 `default_operator`；v3 继续依赖 `default_operator.enable_guest_access`。升级说明必须把两者写成不同通道。
+5. 对客文档分别成章：v2 密钥开放 API（含新身份头）与 v3 免登录发布 API。不得宣称“所有 `/api/v2/**` 都可匿名”，也不得要求 v3 携带 API Key。
+6. 最小可发版集为 A + C + F；B 缺失时不建议对外启用服务账号，E/D 可在同版后续里程碑启用。
 
 ---
 
 ## 11. 后续 / 不做
 
-- 任务模式（灵思）与异步执行：四项前置（异步作业语义、可重放事件流、后端统一编排、并发准入）完成后点亮，**不得推翻** §5.E 契约——`run_mode: "task"` 与 `execution: "async"` 两个字段就是留位；`turn.paused`（`ask_user`）与产物下载入口作为未来事件类型预留名字。
-- 会话列表 / 历史 / 反馈 / 回填端点：不做、不留占位（D12）。
-- 密钥级资源白名单、OAuth 授权服务器、Webhook 回调鉴权、企业网关签发令牌（D6 待定）：不做。
-- share-token 会话从分享创建者列表摘出：分区键已写（`share:{id}`），列表过滤随后续会话功能一并做。
-- 与 `3.0-vibe` 合并：本文 §2.2 的十条差异是合并时的对照清单；`open_api/` 模块结构与 vibe 保持同构就是为了这一步。
+- R8 / P2 的 IP 白名单、限流、配额、幂等均不做，也不预埋字段、Redis key 或错误处理分支。
+- 现有分享链接实现和数据模型不改；其后续治理单独立项，不与 v2/v3 分面绑定。
+- 任务模式、异步作业、按轮结果新契约不做；日常模式只复用现有同步链路。
+- 密钥级资源白名单、OAuth 授权服务器、Webhook 回调鉴权、企业网关签发令牌不做。
+- 日常模式反馈、消息回填等未列入 §5.E 的接口不开放。
+- 与 `3.0-vibe` 合并时以 §2.1 为差异清单，禁止把 User 影子账号、分享凭据或 P2 代码重新带入。
 
 ---
 
@@ -558,5 +535,6 @@ curl -s -H "Authorization: Bearer $SAK2" -H "Idempotency-Key: k1" -X POST $BASE/
 
 | 日期 | 改动 | 触发 |
 |---|---|---|
-| 2026-08-31 | 初版：全量范围（P0+P1+P2）、7 工作流分工、共享契约、错误码分配、数据模型总表、16 条新增坑 | 用户裁定「所有需求一起设计、先出设计、多人分工」 |
-| 2026-08-31 | `/sdd-review design` 自查修订 9 处：限流槽位前移到凭据解析后（原与 spec AC-F1「被拒请求计入限流」矛盾）、日配额留在执行前；补 §3.3 模块「做什么 / 不做什么」表；补 §6.5 新增依赖与风险点；补 §9 手动验证命令；C1 / C2 / C5 / D3 / F2 / F4 补备选与「何时该重新考虑」；E3 写明 RULE-5 约束；C5 flusher 改按租户切上下文写入（C3）；Alembic 保留 vibe revision id 的理由 | 评审 24 项清单 |
+| 2026-08-31 | 初版：P0 + P1 + P2、7 工作流 | 初始总体设计 |
+| 2026-08-31 | `/sdd-review design` 自查修订 | 初版评审 |
+| 2026-09-04 | 重写：移除 R8/P2 与分享链路改造；请求头去品牌；审计改复用 `audit_log.metadata`；服务账号改独立主体且不写 User；日常模式改为五个 v1 同路径 v2 接口；工作流/知识助手免登录发布接口迁至 v3，与 v2 密钥面彻底分离 | 用户新范围裁定 |
