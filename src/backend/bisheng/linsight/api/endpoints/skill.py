@@ -19,7 +19,11 @@ from bisheng.linsight.domain.schemas.skill_schema import (
     SkillStatusUpdate,
 )
 from bisheng.linsight.domain.services.skill_service import SkillService
-from bisheng.linsight.domain.services.skill_store import MAX_BUNDLE_SIZE, slugify_pinyin
+from bisheng.linsight.domain.services.skill_store import (
+    MAX_UNPACKED_SIZE,
+    resolve_skill_upload_limit,
+    slugify_pinyin,
+)
 
 router = APIRouter(prefix="/skill", tags=["LinsightSkill"])
 
@@ -30,7 +34,7 @@ def _current_tenant_id() -> int:
 
 async def _read_upload(file: UploadFile) -> bytes:
     data = await file.read()
-    if len(data) > MAX_BUNDLE_SIZE:
+    if len(data) > await resolve_skill_upload_limit():
         raise SkillFileTooLargeError()
     return data
 
@@ -79,6 +83,20 @@ async def slugify_skill_name(
 ) -> UnifiedResponseModel:
     # Single source of truth with the SOP migration script (skill_store.slugify_pinyin).
     return resp_200({"slug": slugify_pinyin(text)})
+
+
+@router.get("/upload-limit", summary="Effective skill upload size caps (drives the upload dialog)")
+async def get_upload_limit(login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    """Declared before /{name} so the literal path is not swallowed by the name route."""
+    max_size = await resolve_skill_upload_limit()
+    return resp_200(
+        data={
+            "max_size_bytes": max_size,
+            "max_size_mb": max_size // (1024 * 1024),
+            "max_unpacked_bytes": MAX_UNPACKED_SIZE,
+            "max_unpacked_mb": MAX_UNPACKED_SIZE // (1024 * 1024),
+        }
+    )
 
 
 @router.get("/{name}", summary="Skill detail (frontmatter + body + bundle file tree)")
