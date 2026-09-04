@@ -30,7 +30,7 @@ export default () => (
 
 ## 两处固定例外
 
-`approving`（审批中蓝）与 `skill`（技能紫）是色板里仅有的两个**不随蓝⇄绿主题切换**的标签色（见「文档 → 设计规范 → 色彩 Color」§4）。它们不是 `brand` 的别名：`brand` 会跟着主题变绿，而这两个不会。**业务不得再新增固定色**——需要新的固定色是改规范，不是加一个 prop。
+`approving`（审批中蓝）、`skill`（技能紫）与 `web`（网页来源紫，与技能同一支紫、用在参考来源面板上）是色板里仅有的三个**不随蓝⇄绿主题切换**的标签色（见「文档 → 设计规范 → 色彩 Color」§4）。它们不是 `brand` 的别名：`brand` 会跟着主题变绿，而这三个不会。**业务不得再新增固定色**——需要新的固定色是改规范，不是加一个 prop。
 
 ```tsx
 import React from 'react';
@@ -221,7 +221,7 @@ export default () => (
 |---|---|---|---|
 | `children` | `ReactNode` | — | 标签的词，2～6 个字，名词或状态词。文案由调用方给 |
 | `size` | `'small' \| 'medium'` | `'medium'` | 20 / 24px 两档。同一组标签用同一档 |
-| `color` | `'default' \| 'brand' \| 'success' \| 'warning' \| 'danger' \| 'approving' \| 'skill'` | `'default'` | 后两个是仅有的固定例外色（审批中蓝 / 技能紫），不随蓝⇄绿主题切换。`checkable` 与 `avatar` 下不生效 |
+| `color` | `'default' \| 'brand' \| 'success' \| 'warning' \| 'danger' \| 'approving' \| 'skill' \| 'web'` | `'default'` | 后三个是仅有的固定例外色（审批中蓝 / 技能紫 / 网页来源紫），不随蓝⇄绿主题切换。`checkable` 与 `avatar` 下不生效 |
 | `dot` | `boolean` | `false` | 词前面加一个状态点，随档 4 / 6px，颜色跟字走。优先于 `icon`，`avatar` 存在时不生效 |
 | `icon` | `ReactNode` | — | 前缀 icon，随档 12 / 14px，跟文字色走。`dot` / `avatar` 存在时不生效 |
 | `avatar` | `ReactNode` | — | 前缀头像，14 / 16px 裁圆；标签跟着切胶囊并固定灰底 |

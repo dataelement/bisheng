@@ -494,6 +494,21 @@
     "saveToKnowledgePending": "承認申請を送信しました。承認後にナレッジスペースへ保存されます",
     "saveToKnowledgeFailed": "ナレッジスペースへの保存に失敗しました。後でもう一度お試しください"
   },
+  "com_message": {
+    "document_preview": "ドキュメントプレビュー",
+    "source_empty": "参考資料はありません",
+    "source_load_failed": "参照元の詳細を読み込めませんでした",
+    "source_loading": "参照元の詳細を読み込み中...",
+    "source_name_fallback_document": "政策文書",
+    "source_name_fallback_web": "ウェブページ",
+    "source_panel_back": "参考資料一覧に戻る",
+    "source_panel_close": "参考資料を閉じる",
+    "source_panel_download": "ドキュメントをダウンロード",
+    "source_panel_label": "参考資料",
+    "source_type_document": "ドキュメント",
+    "source_type_web": "ウェブページ",
+    "source_untitled": "タイトルなし"
+  },
   "com_message_content_copied": "内容をコピーしました",
   "com_notifications_approved": "承認済み",
   "com_notifications_rejected": "却下済み",
@@ -1565,7 +1580,8 @@
     "card_view": "カード表示",
     "filter_file_status": "ファイル状態で絞り込み",
     "sort_by_size_label": "サイズで並べ替え",
-    "select_all": "すべて選択"
+    "select_all": "すべて選択",
+    "folder_abnormal": "異常あり"
   },
   "com_subscription": {
     "tab_channel": "チャンネル",
@@ -1824,7 +1840,8 @@
     "wechat_link_retry_hint": "{{link}}を確認して修正してください。修正後、Enter キーを押すと再認識します。",
     "wechat_link_label": "公式アカウントのリンク",
     "wechat_article_link_label": "公式アカウント記事リンク",
-    "wechat_link_copy_tip": "記事右上の「···」をタップして「リンクをコピー」を選ぶか、「ブラウザで開く」を選んでアドレスバーの URL をコピーしてください。"
+    "wechat_link_copy_tip": "記事右上の「···」をタップして「リンクをコピー」を選ぶか、「ブラウザで開く」を選んでアドレスバーの URL をコピーしてください。",
+    "channel_unavailable_or_no_permission": "このチャンネルは利用できないか、閲覧権限がありません"
   },
   "com_unified_permission": {
     "access_and_share": "アクセスと共有",
@@ -2167,20 +2184,31 @@
     "user": "ユーザー"
   },
   "com_citation.no_download_url": "ダウンロード可能なファイルアドレスがありません",
-  "com_citation.web": "ウェブ",
-  "com_citation.document": "ドキュメント",
-  "com_citation.untitled": "タイトルなし",
-  "com_citation.loading_detail": "出典の詳細を読み込み中...",
-  "com_citation.load_detail_failed": "出典の詳細の読み込みに失敗しました",
-  "com_citation.policy_document": "政策文書",
-  "com_citation.document_preview": "ドキュメントプレビュー",
-  "com_citation.no_references": "参考資料はありません",
-  "com_citation.close_references": "参考資料を閉じる",
-  "com_citation.back_to_references": "参考資料一覧に戻る",
-  "com_citation.download_document": "ドキュメントをダウンロード",
   "com_message_approval_title": "メッセージと承認",
   "com_message_approval_notifications": "通知",
   "com_notifications_tab_unread": "未読",
   "com_notifications_tab_read": "既読",
-  "com_notifications_target_unavailable": "コンテンツが無効になったか、閲覧権限がありません"
+  "com_notifications_target_unavailable": "コンテンツが無効になったか、閲覧権限がありません",
+  "com_personal_token_title": "個人 API トークン",
+  "com_personal_token_description": "読み取り専用トークンを使って、自分のエージェントから閲覧可能なナレッジを検索できます。",
+  "com_personal_token_account_hint": "外部エージェントが使用するトークンを作成、置換、または失効します。",
+  "com_personal_token_manage": "管理",
+  "com_personal_token_admin_warning": "このトークンは管理者権限を継承せず、安全のため有効期間が短縮されます。",
+  "com_personal_token_disabled": "個人 API トークンは管理者により無効化されています。",
+  "com_personal_token_once": "今すぐこのトークンをコピーしてください。再表示はできません。",
+  "com_personal_token_saved_confirmation": "トークンを安全に保存しました",
+  "com_personal_token_mask": "トークン",
+  "com_personal_token_scope": "権限",
+  "com_personal_token_expires": "有効期限",
+  "com_personal_token_last_used": "最終使用",
+  "com_personal_token_never": "未使用",
+  "com_personal_token_empty": "個人 API トークンはまだ作成されていません。",
+  "com_personal_token_copy_install_prompt": "インストールプロンプトをコピー",
+  "com_personal_token_create": "トークンを作成",
+  "com_personal_token_regenerate": "トークンを置換",
+  "com_personal_token_delete": "トークンを失効",
+  "com_personal_token_operation_success": "個人 API トークンを更新しました",
+  "com_personal_token_copy": "コピー",
+  "com_personal_token_done": "完了",
+  "com_personal_token_loading": "読み込み中..."
 }

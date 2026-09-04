@@ -497,6 +497,21 @@
     "saveToKnowledgePending": "已提交审批，通过后将存入知识空间",
     "saveToKnowledgeFailed": "存入知识空间失败，请稍后重试"
   },
+  "com_message": {
+    "document_preview": "文档预览",
+    "source_empty": "暂无参考资料",
+    "source_load_failed": "溯源详情加载失败",
+    "source_loading": "加载溯源详情...",
+    "source_name_fallback_document": "政策文件",
+    "source_name_fallback_web": "网页",
+    "source_panel_back": "返回参考资料列表",
+    "source_panel_close": "关闭参考资料",
+    "source_panel_download": "下载文档",
+    "source_panel_label": "参考资料",
+    "source_type_document": "文档",
+    "source_type_web": "网页",
+    "source_untitled": "暂无标题"
+  },
   "com_message_content_copied": "内容已复制",
   "com_notifications_approved": "已同意",
   "com_notifications_rejected": "已拒绝",
@@ -1569,7 +1584,8 @@
     "card_view": "卡片视图",
     "filter_file_status": "筛选文件状态",
     "sort_by_size_label": "大小",
-    "select_all": "全选"
+    "select_all": "全选",
+    "folder_abnormal": "存在异常"
   },
   "com_subscription": {
     "tab_channel": "频道",
@@ -1830,7 +1846,8 @@
     "wechat_link_retry_hint": "请检查并修改{{link}}。修改完成后，按回车重新识别。",
     "wechat_link_label": "公众号链接",
     "wechat_article_link_label": "公众号文章链接",
-    "wechat_link_copy_tip": "点击文章右上角「···」，选择「复制链接」，或选择「在浏览器打开」后复制地址栏中的链接。"
+    "wechat_link_copy_tip": "点击文章右上角「···」，选择「复制链接」，或选择「在浏览器打开」后复制地址栏中的链接。",
+    "channel_unavailable_or_no_permission": "该频道已失效或暂无查看权限"
   },
   "com_unified_permission": {
     "access_and_share": "访问与分享",
@@ -2173,20 +2190,31 @@
     "user": "用户"
   },
   "com_citation.no_download_url": "暂无可下载文件地址",
-  "com_citation.web": "网页",
-  "com_citation.document": "文档",
-  "com_citation.untitled": "暂无标题",
-  "com_citation.loading_detail": "加载溯源详情...",
-  "com_citation.load_detail_failed": "溯源详情加载失败",
-  "com_citation.policy_document": "政策文件",
-  "com_citation.document_preview": "文档预览",
-  "com_citation.no_references": "暂无参考资料",
-  "com_citation.close_references": "关闭参考资料",
-  "com_citation.back_to_references": "返回参考资料列表",
-  "com_citation.download_document": "下载文档",
   "com_message_approval_title": "消息与审批",
   "com_message_approval_notifications": "通知",
   "com_notifications_tab_unread": "未读",
   "com_notifications_tab_read": "已读消息",
-  "com_notifications_target_unavailable": "内容已失效或暂无查看权限"
+  "com_notifications_target_unavailable": "内容已失效或暂无查看权限",
+  "com_personal_token_title": "个人 API 令牌",
+  "com_personal_token_description": "使用只读令牌，让您自己的智能体检索您有权访问的知识。",
+  "com_personal_token_account_hint": "创建、替换或吊销外部智能体使用的令牌。",
+  "com_personal_token_manage": "管理",
+  "com_personal_token_admin_warning": "此令牌不会继承管理员特权，并会为安全起见缩短有效期。",
+  "com_personal_token_disabled": "管理员已关闭个人 API 令牌。",
+  "com_personal_token_once": "请立即复制此令牌，之后将无法再次查看。",
+  "com_personal_token_saved_confirmation": "我已安全保存此令牌",
+  "com_personal_token_mask": "令牌",
+  "com_personal_token_scope": "权限",
+  "com_personal_token_expires": "过期时间",
+  "com_personal_token_last_used": "最后使用",
+  "com_personal_token_never": "从未",
+  "com_personal_token_empty": "尚未创建个人 API 令牌。",
+  "com_personal_token_copy_install_prompt": "复制安装提示词",
+  "com_personal_token_create": "创建令牌",
+  "com_personal_token_regenerate": "替换令牌",
+  "com_personal_token_delete": "吊销令牌",
+  "com_personal_token_operation_success": "个人 API 令牌已更新",
+  "com_personal_token_copy": "复制",
+  "com_personal_token_done": "完成",
+  "com_personal_token_loading": "加载中..."
 }

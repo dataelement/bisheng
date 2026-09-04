@@ -1,0 +1,1 @@
+"""Publication access domain contracts."""

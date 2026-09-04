@@ -77,7 +77,6 @@ class UserService:
                 user_id,
                 exc,
             )
-            return
         try:
             from bisheng.admin.domain.services.tenant_scope import TenantScopeService
 
@@ -85,6 +84,25 @@ class UserService:
         except Exception as exc:
             logger.debug(
                 "clear_on_token_version_bump failed after account disabled user_id=%s: %s",
+                user_id,
+                exc,
+            )
+        try:
+            from bisheng.database.models.tenant import UserTenantDao
+            from bisheng.open_api.domain.models.api_credential import REVOKE_REASON_SUBJECT_DISABLED
+            from bisheng.open_api.domain.services.personal_token_service import PersonalTokenService
+
+            membership = await UserTenantDao.aget_active_user_tenant(user_id)
+            if membership is not None:
+                await PersonalTokenService.cascade_revoke(
+                    tenant_id=membership.tenant_id,
+                    user_id=user_id,
+                    reason=REVOKE_REASON_SUBJECT_DISABLED,
+                )
+        except Exception as exc:
+            # Resolver still rejects the disabled holder after its short cache expires.
+            logger.warning(
+                "personal token revoke failed after account disabled user_id={}: {}",
                 user_id,
                 exc,
             )

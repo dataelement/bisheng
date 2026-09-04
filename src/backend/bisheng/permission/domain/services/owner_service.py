@@ -56,6 +56,8 @@ class OwnerProjectionContext:
     operation_type: str = "RESOURCE_CREATE"
     copy_grants: tuple[GrantSnapshot, ...] = ()
     copy_deltas: tuple[ProjectionTupleDelta, ...] = ()
+    creation_grants: tuple[GrantSnapshot, ...] = ()
+    creation_deltas: tuple[ProjectionTupleDelta, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +160,7 @@ class F048OwnerProjectionService:
             )
         all_deltas = merge_projection_deltas(
             context.copy_deltas,
+            context.creation_deltas,
             protected_deltas,
             visibility.deltas if visibility is not None else (),
         )
@@ -231,9 +234,10 @@ class F048OwnerProjectionService:
         context: OwnerProjectionContext,
         owner_grant: GrantSnapshot,
     ) -> tuple[GrantSnapshot, ...]:
-        if not context.copy_grants:
+        additional_grants = (*context.copy_grants, *context.creation_grants)
+        if not additional_grants:
             return (owner_grant,)
-        by_model = {grant.model.model_key: grant for grant in context.copy_grants}
+        by_model = {grant.model.model_key: grant for grant in additional_grants}
         by_model[owner_grant.model.model_key] = owner_grant
         return tuple(by_model[key] for key in sorted(by_model) if by_model[key].active and by_model[key].sources)
 
@@ -266,7 +270,17 @@ class F048OwnerProjectionService:
         if context.operation_type == "RESOURCE_CREATE":
             if context.copy_grants or context.copy_deltas:
                 raise PermissionInvalidResourceError()
+            if any(
+                grant.tenant_id != context.target.tenant_id
+                or grant.resource_type != context.target.resource_type
+                or grant.resource_id != context.target.resource_id
+                or any(source.protected or source.source_type != "CREATOR_GRANT" for source in grant.sources)
+                for grant in context.creation_grants
+            ):
+                raise PermissionInvalidResourceError()
             return
+        if context.creation_grants or context.creation_deltas:
+            raise PermissionInvalidResourceError()
         if context.operation_type != "RESOURCE_COPY" or context.system_owned:
             raise PermissionInvalidResourceError()
         if context.permission_mode not in {"INHERIT", "CUSTOM"}:
