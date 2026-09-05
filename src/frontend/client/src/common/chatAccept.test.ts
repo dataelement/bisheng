@@ -51,6 +51,15 @@ describe("buildChatAccept", () => {
         expect(accept.split(",").filter((ext) => ext === ".png")).toHaveLength(1);
         expect(accept.split(",")).toEqual(expect.arrayContaining([".bmp", ".webp", ".gif"]));
     });
+
+    it("keeps vision images accepted when leaving task mode", () => {
+        const taskAccept = buildChatAccept({ ...DAILY, enableVision: true, taskMode: true });
+        const dailyAccept = buildChatAccept({ ...DAILY, enableVision: true });
+        for (const ext of [".png", ".jpg", ".jpeg", ".webp", ".gif"]) {
+            expect(taskAccept.split(",")).toContain(ext);
+            expect(dailyAccept.split(",")).toContain(ext);
+        }
+    });
 });
 
 describe("isFileNameAccepted", () => {

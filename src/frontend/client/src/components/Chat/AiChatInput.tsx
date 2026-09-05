@@ -258,6 +258,9 @@ const AiChatInput = memo(
             mediaDurationSec?: number;
         }>>([]);
         const inputFilesRef = useRef<any>(null);
+        const supportsVision = modelOptions?.some(
+            (model) => String(model.id) === String(modelValue) && model.visual
+        );
 
         // Leaving task mode drops what only task mode could carry: the skill
         // selection (so the panel's checkboxes reset in sync with the now-hidden
@@ -272,6 +275,7 @@ const AiChatInput = memo(
                 const dailyAccept = buildChatAccept({
                     enableMedia: !!envConfig?.enable_media_upload,
                     enableEtl4lm: !!bsConfig?.enable_etl4lm,
+                    enableVision: !isLingsi && !!supportsVision,
                     includeOfd: !isLingsi,
                 });
                 const isKept = (name: string) => isFileNameAccepted(name || "", dailyAccept);
@@ -298,7 +302,7 @@ const AiChatInput = memo(
             // envConfig/bsConfig are read only when the transition fires; leaving them
             // out keeps a config refetch from re-running the cleanup.
             // eslint-disable-next-line react-hooks/exhaustive-deps
-        }, [taskMode, setDailySkills]);
+        }, [taskMode, setDailySkills, supportsVision]);
 
         // Voice input: check if ASR model is available
         const { data: modelData } = useGetWorkbenchModelsQuery();
@@ -318,9 +322,6 @@ const AiChatInput = memo(
         const kbDisabled = !!disabled;
         const toolsDisabled = !!disabled;
         const filesDisabled = !!disabled;
-        const supportsVision = modelOptions?.some(
-            (model) => String(model.id) === String(modelValue) && model.visual
-        );
         const fileAccept = buildChatAccept({
             enableMedia: !!envConfig?.enable_media_upload,
             enableEtl4lm: !!bsConfig?.enable_etl4lm,
