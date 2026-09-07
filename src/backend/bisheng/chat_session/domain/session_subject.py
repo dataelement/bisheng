@@ -129,7 +129,10 @@ class SessionSubject:
 
         statement = statement.where(
             MessageSession.tenant_id == self.tenant_id,
-            col(MessageSession.is_delete).is_(False),
+            # `== False`, not `.is_(False)`: DM8 renders the latter as `IS 0` and
+            # rejects it outright (SQL syntax error), while `= 0` runs on both
+            # MySQL and DM8. Same reason as the `noqa: E712` sites elsewhere.
+            MessageSession.is_delete == False,  # noqa: E712
         )
         if self.subject_type == "service_account":
             statement = statement.where(
