@@ -2190,6 +2190,8 @@
     "user": "用户"
   },
   "com_citation.no_download_url": "暂无可下载文件地址",
+  "com_citation.no_permission": "暂无权限查看该来源",
+  "com_citation.source_expired": "来源已失效",
   "com_message_approval_title": "消息与审批",
   "com_message_approval_notifications": "通知",
   "com_notifications_tab_unread": "未读",

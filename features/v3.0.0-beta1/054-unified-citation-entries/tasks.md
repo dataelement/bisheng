@@ -58,8 +58,9 @@
   **依赖**: 无
 
 - [ ] **T005**: 溯源文案 i18n
-  **文件**: `src/frontend/packages/locales/`（zh-Hans / en / ja）
-  **逻辑**: 新增「来源已失效」文案；把现存**硬编码中文**「暂无权限」抽出为 key（`client/src/components/Chat/Messages/Content/Markdown.tsx` 内联字符串，见 design §2）。三语同 PR 交付。
+  **文件**: `src/frontend/client/src/locales/{zh-Hans,en,ja}/translation.json`
+  **逻辑**: 在既有 `com_citation.*` 命名空间下新增 `no_permission`（「暂无权限查看该来源」，对齐 AC-09 的完整文案）与 `source_expired`（「来源已失效」）。三语同 PR 交付；组件接线在 T013。
+  **落点变更**（实现期发现）：`packages/locales` 目前只承载 `api_errors` 域，且其 README 明确「错误码文案才放这里」；角标文案是 UI 文案、且只有 Client 消费，故放 client 应用自身的语言文件。迁移新域需要改 `scripts/build.mjs` 的 TARGETS，超出本任务范围。
   **覆盖 AC**: AC-11
   **依赖**: 无
 
@@ -70,7 +71,8 @@
   **逻辑**: 在 `_permitted_file_ids` / `_apply_tier_filter` **之前**加匿名分支：无登录用户时知识库与文章来源一律不返回（含 `shared` 档），网页来源放行；按决策 5 的安全序产出每条未解析来源的原因。**已登录用户的两档语义一个字不改。**
   **跨 Feature 影响**: 该文件是 F029 拥有的 citation 链路（release-contract 表 1 已登记 F054 的扩展权）；改动只加匿名分支，不触碰 F041 的 `accessScope` 两档语义。
   **设计依据**: design §3 决策 5 · §5 坑 4（本 Feature 最容易漏的地方）
-  **测试**: T003 全绿，且 T002 仍全绿
+  **同步改写既有用例**（用户 2026-09-07 选 A）：`test/citation/test_citation_resolve_visibility.py` 的 `test_filter_visible_rag_items_anonymous_caller_preserves_all` 与 `test_resolve_citation_anonymous_caller_passthrough`、`test/citation/test_access_scope_tiering.py` 中断言匿名保留全部的那条，全部改写为新预期，并在用例 docstring 注明「F054 覆盖 F029 AC-20」。
+  **测试**: T003 全绿，改写后的三个既有用例全绿，且 T002 仍全绿
   **覆盖 AC**: AC-08, AC-09, AC-10, AC-13, AC-14
   **依赖**: T002, T003
 
@@ -144,4 +146,5 @@
 > **只留一行指针**，论证写进 design.md（决策 / 坑），这里不重复。
 > 推翻已 ★ 确认的决策时，先停下与用户重新确认，再记录。
 
-- （尚无）
+- T005 落点由 `packages/locales` 改为 client 应用语言文件 → 该包只承载错误码域，角标属 UI 文案（详见 T005 内说明）。
+- T006 推翻 F029 AC-20（匿名放行为分享链接有意保留）→ 用户 2026-09-07 选 A：直接覆盖，已登记 release-contract 表 4 + design §6.1，三个既有用例随 T006 改写。

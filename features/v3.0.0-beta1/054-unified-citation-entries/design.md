@@ -157,7 +157,7 @@
 | 1 | 「提示词缺规则就自动补」的兜底函数 `prompt_has_citation_rules()` **在三处 import 了但从未被调用，是死代码** | 会误以为新入口自动获得引用规则 → 接完发现永远不出角标 | 定义在 `citation/domain/services/citation_prompt_helper.py`；本 Feature 在 `channel/domain/services/channel_chat_service.py` 首次真正调用（决策 3） |
 | 2 | 前端判定来源类型是「是 web 就 web，**其余一律当知识库来源**」 | 文章角标被当成知识库来源，点击走文件预览抽屉 → 空白页 | `client/src/components/Chat/Messages/Content/citationUtils.ts::normalizeCitationType`（+ `CitationSourceIcon.tsx`） |
 | 3 | 频道文章问答**不检索**，全文截断后直接拼进用户提示词的「参考资料」块 | 任何「按片段溯源」的设计从根上不成立 | `channel/api/endpoints/channel_chat.py::chat_completions`（现状）；改造落点见 §4.3（决策 1） |
-| 4 | 匿名收紧要特别处理 `shared` 档：现有过滤在「无登录用户」时返回「不设限」，**分档逻辑与权限判定写在同一处** | 只改「无权限」判定而漏掉 shared 分支，F041 的共享来源会从匿名分享页整条漏出去——**正是这次要堵的洞** | `citation/domain/services/citation_resolve_service.py::_permitted_file_ids` / `_apply_tier_filter`：无登录用户在进入分档**之前**拦掉（决策 5 判定顺序第 1 条） |
+| 4 | 匿名放行**不是疏漏，是 F029 AC-20 有意为分享链接留的**；且现有过滤在「无登录用户」时返回「不设限」，**分档逻辑与权限判定写在同一处** | 只改「无权限」判定而漏掉 shared 分支，F041 的共享来源会从匿名分享页整条漏出去——**正是这次要堵的洞** | `citation/domain/services/citation_resolve_service.py::_permitted_file_ids` / `_apply_tier_filter`：无登录用户在进入分档**之前**拦掉（决策 5 判定顺序第 1 条） |
 | 5 | 工作流临时文件的文档标识是随机 UUID、知识库标识是工作流标识，**都不是整数**；来源载荷要求整数 → 转换落空 → 无预览 / 下载 / 定位 | 就是今天「角标能显示、一点开是空的」的成因 | 成因在 `workflow/nodes/input/input.py::parse_upload_file`（`file_id = generate_uuid()`）；关断点 `workflow/nodes/agent/agent.py` 的 `WorkflowCitationToolWrapper.wrap` 分派处；护栏在 `citation_prompt_helper.py::_is_citable_rag_document`（决策 6） |
 | 6 | 用户是在**文章页内**使用该问答，来源就是当前这篇文章 | 会误以为「点角标跳转」是核心价值 | `client/src/pages/Subscription/AiChat/ArticleAiDock.tsx`；点击行为定为打开原文链接（新标签），核心价值是标明「这句来自文章而非模型自撰」 |
 | 7 | 共享徽标组件的溯源角标只有 `document` / `web` 两种来源色，且**颜色归设计师** | 自行加第三种颜色违反组件所有权规则 | `packages/ui/src/components/Badge/Badge.tsx` 的 `CITATION` 映射；文章复用 `document` 形态，新色需签字（§2 约束） |
@@ -175,6 +175,7 @@
 | `POST /api/v1/citations/resolve` 响应新增 `unresolved` | HTTP 响应**追加**字段：`{items: [...], unresolved: [{citationId, reason}]}`，`reason ∈ {"forbidden", "expired"}`；`items` 语义与顺序不变 | client 前端区分「无权限 / 已失效」；老客户端忽略即可 |
 | `GET /api/v1/citations/{citation_id}` 的 404 响应体携带 `reason` | HTTP 响应**追加**字段 | client 单条兜底路径 |
 | 「无已登录用户即不返回来源详情」 | 行为契约 | 所有免登录访问路径（分享页等） |
+| **覆盖 F029 AC-20 的匿名放行语义** | 行为契约（release-contract 表 4 已登记） | F029 AC-20 当初**有意**为分享链接保留「匿名不过滤」；F054 起该分支收紧。F029 / F041 的三个匿名断言用例随 T006 一并改写 |
 
 ### 6.2 我依赖别人的（Incoming）
 

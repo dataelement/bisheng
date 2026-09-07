@@ -2261,6 +2261,8 @@
     "user": "User"
   },
   "com_citation.no_download_url": "No downloadable file address",
+  "com_citation.no_permission": "You do not have permission to view this source",
+  "com_citation.source_expired": "This source is no longer available",
   "com_message_approval_title": "Messages & Approvals",
   "com_message_approval_notifications": "Notifications",
   "com_notifications_tab_unread": "Unread",

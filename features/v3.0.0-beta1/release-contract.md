@@ -135,6 +135,7 @@
 | 既有工作流独立会话 | F052 在首次进入或切换历史会话时增加一次性状态判断；开关关闭时保持原行为，打开后的后续结束或中断不触发自动重试，手动重新运行契约不变 |
 | F018-resource-owner-transfer | 当前实现先提交资源 `user_id`、再删除旧/写入新 owner tuple，失败依赖 `failed_tuple` 补写；同时不更新 knowledge_space/channel CREATOR membership，且无已接入前端。OQ-07 已选择 A：F048 启服时退役其 API/Service 调用路径，本期不重构 owner transfer；历史差异按 preservation-first 迁移 |
 | 既有 `/api/v2` 开放 API（`open_endpoints/`）与两个免登录分享页 | F053：全部 43 HTTP + 2 WS 端点接入凭据校验，6 个 `/chat/*` 不暴露，裸 `user_id` 参数移除，`download_statistic` 入参 `file_path → file_name`；分享页改走 share-token；`user` 表加 `user_type`、`_filter_users_statement` 默认排除服务账号（8 处消费点无感）；F048 `authorize_created` 增 `autogrant_user_id` kwarg 与来源值 `SERVICE_ACCOUNT_AUTOGRANT`（非 protected、可撤销） |
+| F029-knowledge-qa-permission-filter（AC-20）· F041（匿名分档） | **F054 覆盖其匿名放行语义**。F029 AC-20 当初有意为分享链接 / 公开流程保留「匿名调用不过滤」，F041 的分档同样在匿名时全放行——这正是本期要堵的越权口子。F054 起：**无已登录用户的调用不再返回知识库与文章来源详情（含 `shared` 档），网页来源仍放行**；已登录用户的 `per_user` / `shared` 两档语义完全不变，INV-7 及其 F041 例外不受影响。F029 AC-20 与 F041 匿名断言的三个既有用例随 F054 T006 一并改写为新预期 |
 
 ---
 

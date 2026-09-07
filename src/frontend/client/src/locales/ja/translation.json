@@ -2184,6 +2184,8 @@
     "user": "ユーザー"
   },
   "com_citation.no_download_url": "ダウンロード可能なファイルアドレスがありません",
+  "com_citation.no_permission": "このソースを閲覧する権限がありません",
+  "com_citation.source_expired": "このソースは無効になりました",
   "com_message_approval_title": "メッセージと承認",
   "com_message_approval_notifications": "通知",
   "com_notifications_tab_unread": "未読",
