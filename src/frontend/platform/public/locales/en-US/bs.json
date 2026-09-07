@@ -2128,7 +2128,7 @@
     "serviceAccount": { "title": "Service accounts", "create": "Create service account", "createHint": "The resource owner must be an active user in this tenant.", "search": "Search service accounts", "overview": "Overview", "keys": "API keys", "grants": "Resource grants" },
     "keys": { "issue": "Issue API key", "issueHint": "Configure basic information, permissions, and delegation only.", "once": "Copy this key now. It will not be shown again.", "saved": "I have saved the key securely", "mask": "Key", "permissions": "Permissions", "delegateScopes": "Delegation scopes", "delegatePlaceholder": "user:12, department:34", "delegateRequired": "At least one user or department is required for delegation." },
     "grants": { "resourceType": "Resource type", "resourceId": "Resource ID", "model": "Permission model", "source": "Grant source", "scope": "Scope", "grantModel": "Grant {{model}}" },
-    "personalToken": { "title": "Personal access tokens", "settings": "Tenant policy", "deploymentDisabled": "Personal access tokens are disabled at deployment level.", "tenantEnabled": "Allow employee tokens", "ttlDays": "Maximum lifetime (days)", "holder": "Holder", "adminRisk": "Administrator risk" }
+    "personalToken": { "title": "Personal access tokens", "settings": "Tenant policy", "settingsSaved": "Tenant policy saved", "deploymentDisabled": "Personal access tokens are disabled at deployment level.", "tenantEnabled": "Allow employee tokens", "ttlDays": "Maximum lifetime (days)", "holder": "Holder", "adminRisk": "Administrator risk" }
   },
   "mediaPreview": {
     "recognizedText": "Recognized text",

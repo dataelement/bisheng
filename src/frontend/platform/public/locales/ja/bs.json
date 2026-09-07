@@ -2073,7 +2073,7 @@
     "serviceAccount": { "title": "サービスアカウント", "create": "サービスアカウントを作成", "createHint": "リソース所有者はこのテナントの有効なユーザーである必要があります。", "search": "サービスアカウントを検索", "overview": "概要", "keys": "API キー", "grants": "リソース権限" },
     "keys": { "issue": "API キーを発行", "issueHint": "基本情報、権限、委任設定のみを構成します。", "once": "今すぐこのキーをコピーしてください。再表示はできません。", "saved": "キーを安全に保存しました", "mask": "キー", "permissions": "権限", "delegateScopes": "委任範囲", "delegatePlaceholder": "user:12, department:34", "delegateRequired": "委任にはユーザーまたは部門が少なくとも 1 つ必要です。" },
     "grants": { "resourceType": "リソースタイプ", "resourceId": "リソース ID", "model": "権限モデル", "source": "付与元", "scope": "範囲", "grantModel": "{{model}} を付与" },
-    "personalToken": { "title": "個人アクセストークン", "settings": "テナントポリシー", "deploymentDisabled": "個人アクセストークンはデプロイ設定で無効化されています。", "tenantEnabled": "従業員トークンを許可", "ttlDays": "最大有効期間（日）", "holder": "所有者", "adminRisk": "管理者リスク" }
+    "personalToken": { "title": "個人アクセストークン", "settings": "テナントポリシー", "settingsSaved": "テナントポリシーを保存しました", "deploymentDisabled": "個人アクセストークンはデプロイ設定で無効化されています。", "tenantEnabled": "従業員トークンを許可", "ttlDays": "最大有効期間（日）", "holder": "所有者", "adminRisk": "管理者リスク" }
   },
   "mediaPreview": {
     "recognizedText": "認識テキスト",
