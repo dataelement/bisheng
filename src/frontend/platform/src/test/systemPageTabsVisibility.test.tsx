@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 import { render, screen } from "@/test/test-utils";
+import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import SystemPage from "@/pages/SystemPage";
 
@@ -37,17 +38,25 @@ vi.mock("@/pages/SystemPage/components/PersonalToken", () => ({
 
 type UserShape = Record<string, unknown>;
 
-const renderWithUser = (user: UserShape) => {
+/** The Open API tabs need admin rights AND the deployment opt-in, so every case
+ *  has to say which one it is exercising. Default true keeps the pre-existing
+ *  role assertions about role, not about the switch. */
+const renderWithUser = (user: UserShape, openApiManagementEnabled = true) => {
   const value = {
     user,
     setUser: () => {},
     contextOpen: false,
     setContextOpen: () => {},
   } as unknown as React.ContextType<typeof userContext>;
+  const location = {
+    appConfig: { openApiManagementEnabled },
+  } as unknown as React.ContextType<typeof locationContext>;
   return render(
-    <userContext.Provider value={value}>
-      <SystemPage />
-    </userContext.Provider> as ReactNode,
+    <locationContext.Provider value={location}>
+      <userContext.Provider value={value}>
+        <SystemPage />
+      </userContext.Provider>
+    </locationContext.Provider> as ReactNode,
   );
 };
 
@@ -86,6 +95,15 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
     expect(screen.queryByText(LEGACY)).toBeNull();
     expect(screen.getByText(SERVICE_ACCOUNT)).toBeInTheDocument();
     expect(screen.getByText(PERSONAL_TOKEN)).toBeInTheDocument();
+  });
+
+  it("hides the Open API tabs from a global super admin when the deployment has not opted in", () => {
+    renderWithUser({ role: "admin", user_id: 1 }, false);
+    // Everything the role earns is still there — only the F053 surface is gated.
+    expect(screen.getByText(ORG)).toBeInTheDocument();
+    expect(screen.getByText(ROLE)).toBeInTheDocument();
+    expect(screen.queryByText(SERVICE_ACCOUNT)).toBeNull();
+    expect(screen.queryByText(PERSONAL_TOKEN)).toBeNull();
   });
 
   it("Department Admin sees org/role but NOT system config / theme / org sync", () => {
