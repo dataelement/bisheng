@@ -364,30 +364,88 @@ cd src/backend && uv run pytest test/celery/ -q
 
 ---
 
-## 附:部署提醒 — 授权模型变更
+## 附:部署提醒 — 授权模型变更(每次合主线都要看)
 
-`d53524e69` 把 `public_reader` 从 OpenFGA 授权模型里摘掉了,**模型 checksum 变了**:
+**结论先行:合完主线、部署上去之前,先假设授权模型变了。** 这不是某一次 hotfix 的偶发问题 ——
+两次都撞上了:
 
-```
-98cc4927f62faa0f52e9b369e1f4a7b421d59585f0d72468a16442a840abc8a2   (变更前)
-0bf16de29460ed8021b9abd84a4ff405895bfdee23cb2862ec7f8a76b0b7fd8e   (变更后)
-```
+| 版本 | 改了什么 | 模型 checksum |
+|---|---|---|
+| `d53524e69` | 把 `public_reader` 从模型里摘掉 | `98cc4927…` → `0bf16de2…` |
+| F053(2026-09-07) | 加了服务账号 / 凭据类型 | `0bf16de2…` → `6d4c1ee3…` |
 
-**后果**:所有已部署环境升上这个版本后,启动会卡在
+**症状**:启动卡在
 `Context 'permission_runtime' is in error state: authorization_model_migration_required`,
-**所有走权限的接口返回 500**。这是 F048 的设计行为(发现模型是前代就拒绝启动,等运维迁移),不是 bug。
+**所有走权限的接口 500**。这是 F048 的设计行为(发现模型是前代就拒绝启动,等运维迁移),不是 bug。
 
-处置(容器内跑,先备份):
+### 唯一正确的处置:跑迁移脚本
 
 ```bash
-docker exec -w /app bisheng-backend python scripts/migrate_f048_permission_data.py migrate --apply
-docker exec -w /app bisheng-backend python scripts/migrate_f048_permission_data.py verify --run-id <id>
-# 然后重启 backend + worker
+docker exec -w /app -e PYTHONPATH=/app <backend容器> \
+  python scripts/migrate_f048_permission_data.py migrate --apply
+# 中断后用 --run-id <id> 续跑,不要从头再来
 ```
 
-判断是否成功:`permission_catalog_release` 表有一行 `CURRENT`,日志出现
-`FGAClient initialized from discovered runtime`,且不再有 `migration_required`。
+它会一次做完三件事:在 OpenFGA 里发布新模型、在 `authorization_model_release` 登记它、
+把 `permission_catalog_release` 指过去,并把旧权限数据翻译成新模型的 grant/投影。
 
-此外旧 Store 里遗留的 `public_reader` tuple 需要单独清理,脚本和步骤见
+### ⚠️ 不要用 `openfga.force_write_model` 抄近路
+
+看起来它能"一键发布新模型"(非 production 环境启动时自动写),**但它只写 OpenFGA,不碰数据库的登记表**。
+后果(2026-09-07 实测,绕了两小时):
+
+1. OpenFGA 里是新模型,`authorization_model_release` 还 ACTIVE 指着旧的 —— 三方对不上,照样 `migration_required`。
+2. 它顺手写下的 `f048-initial` catalog 行会**把正规迁移挡住**:
+   `PermissionVersionConflictError: Initial F048 Catalog differs from checkpoint`。
+   清理办法是删掉这行 + 它派生的 `permission_action` / `permission_model` 行 + 那条 ACTIVE 的
+   `authorization_model_release`,再 `migrate --apply --run-id <id>` 续跑。**删之前先确认
+   `permission_grant` / 各 projection / `resource_permission_mode` 都是空的** —— 非空说明有真数据挂在上面。
+3. **开着不关会让每个工作进程启动时各写一次模型**,catalog 和进程 pin 立刻错位,报
+   `CURRENT Catalog does not match the process OpenFGA pin`,子进程反复启动失败(容器却还显示 healthy,
+   因为健康检查打的是 `/health`,不经过权限运行时)。真要用,发布完**立刻改回 false 并重启**。
+
+### 成功判据(三个都要满足)
+
+```
+permission_catalog_release  有一行 status = CURRENT
+authorization_model_release 那一行 status = ACTIVE      ← 最容易漏
+日志出现 FGAClient initialized from discovered runtime,且不再有 migration_required
+```
+
+**第二条单独说**:catalog 变 CURRENT 但模型还是 `STAGED` 时,报的是
+`CURRENT Catalog authorization model is not active` —— 和 `migration_required` 是**不同的错**,
+别当成同一个问题查。模型转 ACTIVE 发生在 verify 通过之后。
+
+### verify 的现实问题:慢库上跑不完
+
+`verify --run-id <id>` 是迁移后的独立校验:拿迁移算出的期望值反问 OpenFGA
+"这个人到底能不能看到这个对象",而且同一问题批量问一遍、再逐条问一遍,比对两种问法是否一致。
+**不写数据,只读回来对答案。**
+
+它的规模是 **O(不同用户 × 不同对象)**,且每个对象都要一次单独 Check。2026-09-07 在 105 上是
+31 个用户 × 1012 个对象 ≈ **3.4 万次单条 Check**。
+
+跑之前三个前提,缺一个就挂:
+
+| 前提 | 症状 | 处置 |
+|---|---|---|
+| **内存** | `RC=137`(OOM kill) | 宿主 15G 被 `backend_worker` 吃掉 6.2G;临时 `docker compose stop backend_worker backend_worker_ocr`,跑完再起 |
+| **客户端超时** | `FGAConnectionError: OpenFGA unreachable:`(冒号后是空的) | `config.yaml` 的 `openfga.timeout` 默认 5 秒,调到 120 |
+| **服务端超时** | `OpenFGA 500: {"code":"deadline_exceeded"}` | compose 里 openfga 没配请求超时,加 `OPENFGA_REQUEST_TIMEOUT: 300s` 后重建 |
+
+三个都满足了,**吞吐仍然可能低到跑不完**。105 上 OpenFGA 只有 15 请求/分钟(它的库是达梦,
+而那台机磁盘 99% 满),3.4 万次 Check ≈ 4 天。
+
+**这种情况下的取舍**:数据面(grant / 投影 / 资源模式)是迁移脚本已经写好的,verify 只是事后
+第三方核对。测试环境可以直接把 `authorization_model_release` 置为 ACTIVE、
+`permission_migration_run` 置为 COMPLETED 收尾,**但要先确认数据面非空**,并把 verify 记为欠账,
+在库性能正常的环境(客户测试环境 / 生产)上补跑。**生产不要跳过。**
+
+> 注:达梦驱动不接受把 `sa.func.now()` 当绑定参数(`dmVar_TypeByValue(): unhandled data type now`),
+> 手写 UPDATE 时用 Python 的 `datetime.datetime.now()`。
+
+### 旧 tuple 清理
+
+旧 Store 里遗留的 `public_reader` tuple 需要单独清理,脚本和步骤见
 `src/backend/scripts/README.md` 的 `cleanup_f048_public_reader_tuples.py`(先 dry-run,
 apply 要带上一次 dry-run 打出的 store-id 和 checksum)。
