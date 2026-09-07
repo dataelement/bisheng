@@ -73,6 +73,7 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
     expect(screen.queryByText(LEGACY)).toBeNull();
     expect(screen.getByText(SERVICE_ACCOUNT)).toBeInTheDocument();
     expect(screen.getByText(PERSONAL_TOKEN)).toBeInTheDocument();
+    expect(screen.getByText(SERVICE_ACCOUNT).closest("[role=tablist]")?.parentElement).toHaveClass("overflow-x-auto");
   });
 
   it("Child Admin sees org/role but NOT system config / theme / org sync (instance-level only)", () => {
