@@ -450,6 +450,10 @@ class ToolExecutor(BaseTool):
 
     @classmethod
     def init_tmp_knowledge_tool_sync(cls, **kwargs) -> BaseTool:
+        # F054: mark the tool as an ephemeral source so citation registration
+        # skips it. A workflow input-node upload has no stable file identity to
+        # trace back to (design §3 decision 6).
+        kwargs.setdefault("ephemeral_source", True)
         return KnowledgeRagTool.init_knowledge_rag_tool(**kwargs)
 
     @wrapper_tool_sync
