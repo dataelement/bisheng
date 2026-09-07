@@ -2,7 +2,7 @@ import { Badge } from "@/components/bs-ui/badge"
 import { Button, LoadButton } from "@/components/bs-ui/button"
 import { Input } from "@/components/bs-ui/input"
 import { Switch } from "@/components/bs-ui/switch"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+import { message } from "@/components/bs-ui/toast/use-toast"
 import {
   Table,
   TableBody,
@@ -63,7 +63,7 @@ export function PersonalToken() {
       setSetting(next)
       setEnabled(next.pat_enabled)
       setTtlDays(next.pat_ttl_days)
-      toast({
+      message({
         title: t("prompt"),
         variant: "success",
         description: t("openApiManagement.personalToken.settingsSaved"),

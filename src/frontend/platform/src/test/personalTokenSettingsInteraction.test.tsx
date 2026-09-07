@@ -10,7 +10,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { PersonalToken } from "@/pages/SystemPage/components/PersonalToken"
 import { render, screen, waitFor } from "@/test/test-utils"
 import type { PersonalTokenSetting } from "@/types/api/openApi"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+import { message } from "@/components/bs-ui/toast/use-toast"
 
 vi.mock("@/controllers/API/personalToken", () => ({
   getPersonalTokenSettingApi: vi.fn(),
@@ -33,7 +33,7 @@ vi.mock("@/components/bs-ui/input", () => ({
 }))
 
 vi.mock("@/components/bs-ui/toast/use-toast", () => ({
-  toast: vi.fn(),
+  message: vi.fn(),
 }))
 
 const initialSetting: PersonalTokenSetting = {
@@ -88,7 +88,7 @@ describe("personal-token tenant settings interaction", () => {
     pending.resolve({ ...initialSetting, pat_enabled: true, effective_enabled: true })
 
     await waitFor(() => expect(saveButton).toBeEnabled())
-    expect(toast).toHaveBeenCalledWith({
+    expect(message).toHaveBeenCalledWith({
       title: "prompt",
       variant: "success",
       description: "openApiManagement.personalToken.settingsSaved",
@@ -105,6 +105,6 @@ describe("personal-token tenant settings interaction", () => {
 
     expect(captureAndAlertRequestErrorHoc).toHaveBeenCalledTimes(1)
     await waitFor(() => expect(saveButton).toBeEnabled())
-    expect(toast).not.toHaveBeenCalled()
+    expect(message).not.toHaveBeenCalled()
   })
 })
