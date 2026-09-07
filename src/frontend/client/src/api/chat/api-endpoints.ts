@@ -47,8 +47,8 @@ export const conversations = (pageNumber: string, isArchived?: boolean, tags?: s
 
 export const conversationById = (id: string) => `${conversationsRoot}/${id}`;
 
-export const genTitle = (version: 'v1' | 'v2' = 'v1') =>
-  version === 'v2' ? `/api/v2/chat/gen_title` : `/api/v1/workstation/gen_title`;
+export const genTitle = (version: 'v1' | 'v2' | 'v3' = 'v1') =>
+  version === 'v1' ? `/api/v1/workstation/gen_title` : `/api/${version}/chat/gen_title`;
 
 export const updateConversation = () => `/api/v1/chat/conversation/rename`;
 
@@ -240,7 +240,7 @@ export const disableTwoFactor = () => '/api/auth/2fa/disable';
 export const regenerateBackupCodes = () => '/api/auth/2fa/backup/regenerate';
 export const verifyTwoFactorTemp = () => '/api/auth/2fa/verify-temp';
 
-// 知识库模块
+// Knowledge APIs.
 export const knowledgeUpload = () => '/api/v1/workstation/knowledgeUpload';
 export const queryKnowledge = () => '/api/v1/workstation/queryKnowledge';
 export const deleteKnowledge = (_id: string) => `/api/v1/workstation/deleteKnowledge?file_id=${_id}`;

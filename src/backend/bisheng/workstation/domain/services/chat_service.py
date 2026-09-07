@@ -4,18 +4,37 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 from uuid import uuid4
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 from json_repair import json_repair
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.tools import ArgsSchema, BaseTool, StructuredTool
 from loguru import logger
+from pydantic import BaseModel as PydanticBaseModel
+from pydantic import Field as PydanticField
+from pydantic import SkipValidation
 from pydantic import field_validator as PydanticFieldValidator
 
 from bisheng.api.services import knowledge_imp
-from bisheng.api.v1.schema.chat_schema import APIChatCompletion
+from bisheng.chat_session.domain.chat import ChatSessionService
+from bisheng.chat_session.domain.session_subject import SessionSubject
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    CitationRegistryCollector,
+    annotate_rag_documents_with_citations,
+    annotate_web_results_with_citations,
+    cache_citation_registry_items,
+    cache_citation_registry_items_sync,
+    collect_rag_citation_registry_items,
+    collect_web_citation_registry_items,
+    save_message_citations,
+    save_message_citations_sync,
+    select_registry_items_for_persistence,
+    strip_unregistered_citation_markers,
+)
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
@@ -46,6 +65,7 @@ from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.department.domain.services.department_flow_service import DepartmentFlowService
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.services.model_rate_limit import (
     ClaimedAttempt,
@@ -62,6 +82,7 @@ from bisheng.llm.domain.services.model_recovery_service import (
 )
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
+from bisheng.workstation.domain.schemas.chat import APIChatCompletion
 
 from .chat_helpers import (
     # insert a placeholder entry in the sidebar conversation list
@@ -79,6 +100,7 @@ from .workstation_service import WorkStationService
 # carries no recognizable speech. English on purpose, like the [file name] /
 # [file content] markers around it — the model answers in the user's language.
 NO_SPEECH_PLACEHOLDER = "(No recognizable speech was detected in this audio/video file.)"
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
 
 
 def build_daily_model_call_context(
@@ -375,29 +397,6 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
 #   - _resolve_user_kb_selection: Resolves UseKnowledgeBaseParam into a list of KB metadata.
 #   - _prepare_tools: Entry point function; integrates tool_payloads + knowledge_bases_info -> List[BaseTool].
 # --------------------------------------------------------------------------- #
-
-from typing import Annotated
-
-from langchain_core.tools import ArgsSchema, BaseTool, StructuredTool
-from pydantic import BaseModel as PydanticBaseModel
-from pydantic import Field as PydanticField
-from pydantic import SkipValidation
-
-from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
-from bisheng.citation.domain.services.citation_prompt_helper import (
-    CitationRegistryCollector,
-    annotate_rag_documents_with_citations,
-    annotate_web_results_with_citations,
-    cache_citation_registry_items,
-    cache_citation_registry_items_sync,
-    collect_rag_citation_registry_items,
-    collect_web_citation_registry_items,
-    save_message_citations,
-    save_message_citations_sync,
-    select_registry_items_for_persistence,
-    strip_unregistered_citation_markers,
-)
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
 DEFAULT_AGENT_MAX_ITERATIONS = 50
 
@@ -790,7 +789,7 @@ async def _build_web_search_tool(user_id: int, tool_id: int | None = None) -> tu
         err = str(exc)
         # Typical symptom for fresh installs: admin hasn't picked a provider.
         if "requires some parameters" in err and "config" in err:
-            err = '联网搜索未配置：请在平台管理的"内置工具 → 联网搜索"设置服务商（Bing/Tavily/…）及 API Key'
+            err = '联网搜索未配置: 请在平台管理的"内置工具 → 联网搜索"设置服务商 (Bing/Tavily/…) 及 API Key'
         logger.warning(f"Failed to initialise web_search tool: {err}")
         return None, err
 
@@ -1004,16 +1003,7 @@ async def _build_knowledge_search_tool(
             if not tag_names:
                 continue
 
-            tag_rows = (
-                await TagDao.get_tags_by_business(
-                    business_type=None,  # type: ignore[arg-type]
-                    business_id=str(kb_id),
-                )
-                if False
-                else []
-            )
-            # Above helper is business-keyed; for file-level tags we query by
-            # name against all tags and intersect with the KB's file set.
+            # File-level tag filters are resolved against the KB's file set.
             try:
                 files = await KnowledgeFileDao.aget_file_by_filters(
                     knowledge_id=kb_id,
@@ -1060,7 +1050,7 @@ async def _build_knowledge_search_tool(
         query: str,
         filters: _Filters | None = None,
     ) -> str:
-        from bisheng.api.v1.schema.chat_schema import UseKnowledgeBaseParam
+        from bisheng.workstation.domain.schemas.chat import UseKnowledgeBaseParam
 
         logger.info(
             f"[search_kb] invoke user={login_user.user_id}"
@@ -1367,7 +1357,11 @@ async def log_telemetry_events(user_id: str, conversation_id: str, start_time: f
 # =========================================================================== #
 
 
-async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayload):
+async def _agent_initialize_chat(
+    data: APIChatCompletion,
+    login_user: UserPayload,
+    session_subject: SessionSubject | None = None,
+):
     """Agent-mode init: creates/fetches the conversation and inserts the user's
     question row in the NEW JSON format (`{"query": str, "files": [...]}`)
     under category='question', type='over'.
@@ -1388,14 +1382,15 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
     if not conversation_id:
         is_new_conversation = True
         conversation_id = uuid4().hex
-        await MessageSessionDao.async_insert_one(
-            MessageSession(
-                chat_id=conversation_id,
-                name="",  # placeholder title is rendered client-side via i18n, never stored
-                flow_type=FlowType.WORKSTATION.value,
-                user_id=login_user.user_id,
-            )
+        new_session = MessageSession(
+            chat_id=conversation_id,
+            name="",  # placeholder title is rendered client-side via i18n, never stored
+            flow_type=FlowType.WORKSTATION.value,
+            user_id=login_user.user_id,
         )
+        if session_subject is not None:
+            new_session = session_subject.stamp(new_session)
+        await MessageSessionDao.async_insert_one(new_session)
         await telemetry_service.log_event(
             user_id=login_user.user_id,
             event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
@@ -1409,7 +1404,11 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
             ),
         )
 
-    conversation = await MessageSessionDao.async_get_one(conversation_id)
+    conversation = (
+        await ChatSessionService.get_subject_session(conversation_id, session_subject)
+        if session_subject is not None
+        else await MessageSessionDao.async_get_one(conversation_id)
+    )
     if conversation is None:
         raise ConversationNotFoundError()
     if not is_new_conversation:
@@ -1418,7 +1417,11 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
 
     # Same as the legacy flow: the attachment becomes permanent at send time,
     # not at upload time (see promote_chat_attachments).
-    await promote_chat_attachments(data.files, login_user.user_id)
+    await promote_chat_attachments(
+        data.files,
+        login_user.user_id,
+        storage_partition=session_subject.storage_partition if session_subject is not None else None,
+    )
 
     attempt_id = str(uuid4())
 
@@ -1569,7 +1572,7 @@ async def _annotate_agent_files_with_video_covers(
 
     minio_client = await get_minio_storage()
     annotated: list[dict] = []
-    for file_item, (local_path, filename) in zip(valid_files, downloaded_files):
+    for file_item, (local_path, filename) in zip(valid_files, downloaded_files, strict=False):
         item = dict(file_item)
         if WorkstationMediaCoverService.is_video_filename(filename):
             try:
@@ -1595,7 +1598,7 @@ def _merge_agent_file_covers(
     if not original_files:
         return []
     cover_by_key: dict[str, str] = {}
-    for source, annotated in zip(valid_files, annotated_valid):
+    for source, annotated in zip(valid_files, annotated_valid, strict=False):
         cover = annotated.get("cover_filepath")
         if not cover:
             continue
@@ -1625,6 +1628,7 @@ async def _agent_stream_chat_completion(
     request: Request,
     data: APIChatCompletion,
     login_user: UserPayload,
+    session_subject: SessionSubject | None = None,
     *,
     recovery_attempt: ClaimedAttempt | None = None,
     recovery_message: ChatMessage | None = None,
@@ -1659,7 +1663,7 @@ async def _agent_stream_chat_completion(
                 is_new_conv,
                 execution_id,
                 attempt_id,
-            ) = await _agent_initialize_chat(data, login_user)
+            ) = await _agent_initialize_chat(data, login_user, session_subject)
         else:
             if recovery_message is None:
                 raise ValueError("recovery message is required")
@@ -1692,6 +1696,8 @@ async def _agent_stream_chat_completion(
             iter([error_response.to_sse_event_instance_str()]),
             media_type="text/event-stream",
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception(f"Error in agent chat completions setup: {exc}")
         return StreamingResponse(
@@ -1882,7 +1888,7 @@ async def _agent_stream_chat_completion(
             )
 
             # Surface init failures as synthetic tool_call events so the user
-            # sees *something* (e.g. "联网搜索 失败：未配置服务商") rather than
+            # sees *something* (e.g. "联网搜索 失败: 未配置服务商") rather than
             # the model silently hallucinating a citation.
             for f in tool_failures:
                 tc_id = f"init_fail_{uuid4().hex[:10]}"
@@ -1915,7 +1921,7 @@ async def _agent_stream_chat_completion(
             )
             if merged_files and any(
                 merged.get("cover_filepath") and not (orig or {}).get("cover_filepath")
-                for orig, merged in zip(data.files or [], merged_files)
+                for orig, merged in zip(data.files or [], merged_files, strict=False)
             ):
                 data.files = merged_files
                 await _persist_question_file_attachments(message, data.text or "", merged_files)
@@ -1970,7 +1976,7 @@ async def _agent_stream_chat_completion(
             # of CITATION_PROMPT_RULES. A backstop was declared here once but the
             # flag was never read, so it never ran; injecting it now would only
             # duplicate rules the prompt already states.
-            llm_messages = list(history) + [HumanMessage(content=content_payload)]
+            llm_messages = [*history, HumanMessage(content=content_payload)]
 
             logger.info(
                 f"[agent_chat] prepared messages user={login_user.user_id}"
@@ -2386,9 +2392,11 @@ async def _agent_stream_chat_completion(
         # title via the gen_title poll endpoint, which waits until the background
         # task has persisted a real name (slow models take >5s).
         if is_new_conv or (conversation.name in (None, "", "New Chat")):
-            asyncio.create_task(
+            title_task = asyncio.create_task(
                 gen_title(data.text or "", bisheng_llm, conversation_id, login_user, request)
             )
+            _BACKGROUND_TASKS.add(title_task)
+            title_task.add_done_callback(_BACKGROUND_TASKS.discard)
         await log_telemetry_events(str(login_user.user_id), conversation_id, start_time)
 
     async def event_stream():
@@ -2427,6 +2435,8 @@ async def stream_chat_completion(
     request: Request,
     data: APIChatCompletion,
     login_user: UserPayload,
+    *,
+    session_subject: SessionSubject | None = None,
 ):
     """v2.5 unified entry — every workstation chat request goes through the
     LangGraph ReAct Agent flow. When `data.tools` is empty/None the agent
@@ -2439,7 +2449,7 @@ async def stream_chat_completion(
     """
     if data.task_mode:
         return await _task_mode_stream_completion(request, data, login_user)
-    return await _agent_stream_chat_completion(request, data, login_user)
+    return await _agent_stream_chat_completion(request, data, login_user, session_subject)
 
 
 # Upper bound for in-stream title generation (task mode). Matches the gen_title

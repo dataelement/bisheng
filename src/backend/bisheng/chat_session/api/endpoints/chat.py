@@ -63,7 +63,7 @@ async def get_chat_message(
 
 @router.get("/chat/info")
 async def get_chat_info(
-    chat_id: str = Query(..., description="Session Uniqueid，chat_id"),
+    chat_id: str = Query(..., description="Session Uniqueid, chat_id"),
     share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
 ):
     """Get session details by chat_id.
@@ -142,5 +142,5 @@ def get_session_list(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Get session list sorted by update_time descending. Only shows daily chat and linsight sessions."""
-    chat_sessions = ChatSessionService.get_user_session_list(login_user.user_id, page, limit)
+    chat_sessions = ChatSessionService.get_user_session_list(login_user, page, limit)
     return resp_200(chat_sessions)

@@ -7,7 +7,6 @@ from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
 from sqlmodel import col, select
 
-from bisheng.api.v1.schema.chat_schema import UseKnowledgeBaseParam
 from bisheng.api.v1.schemas import (
     KnowledgeFileOne,
     KnowledgeFileProcess,
@@ -50,6 +49,7 @@ from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType
 from bisheng.tool.domain.services.f048_tool_permission import SYSTEM_TOOL_ACTIONS
+from bisheng.workstation.domain.schemas.chat import UseKnowledgeBaseParam
 
 from ..models import TenantWorkstationConfigDao
 
@@ -761,6 +761,21 @@ class WorkStationService(BaseService):
         if inherited:
             ret = await cls._aproject_daily_config_for_current_tenant(ret, DEFAULT_TENANT_ID)
         return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
+
+    @classmethod
+    async def get_open_api_daily_config(cls, login_user: UserPayload) -> dict[str, list]:
+        """Project the daily configuration onto the two safe Open API fields."""
+
+        config = await cls.get_daily_chat_config()
+        if config is None:
+            return {"models": [], "tools": []}
+        tools = [tool.model_dump(mode="json") for tool in config.tools or []]
+        if tools:
+            tools = await cls.afilter_tools_by_use_permission(tools, login_user)
+        return {
+            "models": [model.model_dump(mode="json") for model in config.models or []],
+            "tools": tools,
+        }
 
     @classmethod
     async def update_daily_chat_config(cls, data: WorkstationConfig) -> WorkstationConfig:

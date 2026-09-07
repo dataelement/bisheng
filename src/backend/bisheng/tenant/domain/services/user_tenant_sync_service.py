@@ -124,6 +124,8 @@ class UserTenantSyncService:
             new_leaf.id,
         )
         await cls._invalidate_redis_caches(user_id)
+        if old_tenant_id is not None and old_tenant_id != new_leaf.id:
+            await cls._revoke_relocated_personal_token(user_id, old_tenant_id)
         # F019 AC-11: once ``token_version`` has been bumped the old JWT is
         # dead, so any admin-scope the user had set under that JWT must die
         # with it. Best-effort — a scope DEL failure does not block the
@@ -133,7 +135,7 @@ class UserTenantSyncService:
             from bisheng.admin.domain.services.tenant_scope import TenantScopeService
 
             await TenantScopeService.clear_on_token_version_bump(user_id)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("admin_scope clear on relocate failed: %s", exc)
 
         relocate_reason = "no_primary_department" if old_tenant_id is None and new_leaf.id == ROOT_TENANT_ID else None
@@ -319,7 +321,7 @@ class UserTenantSyncService:
         try:
             permissions = await get_permission_relation_api()
             await permissions.apply_changes(tuple(changes), crash_safe=True)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "Permission membership update for user %d relocate %s→%s failed: %s",
                 user_id,
@@ -335,7 +337,7 @@ class UserTenantSyncService:
             from bisheng.core.cache.redis_manager import get_redis_client
 
             redis = await get_redis_client()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("Redis unavailable; cache invalidation skipped: %s", exc)
             return
         for key in (
@@ -345,8 +347,23 @@ class UserTenantSyncService:
         ):
             try:
                 await redis.adelete(key)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.debug("Redis delete %s failed: %s", key, exc)
+
+    @staticmethod
+    async def _revoke_relocated_personal_token(user_id: int, old_tenant_id: int) -> None:
+        try:
+            from bisheng.open_api.domain.models.api_credential import REVOKE_REASON_TENANT_CHANGED
+            from bisheng.open_api.domain.services.personal_token_service import PersonalTokenService
+
+            await PersonalTokenService.cascade_revoke(
+                tenant_id=old_tenant_id,
+                user_id=user_id,
+                reason=REVOKE_REASON_TENANT_CHANGED,
+            )
+        except Exception as exc:
+            # The resolver still rejects this holder because the active tenant no longer matches.
+            logger.warning("personal token revoke on relocate failed for user=%s: %s", user_id, exc)
 
     @classmethod
     async def _write_relocation_audit(
@@ -376,7 +393,7 @@ class UserTenantSyncService:
                     "trigger": trigger,
                 },
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error("audit %s write failed: %s", action.value, exc)
 
     @classmethod

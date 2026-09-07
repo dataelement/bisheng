@@ -31,7 +31,6 @@ import logging
 from datetime import UTC, datetime
 from hashlib import sha256
 
-from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 

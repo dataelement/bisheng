@@ -5,7 +5,6 @@ from fastapi import APIRouter, Body, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from bisheng.api.v1.schema.chat_schema import APIChatCompletion
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.core.context.tenant import bypass_tenant_filter_if
@@ -18,6 +17,7 @@ from bisheng.llm.domain.services.model_recovery_service import (
     build_recovery_rejected_sse,
 )
 from bisheng.workstation.domain.schemas import WorkstationMessage
+from bisheng.workstation.domain.schemas.chat import APIChatCompletion
 from bisheng.workstation.domain.services.chat_helpers import (
     _convert_legacy_message,
     _drop_legacy_sibling_branches,

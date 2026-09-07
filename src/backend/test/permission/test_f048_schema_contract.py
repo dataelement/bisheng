@@ -28,6 +28,7 @@ from bisheng.core.database.alembic.versions import (
     v3_0_0_f048_visible_source_projection as visible_revision,
 )
 from bisheng.core.database.dialect_helpers import LargeText
+from bisheng.core.openfga.authorization_model_f048 import build_authorization_model_f048
 from bisheng.permission.domain import models as permission_models
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -244,6 +245,29 @@ def test_f048_tables_compile_for_mysql_without_native_enum_or_json() -> None:
         normalized = ddl.upper()
         assert " JSON" not in normalized
         assert " ENUM(" not in normalized
+
+
+def test_service_account_is_only_an_ordinary_direct_grant_subject() -> None:
+    model = build_authorization_model_f048()
+    definitions = {definition["type"]: definition for definition in model["type_definitions"]}
+    assert "service_account" in definitions
+
+    ordinary = definitions["permission_grant"]["metadata"]["relations"]["ordinary_assignee"]
+    protected = definitions["permission_grant"]["metadata"]["relations"]["protected_assignee"]
+    assert {entry["type"] for entry in ordinary["directly_related_user_types"]} >= {
+        "user",
+        "service_account",
+    }
+    assert {entry["type"] for entry in protected["directly_related_user_types"]} == {"user"}
+
+    for protected_type, relation in (
+        ("system", "super_admin"),
+        ("tenant", "admin"),
+        ("department", "admin"),
+        ("user_group", "admin"),
+    ):
+        allowed = definitions[protected_type]["metadata"]["relations"][relation]["directly_related_user_types"]
+        assert "service_account" not in {entry["type"] for entry in allowed}
 
 
 def _qualified_name(node: ast.expr) -> str:

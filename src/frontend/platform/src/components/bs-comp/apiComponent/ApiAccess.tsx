@@ -30,13 +30,13 @@ export const JsonItem = ({ name, type, desc, required = false, example = '', rem
     </div>
 }
 
-const ApiAccess = ({ }) => {
+export function ApiAccess() {
 
     const { t } = useTranslation()
     const { id: assisId } = useParams()
 
     const curl = () => {
-        return `curl -X POST "${window.location.protocol}//${window.location.host}/api/v2/assistant/chat/completions" \\
+        return `curl -X POST "${window.location.protocol}//${window.location.host}/api/v3/assistant/chat/completions" \\
 -H "User-Agent: Apifox/1.0.0 (https://apifox.com)" \\
 -H "Content-Type: application/json" \\
 -d '{
@@ -44,7 +44,7 @@ const ApiAccess = ({ }) => {
   "messages": [
     {
       "role": "user",
-      "content": "你好"
+      "content": "Hello"
     }
   ],
   "temperature": 0,
@@ -55,11 +55,11 @@ const ApiAccess = ({ }) => {
 
     const python = () => {
         return `from openai import OpenAI
-base_url = "${window.location.protocol}//${window.location.host}/api/v2/assistant"
+base_url = "${window.location.protocol}//${window.location.host}/api/v3/assistant"
 model = "${assisId}"
 client = OpenAI(base_url=base_url, api_key="empty")
 # Round 1
-messages = [{"role": "user", "content": "9.11 and 9.8, 谁更大?"}]
+messages = [{"role": "user", "content": "Which is larger, 9.11 or 9.8?"}]
 response = client.chat.completions.create(
     model=model,
     messages=messages,
@@ -72,13 +72,13 @@ for chunk in response:
         if not reasoning_content:
             print("\\n\\n-----Reasoning Content-----\\n")
         reasoning_chunk = chunk.choices[0].delta.reasoning_content
-        print(reasoning_chunk, end='', flush=True)  # 流式打印reasoning
+        print(reasoning_chunk, end='', flush=True)  # Stream reasoning
         reasoning_content += reasoning_chunk
     elif chunk.choices[0].delta.content:
         if not content:
             print("\\n\\n-----Final content-----\\n")
         content_chunk = chunk.choices[0].delta.content
-        print(content_chunk, end='', flush=True)  # 流式打印答案
+        print(content_chunk, end='', flush=True)  # Stream the answer
         content += content_chunk`
     }
 
@@ -109,7 +109,7 @@ for chunk in response:
                 <CardContent>
                     <h3 className="mb-2 bg-secondary px-4 py-2 inline-flex items-center rounded-md gap-1">
                         <Badge>POST</Badge>
-                        <span className='hover:underline cursor-pointer' onClick={handleCopyLink}>/api/v2/assistant/chat/completions</span>
+                        <span className='hover:underline cursor-pointer' onClick={handleCopyLink}>/api/v3/assistant/chat/completions</span>
                     </h3>
                     <p className='mt-2'>
                         {t('api.sdkNote')}
@@ -174,7 +174,7 @@ for chunk in response:
                                     <JsonItem name="model" type="string" desc={t('api.assistantId')} required example={assisId}></JsonItem>
                                     <JsonItem name="messages" type="array [object {2}] " desc={t('api.messageList')} required>
                                         <JsonItem name="role" type="string" desc="" required example="user" line></JsonItem>
-                                        <JsonItem name="content" type="string" desc="" required example="你好" line></JsonItem>
+                                        <JsonItem name="content" type="string" desc="" required example="Hello" line></JsonItem>
                                     </JsonItem>
                                     <JsonItem name="temperature" type="integer" desc={t('api.temperature')} ></JsonItem>
                                     <JsonItem name="stream" type="boolean" desc={t('api.stream')} ></JsonItem>
@@ -190,7 +190,7 @@ for chunk in response:
   "messages": [
     {
       "role": "user",
-      "content": "你好"
+      "content": "Hello"
     }
   ],
   "temperature": 0,
@@ -253,7 +253,7 @@ for chunk in response:
       "index": 0,
       "message": {
         "role": "assistant",
-        "content": "你好，有什么可以帮你的？"
+        "content": "Hello, how can I help?"
       },
       "finish_reason": "stop"
     }
@@ -268,6 +268,4 @@ for chunk in response:
             </Card>
         </section>
     );
-};
-
-export default ApiAccess;
+}

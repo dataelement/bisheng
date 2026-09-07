@@ -10,7 +10,7 @@ import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
 import AppChat from '~/pages/appChat';
 import { ChatEmptyState } from '~/pages/appChat/components/ChatEmptyState';
 import { cn } from '~/utils';
-import { StandaloneChatContext } from './StandaloneChatContext';
+import { resolveStandaloneApiVersion, StandaloneChatContext } from './StandaloneChatContext';
 import type { StandaloneChatContextValue } from './StandaloneChatContext';
 import { StandaloneSideNav } from './StandaloneSideNav';
 import { useStandaloneSidebar } from './hooks/useStandaloneSidebar';
@@ -83,7 +83,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
   const isChatShellCompact = useMediaQuery('(max-width: 1023px)');
   const sidebarWidth = 240;
 
-  const apiVersion = mode === 'guest' ? 'v2' : 'v1';
+  const apiVersion = resolveStandaloneApiVersion(mode);
   const numericFlowType = FLOW_TYPE_MAP[flowType];
   const isGuestMode = mode === 'guest';
 

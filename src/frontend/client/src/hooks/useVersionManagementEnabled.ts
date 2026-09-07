@@ -8,3 +8,8 @@ export function useVersionManagementEnabled(): boolean {
   const conf = useRecoilValue(bishengConfState);
   return conf?.knowledges?.version_management?.enabled ?? false;
 }
+
+export function usePersonalTokenEnabled(): boolean {
+  const conf = useRecoilValue(bishengConfState);
+  return conf?.personal_token_enabled ?? false;
+}

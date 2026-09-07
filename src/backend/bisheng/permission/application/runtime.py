@@ -281,6 +281,38 @@ class F048PermissionRuntime:
             source_service=self._sources,
             owner_model=owner_model,
         )
+        creation_grants: tuple[GrantSnapshot, ...] = ()
+        creation_deltas: tuple[ProjectionTupleDelta, ...] = ()
+        if actor.subject_type == "service_account" and mode.upper() == "CUSTOM":
+            manager_model = next(
+                (
+                    item.snapshot
+                    for item in catalog.models
+                    if item.snapshot.model_key == "manager" and item.snapshot.active
+                ),
+                None,
+            )
+            if manager_model is None:
+                raise PermissionPublishNotReadyError(msg="Manager permission model is unavailable")
+            manager_grant = self._empty_grant(target=target, model=manager_model)
+            provisional = self._sources.canonicalize_source(
+                source_id=1,
+                subject_type="service_account",
+                subject_id=str(actor.subject_id),
+                source_type="CREATOR_GRANT",
+                source_ref=f"{target.resource_type}:{target.resource_id}",
+                protected=False,
+            )
+            creator_source = replace(
+                provisional,
+                source_id=stable_assignee_id(
+                    grant_key=manager_grant.grant_id,
+                    source_fingerprint=provisional.source_fingerprint,
+                ),
+            )
+            creator_mutation = self._sources.add_source(manager_grant, creator_source)
+            creation_grants = (creator_mutation.grant,)
+            creation_deltas = creator_mutation.deltas
         return await self._owner.project_created(
             OwnerProjectionContext(
                 target=target,
@@ -301,6 +333,8 @@ class F048PermissionRuntime:
                     owner_user_id,
                 ),
                 permission_mode=mode.upper(),
+                creation_grants=creation_grants,
+                creation_deltas=creation_deltas,
             )
         )
 
@@ -1036,7 +1070,7 @@ class F048PermissionRuntime:
         consistency = await self._consistency(target)
         checks = [
             {
-                "user": f"user:{actor.user_id}",
+                "user": actor.fga_subject,
                 "relation": f"can_grant_level_{level}",
                 "object": f"{target.resource_type}:{target.resource_id}",
             }

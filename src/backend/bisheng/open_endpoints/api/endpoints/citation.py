@@ -8,8 +8,9 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+from bisheng.open_api.domain.scopes import open_api_scope
 from bisheng.open_endpoints.domain.schemas.citation import OpenCitationResponse
-from bisheng.open_endpoints.domain.utils import get_default_operator_async
+from bisheng.open_endpoints.domain.utils import get_open_api_operator_async
 from bisheng.permission.application.business_authorization import (
     check_business_action,
 )
@@ -18,9 +19,10 @@ router = APIRouter(prefix='/citation', tags=['OpenAPI', 'Citation'])
 
 
 @router.get('/{citation_id}', response_model=UnifiedResponseModel[OpenCitationResponse])
+@open_api_scope("knowledge:read")
 async def get_open_citation_detail(
     citation_id: str,
-    default_user: UserPayload = Depends(get_default_operator_async),
+    default_user: UserPayload = Depends(get_open_api_operator_async),
     service: CitationResolveService = Depends(get_citation_resolve_service),
 ) -> UnifiedResponseModel[OpenCitationResponse]:
     try:

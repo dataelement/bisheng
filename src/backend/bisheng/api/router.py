@@ -1,5 +1,5 @@
 # Router for base api
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from bisheng.admin.api.router import router as admin_router
 from bisheng.api.v1 import (
@@ -31,7 +31,6 @@ from bisheng.finetune.api.finetune import router as finetune_router
 from bisheng.finetune.api.server import router as server_router
 from bisheng.knowledge.api.router import (
     knowledge_router,
-    knowledge_space_file_change_router,
     knowledge_space_router,
     knowledge_space_tag_library_router,
     knowledge_version_router,
@@ -40,6 +39,9 @@ from bisheng.knowledge.api.router import (
 from bisheng.linsight.api.router import router as linsight_router
 from bisheng.llm.api.router import router as llm_router
 from bisheng.message.api.router import router as message_router
+from bisheng.open_api.api.dependencies import verify_open_api_access
+from bisheng.open_api.api.router import management_router as open_api_management_router
+from bisheng.open_api.api.router import rpc_router as open_api_rpc_router
 from bisheng.open_endpoints.api.endpoints.llm import router as llm_router_rpc
 from bisheng.open_endpoints.api.router import (
     assistant_router_rpc,
@@ -49,6 +51,7 @@ from bisheng.open_endpoints.api.router import (
     flow_router_rpc,
     knowledge_router_rpc,
     workflow_router_rpc,
+    workstation_router_rpc,
 )
 from bisheng.org_sync.api.endpoints.relink import router as relink_router
 from bisheng.org_sync.api.router import router as org_sync_router
@@ -70,7 +73,6 @@ router.include_router(endpoints_router)
 router.include_router(knowledge_router)
 router.include_router(knowledge_space_tag_library_router)
 router.include_router(knowledge_space_router)
-router.include_router(knowledge_space_file_change_router)
 router.include_router(knowledge_version_router)
 router.include_router(server_router)
 router.include_router(user_router)
@@ -111,15 +113,16 @@ router.include_router(admin_router)
 router.include_router(approval_router)
 router.include_router(brand_router)
 router.include_router(sensitive_word_policy_router)
+router.include_router(open_api_management_router)
 
-router_rpc = APIRouter(
-    prefix="/api/v2",
-)
+router_rpc = APIRouter(prefix="/api/v2", dependencies=[Depends(verify_open_api_access)])
+router_rpc.include_router(open_api_rpc_router)
 router_rpc.include_router(knowledge_router_rpc)
 router_rpc.include_router(filelib_router_rpc)
-router_rpc.include_router(chat_router_rpc)
 router_rpc.include_router(assistant_router_rpc)
 router_rpc.include_router(workflow_router_rpc)
 router_rpc.include_router(llm_router_rpc)
 router_rpc.include_router(flow_router_rpc)
 router_rpc.include_router(citation_router_rpc)
+router_rpc.include_router(workstation_router_rpc)
+router_rpc.include_router(chat_router_rpc)

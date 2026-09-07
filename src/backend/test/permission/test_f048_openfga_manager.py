@@ -46,13 +46,14 @@ def _config(**updates) -> OpenFGAConf:
 
 def _with_openfga_response_defaults(model: dict) -> dict:
     response_model = deepcopy(model)
-    system_metadata = response_model["type_definitions"][1]["metadata"]
+    definitions = {item["type"]: item for item in response_model["type_definitions"]}
+    system_metadata = definitions["system"]["metadata"]
     system_metadata.update(module="", source_info=None)
     super_admin_metadata = system_metadata["relations"]["super_admin"]
     super_admin_metadata.update(module="", source_info=None)
     super_admin_metadata["directly_related_user_types"][0]["condition"] = ""
 
-    department_relations = response_model["type_definitions"][3]["relations"]
+    department_relations = definitions["department"]["relations"]
     parent_rewrite = department_relations["admin"]["union"]["child"][1]["tupleToUserset"]
     parent_rewrite["tupleset"]["object"] = ""
     parent_rewrite["computedUserset"]["object"] = ""
