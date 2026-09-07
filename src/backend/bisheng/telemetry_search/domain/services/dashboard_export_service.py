@@ -19,15 +19,11 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.utils import generate_uuid
 
 from ..schemas.component import ComponentDataConfig, DimensionQueryFilter, TimeFilter
-from .component import DataQueryService
 from .dashboard import DashboardService
+from .dashboard_export_detail import DetailRows, query_detail_rows
 
 EXPORT_ROW_LIMIT_PER_SHEET = 50_000
 _INVALID_SHEET_NAME_CHARS = re.compile(r"[:\\/?*\[\]]")
-
-
-def _column_label(field) -> str:
-    return field.display_name or field.field_name or field.field_id
 
 
 def _sanitize_sheet_name(name: str) -> str:
@@ -35,26 +31,12 @@ def _sanitize_sheet_name(name: str) -> str:
     return name[:31]
 
 
-def _build_dataframe(data_config: ComponentDataConfig, dimensions: list[list], values: list[list]) -> pd.DataFrame:
-    # DataQueryService.query_telemetry_data() queries data_config.dimensions followed by
-    # get_stack_dimensions() (pivot table's 堆叠项/维度) as one combined dimension list —
-    # see component.py::query_telemetry_data lines 80-88 — so each result.dimensions row
-    # carries both, in that order. The exported columns must match, or pandas raises
-    # "N columns passed, passed data had M columns" for any pivot-table component that
-    # has a stack dimension configured.
-    row_dimension_fields = [*data_config.dimensions, *data_config.get_stack_dimensions()]
-    columns = [_column_label(field) for field in row_dimension_fields]
-    columns.extend(_column_label(field) for field in data_config.metrics)
-    if row_dimension_fields:
-        # dimensions/values are index-aligned parallel lists (DataQueryResult contract).
-        rows = [
-            list(dim_row) + list(value_row) for dim_row, value_row in zip(dimensions, values, strict=True)
-        ]
-    else:
-        # No dimensions configured: sort_metrics() leaves `dimensions` permanently empty in
-        # this case (see component.py::sort_metrics), so `values` alone carries the rows.
-        rows = [list(value_row) for value_row in values]
-    return pd.DataFrame(rows, columns=columns) if rows else pd.DataFrame(columns=columns)
+def _build_dataframe(detail: DetailRows, row_indices: list[int] | None = None) -> pd.DataFrame:
+    """One sheet of detail rows, labelled with each column's display name."""
+    rows = detail.rows if row_indices is None else [detail.rows[index] for index in row_indices]
+    labels = [column.label for column in detail.columns]
+    data = [[row.get(column.field) for column in detail.columns] for row in rows]
+    return pd.DataFrame(data, columns=labels) if data else pd.DataFrame(columns=labels)
 
 
 async def _upload_excel(bio: BytesIO, file_name: str) -> str:
@@ -91,7 +73,7 @@ class DashboardExportService:
         time_filters: list[TimeFilter] | None = None,
         dimension_filters: list[DimensionQueryFilter] | None = None,
     ) -> str:
-        """AC-09: export the detail rows for one clicked chart category."""
+        """AC-09: export the records behind one clicked chart category."""
         dashboard_service = DashboardService(request=self.request, login_user=self.login_user)
         _dashboard, component = await dashboard_service._authorize_component_access(dashboard_id, component_id)
 
@@ -99,19 +81,20 @@ class DashboardExportService:
         merged_filters = [*(dimension_filters or [])]
         merged_filters.append(DimensionQueryFilter(fieldId=dimension_field, values=[dimension_value]))
 
-        result = await DataQueryService(
+        detail = await query_detail_rows(
             dataset_code=component.dataset_code,
             data_config=data_config,
             time_filters=time_filters,
             dimension_filters=merged_filters,
-        ).query_telemetry_data()
+            row_limit=EXPORT_ROW_LIMIT_PER_SHEET,
+        )
 
-        if not result.dimensions and not result.value:
+        if not detail.rows:
             raise DashboardExportEmptyError()
-        if len(result.dimensions or result.value) > EXPORT_ROW_LIMIT_PER_SHEET:
+        if len(detail.rows) > EXPORT_ROW_LIMIT_PER_SHEET:
             raise DashboardExportLimitExceededError()
 
-        df = _build_dataframe(data_config, result.dimensions, result.value)
+        df = _build_dataframe(detail)
         bio = BytesIO()
         with pd.ExcelWriter(bio, engine="openpyxl") as writer:
             df.to_excel(writer, sheet_name="Sheet1", index=False)
@@ -124,28 +107,30 @@ class DashboardExportService:
         time_filters: list[TimeFilter] | None = None,
         dimension_filters: list[DimensionQueryFilter] | None = None,
     ) -> str:
-        """AC-10: export the whole chart, one sheet per outermost dimension value."""
+        """AC-10: export every record behind the chart, one sheet per outermost dimension value."""
         dashboard_service = DashboardService(request=self.request, login_user=self.login_user)
         _dashboard, component = await dashboard_service._authorize_component_access(dashboard_id, component_id)
 
         data_config = ComponentDataConfig(**component.data_config)
-        result = await DataQueryService(
+        detail = await query_detail_rows(
             dataset_code=component.dataset_code,
             data_config=data_config,
             time_filters=time_filters,
             dimension_filters=dimension_filters or [],
-        ).query_telemetry_data()
+            row_limit=EXPORT_ROW_LIMIT_PER_SHEET,
+        )
 
-        if not result.dimensions and not result.value:
+        if not detail.rows:
             raise DashboardExportEmptyError()
 
+        # Sheets still split on the chart's outermost dimension, so the workbook keeps the
+        # same shape as before — only each sheet's contents changed from one aggregated row
+        # per category to the records that make up that category.
+        group_field = data_config.dimensions[0].field_id if data_config.dimensions else None
         groups: dict[str, list[int]] = {}
-        if data_config.dimensions:
-            for row_index, dim_row in enumerate(result.dimensions):
-                group_key = str(dim_row[0]) if dim_row else "Sheet1"
-                groups.setdefault(group_key, []).append(row_index)
-        else:
-            groups["Sheet1"] = list(range(len(result.value)))
+        for row_index, row in enumerate(detail.rows):
+            group_key = str(row.get(group_field) or "Sheet1") if group_field else "Sheet1"
+            groups.setdefault(group_key, []).append(row_index)
 
         if any(len(indices) > EXPORT_ROW_LIMIT_PER_SHEET for indices in groups.values()):
             raise DashboardExportLimitExceededError()
@@ -154,11 +139,7 @@ class DashboardExportService:
         used_sheet_names: set[str] = set()
         with pd.ExcelWriter(bio, engine="openpyxl") as writer:
             for group_key, indices in groups.items():
-                # result.dimensions stays permanently empty (not per-row) when no
-                # dimensions are configured — see _build_dataframe's docstring note.
-                group_dimensions = [result.dimensions[i] for i in indices] if data_config.dimensions else []
-                group_values = [result.value[i] for i in indices]
-                df = _build_dataframe(data_config, group_dimensions, group_values)
+                df = _build_dataframe(detail, indices)
                 sheet_name = _sanitize_sheet_name(group_key)
                 suffix = 1
                 base_name = sheet_name
