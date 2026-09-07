@@ -6,6 +6,7 @@ import pytest
 from langchain_core.documents import Document
 
 from bisheng.common.errcode.open_api import OpenApiAuthDependencyUnavailableError
+from bisheng.core.context.tenant import set_current_tenant_id
 from bisheng.common.errcode.permission import PermissionServiceUnavailableError
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.services.knowledge_file_visibility_service import IndexFilter
@@ -18,7 +19,10 @@ from bisheng.permission.domain.services.permission_action_service import Permiss
 
 
 def service() -> KnowledgeSpaceChatService:
-    login_user = MagicMock(user_id=99)
+    # tenant_id is not decoration: 909's visibility service fails closed unless the
+    # identity and the tenant ContextVar name the same positive tenant.
+    login_user = MagicMock(user_id=99, tenant_id=3)
+    set_current_tenant_id(3)
     result = KnowledgeSpaceChatService(request=MagicMock(), login_user=login_user)
     result.version_repo = MagicMock()
     return result
@@ -84,6 +88,10 @@ async def test_prefilter_reaches_both_indexes_and_postfilter_removes_forbidden_c
         )
     )
     visibility.post_filter_retrievable_files = AsyncMock(return_value={10})
+    # 909 threads the file-change approval projection through this path; a bare
+    # MagicMock attribute is not awaitable, so stub both hooks as pass-throughs.
+    visibility.project_mutation_retrieval_query = AsyncMock(side_effect=lambda *, space_id, query: query)
+    visibility.project_mutation_retrieval_names = AsyncMock(side_effect=lambda *, space_id, documents: documents)
     monkeypatch.setattr(svc, "_visibility_service", lambda: visibility)
 
     milvus = MagicMock()
@@ -143,6 +151,9 @@ async def test_service_account_actor_is_not_replaced_by_compatibility_owner(monk
     visibility = svc._visibility_service()
     visibility._non_primary_ids = AsyncMock(return_value=set())
     visibility._list_primary_file_ids_in_space = AsyncMock(return_value={10})
+    # 909-only seam: the file-change approval exclusion reads its own table, which
+    # this unit test has no fixture for. The actor identity is what is under test.
+    visibility._list_file_change_excluded_ids = AsyncMock(return_value=set())
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_file_visibility_service."
         "batch_check_business_actions",

@@ -34,7 +34,11 @@ def _doc(file_id: int) -> Document:
 
 
 def _bound_resolver(user):
-    async def resolve(_user_id):
+    # F053 replaced the /api/v2 identity seam: the endpoint no longer resolves an
+    # operator from a request user_id, it asks the credential for one. The tenant
+    # ContextVar still has to be primed here — 909's _require_resolved_tenant
+    # fails closed when the identity and the ContextVar disagree.
+    async def resolve():
         set_current_tenant_id(int(user.tenant_id))
         return user
 
@@ -54,7 +58,7 @@ async def test_v2_space_file_list_uses_owner_service_for_publication_guard(monke
     """The OpenAPI endpoint must not implement a second ORM listing path."""
     user = _login_user(user_id=91)
     resolve = _bound_resolver(user)
-    monkeypatch.setattr(filelib, "resolve_operator", resolve)
+    monkeypatch.setattr(filelib, "get_open_api_operator_async", resolve)
     monkeypatch.setattr(
         filelib.KnowledgeDao,
         "aquery_by_id",
@@ -83,13 +87,12 @@ async def test_v2_space_file_list_uses_owner_service_for_publication_guard(monke
         status=None,
         page_size=20,
         cursor=None,
-        user_id=91,
         version_repo=MagicMock(),
         doc_repo=MagicMock(),
     )
 
     assert response.data["data"] == [{"id": 103, "file_name": "published.pdf"}]
-    resolve.assert_awaited_once_with(91)
+    resolve.assert_awaited_once_with()
     list_children.assert_awaited_once_with(
         8,
         parent_id=3,
@@ -101,7 +104,7 @@ async def test_v2_space_file_list_uses_owner_service_for_publication_guard(monke
 
 async def test_v2_space_keyword_search_uses_guarded_owner_search(monkeypatch):
     user = _login_user(user_id=92)
-    monkeypatch.setattr(filelib, "resolve_operator", _bound_resolver(user))
+    monkeypatch.setattr(filelib, "get_open_api_operator_async", _bound_resolver(user))
     monkeypatch.setattr(
         filelib.KnowledgeDao,
         "aquery_by_id",
@@ -132,7 +135,6 @@ async def test_v2_space_keyword_search_uses_guarded_owner_search(monkeypatch):
         status=None,
         page_size=10,
         cursor=None,
-        user_id=92,
         version_repo=MagicMock(),
         doc_repo=MagicMock(),
     )
@@ -151,7 +153,7 @@ async def test_v2_space_keyword_search_uses_guarded_owner_search(monkeypatch):
 
 async def test_v2_space_file_list_denies_cross_tenant_row_before_owner_service(monkeypatch):
     user = _login_user(user_id=93, tenant_id=42)
-    monkeypatch.setattr(filelib, "resolve_operator", _bound_resolver(user))
+    monkeypatch.setattr(filelib, "get_open_api_operator_async", _bound_resolver(user))
     monkeypatch.setattr(
         filelib.KnowledgeDao,
         "aquery_by_id",
@@ -169,7 +171,6 @@ async def test_v2_space_file_list_denies_cross_tenant_row_before_owner_service(m
             status=None,
             page_size=20,
             cursor=None,
-            user_id=93,
             version_repo=MagicMock(),
             doc_repo=MagicMock(),
         )
@@ -180,7 +181,7 @@ async def test_v2_space_file_list_denies_cross_tenant_row_before_owner_service(m
 
 async def test_v2_space_file_list_denies_row_without_explicit_tenant_before_owner_service(monkeypatch):
     user = _login_user(user_id=94, tenant_id=42)
-    monkeypatch.setattr(filelib, "resolve_operator", _bound_resolver(user))
+    monkeypatch.setattr(filelib, "get_open_api_operator_async", _bound_resolver(user))
     monkeypatch.setattr(
         filelib.KnowledgeDao,
         "aquery_by_id",
@@ -198,7 +199,6 @@ async def test_v2_space_file_list_denies_row_without_explicit_tenant_before_owne
             status=None,
             page_size=20,
             cursor=None,
-            user_id=94,
             version_repo=MagicMock(),
             doc_repo=MagicMock(),
         )
@@ -301,7 +301,7 @@ async def test_v2_retrieve_endpoint_binds_visibility_to_impersonated_user(monkey
     acting_user = _login_user(user_id=97)
     set_current_tenant_id(42)
     resolve = AsyncMock(return_value=acting_user)
-    monkeypatch.setattr(filelib, "resolve_operator", resolve)
+    monkeypatch.setattr(filelib, "get_open_api_operator_async", resolve)
     captured = {}
 
     async def retrieve(self, **kwargs):
@@ -328,4 +328,4 @@ async def test_v2_retrieve_endpoint_binds_visibility_to_impersonated_user(monkey
 
     assert response.data.total == 0
     assert captured == {"login_user": acting_user, "version_repo": version_repo}
-    resolve.assert_awaited_once_with(97)
+    resolve.assert_awaited_once_with()

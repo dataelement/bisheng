@@ -148,10 +148,15 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
       </SelectTrigger>
       {/* Width fits the longest row between the clamps (`auto` skips the
           trigger-width floor); tool names come from the in-memory bsConfig, so
-          the first frame already has the final width — no reflow on open. */}
+          the first frame already has the final width — no reflow on open.
+          Opens upward: the trigger sits in the composer at the bottom of the viewport,
+          so downward has the least room of any direction. Height is left to the shared
+          clamp (min(24rem, radix available height)) — a fixed max-h here overrode it, and
+          under WeCom's large-font setting the list ran past the bottom edge and was cut off. */}
       <SelectContent
         auto
-        className="bg-white rounded-2xl min-w-[160px] max-w-[280px] max-h-[320px] overflow-y-auto"
+        side="top"
+        className="bg-white rounded-2xl min-w-[160px] max-w-[280px] overflow-y-auto"
         viewportClassName="flex flex-col gap-1 p-3"
       >
         {availableTools.map((group) => (

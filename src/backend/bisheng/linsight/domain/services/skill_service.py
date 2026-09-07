@@ -50,6 +50,7 @@ from bisheng.linsight.domain.services.skill_store import (
     compose_skill_md,
     parse_skill_md,
     render_skill_md,
+    resolve_skill_upload_limit,
     slugify_pinyin,
     unpack_zip_bytes,
     validate_skill_name,
