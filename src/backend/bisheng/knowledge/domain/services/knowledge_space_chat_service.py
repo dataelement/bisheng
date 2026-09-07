@@ -27,6 +27,7 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
+from bisheng.common.image_view import ImageRegistry, annotate, run_vision_tool_loop
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.constants import MessageCategory
@@ -117,6 +118,21 @@ class KnowledgeSpaceChatService:
         context = "\n".join(KnowledgeUtils.format_retrieved_chunk(doc) for doc in annotated_documents)
         return context, citation_items
 
+    async def _resolve_workbench_visual(self, model_id: int) -> bool:
+        """Same WSModel.visual lookup as Linsight ``_resolve_model``."""
+        workbench = await LLMService.get_workbench_llm(tenant_id=getattr(self.login_user, "tenant_id", None))
+        return any(
+            str(entry.id) == str(model_id) and bool(getattr(entry, "visual", False))
+            for entry in (workbench.models or [])
+        )
+
+    @staticmethod
+    def _apply_image_anchors(file_content: str, visual: bool) -> tuple[str, ImageRegistry]:
+        registry = ImageRegistry()
+        if not visual:
+            return file_content, registry
+        return annotate(file_content, registry), registry
+
     @classmethod
     def generate_flow_id_for_file(cls, knowledge_id: int, file_id: int) -> str:
         """Generate a unique flow_id representation for a single file chat"""
@@ -178,7 +194,7 @@ class KnowledgeSpaceChatService:
     async def space_rag(
         self, session, vector_retriever, es_retriever, query: str, model_id: int, tags: Any = None
     ) -> AsyncIterator[ChatResponse]:
-        llm, space_conf = await self.get_space_llm_config(model_id=model_id)
+        _, space_conf = await self.get_space_llm_config(model_id=model_id)
 
         retriever_tool = KnowledgeRetrieverTool(
             vector_retriever=vector_retriever,
@@ -187,118 +203,8 @@ class KnowledgeSpaceChatService:
             sort_by_source_and_index=True,
         )
         finally_docs: list[Document] = await retriever_tool.ainvoke(query)
-        logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
-        file_content, citation_items = await self._prepare_rag_citation_context(finally_docs)
-
-        prompt_service = await get_prompt_manager()
-
-        if space_conf.system_prompt:
-            inputs = [
-                SystemMessage(content=space_conf.system_prompt.format(cur_date=datetime.now().strftime("%Y-%m-%d"))),
-                HumanMessage(
-                    content=space_conf.user_prompt.format(retrieved_file_content=file_content, question=query)
-                ),
-            ]
-        else:
-            prompt_obj = prompt_service.render_prompt(
-                namespace="knowledge_space",
-                prompt_name="rag_prompt",
-                cur_date=datetime.now().strftime("%Y-%m-%d"),
-                retrieved_file_content=file_content,
-                question=query,
-            )
-            inputs = [SystemMessage(content=prompt_obj.prompt.system), HumanMessage(content=prompt_obj.prompt.user)]
-        answer = ""
-        reasoning_content = ""
-        history = await self.get_history(chat_id=session.chat_id, limit=4)
-        if history:
-            history.append(inputs[1])
-            history.insert(0, inputs[0])
-            inputs = history
-
-        logger.info(
-            "space_rag llm inputs | chat_id={} model_id={} retrieved_chunks={} | messages={}",
-            session.chat_id,
-            model_id,
-            len(finally_docs),
-            [{"role": m.type, "content": m.content} for m in inputs],
-        )
-
-        async for one in llm.astream(inputs):
-            chunk_reasoning_content = extract_reasoning_content(one)
-            yield ChatResponse(
-                category=MessageCategory.STREAM,
-                message={
-                    "content": one.content,
-                    "reasoning_content": chunk_reasoning_content,
-                },
-                type="stream",
-            )
-            reasoning_content += chunk_reasoning_content
-            answer += one.content
-        cited_items = select_registry_items_for_persistence(citation_items, answer)
-        answer = strip_unregistered_citation_markers(answer, cited_items)
-        messages = [
-            ChatMessage(
-                category=MessageCategory.QUESTION,
-                message=json.dumps(
-                    {
-                        "query": query,
-                        "tags": tags,
-                        "model_id": model_id,
-                    },
-                    ensure_ascii=False,
-                ),
-                chat_id=session.chat_id,
-                flow_id=session.flow_id,
-                user_id=self.login_user.user_id,
-                type="end",
-                is_bot=False,
-            ),
-            ChatMessage(
-                category=MessageCategory.ANSWER,
-                message=json.dumps({"content": answer, "reasoning_content": reasoning_content}, ensure_ascii=False),
-                chat_id=session.chat_id,
-                flow_id=session.flow_id,
-                user_id=self.login_user.user_id,
-                type="end",
-                is_bot=True,
-            ),
-        ]
-        await ChatMessageDao.ainsert_batch(messages)
-        await save_message_citations(
-            message_id=messages[1].id,
-            items=cited_items,
-            chat_id=session.chat_id,
-            flow_id=session.flow_id,
-        )
-        if not session.name:
-            title_task = asyncio.create_task(
-                self.generate_conversation(
-                    user_id=self.login_user.user_id,
-                    chat_id=session.chat_id,
-                    question=query,
-                    answer=answer,
-                )
-            )
-            _background_tasks.add(title_task)
-            title_task.add_done_callback(_background_tasks.discard)
-
-        yield ChatResponse(
-            category=MessageCategory.STREAM,
-            message={
-                "content": answer,
-                "reasoning_content": reasoning_content,
-                # Real persisted answer ChatMessage id: the client renders the
-                # streamed answer under a temporary placeholder id; sending the
-                # real id on the end event lets it swap in immediately so
-                # like/dislike writes to the right row (previously a like clicked
-                # before a page refresh was lost, since it hit the placeholder id).
-                "message_id": messages[1].id,
-            },
-            citations=cited_items,
-            type="end",
-        )
+        async for one in self._render_rag_response(session, finally_docs, query, model_id, tags):
+            yield one
 
     @staticmethod
     async def generate_conversation(user_id: int, chat_id: str, question: str, answer: str | None = None):
@@ -588,6 +494,8 @@ class KnowledgeSpaceChatService:
         llm, space_conf = await self.get_space_llm_config(model_id=model_id)
         logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
         file_content, citation_items = await self._prepare_rag_citation_context(finally_docs)
+        visual = await self._resolve_workbench_visual(model_id)
+        file_content, image_registry = self._apply_image_anchors(file_content, visual)
 
         prompt_service = await get_prompt_manager()
 
@@ -623,7 +531,7 @@ class KnowledgeSpaceChatService:
             [{"role": m.type, "content": m.content} for m in inputs],
         )
 
-        async for one in llm.astream(inputs):
+        async for one in run_vision_tool_loop(llm, inputs, image_registry, visual=visual):
             chunk_reasoning_content = extract_reasoning_content(one)
             yield ChatResponse(
                 category=MessageCategory.STREAM,

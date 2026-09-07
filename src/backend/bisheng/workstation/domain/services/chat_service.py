@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import time
@@ -8,7 +10,8 @@ from uuid import uuid4
 from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 from json_repair import json_repair
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.runnables import Runnable
 from langchain_core.tools import ArgsSchema, BaseTool, StructuredTool
 from loguru import logger
 from pydantic import BaseModel as PydanticBaseModel
@@ -49,6 +52,8 @@ from bisheng.common.errcode.workstation import (
     DepartmentDailyChatConcurrentLimitError,
     LLMRateLimitError,
 )
+from bisheng.common.image_view import ImageRegistry, annotate, build_view_image_tool, relocate_images_to_human
+from bisheng.common.image_view.loop import prepare_vision_messages
 from bisheng.common.schemas.telemetry.event_data_schema import (
     ApplicationAliveEventData,
     ApplicationProcessEventData,
@@ -230,15 +235,22 @@ class DailyChatCitationToolWrapper(BaseTool):
     tool: BaseTool
     citation_collector: CitationRegistryCollector = PydanticField(exclude=True)
     kb_name_by_id: dict[str, str] = PydanticField(default_factory=dict, exclude=True)
+    image_registry: Any = PydanticField(default=None, exclude=True)
 
     @classmethod
-    def wrap(cls, tool: BaseTool, citation_collector: CitationRegistryCollector) -> BaseTool:
+    def wrap(
+        cls,
+        tool: BaseTool,
+        citation_collector: CitationRegistryCollector,
+        image_registry: ImageRegistry | None = None,
+    ) -> BaseTool:
         return cls(
             name=tool.name,
             description=tool.description,
             args_schema=tool.args_schema,
             tool=tool,
             citation_collector=citation_collector,
+            image_registry=image_registry,
         )
 
     def _is_web_search_tool(self) -> bool:
@@ -292,7 +304,8 @@ class DailyChatCitationToolWrapper(BaseTool):
             kb_id_raw = meta.get("knowledge_id") or meta.get("kb_id") or ""
             kb_id = str(kb_id_raw) if kb_id_raw not in (None, "") else ""
             kb_name = self.kb_name_by_id.get(kb_id, "")
-            results.append(knowledge_imp.KnowledgeUtils.format_retrieved_chunk(doc, kb_name))
+            chunk = knowledge_imp.KnowledgeUtils.format_retrieved_chunk(doc, kb_name)
+            results.append(_annotate_retrieved_chunk(chunk, self.image_registry))
         return json.dumps(results, ensure_ascii=False)
 
     def _extend_citation_registry_items(self, items: list[CitationRegistryItemSchema]) -> None:
@@ -325,13 +338,72 @@ class DailyChatCitationToolWrapper(BaseTool):
         return await self._aformat_knowledge_results(retrieval_result)
 
 
+def _annotate_retrieved_chunk(chunk: str, image_registry: ImageRegistry | None) -> str:
+    if image_registry is None:
+        return chunk
+    return annotate(chunk, image_registry)
+
+
 def _wrap_daily_chat_citation_tool(
     tool: BaseTool,
     citation_collector: CitationRegistryCollector,
+    image_registry: ImageRegistry | None = None,
 ) -> BaseTool:
     if tool.name == "web_search" or hasattr(tool, "knowledge_retriever_tool"):
-        return DailyChatCitationToolWrapper.wrap(tool, citation_collector)
+        return DailyChatCitationToolWrapper.wrap(tool, citation_collector, image_registry=image_registry)
     return tool
+
+
+def _messages_from_model_input(inp: Any) -> list[BaseMessage]:
+    if isinstance(inp, dict):
+        return list(inp.get("messages") or inp.get("llm_input_messages") or [])
+    if isinstance(inp, list):
+        return list(inp)
+    return [inp]
+
+
+class _VisionCallRunnable(Runnable):
+    """Relocate images and optionally append view-image rules, then call the bound LLM."""
+
+    def __init__(self, bound: Any, extra_rules: bool):
+        self._bound = bound
+        self._extra_rules = extra_rules
+
+    def _prepare(self, inp: Any) -> list[BaseMessage]:
+        messages = relocate_images_to_human(_messages_from_model_input(inp))
+        if self._extra_rules:
+            messages = prepare_vision_messages(messages)
+        return messages
+
+    def invoke(self, inp: Any, config=None, **kwargs: Any):
+        return self._bound.invoke(self._prepare(inp), config=config, **kwargs)
+
+    async def ainvoke(self, inp: Any, config=None, **kwargs: Any):
+        return await self._bound.ainvoke(self._prepare(inp), config=config, **kwargs)
+
+
+class VisionToolBindWrapper:
+    """Dynamic LLM for daily ReAct: bind view_image only after the registry is filled.
+
+    Must not be a Runnable — create_react_agent treats a non-Runnable callable as a
+    per-turn model factory and will not compile-time bind ToolNode tools.
+    """
+
+    def __init__(self, llm: Any, registry: ImageRegistry, base_tools: list[BaseTool]):
+        self._llm = llm
+        self._registry = registry
+        self._base_tools = list(base_tools)
+        self._view_tool = build_view_image_tool(registry)
+
+    def __call__(self, state, runtime):
+        if len(self._registry) > 0:
+            tools = [*self._base_tools, self._view_tool]
+            extra_rules = True
+        else:
+            tools = list(self._base_tools)
+            extra_rules = False
+        bound = self._llm.bind_tools(tools) if tools else self._llm
+        return _VisionCallRunnable(bound, extra_rules=extra_rules)
 
 
 async def _get_agent_max_iterations() -> int:
@@ -648,6 +720,7 @@ async def _build_knowledge_search_tool(
     login_user: UserPayload,
     max_token: int,
     citation_collector: CitationRegistryCollector,
+    image_registry: ImageRegistry | None = None,
 ) -> StructuredTool | None:
     """StructuredTool wrapper around WorkStationService.queryChunksFromDB.
 
@@ -946,7 +1019,7 @@ async def _build_knowledge_search_tool(
         citation_items = collect_rag_citation_registry_items(docs)
         await cache_citation_registry_items(citation_items)
         citation_collector.extend(citation_items)
-        results = [_format_chunk(doc) for doc in docs]
+        results = [_annotate_retrieved_chunk(_format_chunk(doc), image_registry) for doc in docs]
 
         # Surface per-KB failures as synthetic chunks carrying
         # <retrieval_error>. The frontend detects these and renders the KB
@@ -1081,6 +1154,7 @@ async def _prepare_tools(
     ws_config,  # WorkstationConfig; kept untyped to avoid circular import cost
     citation_collector: CitationRegistryCollector,
     knowledge_bases_info: list[dict] | None = None,
+    image_registry: ImageRegistry | None = None,
 ) -> tuple[list[BaseTool], list[dict]]:
     """Assemble the BaseTool list passed to LangGraph create_react_agent.
 
@@ -1120,7 +1194,7 @@ async def _prepare_tools(
                 logger.warning(f"Failed to initialise tool id={tool_id} key={tool_key}: {err}")
 
         if t is not None:
-            tools.append(_wrap_daily_chat_citation_tool(t, citation_collector))
+            tools.append(_wrap_daily_chat_citation_tool(t, citation_collector, image_registry=image_registry))
         elif err:
             failures.append(
                 {
@@ -1139,6 +1213,7 @@ async def _prepare_tools(
             login_user=login_user,
             max_token=getattr(ws_config, "maxTokens", 15000) or 15000,
             citation_collector=citation_collector,
+            image_registry=image_registry,
         )
         if kb_tool is not None:
             tools.append(kb_tool)
@@ -1490,6 +1565,8 @@ async def _agent_stream_chat_completion(
         error_flag = False
         error_msg = ""
         citation_collector = CitationRegistryCollector()
+        image_registry = ImageRegistry()
+        visual_enabled = bool(getattr(model_info, "visual", False))
 
         def close_thinking() -> int | None:
             """Finalise the open thinking event (if any). Returns its duration
@@ -1626,6 +1703,7 @@ async def _agent_stream_chat_completion(
                 ws_config=ws_config,
                 citation_collector=citation_collector,
                 knowledge_bases_info=knowledge_bases_info,
+                image_registry=image_registry if visual_enabled else None,
             )
 
             # Surface init failures as synthetic tool_call events so the user
@@ -1788,18 +1866,21 @@ async def _agent_stream_chat_completion(
                 # failures back to the model as observations, so a single tool
                 # error never aborts the whole agent stream
                 # (see _handle_agent_tool_error).
+                agent_tools = list(langchain_tools)
+                if visual_enabled:
+                    agent_tools.append(build_view_image_tool(image_registry))
                 tool_node = ToolNode(
-                    langchain_tools,
+                    agent_tools,
                     handle_tool_errors=_handle_agent_tool_error,
                 )
 
                 agent = create_react_agent(
-                    bisheng_llm,
+                    VisionToolBindWrapper(bisheng_llm, image_registry, langchain_tools),
                     tool_node,
                     prompt=sys_prompt,  # may be None
                 )
 
-                tool_meta_map = {t.name: _build_tool_meta(t) for t in langchain_tools}
+                tool_meta_map = {t.name: _build_tool_meta(t) for t in agent_tools}
                 visible_tool_run_ids: set[str] = set()
                 ignored_tool_run_ids: set[str] = set()
                 max_iter = await _get_agent_max_iterations()

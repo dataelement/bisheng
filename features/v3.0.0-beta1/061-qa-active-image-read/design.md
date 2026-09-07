@@ -12,7 +12,7 @@
 
 **关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)
 **版本**: v3.0.0-beta1
-**最后更新**: 2026-09-07（实现前初版）
+**最后更新**: 2026-09-07（T001–T015 落地后回写接线）
 
 ---
 
@@ -103,34 +103,11 @@
 
 ## 4. 系统现状（接手必读）
 
-> 写的是**写 design 当天**的代码长什么样。实现落地后覆盖更新本节，使它变成「今天的接线」。
+> 写的是**今天**的接线。实现已落地：共享层 `common/image_view/`；知识空间 / 频道走 `run_vision_tool_loop`；日常走 `VisionToolBindWrapper` 动态 bind。
 
 ### 4.1 数据流
 
-**今天（无读图）**
-
-```
-日常  POST /api/v1/workstation/chat/completions
-  → _agent_stream_chat_completion
-  → _prepare_tools（web_search / 用户工具 / search_knowledge_bases）
-  → create_react_agent + astream_events
-  → 模型按需调 search_knowledge_bases
-  → queryChunksFromDB → KnowledgeRetrieverTool
-  → DailyChatCitationToolWrapper._dump_knowledge_chunks
-  → KnowledgeUtils.format_retrieved_chunk（正文保留 ![ ](url)，无编号）
-
-知识空间  POST /api/v1/knowledge/space/{id}/chat/file|folder
-  → chat_single_file / chat_folder
-  → KnowledgeRetrieverTool 预检索
-  → _prepare_rag_citation_context → format_retrieved_chunk
-  → llm.astream（无 tool calling）
-
-频道  POST /api/v1/channel/chat/completions
-  → ChannelChatService 取会话 / LLM；endpoint 内截断文章 + astream
-  →（今天编排落在 endpoint，本 feature 目标迁回 Service，见 §4.3）
-```
-
-**目标（有读图）**
+**今天（有读图）**
 
 ```
 共享 annotate(text) → 原文 ![ ](url) 后追加 ⟦img#N⟧，写入请求级 ImageRegistry
@@ -143,12 +120,11 @@
 
 日常（检索在工具之后）
   _prepare_tools 保持今天的列表（不加 view_image）
-  LLM 外包 / pre_model_hook：每次模型调用前
-    relocate_images_to_human
-    len(registry)>0 → bind_tools(既有 + view_image) 并追加读图规则
-    否则不暴露、不追加规则（AC-03）
-  search_knowledge_bases 返回后 annotate，填注册表
-  ToolNode 能执行 view_image，但 create_react_agent 编译期 bind 看不见它
+  search_knowledge_bases 的 `_format_chunk` 以及 DailyChatCitationToolWrapper._dump_knowledge_chunks
+    在 format_retrieved_chunk 之后 annotate（主路径是前者）
+  VisionToolBindWrapper 是非 Runnable 的 callable，交给 create_react_agent 当动态模型工厂
+    每次模型调用：relocate_images_to_human；len(registry)>0 才 bind view_image 并追加读图规则
+  visual=true 时 ToolNode = base_tools + view_image；编译期 bind 看不见 view_image（动态工厂不会走 bind_tools）
   LangGraph 消息历史 = 原样重发
 ```
 
@@ -192,10 +168,11 @@ sequenceDiagram
 |---|---|---|
 | `bisheng/common/image_view/`（新建） | 标注、注册表、取图、缩放、`view_image` 工具、`run_vision_tool_loop`、`relocate_images_to_human` | 不 import 任何 `domain/`；不做业务鉴权；不写盘给别的进程 |
 | `workstation/.../chat_service.py` | 日常：检索结果 annotate；LLM 外包（或 `pre_model_hook`）在**每次**模型调用前 relocate，并按 `len(registry)` 动态 `bind_tools` + 追加读图规则 | 不把 `view_image` 加进 `_prepare_tools`；不把读图规则写进 `create_react_agent(prompt=sys_prompt)`；不把知识空间 / 频道改成 ReAct |
-| `DailyChatCitationToolWrapper._dump_knowledge_chunks` | `format_retrieved_chunk` 之后 annotate，写入共享注册表 | 不取像素 |
+| `DailyChatCitationToolWrapper._dump_knowledge_chunks` | `format_retrieved_chunk` 之后 annotate（legacy 包装路径） | 不取像素 |
+| `_build_knowledge_search_tool` / `_format_chunk` | 日常主检索路径：format 之后 annotate，写入同一 `ImageRegistry` | 不取像素 |
 | `knowledge/.../knowledge_space_chat_service.py` | `_prepare_rag_citation_context` 后 annotate；`space_rag` / `_render_rag_response` 换 `run_vision_tool_loop`（即将 bind 时追加读图规则）；按 `model_id` 读 `visual` | 不加联网 / 多工具 Agent；不改默认 yaml prompt |
 | `core/prompts/yaml/knowledge_space.yaml` | **不改**。读图规则不预置进默认稿（无图 / `visual=false` 仍走这份稿） | 不删、不改写 citation 规则；不增加「先调 view_image」 |
-| `channel/.../channel_chat_service.py` | 截断后的文章 annotate + `run_vision_tool_loop` + `visual` 门控 + 提示追加。Endpoint 只做鉴权 / SSE 包装 | 不引入向量检索；不把编排留在 `channel_chat.py` endpoint（对齐 C1） |
+| `channel/.../channel_chat_service.py` | `stream_article_reply`：截断 + annotate + `visual` 门控 + `run_vision_tool_loop`。Endpoint 只做鉴权 / SSE 包装 | 不引入向量检索；不把编排留在 `channel_chat.py` endpoint（对齐 C1） |
 | `linsight/.../binary_content_guard.py` | **不改**。本 feature 只复用「image 必须在 user 角色」这一事实 | 不把守卫链挂到问答 |
 
 知识空间 / 频道的 `visual` 解析：从工作台模型列表按 `model_id` 对 `WSModel.visual`，与 Linsight `_resolve_model` 同源，不新开配置面。
@@ -235,6 +212,8 @@ sequenceDiagram
 | 8 | 日常 prompt 在 DB，知识空间 / 频道也可能被运营覆盖 | 只改 yaml 默认稿，线上自定义 prompt 的模型不知道有工具；日常若把规则写进编译期 `prompt=`，无图请求也会被教去调 `view_image` | 三场景同一段口径；**仅当本轮将暴露工具时**追加。日常挂 LLM 外包，知识空间 / 频道在 `run_vision_tool_loop` 组第一轮时追加 |
 | 9 | Linsight 已有「读文件看图」，但是 `read_file` + workspace + 500KB 上限，**不是**本 feature | 误改 `binary_content_guard` / `workspace_backend` 会回归任务模式 | 本 feature 不改 linsight；只抄「搬到 HumanMessage」这一条 |
 | 10 | 频道文章 `markdown_content` 来自信息源，图可能是外链 | 无 host 白名单就会把任意外链当成功来源 | 取图失败按 AC-15 降级；白名单与分流见 **§4.4** |
+| 11 | 模型流式输出 `view_image` 时，参数 JSON 拆在多枚 `AIMessageChunk.tool_call_chunks` 里；单片上的 `tool_calls` 经常是 `args={}` | 若把每片 `tool_calls` 直接 `extend` 再 `ainvoke`，Pydantic 缺 `image_ids` 会把知识空间 / 频道 SSE 整轮打成 500 | `_collect_ai` 用 chunk `+` 拼完整参数；缺参 / 校验失败只回工具观察，不中断会话 |
+| 12 | `qwen3-vl-flash` 一类弱工具调用模型：`tool_choice` 可能被完全忽略（流式只出文本）；就算调了工具也会默认 `img#1` 或标题前的菜单图，并在 tool_call 前编造字段清单 | 问「开户申请表单字段」却不读图 / 读错图；第二轮还复述首轮幻觉 | 4-gram 打分；`image_ids` 改写成 suggested；**未调工具则注入 suggested 读图**；首轮 prose 不带进第二轮；过小图（长边 < 32）按 AC-15 降级 |
 
 ---
 
@@ -313,3 +292,8 @@ sequenceDiagram
 | 2026-09-07 | 日常改为「注册表非空才 bind view_image」，与 spec AC-03 对齐；否决 visual=true 即暴露 | `/sdd-review design` 复审 medium |
 | 2026-09-07 | 点名日常挂钩：`_prepare_tools` 不加 `view_image`；LLM 外包 / `pre_model_hook` 按 registry 动态 bind 并按需追加读图规则；禁止写进编译期 `prompt=` | `/sdd-review design` 复审 medium（编译期 bind） |
 | 2026-09-07 | 默认 `knowledge_space.yaml` 不预置读图规则，只在即将 bind 时追加；§4.1 mermaid 标明仅知识空间 / 频道 | `/sdd-review design` 复审 medium + low |
+| 2026-09-07 | 落地后回写 §4.1 / §4.3：知识空间 `_render_rag_response`、频道 `stream_article_reply`、日常 `VisionToolBindWrapper`（动态模型工厂）+ `search_knowledge_bases` annotate | T001–T015 实现 |
+| 2026-09-07 | 坑 11：流式 tool_call 必须合并 chunk；`view_image` 缺 `image_ids` 降级为观察，不得打挂 SSE | 知识空间单文件问答 ValidationError 500 |
+| 2026-09-07 | 坑 12：强制 tool_choice 后按附近标题提示候选 `img#`，禁止默认第一张 | 联调：开户申请问字段却查看了封面 `img#1` |
+| 2026-09-07 | 坑 12 补：hint 不够则覆盖 `image_ids`；4-gram 过滤；丢掉含 `img#` 的短历史；拒绝长边 < 32 的对象 | 联调：suggested=`img#10/9` 模型仍看 `img#7/8`，且 MinIO 对象仅 13×17 |
+| 2026-09-07 | 坑 12 补：`tool_choice` 被忽略时注入 suggested 读图，不把首轮文本当答案 | 联调：清空历史后 `view_call_count=0`，256 chunk 直接当答案 |
