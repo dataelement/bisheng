@@ -135,10 +135,31 @@ class ResolveCitationRequest(CitationSchemaBase):
     citationIds: list[str] = Field(default_factory=list, description="Citation identifiers to resolve")
 
 
+class CitationUnresolvedReason(str, Enum):
+    """Why a requested citation came back without a payload."""
+
+    FORBIDDEN = "forbidden"
+    EXPIRED = "expired"
+
+
+class UnresolvedCitationSchema(CitationSchemaBase):
+    """One requested citation the server declined or could not find."""
+
+    citationId: str = Field(..., description="Citation identifier that was requested")
+    reason: CitationUnresolvedReason = Field(..., description="Why it was not resolved")
+
+
 class ResolveCitationResponse(CitationSchemaBase):
     """Batch resolve response for citation items."""
 
     items: list[CitationRegistryItemSchema] = Field(default_factory=list, description="Resolved citation items")
+    # F054: previously an unresolvable citation was simply omitted, so the
+    # reader could not tell "you may not see this" from "this source is gone"
+    # and got one vague failure for both. Additive — older clients ignore it.
+    unresolved: list[UnresolvedCitationSchema] = Field(
+        default_factory=list,
+        description="Requested citations that were declined or not found, with the reason",
+    )
 
 
 class CitationRegistrySSEPayload(CitationSchemaBase):
