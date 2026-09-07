@@ -1026,6 +1026,61 @@ class F048PermissionRuntime:
             limit=limit,
         )
 
+    async def list_effective_direct_user_ids_by_model(
+        self,
+        *,
+        target: VerifiedPermissionTarget,
+        model_keys: tuple[str, ...],
+    ) -> dict[str, tuple[str, ...]]:
+        """Resolve effective direct-user assignees for trusted server-side routing.
+
+        The caller must first obtain ``target`` from the owning business adapter.
+        This intentionally reads the SQL Grant roster instead of legacy direct
+        OpenFGA relations, and never expands departments or user groups into users.
+        """
+
+        normalized_keys = tuple(dict.fromkeys(key.strip() for key in model_keys if key.strip()))
+        if not normalized_keys:
+            return {}
+
+        catalog = await self._runtime_catalog()
+        mode = await self._require_current_target(target)
+        requested = set(normalized_keys)
+        models = tuple(item.snapshot for item in catalog.models if item.snapshot.model_key in requested)
+        result: dict[str, list[str]] = {key: [] for key in normalized_keys}
+        seen: dict[str, set[str]] = {key: set() for key in normalized_keys}
+        if not models:
+            return dict.fromkeys(normalized_keys, ())
+
+        after_id = 0
+        while True:
+            rows, has_more = await self._state.load_source_page(
+                target=target,
+                mode=mode.mode,
+                models=models,
+                after_id=after_id,
+                limit=500,
+            )
+            for row in rows:
+                if (
+                    row.model_key in requested
+                    and row.subject_type == "user"
+                    and row.userset_relation is None
+                    and row.subject_id not in seen[row.model_key]
+                ):
+                    seen[row.model_key].add(row.subject_id)
+                    result[row.model_key].append(row.subject_id)
+            if not has_more:
+                break
+            if not rows:
+                raise PermissionPublishNotReadyError(msg="Permission source pagination did not advance")
+            next_after_id = max(row.source_id for row in rows)
+            if next_after_id <= after_id:
+                raise PermissionPublishNotReadyError(msg="Permission source pagination did not advance")
+            after_id = next_after_id
+
+        return {key: tuple(result[key]) for key in normalized_keys}
+
     async def _mode_context(
         self,
         *,
