@@ -95,7 +95,7 @@
 | 用户反馈指标表 | 点赞次数 | `like_count` | `interact_type = like` | `value_count(event_id)` | 点赞反馈事件数量 | 反馈事件时间；支持年/月/周/日 | 不额外去重 |
 | 用户反馈指标表 | 点踩次数 | `dislike_count` | `interact_type = dislike` | `value_count(event_id)` | 点踩反馈事件数量 | 反馈事件时间；支持年/月/周/日 | 不额外去重 |
 | 用户反馈指标表 | 复制次数 | `copy_count` | `interact_type = copy` | `value_count(event_id)` | 复制反馈事件数量 | 反馈事件时间；支持年/月/周/日 | 不额外去重 |
-| 实时问答统计 | 问答总数 | `total_qa_count` | 无 | `value_count(question_id)` | 专家、智能、文档内 AI 问答记录总数 | 问题创建或成功时间；支持年/月/周/日/小时 | 中间表按租户＋类型＋问题 ID 保留一条 |
+| 实时问答统计 | 总问答数 | `total_qa_count` | 无 | `value_count(question_id)` | 专家、智能、文档内 AI 问答记录总数 | 问题创建或成功时间；支持年/月/周/日/小时 | 中间表按租户＋类型＋问题 ID 保留一条 |
 | 实时问答统计 | 专家问答数 | `expert_qa_count` | `qa_type = expert` | `value_count(question_id)` | 专家问答记录数 | 专家问题创建时间 | 每个专家问题一条记录 |
 | 实时问答统计 | 智能问答数 | `smart_qa_count` | `qa_type = smart` | `value_count(question_id)` | 门户智能问答成功记录数 | 问答成功事件时间 | 每个问题一条记录 |
 | 实时问答统计 | 文档内 AI 对话数 | `document_qa_count` | `qa_type = document` | `value_count(question_id)` | 文档场景问答成功记录数 | 问答成功事件时间 | 每个问题一条记录 |

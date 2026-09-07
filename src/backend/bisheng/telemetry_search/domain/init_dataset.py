@@ -1502,7 +1502,7 @@ DASHBOARD_DATASET = [
             metrics=[
                 MetricConfig(
                     field="total_qa_count",
-                    name="问答总数",
+                    name="总问答数",
                     is_virtual=True,
                     aggregations=[
                         AggregationExpression(

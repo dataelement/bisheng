@@ -63,6 +63,7 @@ def test_realtime_dashboard_seed_contains_three_target_datasets():
         metric["field"]: metric
         for metric in qa_dataset.schema_config["metrics"]
     }
+    assert qa_metrics["total_qa_count"]["name"] == "总问答数"
     assert qa_metrics["total_qa_count"]["aggregations"][0]["type"] == "value_count"
     assert "department_source" in {
         dimension["field"]

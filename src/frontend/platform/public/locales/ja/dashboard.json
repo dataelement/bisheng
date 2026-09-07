@@ -538,5 +538,10 @@
   "file_category_name": "ナレッジ分類",
   "file_subcategory_code": "二次ナレッジ分類コード",
   "file_subcategory_name": "二次ナレッジ分類",
-  "business_domain_name": "業務ドメイン"
+  "business_domain_name": "業務ドメイン",
+  "dataset_metrics": {
+    "mid_realtime_qa_question_fact": {
+      "total_qa_count": "総Q&A数"
+    }
+  }
 }

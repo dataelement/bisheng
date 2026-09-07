@@ -70,6 +70,17 @@ export function createMetricDatasetField(metric: MetricConfig, displayName: stri
     }
 }
 
+export function getMetricDisplayName(
+    t: (key: string | string[], options?: { defaultValue?: string }) => string,
+    datasetCode: string | undefined,
+    metric: MetricConfig
+): string {
+    const keys = datasetCode
+        ? [`dataset_metrics.${datasetCode}.${metric.field}`, metric.field]
+        : metric.field
+    return t(keys, { defaultValue: metric.name })
+}
+
 export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetChange, onDragStart, onFieldsLoaded, onFieldClick }: DatasetSelectorProps) {
     const { t } = useTranslation("dashboard")
     const [searchTerm, setSearchTerm] = useState("")
@@ -140,7 +151,7 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
 
         const metrics = selectedDataset.schema_config.metrics.map(m => createMetricDatasetField(
             m,
-            t(m.field, { defaultValue: m.name }),
+            getMetricDisplayName(t, selectedDataset.dataset_code, m),
         ))
 
         return [...dimensions, ...metrics]
@@ -300,7 +311,7 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                                     const isVirtual = isVirtualMetric(metric)
                                     const field = createMetricDatasetField(
                                         metric,
-                                        t(metric.field, { defaultValue: metric.name }),
+                                        getMetricDisplayName(t, selectedDataset.dataset_code, metric),
                                     )
                                     return (
                                         <div

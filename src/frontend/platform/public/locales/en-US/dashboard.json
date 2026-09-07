@@ -541,5 +541,10 @@
   "file_category_name": "Knowledge Classification",
   "file_subcategory_code": "Secondary Knowledge Classification Code",
   "file_subcategory_name": "Secondary Knowledge Classification",
-  "business_domain_name": "Business Domain"
+  "business_domain_name": "Business Domain",
+  "dataset_metrics": {
+    "mid_realtime_qa_question_fact": {
+      "total_qa_count": "Total Q&As"
+    }
+  }
 }

@@ -538,5 +538,10 @@
   "file_category_name": "知识分类",
   "file_subcategory_code": "二级知识分类编码",
   "file_subcategory_name": "二级知识分类",
-  "business_domain_name": "业务域"
+  "business_domain_name": "业务域",
+  "dataset_metrics": {
+    "mid_realtime_qa_question_fact": {
+      "total_qa_count": "总问答数"
+    }
+  }
 }
