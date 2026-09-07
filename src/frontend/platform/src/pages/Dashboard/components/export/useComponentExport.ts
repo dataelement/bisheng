@@ -4,6 +4,7 @@
 
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { exportComponentAll, exportComponentDetail } from "@/controllers/API/dashboard"
+import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -29,10 +30,26 @@ export function useComponentExport({
 }: UseComponentExportArgs) {
   const { t } = useTranslation("dashboard")
   const { toast } = useToast()
+  const savedDashboard = useEditorDashboardStore(state => state.savedDashboard)
   const [exportingDetailKey, setExportingDetailKey] = useState<string | null>(null)
   const [exportingAll, setExportingAll] = useState(false)
 
+  // Export reads the component's saved configuration from the server by id, so a chart the
+  // editor has created (or a dashboard whose changes aren't committed) has nothing to read
+  // — the request comes back "资源不存在". Compare against savedDashboard, the last
+  // server-confirmed state, and ask the user to save instead of showing that error.
+  const canExport = Boolean(
+    dashboardId
+    && componentId
+    && savedDashboard?.components?.some(component => component.id === componentId)
+  )
+
+  const warnUnsaved = () => {
+    toast({ description: t("componentExport.saveBeforeExport"), variant: "error" })
+  }
+
   const exportDetail = async (dimensionField: string, dimensionValue: string | number) => {
+    if (!canExport) return warnUnsaved()
     const key = `${dimensionField}:${dimensionValue}`
     setExportingDetailKey(key)
     try {
@@ -54,6 +71,7 @@ export function useComponentExport({
   }
 
   const exportAll = async () => {
+    if (!canExport) return warnUnsaved()
     setExportingAll(true)
     try {
       const { file_url } = await exportComponentAll({
@@ -74,6 +92,7 @@ export function useComponentExport({
   return {
     exportDetail,
     exportAll,
+    canExport,
     isExportingDetail: (dimensionField: string, dimensionValue: string | number) =>
       exportingDetailKey === `${dimensionField}:${dimensionValue}`,
     isExportingAll: exportingAll,

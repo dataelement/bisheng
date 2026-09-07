@@ -74,9 +74,9 @@ export const PivotTable = memo(function PivotTable({
   componentId,
 }: PivotTableProps) {
   // F058 AC-09: click a row's category cell to export that category's detail rows.
-  // Disabled (no-op) when this table has no saved dashboard/component id yet.
-  const canExportDetail = Boolean(dashboardId && componentId)
-  const { exportDetail, isExportingDetail } = useComponentExport({
+  // Off until the component exists on the server — export reads its saved configuration
+  // by id, so an editor-only draft would just come back "资源不存在" (see useComponentExport).
+  const { exportDetail, isExportingDetail, canExport: canExportDetail } = useComponentExport({
     dashboardId: dashboardId || "",
     componentId: componentId || "",
   })

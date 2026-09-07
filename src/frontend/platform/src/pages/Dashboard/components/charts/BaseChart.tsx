@@ -80,7 +80,7 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig, da
 
   // F058 AC-09: click a chart category (bar segment, pie slice, ...) to export that
   // category's detail rows. dataConfig.dimensions[0] is the chart's category axis.
-  const { exportDetail } = useComponentExport({
+  const { exportDetail, canExport } = useComponentExport({
     dashboardId: dashboardId || "",
     componentId: componentId || "",
   })
@@ -169,8 +169,10 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig, da
       // F058 AC-09: click-to-export-detail, only for chart types with a real category
       // axis / pie slice (a metric card or a bare line-with-no-dimension has nothing
       // meaningful to drill into).
+      // canExport also covers the editor-only draft case: a chart that isn't saved on the
+      // server yet has no configuration for the export endpoint to read.
       const categoryDimensionField = dataConfig?.dimensions?.[0]?.fieldId
-      if (dashboardId && componentId && categoryDimensionField) {
+      if (canExport && categoryDimensionField) {
         chartRef.current.on('click', (params: any) => {
           const categoryValue = params?.name
           if (categoryValue === undefined || categoryValue === null || categoryValue === '') return
@@ -189,7 +191,7 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig, da
         chartRef.current = null
       }
     }
-  }, [screenFull, echartsLibRef.current, data, chartType, dataConfig, styleConfig, isLoading, isDark])
+  }, [screenFull, echartsLibRef.current, data, chartType, dataConfig, styleConfig, isLoading, isDark, canExport])
 
   // resize
   useEffect(() => {

@@ -48,7 +48,7 @@ export const ComponentWrapper = memo(({
     const componentData = component
     // F058 AC-10: whole-chart export, available to both editors and viewers (unlike the
     // rest of this component's toolbar, which is editor-only via isPreviewMode).
-    const { exportAll, isExportingAll } = useComponentExport({
+    const { exportAll, isExportingAll, canExport } = useComponentExport({
         dashboardId: component.dashboard_id,
         componentId: component.id,
     })
@@ -299,8 +299,8 @@ export const ComponentWrapper = memo(({
                         <Button
                             variant="ghost"
                             size="icon"
-                            title={t('componentExport.exportAll')}
-                            disabled={isExportingAll}
+                            title={canExport ? t('componentExport.exportAll') : t('componentExport.saveBeforeExport')}
+                            disabled={isExportingAll || !canExport}
                             className={cn(
                                 "no-drag absolute top-0 right-0 h-5 w-5 p-0 text-gray-400 transition-opacity",
                                 "opacity-0 group-hover:opacity-100"

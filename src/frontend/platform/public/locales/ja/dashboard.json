@@ -149,7 +149,8 @@
   "componentExport": {
     "exportDetail": "この分類の明細をエクスポート",
     "exportAll": "エクスポート",
-    "exportFailed": "エクスポートに失敗しました。しばらくしてから再度お試しください"
+    "exportFailed": "エクスポートに失敗しました。しばらくしてから再度お試しください",
+    "saveBeforeExport": "エクスポートする前にダッシュボードを保存してください"
   },
   "dimensionBlock": {
     "menu": {

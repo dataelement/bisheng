@@ -150,7 +150,8 @@
   "componentExport": {
     "exportDetail": "Export category detail",
     "exportAll": "Export",
-    "exportFailed": "Export failed, please try again later"
+    "exportFailed": "Export failed, please try again later",
+    "saveBeforeExport": "Save the dashboard before exporting"
   },
   "dimensionBlock": {
     "menu": {
