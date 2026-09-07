@@ -55,39 +55,41 @@ export default function index() {
   return (
     <div className="flex h-full w-full flex-col px-2 pt-4">
       <Tabs defaultValue={defaultTab} className="flex min-h-0 w-full flex-1 flex-col">
-        <TabsList className="shrink-0 self-start">
-          {showOrgTab && (
-            <TabsTrigger value="organization">
-              {t("system.orgAndMembers")}
-            </TabsTrigger>
-          )}
-          {showLegacyUserTab && (
-            <TabsTrigger value="user" className="roundedrounded-xl">
-              {t("system.userManagement")}
-            </TabsTrigger>
-          )}
-          {showUserGroupTab && (
-            <TabsTrigger value="userGroup">{t("system.userGroupsM")}</TabsTrigger>
-          )}
-          {showRoleTab && (
-            <TabsTrigger value="role">{t("system.roleAndPermissions")}</TabsTrigger>
-          )}
-          {showOrgSyncTab && (
-            <TabsTrigger value="orgSync">{t("orgSync:title")}</TabsTrigger>
-          )}
-          {showOpenApiManagement && (
-            <TabsTrigger value="serviceAccount">{t("openApiManagement.serviceAccount.title")}</TabsTrigger>
-          )}
-          {showOpenApiManagement && (
-            <TabsTrigger value="personalToken">{t("openApiManagement.personalToken.title")}</TabsTrigger>
-          )}
-          {canAccessSystemConfig && (
-            <TabsTrigger value="system">{t("system.systemConfiguration")}</TabsTrigger>
-          )}
-          {canAccessSystemConfig && (
-            <TabsTrigger value="theme">{t("system.appearanceSettings")}</TabsTrigger>
-          )}
-        </TabsList>
+        <div className="max-w-full shrink-0 overflow-x-auto no-scrollbar">
+          <TabsList className="min-w-max">
+            {showOrgTab && (
+              <TabsTrigger value="organization">
+                {t("system.orgAndMembers")}
+              </TabsTrigger>
+            )}
+            {showLegacyUserTab && (
+              <TabsTrigger value="user" className="roundedrounded-xl">
+                {t("system.userManagement")}
+              </TabsTrigger>
+            )}
+            {showUserGroupTab && (
+              <TabsTrigger value="userGroup">{t("system.userGroupsM")}</TabsTrigger>
+            )}
+            {showRoleTab && (
+              <TabsTrigger value="role">{t("system.roleAndPermissions")}</TabsTrigger>
+            )}
+            {showOrgSyncTab && (
+              <TabsTrigger value="orgSync">{t("orgSync:title")}</TabsTrigger>
+            )}
+            {showOpenApiManagement && (
+              <TabsTrigger value="serviceAccount">{t("openApiManagement.serviceAccount.title")}</TabsTrigger>
+            )}
+            {showOpenApiManagement && (
+              <TabsTrigger value="personalToken">{t("openApiManagement.personalToken.title")}</TabsTrigger>
+            )}
+            {canAccessSystemConfig && (
+              <TabsTrigger value="system">{t("system.systemConfiguration")}</TabsTrigger>
+            )}
+            {canAccessSystemConfig && (
+              <TabsTrigger value="theme">{t("system.appearanceSettings")}</TabsTrigger>
+            )}
+          </TabsList>
+        </div>
         {showOrgTab && (
           <TabsContent value="organization" className="min-h-0 flex-1 overflow-hidden">
             <OrganizationAndMembers />
