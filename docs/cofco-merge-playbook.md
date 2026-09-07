@@ -4,7 +4,7 @@
 >
 > 用途:中粮定制线和主版本线并行开发,同一批 bug 常常两条线各修一遍,合并时**同一批文件反复冲突**。这里记录每处冲突「为什么必然冲突」和「按什么原则收」,下次直接照表处理,不用重新推理一遍。
 >
-> 最近一次全量合并:2026-09-03(2.8-common → 3.0.0-beta1 → 909 ← cofco-902)
+> 最近一次全量合并:2026-09-07(2.8-common → 3.0.0-beta1 → 909 ← cofco-902)
 
 ---
 
@@ -217,6 +217,68 @@ for lang in ('en','ja','zh-Hans'):
 
 **防护**:已有 `test/celery/test_beat_schedule_registration.py`,会遍历整张定时表检查注册。合并后跑一次即可。
 
+### 3.12 后端 · Alembic 又分叉(⚠️ 会挂掉每一次部署)
+
+**症状**:合并本身零冲突,但 `uv run alembic heads` 打出两行。
+
+**根因**:909 的 `f054_merge_cofco_909_heads` 只合并了「当时」的两个头。主线继续往前长(2026-09-07 是 F053 的 `f053_pat_tenant_setting`),再合一次主线就又分叉。**每次合主线都要重新检查一遍。**
+
+**处理方式**:加一个空的 merge revision,`down_revision` 写成当前两个头的元组。别改老的 merge revision。
+
+```bash
+cd src/backend && uv run alembic heads          # 必须只有一行
+uv run pytest test/database/test_alembic_single_head.py test/permission/test_f048_schema_contract.py -q
+```
+
+**为什么必须修**:`entrypoint.sh` 在多头时 fail fast,直接拒绝启动 API —— 不是测试洁癖,是部署会挂。
+
+> 已落地:`f055_merge_cofco_909_f053_heads`(2026-09-07)。
+
+### 3.13 后端 · F053 换掉了 /api/v2 的身份 seam
+
+**根因**:F053(开放 API 鉴权与身份传递)把 `/api/v2` 的身份来源从「请求里的 user_id」改成「凭据」。落地后:
+
+- `filelib.resolve_operator(user_id)` / `get_default_operator_async` **不存在了**,统一是 `get_open_api_operator_async()`(无参)。
+- 端点签名里的**裸 `user_id` 入参被移除**。
+
+**处理方式**:
+
+| 位置 | 怎么改 |
+|---|---|
+| 生产代码 | 取 F053 的 `get_open_api_operator_async()`,**但 909 的 `_require_resolved_tenant(login_user)` 要留在它后面** —— 那是中粮的租户 fail-closed,F053 不提供 |
+| 909 的测试 | `monkeypatch.setattr(filelib, "resolve_operator", ...)` → `"get_open_api_operator_async"`;resolver 改成无参;调用里删掉 `user_id=`;`assert_awaited_once_with(91)` → `assert_awaited_once_with()` |
+
+**注意**:909 侧只有一处 hunk 进冲突,其余调用点是**自动合并**掉的 —— 也就是说光看冲突列表会漏掉这批测试,要靠跑测试发现。
+
+### 3.14 后端 · 主线测试撞上 909 的两道守卫
+
+主线新增的测试(2026-09-07 是 `test_openapi_retrieve_file_visibility.py`)不知道 909 多出来的两层,合过来必挂:
+
+| 症状 | 根因 | 处理 |
+|---|---|---|
+| `TypeError: object MagicMock can't be used in 'await' expression` | 909 在检索路径里插了文件变更审批的查询/名称投影(`project_mutation_retrieval_query` / `_names`),`MagicMock` 的属性不可 await | 把这两个 hook stub 成 `AsyncMock` 直通 |
+| `ValueError: positive tenant_id and user_id are required for file visibility` | 909 的可见性服务要求身份和租户 ContextVar 指向同一个正租户 | fixture 给 `login_user` 配 `tenant_id`,并 `set_current_tenant_id()` |
+| 查到 `knowledge_space_file_change_request` 表不存在 | 909 独有的表,单测没有 fixture | stub `_list_file_change_excluded_ids` |
+
+**原则**:这三处都是**主线测试补 909 的前提**,不是放宽 909 的守卫。守卫是中粮的安全行为,不能为了让主线测试过就摘掉。
+
+### 3.15 后端 · 同一个函数被两条线各加一个参数
+
+**文件**:`workstation/domain/services/chat_service.py` 的 `_agent_stream_chat_completion` / `_agent_initialize_chat`
+
+**根因**:909 加了限流恢复(`recovery_attempt` / `recovery_message`,走 keyword-only),主线 F053 加了身份传递(`session_subject`)。两边改同一行签名。
+
+**处理方式**:**并集**。位置参数 `session_subject` 放在 `*` 前面,909 的恢复参数留在 `*` 后面,然后**别忘了把 `session_subject` 传进非恢复分支的 `_agent_initialize_chat` 调用**。恢复分支的调用点用的是关键字实参,不受影响。
+
+**坑**:同一次合并里,`MessageSession` 的构造也冲突 —— 主线要 `new_session` 变量(F053 要 `session_subject.stamp(new_session)`),909 要 `name=""`(占位标题由客户端 i18n 渲染,不入库)。取主线的结构 + 909 的空标题。
+
+### 3.16 ⚠️ 自动合并会静默吃掉「只有一方新增的实参」
+
+**2026-09-07 实例**:`knowledge_space_chat_service.py` 的 `_aretrieve_chunks_for_kb` 里,冲突块只有一段注释,但主线在**紧邻的调用**里加了 `sort_by_source_and_index=False`。解完注释冲突后那个实参没了 —— 同文件里的兄弟方法却留着,两条 OpenAPI 检索路径行为不一致。
+
+**检查方法**:冲突块解完后,**看一眼冲突块前后 10 行**对方那侧的 diff(`git diff <merge-base> <对方tip> -- <file>`),确认没有落下相邻的新增行。lint / typecheck / 测试都不一定抓得到 —— 这次是靠主线自带的断言测试才暴露。
+
+
 ---
 
 ## 4. 合并后验证清单
@@ -296,6 +358,9 @@ cd src/backend && uv run pytest test/celery/ -q
 | 2026-09-03 | `cofco-902` → `909` | `22790b986` | 29 个冲突;9 个 f048 已删服务、3 处行为移植;日常对话限流恢复未带过来 |
 | 2026-09-03 | `hotfix/3.0.0-beta1` → `3.0.0-beta1` | `d53524e69`(#2409) | 广场可见性与权限解耦;**改了 OpenFGA 授权模型**,见下方部署提醒 |
 | 2026-09-03 | `3.0.0-beta1` → `909` | `2efa486f7` | 1 个冲突(空间更新路径,见 §3.2b) |
+| 2026-09-07 | `2.8-common` → `3.0.0-beta1` | `dae918025` | 零冲突;技能上传上限 + 知识空间深链两笔 |
+| 2026-09-07 | `3.0.0-beta1` → `909` | `b5b7e56e5` | 6 个冲突,全是新的(F053 开放 API 鉴权),见 §3.13 / §3.15 / §3.16 |
+| 2026-09-07 | `cofco-902` → `909` | `deed07980` | **零冲突**(①②③ 顺序生效);坑全在合并之后,见 §3.12 / §3.13 / §3.14 |
 
 ---
 
