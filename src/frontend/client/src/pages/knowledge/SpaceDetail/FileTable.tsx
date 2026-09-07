@@ -31,6 +31,7 @@ import {
 } from "~/components";
 import { cn } from "~/utils";
 import TagGroup from "./TagGroup";
+import { ApprovalLockGuard } from "./ApprovalLockGuard";
 import { EditEncodingModal } from "./EditEncodingModal";
 import FileIconRenderer from "./FileIcon";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
@@ -41,7 +42,7 @@ import {
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole, updateFileEncoding } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTime, getKnowledgeApprovalStatusLabel, getKnowledgeIngestMethodLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeFileLockedByPublishApproval, isKnowledgeItemPreviewable, isKnowledgeFileReparseRetryable, notifyKnowledgeFileApprovalLocked } from "../knowledgeUtils";
+import { formatTime, getKnowledgeApprovalStatusLabel, getKnowledgeIngestMethodLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeFileLockedByPublishApproval, isKnowledgeItemPreviewable, isKnowledgeFileReparseRetryable } from "../knowledgeUtils";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
@@ -1128,29 +1129,6 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
 // ============================================================
 // 行组件
 // ============================================================
-/** Wraps a locked control: stays visible but inert, and explains the lock on hover. */
-function ApprovalLockGuard({
-    locked,
-    onHoverLock,
-    className,
-    children,
-}: {
-    locked: boolean;
-    onHoverLock: () => void;
-    className?: string;
-    children: React.ReactNode;
-}) {
-    if (!locked) return <>{children}</>;
-    return (
-        <span
-            className={cn("inline-flex cursor-not-allowed", className)}
-            onMouseEnter={onHoverLock}
-        >
-            {children}
-        </span>
-    );
-}
-
 function FileRow({
     file,
     isSelected,
@@ -1271,14 +1249,10 @@ function FileRow({
     retryActionLabel?: string;
 }) {
     const localize = useLocalize();
-    const { showToast } = useToastContext();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const isFolder = file.type === FileType.FOLDER;
     // Active publish approval locks every action except download.
     const fileLocked = isKnowledgeFileLockedByPublishApproval(file);
-    const handleHoverLock = useCallback(() => {
-        notifyKnowledgeFileApprovalLocked(showToast);
-    }, [showToast]);
     const isReadonlyDistributionEntry = (
         file.entryType === "share"
         || file.entryType === "publish"
@@ -1338,7 +1312,7 @@ function FileRow({
     // disabled:pointer-events-none lets the wrapper title tooltip show on hover.
     const encodingSelectClassName = "h-8 w-full min-w-0 rounded border border-[#dee2ec] bg-white px-2 text-sm text-[#4e5969] outline-none transition-colors focus:border-[#165dff] disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-[#f7f8fa] disabled:text-[#86909c]";
     const editTagsButton = canEditTags ? (
-        <ApprovalLockGuard locked={fileLocked} onHoverLock={handleHoverLock}>
+        <ApprovalLockGuard locked={fileLocked}>
             <button
                 type="button"
                 title={localize("com_knowledge.edit_tags")}
@@ -1383,7 +1357,7 @@ function FileRow({
             )}
             {showMoreMenu && (
                 fileLocked ? (
-                    <ApprovalLockGuard locked onHoverLock={handleHoverLock}>
+                    <ApprovalLockGuard locked>
                         <button
                             type="button"
                             className={cn(FILE_ROW_ACTION_BTN_CLASS, "cursor-not-allowed opacity-50")}
@@ -1679,7 +1653,7 @@ function FileRow({
                                         <span className="truncate">{file.name}</span>
                                     </div>
                                     {canRenameContent && (onAcceptAlias || onRejectAlias) && (
-                                        <ApprovalLockGuard locked={fileLocked} onHoverLock={handleHoverLock}>
+                                        <ApprovalLockGuard locked={fileLocked}>
                                             <div className="flex shrink-0 items-center gap-1">
                                                 {onAcceptAlias && (
                                                     <button
@@ -1779,7 +1753,6 @@ function FileRow({
                         ) : canEditEncoding ? (
                             <ApprovalLockGuard
                                 locked={fileLocked}
-                                onHoverLock={handleHoverLock}
                                 className="block w-full min-w-0"
                             >
                                 <PortalFileCategoryDropdown
@@ -1819,7 +1792,6 @@ function FileRow({
                             // Wrap disabled select so hover tooltip still works (native title on :disabled is unreliable).
                             <ApprovalLockGuard
                                 locked={fileLocked}
-                                onHoverLock={handleHoverLock}
                                 className="block w-full min-w-0"
                             >
                                 <span
@@ -1910,7 +1882,7 @@ function FileRow({
                                     {fileEncodingText}
                                 </span>
                                 {canEditEncoding && (
-                                    <ApprovalLockGuard locked={fileLocked} onHoverLock={handleHoverLock}>
+                                    <ApprovalLockGuard locked={fileLocked}>
                                         <button
                                             type="button"
                                             title={localize("com_knowledge.file_encoding_edit_title")}

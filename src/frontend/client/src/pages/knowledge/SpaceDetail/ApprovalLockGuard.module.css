@@ -1,0 +1,22 @@
+.locked {
+  cursor: not-allowed;
+}
+
+.locked * {
+  pointer-events: none;
+}
+
+.locked button:disabled {
+  color: #c9cdd4;
+  background-color: #f7f8fa;
+  border-color: #e5e6eb;
+  cursor: not-allowed;
+}
+
+.locked button[aria-haspopup="tree"]:disabled,
+.locked select:disabled {
+  color: #86909c;
+  background-color: #f7f8fa;
+  border-color: #e5e6eb;
+  cursor: not-allowed;
+}

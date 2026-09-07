@@ -1479,3 +1479,32 @@ PYTHONPATH=./ .venv/bin/python scripts/report_original_knowledge_file_counts.py 
 ```
 
 输出包含 `summary`、有文件的 `organizations` 和无法解析归属的 `unassigned`。脚本排除发布、分享、投影墓碑、收藏引用、历史非主版本和旧版发布复制记录；如启用了多租户模式则直接中止。
+
+### `backfill_space_file_points.py` / `backfill_space_file_points.sh`
+
+根据指定的目标知识库类型下所有有效主文件，给原始上传人批量增加指定积分。
+
+特性与规则：
+- 目标库类型：支持 `public` / `department` / `team` / `team_ks` 以及中文别名（如“公共知识库”、“部门库”、“科室库”）。
+- 主文件判定：排除目录 (`file_type=0`)、回收站已删除文件 (`deleted_at is not null`)、跨库分享引用 (`entry_type='share'`) 以及多版本文档中的历史非主版本物理文件。
+- 受让人判定：优先使用文件记录的原始上传人 `original_uploader_id`，若为空则回退到 `user_id`。
+- 忽略账号：支持通过 `--ignore-accounts` 过滤系统管理员账号（如默认 `admin`），命中账号的文件不发放积分。
+- 积分规则：显式绕过单日积分上限限制进行全额累加，并生成按文件 ID 强绑定的幂等键（`backfill:<level>:<file_id>`），保证重复执行不重复发分。
+- 演练预览：支持 `--dry-run` 模式，仅输出统计分析报告，不进行任何数据库写入。
+
+Usage:
+
+```bash
+# 演练预览（推荐在正式发分前先行演练）
+PYTHONPATH=./ .venv/bin/python scripts/backfill_space_file_points.py \
+  --space-level public \
+  --score-per-file 3 \
+  --dry-run
+
+# 使用配套 Shell 脚本正式执行
+bash scripts/backfill_space_file_points.sh \
+  --space-level department \
+  --score-per-file 2 \
+  --ignore-accounts "admin,system"
+```
+
