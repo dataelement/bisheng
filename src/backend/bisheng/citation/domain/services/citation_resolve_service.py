@@ -288,12 +288,20 @@ class CitationResolveService:
         if item is None:
             item = await self.registry_service.get_citation(citation_id)
         if item is None:
-            raise NotFoundError()
+            # Rule 1 before rule 2: for a caller with no logged-in user an
+            # unknown id must look exactly like a refused one, or the reason
+            # itself becomes a way to probe which ids ever existed.
+            raise NotFoundError(
+                reason=(
+                    CitationUnresolvedReason.FORBIDDEN.value
+                    if login_user is None
+                    else CitationUnresolvedReason.EXPIRED.value
+                )
+            )
         if login_user is None and not self._is_anonymous_readable(item):
-            # F054: no logged-in user, so knowledge and article sources are
-            # refused. Same 404 as "never existed", deliberately — see
-            # resolve_citations_with_reasons for why the two must look alike.
-            raise NotFoundError()
+            # F054 overrides F029 AC-20: knowledge and article sources are
+            # refused without a logged-in user.
+            raise NotFoundError(reason=CitationUnresolvedReason.FORBIDDEN.value)
         url_allowed = True
         if item.type == CitationType.RAG and login_user is not None:
             permitted = await self._permitted_file_ids([item], login_user)
@@ -301,8 +309,12 @@ class CitationResolveService:
             # per_user + no view_file → not found (AC-18); shared survives with
             # metadata but no full-file URL (AC-21).
             if not url_allowed and item.accessScope != "shared":
-                raise NotFoundError()
-        return await self._enrich_item(item, login_user, url_allowed=url_allowed)
+                raise NotFoundError(reason=CitationUnresolvedReason.FORBIDDEN.value)
+        try:
+            return await self._enrich_item(item, login_user, url_allowed=url_allowed)
+        except NotFoundError:
+            # Past the permission gate, so naming the source as gone is safe.
+            raise NotFoundError(reason=CitationUnresolvedReason.EXPIRED.value) from None
 
     async def resolve_citations(
         self,
