@@ -159,7 +159,7 @@
   "11040": "Failed to submit question",
   "11050": "Vector retrieval model error. Contact admin",
   "11051": "Skill validation failed: invalid frontmatter or name. Please check the skill file.",
-  "11052": "The skill file exceeds the 10MB size limit. Please reduce its size and upload again.",
+  "11052": "The skill file exceeds the upload size limit. Please reduce its size and upload again.",
   "11053": "The skill does not exist or has been deleted.",
   "11054": "You do not have permission to operate on this skill. Please contact your administrator.",
   "11055": "A skill with the same name already exists. Please choose another name.",

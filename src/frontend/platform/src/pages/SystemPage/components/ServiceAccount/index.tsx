@@ -47,7 +47,7 @@ export function ServiceAccount() {
 
   const handleToggle = async () => {
     if (!selected) return
-    const account = await setServiceAccountEnabledApi(selected.id, selected.status !== "active")
+    const account = await setServiceAccountEnabledApi(selected.id, selected.status !== "enabled")
     setSelected(account)
     await loadList()
   }
@@ -60,6 +60,7 @@ export function ServiceAccount() {
   }
 
   if (selected) {
+    const isEnabled = selected.status === "enabled"
     return (
       <div className="min-h-0 flex-1 overflow-y-auto pb-8">
         <div className="mb-4 flex items-start justify-between gap-4">
@@ -72,7 +73,7 @@ export function ServiceAccount() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleToggle}>
-              {t(selected.status === "active" ? "openApiManagement.actions.disable" : "openApiManagement.actions.enable")}
+              {t(isEnabled ? "openApiManagement.actions.disable" : "openApiManagement.actions.enable")}
             </Button>
             <Button variant="destructive" onClick={handleDelete}>{t("delete")}</Button>
           </div>
@@ -84,7 +85,7 @@ export function ServiceAccount() {
             <TabsTrigger value="grants">{t("openApiManagement.serviceAccount.grants")}</TabsTrigger>
           </TabsList>
           <TabsContent value="overview" className="space-y-3 rounded-md border p-4 text-sm">
-            <p><span className="text-muted-foreground">{t("openApiManagement.fields.status")}: </span>{t(selected.status === "active" ? "openApiManagement.status.active" : "openApiManagement.status.disabled")}</p>
+            <p><span className="text-muted-foreground">{t("openApiManagement.fields.status")}: </span>{t(isEnabled ? "openApiManagement.status.enabled" : "openApiManagement.status.disabled")}</p>
             <p><span className="text-muted-foreground">{t("openApiManagement.fields.owner")}: </span>{selected.resource_owner.user_name || selected.resource_owner.user_id}</p>
             <p><span className="text-muted-foreground">{t("openApiManagement.fields.activeKeys")}: </span>{selected.active_key_count}</p>
             <p><span className="text-muted-foreground">{t("openApiManagement.fields.lastUsed")}: </span>{formatDate(selected.last_used_at)}</p>
@@ -118,16 +119,19 @@ export function ServiceAccount() {
           <TableHead className="text-right">{t("operations")}</TableHead>
         </TableRow></TableHeader>
         <TableBody>
-          {accounts.map((account) => (
-            <TableRow key={account.id}>
-              <TableCell>{account.name}</TableCell>
-              <TableCell>{account.resource_owner.user_name || account.resource_owner.user_id}</TableCell>
-              <TableCell><Badge variant={account.status === "active" ? "outline" : "secondary"}>{t(account.status === "active" ? "openApiManagement.status.active" : "openApiManagement.status.disabled")}</Badge></TableCell>
-              <TableCell>{account.active_key_count}</TableCell>
-              <TableCell>{formatDate(account.last_used_at)}</TableCell>
-              <TableCell className="text-right"><Button variant="link" onClick={() => openDetail(account.id)}>{t("openApiManagement.actions.details")}</Button></TableCell>
-            </TableRow>
-          ))}
+          {accounts.map((account) => {
+            const isEnabled = account.status === "enabled"
+            return (
+              <TableRow key={account.id}>
+                <TableCell>{account.name}</TableCell>
+                <TableCell>{account.resource_owner.user_name || account.resource_owner.user_id}</TableCell>
+                <TableCell><Badge variant={isEnabled ? "outline" : "secondary"}>{t(isEnabled ? "openApiManagement.status.enabled" : "openApiManagement.status.disabled")}</Badge></TableCell>
+                <TableCell>{account.active_key_count}</TableCell>
+                <TableCell>{formatDate(account.last_used_at)}</TableCell>
+                <TableCell className="text-right"><Button variant="link" onClick={() => openDetail(account.id)}>{t("openApiManagement.actions.details")}</Button></TableCell>
+              </TableRow>
+            )
+          })}
           {!accounts.length ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">{t("openApiManagement.empty")}</TableCell></TableRow> : null}
         </TableBody>
       </Table>
