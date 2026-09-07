@@ -48,6 +48,7 @@
 | **OpenApiTenantSetting**（租户级 PAT 开关与默认有效期） | **F053-openapi-auth-and-identity** | PRD §4.10.7 闸门一的租户级半边；部署级半边在进程 Settings |
 | **ShareLink**（既有对象；本版增量 = `share_scope` 列 + 撤销写入 + 有效期强制生效 + share-token 会话执行主体） | **F053-openapi-auth-and-identity** | 两个免登录分享页改走 share_link 通道；只拥有本版对该对象的写行为增量，不拥有既有创建 / 读取 |
 | **MessageSession / ChatMessage**（既有对象；本版增量 = `external_user_id` 分区键列，只写不读） | **F053-openapi-auth-and-identity**（列）| 会话本体仍归既有会话模块；本 Feature 只拥有该列的写入语义（PRD §4.3.4 / §4.6.3 四） |
+| —（无新增领域对象；在 F029 拥有的 citation 链路上扩展第三种来源类型与其载荷） | **F054-unified-citation-entries** | 频道文章 AI 问答接入统一溯源：新增「文章」来源类型及其来源载荷（真实稳定定位标识 = 文章文档标识 / 原文链接，不伪造知识库片段标识）、导出件把隐藏标记烘焙为可见编号 + 参考资料、「来源已失效」状态、来源详情对**无已登录用户**调用一律不返回、工作流输入节点临时文件停止登记来源。只读 / 调用现有 `MessageCitation` 与 citation 注册 / 解析服务；**不拥有** `message_citation` schema，不改 F041 已登记的 `accessScope` 两档语义，不改灵思任务模式（归 F047），不新增表 / Alembic / 对外 API / 错误码 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -115,6 +116,7 @@
 | F051-knowledge-list-action-lazy-load | F027, F048 | 保持知识库列表 cursor 与可见/可用筛选语义；列表不预取非筛选动作，单资源菜单能力继续以 F048 当前有效动作和执行时鉴权为准 |
 | F052-workflow-session-auto-rerun | 既有工作流独立会话与手动重新运行能力 | 系统统一开关只影响免登录/需登录独立工作流会话的打开行为；不改变工作流执行、权限或其他会话入口 |
 | F053-openapi-auth-and-identity | F048（`authorize_created` / `grants:mutate` / 主体校验 / 系统级放行谓词）；既有 `share_link`、`workstation` 日常模式链路、`knowledge` 检索与文件可见性服务 | 代码底座自 `3.0-vibe` 移植；工作流 A（底座 + 端点接入）与 C（身份传递）须同版发布；B / D / E / F / G 可后续合入。内部工作流依赖见 `053-openapi-auth-and-identity/design.md` §4 |
+| F054-unified-citation-entries | F029、F041（均为 v2.6.0 存量，已上线）；与 F047 共用同一 citation 链路但互不阻塞 | 接线 + 扩展型：新增「文章」来源类型、导出烘焙、失效态、匿名收紧、临时文件停发角标。**与 F053 有一处待对齐**：F053 把免登录分享页改走 share_link 通道并引入 share-token 会话执行主体，本 Feature AC-18「无已登录用户即不返回来源详情」的判据需与之对齐（见 spec §2.4 待澄清）。灵思任务模式不在本 Feature，归 F047 |
 
 ---
 
