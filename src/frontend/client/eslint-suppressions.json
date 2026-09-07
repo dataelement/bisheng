@@ -586,11 +586,6 @@
       "count": 1
     }
   },
-  "src/components/Chat/Messages/Content/CitationSourceIcon.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
   "src/components/Chat/Messages/Content/CodeAnalyze.tsx": {
     "no-restricted-imports": {
       "count": 1
@@ -636,9 +631,6 @@
     },
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 6
     },
     "no-useless-escape": {
       "count": 1
@@ -714,7 +706,7 @@
       "count": 4
     },
     "no-restricted-syntax": {
-      "count": 17
+      "count": 15
     }
   },
   "src/components/Chat/Messages/Content/useCitationReferencePanel.tsx": {
