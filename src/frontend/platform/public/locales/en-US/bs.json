@@ -2123,7 +2123,7 @@
   "openApiManagement": {
     "empty": "No records",
     "fields": { "name": "Name", "description": "Description", "ownerUserId": "Resource owner user ID", "owner": "Resource owner", "status": "Status", "activeKeys": "Active keys", "lastUsed": "Last used", "createdAt": "Created", "expiresAt": "Expires" },
-    "status": { "active": "Active", "disabled": "Disabled", "revoked": "Revoked" },
+    "status": { "active": "Active", "enabled": "Enabled", "disabled": "Disabled", "revoked": "Revoked" },
     "actions": { "back": "Back", "details": "Details", "enable": "Enable", "disable": "Disable", "revoke": "Revoke", "revokeHolder": "Revoke holder", "copy": "Copy", "load": "Load resource" },
     "serviceAccount": { "title": "Service accounts", "create": "Create service account", "createHint": "The resource owner must be an active user in this tenant.", "search": "Search service accounts", "overview": "Overview", "keys": "API keys", "grants": "Resource grants" },
     "keys": { "issue": "Issue API key", "issueHint": "Configure basic information, permissions, and delegation only.", "once": "Copy this key now. It will not be shown again.", "saved": "I have saved the key securely", "mask": "Key", "permissions": "Permissions", "delegateScopes": "Delegation scopes", "delegatePlaceholder": "user:12, department:34", "delegateRequired": "At least one user or department is required for delegation." },

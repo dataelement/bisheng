@@ -4,12 +4,14 @@ export interface ServiceAccountOwner {
   disabled: boolean
 }
 
+export type ServiceAccountStatus = "enabled" | "disabled"
+
 export interface ServiceAccountItem {
   id: number
   tenant_id: number
   name: string
   description: string | null
-  status: string
+  status: ServiceAccountStatus
   resource_owner: ServiceAccountOwner
   active_key_count: number
   last_used_at: string | null

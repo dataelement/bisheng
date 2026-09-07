@@ -2068,7 +2068,7 @@
   "openApiManagement": {
     "empty": "暂无记录",
     "fields": { "name": "名称", "description": "描述", "ownerUserId": "资源归属人用户 ID", "owner": "资源归属人", "status": "状态", "activeKeys": "有效密钥", "lastUsed": "最后使用", "createdAt": "创建时间", "expiresAt": "过期时间" },
-    "status": { "active": "有效", "disabled": "已停用", "revoked": "已吊销" },
+    "status": { "active": "有效", "enabled": "已启用", "disabled": "已停用", "revoked": "已吊销" },
     "actions": { "back": "返回", "details": "详情", "enable": "启用", "disable": "停用", "revoke": "吊销", "revokeHolder": "按持有人吊销", "copy": "复制", "load": "加载资源" },
     "serviceAccount": { "title": "服务账号", "create": "创建服务账号", "createHint": "资源归属人必须是当前租户内的有效自然人。", "search": "搜索服务账号", "overview": "概览", "keys": "API 密钥", "grants": "资源授权" },
     "keys": { "issue": "签发 API 密钥", "issueHint": "仅配置基本信息、权限位和委托配置。", "once": "请立即复制此密钥，之后将无法再次查看。", "saved": "我已安全保存此密钥", "mask": "密钥", "permissions": "权限位", "delegateScopes": "委托范围", "delegatePlaceholder": "user:12, department:34", "delegateRequired": "委托至少需要一个用户或部门范围。" },
