@@ -1,7 +1,8 @@
 import { Badge } from "@/components/bs-ui/badge"
-import { Button } from "@/components/bs-ui/button"
+import { Button, LoadButton } from "@/components/bs-ui/button"
 import { Input } from "@/components/bs-ui/input"
 import { Switch } from "@/components/bs-ui/switch"
+import { toast } from "@/components/bs-ui/toast/use-toast"
 import {
   Table,
   TableBody,
@@ -17,6 +18,7 @@ import {
   revokePersonalTokensByHolderApi,
   updatePersonalTokenSettingApi,
 } from "@/controllers/API/personalToken"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type { PersonalTokenLedgerItem, PersonalTokenSetting } from "@/types/api/openApi"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -31,6 +33,7 @@ export function PersonalToken() {
   const [items, setItems] = useState<PersonalTokenLedgerItem[]>([])
   const [enabled, setEnabled] = useState(false)
   const [ttlDays, setTtlDays] = useState(30)
+  const [saving, setSaving] = useState(false)
 
   const load = async () => {
     const [nextSetting, page] = await Promise.all([
@@ -48,10 +51,26 @@ export function PersonalToken() {
   }, [])
 
   const handleSave = async () => {
-    const next = await updatePersonalTokenSettingApi({ pat_enabled: enabled, pat_ttl_days: ttlDays })
-    setSetting(next)
-    setEnabled(next.pat_enabled)
-    setTtlDays(next.pat_ttl_days)
+    if (saving) return
+
+    setSaving(true)
+    try {
+      const next = await captureAndAlertRequestErrorHoc(
+        updatePersonalTokenSettingApi({ pat_enabled: enabled, pat_ttl_days: ttlDays }),
+      )
+      if (!next) return
+
+      setSetting(next)
+      setEnabled(next.pat_enabled)
+      setTtlDays(next.pat_ttl_days)
+      toast({
+        title: t("prompt"),
+        variant: "success",
+        description: t("openApiManagement.personalToken.settingsSaved"),
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleRevoke = async (id: number) => {
@@ -75,16 +94,21 @@ export function PersonalToken() {
         </div>
         <div className="flex flex-wrap items-end gap-6">
           <label className="flex items-center gap-2 text-sm">
-            <Switch checked={enabled} disabled={!setting?.deployment_enabled} onCheckedChange={setEnabled} />
+            <Switch checked={enabled} disabled={!setting?.deployment_enabled || saving} onCheckedChange={setEnabled} />
             {t("openApiManagement.personalToken.tenantEnabled")}
           </label>
           <label className="w-48 space-y-1 text-sm">
             <span>{t("openApiManagement.personalToken.ttlDays")}</span>
-            <Input type="number" min={1} max={365} value={ttlDays} onChange={(event) => setTtlDays(Number(event.target.value))} />
+            <Input type="number" min={1} max={365} value={ttlDays} disabled={saving} onChange={(event) => setTtlDays(Number(event.target.value))} />
           </label>
-          <Button disabled={!setting?.deployment_enabled || ttlDays < 1 || ttlDays > 365} onClick={handleSave}>
+          <LoadButton
+            loading={saving}
+            aria-busy={saving}
+            disabled={!setting?.deployment_enabled || ttlDays < 1 || ttlDays > 365}
+            onClick={handleSave}
+          >
             {t("save")}
-          </Button>
+          </LoadButton>
         </div>
       </section>
       <Table>
