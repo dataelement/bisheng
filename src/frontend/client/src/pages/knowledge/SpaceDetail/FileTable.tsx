@@ -767,9 +767,10 @@ interface FileTableProps {
     onFileEncodingUpdated?: (fileId: string, newEncoding: string, fileSubcategoryCode?: string | null) => void;
     canRetryFile?: (file: KnowledgeFile) => boolean;
     retryActionLabel?: string;
+    loadMore?: React.ReactNode;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onAcceptAlias, onRejectAlias, onNavigateFolder, canReorderFolders = false, onReorderFolder, onPreview, onValidateName, onCancelCreate, onRequestPermissions, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, downloadingEntryIds, publishEntryIds, shareEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, onShareFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, metadataEditableFileIds, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onAcceptAlias, onRejectAlias, onNavigateFolder, canReorderFolders = false, onReorderFolder, onPreview, onValidateName, onCancelCreate, onRequestPermissions, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, downloadingEntryIds, publishEntryIds, shareEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, onShareFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, metadataEditableFileIds, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel, loadMore }: FileTableProps) {
     // Shougang feature gate
     const { data: bsConfig } = useGetBsConfig();
     const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
@@ -1091,6 +1092,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                         ))}
                     </TableBody>
                 </table>
+                {loadMore}
             </div>
 
             {/* 常驻横向滚动条，sticky 固定在底部，同步表格横向滚动位置 */}

@@ -1938,14 +1938,14 @@ export function KnowledgeSpaceContent({
                                     businessDomainOptions={businessDomainOptions}
                                     encodingPrefix={encodingPrefix}
                                     onFileEncodingUpdated={handleFileEncodingUpdated}
+                                    loadMore={hasMore && (
+                                        <LoadMore
+                                            onLoad={() => onPageChange(currentPage + 1)}
+                                            loading={loading}
+                                        />
+                                    )}
                                 />
                             </div>
-                            {hasMore && (
-                                <LoadMore
-                                    onLoad={() => onPageChange(currentPage + 1)}
-                                    loading={loading}
-                                />
-                            )}
                         </>
                     )}
                 </div>
