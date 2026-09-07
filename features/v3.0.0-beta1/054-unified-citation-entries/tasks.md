@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 用户 2026-09-07 确认；导出改为「维持现状」后 AC 重编号 |
 | design.md | ✅ 已评审 | 用户 2026-09-07 确认；六个决策，接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 14 个任务 / 5 个 Wave；22 条 AC 全部有测试或手动验证覆盖 |
-| 实现 | 🟡 进行中 | 11 / 14 完成（Wave 1-3 已落地，余 Wave 4 前端 + Wave 5 验收）。偏差处理见 `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🟡 待人工验收 | 13 / 14 完成。代码全部落地；T014 的自动部分已跑（基线重跑 15 项绿、相关套件 180 项绿、client typecheck/lint/check-i18n 绿），**浏览器七步手动验证待人工执行**。偏差处理见 `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -117,7 +117,7 @@
 
 ### Wave 4 — 前端 Client（Platform 不涉及）
 
-- [ ] **T012**: Client 识别文章来源并落地点击行为
+- [x] **T012**: Client 识别文章来源并落地点击行为
   **文件**: `src/frontend/client/src/components/Chat/Messages/Content/citationUtils.ts`（`normalizeCitationType` 扩展第三种类型）, `CitationSourceIcon.tsx`, `Markdown.tsx`
   **逻辑**: 新前缀映射为文章类型（**不扩展就会被当成知识库来源，点开空白页**）；文章角标显示来源类型 / 标题 / 摘录；点击**打开原文链接（新标签）**。角标形态复用公共组件库的「文档」色，**不新增来源色**（视觉归设计师）。
   **设计依据**: design §5 坑 2、坑 6、坑 7 · §2 组件所有权约束
@@ -125,7 +125,7 @@
   **手动验证**: 按 design §7 步骤 1-3 起前后端 → 文章页侧边问答提一个能命中文章内容的问题 → 角标出现 → 悬浮看标题 / 摘录 → 点击开原文新标签。
   **依赖**: T010, T011
 
-- [ ] **T013**: Client 区分「来源已失效」与「暂无权限」
+- [x] **T013**: Client 区分「来源已失效」与「暂无权限」
   **文件**: `src/frontend/client/src/components/Chat/Messages/Content/Markdown.tsx`, `citationUtils.ts`, `chatApi.ts`
   **逻辑**: 消费 `unresolved` 的原因字段，渲染两种**不可点**状态且文案可区分；历史消息缺结构化溯源数据时原样保留答案、不补造角标；分享页解析不到时降级为不可点，**不报错、不使页面渲染失败**。文案取自 T005 的 key。
   **覆盖 AC**: AC-08, AC-09, AC-11, AC-15, AC-20
@@ -146,6 +146,7 @@
 > **只留一行指针**，论证写进 design.md（决策 / 坑），这里不重复。
 > 推翻已 ★ 确认的决策时，先停下与用户重新确认，再记录。
 
+- T012/T013 顺带偿还了所touch文件的硬编码中文（CitationSourceIcon 2 条 + Markdown 6 条），suppressions 只减不增；这是根 AGENTS.md 的存量偿还规则要求。
 - T009/T010 接口由单个 `persist_article_citations` 拆为 `scrub_article_answer` + `save_article_citations` → 绑定引用需要答案行 id，而答案必须**先清洗再入库**；合成一步会逼端点先存原始答案，把幻觉标记写进库里。
 - T005 落点由 `packages/locales` 改为 client 应用语言文件 → 该包只承载错误码域，角标属 UI 文案（详见 T005 内说明）。
 - T006 推翻 F029 AC-20（匿名放行为分享链接有意保留）→ 用户 2026-09-07 选 A：直接覆盖，已登记 release-contract 表 4 + design §6.1，三个既有用例随 T006 改写。
