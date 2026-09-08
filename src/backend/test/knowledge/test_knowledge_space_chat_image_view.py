@@ -93,7 +93,7 @@ async def test_render_uses_vision_loop_when_visual_and_images(monkeypatch):
         yield AIMessage(content="answer with ![](/bisheng/knowledge/images/1/2/chart.png)")
 
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.run_vision_tool_loop",
+        "bisheng.knowledge.domain.services.knowledge_space_chat_service.run_react_vision_stream",
         fake_loop,
     )
 
@@ -140,7 +140,7 @@ async def test_render_does_not_annotate_when_visual_false(monkeypatch):
         yield AIMessage(content="ok")
 
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.run_vision_tool_loop",
+        "bisheng.knowledge.domain.services.knowledge_space_chat_service.run_react_vision_stream",
         fake_loop,
     )
     monkeypatch.setattr(

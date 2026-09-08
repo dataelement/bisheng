@@ -10,9 +10,9 @@
 > - 实现变化 → **覆盖更新本文档**，只留"今天的状态"
 > - **偏差分级**：推翻已 ★ 确认的决策 → 停下与用户重新确认；纯实现细节 → 直接改 design
 
-**关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)
+**关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md) · [增量 · 知识空间/频道 ReAct](./design-增量-知识空间频道ReAct.md)
 **版本**: v3.0.0-beta1
-**最后更新**: 2026-09-07（T001–T015 落地后回写接线）
+**最后更新**: 2026-09-08（知识空间 / 频道 ReAct 增量落地：`run_react_vision_stream`）
 
 ---
 
@@ -38,7 +38,7 @@
 - **上游数据格式**：知识库图片在入库时已写成 `/{bucket}/knowledge/images/{kb_id}/{doc_id}/{filename}`（`loader/base.py` `build_image_url`）。问答路径今天**不**重写这些 URL。
 - **模型能力**：视觉开关是工作台模型列表上的 `WSModel.visual`，与日常附件、Linsight binary guard 同源。未开视觉的模型，endpoint 会拒 `image_url`。
 - **供应商角色约束**：部分模型（已知 Kimi）只接受 user 角色上的 `image_url`。图片块不得放在 ToolMessage 里发给模型。
-- **容量**：v1 标准档长边 512；单轮最多查看 3 张。知识空间 / 频道最多 1 次额外模型请求。
+- **容量**：v1 标准档长边 512；单轮最多查看 3 张。知识空间 / 频道 ReAct `recursion_limit=8`（约 1–2 次 view + 作答）。日常仍用 `daily_chat.agent_max_iterations`。
 
 ---
 
@@ -49,9 +49,9 @@
 - **备选**：
   - A. 新建 `bisheng/common/image_view/`（标注、注册表、取图、缩放、工具、两轮循环、image 角色搬迁）。三场景各自调用。
   - B. 放进 `knowledge/` domain，频道 / 日常再 import knowledge。
-  - C. 把知识空间 / 频道改成与日常一样的完整 LangGraph ReAct。
+  - C. 把知识空间 / 频道改成日常那种**完整产品 Agent**（联网、按需 `search_knowledge_bases`、`agent_*` SSE）。
 - **选定**：A。
-- **原因**：B 让 channel 依赖 knowledge domain，违反「场景接线、能力下沉」且靠近 C1 交叉 import。C 超出用户确认的 ①–⑦，回归面覆盖历史、citation、SSE 事件，远大于「加一次工具循环」。A 满足 C1：`common` 只碰 `core` 存储 / 下载，不 import 任何 domain。
+- **原因**：B 让 channel 依赖 knowledge domain，违反「场景接线、能力下沉」且靠近 C1 交叉 import。C 的回归面（历史、citation、前端协议）远大于读图。A 满足 C1：`common` 只碰 `core` 存储 / 下载，不 import 任何 domain。**编排层** ReAct（工具仅 `view_image`、SSE 仍 STREAM）不是 C，见决策 3。
 - **何时该重新考虑**：若出现第四个以上场景且编排开始分叉，再评估是否抽独立 chat 编排模块（仍不得让 `common` 依赖 domain）。
 
 ### 决策 2：按需工具调用，不预塞像素
@@ -63,15 +63,16 @@
 - **原因**：用户已锁定 ①–⑦。B 在「这张图是什么意思」以外的问题上浪费 token 与费用，且多图时第一次请求极易超上下文。A 与「模型此时还是瞎的，只是从标记知道这儿有张图」一致。
 - **何时该重新考虑**：若测量表明几乎每次含图问答都会读图，且平均图数 ≤ 1，可评估「单图预塞、多图仍按需」。
 
-### 决策 3：知识空间 / 频道 = 轻量两轮；日常 = 往现有 ReAct 加工具
+### 决策 3：知识空间 / 频道 = 预组文 + LangGraph ReAct（仅 view_image）；日常 = 已有 ReAct + 动态 bind
 
 - **备选**：
-  - A. 知识空间 / 频道：正文已有图时 `bind_tools([view_image])`，最多 1 次额外模型请求；一次工具调用可带多张 `img#`；第二轮不再绑工具。日常：请求级 `ImageRegistry` 由 `search_knowledge_bases` 填充。**不要**把 `view_image` 加进 `_prepare_tools` 再丢给 `create_react_agent`——后者编译期会把 ToolNode 里全部工具 `bind_tools` 给模型，第一次请求就会暴露，AC-03 复燃。正确挂钩：`_prepare_tools` 保持今天的列表；在每次模型调用前的 LLM 外包（或等价 `pre_model_hook`）里按 `len(registry)` 动态 `bind_tools`；读图规则挂在同一外包，仅当本轮将暴露工具时追加。ToolNode 仍须能执行 `view_image`，但编译期 bind 不得看见它。检索无图则全程不暴露。
-  - B. 三场景都改成完整 ReAct。
-  - C. 三场景都写成手写两轮循环（日常拆掉 LangGraph）。
-- **选定**：A。
-- **原因**：日常已经有 `create_react_agent` + `search_knowledge_bases`，图出现在**工具返回之后**，硬套「先检索再两轮」会与现有 Agent 循环打架。知识空间 / 频道今天是单轮 `llm.astream`，加完整 ReAct 会引入联网 / 多工具 / recursion_limit，超出 AC。A 对预检索场景就是 ①–⑦；对日常则是同一工具语义嵌进已有循环，消息历史即「第一次内容原样重发」。
-- **何时该重新考虑**：若知识空间 / 频道也要按需检索（不再预 stuffing），再评估与日常合并 Agent。
+  - A. 知识空间 / 频道手写 `run_vision_tool_loop`（最多 1 次额外请求）；日常 `VisionToolBindWrapper` 动态 bind。**不要**把 `view_image` 加进 `_prepare_tools`（编译期 bind 会第一次就暴露，AC-03 复燃）。
+  - B. 三场景都改成日常那种完整产品 Agent（联网、按需 `search_knowledge_bases`、`agent_*` SSE + 工具卡片）。
+  - C. 知识空间 / 频道**预检索 stuffing 不变**，LLM 循环换成与日常同一套 `create_react_agent` + `VisionToolBindWrapper`；工具只有 `view_image`；对外仍 STREAM，tool 事件不发给前端。
+  - D. 三场景都写成手写两轮循环（日常拆掉 LangGraph）。
+- **选定**：C（2026-09-08 用户 ★ 确认，推翻初版 A）。How → [增量 design](./design-增量-知识空间频道ReAct.md)。**已落地**。
+- **原因**：A 把弱模型注入 / 选图 / chunk 合并锁在 loop，且最多再一轮，与日常分叉。B 会改检索语义和前端协议，用户已否决（知识空间不要自己调 `search_knowledge_bases`；不要工具卡片）。D 让日常倒退。C 只换编排：预组文、citation、STREAM SSE 不动；动态 bind 约束（坑 2）三场景共用。
+- **何时该重新考虑**：产品要知识空间按需检索或文件问答展示工具卡片 → 才评估 B。工作台模型都遵守 `tool_choice` → 可关掉注入。日常也要复用同一事件映射 → 再考虑从 `image_view` 抽 `chat_react`（增量决策 R3）。
 
 ### 决策 4：图片块放 HumanMessage，不放 ToolMessage
 
@@ -103,7 +104,7 @@
 
 ## 4. 系统现状（接手必读）
 
-> 写的是**今天**的接线。实现已落地：共享层 `common/image_view/`；知识空间 / 频道走 `run_vision_tool_loop`；日常走 `VisionToolBindWrapper` 动态 bind。
+> 写的是**今天代码**的接线。共享层 `common/image_view/`：知识空间 / 频道走 `run_react_vision_stream`（LangGraph ReAct，仅 `view_image`）；日常走同一份 `VisionToolBindWrapper` 动态 bind。SSE 协议不变。
 
 ### 4.1 数据流
 
@@ -113,17 +114,17 @@
 共享 annotate(text) → 原文 ![ ](url) 后追加 ⟦img#N⟧，写入请求级 ImageRegistry
 
 知识空间 / 频道（预检索 / 预组文）
-  标注后的上下文 → run_vision_tool_loop
-    第 1 次：bind_tools([view_image])；若是 tool_call，不向用户流式输出该轮 token
-    取字节 → 长边 512 → data URI
-    第 2 次：原样重发第 1 次消息 + 工具 ack + HumanMessage(图片块)；不再绑工具
+  标注后的上下文 → run_react_vision_stream
+    visual 且 registry 非空：create_react_agent(VisionToolBindWrapper, ToolNode([view_image]))
+    recursion_limit=8；tool 事件不对外 yield；STREAM 仍是 content / reasoning_content
+    弱模型注入 / 选图覆盖 / pop_viewed→HumanMessage 挂在 wrapper
 
 日常（检索在工具之后）
   _prepare_tools 保持今天的列表（不加 view_image）
   search_knowledge_bases 的 `_format_chunk` 以及 DailyChatCitationToolWrapper._dump_knowledge_chunks
     在 format_retrieved_chunk 之后 annotate（主路径是前者）
   VisionToolBindWrapper 是非 Runnable 的 callable，交给 create_react_agent 当动态模型工厂
-    每次模型调用：relocate_images_to_human；len(registry)>0 才 bind view_image 并追加读图规则
+    每次模型调用：pop_viewed → HumanMessage 像素；relocate_images_to_human；len(registry)>0 才 bind view_image 并追加读图规则
   visual=true 时 ToolNode = base_tools + view_image；编译期 bind 看不见 view_image（动态工厂不会走 bind_tools）
   LangGraph 消息历史 = 原样重发
 ```
@@ -141,13 +142,12 @@ sequenceDiagram
     Note over Scene,Store: Knowledge space / channel only. Daily does not bind on first LLM call.
     Scene->>Reg: annotate markdown images
     Note over Scene,Reg: "![](chart.png)" becomes "![](chart.png)⟦img#1⟧"
-    Scene->>LLM: round1 bind view_image + system + question + annotatedContext
+    Scene->>LLM: ReAct bind view_image (registry non-empty)
     LLM->>Tool: view_image(["img#1"], standard)
-    Tool->>Reg: resolve img#1
-    Tool->>Store: fetch bytes
-    Tool->>Tool: resize longEdge 512 + base64
-    Scene->>LLM: round2 replay round1 + toolAck + HumanMessage image block
-    LLM-->>Scene: answer from actual pixels
+    Tool->>Reg: resolve img#1 + record_viewed data URI
+    Tool->>Store: fetch bytes, resize longEdge 512
+    Scene->>LLM: next turn + HumanMessage pixels (pop_viewed)
+    LLM-->>Scene: answer chunks (STREAM only; no agent_tool_call)
 ```
 
 ### 4.2 关键数据结构 / 字段约定
@@ -166,18 +166,18 @@ sequenceDiagram
 
 | 模块 / 文件 | 职责 | 不做什么 |
 |---|---|---|
-| `bisheng/common/image_view/`（新建） | 标注、注册表、取图、缩放、`view_image` 工具、`run_vision_tool_loop`、`relocate_images_to_human` | 不 import 任何 `domain/`；不做业务鉴权；不写盘给别的进程 |
-| `workstation/.../chat_service.py` | 日常：检索结果 annotate；LLM 外包（或 `pre_model_hook`）在**每次**模型调用前 relocate，并按 `len(registry)` 动态 `bind_tools` + 追加读图规则 | 不把 `view_image` 加进 `_prepare_tools`；不把读图规则写进 `create_react_agent(prompt=sys_prompt)`；不把知识空间 / 频道改成 ReAct |
+| `bisheng/common/image_view/` | 标注、注册表、取图、缩放、`view_image`、`VisionToolBindWrapper`、`run_react_vision_stream`、`relocate_images_to_human` | 不 import 任何 `domain/`；不做业务鉴权；不写盘给别的进程；不 yield `ChatResponse` |
+| `workstation/.../chat_service.py` | 日常：检索结果 annotate；`VisionToolBindWrapper` 从 `common.image_view` import；每次模型调用前 relocate + `pop_viewed`，按 `len(registry)` 动态 `bind_tools` | 不把 `view_image` 加进 `_prepare_tools`；不把读图规则写进 `create_react_agent(prompt=sys_prompt)` |
 | `DailyChatCitationToolWrapper._dump_knowledge_chunks` | `format_retrieved_chunk` 之后 annotate（legacy 包装路径） | 不取像素 |
-| `_build_knowledge_search_tool` / `_format_chunk` | 日常主检索路径：format 之后 annotate，写入同一 `ImageRegistry` | 不取像素 |
-| `knowledge/.../knowledge_space_chat_service.py` | `_prepare_rag_citation_context` 后 annotate；`space_rag` / `_render_rag_response` 换 `run_vision_tool_loop`（即将 bind 时追加读图规则）；按 `model_id` 读 `visual` | 不加联网 / 多工具 Agent；不改默认 yaml prompt |
+| `_build_knowledge_search_tool` / `_format_chunk` | 日常主检索路径：format 之后 annotate，写入同一 `ImageRegistry` | 不取像素；不接到知识空间 / 频道 |
+| `knowledge/.../knowledge_space_chat_service.py` | `_prepare_rag_citation_context` 后 annotate；`_render_rag_response` 走 `run_react_vision_stream`；按 `model_id` 读 `visual` | 不加联网 / 按需 `search_knowledge_bases`；不改默认 yaml prompt；不改 SSE 为 `agent_*` |
 | `core/prompts/yaml/knowledge_space.yaml` | **不改**。读图规则不预置进默认稿（无图 / `visual=false` 仍走这份稿） | 不删、不改写 citation 规则；不增加「先调 view_image」 |
-| `channel/.../channel_chat_service.py` | `stream_article_reply`：截断 + annotate + `visual` 门控 + `run_vision_tool_loop`。Endpoint 只做鉴权 / SSE 包装 | 不引入向量检索；不把编排留在 `channel_chat.py` endpoint（对齐 C1） |
+| `channel/.../channel_chat_service.py` | `stream_article_reply`：截断 + annotate + `visual` 门控 + `run_react_vision_stream`。Endpoint 只做鉴权 / SSE 包装 | 不引入向量检索；不把编排留在 `channel_chat.py` endpoint（对齐 C1） |
 | `linsight/.../binary_content_guard.py` | **不改**。本 feature 只复用「image 必须在 user 角色」这一事实 | 不把守卫链挂到问答 |
 
 知识空间 / 频道的 `visual` 解析：从工作台模型列表按 `model_id` 对 `WSModel.visual`，与 Linsight `_resolve_model` 同源，不新开配置面。
 
-日常系统提示来自 DB `systemPrompt`，知识空间默认稿在 `knowledge_space.yaml`，都不能指望运营手改，也**不要**把读图规则写进这些默认稿（无图 / 未开视觉时模型仍会读到「先调 view_image」，幻觉调用，AC-02 / AC-03 被软开口）。读图规则只在代码里、**仅当本轮将向模型暴露 `view_image` 时**追加：日常挂 LLM 外包，不要写进 `create_react_agent` 的初始 `prompt=`；知识空间 / 频道在 `run_vision_tool_loop` 组第一轮时追加。三场景同一段口径：
+日常系统提示来自 DB `systemPrompt`，知识空间默认稿在 `knowledge_space.yaml`，都不能指望运营手改，也**不要**把读图规则写进这些默认稿（无图 / 未开视觉时模型仍会读到「先调 view_image」，幻觉调用，AC-02 / AC-03 被软开口）。读图规则只在代码里、**仅当本轮将向模型暴露 `view_image` 时**追加：三场景都挂 `VisionToolBindWrapper` / `prepare_vision_messages`，不要写进 `create_react_agent` 的初始 `prompt=`。三场景同一段口径：
 
 1. `⟦img#N⟧` 只是锚点，第一次请求看不见像素。
 2. 回答依赖图 / 表 / 走势时先调 `view_image`；不要写「我看不到图」，不要根据周围文字编图意。
@@ -204,16 +204,18 @@ sequenceDiagram
 |---|---|---|---|
 | 1 | 部分模型（Kimi）只接受 **user** 角色的 `image_url`，ToolMessage 里放图会 400 杀掉整轮 | 日常 ReAct 默认把工具结果放 ToolMessage → 一调 `view_image` 会话失败 | 决策 4：ack 用文本，像素进 HumanMessage；日常 `relocate_images_to_human` |
 | 2 | 日常 `create_react_agent(bisheng_llm, tool_node)` **编译期**会 `bind_tools` ToolNode 里全部工具；`prompt=sys_prompt` 同样是一次注入。图却出现在 **`search_knowledge_bases` 返回之后** | 把 `view_image` 加进 `_prepare_tools`，或一开场把读图规则拼进 `sys_prompt` → 第一次请求就看见工具 / 被提示去调，AC-03 复燃；若永不 bind → 检索后仍读不了图 | 决策 3/5：`_prepare_tools` 不动；LLM 外包 / `pre_model_hook` 每次调用前按 `len(registry)` 重绑并按需追加规则 |
-| 3 | 知识空间 / 频道今天直接 `astream`，首轮若是 tool_call，token 会当答案流给前端 | 用户看到一截工具 JSON，再被真正答案覆盖或并列 | `run_vision_tool_loop` 缓冲首轮；确认是 tool_call 则不 yield 该轮 content（AC-17） |
+| 3 | 知识空间 / 频道若把 tool_call 轮次的 token 当答案流给前端 | 用户看到一截工具 JSON 或弱模型编造的字段清单 | `run_react_vision_stream` 不对外 yield tool 轮次；注入轮次关掉 inner callbacks（增量坑 R3） |
 | 4 | `view_image` 若允许模型传 URL，等于开放 SSRF | 模型（或提示注入）可打内网 / metadata | 只查 `ImageRegistry`；HTTP 仅 MinIO sharepoint + 已配置信息源主机 |
 | 5 | 知识库图是 **内部路径** `/{bucket}/knowledge/images/...`，不是可匿名打开的 http | 误当 URL 去 fetch 会 404，模型永远读不到图 | `/{bucket}/...` 走 MinIO `get_object`；http(s) / share 链才走 `async_file_download` |
 | 6 | citation 私用区是 `\ue200`…，读图锚点必须避开 | 混用会导致前端 citation 解析把 `⟦img#1⟧` 当来源，或读图正则吃掉引用标记 | 锚点锁定 U+27E6/U+27E7；标注只改 markdown 图片标签周围 |
 | 7 | `WSModel.visual=false` 时硬塞 image_url，供应商直接拒请求 | 「善意读图」变成整轮 500 | 决策 5：未开视觉不标注、不挂工具 |
-| 8 | 日常 prompt 在 DB，知识空间 / 频道也可能被运营覆盖 | 只改 yaml 默认稿，线上自定义 prompt 的模型不知道有工具；日常若把规则写进编译期 `prompt=`，无图请求也会被教去调 `view_image` | 三场景同一段口径；**仅当本轮将暴露工具时**追加。日常挂 LLM 外包，知识空间 / 频道在 `run_vision_tool_loop` 组第一轮时追加 |
+| 8 | 日常 prompt 在 DB，知识空间 / 频道也可能被运营覆盖 | 只改 yaml 默认稿，线上自定义 prompt 的模型不知道有工具；日常若把规则写进编译期 `prompt=`，无图请求也会被教去调 `view_image` | 三场景同一段口径；**仅当本轮将暴露工具时**追加。挂 `prepare_vision_messages`，禁止写进 yaml / `create_react_agent(prompt=)` |
 | 9 | Linsight 已有「读文件看图」，但是 `read_file` + workspace + 500KB 上限，**不是**本 feature | 误改 `binary_content_guard` / `workspace_backend` 会回归任务模式 | 本 feature 不改 linsight；只抄「搬到 HumanMessage」这一条 |
 | 10 | 频道文章 `markdown_content` 来自信息源，图可能是外链 | 无 host 白名单就会把任意外链当成功来源 | 取图失败按 AC-15 降级；白名单与分流见 **§4.4** |
 | 11 | 模型流式输出 `view_image` 时，参数 JSON 拆在多枚 `AIMessageChunk.tool_call_chunks` 里；单片上的 `tool_calls` 经常是 `args={}` | 若把每片 `tool_calls` 直接 `extend` 再 `ainvoke`，Pydantic 缺 `image_ids` 会把知识空间 / 频道 SSE 整轮打成 500 | `_collect_ai` 用 chunk `+` 拼完整参数；缺参 / 校验失败只回工具观察，不中断会话 |
-| 12 | `qwen3-vl-flash` 一类弱工具调用模型：`tool_choice` 可能被完全忽略（流式只出文本）；就算调了工具也会默认 `img#1` 或标题前的菜单图，并在 tool_call 前编造字段清单 | 问「开户申请表单字段」却不读图 / 读错图；第二轮还复述首轮幻觉 | 4-gram 打分；`image_ids` 改写成 suggested；**未调工具则注入 suggested 读图**；首轮 prose 不带进第二轮；过小图（长边 < 32）按 AC-15 降级 |
+| 12 | `qwen3-vl-flash` 一类弱工具调用模型：`tool_choice` 可能被完全忽略（流式只出文本）；就算调了工具也会默认 `img#1` 或标题前的菜单图，并在 tool_call 前编造字段清单 | 问「开户申请表单字段」却不读图 / 读错图；第二轮还复述首轮幻觉 | 4-gram 打分；`image_ids` 改写成 suggested；**未调工具则注入 suggested 读图**；首轮 prose 不带进第二轮；过小图（长边 < 32）按 AC-15 降级。增量切 ReAct 后语义不变，见增量决策 R4 |
+| 13 | `view_image` 把 data URI 记在 `registry.record_viewed`，工具观察只是短文本 ack | 下一轮模型调用若不 `pop_viewed` 成 HumanMessage，就看不见像素 | `VisionToolBindWrapper._prepare` 每次调用前 `pop_viewed` |
+| 14 | `astream_events` 先出 token delta，再出 `on_chat_model_end` / 外包 Runnable 的 `on_chain_end`（完整 AIMessage） | 知识空间 `answer += chunk.content` 会把同一段答案拼两遍 | `run_react_vision_stream`：本轮已 stream 过就不再 yield 完整消息；标志只在下一次 `on_chat_model_start` 清掉 |
 
 ---
 
@@ -224,9 +226,9 @@ sequenceDiagram
 | 契约 | 形式 | 谁在用 |
 |---|---|---|
 | `⟦img#N⟧` 锚点出现在送给模型的检索 / 文章上下文 | 隐式 prompt 契约 | 三场景模型；前端不消费（仍渲染原 `![]()`） |
-| `view_image(image_ids, quality="standard")` | LangChain StructuredTool | 日常 ReAct；知识空间 / 频道两轮循环 |
-| `common.image_view.annotate` / `run_vision_tool_loop` / `relocate_images_to_human` | 内部 Python API | workstation / knowledge / channel domain |
-| 既有 SSE 形态保持 | 日常继续 `agent_tool_call`；知识空间 / 频道继续 STREAM 答案 | client 日常 / 知识空间 / 频道聊天 |
+| `view_image(image_ids, quality="standard")` | LangChain StructuredTool | 日常 ReAct；知识空间 / 频道 `run_react_vision_stream` 的唯一工具 |
+| `common.image_view.annotate` / `run_react_vision_stream` / `VisionToolBindWrapper` / `relocate_images_to_human` | 内部 Python API | workstation / knowledge / channel domain |
+| 既有 SSE 形态保持 | 日常继续 `agent_tool_call`；知识空间 / 频道继续 STREAM 答案（不发工具卡片） | client 日常 / 知识空间 / 频道聊天 |
 
 不新增 HTTP API、不新增错误码模块、不新增领域对象。取图失败只作为工具观察返回给模型。
 
@@ -256,15 +258,15 @@ sequenceDiagram
   - 路径：`/{bucket}/knowledge/images/...` 走 MinIO；非法 host 的 http 失败。
   - 取图失败：返回错误文案，不 raise。
 - **编排**：
-  - `run_vision_tool_loop`：首轮 tool_call → 第二轮消息含原上下文 + HumanMessage 图片块，且首轮 content 不进入对外 stream。
-  - 无图 / `visual=false`：退回单轮 `astream`，与今天一致。
+  - `run_react_vision_stream`：tool_call / 注入轮次不对外 yield；作答 chunk 才进 STREAM。无图 / `visual=false` 退回 `llm.astream`。
+  - 日常 `_prepare_tools` 返回值不含 `view_image`；`VisionToolBindWrapper` 在 `len(registry)>0` 时 bind，且 `pop_viewed` 后带 HumanMessage 像素。
 - **日常接线**：`_prepare_tools` 返回值不含 `view_image`；检索结果字符串含 `⟦img#1⟧` 后，后续轮次经 LLM 外包才 bind；`visual=true` 但检索无图时，模型侧看不到该工具、也看不到读图规则。
 - **手工验证一遍**（本地后端 + client；中间件连本机 / 测试环境 MinIO）：
   1. 后端（`src/backend/`）：`export config=config.yaml; uv run uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --workers 1 --no-access-log`
   2. Client（`src/frontend/`）：`pnpm --filter bishengchat start -- --host 0.0.0.0`（:4001，base `/workspace`）。用已开启「视觉」的工作台模型账号登录。
   3. 日常：打开 `/workspace` 首页日常对话，勾选含图知识库，问「这张图的走势」——应先出现已有 `agent_tool_call`（查看图片），再出带原 `![]()` 的答案。
-  4. 知识空间：打开某空间含图文件 / 文件夹问答（`/workspace` 知识空间入口），同样提问。
-  5. 频道：打开 `/workspace/channel/{channelId}/article/{articleId}`，对正文含 markdown 图的文章同样提问。
+  4. 知识空间：打开某空间含图文件 / 文件夹问答。联调题「开户申请表单上有哪些字段？」应读 `img#10` / `img#9` 量级。SSE 仍是 `stream`，**没有** `agent_tool_call`。
+  5. 频道：打开 `/workspace/channel/{channelId}/article/{articleId}`，对正文含 markdown 图的文章问「图里写了什么」。SSE 同样只有 `stream`。
   6. 同一账号把该模型「视觉」关掉：三场景都不出现查看图片，原文 `![]()` 不变。
   7. 无图问题不误调；人为删掉 MinIO 对象后会话仍结束，模型侧收到「该图不可用」。
 - 实现后把上述步骤写入 `e2e-checklist.md`。
@@ -278,7 +280,9 @@ sequenceDiagram
 - **HTML `<img>` / 频道复杂富文本**：等文章源格式普查后再扩正则。
 - **灵思 / 工作流 / 助手**：各自上下文形状不同（workspace `read_file`、节点变量），不在本 feature 接线。
 - **预塞单张图**：仅当测量显示「含图必读且平均 1 张」时重评决策 2。
-- **前端「正在查看图片」独立 UI**：知识空间 / 频道本期只保证不泄漏 tool token；若产品要进度提示，另起 client 小改。
+- **前端「正在查看图片」独立 UI**：知识空间 / 频道只保证不泄漏 tool token（增量仍吞掉 `on_tool_*`）。若产品要进度提示 / 工具卡片，另起 client + SSE 协议，不要混进读图编排。
+- **知识空间按需 `search_knowledge_bases`**：用户已否决。预组文是场景语义，不是编排缺陷。
+- **把日常 `astream_events` 映射抽到 `common/chat_react/`**：增量决策 R3 明确推迟；日常 SSE 继续留在 workstation。
 - **把 Linsight relocate 抽到 `common` 并回改任务模式**：能 DRY，但会碰 F035 守卫链，本轮不做。
 
 ---
@@ -297,3 +301,5 @@ sequenceDiagram
 | 2026-09-07 | 坑 12：强制 tool_choice 后按附近标题提示候选 `img#`，禁止默认第一张 | 联调：开户申请问字段却查看了封面 `img#1` |
 | 2026-09-07 | 坑 12 补：hint 不够则覆盖 `image_ids`；4-gram 过滤；丢掉含 `img#` 的短历史；拒绝长边 < 32 的对象 | 联调：suggested=`img#10/9` 模型仍看 `img#7/8`，且 MinIO 对象仅 13×17 |
 | 2026-09-07 | 坑 12 补：`tool_choice` 被忽略时注入 suggested 读图，不把首轮文本当答案 | 联调：清空历史后 `view_call_count=0`，256 chunk 直接当答案 |
+| 2026-09-08 | 决策 3 落地：知识空间 / 频道 `run_react_vision_stream`；日常 wrapper 迁到 `common` 并补 `pop_viewed`；删除 `run_vision_tool_loop` | T016–T026 |
+| 2026-09-08 | 坑 14：ReAct stream 后再 yield 完整 AIMessage，知识空间答案重复 | 联调：开户申请表单图片问句，同一段解释出现两次 |

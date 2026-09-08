@@ -14,10 +14,9 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_core.tools import tool as lc_tool
 
 from bisheng.citation.domain.services.citation_prompt_helper import CitationRegistryCollector
-from bisheng.common.image_view import IMAGE_VIEW_PROMPT_RULES, ImageRegistry, annotate
+from bisheng.common.image_view import IMAGE_VIEW_PROMPT_RULES, ImageRegistry, VisionToolBindWrapper, annotate
 from bisheng.workstation.domain.services.chat_service import (
     DailyChatCitationToolWrapper,
-    VisionToolBindWrapper,
     _prepare_tools,
 )
 

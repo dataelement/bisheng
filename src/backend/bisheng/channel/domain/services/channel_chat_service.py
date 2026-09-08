@@ -24,7 +24,7 @@ from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.channel import ArticleNotFoundError, ChannelChatConversationNotFoundError
-from bisheng.common.image_view import ImageRegistry, annotate, run_vision_tool_loop
+from bisheng.common.image_view import ImageRegistry, annotate, run_react_vision_stream
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessageDao
@@ -152,7 +152,7 @@ class ChannelChatService:
         article_content, registry = cls._apply_image_anchors(article_content, visual)
         user_prompt = user_prompt_template.format(article_content=article_content, question=question)
         inputs = [SystemMessage(content=system_prompt), *history_messages, HumanMessage(content=user_prompt)]
-        async for chunk in run_vision_tool_loop(llm, inputs, registry, visual=visual):
+        async for chunk in run_react_vision_stream(llm, inputs, registry, visual=visual):
             yield chunk
 
     @classmethod

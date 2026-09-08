@@ -36,14 +36,17 @@ pnpm --filter bishengchat start -- --host 0.0.0.0
 - [ ] 步骤 1: 打开知识空间入口，对**含图文件**提问「这张图的走势」
 - [ ] 步骤 2: 对**含图文件夹**同样提问
 - [ ] 步骤 3: 对**整空间**（`folder_id=0`）同样提问
+- [ ] 联调题（`spaceId=1` / `file_id=6`）：「开户申请表单上有哪些字段？」——应读 `img#10` / `img#9` 量级
 - [ ] 预期: 首轮若是查看图片，用户侧看不到工具 JSON / tool token（AC-17）
+- [ ] 预期: SSE 仍是 `stream`（`content` / `reasoning_content`），**没有** `agent_tool_call` / 工具卡片
 - [ ] 预期: 最终答案带原始 `![](url)`，且依据画面
 
 ### AC-12: 频道文章问答
 
 - [ ] 步骤 1: 打开 `/workspace/channel/{channelId}/article/{articleId}`（正文含 markdown 图）
-- [ ] 步骤 2: 问「这张图的走势」
+- [ ] 步骤 2: 问「这张图的走势」；含图文章也可问「图里写了什么」
 - [ ] 预期: 首轮 tool token 不进入答案流（AC-17）
+- [ ] 预期: SSE 仍是 `stream`，**没有** `agent_tool_call` / 工具卡片
 - [ ] 预期: 最终答案带原始 `![](url)`，且依据画面
 
 ### AC-02 / AC-03: 关视觉、无图

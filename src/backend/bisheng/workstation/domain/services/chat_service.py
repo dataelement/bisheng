@@ -10,8 +10,7 @@ from uuid import uuid4
 from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 from json_repair import json_repair
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from langchain_core.runnables import Runnable
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import ArgsSchema, BaseTool, StructuredTool
 from loguru import logger
 from pydantic import BaseModel as PydanticBaseModel
@@ -52,8 +51,7 @@ from bisheng.common.errcode.workstation import (
     DepartmentDailyChatConcurrentLimitError,
     LLMRateLimitError,
 )
-from bisheng.common.image_view import ImageRegistry, annotate, build_view_image_tool, relocate_images_to_human
-from bisheng.common.image_view.loop import prepare_vision_messages
+from bisheng.common.image_view import ImageRegistry, VisionToolBindWrapper, annotate, build_view_image_tool
 from bisheng.common.schemas.telemetry.event_data_schema import (
     ApplicationAliveEventData,
     ApplicationProcessEventData,
@@ -352,58 +350,6 @@ def _wrap_daily_chat_citation_tool(
     if tool.name == "web_search" or hasattr(tool, "knowledge_retriever_tool"):
         return DailyChatCitationToolWrapper.wrap(tool, citation_collector, image_registry=image_registry)
     return tool
-
-
-def _messages_from_model_input(inp: Any) -> list[BaseMessage]:
-    if isinstance(inp, dict):
-        return list(inp.get("messages") or inp.get("llm_input_messages") or [])
-    if isinstance(inp, list):
-        return list(inp)
-    return [inp]
-
-
-class _VisionCallRunnable(Runnable):
-    """Relocate images and optionally append view-image rules, then call the bound LLM."""
-
-    def __init__(self, bound: Any, extra_rules: bool):
-        self._bound = bound
-        self._extra_rules = extra_rules
-
-    def _prepare(self, inp: Any) -> list[BaseMessage]:
-        messages = relocate_images_to_human(_messages_from_model_input(inp))
-        if self._extra_rules:
-            messages = prepare_vision_messages(messages)
-        return messages
-
-    def invoke(self, inp: Any, config=None, **kwargs: Any):
-        return self._bound.invoke(self._prepare(inp), config=config, **kwargs)
-
-    async def ainvoke(self, inp: Any, config=None, **kwargs: Any):
-        return await self._bound.ainvoke(self._prepare(inp), config=config, **kwargs)
-
-
-class VisionToolBindWrapper:
-    """Dynamic LLM for daily ReAct: bind view_image only after the registry is filled.
-
-    Must not be a Runnable — create_react_agent treats a non-Runnable callable as a
-    per-turn model factory and will not compile-time bind ToolNode tools.
-    """
-
-    def __init__(self, llm: Any, registry: ImageRegistry, base_tools: list[BaseTool]):
-        self._llm = llm
-        self._registry = registry
-        self._base_tools = list(base_tools)
-        self._view_tool = build_view_image_tool(registry)
-
-    def __call__(self, state, runtime):
-        if len(self._registry) > 0:
-            tools = [*self._base_tools, self._view_tool]
-            extra_rules = True
-        else:
-            tools = list(self._base_tools)
-            extra_rules = False
-        bound = self._llm.bind_tools(tools) if tools else self._llm
-        return _VisionCallRunnable(bound, extra_rules=extra_rules)
 
 
 async def _get_agent_max_iterations() -> int:
@@ -941,7 +887,10 @@ async def _build_knowledge_search_tool(
     async def _search(
         knowledge_base_ids: list[str],
         query: str,
-        filters: _Filters | None = None,
+        # Nested `_Filters` is not in this module's globals. LangGraph ToolNode
+        # runs get_type_hints(func) and would raise NameError if we annotate it.
+        # Runtime type still comes from args_schema=_SearchKbArgs.
+        filters: Any = None,
     ) -> str:
         from bisheng.workstation.domain.schemas.chat import UseKnowledgeBaseParam
 

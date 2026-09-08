@@ -1,17 +1,16 @@
-"""One extra vision round for knowledge-space / channel chat (F061)."""
+"""Vision-loop helpers: pick ids, drop catalog history, inject/override view_image calls."""
 
 from __future__ import annotations
 
 import json
 import re
-from collections.abc import AsyncIterator
 from typing import Any
 
-from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, HumanMessage, SystemMessage
 from loguru import logger
 
 from bisheng.common.image_view.annotate import ImageRegistry
-from bisheng.common.image_view.tool import MAX_IMAGES_PER_TURN, TOOL_NAME, build_view_image_tool
+from bisheng.common.image_view.tool import MAX_IMAGES_PER_TURN, TOOL_NAME
 
 IMAGE_VIEW_PROMPT_RULES = """# 查看图片
 1. `⟦img#N⟧` 只是锚点，第一次请求看不见像素。文件名、alt、上下文、上一轮回答都不是图里的内容。
@@ -20,11 +19,6 @@ IMAGE_VIEW_PROMPT_RULES = """# 查看图片
 4. 不要写「我看不到图」，不要根据周围文字或历史编造图意。
 5. 回答里仍输出原始 `![](url)`，方便前端渲染。
 6. 只能使用本轮出现过的 `img#`。"""
-
-_MISSING_IMAGE_IDS = (
-    "view_image requires image_ids (list of img#N from this turn). "
-    "Pick ids next to the relevant heading; do not default to the first image. Do not pass URLs."
-)
 
 # Prior assistant turns that list many img# ids were almost always guessed from
 # filenames / surrounding text (no pixels). Keep short answers that cite 1–3 images.
@@ -314,20 +308,6 @@ def _normalize_view_image_args(raw: Any) -> dict[str, Any]:
     return args
 
 
-async def _run_view_image_call(tool: Any, call: dict) -> str:
-    raw_args = call.get("args")
-    args = _normalize_view_image_args(raw_args)
-    if not args.get("image_ids"):
-        logger.warning("view_image called without image_ids; args={!r}", raw_args)
-        return _MISSING_IMAGE_IDS
-    try:
-        return await tool.ainvoke(args)
-    except Exception:
-        # Same contract as fetch failure (AC-15): observation, never abort the SSE.
-        logger.exception("view_image invoke failed; returning observation")
-        return "Image is not available."
-
-
 def _as_call_dict(call: Any) -> dict:
     if isinstance(call, dict):
         return call
@@ -352,95 +332,3 @@ def _view_calls(ai_message: AIMessage) -> list[dict]:
         if item.get("name") == TOOL_NAME:
             recovered.append(item)
     return recovered
-
-
-def _image_human_message(viewed: list[tuple[str, str]]) -> HumanMessage:
-    blocks: list[dict] = [{"type": "text", "text": "Viewed images: " + ", ".join(image_id for image_id, _ in viewed)}]
-    for _, data_uri in viewed:
-        blocks.append({"type": "image_url", "image_url": {"url": data_uri}})
-    return HumanMessage(content=blocks)
-
-
-async def run_vision_tool_loop(
-    llm: Any,
-    messages: list[BaseMessage],
-    registry: ImageRegistry,
-    *,
-    visual: bool,
-) -> AsyncIterator[Any]:
-    """Yield LLM chunks. At most one extra request when the model calls view_image."""
-    if not visual or len(registry) == 0:
-        logger.info("image_view skip bind visual={} registry_size={}", visual, len(registry))
-        async for chunk in llm.astream(messages):
-            yield chunk
-        return
-
-    logger.info("image_view first round visual=True registry_size={}", len(registry))
-    first_messages = prepare_vision_messages(messages)
-    tool = build_view_image_tool(registry)
-    bind_kwargs: dict[str, Any] = {}
-    needs_pixels = question_needs_pixels(_last_user_question(first_messages))
-    suggested = _suggested_ids_for(first_messages) if needs_pixels else []
-    if needs_pixels:
-        bind_kwargs["tool_choice"] = {"type": "function", "function": {"name": TOOL_NAME}}
-        logger.info("image_view forcing tool_choice={}", TOOL_NAME)
-    bound = llm.bind_tools([tool], **bind_kwargs)
-    first_chunks: list[Any] = []
-    async for chunk in bound.astream(first_messages):
-        first_chunks.append(chunk)
-
-    ai_message = _collect_ai(first_chunks)
-    view_calls = _view_calls(ai_message)
-    if needs_pixels and suggested:
-        if view_calls:
-            view_calls = _apply_suggested_ids(view_calls, suggested, registry)
-        else:
-            injected = _synthetic_view_calls(suggested, registry)
-            if injected:
-                logger.info(
-                    "image_view injecting view_image ids={}",
-                    injected[0]["args"]["image_ids"],
-                )
-                view_calls = injected
-        if view_calls:
-            ai_message = _ai_message_for_second_round(ai_message, view_calls)
-    elif view_calls:
-        ai_message = _ai_message_for_second_round(ai_message, view_calls)
-    tool_names = [_as_call_dict(call).get("name") for call in (ai_message.tool_calls or [])]
-    logger.info(
-        "image_view first round done chunks={} tool_names={} view_call_count={}",
-        len(first_chunks),
-        tool_names,
-        len(view_calls),
-    )
-    if not view_calls:
-        for chunk in first_chunks:
-            yield chunk
-        return
-
-    tool_messages: list[ToolMessage] = []
-    for call in view_calls:
-        observation = await _run_view_image_call(tool, call)
-        tool_messages.append(
-            ToolMessage(
-                content=observation,
-                tool_call_id=call.get("id") or "view_image",
-                name=TOOL_NAME,
-            )
-        )
-
-    second_messages: list[BaseMessage] = [
-        *first_messages,
-        ai_message,
-        *tool_messages,
-    ]
-    viewed = registry.pop_viewed()
-    logger.info(
-        "image_view second round viewed_ids={}",
-        [image_id for image_id, _ in viewed],
-    )
-    if viewed:
-        second_messages.append(_image_human_message(viewed))
-
-    async for chunk in llm.astream(second_messages):
-        yield chunk

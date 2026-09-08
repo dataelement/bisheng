@@ -27,7 +27,7 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
-from bisheng.common.image_view import ImageRegistry, annotate, run_vision_tool_loop
+from bisheng.common.image_view import ImageRegistry, annotate, run_react_vision_stream
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.constants import MessageCategory
@@ -531,7 +531,7 @@ class KnowledgeSpaceChatService:
             [{"role": m.type, "content": m.content} for m in inputs],
         )
 
-        async for one in run_vision_tool_loop(llm, inputs, image_registry, visual=visual):
+        async for one in run_react_vision_stream(llm, inputs, image_registry, visual=visual):
             chunk_reasoning_content = extract_reasoning_content(one)
             yield ChatResponse(
                 category=MessageCategory.STREAM,

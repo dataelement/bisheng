@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 
 from bisheng.citation.domain.services.citation_prompt_helper import CitationRegistryCollector
-from bisheng.workstation.domain.services.chat_service import _build_knowledge_search_tool
+from bisheng.workstation.domain.services.chat_service import (
+    _build_knowledge_search_tool,
+)
 
 
 async def _args_schema():

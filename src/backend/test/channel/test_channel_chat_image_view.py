@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
 from bisheng.channel.domain.services.channel_chat_service import ChannelChatService
 
@@ -22,6 +22,8 @@ _DEFAULT_USER_PROMPT = "{article_content}\n{question}"
 def test_endpoint_does_not_orchestrate_vision_or_llm_stream():
     text = _ENDPOINT.read_text(encoding="utf-8")
     assert "run_vision_tool_loop" not in text
+    assert "run_react_vision_stream" not in text
+    assert "create_react_agent" not in text
     assert "ImageRegistry" not in text
     assert "bishengllm.astream" not in text
     assert "ensure_article_sensitive_view_allowed" in text
@@ -73,7 +75,7 @@ async def test_stream_uses_vision_loop_when_visual_and_images(monkeypatch):
         yield AIMessage(content="answer with ![chart](https://intel.example/chart.png)")
 
     monkeypatch.setattr(
-        "bisheng.channel.domain.services.channel_chat_service.run_vision_tool_loop",
+        "bisheng.channel.domain.services.channel_chat_service.run_react_vision_stream",
         fake_loop,
     )
     monkeypatch.setattr(ChannelChatService, "_resolve_workbench_visual", AsyncMock(return_value=True))
@@ -109,7 +111,7 @@ async def test_stream_does_not_annotate_when_visual_false(monkeypatch):
         yield AIMessage(content="ok")
 
     monkeypatch.setattr(
-        "bisheng.channel.domain.services.channel_chat_service.run_vision_tool_loop",
+        "bisheng.channel.domain.services.channel_chat_service.run_react_vision_stream",
         fake_loop,
     )
     monkeypatch.setattr(ChannelChatService, "_resolve_workbench_visual", AsyncMock(return_value=False))
@@ -141,7 +143,7 @@ async def test_stream_does_not_annotate_without_markdown_image(monkeypatch):
         yield AIMessage(content="ok")
 
     monkeypatch.setattr(
-        "bisheng.channel.domain.services.channel_chat_service.run_vision_tool_loop",
+        "bisheng.channel.domain.services.channel_chat_service.run_react_vision_stream",
         fake_loop,
     )
     monkeypatch.setattr(ChannelChatService, "_resolve_workbench_visual", AsyncMock(return_value=True))
@@ -168,19 +170,17 @@ class _FakeLLM:
     def __init__(self, first: AIMessage, second: AIMessage):
         self.first = first
         self.second = second
-        self._bound = False
 
     def bind_tools(self, tools, **kwargs):
-        bound = _FakeLLM(self.first, self.second)
-        bound._bound = True
-        bound._parent = self
-        return bound
+        return self
+
+    async def ainvoke(self, messages, config=None, **kwargs):
+        if any(isinstance(message, ToolMessage) for message in messages):
+            return self.second
+        return self.first
 
     async def astream(self, messages, **kwargs):
-        if self._bound:
-            yield self.first
-            return
-        yield self.second
+        yield await self.ainvoke(messages, **kwargs)
 
 
 @pytest.mark.asyncio
