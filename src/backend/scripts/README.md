@@ -62,11 +62,9 @@ exits without deleting if the Store ID or checksum does not match.
 ### `reconcile_f048_visible_projection.py`
 
 Audit and repair environments that already completed an older F048 data
-migration before the final flattened-visible and service-account marker design.
-The command also mirrors each CURRENT resource's `permission_enabled` and
-`custom_mode`/`inherit_mode` state to `service_account:*`. The command is
-available in production as well as development/test; safety comes from the
-same maintenance and consistency gates, not from an environment-name allowlist.
+migration before the final flattened-visible design. The command is available
+in production as well as development/test; safety comes from the same
+maintenance and consistency gates, not from an environment-name allowlist.
 
 Run dry-run first from `src/backend/` with the live `config`:
 
@@ -76,9 +74,8 @@ PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py
 ```
 
 The JSON report includes canonical Grant/assignee source counts, persisted
-source differences, service-account resource marker counts, and the
-deduplicated expected tuple count/checksum. Add an explicit Store scan to
-report missing and orphan direct `visible` tuple keys:
+source differences, and the deduplicated expected tuple count/checksum. Add an
+explicit Store scan to report missing and orphan direct `visible` tuple keys:
 
 ```bash
 PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py \
@@ -111,12 +108,12 @@ when Store confirmation differs, a runtime heartbeat or projection operation
 is active, the CURRENT Catalog has an unrelated/non-resumable fence, canonical
 SQL data is incomplete, or stale source projections would require a classified
 revocation. It publishes/reuses the final immutable model in the same Store,
-ensures every Grant-derived direct `visible` tuple and service-account resource
-state marker in batches of at most 90 with OpenFGA duplicate-ignore semantics,
-verifies them with higher consistency, then activates the rebuilt Grant source
-rows and publishes a no-op Catalog release bound to the new Authorization Model
-release. It does not create or modify a formal `permission_migration_run`.
-Re-running after an interruption is forward-only and idempotent.
+ensures every Grant-derived direct `visible` tuple in batches of at most 90
+with OpenFGA duplicate-ignore semantics, verifies them with higher consistency,
+then activates the rebuilt Grant source rows and publishes a no-op Catalog
+release bound to the new Authorization Model release. It does not create or modify a formal
+`permission_migration_run`. Re-running after an interruption is forward-only
+and idempotent.
 
 To delete reviewed orphan tuple keys, keep the maintenance window in place and
 copy both `store_id` and `orphan_tuple_checksum` from the immediately preceding

@@ -269,30 +269,6 @@ def test_service_account_is_only_an_ordinary_direct_grant_subject() -> None:
         allowed = definitions[protected_type]["metadata"]["relations"][relation]["directly_related_user_types"]
         assert "service_account" not in {entry["type"] for entry in allowed}
 
-    for type_name, relations in (
-        ("permission_catalog_release", ("active",)),
-        (
-            "permission_model_release",
-            ("enabled_marker", "edit_marker", "grant_level_1_marker"),
-        ),
-        ("knowledge_space", ("permission_enabled", "custom_mode")),
-        ("knowledge_file", ("permission_enabled", "custom_mode", "inherit_mode")),
-    ):
-        for relation in relations:
-            allowed = definitions[type_name]["metadata"]["relations"][relation][
-                "directly_related_user_types"
-            ]
-            assert {entry["type"] for entry in allowed} == {
-                "service_account",
-                "user",
-            }
-
-    for relation in ("public_reader", "system_download_marker", "system_use_marker"):
-        allowed = definitions["knowledge_space"]["metadata"]["relations"][relation][
-            "directly_related_user_types"
-        ]
-        assert {entry["type"] for entry in allowed} == {"user"}
-
 
 def _qualified_name(node: ast.expr) -> str:
     if isinstance(node, ast.Name):

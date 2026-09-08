@@ -14,7 +14,6 @@ from bisheng.common.errcode.permission import (
     PermissionImpactExpiredError,
     PermissionVersionConflictError,
 )
-from bisheng.core.openfga.authorization_model_f048 import TECHNICAL_MARKER_SUBJECTS
 from bisheng.permission.domain.models import (
     PermissionProjectionOperation,
     ProjectionOperationStatus,
@@ -256,17 +255,17 @@ class ModeService:
             expected_catalog_release_id=expected_catalog_release_id,
         )
         commit_deltas = (
-            *self._mode_deltas(
+            self._mode_delta(
                 context.target,
                 mode=draft.current_mode,
                 action="DELETE",
                 sequence=0,
             ),
-            *self._mode_deltas(
+            self._mode_delta(
                 context.target,
                 mode=draft.target_mode,
                 action="WRITE",
-                sequence=len(TECHNICAL_MARKER_SUBJECTS),
+                sequence=1,
             ),
         )
         visibility = self._visibility.compile(
@@ -451,23 +450,20 @@ class ModeService:
         )
 
     @staticmethod
-    def _mode_deltas(
+    def _mode_delta(
         target: VerifiedPermissionTarget,
         *,
         mode: str,
         action: str,
         sequence: int,
-    ) -> tuple[ProjectionTupleDelta, ...]:
-        return tuple(
-            ProjectionTupleDelta(
-                phase="COMMIT",
-                sequence=sequence + offset,
-                action=action,
-                user=subject,
-                relation=f"{mode.lower()}_mode",
-                object=f"{target.resource_type}:{target.resource_id}",
-            )
-            for offset, subject in enumerate(TECHNICAL_MARKER_SUBJECTS)
+    ) -> ProjectionTupleDelta:
+        return ProjectionTupleDelta(
+            phase="COMMIT",
+            sequence=sequence,
+            action=action,
+            user="user:*",
+            relation=f"{mode.lower()}_mode",
+            object=f"{target.resource_type}:{target.resource_id}",
         )
 
     async def _emit(

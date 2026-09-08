@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import replace
 
 from bisheng.common.errcode.permission import InvalidPermissionModeError
-from bisheng.core.openfga.authorization_model_f048 import TECHNICAL_MARKER_SUBJECTS
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 from bisheng.permission.domain.services.projection_service import (
     ProjectionPlan,
@@ -46,24 +45,20 @@ def copy_permission_mode(source_mode: str) -> tuple[str, bool]:
     raise InvalidPermissionModeError(msg=f"Invalid copy mode: {source_mode}")
 
 
-def _marker_deltas(
+def _enabled_delta(
     target: VerifiedPermissionTarget,
     *,
-    relation: str,
     action: str,
     phase: str,
     sequence: int,
-) -> tuple[ProjectionTupleDelta, ...]:
-    return tuple(
-        ProjectionTupleDelta(
-            phase=phase,
-            sequence=sequence + offset,
-            action=action,
-            user=subject,
-            relation=relation,
-            object=f"{target.resource_type}:{target.resource_id}",
-        )
-        for offset, subject in enumerate(TECHNICAL_MARKER_SUBJECTS)
+) -> ProjectionTupleDelta:
+    return ProjectionTupleDelta(
+        phase=phase,
+        sequence=sequence,
+        action=action,
+        user="user:*",
+        relation="permission_enabled",
+        object=f"{target.resource_type}:{target.resource_id}",
     )
 
 
@@ -131,23 +126,19 @@ def build_create_plan(
                 object=f"{target.resource_type}:{target.resource_id}",
             )
         )
-    staging.extend(
-        _marker_deltas(
-            target,
-            relation=f"{mode.lower()}_mode",
-            action="WRITE",
+    staging.append(
+        ProjectionTupleDelta(
             phase="STAGE",
             sequence=len(staging),
+            action="WRITE",
+            user="user:*",
+            relation=f"{mode.lower()}_mode",
+            object=f"{target.resource_type}:{target.resource_id}",
         )
     )
-    protected_offset = len(staging)
-    staging.extend(
-        replace(delta, phase="STAGE", sequence=protected_offset + index)
-        for index, delta in enumerate(protected_deltas)
-    )
-    enabled = _marker_deltas(
+    staging.extend(replace(delta, phase="STAGE") for delta in protected_deltas)
+    enabled = _enabled_delta(
         target,
-        relation="permission_enabled",
         action="WRITE",
         phase="COMMIT",
         sequence=len(staging),
@@ -155,7 +146,7 @@ def build_create_plan(
     return _lifecycle_plan(
         target,
         operation_type=operation_type,
-        deltas=(*staging, *enabled),
+        deltas=(*staging, enabled),
         store_id=store_id,
         model_id=model_id,
         operator_id=operator_id,
@@ -179,26 +170,16 @@ def build_move_plan(
     if mode.upper() not in {"INHERIT", "CUSTOM"}:
         raise InvalidPermissionModeError(msg="Invalid move permission mode")
     object_key = f"{target.resource_type}:{target.resource_id}"
-    disabled = _marker_deltas(
-        target,
-        relation="permission_enabled",
-        action="DELETE",
-        phase="STAGE",
-        sequence=0,
-    )
-    parent_sequence = len(disabled)
-    enabled = _marker_deltas(
-        target,
-        relation="permission_enabled",
-        action="WRITE",
-        phase="COMMIT",
-        sequence=parent_sequence + 2,
-    )
     deltas = (
-        *disabled,
+        _enabled_delta(
+            target,
+            action="DELETE",
+            phase="STAGE",
+            sequence=0,
+        ),
         ProjectionTupleDelta(
             phase="COMMIT",
-            sequence=parent_sequence,
+            sequence=1,
             action="DELETE",
             user=f"{old_parent[0]}:{old_parent[1]}",
             relation="parent",
@@ -206,13 +187,18 @@ def build_move_plan(
         ),
         ProjectionTupleDelta(
             phase="COMMIT",
-            sequence=parent_sequence + 1,
+            sequence=2,
             action="WRITE",
             user=f"{new_parent[0]}:{new_parent[1]}",
             relation="parent",
             object=object_key,
         ),
-        *enabled,
+        _enabled_delta(
+            target,
+            action="WRITE",
+            phase="COMMIT",
+            sequence=3,
+        ),
     )
     return _lifecycle_plan(
         target,
@@ -236,12 +222,13 @@ def build_delete_plan(
     return _lifecycle_plan(
         target,
         operation_type="RESOURCE_DELETE",
-        deltas=_marker_deltas(
-            target,
-            relation="permission_enabled",
-            action="DELETE",
-            phase="COMMIT",
-            sequence=0,
+        deltas=(
+            _enabled_delta(
+                target,
+                action="DELETE",
+                phase="COMMIT",
+                sequence=0,
+            ),
         ),
         store_id=store_id,
         model_id=model_id,
