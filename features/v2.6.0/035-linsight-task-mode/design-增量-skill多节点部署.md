@@ -196,3 +196,77 @@ Resume / 换节点：copy 幂等（同 key 再 PUT）。即便本机 `file_dir` 
 | 工作区 `ls`（只返回文件） | `linsight/domain/services/workspace_backend.py` · `ls()` |
 | 任务启动触发复制 | `linsight/domain/task_exec.py` · `_create_agent` |
 | 存量空 hash 窄回填 | `linsight/domain/services/skill_bundle_backfill.py`；运维脚本 `scripts/migrate_skills_to_object_storage.py` |
+
+---
+
+## 8. 核实结论（2026-09-08，LineWalker）
+
+> 本节是对 §1–§6 的**核实批注**，不是方案修订。做了两轮独立核查：一轮追发现链路的调用顺序，一轮不设预设地扫多节点缺口。
+>
+> **一句话**：病因诊断不成立（发现层当前不会失效），但"skill 这块有问题"的直觉是对的 —— 真缺陷在别处，其中一条正是本方案步骤 3.2 顺手提到的。**建议只采纳步骤 3.2，步骤 1/2 不做。**
+
+### 8.1 §1.2 的三个失效场景，逐条核对
+
+| 方案称 | 核实结果 |
+|------|----------|
+| HITL 换节点 resume，copy 失败或 `file_dir` 未就绪 → 枚举 0 个技能（静默降级） | **不成立**。三条 agent 路径（`task_exec.py:529` resume / `:646` continue / `:732` execute）**全部**走 `_create_agent`，而 `materialize_session_skills` 就写在它体内（`:1083`）、`create_linsight_agent`（`:1088`）之前。`file_dir` 在两个 asynccontextmanager 的 `yield` 之前赋值（`:323` / `:497`），`_init_file_directory` 首行就是 `os.makedirs`，不存在"未就绪"。copy 失败时 `skills_present=False` → 中间件**根本不挂载**，且 `_push_skill_load_failure`（`:1087`）会把失败技能名推成 timeline 步骤 —— **不是静默** |
+| 存量行 `content_hash=''` → copy 得到空 bundle | 现象在，但**已经是显式失败**：异常 → `failed.append(name)` → 推给用户（`skill_provisioning.py:117-132`）。步骤 3.1 的收益只是日志分类更准，不是行为修复 |
+| 把 `skills_cache_dir` / `file_dir` 指到共享盘 | 配置误用，与代码无关。配置项 description 已写死 *"Do NOT point this at a shared volume"*（`core/config/settings.py:485-489`） |
+
+**方案漏掉的关键前提**：`WorkspaceBackend.upload_files` 是 **先 `_cache_write` 再 `_minio_put_sync`**，且 `_cache_write` 自动 `mkdir(parents=True)`。所以枚举发生时，本机 `file_dir` 必然已被**当次运行**填好——发现层不需要"上一次运行留下的目录"。这条契约已被 `test/linsight/test_skills_zone_readonly.py:112` 的 `_cache_read` 断言锁定。
+
+**方案中描述正确的部分**（这几条核实无误，不要因为上面的结论一并推翻）：`SkillsMiddleware` 确实不注册任何文件工具（deepagents 已装版本 **0.6.12**，`middleware/skills.py:786-834` 的 `__init__` 无 tools）；`WorkspaceBackend.ls` 确实只出文件条目（`is_dir` 恒 `False`），原生 `skills=` 复用工作区 backend 会枚举到 0。
+
+### 8.2 步骤 1 / 2 建议不做的理由
+
+1. **步骤 1 会波及 `glob` 和 `grep`（方案未评估）**。`WorkspaceBackend` 的 `glob` 与 `grep` **都直接消费同一个 `ls` 的 entries**：`glob` 遍历 entries 匹配即返回 → 合成的 `/skills/foo` 目录项会作为结果交给模型；`grep` 对每个条目调 `_materialize` 去 MinIO 拉取 → 每个合成目录项一次注定失败的 GET。更要紧的是 deepagents 的 `ls` **工具**只把 path 列表返回给模型（`middleware/filesystem.py:991-997`，`_apply_permissions_to_ls_results` 把 `is_dir` 丢掉），模型会看到无扩展名的 `/skills/foo` 混在文件路径里，可能去 `read` 它。方案 §5 只写了"不要改成完全非递归"，没有覆盖这两个消费者。
+2. **步骤 2 有实现级风险**：`WorkspaceBackend.__init__`（`workspace_backend.py:483-496`）**没有调用 `super().__init__()`**，继承自 `FilesystemBackend` 的 `self.cwd` / `self.virtual_mode` / `self.max_file_size_bytes` 全部未设置。把 `SkillsMiddleware` 直接挂上去之前，必须确认其调用链不碰这些继承属性，否则是 `AttributeError`。
+3. **步骤 2 的门控改动是 no-op**：`skills_present and file_dir` 中 `file_dir` 恒非空（见 8.1）；改成的 `skills_present and backend` 中 `backend` 也恒非 `None`（`agent_factory.py:892-893` 有 `_default_backend` 兜底）。两者都等价于 `bool(skills_present)`。
+
+**另有一个方案没发现、且换 backend 也修不掉的机制**：枚举结果被 checkpoint 持久化。枚举只发生在 `before_agent` / `abefore_agent`（`middleware/skills.py:941` / `:987`），结果写进 state 的 `skills_metadata`；短路条件仅判断键是否存在：
+
+```python
+# deepagents/middleware/skills.py:960-961
+if "skills_metadata" in state:
+    return None
+```
+
+（`PrivateStateAttr` 只影响 input/output schema 冒泡，它仍是 graph channel，照常被 checkpointer 持久化。）`_resume_workflow` 用 `Command(resume=...)` 从中断处续跑，entry node **不重放**，压根到不了枚举；`_continue_workflow` 会到达但被这行直接短路。
+
+这对多节点**无害**：模型 `read_file("/skills/<name>/SKILL.md")` 走的是 `WorkspaceBackend`（MinIO 权威），不是中间件那个 `FilesystemBackend`，跨节点照样读得到。清单也不会与实际复制的不一致 —— 追问虽复用同一 svid + thread，但 `/workbench/continue` 端点只接受 `session_version_id` + `question` 两个参数（`linsight/api/endpoints/linsight.py:300-305`），没有 skills 入参，`session_model.skills` 不可变。
+
+### 8.3 核查中扫出的真缺口（本次不改，留待排期）
+
+主链路多节点是通的，但以下 5 条是真的。**没有一条能靠步骤 1/2 修好。**
+
+| # | 缺口 | 性质 | 用户感知 |
+|---|------|------|----------|
+| **P0-1** | `S3Error` 击穿三处降级 handler → 技能详情页 500 | 当前代码就坏（触发条件：对象缺失） | 报错，但是**错误的报错**（裸 S3Error + 500，运维会误判 MinIO 挂了） |
+| **P0-2** | 入队→执行之间技能被停用/删除 → 丢技能 | 当前代码就坏 | **完全静默** |
+| **P1-3** | `exists()` 先看本地缓存，seeder 的自愈永不发生 | 需对象被带外删除 | 各节点表现不一致，**且重启修不好** |
+| **P1-4** | E2B 拿不到技能脚本（顺序倒置） | 仅 E2B 配置 | 脚本 `FileNotFoundError` → 撞 tool-loop breaker |
+| **P1-5** | `SkillService` 在事件循环里做同步对象存储 I/O | 多副本才明显 | 静默，只表现为偶发慢 |
+
+**P0-1**：`SkillStore.materialize` 只处理 `data is None`（`skill_store.py:397-399`），但生产 MinIO 在 NoSuchKey 时是 `raise _thaw_s3_error(e)`（`core/storage/minio/minio_storage.py:509` / `:512`），**从不返回 None**；且 skill 的 object key 刻意不带 `tenant_{code}/` 前缀（`skill_store.py:279-289` 有注释说明理由），`_translate_to_root_prefix` 返回 `None`，连 F017 回退都不会吞掉它。于是三处降级全部失效：`skill_store.py:357-359`（`list_files` 的 `except FileNotFoundError`）、`skill_service.py:150`（`get_detail` 的空预览降级）、`skill_service.py:169`（`read_bundle_file` 的 11053 业务码）。额外：`get_detail` 里的 `list_files(...)` 写在 `SkillDetail(...)` 的构造参数里（`skill_service.py:159`），**根本不在 try 块内**。
+> **测试是假绿**：`test/linsight/fixtures/fake_minio.py:50-53` 的 `get_object_sync` 在缺失时返回 `None`，所以 `test_skill_store.py:178-180` 的 `pytest.raises(FileNotFoundError)` 只在假 MinIO 下成立。修这条时必须同步把 fake 改成抛 `S3Error`，否则改完仍然测不出来。
+
+**P0-2**：`skill_provisioning.py:104-105` 的 `wanted = sorted(name for name in selected if name in enabled)` —— 被 governance 剔除的名字**既不进 `copied` 也不进 `failed`**，而 `task_exec.py:1086-1087` 只在 `failed` 非空时推时间线。用户勾选技能提交 → 队列积压或任务在 `ask_user` park 住 → 期间管理员停用/删除该技能 → worker 取到任务时直接跳过，`skills_present=False`，"技能优先"整段提示消失。前端问题卡片上的技能 chip 还在，模型行为像没选过技能。**多节点把窗口从单机同进程的毫秒级放大到跨 Redis 队列 + park-and-release 的分钟至小时级** —— 这是本方案的问题意识里唯一真正对的那部分，但方案没识别出它。
+
+**P1-3（= 本方案步骤 3.2，独立核查佐证，建议单独采纳）**：`skill_store.py:299-301` 的 `exists()` 一旦本地缓存有 `SKILL.md` 就短路返回 `True`，不探对象。唯一调用方是 seeder 的 `_already_published`（`builtin_skill_seeder.py:117`），而那里的 docstring 明确写着这次探测的意义就是"对象被带外删除/损坏时下次启动自愈"。又因为 `write_bundle` 上传后顺手种了本地缓存（`skill_store.py:326-329`）且缓存无 GC，跑过一次 seeder 的节点缓存永久是热的。后果：MinIO 上 `linsight/skills/` 前缀被误删后，该节点重启永远判 `unchanged`、**永不重新发布**，而其它节点 500 / 技能加载失败 —— 表现不一致且"重启就能修"的心智模型是错的，最费排查时间。
+
+**P1-4**：`_generate_tools`（`task_exec.py:716`）里用 `os.walk(file_dir)` 构造 E2B 的 copy-in 集合（`workbench_impl.py:2185-2198`）是**构建时快照**，而 materialize 在 `_create_agent`（`task_exec.py:732` → `:1083`）才把 bundle 写进 `file_dir` —— 顺序倒置，内置技能的 `scripts/render_docx.py` 等在 E2B 沙箱里根本不存在。同一 context 里还自相矛盾：`agent_factory.py:334-341` / `:365-372` 只按 `has_code_interpreter` 门控，硬性要求模型执行技能脚本、告诉它 `open("skills/<name>/assets/…")` 可用，而 E2B 的工具描述用 `include_skills=False`、注释已承认 skills 不在那里。Local executor 用实时 cwd（`local_sync_path`）不受影响。**与多节点无关。**
+
+**P1-5**：`SkillService` 全是 `async def`，但 store 调用全部阻塞同步（`skill_service.py:148/159/166/226/228/242/258/361`）。对照 worker 侧同一批调用被明确包了 `asyncio.to_thread` 并写明理由（`skill_provisioning.py:113-116`）。单机看不见是因为写入方顺手种了本地缓存、读永远命中本地盘；**多副本下**上传落在 A1，A2/A3 是冷缓存，每次详情页/文件预览都变成完整网络往返 + 解压 + 落盘，**阻塞整个 uvicorn 进程**（entrypoint `--workers 2`，即一半容量）。
+
+**P2（真实但影响可控）**：删除/创建非事务，留孤儿对象且全系统无 GC（`skill_service.py:255-258` / `:361-374`）；缓存只在执行删除的那个节点清理，worker 上旧 hash 目录永久残留（`skill_store.py:380-383`）；每个 API 副本每次启动全表扫一遍技能行（`skill_bundle_backfill.py:59-60`，`page_size=100000` + `bypass_tenant_filter`），迁移完成后是纯浪费。
+
+### 8.4 真正该补的是测试，不是架构
+
+现有 `TestEnumerationLoop`（`test/linsight/test_skill_provisioning.py:257`）用的是 `_CacheBackend` 假货 + 真 `FilesystemBackend`，**绕开了真 `WorkspaceBackend`** —— 所以"A 机上传 → B 机冷盘执行"这条链路在测试里从未被真正走过，本方案 §4 验收标准 1 的场景至今无人锁定。而设施全是现成的：
+
+- `test/linsight/fixtures/fake_minio.py` 已具备 `put` / `get` / `exists` / `list_objects`；
+- `test/linsight/test_skill_store.py:172-176` 已经有 `SkillStore(root=tmp_path / "other-node", minio=store.minio)` 的 A/B 节点写法（`test_materializes_from_storage_when_cache_is_cold`）—— 正是方案 §4 建议的手法，存储层已经这么做了。
+
+建议补一条端到端用例：A 节点 `write_bundle` 发布 → B 节点用**独立 `root` + 独立空 `file_dir`** 的**真** `WorkspaceBackend`（共享同一 `FakeMinioStorage`）跑 `materialize_session_skills` → 断言 ① `copied` 非空、② B 机 `file_dir` 下 `/skills/<name>/SKILL.md` 落盘、③ 真 `SkillsMiddleware.abefore_agent({}, ...)` 枚举到该技能。**这条用例应当在未改架构的当前代码上直接通过** —— 它把"发现层依赖本机目录"这个隐式契约变成一条会失败的断言，比改架构划算得多。
+
+顺带补 `test/linsight/test_workspace_backend.py` 一条 `is_dir` 正面断言：当前"`WorkspaceBackend.ls` 从不返回 `is_dir=True`"这个关键事实只被几个 stub 的默认值固化，没有任何断言锁定它。
