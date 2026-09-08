@@ -8,6 +8,7 @@ import { useToastContext } from "~/Providers";
 import { Button } from "~/components";
 import { uploadFile, uploadFileWithProgress } from "~/api/apps";
 import useLocalize from "~/hooks/useLocalize";
+import { normalizeSuffixList } from "../fileAcceptUtils";
 
 export default function InputFileComponent({
     value,
@@ -33,13 +34,17 @@ export default function InputFileComponent({
         }
     }, [disabled, onChange]);
 
+    // Two callers, two shapes. The skill form passes an array of extensions off
+    // the node template; the workflow form passes the already-joined accept
+    // string from fileAcceptToInputAccept(). The component used to call
+    // suffixes.join(",") unconditionally, which threw `join is not a function`
+    // on the workflow form — that, not the picker mechanics, is why its upload
+    // field did nothing. Normalize once so neither consumer has to care.
+    const suffixList = normalizeSuffixList(suffixes);
+    const acceptAttr = suffixList.join(",");
+
     function checkFileType(fileName: string): boolean {
-        for (let index = 0; index < suffixes.length; index++) {
-            if (fileName.endsWith(suffixes[index])) {
-                return true;
-            }
-        }
-        return false;
+        return suffixList.some((suffix) => fileName.endsWith(suffix));
     }
 
     useEffect(() => {
@@ -210,7 +215,7 @@ export default function InputFileComponent({
                 ref={inputRef}
                 type="file"
                 className="hidden"
-                accept={suffixes.join(",")}
+                accept={acceptAttr}
                 multiple={multiple}
                 disabled={disabled}
                 onChange={handleFilesPicked}
