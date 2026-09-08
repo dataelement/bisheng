@@ -30,6 +30,7 @@ from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.core.openfga.authorization_model_f048 import (
     DEFAULT_ACTION_CODES,
+    TECHNICAL_MARKER_SUBJECTS,
     get_authorization_model_f048,
     required_relations_checksum,
 )
@@ -1334,44 +1335,90 @@ class OpenFGACatalogProjector:
 
     async def commit_active(
         self,
-        changes: tuple[CatalogTupleChange, CatalogTupleChange],
+        changes: tuple[CatalogTupleChange, ...],
     ) -> str:
-        active = await self.read_active_release_keys()
-        old_key = changes[0].object.partition(":")[2]
-        new_key = changes[1].object.partition(":")[2]
-        if active == frozenset({new_key}):
+        active_by_subject = await self._read_active_release_keys_by_subject()
+        active = active_by_subject[TECHNICAL_MARKER_SUBJECTS[0]]
+        deletes = tuple(change for change in changes if change.action == "DELETE")
+        writes = tuple(change for change in changes if change.action == "WRITE")
+        old_keys = {change.object.partition(":")[2] for change in deletes}
+        new_keys = {change.object.partition(":")[2] for change in writes}
+        if len(old_keys) != 1 or len(new_keys) != 1:
+            raise CatalogCommitUnknownError("Catalog active pointer change set is invalid")
+        old_key = next(iter(old_keys))
+        new_key = next(iter(new_keys))
+        target = frozenset({new_key})
+        if all(active_by_subject[subject] == target for subject in TECHNICAL_MARKER_SUBJECTS):
             return _commit_checksum(changes)
         if active != frozenset({old_key}):
             raise CatalogCommitUnknownError(f"Catalog active pointer is {sorted(active)}")
+        for subject in TECHNICAL_MARKER_SUBJECTS[1:]:
+            subject_active = active_by_subject[subject]
+            if subject_active not in (frozenset(), frozenset({old_key})):
+                raise CatalogCommitUnknownError(
+                    f"Catalog active pointer for {subject} is {sorted(subject_active)}"
+                )
+        present_deletes = [
+            change
+            for change in deletes
+            if active_by_subject[change.user] == frozenset({old_key})
+        ]
         await self._client.write_tuples(
             writes=[
                 {
-                    "user": changes[1].user,
-                    "relation": changes[1].relation,
-                    "object": changes[1].object,
+                    "user": change.user,
+                    "relation": change.relation,
+                    "object": change.object,
                 }
+                for change in writes
             ],
             deletes=[
                 {
-                    "user": changes[0].user,
-                    "relation": changes[0].relation,
-                    "object": changes[0].object,
+                    "user": change.user,
+                    "relation": change.relation,
+                    "object": change.object,
                 }
+                for change in present_deletes
             ],
         )
         return _commit_checksum(changes)
 
-    async def read_active_release_keys(self) -> frozenset[str]:
+    async def _read_active_release_keys_by_subject(
+        self,
+    ) -> dict[str, frozenset[str]]:
         # OpenFGA rejects a tuple_key without an object type, so the filter has
         # to name the type even though the prefix check below already does.
-        rows = await self._client.read_tuples(
-            user="user:*",
-            relation="active",
-            object="permission_catalog_release:",
-            consistency=HIGHER_CONSISTENCY,
+        pages = await asyncio.gather(
+            *(
+                self._client.read_tuples(
+                    user=subject,
+                    relation="active",
+                    object="permission_catalog_release:",
+                    consistency=HIGHER_CONSISTENCY,
+                )
+                for subject in TECHNICAL_MARKER_SUBJECTS
+            )
         )
         prefix = "permission_catalog_release:"
-        return frozenset(row["object"].removeprefix(prefix) for row in rows if row["object"].startswith(prefix))
+        return {
+            subject: frozenset(
+                row["object"].removeprefix(prefix)
+                for row in rows
+                if row["object"].startswith(prefix)
+            )
+            for subject, rows in zip(TECHNICAL_MARKER_SUBJECTS, pages, strict=True)
+        }
+
+    async def read_active_release_keys(self) -> frozenset[str]:
+        active_by_subject = await self._read_active_release_keys_by_subject()
+        canonical = active_by_subject[TECHNICAL_MARKER_SUBJECTS[0]]
+        for subject in TECHNICAL_MARKER_SUBJECTS[1:]:
+            subject_active = active_by_subject[subject]
+            if subject_active and subject_active != canonical:
+                raise CatalogCommitUnknownError(
+                    f"Catalog active pointer for {subject} differs: {sorted(subject_active)}"
+                )
+        return canonical
 
     @staticmethod
     def _expected_tuples(
@@ -1393,17 +1440,18 @@ class OpenFGACatalogProjector:
             release = f"permission_model_release:{draft.release_key}~{model.model_key}"
             add(release, "release", f"permission_model:{model.model_key}")
             add(catalog, "catalog", release)
-            add("user:*", "enabled_marker", release)
-            for action in model.action_codes:
-                add("user:*", f"{action}_marker", release)
-            if "manage_permission" in model.action_codes and model.derived_level is not None:
-                upper = model.derived_level if model.allow_same_level else model.derived_level - 1
-                for level in range(1, max(upper, 0) + 1):
-                    add(
-                        "user:*",
-                        f"grant_level_{level}_marker",
-                        release,
-                    )
+            for subject in TECHNICAL_MARKER_SUBJECTS:
+                add(subject, "enabled_marker", release)
+                for action in model.action_codes:
+                    add(subject, f"{action}_marker", release)
+                if "manage_permission" in model.action_codes and model.derived_level is not None:
+                    upper = model.derived_level if model.allow_same_level else model.derived_level - 1
+                    for level in range(1, max(upper, 0) + 1):
+                        add(
+                            subject,
+                            f"grant_level_{level}_marker",
+                            release,
+                        )
         return list(tuples.values())
 
     async def _persist_plan(

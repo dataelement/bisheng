@@ -12,7 +12,7 @@ import json
 from hashlib import sha256
 from typing import Any
 
-MODEL_VERSION = "f048-v3"
+MODEL_VERSION = "f048-v4"
 
 DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "manage_permission",
@@ -134,6 +134,18 @@ def _wildcard_user_type() -> dict:
     return {"type": "user", "wildcard": {}}
 
 
+TECHNICAL_MARKER_SUBJECTS: tuple[str, ...] = ("user:*", "service_account:*")
+
+
+def _technical_marker_subject_types() -> list[dict]:
+    """Subjects gated by Catalog and resource-state markers."""
+
+    return [
+        {"type": subject.removesuffix(":*"), "wildcard": {}}
+        for subject in TECHNICAL_MARKER_SUBJECTS
+    ]
+
+
 def _subject_types() -> list[dict]:
     return [
         {"type": "user"},
@@ -220,7 +232,13 @@ def _catalog_release_type() -> dict:
     return {
         "type": "permission_catalog_release",
         "relations": {"active": _this()},
-        "metadata": {"relations": {"active": {"directly_related_user_types": [_wildcard_user_type()]}}},
+        "metadata": {
+            "relations": {
+                "active": {
+                    "directly_related_user_types": _technical_marker_subject_types(),
+                }
+            }
+        },
     }
 
 
@@ -236,7 +254,9 @@ def _model_release_type(action_codes: tuple[str, ...]) -> dict:
     }
     metadata: dict[str, dict] = {
         "catalog": {"directly_related_user_types": [{"type": "permission_catalog_release"}]},
-        "enabled_marker": {"directly_related_user_types": [_wildcard_user_type()]},
+        "enabled_marker": {
+            "directly_related_user_types": _technical_marker_subject_types(),
+        },
     }
     for action in action_codes:
         marker = f"{action}_marker"
@@ -245,7 +265,9 @@ def _model_release_type(action_codes: tuple[str, ...]) -> dict:
             _computed("published"),
             _computed(marker),
         )
-        metadata[marker] = {"directly_related_user_types": [_wildcard_user_type()]}
+        metadata[marker] = {
+            "directly_related_user_types": _technical_marker_subject_types(),
+        }
     for level in range(1, 5):
         marker = f"grant_level_{level}_marker"
         relations[marker] = _this()
@@ -253,7 +275,9 @@ def _model_release_type(action_codes: tuple[str, ...]) -> dict:
             _computed("published"),
             _computed(marker),
         )
-        metadata[marker] = {"directly_related_user_types": [_wildcard_user_type()]}
+        metadata[marker] = {
+            "directly_related_user_types": _technical_marker_subject_types(),
+        }
     return {
         "type": "permission_model_release",
         "relations": relations,
@@ -353,8 +377,12 @@ def _resource_type(type_name: str, action_codes: tuple[str, ...]) -> dict:
     }
     metadata: dict[str, dict] = {
         "grant": {"directly_related_user_types": [{"type": "permission_grant"}]},
-        "permission_enabled": {"directly_related_user_types": [_wildcard_user_type()]},
-        "custom_mode": {"directly_related_user_types": [_wildcard_user_type()]},
+        "permission_enabled": {
+            "directly_related_user_types": _technical_marker_subject_types(),
+        },
+        "custom_mode": {
+            "directly_related_user_types": _technical_marker_subject_types(),
+        },
         "shared_with": {"directly_related_user_types": [{"type": "tenant"}]},
         "public_reader": {"directly_related_user_types": [_wildcard_user_type()]},
         "system_download_marker": {"directly_related_user_types": [_wildcard_user_type()]},
@@ -364,7 +392,9 @@ def _resource_type(type_name: str, action_codes: tuple[str, ...]) -> dict:
         relations["parent"] = _this()
         relations["inherit_mode"] = _this()
         metadata["parent"] = {"directly_related_user_types": [{"type": parent_type} for parent_type in parent_types]}
-        metadata["inherit_mode"] = {"directly_related_user_types": [_wildcard_user_type()]}
+        metadata["inherit_mode"] = {
+            "directly_related_user_types": _technical_marker_subject_types(),
+        }
 
     relations["system_visible"] = _system_visible_relation(
         parent_types=parent_types,
