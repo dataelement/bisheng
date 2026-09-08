@@ -383,8 +383,8 @@ async def test_personal_space_owner_executes_directly_while_editor_uses_current_
             new=AsyncMock(return_value=set()),
         ),
         patch.object(
-            PermissionService,
-            "resolve_permanent_creator_user_ids_strict",
+            KnowledgeSpaceFileChangeApproverResolver,
+            "_resolve_permanent_creator_user_ids",
             new=AsyncMock(return_value={1}),
         ),
     ):

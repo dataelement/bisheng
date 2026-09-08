@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Iterable
 
 from bisheng.core.openfga.authorization_model_f048 import LEGACY_RESOURCE_TYPES
 from bisheng.core.openfga.exceptions import FGAConnectionError, FGAWriteError
@@ -831,29 +832,32 @@ class PermissionService:
         )
 
     @classmethod
-    async def resolve_permanent_creator_user_ids_strict(
+    async def filter_active_user_ids_strict(
         cls,
         *,
         tenant_id: int,
-        object_type: str,
-        object_id: str,
+        user_ids: Iterable[int],
     ) -> set[int]:
-        """Resolve active creators whose resource type defines permanent ownership.
+        """Keep only the ids that are active users of ``tenant_id``.
 
-        The OpenFGA availability boundary remains the caller's responsibility;
-        this method only projects the established knowledge-space creator rule
-        after the caller has completed its strict relation read.
+        Subjects a caller resolved outside OpenFGA, such as a resource creator
+        who holds permanent ownership, still have to clear the same
+        tenant-activity filter the strict relation reads apply. The caller owns
+        the business read; this service never loads business resources.
+
+        The knowledge-space variant of this used to live here and read the
+        creator out of Knowledge's own tables. F048 removed that read together
+        with its private helper, but one caller kept calling the helper, so
+        every approver resolution raised ``AttributeError`` at runtime.
         """
         from bisheng.core.context.tenant import get_current_tenant_id
 
         current_tenant_id = get_current_tenant_id()
         if current_tenant_id is None or int(current_tenant_id) != int(tenant_id):
-            raise RuntimeError("a matching tenant context is required for permanent creator resolution")
-        if object_type != "knowledge_space":
-            return set()
+            raise RuntimeError("a matching tenant context is required for active user filtering")
 
-        creator_id = await cls._get_resource_creator(object_type, object_id)
-        if creator_id is None:
+        normalized = {int(user_id) for user_id in user_ids}
+        if not normalized:
             return set()
 
         from bisheng.permission.domain.repositories.grant_subject_query_repository import (
@@ -861,7 +865,7 @@ class PermissionService:
         )
 
         return await GrantSubjectQueryRepository().filter_active_user_ids_in_tenant(
-            user_ids={int(creator_id)},
+            user_ids=normalized,
             tenant_id=int(tenant_id),
         )
 

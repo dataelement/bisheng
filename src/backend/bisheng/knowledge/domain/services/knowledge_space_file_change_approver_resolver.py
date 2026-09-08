@@ -57,10 +57,9 @@ class KnowledgeSpaceFileChangeApproverResolver:
             # model even while their best-effort OpenFGA owner tuple is waiting
             # for compensation. Keep the strict OpenFGA read above as the
             # availability boundary, then merge the permission service result.
-            creator_ids = await PermissionService.resolve_permanent_creator_user_ids_strict(
+            creator_ids = await cls._resolve_permanent_creator_user_ids(
                 tenant_id=int(tenant_id),
-                object_type="knowledge_space",
-                object_id=str(space_id),
+                space_id=int(space_id),
             )
             resolved = set(resolved).union(creator_ids)
             excluded_user_id = int(applicant_user_id) if applicant_user_id is not None else None
@@ -71,6 +70,36 @@ class KnowledgeSpaceFileChangeApproverResolver:
             raise
         except Exception as exc:
             raise SpaceFileChangeApproverUnavailableError(exc) from exc
+
+    @classmethod
+    async def _resolve_permanent_creator_user_ids(
+        cls,
+        *,
+        tenant_id: int,
+        space_id: int,
+    ) -> set[int]:
+        """The space creator stays an owner even with no OpenFGA owner tuple.
+
+        The creator sits in Knowledge's own table, so Knowledge reads it here
+        and asks the permission service only to drop ids that are not active
+        users of this tenant. Reading it from inside PermissionService is what
+        F048 deliberately removed.
+        """
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+
+        space = await KnowledgeDao.aquery_by_id(int(space_id))
+        if (
+            space is None
+            or space.type != KnowledgeTypeEnum.SPACE.value
+            or space.user_id is None
+            or int(space.tenant_id or 0) != int(tenant_id)
+        ):
+            return set()
+
+        return await PermissionService.filter_active_user_ids_strict(
+            tenant_id=int(tenant_id),
+            user_ids={int(space.user_id)},
+        )
 
     @classmethod
     async def is_current_approver(
