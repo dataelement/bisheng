@@ -100,6 +100,7 @@ class KnowledgeSpaceFileChangeApprovalPolicy:
                 tenant_id=tenant_id,
                 space_id=int(row.space_id),
                 applicant_user_id=None,
+                actor_user_id=operator_user_id,
             )
             if operator_user_id not in self._normalize_approvers(approver_user_ids):
                 raise ApprovalDecisionPermanentError(

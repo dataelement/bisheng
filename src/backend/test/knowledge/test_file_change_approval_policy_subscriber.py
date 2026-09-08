@@ -273,6 +273,7 @@ async def test_policy_rechecks_current_owner_manager_at_decision_time(session_fa
         tenant_id=TENANT_ID,
         space_id=88,
         applicant_user_id=None,
+        actor_user_id=999,
     )
 
 

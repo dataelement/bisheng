@@ -6,7 +6,6 @@ from typing import Protocol, runtime_checkable
 from bisheng.common.errcode.knowledge_space import SpaceFileChangeApproverUnavailableError
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
-from bisheng.permission.domain.services.permission_service import PermissionService
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,9 +29,9 @@ class KnowledgeSpaceFileChangeApproverResolverPort(Protocol):
 
 
 class KnowledgeSpaceFileChangeApproverResolver:
-    """Strictly resolve current F046 approvers from authoritative ReBAC data."""
+    """Strictly resolve current F046 approvers from authoritative F048 Grants."""
 
-    _APPROVER_RELATIONS = ("owner", "manager")
+    _APPROVER_MODEL_KEYS = ("owner", "manager")
 
     @classmethod
     async def resolve_approver_user_ids(
@@ -41,32 +40,41 @@ class KnowledgeSpaceFileChangeApproverResolver:
         tenant_id: int,
         space_id: int,
         applicant_user_id: int | None,
+        actor_user_id: int | None = None,
     ) -> list[int]:
         try:
+            normalized_tenant_id = int(tenant_id)
+            normalized_space_id = int(space_id)
             current_tenant_id = get_current_tenant_id()
-            if current_tenant_id is None or int(current_tenant_id) != int(tenant_id):
+            if current_tenant_id is None or int(current_tenant_id) != normalized_tenant_id:
                 raise RuntimeError("a matching tenant context is required for file change approvers")
 
-            resolved = await PermissionService.resolve_resource_relation_user_ids_strict(
-                tenant_id=int(tenant_id),
-                object_type="knowledge_space",
-                object_id=str(space_id),
-                relations=cls._APPROVER_RELATIONS,
+            normalized_actor_user_id = int(actor_user_id if actor_user_id is not None else applicant_user_id)
+            if normalized_actor_user_id <= 0:
+                raise RuntimeError("a positive actor user is required for file change approvers")
+
+            from bisheng.permission.application.business_authorization import (
+                list_business_effective_direct_user_ids_by_model,
             )
-            # Knowledge-space creators are permanent owners in the permission
-            # model even while their best-effort OpenFGA owner tuple is waiting
-            # for compensation. Keep the strict OpenFGA read above as the
-            # availability boundary, then merge the permission service result.
-            creator_ids = await PermissionService.resolve_permanent_creator_user_ids_strict(
-                tenant_id=int(tenant_id),
-                object_type="knowledge_space",
-                object_id=str(space_id),
+            from bisheng.permission.domain.services.permission_action_service import PermissionActor
+
+            by_model = await list_business_effective_direct_user_ids_by_model(
+                actor=PermissionActor(
+                    user_id=normalized_actor_user_id,
+                    current_tenant_id=normalized_tenant_id,
+                ),
+                resource_type="knowledge_space",
+                resource_id=normalized_space_id,
+                model_keys=cls._APPROVER_MODEL_KEYS,
             )
-            resolved = set(resolved).union(creator_ids)
             excluded_user_id = int(applicant_user_id) if applicant_user_id is not None else None
-            return sorted(
-                {int(user_id) for user_id in resolved if excluded_user_id is None or int(user_id) != excluded_user_id}
-            )
+            resolved = {
+                int(user_id)
+                for model_key in cls._APPROVER_MODEL_KEYS
+                for user_id in by_model.get(model_key, ())
+                if user_id.isdigit()
+            }
+            return sorted(user_id for user_id in resolved if excluded_user_id is None or user_id != excluded_user_id)
         except SpaceFileChangeApproverUnavailableError:
             raise
         except Exception as exc:
@@ -84,6 +92,7 @@ class KnowledgeSpaceFileChangeApproverResolver:
             tenant_id=tenant_id,
             space_id=space_id,
             applicant_user_id=None,
+            actor_user_id=user_id,
         )
         return int(user_id) in approver_user_ids
 

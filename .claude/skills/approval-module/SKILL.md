@@ -102,8 +102,8 @@ Approval terminal UoW
 `queued + decision_event_id`再派发业务任务，派发临时失败保留 queued 供同事件重投；其他终态关闭请求并释放 active marker。
 
 **知识空间文件变更也由 Knowledge 消费决定事实**：`KnowledgeSpaceFileChangeApprovalPolicy` 强制初始审批人
-精确等于当前 owner/manager 集合，并在决定时持锁重读 request 绑定、实时资格与 tenant ContextVar；OpenFGA
-不可用时 fail-closed。`KnowledgeSpaceFileChangeDecisionSubscriber` 只锁 Knowledge request，approved 先提交
+精确等于 F048 当前有效 owner/manager 直接用户集合，并在决定时持锁重读 request 绑定、实时资格与 tenant ContextVar；
+F048 roster 不可用时 fail-closed。`KnowledgeSpaceFileChangeDecisionSubscriber` 只锁 Knowledge request，approved 先提交
 `queued + decision_event_id` 再派发 Knowledge 任务；其他终态先提交 `closed + decision_event_id` 再清理暂存上传。
 `result_snapshot` 记录派发/清理确认状态，同一事件可补派或补清，成功后不重复副作用。
 
@@ -118,7 +118,7 @@ pending task，并维护 `approver_empty`，历史终态 task 永不复活。审
 Permission 的 `FileChangeApproverReconcileDispatcher` 只编排 Knowledge 公共 resolver 与 F025 application port：
 显式 tenant 必须与 ContextVar 一致，Knowledge 返回 `instance_id + approver_user_ids` DTO 后，F025 只接收
 `tenant_id/instance_id/approver_user_ids/reason`。权限写成功事件、Knowledge 页面惰性校验和 Beat 均复用该入口；
-resolver/OpenFGA 故障必须传播，绝不能伪造成空审批人集合，也不能回退到 `worker/approval` 或 Approval ORM 查询。
+resolver/F048 roster 故障必须传播，绝不能伪造成空审批人集合，也不能回退到 `worker/approval` 或 Approval ORM 查询。
 
 `decide_instance_for_current_approver()` 是文件页单条/批量审批的权威入口，endpoint 不得直接改 task。F046 policy 在管理员旁路或历史 task 判断之前实时校验 owner/manager；资格依赖故障 fail-closed。
 
@@ -169,7 +169,7 @@ resolver/OpenFGA 故障必须传播，绝不能伪造成空审批人集合，也
 | `worker/approval/tasks.py` | Celery 任务（走默认 `celery` 队列） | `execute_approval_outbox`、`retry_approval_outbox` |
 | `worker/knowledge/file_change_tasks.py` | F046 Knowledge-owned coordinate/step/ack/watchdog/补偿/cleanup/动态审批人任务；显式 tenant header，统一 `knowledge_celery` | `CeleryKnowledgeSpaceFileChangeDispatcher`、`coordinate_file_change_execution`、`execute_file_change_step`、`watchdog_all_file_change_executions`、`compensate_all_file_change_execution_steps`、`cleanup_all_file_change_residue`、`reconcile_all_file_change_approvers` |
 | `knowledge/domain/services/knowledge_space_file_change_approval_policy.py` | F046 Knowledge-owned 提交/决定 policy；严格 owner/manager 集合、实时资格与 tenant/instance/fingerprint 绑定 fail-closed | `validate_submission()`、`authorize_decision()` |
-| `knowledge/domain/services/knowledge_space_file_change_approver_resolver.py` | F046 owner/manager 权威解析与 Permission 对账公共 DTO/port；OpenFGA/tenant/候选读取失败统一 fail-closed | `resolve_approver_user_ids()`、`resolve_reconciliation_targets()` |
+| `knowledge/domain/services/knowledge_space_file_change_approver_resolver.py` | F046 从 F048 当前有效 Grant/Assignee roster 解析 owner/manager 直接用户，并提供 Permission 对账公共 DTO/port；tenant/资源/roster 读取失败统一 fail-closed | `resolve_approver_user_ids()`、`resolve_reconciliation_targets()` |
 | `knowledge/domain/services/knowledge_space_file_change_decision_subscriber.py` | F046 幂等决定消费；先持久化 queued/closed 与 event，再补派业务任务或补做终态清理 | `accept()` |
 | `knowledge/domain/services/knowledge_space_file_change_terminal_cleanup_service.py` | F046 独立稳定终态清理 owner；校验 request/stage 绑定并持久化 pending/success，只依赖 Knowledge 事实 | `cleanup()` |
 | `knowledge/domain/services/knowledge_space_file_change_service.py` | F046 Knowledge-owned 建单入口；权限/冲突校验后，在 caller-owned UoW 内写 request/stage/footprint，并以 canonical business key/fingerprint 调 Approval public submission port | `request_change()`、`_create_pending_bundle_in_uow()` |
@@ -272,9 +272,9 @@ resolver/OpenFGA 故障必须传播，绝不能伪造成空审批人集合，也
 - **completion mode**：`decision_delivery`；由 Knowledge policy/subscriber 接入，不注册 handler，不创建 `ApprovalOutbox`
 - **固定配置**：始终 enabled、单 catch-all flow、单个 `or` 节点，审批人来源只能是
   `knowledge_space_owner + knowledge_space_manager`；管理端不得 disable/delete/改 route/flow/node
-- **动态资格**：显式 owner/manager 由 OpenFGA 权威解析；知识空间数据库创建者按 F044 永久 owner 语义合并，
-  其 best-effort owner tuple 尚未补偿时仍可直接执行或审批。OpenFGA 查询故障始终 fail-closed，不以数据库创建者
-  降级绕过故障。新管理员通过候选发现和对账补 task，former approver 的 pending task 取消且失去详情可见性；
+- **动态资格**：owner/manager 从 F048 当前有效 `permission_grant` / `permission_grant_assignee` roster 读取且只取
+  直接用户；知识空间创建者由受保护的 `owner` Grant 自然包含，不再额外读取数据库创建者或 legacy relation tuple。
+  F048 资源校验或 roster 查询故障始终 fail-closed。新管理员通过候选发现和对账补 task，former approver 的 pending task 取消且失去详情可见性；
   最终 decision 前再次校验当前资格
 - **决定消费**：Knowledge request 使用正式 `business_key/request_fingerprint/decision_event_id/result_snapshot`
   绑定审批事实。approved 先提交 queued/event 后派发；reject/withdraw/cancel 先提交 closed/event 后清理 upload stage；
@@ -568,7 +568,7 @@ FROM knowledge_space_file_change_request WHERE approval_instance_id=<N>;
 SELECT id, approver_user_id, status FROM approval_task WHERE instance_id=<N>;
 SELECT id, exception_type, status, detail FROM approval_exception WHERE instance_id=<N>;
 ```
-静态 source 检查 `applicant_department_id` 与节点配置；F046 检查 Knowledge resolver 的当前 owner/manager、tenant ContextVar 与 OpenFGA 可用性。former approver 的 pending task 被取消且不会复活是预期行为。
+静态 source 检查 `applicant_department_id` 与节点配置；F046 检查 Knowledge resolver 的当前 owner/manager、tenant ContextVar 与 F048 roster 可用性。former approver 的 pending task 被取消且不会复活是预期行为。
 
 ---
 

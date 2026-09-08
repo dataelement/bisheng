@@ -10,51 +10,45 @@ from bisheng.core.openfga.exceptions import FGAConnectionError
 from bisheng.knowledge.domain.services.knowledge_space_file_change_approver_resolver import (
     KnowledgeSpaceFileChangeApproverResolver,
 )
-from bisheng.permission.domain.services.permission_service import PermissionService
+from bisheng.permission.domain.services.permission_action_service import PermissionActor
 
 
 @pytest.fixture(autouse=True)
 def reset_tenant_context():
     token = current_tenant_id.set(None)
-    with patch.object(
-        PermissionService,
-        "resolve_permanent_creator_user_ids_strict",
-        AsyncMock(return_value=set()),
-    ):
-        yield
+    yield
     current_tenant_id.reset(token)
 
 
 async def test_resolve_approvers_uses_authoritative_owner_and_manager_relations():
     set_current_tenant_id(17)
 
-    with patch.object(
-        PermissionService,
-        "resolve_resource_relation_user_ids_strict",
-        AsyncMock(return_value={11, 7, 9}),
+    with patch(
+        "bisheng.permission.application.business_authorization.list_business_effective_direct_user_ids_by_model",
+        AsyncMock(return_value={"owner": ("11", "7"), "manager": ("9",)}),
     ) as strict_resolve:
         result = await KnowledgeSpaceFileChangeApproverResolver.resolve_approver_user_ids(
             tenant_id=17,
             space_id=101,
             applicant_user_id=None,
+            actor_user_id=23,
         )
 
     assert result == [7, 9, 11]
     strict_resolve.assert_awaited_once_with(
-        tenant_id=17,
-        object_type="knowledge_space",
-        object_id="101",
-        relations=("owner", "manager"),
+        actor=PermissionActor(user_id=23, current_tenant_id=17),
+        resource_type="knowledge_space",
+        resource_id=101,
+        model_keys=("owner", "manager"),
     )
 
 
 async def test_resolve_approvers_deduplicates_and_excludes_applicant():
     set_current_tenant_id(17)
 
-    with patch.object(
-        PermissionService,
-        "resolve_resource_relation_user_ids_strict",
-        AsyncMock(return_value=[9, 7, 9, 11, 7]),
+    with patch(
+        "bisheng.permission.application.business_authorization.list_business_effective_direct_user_ids_by_model",
+        AsyncMock(return_value={"owner": ("9", "7", "9"), "manager": ("11", "7")}),
     ):
         result = await KnowledgeSpaceFileChangeApproverResolver.resolve_approver_user_ids(
             tenant_id=17,
@@ -65,49 +59,35 @@ async def test_resolve_approvers_deduplicates_and_excludes_applicant():
     assert result == [7, 11]
 
 
-async def test_resolve_approvers_includes_active_permanent_space_creator_without_owner_tuple():
+async def test_resolve_approvers_includes_protected_creator_owner_grant():
     set_current_tenant_id(17)
 
-    with (
-        patch.object(
-            PermissionService,
-            "resolve_resource_relation_user_ids_strict",
-            AsyncMock(return_value=set()),
-        ),
-        patch.object(
-            PermissionService,
-            "resolve_permanent_creator_user_ids_strict",
-            AsyncMock(return_value={7}),
-        ) as permanent_creators,
-    ):
+    with patch(
+        "bisheng.permission.application.business_authorization.list_business_effective_direct_user_ids_by_model",
+        AsyncMock(return_value={"owner": ("7",), "manager": ()}),
+    ) as roster:
         result = await KnowledgeSpaceFileChangeApproverResolver.resolve_approver_user_ids(
             tenant_id=17,
             space_id=101,
             applicant_user_id=None,
+            actor_user_id=23,
         )
 
     assert result == [7]
-    permanent_creators.assert_awaited_once_with(
-        tenant_id=17,
-        object_type="knowledge_space",
-        object_id="101",
+    roster.assert_awaited_once_with(
+        actor=PermissionActor(user_id=23, current_tenant_id=17),
+        resource_type="knowledge_space",
+        resource_id=101,
+        model_keys=("owner", "manager"),
     )
 
 
-async def test_resolve_approvers_excludes_permanent_creator_when_creator_is_applicant():
+async def test_resolve_approvers_excludes_creator_owner_grant_when_creator_is_applicant():
     set_current_tenant_id(17)
 
-    with (
-        patch.object(
-            PermissionService,
-            "resolve_resource_relation_user_ids_strict",
-            AsyncMock(return_value=set()),
-        ),
-        patch.object(
-            PermissionService,
-            "resolve_permanent_creator_user_ids_strict",
-            AsyncMock(return_value={7}),
-        ),
+    with patch(
+        "bisheng.permission.application.business_authorization.list_business_effective_direct_user_ids_by_model",
+        AsyncMock(return_value={"owner": ("7",), "manager": ()}),
     ):
         result = await KnowledgeSpaceFileChangeApproverResolver.resolve_approver_user_ids(
             tenant_id=17,
@@ -121,10 +101,9 @@ async def test_resolve_approvers_excludes_permanent_creator_when_creator_is_appl
 async def test_resolve_approvers_returns_empty_only_for_authoritative_empty_result():
     set_current_tenant_id(17)
 
-    with patch.object(
-        PermissionService,
-        "resolve_resource_relation_user_ids_strict",
-        AsyncMock(return_value=set()),
+    with patch(
+        "bisheng.permission.application.business_authorization.list_business_effective_direct_user_ids_by_model",
+        AsyncMock(return_value={"owner": (), "manager": ()}),
     ):
         result = await KnowledgeSpaceFileChangeApproverResolver.resolve_approver_user_ids(
             tenant_id=17,
@@ -140,16 +119,16 @@ async def test_resolve_approvers_returns_empty_only_for_authoritative_empty_resu
     [
         FGAConnectionError("offline"),
         RuntimeError("tenant context is required"),
-        ValueError("Unsupported OpenFGA subject"),
+        ValueError("invalid F048 roster subject"),
+        AttributeError("legacy PermissionService creator lookup is unavailable"),
     ],
 )
 async def test_resolve_approvers_maps_authoritative_failures_to_18076(failure):
     set_current_tenant_id(17)
 
     with (
-        patch.object(
-            PermissionService,
-            "resolve_resource_relation_user_ids_strict",
+        patch(
+            "bisheng.permission.application.business_authorization.list_business_effective_direct_user_ids_by_model",
             AsyncMock(side_effect=failure),
         ),
         pytest.raises(SpaceFileChangeApproverUnavailableError) as exc_info,
@@ -170,9 +149,8 @@ async def test_resolver_never_uses_root_or_missing_tenant_fallback(context_tenan
         set_current_tenant_id(context_tenant)
 
     with (
-        patch.object(
-            PermissionService,
-            "resolve_resource_relation_user_ids_strict",
+        patch(
+            "bisheng.permission.application.business_authorization.list_business_effective_direct_user_ids_by_model",
             AsyncMock(),
         ) as strict_resolve,
         pytest.raises(SpaceFileChangeApproverUnavailableError) as exc_info,
@@ -190,10 +168,9 @@ async def test_resolver_never_uses_root_or_missing_tenant_fallback(context_tenan
 async def test_is_current_approver_uses_same_strict_resolution():
     set_current_tenant_id(17)
 
-    with patch.object(
-        PermissionService,
-        "resolve_resource_relation_user_ids_strict",
-        AsyncMock(return_value={7, 9}),
+    with patch(
+        "bisheng.permission.application.business_authorization.list_business_effective_direct_user_ids_by_model",
+        AsyncMock(return_value={"owner": ("7",), "manager": ("9",)}),
     ):
         assert await KnowledgeSpaceFileChangeApproverResolver.is_current_approver(
             tenant_id=17,
