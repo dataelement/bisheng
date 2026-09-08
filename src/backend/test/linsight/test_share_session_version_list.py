@@ -30,6 +30,22 @@ VIEWER_ID = 999
 SESSION_ID = "sess-share-1"
 
 
+@pytest.fixture(autouse=True)
+def _no_feedback_lookup(monkeypatch: pytest.MonkeyPatch):
+    """Stub the like/dislike lookup the endpoint gained in ec99d17d.
+
+    That call reads ChatMessage, which is tenant-aware, so it needs a tenant
+    ContextVar this file never sets — and it is not what these tests are about.
+    The module docstring's contract (auth branch only, DB/service mocked) is
+    restored by stubbing it here rather than by giving the file a tenant.
+    """
+    monkeypatch.setattr(
+        linsight_ep.linsight_execute_utils,
+        "get_task_feedback_by_version",
+        AsyncMock(return_value={}),
+    )
+
+
 def _version(vid: str, user_id: int = OWNER_ID) -> LinsightSessionVersion:
     return LinsightSessionVersion(id=vid, session_id=SESSION_ID, user_id=user_id, question="q")
 
