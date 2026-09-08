@@ -25,13 +25,13 @@ import {
     Checkbox,
     DropdownMenu,
     DropdownMenuContent,
-    DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "~/components";
 import { cn } from "~/utils";
 import TagGroup from "./TagGroup";
 import { ApprovalLockGuard } from "./ApprovalLockGuard";
+import { ApprovalLockMenuItem } from "./ApprovalLockMenuItem";
 import { EditEncodingModal } from "./EditEncodingModal";
 import FileIconRenderer from "./FileIcon";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
@@ -1356,20 +1356,9 @@ function FileRow({
                 </button>
             )}
             {showMoreMenu && (
-                fileLocked ? (
-                    <ApprovalLockGuard locked>
-                        <button
-                            type="button"
-                            className={cn(FILE_ROW_ACTION_BTN_CLASS, "cursor-not-allowed opacity-50")}
-                            disabled
-                        >
-                            <MoreVertical className="size-4" />
-                        </button>
-                    </ApprovalLockGuard>
-                ) : (
                     <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
                         <DropdownMenuTrigger asChild>
-                            <button type="button" className={FILE_ROW_ACTION_BTN_CLASS}>
+                            <button type="button" aria-label="更多操作" className={FILE_ROW_ACTION_BTN_CLASS}>
                                 <MoreVertical className="size-4" />
                             </button>
                         </DropdownMenuTrigger>
@@ -1378,7 +1367,7 @@ function FileRow({
                         className={cn("w-32", knowledgeSpaceDropdownSurfaceClassName)}
                     >
                         {showPublish && (
-                            <DropdownMenuItem
+                            <ApprovalLockMenuItem locked={fileLocked}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onPublishFile?.(file);
@@ -1386,10 +1375,10 @@ function FileRow({
                             >
                                 <Send className="mr-2 size-4" />
                                 发布
-                            </DropdownMenuItem>
+                            </ApprovalLockMenuItem>
                         )}
                         {showShare && (
-                            <DropdownMenuItem
+                            <ApprovalLockMenuItem locked={fileLocked}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onShareFile?.(file);
@@ -1397,10 +1386,10 @@ function FileRow({
                             >
                                 <Share2 className="mr-2 size-4" />
                                 分享
-                            </DropdownMenuItem>
+                            </ApprovalLockMenuItem>
                         )}
                         {canEditTags && (
-                            <DropdownMenuItem
+                            <ApprovalLockMenuItem locked={fileLocked}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onEditTags();
@@ -1408,10 +1397,10 @@ function FileRow({
                             >
                                 <Tag className="mr-2 size-4" />
                                 {localize("com_knowledge.edit_tags")}
-                            </DropdownMenuItem>
+                            </ApprovalLockMenuItem>
                         )}
                         {canRenameContent && (
-                            <DropdownMenuItem
+                            <ApprovalLockMenuItem locked={fileLocked}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     startRenaming();
@@ -1419,10 +1408,10 @@ function FileRow({
                             >
                                 <Edit className="mr-2 size-4" />
                                 {localize("com_knowledge.rename")}
-                            </DropdownMenuItem>
+                            </ApprovalLockMenuItem>
                         )}
                         {canMove && (
-                            <DropdownMenuItem
+                            <ApprovalLockMenuItem locked={fileLocked}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onMove?.();
@@ -1430,10 +1419,10 @@ function FileRow({
                             >
                                 <FolderInput className="mr-2 size-4" />
                                 {localize("com_knowledge.move")}
-                            </DropdownMenuItem>
+                            </ApprovalLockMenuItem>
                         )}
                         {canRetry && (
-                            <DropdownMenuItem
+                            <ApprovalLockMenuItem locked={fileLocked}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onRetry?.();
@@ -1441,10 +1430,10 @@ function FileRow({
                             >
                                 <RefreshCw className="mr-2 size-4" />
                                 {retryText}
-                            </DropdownMenuItem>
+                            </ApprovalLockMenuItem>
                         )}
                         {onManagePermission && (
-                            <DropdownMenuItem
+                            <ApprovalLockMenuItem locked={fileLocked}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onManagePermission();
@@ -1452,10 +1441,10 @@ function FileRow({
                             >
                                 <Shield className="mr-2 size-4" />
                                 {localize("com_permission.manage_permission")}
-                            </DropdownMenuItem>
+                            </ApprovalLockMenuItem>
                         )}
                         {versionManagementEnabled && !isFolder && !isReadonlyDistributionEntry && file.status === FileStatus.SUCCESS && isAdmin && (
-                            <DropdownMenuItem
+                            <ApprovalLockMenuItem locked={fileLocked}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onOpenVersionManagement?.(file);
@@ -1463,10 +1452,10 @@ function FileRow({
                             >
                                 <GitBranch className="mr-2 size-4" />
                                 {localize("com_knowledge.version.menu_version_management")}
-                            </DropdownMenuItem>
+                            </ApprovalLockMenuItem>
                         )}
                         {versionManagementEnabled && !isFolder && file.is_multi_version && (
-                            <DropdownMenuItem
+                            <ApprovalLockMenuItem locked={fileLocked}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onOpenVersionHistory?.(file);
@@ -1474,10 +1463,10 @@ function FileRow({
                             >
                                 <History className="mr-2 size-4" />
                                 {localize("com_knowledge.version.menu_version_history")}
-                            </DropdownMenuItem>
+                            </ApprovalLockMenuItem>
                         )}
                         {canDelete && (
-                            <DropdownMenuItem
+                            <ApprovalLockMenuItem locked={fileLocked}
                                 className="text-[#f53f3f] focus:bg-[#fff2f0] focus:text-[#f53f3f]"
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -1486,11 +1475,10 @@ function FileRow({
                             >
                                 <Trash2 className="mr-2 size-4" />
                                 {localize("com_knowledge.delete")}
-                            </DropdownMenuItem>
+                            </ApprovalLockMenuItem>
                         )}
                     </DropdownMenuContent>
                     </DropdownMenu>
-                )
             )}
         </>
     ) : null;

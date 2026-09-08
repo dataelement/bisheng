@@ -20,3 +20,9 @@
   border-color: #e5e6eb;
   cursor: not-allowed;
 }
+
+.locked [role="menuitem"][data-disabled] {
+  color: #c9cdd4;
+  opacity: 1;
+  cursor: not-allowed;
+}
