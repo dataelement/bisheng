@@ -100,6 +100,11 @@ async def get_config(request: Request, login_user=LoginUserDep):
     # deliberately left unfiltered — that endpoint edits the curated list.
     if ret.get("tools"):
         ret["tools"] = await WorkStationService.afilter_tools_by_use_permission(ret["tools"], login_user)
+    # Organization knowledge bases in this user-facing payload seed default
+    # selections and expose display metadata. Filter by `visible` intentionally;
+    # whether a selected library may be used is enforced by the retrieval path.
+    if ret.get("orgKbs"):
+        ret["orgKbs"] = await WorkStationService.afilter_org_kbs_by_visible_permission(ret["orgKbs"], login_user)
     ret["linsightConfig"] = linsight_config.model_dump() if linsight_config else {}
     ret["enable_etl4lm"] = knowledge_conf.image_parser_enabled
     linsight_invitation_code = (await bisheng_settings.aget_all_config()).get("linsight_invitation_code", None)

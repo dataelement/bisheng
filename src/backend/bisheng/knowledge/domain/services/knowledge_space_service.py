@@ -2256,10 +2256,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             creator_users = []
             success_file_map = await KnowledgeFileDao.async_count_success_files_batch(space_ids_int)
-        visible_map = await self._batch_actions(
-            "knowledge_space",
-            space_ids_int,
-            ("visible",),
+        # Square subscription state must match the personal ``/joined`` list.
+        # Do not use the generic action batch here: it expands every action for
+        # super admins, which would incorrectly label every square space joined.
+        visible_map = await batch_check_business_visible(
+            self.login_user,
+            resource_type="knowledge_space",
+            resource_ids=space_ids_int,
         )
         user_map = {u.user_id: u for u in (creator_users or [])}
         resolved_subscription_status = {
@@ -2282,8 +2285,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 user_subscription_status,
                 user_subscription_update_time,
             )
-            if subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED and "visible" in visible_map.get(
-                str(space.id), frozenset()
+            # batch_check_business_visible returns dict[str, bool]; this line used
+            # to read it as a set of actions, which is always falsy against a bool.
+            if (
+                subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+                and visible_map.get(str(space.id), False)
             ):
                 subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
             result_list.append(
