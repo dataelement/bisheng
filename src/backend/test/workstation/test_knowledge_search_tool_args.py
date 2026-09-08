@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import json
 
+from langgraph.prebuilt import ToolNode
+
 from bisheng.citation.domain.services.citation_prompt_helper import CitationRegistryCollector
 from bisheng.workstation.domain.services.chat_service import (
     _build_knowledge_search_tool,
+    _handle_agent_tool_error,
 )
 
 
-async def _args_schema():
+async def _search_tool():
     tool = await _build_knowledge_search_tool(
         knowledge_bases_info=[
             {"id": 101, "name": "one", "source": "organization"},
@@ -19,7 +22,11 @@ async def _args_schema():
         citation_collector=CitationRegistryCollector(),
     )
     assert tool is not None
-    return tool.args_schema
+    return tool
+
+
+async def _args_schema():
+    return (await _search_tool()).args_schema
 
 
 async def test_filters_accept_model_stringified_json_object():
@@ -93,3 +100,13 @@ async def test_filters_accept_list_shorthand_with_stringified_items():
     assert args.knowledge_base_ids == ["101"]
     [kb_filter] = args.filters.knowledge_base_filters
     assert kb_filter.tags == ["policy", "2026"]
+
+
+async def test_search_kb_tool_can_be_wrapped_by_langgraph_tool_node():
+    """LangGraph ToolNode introspects the coroutine annotations.
+
+    Nested class names like `_Filters` are not in module globals, so a
+    forward-ref annotation would raise NameError here and crash daily chat.
+    """
+    tool = await _search_tool()
+    ToolNode([tool], handle_tool_errors=_handle_agent_tool_error)
