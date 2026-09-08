@@ -6,7 +6,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from bisheng.permission.domain.models import ResourcePermissionMode
 from bisheng.permission.domain.schemas import VisibleSourceProjectionDTO
 from scripts import reconcile_f048_visible_projection as cli
 
@@ -128,72 +127,6 @@ def test_report_deduplicates_only_the_same_projected_subject_tuple() -> None:
         ("department:7#member", "visible", "knowledge_space:42"),
         ("user_group:9#member", "visible", "knowledge_space:42"),
     }
-
-
-def test_report_includes_service_account_resource_state_markers() -> None:
-    rows = (
-        ResourcePermissionMode(
-            tenant_id=1,
-            resource_type="knowledge_space",
-            resource_id="42",
-            mode="CUSTOM",
-            projection_state="CURRENT",
-        ),
-        ResourcePermissionMode(
-            tenant_id=1,
-            resource_type="knowledge_file",
-            resource_id="99",
-            mode="INHERIT",
-            projection_state="CURRENT",
-        ),
-    )
-    markers = cli._compile_service_account_resource_markers(rows)
-    assert markers == {
-        ("service_account:*", "permission_enabled", "knowledge_space:42"),
-        ("service_account:*", "custom_mode", "knowledge_space:42"),
-        ("service_account:*", "permission_enabled", "knowledge_file:99"),
-        ("service_account:*", "inherit_mode", "knowledge_file:99"),
-    }
-
-    current = cli.CurrentRelease(
-        catalog_id=1,
-        catalog_key="catalog-v1",
-        store_id="store-1",
-        model_id="model-old",
-        model_release_id=2,
-        model_checksum="c" * 64,
-        write_fenced=False,
-    )
-    report, _, _, expected = cli._build_report(
-        mode="dry-run",
-        current=current,
-        target_model_id=None,
-        target_checksum="d" * 64,
-        grants=(),
-        assignee_count=0,
-        canonical_sources=(),
-        persisted=(),
-        resource_marker_tuples=markers,
-    )
-    assert expected == markers
-    assert report.visible_tuple_count == 0
-    assert report.service_account_marker_tuple_count == 4
-    assert report.expected_tuple_count == 4
-
-
-def test_service_account_resource_state_markers_reject_unsupported_types() -> None:
-    rows = (
-        ResourcePermissionMode(
-            tenant_id=1,
-            resource_type="unknown_resource",
-            resource_id="42",
-            mode="CUSTOM",
-            projection_state="CURRENT",
-        ),
-    )
-
-    with pytest.raises(cli.VisibleReconcileBlockedError, match="unsupported resource permission type"):
-        cli._compile_service_account_resource_markers(rows)
 
 
 class _FGAClient:

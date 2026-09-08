@@ -45,7 +45,7 @@ def test_fixed_fixture_covers_resource_visibility_and_source_matrix(
 ) -> None:
     assert contract["contract_version"] == CONTRACT_VERSION
     assert contract_checksum(contract) == (
-        "6846b3a878c7c28c4bfc8c4c2f7a65e06edee3a16b93cc0450bd76dd340768c0"
+        "76cbae32a0dba8385aa6dcb8851bee3d953f11aba8029667255fdd60845b02dd"
     )
     assert dataset_checksum(contract) == (
         "d083c56febda9eb055e9ae5356f800ca837a1e534628fdeda623dc4b8063ab22"

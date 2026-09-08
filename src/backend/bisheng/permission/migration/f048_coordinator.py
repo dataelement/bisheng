@@ -12,7 +12,6 @@ from bisheng.common.errcode.permission import (
     PermissionVersionConflictError,
 )
 from bisheng.core.openfga.authorization_model_f048 import (
-    TECHNICAL_MARKER_SUBJECTS,
     authorization_model_checksum,
     build_authorization_model_f048,
 )
@@ -469,25 +468,23 @@ def _compile_target_tuples(
         custom_models=custom_selections,
     )
     catalog_object = f"permission_catalog_release:{INITIAL_CATALOG_RELEASE_KEY}"
-    for subject in TECHNICAL_MARKER_SUBJECTS:
-        add(subject, "active", catalog_object)
+    add("user:*", "active", catalog_object)
     for model in model_release.models:
         model_object = f"permission_model:{model.model_key}"
         release_object = f"permission_model_release:{INITIAL_CATALOG_RELEASE_KEY}~{model.model_key}"
         add(release_object, "release", model_object)
         add(catalog_object, "catalog", release_object)
-        for subject in TECHNICAL_MARKER_SUBJECTS:
-            add(subject, "enabled_marker", release_object)
-            for action_code in model.action_codes:
-                add(subject, f"{action_code}_marker", release_object)
-            if "manage_permission" in model.action_codes and model.derived_level is not None:
-                upper = model.derived_level if model.allow_same_level else model.derived_level - 1
-                for level in range(1, max(upper, 0) + 1):
-                    add(
-                        subject,
-                        f"grant_level_{level}_marker",
-                        release_object,
-                    )
+        add("user:*", "enabled_marker", release_object)
+        for action_code in model.action_codes:
+            add("user:*", f"{action_code}_marker", release_object)
+        if "manage_permission" in model.action_codes and model.derived_level is not None:
+            upper = model.derived_level if model.allow_same_level else model.derived_level - 1
+            for level in range(1, max(upper, 0) + 1):
+                add(
+                    "user:*",
+                    f"grant_level_{level}_marker",
+                    release_object,
+                )
 
     for grant in tuple_mapping.grants:
         grant_object = f"permission_grant:{grant.grant_key}"
@@ -561,9 +558,8 @@ def _compile_target_tuples(
             add(delta.user, delta.relation, delta.object)
     for mode in mode_mapping.modes:
         resource_object = mode.resource_key
-        for subject in TECHNICAL_MARKER_SUBJECTS:
-            add(subject, f"{mode.mode.casefold()}_mode", resource_object)
-            add(subject, "permission_enabled", resource_object)
+        add("user:*", f"{mode.mode.casefold()}_mode", resource_object)
+        add("user:*", "permission_enabled", resource_object)
         if mode.parent_key:
             add(mode.parent_key, "parent", resource_object)
     for resource in resources:
