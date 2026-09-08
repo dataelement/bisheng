@@ -21,7 +21,7 @@ import type { ExecStepEventData } from '~/components/Linsight/Execution/stepUtil
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
 import { Spinner } from '~/components/svg';
 import { useAuthContext } from '~/hooks/AuthContext';
-import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import { useGetBsConfig, useGetOrgToolList } from '~/hooks/queries/data-provider';
 import { useGetWorkbenchModelsQuery } from '~/hooks/queries/queries';
 import useAiChat from '~/hooks/useAiChat';
 import useChatModelMemo from '~/hooks/useChatModelMemo';
@@ -42,6 +42,7 @@ import {
   ExportFormatSheet,
   MessageSelectionToolbar,
 } from '~/components/Chat/MessageSelection';
+import { retainVisibleOrgKnowledgeSelections } from './filterVisibleKnowledgeSelections';
 import {
   useExitSelectionOnChatChange,
   useMessageSelection,
@@ -81,6 +82,37 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   // Landing-only: the input box reports whether its attachment bar is showing
   // so the welcome subtitle can hide without shifting the title / input box.
   const [landingHasSelection, setLandingHasSelection] = useState(false);
+
+  const selectedOrgKbIds = useMemo(
+    () => selectedOrgKbs.filter((item) => item.type === 'org').map((item) => String(item.id)),
+    [selectedOrgKbs],
+  );
+  const selectedOrgKbIdsKey = selectedOrgKbIds.join(',');
+  const { data: visibleSelectedOrgKbs = [], isSuccess: selectedOrgKbVisibilityReady } = useGetOrgToolList(
+    {
+      page: 1,
+      page_size: Math.max(1, selectedOrgKbIds.length),
+      sort_by: 'name',
+      preferred_ids: selectedOrgKbIdsKey,
+      action: 'visible',
+    },
+    { enabled: !!user?.id && selectedOrgKbIds.length > 0 },
+  );
+
+  // Revalidate persisted selections as well as new defaults. Without this,
+  // an org KB cached before its visibility was revoked remains exposed as a
+  // chip even after the user-facing workstation config starts filtering it.
+  useEffect(() => {
+    if (!selectedOrgKbVisibilityReady || !selectedOrgKbIds.length) return;
+    const visibleIds = visibleSelectedOrgKbs.map((item: { id: string | number }) => item.id);
+    setSelectedOrgKbs((current) => retainVisibleOrgKnowledgeSelections(current, visibleIds));
+  }, [
+    selectedOrgKbIdsKey,
+    selectedOrgKbIds.length,
+    selectedOrgKbVisibilityReady,
+    visibleSelectedOrgKbs,
+    setSelectedOrgKbs,
+  ]);
 
   // v2.5 interaction memory — per-user localStorage snapshots for the input
   // bar. The model selection is shared across chat surfaces (ChatView and

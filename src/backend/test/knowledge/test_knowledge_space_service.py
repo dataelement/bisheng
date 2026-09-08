@@ -403,9 +403,10 @@ async def test_private_space_info_still_requires_visible_permission(
             await service.get_space_info(302)
 
 
-async def test_square_keeps_public_rows_without_visible_and_marks_not_subscribed(
+async def test_square_super_admin_scope_does_not_mark_ungranted_space_subscribed(
     service: KnowledgeSpaceService,
 ) -> None:
+    service.login_user.is_global_super = True
     space = _make_space(space_id=401, user_id=9, is_released=True, auth_type=AuthTypeEnum.PUBLIC)
     creator = SimpleNamespace(user_id=9, user_name="creator", avatar=None)
 
@@ -430,7 +431,11 @@ async def test_square_keeps_public_rows_without_visible_and_marks_not_subscribed
             new_callable=AsyncMock,
             return_value={401: 0},
         ),
-        patch.object(service, "_batch_actions", new_callable=AsyncMock, return_value={"401": frozenset()}),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.batch_check_business_visible",
+            new_callable=AsyncMock,
+            return_value={"401": False},
+        ) as check_visible,
         patch(
             "bisheng.user.domain.services.user.UserService.get_avatar_share_link",
             new_callable=AsyncMock,
@@ -445,6 +450,11 @@ async def test_square_keeps_public_rows_without_visible_and_marks_not_subscribed
     item = result["data"][0]
     assert item.subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
     assert item.is_followed is False
+    check_visible.assert_awaited_once_with(
+        service.login_user,
+        resource_type="knowledge_space",
+        resource_ids=[401],
+    )
 
 
 async def test_square_marks_real_visible_grant_as_subscribed(
@@ -474,11 +484,10 @@ async def test_square_marks_real_visible_grant_as_subscribed(
             new_callable=AsyncMock,
             return_value={402: 0},
         ),
-        patch.object(
-            service,
-            "_batch_actions",
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.batch_check_business_visible",
             new_callable=AsyncMock,
-            return_value={"402": frozenset({"visible"})},
+            return_value={"402": True},
         ),
         patch(
             "bisheng.user.domain.services.user.UserService.get_avatar_share_link",
