@@ -51,6 +51,7 @@
 | **OpenApiTenantSetting**（租户级 PAT 开关与默认有效期） | **F053-openapi-auth-and-identity** | PRD §4.10.7 闸门一的租户级半边；部署级半边在进程 Settings |
 | **ShareLink**（既有对象；本版增量 = `share_scope` 列 + 撤销写入 + 有效期强制生效 + share-token 会话执行主体） | **F053-openapi-auth-and-identity** | 两个免登录分享页改走 share_link 通道；只拥有本版对该对象的写行为增量，不拥有既有创建 / 读取 |
 | **MessageSession / ChatMessage**（既有对象；本版增量 = `external_user_id` 分区键列，只写不读） | **F053-openapi-auth-and-identity**（列）| 会话本体仍归既有会话模块；本 Feature 只拥有该列的写入语义（PRD §4.3.4 / §4.6.3 四） |
+| —（无新增领域对象；在 F029 拥有的 citation 链路上扩展第三种来源类型与其载荷） | **F054-unified-citation-entries** | 频道文章 AI 问答接入统一溯源：新增「文章」来源类型及其来源载荷（真实稳定定位标识 = 文章文档标识 / 原文链接，不伪造知识库片段标识）、「来源已失效」状态、来源详情对**无已登录用户**调用一律不返回、工作流输入节点临时文件停止登记来源。只读 / 调用现有 `MessageCitation` 与 citation 注册 / 解析服务；**不拥有** `message_citation` schema，不改 F041 已登记的 `accessScope` 两档语义，不改灵思任务模式（归 F047），不新增表 / Alembic / 对外 API / 错误码 |
 | —（无新增） | F061-qa-active-image-read | 日常模式 / 知识空间 / 频道订阅三条问答链路按需查看检索结果或文章正文中的 markdown 图片；复用既有工作台模型视觉开关、检索入口与 `view_file` / 敏感文过滤，不新增领域对象、表、对外 API、错误码或不变量 |
 
 **规则**：
@@ -121,6 +122,7 @@
 | F052-workflow-session-auto-rerun | 既有工作流独立会话与手动重新运行能力 | 系统统一开关只影响免登录/需登录独立工作流会话的打开行为；不改变工作流执行、权限或其他会话入口 |
 | F060-information-source-subscription-reconciliation | v2.6.0 F031、Information 同步查询协议 v1.1 | 继承频道来源与知识同步配置；以远端实际订阅和公共文章状态替代 F031 的租户本地订阅推断，不依赖本版本权限 Feature |
 | F053-openapi-auth-and-identity | F048（`authorize_created` / `grants:mutate` / 主体校验 / 系统级放行谓词）；既有 `share_link`、`workstation` 日常模式链路、`knowledge` 检索与文件可见性服务 | 代码底座自 `3.0-vibe` 移植；工作流 A（底座 + 端点接入）与 C（身份传递）须同版发布；B / D / E / F / G 可后续合入。内部工作流依赖见 `053-openapi-auth-and-identity/design.md` §4 |
+| F054-unified-citation-entries | F029、F041（均为 v2.6.0 存量，已上线）；与 F047 共用同一 citation 链路但互不阻塞 | 接线 + 扩展型：新增「文章」来源类型、失效态、匿名收紧、临时文件停发角标（导出烘焙不在本 Feature，归 F047 Phase 2）。**与 F053 有一处待对齐**：F053 把免登录分享页改走 share_link 通道并引入 share-token 会话执行主体，本 Feature AC-14「无已登录用户即不返回来源详情」的判据需与之对齐（见 spec §2.4 待澄清）。灵思任务模式不在本 Feature，归 F047 |
 | F061-qa-active-image-read | 既有工作台模型视觉开关、日常 ReAct、知识空间 / 频道问答入口；检索可见性守 v2.6.0 **INV-7**（`view_file`） | 接线型；只在已过滤的检索结果 / 文章正文上按需读图。不新增领域对象/表/对外 API/错误码/不变量；不改入库/OCR；不改灵思任务模式、工作流/助手 RAG；不新开取图鉴权口 |
 
 ---
@@ -141,6 +143,7 @@
 | F018-resource-owner-transfer | 当前实现先提交资源 `user_id`、再删除旧/写入新 owner tuple，失败依赖 `failed_tuple` 补写；同时不更新 knowledge_space/channel CREATOR membership，且无已接入前端。OQ-07 已选择 A：F048 启服时退役其 API/Service 调用路径，本期不重构 owner transfer；历史差异按 preservation-first 迁移 |
 | F031-channel-source-subscription-reconcile | F060 替代其“各租户 `channel_info_source` 行存在即代表已订阅、按租户分别对账”的运行语义。频道来源意图改为全部活跃租户并集，远端 `/information/subscriptions` 完整分页成为实际订阅真相；`channel_info_source` 改为平台公共展示目录。F031 已交付的频道创建/编辑能力继续保留，但不得再以本地元数据行推断远端订阅状态 |
 | 既有 `/api/v2` 开放 API（`open_endpoints/`）与两个免登录分享页 | F053：全部 43 HTTP + 2 WS 端点接入凭据校验，6 个 `/chat/*` 不暴露，裸 `user_id` 参数移除，`download_statistic` 入参 `file_path → file_name`；分享页改走 share-token；`user` 表加 `user_type`、`_filter_users_statement` 默认排除服务账号（8 处消费点无感）；F048 `authorize_created` 增 `autogrant_user_id` kwarg 与来源值 `SERVICE_ACCOUNT_AUTOGRANT`（非 protected、可撤销） |
+| F029-knowledge-qa-permission-filter（AC-20）· F041（匿名分档） | **F054 覆盖其匿名放行语义**。F029 AC-20 当初有意为分享链接 / 公开流程保留「匿名调用不过滤」，F041 的分档同样在匿名时全放行——这正是本期要堵的越权口子。F054 起：**无已登录用户的调用不再返回知识库与文章来源详情（含 `shared` 档），网页来源仍放行**；已登录用户的 `per_user` / `shared` 两档语义完全不变，INV-7 及其 F041 例外不受影响。F029 AC-20 与 F041 匿名断言的三个既有用例随 F054 T006 一并改写为新预期 |
 
 ---
 
