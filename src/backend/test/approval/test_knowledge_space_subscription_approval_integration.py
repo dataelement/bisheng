@@ -202,3 +202,80 @@ async def test_knowledge_space_subscribe_scenario_handler_updates_membership_sta
     membership.status = MembershipStatusEnum.PENDING
     await handler.on_rejected(instance_id=1, payload_snapshot=payload, reason="reject")
     assert membership.status == MembershipStatusEnum.REJECTED
+
+
+@pytest.mark.asyncio
+async def test_knowledge_space_approver_sources_keep_owner_and_manager_distinct():
+    from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import (
+        KnowledgeSpaceSubscribeScenarioHandler,
+    )
+
+    handler = KnowledgeSpaceSubscribeScenarioHandler(
+        find_member=AsyncMock(),
+        update_member=AsyncMock(),
+        sync_permissions=AsyncMock(),
+    )
+    req = SimpleNamespace(
+        tenant_id=7,
+        applicant_user_id=42,
+        business_resource_id="12",
+        payload_snapshot={"space_id": 12},
+    )
+
+    with patch(
+        "bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler._resolve_space_permission_roles",
+        new=AsyncMock(return_value=([11], [22])),
+    ):
+        owners = await handler.resolve_approvers(
+            {"sources": [{"type": "knowledge_space_owner"}]},
+            req,
+        )
+        managers = await handler.resolve_approvers(
+            {"sources": [{"type": "knowledge_space_manager"}]},
+            req,
+        )
+        combined = await handler.resolve_approvers(
+            {
+                "sources": [
+                    {"type": "knowledge_space_owner"},
+                    {"type": "knowledge_space_manager"},
+                ]
+            },
+            req,
+        )
+
+    assert owners == [11]
+    assert managers == [22]
+    assert combined == [11, 22]
+
+
+@pytest.mark.asyncio
+async def test_resource_role_resolver_reads_f048_effective_grants():
+    from bisheng.approval.domain.services.approver_resolver import (
+        resolve_resource_permission_role_users,
+    )
+
+    req = SimpleNamespace(tenant_id=7, applicant_user_id=42)
+    with patch(
+        "bisheng.permission.application.business_authorization.list_business_effective_direct_user_ids_by_model",
+        new=AsyncMock(
+            return_value={
+                "owner": ("11", "service-account"),
+                "manager": ("22", "11"),
+            }
+        ),
+    ) as mock_list:
+        owner_ids, manager_ids = await resolve_resource_permission_role_users(
+            req=req,
+            resource_type="knowledge_space",
+            resource_id=12,
+        )
+
+    assert owner_ids == [11]
+    assert manager_ids == [22, 11]
+    call_args = mock_list.await_args.kwargs
+    assert call_args["resource_type"] == "knowledge_space"
+    assert call_args["resource_id"] == 12
+    assert call_args["model_keys"] == ("owner", "manager")
+    assert call_args["actor"].user_id == 42
+    assert call_args["actor"].current_tenant_id == 7

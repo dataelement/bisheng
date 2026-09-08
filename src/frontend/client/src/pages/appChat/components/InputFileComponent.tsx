@@ -1,7 +1,7 @@
 // @ts-strict-ignore
 
 import { FileSearch2, Loader2 } from "lucide-react";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { bishengConfState } from "../store/atoms";
 import { useRecoilState } from "recoil";
 import { useToastContext } from "~/Providers";
@@ -58,21 +58,24 @@ export default function InputFileComponent({
         return ''
     }
 
+    // A real input rendered into the tree, opened through this ref. The previous
+    // version built a detached `display:none` input and called .click() on it —
+    // a node that is in no document and explicitly not displayed, which browsers
+    // are free to ignore, and did: the workflow form's upload field opened
+    // nothing at all. Every other file field in this app renders its input in
+    // JSX; this one now matches.
+    const inputRef = useRef<HTMLInputElement>(null);
+
     const handleButtonClick = () => {
-        if (multiple) return batchUpload()
-        // Create a file input element
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = suffixes.join(",");
-        input.style.display = "none"; // Hidden from view
-        input.multiple = false; // Allow only one file selection
+        if (disabled) return;
+        inputRef.current?.click();
+    };
 
-        input.onchange = (e: Event) => {
-            setLoading(true);
+    const singleUpload = (file: File | undefined) => {
+        if (!file) return;
+        setLoading(true);
 
-            // Get the selected file
-            const file = (e.target as HTMLInputElement).files?.[0];
-
+        {
             const errorMsg = checkFileSize(file)
             if (errorMsg) {
                 showToast({ message: errorMsg, status: 'error' });
@@ -118,25 +121,12 @@ export default function InputFileComponent({
             //   });
             //   setLoading(false);
             // }
-        };
-
-        // Trigger the file selection dialog
-        input.click();
+        }
     };
 
-    const batchUpload = () => {
-        // Create a file input element
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = suffixes.join(",");
-        input.style.display = "none"; // Hidden from view
-        input.multiple = true; // Allow multiple file selection
-
-        input.onchange = (e: Event) => {
+    const batchUpload = (_files: FileList | null) => {
+        {
             setLoading(true);
-
-            // Get the selected files
-            const _files = (e.target as HTMLInputElement).files;
 
             if (_files && _files.length > 0) {
                 const filePaths = []; // This will hold the file paths after successful upload
@@ -199,16 +189,32 @@ export default function InputFileComponent({
 
                 setLoading(false); // Hide loading state if no files were selected
             }
-        };
-
-        // Trigger the file selection dialog
-        input.click();
+        }
     };
 
-
+    const handleFilesPicked = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const picked = event.target.files;
+        if (multiple) {
+            batchUpload(picked);
+        } else {
+            singleUpload(picked?.[0]);
+        }
+        // A persistent input keeps its value, and re-picking the same file would
+        // then fire no change event at all. Clear it so a second attempt works.
+        event.target.value = "";
+    };
 
     return (
         <div className={disabled ? "input-component-div" : "w-full"}>
+            <input
+                ref={inputRef}
+                type="file"
+                className="hidden"
+                accept={suffixes.join(",")}
+                multiple={multiple}
+                disabled={disabled}
+                onChange={handleFilesPicked}
+            />
             <div className="input-file-component flex items-center gap-2 border bg-search-input rounded-md px-2 justify-between">
                 <span
                     onClick={handleButtonClick}
