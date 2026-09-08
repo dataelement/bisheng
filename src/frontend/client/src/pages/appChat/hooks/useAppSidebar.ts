@@ -31,6 +31,12 @@ export function useAppSidebar() {
   const { showToast } = useToastContext();
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
+  // Read through a ref, exactly like showToast above. `useLocalize()` returns a
+  // fresh closure every render, so listing it in a dep array below would make
+  // `fetchConversations` unstable — and the auto-fetch effect keys off that
+  // identity, so every response would schedule the next request forever.
+  const localizeRef = useRef(localize);
+  localizeRef.current = localize;
 
   const currentApp = useRecoilValue(currentAppInfoState);
   const chatState = useRecoilValue(currentChatState);
@@ -53,7 +59,7 @@ export function useAppSidebar() {
       const list: AppConversation[] = (res.data?.list || []).map((item: any) => {
         return {
           id: item.chat_id,
-          title: displayConversationTitle(item.name || item.flow_name, localize('com_ui_new_chat')),
+          title: displayConversationTitle(item.name || item.flow_name, localizeRef.current('com_ui_new_chat')),
           flowId: item.flow_id || flowId,
           flowType: Number(item.flow_type || flowType),
           updatedAt: item.update_time || '',
@@ -75,7 +81,7 @@ export function useAppSidebar() {
     } finally {
       setLoading(false);
     }
-  }, [flowId, flowType, localize, setConversations]);
+  }, [flowId, flowType, setConversations]);
 
   /** Grouped conversations by time */
   const groups: ConversationGroup[] = groupConversationsByTime(conversations);
@@ -177,7 +183,7 @@ export function useAppSidebar() {
       if (conversationId && !list.some(c => c.id === conversationId)) {
         setConversations((prev) => [{
           id: conversationId,
-          title: localize('com_ui_new_chat'),
+          title: localizeRef.current('com_ui_new_chat'),
           flowId: flowId!,
           flowType: Number(flowType),
           updatedAt: new Date().toISOString(),
@@ -185,10 +191,14 @@ export function useAppSidebar() {
         }, ...prev]);
       }
     });
-    // Only re-run when fetchConversations identity changes (i.e. flowId changes).
+    // Keyed on the app itself, NOT on `fetchConversations`. The fetch writes its
+    // result into Recoil and toggles `loading`, so it re-renders this hook; if the
+    // key were a callback identity, any unstable dependency slipping into that
+    // callback would turn each response into the trigger for the next request and
+    // hammer /workstation/app/conversations forever.
     // conversationId is intentionally excluded to prevent re-fetch on every navigation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchConversations]);
+  }, [flowId, flowType]);
 
   return {
     currentApp,
