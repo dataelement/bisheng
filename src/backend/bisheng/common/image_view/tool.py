@@ -37,7 +37,7 @@ async def _view_image(registry: ImageRegistry, image_ids: list[str], quality: st
             registry.record_viewed(image_id, result.data_uri)
             lines.append(f"Viewed {image_id} at standard quality.")
         else:
-            lines.append(f"Image {image_id} is not available.")
+            lines.append(f"Image {image_id} is not available ({result.reason or 'fetch'}).")
 
     if overflow:
         extra = ", ".join(overflow)

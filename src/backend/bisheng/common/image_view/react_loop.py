@@ -13,7 +13,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt import ToolNode, create_react_agent
 from loguru import logger
 
-from bisheng.common.image_view.annotate import ImageRegistry
+from bisheng.common.image_view.annotate import ImageRegistry, missing_viewed_markdown
 from bisheng.common.image_view.tool import TOOL_NAME, build_view_image_tool
 from bisheng.common.image_view.vision_llm import VisionToolBindWrapper
 
@@ -88,6 +88,7 @@ async def run_react_vision_stream(
     )
     streamed_this_model = False
     emitted: set[tuple] = set()
+    visible_text = ""
     async for ev in agent.astream_events(
         {"messages": messages},
         version="v2",
@@ -104,6 +105,7 @@ async def run_react_vision_stream(
             if chunk is None or not _chunk_visible(chunk):
                 continue
             streamed_this_model = True
+            visible_text += getattr(chunk, "content", "") or ""
             yield chunk
             continue
         if et == "on_chat_model_end":
@@ -120,6 +122,7 @@ async def run_react_vision_stream(
                 continue
             emitted.add(key)
             streamed_this_model = True
+            visible_text += getattr(message, "content", "") or ""
             yield message
             continue
         if et == "on_chain_end":
@@ -133,4 +136,10 @@ async def run_react_vision_stream(
                 continue
             emitted.add(key)
             streamed_this_model = True
+            visible_text += getattr(message, "content", "") or ""
             yield message
+
+    extra = missing_viewed_markdown(visible_text, registry)
+    if extra:
+        logger.info("image_view splice markdown viewed_ids={}", registry.viewed_ids())
+        yield AIMessage(content=extra)

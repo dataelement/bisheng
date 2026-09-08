@@ -12,7 +12,7 @@
 
 **关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md) · [增量 · 知识空间/频道 ReAct](./design-增量-知识空间频道ReAct.md)
 **版本**: v3.0.0-beta1
-**最后更新**: 2026-09-08（知识空间 / 频道 ReAct 增量落地：`run_react_vision_stream`）
+**最后更新**: 2026-09-08（日常问图先强制检索，避免代码解释器空转）
 
 ---
 
@@ -125,7 +125,8 @@
     在 format_retrieved_chunk 之后 annotate（主路径是前者）
   VisionToolBindWrapper 是非 Runnable 的 callable，交给 create_react_agent 当动态模型工厂
     每次模型调用：pop_viewed → HumanMessage 像素；relocate_images_to_human；len(registry)>0 才 bind view_image 并追加读图规则
-  visual=true 时 ToolNode = base_tools + view_image；编译期 bind 看不见 view_image（动态工厂不会走 bind_tools）
+    问图且勾了知识库、注册表仍空：tool_choice=search_knowledge_bases（弱模型忽略则注入检索），避免去代码解释器沙箱翻 PDF
+    visual=true 时 ToolNode = base_tools + view_image；编译期 bind 看不见 view_image（动态工厂不会走 bind_tools）
   LangGraph 消息历史 = 原样重发
 ```
 
@@ -181,7 +182,7 @@ sequenceDiagram
 
 1. `⟦img#N⟧` 只是锚点，第一次请求看不见像素。
 2. 回答依赖图 / 表 / 走势时先调 `view_image`；不要写「我看不到图」，不要根据周围文字编图意。
-3. 回答里仍输出原始 `![](url)`，方便前端渲染。
+3. 是否把图画进回答由模型判断：用户要看图 / 展示时输出原始 `![](url)`；只问字段、走势、图意时只写文字。弱模型写了「我将显示」却漏 markdown 时，后端只补已查看的图。
 4. 只能使用本轮出现过的 `img#`。
 
 ### 4.4 取图与 host 白名单
@@ -216,6 +217,10 @@ sequenceDiagram
 | 12 | `qwen3-vl-flash` 一类弱工具调用模型：`tool_choice` 可能被完全忽略（流式只出文本）；就算调了工具也会默认 `img#1` 或标题前的菜单图，并在 tool_call 前编造字段清单 | 问「开户申请表单字段」却不读图 / 读错图；第二轮还复述首轮幻觉 | 4-gram 打分；`image_ids` 改写成 suggested；**未调工具则注入 suggested 读图**；首轮 prose 不带进第二轮；过小图（长边 < 32）按 AC-15 降级。增量切 ReAct 后语义不变，见增量决策 R4 |
 | 13 | `view_image` 把 data URI 记在 `registry.record_viewed`，工具观察只是短文本 ack | 下一轮模型调用若不 `pop_viewed` 成 HumanMessage，就看不见像素 | `VisionToolBindWrapper._prepare` 每次调用前 `pop_viewed` |
 | 14 | `astream_events` 先出 token delta，再出 `on_chat_model_end` / 外包 Runnable 的 `on_chain_end`（完整 AIMessage） | 知识空间 `answer += chunk.content` 会把同一段答案拼两遍 | `run_react_vision_stream`：本轮已 stream 过就不再 yield 完整消息；标志只在下一次 `on_chat_model_start` 清掉 |
+| 15 | 日常 `[agent_chat] tool_names=` / dump 只列 `_prepare_tools` 结果，**本来就不含** `view_image`；第一轮注册表空，wrapper 也不 bind。模型看见代码解释器就会去沙箱翻 PDF | 把「第一次请求没有 view_image」误判成视觉开关没开；问知识库截图时空转几十轮 | 日志补 `visual_enabled`；问图且勾了知识库时 `tool_choice=search_knowledge_bases`，弱模型忽略则注入检索。检索出图后下一轮才 bind `view_image` |
+| 16 | `pop_viewed` 会追加 `HumanMessage("Viewed images: …")`。若 `_last_user_question` 取最后一条 Human，英文问句没有 CJK 4-gram，ASCII 词 `images` 又命中每条 markdown 的 `/knowledge/images/`，分数打平后**越靠后的图越赢** | 问「开户登记界面」却 hint 成文档末尾 U 盾图；失败的 `view_image` 观察也被当成已看过，不再注入正确编号 | 跳过 `Viewed images:` Human；ASCII 停用词不含 URL 路径；`pixels_were_viewed` 只认观察里的 `Viewed ` |
+| 18 | `qwen3-vl-flash` 看完像素后常只写「我将显示 img#7」，不回写原始 `![](url)`；前端只渲染 markdown 图 | 选对了图、工具也成功，气泡里仍没有图 | `missing_viewed_markdown`：只把**已成功查看**的 id 补成 `![](url)` 追加到答案；日常 SSE / 知识空间 ReAct 流结束时各 splice 一次 |
+| 19 | 坑 18 无条件 splice：问「img#7 要填哪些字段」也会在答案末尾再贴一张已读截图 | 用户没要求展示图片，气泡多出一张大图 | 出图由模型决定：写了 `![](url)` 就渲染；只问字段不贴图。弱模型声称「我将显示 / 如下图」却漏 markdown 时才 splice |
 
 ---
 
@@ -303,3 +308,5 @@ sequenceDiagram
 | 2026-09-07 | 坑 12 补：`tool_choice` 被忽略时注入 suggested 读图，不把首轮文本当答案 | 联调：清空历史后 `view_call_count=0`，256 chunk 直接当答案 |
 | 2026-09-08 | 决策 3 落地：知识空间 / 频道 `run_react_vision_stream`；日常 wrapper 迁到 `common` 并补 `pop_viewed`；删除 `run_vision_tool_loop` | T016–T026 |
 | 2026-09-08 | 坑 14：ReAct stream 后再 yield 完整 AIMessage，知识空间答案重复 | 联调：开户申请表单图片问句，同一段解释出现两次 |
+| 2026-09-08 | 坑 16：`Viewed images:` Human 不得当作用户问题；`images` 不得给 URL 加分；失败取图不算已看过 | 联调：开户登记问句 suggested=`img#66/65/64`（U 盾注销） |
+| 2026-09-08 | 坑 18：弱模型看完图只写 img# 不写 `![](url)`，作答后按已查看 id 补 markdown | 联调：开户登记选中 img#7/8，气泡无图 |

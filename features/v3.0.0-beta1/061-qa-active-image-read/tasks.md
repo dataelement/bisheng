@@ -83,7 +83,7 @@
 
 - [x] **T007**: run_vision_tool_loop 与 relocate 单元测试
   **文件**: `src/backend/test/common/test_image_view_loop.py`
-  **逻辑**: mock LLM：第一轮 `tool_call` view_image，第二轮文本答案。断言第一轮发给模型的消息**没有** image / data URI（只有 `⟦img#N⟧`）；对外 iterator **不 yield** 第一轮 content（AC-17）；第二轮消息含原问题 + 标注上下文 + 工具 ack + `HumanMessage`（text + `image_url` data URI），且不再 `bind_tools`。无图或调用方声明 `visual=false` 时退回单轮、不 bind。误把 image 放进 ToolMessage 的列表经 `relocate_images_to_human` 后，image 只出现在 HumanMessage。追加的读图规则含「回答里仍输出原始 `![](url)`」；无图路径不追加该规则。
+  **逻辑**: mock LLM：第一轮 `tool_call` view_image，第二轮文本答案。断言第一轮发给模型的消息**没有** image / data URI（只有 `⟦img#N⟧`）；对外 iterator **不 yield** 第一轮 content（AC-17）；第二轮消息含原问题 + 标注上下文 + 工具 ack + `HumanMessage`（text + `image_url` data URI），且不再 `bind_tools`。无图或调用方声明 `visual=false` 时退回单轮、不 bind。误把 image 放进 ToolMessage 的列表经 `relocate_images_to_human` 后，image 只出现在 HumanMessage。追加的读图规则含「是否把图画进回答由你判断」；无图路径不追加该规则。
   **覆盖 AC**: AC-04, AC-06, AC-07, AC-13, AC-16, AC-17
   **验证**: `cd src/backend && uv run pytest test/common/test_image_view_loop.py`
   **依赖**: T002, T006

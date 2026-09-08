@@ -124,3 +124,89 @@ def test_screenshot_question_hints_matching_image_ids():
     assert "img#1" not in hinted_ids
     assert any(token in hinted_ids for token in ("img#6", "img#9", "img#10"))
     assert "img#28" not in hinted_ids
+
+
+def _hinted_ids(system: str) -> list[str]:
+    hinted = system.split("本题附近标题更匹配的图片：", 1)[-1].split("。", 1)[0]
+    return [part.strip() for part in hinted.split("、") if part.strip()]
+
+
+def test_viewed_images_human_does_not_poison_pick_toward_last_url():
+    """Synthetic 'Viewed images:' must not become the question; URL 'images/' must not rank picks."""
+    context = (
+        _OPENING_HANDBOOK
+        + "\n2.3 U盾注销\n操作路径：司库管理 银行账户 网银U盾注销\n"
+        + "![usb](/bisheng/knowledge/images/1/6/image_20_69.jpeg)⟦img#65⟧\n"
+        + "![usb2](/bisheng/knowledge/images/1/6/image_20_70.jpeg)⟦img#66⟧\n"
+    )
+    messages = [
+        SystemMessage(content="base system"),
+        HumanMessage(content="<user_question>\n把开户登记界面说明相关的图片显示出来\n</user_question>"),
+        ToolMessage(content=context, tool_call_id="s1", name="search_knowledge_bases"),
+        ToolMessage(content="Image img#19 is not available (too_small).", tool_call_id="v0", name="view_image"),
+        HumanMessage(
+            content=[
+                {"type": "text", "text": "Viewed images: img#7"},
+                {"type": "image_url", "image_url": {"url": _DATA_URI}},
+            ]
+        ),
+    ]
+    out = prepare_vision_messages(messages)
+    hinted_ids = _hinted_ids(out[0].content)
+    assert hinted_ids
+    assert "img#65" not in hinted_ids
+    assert "img#66" not in hinted_ids
+    assert "img#14" in hinted_ids
+
+
+def test_failed_view_observation_is_not_treated_as_pixels_seen():
+    from bisheng.common.image_view.loop import pixels_were_viewed
+
+    failed = [
+        HumanMessage(content="把开户登记界面说明相关的图片显示出来"),
+        ToolMessage(content="Image img#19 is not available (too_small).", tool_call_id="v0", name="view_image"),
+    ]
+    ok = [
+        *failed,
+        ToolMessage(content="Viewed img#7 at standard quality.", tool_call_id="v1", name="view_image"),
+    ]
+    assert pixels_were_viewed(failed) is False
+    assert pixels_were_viewed(ok) is True
+
+
+_REGISTER_VS_USB = """
+1.1.2.开户登记
+待登记或已经登记的单据信息，经办人对开户登记单据进行查看、删除、退回、提交。
+![a](/bisheng/knowledge/images/1/6/image_5_11.jpeg)⟦img#5⟧
+![b](/bisheng/knowledge/images/1/6/image_5_12.jpeg)⟦img#6⟧
+操作路径：司库管理 银行账户 开户登记
+![c](/bisheng/knowledge/images/1/6/image_6_13.jpeg)⟦img#7⟧
+选中单据点击待登记，检查登记表单信息，点击保存并提交：
+![d](/bisheng/knowledge/images/1/6/image_6_14.jpeg)⟦img#8⟧
+1.6 账户可视状态管理
+账户银行开户登记完成后，由财务公司系统办理账户可视状态变更。
+![vis](/bisheng/knowledge/images/1/6/image_15_46.jpeg)⟦img#27⟧
+2.1 U盾登记
+经办人在网银U盾登记界面，可查询当前经办人操作的登记单记录。
+![usb1](/bisheng/knowledge/images/1/6/image_18_59.jpeg)⟦img#32⟧
+![usb2](/bisheng/knowledge/images/1/6/image_18_60.jpeg)⟦img#33⟧
+操作路径：司库管理 银行账户 网银U盾登记
+"""
+
+
+def test_suggest_opening_register_does_not_prefer_usb_register_heading():
+    question = "把开户登记界面说明相关的图片显示出来"
+    suggested = suggest_image_ids(_REGISTER_VS_USB, question)
+    assert suggested
+    assert "img#32" not in suggested
+    assert "img#33" not in suggested
+    assert "img#27" not in suggested
+    assert any(image_id in suggested for image_id in ("img#5", "img#6", "img#7", "img#8"))
+
+
+def test_suggest_skips_already_failed_too_small_ids():
+    question = "把开户登记界面说明相关的图片显示出来"
+    suggested = suggest_image_ids(_REGISTER_VS_USB, question, exclude={"img#5", "img#6", "img#7"})
+    assert "img#5" not in suggested
+    assert any(image_id in suggested for image_id in ("img#8",))
+    assert "img#32" not in suggested

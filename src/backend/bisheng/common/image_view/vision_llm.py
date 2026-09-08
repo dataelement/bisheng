@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from loguru import logger
@@ -23,11 +23,21 @@ from bisheng.common.image_view.loop import (
     _suggested_ids_for,
     _synthetic_view_calls,
     _view_calls,
+    failed_image_ids,
+    pixels_were_viewed,
     prepare_vision_messages,
     question_needs_pixels,
 )
 from bisheng.common.image_view.relocate import relocate_images_to_human
 from bisheng.common.image_view.tool import build_view_image_tool
+
+RETRIEVE_BEFORE_VIEW_RULES = (
+    "知识库文件不在代码执行器工作目录。"
+    "用户问知识库中的截图 / 界面 / 图片时，必须先调用 search_knowledge_bases，"
+    "不要用代码执行器查找或抽取这些 PDF。"
+    "检索返回的 markdown 图会带 ⟦img#N⟧，然后再调用 view_image。"
+)
+_SYNTHETIC_RETRIEVE_ID = "search_kb_forced"
 
 
 def viewed_images_human_message(viewed: list[tuple[str, str]]) -> HumanMessage:
@@ -52,7 +62,41 @@ def _messages_from_state(state: Any) -> list[BaseMessage]:
 
 
 def _already_viewed(messages: list[BaseMessage]) -> bool:
-    return any(isinstance(message, ToolMessage) and message.name == TOOL_NAME for message in messages)
+    return pixels_were_viewed(messages)
+
+
+def _already_retrieved(messages: list[BaseMessage], tool_name: str) -> bool:
+    return any(isinstance(message, ToolMessage) and message.name == tool_name for message in messages)
+
+
+def _retrieve_query(messages: list[BaseMessage]) -> str:
+    return _last_user_question(messages).strip()
+
+
+def maybe_inject_retrieve(ai: AIMessage, messages: list[BaseMessage], retrieve_tool_name: str | None) -> AIMessage:
+    """Force search_knowledge_bases when the model goes to the sandbox instead."""
+    if not retrieve_tool_name:
+        return ai
+    if _already_retrieved(messages, retrieve_tool_name):
+        return ai
+    calls = list(ai.tool_calls or [])
+    if any(call.get("name") == retrieve_tool_name for call in calls):
+        return ai
+    query = _retrieve_query(messages)
+    if not query:
+        return ai
+    logger.info("image_view injecting retrieve tool={} query={!r}", retrieve_tool_name, query[:80])
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": retrieve_tool_name,
+                "args": {"knowledge_base_ids": [], "query": query},
+                "id": _SYNTHETIC_RETRIEVE_ID,
+                "type": "tool_call",
+            }
+        ],
+    )
 
 
 def maybe_inject_view_image(ai: AIMessage, messages: list[BaseMessage], registry: ImageRegistry) -> AIMessage:
@@ -72,7 +116,10 @@ def maybe_inject_view_image(ai: AIMessage, messages: list[BaseMessage], registry
                 view_calls = injected
         if view_calls:
             return _ai_message_for_second_round(ai, view_calls)
-    elif view_calls:
+    if view_calls and not suggested and failed_image_ids(messages):
+        logger.info("image_view skip retry failed_ids={}", sorted(failed_image_ids(messages)))
+        return AIMessage(content=ai.content if isinstance(ai.content, str) else "")
+    if view_calls:
         return _ai_message_for_second_round(ai, view_calls)
     return ai
 
@@ -80,11 +127,21 @@ def maybe_inject_view_image(ai: AIMessage, messages: list[BaseMessage], registry
 class _VisionCallRunnable(Runnable):
     """Relocate images, attach viewed pixels, optionally append rules, then call the bound LLM."""
 
-    def __init__(self, bound: Any, extra_rules: bool, registry: ImageRegistry, hold_for_inject: bool):
+    def __init__(
+        self,
+        bound: Any,
+        extra_rules: bool,
+        registry: ImageRegistry,
+        hold_for_inject: bool,
+        retrieve_tool_name: str | None = None,
+        retrieve_hint: bool = False,
+    ):
         self._bound = bound
         self._extra_rules = extra_rules
         self._registry = registry
         self._hold_for_inject = hold_for_inject
+        self._retrieve_tool_name = retrieve_tool_name
+        self._retrieve_hint = retrieve_hint
 
     def _prepare(self, inp: Any) -> list[BaseMessage]:
         messages = messages_from_model_input(inp)
@@ -94,7 +151,17 @@ class _VisionCallRunnable(Runnable):
         messages = relocate_images_to_human(messages)
         if self._extra_rules:
             messages = prepare_vision_messages(messages)
+        elif self._retrieve_hint:
+            messages = [SystemMessage(content=RETRIEVE_BEFORE_VIEW_RULES), *messages]
         return messages
+
+    def _after_model(self, result: Any, messages: list[BaseMessage]) -> Any:
+        if not isinstance(result, AIMessage):
+            return result
+        result = maybe_inject_view_image(result, messages, self._registry)
+        if self._retrieve_hint:
+            result = maybe_inject_retrieve(result, messages, self._retrieve_tool_name)
+        return result
 
     def _bound_config(self, config):
         if not self._hold_for_inject:
@@ -110,9 +177,7 @@ class _VisionCallRunnable(Runnable):
     def invoke(self, inp: Any, config=None, **kwargs: Any):
         messages = self._prepare(inp)
         result = self._bound.invoke(messages, config=self._bound_config(config), **kwargs)
-        if isinstance(result, AIMessage):
-            return maybe_inject_view_image(result, messages, self._registry)
-        return result
+        return self._after_model(result, messages)
 
     async def ainvoke(self, inp: Any, config=None, **kwargs: Any):
         messages = self._prepare(inp)
@@ -126,9 +191,7 @@ class _VisionCallRunnable(Runnable):
             result = _collect_ai(chunks)
         else:
             result = self._bound.invoke(messages, config=call_config, **kwargs)
-        if isinstance(result, AIMessage):
-            return maybe_inject_view_image(result, messages, self._registry)
-        return result
+        return self._after_model(result, messages)
 
     async def astream(self, inp: Any, config=None, **kwargs: Any):
         messages = self._prepare(inp)
@@ -141,8 +204,8 @@ class _VisionCallRunnable(Runnable):
         async for chunk in self._bound.astream(messages, config=call_config, **kwargs):
             chunks.append(chunk)
         ai = _collect_ai(chunks)
-        injected = maybe_inject_view_image(ai, messages, self._registry)
-        if injected.tool_calls:
+        injected = self._after_model(ai, messages)
+        if isinstance(injected, AIMessage) and injected.tool_calls:
             yield injected
             return
         for chunk in chunks:
@@ -152,31 +215,63 @@ class _VisionCallRunnable(Runnable):
 class VisionToolBindWrapper:
     """Per-turn model factory: bind view_image only after the registry is filled."""
 
-    def __init__(self, llm: Any, registry: ImageRegistry, base_tools: list[BaseTool]):
+    def __init__(
+        self,
+        llm: Any,
+        registry: ImageRegistry,
+        base_tools: list[BaseTool],
+        *,
+        retrieve_tool_name: str | None = None,
+    ):
         self._llm = llm
         self._registry = registry
         self._base_tools = list(base_tools)
         self._view_tool = build_view_image_tool(registry)
+        self._retrieve_tool_name = retrieve_tool_name
 
     def __call__(self, state, runtime):
         messages = _messages_from_state(state)
         needs_pixels = question_needs_pixels(_last_user_question(messages)) if messages else False
         viewed = _already_viewed(messages)
         bind_kwargs: dict[str, Any] = {}
+        retrieve_hint = False
         if len(self._registry) > 0:
             tools = [*self._base_tools, self._view_tool]
             extra_rules = True
-            if needs_pixels and not viewed:
+            remaining = _suggested_ids_for(messages) if needs_pixels else []
+            exhausted = bool(failed_image_ids(messages)) and not remaining
+            if needs_pixels and not viewed and not exhausted:
                 bind_kwargs["tool_choice"] = {"type": "function", "function": {"name": TOOL_NAME}}
                 logger.info("image_view forcing tool_choice={}", TOOL_NAME)
         else:
             tools = list(self._base_tools)
             extra_rules = False
+            retrieve_ready = bool(
+                self._retrieve_tool_name
+                and needs_pixels
+                and any(getattr(tool, "name", None) == self._retrieve_tool_name for tool in tools)
+                and not _already_retrieved(messages, self._retrieve_tool_name)
+            )
+            if retrieve_ready:
+                retrieve_hint = True
+                bind_kwargs["tool_choice"] = {
+                    "type": "function",
+                    "function": {"name": self._retrieve_tool_name},
+                }
+                logger.info("image_view forcing retrieve tool={}", self._retrieve_tool_name)
+            else:
+                logger.info(
+                    "image_view skip view_image registry_size=0 tools={} needs_pixels={}",
+                    [getattr(tool, "name", "") for tool in tools],
+                    needs_pixels,
+                )
         bound = self._llm.bind_tools(tools, **bind_kwargs) if tools else self._llm
-        hold_for_inject = extra_rules and needs_pixels and not viewed
+        hold_for_inject = (extra_rules and needs_pixels and not viewed) or retrieve_hint
         return _VisionCallRunnable(
             bound,
             extra_rules=extra_rules,
             registry=self._registry,
             hold_for_inject=hold_for_inject,
+            retrieve_tool_name=self._retrieve_tool_name,
+            retrieve_hint=retrieve_hint,
         )

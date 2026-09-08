@@ -51,7 +51,13 @@ from bisheng.common.errcode.workstation import (
     DepartmentDailyChatConcurrentLimitError,
     LLMRateLimitError,
 )
-from bisheng.common.image_view import ImageRegistry, VisionToolBindWrapper, annotate, build_view_image_tool
+from bisheng.common.image_view import (
+    ImageRegistry,
+    VisionToolBindWrapper,
+    annotate,
+    build_view_image_tool,
+    missing_viewed_markdown,
+)
 from bisheng.common.schemas.telemetry.event_data_schema import (
     ApplicationAliveEventData,
     ApplicationProcessEventData,
@@ -1568,6 +1574,24 @@ async def _agent_stream_chat_completion(
                             ev["duration_ms"] = max(0, now_ms - ev["started_at"])
             inflight_tool_idx.clear()
 
+        def splice_viewed_image_markdown() -> str:
+            """Append `![](url)` for images the model already viewed.
+
+            Weak VL models often say they will show img#N without emitting the
+            original markdown the chat bubble needs to render.
+            """
+            nonlocal final_msg
+            extra = missing_viewed_markdown(final_msg, image_registry)
+            if not extra:
+                return ""
+            logger.info("image_view splice markdown viewed_ids={}", image_registry.viewed_ids())
+            final_msg += extra
+            if events and events[-1].get("type") == "text":
+                events[-1]["content"] = events[-1].get("content", "") + extra
+            else:
+                events.append({"type": "text", "content": extra.lstrip()})
+            return extra
+
         def build_answer_row(db_content: dict) -> ChatMessage:
             return ChatMessage(
                 user_id=conversation.user_id,
@@ -1602,6 +1626,7 @@ async def _agent_stream_chat_completion(
             error_flag = True
             error_msg = error_msg or reason
             finalise_dangling_events()
+            splice_viewed_image_markdown()
             try:
                 citation_items = select_registry_items_for_persistence(
                     citation_collector.list_items(),
@@ -1748,6 +1773,7 @@ async def _agent_stream_chat_completion(
 
             logger.info(
                 f"[agent_chat] prepared messages user={login_user.user_id}"
+                f" model={data.model} visual_enabled={visual_enabled}"
                 f" history_len={len(history)} has_sys_prompt={bool(sys_prompt)}"
                 f" tool_count={len(langchain_tools)}"
                 f" tool_names={[t.name for t in langchain_tools]}"
@@ -1793,6 +1819,7 @@ async def _agent_stream_chat_completion(
                     "conversation_id": conversation_id,
                     "tool_count": len(langchain_tools),
                     "tool_names": [t.name for t in langchain_tools],
+                    "visual_enabled": visual_enabled,
                     "kb_count": len(knowledge_bases_info or []),
                     "system_prompt": sys_prompt,
                     "messages": [_serialize_message(m) for m in llm_messages],
@@ -1824,7 +1851,14 @@ async def _agent_stream_chat_completion(
                 )
 
                 agent = create_react_agent(
-                    VisionToolBindWrapper(bisheng_llm, image_registry, langchain_tools),
+                    VisionToolBindWrapper(
+                        bisheng_llm,
+                        image_registry,
+                        langchain_tools,
+                        retrieve_tool_name="search_knowledge_bases"
+                        if visual_enabled and knowledge_bases_info
+                        else None,
+                    ),
                     tool_node,
                     prompt=sys_prompt,  # may be None
                 )
@@ -2094,6 +2128,15 @@ async def _agent_stream_chat_completion(
         # Finalise any dangling thinking / tool events (e.g. stream interrupted
         # mid-reasoning or mid-tool).
         finalise_dangling_events()
+
+        extra_images = splice_viewed_image_markdown()
+        if extra_images and not error_flag:
+            yield _sse_resp(
+                "agent_answer",
+                "stream",
+                {"msg": extra_images},
+                conversation_id,
+            )
 
         # Persist agent_answer — new unified shape is `{msg, events}`.
         # Citations are resolved BEFORE the insert so a marker the registry

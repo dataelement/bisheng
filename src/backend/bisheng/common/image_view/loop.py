@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any
 
-from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from loguru import logger
 
 from bisheng.common.image_view.annotate import ImageRegistry
@@ -17,21 +17,32 @@ IMAGE_VIEW_PROMPT_RULES = """# 查看图片
 2. 用户问截图 / 界面 / 表单字段 / 图内文字 / 图表走势时，必须先调 `view_image`（`image_ids` 为列表，单轮最多 3 张），看完再答。
 3. 选图：根据问题匹配附近标题 / 说明文字对应的 `img#`，不要默认第一张 `img#1`。
 4. 不要写「我看不到图」，不要根据周围文字或历史编造图意。
-5. 回答里仍输出原始 `![](url)`，方便前端渲染。
+5. 是否把图画进回答由你判断：用户要看图 / 展示 / 对照截图时，输出原始 `![](url)`；只问字段、走势、图意时只写文字，不要贴图。
 6. 只能使用本轮出现过的 `img#`。"""
 
 # Prior assistant turns that list many img# ids were almost always guessed from
 # filenames / surrounding text (no pixels). Keep short answers that cite 1–3 images.
 _CATALOG_IMG_MENTIONS = 5
-_NEED_PIXELS = re.compile(r"截图|界面|表单|字段|图里|走势|图表|这张图|图片写|看图|图上")
+_NEED_PIXELS = re.compile(r"截图|界面|表单|字段|图里|走势|图表|这张图|图片写|看图|图上|图片")
 _USER_QUESTION_MARKERS = ("# 用户问题", "# User question")
+_USER_QUESTION_OPEN = "<user_question>"
+_USER_QUESTION_CLOSE = "</user_question>"
+_VIEWED_IMAGES_PREFIX = "Viewed images:"
+# URL path tokens that match every knowledge markdown image; must not rank picks.
+_ASCII_SCORE_STOP = frozenset(
+    {"viewed", "images", "image", "knowledge", "bisheng", "http", "https", "jpeg", "jpg", "png", "html"}
+)
 _ANCHOR_RE = re.compile(r"\u27e6(img#\d+)\u27e7")
+_FAILED_ID_RE = re.compile(r"Image (img#\d+) is not available")
 _CJK_RUN = re.compile(r"[\u4e00-\u9fff]+")
 _ASCII_WORD = re.compile(r"[A-Za-z0-9_]{4,}")
+# Sliding 4-grams of the whole question match generic "登记界面"; require the head noun.
+_LEADING_ASK = re.compile(r"^(把|将|请|帮我|给我|我想看|我想|我要)+")
 _CAPTION_BEFORE = 240
 _CAPTION_NEAR = 80
 _SUGGEST_LIMIT = 3
 _MIN_CAPTION_SCORE = 2
+_REQUIRED_TOKEN_NEAR_BONUS = 24
 
 
 def _message_text(message: BaseMessage) -> str:
@@ -73,18 +84,64 @@ def drop_image_catalog_history(
     return kept
 
 
+def _extract_user_question(text: str) -> str:
+    start = text.find(_USER_QUESTION_OPEN)
+    end = text.find(_USER_QUESTION_CLOSE)
+    if start != -1 and end > start:
+        return text[start + len(_USER_QUESTION_OPEN) : end].strip()
+    return text.strip()
+
+
 def _last_user_question(messages: list[BaseMessage]) -> str:
     for message in reversed(messages):
         if not isinstance(message, HumanMessage):
             continue
         text = _message_text(message)
-        if not text:
+        if not text or text.startswith(_VIEWED_IMAGES_PREFIX):
             continue
         for marker in _USER_QUESTION_MARKERS:
             if marker in text:
-                return text.split(marker, 1)[-1]
-        return text
+                return _extract_user_question(text.split(marker, 1)[-1])
+        return _extract_user_question(text)
     return ""
+
+
+def pixels_were_viewed(messages: list[BaseMessage]) -> bool:
+    """True only after view_image actually returned pixels, not a failed fetch."""
+    return any(
+        isinstance(message, ToolMessage) and message.name == TOOL_NAME and "Viewed " in _message_text(message)
+        for message in messages
+    )
+
+
+def failed_image_ids(messages: list[BaseMessage]) -> set[str]:
+    """img# ids that already returned not-available / too_small this turn."""
+    ids: set[str] = set()
+    for message in messages:
+        if isinstance(message, ToolMessage) and message.name == TOOL_NAME:
+            ids.update(_FAILED_ID_RE.findall(_message_text(message)))
+    return ids
+
+
+def _required_caption_token(question: str) -> str:
+    """First 4 CJK chars after stripping 把/请 — '开户登记' not the overlapping '登记界面'."""
+    joined = "".join(_CJK_RUN.findall(question or ""))
+    joined = _LEADING_ASK.sub("", joined)
+    if len(joined) >= 4:
+        return joined[:4]
+    return ""
+
+
+def _required_token_is_topic(window: str, required: str) -> bool:
+    """True when required names this section, not a prerequisite like '开户登记完成后'."""
+    if not required or required not in window:
+        return False
+    for match in re.finditer(re.escape(required), window):
+        after = window[match.end() : match.end() + 2]
+        if after.startswith("完成"):
+            continue
+        return True
+    return False
 
 
 def question_needs_pixels(text: str) -> bool:
@@ -105,7 +162,11 @@ def _raw_caption_score(window: str, question: str) -> int:
     score = sum(1 for gram in _cjk_ngrams(question, 2) if gram in window)
     score += 4 * sum(1 for gram in _cjk_ngrams(question, 4) if gram in window)
     lowered = window.lower()
-    score += 2 * sum(1 for word in _ASCII_WORD.findall(question or "") if word.lower() in lowered)
+    score += 2 * sum(
+        1
+        for word in _ASCII_WORD.findall(question or "")
+        if word.lower() not in _ASCII_SCORE_STOP and word.lower() in lowered
+    )
     return score
 
 
@@ -115,22 +176,37 @@ def _caption_score(window: str, question: str) -> int:
     return _raw_caption_score(near, question) * 3 + _raw_caption_score(far, question)
 
 
-def suggest_image_ids(context: str, question: str, *, limit: int = _SUGGEST_LIMIT) -> list[str]:
+def suggest_image_ids(
+    context: str,
+    question: str,
+    *,
+    limit: int = _SUGGEST_LIMIT,
+    exclude: set[str] | None = None,
+) -> list[str]:
     """Rank img# ids by how well the preceding caption matches the user question."""
     if not context or not question:
         return []
+    skip = exclude or set()
+    required = _required_caption_token(question)
     four_grams = _cjk_ngrams(question, 4)
     ranked: list[tuple[int, int, str]] = []
     for match in _ANCHOR_RE.finditer(context):
+        image_id = match.group(1)
+        if image_id in skip:
+            continue
         start = max(0, match.start() - _CAPTION_BEFORE)
         window = context[start : match.start()]
+        if required and not _required_token_is_topic(window, required):
+            continue
         # 4-gram required when the question has one: "开户申请" must not match "销户申请".
-        if four_grams and not any(gram in window for gram in four_grams):
+        if not required and four_grams and not any(gram in window for gram in four_grams):
             continue
         score = _caption_score(window, question)
+        if required and _required_token_is_topic(window[-_CAPTION_NEAR:], required):
+            score += _REQUIRED_TOKEN_NEAR_BONUS
         if score >= _MIN_CAPTION_SCORE:
             # Later images win ties: form screenshots sit after the section heading.
-            ranked.append((-score, -match.start(), match.group(1)))
+            ranked.append((-score, -match.start(), image_id))
     seen: set[str] = set()
     out: list[str] = []
     for _, _, image_id in sorted(ranked):
@@ -144,9 +220,7 @@ def suggest_image_ids(context: str, question: str, *, limit: int = _SUGGEST_LIMI
 
 
 def _image_pick_hint(messages: list[BaseMessage]) -> str:
-    question = _last_user_question(messages)
-    context = "\n".join(_message_text(message) for message in messages)
-    suggested = suggest_image_ids(context, question)
+    suggested = _suggested_ids_for(messages)
     if not suggested:
         return ""
     logger.info("image_view suggested_ids={}", suggested)
@@ -181,7 +255,7 @@ def prepare_vision_messages(messages: list[BaseMessage]) -> list[BaseMessage]:
 def _suggested_ids_for(messages: list[BaseMessage]) -> list[str]:
     question = _last_user_question(messages)
     context = "\n".join(_message_text(message) for message in messages)
-    return suggest_image_ids(context, question)
+    return suggest_image_ids(context, question, exclude=failed_image_ids(messages))
 
 
 def _apply_suggested_ids(

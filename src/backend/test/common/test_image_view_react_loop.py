@@ -237,6 +237,8 @@ async def test_after_view_plain_text_is_not_injected(mock_fetch):
         yielded.append(getattr(chunk, "content", "") or "")
     joined = "".join(yielded)
     assert joined.count("final answer after viewing") == 1
+    # Trend / field questions view pixels but must not paste the screenshot.
+    assert "chart.png" not in joined
     assert len([inp for inp in llm.generate_inputs if any(isinstance(m, ToolMessage) for m in inp)]) == 1
     # Second model turn is the answer; no extra inject round after that.
     answer_turns = [inp for inp in llm.generate_inputs if any(isinstance(m, ToolMessage) for m in inp)]
@@ -244,6 +246,33 @@ async def test_after_view_plain_text_is_not_injected(mock_fetch):
     assert not any(
         isinstance(m, AIMessage) and m.tool_calls and getattr(m, "id", None) == "view_image_forced" for m in last
     )
+
+
+async def test_after_view_splices_markdown_when_user_asks_to_show(mock_fetch):
+    llm = _FakeVisionModel(
+        first=AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "view_image",
+                    "args": {"image_ids": ["img#1"], "quality": "standard"},
+                    "id": "call_1",
+                    "type": "tool_call",
+                }
+            ],
+        ),
+        second=AIMessage(content="我将显示开户登记相关截图。"),
+    )
+    messages = [
+        SystemMessage(content="base system"),
+        HumanMessage(content="把开户登记界面说明相关的图片显示出来"),
+    ]
+    yielded: list[str] = []
+    async for chunk in run_react_vision_stream(llm, messages, _registry_one(), visual=True):
+        yielded.append(getattr(chunk, "content", "") or "")
+    joined = "".join(yielded)
+    assert "我将显示开户登记相关截图。" in joined
+    assert "chart.png](/bisheng/knowledge/images/1/2/chart.png)" in joined
 
 
 async def test_stream_deltas_are_not_repeated_by_chain_end(monkeypatch):

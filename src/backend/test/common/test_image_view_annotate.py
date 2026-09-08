@@ -3,7 +3,12 @@
 Covers AC: AC-01, AC-08
 """
 
-from bisheng.common.image_view import ImageRegistry, annotate
+from bisheng.common.image_view.annotate import (
+    ImageRegistry,
+    annotate,
+    missing_viewed_markdown,
+    should_splice_viewed_images,
+)
 
 _CHART = "/bucket/knowledge/images/1/2/chart.png"
 _TABLE = "/bucket/knowledge/images/1/2/table.png"
@@ -69,3 +74,51 @@ def test_annotate_does_not_rewrite_citation_private_use():
     assert f"![c]({_CHART})⟦img#1⟧" in out
     assert out.count("\ue200") == 1
     assert registry.get("img#1") == {"url": _CHART}
+
+
+def test_missing_viewed_markdown_appends_only_viewed_urls():
+    registry = ImageRegistry()
+    annotate(f"![chart]({_CHART}) ![table]({_TABLE})", registry)
+    registry.record_viewed("img#2", "data:image/png;base64,aaa")
+    registry.pop_viewed()
+
+    extra = missing_viewed_markdown("我将显示 img#2。", registry)
+
+    assert _TABLE in extra
+    assert _CHART not in extra
+    assert extra.startswith("\n\n")
+    assert f"![{_TABLE.rsplit('/', 1)[-1]}]({_TABLE})" in extra
+
+
+def test_missing_viewed_markdown_skips_when_url_already_present():
+    registry = ImageRegistry()
+    annotate(f"![chart]({_CHART})", registry)
+    registry.record_viewed("img#1", "data:image/png;base64,aaa")
+
+    extra = missing_viewed_markdown(f"see ![]({_CHART})", registry)
+
+    assert extra == ""
+
+
+def test_missing_viewed_markdown_empty_when_nothing_viewed():
+    registry = ImageRegistry()
+    annotate(f"![chart]({_CHART})", registry)
+
+    assert missing_viewed_markdown("我将显示 img#1。", registry) == ""
+
+
+def test_missing_viewed_markdown_skips_when_answer_does_not_claim_display():
+    registry = ImageRegistry()
+    annotate(f"![chart]({_CHART})", registry)
+    registry.record_viewed("img#1", "data:image/png;base64,aaa")
+
+    extra = missing_viewed_markdown("单据编号、单位名称、账户类型。", registry)
+
+    assert extra == ""
+
+
+def test_should_splice_viewed_images_follows_model_answer():
+    assert should_splice_viewed_images("我将显示 img#7。")
+    assert should_splice_viewed_images("如下图所示。")
+    assert not should_splice_viewed_images("单据编号、单位名称。")
+    assert not should_splice_viewed_images("开户登记相关截图。")
