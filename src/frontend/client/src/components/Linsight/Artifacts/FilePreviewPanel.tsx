@@ -8,6 +8,7 @@
  */
 import { Outlined } from 'bisheng-icons';
 import { ChevronLeft } from 'lucide-react';
+import type { ChatCitation } from '~/api/chatApi';
 import FileIcon from '~/components/ui/icon/File';
 import { Sheet, SheetContent } from '~/components/ui/Sheet';
 import { useLocalize } from '~/hooks';
@@ -20,6 +21,8 @@ interface FilePreviewPanelProps {
     onOpenChange: (open: boolean) => void;
     file: ArtifactFile | null;
     versionId: string;
+    citations?: ChatCitation[] | null;
+    messageId?: string;
     /** Full session artifact list — lets the markdown preview resolve relative
      *  image refs (`![](charts/x.png)`) against real workspace objects. */
     fileList?: ArtifactFile[];
@@ -29,7 +32,17 @@ interface FilePreviewPanelProps {
     onArtifactPreview?: (file: ArtifactFile) => void;
 }
 
-export function FilePreviewPanel({ open, onOpenChange, file, versionId, fileList, onBack, onArtifactPreview }: FilePreviewPanelProps) {
+export function FilePreviewPanel({
+    open,
+    onOpenChange,
+    file,
+    versionId,
+    citations,
+    messageId,
+    fileList,
+    onBack,
+    onArtifactPreview,
+}: FilePreviewPanelProps) {
     const localize = useLocalize();
 
     if (!file) return null;
@@ -74,6 +87,8 @@ export function FilePreviewPanel({ open, onOpenChange, file, versionId, fileList
                         file={file}
                         versionId={versionId}
                         fileList={fileList}
+                        citations={citations}
+                        messageId={messageId}
                         onArtifactPreview={onArtifactPreview}
                     />
                 </div>

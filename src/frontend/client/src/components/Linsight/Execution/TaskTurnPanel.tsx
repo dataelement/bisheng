@@ -275,6 +275,8 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
                         answer={linsight.output_result?.answer}
                         files={fileList}
                         versionId={versionId}
+                        citations={linsight.output_result?.citations}
+                        messageId={linsight.message_id ?? undefined}
                         onPreview={(file) => onPreviewFile?.(file)}
                     />
                 </ResultPanel>

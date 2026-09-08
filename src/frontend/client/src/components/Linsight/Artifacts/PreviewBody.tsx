@@ -6,6 +6,7 @@
  */
 import { Colored, Outlined } from 'bisheng-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ChatCitation } from '~/api/chatApi';
 import { NotificationSeverity } from '~/common';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import FilePreview from '~/pages/knowledge/FilePreview';
@@ -155,9 +156,12 @@ interface PreviewBodyProps {
     fileList?: ArtifactFile[];
     /** Switch preview to another deliverable when a markdown link is clicked. */
     onArtifactPreview?: (file: ArtifactFile) => void;
+    /** Sources actually cited in the report — same payload as output_result.citations */
+    citations?: ChatCitation[] | null;
+    messageId?: string;
 }
 
-export function PreviewBody({ file, versionId, fileList, onArtifactPreview }: PreviewBodyProps) {
+export function PreviewBody({ file, versionId, fileList, onArtifactPreview, citations, messageId }: PreviewBodyProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const { loading, error, text, imageUrl, resolvedUrl } = usePreviewSource(file, versionId);
@@ -288,6 +292,8 @@ export function PreviewBody({ file, versionId, fileList, onArtifactPreview }: Pr
                         content={markdownText}
                         isLatestMessage={true}
                         webContent={false}
+                        citations={citations}
+                        messageId={messageId}
                         resolveImageSrc={resolveImageSrc}
                         resolveArtifactLink={onArtifactPreview ? resolveArtifactLink : undefined}
                         onArtifactPreview={onArtifactPreview ? handleArtifactPreview : undefined}

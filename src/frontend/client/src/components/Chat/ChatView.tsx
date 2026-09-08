@@ -844,6 +844,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             <WorkspacePanel
                               files={taskWorkspaceFiles}
                               versionId={latestTaskVersionId}
+                              citations={taskLinsight?.output_result?.citations}
+                              messageId={taskLinsight?.message_id ?? undefined}
                               previewFile={taskArtifacts.previewFile}
                               fullscreen={false}
                               onPreview={taskArtifacts.openPreview}
@@ -869,6 +871,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         <WorkspacePanel
                           files={taskWorkspaceFiles}
                           versionId={latestTaskVersionId}
+                          citations={taskLinsight?.output_result?.citations}
+                          messageId={taskLinsight?.message_id ?? undefined}
                           previewFile={taskArtifacts.previewFile}
                           fullscreen
                           hideFullscreenToggle
@@ -1036,6 +1040,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               <WorkspacePanel
                 files={taskWorkspaceFiles}
                 versionId={latestTaskVersionId}
+                citations={taskLinsight?.output_result?.citations}
+                messageId={taskLinsight?.message_id ?? undefined}
                 previewFile={taskArtifacts.previewFile}
                 fullscreen={true}
                 onPreview={taskArtifacts.openPreview}

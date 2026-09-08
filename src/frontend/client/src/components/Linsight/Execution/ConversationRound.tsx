@@ -78,6 +78,7 @@ export function ConversationRound({ round, versionId, onPreview }: ConversationR
                         answer={round.output_result.answer}
                         files={files}
                         versionId={versionId}
+                        citations={round.output_result?.citations}
                         onPreview={onPreview}
                     />
                 </ResultPanel>

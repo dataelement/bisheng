@@ -261,6 +261,8 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                                 answer={linsight?.output_result?.answer}
                                 files={fileList}
                                 versionId={versionId}
+                                citations={linsight?.output_result?.citations}
+                                messageId={linsight?.message_id ?? undefined}
                                 onPreview={(file) => artifactsPanel.openPreview(file)}
                             />
                         </ResultPanel>
@@ -321,6 +323,8 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                 file={artifactsPanel.previewFile}
                 versionId={versionId}
                 fileList={workspaceFiles}
+                citations={linsight?.output_result?.citations}
+                messageId={linsight?.message_id ?? undefined}
                 onBack={artifactsPanel.fromWorkspace ? artifactsPanel.backToWorkspace : undefined}
                 onArtifactPreview={(file) => artifactsPanel.openPreview(file, artifactsPanel.fromWorkspace)}
             />

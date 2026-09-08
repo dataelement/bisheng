@@ -131,6 +131,21 @@ async def test_fallback_writes_exactly_one_verbatim_report(tmp_path):
     assert files[0]["file_url"].split("/")[-1][:-3].isalnum()
 
 
+async def test_fallback_unescapes_citation_markers(tmp_path):
+    """Preview only clicks real U+E200; the wrap-up often still has \\ue200."""
+    answer = "结论。\\ue200knowledgesearch_aaa:1\\ue202"
+    session = type("S", (), {"id": "sv-cite"})()
+    fake_minio = _FakeMinio()
+
+    with patch("bisheng.linsight.domain.utils.get_minio_storage", new=AsyncMock(return_value=fake_minio)):
+        files = await build_fallback_report_file(session_model=session, answer=answer, file_dir=str(tmp_path))
+
+    written = (tmp_path / "output" / FALLBACK_REPORT_NAME).read_text(encoding="utf-8")
+    assert "\ue200knowledgesearch_aaa:1\ue202" in written
+    assert "\\ue200" not in written
+    assert files[0]["file_name"] == FALLBACK_REPORT_NAME
+
+
 async def test_fallback_returns_nothing_for_an_empty_answer(tmp_path):
     session = type("S", (), {"id": "sv-2"})()
     assert await build_fallback_report_file(session_model=session, answer="  ", file_dir=str(tmp_path)) == []

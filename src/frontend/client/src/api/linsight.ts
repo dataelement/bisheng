@@ -37,6 +37,16 @@ export function getLinsightTaskList(versionId: string, linsight: LinsightInfo, s
                 status: item.status === 'in_progress' ? 'terminated' : item.status
             }))
         }
+        if (linsight.status === 'completed') {
+            // Same leftover close as the backend completion sweep. A finished
+            // run can still return in_progress / not_started rows; without this
+            // the reloaded panel keeps spinning at "任务已完成 0/N".
+            const keep = new Set(['success', 'failed', 'terminated']);
+            return res.data.map(item => ({
+                ...item,
+                status: keep.has(item.status) ? item.status : 'terminated',
+            }));
+        }
         return res.data
     });
 }

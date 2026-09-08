@@ -1,5 +1,6 @@
 import re
 from collections import OrderedDict, defaultdict, deque
+from collections.abc import Sequence
 from typing import Any
 
 from langchain_core.documents import Document
@@ -7,7 +8,7 @@ from langchain_core.documents import Document
 from bisheng.citation.domain.repositories.implementations.message_citation_repository_impl import (
     MessageCitationRepositoryImpl,
 )
-from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema, CitationType
 from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
 from bisheng.citation.domain.services.citation_runtime_cache_service import (
     CitationRuntimeCacheService,
@@ -22,6 +23,25 @@ CITATION_KEY_PATTERN = re.compile(
     rf"{CITATION_START_MARKER}(.*?){CITATION_END_MARKER}",
     re.DOTALL,
 )
+# Models (and write_file JSON) often emit the six-character sequence \ue200
+# instead of U+E200. Extra backslashes from JSON double-escaping are common.
+_ESCAPED_CITATION_MARKER_RE = re.compile(r"\\{1,4}ue20([012])", re.IGNORECASE)
+
+
+def unescape_citation_markers(text: str) -> str:
+    """Turn literal ``\\ue200`` / ``\\ue201`` / ``\\ue202`` into real PUA chars."""
+    if not text or "ue20" not in text.lower():
+        return text
+    mapping = {
+        "0": CITATION_START_MARKER,
+        "1": CITATION_SEPARATOR_MARKER,
+        "2": CITATION_END_MARKER,
+    }
+
+    def _repl(match: re.Match[str]) -> str:
+        return mapping[match.group(1)]
+
+    return _ESCAPED_CITATION_MARKER_RE.sub(_repl, text)
 
 
 class CitationRegistryCollector:
@@ -259,6 +279,7 @@ def extract_citation_ids_from_text(text: str) -> set[str]:
     if not text:
         return set()
 
+    text = unescape_citation_markers(text)
     citation_ids: set[str] = set()
     for marker_content in CITATION_KEY_PATTERN.findall(text):
         for citation_key in marker_content.split(CITATION_SEPARATOR_MARKER):
@@ -279,6 +300,44 @@ def filter_registry_items_by_text(
     return [item for item in items if item.citationId in citation_ids]
 
 
+def cited_paragraphs_from_texts(texts: Sequence[str] | None) -> list[str]:
+    """Paragraphs that already carry citation markers, in document order."""
+    paragraphs: list[str] = []
+    seen: set[str] = set()
+    for text in texts or []:
+        if not text:
+            continue
+        normalized = unescape_citation_markers(text)
+        for block in re.split(r"\n\s*\n", normalized):
+            line = block.strip()
+            if not line or line in seen:
+                continue
+            if extract_citation_ids_from_text(line):
+                seen.add(line)
+                paragraphs.append(line)
+    return paragraphs
+
+
+def answer_with_visible_citations(answer: str | None, report_texts: Sequence[str] | None = None) -> str:
+    """Keep the wrap-up, and surface cited report paragraphs when it has no markers.
+
+    Linsight's final spoken answer is often a 1–2 sentence recap without PUA
+    markers, while the report file has them. The result panel renders ``answer``,
+    so badges never appear unless those marked paragraphs are copied onto it.
+    """
+    answer = answer or ""
+    if extract_citation_ids_from_text(answer):
+        return answer
+    cited = cited_paragraphs_from_texts(report_texts)
+    if not cited:
+        return answer
+    body = "\n\n".join(cited)
+    stripped = answer.strip()
+    if not stripped:
+        return body
+    return f"{stripped}\n\n{body}"
+
+
 def strip_unregistered_citation_markers(text: str, items: list[CitationRegistryItemSchema]) -> str:
     """Drop citation markers whose ids were never registered.
 
@@ -297,6 +356,7 @@ def strip_unregistered_citation_markers(text: str, items: list[CitationRegistryI
     Returns the text unchanged when it holds no markers, so the common path
     costs one regex search.
     """
+    text = unescape_citation_markers(text)
     if not text or CITATION_START_MARKER not in text:
         return text
 
@@ -311,11 +371,7 @@ def strip_unregistered_citation_markers(text: str, items: list[CitationRegistryI
                 kept.append(key)
         if not kept:
             return ""
-        return (
-            f"{CITATION_START_MARKER}"
-            f"{CITATION_SEPARATOR_MARKER.join(kept)}"
-            f"{CITATION_END_MARKER}"
-        )
+        return f"{CITATION_START_MARKER}{CITATION_SEPARATOR_MARKER.join(kept)}{CITATION_END_MARKER}"
 
     return CITATION_KEY_PATTERN.sub(_rewrite, text)
 
@@ -379,6 +435,57 @@ def save_message_citations_sync(
             flow_id=flow_id,
         )
     cache_citation_registry_items_sync(items)
+
+
+_RAG_SIGNED_URL_KEYS = ("previewUrl", "downloadUrl", "sourceUrl")
+
+
+def serialize_citation_items_for_page(
+    items: Sequence[CitationRegistryItemSchema],
+) -> list[dict[str, Any]]:
+    """JSON payloads for ``output_result.citations`` / FINAL_RESULT.
+
+    RAG signed URLs are stripped so the client still calls ``/citations/resolve``
+    (INV-7). Document names and snippets stay so the result page can render
+    badges immediately.
+    """
+    payloads: list[dict[str, Any]] = []
+    for item in items:
+        data = item.model_dump(mode="json")
+        if data.get("type") == CitationType.RAG.value:
+            source_payload = data.get("sourcePayload")
+            if isinstance(source_payload, dict):
+                for key in _RAG_SIGNED_URL_KEYS:
+                    source_payload.pop(key, None)
+        payloads.append(data)
+    return payloads
+
+
+async def persist_linsight_report_citations(
+    message_id: int | str | None,
+    chat_id: str | None,
+    report_texts: Sequence[str] | None = None,
+) -> list[CitationRegistryItemSchema]:
+    """Persist only citations actually referenced in a linsight report.
+
+    Unlike ``select_registry_items_for_persistence`` this keeps ZERO items when
+    the report contains no markers (AC-05). Always returns the filtered items
+    so the completion path can attach them to the page payload even when the
+    ChatMessage id is missing (save is skipped in that case). Callers should
+    swallow exceptions so task completion cannot fail because of citation
+    persistence.
+    """
+    joined = "\n\n".join(text for text in (report_texts or []) if text)
+    citation_ids = extract_citation_ids_from_text(joined)
+    if not citation_ids:
+        return []
+    items = await _citation_runtime_cache_service.get_citations_by_ids(list(citation_ids))
+    items = filter_registry_items_by_text(items, joined)
+    if not items:
+        return []
+    if message_id and isinstance(message_id, int):
+        await save_message_citations(message_id=message_id, items=items, chat_id=chat_id)
+    return items
 
 
 async def save_message_citations(

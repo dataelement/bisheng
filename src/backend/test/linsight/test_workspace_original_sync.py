@@ -47,7 +47,7 @@ def _minio(objects: dict[str, bytes]) -> MagicMock:
 def _task(file_dir: str) -> LinsightWorkflowTask:
     task = LinsightWorkflowTask.__new__(LinsightWorkflowTask)
     task.file_dir = file_dir
-    task._baseline_files = set()
+    task._baseline_files = {}
     return task
 
 
@@ -85,7 +85,7 @@ async def test_sync_is_idempotent_for_already_prefetched_files(tmp_path):
 
     assert (tmp_path / "uploads" / "data.xlsx").read_bytes() == b"already here"
     minio.get_object_sync.assert_not_called()
-    assert task._baseline_files == set()
+    assert task._baseline_files == {}
 
 
 async def test_sync_failure_never_blocks_the_turn(tmp_path):
@@ -98,4 +98,4 @@ async def test_sync_failure_never_blocks_the_turn(tmp_path):
     ):
         await task._sync_workspace_originals(SimpleNamespace(id=SVID))  # must not raise
 
-    assert task._baseline_files == set()
+    assert task._baseline_files == {}

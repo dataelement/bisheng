@@ -133,6 +133,54 @@ def snapshot_file_paths(file_dir: str) -> set[str]:
     return set(util.read_files_in_directory(file_dir))
 
 
+def snapshot_file_fingerprints(file_dir: str) -> dict[str, str]:
+    """Absolute path → md5 for every file currently in ``file_dir``.
+
+    Same moment as :func:`snapshot_file_paths`, plus the digest so a later
+    overwrite of an inherited ``output/*.md`` is distinguishable from a leftover.
+    """
+    if not file_dir or not os.path.exists(file_dir):
+        return {}
+    fingerprints: dict[str, str] = {}
+    for path in util.read_files_in_directory(file_dir):
+        try:
+            fingerprints[path] = util.calculate_md5(path)
+        except OSError:
+            continue
+    return fingerprints
+
+
+def fingerprint_file(path: str) -> str:
+    """md5 of one file; empty string when the path cannot be read."""
+    try:
+        return util.calculate_md5(path)
+    except OSError:
+        return ""
+
+
+def _baseline_path_set(
+    baseline_paths: set[str] | dict[str, str] | None,
+) -> set[str] | None:
+    if baseline_paths is None:
+        return None
+    if isinstance(baseline_paths, dict):
+        return set(baseline_paths)
+    return baseline_paths
+
+
+def _is_unmodified_leftover(
+    file_info: dict,
+    baseline_paths: set[str] | dict[str, str] | None,
+) -> bool:
+    """True when this path was already present at start with the same bytes."""
+    if not isinstance(baseline_paths, dict):
+        return False
+    path = file_info.get("file_path") or ""
+    start_md5 = baseline_paths.get(path) or baseline_paths.get(os.path.normpath(path))
+    current_md5 = file_info.get("file_md5")
+    return bool(start_md5) and bool(current_md5) and start_md5 == current_md5
+
+
 def _zone_of(rel_path: str) -> str:
     """First path segment of a workspace-relative path ('' for root-level files)."""
     head = rel_path.replace(os.sep, "/").split("/", 1)
@@ -243,7 +291,9 @@ def deliverable_format_error(file_info: dict) -> str | None:
     return f"content does not match its {ext} extension (starts with {head!r})"
 
 
-def detect_invalid_deliverables(file_details: list[dict], baseline_paths: set[str] | None = None) -> list[dict]:
+def detect_invalid_deliverables(
+    file_details: list[dict], baseline_paths: set[str] | dict[str, str] | None = None
+) -> list[dict]:
     """Selected deliverables whose bytes contradict the format their name promises.
 
     The diagnostic twin of :func:`detect_phantom_deliverables`: that one reports a
@@ -301,14 +351,22 @@ async def read_file_directory(file_dir: str) -> list[dict[str, Any]]:
     return file_details
 
 
-def select_deliverables(file_details: list[dict], baseline_paths: set[str] | None = None) -> list[dict]:
+def select_deliverables(
+    file_details: list[dict], baseline_paths: set[str] | dict[str, str] | None = None
+) -> list[dict]:
     """Pick the run's deliverables out of the working-dir listing, best first.
 
     Two ordered criteria, no text matching:
 
     1. **The ``output/`` zone** — the delivery contract every writer is pointed at
        (the code interpreter now relocates root-level writes into it, and the
-       kernel prompt tells ``write_file`` to use it).
+       kernel prompt tells ``write_file`` to use it). A follow-up turn inherits
+       the previous ``output/``; if every file there is an unmodified leftover
+       (same path + md5 as the start-of-run fingerprint dict), the zone is
+       treated as empty so a missing ``write_file`` falls through to fallback
+       instead of republishing last turn's report. A path-only ``set`` baseline
+       cannot tell overwrite from leftover, so this filter is skipped for that
+       shape (older callers / tests).
     2. **Files this run created**, when ``output/`` came up empty — a deliverable
        written to an off-contract path is still a deliverable. Requires the task's
        start-of-run ``baseline_paths``; without it this criterion is skipped rather
@@ -343,12 +401,20 @@ def select_deliverables(file_details: list[dict], baseline_paths: set[str] | Non
         candidates.append((file_info, zone))
 
     selected = [info for info, zone in candidates if zone == OUTPUT_ZONE]
-    if not selected and baseline_paths is not None:
+    # Fingerprint dict only: if this run wrote or overwrote anything in output/,
+    # keep the whole zone (leftover charts next to a new report still belong
+    # together). If every output/ file is an unmodified leftover, drop them.
+    if selected and isinstance(baseline_paths, dict):
+        if not any(not _is_unmodified_leftover(info, baseline_paths) for info in selected):
+            selected = []
+
+    path_set = _baseline_path_set(baseline_paths)
+    if not selected and path_set is not None:
         # `is not None`, not truthiness: an EMPTY baseline is the common case (a task
         # with no uploaded files prefetches nothing), and it is precisely the case
         # where every file present was produced by this run. Only `None` — no
         # baseline captured at all — means "cannot tell", and then we do not guess.
-        selected = [info for info, _ in candidates if info.get("file_path") not in baseline_paths]
+        selected = [info for info, _ in candidates if info.get("file_path") not in path_set]
 
     # Type first, recency second. The frontend takes ``[0]`` as the headline file
     # and lists the rest under it, so this ordering is user-visible: it must be a
@@ -359,13 +425,15 @@ def select_deliverables(file_details: list[dict], baseline_paths: set[str] | Non
 
 # Get the final result file
 async def get_final_result_file(
-    session_model: LinsightSessionVersion, file_details, baseline_paths: set[str] | None = None
+    session_model: LinsightSessionVersion,
+    file_details,
+    baseline_paths: set[str] | dict[str, str] | None = None,
 ) -> list[dict]:
     """
     Get the final result file
     :param file_details:
     :param session_model: LinsightSessionVersion Model Instance
-    :param baseline_paths: absolute paths present at task start (see snapshot_file_paths)
+    :param baseline_paths: start-of-run paths (set) or path→md5 fingerprints (dict)
     :return: List containing final result file information
     """
     # Final Result File. A file whose bytes contradict its extension is dropped
@@ -577,6 +645,9 @@ async def build_fallback_report_file(session_model: LinsightSessionVersion, answ
     if not answer:
         return []
     try:
+        from bisheng.citation.domain.services.citation_prompt_helper import unescape_citation_markers
+
+        answer = unescape_citation_markers(answer)
         output_dir = os.path.join(file_dir, "output")
         os.makedirs(output_dir, exist_ok=True)
         local_path = os.path.join(output_dir, FALLBACK_REPORT_NAME)

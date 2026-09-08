@@ -23,14 +23,18 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from typing import Annotated
+from typing import Annotated, Any
 
 from json_repair import json_repair
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool, tool
+from langchain_core.tools.base import ArgsSchema
 from langgraph.prebuilt import InjectedState
 from langgraph.types import interrupt
+from loguru import logger
+from pydantic import Field as PydanticField
+from pydantic import SkipValidation
 
 from bisheng.common.services.config_service import settings
 from bisheng.linsight.domain.services.binary_content_guard import (
@@ -83,7 +87,7 @@ __KB_RESEARCH_LINE__
 - 中间产物（草稿、笔记、原始检索摘录）只写入工作区 scratch/ 目录，绝不写 output/。最终交付物的撰写与拼装由主智能体负责，不归你管。
 - 你**没有** ask_user 工具，也不得以任何方式向用户提问；遇到信息不足时基于已掌握的资料给出最佳结论并说明不确定性，而不是停下来等待澄清。
 - 调用方（主智能体）只能看到你的**最后一条消息**。因此请把蒸馏后的结论（含关键事实、出处/来源标识、必要的不确定性说明）作为最后一条消息完整回传，不要把结论只留在中间步骤里。
-
+__CITATION_HANDOFF_LINE__
 请全程使用与任务描述一致的语言（默认简体中文）——这**包括你的思考与推理过程（thinking）**、调研旁白与最终回传，绝不允许“用英文思考、再用中文回传”。"""
 
 # Chinese system prompt for the Linsight task-mode agent (design §2.4). Kept
@@ -131,6 +135,7 @@ __SKILL_DELIVERABLE_LINE__   - 3a（始终）：write_file 写 output/<name>.md�
    - 3d（仅当选了 pdf）：export_pdf(source_path="output/<name>.md")，必须在 3a 之后。
    最终交付物的撰写与拼装必须由你（主智能体）亲自完成，不得委派给子代理；中间产物写 scratch/。
    **禁止**在未调用 write_file 写入 output/ 的情况下，在回复中声称「已保存为 xxx.md / 已写入 xxx」——用户界面只会展示真实写入 output/ 的交付物；口头提及的文件名无法被预览或下载。
+   **重新生成必须覆盖写入**：若 output/ 里已有上一轮交付物，且用户要求重新生成、覆盖、更新或再出一份报告，必须再次调用 write_file（或 edit_file）写入新内容。只读旧文件、把未改动的旧稿当成本轮交付、或仅用文字收尾声称「已更新」，都是错误的。
 
 4. 【收尾】用 1-2 句话概括交付物的核心内容或结论（例如“已梳理出近一年的市场变化并给出三条关键建议”）；不要复述文件名、工作区路径（如 output/…）或“已完成”之类的状态字样——完成状态与可下载的文件由界面单独呈现，正文里无需重复。
 
@@ -388,7 +393,7 @@ def _build_linsight_system_prompt(
     )
 
 
-def _build_researcher_prompt(has_knowledge_base: bool) -> str:
+def _build_researcher_prompt(has_knowledge_base: bool, has_web_search: bool = False) -> str:
     """Resolve the researcher subagent prompt (same lockstep rule as the main one).
 
     The subagent receives search_knowledge_base only when it is in the filtered
@@ -407,7 +412,16 @@ def _build_researcher_prompt(has_knowledge_base: bool) -> str:
             "不要调用任何知识库检索工具，基于已有资料与自身知识给出结论。"
             f"{media_line}"
         )
-    return _LINSIGHT_RESEARCHER_PROMPT_TEMPLATE_ZH.replace("__KB_RESEARCH_LINE__", research_line)
+    if has_knowledge_base or has_web_search:
+        citation_handoff = (
+            "- 检索结果中的来源标识（知识库 `<chunk_id>`、联网 `citation_key`）必须**原样**出现在你的"
+            "最后一条消息里，供主智能体写入报告正文；不要改写、翻译或改成参考文献列表。\n"
+        )
+    else:
+        citation_handoff = ""
+    return _LINSIGHT_RESEARCHER_PROMPT_TEMPLATE_ZH.replace("__KB_RESEARCH_LINE__", research_line).replace(
+        "__CITATION_HANDOFF_LINE__", citation_handoff
+    )
 
 
 def _loads_tolerant(s: str) -> object | None:
@@ -690,6 +704,96 @@ async def ask_user(
     return interrupt({"reason": reason, "params": {"tool_calls": tool_calls}})
 
 
+def _is_web_search_tool(tool: object) -> bool:
+    return getattr(tool, "name", None) == "web_search" or getattr(tool, "tool_name", None) == "web_search"
+
+
+# Linsight-only: write_file JSON double-escapes \\ue200 into the six-character
+# sequence, which extract_citation_ids_from_text does not recognize. Shared
+# citation.yaml already requires real U+E200; this names the output/*.md path
+# the task-mode preview actually reads.
+_LINSIGHT_CITATION_FILE_RULES = (
+    "## File Output\n"
+    "写入任何文件（尤其是经 write_file / edit_file 写入的 `output/*.md`）时，"
+    f"引用标记必须是真实 Unicode 字符 {chr(0xE200)} / {chr(0xE201)} / {chr(0xE202)}"
+    "（U+E200 / U+E201 / U+E202）。"
+    "禁止写成六字符转义 \\ue200 / \\ue201 / \\ue202，也禁止再套反斜杠。"
+)
+
+
+def _with_citation_rules(prompt: str, enabled: bool) -> str:
+    """Append citation.yaml rules when the run actually has a citable tool."""
+    if not enabled or not prompt:
+        return prompt
+    from bisheng.citation.domain.services.citation_prompt_helper import (
+        CITATION_PROMPT_RULES,
+        prompt_has_citation_rules,
+    )
+
+    if prompt_has_citation_rules(prompt):
+        return prompt
+    return f"{prompt.rstrip()}\n\n{CITATION_PROMPT_RULES}\n\n{_LINSIGHT_CITATION_FILE_RULES}"
+
+
+async def _annotate_web_search_output(output: Any) -> Any:
+    from bisheng.citation.domain.services.citation_prompt_helper import (
+        annotate_web_results_with_citations,
+        cache_citation_registry_items,
+        collect_web_citation_registry_items,
+    )
+
+    if not isinstance(output, str):
+        return output
+    try:
+        results = json.loads(output)
+    except json.JSONDecodeError:
+        return output
+    if not isinstance(results, list):
+        return output
+    annotated = annotate_web_results_with_citations(results)
+    await cache_citation_registry_items(collect_web_citation_registry_items(annotated))
+    return json.dumps(annotated, ensure_ascii=False)
+
+
+class _LinsightWebCitationWrapper(BaseTool):
+    """Register web_search hits into the citation runtime cache (F047)."""
+
+    name: str
+    description: str
+    args_schema: Annotated[ArgsSchema | None, SkipValidation()] = PydanticField(default=None)
+    tool: BaseTool
+
+    @classmethod
+    def wrap(cls, inner: BaseTool) -> BaseTool:
+        return cls(
+            name=inner.name,
+            description=inner.description,
+            args_schema=inner.args_schema,
+            tool=inner,
+        )
+
+    def _run(self, *args, **kwargs):
+        return "not supported in sync mode, please use async version"
+
+    async def _arun(self, config=None, **kwargs):
+        output = await self.tool.ainvoke(kwargs, config=config)
+        try:
+            return await _annotate_web_search_output(output)
+        except Exception:
+            logger.opt(exception=True).warning("web_search citation annotate failed; returning bare result")
+            return output
+
+
+def _wrap_linsight_web_citation_tools(tools: Sequence) -> list:
+    wrapped = []
+    for tool_obj in tools:
+        if _is_web_search_tool(tool_obj) and isinstance(tool_obj, BaseTool):
+            wrapped.append(_LinsightWebCitationWrapper.wrap(tool_obj))
+        else:
+            wrapped.append(tool_obj)
+    return wrapped
+
+
 def _subagent_tools(tools: Sequence[BaseTool]) -> list[BaseTool]:
     """Filter the main-graph tool list down to the researcher subagent's subset.
 
@@ -733,13 +837,17 @@ def _build_researcher_subagent(tools: Sequence[BaseTool]) -> dict:
     """
     sub_tools = _subagent_tools(tools)
     has_kb = any(t.name == _KB_TOOL_NAME for t in sub_tools)
+    has_web = any(_is_web_search_tool(t) for t in sub_tools)
     return {
         "name": "general-purpose",
         "description": (
             "用于隔离的调研/分析子任务：在独立上下文中多轮检索与阅读资料，"
             "返回蒸馏后的、有出处的结构化摘要。它不能向用户提问，也不负责最终交付物的撰写与拼装。"
         ),
-        "system_prompt": _build_researcher_prompt(has_kb),
+        "system_prompt": _with_citation_rules(
+            _build_researcher_prompt(has_kb, has_web_search=has_web),
+            has_kb or has_web,
+        ),
         "tools": sub_tools,
     }
 
@@ -778,6 +886,7 @@ async def create_linsight_agent(
     from deepagents import create_deep_agent
 
     svid = svid or session_model.id
+    tools = _wrap_linsight_web_citation_tools(list(tools or []))
     model, supports_vision = await _resolve_model(session_model, model_id)
 
     if backend is None:
@@ -909,18 +1018,22 @@ async def create_linsight_agent(
     # model is never told to call a tool that isn't there (root cause of the
     # "knowledge_id: Field required" error when no KB is selected).
     has_kb = any(t.name == _KB_TOOL_NAME for t in tools)
+    has_web = any(_is_web_search_tool(t) for t in tools)
     # Same lockstep for skills: the skill-priority lines are advertised IFF
     # SkillsMiddleware was actually attached above (``skills_advertised``), so the
     # prompt never points at an "Available Skills" section that does not exist.
     return create_deep_agent(
         model=model,
         tools=[*tools, ask_user, *export_tools],
-        system_prompt=_build_linsight_system_prompt(
-            has_kb,
-            skills_present=skills_advertised,
-            # Gates the hard "no export_docx/export_pdf" rule: only meaningful
-            # when the skill's script route can actually run in this session.
-            has_code_interpreter=has_code_interpreter,
+        system_prompt=_with_citation_rules(
+            _build_linsight_system_prompt(
+                has_kb,
+                skills_present=skills_advertised,
+                # Gates the hard "no export_docx/export_pdf" rule: only meaningful
+                # when the skill's script route can actually run in this session.
+                has_code_interpreter=has_code_interpreter,
+            ),
+            has_kb or has_web,
         ),
         middleware=middlewares,
         subagents=[researcher],

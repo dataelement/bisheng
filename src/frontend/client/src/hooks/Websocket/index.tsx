@@ -326,13 +326,27 @@ export const useLinsightWebSocket = (versionId) => {
                     });
                     break;
                 case 'final_result':
-                    updateLinsight(id, {
-                        output_result: taskData.data.output_result,
-                        // summary: taskData.data.output_result.answer,
-                        file_list: taskData.data.output_result.final_files || [],
-                        status: SopStatus.completed
+                    updateLinsight(id, (prev) => {
+                        const keep = new Set(['success', 'failed', 'terminated']);
+                        const closeUnfinished = (task: { status?: string; children?: unknown[] }) => ({
+                            ...task,
+                            status: keep.has(task.status || '') ? task.status : 'terminated',
+                            children: (task.children || []).map(closeUnfinished),
+                        });
+                        return {
+                            output_result: taskData.data.output_result,
+                            // summary: taskData.data.output_result.answer,
+                            file_list: taskData.data.output_result.final_files || [],
+                            status: SopStatus.completed,
+                            // Sweep leftovers the same way the backend does. FINAL_RESULT
+                            // used to flip only the session status, so a finished run
+                            // kept showing in_progress / not_started ("任务已完成 0/8").
+                            tasks: (prev.tasks || []).map(closeUnfinished),
+                        };
                     })
                     toggleNav(true)
+                    // Authority: pick up the DB sweep even if this socket missed TASK_END.
+                    void reconcileRef.current(id);
                     // Live only: the task answer is now a persisted category="task"
                     // ChatMessage. Pull its real id (+ liked verdict) into the store so
                     // like/dislike targets the right row the moment the result panel
