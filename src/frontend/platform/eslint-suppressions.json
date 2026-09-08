@@ -3475,11 +3475,6 @@
       "count": 1
     }
   },
-  "src/pages/SystemPage/index.tsx": {
-    "react-hooks/rules-of-hooks": {
-      "count": 2
-    }
-  },
   "src/pages/SystemPage/theme/Example.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1

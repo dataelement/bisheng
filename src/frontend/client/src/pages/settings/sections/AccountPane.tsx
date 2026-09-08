@@ -1,10 +1,13 @@
 import { Outlined } from "bisheng-icons";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { getPersonalTokenStatusApi } from "~/api/personalToken";
 import { PersonalTokenDialog } from "~/components/PersonalTokenDialog";
 import { AccountSection } from "~/components/Settings/sections/AccountSection";
 import { Button } from "~/components/ui/Button";
 import { useAuthContext, useLocalize } from "~/hooks";
 import { usePersonalTokenEnabled } from "~/hooks/useVersionManagementEnabled";
+import { shouldShowPersonalTokenEntry } from "./personalTokenEntry";
 
 /**
  * Account section of the settings page: basic information and security
@@ -16,7 +19,17 @@ export function AccountPane() {
   const displayName = user?.username || "admin";
   const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatar || "");
   const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
-  const personalTokenEnabled = usePersonalTokenEnabled();
+  const personalTokenDeploymentEnabled = usePersonalTokenEnabled();
+  const { data: personalTokenStatus } = useQuery({
+    queryKey: ["personal-token-status", user?.id],
+    queryFn: getPersonalTokenStatusApi,
+    enabled: personalTokenDeploymentEnabled && !!user?.id,
+    retry: false,
+  });
+  const personalTokenEnabled = shouldShowPersonalTokenEntry(
+    personalTokenDeploymentEnabled,
+    personalTokenStatus?.enabled,
+  );
 
   return (
     <div className="flex flex-col gap-6">

@@ -159,6 +159,7 @@ export const ChatKnowledge = ({
     name: debouncedOrgKeyword,
     sort_by: 'name',
     preferred_ids: preferredIds,
+    action: 'visible',
   });
 
   useEffect(() => {
@@ -174,7 +175,7 @@ export const ChatKnowledge = ({
   }, [orgData, orgPage]);
 
   // Sort: admin-configured org KBs (in sort_order) first, then any other KBs
-  // the user can access. Filtering by use-permission is enforced server-side
+  // visible to the user. Visibility filtering is enforced server-side
   // in useGetOrgToolList — we only reshuffle display order here.
   const sortedOrgKbs = useMemo(() => {
     const configured = (config as any)?.orgKbs || [];

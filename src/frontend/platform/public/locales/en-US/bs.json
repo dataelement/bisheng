@@ -2073,7 +2073,7 @@
       "requirementsTitle": "File requirements",
       "reqMd": ".md file must contain YAML frontmatter (name and description required)",
       "reqZip": ".zip / .skill archive must include SKILL.md at root; assets allowed",
-      "reqSize": "Uploaded file ≤ 10MB; unpacked contents ≤ 100MB",
+      "reqSize": "Uploaded file ≤ {{size}}MB; unpacked contents ≤ {{unpacked}}MB",
       "githubUrlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill",
       "githubHint": "Paste a GitHub URL pointing to a skill directory (must contain SKILL.md)",
       "githubReqHost": "Public github.com repositories only",
@@ -2091,7 +2091,7 @@
     "errors": {
       "validation": "Validation failed: invalid frontmatter or skill ID",
       "validationDetail": "Validation failed: {{detail}}",
-      "tooLarge": "Uploaded file exceeds the 10MB limit, please trim it and retry",
+      "tooLarge": "Uploaded file exceeds the {{size}}MB limit, please trim it and retry",
       "bundleTooLarge": "Unpacked bundle contents exceed the 100MB limit, please trim the bundled assets and retry",
       "notFound": "Skill not found",
       "noPermission": "No permission for this operation",
@@ -2123,12 +2123,12 @@
   "openApiManagement": {
     "empty": "No records",
     "fields": { "name": "Name", "description": "Description", "ownerUserId": "Resource owner user ID", "owner": "Resource owner", "status": "Status", "activeKeys": "Active keys", "lastUsed": "Last used", "createdAt": "Created", "expiresAt": "Expires" },
-    "status": { "active": "Active", "disabled": "Disabled", "revoked": "Revoked" },
+    "status": { "active": "Active", "enabled": "Enabled", "disabled": "Disabled", "revoked": "Revoked" },
     "actions": { "back": "Back", "details": "Details", "enable": "Enable", "disable": "Disable", "revoke": "Revoke", "revokeHolder": "Revoke holder", "copy": "Copy", "load": "Load resource" },
     "serviceAccount": { "title": "Service accounts", "create": "Create service account", "createHint": "The resource owner must be an active user in this tenant.", "search": "Search service accounts", "overview": "Overview", "keys": "API keys", "grants": "Resource grants" },
     "keys": { "issue": "Issue API key", "issueHint": "Configure basic information, permissions, and delegation only.", "once": "Copy this key now. It will not be shown again.", "saved": "I have saved the key securely", "mask": "Key", "permissions": "Permissions", "delegateScopes": "Delegation scopes", "delegatePlaceholder": "user:12, department:34", "delegateRequired": "At least one user or department is required for delegation." },
     "grants": { "resourceType": "Resource type", "resourceId": "Resource ID", "model": "Permission model", "source": "Grant source", "scope": "Scope", "grantModel": "Grant {{model}}" },
-    "personalToken": { "title": "Personal access tokens", "settings": "Tenant policy", "deploymentDisabled": "Personal access tokens are disabled at deployment level.", "tenantEnabled": "Allow employee tokens", "ttlDays": "Maximum lifetime (days)", "holder": "Holder", "adminRisk": "Administrator risk" }
+    "personalToken": { "title": "Personal access tokens", "settings": "Tenant policy", "settingsSaved": "Tenant policy saved", "deploymentDisabled": "Personal access tokens are disabled at deployment level.", "tenantEnabled": "Allow employee tokens", "ttlDays": "Maximum lifetime (days)", "holder": "Holder", "adminRisk": "Administrator risk" }
   },
   "mediaPreview": {
     "recognizedText": "Recognized text",

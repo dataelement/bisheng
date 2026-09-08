@@ -2018,7 +2018,7 @@
       "requirementsTitle": "文件要求",
       "reqMd": ".md 文件须包含 YAML frontmatter（name 与 description 必填）",
       "reqZip": ".zip / .skill 压缩包须在根目录包含 SKILL.md，可携带附属文件",
-      "reqSize": "上传文件 ≤ 10MB，解压后内容 ≤ 100MB",
+      "reqSize": "上传文件 ≤ {{size}}MB，解压后内容 ≤ {{unpacked}}MB",
       "githubUrlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill",
       "githubHint": "粘贴指向技能目录的 GitHub 链接（目录须包含 SKILL.md）",
       "githubReqHost": "仅支持 github.com 公共仓库",
@@ -2036,7 +2036,7 @@
     "errors": {
       "validation": "校验失败：frontmatter 或技能 ID 不合规",
       "validationDetail": "校验失败：{{detail}}",
-      "tooLarge": "上传文件超过 10MB 上限，请精简后重传",
+      "tooLarge": "上传文件超过 {{size}}MB 上限，请精简后重传",
       "bundleTooLarge": "压缩包解压后内容超过 100MB 上限，请精简附属文件后重传",
       "notFound": "技能不存在",
       "noPermission": "无权限执行该操作",
@@ -2068,12 +2068,12 @@
   "openApiManagement": {
     "empty": "暂无记录",
     "fields": { "name": "名称", "description": "描述", "ownerUserId": "资源归属人用户 ID", "owner": "资源归属人", "status": "状态", "activeKeys": "有效密钥", "lastUsed": "最后使用", "createdAt": "创建时间", "expiresAt": "过期时间" },
-    "status": { "active": "有效", "disabled": "已停用", "revoked": "已吊销" },
+    "status": { "active": "有效", "enabled": "已启用", "disabled": "已停用", "revoked": "已吊销" },
     "actions": { "back": "返回", "details": "详情", "enable": "启用", "disable": "停用", "revoke": "吊销", "revokeHolder": "按持有人吊销", "copy": "复制", "load": "加载资源" },
     "serviceAccount": { "title": "服务账号", "create": "创建服务账号", "createHint": "资源归属人必须是当前租户内的有效自然人。", "search": "搜索服务账号", "overview": "概览", "keys": "API 密钥", "grants": "资源授权" },
     "keys": { "issue": "签发 API 密钥", "issueHint": "仅配置基本信息、权限位和委托配置。", "once": "请立即复制此密钥，之后将无法再次查看。", "saved": "我已安全保存此密钥", "mask": "密钥", "permissions": "权限位", "delegateScopes": "委托范围", "delegatePlaceholder": "user:12, department:34", "delegateRequired": "委托至少需要一个用户或部门范围。" },
     "grants": { "resourceType": "资源类型", "resourceId": "资源 ID", "model": "权限模型", "source": "授权来源", "scope": "范围", "grantModel": "授予 {{model}}" },
-    "personalToken": { "title": "个人访问令牌", "settings": "租户策略", "deploymentDisabled": "部署级个人访问令牌开关已关闭。", "tenantEnabled": "允许员工使用令牌", "ttlDays": "最长有效期（天）", "holder": "持有人", "adminRisk": "管理员风险" }
+    "personalToken": { "title": "个人访问令牌", "settings": "租户策略", "settingsSaved": "已保存租户策略", "deploymentDisabled": "部署级个人访问令牌开关已关闭。", "tenantEnabled": "允许员工使用令牌", "ttlDays": "最长有效期（天）", "holder": "持有人", "adminRisk": "管理员风险" }
   },
   "mediaPreview": {
     "recognizedText": "识别文本",
