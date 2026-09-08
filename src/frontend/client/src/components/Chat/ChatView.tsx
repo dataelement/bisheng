@@ -14,7 +14,7 @@ import { WorkspacePanel } from '~/components/Linsight/Artifacts/WorkspacePanel';
 import { useWorkspacePanel } from '~/components/Linsight/Artifacts/useWorkspacePanel';
 import { collectConversationWorkspaceFiles } from '~/components/Linsight/Artifacts/artifactUtils';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
-import { userStopLinsightEvent } from '~/api/linsight';
+import { getLinsightSessionVersionList, userStopLinsightEvent } from '~/api/linsight';
 import { SopStatus, taskModeState } from '~/store/linsight';
 import { findPendingUserInput, splitSessionPseudoTask } from '~/components/Linsight/Execution/stepUtils';
 import type { ExecStepEventData } from '~/components/Linsight/Execution/stepUtils';
@@ -24,7 +24,13 @@ import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig, useGetOrgToolList } from '~/hooks/queries/data-provider';
 import { useGetWorkbenchModelsQuery } from '~/hooks/queries/queries';
 import useAiChat from '~/hooks/useAiChat';
-import useChatModelMemo from '~/hooks/useChatModelMemo';
+import {
+  moveConversationModel,
+  readAdminDefaultModelId,
+  useChatModelResolution,
+  type ChatModelMode,
+  type ChatModelOption,
+} from '~/hooks/useChatModelResolution';
 import useLocalize from '~/hooks/useLocalize';
 import store from '~/store';
 import { addConversation, cn, generateUUID } from '~/utils';
@@ -115,55 +121,18 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   ]);
 
   // v2.5 interaction memory — per-user localStorage snapshots for the input
-  // bar. The model selection is shared across chat surfaces (ChatView and
-  // AiAssistantPanel), so it lives in useChatModelMemo. KB / tools are
-  // ChatView-only and handled in the effect below. Rules:
+  // bar (KB / tools; handled in the effect below). Rules:
   //  - KB space: default empty; remember user toggles
   //  - org KB: default per bsConfig.orgKbs[].default_checked; remember toggles
   //  - tools: default per bsConfig.tools[].default_checked; remember toggles
-  useChatModelMemo(user, bsConfig as any);
-
-  // Per-mode model resolution. Each mode owns a separate manual memory
-  // (`bs:{uid}:chatModel` / `bs:{uid}:taskModel`); with no valid record the
-  // mode's admin default applies (daily → chat_default_model_id, task →
-  // linsight_default_model_id). Runs on mount and on every mode switch, so
-  // 新建对话/新建任务 swap the displayed model between the two memories /
-  // defaults. KeepAlive-safe: only the activated page runs effects.
+  // The model selection is NOT here — it is scoped per conversation, resolved
+  // further down (search: useChatModelResolution) once isTaskConversation is known.
   const { data: workbenchCfg } = useGetWorkbenchModelsQuery();
-  useEffect(() => {
-    const models = bsConfig?.models || [];
-    if (!models.length || !user?.id) return;
-    const mode = taskMode ? 'task' : 'daily';
-    const key = `bs:${user.id}:${taskMode ? 'taskModel' : 'chatModel'}`;
-    const savedId = localStorage.getItem(key);
-    let manual = true;
-    let target = savedId ? models.find((m) => String(m.id) === savedId) : undefined;
-    if (!target) {
-      manual = false;
-      // A saved id that no longer resolves (model removed/disabled) is a
-      // stale record — drop it so the admin default takes over for good.
-      if (savedId) localStorage.removeItem(key);
-      const raw = (workbenchCfg as Record<string, unknown> | undefined)?.[
-        taskMode ? 'linsight_default_model_id' : 'chat_default_model_id'
-      ];
-      const adminDefaultId =
-        typeof raw === 'string' || typeof raw === 'number' ? String(raw) : null;
-      target =
-        (adminDefaultId ? models.find((m) => String(m.id) === adminDefaultId) : undefined) ??
-        (taskMode ? models[0] : models[models.length - 1]);
-    }
-    if (
-      target &&
-      (String(target.id) !== String(chatModel.id) || !!chatModel.manual !== manual || chatModel.mode !== mode)
-    ) {
-      setChatModel({
-        id: Number(target.id),
-        name: target.displayName || target.name || '',
-        manual,
-        mode,
-      });
-    }
-  }, [taskMode, chatModel.id, chatModel.manual, chatModel.mode, bsConfig, workbenchCfg, user?.id, setChatModel]);
+  const modelMode: ChatModelMode = taskMode ? 'task' : 'daily';
+  const adminDefaultModelId = useMemo(
+    () => readAdminDefaultModelId(workbenchCfg, modelMode),
+    [workbenchCfg, modelMode],
+  );
 
   const memoReadyRef = useRef(false);
   useEffect(() => {
@@ -349,6 +318,12 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     ) {
       // Flag the rewrite so the reset effect above preserves the current mode.
       keepTaskModeOnRewriteRef.current = true;
+      // Carry the model picked while composing under `new` to the real id —
+      // otherwise the freshly created conversation has no record of its own and
+      // resolves from the user-level default instead.
+      if (user?.id) {
+        moveConversationModel(String(user.id), 'new', activeConvoId);
+      }
       navigate(`/c/${activeConvoId}`, { replace: true });
     }
   }, [activeConvoId]); // intentionally ONLY on activeConvoId — don't add navigate/conversationId
@@ -468,6 +443,84 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
           m?.conversationId === conversationId,
       ),
     [messages, conversationId],
+  );
+
+  // Model selection is scoped PER CONVERSATION (bs:{uid}:convModel:{mode}:{id}),
+  // not per user: picking a model in conversation A used to change what every
+  // other conversation showed, and opening a historical one displayed the last
+  // global pick rather than the model that conversation ran on. The user-level
+  // record survives as the layer a BRAND-NEW conversation inherits from.
+  //
+  // Task conversations additionally carry a cross-device source of truth — the
+  // model their last turn really executed with (linsight_session_version.model,
+  // already returned by session-version-list). It only applies when this browser
+  // has no record for the conversation, i.e. after a device/browser switch.
+  const { data: taskConversationModelId = null } = useQuery(
+    [QueryKeys.linsightSessionVersions, conversationId, shareToken],
+    async () => {
+      const versions = await getLinsightSessionVersionList(conversationId, shareToken || '');
+      const latest = (versions || [])[(versions || []).length - 1];
+      return latest?.model ? String(latest.model) : null;
+    },
+    {
+      enabled: isTaskConversation && conversationId !== 'new',
+      staleTime: 60_000,
+      // A failure here just means we fall through to the local records.
+      retry: false,
+    },
+  );
+
+  const handleModelResolved = useCallback(
+    (target: ChatModelOption, deliberate: boolean) => {
+      setChatModel({
+        id: Number(target.id),
+        name: target.displayName || target.name || '',
+        manual: deliberate,
+        mode: modelMode,
+      });
+    },
+    [setChatModel, modelMode],
+  );
+
+  const { persistPick: persistModelPick } = useChatModelResolution({
+    userId: user?.id,
+    conversationId,
+    mode: modelMode,
+    models: (bsConfig?.models || []) as ChatModelOption[],
+    adminDefaultId: adminDefaultModelId,
+    serverModelId: taskConversationModelId,
+    ready: !!bsConfig?.models?.length && !!user?.id,
+    onResolved: handleModelResolved,
+  });
+
+  // The picker writes both the conversation record and the user-level default,
+  // so this conversation keeps the choice and the next new one inherits it.
+  const handleModelChange = useCallback(
+    (val: string | number) => {
+      const model = bsConfig?.models?.find((m: ChatModelOption) => String(m.id) === String(val));
+      persistModelPick(val);
+      setChatModel({
+        id: Number(val),
+        name: model?.displayName || '',
+        manual: true,
+        mode: modelMode,
+      });
+    },
+    [bsConfig, persistModelPick, setChatModel, modelMode],
+  );
+
+  // AiModelSelect repairing an invalid value is NOT a user pick — never persist it.
+  const handleModelAutoChange = useCallback(
+    (val: string | number) => {
+      const model = bsConfig?.models?.find((m: ChatModelOption) => String(m.id) === String(val));
+      setChatModel((prev) => ({
+        id: Number(val),
+        name: model?.displayName || prev.name || '',
+        manual: prev.manual ?? false,
+        mode: prev.mode,
+      }));
+    },
+    [bsConfig, setChatModel],
   );
 
   // F035: sync the task-mode toggle to navigation. ChatView is NOT remounted
@@ -806,24 +859,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                               onScrollToBottom={() => { }}
                               modelOptions={bsConfig?.models}
                               modelValue={chatModel.id}
-                              onModelChange={(val) => {
-                                const model = bsConfig?.models?.find((m) => m.id === val);
-                                setChatModel({
-                                  id: Number(val),
-                                  name: model?.displayName || '',
-                                  manual: true,
-                                  mode: taskMode ? 'task' : 'daily',
-                                });
-                              }}
-                              onModelAutoChange={(val) => {
-                                const model = bsConfig?.models?.find((m) => String(m.id) === String(val));
-                                setChatModel((prev) => ({
-                                  id: Number(val),
-                                  name: model?.displayName || prev.name || '',
-                                  manual: prev.manual ?? false,
-                                  mode: prev.mode,
-                                }));
-                              }}
+                              onModelChange={handleModelChange}
+                              onModelAutoChange={handleModelAutoChange}
                               onSend={handleSend}
                               onStop={handleStop}
                               value={inputText}
@@ -991,24 +1028,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             onScrollToBottom={() => { }}
                             modelOptions={bsConfig?.models}
                             modelValue={chatModel.id}
-                            onModelChange={(val) => {
-                              const model = bsConfig?.models?.find((m) => m.id === val);
-                              setChatModel({
-                                id: Number(val),
-                                name: model?.displayName || '',
-                                manual: true,
-                                mode: taskMode ? 'task' : 'daily',
-                              });
-                            }}
-                            onModelAutoChange={(val) => {
-                              const model = bsConfig?.models?.find((m) => String(m.id) === String(val));
-                              setChatModel((prev) => ({
-                                id: Number(val),
-                                name: model?.displayName || prev.name || '',
-                                manual: prev.manual ?? false,
-                                mode: prev.mode,
-                              }));
-                            }}
+                            onModelChange={handleModelChange}
+                            onModelAutoChange={handleModelAutoChange}
                             onSend={handleSend}
                             onStop={stopGenerating}
                             value={inputText}

@@ -20,8 +20,16 @@ import store from "~/store";
  * Hook for channel article AI chat.
  * @param articleDocId - ES article document ID; empty string disables the hook.
  */
-export default function useChannelChat(articleDocId: string) {
-    const chatModel = useRecoilValue(store.chatModel);
+/**
+ * @param model - The surface's own model selection (see useSurfaceModel).
+ *   Omitted, it falls back to the shared `chatModel` atom.
+ */
+export default function useChannelChat(
+    articleDocId: string,
+    model?: { id: number; name: string },
+) {
+    const sharedChatModel = useRecoilValue(store.chatModel);
+    const chatModel = model ?? sharedChatModel;
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
     const [isLoading, setIsLoading] = useState(false);

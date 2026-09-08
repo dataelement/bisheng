@@ -7,7 +7,7 @@ import { useLocalize } from "~/hooks";
  *   - File chat mode: when fileChat is provided, uses useFileChat
  */
 import { ChevronsRight } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRecoilState } from "recoil";
 import { Button } from "~/components";
 import {
@@ -17,7 +17,7 @@ import {
     TooltipTrigger,
 } from "~/components/ui/Tooltip2";
 import { useAuthContext } from "~/hooks/AuthContext";
-import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { useGetBsConfig, useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import store from "~/store";
 import type { AiChatInputFeatures } from "~/components/Chat/AiChatInput";
 import AiChatInput from "~/components/Chat/AiChatInput";
@@ -25,7 +25,12 @@ import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { ArticleQAIllustration } from "~/components/illustrations";
 import useAiChat from "~/hooks/useAiChat";
 import useChannelChat from "~/hooks/useChannelChat";
-import useChatModelMemo from "~/hooks/useChatModelMemo";
+import {
+    readAdminDefaultModelId,
+    useChatModelResolution,
+    type ChatModelOption,
+} from "~/hooks/useChatModelResolution";
+import { useSurfaceModel } from "~/hooks/useSurfaceModel";
 import useFileChat from "~/hooks/useFileChat";
 import { useConfirm } from "~/Providers";
 import { ChannelClearIcon } from "~/components/icons/channels";
@@ -67,12 +72,33 @@ export function AiAssistantPanel({
     const allowModelSelect = features?.modelSelect ?? !isFileChatMode;
     const allowAdvancedSelectors = !isSimpleMode;
 
+    // Model selection splits by mode:
+    //  - dock modes (channel / file) are standalone panels: their own isolated
+    //    selection, which must not leak into /c (see useSurfaceModel);
+    //  - workstation mode IS a regular conversation, so it resolves per
+    //    conversation exactly like ChatView and keeps writing the shared atom
+    //    that useAiChat reads.
+    const { data: bsConfig } = useGetBsConfig();
+    const { user } = useAuthContext();
+    const { data: workbenchCfg } = useGetWorkbenchModelsQuery();
+    const {
+        model: surfaceModel,
+        selectModel: selectSurfaceModel,
+        repairModel: repairSurfaceModel,
+    } = useSurfaceModel({
+        userId: user?.id,
+        surfaceKey: isFileChatMode ? 'assistantFileAi' : 'assistantChannelAi',
+        models: (bsConfig?.models || []) as ChatModelOption[],
+        adminDefaultId: readAdminDefaultModelId(workbenchCfg, 'daily'),
+    });
+
     // All three hooks always called (React hooks rules); only the active one runs
     const workstationChat = useAiChat(isSimpleMode ? "new" : conversationId);
-    const channelChat = useChannelChat(isChannelMode ? articleDocId! : "");
+    const channelChat = useChannelChat(isChannelMode ? articleDocId! : "", surfaceModel);
     const fileChatHook = useFileChat(
         isFileChatMode ? fileChat!.spaceId : "",
-        isFileChatMode ? fileChat!.fileId : ""
+        isFileChatMode ? fileChat!.fileId : "",
+        surfaceModel,
     );
 
     // Pick the active chat based on mode
@@ -98,17 +124,68 @@ export function AiAssistantPanel({
     // never upload media, so they have no such flag to read off activeChat.
     const isParsingMedia = isSimpleMode ? false : workstationChat.isParsingMedia;
 
-    const { data: bsConfig } = useGetBsConfig();
-    const { user } = useAuthContext();
     const [chatModel, setChatModel] = useRecoilState(store.chatModel);
     const [selectedOrgKbs, setSelectedOrgKbs] = useRecoilState(store.selectedOrgKbs);
     const [searchType, setSearchType] = useRecoilState(store.searchType);
     const [inputText, setInputText] = useState("");
 
-    // Hydrate / persist chatModel under bs:{uid}:chatModel so model selection
-    // on Subscription / Article / FilePreview pages survives refresh and gets
-    // wiped on re-login alongside the rest of bs:*.
-    useChatModelMemo(user, bsConfig as any);
+    // Workstation mode only — a dock panel resolves through useSurfaceModel above.
+    const handleModelResolved = useCallback(
+        (target: ChatModelOption, deliberate: boolean) => {
+            setChatModel({
+                id: Number(target.id),
+                name: target.displayName || target.name || "",
+                manual: deliberate,
+                mode: 'daily',
+            });
+        },
+        [setChatModel],
+    );
+    const { persistPick: persistModelPick } = useChatModelResolution({
+        userId: user?.id,
+        conversationId: conversationId || 'new',
+        mode: 'daily',
+        models: (bsConfig?.models || []) as ChatModelOption[],
+        adminDefaultId: readAdminDefaultModelId(workbenchCfg, 'daily'),
+        ready: !isSimpleMode && !!bsConfig?.models?.length && !!user?.id,
+        onResolved: handleModelResolved,
+    });
+
+    const handleModelChange = useCallback(
+        (val: string | number) => {
+            if (isSimpleMode) {
+                selectSurfaceModel(val);
+                return;
+            }
+            const picked = bsConfig?.models?.find((m: ChatModelOption) => String(m.id) === String(val));
+            persistModelPick(val);
+            setChatModel({
+                id: Number(val),
+                name: picked?.displayName || "",
+                manual: true,
+                mode: 'daily',
+            });
+        },
+        [isSimpleMode, selectSurfaceModel, bsConfig, persistModelPick, setChatModel],
+    );
+
+    // AiModelSelect repairing an invalid value is not a user pick — never persisted.
+    const handleModelAutoChange = useCallback(
+        (val: string | number) => {
+            if (isSimpleMode) {
+                repairSurfaceModel(val);
+                return;
+            }
+            const picked = bsConfig?.models?.find((m: ChatModelOption) => String(m.id) === String(val));
+            setChatModel((prev) => ({
+                id: Number(val),
+                name: picked?.displayName || prev.name || "",
+                manual: prev.manual ?? false,
+                mode: prev.mode,
+            }));
+        },
+        [isSimpleMode, repairSurfaceModel, bsConfig, setChatModel],
+    );
 
     const confirm = useConfirm();
 
@@ -225,16 +302,9 @@ export function AiAssistantPanel({
                     isParsingMedia={isParsingMedia}
                     onScrollToBottom={() => { }}
                     modelOptions={allowModelSelect ? bsConfig?.models : undefined}
-                    modelValue={allowModelSelect ? chatModel.id : undefined}
-                    onModelChange={allowModelSelect ? (val) => {
-                        const model = bsConfig?.models?.find((m) => m.id === val);
-                        setChatModel({
-                            id: Number(val),
-                            name: model?.displayName || "",
-                            manual: true,
-                            mode: 'daily',
-                        });
-                    } : undefined}
+                    modelValue={allowModelSelect ? (isSimpleMode ? surfaceModel.id : chatModel.id) : undefined}
+                    onModelChange={allowModelSelect ? handleModelChange : undefined}
+                    onModelAutoChange={allowModelSelect ? handleModelAutoChange : undefined}
                     onSend={handleSend}
                     onStop={stopGenerating}
                     value={inputText}

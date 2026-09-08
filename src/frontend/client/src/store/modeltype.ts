@@ -33,14 +33,18 @@ const isSearch = atom<boolean>({
   default: false,
 });
 
-// Persistence is handled by ChatView under `bs:{uid}:chatModel` (daily mode)
-// and `bs:{uid}:taskModel` (task mode) so the value is user-scoped and gets
-// cleared on re-login alongside the rest of `bs:*`. `manual: true` marks an
-// explicit user pick — only those are persisted and only they override the
-// admin-configured per-mode default models; `mode` records which mode the
-// pick (or applied default) belongs to so the two memories stay separate.
-// Auto-applied defaults keep `manual` falsy and are never written to
-// localStorage.
+// The model currently shown by the MAIN chat (/c). It is derived state: the
+// value is resolved per conversation and mode by `useChatModelResolution`,
+// which owns the storage (`bs:{uid}:convModel:{mode}:{convId}` for the
+// conversation, `bs:{uid}:chatModel` / `bs:{uid}:taskModel` for the user-level
+// default a NEW conversation inherits). Everything under `bs:*` is cleared on
+// re-login. `manual: true` marks a value that came from a deliberate selection
+// rather than an applied default; `mode` records which mode it belongs to so
+// the two memories stay separate.
+//
+// The satellite surfaces (knowledge-space Q&A, article / file docks) do NOT
+// write this atom — they keep their own selection via `useSurfaceModel`, so
+// switching models there no longer changes what the main chat shows.
 const chatModel = atom<{ id: number; name: string; manual?: boolean; mode?: 'daily' | 'task' }>({
   key: 'chatModel',
   default: { id: 0, name: '' },

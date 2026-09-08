@@ -45,12 +45,16 @@ export interface FolderChatTag {
  * Hook for folder/space RAG chat.
  * @param spaceId  - Knowledge space ID; empty string disables the hook.
  * @param folderId - Folder ID; undefined means the entire space.
+ * @param model    - The surface's own model selection (see useSurfaceModel).
+ *   Omitted, it falls back to the shared `chatModel` atom.
  */
 export default function useFolderChat(
     spaceId: string,
-    folderId?: string
+    folderId?: string,
+    model?: { id: number; name: string },
 ) {
-    const chatModel = useRecoilValue(store.chatModel);
+    const sharedChatModel = useRecoilValue(store.chatModel);
+    const chatModel = model ?? sharedChatModel;
     const [sessions, setSessions] = useState<FolderSession[]>([]);
     const [activeChatId, setActiveChatId] = useState<string>("");
     const [messages, setMessages] = useState<ChatMessage[]>([]);
