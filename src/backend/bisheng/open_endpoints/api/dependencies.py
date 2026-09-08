@@ -9,6 +9,7 @@ from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.developer_token import DeveloperTokenInvalidFileSyncRuleError
 from bisheng.common.errcode.filelib_sync import FilelibSyncRuleNotConfiguredError
+from bisheng.common.services.config_service import settings
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.developer_token.api.dependencies import (
     get_developer_token_principal,
@@ -46,6 +47,7 @@ from bisheng.open_endpoints.domain.repositories.implementations.filelib_sync_rep
 from bisheng.open_endpoints.domain.repositories.interfaces.filelib_sync_repository import (
     FilelibSyncRepository,
 )
+from bisheng.open_endpoints.domain.services.filelib_file_source_service import FilelibFileSourceService
 from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service import (
     FilelibRetrieveSourceService,
 )
@@ -143,7 +145,13 @@ async def get_filelib_retrieve_source_service(
         version_repository=version_repository,
         storage=await get_minio_storage(),
         max_concurrency=retrieval_runtime.config.max_source_link_concurrency,
+        public_origin_provider=get_filelib_source_origin,
     )
+
+
+async def get_filelib_source_origin() -> str | None:
+    config = await settings.aget_all_config()
+    return (config.get('shougang') or {}).get('portal_base_url')
 
 
 async def get_filelib_developer_token_principal(
@@ -178,6 +186,30 @@ async def get_filelib_request_user(
 ) -> AsyncGenerator[UserPayload, None]:
     async with service.use_user(principal, external_id) as login_user:
         yield login_user
+
+
+async def get_filelib_file_source_service(
+    request: Request,
+    login_user: UserPayload = Depends(get_filelib_request_user),
+    file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
+    knowledge_repository: KnowledgeRepository = Depends(get_knowledge_repository),
+    document_repository: KnowledgeDocumentRepository = Depends(get_filelib_knowledge_document_repository),
+    version_repository: KnowledgeDocumentVersionRepository = Depends(get_filelib_knowledge_document_version_repository),
+) -> FilelibFileSourceService:
+    return FilelibFileSourceService(
+        request=request,
+        login_user=login_user,
+        file_repository=file_repository,
+        knowledge_repository=knowledge_repository,
+        document_repository=document_repository,
+        version_repository=version_repository,
+        source_service=FilelibRetrieveSourceService(
+            file_repository=file_repository,
+            version_repository=version_repository,
+            storage=await get_minio_storage(),
+            public_origin_provider=get_filelib_source_origin,
+        ),
+    )
 
 
 def build_knowledge_space_chat_service_for_openapi(

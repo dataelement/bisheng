@@ -259,6 +259,11 @@ async def test_retrieve_uses_external_user_for_complete_business_call(monkeypatc
     request = MagicMock()
     version_repo = MagicMock()
     doc_repo = MagicMock()
+    file_repo = MagicMock()
+    retrieval_runtime = SimpleNamespace(config=SimpleNamespace(
+        total_timeout_seconds=10,
+        source_link_timeout_seconds=5,
+    ))
 
     response = await filelib_endpoint.retrieve_chunks(
         request=request,
@@ -272,6 +277,8 @@ async def test_retrieve_uses_external_user_for_complete_business_call(monkeypatc
         version_repo=version_repo,
         doc_repo=doc_repo,
         source_service=source_service,
+        file_repo=file_repo,
+        retrieval_runtime=retrieval_runtime,
     )
 
     assert context_events == [
@@ -284,6 +291,8 @@ async def test_retrieve_uses_external_user_for_complete_business_call(monkeypatc
         request_user=target_user,
         version_repo=version_repo,
         doc_repo=doc_repo,
+        file_repo=file_repo,
+        retrieval_runtime=retrieval_runtime,
     )
     chat_service.aretrieve_chunks.assert_awaited_once()
     assert response.status_code == 200
@@ -322,6 +331,8 @@ def test_invalid_token_precedes_invalid_external_id(method, path, request_kwargs
     app.dependency_overrides[get_filelib_knowledge_document_version_repository] = MagicMock
     app.dependency_overrides[get_filelib_knowledge_document_repository] = MagicMock
     app.dependency_overrides[get_filelib_retrieve_source_service] = MagicMock
+    app.dependency_overrides[filelib_endpoint.get_knowledge_file_repository] = MagicMock
+    app.dependency_overrides[filelib_endpoint.get_async_retrieval_runtime] = MagicMock
 
     with TestClient(app) as client:
         response = getattr(client, method)(path, **request_kwargs)
@@ -368,6 +379,8 @@ def test_invalid_external_id_returns_422_without_user_lookup(
     app.dependency_overrides[get_filelib_knowledge_document_version_repository] = MagicMock
     app.dependency_overrides[get_filelib_knowledge_document_repository] = MagicMock
     app.dependency_overrides[get_filelib_retrieve_source_service] = MagicMock
+    app.dependency_overrides[filelib_endpoint.get_knowledge_file_repository] = MagicMock
+    app.dependency_overrides[filelib_endpoint.get_async_retrieval_runtime] = MagicMock
 
     with TestClient(app) as client:
         response = getattr(client, method)(path, **request_kwargs)

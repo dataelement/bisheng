@@ -3,6 +3,7 @@ import json
 import os
 import re
 from typing import Any, Literal, Union
+from urllib.parse import urlsplit
 
 from celery.schedules import crontab
 from cryptography.fernet import Fernet
@@ -551,8 +552,35 @@ class ShougangConf(BaseModel):
     # consumed by the file-encoding pipeline. Kept here so the model accepts them.
     deployment_label: str | None = Field(default=None)
     portal_admin_url: str | None = Field(default=None)
-    portal_base_url: str | None = Field(default=None)
+    portal_base_url: str | None = Field(
+        default=None, description='Filelib original-file public HTTP(S) origin; empty uses MinIO sharepoint.',
+    )
     file_encoding: ShougangFileEncodingConf = Field(default_factory=ShougangFileEncodingConf)
+
+    @staticmethod
+    def normalize_file_source_origin(value: str | None) -> str:
+        if value is None:
+            return ''
+        if not isinstance(value, str):
+            raise ValueError('shougang.portal_base_url must be an HTTP(S) origin')
+        value = value.strip()
+        if not value:
+            return ''
+        try:
+            parsed = urlsplit(value)
+            port = parsed.port
+            valid = (
+                parsed.scheme in {'http', 'https'} and bool(parsed.hostname)
+                and parsed.username is None and parsed.password is None
+                and parsed.path in {'', '/'} and '?' not in value and '#' not in value
+                and '\\' not in value and not any(c.isspace() or ord(c) < 32 for c in value)
+                and (port is None or port > 0)
+            )
+        except ValueError:
+            valid = False
+        if not valid:
+            raise ValueError('shougang.portal_base_url must be an HTTP(S) origin without credentials or path')
+        return value.rstrip('/')
 
     @property
     def enabled(self) -> bool:

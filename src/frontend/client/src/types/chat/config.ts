@@ -556,7 +556,7 @@ export type BsConfig = {
     deployment_label?: string;
     /** 门户管理后台 URL；有值则 BiSheng 工作台侧栏显示"门户配置"菜单 */
     portal_admin_url?: string;
-    /** 门户前端访问基址；后端 retrieve 接口用于拼接原文预览完整 URL */
+    /** Public file origin used by Filelib source URLs; empty uses MinIO sharepoint. */
     portal_base_url?: string;
     file_encoding?: {
       document_types?: Array<{

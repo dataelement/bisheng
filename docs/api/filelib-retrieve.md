@@ -1,5 +1,7 @@
 # 知识库纯检索接口 (Filelib Retrieve)
 
+`source_full_url` 可通过后台 `shougang.portal_base_url` 配置公网文件访问 Origin；为空时使用 MinIO 原始地址。也可按文件 ID 单独获取链接，详见 [原文件地址接口及配置](filelib-file-source-url.md)。
+
 `POST /api/v2/filelib/retrieve`
 
 跨一个或多个知识库返回 top-k chunks，**不**调用 LLM 生成回答。面向外部检索集成场景（自带 LLM 的 agent、Deep Research 工作流、第三方 RAG 编排器），是 BiSheng 工作台「日常模式 + 知识库检索」中检索阶段的 HTTP 化暴露。

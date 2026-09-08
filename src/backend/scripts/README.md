@@ -270,6 +270,61 @@ Exit codes:
 - `4`：真实删除、分步核验或恢复执行失败。
 - `5`：审计报告无法持久化；脚本不会在该状态下继续新的业务删除。
 
+### `dedupe_knowledge_space_documents.py`
+
+门户知识库**库内去重**：公共、部门、班组/科室、个人知识库分别比较，不同文件夹一起比较，
+不同库之间不判重。以当前主版本非空 MD5 分组（忽略首尾空白和十六进制字母大小写），保留
+当前主版本文件 `create_time` 最新的文档；时间相同时保留主版本文件 ID 较大的，若多个
+分发入口引用同一主版本，再按入口 ID 较大者保留。历史版本不作为独立候选。
+
+```bash
+# 从 src/backend 执行；默认只预览，不需要操作用户，不触发删除或异步任务
+.venv/bin/python scripts/dedupe_knowledge_space_documents.py
+
+# 收窄到指定知识库，可重复指定 --space-id；报告路径必须是新文件
+.venv/bin/python scripts/dedupe_knowledge_space_documents.py \
+  --space-id 10 --space-id 20 --report-file /tmp/space-dedup-preview.jsonl
+
+# 审核预览结果，在维护窗口执行；自动使用有效超级管理员
+.venv/bin/python scripts/dedupe_knowledge_space_documents.py \
+  --space-id 10 --apply
+
+# 多租户部署必须显式选定租户，每次只处理一个租户
+.venv/bin/python scripts/dedupe_knowledge_space_documents.py --tenant-id 2
+```
+
+- 不指定 `--space-id` 时扫描当前租户所有有门户层级、处于正常状态的知识空间。
+- 跳过 MD5/上传时间缺失、解析未成功、历史版本正在处理、审批未结束、回收站、分发投影未就绪、
+  版本链缺失或归属异常的数据，报告具体原因。文件夹不参与去重，也不删除文件夹。
+- apply 自动查找系统中未禁用且身份验证通过的全局超级管理员，不需要指定操作用户。
+  候选来自 OpenFGA 授权和兼容管理员角色，按用户 ID 从小到大选择有效账号；没有可用账号时终止。
+  不创建账号或修改权限。选中的账号写入报告 `operator` 事件，文档查询仍限制在目标租户。
+  继续使用现有业务删除入口和写入冻结检查。
+  每次删除前重查当前知识库、当前主版本、历史版本链及相关引用；发现变化即停止，重新预览后再运行。
+- 调用现有 `KnowledgeSpaceService.delete_file()`：普通文档按业务规则连同版本链进入回收站；
+  脚本内装配所需服务和仓储，不依赖 `filelib_sync_factory` 中新增的工厂函数。
+  发布/分享文档走现有分发生命周期，可能回退管理权或使其他库引用失效。不额外保留独有历史版本，
+  也不绕过业务执行物理删除。回收站数据按现有回收站能力处理；分发生命周期可能不可恢复。
+- 若预计业务级联会影响本轮任一重复组的保留项，在预览 `blocked` 中列出，并在 apply 中跳过。
+  不自动改选较旧文档或重建引用。出现该情况返回 `6`，表示仍有重复项待处理。
+- 默认报告目录为 `migration_reports/knowledge_space_dedup/`。JSONL 依次记录 `run`、`operator`（仅 apply）、`plan`、
+  `delete_started`、`delete_result`、`summary`，以及必要的 `skipped`、`stopped`、`failed` 或 `aborted`。
+  `groups` 包含保留/删除项、MD5、库名、文件夹、主版本时间、历史文件 ID、关联入口 ID。
+  报告文件独占创建且逐条落盘；落盘失败会停止，不继续删除。
+  `failed.failure_stage = service_setup` 表示删除服务初始化失败，尚未调用业务删除；
+  `delete_or_verify` 表示调用业务删除或核验期间失败，需要核对实际数据状态。
+- `soft_deleted` 表示进入回收站，`removed` 表示入口已不存在，`pending_cleanup` 表示业务状态已转换，
+  `rolled_back_pending_cleanup` 表示管理文档已退回上一发布库、原库清理仍在等待。
+  **不代表 MinIO、Milvus、Elasticsearch、权限等异步清理已完成**；需保持对应 Worker/Beat 正常运行。
+- 没有跨会话全局写锁，也没有跨存储原子回滚。维护窗口内暂停上传、版本修改、审批和分发操作，
+  先备份并按知识库小范围执行。部分失败时先核对报告与业务状态；再次运行会重新计算，不重放旧报告。
+- 首次扫描读取当前范围及其引用所需的元数据到内存；逐项复核只读取当前库及相关引用。
+  大数据量时用 `--space-id` 分库运行。脚本不读取原文件内容来补算空 MD5。
+
+退出码：`0` 为扫描完成或本轮删除请求及状态核验完成（异步清理可仍在等待）；`2` 为参数/预检失败；
+`3` 为初始化、扫描或报告写入失败；`4` 为业务删除或删除后核验失败；`6` 为状态变化中止或保留项冲突，
+需要核对后重新预览。
+
 ### `relink_duplicate_space_files_as_publish.py`
 
 把多知识空间中的相同当前主版本转成 F059 软链接：最高级空间保留物理原文件（`manager`），

@@ -15,7 +15,7 @@ from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.cache.utils import save_uploaded_file, upload_file_to_minio
-from bisheng.core.config.settings import KnowledgeChunkingConf
+from bisheng.core.config.settings import KnowledgeChunkingConf, ShougangConf
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 
@@ -121,6 +121,7 @@ def save_config(data: dict, admin_user: UserPayload = Depends(UserPayload.get_ad
         if not isinstance(knowledge_config, dict):
             raise ValueError('knowledges config must be a mapping')
         KnowledgeChunkingConf(**knowledge_config.get('chunking', {}))
+        ShougangConf.normalize_file_source_origin((config.get('shougang') or {}).get('portal_base_url'))
 
         # Judging linsight_invitation_code Right?boolean
         if isinstance(config, dict) and 'linsight_invitation_code' in config.keys():
@@ -132,7 +133,7 @@ def save_config(data: dict, admin_user: UserPayload = Depends(UserPayload.get_ad
         db_config.value = data.get('data')
         ConfigDao.insert_config(db_config)
         get_redis_client_sync().delete('config:initdb_config')
-    except Exception as e:
+    except Exception:
         raise SystemConfigInvalidError()
 
     return resp_200()

@@ -1,5 +1,7 @@
 # Filelib OpenAPI 接口文档
 
+新增按文件 ID 获取原文件地址：`GET /api/v2/filelib/file/source_url?file_id=123`，支持 `external_id`，返回 `{file_id, source_full_url}`。详见 [按文件 ID 获取原文件地址](filelib-file-source-url.md)。
+
 ## 1. 通用约定
 
 ### 1.1 Base URL
@@ -22,7 +24,7 @@ http://{bisheng-host}:7860/api/v2
 
 ### 1.3 调用资格、业务用户与数据作用域
 
-四个查询接口使用双重身份：
+Filelib 查询接口（包括按 ID 获取原文件地址）使用双重身份：
 
 - `X-Developer-Token` 始终必填，只用于验证调用方是否具备调用资格，包括 Token 状态、绑定关系、IP、路由白名单和限流。
 - `external_id` 可选，用于确定本次请求的业务用户、资源权限和数据作用域。

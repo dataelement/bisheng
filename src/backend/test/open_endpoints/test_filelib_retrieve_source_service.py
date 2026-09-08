@@ -67,6 +67,49 @@ def _version_repository() -> MagicMock:
     return repository
 
 
+@pytest.mark.parametrize("origin", ["https://portal.example.com:9443/", "", None])
+async def test_public_origin_keeps_signed_path_and_query_unchanged(origin):
+    repository = MagicMock()
+    repository.find_by_ids = AsyncMock(return_value=[_file(12, object_name="original/12.pdf")])
+    storage = _storage()
+    signed_path = "/public/original/12.pdf?X-Amz-Signature=TEST&name=a%2Bb%20c"
+    storage.get_share_link.return_value = "https://files.example.com" + signed_path
+    provider = AsyncMock(return_value=origin)
+    service = FilelibRetrieveSourceService(
+        repository, storage, version_repository=_version_repository(), public_origin_provider=provider
+    )
+    result = (await service.resolve_links([12]))[12]
+    assert result.source_url == signed_path
+    assert result.source_full_url == (origin.rstrip("/") if origin else "https://files.example.com") + signed_path
+    provider.assert_awaited_once()
+    storage.get_share_link.assert_awaited_once_with("original/12.pdf", clear_host=False, expire_days=7)
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "ftp://files.example.com",
+        "https://user:pass@files.example.com",
+        "https://files.example.com/path",
+        "https://files.example.com?x=1",
+        "https://files.example.com#x",
+        "https://files.example.com:bad",
+        "//files.example.com",
+    ],
+)
+async def test_invalid_public_origin_never_issues_link(origin):
+    storage = _storage()
+    service = FilelibRetrieveSourceService(
+        MagicMock(),
+        storage,
+        version_repository=_version_repository(),
+        public_origin_provider=AsyncMock(return_value=origin),
+    )
+    with pytest.raises(ValueError):
+        await service.resolve_links([12])
+    storage.get_share_link.assert_not_awaited()
+
+
 async def test_resolve_links_batches_deduplicates_and_reuses_one_signature_per_file() -> None:
     repository = MagicMock()
     repository.find_by_ids = AsyncMock(
@@ -136,9 +179,7 @@ async def test_resolve_links_uses_canonical_version_file_for_authorized_share_en
     version_repository = MagicMock()
     version_repository.find_by_ids = AsyncMock(return_value=[version])
     storage = _storage()
-    storage.get_share_link.return_value = (
-        "https://files.example.com/public/original/3040.xlsx?X-Amz-Signature=AAA"
-    )
+    storage.get_share_link.return_value = "https://files.example.com/public/original/3040.xlsx?X-Amz-Signature=AAA"
     service = FilelibRetrieveSourceService(
         repository,
         storage,
@@ -162,10 +203,7 @@ async def test_resolve_links_uses_canonical_version_file_for_authorized_share_en
 
     expected_link = RetrieveSourceLink(
         source_url="/public/original/3040.xlsx?X-Amz-Signature=AAA",
-        source_full_url=(
-            "https://files.example.com/public/original/3040.xlsx"
-            "?X-Amz-Signature=AAA"
-        ),
+        source_full_url=("https://files.example.com/public/original/3040.xlsx?X-Amz-Signature=AAA"),
     )
     assert result == {3058: expected_link, 3059: expected_link}
     assert repository.find_by_ids.await_args_list == [

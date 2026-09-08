@@ -81,6 +81,11 @@ class RetrieveResp(BaseModel):
     total: int
 
 
+class FileSourceUrlResp(BaseModel):
+    file_id: int
+    source_full_url: str = ""
+
+
 class FileDetailFile(BaseModel):
     id: int
     knowledge_id: int

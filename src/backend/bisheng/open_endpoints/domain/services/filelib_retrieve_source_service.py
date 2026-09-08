@@ -1,8 +1,9 @@
 import asyncio
 import logging
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 
+from bisheng.core.config.settings import ShougangConf
 from bisheng.core.storage.minio.minio_storage import MinioStorage
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
@@ -47,11 +48,13 @@ class FilelibRetrieveSourceService:
         *,
         version_repository: KnowledgeDocumentVersionRepository,
         max_concurrency: int = 8,
+        public_origin_provider: Callable[[], Awaitable[str | None]] | None = None,
     ) -> None:
         self.file_repository = file_repository
         self.version_repository = version_repository
         self.storage = storage
         self._semaphore = asyncio.Semaphore(max_concurrency)
+        self.public_origin_provider = public_origin_provider
 
     @staticmethod
     def _positive_int(value: object) -> int | None:
@@ -89,11 +92,7 @@ class FilelibRetrieveSourceService:
     ) -> dict[int, KnowledgeFile]:
         entry_ids = list(source_refs)
         entries = await self.file_repository.find_by_ids(entry_ids)
-        entry_map = {
-            int(entry.id): entry
-            for entry in entries
-            if entry.id is not None and int(entry.id) in source_refs
-        }
+        entry_map = {int(entry.id): entry for entry in entries if entry.id is not None and int(entry.id) in source_refs}
 
         content_file_ids: dict[int, int] = {}
         version_refs: dict[int, RetrieveSourceRef] = {}
@@ -102,16 +101,11 @@ class FilelibRetrieveSourceService:
             if entry is None:
                 continue
 
-            reference_document_id = self._positive_int(
-                getattr(entry, "reference_document_id", None)
-            )
+            reference_document_id = self._positive_int(getattr(entry, "reference_document_id", None))
             if reference_document_id is None:
                 content_file_ids[entry_id] = entry_id
                 continue
-            if (
-                source_ref.canonical_document_id != reference_document_id
-                or source_ref.canonical_version_id is None
-            ):
+            if source_ref.canonical_document_id != reference_document_id or source_ref.canonical_version_id is None:
                 continue
             version_refs[entry_id] = source_ref
 
@@ -133,21 +127,15 @@ class FilelibRetrieveSourceService:
                 version = version_map.get(int(source_ref.canonical_version_id or 0))
                 if version is None:
                     continue
-                if self._positive_int(getattr(version, "document_id", None)) != (
-                    source_ref.canonical_document_id
-                ):
+                if self._positive_int(getattr(version, "document_id", None)) != (source_ref.canonical_document_id):
                     continue
-                content_file_id = self._positive_int(
-                    getattr(version, "knowledge_file_id", None)
-                )
+                content_file_id = self._positive_int(getattr(version, "knowledge_file_id", None))
                 if content_file_id is not None:
                     content_file_ids[entry_id] = content_file_id
 
         missing_content_ids = list(
             dict.fromkeys(
-                content_file_id
-                for content_file_id in content_file_ids.values()
-                if content_file_id not in entry_map
+                content_file_id for content_file_id in content_file_ids.values() if content_file_id not in entry_map
             )
         )
         content_file_map = dict(entry_map)
@@ -179,6 +167,9 @@ class FilelibRetrieveSourceService:
         if not source_ref_map:
             return {}
 
+        public_origin = ShougangConf.normalize_file_source_origin(
+            await self.public_origin_provider() if self.public_origin_provider else None
+        )
         file_map = await self._resolve_content_files(source_ref_map)
         result: dict[int, RetrieveSourceLink] = dict.fromkeys(
             source_ref_map,
@@ -208,9 +199,10 @@ class FilelibRetrieveSourceService:
                         clear_host=False,
                         expire_days=7,
                     )
+                source_url = self.storage.clear_minio_share_host(source_full_url)
                 return object_name, RetrieveSourceLink(
-                    source_url=self.storage.clear_minio_share_host(source_full_url),
-                    source_full_url=source_full_url,
+                    source_url=source_url,
+                    source_full_url=public_origin + source_url if public_origin else source_full_url,
                 )
             except Exception as exc:
                 logger.warning(
@@ -221,9 +213,7 @@ class FilelibRetrieveSourceService:
                 return object_name, EMPTY_RETRIEVE_SOURCE_LINK
 
         object_links = dict(
-            await asyncio.gather(
-                *(_resolve_one(object_name) for object_name in entry_ids_by_object_name)
-            )
+            await asyncio.gather(*(_resolve_one(object_name) for object_name in entry_ids_by_object_name))
         )
         for object_name, entry_ids in entry_ids_by_object_name.items():
             link = object_links.get(object_name, EMPTY_RETRIEVE_SOURCE_LINK)

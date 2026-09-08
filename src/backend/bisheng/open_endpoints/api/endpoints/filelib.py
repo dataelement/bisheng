@@ -4,7 +4,19 @@ import os
 from datetime import datetime
 from typing import Annotated, Any, List, Literal, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Body,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from loguru import logger
 from sqlmodel import col, select
 from starlette.concurrency import run_in_threadpool
@@ -17,6 +29,7 @@ from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
+from bisheng.common.schemas.api import UnifiedResponseModel
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.utils import async_file_download, save_download_file
@@ -52,6 +65,7 @@ from bisheng.knowledge.rag.async_retrieval_runtime import (
 from bisheng.open_endpoints.api.dependencies import (
     build_knowledge_space_chat_service_for_openapi,
     get_filelib_developer_token_principal,
+    get_filelib_file_source_service,
     get_filelib_knowledge_document_repository,
     get_filelib_knowledge_document_version_repository,
     get_filelib_request_user,
@@ -64,11 +78,13 @@ from bisheng.open_endpoints.domain.schemas.filelib import (
     APIAppendQAParam,
     FileDetailFile,
     FileDetailResp,
+    FileSourceUrlResp,
     QueryQAParam,
     RetrieveChunk,
     RetrieveReq,
     RetrieveResp,
 )
+from bisheng.open_endpoints.domain.services.filelib_file_source_service import FilelibFileSourceService
 from bisheng.open_endpoints.domain.services.filelib_knowledge_list_service import FilelibKnowledgeListService
 from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service import (
     EMPTY_RETRIEVE_SOURCE_LINK,
@@ -525,6 +541,17 @@ async def get_file_detail(
         chunk_count=chunk_count,
     )
     return resp_200(data=data)
+
+
+@router.get('/file/source_url', response_model=UnifiedResponseModel[FileSourceUrlResp])
+async def get_file_source_url(
+        response: Response,
+        file_id: int = Query(..., gt=0, description='KnowledgeFile ID, same as retrieve document_id'),
+        service: FilelibFileSourceService = Depends(get_filelib_file_source_service),
+) -> UnifiedResponseModel:
+    """Return a seven-day original-file link for an authorized file entry."""
+    response.headers['Cache-Control'] = 'no-store'
+    return resp_200(data=await service.get_source_url(file_id))
 
 
 @router.post('/chunks')
