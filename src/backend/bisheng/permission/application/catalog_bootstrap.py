@@ -38,6 +38,7 @@ from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.core.openfga.authorization_model_f048 import (
     MODEL_VERSION,
+    TECHNICAL_MARKER_SUBJECTS,
     get_authorization_model_f048,
     required_relations_checksum,
 )
@@ -111,18 +112,20 @@ def _catalog_tuples(
             "object": object_key,
         }
 
-    add("user:*", "active", catalog)
+    for subject in TECHNICAL_MARKER_SUBJECTS:
+        add(subject, "active", catalog)
     for model in model_release.models:
         release = f"permission_model_release:{release_key}~{model.model_key}"
         add(release, "release", f"permission_model:{model.model_key}")
         add(catalog, "catalog", release)
-        add("user:*", "enabled_marker", release)
-        for action_code in model.action_codes:
-            add("user:*", f"{action_code}_marker", release)
-        if "manage_permission" in model.action_codes and model.derived_level is not None:
-            upper = model.derived_level if model.allow_same_level else model.derived_level - 1
-            for level in range(1, max(upper, 0) + 1):
-                add("user:*", f"grant_level_{level}_marker", release)
+        for subject in TECHNICAL_MARKER_SUBJECTS:
+            add(subject, "enabled_marker", release)
+            for action_code in model.action_codes:
+                add(subject, f"{action_code}_marker", release)
+            if "manage_permission" in model.action_codes and model.derived_level is not None:
+                upper = model.derived_level if model.allow_same_level else model.derived_level - 1
+                for level in range(1, max(upper, 0) + 1):
+                    add(subject, f"grant_level_{level}_marker", release)
     return list(tuples.values())
 
 

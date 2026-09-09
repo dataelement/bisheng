@@ -38,6 +38,11 @@ def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
     elif isinstance(exc, BaseErrorCode):
         data = {"exception": str(exc), **exc.kwargs} if exc.kwargs else {"exception": str(exc)}
         msg = {"status_code": exc.code, "status_message": exc.message, "data": data}
+        if is_v2:
+            from bisheng.open_api.api.exception_handlers import mark_open_api_error, open_api_http_status
+
+            mark_open_api_error(req, exc)
+            http_status = open_api_http_status(exc)
     else:
         logger.exception("Unhandled exception")
         msg = {"status_code": 500, "status_message": str(exc)}

@@ -1,6 +1,6 @@
 # Tasks: 开放 API 鉴权与身份传递（F053）
 
-> 本任务清单以 [design.md](./design.md) 2026-09-04 最终版为唯一技术基准。旧 `tasks.md` 中与最终设计冲突的 P2、share-token、服务账号写入 `user`、独立调用日志表和旧日常会话方案均已删除。
+> 本任务清单以 [design.md](./design.md) 2026-09-08 PRD v2.6 同步版为唯一技术基准。旧 `tasks.md` 中与最终设计冲突的 P2、share-token、服务账号写入 `user`、独立调用日志表和旧日常会话方案均已删除。
 
 **关联**: [design.md](./design.md) · [spec.md](./spec.md) · [release-contract.md](../release-contract.md) · [openapi-v2-key-auth-api.md](./openapi-v2-key-auth-api.md)
 **版本**: v3.0.0-beta1
@@ -12,10 +12,10 @@
 
 | 步骤 | 状态 | 备注 |
 |---|---|---|
-| spec.md | ⚠️ 历史需求稿 | 其中仍有旧范围描述；执行时以用户确认的最终 `design.md` 为准，不得据此恢复已删除范围 |
-| design.md | ✅ 最终设计 | 2026-09-04 用户确认作为最终技术方案 |
-| tasks.md | ✅ 已按最终设计重排 | 2026-09-04；共 58 个任务 |
-| 实现 | 🔲 未开始 | 0 / 58 |
+| spec.md | ✅ PRD v2.6 同步 | 2026-09-08 补齐 R1～R8 缺陷验收 |
+| design.md | ✅ PRD v2.6 同步 | 2026-09-08 补齐实现方案与发布约束 |
+| tasks.md | ✅ 已补充整改任务 | 58 个基线任务 + U01～U09 |
+| 实现 | 🟡 整改实现完成 | U01～U08 已完成；U09 的真实中间件、浏览器和两处存量 typecheck 问题待外部验证/处置 |
 
 ---
 
@@ -506,15 +506,15 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
   **完成条件**: v1 管理信封与 v2 真 HTTP 状态不混用
   **依赖**: D03、A08
 
-- [ ] **D05：用户状态变化的级联失效**
+- [ ] **D05：用户状态变化与租户切换**
   **设计依据**: design §5.D2
   **文件**: 用户禁用/删除入口、`tenant/domain/services/user_tenant_sync_service.py`、credential cache invalidation；测试 `test/open_api/test_pat_cascade.py`
   **执行顺序**:
-  1. 先对用户禁用、删除、离开租户和遗漏主动 hook 的校验兜底写测试。
-  2. 三个主动触发点撤销该自然人 PAT 并失效缓存。
-  3. credential resolver 每次缓存刷新仍校验 User 与 UserTenant，作为漏 hook 的 fail-closed 兜底。
+  1. 先对用户禁用、删除、活跃租户切换和遗漏主动 hook 的校验兜底写测试。
+  2. 用户禁用/删除时撤销自然人 PAT；活跃租户切换时迁移未撤销凭据及 scope 元数据并失效缓存，不吊销原 token。
+  3. credential resolver 每次缓存刷新仍校验 User 与凭据当前租户的 UserTenant，作为漏 hook 的 fail-closed 兜底。
   4. 不增加服务账号登录守卫或 user_type 分支。
-  **完成条件**: 主体失效后 5 秒内 PAT 返回 401，不泄漏其它租户资源存在性
+  **完成条件**: 主体失效后 5 秒内 PAT 返回 401；迁租户后原 token 在新租户生效且不能访问旧租户
   **依赖**: D03
 
 - [ ] **D06：知识检索技能包和匿名分发**
@@ -785,6 +785,55 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
 
 ---
 
+## 10.1 PRD v2.6 补充整改（2026-09-08）
+
+- [x] **U01：服务账号管理交互闭环**
+  **设计依据**: design §5.B1；spec AC-R1
+  **执行**: 复用 `origin/3.0-vibe` 的 request wrapper、Toast、确认弹窗和 loading 处理；创建时用组织用户选择器；启停、删除、签发、单把/全部吊销均防重复提交并反馈结果。
+  **完成条件**: 所有 mutation 有 loading、成功反馈和统一失败反馈；破坏性操作说明即时失效范围。
+
+- [x] **U02：主体侧资源授权与选择弹窗**
+  **设计依据**: design §5.B2；spec AC-R2
+  **执行**: permission 层新增按 service_account 反向索引查询和 CURRENT 顶层资源候选；平台详情直接展示聚合授权；新增授权使用资源类型下拉、搜索、勾选和权限模型下拉；撤权仍走 F048 mutation。
+  **完成条件**: 页面无资源类型/资源 ID 文本输入；DIRECT 与 CREATOR_GRANT 均可单条撤销、protected 授权只读、全部撤销排除 CREATOR_GRANT。
+
+- [x] **U03：F048 service_account 技术标记与存量对账**
+  **设计依据**: design §7.2；spec AC-R3
+  **执行**: OpenFGA 模型升级；Catalog、模式、资源生命周期和迁移协调器同时投影 `user:*` / `service_account:*` 技术 tuple；对账脚本从 CURRENT `ResourcePermissionMode` 补齐存量服务账号标记，保持默认 dry-run。
+  **完成条件**: schema/catalog/mode/projection/reconcile 测试覆盖双标记；服务账号直授后具体动作通过。
+
+- [x] **U04：QA 所属知识库鉴权**
+  **设计依据**: design §8#15；spec AC-R4
+  **执行**: add/detail/update/delete/add_relative/query_qa 在返回或变更前定位所属知识库并经 KnowledgeService 的 PermissionService 校验 visible/edit；去掉捕获后返回 200/500 信封的路径。
+  **完成条件**: 无权限读取不返回答案；无权限修改不触发 DAO update、索引或任务；不存在/错配按 404 防枚举。
+
+- [x] **U05：知识空间列表 DTO 契约**
+  **设计依据**: spec AC-R5
+  **执行**: `KnowledgeSpaceListItemResp` 明确声明 `user_name/actions`，保持列表 enrichment 与响应模型一致。
+  **完成条件**: PAT/代表用户访问非空 type=3 列表可序列化并包含权限字段。
+
+- [x] **U06：v2 HTTP 状态与 SSE 审计结果**
+  **设计依据**: design §5.C5、§8#14；spec AC-R6
+  **执行**: 为 v2 全部 BaseErrorCode 建统一传输状态映射；审计中间件保留业务错误码，并从有界 SSE 尾部识别 `[DONE]` 或 workflow close 终态。
+  **完成条件**: 权限 403、防枚举 404、权限依赖 503；v1 信封不变；SSE 审计含 final result，失败含业务码。
+
+- [x] **U07：multipart 裸 user_id 拒绝**
+  **设计依据**: design §8#16；spec AC-R7
+  **执行**: v2 全局身份依赖检查 query、JSON、multipart、urlencoded；在端点文件处理前返回 400/26019。
+  **完成条件**: 正常 multipart 不受影响；含 user_id 的上传不进入 handler。
+
+- [x] **U08：PAT 随持有人迁租户**
+  **设计依据**: design §5.D2；spec AC-R8
+  **执行**: 未撤销 PAT 与关联 scope 元数据迁到新 tenant，清理 hash cache，写 `open_api.pat.tenant_migrate` 审计；同租户同步也执行错位修复；PAT actor 恢复持有人管理员事实但仍锁定可见租户。
+  **完成条件**: 原 token 不撤销且在新租户可用；旧租户不可用；缓存与审计断言通过。
+
+- [ ] **U09：整改验证与 E2E**
+  **设计依据**: design §9；spec §4
+  **依赖**: U01～U08
+  **执行**: 后端 ruff/定向测试、OpenFGA 契约测试、platform lint/typecheck/组件测试、i18n parity、arch-guard；运行 `/e2e-test` 并更新页面手动验证清单。
+  **完成条件**: 本地可运行项全绿；依赖中间件项保留为 CI 证据，不降低断言。
+  **当前证据**: Open API 110 passed；F048 定向 133 passed / 6 skipped；platform 定向 10 passed；ruff、lint、i18n、arch-guard、diff check 通过。真实中间件/浏览器 E2E 尚未执行；全前端 typecheck 仅剩两个未触碰测试文件的既有错误，详见 `release-and-deployment.md`。
+
 ## 11. 依赖图
 
 ```text
@@ -843,3 +892,4 @@ A08 → B01 → B02/B03；D08 → B04；F07/C08 → B05 → B06
 |---|---|
 | 2026-08-31 | 初版按旧设计拆为 A～G，包含 P2、share-token 和旧日常会话方案 |
 | 2026-09-04 | 按最终 design 全量重排为 58 个顺序任务：删除 R8/P2、share-token、`user_type`、独立调用日志表和三端点日常方案；增加独立服务账号/F048 主体、复用 `audit_log`、五个日常 v2 接口及九个 v3 免登录发布接口 |
+| 2026-09-08 | 同步 PRD v2.6，增加 U01～U09：管理交互、资源选择弹窗、FGA 双技术标记、QA 防越权、知识空间 DTO、v2 HTTP/SSE 结果、multipart 废弃字段拒绝、PAT 迁租户和整改 E2E |

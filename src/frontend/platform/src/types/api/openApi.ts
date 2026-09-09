@@ -6,6 +6,12 @@ export interface ServiceAccountOwner {
 
 export type ServiceAccountStatus = "enabled" | "disabled"
 
+export interface ServiceAccountDelegateScope {
+  subject_type: "user" | "department"
+  subject_id: number
+  subject_name: string | null
+}
+
 export interface ServiceAccountItem {
   id: number
   tenant_id: number
@@ -14,9 +20,12 @@ export interface ServiceAccountItem {
   status: ServiceAccountStatus
   resource_owner: ServiceAccountOwner
   active_key_count: number
+  has_delegate: boolean
+  delegate_scopes: ServiceAccountDelegateScope[]
   last_used_at: string | null
   idle: boolean
   created_by: number | null
+  creator_name: string | null
   create_time: string | null
   update_time: string | null
   disabled_at?: string | null
@@ -34,9 +43,39 @@ export interface ServiceAccountForm {
   resource_owner_user_id: number
 }
 
+export interface ServiceAccountDeleteResult {
+  id: number
+  grants: ServiceAccountResourceGrant[]
+}
+
+export interface ServiceAccountResourceGrant {
+  resource_type: string
+  resource_id: string
+  resource_name: string
+  model_key: string
+  model_name: string
+  assignee_id: string
+  assignee_version: number
+  source_type: string
+  protected: boolean
+  editable: boolean
+}
+
+export interface ServiceAccountGrantableResource {
+  resource_type: string
+  resource_id: string
+  resource_name: string
+  mode: "INHERIT" | "CUSTOM"
+  resource_version: number
+}
+
 export interface DelegateScopeInput {
   subject_type: "user" | "department"
   subject_id: number
+}
+
+export interface DelegateScopeItem extends DelegateScopeInput {
+  subject_name: string | null
 }
 
 export interface ApiKeyItem {
@@ -52,7 +91,7 @@ export interface ApiKeyItem {
   revoke_reason: string | null
   is_valid: boolean
   create_time: string | null
-  delegate_scopes: DelegateScopeInput[]
+  delegate_scopes: DelegateScopeItem[]
 }
 
 export interface ApiKeyIssued extends ApiKeyItem {
@@ -64,6 +103,13 @@ export interface ApiKeyIssueForm {
   scopes: string[]
   expires_at?: string | null
   delegate_scopes: DelegateScopeInput[]
+}
+
+export interface ApiKeyUpdateForm {
+  name?: string
+  scopes?: string[]
+  expires_at?: string | null
+  delegate_scopes?: DelegateScopeInput[]
 }
 
 export interface OpenApiScopeItem {

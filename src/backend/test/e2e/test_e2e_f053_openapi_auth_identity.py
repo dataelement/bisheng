@@ -39,6 +39,13 @@ def _required_env(name: str) -> str:
     return value
 
 
+def _optional_env(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        pytest.skip(f"set {name} to run this resource-specific E2E case")
+    return value
+
+
 async def _cleanup_service_accounts(client: httpx.AsyncClient, token: str) -> None:
     """Delete only service accounts created by this suite."""
 
@@ -100,7 +107,7 @@ async def service_account(
             f"{API_BASE}/service-accounts/{created['id']}/keys",
             json={
                 "name": f"{PREFIX}key",
-                "scopes": ["chat:invoke", "knowledge:read"],
+                "scopes": ["chat:invoke", "knowledge:read", "knowledge:write"],
                 "delegate_scopes": [],
             },
             headers=auth_headers(admin_token),
@@ -292,3 +299,86 @@ class TestE2EF053OpenApiAuthIdentity:
             "/api/v3/chat/history",
             "/api/v3/chat/gen_title",
         }
+
+    async def test_ac_f053_08_service_account_grants_are_subject_side_lists(
+        self,
+        client: httpx.AsyncClient,
+        admin_token: str,
+        service_account: dict,
+    ) -> None:
+        """AC-R2: administrators browse grants and candidates without entering ids."""
+
+        account_id = service_account["account"]["id"]
+        grants = assert_resp_200(
+            await client.get(
+                f"{API_BASE}/service-accounts/{account_id}/resource-grants",
+                headers=auth_headers(admin_token),
+            )
+        )
+        candidates = assert_resp_200(
+            await client.get(
+                f"{API_BASE}/service-accounts/{account_id}/grantable-resources",
+                params={"resource_type": "knowledge_space"},
+                headers=auth_headers(admin_token),
+            )
+        )
+        assert isinstance(grants, list)
+        assert isinstance(candidates, list)
+        assert all({"resource_type", "resource_id", "resource_name"} <= set(row) for row in grants)
+        assert all({"resource_type", "resource_id", "resource_name"} <= set(row) for row in candidates)
+
+    async def test_ac_f053_09_multipart_user_id_is_rejected_before_upload(
+        self,
+        client: httpx.AsyncClient,
+        service_account: dict,
+    ) -> None:
+        """AC-R7: removed identity fields are rejected in multipart bodies."""
+
+        response = await client.post(
+            f"{API_ORIGIN}/api/v2/knowledge/upload",
+            headers={"Authorization": f"Bearer {service_account['key']['plaintext']}"},
+            data={"user_id": "1"},
+            files={"file": ("identity-check.txt", b"must not be stored", "text/plain")},
+        )
+        assert response.status_code == 400
+        assert_resp_error(response, 26019)
+
+    async def test_ac_f053_10_pat_space_list_has_explicit_enrichment_fields(
+        self,
+        client: httpx.AsyncClient,
+        personal_token: dict,
+    ) -> None:
+        """AC-R5: a non-empty type=3 list serializes user_name and actions."""
+
+        response = await client.get(
+            f"{API_ORIGIN}/api/v2/filelib/",
+            params={"type": 3},
+            headers={"Authorization": f"Bearer {personal_token['plaintext']}"},
+        )
+        page = assert_resp_200(response)
+        rows = page.get("data", page) if isinstance(page, dict) else page
+        assert isinstance(rows, list)
+        assert all("user_name" in row and "actions" in row for row in rows)
+
+    async def test_ac_f053_11_qa_id_cannot_bypass_parent_library_permission(
+        self,
+        client: httpx.AsyncClient,
+        service_account: dict,
+    ) -> None:
+        """AC-R4: direct QA ids still require access to the owning library."""
+
+        qa_id = int(_optional_env("F053_E2E_FORBIDDEN_QA_ID"))
+        headers = {"Authorization": f"Bearer {service_account['key']['plaintext']}"}
+        detail = await client.get(
+            f"{API_ORIGIN}/api/v2/filelib/detail_qa",
+            params={"id": qa_id},
+            headers=headers,
+        )
+        assert detail.status_code in {403, 404}
+
+        update = await client.post(
+            f"{API_ORIGIN}/api/v2/filelib/update_qa",
+            json={"id": qa_id, "question": "forbidden-e2e-update", "answer": ["must-not-persist"]},
+            headers=headers,
+        )
+        assert update.status_code in {403, 404}
