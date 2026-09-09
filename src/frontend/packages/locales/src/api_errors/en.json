@@ -305,6 +305,7 @@
   "19011": "Access denied to private channel",
   "19012": "Already subscribed to this channel or application is pending",
   "19013": "Permission denied for this channel operation",
+  "19014": "You are not subscribed to this channel",
   "19040": "Article not found",
   "19041": "Chat conversation not found",
   "19042": "This article contains sensitive content and cannot be viewed",
