@@ -171,6 +171,7 @@ class F048ResourcePermissionApi:
                 "assignee_id": str(assignee.id),
                 "assignee_version": assignee.version,
                 "source_type": assignee.source_type,
+                "granted_at": assignee.create_time,
                 "protected": assignee.protected,
                 "editable": not assignee.protected,
             }

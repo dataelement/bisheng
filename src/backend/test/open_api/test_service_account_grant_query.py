@@ -1,3 +1,4 @@
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -19,6 +20,7 @@ class Subjects:
 
 
 async def test_subject_grants_are_aggregated_with_resource_and_model_names(monkeypatch):
+    granted_at = datetime(2026, 9, 1, 10, 22)
     assignee = PermissionGrantAssignee(
         id=31,
         tenant_id=1,
@@ -32,6 +34,7 @@ async def test_subject_grants_are_aggregated_with_resource_and_model_names(monke
         projected_subject="service_account:7",
         state="ACTIVE",
         version=2,
+        create_time=granted_at,
     )
     grant = PermissionGrant(
         id=21,
@@ -68,6 +71,7 @@ async def test_subject_grants_are_aggregated_with_resource_and_model_names(monke
         "assignee_id": "31",
         "assignee_version": 2,
         "source_type": "DIRECT",
+        "granted_at": granted_at,
         "protected": False,
         "editable": True,
     }]

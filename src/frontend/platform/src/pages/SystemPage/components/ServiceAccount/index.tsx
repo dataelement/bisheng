@@ -179,7 +179,10 @@ export function ServiceAccount() {
             />
           </TabsContent>
           <TabsContent value="grants">
-            <ResourceGrantsTab serviceAccountId={selected.id} />
+            <ResourceGrantsTab
+              serviceAccountId={selected.id}
+              serviceAccountName={selected.name}
+            />
           </TabsContent>
         </Tabs>
       </div>
