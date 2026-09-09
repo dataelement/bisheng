@@ -170,6 +170,35 @@ class F048ResourcePermissionApi:
             "can_manage_permission": can_manage,
         }
 
+    @staticmethod
+    async def _without_department_space_creator(
+        *,
+        resource_type: str,
+        resource_id: str,
+        rows,
+    ):
+        """A department knowledge space has no front-facing creator (COFCO).
+
+        ``Knowledge.user_id`` records the super admin who operated the creation,
+        for auditing; the space's responsible figure is its single space admin,
+        surfaced through the manager grant. Listing the creator put that admin
+        back into the authorization panel as a protected owner nobody could
+        remove. Only the row is withheld — the grant itself stays, because a
+        super admin holds the space regardless and read paths still expect an
+        owner to exist.
+
+        The cursor keeps running off the unfiltered page, so paging cannot skip.
+        """
+        if resource_type != "knowledge_space" or not str(resource_id).isdigit():
+            return rows
+        from bisheng.knowledge.domain.models.department_knowledge_space import (
+            DepartmentKnowledgeSpaceDao,
+        )
+
+        if await DepartmentKnowledgeSpaceDao.aget_by_space_id(int(resource_id)) is None:
+            return rows
+        return [row for row in rows if str(row.source_type).upper() != "CREATOR"]
+
     async def list_grants(
         self,
         *,
@@ -208,6 +237,11 @@ class F048ResourcePermissionApi:
         )
         parent_names = await self._subjects.resource_display_names(parents) if parents else {}
         model_names = {item.snapshot.model_key: item.name for item in catalog.models}
+        listed = await self._without_department_space_creator(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            rows=selected,
+        )
         data = [
             {
                 "assignee_id": str(row.source_id),
@@ -239,7 +273,7 @@ class F048ResourcePermissionApi:
                 "protected": row.protected,
                 "editable": row.editable,
             }
-            for row in selected
+            for row in listed
         ]
         next_cursor = None
         if has_more and selected:
