@@ -77,6 +77,14 @@ class ChannelNotSubscribedError(BaseErrorCode):
     Msg: str = "You are not subscribed to this channel"
 
 
+# The caller holds the channel through a Grant rather than a subscription, so
+# there is no membership of theirs to remove. Distinct from 19014, which means
+# an application is still pending or was rejected.
+class ChannelGrantedNotSubscribedError(BaseErrorCode):
+    Code: int = 19015
+    Msg: str = "This channel is open to you through a permission grant and cannot be unsubscribed"
+
+
 # Channel module error codes, module code: 190
 # Article not found
 class ArticleNotFoundError(BaseErrorCode):
