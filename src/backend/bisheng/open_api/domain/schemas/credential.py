@@ -93,9 +93,18 @@ class KeyIssuedResponse(KeyItem):
     plaintext: str = Field(description="Shown once and never stored")
 
 
+class OpenApiScopeEndpoint(BaseModel):
+    method: str
+    path: str
+
+
 class OpenApiScopeItem(BaseModel):
     code: str
-    endpoints: list[str]
+    group: str
+    label_key: str
+    desc_key: str
+    endpoints: list[OpenApiScopeEndpoint]
+    hint_keys: list[str] = Field(default_factory=list)
 
 
 class OpenApiScopeCatalog(BaseModel):

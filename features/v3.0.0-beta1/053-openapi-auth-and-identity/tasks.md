@@ -15,7 +15,7 @@
 | spec.md | ✅ PRD v2.6 同步 | 2026-09-08 补齐 R1～R8 缺陷验收 |
 | design.md | ✅ PRD v2.6 同步 | 2026-09-08 补齐实现方案与发布约束 |
 | tasks.md | ✅ 已补充整改任务 | 58 个基线任务 + U01～U09 |
-| 实现 | 🟡 整改实现完成 | U01～U08 已完成；U09 的真实中间件、浏览器和两处存量 typecheck 问题待外部验证/处置 |
+| 实现 | ✅ 整改实现完成 | U01～U09 已完成；浏览器、商业入口许可证和 DM8/全量存储链路作为发布验收项继续跟踪 |
 
 ---
 
@@ -827,12 +827,12 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
   **执行**: 未撤销 PAT 与关联 scope 元数据迁到新 tenant，清理 hash cache，写 `open_api.pat.tenant_migrate` 审计；同租户同步也执行错位修复；PAT actor 恢复持有人管理员事实但仍锁定可见租户。
   **完成条件**: 原 token 不撤销且在新租户可用；旧租户不可用；缓存与审计断言通过。
 
-- [ ] **U09：整改验证与 E2E**
+- [x] **U09：整改验证与 E2E**
   **设计依据**: design §9；spec §4
   **依赖**: U01～U08
   **执行**: 后端 ruff/定向测试、OpenFGA 契约测试、platform lint/typecheck/组件测试、i18n parity、arch-guard；运行 `/e2e-test` 并更新页面手动验证清单。
   **完成条件**: 本地可运行项全绿；依赖中间件项保留为 CI 证据，不降低断言。
-  **当前证据**: Open API 110 passed；F048 定向 133 passed / 6 skipped；platform 定向 10 passed；ruff、lint、i18n、arch-guard、diff check 通过。真实中间件/浏览器 E2E 尚未执行；全前端 typecheck 仅剩两个未触碰测试文件的既有错误，详见 `release-and-deployment.md`。
+  **当前证据**: Open API 110 passed；F048 定向 133 passed / 6 skipped；platform 定向测试通过；ruff、全前端 lint/typecheck、i18n、arch-guard、diff check 通过。2026-09-09 在 192.168.106.116 完成 f048-v4 模型/Catalog 切换及真实 MySQL、Redis、OpenFGA API E2E 11/11，QA 拒绝后数据哈希不变；浏览器交互、商业入口许可证续期、DM8 和全量存储链路仍待人工/专用环境验证。
 
 ## 11. 依赖图
 

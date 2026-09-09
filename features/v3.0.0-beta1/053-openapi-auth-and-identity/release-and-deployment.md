@@ -50,14 +50,15 @@ export PYTHONPATH=./
 - F048 技术标记、Catalog、模式、投影、迁移与对账脚本定向回归：133 passed、6 skipped；跳过项需要真实 OpenFGA。
 - platform 服务账号/API wrapper/系统页签定向测试：10 passed。
 - 受影响 Python 文件 ruff、全前端 lint、i18n parity、architecture guard 和 `git diff --check` 通过。
-- 默认环境收集 F053 E2E 共 11 项并安全跳过；只有显式设置 `F053_E2E=1` 才会操作专用部署。
-- 全前端 `pnpm typecheck` 未全绿，失败仅为本分支既有且未被本次修改的两处：`src/test/f048DashboardPermissions.test.tsx:91` 的组件 props 不匹配、`src/test/routeFilterPurity.test.ts:16` 的 `(string | undefined)[]` 类型不匹配；本次触碰文件未报告类型错误。
+- 2026-09-09 在 `192.168.106.116:7861` 执行 F053 API E2E 11/11：无密钥/JWT 回落拒绝、独立 SA 主体、身份头冲突、日常配置、PAT、v3 allowlist、资源授权候选、multipart `user_id`、知识空间 DTO 与 QA 防越权均通过。QA 样本拒绝前后内容哈希一致，测试服务账号清理后残留为 0。
+- 同日将该环境 OpenFGA Store `01KQ3ZRQ9VY0FJJ46V8NW98M7M` 从旧模型切换到 `f048-v4` 模型 `01M21ZT2425HJTQ6MX6W18JGYM`，Catalog release 195；补齐 20,764 条 SA 技术标记，41,187 条期望 tuple 经 higher consistency 验证。二次 dry-run 无 source upsert/retire，API/Celery 心跳均绑定新模型与 Catalog。
+- 执行 `pnpm install --frozen-lockfile` 同步工作区依赖后，全前端 `pnpm typecheck` 通过：platform 385 个 strict 文件、client 1290 个 strict 文件及 file-viewers 均通过。同步修正 dashboard 测试夹具的懒加载权限 hook 契约和 route filter 测试的字符串类型收窄；相关 10 项测试通过。
 
 ## 发布阻断项
 
 - **商业网关**：源码不在本仓。目标私有仓库为 `dataelement/bisheng-gateway`；依据现有架构文档，待该仓负责人核对的完整候选路径为 `src/main/resources/application.yml`、`src/main/java/com/dataelem/gateway/config/BishengConfig.java`、`src/main/java/com/dataelem/gateway/filter/SelfWebsocketRoutingFilter.java`、`src/main/java/com/dataelem/gateway/filter/PathRateGlobalFilter.java` 和 `src/main/java/com/dataelem/gateway/filter/SensitiveWordsFilter.java`。需使 `/api/v3/**` HTTP 和两个 WebSocket 不进入登录或 API Key 网关。当前工作区没有该仓源码，也没有负责人信息，路径尚不能以源码复核，因此 F07/R03 未完成。
-- **真实中间件与数据库**：本地无项目专用 MySQL、Redis、OpenFGA、Milvus/ES/MinIO 和 DM8 105 环境；迁移往返、凭据撤销时效、权限模型发布及检索链路需在 CI/专用环境复核。
-- **前端存量类型错误**：上述两个既有测试错误必须在合入前由对应模块修复或确认基线处置；本次不扩大变更范围去修改 dashboard/route filter 测试。
+- **剩余中间件与数据库**：MySQL、Redis、OpenFGA 模型发布及 API 权限链路已在 192.168.106.116 验证；Milvus/ES/MinIO 的成功写入/检索链路和 DM8 105 migration 往返仍需在对应专用环境复核。
+- **商业入口许可证**：`192.168.106.116:3001` 的公开 v3 请求当前返回业务码 11001（软件授权已过期）；直连同机后端 `:7861` 的 v3 与 OpenAPI schema 验证通过。浏览器 guest 与对外入口验收前须续期许可证，并通过实际商业入口复测 HTTP/WS。
 - **人工导入与浏览器证据**：Apifox/Postman 导入、无痕 guest HTTP/WS、platform/client Network、既有分享链接和商业版端到端验证仍需按 `e2e-checklist.md` 执行并附截图或日志。
 
 上述阻断项有结果前，不宣告 F07、R01、R03 或 R04 完成。

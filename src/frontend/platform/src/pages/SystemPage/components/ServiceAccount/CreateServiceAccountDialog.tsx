@@ -11,7 +11,8 @@ import {
   DialogTitle,
 } from "@/components/bs-ui/dialog"
 import { Input, Textarea } from "@/components/bs-ui/input"
-import { message } from "@/components/bs-ui/toast/use-toast"
+import { Label } from "@/components/bs-ui/label"
+import { toast } from "@/components/bs-ui/toast/use-toast"
 import { createServiceAccountApi } from "@/controllers/API/serviceAccount"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { useState } from "react"
@@ -38,17 +39,23 @@ export function CreateServiceAccountDialog({
   const handleCreate = async () => {
     setLoading(true)
     try {
-      const account = await captureAndAlertRequestErrorHoc(createServiceAccountApi({
-        name: name.trim(),
-        description: description.trim() || null,
-        resource_owner_user_id: owners[0].value,
-      }))
+      const account = await captureAndAlertRequestErrorHoc(
+        createServiceAccountApi({
+          name: name.trim(),
+          description: description.trim() || null,
+          resource_owner_user_id: owners[0].value,
+        }),
+      )
       if (!account) return
       setName("")
       setDescription("")
       setOwners([])
       onOpenChange(false)
-      message({ description: t("openApiManagement.feedback.created") })
+      toast({
+        title: t("openApiManagement.serviceAccount.create"),
+        description: t("openApiManagement.feedback.created"),
+        variant: "success",
+      })
       onCreated(account.id)
     } finally {
       setLoading(false)
@@ -67,42 +74,75 @@ export function CreateServiceAccountDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>{t("openApiManagement.serviceAccount.create")}</DialogTitle>
-          <DialogDescription>{t("openApiManagement.serviceAccount.createHint")}</DialogDescription>
+          <DialogTitle>
+            {t("openApiManagement.serviceAccount.create")}
+          </DialogTitle>
+          <DialogDescription>
+            {t("openApiManagement.serviceAccount.createHint")}
+          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <label className="block space-y-1 text-sm">
-            <span>{t("openApiManagement.fields.name")}</span>
-            <Input value={name} maxLength={128} onChange={(event) => setName(event.target.value)} />
-          </label>
-          <label className="block space-y-1 text-sm">
-            <span>{t("openApiManagement.fields.description")}</span>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label>{t("openApiManagement.fields.name")} *</Label>
+            <Input
+              value={name}
+              maxLength={128}
+              placeholder={t(
+                "openApiManagement.serviceAccount.namePlaceholder",
+              )}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>{t("openApiManagement.fields.description")}</Label>
             <Textarea
               value={description}
               maxLength={512}
               rows={3}
+              placeholder={t(
+                "openApiManagement.serviceAccount.descriptionPlaceholder",
+              )}
               onChange={(event) => setDescription(event.target.value)}
             />
-          </label>
-          <label className="block space-y-1 text-sm">
-            <span>{t("openApiManagement.fields.owner")}</span>
+          </div>
+          <div className="space-y-2">
+            <Label>{t("openApiManagement.fields.owner")} *</Label>
             <DepartmentUsersSelect
               value={owners}
               onChange={setOwners}
               multiple={false}
-              placeholder={t("openApiManagement.serviceAccount.ownerPlaceholder")}
-              searchPlaceholder={t("openApiManagement.serviceAccount.ownerSearch")}
+              placeholder={t(
+                "openApiManagement.serviceAccount.ownerPlaceholder",
+              )}
+              searchPlaceholder={t(
+                "openApiManagement.serviceAccount.ownerSearch",
+              )}
             />
-          </label>
+            <p className="text-sm text-muted-foreground">
+              {t("openApiManagement.serviceAccount.ownerTip")}
+            </p>
+          </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" disabled={loading} onClick={() => handleOpenChange(false)}>
+          <Button
+            variant="outline"
+            disabled={loading}
+            onClick={() => handleOpenChange(false)}
+          >
             {t("cancel")}
           </Button>
-          <Button disabled={loading || !name.trim() || owners.length !== 1} onClick={handleCreate}>
-            {loading ? <Loader2 aria-hidden="true" className="mr-2 size-4 animate-spin" /> : null}
+          <Button
+            disabled={loading || !name.trim() || owners.length !== 1}
+            onClick={handleCreate}
+          >
+            {loading ? (
+              <Loader2
+                aria-hidden="true"
+                className="mr-2 size-4 animate-spin"
+              />
+            ) : null}
             {t("confirmButton")}
           </Button>
         </DialogFooter>

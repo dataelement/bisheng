@@ -114,7 +114,14 @@ export interface ApiKeyUpdateForm {
 
 export interface OpenApiScopeItem {
   code: string
-  endpoints: string[]
+  group: string
+  label_key: string
+  desc_key: string
+  endpoints: Array<{
+    method: string
+    path: string
+  }>
+  hint_keys: string[]
 }
 
 export interface OpenApiScopeCatalog {

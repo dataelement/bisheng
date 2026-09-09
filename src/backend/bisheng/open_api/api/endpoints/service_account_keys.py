@@ -17,9 +17,10 @@ from bisheng.open_api.domain.schemas.credential import (
     KeyItem,
     KeyUpdateRequest,
     OpenApiScopeCatalog,
+    OpenApiScopeEndpoint,
     OpenApiScopeItem,
 )
-from bisheng.open_api.domain.scopes import ISSUABLE_OPEN_API_SCOPE_CODES, OPEN_API_SCOPE_MAP
+from bisheng.open_api.domain.scopes import OPEN_API_SCOPES
 from bisheng.open_api.domain.services.credential_service import CredentialService
 from bisheng.open_api.domain.services.service_account_service import ServiceAccountService
 from bisheng.permission.application.process_runtime import ensure_f048_process_runtime_ready
@@ -31,12 +32,17 @@ scopes_router = APIRouter(prefix="/service-accounts", tags=["ServiceAccount"])
 @scopes_router.get("/scopes", response_model=UnifiedResponseModel[OpenApiScopeCatalog])
 async def list_open_api_scopes(_admin: UserPayload = Depends(get_service_account_admin)):
     items = []
-    for code in sorted(ISSUABLE_OPEN_API_SCOPE_CODES):
-        scope = OPEN_API_SCOPE_MAP[code]
+    for scope in OPEN_API_SCOPES:
+        if not scope.issuable:
+            continue
         items.append(
             OpenApiScopeItem(
-                code=code,
-                endpoints=[f"{method} {path}" for method, path in scope.endpoints],
+                code=scope.code,
+                group=scope.group,
+                label_key=scope.label_key,
+                desc_key=scope.desc_key,
+                endpoints=[OpenApiScopeEndpoint(method=method, path=path) for method, path in scope.endpoints],
+                hint_keys=list(scope.hint_keys),
             )
         )
     return resp_200(
