@@ -1,4 +1,5 @@
 import { Button } from "@/components/bs-ui/button"
+import { LoadIcon } from "@/components/bs-icons"
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import {
   Dialog,
@@ -31,22 +32,23 @@ import type {
   ServiceAccountGrantableResource,
   ServiceAccountResourceGrant,
 } from "@/types/api/openApi"
-import { Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import {
+  SERVICE_ACCOUNT_PERMISSION_TIERS,
+  SERVICE_ACCOUNT_RESOURCE_TYPES,
+} from "./resourceGrantUtils"
 
-const RESOURCE_TYPES = [
-  "knowledge_space",
-  "knowledge_library",
-  "workflow",
-  "assistant",
-  "tool",
-  "channel",
-  "dashboard",
-] as const
+function filterPermissionTiers(models: GrantablePermissionModel[]) {
+  return SERVICE_ACCOUNT_PERMISSION_TIERS.flatMap((key) => {
+    const model = models.find((item) => item.key === key)
+    return model ? [model] : []
+  })
+}
 
 export interface ResourceGrantDialogProps {
   serviceAccountId: number
+  serviceAccountName: string
   existingGrants: ServiceAccountResourceGrant[]
   editingGrant: ServiceAccountResourceGrant | null
   open: boolean
@@ -56,6 +58,7 @@ export interface ResourceGrantDialogProps {
 
 export function ResourceGrantDialog({
   serviceAccountId,
+  serviceAccountName,
   existingGrants,
   editingGrant,
   open,
@@ -63,7 +66,9 @@ export function ResourceGrantDialog({
   onGranted,
 }: ResourceGrantDialogProps) {
   const { t } = useTranslation()
-  const [resourceType, setResourceType] = useState<string>(RESOURCE_TYPES[0])
+  const [resourceType, setResourceType] = useState<string>(
+    SERVICE_ACCOUNT_RESOURCE_TYPES[0],
+  )
   const [keyword, setKeyword] = useState("")
   const [resources, setResources] = useState<ServiceAccountGrantableResource[]>(
     [],
@@ -131,7 +136,7 @@ export function ResourceGrantDialog({
       ),
     )
       .then((available) => {
-        if (available) setModels(available)
+        if (available) setModels(filterPermissionTiers(available))
       })
       .finally(() => setLoadingModels(false))
   }, [editingGrant, open])
@@ -171,7 +176,7 @@ export function ResourceGrantDialog({
             resource.resource_id,
           ),
         )
-        if (available) setModels(available)
+        if (available) setModels(filterPermissionTiers(available))
       } finally {
         setLoadingModels(false)
       }
@@ -266,7 +271,7 @@ export function ResourceGrantDialog({
         onOpenChange(nextOpen)
       }}
     >
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>
             {t(
@@ -276,36 +281,46 @@ export function ResourceGrantDialog({
             )}
           </DialogTitle>
           <DialogDescription>
-            {t("openApiManagement.grants.addHint")}
+            {t("openApiManagement.grants.fixedSubjectHint", {
+              name: serviceAccountName,
+            })}
           </DialogDescription>
         </DialogHeader>
         {!editingGrant ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Select
-              value={resourceType}
-              onValueChange={(value) => {
-                setResourceType(value)
-                setSelectedResources([])
-                setModels([])
-                setModelKey("")
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {RESOURCE_TYPES.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {t(`openApiManagement.resourceTypes.${type}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <SearchInput
-              value={keyword}
-              placeholder={t("openApiManagement.grants.search")}
-              onChange={(event) => setKeyword(event.target.value)}
-            />
+          <div className="space-y-3">
+            <label className="space-y-1 text-sm">
+              <span>{t("openApiManagement.grants.resourceType")}</span>
+              <Select
+                value={resourceType}
+                onValueChange={(value) => {
+                  setResourceType(value)
+                  setSelectedResources([])
+                  setModels([])
+                  setModelKey("")
+                }}
+              >
+                <SelectTrigger
+                  aria-label={t("openApiManagement.grants.resourceType")}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SERVICE_ACCOUNT_RESOURCE_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {t(`openApiManagement.resourceTypes.${type}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <label className="space-y-1 text-sm">
+              <span>{t("openApiManagement.grants.resourceSearch")}</span>
+              <SearchInput
+                value={keyword}
+                placeholder={t("openApiManagement.grants.search")}
+                onChange={(event) => setKeyword(event.target.value)}
+              />
+            </label>
           </div>
         ) : null}
         {!editingGrant ? (
@@ -350,7 +365,7 @@ export function ResourceGrantDialog({
             })}
             {loadingResources ? (
               <p className="flex items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
-                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                <LoadIcon className="size-4" />
                 {t("openApiManagement.grants.loadingResources")}
               </p>
             ) : null}
@@ -378,7 +393,7 @@ export function ResourceGrantDialog({
             disabled={!selectedResources.length || loadingModels}
             onValueChange={setModelKey}
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label={t("openApiManagement.grants.model")}>
               <SelectValue
                 placeholder={t("openApiManagement.grants.modelPlaceholder")}
               />
@@ -386,7 +401,7 @@ export function ResourceGrantDialog({
             <SelectContent>
               {models.map((model) => (
                 <SelectItem key={model.key} value={model.key}>
-                  {model.name}
+                  {t(`openApiManagement.permissionTiers.${model.key}`)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -409,13 +424,12 @@ export function ResourceGrantDialog({
             }
             onClick={handleGrant}
           >
-            {loading ? (
-              <Loader2
-                aria-hidden="true"
-                className="mr-2 size-4 animate-spin"
-              />
-            ) : null}
-            {t("confirmButton")}
+            {loading ? <LoadIcon className="mr-2 size-4" /> : null}
+            {t(
+              editingGrant
+                ? "confirmButton"
+                : "openApiManagement.grants.confirmGrant",
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

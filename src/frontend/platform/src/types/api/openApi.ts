@@ -57,6 +57,7 @@ export interface ServiceAccountResourceGrant {
   assignee_id: string
   assignee_version: number
   source_type: string
+  granted_at: string | null
   protected: boolean
   editable: boolean
 }
