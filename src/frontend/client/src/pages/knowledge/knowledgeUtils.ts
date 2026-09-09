@@ -396,3 +396,23 @@ export function validateFileForUpload(
     }
     return null;
 }
+
+/**
+ * Whether selecting a space should also rewrite the URL to that space's page.
+ *
+ * The sidebar auto-selects a first space as soon as its lists land, and that runs
+ * through the same handler as an explicit click. On a share route that navigation
+ * replaced `/knowledge/share/:id` with the recipient's own default space before the
+ * share preview could open, so the shared space was never shown. The auto-selected
+ * space may render behind the preview; the share URL has to survive.
+ */
+export function shouldNavigateOnSpaceSelect(params: {
+    isShareRoute: boolean;
+    urlFolderId?: string;
+    urlSpaceId?: string;
+    targetSpaceId: string;
+}): boolean {
+    const { isShareRoute, urlFolderId, urlSpaceId, targetSpaceId } = params;
+    if (isShareRoute) return false;
+    return Boolean(urlFolderId) || urlSpaceId !== targetSpaceId;
+}
