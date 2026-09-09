@@ -134,9 +134,25 @@ async def _repair_single(
             )
             return False
 
-        actual_parent = (target.parent_type, target.parent_id)
-        expected_parent = (correct_parent_type, correct_parent_id)
-        if actual_parent == expected_parent:
+        # The drift is between the mirror and the business truth, so that is the
+        # pair to compare. This compared the freshly loaded record against the
+        # expectation computed from the same `file_level_path` — two readings of
+        # the same truth, always equal — and skipped every candidate as "already
+        # consistent". The scan found the drift and the repair declined to act
+        # on it, for as long as both have existed.
+        business_parent = (target.parent_type, target.parent_id)
+        correct_parent = (correct_parent_type, correct_parent_id)
+        stored_parent = (stored_parent_type, stored_parent_id)
+        if business_parent != correct_parent:
+            # The file moved again between the scan and now; the next cycle
+            # re-reads it with fresh values rather than writing a stale one.
+            logger.info(
+                "stale_projection_reconciler: resource {}/{} moved since the scan, skipping",
+                resource_type,
+                resource_id,
+            )
+            return False
+        if stored_parent == correct_parent:
             logger.info(
                 "stale_projection_reconciler: resource {}/{} already consistent, skipping",
                 resource_type,
