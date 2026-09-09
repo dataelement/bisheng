@@ -325,6 +325,7 @@ class TestCreateDepartment:
                 _Rows(parent),  # parent lookup
                 _Rows(None),  # duplicate-name lookup
                 _Rows(None),  # dept_id collision lookup
+                _Rows(None),  # company root for org_level
             ]
         )
         db_session.add.side_effect = added.append
@@ -1513,6 +1514,10 @@ class TestMoveDepartmentSubtreeSync:
                 "KnowledgeSpaceContentStat.enqueue_department_stat_async",
                 new=enqueue_stat,
             ),
+            patch(
+                "bisheng.points.domain.services.department_org_level_labeler.relabel_subtree",
+                new_callable=AsyncMock,
+            ),
         ):
             await DepartmentService.amove_department(
                 dept_id="7",
@@ -1583,6 +1588,10 @@ class TestMoveDepartmentSubtreeSync:
                 "KnowledgeSpaceContentStat.enqueue_department_stat_async",
                 new=enqueue_stat,
             ),
+            patch(
+                "bisheng.points.domain.services.department_org_level_labeler.relabel_subtree",
+                new_callable=AsyncMock,
+            ),
         ):
             await DepartmentService.amove_department(
                 dept_id="7",
@@ -1631,6 +1640,10 @@ class TestMoveDepartmentSubtreeSync:
             patch(
                 "bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users",
                 sync_mock,
+            ),
+            patch(
+                "bisheng.points.domain.services.department_org_level_labeler.relabel_subtree",
+                new_callable=AsyncMock,
             ),
         ):
             # Must NOT raise — sync hiccup is best-effort.

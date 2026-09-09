@@ -37,6 +37,14 @@ const ORG_LEVEL_I18N_KEYS: Record<string, string> = {
   squad: "com_permission.org_level_squad",
 };
 
+/** 祖先已是班组则不画徽章; 第一层班组仍展示. */
+function shouldShowOrgLevelBadge(
+  level: string | null | undefined,
+  ancestorHasSquad: boolean,
+): boolean {
+  return Boolean(level) && !ancestorHasSquad;
+}
+
 /** 对齐后台「组织与成员」树行徽章颜色。 */
 function orgLevelBadgeClass(level: string): string {
   switch (level) {
@@ -318,6 +326,7 @@ export function SubjectSearchDepartment({
               indeterminateIds={indeterminateIds}
               selectedDepartmentsById={selectedDepartmentsById}
               ancestorIncluded={false}
+              ancestorHasSquad={false}
               disabledIds={disabledIdSet}
               matchesKeyword={matchesKeyword}
               onMaterializeInheritedSelection={materializeInheritedSelection}
@@ -335,7 +344,7 @@ export function SubjectSearchDepartment({
 }
 
 function TreeNode({
-  node, depth, expanded, selectedIds, indeterminateIds, selectedDepartmentsById, ancestorIncluded, disabledIds, matchesKeyword, onMaterializeInheritedSelection, onToggle, onExpand, selectionMode, canSelectNode, showAlreadyGrantedLabel, boundDisabledLabelKey,
+  node, depth, expanded, selectedIds, indeterminateIds, selectedDepartmentsById, ancestorIncluded, ancestorHasSquad, disabledIds, matchesKeyword, onMaterializeInheritedSelection, onToggle, onExpand, selectionMode, canSelectNode, showAlreadyGrantedLabel, boundDisabledLabelKey,
 }: {
   node: DepartmentNode;
   depth: number;
@@ -344,6 +353,7 @@ function TreeNode({
   indeterminateIds: Set<number>;
   selectedDepartmentsById: Map<number, SelectedSubject>;
   ancestorIncluded: boolean;
+  ancestorHasSquad: boolean;
   disabledIds: Set<number>;
   matchesKeyword: (n: DepartmentNode) => boolean;
   onMaterializeInheritedSelection: () => void;
@@ -429,7 +439,9 @@ function TreeNode({
         <span className="min-w-0 truncate text-sm" title={displayName}>
           {displayName}
         </span>
-        {node.org_level && ORG_LEVEL_I18N_KEYS[node.org_level] ? (
+        {shouldShowOrgLevelBadge(node.org_level, ancestorHasSquad)
+          && node.org_level
+          && ORG_LEVEL_I18N_KEYS[node.org_level] ? (
           <span
             className={cn(
               "ml-1 shrink-0 rounded px-1 py-0.5 text-[10px] font-medium",
@@ -463,6 +475,7 @@ function TreeNode({
           indeterminateIds={indeterminateIds}
           selectedDepartmentsById={selectedDepartmentsById}
           ancestorIncluded={nextAncestorIncluded}
+          ancestorHasSquad={ancestorHasSquad || node.org_level === "squad"}
           disabledIds={disabledIds}
           matchesKeyword={matchesKeyword}
           onMaterializeInheritedSelection={onMaterializeInheritedSelection}

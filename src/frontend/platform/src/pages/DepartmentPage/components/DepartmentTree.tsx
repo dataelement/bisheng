@@ -29,6 +29,14 @@ interface DepartmentTreeProps {
   orgLevelById?: Record<number, string | null>
 }
 
+/** 祖先已是班组则不画徽章; 第一层班组仍展示. */
+function shouldShowOrgLevelBadge(
+  level: string | null | undefined,
+  ancestorHasSquad: boolean,
+): boolean {
+  return Boolean(level) && !ancestorHasSquad
+}
+
 /** org_level 徽章样式（积分部门榜用标签，不改拓扑）。 */
 function orgLevelBadgeClass(level: string | null | undefined): string {
   switch (level) {
@@ -164,13 +172,24 @@ export function DepartmentTree({
   }, [keyword, data, matchesKeyword])
 
   const renderNode = useMemo(() => {
-    const Render = ({ node, depth }: { node: DepartmentTreeNode; depth: number }) => {
+    const Render = ({
+      node,
+      depth,
+      ancestorHasSquad,
+    }: {
+      node: DepartmentTreeNode
+      depth: number
+      ancestorHasSquad: boolean
+    }) => {
       if (!matchesKeyword(node)) return null
       const hasChildren = node.children && node.children.length > 0
       const isExpanded = expanded.has(node.id)
       const isSelected = node.dept_id === selectedDeptId
       const isArchived = node.status === "archived"
       const gutterWidth = depth * TREE_INDENT_PER_LEVEL
+      const nodeLevel = orgLevelById?.[node.id]
+      const showOrgLevelBadge = shouldShowOrgLevelBadge(nodeLevel, ancestorHasSquad)
+      const nextAncestorHasSquad = ancestorHasSquad || nodeLevel === "squad"
 
       return (
         <div key={node.id}>
@@ -246,15 +265,15 @@ export function DepartmentTree({
                 {t("bs:tenant.mountedTag", { defaultValue: "子租户" })}
               </span>
             )}
-            {orgLevelById?.[node.id] ? (
+            {showOrgLevelBadge && nodeLevel ? (
               <span
                 className={cn(
                   "mr-1 shrink-0 rounded px-1 py-0.5 text-[10px] font-medium",
-                  orgLevelBadgeClass(orgLevelById[node.id]),
+                  orgLevelBadgeClass(nodeLevel),
                 )}
                 title={t("bs:department.orgLevelBadgeTitle")}
               >
-                {t(`bs:department.orgLevel.${orgLevelById[node.id]}`)}
+                {t(`bs:department.orgLevel.${nodeLevel}`)}
               </span>
             ) : null}
             {/* Quick create child button — hidden for archived departments */}
@@ -274,7 +293,12 @@ export function DepartmentTree({
           {hasChildren && isExpanded && (
             <div>
               {node.children.map((child) => (
-                <Render key={child.id} node={child} depth={depth + 1} />
+                <Render
+                  key={child.id}
+                  node={child}
+                  depth={depth + 1}
+                  ancestorHasSquad={nextAncestorHasSquad}
+                />
               ))}
             </div>
           )}
@@ -304,7 +328,7 @@ export function DepartmentTree({
       />
       <div className="flex-1 overflow-y-auto">
         {data.map((node) => (
-          <TreeNode key={node.id} node={node} depth={0} />
+          <TreeNode key={node.id} node={node} depth={0} ancestorHasSquad={false} />
         ))}
       </div>
     </div>

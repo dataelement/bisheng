@@ -40,3 +40,11 @@ def org_level_for_relative_depth(rel: int) -> str:
     if rel == 2:
         return ORG_LEVEL_OFFICE
     return ORG_LEVEL_SQUAD
+
+
+def org_level_for_path(company_path: str | None, node_path: str | None) -> str | None:
+    """节点在公司子树内则返回四级标签, 否则 None (与未设公司根对齐)."""
+    rel = relative_depth(company_path, node_path)
+    if rel is None:
+        return None
+    return org_level_for_relative_depth(rel)

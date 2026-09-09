@@ -134,7 +134,7 @@ class DeptUpsertService:
 
             await aassert_default_root_parent_immutable(existing.id, parent_id)
 
-        return await DepartmentDao.aupsert_by_external_id(
+        dept = await DepartmentDao.aupsert_by_external_id(
             source=source,
             external_id=item.external_id,
             name=item.name,
@@ -143,3 +143,10 @@ class DeptUpsertService:
             sort_order=item.sort,
             last_sync_ts=last_sync_ts,
         )
+        from bisheng.points.domain.services.department_org_level_labeler import (
+            relabel_subtree_standalone,
+        )
+
+        if dept is not None and dept.path:
+            await relabel_subtree_standalone(dept.path)
+        return dept

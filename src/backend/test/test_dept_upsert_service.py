@@ -16,6 +16,16 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _noop_org_level_relabel():
+    """upsert 后打标走独立 session; 本文件只验 DAO 入参, 不打真实库."""
+    with patch(
+        "bisheng.points.domain.services.department_org_level_labeler.relabel_subtree_standalone",
+        new_callable=AsyncMock,
+    ):
+        yield
+
 from bisheng.common.errcode.sso_sync import SsoDeptParentMissingError
 from bisheng.sso_sync.domain.schemas.payloads import DepartmentUpsertItem
 
