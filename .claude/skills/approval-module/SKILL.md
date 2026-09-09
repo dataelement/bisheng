@@ -360,6 +360,11 @@ manifest 和当前 generation steps；随后 coordinator 只加载已准备的�
 
 Beat 注册四个 Knowledge coordinator：动态审批人对账、执行 watchdog、step recovery/compensation、stage/residue/delete cleanup。coordinator 只在 `bypass_tenant_filter()` 内枚举租户，再带显式 tenant header 逐租户派发；逐租户 keyset 有界扫描、ContextVar finally reset、单租户失败隔离。所有 F046 task 与 Beat 字符串均位于 `bisheng.worker.knowledge.file_change_tasks` 并路由到 `knowledge_celery`。
 
+**两条终态兜底（缺一都会让请求永远停在非终态，文件也删不掉）：**
+
+- **派发预算**：`dispatch_ready_steps` 在派发前检查 `attempt_count`，达到 `MAX_STEP_DISPATCH_ATTEMPTS`（coordinator 模块常量，当前 50）就改调 `mark_failed`，由随后的 `reconcile()` 把整个 request 判 failed。没有这道闸时，watchdog 与 step recovery 会把同一份注定失败的工作互相递回，而**每次派发都会刷新 request 心跳**——心跳过期恰恰是 watchdog 唯一的放弃依据，于是重试把看门狗喂饱，request 永远 `applying`。
+- **watchdog 扫描覆盖 `queued`**：`list_watchdog_candidates` 除 `applying/compensating`（要求非空 token）外，还收心跳过期的 `queued`。`queued` 请求尚未持有 token 也没有 step（token 由 `begin_execution` 铸造），决定交付层认为 `delivered` 即完事、step recovery 又要求先有 step，所以没有这条谁都捞不到它。`ExecutionWatchdogCandidate` 因此带 `execution_state` 且 `execution_token` 可为 None；worker 按状态分流：`queued` 重投 `coordinate_file_change_execution`（begin 是幂等的，工作仍然欠着），其余仍走 `watchdog_file_change_execution`。
+
 > 部署至少需要同时消费默认 `celery` 与 `knowledge_celery`。task ID 和 broker ACK 只证明派发，不证明业务成功。
 
 v2.6.0 发布采用停服直接升级：同时停止 API、默认/Knowledge worker 与 Beat，完成未发布 F045/F046 DDL/代码替换后整组启动；不保留两场景开发期消息/数据兼容，也不允许新旧 worker 混跑。三个已上线 legacy 场景的 outbox 数据与 worker 语义必须保留。

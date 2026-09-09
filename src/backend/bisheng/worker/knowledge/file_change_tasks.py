@@ -369,11 +369,10 @@ async def _coordinate_execution_async(
     request_id: int,
     execution_token: str | None,
 ) -> dict:
+    from bisheng.common.errcode.base import BaseErrorCode
     from bisheng.knowledge.domain.services.knowledge_space_mutation_executor import (
         MutationExecutionCompleted,
     )
-
-    from bisheng.common.errcode.base import BaseErrorCode
 
     coordinator = _build_execution_coordinator()
     executor = _build_mutation_executor()
@@ -638,6 +637,10 @@ async def _run_owner_async(
 
 
 async def _watchdog_tenant_page_async(*, tenant_id: int, after_request_id: int) -> dict:
+    from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
+        KnowledgeSpaceFileChangeExecutionState,
+    )
+
     page = await _build_compensation_service().list_watchdog_page(
         tenant_id=int(tenant_id),
         after_request_id=int(after_request_id),
@@ -646,6 +649,17 @@ async def _watchdog_tenant_page_async(*, tenant_id: int, after_request_id: int) 
     dispatched, failed = 0, 0
     for candidate in page.items:
         try:
+            if candidate.execution_state == KnowledgeSpaceFileChangeExecutionState.QUEUED:
+                # Stranded before it ever began: re-drive it rather than fail it.
+                # The approval was granted, so the work is still owed, and
+                # beginning execution is idempotent — it reuses any token already
+                # minted and leaves an execution that did start alone.
+                coordinate_file_change_execution.apply_async(
+                    kwargs={"request_id": int(candidate.request_id)},
+                    headers={"tenant_id": int(tenant_id)},
+                )
+                dispatched += 1
+                continue
             watchdog_file_change_execution.apply_async(
                 kwargs={
                     "request_id": int(candidate.request_id),

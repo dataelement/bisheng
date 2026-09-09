@@ -45,6 +45,17 @@ from bisheng.knowledge.domain.services.knowledge_space_mutation_read_projection_
 
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
+# A step dispatched this many times is not going to succeed. Celery's own
+# per-attempt retries are exhausted long before this; every dispatch beyond them
+# is the watchdog and the step recovery handing the same doomed work back to
+# each other. Left alone the loop never ends, because a dispatch refreshes the
+# request heartbeat and a stale heartbeat is the only thing that makes the
+# watchdog give up: the request stays "applying" forever and its file stays
+# undeletable. Retiring the step lets `reconcile` fail the request, which is the
+# way out. Keep the budget an order of magnitude above any plausible run of
+# transient failures so a step that would recover on its own still gets to.
+MAX_STEP_DISPATCH_ATTEMPTS = 50
+
 
 class ExecutionReconcileStatus(StrEnum):
     IGNORED = "ignored"
@@ -328,6 +339,9 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
         for row in rows:
             if row.step_code not in selected or row.step_code not in ready_codes:
                 continue
+            if row.attempt_count >= MAX_STEP_DISPATCH_ATTEMPTS:
+                await self._retire_exhausted_step(identity=identity, row=row)
+                continue
             context = self._step_context(identity=identity, request=request, row=row)
             task_id = dispatcher(context)
             if isawaitable(task_id):
@@ -350,6 +364,34 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
                 if marked:
                     dispatched.append(row.step_code)
         return dispatched
+
+    async def _retire_exhausted_step(
+        self,
+        *,
+        identity: ExecutionIdentity,
+        row: KnowledgeSpaceFileChangeExecutionStep,
+    ) -> bool:
+        """Fail a step that has spent its dispatch budget, so the request can end.
+
+        `reconcile` turns any failed step into a failed request, so this is the
+        only hand-off needed: the caller reconciles right after dispatching.
+        """
+
+        async with self.session_factory() as session, session.begin():
+            current = await KnowledgeSpaceFileChangeRequestRepository(session).get_by_id(
+                tenant_id=identity.tenant_id,
+                request_id=identity.request_id,
+                for_update=True,
+            )
+            if not self._matches_identity(current, identity):
+                return False
+            return await KnowledgeSpaceFileChangeExecutionStepRepository(session).mark_failed(
+                tenant_id=identity.tenant_id,
+                request_id=identity.request_id,
+                step_code=row.step_code,
+                attempt_token=identity.execution_token,
+                error_summary=f"step gave up after {row.attempt_count} dispatch attempts",
+            )
 
     async def acknowledge_step(
         self,
