@@ -350,7 +350,13 @@ def test_watchdog_is_token_bound_and_only_fails_current_knowledge_request(worker
 
 async def test_watchdog_scan_dispatches_only_request_token_and_request_cursor(worker, monkeypatch):
     page = SimpleNamespace(
-        items=[SimpleNamespace(request_id=41, execution_token="generation-1")],
+        items=[
+            SimpleNamespace(
+                request_id=41,
+                execution_token="generation-1",
+                execution_state="applying",
+            )
+        ],
         has_more=True,
         next_after_id=41,
     )

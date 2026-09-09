@@ -243,10 +243,27 @@ class ChannelService:
         self.initial_grant_application = initial_grant_application
         self.prospective_grant_application = prospective_grant_application
 
+    @staticmethod
+    def _reads_without_subscribing(channel: Channel) -> bool:
+        """A public channel's articles are open to anyone who can find it.
+
+        F048 hands out `visible` only through a subscription or an explicit
+        grant, and being public grants nothing — so a public channel opened
+        from the square told a non-subscriber its content needed an approval
+        that a public channel does not even have.
+
+        Deliberately a business predicate and not a permission tuple: an older
+        build wrote `user:* public_reader` tuples, they were removed on
+        purpose, and the authorization model no longer reads them.
+        """
+
+        return channel.visibility == ChannelVisibilityEnum.PUBLIC
+
     async def _get_channel_actions(
         self,
         channel_id: str,
         login_user: UserPayload,
+        channel: Channel | None = None,
     ) -> set[str]:
         action_map = await batch_check_business_actions(
             login_user,
@@ -254,7 +271,12 @@ class ChannelService:
             resource_ids=(channel_id,),
             actions=CHANNEL_EFFECTIVE_ACTIONS,
         )
-        return set(action_map.get(str(channel_id), frozenset()))
+        actions = set(action_map.get(str(channel_id), frozenset()))
+        # The client decides from this set whether to ask for the articles at
+        # all, so a channel the read gates now allow has to say so here too.
+        if channel is not None and self._reads_without_subscribing(channel):
+            actions.add("visible")
+        return actions
 
     @staticmethod
     def _resolve_subscription_status(
@@ -2142,7 +2164,7 @@ class ChannelService:
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=login_user.user_id,
         )
-        actions = await self._get_channel_actions(channel_id, login_user)
+        actions = await self._get_channel_actions(channel_id, login_user, channel=channel)
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             # If private, only members can view unless special requirement
             if channel.visibility == ChannelVisibilityEnum.PRIVATE and "visible" not in actions:
@@ -2577,12 +2599,13 @@ class ChannelService:
         channel = channels[0]
         if login_user is None:
             raise ChannelAccessDeniedError()
-        await require_business_action(
-            login_user,
-            resource_type="channel",
-            resource_id=channel_id,
-            action="visible",
-        )
+        if not self._reads_without_subscribing(channel):
+            await require_business_action(
+                login_user,
+                resource_type="channel",
+                resource_id=channel_id,
+                action="visible",
+            )
 
         # The `visible` check above IS the gate, exactly as in get_article_detail.
         # An ACTIVE-membership-or-view_channel block used to sit here; F048 replaced
@@ -2674,12 +2697,13 @@ class ChannelService:
             raise ChannelNotFoundError()
         channel = channels[0]
 
-        await require_business_action(
-            login_user,
-            resource_type="channel",
-            resource_id=channel_id,
-            action="visible",
-        )
+        if not self._reads_without_subscribing(channel):
+            await require_business_action(
+                login_user,
+                resource_type="channel",
+                resource_id=channel_id,
+                action="visible",
+            )
 
         # 1. Fetch article from ES
         article = await self.article_es_service.get_article(article_id)

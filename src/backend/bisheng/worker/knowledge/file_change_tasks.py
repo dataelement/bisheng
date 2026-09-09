@@ -650,10 +650,10 @@ async def _watchdog_tenant_page_async(*, tenant_id: int, after_request_id: int) 
     for candidate in page.items:
         try:
             if candidate.execution_state == KnowledgeSpaceFileChangeExecutionState.QUEUED:
-                # Stranded before it ever began: re-drive it rather than fail it.
-                # The approval was granted, so the work is still owed, and
-                # beginning execution is idempotent — it reuses any token already
-                # minted and leaves an execution that did start alone.
+                # Stranded before it ever began: re-drive it rather than fail
+                # it. The change was already cleared to run, so the work is
+                # still owed, and beginning execution is idempotent — it reuses
+                # any token already minted and leaves a started run alone.
                 coordinate_file_change_execution.apply_async(
                     kwargs={"request_id": int(candidate.request_id)},
                     headers={"tenant_id": int(tenant_id)},

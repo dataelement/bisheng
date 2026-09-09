@@ -16,14 +16,20 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from bisheng.channel.domain.models.channel import ChannelVisibilityEnum
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.errcode.channel import ChannelAccessDeniedError
 
 _CHANNEL_ID = "ba05d6abbb214bbf92de036115a748fa"
 
 
-def _service(*, search_response) -> ChannelService:
-    channel = SimpleNamespace(id=_CHANNEL_ID, source_list=["src-1"], filter_rules=None)
+def _service(*, search_response, visibility=ChannelVisibilityEnum.REVIEW) -> ChannelService:
+    channel = SimpleNamespace(
+        id=_CHANNEL_ID,
+        source_list=["src-1"],
+        filter_rules=None,
+        visibility=visibility,
+    )
     return ChannelService(
         channel_repository=SimpleNamespace(find_channels_by_ids=AsyncMock(return_value=[channel])),
         # Left un-stubbed on purpose: the list must not consult membership at all.
