@@ -654,20 +654,27 @@ class ChannelService:
                         for grant in channel_data.initial_permissions.grants
                     ),
                 )
-                mutation = await self.initial_grant_application.apply(
+                outcome = await self.initial_grant_application.apply(
                     actor=actor,
                     target=target,
                     request=initial_request,
                 )
+                mutation = outcome.mutation
                 permission_result = ChannelInitialPermissionApplyResult(
                     status="succeeded",
-                    resource_version=mutation.resource_version,
-                    assignee_ids=[
-                        str(source.source_id)
-                        for grant in mutation.grants
-                        for source in grant.sources
-                        if source.active and not source.protected
-                    ],
+                    # None when everyone named at creation was invited to
+                    # confirm instead of granted, leaving the channel untouched.
+                    resource_version=(target.resource_version if mutation is None else mutation.resource_version),
+                    assignee_ids=(
+                        []
+                        if mutation is None
+                        else [
+                            str(source.source_id)
+                            for grant in mutation.grants
+                            for source in grant.sources
+                            if source.active and not source.protected
+                        ]
+                    ),
                 )
             except Exception as exc:
                 # The Channel and protected owner are already durable; ordinary

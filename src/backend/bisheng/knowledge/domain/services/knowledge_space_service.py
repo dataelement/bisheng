@@ -139,6 +139,7 @@ from bisheng.permission.application.initial_grant import (
     InitialGrantRequest,
 )
 from bisheng.permission.application.prospective_grant import ProspectiveGrantApplication
+from bisheng.permission.domain.schemas.permission_schema import AuthorizationItemResult
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.user.domain.models.user import UserDao
@@ -1339,19 +1340,41 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         for grant in initial_permissions.grants
                     ),
                 )
-                mutation = await self.initial_grant_application.apply(
+                outcome = await self.initial_grant_application.apply(
                     actor=actor,
                     target=target,
                     request=request,
                 )
+                mutation = outcome.mutation
                 permission_result = InitialPermissionApplyResult(
                     status="succeeded",
-                    resource_version=mutation.resource_version,
-                    assignee_ids=[
-                        str(source.source_id)
-                        for grant in mutation.grants
-                        for source in grant.sources
-                        if source.active and not source.protected
+                    # None when every person named at creation was invited
+                    # instead of granted, which leaves the resource untouched.
+                    resource_version=(target.resource_version if mutation is None else mutation.resource_version),
+                    assignee_ids=(
+                        []
+                        if mutation is None
+                        else [
+                            str(source.source_id)
+                            for grant in mutation.grants
+                            for source in grant.sources
+                            if source.active and not source.protected
+                        ]
+                    ),
+                    direct_applied_count=0 if mutation is None else len(mutation.grants),
+                    invite_created_count=sum(1 for item in outcome.pending if item.outcome == "invite_created"),
+                    invite_existing_count=sum(1 for item in outcome.pending if item.outcome == "invite_existing"),
+                    results=[
+                        AuthorizationItemResult(
+                            operation="grant",
+                            subject_type="user",
+                            subject_id=int(item.subject_id),
+                            relation=item.model_key,
+                            model_id=item.model_key,
+                            outcome=item.outcome,
+                            approval_instance_id=item.approval_instance_id,
+                        )
+                        for item in outcome.pending
                     ],
                 )
             except Exception as exc:

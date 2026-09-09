@@ -63,7 +63,10 @@ class _InitialGrants:
         if self.error is not None:
             raise self.error
         source = SimpleNamespace(source_id=92, active=True, protected=False)
-        return SimpleNamespace(resource_version=2, grants=(SimpleNamespace(sources=(source,)),))
+        return SimpleNamespace(
+            mutation=SimpleNamespace(resource_version=2, grants=(SimpleNamespace(sources=(source,)),)),
+            pending=(),
+        )
 
 
 def _request(*, request_id: str | None = "req-1") -> CreateChannelRequest:

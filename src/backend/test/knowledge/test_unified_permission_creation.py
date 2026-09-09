@@ -59,7 +59,10 @@ class _InitialGrants:
             raise self.error
         source = SimpleNamespace(source_id=91, active=True, protected=False)
         grant = SimpleNamespace(sources=(source,))
-        return SimpleNamespace(resource_version=2, grants=(grant,))
+        return SimpleNamespace(
+            mutation=SimpleNamespace(resource_version=2, grants=(grant,)),
+            pending=(),
+        )
 
 
 def _user():
