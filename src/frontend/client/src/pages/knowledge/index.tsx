@@ -408,25 +408,7 @@ export default function Knowledge() {
                 // already sitting in their own sidebar. `visible` is the same
                 // decision the space's own pages enforce; `role` cannot answer it,
                 // because an absent role maps to MEMBER exactly like a real one.
-                // TEMPORARY (share-link diagnosis): remove once the redirect is understood.
-                console.warn("[share-debug] guard decided", {
-                    previewSpaceId,
-                    canOpen: canOpenSharedSpace(info),
-                    actions: (info as { actions?: string[] })?.actions,
-                    role: info?.role,
-                    pathname: window.location.pathname,
-                });
                 if (canOpenSharedSpace(info)) {
-                    // Claim the space before navigating. The sidebar's
-                    // auto-select-first effect is a child's, so it runs before
-                    // this component's own deep-link effect on the very render
-                    // the route changes — with nothing active yet it picked the
-                    // first space in the list and navigated there, landing the
-                    // share link on somebody's default space instead of the
-                    // shared one. Same guard the deep-link route already uses.
-                    setActiveSpace((prev) =>
-                        prev?.id === previewSpaceId ? prev : ({ ...info, id: previewSpaceId } as KnowledgeSpace),
-                    );
                     navigateRef.current(`/knowledge/space/${previewSpaceId}`, { replace: true });
                     return;
                 }
@@ -497,20 +479,6 @@ export default function Knowledge() {
         // Without this, clicking a space while the URL is on /folder/<id> leaves the
         // file list stuck on the folder's contents and the tree's folder highlight
         // pointing at the wrong space (Bug A + Bug B).
-        // TEMPORARY (share-link diagnosis): remove once the redirect is understood.
-        console.warn("[share-debug] space selected", {
-            target: space.id,
-            isShareRoute,
-            urlSpaceId: spaceId,
-            pathname: window.location.pathname,
-            willNavigate: shouldNavigateOnSpaceSelect({
-                isShareRoute,
-                urlFolderId,
-                urlSpaceId: spaceId,
-                targetSpaceId: space.id,
-            }),
-            stack: new Error().stack?.split("\n").slice(1, 5).join(" | "),
-        });
         // Never on a share route — see shouldNavigateOnSpaceSelect.
         if (shouldNavigateOnSpaceSelect({
             isShareRoute,
@@ -768,6 +736,10 @@ export default function Knowledge() {
                         onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
                         collapsed={sidebarCollapsed}
                         onCollapsedChange={setSidebarCollapsed}
+                        // The URL names a space on both of these routes, so the
+                        // default-pick has nothing to decide and must not race
+                        // the route effect for the address bar.
+                        suppressAutoSelect={!!detailSpaceId || isShareRoute}
                         hideExpandToggleWhenCollapsed={isDesktop && !!activeSpace}
                     />
                 </div>
