@@ -68,3 +68,14 @@ export function consumeLoginReturnTo(): string | null {
         return null;
     }
 }
+
+/** Preserve desktop consent through SSO before admin-console access is evaluated. */
+export function hasDesktopLoginReturnTo(): boolean {
+    try {
+        const raw = localStorage.getItem(LOGIN_PATHNAME_KEY)
+        const at = Number(localStorage.getItem(LOGIN_PATHNAME_AT_KEY))
+        if (!raw || !at || Date.now() - at > MAX_AGE_MS || at > Date.now()) return false
+        const target = new URL(raw, location.origin)
+        return target.origin === location.origin && target.pathname === '/desktop-login'
+    } catch { return false }
+}

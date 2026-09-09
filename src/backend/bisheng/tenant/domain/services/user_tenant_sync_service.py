@@ -116,8 +116,13 @@ class UserTenantSyncService:
             )
 
         # Perform the swap.
-        await UserTenantDao.aactivate_user_tenant(user_id, new_leaf.id)
-        await UserDao.aincrement_token_version(user_id)
+        from bisheng.user.domain.services.user import UserService
+
+        if UserService._dsh_enabled():
+            await UserService.activate_tenant_with_profile(user_id, new_leaf.id)
+        else:
+            await UserTenantDao.aactivate_user_tenant(user_id, new_leaf.id)
+            await UserDao.aincrement_token_version(user_id)
         await cls._rewrite_tenant_membership_permissions(
             user_id,
             old_tenant_id,

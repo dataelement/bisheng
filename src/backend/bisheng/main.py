@@ -126,8 +126,13 @@ async def lifespan(app: FastAPI):
         # LangfuseInstance.update()
         yield
     finally:
-        thread_pool.tear_down()
-        await close_app_context()
+        try:
+            dsh_runtime = getattr(app.state, "dsh_runtime", None)
+            if dsh_runtime is not None:
+                await dsh_runtime.close()
+        finally:
+            thread_pool.tear_down()
+            await close_app_context()
 
 
 def create_app():

@@ -1185,7 +1185,7 @@
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 4
+      "count": 2
     }
   },
   "src/i18n.js": {
@@ -3498,9 +3498,6 @@
     }
   },
   "src/pages/SystemPage/index.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    },
     "react-hooks/rules-of-hooks": {
       "count": 2
     }

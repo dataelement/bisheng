@@ -13,6 +13,7 @@ import EditorPage from "@/pages/Dashboard/editor";
 import SharePage from "@/pages/Dashboard/share";
 
 // 异步加载页面组件
+const DshLogin = lazy(() => import('@/pages/DshLogin').then(module => ({ default: module.DshLogin })));
 const Templates = lazy(() => import("@/pages/BuildPage/appTemps"));
 const Apps = lazy(() => import("@/pages/BuildPage/apps"));
 const EditAssistantPage = lazy(() => import("@/pages/BuildPage/assistant/editAssistant"));
@@ -68,6 +69,7 @@ const RedirectToClient = () => {
 };
 
 const privateRouter = [
+  { path: "/desktop-login", element: <DshLogin />, errorElement: <RouteErrorBoundary /> },
   { path: "/", element: <RedirectToExternalLink /> },
   {
     path: "/",
@@ -238,6 +240,7 @@ export const getAdminRouter = () => {
 }
 
 export const publicRouter = createBrowserRouter([
+  { path: "/desktop-login", element: <DshLogin />, errorElement: <RouteErrorBoundary /> },
   { path: "/", element: <LoginPage />, errorElement: <RouteErrorBoundary /> },
   // Backdoor entry: bypasses SSO auto-redirect when redirect_login_url is configured.
   { path: "/admin-login", element: <LoginPage forceLocal />, errorElement: <RouteErrorBoundary /> },

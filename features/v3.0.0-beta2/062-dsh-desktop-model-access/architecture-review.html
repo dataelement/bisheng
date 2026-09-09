@@ -1,0 +1,1324 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>v3.0.0-beta2 · F062 DSH Desktop 技术评审</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --surface-soft: #f0f3f6;
+      --ink: #17202a;
+      --muted: #66717e;
+      --line: #d7dde4;
+      --blue: #2563a7;
+      --blue-soft: #e7f0fa;
+      --green: #247357;
+      --green-soft: #e7f4ee;
+      --amber: #9a6415;
+      --amber-soft: #fff3d9;
+      --red: #a33b3b;
+      --red-soft: #faeaea;
+      --purple: #6750a4;
+      --purple-soft: #eee9fa;
+      --shadow: 0 8px 24px rgba(23, 32, 42, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; overflow-x: hidden; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      letter-spacing: 0;
+      overflow-x: hidden;
+    }
+
+    button, a { font: inherit; }
+
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 22px 0 48px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 10px 0 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .title-block { min-width: 0; max-width: 100%; }
+
+    .title-block h1 {
+      margin: 0 0 6px;
+      font-size: 26px;
+      line-height: 1.25;
+      font-weight: 500;
+      overflow-wrap: anywhere;
+    }
+
+    .title-block p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .decision {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .decision span,
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 9px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .tag-blue { color: var(--blue); background: var(--blue-soft); }
+    .tag-green { color: var(--green); background: var(--green-soft); }
+    .tag-amber { color: var(--amber); background: var(--amber-soft); }
+    .tag-red { color: var(--red); background: var(--red-soft); }
+    .tag-purple { color: var(--purple); background: var(--purple-soft); }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      padding: 10px 0;
+      background: rgba(246, 247, 249, 0.96);
+      border-bottom: 1px solid var(--line);
+    }
+
+    nav a {
+      flex: 0 0 auto;
+      color: var(--muted);
+      text-decoration: none;
+      padding: 7px 10px;
+      border-radius: 6px;
+    }
+
+    nav a:hover { color: var(--ink); background: var(--surface-soft); }
+
+    section {
+      padding: 34px 0;
+      border-bottom: 1px solid var(--line);
+      scroll-margin-top: 54px;
+    }
+
+    section:last-child { border-bottom: 0; }
+
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 19px;
+      font-weight: 500;
+    }
+
+    .section-head p {
+      margin: 0;
+      color: var(--muted);
+      text-align: right;
+    }
+
+    .architecture {
+      display: grid;
+      grid-template-columns: minmax(170px, 0.8fr) 54px minmax(240px, 1.1fr) 54px minmax(260px, 1.2fr);
+      align-items: stretch;
+      gap: 0;
+    }
+
+    .system {
+      min-width: 0;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .system-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      font-weight: 500;
+      flex-wrap: wrap;
+    }
+
+    .system-body { padding: 12px 14px; }
+
+    .system-body ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .system-body li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--surface-soft);
+    }
+
+    .system-body li:last-child { border-bottom: 0; }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 8px;
+      border-radius: 50%;
+      background: var(--blue);
+    }
+
+    .closed .dot { background: var(--purple); }
+    .core .dot { background: var(--green); }
+
+    .connector {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      text-align: center;
+      font-size: 12px;
+    }
+
+    .connector strong {
+      color: var(--ink);
+      font-size: 22px;
+      font-weight: 400;
+      line-height: 1;
+    }
+
+    .boundary-note {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .rule {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 52px;
+      padding: 10px 12px;
+      background: var(--surface-soft);
+      border-radius: 6px;
+    }
+
+    .rule b { font-weight: 500; }
+    .rule span { color: var(--muted); }
+
+    .scenario-controls {
+      display: inline-flex;
+      gap: 3px;
+      padding: 3px;
+      margin-bottom: 18px;
+      background: var(--surface-soft);
+      border-radius: 7px;
+    }
+
+    .scenario-controls button {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 7px 12px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .scenario-controls button[aria-selected="true"] {
+      background: var(--surface);
+      color: var(--ink);
+      box-shadow: 0 1px 4px rgba(23, 32, 42, 0.12);
+    }
+
+    .scenario-panel[hidden] { display: none; }
+
+    .sequence {
+      display: grid;
+      grid-template-columns: 42px repeat(4, minmax(145px, 1fr));
+      gap: 0 8px;
+      align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .lane-head {
+      min-height: 58px;
+      padding: 11px 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-weight: 500;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-soft);
+    }
+
+    .lane-head.blank { background: var(--surface); }
+
+    .step-no {
+      align-self: stretch;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      border-top: 1px solid var(--surface-soft);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .seq-cell {
+      min-height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 9px;
+      text-align: center;
+      color: var(--muted);
+      border-top: 1px solid var(--surface-soft);
+      border-left: 1px dashed var(--line);
+    }
+
+    .seq-cell.event {
+      color: var(--ink);
+      background: var(--blue-soft);
+      border-left: 0;
+      border-radius: 5px;
+      margin: 6px 0;
+      min-height: 52px;
+    }
+
+    .seq-cell.event.closed-event { background: var(--purple-soft); }
+    .seq-cell.event.core-event { background: var(--green-soft); }
+    .seq-cell.event.warning-event { background: var(--amber-soft); }
+    .seq-cell.arrow { color: var(--blue); font-weight: 500; }
+
+    .mobile-sequence { display: none; }
+
+    .state-flow {
+      display: grid;
+      grid-template-columns: 1fr 42px 1fr 42px 1fr 42px 1fr;
+      align-items: center;
+      gap: 0;
+    }
+
+    .state {
+      min-height: 112px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 14px;
+      text-align: center;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .state b { font-size: 16px; font-weight: 500; }
+    .state span { color: var(--muted); }
+    .state-active { border-color: #93c6ae; background: var(--green-soft); }
+    .state-grace { border-color: #e4c177; background: var(--amber-soft); }
+    .state-released { border-color: #d3b0b0; background: var(--red-soft); }
+
+    .state-arrow {
+      text-align: center;
+      color: var(--muted);
+      font-size: 22px;
+    }
+
+    .cleanup-paths {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .cleanup-path {
+      padding: 11px;
+      border-left: 3px solid var(--line);
+      background: var(--surface);
+    }
+
+    .cleanup-path b { display: block; font-weight: 500; }
+    .cleanup-path span { color: var(--muted); }
+
+    .admin-frame {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .admin-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .admin-title { font-weight: 500; }
+
+    .seat-meter {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+    }
+
+    .meter-track {
+      width: 128px;
+      height: 7px;
+      overflow: hidden;
+      background: var(--surface-soft);
+      border-radius: 4px;
+    }
+
+    .meter-fill { width: 80%; height: 100%; background: var(--green); }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+    }
+
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--surface-soft);
+      white-space: nowrap;
+    }
+
+    th { color: var(--muted); font-weight: 400; background: #fbfcfd; }
+
+    .action-link {
+      color: var(--blue);
+      margin-right: 12px;
+      font-weight: 500;
+    }
+
+    .danger-link { color: var(--red); }
+
+    .orchestration {
+      display: grid;
+      grid-template-columns: repeat(7, auto);
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      padding: 18px 14px;
+      background: var(--surface-soft);
+      border-top: 1px solid var(--line);
+    }
+
+    .orchestration .op {
+      padding: 8px 10px;
+      background: var(--surface);
+      border-radius: 6px;
+      text-align: center;
+    }
+
+    .orchestration .op small { display: block; color: var(--muted); }
+    .orchestration .arr { color: var(--muted); }
+
+    .ownership {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .owner-column h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .owner-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      border-top: 2px solid var(--green);
+    }
+
+    .owner-column.closed-owner .owner-list { border-top-color: var(--purple); }
+
+    .owner-list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 11px 2px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .owner-list span { color: var(--muted); text-align: right; }
+
+    .scope-bands {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 18px;
+    }
+
+    .scope-band {
+      padding-top: 12px;
+      border-top: 3px solid var(--green);
+    }
+
+    .scope-band.later { border-top-color: var(--line); }
+
+    .scope-band h3 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .scope-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .scope-item {
+      padding: 7px 9px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    .foot-note {
+      margin-top: 24px;
+      padding: 13px 14px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      border-left: 3px solid var(--amber);
+    }
+
+    .technical-group { margin-top: 24px; }
+    .technical-section h3 { font-size: 16px; font-weight: 500; margin: 16px 0 8px; }
+    .technical-section p { color: var(--muted); }
+    .technical-section .table-wrap { max-width: 100%; margin: 12px 0; }
+    .technical-table { min-width: 780px; table-layout: fixed; }
+    .technical-table th, .technical-table td { white-space: normal; vertical-align: top; overflow-wrap: anywhere; padding: 10px 12px; }
+    .technical-table th:first-child, .technical-table td:first-child { width: 27%; }
+    .technical-section code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
+    .technical-section a { color: var(--blue); }
+    .technical-note { margin: 16px 0; }
+    .technical-detail { padding: 12px 0; border-bottom: 1px solid var(--line); scroll-margin-top: 80px; }
+    .technical-detail summary { cursor: pointer; min-height: 44px; padding: 10px 0; overflow-wrap: anywhere; }
+    .technical-detail pre { max-width: 100%; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 14px; background: var(--surface-soft); font-size: 13px; line-height: 22px; }
+    .technical-section .owner-list li { flex-wrap: wrap; }
+    .technical-section .owner-list span { overflow-wrap: anywhere; min-width: 0; }
+
+    @media (max-width: 900px) {
+      .architecture {
+        grid-template-columns: 1fr;
+        gap: 9px;
+      }
+
+      .connector { min-height: 38px; }
+      .connector strong { transform: rotate(90deg); }
+      .boundary-note { grid-template-columns: 1fr; }
+      .sequence { display: none; }
+      .mobile-sequence { display: grid; gap: 8px; }
+
+      .mobile-step {
+        display: grid;
+        grid-template-columns: 32px 1fr;
+        gap: 10px;
+        align-items: start;
+        padding: 11px;
+        background: var(--surface);
+        border-left: 3px solid var(--blue);
+      }
+
+      .mobile-step b { font-weight: 500; }
+      .mobile-step span { display: block; color: var(--muted); }
+      .state-flow { grid-template-columns: 1fr; gap: 8px; }
+      .state-arrow { transform: rotate(90deg); }
+      .cleanup-paths { grid-template-columns: 1fr 1fr; }
+      .orchestration { grid-template-columns: 1fr; justify-items: stretch; }
+      .orchestration .arr { text-align: center; transform: rotate(90deg); }
+    }
+
+    @media (max-width: 640px) {
+      .shell { width: min(calc(100% - 20px), 1180px); padding-top: 10px; }
+      .topbar, .section-head, .admin-toolbar { align-items: flex-start; flex-direction: column; }
+      .decision { justify-content: flex-start; }
+      .section-head p { text-align: left; }
+      .boundary-note, .cleanup-paths, .ownership, .scope-bands { grid-template-columns: 1fr; }
+      .scenario-controls { display: grid; grid-template-columns: 1fr; width: 100%; }
+      .scenario-controls button { text-align: left; min-height: 42px; }
+      .seat-meter { width: 100%; justify-content: space-between; }
+      .meter-track { flex: 1; }
+    }
+
+    @media print {
+      body { background: #fff; }
+      nav, .scenario-controls { display: none; }
+      .shell { width: 100%; padding: 0; }
+      .system, .sequence, .admin-frame { box-shadow: none; }
+      .scenario-panel[hidden] { display: block; margin-top: 18px; }
+      section { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="title-block">
+        <h1>DSH Desktop 登录、席位与模型转发技术架构</h1>
+        <p>DSH 是 Agent 客户端；BiSheng 提供已配置模型；Gateway 授权模块控制固定席位</p>
+      </div>
+      <div class="decision" aria-label="核心决策">
+        <span class="tag-purple">席位与 DSH Token：Gateway 授权模块</span>
+        <span class="tag-green">模型配置与转发：BiSheng</span>
+        <span class="tag-blue">V2 API 鉴权：不复用</span>
+      </div>
+    </header>
+
+    <nav aria-label="页面导航">
+      <a href="#overview">总体架构</a>
+      <a href="#sequence">核心时序</a>
+      <a href="#lifecycle">席位生命周期</a>
+      <a href="#admin">统一管理面</a>
+      <a href="#ownership">职责边界</a>
+      <a href="#interfaces">接口设计</a>
+      <a href="#tables">数据表设计</a>
+      <a href="#scale">规模与实时限额</a>
+      <a href="#scope">一期范围</a>
+      <a href="./spec.md">F062 Spec</a>
+      <a href="./design.md">设计文档</a>
+      <a href="./client-api.md">客户端接口契约</a>
+      <a href="./design-review.md">评审问题</a>
+    </nav>
+
+    <section id="overview">
+      <div class="section-head">
+        <h2>总体架构</h2>
+        <p>三类职责独立，管理体验统一</p>
+      </div>
+
+      <div class="architecture" aria-label="DSH、Gateway 授权模块与 BiSheng 的系统关系">
+        <article class="system">
+          <div class="system-title">
+            <span>DSH Desktop</span>
+            <span class="tag tag-blue">Agent 客户端</span>
+          </div>
+          <div class="system-body">
+            <ul>
+              <li><span class="dot"></span>发起浏览器登录</li>
+              <li><span class="dot"></span>获取 DSH 专用 Token</li>
+              <li><span class="dot"></span>调用 BiSheng 模型驱动 Agent</li>
+            </ul>
+          </div>
+        </article>
+
+        <div class="connector"><span>身份票据</span><strong>&rarr;</strong><span>DSH Token</span></div>
+
+        <article class="system closed">
+          <div class="system-title">
+            <span>Gateway / DSH 授权模块</span>
+            <span class="tag tag-purple">闭源项目</span>
+          </div>
+          <div class="system-body">
+            <ul>
+              <li><span class="dot"></span>项目内 License 能力与实例激活</li>
+              <li><span class="dot"></span>固定实名席位唯一账本</li>
+              <li><span class="dot"></span>DSH Token 签发与刷新</li>
+              <li><span class="dot"></span>撤销、重新分配与审计</li>
+            </ul>
+          </div>
+        </article>
+
+        <div class="connector"><span>验席</span><strong>&harr;</strong><span>撤销</span></div>
+
+        <article class="system core">
+          <div class="system-title">
+            <span>BiSheng</span>
+            <span class="tag tag-green">现有平台</span>
+          </div>
+          <div class="system-body">
+            <ul>
+              <li><span class="dot"></span>用户登录与 identity ticket</li>
+              <li><span class="dot"></span>DSH 专用模型接口</li>
+              <li><span class="dot"></span>现有模型配置与 LLMService</li>
+              <li><span class="dot"></span>模型白名单、月预算与审计</li>
+              <li><span class="dot"></span>统一管理员界面</li>
+            </ul>
+          </div>
+        </article>
+      </div>
+
+      <div class="foot-note">
+        v3.0.0-beta2 / F062：DSH 授权模块在 gateway 项目内随进程部署。客户端只配置 Nginx 地址；模型流量经 Nginx → Gateway → BiSheng → 已配置模型，/api/dsh/* 由 Gateway 自有模块处理，/api/v1/* 转发到 BiSheng。验席与发证由 Gateway 负责。用户已接受仅保证未修改的官方链路；完整客户端契约见 client-api.md，服务端设计见 design.md。
+        <p>2026-09-09 用户修订：逐用户/模型独立月额度，一期无限流；主配置为强类型对象。DM8 真库本轮暂缓，毕昇业务无新增手写 SQL，Gateway 保留既有 Mapper 并审查兼容性。GET usage 的逐模型查询与显示语义须同步客户端。</p>
+        <p>实施进展（2026-09-09）：两仓 26 个 HTTP 端点、固定席位、模型与实际配额、恢复 CLI 和平台页面已接线。本轮完成性复核修复与验证详见 <a href="./completion-audit.md">完成性复核</a>。详见 <a href="./tasks.md">任务表</a>、<a href="./root-integration-progress.md">集成记录</a>与<a href="./rollout.md">部署说明</a>。隔离 MySQL / Redis / MinIO 验证已执行；DM8 实机本轮按用户确认暂缓；目标旧发行二进制、真实 Desktop / Nginx / 供应商联调仍待外部环境。</p>
+      </div>
+
+      <div class="boundary-note">
+        <div class="rule"><b>固定席位</b><span>只由管理员明确撤销</span></div>
+        <div class="rule"><b>模型来源</b><span>复用 BiSheng 已配置模型</span></div>
+        <div class="rule"><b>凭证隔离</b><span>DSH Token 与 JWT、PAT、SAK 分离</span></div>
+      </div>
+    </section>
+
+    <section id="sequence">
+      <div class="section-head">
+        <h2>核心时序</h2>
+        <p>登录证明身份，Gateway 授权模块占席发证，BiSheng 完成模型调用</p>
+      </div>
+
+      <div class="scenario-controls" role="tablist" aria-label="时序场景">
+        <button type="button" role="tab" aria-selected="true" aria-controls="login-flow" id="login-tab" data-target="login-flow">登录与占席</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="model-flow" id="model-tab" data-target="model-flow">模型调用</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="revoke-flow" id="revoke-tab" data-target="revoke-flow">管理员撤销</button>
+      </div>
+
+      <div class="scenario-panel" id="login-flow" role="tabpanel" aria-labelledby="login-tab">
+        <div class="sequence">
+          <div class="lane-head blank"></div>
+          <div class="lane-head">用户 / 浏览器</div>
+          <div class="lane-head">DSH Desktop</div>
+          <div class="lane-head">BiSheng</div>
+          <div class="lane-head">Gateway 授权模块</div>
+
+          <div class="step-no">1</div>
+          <div class="seq-cell event">完成登录</div>
+          <div class="seq-cell arrow">打开浏览器 &rarr;</div>
+          <div class="seq-cell event core-event">校验用户身份</div>
+          <div class="seq-cell"></div>
+
+          <div class="step-no">2</div>
+          <div class="seq-cell event">确认授权 DSH</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell event core-event">签发一次性 identity ticket</div>
+          <div class="seq-cell"></div>
+
+          <div class="step-no">3</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell event">提交 ticket 与 PKCE verifier</div>
+          <div class="seq-cell arrow">服务端兑换身份 &rarr;</div>
+          <div class="seq-cell event closed-event">校验 License，原子占席</div>
+
+          <div class="step-no">4</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell arrow">DSH Token &larr;</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell event closed-event">签发专用访问凭证</div>
+
+          <div class="step-no">5</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell event">获取可用模型</div>
+          <div class="seq-cell event core-event">返回 DSH 模型白名单</div>
+          <div class="seq-cell event closed-event">席位保持 ASSIGNED</div>
+        </div>
+        <div class="mobile-sequence">
+          <div class="mobile-step"><b>1</b><div><b>BiSheng 登录</b><span>DSH 打开浏览器，用户完成平台登录</span></div></div>
+          <div class="mobile-step"><b>2</b><div><b>一次性身份票据</b><span>BiSheng 只证明用户身份，不分配席位</span></div></div>
+          <div class="mobile-step"><b>3</b><div><b>Gateway 授权模块占席</b><span>校验 License 后按用户原子分配固定席位</span></div></div>
+          <div class="mobile-step"><b>4</b><div><b>Gateway 授权模块发证</b><span>向 DSH 签发专用访问 Token</span></div></div>
+          <div class="mobile-step"><b>5</b><div><b>获取模型</b><span>BiSheng 返回该用户可用于 DSH 的模型</span></div></div>
+        </div>
+      </div>
+
+      <div class="scenario-panel" id="model-flow" role="tabpanel" aria-labelledby="model-tab" hidden>
+        <div class="sequence">
+          <div class="lane-head blank"></div>
+          <div class="lane-head">DSH Agent</div>
+          <div class="lane-head">BiSheng DSH API</div>
+          <div class="lane-head">Gateway 授权模块</div>
+          <div class="lane-head">BiSheng LLMService</div>
+
+          <div class="step-no">1</div>
+          <div class="seq-cell event">OpenAI 兼容请求 + DSH Token</div>
+          <div class="seq-cell arrow">请求 &rarr;</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell"></div>
+
+          <div class="step-no">2</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell event core-event">HS256 验签、校验 audience 与租户</div>
+          <div class="seq-cell event closed-event">每次新请求验席与会话版本</div>
+          <div class="seq-cell"></div>
+
+          <div class="step-no">3</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell event core-event">校验模型白名单与月预算</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell"></div>
+
+          <div class="step-no">4</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell arrow">model_id + messages &rarr;</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell event core-event">复用现有模型配置完成调用</div>
+
+          <div class="step-no">5</div>
+          <div class="seq-cell event">接收流式响应</div>
+          <div class="seq-cell event core-event">记录 token 用量与审计</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell arrow">模型响应 &larr;</div>
+        </div>
+        <div class="mobile-sequence">
+          <div class="mobile-step"><b>1</b><div><b>DSH 发起模型请求</b><span>使用 OpenAI 兼容协议与 DSH 专用 Token</span></div></div>
+          <div class="mobile-step"><b>2</b><div><b>双层门控</b><span>BiSheng HMAC 验签，每次新请求向 Gateway 验席与会话版本</span></div></div>
+          <div class="mobile-step"><b>3</b><div><b>能力治理</b><span>BiSheng 校验模型白名单与月 token 上限</span></div></div>
+          <div class="mobile-step"><b>4</b><div><b>现有模型链路</b><span>复用 LLMService 和平台内已配置的模型</span></div></div>
+          <div class="mobile-step"><b>5</b><div><b>响应与审计</b><span>返回流式结果并记录调用用量</span></div></div>
+        </div>
+      </div>
+
+      <div class="scenario-panel" id="revoke-flow" role="tabpanel" aria-labelledby="revoke-tab" hidden>
+        <div class="sequence">
+          <div class="lane-head blank"></div>
+          <div class="lane-head">管理员</div>
+          <div class="lane-head">BiSheng 管理面</div>
+          <div class="lane-head">Gateway 授权模块</div>
+          <div class="lane-head">DSH Desktop</div>
+
+          <div class="step-no">1</div>
+          <div class="seq-cell event">点击“撤销席位”</div>
+          <div class="seq-cell event core-event">鉴权并创建 operation_id</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell"></div>
+
+          <div class="step-no">2</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell arrow">撤销请求 &rarr;</div>
+          <div class="seq-cell event closed-event">状态变更为 REVOKED</div>
+          <div class="seq-cell"></div>
+
+          <div class="step-no">3</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell event core-event">确认撤销操作结果</div>
+          <div class="seq-cell event closed-event">递增授权版本并撤销会话</div>
+          <div class="seq-cell"></div>
+
+          <div class="step-no">4</div>
+          <div class="seq-cell"></div>
+          <div class="seq-cell event core-event">拒绝后续 DSH 模型调用</div>
+          <div class="seq-cell event closed-event">席位容量已归还</div>
+          <div class="seq-cell event warning-event">旧 Token 不再可用</div>
+
+          <div class="step-no">5</div>
+          <div class="seq-cell event">明确重新授权</div>
+          <div class="seq-cell event core-event">发起重新分配</div>
+          <div class="seq-cell event closed-event">ASSIGNED / 新授权版本</div>
+          <div class="seq-cell event">重新登录获取新 Token</div>
+        </div>
+        <div class="mobile-sequence">
+          <div class="mobile-step"><b>1</b><div><b>统一管理动作</b><span>管理员在 BiSheng 点击撤销席位</span></div></div>
+          <div class="mobile-step"><b>2</b><div><b>Gateway 授权模块撤销</b><span>席位进入 REVOKED，容量立即归还</span></div></div>
+          <div class="mobile-step"><b>3</b><div><b>凭证失效</b><span>递增授权版本并撤销会话；旧 Token 无法刷新或通过验席</span></div></div>
+          <div class="mobile-step"><b>4</b><div><b>模型调用被拒绝</b><span>不影响用户正常登录 BiSheng 或使用 PAT</span></div></div>
+          <div class="mobile-step"><b>5</b><div><b>只能人工恢复</b><span>管理员重新分配后，用户重新登录</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="lifecycle">
+      <div class="section-head">
+        <h2>固定席位生命周期</h2>
+        <p>离线、登出和 Token 过期都不释放席位</p>
+      </div>
+
+      <div class="state-flow" aria-label="固定席位状态机">
+        <div class="state">
+          <span class="tag tag-blue">未占席</span>
+          <b>NEVER_ASSIGNED</b>
+          <span>用户尚未获得 DSH 资格</span>
+        </div>
+        <div class="state-arrow">&rarr;</div>
+        <div class="state state-active">
+          <span class="tag tag-green">占 1 席</span>
+          <b>ASSIGNED</b>
+          <span>首次授权后持续占用</span>
+        </div>
+        <div class="state-arrow">&rarr;</div>
+        <div class="state state-released">
+          <span class="tag tag-red">管理员撤销</span>
+          <b>REVOKED</b>
+          <span>不可通过重新登录自动占席</span>
+        </div>
+        <div class="state-arrow">&rarr;</div>
+        <div class="state state-grace">
+          <span class="tag tag-amber">管理员恢复</span>
+          <b>ASSIGNED</b>
+          <span>新授权版本，旧 Token 不复活</span>
+        </div>
+      </div>
+
+      <div class="cleanup-paths">
+        <div class="cleanup-path"><b>主动登出</b><span>Token 失效，席位保留</span></div>
+        <div class="cleanup-path"><b>崩溃 / 离线</b><span>席位状态不变</span></div>
+        <div class="cleanup-path"><b>Token 到期</b><span>席位、会话及授权均有效才可刷新</span></div>
+        <div class="cleanup-path"><b>管理员撤销</b><span>唯一释放路径</span></div>
+      </div>
+    </section>
+
+    <section id="admin">
+      <div class="section-head">
+        <h2>统一管理面</h2>
+        <p>页面在 BiSheng，席位数据由 Gateway 授权模块维护</p>
+      </div>
+
+      <div class="admin-frame" aria-label="BiSheng DSH Desktop 接入管理页面示意">
+        <div class="admin-toolbar">
+          <div>
+            <div class="admin-title">系统管理 / DSH Desktop 接入</div>
+            <span class="tag tag-green">License 有效</span>
+          </div>
+          <div class="seat-meter">
+            <span>固定席位 <strong>8 / 10</strong></span>
+            <div class="meter-track" role="progressbar" aria-label="席位使用率" aria-valuemin="0" aria-valuemax="10" aria-valuenow="8">
+              <div class="meter-fill"></div>
+            </div>
+          </div>
+        </div>
+
+        <p class="technical-note">席位与登录　|　模型与额度（独立视图）</p>
+        <p class="technical-note">账号 / 姓名前缀检索　·　席位状态　·　有效登录状态</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>用户 / 账号</th><th>席位状态</th><th>登录状态</th><th>有效会话</th><th>最近登录 / 最近活跃</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>张三 / zhangsan</td><td><span class="tag tag-green">ASSIGNED</span></td><td>有有效会话</td><td>2</td><td>今天 09:00 / 10:42</td><td><span class="action-link">查看会话</span><span class="action-link danger-link">撤销席位</span></td></tr>
+              <tr><td>李四 / lisi</td><td><span class="tag tag-red">REVOKED</span></td><td>无有效会话</td><td>0</td><td>昨天 18:00 / 18:10</td><td><span class="action-link">重新分配</span></td></tr>
+              <tr><td>王五 / wangwu</td><td><span class="tag tag-green">ASSIGNED</span></td><td>不可用</td><td>-</td><td>昨天 09:00 / 未知</td><td><span class="action-link">查看会话</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="technical-note">每页 50 条，最多 100 条；游标前后翻页。有效会话不等于实时在线；席位页不加载模型或用量。</p>
+        <div class="orchestration" aria-label="撤销 DSH 席位的跨服务编排">
+          <div class="op"><strong>管理员动作</strong><small>撤销席位</small></div>
+          <div class="arr">&rarr;</div>
+          <div class="op"><strong>闭源状态</strong><small>REVOKED</small></div>
+          <div class="arr">&rarr;</div>
+          <div class="op"><strong>DSH Token</strong><small>刷新与调用被拒绝</small></div>
+          <div class="arr">&rarr;</div>
+          <div class="op"><strong>占席统计</strong><small>ASSIGNED 减少 1 人</small></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="ownership">
+      <div class="section-head">
+        <h2>数据与职责边界</h2>
+        <p>控制面分域，调用链不搬迁模型配置</p>
+      </div>
+
+      <div class="ownership">
+        <div class="owner-column">
+          <h3>BiSheng</h3>
+          <ul class="owner-list">
+            <li><b>身份</b><span>用户、租户、登录、identity ticket</span></li>
+            <li><b>模型</b><span>现有 llm_server / llm_model 配置</span></li>
+            <li><b>调用</b><span>DSH 专用接口复用 LLMService</span></li>
+            <li><b>治理</b><span>模型白名单、月预算、调用审计</span></li>
+            <li><b>管理面</b><span>席位登录与模型额度分视图</span></li>
+          </ul>
+        </div>
+
+        <div class="owner-column closed-owner">
+          <h3>Gateway / DSH 授权模块</h3>
+          <ul class="owner-list">
+            <li><b>License</b><span>客户授权、席位上限、有效期</span></li>
+            <li><b>实例</b><span>installation_id 与激活状态</span></li>
+            <li><b>席位</b><span>固定实名席位唯一账本</span></li>
+            <li><b>凭证</b><span>DSH Token 签发、刷新、撤销</span></li>
+            <li><b>门控</b><span>assign、revoke、reassign、introspect</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="foot-note">
+        新增集成：仅在启用 DSH 时，BiSheng 配置 Gateway 授权模块地址与服务端认证，调用验席、撤销和重新分配接口；凭证保留在服务端。未启用 DSH 时，常规业务不建立该依赖。
+      </div>
+
+      <div class="foot-note">
+        三套鉴权互不混用：普通 JWT 仅用于常规 /api/v1；PAT / SAK 仅用于开放 /api/v2；DSH Token 仅用于 DSH 专用模型接口。Gateway 对 BiSheng 常规功能可选；启用 DSH 时必须部署 Gateway 并启用其中的授权模块。DSH 模块具有独立业务入口，不接入 V2 API Key 鉴权。
+      </div>
+      <div class="foot-note">
+        已确认边界：闭源发证约束未修改的官方调用链；已准入流式请求默认允许完成。SDD R1–R5 已修订，实际实现与兼容验证待执行。详见 design.md §2.1、§8。
+      </div>
+    </section>
+
+    <section id="interfaces" class="technical-section">
+      <div class="section-head"><h2>接口设计</h2><p>26 个已接线接口 · 客户端 0.4.0 契约已冻结 · 与 Design §6.0–6.1 同步</p></div>
+      <div class="boundary-note">
+        <div class="rule"><b>客户端</b><span>票据 + PKCE 换 DSH Token</span></div>
+        <div class="rule"><b>管理端</b><span>JWT 鉴权后由 BiSheng 编排</span></div>
+        <div class="rule"><b>服务间</b><span>HTTPS + 既有共享 Secret 派生 HMAC，不走 PAT / SAK</span></div>
+      </div>
+      <div class="technical-group"><h3>1. 登录与模型接口</h3><p>DSH 只配置 Nginx BASE，config 返回开关与公开 client_id；浏览器走用户 JWT，模型调用只接受 DSH Token。字段细节以客户端契约为准。后续接口或时序变更必须同步 Design、客户端文档并记录客户端确认和联调结果，不能只改服务端。</p><div class="table-wrap"><table class="technical-table"><thead><tr><th scope="col">接口 / 提供方</th><th scope="col">调用方 · 鉴权</th><th scope="col">关键入参</th><th scope="col">返回</th><th scope="col">关联数据</th></tr></thead><tbody><tr><td><code>GET</code> <code>/api/v1/dsh/config</code><br><span class="tag tag-green">BiSheng</span></td><td>DSH<br>公开只读</td><td><code>无</code></td><td>enabled, client_id, contract_version</td><td>部署配置</td></tr>
+<tr><td><code>POST</code> <code>/api/dsh/authorizations</code><br><span class="tag tag-purple">Gateway</span></td><td>DSH<br>公共客户端 + 防滥用</td><td><code>client_id, redirect_uri, code_challenge, code_challenge_method, state, device_name（可选）</code></td><td>auth_id, authorize_url, expires_in</td><td>Redis 授权事务</td></tr>
+<tr><td><code>POST</code> <code>/api/v1/dsh/authorize</code><br><span class="tag tag-green">BiSheng</span></td><td>浏览器<br>用户 JWT + CSRF</td><td><code>auth_id</code></td><td>identity_ticket, redirect_uri, state, expires_in</td><td>Redis 票据</td></tr>
+<tr><td><code>POST</code> <code>/api/dsh/token</code><br><span class="tag tag-purple">Gateway</span></td><td>DSH<br>票据 + PKCE / refresh</td><td><code>grant_type + identity_ticket/auth_id/code_verifier 或 refresh_token</code></td><td>access_token, refresh_token, expires_in，身份及会话期限（见客户端契约）</td><td>有效 License（只读）, seat, session, refresh</td></tr>
+<tr><td><code>POST</code> <code>/api/dsh/logout</code><br><span class="tag tag-purple">Gateway</span></td><td>DSH<br>DSH Token / refresh</td><td><code>当前会话凭证</code></td><td>204；当前会话撤销，席位保留</td><td>session, refresh</td></tr>
+<tr><td><code>GET</code> <code>/api/dsh/jwks</code><br><span class="tag tag-purple">Gateway</span></td><td>BiSheng<br>公开只读</td><td><code>无</code></td><td>keys: kid, kty, alg, use 及公钥参数</td><td>受管公钥集</td></tr>
+<tr><td><code>GET</code> <code>/api/v1/dsh/models</code><br><span class="tag tag-green">BiSheng</span></td><td>DSH<br>DSH Token + 在线验席</td><td><code>无</code></td><td>OpenAI models 列表与能力说明</td><td>user_policy.model_configs + 既有模型</td></tr>
+<tr><td><code>POST</code> <code>/api/v1/dsh/chat/completions</code><br><span class="tag tag-green">BiSheng</span></td><td>DSH<br>DSH Token + 在线验席</td><td><code>model, messages, tools, stream, max_tokens</code></td><td>JSON / SSE + usage / tool_calls</td><td>policy, monthly_usage, model_call</td></tr>
+<tr><td><code>GET</code> <code>/api/v1/dsh/usage</code><br><span class="tag tag-green">BiSheng</span></td><td>DSH<br>DSH Token + 在线验席</td><td><code>可选 model=bisheng:&lt;id&gt;；仅当前用户</code></td><td>month, used, limit, remaining, source, as_of, quota_state 及计费时间边界（见客户端契约）</td><td>Redis live；SQL 仅降级展示</td></tr></tbody></table></div></div>
+<div class="technical-group"><h3>2. 统一管理接口</h3><p>均由 BiSheng 提供，管理员 JWT + 当前管理作用域；用户与租户不能由未验证参数替换。</p><div class="table-wrap"><table class="technical-table"><thead><tr><th scope="col">接口 / 提供方</th><th scope="col">调用方 · 鉴权</th><th scope="col">关键入参</th><th scope="col">返回</th><th scope="col">关联数据</th></tr></thead><tbody><tr><td><code>GET</code> <code>/api/v1/dsh/admin/users</code><br><span class="tag tag-green">BiSheng</span></td><td>管理页面<br>管理员 JWT</td><td><code>cursor, limit, keyword, seat_state, login_state</code></td><td>身份/席位/登录 items, next_cursor, has_more, as_of</td><td>Gateway 分页 + 当前页身份，不查模型</td></tr>
+<tr><td><code>GET</code> <code>/api/v1/dsh/admin/license</code><br><span class="tag tag-green">BiSheng</span></td><td>管理页面<br>管理员 JWT</td><td><code>无</code></td><td>授权状态, used, limit, valid_until</td><td>Gateway 当前有效 License + 席位统计</td></tr>
+<tr><td><code>PUT</code> <code>/api/v1/dsh/admin/users/{id}/policy</code><br><span class="tag tag-green">BiSheng</span></td><td>管理页面<br>管理员 JWT</td><td><code>operation_id, models: DshModelQuotaConfig[], expected_version</code></td><td>operation_id、status；成功含 policy/version，处理中含 phase</td><td>user_policy + admin_operation</td></tr>
+<tr><td><code>POST</code> <code>/api/v1/dsh/admin/users/{id}/revoke</code><br><span class="tag tag-green">BiSheng</span></td><td>管理页面<br>管理员 JWT</td><td><code>operation_id, expected_grant_version</code></td><td>SUCCEEDED / PROCESSING + operation_id</td><td>admin_operation → Gateway</td></tr>
+<tr><td><code>POST</code> <code>/api/v1/dsh/admin/users/{id}/reassign</code><br><span class="tag tag-green">BiSheng</span></td><td>管理页面<br>管理员 JWT</td><td><code>operation_id, expected_grant_version</code></td><td>SUCCEEDED / PROCESSING + 新授权版本</td><td>admin_operation → Gateway</td></tr>
+<tr><td><code>GET</code> <code>/api/v1/dsh/admin/operations/{id}</code><br><span class="tag tag-green">BiSheng</span></td><td>管理页面<br>管理员 JWT</td><td><code>路径 operation_id</code></td><td>status, phase, action, actor/target, before/after, 时间、result_code 及 result</td><td>admin_operation；含策略审计</td></tr>
+<tr><td><code>GET /api/v1/dsh/admin/users/{id}/policy</code><br>BiSheng</td><td>模型与额度视图<br>管理员 JWT</td><td>路径 user_id；可选 tenant_id，由后端校验或定位授权目标</td><td>tenant_id、策略与月限额、available_models 及来源、用量 source/as_of、last_call 及来源</td><td>模型业务强读 + 策略 + Redis；SQL 用量降级与最近调用投影</td></tr>
+<tr><td><code>GET /api/v1/dsh/admin/users/{id}/sessions</code><br>BiSheng</td><td>席位会话详情<br>管理员 JWT</td><td>user_id, cursor, limit</td><td>会话/设备分页</td><td>Gateway management/read</td></tr></tbody></table></div></div>
+<p class="technical-note">管理策略读响应固定返回经授权定位的 tenant_id；保存必须使用该租户。available_models 只包含目标租户可用且已通过 DSH 能力验证的模型，标记 is_root_shared；available_models_source 为 live/unavailable，不可用时阻止保存。last_call 仅返回 request_id、model_id、status、started_at、finished_at、total_tokens、projected_at，last_call_source 为 persisted/unavailable；空历史、数据不可用及未知用量必须分别展示。成功撤销或重分配后回读席位与 License，操作进度显示 phase，审计保留前后 state/grant_version。这些是平台管理接口补充；客户端 0.4.0 保留七个端点；本次逐模型查询与额度语义变更须同步客户端。</p>
+<div class="technical-group"><h3>3. 内部服务接口</h3><p>HTTPS + 现有用户同步 Secret 派生的双向 HMAC；key_id 由代码固定并绑定安装实例，签名包含时间戳和 nonce。DSH 客户端不持有服务 Secret。</p><div class="table-wrap"><table class="technical-table"><thead><tr><th scope="col">接口 / 提供方</th><th scope="col">调用方 · 鉴权</th><th scope="col">关键入参</th><th scope="col">返回</th><th scope="col">关联数据</th></tr></thead><tbody><tr><td><code>POST</code> <code>/api/v1/internal/dsh/identity/redeem</code><br><span class="tag tag-green">BiSheng</span></td><td>Gateway → BiSheng<br>服务 HMAC</td><td><code>identity_ticket, auth_id, client_id, redirect_uri, code_challenge</code></td><td>DshIdentitySnapshot：实例、用户/租户 ID、状态、user/tenant 显示对象、profile_version</td><td>Redis 消费票据 + 用户业务</td></tr>
+<tr><td><code>POST</code> <code>/api/v1/internal/dsh/identity/check</code><br><span class="tag tag-green">BiSheng</span></td><td>Gateway → BiSheng<br>服务 HMAC</td><td><code>受信实例、租户、用户</code></td><td>DshIdentitySnapshot；每次刷新强读当前身份及显示对象</td><td>既有用户/租户业务</td></tr>
+<tr><td><code>POST</code> <code>/api/internal/dsh/introspect</code><br><span class="tag tag-purple">Gateway</span></td><td>BiSheng → Gateway<br>服务 HMAC + DSH Token</td><td><code>token</code></td><td>active, seat_id, session_id, grant_version, reason</td><td>有效 License（只读）, seat, session</td></tr>
+<tr><td><code>POST</code> <code>/api/internal/dsh/authorizations/resolve</code><br><span class="tag tag-purple">Gateway</span></td><td>BiSheng → Gateway<br>服务 HMAC</td><td><code>auth_id</code></td><td>challenge, redirect_uri, client_id, instance, state</td><td>Redis 授权事务</td></tr>
+<tr><td><code>POST</code> <code>/api/internal/dsh/management/read</code><br><span class="tag tag-purple">Gateway</span></td><td>BiSheng → Gateway<br>服务 HMAC + 管理员上下文</td><td><code>resource, cursor, limit, keyword, seat_state, login_state, target</code></td><td>license / seats / sessions 分页摘要</td><td>有效 License（只读）, seat, session</td></tr>
+<tr><td><code>POST</code> <code>/api/internal/dsh/seats/revoke</code><br><span class="tag tag-purple">Gateway</span></td><td>BiSheng → Gateway<br>服务 HMAC + 管理员上下文</td><td><code>operation_id, target, expected_grant_version</code></td><td>结果、新授权版本</td><td>operation + seat/session；License 只读</td></tr>
+<tr><td><code>POST</code> <code>/api/internal/dsh/seats/reassign</code><br><span class="tag tag-purple">Gateway</span></td><td>BiSheng → Gateway<br>服务 HMAC + 管理员上下文</td><td><code>operation_id, target, expected_grant_version</code></td><td>结果、新授权版本</td><td>operation + seat；License 只读</td></tr>
+<tr><td><code>POST</code> <code>/api/internal/dsh/operations/read</code><br><span class="tag tag-purple">Gateway</span></td><td>BiSheng → Gateway<br>服务 HMAC</td><td><code>operation_id</code></td><td>UNKNOWN / SUCCEEDED / FAILED</td><td>operation</td></tr>
+<tr><td><code>POST /api/internal/dsh/profiles/upsert</code><br>Gateway</td><td>BiSheng<br>服务 HMAC</td><td>至多 100 条身份字段、profile_version</td><td>按版本幂等更新结果</td><td>seat 检索投影；不改授权、不创建席位</td></tr></tbody></table></div></div>
+      <details class="technical-detail" id="sdd-fixes"><summary>SDD 修复：审计、可信身份与异常恢复</summary>
+        <p>本轮复用 8 张表和 26 个 HTTP 接口。客户端 0.4.0 的 7 个接口保持冻结；内部身份 DTO、平台管理 policy 保存和 operations 查询有补充，两仓按 Design 同步实现。</p>
+        <p><b>共享模型：</b>模型业务认可的租户自有或合法 Root 共享范围，与用户 DSH 授权取交集；取消共享后新调用拒绝。Spec AC-18/21/30 已统一。</p>
+        <p><b>策略审计：</b>UPDATE_POLICY 以 operation_id 串行编排，策略和前后值/版本/actor 同事务提交；committed_at 与 effective_at 区分提交和生效。查询 operations 返回 phase、before/after 和结果；故障恢复同一操作，不覆盖历史。</p>
+        <p><b>身份显示：</b>redeem/check 共用 DshIdentitySnapshot；首次换证与每次刷新返回当前可信 user/tenant。display_name 空时回退 username，租户名称空时回退 Tenant &lt;tenant.id&gt;；无有效账号或身份服务失败不签发成功凭据。</p>
+        <p><b>UNKNOWN：</b>拟建 DshReconciliationService 和 python -m bisheng.dsh.cli.reconcile 受控命令。真实管理员鉴权后，以逐请求证据、expected_event_version 和 operation_id 登记 RECONCILE_USAGE，复用 Lua/Stream/SQL 投影幂等结算；证据存受控 MinIO，命令不直改账本。</p>
+        <p>未知用量只记录 USAGE_UNKNOWN 明细，token字段为NULL；不冻结用户或模型。补记为可选审计操作，策略变更和账本故障保护独立保留。</p>
+        <p>完整字段、CLI 输入、幂等和故障恢复步骤见 <a href="design.md">Design §4.5.5、§4.7.4、§6.1</a>；复核结果见 <a href="design-review.md">设计评审报告</a>。生产恢复入口和故障验收见 <a href="quota-operations.md">配额运维</a>与<a href="recovery-acceptance.md">恢复报告</a>；外部环境门禁仍需关闭。</p>
+      </details>
+      <details class="technical-detail"><summary>请求示例与响应约定</summary>
+        <p>config 在关闭时仅返回 enabled=false，不公开内部地址或 Secret；Token 使用共享 HMAC 派生的 HS256；JWKS 仅保留空 keys 兼容响应，不发布密钥。License 保留旧配置项、加密外层和 trial/pro 字段；DSH 以可选签名扩展接入，扩展缺失或失效不改变旧商业能力，旧 pro 不代表 DSH 无限席位。旧商业期满与 DSH 到期独立判定；旧 trial 期满但外层可解析且 DSH 授权有效时，DSH 可独立验权，旧 SSO 不延期。外层无法解析则 DSH 拒绝；四种有效期组合见 Design §4.5.4。</p>
+        <p>PKCE 固定 S256；内部兑换须比对 client_id、redirect_uri、code_challenge 与票据绑定记录，再原子消费。管理聚合失败标记 unavailable，不显示成 0 席。</p>
+        <h3>票据换证 · POST /api/dsh/token</h3><pre>{
+  &quot;grant_type&quot;: &quot;identity_ticket&quot;,
+  &quot;auth_id&quot;: &quot;&lt;本次授权事务&gt;&quot;,
+  &quot;identity_ticket&quot;: &quot;&lt;一次性票据&gt;&quot;,
+  &quot;code_verifier&quot;: &quot;&lt;本机生成的 PKCE verifier&gt;&quot;
+}</pre>
+        <p>刷新时 grant_type=refresh_token，提交 refresh_token；成功后两个凭证均由 Gateway 返回，刷新凭证每次轮换。同会话串行刷新，回包丢失不重放旧凭证。7 个客户端接口使用裸 JSON（logout 为 204）；浏览器 authorize 与管理接口沿用统一响应。</p>
+        <h3>Agent 模型调用 · POST /api/v1/dsh/chat/completions</h3><pre>{
+  &quot;model&quot;: &quot;bisheng:42&quot;,
+  &quot;messages&quot;: [
+    {
+      &quot;role&quot;: &quot;user&quot;,
+      &quot;content&quot;: &quot;分析这份报告&quot;
+    }
+  ],
+  &quot;tools&quot;: [
+    {
+      &quot;type&quot;: &quot;function&quot;,
+      &quot;function&quot;: {
+        &quot;name&quot;: &quot;read_report&quot;,
+        &quot;parameters&quot;: {
+          &quot;type&quot;: &quot;object&quot;,
+          &quot;properties&quot;: {},
+          &quot;additionalProperties&quot;: false
+        }
+      }
+    }
+  ],
+  &quot;stream&quot;: true,
+  &quot;stream_options&quot;: {
+    &quot;include_usage&quot;: true
+  },
+  &quot;max_tokens&quot;: 2048
+}</pre>
+        <p>Authorization 使用 DSH Token。SSE 保留 tool_calls 增量与 finish_reason，按需返回 usage，最后输出 [DONE]；不自动重放模型调用。</p>
+        <h3>撤销席位 · POST /api/v1/dsh/admin/users/{id}/revoke</h3><pre>{
+  &quot;operation_id&quot;: &quot;&lt;一次操作的 UUID，重试保持不变&gt;&quot;,
+  &quot;expected_grant_version&quot;: 3
+}</pre>
+        <p>返回 operation_id、status 和新 grant_version；跨服务结果未知时为 PROCESSING，不能展示撤销成功。</p>
+        <div class="table-wrap"><table class="technical-table"><thead><tr><th scope="col">响应类别</th><th scope="col">契约</th></tr></thead><tbody><tr><td>普通管理 API</td><td>沿用 UnifiedResponseModel；业务数据放 data</td></tr>
+<tr><td>模型 API</td><td>OpenAI 兼容 JSON / SSE，不外包 resp_200</td></tr>
+<tr><td>错误状态</td><td>401 凭证无效；403 授权拒绝；409 版本/幂等冲突；429 月预算不足；503 授权依赖不可用；502/504 上游失败</td></tr>
+<tr><td>模型错误体</td><td><code>{error:{message,type,code},request_id}</code></td></tr>
+<tr><td>Token 声明</td><td><code>iss, aud, sub, installation_id, tenant_id, seat_id, session_id, grant_version, iat, exp, jti</code></td></tr></tbody></table></div>
+      </details>
+    </section>
+
+    <section id="tables" class="technical-section">
+      <div class="section-head"><h2>数据表设计</h2><p>Gateway 4 张 · BiSheng 4 张 · 拟定结构，未创建数据库表</p></div>
+      <div class="boundary-note">
+        <div class="rule"><b>授权上限</b><span>当前 License 验签解析，不新建表</span></div>
+        <div class="rule"><b>已用席位</b><span>统计 ASSIGNED；换 License 不清空</span></div>
+        <div class="rule"><b>用户策略</b><span>每用户、每模型独立月额度；对象化配置</span></div>
+      </div>
+      <div class="ownership">
+        <div class="owner-column"><h3>Gateway 数据库</h3><ul class="owner-list">
+          <li><b>实例 → 固定席位</b><span>gt_dsh_seat</span></li>
+          <li><b>1 → N 登录会话</b><span>gt_dsh_session</span></li>
+          <li><b>1 → N 刷新代次</b><span>gt_dsh_refresh_token</span></li>
+          <li><b>操作幂等与审计</b><span>gt_dsh_operation</span></li>
+        </ul></div>
+        <div class="owner-column"><h3>BiSheng 数据库</h3><ul class="owner-list">
+          <li><b>逐模型额度对象列表</b><span>dsh_user_policy</span></li>
+          <li><b>用户 × 模型 × 月份</b><span>dsh_monthly_usage</span></li>
+          <li><b>1 → N 调用结算</b><span>dsh_model_call</span></li>
+          <li><b>管理请求 → Gateway</b><span>dsh_admin_operation</span></li>
+        </ul></div>
+      </div>
+      <p class="technical-note">跨库只传 user_id、seat_id、session_id 和 operation_id，不建跨库外键；模型供应商配置继续保存在既有 llm_server / llm_model。</p>
+      <div class="table-wrap"><table class="technical-table"><thead><tr><th scope="col">数据库 / 表</th><th scope="col">用途</th><th scope="col">主键与唯一约束</th></tr></thead><tbody>
+<tr><td>Gateway<br><a href="#gt_dsh_seat"><code>gt_dsh_seat</code></a></td><td>固定用户席位</td><td>PK seat_id；UK (installation_id, user_id)</td></tr>
+<tr><td>Gateway<br><a href="#gt_dsh_session"><code>gt_dsh_session</code></a></td><td>登录设备与会话</td><td>PK session_id；UK auth_id；一个席位对应多个 Session</td></tr>
+<tr><td>Gateway<br><a href="#gt_dsh_refresh_token"><code>gt_dsh_refresh_token</code></a></td><td>刷新轮换与重放记录</td><td>PK refresh_id；UK token_hash；UK (session_id, generation)</td></tr>
+<tr><td>Gateway<br><a href="#gt_dsh_operation"><code>gt_dsh_operation</code></a></td><td>席位命令幂等与审计</td><td>PK operation_id；全局唯一，并校验 installation_id 作用域</td></tr>
+<tr><td>BiSheng<br><a href="#dsh_user_policy"><code>dsh_user_policy</code></a></td><td>用户逐模型独立月额度策略</td><td>PK id；UK (tenant_id, user_id)</td></tr>
+
+<tr><td>BiSheng<br><a href="#dsh_monthly_usage"><code>dsh_monthly_usage</code></a></td><td>用户模型月用量汇总</td><td>PK id；UK (tenant_id, user_id, usage_month, model_id)</td></tr>
+<tr><td>BiSheng<br><a href="#dsh_model_call"><code>dsh_model_call</code></a></td><td>请求用量与结算明细</td><td>PK request_id；服务端生成 UUID，结算按 request_id 幂等</td></tr>
+<tr><td>BiSheng<br><a href="#dsh_admin_operation"><code>dsh_admin_operation</code></a></td><td>管理编排与可靠重试</td><td>PK operation_id；Gateway 复用相同 ID</td></tr></tbody></table></div>
+      <p class="technical-note">类型为逻辑类型：BIGINT 非负计数、UTC 时间、JsonType 按 MySQL 与 DM8 映射。全部新表保留 created_at / updated_at；密码、签名私钥与明文 Token 均不入表。PK 以表级声明为准，字段分组不代表联合主键；所有用户数据读写均校验租户作用域。</p>
+
+<details id="gt_dsh_seat" class="technical-detail"><summary><code>gt_dsh_seat</code> · 固定用户席位</summary><p>PK seat_id；UK (installation_id, user_id)<br>INDEX (installation_id, state) 保护容量；管理索引按 installation_id、tenant_id 前缀，分别接 (state, created_at, seat_id)、(username_search, seat_id)、(display_name_search, seat_id)、(created_at, seat_id)；SQL 执行计划验证后确定最终组合</p><div class="table-wrap"><table class="technical-table"><thead><tr><th>字段</th><th>逻辑类型</th><th>约束 / 默认</th><th>语义</th></tr></thead><tbody><tr><td><code>seat_id</code></td><td><code>VARCHAR(36)</code></td><td>PK</td><td>UUID；被 Token、Session 与调用记录引用</td></tr>
+<tr><td><code>installation_id</code></td><td><code>VARCHAR(64)</code></td><td>非空 / 稳定实例标识</td><td>不引用某份 License，替换授权不改变用户占席记录</td></tr>
+<tr><td><code>tenant_id / user_id</code></td><td><code>BIGINT / BIGINT</code></td><td>非空</td><td>稳定用户与归属租户；用户名、设备 ID 不参与席位唯一性</td></tr>
+<tr><td><code>state</code></td><td><code>VARCHAR(16)</code></td><td>非空</td><td>ASSIGNED / REVOKED；无历史行才是 NEVER_ASSIGNED</td></tr>
+<tr><td><code>grant_version</code></td><td><code>BIGINT</code></td><td>非空 / 初始 1</td><td>撤销、重新分配均递增，旧 Token 不可恢复</td></tr>
+<tr><td><code>assigned_at / revoked_at</code></td><td><code>UTC datetime</code></td><td>revoked_at 可空</td><td>最近一次分配/撤销时间</td></tr>
+<tr><td><code>username_search / display_name_search</code></td><td><code>MySQL VARCHAR(510) / DM8 VARCHAR(2040)</code></td><td>可空 / 索引</td><td>按 Unicode 码点接受最多 255 字符原名，容纳小写扩展；仅检索展示，不参与授权</td></tr>
+<tr><td><code>profile_version / profile_synced_at</code></td><td><code>BIGINT / BIGINT / UTC datetime</code></td><td>可空</td><td>资料投影版本与同步时间；权威身份仍在 BiSheng</td></tr>
+<tr><td><code>last_login_at</code></td><td><code>UTC datetime</code></td><td>可空</td><td>成功创建会话时更新；不随每次模型调用更新</td></tr>
+<tr><td><code>last_operation_id</code></td><td><code>VARCHAR(36)</code></td><td>可空</td><td>最近管理员操作；首次自动占席可空</td></tr></tbody></table></div></details>
+<details id="gt_dsh_session" class="technical-detail"><summary><code>gt_dsh_session</code> · 登录设备与会话</summary><p>PK session_id；UK auth_id；一个席位对应多个 Session<br>INDEX (seat_id, state, expires_at) 支持当前页有效会话 EXISTS/聚合；INDEX expires_at</p><div class="table-wrap"><table class="technical-table"><thead><tr><th>字段</th><th>逻辑类型</th><th>约束 / 默认</th><th>语义</th></tr></thead><tbody><tr><td><code>session_id</code></td><td><code>VARCHAR(36)</code></td><td>PK</td><td>登录会话标识，同时作为 refresh family 标识</td></tr>
+<tr><td><code>seat_id / grant_version</code></td><td><code>VARCHAR(36) / BIGINT</code></td><td>非空</td><td>建立会话时的席位与授权版本</td></tr>
+<tr><td><code>auth_id</code></td><td><code>VARCHAR(36)</code></td><td>UK / 非空</td><td>一次登录事务最多创建一个会话族</td></tr>
+<tr><td><code>device_label / client_version</code></td><td><code>device_label: MySQL VARCHAR(128) / DM VARCHAR(400); client_version: VARCHAR(64)</code></td><td>可空</td><td>设备名最多 100 Unicode 码点，DM 预留 400 UTF-8 字节；客户端版本当前为空，不作为认证依据</td></tr>
+<tr><td><code>state</code></td><td><code>VARCHAR(16)</code></td><td>非空</td><td>ACTIVE / REVOKED / EXPIRED</td></tr>
+<tr><td><code>expires_at / last_seen_at</code></td><td><code>UTC datetime</code></td><td>last_seen_at 可空</td><td>会话绝对有效期及节流落库的最后活跃时间（如每 5 分钟）；实时最近活跃读 Redis，离线不释放席位</td></tr></tbody></table></div></details>
+<details id="gt_dsh_refresh_token" class="technical-detail"><summary><code>gt_dsh_refresh_token</code> · 刷新轮换与重放记录</summary><p>PK refresh_id；UK token_hash；UK (session_id, generation)<br>INDEX (session_id, state)；按 session_id 锁定 Session 后轮换</p><div class="table-wrap"><table class="technical-table"><thead><tr><th>字段</th><th>逻辑类型</th><th>约束 / 默认</th><th>语义</th></tr></thead><tbody><tr><td><code>refresh_id / session_id</code></td><td><code>VARCHAR(36) / VARCHAR(36)</code></td><td>PK / 非空</td><td>所属会话即 family；所有旧代 token 都可反查</td></tr>
+<tr><td><code>token_hash</code></td><td><code>CHAR(64)</code></td><td>UK / 非空</td><td>高熵随机 refresh token 的 SHA-256 摘要；不存明文</td></tr>
+<tr><td><code>generation</code></td><td><code>BIGINT</code></td><td>非空 / 从 1 递增</td><td>同一会话内刷新代次</td></tr>
+<tr><td><code>state</code></td><td><code>VARCHAR(16)</code></td><td>非空</td><td>ACTIVE / USED / REVOKED；识别 USED 重放后撤销整族</td></tr>
+<tr><td><code>expires_at / used_at</code></td><td><code>UTC datetime</code></td><td>used_at 可空</td><td>有效期与首次消费时间；保留至会话绝对到期和安全审计保留期结束</td></tr></tbody></table></div></details>
+<details id="gt_dsh_operation" class="technical-detail"><summary><code>gt_dsh_operation</code> · 席位命令幂等与审计</summary><p>PK operation_id；全局唯一，并校验 installation_id 作用域<br>INDEX (installation_id, tenant_id, user_id, created_at)</p><div class="table-wrap"><table class="technical-table"><thead><tr><th>字段</th><th>逻辑类型</th><th>约束 / 默认</th><th>语义</th></tr></thead><tbody><tr><td><code>operation_id / installation_id</code></td><td><code>VARCHAR(36) / VARCHAR(64)</code></td><td>PK / 非空</td><td>从 BiSheng 传入的稳定操作 ID</td></tr>
+<tr><td><code>tenant_id / user_id / actor_user_id</code></td><td><code>BIGINT</code></td><td>非空</td><td>受信请求中的目标与管理员身份</td></tr>
+<tr><td><code>action / expected_grant_version</code></td><td><code>VARCHAR(16) / BIGINT</code></td><td>非空</td><td>REVOKE / REASSIGN；阻止延迟旧命令覆盖新状态</td></tr>
+<tr><td><code>payload_hash</code></td><td><code>CHAR(64)</code></td><td>非空</td><td>同 operation_id 不同负载返回 409</td></tr>
+<tr><td><code>status / result_grant_version</code></td><td><code>VARCHAR(16) / BIGINT</code></td><td>结果版本可空</td><td>SUCCEEDED / FAILED；与席位事务同提交，执行中不伪造成功</td></tr>
+<tr><td><code>result_code / result_payload</code></td><td><code>VARCHAR(64) / JsonType</code></td><td>可空</td><td>幂等重试返回原结果；不含 Token 或 Secret</td></tr></tbody></table></div></details>
+<details id="dsh_user_policy" class="technical-detail"><summary><code>dsh_user_policy</code> · 用户逐模型独立月额度策略</summary><p>PK id；UK (tenant_id, user_id)<br>用户策略强读；写入带 expected_version；完整策略历史保存在 UPDATE_POLICY 操作</p><div class="table-wrap"><table class="technical-table"><thead><tr><th>字段</th><th>逻辑类型</th><th>约束 / 默认</th><th>语义</th></tr></thead><tbody><tr><td>id / tenant_id / user_id</td><td>BIGINT</td><td>PK / 非空</td><td>租户字段由既有上下文与隔离机制维护</td></tr>
+<tr><td>model_configs</td><td>ModelConfigsType / JsonType</td><td>非空 / 默认 []</td><td>DshModelQuotaConfig[]，每个对象含唯一 model_id 与独立 monthly_token_limit；0 只禁止该模型新调用</td></tr>
+<tr><td>version</td><td>BIGINT</td><td>非空 / 首次生效 1，占位 0</td><td>模型清单和月限额变更在同一事务递增；0 仅首次配置前的禁止调用占位</td></tr>
+<tr><td>quota_sync_state / quota_epoch</td><td>VARCHAR(16) / BIGINT</td><td>非空 / PENDING、初始 1</td><td>PENDING / READY / FROZEN；策略同步、恢复代次控制，不是逐请求计数器</td></tr>
+<tr><td>updated_by</td><td>BIGINT</td><td>非空</td><td>最近配置的真实管理员；完整变更历史见 UPDATE_POLICY 操作，未配置用户使用虚拟默认策略</td></tr>
+<tr><td>pending_operation_id</td><td>VARCHAR(36)</td><td>可空</td><td>当前策略编排所有者；同一用户一次只接受一个未完成策略操作，完成后清空</td></tr></tbody></table></div></details>
+
+<details id="dsh_monthly_usage" class="technical-detail"><summary><code>dsh_monthly_usage</code> · 用户模型月用量汇总</summary><p>PK id；UK (tenant_id, user_id, usage_month, model_id)<br>唯一索引前缀支持用户月份汇总；由消费者批量更新，不参与每请求 SQL 锁定；不按席位重新建账</p><div class="table-wrap"><table class="technical-table"><thead><tr><th>字段</th><th>逻辑类型</th><th>约束 / 默认</th><th>语义</th></tr></thead><tbody><tr><td><code>id / tenant_id / user_id</code></td><td><code>BIGINT</code></td><td>PK / 非空</td><td>用量归属稳定用户，席位释放不重置</td></tr>
+<tr><td><code>model_id</code></td><td><code>BIGINT</code></td><td>非空 / 联合唯一键成员</td><td>毕昇模型主键，不是上游模型名；与请求明细一致，不使用 NULL/0 表示用户总量</td></tr>
+<tr><td><code>usage_month / billing_timezone</code></td><td><code>CHAR(7) / VARCHAR(64)</code></td><td>非空</td><td>如 2026-09；保存月份归属时区</td></tr>
+<tr><td><code>used_tokens</code></td><td><code>BIGINT</code></td><td>非空 / 默认 0</td><td>已入账实际用量，非负；允许超过月限额，不截断超额部分</td></tr>
+<tr><td><code>version / projected_at</code></td><td><code>BIGINT / UTC datetime</code></td><td>默认 0 / 时间可空</td><td>持久化投影版本与时间；同事务应用明细差额，不代表实时额度</td></tr></tbody></table></div></details>
+<details id="dsh_model_call" class="technical-detail"><summary><code>dsh_model_call</code> · 请求用量与结算明细</summary><p>PK request_id；服务端生成 UUID，结算按 request_id 幂等<br>INDEX (tenant_id, user_id, started_at)；INDEX (tenant_id, user_id, model_id, started_at)；INDEX (status, updated_at)；INDEX trace_id</p><div class="table-wrap"><table class="technical-table"><thead><tr><th>字段</th><th>逻辑类型</th><th>约束 / 默认</th><th>语义</th></tr></thead><tbody><tr><td>request_id / tenant_id / user_id</td><td>VARCHAR(36) / BIGINT / BIGINT</td><td>PK / 非空</td><td>调用与配额结算标识；用户 ID 来自 DshPrincipal</td></tr>
+<tr><td>seat_id / session_id / grant_version</td><td>VARCHAR(36) / VARCHAR(36) / BIGINT</td><td>非空</td><td>Gateway 引用与调用当时授权代次</td></tr>
+<tr><td>model_id</td><td>BIGINT</td><td>非空</td><td>既有字段单列说明：服务端鉴权后解析的毕昇模型主键，与月汇总模型 ID 一致</td></tr>
+<tr><td>usage_month / policy_version</td><td>CHAR(7) / BIGINT</td><td>非空</td><td>准入月份与使用的策略版本；结算不重新按当前月份归属</td></tr>
+<tr><td>event_version / quota_epoch</td><td>BIGINT / BIGINT</td><td>非空</td><td>请求状态事件递增版本与准入代次；去重、乱序和重建依据</td></tr>
+<tr><td>input_tokens / output_tokens / total_tokens</td><td>BIGINT</td><td>可空</td><td>NULL 表示尚未知；0 只表示可靠计量为零</td></tr>
+<tr><td>status / usage_source</td><td>VARCHAR(24)</td><td>非空 / source 可空</td><td>RUNNING / SUCCEEDED / FAILED / CANCELLED / USAGE_UNKNOWN；计量来源 PROVIDER / RECONCILED</td></tr>
+<tr><td>settled_at / started_at / ended_at</td><td>UTC datetime</td><td>started_at / ended_at / settled_at 可空</td><td>started_at 记录准入时点；settled_at 记录可靠用量入账时点，未知时为空，event_version 保证幂等</td></tr>
+<tr><td>provider_request_id</td><td>VARCHAR(256)</td><td>可空</td><td>适配器取得的供应商请求标识；无法取得时仍保留本地 request_id，补记必须另有逐请求关联证据</td></tr>
+<tr><td>trace_id / error_code / latency_ms</td><td>VARCHAR(64) / VARCHAR(64) / BIGINT</td><td>错误/耗时可空</td><td>仅记录脱敏摘要，不默认保存完整消息</td></tr></tbody></table></div></details>
+<details id="dsh_admin_operation" class="technical-detail"><summary><code>dsh_admin_operation</code> · 管理编排、不可变审计与可靠重试</summary><p>PK operation_id；Gateway 复用相同 ID<br>INDEX (status, next_retry_at)；INDEX (tenant_id, user_id, created_at)</p><div class="table-wrap"><table class="technical-table"><thead><tr><th>字段</th><th>逻辑类型</th><th>约束 / 默认</th><th>语义</th></tr></thead><tbody><tr><td>operation_id / tenant_id / user_id</td><td>VARCHAR(36) / BIGINT / BIGINT</td><td>PK / 非空</td><td>原子登记管理员操作意图</td></tr>
+<tr><td>actor_user_id / action</td><td>BIGINT / VARCHAR(16)</td><td>actor 仅 SYNC_PROFILE 可空</td><td>REVOKE / REASSIGN / UPDATE_POLICY / RECONCILE_USAGE 必须记录真实已鉴权操作者</td></tr>
+<tr><td>expected_grant_version / payload_hash</td><td>BIGINT / CHAR(64)</td><td>expected 仅席位动作必填 / hash 非空</td><td>按动作校验；相同 ID 不同操作者/目标/负载返回 409</td></tr>
+<tr><td>expected_policy_version / expected_event_version</td><td>BIGINT</td><td>按动作必填</td><td>UPDATE_POLICY / RECONCILE_USAGE 的乐观锁；其余动作为空</td></tr>
+<tr><td>payload</td><td>JsonType</td><td>非空且登记后不可覆盖</td><td>原始动作负载；补记包含 request_id、证据引用/摘要及可靠 usage；不含 Secret</td></tr>
+<tr><td>before_values / after_values</td><td>JsonType</td><td>策略提交时必填，其余按动作</td><td>UPDATE_POLICY 的旧新模型集合、月限额与 version；提交后不可覆盖；首次配置 before.version=0、model_configs=[]</td></tr>
+<tr><td>created_at / updated_at / committed_at / effective_at</td><td>UTC datetime</td><td>前两者非空，后两者可空</td><td>意图登记、进度更新、业务提交、最终生效时间；策略已提交不等于已解冻</td></tr>
+<tr><td>status</td><td>VARCHAR(16)</td><td>非空</td><td>PENDING / PROCESSING / SUCCEEDED / FAILED</td></tr>
+<tr><td>attempts / next_retry_at / lease_until / lease_generation</td><td>INTEGER / UTC datetime / UTC datetime / BIGINT</td><td>attempts/代次默认 0；时间可空</td><td>领取时原子递增 lease_generation 作为 fencing token，状态写入和 Redis 操作校验当前代次；不用于席位回收</td></tr>
+<tr><td>result_code / result_payload</td><td>VARCHAR(64) / JsonType</td><td>可空</td><td>席位保存 Gateway 结果；策略保存 committed_version、phase；补记保存结算 event_version。SUCCEEDED 终态结果不可覆盖</td></tr></tbody></table></div></details>
+      <div class="technical-group"><h3>三类用量数据，不重复计费</h3>
+        <div class="table-wrap"><table class="technical-table"><thead><tr><th scope="col">配置</th><th scope="col">月汇总</th><th scope="col">请求明细</th></tr></thead><tbody>
+          <tr><td><code>dsh_user_policy</code><br>每个模型允许使用多少、该模型达限后拒绝新请求</td><td><code>dsh_monthly_usage</code><br>用户 × 模型 × 月份的批量持久化投影</td><td><code>dsh_model_call</code><br>哪次请求、哪个 model_id、用了多少、是否结算</td></tr>
+          <tr><td>模型 101 每月 5 万、模型 202 每月 10 万 token</td><td>模型 101 用 4 万剩 1 万，模型 202 用 2 万剩 8 万；不可互借</td><td>R1 / 模型 101 完成后实际入账 1200</td></tr>
+        </tbody></table></div>
+        <p>按用户＋模型取各自月行并执行独立月额度；用户汇总只供展示。模型 A 用尽不影响模型 B，删除模型不删除历史消费。remaining 汇总为各模型 max(limit-used,0) 之和。</p>
+        <p>models 映射为强类型 model_configs 对象列表；JsonType 仅负责数据库存储，应用验证唯一 model_id 与每模型月限额，不做数据库 JSON 查询。每次调用仍校验模型权限。一期不实现任何限流。</p>
+      </div>
+      <p class="technical-note">实时路径：Redis Lua 检查用户已用量是否低于限额 → 登记请求及 Stream 事件（不扣减）→ 模型调用 → Lua 原子累计实际 usage。Worker 批量写 SQL，准入不读滞后 SQL，不逐 SSE chunk 写库。</p>
+      <p class="technical-note">SQL 月行首次创建受唯一键保护；模型移除不删历史。结算沿用原 model_id/月，未知用量标 USAGE_UNKNOWN 待对账，不暂停该用户新调用，不估算扣款；/usage?model=bisheng:&lt;id&gt; 读该模型实时额度，无参数只作汇总展示，降级 SQL 展示必须带 source/as_of，不能用于准入。</p>
+      <div class="technical-group"><h3>事务与一致性</h3>
+      <div class="table-wrap"><table class="technical-table"><thead><tr><th scope="col">操作</th><th scope="col">一次事务涉及</th><th scope="col">必须保证</th></tr></thead><tbody><tr><td>首次占席</td><td>Gateway：seat + session + refresh</td><td>MySQL 使用 SERIALIZABLE 范围事务；DM 使用 READ_COMMITTED，并在事务首条 SQL 对 gt_dsh_seat 加 EXCLUSIVE 表锁，锁后统计当前已提交席位再写入；统计 ASSIGNED 后对照有效 License；冲突重试，失败不释放已提交席位</td></tr>
+<tr><td>刷新</td><td>Gateway：session + refresh_token</td><td>锁会话；当前代变 USED、新代变 ACTIVE；旧代重放可反查并撤销该会话族</td></tr>
+<tr><td>管理员撤销</td><td>Gateway：operation + seat + session</td><td>同样的实例范围事务；grant_version 递增并保留 REVOKED；已用数按席位状态统计，不写 License</td></tr>
+<tr><td>修改用户策略</td><td>SQL 操作所有者 → Redis 冻结 → SQL 新版本及审计 → Redis 安装/移除本操作冻结原因</td><td>UPDATE_POLICY 保存前后值/版本、actor、提交与生效时间；原 operation_id 续跑，终态不可覆盖，其他冻结原因继续阻断</td></tr>
+<tr><td>准入检查 / 实际入账</td><td>Redis 用户量 + 模型量 + 请求 + Stream</td><td>同槽原子脚本；版本去重，正常每请求两次，不逐 token 写入</td></tr>
+<tr><td>批量持久化</td><td>SQL monthly_usage + model_call</td><td>按新旧明细差额更新；提交后 ACK，重复投递不重复记账</td></tr>
+<tr><td>跨服务重试</td><td>BiSheng：admin_operation → Gateway：operation</td><td>同 operation_id、同 payload_hash；查询终态后重放原 intent 核验，明确业务拒绝持久 FAILED，依赖不确定保留 PROCESSING；不跨 HTTP 持事务锁</td></tr></tbody></table></div></div>
+      <p class="technical-note">不新增容量锁表。MySQL 使用 SERIALIZABLE 范围事务；DM 使用 READ_COMMITTED，并在事务首条 SQL 对 gt_dsh_seat 加 EXCLUSIVE 表锁，锁后统计当前已提交席位再写入。MySQL 空实例 11 人抢 10 席与既往 5 万席位分页已验证；DM 分支的锁顺序/回滚、分页、CLOB 与字节容量检查已通过，实机本轮暂缓。DM 表锁可能降低不同安装实例席位操作的并行度，事务内无远程调用。</p>
+      <p class="technical-note">License 一期受控换版：暂停所有副本的新 DSH 准入与席位变更 → 等待席位事务结束 → 更新既有授权源 → 全部副本验签并确认同版本/摘要 → 恢复。失败保持 DSH 关闭；普通业务不受影响，已准入模型请求可完成，不承诺无停机热切换。</p>
+      <div class="technical-group"><h3>非数据库状态</h3>
+      <div class="table-wrap"><table class="technical-table"><thead><tr><th scope="col">位置</th><th scope="col">内容</th><th scope="col">失效行为</th></tr></thead><tbody><tr><td>Gateway Redis</td><td>auth_id / challenge / redirect_uri / state，5 分钟；HMAC nonce，120 秒</td><td>登录事务过期重开；不影响已分配席位</td></tr>
+<tr><td>BiSheng Redis</td><td>票据 60 秒、nonce 120 秒；独立配额区保存实时账本、请求状态、Stream</td><td>配额 noeviction + 持久化，不能套普通 TTL；主切换/缺失先冻结，不读旧 SQL 放行</td></tr>
+<tr><td>受管 Secret</td><td>复用用户同步的一个共享 Secret，程序按服务方向和 Token 用途派生；客户端不持有密钥</td><td>多副本复用本实例的现有 Secret；License 密钥独立</td></tr></tbody></table></div></div>
+    </section>
+
+    <section id="scale" class="technical-section">
+      <div class="section-head"><h2>规模与实时限额</h2><p>万级席位分页 · 登录信息独立展示 · 高频写入移出请求链路</p></div>
+      <h3>席位列表：先筛选分页，再补齐本页</h3>
+      <div class="boundary-note">
+        <div class="rule"><b>BiSheng</b><span>管理员鉴权，传递游标与筛选</span></div>
+        <div class="rule"><b>Gateway SQL</b><span>身份投影检索 + 会话筛选 → LIMIT 51</span></div>
+        <div class="rule"><b>当前页</b><span>批量身份、会话摘要、最近活跃</span></div>
+      </div>
+      <div class="table-wrap"><table class="technical-table"><thead><tr><th>问题</th><th>约定</th></tr></thead><tbody>
+        <tr><td>上万席位</td><td>created_at + seat_id 稳定游标；默认 50、最多 100，limit+1 判断 has_more，不做深 OFFSET 或每页 COUNT。</td></tr>
+        <tr><td>跨库检索</td><td>Gateway 保存账号/名称的最小检索投影；前缀/ID 检索、状态筛选在 SQL 内先完成。当前页才批量读取 BiSheng 身份，不先传上万 ID，也不分页后过滤。</td></tr>
+        <tr><td>资料变更</td><td>原用户表新增 dsh_profile_version，改名时原用户事务递增并登记 SYNC_PROFILE；profiles/upsert 按版本更新，部门变更不触发同步；失败重试，100 条游标回填；显示同步时点，投影绝不用于鉴权。新增字段走双库DDL，回退保留版本。</td></tr>
+        <tr><td>登录状态</td><td>有有效会话 / 无有效会话 / 不可用；不等于实时在线。最近活跃仅是服务端观察值，不用于席位释放。</td></tr>
+        <tr><td>首屏与查询</td><td>仅席位/登录列，无模型或用量；会话详情另分页。一次页级批量补齐，禁止 N+1；搜索防抖 300ms、丢弃过期响应。</td></tr>
+      </tbody></table></div>
+      <h3>模型配额：Redis 实时，SQL 批量</h3>
+      <div class="boundary-note">
+        <div class="rule"><b>1 准入</b><span>已用量低于限额 → 登记请求，不扣减</span></div>
+        <div class="rule"><b>2 模型调用</b><span>LLMService / SSE，不逐 chunk 写库</span></div>
+        <div class="rule"><b>3 结算</b><span>实际 usage 原子累加 + Stream</span></div>
+      </div>
+      <div class="table-wrap"><table class="technical-table"><thead><tr><th>环节</th><th>默认方案</th><th>保证与边界</th></tr></thead><tbody>
+        <tr><td>准入检查</td><td>model_used_tokens &lt; model_monthly_token_limit；不预占、不扣减</td><td>仅看所选模型已入账实际用量；0 限额只禁止该模型调用</td></tr>
+        <tr><td>完成入账</td><td>用户总量与模型分量原子累加实际 usage</td><td>达到或超过阈值后拒绝新请求；在途继续完成，超额如实记录</td></tr>
+        <tr><td>批量 SQL</td><td>最多 500 事件或 5 秒一批，按 request_id 合并，每月行每批一次更新</td><td>event_version 完整快照去重；明细/汇总同事务，提交后 XACK</td></tr>
+        <tr><td>策略变更</td><td>冻结准入 → SQL PENDING → Redis 安装 → SQL READY → 解冻</td><td>成功后立即生效；失败保持冻结，不靠最终一致广播</td></tr>
+        <tr><td>写入成本</td><td>减少事务、往返和热点汇总行更新</td><td>审计明细仍随请求增长，不承诺 MySQL 零写入或未经压测的吞吐</td></tr>
+      </tbody></table></div>
+      <h3>并发示例：限额 1000，已用 900</h3>
+      <div class="boundary-note">
+        <div class="rule"><b>A / B 准入</b><span>均看到 900 &lt; 1000，全部放行，不预扣</span></div>
+        <div class="rule"><b>A 完成 +300</b><span>已用 1200 → 拒绝此后的新请求</span></div>
+        <div class="rule"><b>B 完成 +300</b><span>在途继续，最终如实记录 1500</span></div>
+      </div>
+      <p>取消输入上界估算和额度归还；不按剩余额度限制模型输出，不因达限中断已准入的 SSE。超额取决于在途数量与实际用量，不承诺固定上界，也不新增并发限流。</p>
+      <h3>异常时不拿旧余额继续放行</h3>
+      <div class="table-wrap"><table class="technical-table"><thead><tr><th>异常</th><th>处理</th></tr></thead><tbody>
+        <tr><td>usage 缺失 / 断流无法计量</td><td>token字段=NULL、USAGE_UNKNOWN，保留调用明细及缺失原因；不冻结用户或模型。成功回答正常返回，缺usage的SSE仍发送DONE；实际断流保留上游错误。可靠补记可选，不是继续调用的前提。</td></tr>
+        <tr><td>SQL/消费者中断</td><td>Stream 保留 pending，恢复后幂等重放；积压超过 30 秒或容量阈值停止新准入并预留在途结算空间，不丢未确认事件。</td></tr>
+        <tr><td>Redis key 丢失 / 断连 / OOM</td><td>失败关闭；不能从旧 SQL 取零或剩余额度放行。Lua 运行错误也不自动回滚，脚本先校验，异常冻结排查。</td></tr>
+        <tr><td>重启 / 主从切换</td><td>门禁绑定批准的主节点/恢复代次，先阻断并隔离旧主，再核对 AOF/Stream + SQL + 在途请求；证明完整、提高 epoch 后才能开放。</td></tr>
+        <tr><td>丢失已确认事件</td><td>无法证明完整则冻结受影响月份/分片、人工核账，不承诺无损自动恢复。AOF、副本和 WAIT 不等于任意故障下的强一致。</td></tr>
+      </tbody></table></div>
+      <p>额度区独立 noeviction、持久化，不使用普通缓存 TTL；同槽脚本同时登记事件，不用 Pub/Sub 或进程内异步任务。/usage 读 live，SQL 降级展示标 persisted + as_of。</p>
+      <p>待验证：5 万席位、50/100 条分页与执行计划；1000 请求/秒下原子计数、批次大小、SQL 事务量、投影延迟；跨模型并发、丢尾/主切换、重复乱序事件及策略冻结恢复。此处不是压测结论。</p>
+      <p>参考：<a href="https://redis.io/docs/latest/operate/oss_and_stack/management/replication/">Redis 复制一致性边界</a>。若要求故障后无损且持续可用，需要另评审同步持久化日志或数据库逐请求准入。</p>
+    </section>
+
+    <p class="technical-note">配额维护：默认内存预算 512 MiB、结算余量 64 MiB；10,000 条或 30 秒积压停止新准入。RUNNING 索引与实时 usage 门禁一致；投影每批 500 条，单用户 10 批或 1 秒后让出。只清理 SQL 精确确认、全部消费组 ACK 且保留 30 天的可靠终态。恢复顺序为 FROZEN 回执 → SQL epoch CAS → owner/digest/epoch/version CAS READY。详见 <a href="./design.md">Design §4.7</a>；生产容量待压测。</p>
+    <section id="scope">
+      <div class="section-head">
+        <h2>一期范围</h2>
+        <p>完成登录、固定席位、模型调用和管理员撤销闭环</p>
+      </div>
+
+      <div class="scope-bands">
+        <div class="scope-band">
+          <h3>一期交付</h3>
+          <div class="scope-items">
+            <span class="scope-item">浏览器授权登录</span>
+            <span class="scope-item">identity ticket</span>
+            <span class="scope-item">固定席位原子分配</span>
+            <span class="scope-item">DSH 专用 Token</span>
+            <span class="scope-item">OpenAI 兼容模型接口</span>
+            <span class="scope-item">复用 LLMService</span>
+            <span class="scope-item">模型白名单</span>
+            <span class="scope-item">月用量达限拦截</span>
+            <span class="scope-item">逐条调用审计</span>
+            <span class="scope-item">统一管理面</span>
+            <span class="scope-item">管理员撤销</span>
+            <span class="scope-item">管理员重新分配</span>
+          </div>
+        </div>
+
+        <div class="scope-band later">
+          <h3>明确排除</h3>
+          <div class="scope-items">
+            <span class="scope-item">自动释放席位</span>
+            <span class="scope-item">设备级计费</span>
+            <span class="scope-item">V2 API Key 复用</span>
+            <span class="scope-item">迁移模型配置</span>
+            <span class="scope-item">RPM / TPM</span>
+            <span class="scope-item">金额预算</span>
+            <span class="scope-item">部门共享池</span>
+            <span class="scope-item">聚合看板与导出</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const tabs = Array.from(document.querySelectorAll('[role="tab"][data-target]'));
+    const panels = Array.from(document.querySelectorAll('.scenario-panel'));
+
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.target;
+        tabs.forEach((item) => item.setAttribute('aria-selected', String(item === tab)));
+        panels.forEach((panel) => { panel.hidden = panel.id !== target; });
+      });
+    });
+
+    function revealTable() {
+      const target = document.getElementById(location.hash.slice(1));
+      if (target instanceof HTMLDetailsElement) target.open = true;
+    }
+    window.addEventListener('hashchange', revealTable);
+    revealTable();
+    window.addEventListener('beforeprint', () => {
+      document.querySelectorAll('.technical-detail').forEach((detail) => {
+        detail.dataset.printOpen = String(detail.open);
+        detail.open = true;
+      });
+    });
+    window.addEventListener('afterprint', () => {
+      document.querySelectorAll('.technical-detail').forEach((detail) => {
+        detail.open = detail.dataset.printOpen === 'true';
+        delete detail.dataset.printOpen;
+      });
+    });
+  </script>
+</body>
+</html>

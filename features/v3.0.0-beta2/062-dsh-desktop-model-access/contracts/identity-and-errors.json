@@ -1,0 +1,375 @@
+{
+  "contract_version": "0.1.0",
+  "snapshot": {
+    "installation_id": "installation_fixture_001",
+    "tenant_id": "1",
+    "user_id": "1001",
+    "active": true,
+    "reason": null,
+    "user": {
+      "id": "1001",
+      "username": "demo.user",
+      "display_name": "Demo User"
+    },
+    "tenant": {
+      "id": "1",
+      "name": "Demo Tenant"
+    },
+    "profile_version": 0
+  },
+  "snapshot_name_fallback": {
+    "installation_id": "installation_fixture_001",
+    "tenant_id": "1",
+    "user_id": "1001",
+    "active": true,
+    "reason": null,
+    "user": {
+      "id": "1001",
+      "username": "demo.user",
+      "display_name": "demo.user"
+    },
+    "tenant": {
+      "id": "1",
+      "name": "Tenant 1"
+    },
+    "profile_version": 0
+  },
+  "inactive_snapshot": {
+    "installation_id": "installation_fixture_001",
+    "tenant_id": "1",
+    "user_id": "1001",
+    "active": false,
+    "reason": "user_disabled"
+  },
+  "pkce": {
+    "verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+    "challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+    "method": "S256",
+    "binding": {
+      "client_id": "dsh-desktop",
+      "redirect_uri": "http://127.0.0.1:49152/dsh/callback",
+      "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+    },
+    "auth_id": "auth_01_example",
+    "ticket_ttl_seconds": 60,
+    "authorization_ttl_seconds": 300
+  },
+  "unknown_usage": {
+    "request_id": "request_fixture_001",
+    "status": "USAGE_UNKNOWN",
+    "usage_source": null,
+    "input_tokens": null,
+    "output_tokens": null,
+    "total_tokens": null
+  },
+  "errors": [
+    {
+      "http_status": 400,
+      "body": {
+        "error": {
+          "message": "invalid request",
+          "type": "invalid_request_error",
+          "code": "invalid_request"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 400,
+      "body": {
+        "error": {
+          "message": "unsupported parameter",
+          "type": "invalid_request_error",
+          "code": "unsupported_parameter"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 400,
+      "body": {
+        "error": {
+          "message": "context length exceeded",
+          "type": "invalid_request_error",
+          "code": "context_length_exceeded"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 400,
+      "body": {
+        "error": {
+          "message": "invalid grant",
+          "type": "authentication_error",
+          "code": "invalid_grant"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 400,
+      "body": {
+        "error": {
+          "message": "pkce verification failed",
+          "type": "authentication_error",
+          "code": "pkce_verification_failed"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 400,
+      "body": {
+        "error": {
+          "message": "authorization expired",
+          "type": "authentication_error",
+          "code": "authorization_expired"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 401,
+      "body": {
+        "error": {
+          "message": "invalid access token",
+          "type": "authentication_error",
+          "code": "invalid_access_token"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 401,
+      "body": {
+        "error": {
+          "message": "invalid refresh token",
+          "type": "authentication_error",
+          "code": "invalid_refresh_token"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 401,
+      "body": {
+        "error": {
+          "message": "refresh token reused",
+          "type": "authentication_error",
+          "code": "refresh_token_reused"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 401,
+      "body": {
+        "error": {
+          "message": "session expired",
+          "type": "authentication_error",
+          "code": "session_expired"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 401,
+      "body": {
+        "error": {
+          "message": "session revoked",
+          "type": "authentication_error",
+          "code": "session_revoked"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "seat limit reached",
+          "type": "permission_error",
+          "code": "seat_limit_reached"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "seat revoked",
+          "type": "permission_error",
+          "code": "seat_revoked"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "license invalid",
+          "type": "permission_error",
+          "code": "license_invalid"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "license expired",
+          "type": "permission_error",
+          "code": "license_expired"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "dsh disabled",
+          "type": "permission_error",
+          "code": "dsh_disabled"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "user disabled",
+          "type": "permission_error",
+          "code": "user_disabled"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "tenant unavailable",
+          "type": "permission_error",
+          "code": "tenant_unavailable"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "model not allowed",
+          "type": "permission_error",
+          "code": "model_not_allowed"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 409,
+      "body": {
+        "error": {
+          "message": "authorization conflict",
+          "type": "conflict_error",
+          "code": "authorization_conflict"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 429,
+      "body": {
+        "error": {
+          "message": "monthly token limit exceeded",
+          "type": "quota_error",
+          "code": "monthly_token_limit_exceeded"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 429,
+      "body": {
+        "error": {
+          "message": "too many requests",
+          "type": "rate_limit_error",
+          "code": "too_many_requests"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 502,
+      "body": {
+        "error": {
+          "message": "upstream error",
+          "type": "upstream_error",
+          "code": "upstream_error"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 504,
+      "body": {
+        "error": {
+          "message": "upstream timeout",
+          "type": "upstream_error",
+          "code": "upstream_timeout"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 503,
+      "body": {
+        "error": {
+          "message": "authorization unavailable",
+          "type": "service_unavailable_error",
+          "code": "authorization_unavailable"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 503,
+      "body": {
+        "error": {
+          "message": "quota unavailable",
+          "type": "service_unavailable_error",
+          "code": "quota_unavailable"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 503,
+      "body": {
+        "error": {
+          "message": "usage unavailable",
+          "type": "service_unavailable_error",
+          "code": "usage_unavailable"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 500,
+      "body": {
+        "error": {
+          "message": "internal error",
+          "type": "server_error",
+          "code": "internal_error"
+        },
+        "request_id": "request_fixture_001"
+      }
+    }
+  ]
+}

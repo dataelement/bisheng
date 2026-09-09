@@ -5,7 +5,7 @@ import os
 from collections.abc import Iterable
 from typing import Any, Optional
 
-from fastapi import BackgroundTasks, Request, UploadFile
+from fastapi import BackgroundTasks, HTTPException, Request, UploadFile
 from langchain_core.documents import BaseDocumentCompressor, Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
@@ -13,6 +13,7 @@ from loguru import logger
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.dsh import DshModelNotAllowedError
 from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.errcode.llm import (
     ModelNameRepeatError,
@@ -553,6 +554,64 @@ class LLMService:
                 return raw
 
         raise LLMModelNotAccessibleError.http_exception()
+
+    @classmethod
+    async def get_dsh_model_ids(cls) -> list[int]:
+        """Reuse the existing model catalog; callers still validate each current snapshot."""
+        with strict_tenant_filter():
+            servers = await cls.get_all_llm()
+        return sorted(
+            {
+                model.id
+                for server in servers
+                for model in server.models
+                if model.online and model.model_type == LLMModelType.LLM.value
+            }
+        )
+
+    @classmethod
+    async def get_dsh_model_snapshot(cls, model_id: int) -> tuple[LLMModel, LLMServer]:
+        """Read the current governed model/provider pair for one DSH invocation.
+
+        Ordinary callers retain their existing caching behavior. Root access is
+        still decided by get_model_for_call; bypass only resolves the provider
+        belonging to that verified model and never authorizes another model.
+        """
+        tenant_id = get_current_tenant_id()
+        if tenant_id is None:
+            raise DshModelNotAllowedError()
+        try:
+            with strict_tenant_filter():
+                model = await cls.get_model_for_call(model_id)
+        except HTTPException as exc:
+            if exc.status_code == LLMModelNotAccessibleError.Code:
+                raise DshModelNotAllowedError() from exc
+            raise
+        if (
+            model.tenant_id not in {tenant_id, ROOT_TENANT_ID}
+            or not model.online
+            or model.model_type != LLMModelType.LLM.value
+        ):
+            raise DshModelNotAllowedError()
+        with bypass_tenant_filter():
+            server = await LLMDao.aget_server_by_id(model.server_id, cache=False)
+        if server is None or server.tenant_id != model.tenant_id:
+            raise DshModelNotAllowedError()
+        return model.model_copy(deep=True), server.model_copy(deep=True)
+
+    @classmethod
+    def build_dsh_llm(cls, model: LLMModel, server: LLMServer, *, user_id: int, streaming: bool = False):
+        """Construct the governed wrapper from the exact DSH snapshot, without retries."""
+        return BishengLLM.get_class_instance_from_snapshot(
+            model_info=model,
+            server_info=server,
+            disable_retries=True,
+            app_id="dsh-desktop",
+            app_name="DSH Desktop",
+            app_type=ApplicationTypeEnum.DSH_DESKTOP,
+            user_id=user_id,
+            streaming=streaming,
+        )
 
     @classmethod
     async def get_one_llm(

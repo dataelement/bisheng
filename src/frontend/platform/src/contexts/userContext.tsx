@@ -1,6 +1,7 @@
 // @ts-strict-ignore
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { resolveAdminLandingPath, resolveRoutePermissions } from "@/routes";
+import { hasDesktopLoginReturnTo } from "@/utils/loginReturnTo";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import i18next from "i18next";
 import { ReactNode, createContext, useLayoutEffect, useState } from "react";
@@ -138,7 +139,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
             localStorage.setItem('UUR_INFO', user_id ? String(user_id) : '');
             // if (user_id) loadComponents();
             // 是否有访问后台权限
-            if (/^(\/\w+)?\/chat/.test(location.pathname)) return // 排除免登陆
+            if (/^(\/\w+)?\/chat/.test(location.pathname)) return
+            // Desktop consent is available to ordinary platform identities.
+            if (location.pathname === '/desktop-login' || hasDesktopLoginReturnTo()) return
 
             const BASE_URL = __APP_ENV__.BASE_URL
 
