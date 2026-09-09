@@ -195,7 +195,9 @@ def test_group_files_by_payee_custom_ignore_accounts():
 async def test_execute_backfill_accumulation_and_idempotency():
     """测试积分全额累加（如 10 个文件 +30 分，突破 15 分上限）与强幂等性。"""
     summary = BackfillSummary(target_level="public", score_per_file=3)
+    from datetime import datetime, timedelta
     uid = 100
+    upload_base_time = datetime(2026, 5, 1, 10, 0, 0)
     files = [
         KnowledgeFile(
             id=300 + i,
@@ -203,6 +205,7 @@ async def test_execute_backfill_accumulation_and_idempotency():
             file_type=FileType.FILE.value,
             knowledge_id=1,
             user_id=uid,
+            create_time=upload_base_time + timedelta(days=i),
         )
         for i in range(10)
     ]
@@ -214,10 +217,14 @@ async def test_execute_backfill_accumulation_and_idempotency():
             self.balance = 0
             self.lifetime_earned = 0
             self.logs = {}
+            self.awarded_occurred_ats = []
 
-        async def award(self, *, tenant_id, user_id, delta, title, rule_code, idempotency_key, daily_cap, **kwargs):
-            # 验证显式传了 daily_cap=None 以跳过上限截断
-            assert daily_cap is None
+        async def award(self, *, tenant_id, user_id, delta, title, rule_code, idempotency_key, **kwargs):
+            # 验证业务发生时间精确继承文件上传时间
+            occurred_at = kwargs.get("occurred_at")
+            assert occurred_at is not None
+            self.awarded_occurred_ats.append(occurred_at)
+
             if idempotency_key in self.logs:
                 return SimpleNamespace(replayed=True, applied_delta=0)
             self.balance += delta
@@ -229,8 +236,7 @@ async def test_execute_backfill_accumulation_and_idempotency():
     mock_session = AsyncMock()
 
     with patch.object(bsp, "load_user_names", AsyncMock(return_value={uid: "test_user"})), \
-         patch.object(bsp, "PointsLedgerService", return_value=fake_ledger), \
-         patch.object(bsp, "PointsRepository"):
+         patch.object(bsp, "BackfillPointsLedger", return_value=fake_ledger):
 
         # 第一次执行：应全额发放 10 * 3 = 30 分
         await execute_backfill(
@@ -248,6 +254,9 @@ async def test_execute_backfill_accumulation_and_idempotency():
         assert summary.replayed_files == 0
         assert fake_ledger.balance == 30
         assert fake_ledger.lifetime_earned == 30
+        assert len(fake_ledger.awarded_occurred_ats) == 10
+        for idx, ot in enumerate(fake_ledger.awarded_occurred_ats):
+            assert ot == upload_base_time + timedelta(days=idx)
 
         # 第二次重复执行：幂等性保障，不增加积分
         summary_replay = BackfillSummary(target_level="public", score_per_file=3)
@@ -280,7 +289,7 @@ async def test_execute_backfill_dry_run():
 
     mock_session = AsyncMock()
     with patch.object(bsp, "load_user_names", AsyncMock(return_value={uid: "dry_user"})), \
-         patch.object(bsp, "PointsLedgerService") as mock_ledger_cls:
+         patch.object(bsp, "BackfillPointsLedger") as mock_ledger_cls:
 
         await execute_backfill(
             mock_session,
@@ -297,6 +306,91 @@ async def test_execute_backfill_dry_run():
         mock_session.commit.assert_not_called()
         assert summary.users_affected[uid]["expected_points"] == 3
         assert summary.users_affected[uid]["actual_awarded_points"] == 0
+
+
+@pytest.mark.asyncio
+async def test_backfill_points_ledger_custom_occurred_at_and_last_earned_at():
+    """测试 BackfillPointsLedger 自身：业务发生时间继承、幂等性与 last_earned_at 保护。"""
+    from datetime import datetime
+    class FakeRepo:
+        def __init__(self):
+            self.account = SimpleNamespace(
+                balance=10,
+                version=1,
+                lifetime_earned=10,
+                lifetime_deducted=0,
+                last_earned_at=datetime(2026, 4, 1),
+            )
+            self.logs = {}
+            self.outboxes = []
+
+        async def get_log_by_idempotency(self, tenant_id, key):
+            return self.logs.get(key)
+
+        async def lock_or_create_account(self, tenant_id, user_id):
+            return self.account
+
+        async def append_log(self, log):
+            log.id = 1001
+            self.logs[log.idempotency_key] = log
+            return log
+
+        async def add_outbox(self, tenant_id, log_id, payload):
+            self.outboxes.append((tenant_id, log_id, payload))
+
+    mock_session = AsyncMock()
+    fake_repo = FakeRepo()
+    with patch.object(bsp, "PointsRepository", return_value=fake_repo):
+        ledger = bsp.BackfillPointsLedger(mock_session)
+
+        # 1. 历史更早时间补发（2026-03-01 < 2026-04-01）
+        hist_time = datetime(2026, 3, 1, 9, 0, 0)
+        res1 = await ledger.award(
+            tenant_id=1,
+            user_id=1,
+            delta=3,
+            title="测试补发",
+            rule_code="G1",
+            idempotency_key="k1",
+            occurred_at=hist_time,
+        )
+        assert not res1.replayed
+        assert fake_repo.account.balance == 13
+        assert fake_repo.account.lifetime_earned == 13
+        # 因为 3月 早于 4月，last_earned_at 应受保护不回退
+        assert fake_repo.account.last_earned_at == datetime(2026, 4, 1)
+        assert fake_repo.logs["k1"].occurred_at == hist_time
+
+        # 2. 幂等性测试
+        res_replay = await ledger.award(
+            tenant_id=1,
+            user_id=1,
+            delta=3,
+            title="测试补发",
+            rule_code="G1",
+            idempotency_key="k1",
+            occurred_at=hist_time,
+        )
+        assert res_replay.replayed
+        assert fake_repo.account.balance == 13
+
+        # 3. 更新时间补发（2026-05-01 > 2026-04-01）
+        new_time = datetime(2026, 5, 1, 9, 0, 0)
+        res2 = await ledger.award(
+            tenant_id=1,
+            user_id=1,
+            delta=3,
+            title="测试补发2",
+            rule_code="G1",
+            idempotency_key="k2",
+            occurred_at=new_time,
+        )
+        assert not res2.replayed
+        assert fake_repo.account.balance == 16
+        # 推进到 5月
+        assert fake_repo.account.last_earned_at == new_time
+        assert fake_repo.logs["k2"].occurred_at == new_time
+        assert len(fake_repo.outboxes) == 2
 
 
 @pytest.mark.asyncio

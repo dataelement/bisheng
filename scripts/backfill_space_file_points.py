@@ -54,11 +54,16 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceScope,
 )
+from zoneinfo import ZoneInfo
+
 from bisheng.points.domain.constants.space_level_rules import earn_rule_for_space_level
+from bisheng.points.domain.models import UserPointLog
 from bisheng.points.domain.repositories.points_repository import PointsRepository
-from bisheng.points.domain.services.points_ledger_service import PointsLedgerService
+from bisheng.points.domain.services.points_ledger_service import LedgerResult
 from bisheng.user.domain.models.user import User
 from bisheng.user.domain.models.user_role import UserRole
+
+SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -328,6 +333,99 @@ def group_files_by_payee(
     return payee_files
 
 
+class BackfillPointsLedger:
+    """批量补分专用记账服务：完全自包含于脚本内部，不依赖服务层任何额外代码修改。
+
+    功能特性：
+    1. 强幂等防重跑：基于 idempotency_key 检查，重复文件自动跳过并标记 replayed=True；
+    2. 全额突破单日上限：不设 daily_cap 截断，所有有效文件全额累加；
+    3. 业务发生时间继承：将 occurred_at 精确记录为文件上传/创建时间（若已有且更新则推进 last_earned_at）；
+    4. 悲观锁并发安全：行锁保护 user_point_account，版本号递增；
+    5. 外箱同步：写入 PointSyncOutbox，确保与现有积分异步通知机制完全兼容。
+    """
+
+    def __init__(self, session):
+        self.session = session
+        self.repository = PointsRepository(session)
+
+    async def award(
+        self,
+        *,
+        tenant_id: int,
+        user_id: int,
+        delta: int,
+        title: str,
+        rule_code: str,
+        idempotency_key: str,
+        source: str = "batch_backfill",
+        biz_type: str | None = None,
+        biz_id: str | None = None,
+        remark: str | None = None,
+        occurred_at: datetime | None = None,
+    ) -> LedgerResult:
+        # 1. 幂等性检查
+        existing = await self.repository.get_log_by_idempotency(tenant_id, idempotency_key)
+        if existing:
+            return LedgerResult(
+                applied_delta=existing.delta,
+                balance=existing.balance_after,
+                log_id=existing.id,
+                replayed=True,
+            )
+
+        # 2. 锁定或创建账户
+        account = await self.repository.lock_or_create_account(tenant_id, user_id)
+
+        # 3. 计算并更新余额
+        balance = account.balance + delta
+        account.balance = balance
+        account.version += 1
+
+        # 4. 时间戳处理（默认或使用文件上传时间）
+        if occurred_at is None:
+            occurred_at = datetime.now(SHANGHAI).replace(tzinfo=None)
+        elif occurred_at.tzinfo is not None:
+            occurred_at = occurred_at.astimezone(SHANGHAI).replace(tzinfo=None)
+
+        if delta > 0:
+            account.lifetime_earned += delta
+            current_last = getattr(account, "last_earned_at", None)
+            if current_last is None or occurred_at > current_last:
+                account.last_earned_at = occurred_at
+        else:
+            account.lifetime_deducted += -delta
+
+        # 5. 写入不可变流水
+        log = await self.repository.append_log(
+            UserPointLog(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                delta=delta,
+                balance_after=balance,
+                direction="earn" if delta > 0 else "deduct",
+                rule_code=rule_code,
+                title=title,
+                source=source,
+                biz_type=biz_type,
+                biz_id=biz_id,
+                idempotency_key=idempotency_key,
+                operator_id=None,
+                remark=remark,
+                score_snapshot=abs(delta),
+                beneficiary_role="uploader",
+                occurred_at=occurred_at,
+            )
+        )
+
+        # 6. 建立外箱同步
+        await self.repository.add_outbox(
+            tenant_id,
+            int(log.id),
+            {"user_id": user_id, "delta": delta, "log_id": log.id},
+        )
+        return LedgerResult(applied_delta=delta, balance=balance, log_id=log.id, replayed=False)
+
+
 async def execute_backfill(
     session,
     *,
@@ -344,8 +442,7 @@ async def execute_backfill(
     space_title = SPACE_LEVEL_TITLES.get(space_level, "知识库")
     log_title = f"{space_title}文件补发积分"
 
-    repo = PointsRepository(session)
-    ledger = PointsLedgerService(repo)
+    ledger = BackfillPointsLedger(session)
 
     all_user_ids = set(payee_files.keys())
     user_names = await load_user_names(session, all_user_ids)
@@ -372,6 +469,7 @@ async def execute_backfill(
         for f in ufiles:
             # 采用按文件维度唯一的幂等键
             idempotency_key = f"backfill:{space_level}:{f.id}"
+            file_upload_time = getattr(f, "create_time", None)
             remark = f"目标库文件补偿发分 [{space_title}, file_id={f.id}]"
 
             result = await ledger.award(
@@ -381,11 +479,11 @@ async def execute_backfill(
                 title=log_title,
                 rule_code=rule_code,
                 idempotency_key=idempotency_key,
-                daily_cap=None,  # 显式绕过每日上限
                 source="batch_backfill",
                 biz_type="space_file",
                 biz_id=str(f.id),
                 remark=remark,
+                occurred_at=file_upload_time,
             )
 
             if result.replayed:

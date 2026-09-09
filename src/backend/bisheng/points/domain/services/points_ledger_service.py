@@ -39,7 +39,6 @@ class PointsLedgerService:
         idempotency_key: str,
         daily_cap: int | None = None,
         source: str = "auto",
-        occurred_at: datetime | None = None,
         **kwargs,
     ) -> LedgerResult:
         """自动发分；剩余额度不足整笔时跳过，不做部分截断。"""
@@ -54,7 +53,6 @@ class PointsLedgerService:
             idempotency_key=idempotency_key,
             daily_cap=daily_cap,
             source=source,
-            occurred_at=occurred_at,
             **kwargs,
         )
 
