@@ -1174,7 +1174,7 @@
   "com_ui_upload_file_search": "Upload for File Search",
   "com_ui_upload_file_type_error": "This application does not support uploading this file type.",
   "com_chat.media_parsing": "Parsing…",
-  "com_chat.media_file_too_large": "File size cannot exceed 1024MB. Please upload again.",
+  "com_chat.media_file_too_large": "File size cannot exceed {{0}}MB. Please upload again.",
   "com_chat.media_file_too_many": "You cannot upload more than 5 audio/video files.",
   "com_ui_upload_files": "Upload files",
   "com_ui_upload_folder": "Upload folder",
