@@ -143,3 +143,55 @@ async def test_export_docx_converter_error_soft_returns(monkeypatch):
 def test_run_sync_unsupported():
     tool = linsight_export.ExportPdfTool(backend=_writable_backend())
     assert "not supported in sync mode" in tool._run()
+
+
+_CITED_MD = (
+    "# 报告\n\n"
+    "PM2.5 年均浓度下降。\ue200knowledgesearch_18f5868b:0\ue202\n\n"
+    "- 要点\ue200knowledgesearch_18f5868b:1\ue201websearch_3a1c9f22:0\ue202\n"
+    "- 字面转义形式\\ue200websearch_3a1c9f22:1\\ue202\n"
+)
+
+
+def _assert_clean(md: str) -> None:
+    assert "\ue200" not in md and "\ue201" not in md and "\ue202" not in md
+    assert "knowledgesearch_" not in md and "websearch_" not in md
+    assert "PM2.5 年均浓度下降。" in md  # prose kept
+
+
+async def test_export_docx_strips_citation_markers_before_convert(monkeypatch):
+    """Word must never carry the PUA wrappers nor the bare source ids."""
+    import bisheng.common.utils.markdown_cmpnt.md_to_docx.markdocx as markdocx_mod
+
+    seen = {}
+
+    class _FakeMarkDocx:
+        def __call__(self, md):
+            seen["md"] = md
+            return (b"DOCXBYTES", "title")
+
+    monkeypatch.setattr(markdocx_mod, "MarkDocx", _FakeMarkDocx)
+
+    backend = _writable_backend(md_content=_CITED_MD)
+    tool = linsight_export.ExportDocxTool(backend=backend)
+    res = await tool._arun(source_path="output/report.md")
+
+    _assert_clean(seen["md"])
+    assert "已生成 Word" in res
+
+
+async def test_export_pdf_strips_citation_markers_before_convert(monkeypatch):
+    seen = {}
+
+    def _fake_pdf(md):
+        seen["md"] = md
+        return b"PDFBYTES"
+
+    monkeypatch.setattr(linsight_export, "_md_to_pdf_bytes_via_libreoffice", _fake_pdf)
+
+    backend = _writable_backend(md_content=_CITED_MD)
+    tool = linsight_export.ExportPdfTool(backend=backend)
+    res = await tool._arun(source_path="output/report.md")
+
+    _assert_clean(seen["md"])
+    assert "已生成 PDF" in res

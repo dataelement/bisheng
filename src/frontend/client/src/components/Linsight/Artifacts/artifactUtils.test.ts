@@ -1,6 +1,8 @@
+import request from '~/api/request';
 import {
     type ArtifactFile,
     applyHtmlViewerTabIdentity,
+    fetchArtifactBlob,
     isAbsoluteImageSrc,
     isDeliverableLinkHref,
     isHtmlArtifact,
@@ -10,6 +12,11 @@ import {
     stripEmptyHtmlPlaceholders,
     stripWorkspacePaths,
 } from './artifactUtils';
+
+jest.mock('~/api/request', () => ({
+    __esModule: true,
+    default: { post: jest.fn() },
+}));
 
 const mkArtifact = (over: Partial<ArtifactFile>): ArtifactFile => ({
     file_id: over.file_id ?? Math.random().toString(36).slice(2),
@@ -353,5 +360,107 @@ describe('applyHtmlViewerTabIdentity', () => {
         applyHtmlViewerTabIdentity('<html><body><p>no head title</p></body></html>');
 
         expect(document.title).toBe('BISHENG');
+    });
+});
+
+/**
+ * Task-mode markdown carries citations as private-use spans
+ * `\ue200<sourceId>[\ue201<sourceId>...]\ue202`. The in-app preview turns them
+ * into badges, but a downloaded / knowledge-saved FILE would show invisible
+ * wrapper chars around bare source ids - so the hand-off path strips the whole
+ * span, ids included. Binary artifacts must never be decoded.
+ */
+describe('fetchArtifactBlob citation stripping', () => {
+    const origFetch = global.fetch;
+
+    // jsdom's Blob has no .text(); read the produced blob back through FileReader.
+    const readBlobText = (blob: Blob) =>
+        new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(reader.error);
+            reader.readAsText(blob);
+        });
+
+    const mockFetch = (body: string, type: string) => {
+        const raw = new Blob([body], { type });
+        const text = jest.fn().mockResolvedValue(body);
+        const blob = jest.fn().mockResolvedValue(raw);
+        global.fetch = jest.fn().mockResolvedValue({ ok: true, text, blob }) as unknown as typeof fetch;
+        return { raw, text, blob };
+    };
+
+    const cited =
+        'Claim A\ue200knowledgesearch_18f5868b:0\ue202 and claim B' +
+        '\ue200knowledgesearch_18f5868b:1\ue201websearch_ab12cd34:3\ue202.\n' +
+        'Orphan \ue201 marker left by a truncated stream.';
+    const clean = 'Claim A and claim B.\nOrphan  marker left by a truncated stream.';
+
+    beforeEach(() => {
+        (request.post as jest.Mock).mockResolvedValue({
+            status_code: 200,
+            data: { file_path: '/presigned/x' },
+        });
+    });
+
+    afterEach(() => {
+        global.fetch = origFetch;
+    });
+
+    it('removes citation spans, their source ids and stray markers from a .md deliverable', async () => {
+        mockFetch(cited, 'text/markdown');
+
+        const { blob, fileName } = await fetchArtifactBlob(
+            { file_id: '1', file_name: 'report.md', file_url: 'output/report.md', source: 'output' },
+            'SV-1',
+        );
+
+        expect(global.fetch).toHaveBeenCalledWith('/presigned/x');
+        expect(fileName).toBe('report.md');
+        expect(blob.type).toBe('text/markdown;charset=utf-8');
+        const text = await readBlobText(blob);
+        expect(text).toBe(clean);
+        expect(text).not.toMatch(/[\ue200\ue201\ue202]/);
+        expect(text).not.toContain('knowledgesearch_');
+        expect(text).not.toContain('websearch_');
+    });
+
+    it('treats .markdown like .md', async () => {
+        mockFetch(cited, 'text/markdown');
+
+        const { blob } = await fetchArtifactBlob(
+            { file_id: '2', file_name: 'notes.markdown', file_url: 'output/notes.markdown', source: 'output' },
+            'SV-1',
+        );
+
+        expect(await readBlobText(blob)).toBe(clean);
+    });
+
+    it('also strips a parsed-markdown upload (bytes are markdown whatever the name says)', async () => {
+        mockFetch(cited, 'text/markdown');
+
+        const { blob, fileName } = await fetchArtifactBlob(
+            { file_id: '3', file_name: 'source.pdf', file_url: 'uploads/source/index.md', source: 'upload' },
+            'SV-1',
+        );
+
+        expect(fileName).toBe('source.md');
+        expect(await readBlobText(blob)).toBe(clean);
+    });
+
+    it('passes a binary artifact through untouched (never decoded as text)', async () => {
+        const { raw, text } = mockFetch(
+            'PK not markdown knowledgesearch_1:0',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        );
+
+        const { blob, fileName } = await fetchArtifactBlob(
+            { file_id: '4', file_name: 'report.docx', file_url: 'output/report.docx', source: 'output' },
+            'SV-1',
+        );
+
+        expect(fileName).toBe('report.docx');
+        expect(blob).toBe(raw);
+        expect(text).not.toHaveBeenCalled();
     });
 });

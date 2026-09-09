@@ -2069,12 +2069,14 @@ class LinsightWorkflowTask:
         """Best-effort: bind report-cited sources to the task ChatMessage (F047).
 
         Also writes the same filtered items onto ``output_result.citations`` so
-        FINAL_RESULT / history can render badges without a second fetch.
+        FINAL_RESULT / history can render badges without a second fetch. The
+        answer text itself is left as the model wrote it — the report file is
+        the cited deliverable, and copying its marked paragraphs into the
+        answer only duplicated them on the result page.
         Failures must not abort task completion — the user still gets the report.
         """
         try:
             from bisheng.citation.domain.services.citation_prompt_helper import (
-                answer_with_visible_citations,
                 persist_linsight_report_citations,
                 serialize_citation_items_for_page,
             )
@@ -2095,33 +2097,18 @@ class LinsightWorkflowTask:
                 report_texts=texts,
             )
             payloads = serialize_citation_items_for_page(items)
-            visible_answer = answer_with_visible_citations(texts[0], texts[1:])
+            if not payloads:
+                logger.info("linsight citations session={} none referenced in report/answer", session_model.id)
+                return
             # Copy + reassign. JsonType in-place mutation is not dirty: the
             # subsequent set_session_version_info does add/commit/refresh and
             # would reload the old output_result, so FINAL_RESULT and the
             # version-list API (which the client reconciles onto) never saw
-            # citations or the marked paragraphs.
+            # the citations.
             output_result = dict(session_model.output_result or {})
-            previous_answer = output_result.get("answer") or ""
-            changed = False
-            if payloads:
-                output_result["citations"] = payloads
-                changed = True
-            if visible_answer != previous_answer:
-                output_result["answer"] = visible_answer
-                changed = True
-            if not changed:
-                logger.info("linsight citations session={} none referenced in report/answer", session_model.id)
-                return
+            output_result["citations"] = payloads
             session_model.output_result = output_result
-            logger.info(
-                "linsight citations session={} saved={} answer_has_markers={}",
-                session_model.id,
-                len(payloads),
-                "\ue200" in visible_answer,
-            )
-            if visible_answer != previous_answer:
-                await linsight_execute_utils.persist_task_turn_message(session_model)
+            logger.info("linsight citations session={} saved={}", session_model.id, len(payloads))
             state_manager = getattr(self, "_state_manager", None)
             if state_manager is not None:
                 await state_manager.set_session_version_info(session_model)

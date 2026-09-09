@@ -178,7 +178,9 @@ async def test_persist_report_citations_attaches_sources_to_output_result(monkey
     task._state_manager.set_session_version_info.assert_awaited_once_with(session)
 
 
-async def test_persist_report_citations_copies_marked_paragraphs_into_answer(tmp_path, monkeypatch: pytest.MonkeyPatch):
+async def test_persist_report_citations_leaves_answer_untouched(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    """The report file is the cited deliverable; its marked paragraphs are no
+    longer copied onto the answer, and the task turn is not re-persisted."""
     from bisheng.citation.domain.schemas.citation_schema import (
         CitationRegistryItemSchema,
         CitationType,
@@ -217,13 +219,10 @@ async def test_persist_report_citations_copies_marked_paragraphs_into_answer(tmp
     task = LinsightWorkflowTask()
     task._state_manager = AsyncMock()
     session = _session(answer="已梳理近期问题。")
-    original_output = session.output_result
     await task._persist_report_citations(session, _msg(7), [{"file_path": str(report)}])
-    persist_message.assert_awaited_once_with(session)
 
-    assert session.output_result is not original_output
-    answer = session.output_result["answer"]
-    assert answer.startswith("已梳理近期问题。")
-    assert "补测 20/20" in answer
-    assert "背景无引用" not in answer
-    assert marker in answer
+    persist_message.assert_not_awaited()
+    assert session.output_result["answer"] == "已梳理近期问题。"
+    assert "补测 20/20" not in session.output_result["answer"]
+    assert session.output_result["citations"][0]["citationId"] == "knowledgesearch_aaa"
+    task._state_manager.set_session_version_info.assert_awaited_once_with(session)

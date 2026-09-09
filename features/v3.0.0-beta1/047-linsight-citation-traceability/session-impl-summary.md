@@ -50,7 +50,7 @@
 
 | 现象 | 根因 | 处理 |
 |------|------|------|
-| worker 写了带 `\ue200` 的 md，页面仍无角标 | 结果区渲染的是无标记口播 | `answer_with_visible_citations` 把报告带标记段落接到 answer |
+| worker 写了带 `\ue200` 的 md，页面仍无角标 | 结果区渲染的是无标记口播 | 曾用 `answer_with_visible_citations` 把报告带标记段落接到 answer；2026-09-09 按产品决定移除（结果区只显示模型原话，角标在报告预览中呈现） |
 | worker 打 `saved=1 answer_has_markers=True`，页面仍是纯口播 | `output_result` 是 JSON 字段，原地改不脏；`set_session_version_info` 的 `commit+refresh` 冲掉内存改动；`FINAL_RESULT` / 前端 reconcile 读到旧值 | 拷贝成新 dict 再赋回 `session_model.output_result`，再落库 / 推事件 |
 
 页面上的 `` `knowledgesearch_xxx:10` `` 若出现在口播反引号里，那是模型**用文字提到** id，不是角标。角标只来自 PUA 标记。
@@ -69,9 +69,8 @@ persist_task_turn_message
 _persist_report_citations
   · 读 answer + output/*.md
   · persist_linsight_report_citations（只保存正文引用到的）
-  · answer_with_visible_citations（口播补带标记段落）
-  · 新 dict 赋回 output_result（citations + answer）
-  · 必要时再写 ChatMessage
+  · 新 dict 赋回 output_result（citations）
+  · （2026-09-09 移除：不再把报告带标记段落拼进 answer，也不再二次回写 ChatMessage）
   · set_session_version_info
         ↓
 FINAL_RESULT（整包 session，含 output_result）
@@ -87,7 +86,7 @@ FINAL_RESULT（整包 session，含 output_result）
 
 | 文件 | 改动 |
 |------|------|
-| `src/backend/bisheng/citation/domain/services/citation_prompt_helper.py` | `unescape_citation_markers`；`persist_linsight_report_citations`（只按正文 citationId 落库，返回 items）；`serialize_citation_items_for_page`（去 RAG 签名 URL）；`cited_paragraphs_from_texts` / `answer_with_visible_citations` |
+| `src/backend/bisheng/citation/domain/services/citation_prompt_helper.py` | `unescape_citation_markers`；`persist_linsight_report_citations`（只按正文 citationId 落库，返回 items）；`serialize_citation_items_for_page`（去 RAG 签名 URL）；`strip_citation_markers`（导出/下载去标记与来源 ID，2026-09-09） |
 | `src/backend/bisheng/core/prompts/yaml/citation.yaml` | 强制真实 PUA；禁止 `\ue200` 转义；File Output 条款 |
 | `src/backend/bisheng/tool/domain/langchain/linsight_knowledge.py` | `base_search`：annotate + cache + `format_retrieved_chunk`（`<chunk_id>`） |
 
@@ -144,7 +143,7 @@ FINAL_RESULT（整包 session，含 output_result）
 |------|------|------|
 | `persist_linsight_report_citations` | `citation_prompt_helper.py` | 只保存正文引用到的来源 |
 | `serialize_citation_items_for_page` | 同上 | 页面 JSON，去掉 RAG 签名 URL |
-| `answer_with_visible_citations` | 同上 | 口播无标记时补上报告带标记段落 |
+| `strip_citation_markers` | 同上 | 导出 Word/PDF、批量下载 zip 时去掉引用标记与来源 ID（2026-09-09；`answer_with_visible_citations` 已移除） |
 | `unescape_citation_markers` | 同上 | `\ue200` → 真实 U+E200 |
 | `_persist_report_citations` | `task_exec.py` | 完成路径：落库 + 改 `output_result` + 打日志 |
 | `_wrap_linsight_web_citation_tools` | `agent_factory.py` | web_search 结果加 citation_key 并登记 |

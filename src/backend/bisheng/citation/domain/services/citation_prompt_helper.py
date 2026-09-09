@@ -44,6 +44,55 @@ def unescape_citation_markers(text: str) -> str:
     return _ESCAPED_CITATION_MARKER_RE.sub(_repl, text)
 
 
+# Shapes an export output has to lose. The wrapper chars are invisible in Word /
+# PDF while the ids between them are plain ASCII, so a preview badge such as
+# ``\ue200knowledgesearch_18f5868b:0\ue202`` would surface as a bare
+# ``knowledgesearch_18f5868b:0`` in the deliverable.
+# Registry-shaped ids only (``knowledgesearch_…:n`` / ``websearch_…:n``), so a
+# stray start marker cannot take an unrelated ``a:b`` token such as a clock
+# time with it.
+_CITATION_KEY_TOKEN = (
+    rf"(?:{re.escape(CitationRegistryService.RAG_PREFIX)}|{re.escape(CitationRegistryService.WEB_PREFIX)})"
+    r"[A-Za-z0-9_.\-]+:[A-Za-z0-9_.\-]+"
+)
+# A start marker with no end marker before the end of its line (or the next
+# start marker). Only the marker char and the id-like tokens glued to it go;
+# the surrounding sentence stays.
+_UNTERMINATED_CITATION_RE = re.compile(
+    rf"{CITATION_START_MARKER}(?![^\n{CITATION_START_MARKER}]*{CITATION_END_MARKER})"
+    rf"(?:[ \t]*{_CITATION_KEY_TOKEN}(?:[ \t]*{CITATION_SEPARATOR_MARKER}[ \t]*{_CITATION_KEY_TOKEN})*)?"
+)
+_STRAY_CITATION_MARKER_TABLE = str.maketrans(
+    {CITATION_START_MARKER: "", CITATION_SEPARATOR_MARKER: "", CITATION_END_MARKER: ""}
+)
+
+
+def strip_citation_markers(text: str) -> str:
+    """Remove every citation span — wrapper chars and source ids alike.
+
+    For export and download outputs only (docx / pdf / zipped markdown). The
+    stored ``.md`` keeps its markers because the in-app preview parses them
+    into badges. Nothing but the spans is touched: surrounding whitespace and
+    punctuation are left exactly as written.
+
+    Three shapes reach an export: a well-formed ``\ue200id[\ue201id…]\ue202``
+    span, its literal ``\\ue200`` text form (normalised through
+    :func:`unescape_citation_markers` first), and a span the model never
+    closed. The unterminated pass runs before the span pass so a dangling
+    start marker cannot pair with the end marker of a later, well-formed span
+    and swallow the prose between them. Whatever marker char is still standing
+    afterwards is dropped, so no private-use char survives.
+    """
+    if not text:
+        return text
+    text = unescape_citation_markers(text)
+    if not any(marker in text for marker in (CITATION_START_MARKER, CITATION_SEPARATOR_MARKER, CITATION_END_MARKER)):
+        return text
+    text = _UNTERMINATED_CITATION_RE.sub("", text)
+    text = CITATION_KEY_PATTERN.sub("", text)
+    return text.translate(_STRAY_CITATION_MARKER_TABLE)
+
+
 class CitationRegistryCollector:
     """Collect citation registry items across copied tool instances."""
 
@@ -337,44 +386,6 @@ def filter_registry_items_by_text(
     if not citation_ids:
         return []
     return [item for item in items if item.citationId in citation_ids]
-
-
-def cited_paragraphs_from_texts(texts: Sequence[str] | None) -> list[str]:
-    """Paragraphs that already carry citation markers, in document order."""
-    paragraphs: list[str] = []
-    seen: set[str] = set()
-    for text in texts or []:
-        if not text:
-            continue
-        normalized = unescape_citation_markers(text)
-        for block in re.split(r"\n\s*\n", normalized):
-            line = block.strip()
-            if not line or line in seen:
-                continue
-            if extract_citation_ids_from_text(line):
-                seen.add(line)
-                paragraphs.append(line)
-    return paragraphs
-
-
-def answer_with_visible_citations(answer: str | None, report_texts: Sequence[str] | None = None) -> str:
-    """Keep the wrap-up, and surface cited report paragraphs when it has no markers.
-
-    Linsight's final spoken answer is often a 1–2 sentence recap without PUA
-    markers, while the report file has them. The result panel renders ``answer``,
-    so badges never appear unless those marked paragraphs are copied onto it.
-    """
-    answer = answer or ""
-    if extract_citation_ids_from_text(answer):
-        return answer
-    cited = cited_paragraphs_from_texts(report_texts)
-    if not cited:
-        return answer
-    body = "\n\n".join(cited)
-    stripped = answer.strip()
-    if not stripped:
-        return body
-    return f"{stripped}\n\n{body}"
 
 
 def strip_unregistered_citation_markers(text: str, items: list[CitationRegistryItemSchema]) -> str:

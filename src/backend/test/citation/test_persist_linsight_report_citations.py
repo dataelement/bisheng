@@ -16,7 +16,6 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     CITATION_END_MARKER,
     CITATION_SEPARATOR_MARKER,
     CITATION_START_MARKER,
-    answer_with_visible_citations,
     persist_linsight_report_citations,
     serialize_citation_items_for_page,
     unescape_citation_markers,
@@ -204,24 +203,3 @@ def test_serialize_citation_items_for_page_strips_rag_urls():
     assert "previewUrl" not in payloads[0]["sourcePayload"]
     assert "downloadUrl" not in payloads[0]["sourcePayload"]
     assert "sourceUrl" not in payloads[0]["sourcePayload"]
-
-
-def test_answer_with_visible_citations_keeps_marked_answer():
-    marked = f"浓度下降。{_marker('knowledgesearch_aaa:1')}"
-    assert answer_with_visible_citations(marked, ["报告。"]) == marked
-
-
-def test_answer_with_visible_citations_copies_report_paragraphs():
-    report = (
-        "# 标题\n\n"
-        "背景说明没有引用。\n\n"
-        f"- 补测 20/20{_marker('knowledgesearch_aaa:10')}\n\n"
-        f"- 共享索引稳定{_marker('knowledgesearch_aaa:12')}\n"
-    )
-    answer = "已梳理 Milvus 近期问题并给出三层建议。"
-    visible = answer_with_visible_citations(answer, [report])
-    assert visible.startswith(answer)
-    assert "补测 20/20" in visible
-    assert "共享索引稳定" in visible
-    assert "背景说明没有引用" not in visible
-    assert _marker("knowledgesearch_aaa:10") in visible
