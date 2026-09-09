@@ -1,6 +1,8 @@
-"""A department knowledge space shows no creator in its authorization panel.
+"""Where the authorization panel withholds the protected creator row.
 
-COFCO customisation. `Knowledge.user_id` records the super admin who operated
+COFCO customisation. A channel never shows one — ownership is implicit and the
+row cannot be edited, so it is only noise. A department knowledge space never
+shows one for a stronger reason: `Knowledge.user_id` records the super admin who operated
 the creation, for auditing only; the space's responsible figure is its single
 space admin, surfaced through the manager grant. The panel listed the creator as
 a protected owner nobody could remove, putting the operating super admin back in
@@ -47,7 +49,7 @@ def _binding(found):
 
 async def test_a_department_space_withholds_the_creator_row():
     with _binding(True):
-        rows = await F048ResourcePermissionApi._without_department_space_creator(
+        rows = await F048ResourcePermissionApi._without_hidden_creator_row(
             resource_type="knowledge_space",
             resource_id=_SPACE_ID,
             rows=_ROWS,
@@ -58,7 +60,7 @@ async def test_a_department_space_withholds_the_creator_row():
 
 async def test_an_ordinary_space_keeps_its_creator():
     with _binding(False):
-        rows = await F048ResourcePermissionApi._without_department_space_creator(
+        rows = await F048ResourcePermissionApi._without_hidden_creator_row(
             resource_type="knowledge_space",
             resource_id=_SPACE_ID,
             rows=_ROWS,
@@ -67,10 +69,27 @@ async def test_an_ordinary_space_keeps_its_creator():
     assert [row.source_type for row in rows] == ["DIRECT", "CREATOR"]
 
 
+async def test_a_channel_always_withholds_the_creator_row():
+    """Ownership is implicit and the row cannot be edited — it is only noise."""
+    lookup = AsyncMock(return_value=_DEPARTMENT_BINDING)
+    with patch(
+        "bisheng.knowledge.domain.models.department_knowledge_space.DepartmentKnowledgeSpaceDao.aget_by_space_id",
+        lookup,
+    ):
+        rows = await F048ResourcePermissionApi._without_hidden_creator_row(
+            resource_type="channel",
+            resource_id="70b0130ff3344001b368891803520eee",
+            rows=_ROWS,
+        )
+
+    assert [row.source_type for row in rows] == ["DIRECT"]
+    # A channel has no department binding to consult.
+    lookup.assert_not_awaited()
+
+
 @pytest.mark.parametrize(
     ("resource_type", "resource_id"),
     [
-        ("channel", "70b0130ff3344001b368891803520eee"),
         ("workflow", "41ceff840cd741fb92fdb9d9cf41f967"),
         ("knowledge_space", "not-a-number"),
     ],
@@ -82,7 +101,7 @@ async def test_other_resources_are_untouched_and_never_queried(resource_type, re
         "bisheng.knowledge.domain.models.department_knowledge_space.DepartmentKnowledgeSpaceDao.aget_by_space_id",
         lookup,
     ):
-        rows = await F048ResourcePermissionApi._without_department_space_creator(
+        rows = await F048ResourcePermissionApi._without_hidden_creator_row(
             resource_type=resource_type,
             resource_id=resource_id,
             rows=_ROWS,
