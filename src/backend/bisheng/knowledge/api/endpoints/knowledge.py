@@ -152,7 +152,6 @@ async def upload_knowledge_file(
 
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if knowledge is not None and knowledge.type == KnowledgeTypeEnum.SPACE.value:
-            await space_service.authorize_upload_stage(knowledge_id)
             stage = await stage_service.create_stage(
                 space_id=knowledge_id,
                 uploader_user_id=login_user.user_id,
