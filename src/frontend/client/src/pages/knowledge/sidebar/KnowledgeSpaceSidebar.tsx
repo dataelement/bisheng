@@ -238,6 +238,13 @@ export function KnowledgeSpaceSidebar({
         if (mobilePageMode) return;
         if (!activeSpaceId) {
             if (isCreatedLoading || isJoinedLoading || isDepartmentLoading) return;
+            // TEMPORARY (share-link diagnosis): remove once the redirect is understood.
+            console.warn("[share-debug] auto-select firing", {
+                pathname: window.location.pathname,
+                department: departmentSpaces[0]?.id,
+                created: filteredCreatedSpaces[0]?.id,
+                joined: filteredJoinedSpaces[0]?.id,
+            });
 
             if (departmentSpaces.length > 0) {
                 onSpaceSelect(departmentSpaces[0]);
