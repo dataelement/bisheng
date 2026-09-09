@@ -19,15 +19,24 @@ describe("canReadChannelContent", () => {
         expect(canReadChannelContent({ actions: ["visible"], isSubscribed: false })).toBe(true);
     });
 
-    it("admits an active subscriber", () => {
-        expect(canReadChannelContent({ actions: [], isSubscribed: true })).toBe(true);
+    it("admits an active subscriber whose grant landed", () => {
+        expect(canReadChannelContent({ actions: ["visible"], isSubscribed: true })).toBe(true);
     });
 
-    it("admits the creator", () => {
-        expect(canReadChannelContent({ actions: [], isCreatorView: true })).toBe(true);
+    it("refuses a subscriber whose grant never landed, rather than taking a 403", () => {
+        // The square reads 已订阅 off the membership row while the channel's own
+        // list reads the Grant, so a failure between the two writes shows a
+        // subscribed channel the viewer cannot open. Requesting its articles
+        // anyway cost the viewer the whole page to the global 403 redirect.
+        expect(canReadChannelContent({ actions: [], isSubscribed: true })).toBe(false);
     });
 
-    it("refuses when actions are absent and the viewer is neither owner nor subscriber", () => {
+    it("falls back to subscriber and creator only when actions are missing", () => {
+        expect(canReadChannelContent({ isSubscribed: true })).toBe(true);
+        expect(canReadChannelContent({ actions: null, isCreatorView: true })).toBe(true);
+    });
+
+    it("refuses when actions are absent and the viewer is neither creator nor subscriber", () => {
         expect(canReadChannelContent({})).toBe(false);
         expect(canReadChannelContent({ actions: null })).toBe(false);
         expect(canReadChannelContent({ actions: undefined, isSubscribed: false })).toBe(false);
