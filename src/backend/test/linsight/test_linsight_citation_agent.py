@@ -8,7 +8,10 @@ import pytest
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from bisheng.citation.domain.services.citation_prompt_helper import prompt_has_citation_rules
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    ensure_citation_rules,
+    prompt_has_citation_rules,
+)
 from bisheng.linsight.domain.services import agent_factory
 from bisheng.linsight.domain.services.agent_factory import (
     _annotate_web_search_output,
@@ -122,18 +125,26 @@ def test_citation_rules_only_when_kb_or_web():
     assert _with_citation_rules(with_rules, True) == with_rules
 
 
-def test_citation_rules_require_real_pua_and_forbid_escape_in_output_md():
-    """Task-mode preview reads output/*.md; escaped \\ue200 is not clickable."""
+def test_citation_rules_require_real_pua_and_cover_written_files():
+    """Task-mode preview reads output/*.md; the shared rules must teach real
+    U+E200 markers for written files too, and never show the escaped form."""
     rules = _with_citation_rules("system prompt", True)
     assert chr(0xE200) in rules
     assert chr(0xE201) in rules
     assert chr(0xE202) in rules
-    assert "output/*.md" in rules
-    assert "write_file" in rules
-    # The six-character form is named only as a prohibition, not as the example.
-    assert "\\ue200" in rules
-    assert "禁止" in rules or "Never" in rules or "不得" in rules
+    assert "任何文件" in rules
+    # The six-character form is named only as a prohibition, never spelled out.
+    assert "反斜杠" in rules
+    assert "\\" not in rules
     assert _with_citation_rules(rules, True) == rules
+
+
+def test_with_citation_rules_delegates_to_the_shared_backstop():
+    """Linsight teaches exactly the same rules as daily chat / knowledge space /
+    channel — no task-mode-only paragraph any more."""
+    prompt = "system prompt"
+    assert _with_citation_rules(prompt, True) == ensure_citation_rules(prompt)
+    assert "File Output" not in _with_citation_rules(prompt, True)
 
 
 def test_researcher_prompt_requires_last_message_handoff_when_citable():

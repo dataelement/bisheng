@@ -39,6 +39,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     CITATION_END_MARKER,
     CITATION_PROMPT_RULES,
     CITATION_START_MARKER,
+    ensure_citation_rules,
 )
 
 DEFAULT_SYSTEM_PROMPT = "You are a professional AI assistant helping users analyze and discuss articles."
@@ -111,7 +112,7 @@ async def test_registration_caches_the_item_for_later_resolve():
 def test_citation_rules_are_appended_to_the_default_system_prompt():
     """The channel default prompt teaches no markers, so without this the model
     never emits one and no badge can ever appear."""
-    prompt = ChannelChatService.apply_citation_rules(DEFAULT_SYSTEM_PROMPT)
+    prompt = ensure_citation_rules(DEFAULT_SYSTEM_PROMPT)
 
     assert prompt.startswith(DEFAULT_SYSTEM_PROMPT)
     assert CITATION_PROMPT_RULES in prompt
@@ -121,13 +122,13 @@ def test_citation_rules_are_not_appended_twice():
     """An admin prompt that already teaches the markers is left alone."""
     already = DEFAULT_SYSTEM_PROMPT + "\n" + CITATION_PROMPT_RULES
 
-    assert ChannelChatService.apply_citation_rules(already) == already
+    assert ensure_citation_rules(already) == already
 
 
 def test_citation_rules_are_appended_to_a_custom_admin_prompt_too():
     custom = "你是某频道的专属助手。"
 
-    prompt = ChannelChatService.apply_citation_rules(custom)
+    prompt = ensure_citation_rules(custom)
 
     assert prompt.startswith(custom)
     assert CITATION_PROMPT_RULES in prompt

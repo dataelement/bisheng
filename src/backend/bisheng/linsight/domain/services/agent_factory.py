@@ -708,31 +708,18 @@ def _is_web_search_tool(tool: object) -> bool:
     return getattr(tool, "name", None) == "web_search" or getattr(tool, "tool_name", None) == "web_search"
 
 
-# Linsight-only: write_file JSON double-escapes \\ue200 into the six-character
-# sequence, which extract_citation_ids_from_text does not recognize. Shared
-# citation.yaml already requires real U+E200; this names the output/*.md path
-# the task-mode preview actually reads.
-_LINSIGHT_CITATION_FILE_RULES = (
-    "## File Output\n"
-    "写入任何文件（尤其是经 write_file / edit_file 写入的 `output/*.md`）时，"
-    f"引用标记必须是真实 Unicode 字符 {chr(0xE200)} / {chr(0xE201)} / {chr(0xE202)}"
-    "（U+E200 / U+E201 / U+E202）。"
-    "禁止写成六字符转义 \\ue200 / \\ue201 / \\ue202，也禁止再套反斜杠。"
-)
-
-
 def _with_citation_rules(prompt: str, enabled: bool) -> str:
-    """Append citation.yaml rules when the run actually has a citable tool."""
+    """Append citation.yaml rules when the run actually has a citable tool.
+
+    Delegates to the shared backstop so linsight, daily chat, knowledge space
+    and channel all teach the same rules (real U+E200 markers, written files
+    included). The gate stays here: no KB / web tool → nothing to cite → no rules.
+    """
     if not enabled or not prompt:
         return prompt
-    from bisheng.citation.domain.services.citation_prompt_helper import (
-        CITATION_PROMPT_RULES,
-        prompt_has_citation_rules,
-    )
+    from bisheng.citation.domain.services.citation_prompt_helper import ensure_citation_rules
 
-    if prompt_has_citation_rules(prompt):
-        return prompt
-    return f"{prompt.rstrip()}\n\n{CITATION_PROMPT_RULES}\n\n{_LINSIGHT_CITATION_FILE_RULES}"
+    return ensure_citation_rules(prompt)
 
 
 async def _annotate_web_search_output(output: Any) -> Any:

@@ -87,7 +87,7 @@ FINAL_RESULT（整包 session，含 output_result）
 | 文件 | 改动 |
 |------|------|
 | `src/backend/bisheng/citation/domain/services/citation_prompt_helper.py` | `unescape_citation_markers`；`persist_linsight_report_citations`（只按正文 citationId 落库，返回 items）；`serialize_citation_items_for_page`（去 RAG 签名 URL）；`strip_citation_markers`（导出/下载去标记与来源 ID，2026-09-09） |
-| `src/backend/bisheng/core/prompts/yaml/citation.yaml` | 强制真实 PUA；禁止 `\ue200` 转义；File Output 条款 |
+| `src/backend/bisheng/core/prompts/yaml/citation.yaml` | 强制真实 PUA；禁止 `\ue200` 转义；「包括写入的任何文件」条款（灵思原单独追加的 File Output 段已于 2026-09-09 删除，本文件成为唯一来源） |
 | `src/backend/bisheng/tool/domain/langchain/linsight_knowledge.py` | `base_search`：annotate + cache + `format_retrieved_chunk`（`<chunk_id>`） |
 
 ### 4.2 后端 — 灵思执行

@@ -21,6 +21,16 @@ from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schemas import SubscriptionConfig
 from bisheng.channel.domain.schemas.channel_chat_schema import ChannelArticleChatRequest
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
+
+# Article context prompt template
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    annotate_article_with_citation,
+    cache_citation_registry_items,
+    filter_registry_items_by_text,
+    save_message_citations,
+    strip_unregistered_citation_markers,
+)
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.channel import ArticleNotFoundError, ChannelChatConversationNotFoundError
@@ -30,18 +40,6 @@ from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.llm.domain import LLMService
-
-# Article context prompt template
-from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
-from bisheng.citation.domain.services.citation_prompt_helper import (
-    CITATION_PROMPT_RULES,
-    annotate_article_with_citation,
-    cache_citation_registry_items,
-    filter_registry_items_by_text,
-    prompt_has_citation_rules,
-    save_message_citations,
-    strip_unregistered_citation_markers,
-)
 
 ARTICLE_CONTEXT_PROMPT = (
     "You are a professional AI assistant, please answer user's questions based on the following article content.\n\n"
@@ -214,19 +212,6 @@ class ChannelChatService:
         except Exception as exc:
             logger.warning(f"[channel_citation] register failed, answering without a source: {exc}")
             return "", []
-
-    @classmethod
-    def apply_citation_rules(cls, system_prompt: str | None) -> str:
-        """Append the citation rules unless the prompt already teaches them.
-
-        The channel default system prompt is one English sentence with no rule
-        text, so without this the model never emits a marker and the feature is
-        inert. An admin prompt that already carries the markers is left as-is.
-        """
-        base = system_prompt or ""
-        if prompt_has_citation_rules(base):
-            return base
-        return f"{base}\n\n{CITATION_PROMPT_RULES}" if base else CITATION_PROMPT_RULES
 
     @classmethod
     def decorate_article_content(cls, content: str, citation_key: str) -> str:

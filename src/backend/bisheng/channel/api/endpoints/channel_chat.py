@@ -22,6 +22,7 @@ from bisheng.channel.domain.schemas.channel_chat_schema import ChannelArticleCha
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.channel.domain.services.channel_chat_service import ChannelChatService
 from bisheng.channel.domain.services.channel_service import ChannelService
+from bisheng.citation.domain.services.citation_prompt_helper import ensure_citation_rules
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.channel import ChannelChatConversationNotFoundError
@@ -157,10 +158,9 @@ async def chat_completions(
                 if subscription_config and subscription_config.system_prompt
                 else "You are a professional AI assistant helping users analyze and discuss articles."
             )
-            # The default prompt above teaches no citation markers, so without
-            # this the model never emits one. Idempotent: a prompt that already
-            # carries the rules is left alone.
-            system_prompt = ChannelChatService.apply_citation_rules(system_prompt)
+            # The default prompt above teaches no citation markers; the shared
+            # backstop appends them unless the admin prompt already carries them.
+            system_prompt = ensure_citation_rules(system_prompt)
 
             # Build user prompt from template or default
             user_prompt_template = (

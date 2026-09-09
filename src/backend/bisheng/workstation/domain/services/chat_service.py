@@ -30,6 +30,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
+    ensure_citation_rules,
     save_message_citations,
     save_message_citations_sync,
     select_registry_items_for_persistence,
@@ -1762,13 +1763,10 @@ async def _agent_stream_chat_completion(
                     "{cur_date}",
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 )
-            # No citation-rule backstop here on purpose: the default daily-chat
-            # system prompt (platform locales, `chatConfig.systemPrompt2`) already
-            # carries the full marker spec — source-id format, the private-use
-            # delimiters and the "never invent an id" rule — making it a superset
-            # of CITATION_PROMPT_RULES. A backstop was declared here once but the
-            # flag was never read, so it never ran; injecting it now would only
-            # duplicate rules the prompt already states.
+            # Shared citation backstop: the default template already carries the
+            # rules (no-op there), but an admin may replace it with a prompt that
+            # does not — or leave it empty — and citations must keep working.
+            sys_prompt = ensure_citation_rules(sys_prompt)
             llm_messages = [*history, HumanMessage(content=content_payload)]
 
             logger.info(

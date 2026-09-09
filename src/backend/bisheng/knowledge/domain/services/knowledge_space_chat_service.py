@@ -19,6 +19,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     annotate_rag_documents_with_citations,
     cache_citation_registry_items,
     collect_rag_citation_registry_items,
+    ensure_citation_rules,
     save_message_citations,
     select_registry_items_for_persistence,
     strip_unregistered_citation_markers,
@@ -500,12 +501,8 @@ class KnowledgeSpaceChatService:
         prompt_service = await get_prompt_manager()
 
         if space_conf.system_prompt:
-            inputs = [
-                SystemMessage(content=space_conf.system_prompt.format(cur_date=datetime.now().strftime("%Y-%m-%d"))),
-                HumanMessage(
-                    content=space_conf.user_prompt.format(retrieved_file_content=file_content, question=query)
-                ),
-            ]
+            system_text = space_conf.system_prompt.format(cur_date=datetime.now().strftime("%Y-%m-%d"))
+            user_text = space_conf.user_prompt.format(retrieved_file_content=file_content, question=query)
         else:
             prompt_obj = prompt_service.render_prompt(
                 namespace="knowledge_space",
@@ -514,7 +511,12 @@ class KnowledgeSpaceChatService:
                 retrieved_file_content=file_content,
                 question=query,
             )
-            inputs = [SystemMessage(content=prompt_obj.prompt.system), HumanMessage(content=prompt_obj.prompt.user)]
+            system_text = prompt_obj.prompt.system
+            user_text = prompt_obj.prompt.user
+        # Format first, append last: the admin-saved prompt (its default template
+        # never carried the rules) and the yaml fallback both rely on the shared
+        # citation backstop, which is a no-op when the rules are already present.
+        inputs = [SystemMessage(content=ensure_citation_rules(system_text)), HumanMessage(content=user_text)]
         answer = ""
         reasoning_content = ""
         history = await self.get_history(chat_id=session.chat_id, limit=4)

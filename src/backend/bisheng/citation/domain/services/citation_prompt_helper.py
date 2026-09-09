@@ -138,6 +138,22 @@ def prompt_has_citation_rules(prompt: str | None) -> bool:
     return chr(0xE200) in prompt or (chr(92) + "ue200") in prompt
 
 
+def ensure_citation_rules(prompt: str | None) -> str:
+    """Return ``prompt`` with the citation rules appended unless it already teaches them.
+
+    The single backstop shared by every chat entry point (daily chat, knowledge
+    space, channel, linsight). Idempotent: a prompt carrying the start marker —
+    the real U+E200 char or its literal ``\\ue200`` text — is returned unchanged,
+    so a default template that already spells the rules is never duplicated.
+    Callers apply their own ``format`` / ``replace`` BEFORE calling this: the
+    rules text is appended verbatim and takes no placeholders.
+    """
+    if prompt_has_citation_rules(prompt):
+        return prompt or ""
+    base = (prompt or "").rstrip()
+    return f"{base}\n\n{CITATION_PROMPT_RULES}" if base else CITATION_PROMPT_RULES
+
+
 def _rag_registry_signature(item: CitationRegistryItemSchema) -> tuple[Any, ...]:
     payload = item.sourcePayload
     chunk_item = payload.items[0] if payload.items else None
