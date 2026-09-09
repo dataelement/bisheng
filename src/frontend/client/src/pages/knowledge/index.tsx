@@ -409,6 +409,16 @@ export default function Knowledge() {
                 // decision the space's own pages enforce; `role` cannot answer it,
                 // because an absent role maps to MEMBER exactly like a real one.
                 if (canOpenSharedSpace(info)) {
+                    // Claim the space before navigating. The sidebar's
+                    // auto-select-first effect is a child's, so it runs before
+                    // this component's own deep-link effect on the very render
+                    // the route changes — with nothing active yet it picked the
+                    // first space in the list and navigated there, landing the
+                    // share link on somebody's default space instead of the
+                    // shared one. Same guard the deep-link route already uses.
+                    setActiveSpace((prev) =>
+                        prev?.id === previewSpaceId ? prev : ({ ...info, id: previewSpaceId } as KnowledgeSpace),
+                    );
                     navigateRef.current(`/knowledge/space/${previewSpaceId}`, { replace: true });
                     return;
                 }
