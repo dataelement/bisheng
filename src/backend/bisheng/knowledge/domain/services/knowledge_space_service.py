@@ -41,6 +41,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderDuplicateError,
     SpaceFolderNotFoundError,
     SpaceFolderUploadCountExceededError,
+    SpaceGrantedNotJoinedError,
     SpaceLimitError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
@@ -5217,6 +5218,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             current_membership and current_membership.user_role == UserRoleEnum.CREATOR
         ):
             raise SpacePermissionDeniedError()
+
+        if not current_membership:
+            # The joined list is resolved from the `visible` decision, so it also
+            # carries spaces held through a Grant rather than by joining. Exiting
+            # one of those revoked nothing, deleted no row and still reported
+            # success, so the space came back on the next refresh.
+            raise SpaceGrantedNotJoinedError()
 
         await self._revoke_direct_space_user_permissions(space_id, self.login_user.user_id)
         deleted = await SpaceChannelMemberDao.delete_space_member(space_id, self.login_user.user_id)

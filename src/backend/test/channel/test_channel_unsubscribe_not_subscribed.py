@@ -15,7 +15,10 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bisheng.channel.domain.services.channel_service import ChannelService
-from bisheng.common.errcode.channel import ChannelNotSubscribedError
+from bisheng.common.errcode.channel import (
+    ChannelGrantedNotSubscribedError,
+    ChannelNotSubscribedError,
+)
 from bisheng.common.models.space_channel_member import MembershipStatusEnum
 
 _CHANNEL_ID = "ba05d6abbb214bbf92de036115a748fa"
@@ -36,17 +39,23 @@ def _login_user(user_id: int = 150041):
     return SimpleNamespace(user_id=user_id, user_name="gzx006", tenant_id=1)
 
 
+async def test_no_membership_at_all_says_the_channel_was_granted():
+    """Reached through a Grant, so there is no subscription of theirs to end."""
+    service = _service(membership=None)
+
+    with pytest.raises(ChannelGrantedNotSubscribedError) as exc_info:
+        await service.unsubscribe_channel(_CHANNEL_ID, _login_user())
+
+    assert exc_info.value.code == 19015
+
+
 @pytest.mark.parametrize(
-    "membership",
-    [
-        None,
-        SimpleNamespace(id=1, status=MembershipStatusEnum.PENDING),
-        SimpleNamespace(id=1, status=MembershipStatusEnum.REJECTED),
-    ],
-    ids=["granted-but-never-subscribed", "still-pending", "rejected"],
+    "status",
+    [MembershipStatusEnum.PENDING, MembershipStatusEnum.REJECTED],
+    ids=["still-pending", "rejected"],
 )
-async def test_unsubscribe_without_an_active_membership_is_a_business_error(membership):
-    service = _service(membership=membership)
+async def test_an_application_that_never_became_a_subscription_says_so(status):
+    service = _service(membership=SimpleNamespace(id=1, status=status))
 
     with pytest.raises(ChannelNotSubscribedError) as exc_info:
         await service.unsubscribe_channel(_CHANNEL_ID, _login_user())
@@ -54,12 +63,10 @@ async def test_unsubscribe_without_an_active_membership_is_a_business_error(memb
     assert exc_info.value.code == 19014
 
 
-async def test_the_error_is_not_a_bare_value_error():
+async def test_neither_case_is_a_bare_value_error():
     """A ValueError here reaches the client as a 500 with no code to branch on."""
-    service = _service(membership=None)
-
-    with pytest.raises(Exception) as exc_info:
-        await service.unsubscribe_channel(_CHANNEL_ID, _login_user())
-
-    assert type(exc_info.value) is not ValueError
-    assert isinstance(exc_info.value, ChannelNotSubscribedError)
+    for membership in (None, SimpleNamespace(id=1, status=MembershipStatusEnum.PENDING)):
+        service = _service(membership=membership)
+        with pytest.raises(Exception) as exc_info:
+            await service.unsubscribe_channel(_CHANNEL_ID, _login_user())
+        assert type(exc_info.value) is not ValueError
