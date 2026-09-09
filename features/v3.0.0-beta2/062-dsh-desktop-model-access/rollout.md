@@ -63,19 +63,19 @@ status 显示 phase、version、digest、inflight 与 required/ack；未初始�
 
 普通后续用户由同一已批准账本上的策略事务自动创建 version 0 gate，再安装目标策略；月份切换由 SQL 空历史和 Redis 永久月份记录共同证明，不会抹去跨月 UNKNOWN。Worker 实际注册 `dsh.project_usage`、`inspect_usage`、`reconcile_usage`、`resume_operation`、`scan_operations`、`scan_profiles`、`scan_usage`；启用时 Beat 派发投影、巡检、操作恢复和资料补偿。保持现有队列与单一 Beat 调度部署纪律。
 
-Redis 连接/主节点身份不再可信时，本进程关闭准入，不能以旧审批自动重连恢复。按证据恢复流程生成新审批并更新全部调用方。SQL 用量降级只用于显示：`persisted` 的 quota_state 固定 unavailable；不能用 SQL 延迟快照继续放行。UNKNOWN 必须用逐请求供应商证据对账，没有“强制解冻”入口。
+Redis 连接/主节点身份不再可信时，本进程关闭准入，不能以旧审批自动重连恢复。按证据恢复流程生成新审批并更新全部调用方。SQL 用量降级只用于显示：`persisted` 的 quota_state 固定 unavailable；不能用 SQL 延迟快照继续放行。UNKNOWN 记录缺失用量原因，不冻结用户；若后续补记用量，必须提供逐请求供应商证据，没有“强制解冻”入口。
 
 ## 联调与回退
 
 先完成 [客户端交接清单](./desktop-handoff-checklist.md) 中登录、刷新、退出、两个角色范围、流取消和故障场景。查看 DSH request_id 对应的 SQL 明细、Redis 投影积压和 `dsh_settlement` 日志；日志不得记录 Token、完整消息或票据。遥测不是硬账本。
 
-回退时先停止新 DSH 准入，保留已分配席位、会话/refresh 摘要、审计和配额数据，妥善结算在途请求。关闭开关仍保留 Gateway 实例、公钥和内部服务认证配置，使旧 DSH 凭据可退出；不需要保留签发私钥来验证退出。Python/Worker 停止后不删除 Stream、AOF 或证据。旧商业授权的有效性继续按原字段计算，不因 DSH 关闭延长或缩短。
+回退时先停止新 DSH 准入，保留已分配席位、会话/refresh 摘要、审计和配额数据，妥善结算在途请求。关闭开关仍保留 Gateway 安装实例标识和原用户同步共享 HMAC Secret，使本版 DSH 凭据可退出；DSH Token 不再配置公钥或私钥。License 验证配置继续独立保留。Python/Worker 停止后不删除 Stream、AOF 或证据。旧商业授权的有效性继续按原字段计算，不因 DSH 关闭延长或缩短。
 
 仍未完成的环境/制品验收以各 acceptance/report 为准。本文不授权发布、生产数据修改或对外发送文档。
 
 ## 逐模型配置修订的发布准备（2026-09-09）
 
-- 主配置使用 `Settings.dsh: DshSettings`，能力条目为 `ChatCapabilities`；字段含类型、含义与边界校验，密钥继续走受控配置通道。用户策略为 `models: [{model_id, monthly_token_limit}]`，同一用户可有多个模型，每个模型仅一份配置。一期不配置 RPM、TPM 或并发限流。
+- 主配置使用 `Settings.dsh: DshSettings`；字段含类型、含义与边界校验，密钥复用用户同步配置。`ChatCapabilities` 由供应商适配器生成，不是部署配置。用户策略为 `models: [{model_id, monthly_token_limit}]`，同一用户可有多个模型，每个模型仅一份配置。一期不配置 RPM、TPM 或并发限流。
 - 新策略表持久字段为 `model_configs`，其值由 `ModelConfigsType` 通过既有 `JsonType` 保存；旧草案的 `allowed_model_ids`＋共享额度列不是当前结构。全新安装可走模型发现建表；曾试装旧草案的环境必须先关闭 DSH、备份并只读核对 schema，安排保留数据的结构调整和人工确认每模型额度，重新生成绑定完整配置的恢复证据后再开启。不得直接 create_all 假定旧表会变更，也不得删表或清零账本。
 - Gateway 使用现有 `mybatis-plus.db-type`；DM 环境必须设为 `DM`，使席位短事务使用 READ_COMMITTED＋首条 EXCLUSIVE 表锁。锁在提交/回滚时释放；不可仅切换 JDBC URL 却保留 MYSQL 类型。DM 实机本轮暂缓，静态兼容检查不代表部署吞吐量已验证。
 - 发布前向客户端同步 [接口文档](./client-api.md) 的逐模型额度修订。模型选择/切换、调用结束、额度拒绝后查询 `GET /api/v1/dsh/usage?model=bisheng:<id>`；无参数只作汇总展示，汇总额度不能决定某个模型可调用。
