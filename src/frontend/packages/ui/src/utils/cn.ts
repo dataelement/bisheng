@@ -19,7 +19,7 @@ import { type ClassValue, clsx } from 'clsx';
 const twMerge = extendTailwindMerge({
   classGroups: {
     'font-size': [
-      { text: ['caption', 'body-sm', 'body', 'h1', 'h2', 'h3', 'h4', 'display', 'metric'] },
+      { text: ['caption-sm', 'caption', 'body-sm', 'body', 'h1', 'h2', 'h3', 'h4', 'display', 'metric'] },
     ],
   },
 });

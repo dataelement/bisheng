@@ -120,7 +120,7 @@ export function MultiSourceSelect({
                 <Button
                     variant="outline"
                     className={cn(
-                        "w-auto min-w-[160px] h-9 justify-between rounded-md border-[#ECECEC] px-3 font-normal",
+                        "w-auto min-w-[160px] h-9 justify-between rounded-md border-border-base px-3 font-normal",
                         hasEmptyError && "border-[#F53F3F] bg-[#F53F3F]/10",
                         hideTrigger && "pointer-events-none inline-block size-0 min-w-0 overflow-hidden border-0 p-0 opacity-0",
                         className
@@ -141,7 +141,7 @@ export function MultiSourceSelect({
                 <div className="p-2">
                     {/* 全部信息源 选项 */}
                     <div
-                        className="flex w-full min-w-0 cursor-pointer items-center space-x-2 rounded-md px-2 py-[5px] transition-colors fine-pointer:hover:bg-[#F2F3F5]"
+                        className="flex w-full min-w-0 cursor-pointer items-center space-x-2 rounded-md px-2 py-[5px] transition-colors fine-pointer:hover:bg-fill-2"
                         onClick={handleSelectAll}
                     >
                         <Checkbox
@@ -163,7 +163,7 @@ export function MultiSourceSelect({
                         {options.map((option) => (
                             <div
                                 key={option.id}
-                                className="flex w-full min-w-0 cursor-pointer items-center space-x-2 rounded-md px-2 py-[5px] transition-colors fine-pointer:hover:bg-[#F2F3F5]"
+                                className="flex w-full min-w-0 cursor-pointer items-center space-x-2 rounded-md px-2 py-[5px] transition-colors fine-pointer:hover:bg-fill-2"
                                 onClick={() => handleToggleItem(option.id)}
                             >
                                 <Checkbox

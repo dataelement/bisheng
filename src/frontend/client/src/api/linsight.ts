@@ -37,6 +37,16 @@ export function getLinsightTaskList(versionId: string, linsight: LinsightInfo, s
                 status: item.status === 'in_progress' ? 'terminated' : item.status
             }))
         }
+        if (linsight.status === 'completed') {
+            // Same leftover close as the backend completion sweep. A finished
+            // run can still return in_progress / not_started rows; without this
+            // the reloaded panel keeps spinning at "任务已完成 0/N".
+            const keep = new Set(['success', 'failed', 'terminated']);
+            return res.data.map(item => ({
+                ...item,
+                status: keep.has(item.status) ? item.status : 'terminated',
+            }));
+        }
         return res.data
     });
 }
@@ -98,6 +108,8 @@ export function getSelectableSkills(): Promise<SelectableSkill[]> {
 export interface LinsightModelConfig {
     models?: { id: string | number; name?: string; displayName?: string }[];
     linsight_default_model_id?: string | null;
+    /** Admin-configured default model for new daily-mode conversations. */
+    chat_default_model_id?: string | null;
 }
 
 export function getLinsightModelConfig(): Promise<LinsightModelConfig> {
@@ -117,17 +129,19 @@ export function getPersonalKnowledgeInfo(): Promise<any> {
 }
 
 // 获取组织知识库
-export function getKnowledgeInfo({page = 1, name = '', page_size = 200, sort_by = 'update_time', preferred_ids = ''}: {
+export function getKnowledgeInfo({page = 1, name = '', page_size = 200, sort_by = 'update_time', preferred_ids = '', action}: {
     page?: number,
     name?: string,
     page_size?: number,
     sort_by?: string,
     /** Comma-separated ids pinned to the top of the global sort (admin-configured orgKbs). */
     preferred_ids?: string,
+    action?: 'visible' | 'use',
 }): Promise<any> {
     const base = `/api/v1/knowledge?page_num=${page}&page_size=${page_size}&type=0&name=${encodeURIComponent(name)}&sort_by=${sort_by}`;
     const pinned = preferred_ids ? `&preferred_ids=${encodeURIComponent(preferred_ids)}` : '';
-    return request.get(`${base}${pinned}`);
+    const permissionAction = action ? `&action=${action}` : '';
+    return request.get(`${base}${pinned}${permissionAction}`);
 }
 
 // 获取linsight剩余次数

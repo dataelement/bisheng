@@ -1,5 +1,6 @@
 import re
 from collections import OrderedDict, defaultdict, deque
+from collections.abc import Sequence
 from typing import Any
 
 from langchain_core.documents import Document
@@ -7,7 +8,7 @@ from langchain_core.documents import Document
 from bisheng.citation.domain.repositories.implementations.message_citation_repository_impl import (
     MessageCitationRepositoryImpl,
 )
-from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema, CitationType
 from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
 from bisheng.citation.domain.services.citation_runtime_cache_service import (
     CitationRuntimeCacheService,
@@ -22,6 +23,74 @@ CITATION_KEY_PATTERN = re.compile(
     rf"{CITATION_START_MARKER}(.*?){CITATION_END_MARKER}",
     re.DOTALL,
 )
+# Models (and write_file JSON) often emit the six-character sequence \ue200
+# instead of U+E200. Extra backslashes from JSON double-escaping are common.
+_ESCAPED_CITATION_MARKER_RE = re.compile(r"\\{1,4}ue20([012])", re.IGNORECASE)
+
+
+def unescape_citation_markers(text: str) -> str:
+    """Turn literal ``\\ue200`` / ``\\ue201`` / ``\\ue202`` into real PUA chars."""
+    if not text or "ue20" not in text.lower():
+        return text
+    mapping = {
+        "0": CITATION_START_MARKER,
+        "1": CITATION_SEPARATOR_MARKER,
+        "2": CITATION_END_MARKER,
+    }
+
+    def _repl(match: re.Match[str]) -> str:
+        return mapping[match.group(1)]
+
+    return _ESCAPED_CITATION_MARKER_RE.sub(_repl, text)
+
+
+# Shapes an export output has to lose. The wrapper chars are invisible in Word /
+# PDF while the ids between them are plain ASCII, so a preview badge such as
+# ``\ue200knowledgesearch_18f5868b:0\ue202`` would surface as a bare
+# ``knowledgesearch_18f5868b:0`` in the deliverable.
+# Registry-shaped ids only (``knowledgesearch_…:n`` / ``websearch_…:n``), so a
+# stray start marker cannot take an unrelated ``a:b`` token such as a clock
+# time with it.
+_CITATION_KEY_TOKEN = (
+    rf"(?:{re.escape(CitationRegistryService.RAG_PREFIX)}|{re.escape(CitationRegistryService.WEB_PREFIX)})"
+    r"[A-Za-z0-9_.\-]+:[A-Za-z0-9_.\-]+"
+)
+# A start marker with no end marker before the end of its line (or the next
+# start marker). Only the marker char and the id-like tokens glued to it go;
+# the surrounding sentence stays.
+_UNTERMINATED_CITATION_RE = re.compile(
+    rf"{CITATION_START_MARKER}(?![^\n{CITATION_START_MARKER}]*{CITATION_END_MARKER})"
+    rf"(?:[ \t]*{_CITATION_KEY_TOKEN}(?:[ \t]*{CITATION_SEPARATOR_MARKER}[ \t]*{_CITATION_KEY_TOKEN})*)?"
+)
+_STRAY_CITATION_MARKER_TABLE = str.maketrans(
+    {CITATION_START_MARKER: "", CITATION_SEPARATOR_MARKER: "", CITATION_END_MARKER: ""}
+)
+
+
+def strip_citation_markers(text: str) -> str:
+    """Remove every citation span — wrapper chars and source ids alike.
+
+    For export and download outputs only (docx / pdf / zipped markdown). The
+    stored ``.md`` keeps its markers because the in-app preview parses them
+    into badges. Nothing but the spans is touched: surrounding whitespace and
+    punctuation are left exactly as written.
+
+    Three shapes reach an export: a well-formed ``\ue200id[\ue201id…]\ue202``
+    span, its literal ``\\ue200`` text form (normalised through
+    :func:`unescape_citation_markers` first), and a span the model never
+    closed. The unterminated pass runs before the span pass so a dangling
+    start marker cannot pair with the end marker of a later, well-formed span
+    and swallow the prose between them. Whatever marker char is still standing
+    afterwards is dropped, so no private-use char survives.
+    """
+    if not text:
+        return text
+    text = unescape_citation_markers(text)
+    if not any(marker in text for marker in (CITATION_START_MARKER, CITATION_SEPARATOR_MARKER, CITATION_END_MARKER)):
+        return text
+    text = _UNTERMINATED_CITATION_RE.sub("", text)
+    text = CITATION_KEY_PATTERN.sub("", text)
+    return text.translate(_STRAY_CITATION_MARKER_TABLE)
 
 
 class CitationRegistryCollector:
@@ -69,6 +138,22 @@ def prompt_has_citation_rules(prompt: str | None) -> bool:
     return chr(0xE200) in prompt or (chr(92) + "ue200") in prompt
 
 
+def ensure_citation_rules(prompt: str | None) -> str:
+    """Return ``prompt`` with the citation rules appended unless it already teaches them.
+
+    The single backstop shared by every chat entry point (daily chat, knowledge
+    space, channel, linsight). Idempotent: a prompt carrying the start marker —
+    the real U+E200 char or its literal ``\\ue200`` text — is returned unchanged,
+    so a default template that already spells the rules is never duplicated.
+    Callers apply their own ``format`` / ``replace`` BEFORE calling this: the
+    rules text is appended verbatim and takes no placeholders.
+    """
+    if prompt_has_citation_rules(prompt):
+        return prompt or ""
+    base = (prompt or "").rstrip()
+    return f"{base}\n\n{CITATION_PROMPT_RULES}" if base else CITATION_PROMPT_RULES
+
+
 def _rag_registry_signature(item: CitationRegistryItemSchema) -> tuple[Any, ...]:
     payload = item.sourcePayload
     chunk_item = payload.items[0] if payload.items else None
@@ -114,8 +199,24 @@ def _build_rag_key_map(
 
 
 def _is_citable_rag_document(document: Document) -> bool:
+    """Whether a retrieved document may be handed a citation key.
+
+    A document with no metadata never could be. F054 adds a second refusal: a
+    document carrying a document id that is not an integer. Workflow temp files
+    are the case in point — the input node stores a random UUID as
+    ``document_id`` and the workflow id as ``knowledge_id``, so the RAG payload
+    (which types both as int) resolves neither, and the badge rendered but
+    opened onto nothing. Only a *present and unparseable* id is refused; a
+    document with no id at all keeps its previous treatment and falls back to
+    metadata grouping, so the four live entry points are untouched.
+    """
     metadata = document.metadata or {}
-    return bool(metadata)
+    if not metadata:
+        return False
+    raw_document_id = metadata.get("document_id") or metadata.get("file_id")
+    if raw_document_id not in (None, "") and CitationRegistryService._parse_optional_int(raw_document_id) is None:
+        return False
+    return True
 
 
 def annotate_rag_documents_with_citations(documents: list[Document]) -> list[Document]:
@@ -174,6 +275,29 @@ def annotate_web_results_with_citations(results: list[dict]) -> list[dict]:
             annotated_result["citation_key"] = citation_key
         annotated_results.append(annotated_result)
     return annotated_results
+
+
+def annotate_article_with_citation(
+    article_doc_id: str,
+    title: str | None = None,
+    snippet: str | None = None,
+    source_url: str | None = None,
+    source_type: int | None = None,
+) -> tuple[str, list[CitationRegistryItemSchema]]:
+    """Register one channel article as a citation source.
+
+    Returns the citation key the model must copy verbatim and the registry
+    items to cache. Mirrors the RAG/web annotate helpers, minus the chunking:
+    channel QA reads the article whole, so one article is one source.
+    """
+    items = CitationRegistryService.build_article_registry(
+        article_doc_id=article_doc_id,
+        title=title,
+        snippet=snippet,
+        source_url=source_url,
+        source_type=source_type,
+    )
+    return items[0].key or "", items
 
 
 def _split_citation_key(citation_key: Any) -> tuple[str | None, str | None]:
@@ -259,6 +383,7 @@ def extract_citation_ids_from_text(text: str) -> set[str]:
     if not text:
         return set()
 
+    text = unescape_citation_markers(text)
     citation_ids: set[str] = set()
     for marker_content in CITATION_KEY_PATTERN.findall(text):
         for citation_key in marker_content.split(CITATION_SEPARATOR_MARKER):
@@ -297,6 +422,7 @@ def strip_unregistered_citation_markers(text: str, items: list[CitationRegistryI
     Returns the text unchanged when it holds no markers, so the common path
     costs one regex search.
     """
+    text = unescape_citation_markers(text)
     if not text or CITATION_START_MARKER not in text:
         return text
 
@@ -311,11 +437,7 @@ def strip_unregistered_citation_markers(text: str, items: list[CitationRegistryI
                 kept.append(key)
         if not kept:
             return ""
-        return (
-            f"{CITATION_START_MARKER}"
-            f"{CITATION_SEPARATOR_MARKER.join(kept)}"
-            f"{CITATION_END_MARKER}"
-        )
+        return f"{CITATION_START_MARKER}{CITATION_SEPARATOR_MARKER.join(kept)}{CITATION_END_MARKER}"
 
     return CITATION_KEY_PATTERN.sub(_rewrite, text)
 
@@ -379,6 +501,57 @@ def save_message_citations_sync(
             flow_id=flow_id,
         )
     cache_citation_registry_items_sync(items)
+
+
+_RAG_SIGNED_URL_KEYS = ("previewUrl", "downloadUrl", "sourceUrl")
+
+
+def serialize_citation_items_for_page(
+    items: Sequence[CitationRegistryItemSchema],
+) -> list[dict[str, Any]]:
+    """JSON payloads for ``output_result.citations`` / FINAL_RESULT.
+
+    RAG signed URLs are stripped so the client still calls ``/citations/resolve``
+    (INV-7). Document names and snippets stay so the result page can render
+    badges immediately.
+    """
+    payloads: list[dict[str, Any]] = []
+    for item in items:
+        data = item.model_dump(mode="json")
+        if data.get("type") == CitationType.RAG.value:
+            source_payload = data.get("sourcePayload")
+            if isinstance(source_payload, dict):
+                for key in _RAG_SIGNED_URL_KEYS:
+                    source_payload.pop(key, None)
+        payloads.append(data)
+    return payloads
+
+
+async def persist_linsight_report_citations(
+    message_id: int | str | None,
+    chat_id: str | None,
+    report_texts: Sequence[str] | None = None,
+) -> list[CitationRegistryItemSchema]:
+    """Persist only citations actually referenced in a linsight report.
+
+    Unlike ``select_registry_items_for_persistence`` this keeps ZERO items when
+    the report contains no markers (AC-05). Always returns the filtered items
+    so the completion path can attach them to the page payload even when the
+    ChatMessage id is missing (save is skipped in that case). Callers should
+    swallow exceptions so task completion cannot fail because of citation
+    persistence.
+    """
+    joined = "\n\n".join(text for text in (report_texts or []) if text)
+    citation_ids = extract_citation_ids_from_text(joined)
+    if not citation_ids:
+        return []
+    items = await _citation_runtime_cache_service.get_citations_by_ids(list(citation_ids))
+    items = filter_registry_items_by_text(items, joined)
+    if not items:
+        return []
+    if message_id and isinstance(message_id, int):
+        await save_message_citations(message_id=message_id, items=items, chat_id=chat_id)
+    return items
 
 
 async def save_message_citations(

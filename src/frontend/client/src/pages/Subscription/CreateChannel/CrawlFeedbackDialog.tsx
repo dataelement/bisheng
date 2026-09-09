@@ -44,12 +44,12 @@ export function CrawlFeedbackDialog({ open, onOpenChange }: CrawlFeedbackDialogP
                     <AlertDialogTitle>
                         {localize("com_subscription.submit_manual_crawl_request")}
                     </AlertDialogTitle>
-                    <AlertDialogDescription className="whitespace-pre-line text-[14px] leading-6 text-[#4E5969]">
+                    <AlertDialogDescription className="whitespace-pre-line text-[14px] leading-6 text-text-2">
                         {tips}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogAction className="h-8 rounded-md px-4 inline-flex items-center justify-center leading-none bg-blue-500 hover:bg-blue-400">
+                    <AlertDialogAction className="btn-brand-primary h-8 rounded-md px-4 inline-flex items-center justify-center leading-none bg-blue-500 hover:bg-blue-400">
                         {localize("com_subscription.ok")}
                     </AlertDialogAction>
                 </AlertDialogFooter>

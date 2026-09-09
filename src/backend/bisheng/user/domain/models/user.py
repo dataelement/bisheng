@@ -23,12 +23,12 @@ USER_TYPE_SERVICE = "service"
 
 
 class UserBase(SQLModelSerializable):
-    user_name: str = Field(index=True)
-    email: str | None = Field(default=None, index=True)
-    phone_number: str | None = Field(default=None, index=True)
-    dept_id: str | None = Field(default=None, index=True)
-    remark: str | None = Field(default=None, index=False)
-    avatar: str | None = Field(default=None, index=False)
+    user_name: str = Field(index=True, max_length=128)
+    email: str | None = Field(default=None, index=True, max_length=255)
+    phone_number: str | None = Field(default=None, index=True, max_length=64)
+    dept_id: str | None = Field(default=None, index=True, max_length=128)
+    remark: str | None = Field(default=None, index=False, max_length=512)
+    avatar: str | None = Field(default=None, index=False, max_length=512)
     source: str = Field(
         default="local",
         sa_column=Column(
@@ -74,7 +74,7 @@ class UserBase(SQLModelSerializable):
 
 class User(UserBase, table=True):
     user_id: int | None = Field(default=None, primary_key=True)
-    password: str = Field(index=False)
+    password: str = Field(index=False, max_length=255)
     password_update_time: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP")),

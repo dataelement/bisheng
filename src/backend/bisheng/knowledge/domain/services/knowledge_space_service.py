@@ -1014,6 +1014,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "visible",
         ):
             return space, True
+        if self._is_square_preview_space(space):
+            return space, False
         raise SpacePermissionDeniedError()
 
     # ──────────────────────────── Space CRUD ──────────────────────────────────
@@ -1250,18 +1252,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ),
             actor=actor,
         )
-        if self._is_square_preview_space(knowledge_space):
-            current_record = await container_adapter.load_permission_record(
-                resource_type="knowledge_space",
-                resource_id=str(knowledge_space.id),
-            )
-            if current_record is None:
-                raise SpaceNotFoundError()
-            await container_adapter.sync_public_reader(
-                record=current_record,
-                actor=actor,
-                enabled=True,
-            )
         permission_result = None
         if initial_permissions is not None and initial_permissions.grants:
             if self.initial_grant_application is None or creation_request_id is None:
@@ -1692,8 +1682,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._require_action("knowledge_space", space_id, "edit")
 
         old_auth_type = space.auth_type
-        old_square_visible = self._is_square_preview_space(space)
-
         if name is not None:
             space.name = name
         if description is not None:
@@ -1737,8 +1725,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         space = await KnowledgeDao.async_update_space(space)
         new_auth_type = space.auth_type
-        new_square_visible = self._is_square_preview_space(space)
-
         # When switching to PRIVATE, remove all non-creator members
         if old_auth_type != AuthTypeEnum.PRIVATE and new_auth_type == AuthTypeEnum.PRIVATE:
             removed_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
@@ -1776,20 +1762,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     operator_user_id=self.login_user.user_id,
                 )
             await SpaceChannelMemberDao.async_delete_rejected_members(space_id)
-
-        if new_auth_type != AuthTypeEnum.PRIVATE and old_square_visible != new_square_visible:
-            container_adapter = await self._resource_adapter("knowledge_space")
-            current_record = await container_adapter.load_permission_record(
-                resource_type="knowledge_space",
-                resource_id=str(space_id),
-            )
-            if current_record is None:
-                raise SpaceNotFoundError()
-            await container_adapter.sync_public_reader(
-                record=current_record,
-                actor=await self._permission_actor(),
-                enabled=new_square_visible,
-            )
 
         return space
 
@@ -2190,12 +2162,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             creator_users = []
             success_file_map = await KnowledgeFileDao.async_count_success_files_batch(space_ids_int)
-        visible_map = await self._batch_actions(
-            "knowledge_space",
-            space_ids_int,
-            ("visible",),
+        # Square subscription state must match the personal ``/joined`` list.
+        # Do not use the generic action batch here: it expands every action for
+        # super admins, which would incorrectly label every square space joined.
+        visible_map = await batch_check_business_visible(
+            self.login_user,
+            resource_type="knowledge_space",
+            resource_ids=space_ids_int,
         )
-        rows = [row for row in rows if "visible" in visible_map.get(str(row[0].id), frozenset())]
         user_map = {u.user_id: u for u in (creator_users or [])}
         resolved_subscription_status = {
             row[0].id: self._resolve_subscription_status_from_fields(row[1], row[2]) for row in rows
@@ -2217,6 +2191,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 user_subscription_status,
                 user_subscription_update_time,
             )
+            if (
+                subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+                and visible_map.get(str(space.id), False)
+            ):
+                subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
             result_list.append(
                 KnowledgeSpaceInfoResp(
                     **space.model_dump(),
@@ -2364,6 +2343,35 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             from bisheng.core.database import get_async_db_session
 
+            # 存在异常 only counts files the *current user* may see. A viewer or editor
+            # cannot see other people's failed uploads in the listing, so a folder must
+            # not light up over files that are invisible to them. The check reuses the
+            # listing's own visibility rule (_filter_visible_child_items) so both agree;
+            # the permission context is built once per space and shared across folders.
+            permission_contexts: dict[int, dict] = {}
+
+            async def visible_abnormal_exists(folder: KnowledgeFile, prefix: str, abnormal_statuses: set[int]) -> bool:
+                candidates_stmt = select(KnowledgeFile).where(
+                    KnowledgeFile.knowledge_id == folder.knowledge_id,
+                    KnowledgeFile.file_type == 1,
+                    col(KnowledgeFile.status).in_(sorted(abnormal_statuses)),
+                    or_(
+                        col(KnowledgeFile.file_level_path) == prefix,
+                        col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
+                    ),
+                )
+                async with get_async_db_session() as session:
+                    candidates = list((await session.exec(candidates_stmt)).all())
+                if not candidates:
+                    return False
+                space_id = int(folder.knowledge_id)
+                if space_id not in permission_contexts:
+                    permission_contexts[space_id] = await self._build_child_permission_context(space_id)
+                visible = await self._filter_visible_child_items(
+                    candidates, space_id=space_id, context=permission_contexts[space_id]
+                )
+                return bool(visible)
+
             async def count_folder(folder: KnowledgeFile):
                 prefix = f"{folder.file_level_path or ''}/{folder.id}"
                 stmt = (
@@ -2389,16 +2397,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     KnowledgeFileStatus.FAILED.value,
                     KnowledgeFileStatus.VIOLATION.value,
                 }
+                # What the folder rollup calls "存在异常" — everything needing the user to step
+                # in. Deliberately wider than retryable_statuses: a timed-out file is an anomaly
+                # the folder must surface, but batch retry does not act on it, so the display
+                # signal and the retry signal stay separate instead of one doing double duty.
+                abnormal_statuses = retryable_statuses | {KnowledgeFileStatus.TIMEOUT.value}
                 async with get_async_db_session() as session:
                     rows = (await session.exec(stmt)).all()
                     success = sum(r[1] for r in rows if r[0] == KnowledgeFileStatus.SUCCESS.value)
                     processing = sum(r[1] for r in rows if r[0] in in_progress_statuses)
                     failed = sum(r[1] for r in rows if r[0] in retryable_statuses)
-                    folder_counts[folder.id] = {
-                        "has_failed_files": failed > 0,
-                        "success_file_num": success,
-                        "processing_file_num": processing,
-                    }
+                    abnormal = sum(r[1] for r in rows if r[0] in abnormal_statuses)
+                # The aggregate says whether anything abnormal exists at all; only then is the
+                # (dearer) visibility pass worth running.
+                has_abnormal = abnormal > 0 and await visible_abnormal_exists(folder, prefix, abnormal_statuses)
+                folder_counts[folder.id] = {
+                    "has_failed_files": failed > 0,
+                    "has_abnormal_files": has_abnormal,
+                    "success_file_num": success,
+                    "processing_file_num": processing,
+                }
 
             folders = [f for f in res if f.file_type == FileType.DIR]
             await asyncio.gather(*(count_folder(f) for f in folders))
@@ -2420,7 +2438,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if one.file_type == FileType.DIR:
                 counts = folder_counts.get(
                     one.id,
-                    {"has_failed_files": False, "success_file_num": 0, "processing_file_num": 0},
+                    {
+                        "has_failed_files": False,
+                        "has_abnormal_files": False,
+                        "success_file_num": 0,
+                        "processing_file_num": 0,
+                    },
                 )
                 item.update(counts)
             else:
@@ -2516,7 +2539,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         {"visible"} if visible_map.get(str(resource_id), False) else set()
                     )
         visible_keys = {key for key, value in permissions.items() if value}
-        return [
+        visible = [
             item
             for item in items
             if (
@@ -2525,6 +2548,58 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             in visible_keys
         ]
+        return await self._hide_others_failed_files(visible, space_id=space_id)
+
+    async def _can_manage_space_cached(self, space_id: int) -> bool:
+        """Admin / space manager check, resolved once per space per request."""
+        if self.login_user.is_admin():
+            return True
+        cache = self.__dict__.setdefault("_can_manage_space_cache", {})
+        normalized = int(space_id)
+        if normalized not in cache:
+            cache[normalized] = await self._check_action(
+                "knowledge_space",
+                normalized,
+                "manage_permission",
+            )
+        return cache[normalized]
+
+    async def _hide_others_failed_files(
+        self,
+        items: list[KnowledgeFile],
+        *,
+        space_id: int,
+    ) -> list[KnowledgeFile]:
+        """A parse failure is only the uploader's (and the managers') business.
+
+        Everyone else in the space sees neither the row nor, through the folder rollup that
+        reuses this filter, any hint of it. The rule lives here rather than in the client's
+        `file_status` query so listing, folder rollup and any other reader agree — the query
+        param it replaces hid the row from the uploader too, and left the file reachable by
+        anyone who called the API directly.
+
+        Timeout and violation are deliberately NOT covered: they stayed visible to every
+        member under the old client rule, and a violation in particular is the space's
+        business, not just the uploader's.
+        """
+        failed_items = [
+            item
+            for item in items
+            if item.file_type != FileType.DIR.value and item.status == KnowledgeFileStatus.FAILED.value
+        ]
+        if not failed_items:
+            return items
+        if await self._can_manage_space_cached(space_id):
+            return items
+        user_id = self.login_user.user_id
+        hidden = {
+            int(item.id)
+            for item in failed_items
+            if getattr(item, "user_id", None) != user_id
+        }
+        if not hidden:
+            return items
+        return [item for item in items if int(item.id) not in hidden]
 
     async def _scan_visible_child_items(
         self,

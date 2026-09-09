@@ -24,6 +24,7 @@ TENANT_CHECK_EXEMPT_PATHS = (
     "/api/v1/user/switch-tenant",
     "/api/v1/user/tenants",
     "/api/v1/env",
+    "/api/v1/open-api/skill-packs/",
     # v2.5.1 F014: HMAC-authenticated Gateway callbacks. No JWT → no
     # tenant context from cookies; the service layer installs
     # ROOT_TENANT_ID + bypass_tenant_filter explicitly.

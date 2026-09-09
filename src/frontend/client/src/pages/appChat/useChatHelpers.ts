@@ -12,6 +12,18 @@ import { runLogsTypes, SkillMethod } from "./appUtils/skillMethod"
 import { bishengConfState, chatApiVersionState, chatIdState, chatsState, currentChatState, currentRunningState, runningState } from "./store/atoms"
 import { emitAreaTextEvent, EVENT_TYPE } from "./useAreaText"
 
+// Attachments hung on a sent message. Producers disagree on the field names
+// (the uploader says `name`/`filepath`, the websocket payload says
+// `file_name`/`file_url`), so every alias stays optional and readers fall back.
+type SentMessageFile = {
+    file_id?: string
+    file_name?: string
+    file_url?: string
+    name?: string
+    filepath?: string
+    file_path?: string
+}
+
 export default function useChatHelpers() {
     const chatState = useRecoilValue(currentChatState)
     const runState = useRecoilValue(currentRunningState)
@@ -403,7 +415,7 @@ export default function useChatHelpers() {
         },
         // `files` keeps the attachments as data rather than only as filenames
         // glued onto the text, so an image can render as an image.
-        createSendMsg: (msg: string, files: any[] = []) => {
+        createSendMsg: (msg: string, files: SentMessageFile[] = []) => {
             setChats((prev) =>
                 updateChatMessages(prev, chatId, (messages) => [
                     ...messages,

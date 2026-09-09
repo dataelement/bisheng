@@ -5,6 +5,9 @@ import openpyxl
 import pandas as pd
 from loguru import logger
 
+from bisheng.common.errcode.knowledge import KnowledgeFileDamagedError
+from bisheng.knowledge.rag.pipeline.loader.utils.xlsx_repair import repair_xlsx_styles
+
 
 def xls_to_xlsx(xls_path):
     if not xls_path.lower().endswith(".xls"):
@@ -446,6 +449,36 @@ def is_list_of_lists_empty(data_list):
     return not any(any(cell is not None and str(cell).strip() != "" for cell in row) for row in data_list)
 
 
+def _load_workbook_with_style_repair(excel_path: str):
+    """Open a workbook, retrying once on a repaired copy when styles are the blocker.
+
+    openpyxl rejects a handful of style constructs Excel and WPS write happily
+    (see ``xlsx_repair``), and refuses the whole workbook over them — a 28 MB
+    customer file with 18 populated sheets was unreadable for three empty
+    ``<fill/>`` elements. The retry only ever runs after a real failure, and only
+    when the repair actually changed something, so a workbook that opens today
+    takes exactly the path it takes today.
+    """
+    try:
+        return openpyxl.load_workbook(excel_path, data_only=True, read_only=False)
+    except Exception as first_error:
+        repaired_path = repair_xlsx_styles(excel_path)
+        if repaired_path is None:
+            raise
+        logger.warning(
+            "excel load failed ({}), retrying on a style-repaired copy of {}",
+            first_error,
+            os.path.basename(excel_path),
+        )
+        try:
+            return openpyxl.load_workbook(repaired_path, data_only=True, read_only=False)
+        except Exception:
+            # Report the ORIGINAL failure: the repaired copy is our artefact, and
+            # its error would send whoever reads the log after the wrong file.
+            logger.opt(exception=True).warning("style-repaired copy still unreadable")
+            raise first_error from None
+
+
 def excel_file_to_markdown(
     excel_path,
     num_header_rows,
@@ -457,11 +490,22 @@ def excel_file_to_markdown(
 ):
     logger.debug(f"\nStart ProcessingExcelDocumentation:'{excel_path}'")
     try:
-        workbook = openpyxl.load_workbook(excel_path, data_only=True, read_only=False)
+        workbook = _load_workbook_with_style_repair(excel_path)
     except Exception as e:
-        logger.debug(f"Error: Unable to loadExcelDoc. '{excel_path}'Reason: {e}")
-        return
+        # Was `logger.debug(...); return`, which made an unopenable workbook look
+        # like a workbook with no content: the loader returned zero documents, the
+        # caller marked the file parsed successfully, and nothing was ever
+        # indexed. The debug level meant the reason never even reached the log
+        # file. A file we cannot open is a parse failure and must say so.
+        logger.exception(f"Unable to load Excel doc '{excel_path}'")
+        raise KnowledgeFileDamagedError(exception=e)
 
+    # Workbook sheet order, with the markdown file prefix each sheet got (None when
+    # the sheet had no cell data and therefore produced no markdown). The loader uses
+    # this to place a sheet's embedded pictures next to that sheet's table chunks —
+    # the numbered file names alone cannot say which sheet a chunk came from, because
+    # empty sheets are skipped and do not consume a number.
+    sheet_order: list[tuple[str, int | None]] = []
     sheet_index = 0
     for sheet_name in workbook.sheetnames:
         logger.debug(f"\n  (In work)ExcelWorksheet'{sheet_name}'...")
@@ -472,12 +516,14 @@ def excel_file_to_markdown(
         # Using the new decision function
         if is_list_of_lists_empty(unmerged_data_list_of_lists):
             logger.debug(f"  Worksheet '{sheet_name}' Empty or no valid data, skipping.")
+            sheet_order.append((sheet_name, None))
             continue
 
         df = pd.DataFrame(unmerged_data_list_of_lists)
         df.fillna("", inplace=True)
         if df.empty:
             logger.debug(f"  Worksheet '{sheet_name}' Empty after processingDataFrameSkip")
+            sheet_order.append((sheet_name, None))
             continue
 
         process_dataframe_to_markdown_files(
@@ -490,11 +536,13 @@ def excel_file_to_markdown(
             max_chars=max_chars,
             long_row_splitter=long_row_splitter,
         )
+        sheet_order.append((sheet_name, sheet_index))
         sheet_index += 1
 
     if workbook:
         workbook.close()
     logger.debug(f"\nExcelDoc. '{excel_path}' Process Completed.")
+    return sheet_order
 
 
 def csv_file_to_markdown(
@@ -564,10 +612,13 @@ def convert_file_to_markdown(
     ``max_chars`` turns ``rows_per_markdown`` into an upper bound: groups that
     would exceed the budget are subdivided. ``None`` keeps the legacy fixed-row
     behaviour byte for byte.
+
+    Returns the workbook's sheet order as ``[(sheet_name, markdown prefix or None)]``
+    for Excel input; an empty list for CSV (a single, nameless sheet) and on failure.
     """
     if not os.path.exists(input_file_path):
         logger.debug(f"Error: Input file '{input_file_path}' Nothing found.")
-        return
+        return []
 
     if not os.path.exists(base_output_dir):
         os.makedirs(base_output_dir)
@@ -579,7 +630,7 @@ def convert_file_to_markdown(
         input_file_path = xls_to_xlsx(input_file_path)
 
     if file_extension in [".xlsx", ".xls"]:
-        excel_file_to_markdown(
+        return excel_file_to_markdown(
             input_file_path,
             num_header_rows,
             rows_per_markdown,
@@ -588,7 +639,7 @@ def convert_file_to_markdown(
             max_chars=max_chars,
             long_row_splitter=long_row_splitter,
         )
-    elif file_extension == ".csv":
+    if file_extension == ".csv":
         csv_file_to_markdown(
             input_file_path,
             num_header_rows,
@@ -600,10 +651,11 @@ def convert_file_to_markdown(
             max_chars=max_chars,
             long_row_splitter=long_row_splitter,
         )
-    else:
-        logger.debug(
-            f"Error: Unsupported file type '{file_extension}'Please provide user. Excel (.xlsx, .xls) OR CSV (.csv) files."
-        )
+        return []
+    logger.debug(
+        f"Error: Unsupported file type '{file_extension}'Please provide user. Excel (.xlsx, .xls) OR CSV (.csv) files."
+    )
+    return []
 
 
 def handler(

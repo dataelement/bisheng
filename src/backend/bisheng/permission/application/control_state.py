@@ -1107,9 +1107,10 @@ class SqlPermissionControlState:
         context: OwnerProjectionContext,
         owner_grant: GrantSnapshot | None,
     ) -> tuple[GrantSnapshot, ...]:
-        if not context.copy_grants:
+        additional_grants = (*context.copy_grants, *context.creation_grants)
+        if not additional_grants:
             return (owner_grant,) if owner_grant is not None else ()
-        by_model = {grant.model.model_key: grant for grant in context.copy_grants}
+        by_model = {grant.model.model_key: grant for grant in additional_grants}
         if owner_grant is not None:
             by_model[owner_grant.model.model_key] = owner_grant
         return tuple(by_model[key] for key in sorted(by_model) if by_model[key].active and by_model[key].sources)

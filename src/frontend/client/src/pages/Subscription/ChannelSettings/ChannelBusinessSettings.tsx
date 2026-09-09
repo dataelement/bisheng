@@ -7,8 +7,8 @@ import {
   SettingsSwitchRow,
 } from "~/components/permission/UnifiedPermissionControls";
 import { Input } from "~/components/ui/Input";
+import { Textarea } from "@bisheng/ui";
 import { Label } from "~/components/ui/Label";
-import { Textarea } from "~/components/ui/Textarea";
 import { useToastContext } from "~/Providers";
 import { getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { AddSourceDropdown } from "../CreateChannel/AddSourceDropdown";
@@ -105,29 +105,35 @@ export function ChannelBusinessSettings({
               <span className="mr-1 text-danger">*</span>
               {settings.localize("com_subscription.channel_name")}
             </Label>
-            <div className="relative">
-              <Input
-                value={form.channelName}
-                onChange={(event) =>
-                  form.setChannelName(
-                    truncateByFullWidth(event.target.value, MAX_CHANNEL_NAME),
-                  )
-                }
-                placeholder={settings.localize(
-                  "com_subscription.enter_channel_name",
-                )}
-                className="h-8 rounded-md bg-white pr-14 placeholder:text-[#999999]"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-body-sm text-[#999999]">
-                {Math.ceil(getFullWidthLength(form.channelName))}/
-                {MAX_CHANNEL_NAME}
-              </span>
-            </div>
+            {/* Counter rides in the suffix slot. It counts FULL-WIDTH units
+                (not chars), so the component's own showCount doesn't apply —
+                truncation stays in onChange. */}
+            <Input
+              value={form.channelName}
+              onChange={(event) =>
+                form.setChannelName(
+                  truncateByFullWidth(event.target.value, MAX_CHANNEL_NAME),
+                )
+              }
+              placeholder={settings.localize(
+                "com_subscription.enter_channel_name",
+              )}
+              suffix={
+                <span className="text-body-sm text-text-3">
+                  {Math.ceil(getFullWidthLength(form.channelName))}/
+                  {MAX_CHANNEL_NAME}
+                </span>
+              }
+            />
           </div>
           <div className="space-y-2">
             <Label className="text-body font-medium text-text-1">
               {settings.localize("com_subscription.channel_description")}
             </Label>
+            {/* Spec Textarea (组件-Input输入框.md §2): default 3 rows, vertical
+                resize allowed with the 32px floor; the old shell's min-h /
+                shadow / placeholder overrides are all built in now. Length cap
+                stays in onChange — it counts full-width units. */}
             <Textarea
               value={form.channelDesc}
               onChange={(event) =>
@@ -138,7 +144,6 @@ export function ChannelBusinessSettings({
               placeholder={settings.localize(
                 "com_subscription.enter_channel_description",
               )}
-              className="min-h-20 resize-none rounded-md bg-white shadow-none placeholder:text-[#999999]"
             />
           </div>
         </div>
@@ -220,7 +225,7 @@ export function ChannelBusinessSettings({
                   <button
                     type="button"
                     onClick={form.handleAddSubChannel}
-                    className="flex h-12 w-full items-center gap-3 bg-[#F8F8F8] px-4 text-left text-body text-text-1 transition-colors hover:bg-fill-2"
+                    className="flex h-12 w-full items-center gap-3 bg-fill-1 px-4 text-left text-body text-text-1 transition-colors hover:bg-fill-2"
                   >
                     <SquarePlus
                       className="size-4 shrink-0 text-text-2"

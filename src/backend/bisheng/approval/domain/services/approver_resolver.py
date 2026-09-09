@@ -63,6 +63,34 @@ async def _platform_super_admin_user_ids() -> list[int]:
         return []
 
 
+async def resolve_resource_permission_role_users(
+    *,
+    req: Any,
+    resource_type: str,
+    resource_id: str | int,
+) -> tuple[list[int], list[int]]:
+    """Return effective direct owner and manager users from F048 Grants."""
+
+    from bisheng.permission.application.business_authorization import (
+        list_business_effective_direct_user_ids_by_model,
+    )
+    from bisheng.permission.domain.services.permission_action_service import PermissionActor
+
+    by_model = await list_business_effective_direct_user_ids_by_model(
+        actor=PermissionActor(
+            user_id=int(req.applicant_user_id),
+            current_tenant_id=int(req.tenant_id),
+        ),
+        resource_type=resource_type,
+        resource_id=resource_id,
+        model_keys=("owner", "manager"),
+    )
+    return (
+        [int(user_id) for user_id in by_model.get("owner", ()) if user_id.isdigit()],
+        [int(user_id) for user_id in by_model.get("manager", ()) if user_id.isdigit()],
+    )
+
+
 async def resolve_approvers_from_sources(sources: list[dict], req: Any) -> list[int]:
     """Resolve the full approver user-id list from a node's ``sources`` config.
 

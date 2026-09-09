@@ -67,6 +67,12 @@ class TaskAlreadyInProgressError(Exception):
     pass
 
 
+# Exclusive driver lock per session_version_id. SET NX EX in one roundtrip
+# (not asetNx, which is setnx+expire and can leave a TTL-less lock on crash).
+LINSIGHT_RUN_LOCK_KEY_PREFIX = "linsight:run_lock:"
+LINSIGHT_RUN_LOCK_TTL_SECONDS = 4 * 60 * 60
+
+
 async def ensure_linsight_permission_runtime(manager=None) -> dict:
     """Initialize and verify Linsight's single F048 runtime pin."""
 
@@ -220,9 +226,10 @@ class LinsightWorkflowTask:
         # was closed out on the materials already gathered.
         self._turn_budget: dict = {}
         self.file_dir: str | None = None
-        # Files present in ``file_dir`` before the agent ran (set by
-        # _init_file_directory); the deliverable scan diffs against it.
-        self._baseline_files: set[str] = set()
+        # Path → md5 of files present in ``file_dir`` before the agent ran
+        # (set by _init_file_directory). The deliverable scan diffs against it
+        # so an inherited output/*.md is not republished as this turn's result.
+        self._baseline_files: dict[str, str] = {}
         # Set per run in _create_agent; gates every prompt hint that names the
         # code interpreter (prompt ⟺ tool lockstep).
         self._has_code_interpreter: bool = False
@@ -232,53 +239,93 @@ class LinsightWorkflowTask:
     # ==================== Resource Management ====================
 
     @asynccontextmanager
+    async def _acquire_session_run_lock(self):
+        """Hold an exclusive driver lock for ``session_version_id``.
+
+        Uses a single Redis ``SET key NX EX ttl``. SET returning False means
+        another worker is already driving this session →
+        ``TaskAlreadyInProgressError``. Client construction / Redis outage
+        fails open (the queue already required Redis; dropping a dequeued turn
+        is worse than a rare dual start).
+        """
+        from bisheng.core.cache.redis_manager import get_redis_client
+
+        redis = None
+        acquired = False
+        lock_key = f"{LINSIGHT_RUN_LOCK_KEY_PREFIX}{self.session_version_id}"
+        try:
+            redis = await get_redis_client()
+            result = await redis.async_connection.set(
+                lock_key,
+                b"1",
+                nx=True,
+                ex=LINSIGHT_RUN_LOCK_TTL_SECONDS,
+            )
+            acquired = bool(result)
+        except Exception as e:
+            logger.warning("linsight run lock acquire failed ({}); proceeding without lock", e)
+            acquired = True
+            redis = None
+        if not acquired:
+            raise TaskAlreadyInProgressError("Task already in progress")
+        try:
+            yield
+        finally:
+            if redis is not None and acquired:
+                try:
+                    await redis.adelete(lock_key)
+                except Exception as e:
+                    logger.warning("linsight run lock release failed: {}", e)
+
+    @asynccontextmanager
     async def _managed_execution(self):
         """Context manager for managing execution resources"""
 
         self._state_manager = LinsightStateMessageManager(self.session_version_id)
         session_model = await self._get_session_model(self.session_version_id)
 
-        # Check session status
-        if await self._is_session_in_progress(session_model):
-            raise TaskAlreadyInProgressError("Task already in progress")
+        async with self._acquire_session_run_lock():
+            session_model = await self._get_session_model(self.session_version_id)
+            if await self._is_session_in_progress(session_model):
+                raise TaskAlreadyInProgressError("Task already in progress")
 
-        try:
-            # Start Termination Monitoring
-            await self._start_termination_monitor(session_model)
+            try:
+                # Start Termination Monitoring
+                await self._start_termination_monitor(session_model)
 
-            # Claim the session BEFORE the (now possibly multi-minute) attachment
-            # ingest: a duplicate queue item for the same svid — submit enqueues
-            # AND the browser's start-execute may still land — is rejected by
-            # _is_session_in_progress, which keys only on IN_PROGRESS. It also
-            # brings the row into the worker-startup crash sweep's scan, which
-            # force-FAILs an IN_PROGRESS row whose owner node is dead; a worker
-            # killed mid-ingest is thus reported as failed instead of sitting at
-            # NOT_STARTED forever with nobody to pick it up (the attachments
-            # survive on pending_files, and /workbench/continue re-ingests them).
-            await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
+                # Claim the session BEFORE the (now possibly multi-minute) attachment
+                # ingest: a duplicate queue item for the same svid — submit enqueues
+                # AND the browser's start-execute may still land — is rejected by
+                # _is_session_in_progress, which keys only on IN_PROGRESS. It also
+                # brings the row into the worker-startup crash sweep's scan, which
+                # force-FAILs an IN_PROGRESS row whose owner node is dead; a worker
+                # killed mid-ingest is thus reported as failed instead of sitting at
+                # NOT_STARTED forever with nobody to pick it up (the attachments
+                # survive on pending_files, and /workbench/continue re-ingests them).
+                await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
-            # F035 problem 2: ensure the session-level pseudo task row exists so
-            # planning/wrap-up/direct-answer steps (mapper routes them to
-            # task_id = svid) are persisted and survive a refresh. It also carries
-            # the ingest progress steps pushed just below.
-            await self._ensure_session_pseudo_task(session_model)
+                # F035 problem 2: ensure the session-level pseudo task row exists so
+                # planning/wrap-up/direct-answer steps (mapper routes them to
+                # task_id = svid) are persisted and survive a refresh. It also carries
+                # the ingest progress steps pushed just below.
+                await self._ensure_session_pseudo_task(session_model)
 
-            await self._ingest_pending_attachments(session_model)
-            # The ingest can hold the run for minutes, and _execute_workflow opens
-            # with an UNCONDITIONAL IN_PROGRESS write. A stop that landed inside
-            # that window would be overwritten by it, and nothing writes a
-            # terminal status afterwards — the session then shows as running
-            # forever, unstoppable. Re-read the authoritative status here rather
-            # than trusting the monitor's polling interval to have caught up.
-            await self._check_termination_now()
+                await self._ingest_pending_attachments(session_model)
+                # The ingest can hold the run for minutes, and _execute_workflow opens
+                # with an UNCONDITIONAL IN_PROGRESS write. A stop that landed inside
+                # that window would be overwritten by it, and nothing writes a
+                # terminal status afterwards — the session then shows as running
+                # forever, unstoppable. Re-read the authoritative status here rather
+                # than trusting the monitor's polling interval to have caught up.
+                await self._check_termination_now()
 
-            # Initialization file directory
-            self.file_dir = await self._init_file_directory(session_model)
+                # Initialization file directory
+                self.file_dir = await self._init_file_directory(session_model)
 
-            yield session_model
+                yield session_model
 
-        finally:
-            await self._cleanup_resources()
+            finally:
+                await self._cleanup_resources()
 
     async def _cleanup_resources(self):
         """Clean up resources"""
@@ -419,33 +466,39 @@ class LinsightWorkflowTask:
 
     @asynccontextmanager
     async def _managed_resume(self):
-        """Like ``_managed_execution`` but for the resume path.
+        """Like ``_managed_execution`` but for continue / ask_user resume.
 
-        A parked session is legitimately IN_PROGRESS, so the
-        ``_is_session_in_progress`` guard (which rejects re-entry on the fresh
-        path) must NOT apply here — resume is precisely re-entry into the same
-        session. Everything else (termination monitor, file dir, cleanup) is the
-        same as the fresh path.
+        Mutual exclusion here is the Redis run lock ONLY. The DB status must
+        not be used as a guard: /workbench/continue flips the row to
+        ``IN_PROGRESS`` before it enqueues the continue item (so the worker
+        pre-flight non-terminal check accepts it), so every follow-up turn
+        arrives with status ``IN_PROGRESS`` — a status guard would reject all
+        of them and leave the session stuck as running. A second
+        continue/resume while another worker is already driving the same
+        session is rejected by the lock — both workers used to finalize the
+        same ChatMessage row and the later write overwrote a cited report with
+        a marker-less wrap-up.
         """
         self._state_manager = LinsightStateMessageManager(self.session_version_id)
-        session_model = await self._get_session_model(self.session_version_id)
-        try:
-            await self._start_termination_monitor(session_model)
-            # F035 problem 2: resume/continue can also produce session-level
-            # (task_id = svid) steps; ensure the pseudo task row is present. It
-            # now has to precede the ingest, which hangs its progress steps off it.
-            await self._ensure_session_pseudo_task(session_model)
-            # Normally a no-op: the fresh run already drained pending_files. It is
-            # NOT dead code, because this is the only second chance the column
-            # ever gets — a worker killed mid-ingest leaves the row FAILED with
-            # pending_files intact, and FAILED is one of the two statuses
-            # /workbench/continue accepts. Without this the follow-up turn would
-            # run with no attachments at all and the refs would sit there forever.
-            await self._ingest_pending_attachments(session_model)
-            self.file_dir = await self._init_file_directory(session_model)
-            yield session_model
-        finally:
-            await self._cleanup_resources()
+        async with self._acquire_session_run_lock():
+            session_model = await self._get_session_model(self.session_version_id)
+            try:
+                await self._start_termination_monitor(session_model)
+                # F035 problem 2: resume/continue can also produce session-level
+                # (task_id = svid) steps; ensure the pseudo task row is present. It
+                # now has to precede the ingest, which hangs its progress steps off it.
+                await self._ensure_session_pseudo_task(session_model)
+                # Normally a no-op: the fresh run already drained pending_files. It is
+                # NOT dead code, because this is the only second chance the column
+                # ever gets — a worker killed mid-ingest leaves the row FAILED with
+                # pending_files intact, and FAILED is one of the two statuses
+                # /workbench/continue accepts. Without this the follow-up turn would
+                # run with no attachments at all and the refs would sit there forever.
+                await self._ingest_pending_attachments(session_model)
+                self.file_dir = await self._init_file_directory(session_model)
+                yield session_model
+            finally:
+                await self._cleanup_resources()
 
     async def _resume_workflow(self, session_model: LinsightSessionVersion, user_input) -> None:
         """Rebuild the agent on the same thread (Redis checkpointer) and drive resume."""
@@ -563,6 +616,8 @@ class LinsightWorkflowTask:
                 await self._continue_workflow(session_model, question)
         except UserTerminationError:
             logger.info(f"Continued task terminated by user: session_version_id={self.session_version_id}")
+        except TaskAlreadyInProgressError:
+            logger.warning(f"Continued task already in progress: session_version_id={self.session_version_id}")
         except TaskExecutionError as e:
             logger.error(f"Continue task execution failed: session_version_id={self.session_version_id}, error={e}")
             await self._handle_execution_error(e)
@@ -927,7 +982,7 @@ class LinsightWorkflowTask:
         # runs (i.e. the prefetched upload sources). Captured here — after the
         # prefetch, at the single point every driver goes through — so the
         # completion scan can tell what the agent actually produced.
-        self._baseline_files = linsight_execute_utils.snapshot_file_paths(file_dir)
+        self._baseline_files = linsight_execute_utils.snapshot_file_fingerprints(file_dir)
 
         return file_dir
 
@@ -1145,7 +1200,8 @@ class LinsightWorkflowTask:
                 # These arrived AFTER _init_file_directory took the baseline, so
                 # without this they would look like files the agent produced and be
                 # delivered back to the user as this turn's output.
-                self._baseline_files.update(synced)
+                for path in synced:
+                    self._baseline_files[path] = linsight_execute_utils.fingerprint_file(path)
                 logger.info(
                     "Synced {} workspace original(s) into the local task dir for the code interpreter",
                     len(synced),
@@ -1956,13 +2012,15 @@ class LinsightWorkflowTask:
             "all_from_session_files": [],
         }
         self._flag_phantom_deliverables(session_model, answer, final_files)
+        self._flag_invalid_deliverables(session_model, file_details)
         await self._state_manager.set_session_version_info(session_model)
         # F035 problem 2: finalize the session pseudo task carrying any
         # planning/direct-answer steps so it isn't left stuck in_progress.
         await self._complete_session_pseudo_task(session_model)
         await self._converge_task_rows_on_completion()
         # F035 Track J: land the answer in the unified conversation stream.
-        await linsight_execute_utils.persist_task_turn_message(session_model)
+        msg = await linsight_execute_utils.persist_task_turn_message(session_model)
+        await self._persist_report_citations(session_model, msg, final_files)
         await self._state_manager.push_message(
             MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
         )
@@ -1987,6 +2045,75 @@ class LinsightWorkflowTask:
             ", ".join(phantom),
         )
         session_model.output_result["phantom_deliverables"] = phantom
+
+    def _flag_invalid_deliverables(self, session_model, file_details: list[dict]) -> None:
+        """Record deliverables dropped for not being the format their name claims.
+
+        ``get_final_result_file`` already refuses to publish them — a .pptx that is
+        really prose opens nowhere — but a silent drop turns into "暂无产物文件" with
+        no explanation, and the run afterwards looks like the model simply wrote
+        nothing. Same contract as the phantom flag: describe, never repair.
+        """
+        invalid = linsight_execute_utils.detect_invalid_deliverables(file_details, self._baseline_files)
+        if not invalid:
+            return
+        logger.warning(
+            "[linsight-invalid-deliverable] session={} dropped {} file(s) whose bytes contradict their name: {}",
+            session_model.id,
+            len(invalid),
+            "; ".join(f"{f['file_name']}: {f['reason']}" for f in invalid),
+        )
+        session_model.output_result["invalid_deliverables"] = invalid
+
+    async def _persist_report_citations(self, session_model, msg, final_files: list[dict] | None) -> None:
+        """Best-effort: bind report-cited sources to the task ChatMessage (F047).
+
+        Also writes the same filtered items onto ``output_result.citations`` so
+        FINAL_RESULT / history can render badges without a second fetch. The
+        answer text itself is left as the model wrote it — the report file is
+        the cited deliverable, and copying its marked paragraphs into the
+        answer only duplicated them on the result page.
+        Failures must not abort task completion — the user still gets the report.
+        """
+        try:
+            from bisheng.citation.domain.services.citation_prompt_helper import (
+                persist_linsight_report_citations,
+                serialize_citation_items_for_page,
+            )
+
+            texts = [(session_model.output_result or {}).get("answer") or ""]
+            for file_info in final_files or []:
+                path = file_info.get("file_path") or ""
+                if not isinstance(path, str) or not path.endswith(".md") or not os.path.isfile(path):
+                    continue
+                try:
+                    with open(path, encoding="utf-8") as handle:
+                        texts.append(handle.read())
+                except OSError:
+                    logger.warning("could not read report markdown {}", path)
+            items = await persist_linsight_report_citations(
+                message_id=getattr(msg, "id", None),
+                chat_id=session_model.session_id,
+                report_texts=texts,
+            )
+            payloads = serialize_citation_items_for_page(items)
+            if not payloads:
+                logger.info("linsight citations session={} none referenced in report/answer", session_model.id)
+                return
+            # Copy + reassign. JsonType in-place mutation is not dirty: the
+            # subsequent set_session_version_info does add/commit/refresh and
+            # would reload the old output_result, so FINAL_RESULT and the
+            # version-list API (which the client reconciles onto) never saw
+            # the citations.
+            output_result = dict(session_model.output_result or {})
+            output_result["citations"] = payloads
+            session_model.output_result = output_result
+            logger.info("linsight citations session={} saved={}", session_model.id, len(payloads))
+            state_manager = getattr(self, "_state_manager", None)
+            if state_manager is not None:
+                await state_manager.set_session_version_info(session_model)
+        except Exception:
+            logger.opt(exception=True).warning("persist linsight citations failed; task continues")
 
     def _with_soft_landing_note(self, answer: str) -> str:
         """Append the wrap-up note when the turn budget cut the run short.
@@ -2066,10 +2193,12 @@ class LinsightWorkflowTask:
             "partial": True,
         }
         self._flag_phantom_deliverables(session_model, answer, final_files)
+        self._flag_invalid_deliverables(session_model, file_details)
         await self._state_manager.set_session_version_info(session_model)
         await self._complete_session_pseudo_task(session_model)
         await self._converge_task_rows_on_completion()
-        await linsight_execute_utils.persist_task_turn_message(session_model)
+        msg = await linsight_execute_utils.persist_task_turn_message(session_model)
+        await self._persist_report_citations(session_model, msg, final_files)
         await self._state_manager.push_message(
             MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
         )
@@ -2112,6 +2241,7 @@ class LinsightWorkflowTask:
                 "all_from_session_files": all_from_session_files,
             }
             self._flag_phantom_deliverables(session_model, answer, final_result_files)
+            self._flag_invalid_deliverables(session_model, file_details)
 
             # Save session information and push messages
             await self._state_manager.set_session_version_info(session_model)
@@ -2120,7 +2250,8 @@ class LinsightWorkflowTask:
             await self._complete_session_pseudo_task(session_model)
             await self._converge_task_rows_on_completion()
             # F035 Track J: land the answer in the unified conversation stream.
-            await linsight_execute_utils.persist_task_turn_message(session_model)
+            msg = await linsight_execute_utils.persist_task_turn_message(session_model)
+            await self._persist_report_citations(session_model, msg, final_result_files)
             await self._state_manager.push_message(
                 MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
             )
@@ -2154,9 +2285,17 @@ class LinsightWorkflowTask:
                     ExecuteTaskStatusEnum.SUCCESS,
                     ExecuteTaskStatusEnum.FAILED,
                 ]:
-                    await self._state_manager.update_execution_task_status(
+                    task_data = await self._state_manager.update_execution_task_status(
                         task_id=task.id, status=ExecuteTaskStatusEnum.TERMINATED
                     )
+                    # The live panel only learns about status via TASK_END. The
+                    # sweep used to write DB/Redis only, so FINAL_RESULT could
+                    # flip the session to COMPLETED while leftover rows stayed
+                    # in_progress / not_started — "任务已完成 0/8" with spinners.
+                    if task_data:
+                        await self._state_manager.push_message(
+                            MessageData(event_type=MessageEventType.TASK_END, data=task_data)
+                        )
         except Exception as e:
             logger.warning("Error converging unfinished task rows: {}", e)
 

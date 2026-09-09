@@ -457,7 +457,7 @@ export function KnowledgeSpacePreviewDrawer({
                         type="button"
                         aria-label={localize("com_knowledge.collapse_drawer")}
                         onClick={() => onOpenChange(false)}
-                        className="absolute left-1 top-1/2 z-20 flex h-16 w-6 -translate-y-1/2 items-center justify-center bg-white text-[#C9CDD4] hover:text-[#B6BBC5]"
+                        className="absolute left-1 top-1/2 z-20 flex h-16 w-6 -translate-y-1/2 items-center justify-center bg-white text-text-4 hover:text-[#B6BBC5]"
                     >
                         <ChevronRight className="size-6 stroke-[2.75]" />
                     </button>
@@ -466,7 +466,7 @@ export function KnowledgeSpacePreviewDrawer({
                         type="button"
                         aria-label={localize("com_knowledge.close")}
                         onClick={() => onOpenChange(false)}
-                        className="absolute right-4 top-4 z-20 inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                        className="absolute right-4 top-4 z-20 inline-flex size-8 items-center justify-center rounded-md text-text-2 hover:bg-fill-1"
                     >
                         <X className="size-4" />
                     </button>
@@ -474,13 +474,13 @@ export function KnowledgeSpacePreviewDrawer({
                 {space ? (
                     <>
                         <SheetHeader className="gap-0 border-b border-gray-100 px-6 pb-4 pt-6 text-left touch-mobile:px-0 touch-mobile:pt-6">
-                            <SheetTitle className="mb-1 text-[#1d2129] leading-tight font-semibold touch-mobile:pr-10">
+                            <SheetTitle className="mb-1 text-text-1 leading-tight font-semibold touch-mobile:pr-10">
                                 {space.name}
                             </SheetTitle>
                             {space.description && (
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <p className="text-sm text-[#86909c] leading-relaxed line-clamp-2 cursor-default text-left">
+                                        <p className="text-sm text-text-3 leading-relaxed line-clamp-2 cursor-default text-left">
                                             {space.description}
                                         </p>
                                     </TooltipTrigger>
@@ -494,20 +494,20 @@ export function KnowledgeSpacePreviewDrawer({
                                 <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs">
                                     {space.creator?.[0] || "?"}
                                 </span>
-                                <span className="text-sm text-[#86909c]">{space.creator}</span>
+                                <span className="text-sm text-text-3">{space.creator}</span>
                             </div>
 
                             <div className="flex items-center justify-between">
-                                <div className="flex items-center text-sm text-[#86909c]">
+                                <div className="flex items-center text-sm text-text-3">
                                     <span className="mr-3">{space.fileCount ?? 0} {localize("com_knowledge.articles_count")}</span>
                                     <span>{space.memberCount ?? 0} {localize("com_knowledge.users_count")}</span>
                                 </div>
                                 <Button
                                     variant={btn.variant}
                                     className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${status === "joined"
-                                        ? "bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]"
+                                        ? "bg-fill-2 text-text-3 border-border-base"
                                         : status === "pending"
-                                            ? "bg-[#F2F3F5] text-[#C9CDD4] border-[#E5E6EB]"
+                                            ? "bg-fill-2 text-text-4 border-border-base"
                                             : ""
                                         }`}
                                     disabled={btn.disabled}
@@ -530,7 +530,7 @@ export function KnowledgeSpacePreviewDrawer({
                         >
                             {canViewFiles ? (
                                 <div className="flex min-h-full flex-col space-y-2">
-                                    <div className="mb-1 text-sm text-[#4E5969] flex items-center gap-2 flex-wrap">
+                                    <div className="mb-1 text-sm text-text-2 flex items-center gap-2 flex-wrap">
                                         <button
                                             type="button"
                                             className="text-blue-500 hover:underline"
@@ -541,11 +541,11 @@ export function KnowledgeSpacePreviewDrawer({
                                             const depth = idx + 1;
                                             return (
                                                 <span key={`${name}-${idx}`} className="flex items-center gap-2">
-                                                    <span className="text-[#86909c]">/</span>
+                                                    <span className="text-text-3">/</span>
                                                     <button
                                                         type="button"
                                                         onClick={() => goToParentDepth(depth)}
-                                                        className={depth === parentNameStack.length ? "text-[#86909c] cursor-default" : "text-blue-500 hover:underline"}
+                                                        className={depth === parentNameStack.length ? "text-text-3 cursor-default" : "text-blue-500 hover:underline"}
                                                         disabled={depth === parentNameStack.length}
                                                     >
                                                         {name}
@@ -561,7 +561,7 @@ export function KnowledgeSpacePreviewDrawer({
                                     ) : filesPreview.length === 0 ? (
                                         <div className="flex flex-1 flex-col items-center justify-center text-center">
                                             <EmptyStateIllustration className="size-[120px] mb-4" />
-                                            <p className="text-[14px] font-normal text-[#999999]">
+                                            <p className="text-[14px] font-normal text-text-3">
                                                 {localize("com_knowledge.no_files")}
                                             </p>
                                         </div>
@@ -593,26 +593,26 @@ export function KnowledgeSpacePreviewDrawer({
                                     )}
 
                                     {loadingChildrenMore && (
-                                        <div className="py-3 text-center text-[12px] text-[#C9CDD4]">
+                                        <div className="py-3 text-center text-[12px] text-text-4">
                                             {localize("com_knowledge.loading")}</div>
                                     )}
 
                                     {!loadingChildrenMore && filesPreview.length > 0 && filesPreview.length >= childrenTotal && (
-                                        <div className="py-3 text-center text-[12px] text-[#C9CDD4]">
+                                        <div className="py-3 text-center text-[12px] text-text-4">
                                             {localize("com_knowledge.no_more_content")}</div>
                                     )}
                                 </div>
                             ) : space?.visibility === VisibilityType.APPROVAL ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[360px]">
                                     <NoPermissionIllustration className="size-[120px] mb-4" />
-                                    <div className="text-[14px] font-normal text-[#999999]">
+                                    <div className="text-[14px] font-normal text-text-3">
                                         {localize("com_knowledge.space_view_requires_approval")}
                                     </div>
                                 </div>
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[360px]">
                                     <NoPermissionIllustration className="size-[120px] mb-4" />
-                                    <div className="text-[14px] font-normal text-[#999999]">
+                                    <div className="text-[14px] font-normal text-text-3">
                                         {localize("com_knowledge.space_view_requires_join")}
                                     </div>
                                 </div>
@@ -620,7 +620,7 @@ export function KnowledgeSpacePreviewDrawer({
                         </div>
                     </>
                 ) : (
-                    <div className="flex flex-1 items-center justify-center px-6 py-4 text-sm text-[#86909c] touch-mobile:px-0">
+                    <div className="flex flex-1 items-center justify-center px-6 py-4 text-sm text-text-3 touch-mobile:px-0">
                         {loadingSpace ? (
                             <LoadingIcon className="size-20 text-primary" />
                         ) : (

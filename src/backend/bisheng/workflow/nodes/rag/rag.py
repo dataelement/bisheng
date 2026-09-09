@@ -10,11 +10,9 @@ from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from bisheng.citation.domain.services.citation_prompt_helper import (
-    CITATION_PROMPT_RULES,
     annotate_rag_documents_with_citations,
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
-    prompt_has_citation_rules,
 )
 from bisheng.common.chat.types import IgnoreException
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum

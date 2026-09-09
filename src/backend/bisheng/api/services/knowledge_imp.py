@@ -17,6 +17,7 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.knowledge import (
     KnowledgeEtl4lmTimeoutError,
     KnowledgeFileDeleteError,
+    KnowledgeFileEmptyError,
     KnowledgeFileFailedError,
     KnowledgeRecommendQuestionError,
     KnowledgeSimilarError,
@@ -218,6 +219,15 @@ def addEmbedding(
                 vector_store=[vector_client, es_client],
             )
             pipeline_result = knowledge_file_pipeline.run()
+            # A parse that produced nothing is a FAILED parse, not a successful
+            # one with an empty result. Marking it SUCCESS is how an unopenable
+            # 28 MB xlsx ended up listed as parsed while its knowledge space
+            # answered "没有找到相关内容" to every question: zero chunks reach
+            # Milvus/ES, so the file exists everywhere except where it is
+            # searched. Whatever the cause — a loader that bailed, a document
+            # with no extractable text — the user needs to see it as a failure.
+            if not pipeline_result.documents:
+                raise KnowledgeFileEmptyError()
             db_file.status = KnowledgeFileStatus.SUCCESS.value
 
             # TODO[plan-3-async]: trigger SimHash similar-scan after successful parse.

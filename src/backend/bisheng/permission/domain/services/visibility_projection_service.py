@@ -22,6 +22,7 @@ _GRANT_SOURCE_TYPES = frozenset(
         "DEPARTMENT",
         "USER_GROUP",
         "CREATOR",
+        "CREATOR_GRANT",
         "SPACE_MEMBERSHIP",
         "CHANNEL_MEMBERSHIP",
         "SNAPSHOT_FROM_PARENT",
@@ -116,16 +117,12 @@ class VisibilityProjectionCompiler:
                 ),
             )
         )
-        desired_by_fingerprint = {
-            source.contribution_fingerprint: source for source in desired
-        }
+        desired_by_fingerprint = {source.contribution_fingerprint: source for source in desired}
         if len(desired_by_fingerprint) != len(desired):
             raise ValueError("visibility contribution fingerprints must be unique")
 
         existing_active = tuple(source for source in existing_sources if source.state == "ACTIVE")
-        existing_by_fingerprint = {
-            source.contribution_fingerprint: source for source in existing_active
-        }
+        existing_by_fingerprint = {source.contribution_fingerprint: source for source in existing_active}
         active_sources: list[VisibleSourceProjectionDTO] = []
         for fingerprint, source in desired_by_fingerprint.items():
             previous = existing_by_fingerprint.get(fingerprint)
@@ -172,12 +169,8 @@ class VisibilityProjectionCompiler:
             before=before_aggregates,
             after=after_aggregates,
         )
-        source_checksum = _checksum(
-            [_source_payload(source) for source in (*active_sources_tuple, *retired_sources)]
-        )
-        aggregate_checksum = _checksum(
-            [list(key) for key in sorted(after_aggregates)]
-        )
+        source_checksum = _checksum([_source_payload(source) for source in (*active_sources_tuple, *retired_sources)])
+        aggregate_checksum = _checksum([list(key) for key in sorted(after_aggregates)])
         result = VisibilityProjectionCompilation(
             active_sources=active_sources_tuple,
             retired_sources=retired_sources,
@@ -253,10 +246,9 @@ class VisibilityProjectionCompiler:
         before: set[tuple[str, str, str]],
         after: set[tuple[str, str, str]],
     ) -> tuple[ProjectionTupleDelta, ...]:
-        changes = (
-            [("DELETE", key) for key in sorted(before - after)]
-            + [("WRITE", key) for key in sorted(after - before)]
-        )
+        changes = [("DELETE", key) for key in sorted(before - after)] + [
+            ("WRITE", key) for key in sorted(after - before)
+        ]
         return tuple(
             ProjectionTupleDelta(
                 phase="COMMIT",
@@ -350,22 +342,16 @@ class VisibilityProjectionReconciler:
                 (
                     source
                     for fingerprint, source in persisted_by_fingerprint.items()
-                    if fingerprint not in canonical_by_fingerprint
-                    and source.state in {"ACTIVE", "PENDING"}
+                    if fingerprint not in canonical_by_fingerprint and source.state in {"ACTIVE", "PENDING"}
                 ),
                 key=lambda row: row.contribution_fingerprint,
             )
         )
-        upsert_tuple = tuple(
-            sorted(upsert, key=lambda row: row.contribution_fingerprint)
-        )
-        target_tuples = frozenset(
-            self._live_key(source) for source in canonical_by_fingerprint.values()
-        )
-        changes = (
-            [("DELETE", key) for key in sorted(live_tuples - target_tuples)]
-            + [("WRITE", key) for key in sorted(target_tuples - live_tuples)]
-        )
+        upsert_tuple = tuple(sorted(upsert, key=lambda row: row.contribution_fingerprint))
+        target_tuples = frozenset(self._live_key(source) for source in canonical_by_fingerprint.values())
+        changes = [("DELETE", key) for key in sorted(live_tuples - target_tuples)] + [
+            ("WRITE", key) for key in sorted(target_tuples - live_tuples)
+        ]
         deltas = tuple(
             ProjectionTupleDelta(
                 phase="COMMIT",
@@ -387,9 +373,7 @@ class VisibilityProjectionReconciler:
             upsert_sources=upsert_tuple,
             retire_sources=retire,
             deltas=deltas,
-            source_checksum=_checksum(
-                [_source_payload(source) for source in active_canonical]
-            ),
+            source_checksum=_checksum([_source_payload(source) for source in active_canonical]),
             target_checksum=self._tuple_checksum(target_tuples),
             live_checksum=self._tuple_checksum(live_tuples),
             blockers=tuple(dict.fromkeys(blockers)),

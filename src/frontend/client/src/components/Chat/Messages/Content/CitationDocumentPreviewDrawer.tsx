@@ -127,11 +127,11 @@ export function CitationDocumentPreviewContent({
           compactMode={compactMode}
         />
       ) : isResolvingFileUrl ? (
-        <div className="flex h-full items-center justify-center text-[14px] text-[#86909C]">
+        <div className="flex h-full items-center justify-center text-[14px] text-text-3">
           正在加载文件预览...
         </div>
       ) : (
-        <div className="flex h-full items-center justify-center text-[14px] text-[#86909C]">
+        <div className="flex h-full items-center justify-center text-[14px] text-text-3">
           暂无可预览文件地址
         </div>
       )}
@@ -242,7 +242,7 @@ export default function CitationDocumentPreviewDrawer({
         'fixed flex flex-col bg-white',
         isFullBleedMobile && 'z-[120] inset-0 overflow-hidden overscroll-contain touch-pan-y',
         !isFullBleedMobile &&
-        'z-[121] inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
+        'z-[121] inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-border-base shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
       )}
       aria-label="文档预览"
       onClick={(event) => event.stopPropagation()}
@@ -250,7 +250,7 @@ export default function CitationDocumentPreviewDrawer({
     >
       <div
         className={cn(
-          'flex shrink-0 items-center justify-between border-b border-[#F2F3F5]',
+          'flex shrink-0 items-center justify-between border-b border-fill-2',
           // Symmetric vertical padding so icon/title/actions sit centered in the bar; safe-area only on top.
           isFullBleedMobile &&
             'px-4 pb-4 pt-[calc(env(safe-area-inset-top,0px)+16px)]',
@@ -261,7 +261,7 @@ export default function CitationDocumentPreviewDrawer({
           {(!isNarrowLayout || isFullBleedMobile) && <Outlined.File className="size-4 shrink-0 text-blue-500" />}
           <h2
             className={cn(
-              'min-w-0 truncate font-semibold text-[#1D2129]',
+              'min-w-0 truncate font-semibold text-text-1',
               isNarrowLayout ? 'text-[14px] leading-5' : 'text-[16px] leading-6',
             )}
             title={fileName}
@@ -274,7 +274,7 @@ export default function CitationDocumentPreviewDrawer({
               onClick={handleDownload}
               disabled={!fileUrl}
               className={cn(
-                'shrink-0 items-center justify-center text-[#86909C] hover:bg-[#F2F3F5] hover:text-blue-500 disabled:cursor-not-allowed disabled:text-[#C9CDD4]',
+                'shrink-0 items-center justify-center text-text-3 hover:bg-fill-2 hover:text-blue-500 disabled:cursor-not-allowed disabled:text-text-4',
                 isFullBleedMobile
                   ? 'inline-flex size-8 rounded-md'
                   : 'inline-flex size-6 rounded-md',
@@ -289,7 +289,7 @@ export default function CitationDocumentPreviewDrawer({
           type="button"
           onClick={onClose}
           className={cn(
-            'items-center justify-center text-[#A9AEB8] hover:bg-[#F2F3F5] hover:text-[#4E5969]',
+            'items-center justify-center text-[#A9AEB8] hover:bg-fill-2 hover:text-text-2',
             isFullBleedMobile
               ? 'inline-flex size-8 rounded-md'
               : 'inline-flex size-6 rounded-md',

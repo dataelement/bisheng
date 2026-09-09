@@ -1,5 +1,5 @@
 # Router for base api
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from bisheng.admin.api.router import router as admin_router
 from bisheng.api.v1 import (
@@ -44,7 +44,9 @@ from bisheng.knowledge.api.router import (
 from bisheng.linsight.api.router import router as linsight_router
 from bisheng.llm.api.router import router as llm_router
 from bisheng.message.api.router import router as message_router
-from bisheng.open_api.api.router import open_api_v2_router, service_account_router
+from bisheng.open_api.api.dependencies import verify_open_api_access
+from bisheng.open_api.api.router import management_router as open_api_management_router
+from bisheng.open_api.api.router import rpc_router as open_api_rpc_router
 from bisheng.open_endpoints.api.endpoints.llm import router as llm_router_rpc
 from bisheng.open_endpoints.api.router import (
     assistant_router_rpc,
@@ -54,6 +56,7 @@ from bisheng.open_endpoints.api.router import (
     flow_router_rpc,
     knowledge_router_rpc,
     workflow_router_rpc,
+    workstation_router_rpc,
 )
 from bisheng.org_sync.api.endpoints.relink import router as relink_router
 from bisheng.org_sync.api.router import router as org_sync_router
@@ -115,13 +118,16 @@ router.include_router(admin_router)
 router.include_router(approval_router)
 router.include_router(brand_router)
 router.include_router(sensitive_word_policy_router)
-# F049: service-account management face (session auth, tenant-admin gated).
-router.include_router(service_account_router)
+# Open API management face (features/v3.0.0-beta1/053): service accounts,
+# personal tokens, scope catalogue and skill-pack distribution — session auth,
+# tenant-admin gated inside the endpoints.
+router.include_router(open_api_management_router)
 # F054: hosted application state actions, read side and the app-proxy hook.
 router.include_router(app_runtime_router)
 # F055: publish status + manual publish for the publish face (session auth).
 router.include_router(app_publish_v1_router)
-# F053 (design D10): CLI installer download + version truth, both anonymous.
+# F053 (features/v3.0.0/053, design D10): CLI installer download + version
+# truth, both anonymous.
 # The include is **conditional on purpose** — do not "tidy" it into an
 # unconditional one. AC-05 asks that these endpoints appear not to exist where
 # the open-capability layer is not deployed, and not registering the router is
@@ -132,23 +138,25 @@ router.include_router(app_publish_v1_router)
 if settings.open_platform.enabled:
     router.include_router(dev_toolkit_router)
 
-router_rpc = APIRouter(
-    prefix="/api/v2",
-)
+# /api/v2 carries ONE router-level dependency. ``verify_open_api_access``
+# authenticates the bearer, then reads the ``@open_api_scope`` marker off the
+# matched endpoint to enforce scope and identity mode; an endpoint without a
+# marker fails closed (OpenApiEndpointUnregisteredError). Every sub-router
+# included below therefore marks each endpoint and never resolves identity on
+# its own — it reads ``get_current_open_api_principal()`` instead.
+router_rpc = APIRouter(prefix="/api/v2", dependencies=[Depends(verify_open_api_access)])
+router_rpc.include_router(open_api_rpc_router)
 router_rpc.include_router(knowledge_router_rpc)
 router_rpc.include_router(filelib_router_rpc)
-router_rpc.include_router(chat_router_rpc)
 router_rpc.include_router(assistant_router_rpc)
 router_rpc.include_router(workflow_router_rpc)
 router_rpc.include_router(llm_router_rpc)
 router_rpc.include_router(flow_router_rpc)
 router_rpc.include_router(citation_router_rpc)
-# F049: /api/v2/auth/whoami — carries the credential dependency on its own
-# sub-router; T040 lifts it onto router_rpc once the 38 existing v2
-# endpoints carry their @open_api_scope markers.
-router_rpc.include_router(open_api_v2_router)
-# F055: /api/v2/apps/** — what `bisheng deploy` / `bisheng logs` talk to. Each
-# endpoint carries its own Depends(open_api_subject("app:manage")) instead of
-# relying on a router-level dependency, so this router stays independent of
-# when the shared v2 router gets its dependency lifted (F055 design D2).
+router_rpc.include_router(workstation_router_rpc)
+router_rpc.include_router(chat_router_rpc)
+# F055: /api/v2/apps/** — what `bisheng deploy` / `bisheng logs` talk to. Same
+# contract as every other v2 sub-router: the credential dependency is inherited
+# from router_rpc, each endpoint carries @open_api_scope("app:manage") and reads
+# the principal from get_current_open_api_principal().
 router_rpc.include_router(app_publish_v2_router)

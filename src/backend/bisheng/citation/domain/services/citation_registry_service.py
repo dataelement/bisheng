@@ -10,6 +10,8 @@ from langchain_classic.docstore.document import Document
 from bisheng.citation.domain.models.message_citation import MessageCitation, MessageCitationRelation
 from bisheng.citation.domain.repositories.interfaces.message_citation_repository import MessageCitationRepository
 from bisheng.citation.domain.schemas.citation_schema import (
+    ArticleCitationItemSchema,
+    ArticleCitationPayloadSchema,
     CitationRegistryItemSchema,
     CitationType,
     RagCitationItemSchema,
@@ -25,6 +27,7 @@ class CitationRegistryService:
 
     RAG_PREFIX = "knowledgesearch_"
     WEB_PREFIX = "websearch_"
+    ARTICLE_PREFIX = "articlesearch_"
     ID_SUFFIX_LENGTH = 8
 
     def __init__(self, repository: MessageCitationRepository):
@@ -39,6 +42,11 @@ class CitationRegistryService:
     def generate_web_citation_id(cls) -> str:
         """Generate a stable-format web citation identifier."""
         return f"{cls.WEB_PREFIX}{uuid.uuid4().hex[: cls.ID_SUFFIX_LENGTH]}"
+
+    @classmethod
+    def generate_article_citation_id(cls) -> str:
+        """Generate a stable-format channel-article citation identifier."""
+        return f"{cls.ARTICLE_PREFIX}{uuid.uuid4().hex[: cls.ID_SUFFIX_LENGTH]}"
 
     @staticmethod
     def normalize_url(url: str) -> str:
@@ -91,6 +99,8 @@ class CitationRegistryService:
         """Validate persisted source payload before returning it."""
         if citation_type == CitationType.RAG.value:
             return RagCitationPayloadSchema.model_validate(source_payload).model_dump(exclude_none=False)
+        if citation_type == CitationType.ARTICLE.value:
+            return ArticleCitationPayloadSchema.model_validate(source_payload).model_dump(exclude_none=False)
         return WebCitationPayloadSchema.model_validate(source_payload).model_dump(exclude_none=False)
 
     @classmethod
@@ -467,6 +477,66 @@ class CitationRegistryService:
         return registry_items
 
     @classmethod
+    def build_article_registry(
+        cls,
+        article_doc_id: str,
+        title: str | None = None,
+        snippet: str | None = None,
+        source_url: str | None = None,
+        source_type: int | None = None,
+    ) -> list[CitationRegistryItemSchema]:
+        """Build the single registry entry for one channel article.
+
+        Channel QA hands the model the whole article rather than retrieving
+        chunks from it, so there is exactly one item and its ``itemId`` is
+        fixed at "0" — nothing finer exists to address. ``articleDocId`` is the
+        real locator; no knowledge-chunk id is ever synthesised (AC-02).
+        """
+        citation_id = cls.generate_article_citation_id()
+        item = ArticleCitationItemSchema(itemId="0", snippet=snippet, title=title)
+        payload = ArticleCitationPayloadSchema(
+            articleDocId=article_doc_id,
+            title=title,
+            snippet=snippet,
+            sourceUrl=source_url,
+            sourceType=source_type,
+            items=[item],
+        )
+        return [
+            CitationRegistryItemSchema(
+                key=cls.build_item_key(citation_id, item.itemId),
+                citationId=citation_id,
+                type=CitationType.ARTICLE,
+                itemId=item.itemId,
+                sourcePayload=payload,
+            )
+        ]
+
+    @classmethod
+    def _group_article_flat_items(
+        cls,
+        items: list[CitationRegistryItemSchema],
+    ) -> CitationRegistryItemSchema:
+        """Rebuild one grouped article registry item from flattened records."""
+        first_item = items[0]
+        payloads = [ArticleCitationPayloadSchema.model_validate(item.sourcePayload) for item in items]
+        article_items: list[ArticleCitationItemSchema] = []
+        for payload in payloads:
+            article_items.extend(payload.items)
+        grouped_payload = payloads[0].model_copy(
+            update={
+                "snippet": article_items[0].snippet if article_items else payloads[0].snippet,
+                "items": article_items,
+            }
+        )
+        return CitationRegistryItemSchema(
+            citationId=first_item.citationId,
+            type=CitationType.ARTICLE,
+            accessScope=first_item.accessScope,
+            sourcePayload=grouped_payload,
+        )
+
+    @classmethod
     def _group_registry_items(
         cls,
         items: list[CitationRegistryItemSchema],
@@ -481,6 +551,8 @@ class CitationRegistryService:
             first_item = grouped_flat_items[0]
             if first_item.type == CitationType.RAG:
                 registry_items.append(cls._group_rag_flat_items(grouped_flat_items))
+            elif first_item.type == CitationType.ARTICLE:
+                registry_items.append(cls._group_article_flat_items(grouped_flat_items))
             else:
                 registry_items.append(cls._group_web_flat_items(grouped_flat_items))
         return registry_items

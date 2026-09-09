@@ -108,10 +108,10 @@ await require_business_action(
 
 - 5-digit `MMMEE` (3-digit module + 2-digit error), defined in `common/errcode/`.
 
-**Module registry** (35 in use as of 2026-08-17). The authoritative source is always the `Code: int = NNNNN` literals themselves; this table mirrors them and *will* drift. **Before claiming a new module number, re-derive the list:**
+**Module registry** (38 in use as of 2026-09-10). The authoritative source is always the `Code: int = NNNNN` / `Code = NNNNN` literals themselves; this table mirrors them and *will* drift. **Before claiming a new module number, re-derive the list:**
 
 ```bash
-grep -rhoE "Code:\s*int\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.py \
+grep -rhoE "Code(:\s*int)?\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.py \
   | grep -oE "[0-9]{5}" | cut -c1-3 | sort -un
 ```
 
@@ -119,15 +119,15 @@ grep -rhoE "Code:\s*int\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.py 
 |---|---|
 | 10x | 100 server · 101 finetune · 102 model_deploy · 103 component · 104 assistant · 105 flow · 106 user · 107 tag · 108 llm · 109 knowledge |
 | 11x | 110 linsight · 111 linsight (second block) |
-| 12x–18x | 120 workstation · 140 message · 150 tool · 160 dataset · **161 app_factory (F054)** · 170 telemetry · 180 knowledge_space · 181 approval |
+| 12x–18x | 120 workstation · 130 chat · 140 message · 150 tool · 160 dataset · **161 app_factory (F054) · 162 app_factory (F055)** · 170 telemetry · 180 knowledge_space · 181 approval |
 | 19x (tenant / permission) | 190 channel **and** permission ⚠️ · 191 tenant_resolver · 192 tenant_fga · 193 sso_sync · 194 tenant_quota · 195 tenant_sharing · 196 resource_owner_transfer · 197 admin_scope · 198 llm_tenant |
 | 20x–26x (org / open API) | 200 tenant · 210 department · 220 org_sync **and** tenant_tree ⚠️ · 230 user_group · 240 role · 250 permission · 260 open_api |
 
 - ⚠️ **190 and 220 are each shared by two modules** — pre-existing collisions, not a precedent. Never reuse an occupied number.
-- **130 was registered as `chat` but is not used by any error code.** Do not treat it as free without checking; do not cite it as an example.
-- **260 = open_api** (F049, `common/errcode/open_api.py`): open face `/api/v2` uses 26001–26019 (26001 / 26002 / 26003 / 26004 / 26012 implemented; 26005–26007 / 26010 / 26016 reserved for F050 delegation; 26013 / 26014 retired, never reuse), management face `/api/v1/service-accounts/**` uses 26020+ (26020–26031 implemented). Every 260xx carries a real `http_status` for the `/api/v2` handler; copy for each code must land in `packages/locales/src/api_errors/*.json` (all three languages) in the same change.
+- **130 = chat** (`common/errcode/chat.py`, 13004–13010). Earlier revisions of this table called it "registered but unused" because its codes are declared `Code = NNNNN` without the `: int` annotation and the old derive command skipped that style. It is occupied — do not treat it as free; do not cite it as an example.
+- **260 is assigned** to Open API authentication and identity (`/api/v2`; F053, `common/errcode/open_api.py`). Do not reuse it. Sub-bands as of 2026-09-10: 26001–26019 open face (`/api/v2` credential / scope / delegation / identity headers) · 26020–26031 service-account management face (`/api/v1/service-accounts/**`) · 26040–26043 personal tokens (`/api/v1/personal-tokens/**`). Holes inside those ranges are not free by default (26013 / 26014 were retired and are never reused) — read the file before claiming a number. Every 260xx carries a real `http_status`, which `open_api/api/exception_handlers.py` returns on `/api/v2` paths (200 elsewhere); copy for each code must land in `packages/locales/src/api_errors/*.json` (all three languages) in the same change. Codes in this file are declared `Code = NNNNN` without the `: int` annotation — the derive command above matches both styles for that reason.
 - **181 = approval** (F025 审批中心, `common/errcode/approval.py`): 18100–18118 in use. Note that 181 is the band for the approval **engine**, which every scenario shares — `withdraw` / `decide` guards live here (e.g. **18118** `ApprovalInstanceNotPendingError`, F055 T051), *not* in a scenario owner's band such as 162. A code added here tightens behaviour for menu access, channel subscription, knowledge-space join and app publish at once, so it needs regression coverage in every live scenario, and its copy must land in `packages/locales/src/api_errors/*.json` (all three languages) in the same change.
-- **161–164 = app_factory** (v3.0.0 应用工场). One band, four owners — split so each feature can claim codes without touching another's file: **161 = F054** (hosted-app domain + runtime, `common/errcode/app_factory.py`) · **162 = F055** (publish pipeline) · **163 = F056** (app square / governance) · **164 = F059** (k8s runtime backend). 161 sub-ranges: `16100-16119` domain/state machine · `16120-16139` runtime/orchestration · `16140-16159` entry & identity injection · `16160-16179` data plane/logs · `16180-16199` deployment switch/ops. The same assignment is mirrored in `features/v3.0.0/release-contract.md` ("已分配模块编码"), which is where F055 / F056 / F059 look it up — update both together.
+- **161–164 = app_factory** (v3.0.0 应用工场). One band, four owners — split so each feature can claim codes without touching another's file: **161 = F054** (hosted-app domain + runtime, `common/errcode/app_factory.py`) · **162 = F055** (publish pipeline, `common/errcode/app_publish.py`) · **163 = F056** (app square / governance) · **164 = F059** (k8s runtime backend). 161 sub-ranges: `16100-16119` domain/state machine · `16120-16139` runtime/orchestration · `16140-16159` entry & identity injection · `16160-16179` data plane/logs · `16180-16199` deployment switch/ops. The same assignment is mirrored in `features/v3.0.0/release-contract.md` ("已分配模块编码"), which is where F055 / F056 / F059 look it up — update both together.
 - When you claim a number, add it here in the same change.
 
 ## C6. No Hardcoded Secrets (RULE-7)

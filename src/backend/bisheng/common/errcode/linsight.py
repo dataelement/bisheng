@@ -107,10 +107,10 @@ class SkillValidationError(BaseErrorCode):
     Msg: str = "Skill validation failed: invalid frontmatter or name"
 
 
-# Uploaded skill file (the .md / .zip / .skill payload itself) exceeds the 10MB limit
+# Uploaded skill file (the .md / .zip / .skill payload itself) exceeds the configured upload limit
 class SkillFileTooLargeError(BaseErrorCode):
     Code: int = 11052
-    Msg: str = "Skill file exceeds the 10MB size limit"
+    Msg: str = "Skill file exceeds the upload size limit"
 
 
 # Skill not found in the current tenant

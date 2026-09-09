@@ -47,14 +47,14 @@ export function TaskModeToggle({ active, disabled = false, onClick, compact = fa
             className={cn(
                 // primary-100 is not a theme token; use a light primary tint to match.
                 'flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-normal transition-colors outline-none hover:bg-blue-100',
-                active ? 'text-blue-500' : 'text-[#4E5969]',
+                active ? 'text-blue-500' : 'text-text-2',
                 disabled && 'cursor-not-allowed opacity-50',
             )}
         >
             {showExit ? (
                 <X size={16} className="text-blue-500" />
             ) : (
-                <Outlined.ListSuccess size={16} className={active ? 'text-blue-500' : 'text-[#4E5969]'} />
+                <Outlined.ListSuccess size={16} className={active ? 'text-blue-500' : 'text-text-2'} />
             )}
             {/* Compact: collapse to icon only to save horizontal space in the
                 input toolbar, matching the knowledge/tools selectors. */}
@@ -64,7 +64,7 @@ export function TaskModeToggle({ active, disabled = false, onClick, compact = fa
                 when no hover-swap will reveal one: compact layout, or a device
                 that can't hover. Hover-capable roomy layouts use the swap above. */}
             {showPersistentExit && (
-                <X size={16} className="shrink-0 text-[#999]" />
+                <X size={16} className="shrink-0 text-text-3" />
             )}
         </button>
     );

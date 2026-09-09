@@ -23,7 +23,7 @@ export function SelectionPathBreadcrumb({
     const { commonPath, isLoading } = useSelectionPath(spaceId, spaceName, selectedFiles, displayFiles);
 
     if (isLoading) {
-        return <span className="text-xs text-[#86909c]">{localize("com_knowledge.loading_path")}</span>;
+        return <span className="text-xs text-text-3">{localize("com_knowledge.loading_path")}</span>;
     }
 
     if (commonPath.length === 0) {
@@ -41,7 +41,7 @@ export function SelectionPathBreadcrumb({
     };
 
     return (
-        <div className="flex flex-wrap items-center gap-0.5 text-sm text-[#86909c] min-w-0 max-w-[60%]">
+        <div className="flex flex-wrap items-center gap-0.5 text-sm text-text-3 min-w-0 max-w-[60%]">
             {commonPath.map((item, index) => {
                 const isLast = index === commonPath.length - 1;
                 return (

@@ -192,18 +192,18 @@ export function SubjectSearchUser({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="relative shrink-0">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
         <input
           type="text"
           placeholder={localize("com_permission.search_user")}
           value={keyword}
           onChange={handleInput}
-          className="h-8 w-full rounded-md border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
+          className="h-8 w-full rounded-md border border-border-base bg-white pl-9 pr-3 text-[14px] text-text-1 outline-none transition-colors placeholder:text-text-3 focus:border-border-deep"
         />
       </div>
       <div
         ref={scrollRef}
-        className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-md border border-[#EBECF0]"
+        className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-md border border-border-base"
       >
         {loading && (
           <div className="py-4 text-center text-sm text-gray-500">
@@ -248,7 +248,7 @@ export function SubjectSearchUser({
                   {showUserId && (
                     <>
                       <span className="h-3 w-px shrink-0 bg-[#D9D9D9]" aria-hidden />
-                      <span className="shrink-0 truncate text-xs text-[#999999]" title={user.external_id ?? undefined}>{user.external_id}</span>
+                      <span className="shrink-0 truncate text-xs text-text-3" title={user.external_id ?? undefined}>{user.external_id}</span>
                     </>
                   )}
                   {/* "Already granted" badge sits right after the name/id; it stays at
@@ -264,7 +264,7 @@ export function SubjectSearchUser({
                     </span>
                   )}
                 </div>
-                <span className="max-w-[45%] shrink-0 truncate text-xs text-[#999999]" title={departmentPath}>{departmentPath}</span>
+                <span className="max-w-[45%] shrink-0 truncate text-xs text-text-3" title={departmentPath}>{departmentPath}</span>
               </div>
             );
           })}

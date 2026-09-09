@@ -1,5 +1,9 @@
+import asyncio
 import json
+from typing import TYPE_CHECKING
+
 from loguru import logger
+from sqlmodel import col, select
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.workflow import WorkFlowService
@@ -8,6 +12,7 @@ from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatList
 from bisheng.chat_session.domain.services.chat_message_service import _resolve_leaf_tenant_id
+from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.chat_session.utils import get_session_app_type
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -15,16 +20,20 @@ from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.schemas.telemetry.event_data_schema import DeleteMessageSessionEventData, NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
+from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.logger import trace_id_var
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.mark_record import MarkRecordDao, MarkRecordStatus
 from bisheng.database.models.mark_task import MarkTaskDao
-from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.user.domain.models.user import UserDao
+
+if TYPE_CHECKING:
+    from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
 
 
 class ChatSessionService:
@@ -52,12 +61,71 @@ class ChatSessionService:
         return history
 
     @staticmethod
-    async def get_session_info(chat_id: str) -> MessageSession | None:
+    async def get_session_info(
+        chat_id: str,
+        subject: SessionSubject | None = None,
+    ) -> MessageSession | None:
         """Get session details with logo URL resolved."""
         res = await MessageSessionDao.async_get_one(chat_id)
+        if subject is not None and (res is None or not subject.matches(res)):
+            raise NotFoundError.http_exception()
         if res:
             res.flow_logo = WorkFlowService.get_logo_share_link(res.flow_logo)
         return res
+
+    @staticmethod
+    async def get_subject_session(chat_id: str, subject: SessionSubject) -> MessageSession:
+        session = await MessageSessionDao.async_get_one(chat_id)
+        if session is None or not subject.matches(session):
+            raise NotFoundError.http_exception()
+        return session
+
+    @staticmethod
+    async def get_subject_session_if_exists(
+        chat_id: str,
+        subject: SessionSubject,
+    ) -> MessageSession | None:
+        session = await MessageSessionDao.async_get_one(chat_id)
+        if session is not None and not subject.matches(session):
+            raise NotFoundError.http_exception()
+        return session
+
+    @staticmethod
+    async def get_public_session_for_resolution(chat_id: str) -> MessageSession:
+        """Resolve only a public-v3 row before its tenant context is known."""
+
+        with bypass_tenant_filter():
+            session = await MessageSessionDao.async_get_one(chat_id)
+        if session is None or session.is_delete or session.api_subject_type != "public_v3":
+            raise NotFoundError.http_exception()
+        return session
+
+    @staticmethod
+    async def wait_for_subject_title(
+        chat_id: str,
+        subject: SessionSubject,
+        *,
+        deadline_seconds: float = 30.0,
+        interval_seconds: float = 0.5,
+    ) -> str:
+        """Wait for the existing background title task without weakening ownership."""
+
+        waited = 0.0
+        while waited < deadline_seconds:
+            session = await ChatSessionService.get_subject_session(chat_id, subject)
+            if session.name and session.name != "New Chat":
+                return session.name
+            await asyncio.sleep(interval_seconds)
+            waited += interval_seconds
+        session = await ChatSessionService.get_subject_session(chat_id, subject)
+        return session.name or "New Chat"
+
+    @staticmethod
+    async def create_subject_session(
+        session: MessageSession,
+        subject: SessionSubject,
+    ) -> MessageSession:
+        return await MessageSessionDao.async_insert_one(subject.stamp(session))
 
     @staticmethod
     async def rename_session(conversation_id: str, name: str) -> None:
@@ -67,12 +135,11 @@ class ChatSessionService:
     @staticmethod
     async def _own_conversation_or_raise(chat_id: str, login_user: UserPayload) -> MessageSession:
         """Load a conversation, refusing anyone who doesn't own it."""
-        session_chat = await MessageSessionDao.async_get_one(chat_id)
-        if not session_chat or session_chat.is_delete:
-            raise NotFoundError.http_exception()
-        if session_chat.user_id != login_user.user_id:
-            raise UnAuthorizedError.http_exception()
-        return session_chat
+        subject = SessionSubject.natural_person(
+            tenant_id=_resolve_leaf_tenant_id(login_user),
+            user_id=login_user.user_id,
+        )
+        return await ChatSessionService.get_subject_session(chat_id, subject)
 
     @staticmethod
     def _attachments_of(messages: list) -> list[dict]:
@@ -264,18 +331,18 @@ class ChatSessionService:
         return PageList(list=result, total=total)
 
     @staticmethod
-    def get_user_session_list(user_id: int, page: int = 1, limit: int = 10) -> list[ChatList]:
+    def get_subject_session_list(
+        subject: SessionSubject,
+        page: int = 1,
+        limit: int = 10,
+    ) -> list[ChatList]:
         """List daily chat and linsight sessions for a user, sorted by update_time descending."""
         allowed_flow_types = [FlowType.WORKSTATION.value, FlowType.LINSIGHT.value]
-
-        res = MessageSessionDao.filter_session(
-            user_ids=[user_id],
-            flow_type=allowed_flow_types,
-            page=page,
-            limit=limit,
-            include_delete=False,
-            order_by_update_time=True,
+        statement = subject.filter_statement(select(MessageSession)).where(
+            col(MessageSession.flow_type).in_(allowed_flow_types)
         )
+        statement = statement.order_by(col(MessageSession.update_time).desc())
+        res = MessageSessionDao.get_statement_results_sync(statement, page=page, limit=limit)
 
         if not res:
             return []
@@ -301,6 +368,18 @@ class ChatSessionService:
             )
             for one in res
         ]
+
+    @staticmethod
+    def get_user_session_list(
+        login_user: UserPayload,
+        page: int = 1,
+        limit: int = 10,
+    ) -> list[ChatList]:
+        subject = SessionSubject.natural_person(
+            tenant_id=_resolve_leaf_tenant_id(login_user),
+            user_id=login_user.user_id,
+        )
+        return ChatSessionService.get_subject_session_list(subject, page, limit)
 
     @staticmethod
     def get_or_create_session(

@@ -1,0 +1,222 @@
+---
+status: done
+component: Tabs
+---
+
+# 标签页 Tabs
+
+把**同一层级的几组内容**收进同一块区域,点谁看谁——切的是「内容区」,属于导航。只是同一份内容换个看法(列表还是卡片)的,用[分段控制器](/components/segmented);要随表单提交才生效的,用单选框。组件库 `@bisheng/ui` 导出 **`Tabs`**。规范全文见「文档 → 组件规范 → 标签页 Tabs」。
+
+**壳把规范写死的部分**:只有线型一种画法——标签行 + 2px 指示条 + 底部 1px 通栏分隔线(分隔线可经 `divider={false}` 关掉,见下);选中态两种配色经 `variant` 二选一:`brand`(默认,随蓝⇄绿主题)/ `neutral`(墨色,见下),不开放任意配色;三档高度 24/32/40;页签间距 24px、首个页签与内容区左缘对齐;未选中字重 400、选中 500(宽度按加粗态预留,切换零位移);指示条 200ms 滑动、内容区即时替换不加转场;溢出横向滚动 + 两端渐隐,选中页签自动保持可见;触屏热区 ≥44px。这些没有 prop。键盘走 WAI-ARIA tabs pattern 的 **automatic 模式**:左右方向键移动焦点即激活,Home/End 跳两端。
+
+## 基础用法
+
+`items` 传页签数组,`children` 是各自的内容面板;不传 `activeKey` 即非受控,默认选中第一个可用页签。页签最少 2 个——只有 1 个就不该分页签。
+
+```tsx
+import { Tabs } from '@bisheng/ui';
+
+export default () => (
+  <Tabs
+    items={[
+      { key: 'detail', label: '详情', children: <p className="py-4 text-body text-text-2">应用的基础信息。</p> },
+      { key: 'version', label: '版本', children: <p className="py-4 text-body text-text-2">历史版本列表。</p> },
+      { key: 'perm', label: '权限', children: <p className="py-4 text-body text-text-2">谁能看、谁能改。</p> },
+    ]}
+  />
+);
+```
+
+## 三档尺寸
+
+默认 `medium`。档位暗示层级:页头用 `large`,页内容器用 `medium`,弹窗、抽屉里的次级分区用 `small`——别让弹窗里的页签和页头一样大。
+
+```tsx
+import { Tabs } from '@bisheng/ui';
+
+const items = [
+  { key: 'a', label: '详情' },
+  { key: 'b', label: '版本' },
+  { key: 'c', label: '权限' },
+];
+
+export default () => (
+  <div style={{ display: 'grid', gap: 24 }}>
+    <Tabs size="small" items={items} />
+    <Tabs items={items} />
+    <Tabs size="large" items={items} />
+  </div>
+);
+```
+
+## 墨色款
+
+`variant="neutral"`:选中态不用品牌色,文字与指示条都用墨色(text-1),选中靠**加粗 + 指示条**表达。用在品牌色会打架的界面——页面上已有品牌色主按钮/链接群,或页签只是弱导航不想抢焦点时。默认款仍是品牌色。
+
+```tsx
+import { Tabs } from '@bisheng/ui';
+
+const items = [
+  { key: 'a', label: '详情' },
+  { key: 'b', label: '版本' },
+  { key: 'c', label: '权限' },
+];
+
+export default () => (
+  <div style={{ display: 'grid', gap: 24 }}>
+    <Tabs items={items} />
+    <Tabs variant="neutral" items={items} />
+  </div>
+);
+```
+
+## 无分隔线
+
+`divider={false}` 去掉标签行下方那条通栏灰线,指示条与页签保持原样。**只在外层容器已经画了这条边时用**——卡片描边、分区横线紧挨着页签下沿时,两条 1px 细线隔着 1px 并排,看起来像渲染出错。容器没画边就别关,页签会飘在内容上方失去归属。
+
+```tsx
+import { Tabs } from '@bisheng/ui';
+
+const items = [
+  { key: 'a', label: '详情' },
+  { key: 'b', label: '版本' },
+  { key: 'c', label: '权限' },
+];
+
+export default () => (
+  <div style={{ display: 'grid', gap: 24 }}>
+    <Tabs items={items} />
+    <Tabs divider={false} items={items} />
+  </div>
+);
+```
+
+## 前缀图标
+
+icon 随档 14/16/18px,与文字间距 8px(small 档 4px)。同组页签**要么都带 icon 要么都不带**,一半有一半没有的组读起来最累。icon 走 `currentColor` 跟随文字色,所以与配色款正交——墨色款下图标同样变墨色,无需额外处理。
+
+```tsx
+import { Tabs } from '@bisheng/ui';
+import { Outlined } from 'bisheng-icons';
+
+const items = [
+  { key: 'list', label: '列表', icon: <Outlined.List /> },
+  { key: 'calendar', label: '日历', icon: <Outlined.Calendar /> },
+];
+
+export default () => (
+  <div style={{ display: 'grid', gap: 24 }}>
+    <Tabs items={items} />
+    <Tabs variant="neutral" items={items} />
+  </div>
+);
+```
+
+## 数字徽标
+
+`badge` 在文字右侧挂一个数字(未读数、条目数)。传 `0` 或不传都不渲染,所以业务侧可以把计数原样传进来,不必自己判空。徽标**不跟随选中态变色**——它报的是「有多少」,不是「你在哪一页」,选中与未选中一律同色;但它跟随配色款,墨色款下自然是墨色。数字不截断,位数多了页签跟着变宽。
+
+```tsx
+import { Tabs } from '@bisheng/ui';
+
+const items = [
+  { key: 'all', label: '全部', badge: 499 },
+  { key: 'agri', label: '农业', badge: 499 },
+  { key: 'read', label: '已读' },
+];
+
+export default () => (
+  <div style={{ display: 'grid', gap: 24 }}>
+    <Tabs items={items} />
+    <Tabs variant="neutral" items={items} />
+  </div>
+);
+```
+
+## 禁用页签
+
+禁用是「暂时不可用」:灰字 + 禁止光标,键盘焦点直接跳过。永远点不了的入口别长期挂着——未开放的功能页签直接不渲染。
+
+```tsx
+import { Tabs } from '@bisheng/ui';
+
+export default () => (
+  <Tabs
+    items={[
+      { key: 'detail', label: '详情' },
+      { key: 'version', label: '版本', disabled: true },
+      { key: 'perm', label: '权限' },
+    ]}
+  />
+);
+```
+
+## 附加操作区
+
+标签行右端可以放和这块内容相关的**轻操作**(刷新、筛选),与页签垂直居中;重操作进内容区。
+
+```tsx
+import { Tabs, Button, Tooltip } from '@bisheng/ui';
+import { Outlined } from 'bisheng-icons';
+
+export default () => (
+  <Tabs
+    items={[
+      { key: 'run', label: '运行日志', children: <p className="py-4 text-body text-text-2">近 24 小时的运行记录。</p> },
+      { key: 'error', label: '错误日志', children: <p className="py-4 text-body text-text-2">只看失败的。</p> },
+    ]}
+    extra={
+      <Tooltip content="刷新">
+        <Button size="small" variant="text" color="default" iconOnly aria-label="刷新" icon={<Outlined.Refresh />} />
+      </Tooltip>
+    }
+  />
+);
+```
+
+## 溢出横滚
+
+页签装不下时**横向滚动 + 两端渐隐**,不换行、不出第二行;选中的页签自动滚到可视区内。页签超过 7 个,先想想能不能合并归类。
+
+```tsx
+import { Tabs } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ maxWidth: 360 }}>
+    <Tabs
+      defaultActiveKey="t5"
+      items={['详情', '版本', '权限', '成员', '日志', '监控', '告警', '设置'].map((label, i) => ({
+        key: `t${i}`,
+        label,
+      }))}
+    />
+  </div>
+);
+```
+
+## 受控用法
+
+`activeKey` + `onChange` 受控,适合页签状态要进路由/URL 的场景;此时可以不传 `children`,把 Tabs 当纯页签条用,内容区由页面自己按路由渲染。
+
+```tsx
+import React from 'react';
+import { Tabs } from '@bisheng/ui';
+
+export default () => {
+  const [key, setKey] = React.useState('detail');
+  return (
+    <div style={{ display: 'grid', gap: 8 }}>
+      <Tabs
+        activeKey={key}
+        onChange={setKey}
+        items={[
+          { key: 'detail', label: '详情' },
+          { key: 'version', label: '版本' },
+          { key: 'perm', label: '权限' },
+        ]}
+      />
+      <span className="text-caption text-text-3">当前页签:{key}</span>
+    </div>
+  );
+};
+```

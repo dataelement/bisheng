@@ -44,7 +44,7 @@ export function PermissionLevelMenu({
     return (
       <span
         className={cn(
-          "inline-flex h-8 w-[96px] shrink-0 items-center justify-end whitespace-nowrap px-2 text-[14px] leading-[22px] text-[#999999]",
+          "inline-flex h-8 w-[96px] shrink-0 items-center justify-end whitespace-nowrap px-2 text-[14px] leading-[22px] text-text-3",
           className,
         )}
       >
@@ -59,12 +59,12 @@ export function PermissionLevelMenu({
         <button
           type="button"
           className={cn(
-            "inline-flex h-8 w-[96px] items-center justify-end gap-1 rounded-md px-2 text-[14px] leading-[22px] text-[#999999] transition-colors hover:bg-[#F7F7F7]",
+            "inline-flex h-8 w-[96px] items-center justify-end gap-1 rounded-md px-2 text-[14px] leading-[22px] text-text-3 transition-colors hover:bg-fill-1",
             className,
           )}
         >
           <span className="truncate">{label}</span>
-          <ChevronDown className="size-3.5 shrink-0 text-[#999999]" />
+          <ChevronDown className="size-3.5 shrink-0 text-text-3" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -80,7 +80,7 @@ export function PermissionLevelMenu({
                 "rounded-md px-2 py-[5px] text-[14px] leading-[22px]",
                 active
                   ? "bg-blue-500/[0.07] text-blue-500 data-[highlighted]:bg-blue-500/[0.07] data-[highlighted]:text-blue-500"
-                  : "text-[#212121] data-[highlighted]:bg-[#F7F7F7] data-[highlighted]:text-[#212121]",
+                  : "text-text-1 data-[highlighted]:bg-fill-1 data-[highlighted]:text-text-1",
               )}
               onSelect={() => onChange(model.id)}
             >
@@ -89,7 +89,7 @@ export function PermissionLevelMenu({
           );
         })}
         {showLevels && onRemove && (
-          <DropdownMenuSeparator className="my-1 bg-[#EBECF0]" />
+          <DropdownMenuSeparator className="my-1 bg-fill-3" />
         )}
         {onRemove && (
           <DropdownMenuItem

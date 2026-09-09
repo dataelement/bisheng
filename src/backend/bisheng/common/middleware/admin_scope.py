@@ -27,7 +27,7 @@ inactivity; a super admin who steps away for 4h loses the scope.
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -45,7 +45,6 @@ from bisheng.utils.http_middleware import (
     _extract_http_access_token,
 )
 
-
 # Path prefixes considered "management APIs" for the purpose of admin-scope.
 # The list is deliberately conservative: admin-scope is a read-time filter,
 # and wrapping the whole API surface with it would change business flows
@@ -61,16 +60,15 @@ from bisheng.utils.http_middleware import (
 # so it never matched. Both prefixes were removed; scope now only affects
 # the LLM management surface (and the admin endpoints used to set it).
 MANAGEMENT_API_PREFIXES: tuple[str, ...] = (
-    '/api/v1/llm',
-    '/api/v1/workstation',
-    '/api/v1/linsight',
-    '/api/v1/tool',
-    '/api/v1/knowledge',
-    '/api/v1/chat/online',
-    '/api/v1/admin',
-    # F049: a super admin has no tenant-admin role, so the ScopeBar is the only
-    # way to create a service account inside a child tenant (AC-23, pit 23).
-    '/api/v1/service-accounts',
+    "/api/v1/llm",
+    "/api/v1/workstation",
+    "/api/v1/linsight",
+    "/api/v1/tool",
+    "/api/v1/knowledge",
+    "/api/v1/chat/online",
+    "/api/v1/admin",
+    "/api/v1/service-accounts",
+    "/api/v1/personal-tokens",
 )
 
 
@@ -79,7 +77,7 @@ def _is_management_api_path(path: str, prefixes: Iterable[str] = MANAGEMENT_API_
 
 
 def _redis_key(user_id: int) -> str:
-    return f'admin_scope:{user_id}'
+    return f"admin_scope:{user_id}"
 
 
 class AdminScopeMiddleware(BaseHTTPMiddleware):
@@ -101,14 +99,14 @@ class AdminScopeMiddleware(BaseHTTPMiddleware):
         subject = _decode_jwt_subject(token)
         if not subject:
             return await call_next(request)
-        user_id = subject.get('user_id')
+        user_id = subject.get("user_id")
         if not user_id:
             return await call_next(request)
 
         try:
             is_super = await _check_is_global_super(int(user_id))
-        except Exception as exc:  # noqa: BLE001 — middleware must fail-open
-            logger.debug('AdminScopeMiddleware: super check failed: %s', exc)
+        except Exception as exc:
+            logger.debug("AdminScopeMiddleware: super check failed: %s", exc)
             return await call_next(request)
 
         if not is_super:
@@ -122,8 +120,8 @@ class AdminScopeMiddleware(BaseHTTPMiddleware):
             redis = await get_redis_client()
             key = _redis_key(int(user_id))
             raw = await redis.aget(key)
-        except Exception as exc:  # noqa: BLE001 — fail-open on Redis outage
-            logger.debug('AdminScopeMiddleware: Redis read failed: %s', exc)
+        except Exception as exc:
+            logger.debug("AdminScopeMiddleware: Redis read failed: %s", exc)
             return await call_next(request)
 
         if raw is None:
@@ -138,9 +136,10 @@ class AdminScopeMiddleware(BaseHTTPMiddleware):
         # Sliding refresh. Do NOT block the request on a TTL update failure.
         try:
             await redis.aexpire_key(
-                key, settings.multi_tenant.admin_scope_ttl_seconds,
+                key,
+                settings.multi_tenant.admin_scope_ttl_seconds,
             )
-        except Exception as exc:  # noqa: BLE001
-            logger.debug('AdminScopeMiddleware: TTL refresh failed: %s', exc)
+        except Exception as exc:
+            logger.debug("AdminScopeMiddleware: TTL refresh failed: %s", exc)
 
         return await call_next(request)

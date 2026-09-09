@@ -370,6 +370,7 @@ async def test_workbench_getter_sanitizes_inherited_stale_model_refs():
             WSModel(id="30", name="deleted-model").model_dump(),
         ],
         "linsight_default_model_id": "20",
+        "chat_default_model_id": "30",
         "embedding_model": WSModel(id="10", name="root-embedding").model_dump(),
         "asr_model": WSModel(id="30", name="deleted-asr").model_dump(),
         "tts_model": WSModel(id="20", name="child-tts").model_dump(),
@@ -390,6 +391,7 @@ async def test_workbench_getter_sanitizes_inherited_stale_model_refs():
     assert blocked is False
     assert [one.id for one in (config.models or [])] == ["10"]
     assert config.linsight_default_model_id is None
+    assert config.chat_default_model_id is None
     assert config.embedding_model and config.embedding_model.id == "10"
     assert config.asr_model is None
     assert config.tts_model is None

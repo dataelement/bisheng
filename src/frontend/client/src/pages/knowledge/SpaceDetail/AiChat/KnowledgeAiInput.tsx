@@ -16,7 +16,6 @@
  * The component renders no outer padding; the parent owns positioning and spacing.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useRecoilState } from "recoil";
 import { SendIcon } from "~/components/svg";
 import AiModelSelect from "~/components/Chat/AiModelSelect";
 import type { BsConfig } from "~/api/chatApi";
@@ -26,12 +25,16 @@ import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import { cn } from "~/utils";
-import store from "~/store";
 
 interface KnowledgeAiInputProps {
     availableTags: { id: number; name: string }[];
     modelOptions?: BsConfig["models"];
     modelValue?: number;
+    /** User picked a model — the dock owns the selection, this input never
+     *  writes it (it used to write the global atom shared with /c). */
+    onModelChange?: (val: string) => void;
+    /** Value repair by AiModelSelect — applied but never remembered. */
+    onModelAutoChange?: (val: string) => void;
     isStreaming: boolean;
     disabled?: boolean;
     onSend: (text: string, files?: any[] | null, tag?: FolderChatTag) => void;
@@ -47,12 +50,14 @@ const TAG_TEXT_GAP_PX = 4;
 
 /** Tag chip: background #335CFF @ ~35% alpha; label text #212121 */
 const TAG_BG = "rgb(var(--brand-500)/0.35)";
-const TAG_TEXT_CLASS = "text-[#212121]";
+const TAG_TEXT_CLASS = "text-text-1";
 
 export function KnowledgeAiInput({
     availableTags,
     modelOptions,
     modelValue = 0,
+    onModelChange,
+    onModelAutoChange,
     isStreaming,
     disabled,
     onSend,
@@ -62,7 +67,6 @@ export function KnowledgeAiInput({
 }: KnowledgeAiInputProps) {
     const outerScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const localize = useLocalize();
-    const [, setChatModel] = useRecoilState(store.chatModel);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const badgeRef = useRef<HTMLSpanElement>(null);
     const [badgeIndentPx, setBadgeIndentPx] = useState<number | undefined>(undefined);
@@ -260,13 +264,8 @@ export function KnowledgeAiInput({
             options={modelOptions}
             value={modelValue}
             disabled={disabled || isStreaming || !modelOptions?.length}
-            onChange={(val) => {
-                const model = modelOptions?.find((item) => String(item.id) === String(val));
-                setChatModel({
-                    id: Number(val),
-                    name: model?.displayName || "",
-                });
-            }}
+            onChange={(val) => onModelChange?.(val)}
+            onAutoChange={onModelAutoChange}
         />
     );
 
@@ -319,7 +318,7 @@ export function KnowledgeAiInput({
             className={cn(
                 "relative flex w-full bg-white p-3",
                 variant === "box"
-                    ? "rounded-[20px] touch-mobile:rounded-2xl border border-[#E5E6EB] shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
+                    ? "rounded-[20px] touch-mobile:rounded-2xl border border-border-base shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
                     : "border-t border-[#EBEBEB]",
                 stacked ? "flex-col gap-2" : "items-center gap-2",
             )}
@@ -383,7 +382,7 @@ export function KnowledgeAiInput({
                             disabled={disabled || isStreaming}
                             placeholder={resolvedPlaceholder}
                             rows={1}
-                            className="block w-full min-h-5 resize-none overflow-hidden bg-transparent text-sm leading-5 text-text-primary outline-none placeholder-[#86909c]"
+                            className="block w-full min-h-5 resize-none overflow-hidden bg-transparent text-sm leading-5 text-text-primary outline-none placeholder-text-3"
                             style={{
                                 textIndent: selectedTag ? `${badgeIndentPx ?? 0}px` : undefined,
                             }}

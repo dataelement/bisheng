@@ -51,6 +51,7 @@ const ArticlePage = lazy(() => import('~/pages/Subscription/Article/ArticlePage'
 const DevLogin = lazy(() => import('~/pages/DevLogin'));
 const StandaloneChatPage = lazy(() => import('~/pages/standaloneChat/StandaloneChatPage'));
 const MediaPlaybackPage = lazy(() => import('~/pages/media/MediaPlaybackPage'));
+const SettingsPage = lazy(() => import('~/pages/settings/SettingsPage'));
 
 function RouteLoading() {
   return (
@@ -124,24 +125,6 @@ const baseConfig = {
   //@ts-ignore
   basename: __APP_ENV__.BASE_URL
 }
-
-// DEV-ONLY component gallery for the UI unification effort (docs-ui-refactor/).
-// `import.meta.env.DEV` is statically false in production builds, so both the lazy
-// import and the route below are tree-shaken out — the gallery never ships to users.
-const GalleryApp = import.meta.env.DEV
-  ? lazy(() => import('~/pages/_gallery/GalleryApp'))
-  : null;
-
-const devGalleryRoutes = import.meta.env.DEV && GalleryApp
-  ? [{
-      path: '/gallery',
-      element: (
-        <Suspense fallback={null}>
-          <GalleryApp />
-        </Suspense>
-      ),
-    }]
-  : [];
 
 export const router = createBrowserRouter([
   {
@@ -275,6 +258,8 @@ export const router = createBrowserRouter([
             </MenuApprovalPluginGate>
           )},
           { path: 'knowledge/share/:spaceId', element: suspended(<Knowledge />) },
+          // Personal settings + 消息与审批, merged into one routed page (no plugin gate — always available).
+          { path: 'settings/:section?', element: suspended(<SettingsPage />) },
           { path: 'menu-unavailable', element: <MenuUnavailablePage /> },
         ],
       },
@@ -294,7 +279,6 @@ export const router = createBrowserRouter([
   { path: 'chat/flow/:flowId', element: suspended(<StandaloneChatPage mode="guest" flowType="workflow" />), errorElement: <RouteErrorBoundary /> },
   { path: 'chat/assistant/:flowId', element: suspended(<StandaloneChatPage mode="guest" flowType="assistant" />), errorElement: <RouteErrorBoundary /> },
   { path: '/html', element: suspended(<WebView />) },
-  ...devGalleryRoutes,
   { path: '/__dev/login', element: suspended(<DevLogin />) },
   { path: '/404', element: <Page404 /> },
   { path: '/403', element: <Page403 /> },

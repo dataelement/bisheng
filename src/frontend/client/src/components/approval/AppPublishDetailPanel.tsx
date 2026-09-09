@@ -6,7 +6,7 @@ import {
   formatTime,
   InfoGrid,
   type LocalizeFn,
-} from "./ApprovalDetailPrimitives";
+} from "./approvalPresentation";
 
 /** Backend scenario code (app_publish_scenario_handler.SCENARIO_CODE). */
 export const APP_PUBLISH_SCENARIO_CODE = "app_publish_request";

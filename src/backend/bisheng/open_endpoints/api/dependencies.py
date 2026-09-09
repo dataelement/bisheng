@@ -17,7 +17,7 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository 
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
 from bisheng.knowledge.domain.services.knowledge_file_service import KnowledgeFileService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-from bisheng.open_endpoints.domain.utils import get_default_operator_async
+from bisheng.open_endpoints.domain.utils import get_open_api_operator_async
 
 if TYPE_CHECKING:
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
@@ -60,7 +60,7 @@ async def get_knowledge_file_service(
 
 async def get_knowledge_space_chat_service_for_openapi(
         request: Request,
-        default_user: UserPayload = Depends(get_default_operator_async),
+        default_user: UserPayload = Depends(get_open_api_operator_async),
         version_repo: KnowledgeDocumentVersionRepository = Depends(
             get_knowledge_document_version_repository
         ),
@@ -68,7 +68,7 @@ async def get_knowledge_space_chat_service_for_openapi(
     """KnowledgeSpaceChatService bound to the configured default operator.
 
     Used by the OpenAPI surface so external systems do not need user JWTs.
-    The tenant ContextVar is seeded inside ``get_default_operator_async``.
+    The v2 router dependency has already seeded the tenant ContextVar.
     """
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 

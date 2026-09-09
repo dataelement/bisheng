@@ -44,9 +44,7 @@ class PermissionService:
         }
     )
     _LEGACY_INTERNAL_RESOURCE_TYPES = frozenset(LEGACY_RESOURCE_TYPES)
-    _ALLOWED_RUNTIME_TYPES = (
-        _IDENTITY_RELATION_TYPES | _LEGACY_INTERNAL_RESOURCE_TYPES
-    )
+    _ALLOWED_RUNTIME_TYPES = _IDENTITY_RELATION_TYPES | _LEGACY_INTERNAL_RESOURCE_TYPES
     _FGA_BATCH_SIZE = 100
     _SUBJECT_RE = re.compile(
         r"^(user|department|user_group):(\d+)"
@@ -58,8 +56,7 @@ class PermissionService:
         normalized = str(object_type or "").strip().lower()
         if normalized not in cls._ALLOWED_RUNTIME_TYPES:
             raise RuntimeError(
-                "Legacy PermissionService cannot authorize an F048 "
-                f"business resource: {normalized or '<empty>'}"
+                f"Legacy PermissionService cannot authorize an F048 business resource: {normalized or '<empty>'}"
             )
         return normalized
 
@@ -71,9 +68,7 @@ class PermissionService:
         for operation in operations:
             object_type, separator, object_id = operation.object.partition(":")
             if not separator or not object_id:
-                raise ValueError(
-                    f"Invalid OpenFGA object key: {operation.object}"
-                )
+                raise ValueError(f"Invalid OpenFGA object key: {operation.object}")
             cls._require_allowed_runtime_type(object_type)
 
     @classmethod
@@ -294,6 +289,10 @@ class PermissionService:
     ) -> str:
         if subject_type == "user":
             return f"user:{subject_id}"
+        if subject_type == "service_account":
+            if include_children:
+                raise ValueError("service accounts do not support include_children")
+            return f"service_account:{subject_id}"
         if subject_type == "department":
             relation = "subtree_member" if include_children else "member"
             return f"department:{subject_id}#{relation}"
@@ -361,8 +360,7 @@ class PermissionService:
                     )
                 except FGAWriteError as exc:
                     logger.info(
-                        "Identity tuple batch fell back to single writes for "
-                        "%d operations: %s",
+                        "Identity tuple batch fell back to single writes for %d operations: %s",
                         len(chunk),
                         exc,
                     )
@@ -383,8 +381,7 @@ class PermissionService:
                     saved_failure_ops = True
                 if raise_on_failure:
                     raise FGAWriteError(
-                        "OpenFGA write did not complete successfully; "
-                        f"{len(failed_ops)} tuple operations failed"
+                        f"OpenFGA write did not complete successfully; {len(failed_ops)} tuple operations failed"
                     )
                 return
 
@@ -442,16 +439,9 @@ class PermissionService:
     ) -> bool:
         text = error_msg.lower()
         if action == "write":
-            return (
-                "already exists" in text
-                or "cannot write a tuple which already exists" in text
-            )
+            return "already exists" in text or "cannot write a tuple which already exists" in text
         if action == "delete":
-            return (
-                "does not exist" in text
-                or "did not exist" in text
-                or "tuple to be deleted did not exist" in text
-            )
+            return "does not exist" in text or "did not exist" in text or "tuple to be deleted did not exist" in text
         return False
 
     @staticmethod
@@ -486,9 +476,7 @@ class PermissionService:
             fga = await cls._aget_fga()
             if fga is None:
                 return []
-            tuples = await fga.read_tuples(
-                object=f"{object_type}:{object_id}"
-            )
+            tuples = await fga.read_tuples(object=f"{object_type}:{object_id}")
         except Exception as exc:
             logger.error("Failed to read identity/LLM roster: %s", exc)
             return []
@@ -515,11 +503,7 @@ class PermissionService:
                     subject_type=subject_type,
                     subject_id=int(subject_id),
                     relation=key[2],
-                    include_children=(
-                        include_children
-                        if subject_type == "department"
-                        else None
-                    ),
+                    include_children=(include_children if subject_type == "department" else None),
                 )
             )
         return items

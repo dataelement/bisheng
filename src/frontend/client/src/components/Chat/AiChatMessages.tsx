@@ -311,7 +311,7 @@ export default function AiChatMessages({
                     {emptyStateIllustration ?? (
                         <ArticleQAIllustration grey className="size-[80px] mx-auto block" />
                     )}
-                    <p className="mt-4 text-center text-[14px] font-normal text-[#999999]">
+                    <p className="mt-4 text-center text-[14px] font-normal text-text-3">
                         {emptyStateHint ?? localize("com_knowledge.qa_current_article")}
                     </p>
                     {presetQuestions.length > 0 && (
@@ -320,7 +320,7 @@ export default function AiChatMessages({
                                 <Button
                                     key={i}
                                     variant="ghost"
-                                    className="bg-gray-50 px-3 py-1 text-left text-sm font-normal text-[#86909c] transition-colors hover:bg-blue-500/[0.07] hover:text-blue-500 active:bg-blue-500/[0.07] rounded-lg flex items-center gap-1 group w-fit"
+                                    className="bg-gray-50 px-3 py-1 text-left text-sm font-normal text-text-3 transition-colors hover:bg-blue-500/[0.07] hover:text-blue-500 active:bg-blue-500/[0.07] rounded-lg flex items-center gap-1 group w-fit"
                                     onClick={() => onPresetClick?.(q)}
                                 >
                                     <div className="size-4 flex items-center justify-center">
@@ -462,7 +462,7 @@ export default function AiChatMessages({
                     <button
                         type="button"
                         onClick={scrollToBottom}
-                        className="flex items-center h-8 justify-center gap-2 rounded-md border border-[#EBECF0] bg-white/80 px-2.5 text-sm leading-5 text-neutral-800 hover:bg-white/90 transition-colors"
+                        className="flex items-center h-8 justify-center gap-2 rounded-md border border-border-base bg-white/80 px-2.5 text-sm leading-5 text-neutral-800 hover:bg-white/90 transition-colors"
                     >
                         <ArrowDownIcon size={16} />
                         <span className="text-sm">回到底部</span>

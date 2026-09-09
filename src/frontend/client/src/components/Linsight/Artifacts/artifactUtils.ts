@@ -5,6 +5,7 @@
  * legacy task flow but kept here so P5 can delete the Sop components.
  */
 import { getLinsightFileDownloadApi } from '~/api/chat/data-service';
+import { stripCitationMarkers } from '~/components/Chat/Messages/Content/citationUtils';
 import { getShareTokenFromPath } from '~/utils/shareToken';
 
 /** Output file shape of `output_result.final_files` (= store `file_list`). */
@@ -37,6 +38,10 @@ const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'];
 // and `ppt`/`pptx` (need a backend pptx→pdf conversion) — those stay 'unsupported'
 // so they keep the "download to view" fallback.
 const DOCUMENT_EXTS = ['pdf', 'docx', 'xls', 'xlsx', 'csv'];
+// Deliverable extensions whose bytes are markdown TEXT - the only artifacts
+// fetchArtifactBlob decodes (to strip citation markers); everything else is
+// handed out as raw bytes.
+const MARKDOWN_EXTS = ['md', 'markdown'];
 
 export function getFileExtension(fileName: string): string {
     const lastDot = fileName?.lastIndexOf('.') ?? -1;
@@ -369,32 +374,73 @@ export function applyHtmlViewerTabIdentity(htmlContent: string): void {
     }
 }
 
+/**
+ * Decode a markdown artifact and drop its citation markers.
+ *
+ * Task-mode deliverables carry citations as private-use-area spans
+ * `\ue200<sourceId>[\ue201<sourceId>...]\ue202` (see citationUtils). The in-app
+ * preview (PreviewBody -> Markdown) parses those into badges and must keep
+ * seeing them - it fetches the object itself (usePreviewSource) and never comes
+ * through here. As a FILE, though, the span is just invisible wrapper chars
+ * around a bare `knowledgesearch_xxx:0` id, so the local download and the
+ * knowledge-space save hand out the markdown with every span removed, ids
+ * included - the same rule clipboard copy applies via stripCitationMarkers.
+ * Decoded with Response.text() so the result is a proper UTF-8 text blob.
+ */
+async function readCitationFreeMarkdown(response: Response): Promise<Blob> {
+  const text = await response.text();
+  return new Blob([stripCitationMarkers(text)], { type: 'text/markdown;charset=utf-8' });
+}
+
+/**
+ * Resolve, fetch and name an artifact's real bytes.
+ *
+ * Shared by the local download and the save-to-knowledge-space flow so the
+ * name rule can't drift between them: a user-uploaded non-image source is
+ * stored as its PARSED MARKDOWN, so the bytes are markdown regardless of the
+ * original extension and the name must become `<stem>.md`. Image uploads and
+ * model-generated outputs keep their real name/content.
+ *
+ * Markdown payloads (`.md` / `.markdown` outputs and those parsed uploads) are
+ * returned with citation markers stripped (readCitationFreeMarkdown); every
+ * other file is passed through as raw bytes, so binary artifacts (docx / pdf /
+ * images / csv) are never decoded or altered.
+ */
+export async function fetchArtifactBlob(
+  file: ArtifactFile,
+  versionId: string,
+): Promise<{ blob: Blob; fileName: string }> {
+  const url = await resolveArtifactUrl(file.file_url, versionId);
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to download file: ${response.status}`);
+  }
+  const isUploadMarkdown = file.source === 'upload' && !file.previewAsImage;
+  const isMarkdown = isUploadMarkdown || MARKDOWN_EXTS.includes(getFileExtension(file.file_name));
+  const blob = isMarkdown ? await readCitationFreeMarkdown(response) : await response.blob();
+  return {
+    blob,
+    fileName: isUploadMarkdown
+      ? `${file.file_name.replace(/\.[^./\\]+$/, '')}.md`
+      : file.file_name,
+  };
+}
+
 /** Download the original artifact file ("save as" action). */
 export async function downloadArtifactFile(file: ArtifactFile, versionId: string): Promise<void> {
-    const url = await resolveArtifactUrl(file.file_url, versionId);
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`Failed to download file: ${response.status}`);
-    }
-    const data = await response.blob();
-    // A user-uploaded non-image source is stored as its PARSED MARKDOWN, so the
-    // bytes fetched here are markdown regardless of the original extension —
-    // download it as `<name>.md`. Image uploads and model-generated outputs keep
-    // their real name/content.
-    const isUploadMarkdown = file.source === 'upload' && !file.previewAsImage;
-    const downloadName = isUploadMarkdown
-        ? `${file.file_name.replace(/\.[^./\\]+$/, '')}.md`
-        : file.file_name;
-    // CSV needs a UTF-8 BOM so Excel opens it with the right encoding
-    const blob =
-        !isUploadMarkdown && getFileExtension(file.file_name) === 'csv'
-            ? new Blob([new Uint8Array([0xef, 0xbb, 0xbf]), data], { type: 'text/csv;charset=utf-8;' })
-            : data;
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = downloadName;
-    link.click();
-    URL.revokeObjectURL(link.href);
+  const { blob: data, fileName } = await fetchArtifactBlob(file, versionId);
+  // CSV needs a UTF-8 BOM so Excel opens it with the right encoding. Download
+  // only — a BOM prepended to a file entering knowledge-base parsing would
+  // corrupt its first cell, so it stays out of fetchArtifactBlob.
+  const blob =
+    fileName === file.file_name && getFileExtension(file.file_name) === 'csv'
+      ? new Blob([new Uint8Array([0xef, 0xbb, 0xbf]), data], { type: 'text/csv;charset=utf-8;' })
+      : data;
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 /** Save an exported blob (md → pdf/docx) with the converted extension. */

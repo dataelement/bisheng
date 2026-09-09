@@ -12,21 +12,32 @@ import json
 from hashlib import sha256
 from typing import Any
 
-# v3 is the merge of two independent v2s (2026-08-18).
+# v4 is the union of two independent v3s (2026-09-10), the same way v3 was
+# the union of two independent v2s.
 #
-# `feat/3.0.0-beta1` bumped v1 → v2 for the visibility-projection upgrade
-# (`FLAT_VISIBLE_RESOURCE_TYPES`, `_visible_subject_types`, `published`), while
-# `3.0-vibe` bumped v1 → v2 to add F054's `app` resource type. Both landed under
-# the same name, so the merged shape — a superset of both — is a *third* shape
-# that would otherwise still be called `f048-v2`.
+# - `3.0-vibe` v3 (2026-08-18): beta1's visibility-projection upgrade
+#   (`FLAT_VISIBLE_RESOURCE_TYPES`, `_visible_subject_types`, `published`)
+#   merged with F054's `app` resource type.
+# - `feat/3.0.0-beta2` v3 (2026-09-04): F053's `service_account` subject type
+#   — its own type definition, accepted as an ordinary assignee and as a
+#   visibility subject, never as a protected assignee or any admin relation.
+#   It sits on top of beta2's v2, which had already dropped `public_reader`
+#   from the computed `system_*` branches (2026-09-03, no bump of its own):
+#   the relation stays declared so existing tuples still write, but it no
+#   longer feeds `visible` or `system_can_*`.
+#
+# This file is the union of beta2's v3 and vibe's v3: `service_account`
+# subjects together with the `app` resource type. Both lines had called
+# their own shape `f048-v3`, so the union is a third shape and needs a
+# third name.
 #
 # The name is bumped rather than reused because it is written into
 # `authorization_model_release.model_version` next to the checksum. Correctness
 # is carried by the checksum, so nothing breaks either way; but an operator
-# reading the release history would see two `f048-v2` rows with different
+# reading the release history would see two `f048-v3` rows with different
 # checksums and no way to tell which model each one is. A version string whose
 # only job is to be readable must not name two different things.
-MODEL_VERSION = "f048-v3"
+MODEL_VERSION = "f048-v4"
 
 DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "manage_permission",
@@ -157,6 +168,7 @@ def _wildcard_user_type() -> dict:
 def _subject_types() -> list[dict]:
     return [
         {"type": "user"},
+        {"type": "service_account"},
         {"type": "department", "relation": "member"},
         {"type": "department", "relation": "subtree_member"},
         {"type": "user_group", "relation": "member"},
@@ -177,6 +189,7 @@ def _visible_subject_types() -> list[dict]:
 def _base_type_definitions() -> list[dict]:
     return [
         {"type": "user", "relations": {}, "metadata": None},
+        {"type": "service_account", "relations": {}, "metadata": None},
         {
             "type": "system",
             "relations": {"super_admin": _this()},
@@ -343,12 +356,7 @@ def _system_relation(
 ) -> dict:
     children: list[dict] = [_computed(f"system_{action}_marker")]
     if type_name in SYSTEM_SHARED_ACTION_TYPES[action]:
-        children.extend(
-            (
-                _computed("public_reader"),
-                _from("shared_with", "member"),
-            )
-        )
+        children.append(_from("shared_with", "member"))
     if parent_types:
         children.append(_from("parent", f"system_can_{action}"))
     return _union(*children)
@@ -356,7 +364,6 @@ def _system_relation(
 
 def _system_visible_relation(*, parent_types: tuple[str, ...]) -> dict:
     children: list[dict] = [
-        _computed("public_reader"),
         _from("shared_with", "member"),
     ]
     if parent_types:

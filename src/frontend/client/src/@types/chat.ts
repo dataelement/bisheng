@@ -129,6 +129,8 @@ export type BishengConfig = {
    * `undefined` as "not deployed" (read it through `useAppRuntimeEnabled`).
    */
   app_runtime_enabled?: boolean;
+  /** Whether employees may manage a personal access token in account settings. */
+  personal_token_enabled?: boolean;
   /** Knowledge space feature flags */
   knowledges?: {
     version_management?: {

@@ -38,24 +38,24 @@ const THREE_PRUNED = [task('e', 'terminated'), task('f', 'terminated'), task('g'
 describe('TaskPanel progress ratio', () => {
     it('hides pruned rows on a normally completed run', () => {
         render(<TaskPanel tasks={[...FOUR_DONE, ...THREE_PRUNED]} completed />);
-        expect(screen.getByText('4/4')).toBeInTheDocument();
-        expect(screen.queryByText('4/7')).not.toBeInTheDocument();
+        expect(screen.getByText('4/4')).toBeTruthy();
+        expect(screen.queryByText('4/7')).toBeNull();
     });
 
     it('keeps every row when the user stopped the run', () => {
         // Gate-keeper: the stop path renders exactly as it did before this change.
         render(<TaskPanel tasks={[...FOUR_DONE, ...THREE_PRUNED]} completed terminated />);
-        expect(screen.getByText('4/7')).toBeInTheDocument();
+        expect(screen.getByText('4/7')).toBeTruthy();
     });
 
     it('keeps not-started rows while the run is still going', () => {
         const running = [...FOUR_DONE, task('e', 'in_progress'), task('f', 'not_started')];
         render(<TaskPanel tasks={running} completed={false} />);
-        expect(screen.getByText('4/6')).toBeInTheDocument();
+        expect(screen.getByText('4/6')).toBeTruthy();
     });
 
     it('renders nothing when every row was pruned', () => {
         const { container } = render(<TaskPanel tasks={THREE_PRUNED} completed />);
-        expect(container).toBeEmptyDOMElement();
+        expect(container.firstChild).toBeNull();
     });
 });

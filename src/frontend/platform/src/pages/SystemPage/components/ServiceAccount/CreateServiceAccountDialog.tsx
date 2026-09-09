@@ -1,149 +1,83 @@
-import DepartmentUsersSelect, {
-  DepartmentUserOption,
-} from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
 import { Button } from "@/components/bs-ui/button"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/bs-ui/dialog"
-import { Input, Textarea } from "@/components/bs-ui/input"
-import { Label } from "@/components/bs-ui/label"
-import { toast } from "@/components/bs-ui/toast/use-toast"
-import { locationContext } from "@/contexts/locationContext"
+import { Input } from "@/components/bs-ui/input"
 import { createServiceAccountApi } from "@/controllers/API/serviceAccount"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { useContext, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
-interface CreateServiceAccountDialogProps {
+export interface CreateServiceAccountDialogProps {
   open: boolean
-  onClose: () => void
-  /** Success hands the new id up so the panel can jump straight to key issuing (AC-43). */
+  onOpenChange: (open: boolean) => void
   onCreated: (id: number) => void
 }
 
-/**
- * Create dialog: name + description + resource owner (AC-23).
- *
- * The tenant is never part of the payload — the backend takes it from the
- * acting admin's scope (the F019 ScopeBar for a super admin), so there is
- * nothing to choose and nothing to change afterwards.
- */
 export function CreateServiceAccountDialog({
   open,
-  onClose,
+  onOpenChange,
   onCreated,
 }: CreateServiceAccountDialogProps) {
-  const { t } = useTranslation("serviceAccount")
-  const { appConfig } = useContext(locationContext)
+  const { t } = useTranslation()
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [owner, setOwner] = useState<DepartmentUserOption[]>([])
+  const [ownerId, setOwnerId] = useState("")
   const [loading, setLoading] = useState(false)
 
-  // Single-tenant deployments have exactly one tenant, so naming it in the
-  // picker hint only adds a concept the operator never sees anywhere else.
-  const ownerPlaceholder = appConfig.multiTenantEnabled
-    ? t("create.resourceOwnerPlaceholderTenant")
-    : t("create.resourceOwnerPlaceholder")
-
-  const handleClose = () => {
-    if (loading) return
-    setName("")
-    setDescription("")
-    setOwner([])
-    onClose()
-  }
-
-  const handleSubmit = () => {
-    const trimmed = name.trim()
-    if (!trimmed) {
-      toast({ title: t("create.title"), description: t("create.nameRequired"), variant: "error" })
-      return
-    }
-    if (!owner.length) {
-      toast({
-        title: t("create.title"),
-        description: t("create.resourceOwnerRequired"),
-        variant: "error",
-      })
-      return
-    }
+  const handleCreate = async () => {
     setLoading(true)
-    captureAndAlertRequestErrorHoc(
-      createServiceAccountApi({
-        name: trimmed,
+    try {
+      const account = await createServiceAccountApi({
+        name: name.trim(),
         description: description.trim() || null,
-        resource_owner_user_id: Number(owner[0].value),
+        resource_owner_user_id: Number(ownerId),
       })
-    ).then((res) => {
-      setLoading(false)
-      if (!res) return
-      toast({ title: t("create.title"), description: t("create.success"), variant: "success" })
       setName("")
       setDescription("")
-      setOwner([])
-      onCreated(res.id)
-    })
+      setOwnerId("")
+      onOpenChange(false)
+      onCreated(account.id)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && handleClose()}>
-      <DialogContent className="sm:max-w-[560px]">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t("create.title")}</DialogTitle>
+          <DialogTitle>{t("openApiManagement.serviceAccount.create")}</DialogTitle>
+          <DialogDescription>{t("openApiManagement.serviceAccount.createHint")}</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="space-y-2">
-            <Label>{t("common.name")} *</Label>
+        <div className="space-y-4">
+          <label className="block space-y-1 text-sm">
+            <span>{t("openApiManagement.fields.name")}</span>
+            <Input value={name} maxLength={128} onChange={(event) => setName(event.target.value)} />
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span>{t("openApiManagement.fields.description")}</span>
             <Input
-              value={name}
-              maxLength={64}
-              placeholder={t("create.namePlaceholder")}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>{t("common.description")}</Label>
-            <Textarea
               value={description}
               maxLength={512}
-              rows={3}
-              placeholder={t("create.descriptionPlaceholder")}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(event) => setDescription(event.target.value)}
             />
-          </div>
-          <div className="space-y-2">
-            <Label>{t("create.resourceOwner")} *</Label>
-            <DepartmentUsersSelect
-              multiple={false}
-              value={owner}
-              onChange={setOwner}
-              placeholder={ownerPlaceholder}
-            />
-            <p className="text-sm text-muted-foreground">{t("create.resourceOwnerTip")}</p>
-            {/* Extra ownership consequences that only exist once apps can be deployed. */}
-            {appConfig.openPlatformEnabled && (
-              <p className="text-sm text-muted-foreground">
-                {t("create.resourceOwnerOpenPlatformTip")}
-              </p>
-            )}
-          </div>
-          {/* The tenant a service account belongs to is only a decision worth
-              explaining when more than one tenant exists. */}
-          {appConfig.multiTenantEnabled && (
-            <p className="text-sm text-muted-foreground">{t("create.tenantFixedTip")}</p>
-          )}
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span>{t("openApiManagement.fields.ownerUserId")}</span>
+            <Input type="number" min={1} value={ownerId} onChange={(event) => setOwnerId(event.target.value)} />
+          </label>
         </div>
         <DialogFooter>
-          <Button variant="outline" disabled={loading} onClick={handleClose}>
-            {t("common.cancel")}
+          <Button variant="outline" disabled={loading} onClick={() => onOpenChange(false)}>
+            {t("cancel")}
           </Button>
-          <Button disabled={loading} onClick={handleSubmit}>
-            {t("create.submit")}
+          <Button disabled={loading || !name.trim() || Number(ownerId) < 1} onClick={handleCreate}>
+            {t("confirmButton")}
           </Button>
         </DialogFooter>
       </DialogContent>

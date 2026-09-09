@@ -654,3 +654,33 @@ class TestConnectionManagerDialectSchemaObjects:
         assert mgr.ensure_dialect_schema_objects("mysql") is False
         mgr._ensure_dm_triggers.assert_not_called()
         mgr._ensure_dm_computed_triggers.assert_not_called()
+
+
+class TestStrJoinKey:
+    """CAST used as a join key must carry an EXPLICIT collation on MySQL.
+
+    A bare CAST(x AS CHAR) inherits collation_connection (utf8mb4_0900_ai_ci on
+    a stock MySQL 8) and clashes with the utf8mb4_unicode_ci VARCHAR column it
+    is joined against — MySQL then raises 1267 instead of running the query.
+    """
+
+    def _compile(self, dialect):
+        from sqlmodel import Column, Integer
+
+        from bisheng.core.database.dialect_helpers import StrJoinKey
+
+        return str(StrJoinKey(Column("id", Integer)).compile(dialect=dialect))
+
+    def test_mysql_renders_explicit_collation(self):
+        from sqlalchemy.dialects import mysql
+
+        sql = self._compile(mysql.dialect())
+        assert "CAST(id AS CHAR" in sql
+        assert "COLLATE utf8mb4_unicode_ci" in sql
+
+    def test_non_mysql_renders_plain_cast(self):
+        from sqlalchemy.dialects import sqlite
+
+        sql = self._compile(sqlite.dialect())
+        assert "CAST(id AS " in sql
+        assert "COLLATE" not in sql

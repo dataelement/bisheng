@@ -33,8 +33,8 @@ import ThinkingContent from "./ThinkingContent";
 import ToolCallDisplay from "./ToolCallDisplay";
 
 const BUTTON_STYLES = {
-    base: "group flex w-fit items-center gap-1 text-sm font-medium leading-[22px] text-[#212121]",
-    icon: "shrink-0 transform-gpu text-[#999999] transition-transform duration-200",
+    base: "group flex w-fit items-center gap-1 text-sm font-medium leading-[22px] text-text-1",
+    icon: "shrink-0 transform-gpu text-text-3 transition-transform duration-200",
 } as const;
 
 export interface DeepThinkingGroupProps {

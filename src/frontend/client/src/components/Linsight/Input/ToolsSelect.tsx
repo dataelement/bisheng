@@ -38,7 +38,7 @@ export function ToolsSelect({ tools, disabled = false, onChange, compact = false
                         'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs font-normal outline-none transition-colors hover:bg-black/5',
                         // Active highlight uses brand-600 to match the checked-checkbox
                         // color in the picker dropdowns (KnowledgeSpaceSelect rows).
-                        active ? 'text-blue-600' : 'text-[#4E5969]',
+                        active ? 'text-blue-600' : 'text-text-2',
                         disabled && 'cursor-not-allowed opacity-50',
                     )}
                 >

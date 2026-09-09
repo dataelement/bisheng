@@ -43,7 +43,7 @@ const AvatarName = React.forwardRef<HTMLDivElement, AvatarNameProps>(
       <div
         ref={ref}
         className={cn(
-          "flex h-full w-full items-center justify-center aspect-square rounded-full bg-[#C9CDD4] text-white font-medium tracking-tight",
+          "flex h-full w-full items-center justify-center aspect-square rounded-full bg-fill-4 text-white font-medium tracking-tight",
           className
         )}
         {...props}

@@ -14,16 +14,23 @@ import { WorkspacePanel } from '~/components/Linsight/Artifacts/WorkspacePanel';
 import { useWorkspacePanel } from '~/components/Linsight/Artifacts/useWorkspacePanel';
 import { collectConversationWorkspaceFiles } from '~/components/Linsight/Artifacts/artifactUtils';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
-import { userStopLinsightEvent } from '~/api/linsight';
+import { getLinsightSessionVersionList, userStopLinsightEvent } from '~/api/linsight';
 import { SopStatus, taskModeState } from '~/store/linsight';
 import { findPendingUserInput, splitSessionPseudoTask } from '~/components/Linsight/Execution/stepUtils';
 import type { ExecStepEventData } from '~/components/Linsight/Execution/stepUtils';
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
 import { Spinner } from '~/components/svg';
 import { useAuthContext } from '~/hooks/AuthContext';
-import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import { useGetBsConfig, useGetOrgToolList } from '~/hooks/queries/data-provider';
+import { useGetWorkbenchModelsQuery } from '~/hooks/queries/queries';
 import useAiChat from '~/hooks/useAiChat';
-import useChatModelMemo from '~/hooks/useChatModelMemo';
+import {
+  moveConversationModel,
+  readAdminDefaultModelId,
+  useChatModelResolution,
+  type ChatModelMode,
+  type ChatModelOption,
+} from '~/hooks/useChatModelResolution';
 import useLocalize from '~/hooks/useLocalize';
 import store from '~/store';
 import { addConversation, cn, generateUUID } from '~/utils';
@@ -41,6 +48,7 @@ import {
   ExportFormatSheet,
   MessageSelectionToolbar,
 } from '~/components/Chat/MessageSelection';
+import { retainVisibleOrgKnowledgeSelections } from './filterVisibleKnowledgeSelections';
 import {
   useExitSelectionOnChatChange,
   useMessageSelection,
@@ -81,14 +89,50 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   // so the welcome subtitle can hide without shifting the title / input box.
   const [landingHasSelection, setLandingHasSelection] = useState(false);
 
+  const selectedOrgKbIds = useMemo(
+    () => selectedOrgKbs.filter((item) => item.type === 'org').map((item) => String(item.id)),
+    [selectedOrgKbs],
+  );
+  const selectedOrgKbIdsKey = selectedOrgKbIds.join(',');
+  const { data: visibleSelectedOrgKbs = [], isSuccess: selectedOrgKbVisibilityReady } = useGetOrgToolList(
+    {
+      page: 1,
+      page_size: Math.max(1, selectedOrgKbIds.length),
+      sort_by: 'name',
+      preferred_ids: selectedOrgKbIdsKey,
+      action: 'visible',
+    },
+    { enabled: !!user?.id && selectedOrgKbIds.length > 0 },
+  );
+
+  // Revalidate persisted selections as well as new defaults. Without this,
+  // an org KB cached before its visibility was revoked remains exposed as a
+  // chip even after the user-facing workstation config starts filtering it.
+  useEffect(() => {
+    if (!selectedOrgKbVisibilityReady || !selectedOrgKbIds.length) return;
+    const visibleIds = visibleSelectedOrgKbs.map((item: { id: string | number }) => item.id);
+    setSelectedOrgKbs((current) => retainVisibleOrgKnowledgeSelections(current, visibleIds));
+  }, [
+    selectedOrgKbIdsKey,
+    selectedOrgKbIds.length,
+    selectedOrgKbVisibilityReady,
+    visibleSelectedOrgKbs,
+    setSelectedOrgKbs,
+  ]);
+
   // v2.5 interaction memory — per-user localStorage snapshots for the input
-  // bar. The model selection is shared across chat surfaces (ChatView and
-  // AiAssistantPanel), so it lives in useChatModelMemo. KB / tools are
-  // ChatView-only and handled in the effect below. Rules:
+  // bar (KB / tools; handled in the effect below). Rules:
   //  - KB space: default empty; remember user toggles
   //  - org KB: default per bsConfig.orgKbs[].default_checked; remember toggles
   //  - tools: default per bsConfig.tools[].default_checked; remember toggles
-  useChatModelMemo(user, bsConfig as any);
+  // The model selection is NOT here — it is scoped per conversation, resolved
+  // further down (search: useChatModelResolution) once isTaskConversation is known.
+  const { data: workbenchCfg } = useGetWorkbenchModelsQuery();
+  const modelMode: ChatModelMode = taskMode ? 'task' : 'daily';
+  const adminDefaultModelId = useMemo(
+    () => readAdminDefaultModelId(workbenchCfg, modelMode),
+    [workbenchCfg, modelMode],
+  );
 
   const memoReadyRef = useRef(false);
   useEffect(() => {
@@ -274,6 +318,12 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     ) {
       // Flag the rewrite so the reset effect above preserves the current mode.
       keepTaskModeOnRewriteRef.current = true;
+      // Carry the model picked while composing under `new` to the real id —
+      // otherwise the freshly created conversation has no record of its own and
+      // resolves from the user-level default instead.
+      if (user?.id) {
+        moveConversationModel(String(user.id), 'new', activeConvoId);
+      }
       navigate(`/c/${activeConvoId}`, { replace: true });
     }
   }, [activeConvoId]); // intentionally ONLY on activeConvoId — don't add navigate/conversationId
@@ -393,6 +443,84 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
           m?.conversationId === conversationId,
       ),
     [messages, conversationId],
+  );
+
+  // Model selection is scoped PER CONVERSATION (bs:{uid}:convModel:{mode}:{id}),
+  // not per user: picking a model in conversation A used to change what every
+  // other conversation showed, and opening a historical one displayed the last
+  // global pick rather than the model that conversation ran on. The user-level
+  // record survives as the layer a BRAND-NEW conversation inherits from.
+  //
+  // Task conversations additionally carry a cross-device source of truth — the
+  // model their last turn really executed with (linsight_session_version.model,
+  // already returned by session-version-list). It only applies when this browser
+  // has no record for the conversation, i.e. after a device/browser switch.
+  const { data: taskConversationModelId = null } = useQuery(
+    [QueryKeys.linsightSessionVersions, conversationId, shareToken],
+    async () => {
+      const versions = await getLinsightSessionVersionList(conversationId, shareToken || '');
+      const latest = (versions || [])[(versions || []).length - 1];
+      return latest?.model ? String(latest.model) : null;
+    },
+    {
+      enabled: isTaskConversation && conversationId !== 'new',
+      staleTime: 60_000,
+      // A failure here just means we fall through to the local records.
+      retry: false,
+    },
+  );
+
+  const handleModelResolved = useCallback(
+    (target: ChatModelOption, deliberate: boolean) => {
+      setChatModel({
+        id: Number(target.id),
+        name: target.displayName || target.name || '',
+        manual: deliberate,
+        mode: modelMode,
+      });
+    },
+    [setChatModel, modelMode],
+  );
+
+  const { persistPick: persistModelPick } = useChatModelResolution({
+    userId: user?.id,
+    conversationId,
+    mode: modelMode,
+    models: (bsConfig?.models || []) as ChatModelOption[],
+    adminDefaultId: adminDefaultModelId,
+    serverModelId: taskConversationModelId,
+    ready: !!bsConfig?.models?.length && !!user?.id,
+    onResolved: handleModelResolved,
+  });
+
+  // The picker writes both the conversation record and the user-level default,
+  // so this conversation keeps the choice and the next new one inherits it.
+  const handleModelChange = useCallback(
+    (val: string | number) => {
+      const model = bsConfig?.models?.find((m: ChatModelOption) => String(m.id) === String(val));
+      persistModelPick(val);
+      setChatModel({
+        id: Number(val),
+        name: model?.displayName || '',
+        manual: true,
+        mode: modelMode,
+      });
+    },
+    [bsConfig, persistModelPick, setChatModel, modelMode],
+  );
+
+  // AiModelSelect repairing an invalid value is NOT a user pick — never persist it.
+  const handleModelAutoChange = useCallback(
+    (val: string | number) => {
+      const model = bsConfig?.models?.find((m: ChatModelOption) => String(m.id) === String(val));
+      setChatModel((prev) => ({
+        id: Number(val),
+        name: model?.displayName || prev.name || '',
+        manual: prev.manual ?? false,
+        mode: prev.mode,
+      }));
+    },
+    [bsConfig, setChatModel],
   );
 
   // F035: sync the task-mode toggle to navigation. ChatView is NOT remounted
@@ -731,13 +859,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                               onScrollToBottom={() => { }}
                               modelOptions={bsConfig?.models}
                               modelValue={chatModel.id}
-                              onModelChange={(val) => {
-                                const model = bsConfig?.models?.find((m) => m.id === val);
-                                setChatModel({
-                                  id: Number(val),
-                                  name: model?.displayName || '',
-                                });
-                              }}
+                              onModelChange={handleModelChange}
+                              onModelAutoChange={handleModelAutoChange}
                               onSend={handleSend}
                               onStop={handleStop}
                               value={inputText}
@@ -790,6 +913,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             <WorkspacePanel
                               files={taskWorkspaceFiles}
                               versionId={latestTaskVersionId}
+                              citations={taskLinsight?.output_result?.citations}
+                              messageId={taskLinsight?.message_id ?? undefined}
                               previewFile={taskArtifacts.previewFile}
                               fullscreen={false}
                               onPreview={taskArtifacts.openPreview}
@@ -815,6 +940,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         <WorkspacePanel
                           files={taskWorkspaceFiles}
                           versionId={latestTaskVersionId}
+                          citations={taskLinsight?.output_result?.citations}
+                          messageId={taskLinsight?.message_id ?? undefined}
                           previewFile={taskArtifacts.previewFile}
                           fullscreen
                           hideFullscreenToggle
@@ -839,7 +966,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       // higher z so it clears the chrome (mirrors the citation panel).
                       if (!isH5) {
                         return createPortal(
-                          <div className="fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-[#ECECEC] bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300 w-[min(480px,100vw)]">
+                          <div className="fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-border-base bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300 w-[min(480px,100vw)]">
                             {mobilePanel}
                           </div>,
                           document.body,
@@ -849,7 +976,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       // 577–767: right drawer docked to the viewport edge (z above
                       // MobileNav z-60), full height, slide-in from the right.
                       return (
-                        <div className="fixed inset-y-0 right-0 z-[130] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-[#ECECEC] bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.08)] animate-in slide-in-from-right duration-300 min-w-[260px] w-[min(520px,42vw)] max-[580px]:min-w-[240px] max-[580px]:w-[min(360px,calc(100vw-40px))]">
+                        <div className="fixed inset-y-0 right-0 z-[130] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-border-base bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.08)] animate-in slide-in-from-right duration-300 min-w-[260px] w-[min(520px,42vw)] max-[580px]:min-w-[240px] max-[580px]:w-[min(360px,calc(100vw-40px))]">
                           {mobilePanel}
                         </div>
                       );
@@ -901,13 +1028,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             onScrollToBottom={() => { }}
                             modelOptions={bsConfig?.models}
                             modelValue={chatModel.id}
-                            onModelChange={(val) => {
-                              const model = bsConfig?.models?.find((m) => m.id === val);
-                              setChatModel({
-                                id: Number(val),
-                                name: model?.displayName || '',
-                              });
-                            }}
+                            onModelChange={handleModelChange}
+                            onModelAutoChange={handleModelAutoChange}
                             onSend={handleSend}
                             onStop={stopGenerating}
                             value={inputText}
@@ -958,7 +1080,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               and resizing desktop→mobile tears any open overlay down cleanly. */}
           {latestTaskVersionId && !isTouchLayout && fsMounted && fsBox && createPortal(
             <div
-              className="fixed z-[100] overflow-hidden border border-[#ECECEC] bg-[#FBFBFB] transition-[top,left,right,bottom,padding,border-radius] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+              className="fixed z-[100] overflow-hidden border border-border-base bg-[#FBFBFB] transition-[top,left,right,bottom,padding,border-radius] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
               style={{ ...(fsExpanded ? fsBox.expanded : fsBox.collapsed), padding: fsExpanded ? 4 : 0, borderRadius: fsExpanded ? 12 : 8 }}
               onTransitionEnd={(e) => {
                 // Unmount only after the collapse finishes (ignore the expand end
@@ -971,6 +1093,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               <WorkspacePanel
                 files={taskWorkspaceFiles}
                 versionId={latestTaskVersionId}
+                citations={taskLinsight?.output_result?.citations}
+                messageId={taskLinsight?.message_id ?? undefined}
                 previewFile={taskArtifacts.previewFile}
                 fullscreen={true}
                 onPreview={taskArtifacts.openPreview}
@@ -1070,7 +1194,7 @@ const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
             {displayApps.map((appItem) => (
               <Card
                 key={appItem.id}
-                className="group flex flex-col py-0 rounded-lg shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-[#E5E6EB] overflow-hidden cursor-pointer hover:border-blue-500 hover:shadow-[0_4px_14px_rgb(var(--brand-500)/0.12)] transition-all duration-300 h-[142px] hover:-translate-y-1"
+                className="group flex flex-col py-0 rounded-lg shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-border-base overflow-hidden cursor-pointer hover:border-blue-500 hover:shadow-[0_4px_14px_rgb(var(--brand-500)/0.12)] transition-all duration-300 h-[142px] hover:-translate-y-1"
                 style={{ background: 'linear-gradient(135deg, rgb(var(--brand-500)/0.04) 0%, #fff 50%, rgb(var(--brand-500)/0.04) 100%)' }}
                 onClick={() => handleCardClick(appItem)}
               >
@@ -1083,16 +1207,16 @@ const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
                       className={`size-[32px] min-w-[32px] !rounded-lg`}
                       iconClassName="w-5 h-5"
                     />
-                    <div className="text-[15px] font-medium text-[#1D2129] line-clamp-1 break-all">{appItem.name}</div>
+                    <div className="text-[15px] font-medium text-text-1 line-clamp-1 break-all">{appItem.name}</div>
                   </div>
-                  <div className="text-[13px] text-[#86909C] line-clamp-2 break-all font-normal leading-[1.5]">{appItem.description}</div>
+                  <div className="text-[13px] text-text-3 line-clamp-2 break-all font-normal leading-[1.5]">{appItem.description}</div>
 
                   <div className="mt-auto pt-2 relative h-[30px] shrink-0 w-full overflow-hidden">
                     <div className="absolute inset-x-0 bottom-0 top-1 flex gap-1.5 flex-wrap overflow-hidden opacity-100 fine-pointer:group-hover:opacity-0 transition-opacity duration-200 pointer-events-none coarse-pointer:opacity-0">
                       {appItem.tags && appItem.tags.map((tag: any) => (
                         <div
                           key={tag.id || tag.name || tag}
-                          className="bg-[#F2F3F5] text-[#4E5969] text-[12px] px-2 py-[2px] rounded-sm font-normal whitespace-nowrap"
+                          className="bg-fill-2 text-text-2 text-[12px] px-2 py-[2px] rounded-[4px] font-normal whitespace-nowrap"
                         >
                           {tag.name || tag}
                         </div>

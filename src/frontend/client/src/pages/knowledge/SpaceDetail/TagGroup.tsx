@@ -13,7 +13,7 @@ import {
 import { FileTag } from '~/api/knowledge';
 import { cn } from '~/utils';
 
-type TagVariant = 'pill' | 'text' | 'text-h5';
+type TagVariant = 'pill' | 'text' | 'text-h5' | 'text-list';
 
 interface TagGroupProps {
     tags: FileTag[];
@@ -22,6 +22,8 @@ interface TagGroupProps {
      * Visual style.
      * - `pill` (default): grey rounded background — used in the list view.
      * - `text`: plain `#tag` 10px grey text — used in the card view (Figma 11671:34378).
+     * - `text-list`: same 10px `#tag`, on the desktop list row's 18px meta line
+     *   (Figma 13198:75880) so it sits flush with the date beside it.
      */
     variant?: TagVariant;
     /**
@@ -44,31 +46,41 @@ const VARIANT_STYLES: Record<TagVariant, {
 }> = {
     pill: {
         container: 'min-h-[24px] gap-1.5',
-        tag: 'bg-[#f2f3f5] text-[#4e5969] text-xs px-1.5 py-0.5 rounded-sm',
-        tagHighlighted: 'bg-blue-500/[0.07] text-blue-500 font-semibold text-xs px-1.5 py-0.5 rounded-sm',
+        tag: 'bg-fill-2 text-text-2 text-xs px-1.5 py-0.5 rounded-sm',
+        tagHighlighted: 'bg-blue-500/[0.07] text-blue-500 font-medium text-xs px-1.5 py-0.5 rounded-sm',
         tagFirst: 'min-w-[30px] truncate flex-shrink',
-        moreBadge: 'bg-[#f2f3f5] text-[#4e5969] font-medium text-xs px-1.5 py-0.5 rounded-sm cursor-pointer flex-shrink-0',
+        moreBadge: 'bg-fill-2 text-text-2 font-medium text-xs px-1.5 py-0.5 rounded-sm cursor-pointer flex-shrink-0',
         measure: 'px-1.5 py-0.5 text-xs',
         moreBadgeReserve: 40,
     },
     text: {
         container: 'min-h-[20px] gap-1',
-        tag: 'text-[10px] leading-5 text-[#999] whitespace-nowrap',
-        tagHighlighted: 'text-[10px] leading-5 font-semibold text-blue-500 whitespace-nowrap',
+        tag: 'text-caption-sm leading-5 text-text-3 whitespace-nowrap',
+        tagHighlighted: 'text-caption-sm leading-5 font-medium text-blue-500 whitespace-nowrap',
         tagFirst: 'min-w-[20px] truncate flex-shrink',
-        moreBadge: 'text-[10px] leading-5 text-[#999] cursor-pointer flex-shrink-0',
-        measure: 'text-[10px] leading-5',
+        moreBadge: 'text-caption-sm leading-5 text-text-3 cursor-pointer flex-shrink-0',
+        measure: 'text-caption-sm leading-5',
         moreBadgeReserve: 24,
     },
     // H5 mobile row: 12px `#tag` in #999999, with a `+N` overflow counter (Figma H5 file row).
     'text-h5': {
         container: 'min-h-[20px] gap-1',
-        tag: 'text-xs leading-5 text-[#999999] whitespace-nowrap',
-        tagHighlighted: 'text-xs leading-5 font-semibold text-blue-500 whitespace-nowrap',
+        tag: 'text-xs leading-5 text-text-3 whitespace-nowrap',
+        tagHighlighted: 'text-xs leading-5 font-medium text-blue-500 whitespace-nowrap',
         tagFirst: 'min-w-[20px] truncate flex-shrink',
-        moreBadge: 'bg-[#F2F3F5] text-[#999999] text-xs leading-5 px-1.5 rounded-sm cursor-pointer flex-shrink-0',
+        moreBadge: 'bg-fill-2 text-text-3 text-xs leading-5 px-1.5 rounded-[4px] cursor-pointer flex-shrink-0',
         measure: 'text-xs leading-5',
         moreBadgeReserve: 34,
+    },
+    // Desktop list row: 10px `#tag` sharing the 18px meta line with the date.
+    'text-list': {
+        container: 'min-h-[18px] gap-1',
+        tag: 'text-[10px] leading-[18px] text-[#999999] whitespace-nowrap',
+        tagHighlighted: 'text-[10px] leading-[18px] font-semibold text-blue-500 whitespace-nowrap',
+        tagFirst: 'min-w-[20px] truncate flex-shrink',
+        moreBadge: 'bg-[#F2F3F5] text-[#999999] text-[10px] leading-[18px] px-1.5 rounded-[4px] cursor-pointer flex-shrink-0',
+        measure: 'text-[10px] leading-[18px]',
+        moreBadgeReserve: 30,
     },
 };
 
@@ -77,7 +89,7 @@ const TagGroup = ({ tags, actionButton, variant = 'pill', highlightedTagIds }: T
     const [visibleCount, setVisibleCount] = useState(1); // Initial fallback
     const styles = VARIANT_STYLES[variant];
     const renderTagText = (tag: FileTag) =>
-        variant === 'text' || variant === 'text-h5' ? `#${tag.name}` : tag.name;
+        variant === 'pill' ? tag.name : `#${tag.name}`;
     const highlightSet = React.useMemo(
         () => new Set(highlightedTagIds ?? []),
         [highlightedTagIds],

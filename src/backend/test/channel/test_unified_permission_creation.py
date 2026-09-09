@@ -21,6 +21,10 @@ class _LoginUser:
     user_name = "creator"
     tenant_id = 3
 
+    def is_admin(self):
+        # Creation now runs the subscribe-quota check, which asks the operator first.
+        return False
+
 
 class _Adapter:
     def __init__(
@@ -134,6 +138,13 @@ def _service(repository, adapter: _Adapter, grants: _InitialGrants | None = None
 def _runtime_stubs():
     information = SimpleNamespace(subscribe_information_source=AsyncMock())
     with (
+        # The subscribe quota check looks the channel owner's roles up first (an admin
+        # owner is exempt regardless of the configured limit), so the role lookup has to
+        # be stubbed too or these tests hit the database for a quota they do not exercise.
+        patch(
+            "bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles",
+            new=AsyncMock(return_value=[]),
+        ),
         patch(f"{_CS}.QuotaService.get_effective_quota", new=AsyncMock(return_value=-1)),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=information)),
         patch(f"{_CS}.resolve_permission_actor", new=AsyncMock(return_value=SimpleNamespace(user_id=7))),

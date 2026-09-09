@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from hashlib import sha256
 from typing import Any
 
+from loguru import logger
 from sqlalchemy import func
 from sqlmodel import col, select
 
@@ -126,9 +128,7 @@ class LiveMigrationEvidenceProvider:
             consistency=consistency,
         )
         source_integrity = await self._visible_source_integrity()
-        expected_visible = {
-            _identity(row) for row in target_tuples if row["relation"] == "visible"
-        }
+        expected_visible = {_identity(row) for row in target_tuples if row["relation"] == "visible"}
         actual_visible = {
             _identity(row)
             for row in actual_rows
@@ -340,73 +340,83 @@ class LiveMigrationEvidenceProvider:
         tuples: tuple[dict[str, str], ...],
         consistency: str,
     ) -> dict[str, bool]:
-        users = sorted(
-            {
-                row["user"]
-                for row in tuples
-                if row["user"].startswith("user:") and "#" not in row["user"]
-            }
-        )
-        objects_by_type: dict[str, list[str]] = {}
+        expected_by_scope: dict[tuple[str, str], set[str]] = {}
         for row in tuples:
-            if row["relation"] != "visible":
+            user = row["user"]
+            if row["relation"] != "visible" or not user.startswith("user:") or "#" in user:
                 continue
             resource_type = row["object"].partition(":")[0]
-            objects_by_type.setdefault(resource_type, []).append(row["object"])
-        if not users or not objects_by_type:
+            expected_by_scope.setdefault((user, resource_type), set()).add(row["object"])
+        if not expected_by_scope:
             return {
                 "visible_single_batch_oracle": True,
                 "visible_stream_oracle": True,
             }
 
-        single_batch_matches = True
+        # BatchCheck-versus-Check is an API parity probe, not a reason to scan
+        # every user's Cartesian product with every resource. The complete
+        # direct tuple graph is already checked by ``_raw_tuple_checks`` below.
+        # Keep a deterministic bounded sample here and use streamed enumeration
+        # to prove that every materialized direct-visible tuple is discoverable.
+        scopes = sorted(expected_by_scope.items())
+        probes = [
+            {
+                "user": user,
+                "relation": "visible",
+                "object": min(objects),
+            }
+            for (user, _), objects in scopes
+        ]
+        probe_indexes = sorted(set(range(min(50, len(probes)))) | set(range(max(0, len(probes) - 50), len(probes))))
+        sampled_probes = [probes[index] for index in probe_indexes]
+        batch_results = await LiveMigrationEvidenceProvider._batch_check_with_retry(
+            client,
+            sampled_probes,
+            consistency,
+        )
+        single_results = [
+            await client.check(
+                user=probe["user"],
+                relation=probe["relation"],
+                object=probe["object"],
+                consistency=consistency,
+            )
+            for probe in sampled_probes
+        ]
+        single_batch_matches = (
+            len(batch_results) == len(sampled_probes) and all(batch_results) and single_results == batch_results
+        )
+
         stream_matches = True
-        for user in users:
-            for resource_type, objects in sorted(objects_by_type.items()):
-                checks = [
-                    {
-                        "user": user,
-                        "relation": "visible",
-                        "object": object_key,
-                    }
-                    for object_key in sorted(set(objects))
-                ]
-                batch_results: list[bool] = []
-                for offset in range(0, len(checks), 50):
-                    batch_results.extend(
-                        await client.batch_check(
-                            checks[offset : offset + 50],
-                            consistency=consistency,
-                        )
-                    )
-                single_results = [
-                    await client.check(
+        logger.info(
+            "F048 visible stream verification started: scopes={}",
+            len(scopes),
+        )
+        for index, ((user, resource_type), expected) in enumerate(scopes, start=1):
+            try:
+                streamed = set(
+                    await client.stream_list_objects(
                         user=user,
                         relation="visible",
-                        object=check["object"],
+                        type=resource_type,
                         consistency=consistency,
                     )
-                    for check in checks
-                ]
-                single_batch_matches &= single_results == batch_results
-                expected = {
-                    check["object"]
-                    for check, allowed in zip(checks, batch_results, strict=True)
-                    if allowed
-                }
-                try:
-                    streamed = set(
-                        await client.stream_list_objects(
-                            user=user,
-                            relation="visible",
-                            type=resource_type,
-                            consistency=consistency,
-                        )
-                    )
-                except Exception:
-                    stream_matches = False
-                else:
-                    stream_matches &= (streamed & set(objects)) == expected
+                )
+            except Exception:
+                logger.exception(
+                    "F048 visible stream verification failed at scope {}/{}",
+                    index,
+                    len(scopes),
+                )
+                stream_matches = False
+            else:
+                stream_matches &= expected <= streamed
+            if index % 500 == 0 or index == len(scopes):
+                logger.info(
+                    "F048 visible stream verification progress: completed={} total={}",
+                    index,
+                    len(scopes),
+                )
         return {
             "visible_single_batch_oracle": single_batch_matches,
             "visible_stream_oracle": stream_matches,
@@ -455,13 +465,41 @@ class LiveMigrationEvidenceProvider:
         for index in range(0, len(tuples), 100):
             batch = list(tuples[index : index + 100])
             if not all(
-                await client.batch_check(
+                await LiveMigrationEvidenceProvider._batch_check_with_retry(
+                    client,
                     batch,
-                    consistency=consistency,
+                    consistency,
                 )
             ):
                 return False
+            completed = index + len(batch)
+            if completed % 100_000 == 0 or completed == len(tuples):
+                logger.info(
+                    "F048 target tuple verification progress: completed={} total={}",
+                    completed,
+                    len(tuples),
+                )
         return True
+
+    @staticmethod
+    async def _batch_check_with_retry(
+        client: FGAClient,
+        checks: list[dict[str, str]],
+        consistency: str,
+    ) -> list[bool]:
+        if not checks:
+            return []
+        results: list[bool] = []
+        for attempt in range(3):
+            results = await client.batch_check(
+                checks,
+                consistency=consistency,
+            )
+            if len(results) == len(checks) and all(results):
+                return results
+            if attempt < 2:
+                await asyncio.sleep(0.25 * (2**attempt))
+        return results
 
     @staticmethod
     def _protected_owner(resource: dict[str, Any]) -> int:

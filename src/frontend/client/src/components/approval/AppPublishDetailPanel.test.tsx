@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import type { ApprovalTaskDetail } from "~/api/approval";
 import { AppPublishDetailPanel, isAppPublishScenario } from "./AppPublishDetailPanel";
-import type { LocalizeFn } from "./ApprovalDetailPrimitives";
+import type { LocalizeFn } from "./approvalPresentation";
 
 /** Echoes the key back so assertions read as the contract, plus the interpolated value. */
 const localize: LocalizeFn = (key, options) =>

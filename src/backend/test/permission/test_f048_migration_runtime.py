@@ -558,6 +558,88 @@ async def test_evidence_provider_checks_canonical_remote_model() -> None:
     assert await provider._remote_model_checksum("missing-model") is None
 
 
+class _VisibleOracleClient:
+    def __init__(self, streams: dict[tuple[str, str], tuple[str, ...]]) -> None:
+        self.streams = streams
+        self.batch_checks: list[tuple[dict, ...]] = []
+        self.single_checks: list[dict] = []
+        self.stream_checks: list[tuple[str, str]] = []
+
+    async def batch_check(self, checks, consistency=None):
+        assert consistency == "HIGHER_CONSISTENCY"
+        self.batch_checks.append(tuple(checks))
+        return [True] * len(checks)
+
+    async def check(self, *, user, relation, object, consistency=None):
+        assert consistency == "HIGHER_CONSISTENCY"
+        self.single_checks.append({"user": user, "relation": relation, "object": object})
+        return True
+
+    async def stream_list_objects(
+        self,
+        *,
+        user,
+        relation,
+        type,
+        consistency=None,
+    ):
+        assert relation == "visible"
+        assert consistency == "HIGHER_CONSISTENCY"
+        self.stream_checks.append((user, type))
+        return self.streams[(user, type)]
+
+
+async def test_visible_oracle_scales_by_materialized_user_type_scopes() -> None:
+    tuples = (
+        {"user": "user:1", "relation": "visible", "object": "workflow:w1"},
+        {"user": "user:1", "relation": "visible", "object": "workflow:w2"},
+        {"user": "user:2", "relation": "visible", "object": "workflow:w2"},
+        {
+            "user": "user:3",
+            "relation": "protected_assignee",
+            "object": "permission_grant:g1",
+        },
+    )
+    client = _VisibleOracleClient(
+        {
+            ("user:1", "workflow"): ("workflow:w1", "workflow:w2", "workflow:system"),
+            ("user:2", "workflow"): ("workflow:w2",),
+        }
+    )
+
+    result = await LiveMigrationEvidenceProvider._visible_oracle_semantics(
+        client,
+        tuples,
+        "HIGHER_CONSISTENCY",
+    )
+
+    assert result == {
+        "visible_single_batch_oracle": True,
+        "visible_stream_oracle": True,
+    }
+    assert client.stream_checks == [
+        ("user:1", "workflow"),
+        ("user:2", "workflow"),
+    ]
+    assert sum(len(batch) for batch in client.batch_checks) == 2
+    assert len(client.single_checks) == 2
+
+
+async def test_visible_oracle_blocks_incomplete_stream() -> None:
+    client = _VisibleOracleClient({("user:1", "workflow"): ("workflow:w1",)})
+
+    result = await LiveMigrationEvidenceProvider._visible_oracle_semantics(
+        client,
+        (
+            {"user": "user:1", "relation": "visible", "object": "workflow:w1"},
+            {"user": "user:1", "relation": "visible", "object": "workflow:w2"},
+        ),
+        "HIGHER_CONSISTENCY",
+    )
+
+    assert result["visible_stream_oracle"] is False
+
+
 def test_preserved_tuple_evidence_excludes_planned_stale_and_canonical_deletes() -> None:
     def item(
         *,

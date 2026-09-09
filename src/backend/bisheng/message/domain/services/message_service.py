@@ -19,6 +19,7 @@ from bisheng.message.domain.schemas.message_schema import (
     MessageContentItem,
     MessageItemResponse,
     MessagePageResponse,
+    ReadStateEnum,
     TabTypeEnum,
     UnreadCountResponse,
 )
@@ -40,6 +41,15 @@ APPROVAL_CENTER_NOTIFY_ACTION_CODES = [
     "approval_exception_approver_empty",
     "approval_execute_failed",
     "menu_grant_revoked",
+]
+
+# Approval to-dos addressed to an approver. They belong exclusively to the approval
+# center's "待我处理" list, so the notification inbox must never surface them again.
+APPROVAL_TODO_ACTION_CODES = [
+    "approval_task_pending",
+    "request_menu_access",
+    "request_channel",
+    "request_knowledge_space",
 ]
 
 
@@ -106,31 +116,41 @@ class MessageService:
         self,
         login_user: UserPayload,
         tab: TabTypeEnum = TabTypeEnum.ALL,
-        only_unread: bool = False,
+        read_state: ReadStateEnum = ReadStateEnum.ALL,
         keyword: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> MessagePageResponse:
-        """Get paginated message list for the current user with read status annotation."""
+        """Get paginated message list for the current user with read status annotation.
+
+        ``read_state`` selects the read filter: ALL keeps everything, UNREAD keeps only
+        unread messages, READ keeps only messages the user has already read.
+        """
         # 1. Get read message IDs for this user
         read_message_ids = await self.message_read_repository.get_read_message_ids(login_user.user_id)
         read_set = set(read_message_ids)
 
-        # 2. Determine message type filter based on tab
+        # 2. Determine the action_code / message_type filters based on tab
         message_type = None
         action_codes = None
+        exclude_action_codes = None
         if tab == TabTypeEnum.REQUEST:
             message_type = MessageTypeEnum.APPROVE
             action_codes = APPROVAL_CENTER_NOTIFY_ACTION_CODES
+        elif tab == TabTypeEnum.NOTIFY:
+            # Notification inbox: everything except approval to-dos, which live only
+            # in the approval center's "待我处理" list.
+            exclude_action_codes = APPROVAL_TODO_ACTION_CODES
 
         # 3. Query messages
         messages = await self.message_repository.find_messages_by_receiver(
             user_id=login_user.user_id,
             message_type=message_type,
             action_codes=action_codes,
+            exclude_action_codes=exclude_action_codes,
             keyword=keyword,
-            only_unread=only_unread,
-            read_message_ids=read_message_ids if only_unread else None,
+            read_state=read_state,
+            read_message_ids=read_message_ids,
             page=page,
             page_size=page_size,
         )
@@ -140,9 +160,10 @@ class MessageService:
             user_id=login_user.user_id,
             message_type=message_type,
             action_codes=action_codes,
+            exclude_action_codes=exclude_action_codes,
             keyword=keyword,
-            only_unread=only_unread,
-            read_message_ids=read_message_ids if only_unread else None,
+            read_state=read_state,
+            read_message_ids=read_message_ids,
         )
 
         # 5. Batch query sender user names
@@ -236,6 +257,10 @@ class MessageService:
         """Get unread message counts grouped by type."""
         read_message_ids = await self.message_read_repository.get_read_message_ids(login_user.user_id)
 
+        # The inbox is split by destination, not by message_type: `notify` is everything
+        # the notification list still shows (i.e. all unread minus approval to-dos), and
+        # `approve` is the approval center's "待我处理" badge. `total` stays the raw unread
+        # count, so notify + approve == total.
         total = await self.message_repository.count_unread_by_receiver(
             user_id=login_user.user_id,
             read_message_ids=read_message_ids,
@@ -243,14 +268,12 @@ class MessageService:
         notify_count = await self.message_repository.count_unread_by_receiver(
             user_id=login_user.user_id,
             read_message_ids=read_message_ids,
-            message_type=MessageTypeEnum.NOTIFY,
-            exclude_action_codes=APPROVAL_CENTER_NOTIFY_ACTION_CODES,
+            exclude_action_codes=APPROVAL_TODO_ACTION_CODES,
         )
         approve_count = await self.message_repository.count_unread_by_receiver(
             user_id=login_user.user_id,
             read_message_ids=read_message_ids,
-            message_type=MessageTypeEnum.APPROVE,
-            action_codes=APPROVAL_CENTER_NOTIFY_ACTION_CODES,
+            action_codes=APPROVAL_TODO_ACTION_CODES,
         )
 
         return UnreadCountResponse(total=total, notify=notify_count, approve=approve_count)
@@ -264,8 +287,12 @@ class MessageService:
         read_message_ids = await self.message_read_repository.get_read_message_ids(login_user.user_id)
         read_set = set(read_message_ids)
 
-        # Use dedicated method to get all message IDs without loading full objects
-        all_msg_ids = await self.message_repository.get_all_message_ids_by_receiver(login_user.user_id)
+        # "全部已读" is a list action of the notification inbox, so it must not touch approval
+        # to-dos — those are handled in the approval center, never read away in bulk here.
+        all_msg_ids = await self.message_repository.get_all_message_ids_by_receiver(
+            login_user.user_id,
+            exclude_action_codes=APPROVAL_TODO_ACTION_CODES,
+        )
 
         # Filter out already read messages
         unread_ids = [mid for mid in all_msg_ids if mid not in read_set]

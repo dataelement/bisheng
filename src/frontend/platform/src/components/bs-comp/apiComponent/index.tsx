@@ -4,8 +4,8 @@ import { hasResourceAction, useResourceActions } from '@/components/bs-comp/perm
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
-import ApiAccess from './ApiAccess';
-import ApiAccessFlow from './ApiAccessFlow';
+import { ApiAccess } from './ApiAccess';
+import { ApiAccessFlow } from './ApiAccessFlow';
 import ApiAccessSkill from './ApiAccessSkill';
 import ChatLink from './ChatLink';
 
@@ -23,7 +23,7 @@ type MenuItem = {
 
 interface ApiMainPageProps {
     /** 
-     * API 类型，决定显示哪种类型的接入方式
+     * API type determines which integration guide is shown.
      * @default API_TYPE.ASSISTANT
      */
     type?: API_TYPE;
@@ -38,7 +38,7 @@ const ApiMainPage = ({ type = API_TYPE.ASSISTANT }: ApiMainPageProps) => {
     const { actions, loading } = useResourceActions(permissionType, resourceIds, ['share']);
     const canManageShare = id ? hasResourceAction(actions, id, 'share') : false;
 
-    // 菜单配置项
+    // Navigation entries.
     const menuItems = useMemo((): MenuItem[] => [
         {
             key: 'api-access',
@@ -57,7 +57,7 @@ const ApiMainPage = ({ type = API_TYPE.ASSISTANT }: ApiMainPageProps) => {
         }
     ], [type]);
 
-    // 当前活动内容
+    // Active content.
     const activeContent = useMemo(
         () => menuItems.find(item => item.key === activeMenu)?.component,
         [activeMenu, menuItems]
@@ -83,14 +83,14 @@ const ApiMainPage = ({ type = API_TYPE.ASSISTANT }: ApiMainPageProps) => {
 
     return (
         <div className="flex size-full bg-background-main">
-            {/* 左侧菜单组件 */}
+            {/* Left navigation. */}
             <MenuPanel
                 items={menuItems}
                 activeKey={activeMenu}
                 onChange={setActiveMenu}
             />
 
-            {/* 右侧内容区 */}
+            {/* Main content. */}
             <main className="flex-1 p-2 pl-0 overflow-y-auto" style={{ scrollBehavior: 'smooth' }}>
                 {activeContent}
             </main>
@@ -98,7 +98,7 @@ const ApiMainPage = ({ type = API_TYPE.ASSISTANT }: ApiMainPageProps) => {
     );
 };
 
-// 辅助函数：获取 API 接入组件
+// Resolve the guide for an API type.
 const getApiAccessComponent = (type: API_TYPE) => {
     const components = {
         [API_TYPE.ASSISTANT]: <ApiAccess />,
@@ -108,7 +108,7 @@ const getApiAccessComponent = (type: API_TYPE) => {
     return components[type] || <ApiAccess />;
 };
 
-// 菜单面板组件
+// Navigation panel.
 const MenuPanel = ({ items, activeKey, onChange }: {
     items: MenuItem[];
     activeKey: string;

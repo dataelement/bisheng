@@ -1,28 +1,28 @@
-from typing import Dict, List, Literal, Optional
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class APIAddQAParam(BaseModel):
     question: str
-    answer: List[str]
-    extra: Optional[Dict] = {}
+    answer: list[str]
+    extra: dict | None = {}
 
 
 class APIAppendQAParam(BaseModel):
-    relative_questions: List[str] = []
+    relative_questions: list[str] = []
     id: str = None
 
 
 class QueryQAParam(BaseModel):
-    timeRange: List[str]
+    timeRange: list[str]
 
 
 class KnowledgeBaseFilter(BaseModel):
     """Per-knowledge-base filter applied when retrieving chunks."""
 
     knowledge_base_id: int = Field(..., description="Must appear in knowledge_base_ids")
-    tags: List[str] = Field(
+    tags: list[str] = Field(
         default_factory=list,
         description="Tag names defined under this knowledge base used to narrow files",
     )
@@ -33,21 +33,17 @@ class KnowledgeBaseFilter(BaseModel):
 
 
 class RetrieveFilters(BaseModel):
-    knowledge_base_filters: List[KnowledgeBaseFilter] = Field(default_factory=list)
+    knowledge_base_filters: list[KnowledgeBaseFilter] = Field(default_factory=list)
 
 
 class RetrieveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     query: str = Field(..., min_length=1, description="User question")
-    knowledge_base_ids: List[int] = Field(
+    knowledge_base_ids: list[int] = Field(
         ..., min_length=1, description="Knowledge base ids to search across"
     )
-    user_id: Optional[int] = Field(
-        default=None,
-        description="F030: act-on-behalf-of user id. When set, retrieval is scoped "
-                    "to this user's visible resources/files; omit to run as the "
-                    "configured default operator.",
-    )
-    filters: Optional[RetrieveFilters] = None
+    filters: RetrieveFilters | None = None
     top_k: int = Field(default=10, ge=1, le=200, description="Max chunks to return")
     max_content: int = Field(
         default=15000,
@@ -69,5 +65,5 @@ class RetrieveChunk(BaseModel):
 
 
 class RetrieveResp(BaseModel):
-    chunks: List[RetrieveChunk]
+    chunks: list[RetrieveChunk]
     total: int

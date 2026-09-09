@@ -90,13 +90,17 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
     // per variant. Changing this single component restyles all confirm() callers.
     //  • destructive → red trash icon + red title + red confirm ("暂不 / 确认删除")
     //  • default     → amber warning icon + neutral title + primary confirm ("取消 / 确认")
-    const titleColor = isDestructive ? "text-[#f53f3f]" : "text-[#1d2129]"
+    // Unprefixed colors are enough: AlertDialog's own defaults carry no dark:
+    // color classes, so nothing outranks these in dark mode (see AlertDialog.tsx).
+    const titleColor = isDestructive ? "text-danger" : "text-text-1"
     const confirmColor = isDestructive
-        ? "bg-[#f53f3f] hover:bg-[#f53f3f]/90"
-        : "btn-brand-primary bg-primary hover:bg-primary/90"
+        ? "bg-danger hover:bg-danger-hover"
+        // bg-blue-500 = brand token (NOT shadcn's bg-primary, whose hsl var
+        // flips to near-white in dark mode) — same classes as <Button> primary solid.
+        : "btn-brand-primary bg-blue-500 hover:bg-blue-400"
     const accentIcon = options.icon ?? (isDestructive
-        ? <Outlined.Delete className="size-5 shrink-0 text-[#f53f3f]" />
-        : <Outlined.Attention className="size-5 shrink-0 text-[#ff7d00]" />)
+        ? <Outlined.Delete className="size-5 shrink-0 text-danger" />
+        : <Outlined.Attention className="size-5 shrink-0 text-warning" />)
     const defaultTitle = isDestructive
         ? localize("com_knowledge.confirm_delete_title")
         : localize("com_knowledge.prompt")
@@ -115,7 +119,7 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
                     equal buttons. PC: left-aligned title + right-aligned hug buttons. */}
                 <AlertDialogContent
                     onOpenAutoFocus={(e) => e.preventDefault()}
-                    className="inset-0 m-auto flex h-fit max-h-[calc(100dvh-2rem)] max-w-[calc(100%-2rem)] flex-col items-center gap-4 rounded-2xl border border-[#ebebeb] p-5 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:max-w-[400px] sm:rounded-2xl"
+                    className="inset-0 m-auto flex h-fit max-h-[calc(100dvh-2rem)] max-w-[calc(100%-2rem)] flex-col items-center gap-4 rounded-2xl border border-border-base p-5 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:max-w-[400px] sm:rounded-2xl"
                 >
                     <AlertDialogHeader className="w-full flex-row items-center justify-center gap-2 space-y-0 text-center sm:justify-start sm:text-left">
                         {accentIcon}
@@ -124,14 +128,14 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
                         </AlertDialogTitle>
                     </AlertDialogHeader>
 
-                    <AlertDialogDescription className="w-full text-left text-sm leading-[22px] text-[#212121] whitespace-pre-line">
+                    <AlertDialogDescription className="w-full text-left text-sm leading-[22px] text-text-1 whitespace-pre-line">
                         {options.description}
                     </AlertDialogDescription>
 
                     <AlertDialogFooter className="w-full flex-row gap-2 sm:space-x-0">
                         {!options.hideCancel && <AlertDialogCancel
                             onClick={handleCancel}
-                            className="mt-0 h-8 flex-1 rounded-md border-[#ebecf0] bg-white/50 px-4 text-sm font-normal text-[#070038] hover:bg-[#f7f8fa] focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 sm:mt-0 sm:flex-none"
+                            className="mt-0 h-8 flex-1 rounded-md border-border-base bg-transparent px-4 text-sm font-normal text-text-1 hover:bg-fill-1 focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 sm:mt-0 sm:flex-none"
                         >
                             {options.cancelText || defaultCancel}
                         </AlertDialogCancel>}

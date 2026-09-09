@@ -133,6 +133,54 @@ def snapshot_file_paths(file_dir: str) -> set[str]:
     return set(util.read_files_in_directory(file_dir))
 
 
+def snapshot_file_fingerprints(file_dir: str) -> dict[str, str]:
+    """Absolute path → md5 for every file currently in ``file_dir``.
+
+    Same moment as :func:`snapshot_file_paths`, plus the digest so a later
+    overwrite of an inherited ``output/*.md`` is distinguishable from a leftover.
+    """
+    if not file_dir or not os.path.exists(file_dir):
+        return {}
+    fingerprints: dict[str, str] = {}
+    for path in util.read_files_in_directory(file_dir):
+        try:
+            fingerprints[path] = util.calculate_md5(path)
+        except OSError:
+            continue
+    return fingerprints
+
+
+def fingerprint_file(path: str) -> str:
+    """md5 of one file; empty string when the path cannot be read."""
+    try:
+        return util.calculate_md5(path)
+    except OSError:
+        return ""
+
+
+def _baseline_path_set(
+    baseline_paths: set[str] | dict[str, str] | None,
+) -> set[str] | None:
+    if baseline_paths is None:
+        return None
+    if isinstance(baseline_paths, dict):
+        return set(baseline_paths)
+    return baseline_paths
+
+
+def _is_unmodified_leftover(
+    file_info: dict,
+    baseline_paths: set[str] | dict[str, str] | None,
+) -> bool:
+    """True when this path was already present at start with the same bytes."""
+    if not isinstance(baseline_paths, dict):
+        return False
+    path = file_info.get("file_path") or ""
+    start_md5 = baseline_paths.get(path) or baseline_paths.get(os.path.normpath(path))
+    current_md5 = file_info.get("file_md5")
+    return bool(start_md5) and bool(current_md5) and start_md5 == current_md5
+
+
 def _zone_of(rel_path: str) -> str:
     """First path segment of a workspace-relative path ('' for root-level files)."""
     head = rel_path.replace(os.sep, "/").split("/", 1)
@@ -184,6 +232,94 @@ def _type_rank(file_info: dict) -> int:
     return _DELIVERABLE_TYPE_RANK.get(ext, _DEFAULT_TYPE_RANK)
 
 
+# --- Deliverable format guard ------------------------------------------------
+# Leading bytes every container format is REQUIRED to start with. A run that
+# cannot actually build one of these has been observed writing prose under the
+# name instead — a 310-byte outline opening with 「虚拟生成的PPT文件内容」 saved as
+# ``output/presentation.pptx`` — and every downstream check passed it: right zone,
+# new file, non-empty. The user downloads something PowerPoint refuses to open and
+# nothing in the run says why.
+#
+# Only formats whose first bytes are FIXED appear here. A text deliverable
+# (.md / .csv / .html / .svg / .txt) may legitimately begin with any byte, so it
+# has no entry and is never judged; neither is an extension outside this table.
+# Being narrow is the point: a wrongly dropped real deliverable is worse than a
+# fake one getting through, since the fake at least leaves the answer to explain.
+_ZIP_SIGNATURES = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+_OLE2_SIGNATURE = (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",)
+_FORMAT_SIGNATURES: dict[str, tuple[bytes, ...]] = {
+    # OOXML and OpenDocument are zip containers
+    ".docx": _ZIP_SIGNATURES,
+    ".xlsx": _ZIP_SIGNATURES,
+    ".pptx": _ZIP_SIGNATURES,
+    ".odt": _ZIP_SIGNATURES,
+    ".ods": _ZIP_SIGNATURES,
+    ".odp": _ZIP_SIGNATURES,
+    # legacy Office is an OLE2 compound file
+    ".doc": _OLE2_SIGNATURE,
+    ".xls": _OLE2_SIGNATURE,
+    ".ppt": _OLE2_SIGNATURE,
+    ".pdf": (b"%PDF-",),
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".jpg": (b"\xff\xd8\xff",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".gif": (b"GIF87a", b"GIF89a"),
+}
+_SIGNATURE_READ_BYTES = 8
+
+
+def deliverable_format_error(file_info: dict) -> str | None:
+    """Why this file cannot be what its name promises — ``None`` when it can.
+
+    Reads the first few bytes only. Deliberately silent (returns ``None``) for
+    formats with no fixed header, extensions outside the table, and files that
+    could not be opened at all: an unreadable file is a different failure that the
+    upload reports on its own, and accusing it here would just add noise.
+    """
+    name = file_info.get("file_name") or os.path.basename(file_info.get("file_path") or "")
+    ext = os.path.splitext(name)[1].lower()
+    signatures = _FORMAT_SIGNATURES.get(ext)
+    if not signatures:
+        return None
+    try:
+        with open(file_info.get("file_path") or "", "rb") as fh:
+            head = fh.read(_SIGNATURE_READ_BYTES)
+    except OSError:
+        return None
+    if any(head.startswith(signature) for signature in signatures):
+        return None
+    return f"content does not match its {ext} extension (starts with {head!r})"
+
+
+def detect_invalid_deliverables(
+    file_details: list[dict], baseline_paths: set[str] | dict[str, str] | None = None
+) -> list[dict]:
+    """Selected deliverables whose bytes contradict the format their name promises.
+
+    The diagnostic twin of :func:`detect_phantom_deliverables`: that one reports a
+    file the answer claims but the run never wrote, this one reports a file that
+    exists but is not what it says it is. Both only ever describe — the fake is
+    dropped from the result, never "repaired" into something it isn't, because a
+    repair would once again leave the run looking healthy.
+
+    Judged over :func:`select_deliverables` rather than the whole listing: a stray
+    half-written file under ``scratch/`` is not being delivered to anyone, and
+    reporting it would bury the finding that matters.
+    """
+    invalid: list[dict] = []
+    for file_info in select_deliverables(file_details, baseline_paths):
+        reason = deliverable_format_error(file_info)
+        if reason:
+            invalid.append(
+                {
+                    "file_name": file_info.get("file_name"),
+                    "rel_path": file_info.get("rel_path"),
+                    "reason": reason,
+                }
+            )
+    return invalid
+
+
 # Read File Directory File Details
 async def read_file_directory(file_dir: str) -> list[dict[str, Any]]:
     """Read file details in file directory"""
@@ -215,14 +351,22 @@ async def read_file_directory(file_dir: str) -> list[dict[str, Any]]:
     return file_details
 
 
-def select_deliverables(file_details: list[dict], baseline_paths: set[str] | None = None) -> list[dict]:
+def select_deliverables(
+    file_details: list[dict], baseline_paths: set[str] | dict[str, str] | None = None
+) -> list[dict]:
     """Pick the run's deliverables out of the working-dir listing, best first.
 
     Two ordered criteria, no text matching:
 
     1. **The ``output/`` zone** — the delivery contract every writer is pointed at
        (the code interpreter now relocates root-level writes into it, and the
-       kernel prompt tells ``write_file`` to use it).
+       kernel prompt tells ``write_file`` to use it). A follow-up turn inherits
+       the previous ``output/``; if every file there is an unmodified leftover
+       (same path + md5 as the start-of-run fingerprint dict), the zone is
+       treated as empty so a missing ``write_file`` falls through to fallback
+       instead of republishing last turn's report. A path-only ``set`` baseline
+       cannot tell overwrite from leftover, so this filter is skipped for that
+       shape (older callers / tests).
     2. **Files this run created**, when ``output/`` came up empty — a deliverable
        written to an off-contract path is still a deliverable. Requires the task's
        start-of-run ``baseline_paths``; without it this criterion is skipped rather
@@ -257,12 +401,20 @@ def select_deliverables(file_details: list[dict], baseline_paths: set[str] | Non
         candidates.append((file_info, zone))
 
     selected = [info for info, zone in candidates if zone == OUTPUT_ZONE]
-    if not selected and baseline_paths is not None:
+    # Fingerprint dict only: if this run wrote or overwrote anything in output/,
+    # keep the whole zone (leftover charts next to a new report still belong
+    # together). If every output/ file is an unmodified leftover, drop them.
+    if selected and isinstance(baseline_paths, dict):
+        if not any(not _is_unmodified_leftover(info, baseline_paths) for info in selected):
+            selected = []
+
+    path_set = _baseline_path_set(baseline_paths)
+    if not selected and path_set is not None:
         # `is not None`, not truthiness: an EMPTY baseline is the common case (a task
         # with no uploaded files prefetches nothing), and it is precisely the case
         # where every file present was produced by this run. Only `None` — no
         # baseline captured at all — means "cannot tell", and then we do not guess.
-        selected = [info for info, _ in candidates if info.get("file_path") not in baseline_paths]
+        selected = [info for info, _ in candidates if info.get("file_path") not in path_set]
 
     # Type first, recency second. The frontend takes ``[0]`` as the headline file
     # and lists the rest under it, so this ordering is user-visible: it must be a
@@ -273,25 +425,41 @@ def select_deliverables(file_details: list[dict], baseline_paths: set[str] | Non
 
 # Get the final result file
 async def get_final_result_file(
-    session_model: LinsightSessionVersion, file_details, baseline_paths: set[str] | None = None
+    session_model: LinsightSessionVersion,
+    file_details,
+    baseline_paths: set[str] | dict[str, str] | None = None,
 ) -> list[dict]:
     """
     Get the final result file
     :param file_details:
     :param session_model: LinsightSessionVersion Model Instance
-    :param baseline_paths: absolute paths present at task start (see snapshot_file_paths)
+    :param baseline_paths: start-of-run paths (set) or path→md5 fingerprints (dict)
     :return: List containing final result file information
     """
-    # Final Result File
-    final_result_files = [
-        {
-            "file_name": file_info["file_name"],
-            "file_path": file_info["file_path"],
-            "file_md5": file_info["file_md5"],
-            "file_id": file_info["file_id"],
-        }
-        for file_info in select_deliverables(file_details, baseline_paths)
-    ]
+    # Final Result File. A file whose bytes contradict its extension is dropped
+    # here rather than uploaded: handing the user a .pptx PowerPoint cannot open is
+    # worse than handing them nothing, and "nothing" is at least visible. The drop
+    # is recorded on the session by the caller (detect_invalid_deliverables) and
+    # logged here so it is never silent.
+    final_result_files = []
+    for file_info in select_deliverables(file_details, baseline_paths):
+        reason = deliverable_format_error(file_info)
+        if reason:
+            logger.warning(
+                "[linsight-invalid-deliverable] session={} dropping {!r}: {}",
+                session_model.id,
+                file_info.get("rel_path") or file_info.get("file_name"),
+                reason,
+            )
+            continue
+        final_result_files.append(
+            {
+                "file_name": file_info["file_name"],
+                "file_path": file_info["file_path"],
+                "file_md5": file_info["file_md5"],
+                "file_id": file_info["file_id"],
+            }
+        )
 
     async def upload_file_to_minio(final_file_info: dict) -> dict | None:
         """Upload files toMinIOand returns file information"""
@@ -477,6 +645,9 @@ async def build_fallback_report_file(session_model: LinsightSessionVersion, answ
     if not answer:
         return []
     try:
+        from bisheng.citation.domain.services.citation_prompt_helper import unescape_citation_markers
+
+        answer = unescape_citation_markers(answer)
         output_dir = os.path.join(file_dir, "output")
         os.makedirs(output_dir, exist_ok=True)
         local_path = os.path.join(output_dir, FALLBACK_REPORT_NAME)

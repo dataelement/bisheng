@@ -4,6 +4,7 @@ import os
 import re
 import ssl
 from typing import Union
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from celery.schedules import crontab
 from cryptography.fernet import Fernet
@@ -184,6 +185,15 @@ class CeleryConf(BaseModel):
                 "bisheng.worker.knowledge.*": {"queue": "knowledge_celery"},  # Knowledge Base Related Tasks
                 "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # Workflow Execution Related Tasks
             }
+        if self.beat_schedule is None:
+            self.beat_schedule = {}
+        obsolete_information_tasks = {
+            "bisheng.worker.information.article.sync_information_article",
+            "bisheng.worker.information.reconcile.reconcile_all_tenants",
+        }
+        for key, task_info in list(self.beat_schedule.items()):
+            if task_info.get("task") in obsolete_information_tasks:
+                self.beat_schedule.pop(key)
         if "telemetry_mid_user_increment" not in self.beat_schedule:
             self.beat_schedule["telemetry_mid_user_increment"] = {
                 "task": "bisheng.worker.telemetry.mid_table.sync_mid_user_increment",
@@ -204,18 +214,15 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.telemetry.mid_table.sync_mid_user_interact_dtl",
                 "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
             }
-        if "sync_information_article" not in self.beat_schedule:
-            self.beat_schedule["sync_information_article"] = {
-                "task": "bisheng.worker.information.article.sync_information_article",
-                "schedule": crontab.from_string("30 5 * * *"),  # 05:30 exec every day
+        if "dispatch_information_subscription_reconcile" not in self.beat_schedule:
+            self.beat_schedule["dispatch_information_subscription_reconcile"] = {
+                "task": "bisheng.worker.information.reconcile.dispatch_information_subscription_reconcile",
+                "schedule": 3600.0,
             }
-        # F031: daily reconcile of information-source subscriptions per tenant.
-        # Runs at 04:30, before the 05:30 article sync, so orphaned sources are
-        # unsubscribed and missing ones subscribed before articles are pulled.
-        if "reconcile_information_subscriptions" not in self.beat_schedule:
-            self.beat_schedule["reconcile_information_subscriptions"] = {
-                "task": "bisheng.worker.information.reconcile.reconcile_all_tenants",
-                "schedule": crontab.from_string("30 4 * * *"),  # 04:30 exec every day
+        if "dispatch_information_article_poll" not in self.beat_schedule:
+            self.beat_schedule["dispatch_information_article_poll"] = {
+                "task": "bisheng.worker.information.article.dispatch_information_article_poll",
+                "schedule": 1800.0,
             }
         if "retry_failed_tuples" not in self.beat_schedule:
             self.beat_schedule["retry_failed_tuples"] = {
@@ -238,11 +245,6 @@ class CeleryConf(BaseModel):
             self.beat_schedule["admin_scope_cleanup"] = {
                 "task": "bisheng.worker.admin_scope.tasks.admin_scope_cleanup",
                 "schedule": crontab.from_string("*/10 * * * *"),  # every 10 minutes
-            }
-        if "sync_information_article_hourly" not in self.beat_schedule:
-            self.beat_schedule["sync_information_article_hourly"] = {
-                "task": "bisheng.worker.information.article.sync_information_article",
-                "schedule": crontab.from_string("*/30 * * * *"),  # exec Every half hour
             }
         if "file_scheduler_dispatch" not in self.beat_schedule:
             self.beat_schedule["file_scheduler_dispatch"] = {
@@ -446,6 +448,11 @@ class LinsightConf(BaseModel):
         description="L2 truncation guard: max times to retry a model call whose tool-call arguments were "
         "cut off by finish_reason=length (with a 'write in smaller parts' corrective nudge) before giving up.",
     )
+    skill_upload_max_size_mb: int = Field(
+        default=10,
+        ge=1,
+        description="Upload cap for a skill bundle (.md/.zip/.skill), in MB. 系统配置 linsight.skill_upload_max_size_mb",
+    )
     retry_num: int = Field(
         default=3, description="Number of times the model call was retried during the execution of the Ideas task"
     )
@@ -637,6 +644,20 @@ class IntelligenceCenterConf(BaseModel):
     base_url: str = Field(default="", description="Intelligence Center Service Address")
     api_key: str = Field(default="", description="Intelligence Center Service API Key")
     kwargs: dict = Field(default_factory=dict, description="Additional Arguments")
+    information_initial_article_limit: int = Field(default=20, ge=1, le=100)
+    information_sync_jitter_seconds: int = Field(default=600, ge=0)
+    information_subscription_auto_unsubscribe_enabled: bool = Field(default=True)
+    information_knowledge_delivery_enabled: bool = Field(default=True)
+    information_business_timezone: str = Field(default="Asia/Shanghai")
+
+    @field_validator("information_business_timezone")
+    @classmethod
+    def validate_business_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("information_business_timezone must be a valid IANA timezone") from exc
+        return value
 
 
 class McpConf(BaseModel):
@@ -816,8 +837,9 @@ class Settings(BaseModel):
     information_conf: IntelligenceCenterConf = IntelligenceCenterConf()
     mcp: McpConf = McpConf()
     multi_tenant: MultiTenantConf = MultiTenantConf()
-    # F049: open platform switch (three-stage: yaml → /env → appConfig) and
-    # open API auth tuning. Process-level, not DB hot config (design K8).
+    # Open platform switch (three-stage: yaml → /env → appConfig) and open API
+    # auth tuning; both models live in core/config/open_platform.py. Process-level,
+    # not DB hot config.
     open_platform: OpenPlatformConf = OpenPlatformConf()
     open_api: OpenApiConf = OpenApiConf()
     # F054: app-factory runtime layer switch + runtime-manager / app-proxy

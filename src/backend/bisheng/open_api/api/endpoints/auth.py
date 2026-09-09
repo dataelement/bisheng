@@ -1,61 +1,38 @@
-"""``GET /api/v2/auth/whoami`` — what the presented credential is (F049 design §4.2 / §6.1).
-
-The one ``/api/v2`` endpoint that requires **no** scope: it is how F053's ``login``
-verifies a pasted key, and how a human verifies a deployment with ``curl``. It
-still carries ``@open_api_scope(None)`` — "no scope required" and "somebody
-forgot the marker" must stay distinguishable (D3: an unmarked endpoint is 26031).
-"""
-
 from fastapi import APIRouter, Depends
 
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
-from bisheng.open_api.api.dependencies import verify_open_api_access
-from bisheng.open_api.domain.context import PRINCIPAL_KIND_SERVICE_ACCOUNT
-from bisheng.open_api.domain.schemas.credential import (
-    WhoamiResponse,
-    WhoamiServiceAccount,
-)
+from bisheng.open_api.api.dependencies import get_open_api_execution
+from bisheng.open_api.domain.context import OpenApiPrincipal
+from bisheng.open_api.domain.repositories.credential_repository import CredentialRepository
+from bisheng.open_api.domain.schemas.credential import WhoamiResourceOwner, WhoamiResponse
 from bisheng.open_api.domain.scopes import open_api_scope
-from bisheng.open_api.domain.services.credential_service import CredentialService
-from bisheng.open_api.domain.services.credential_validator import ValidatedCredential
 
 router = APIRouter(prefix="/auth", tags=["OpenAPI", "Auth"])
 
 
 @router.get("/whoami", response_model=UnifiedResponseModel[WhoamiResponse])
 @open_api_scope(None)
-async def whoami(credential: ValidatedCredential = Depends(verify_open_api_access)):
-    """Identity behind the presented credential: subject, tenant, scopes, key mask, expiry."""
-    principal = credential.principal
-    key = None
-    if principal.credential_id is not None:
-        # Reads the key's own row for the mask + expiry. The tenant context has
-        # just been seeded from that very row, so the automatic filter matches.
-        key = await CredentialService.get_row(
-            principal.subject_kind,
-            str(principal.subject_user_id),
-            principal.credential_id,
-        )
-
-    service_account = None
-    if principal.subject_kind == PRINCIPAL_KIND_SERVICE_ACCOUNT:
-        service_account = WhoamiServiceAccount(id=principal.subject_user_id, name=credential.user.user_name)
-
-    # A deleted or cross-tenant owner row resolves to None rather than failing
-    # the probe: ``whoami`` answers "what is this credential", and a dangling
-    # owner reference is a fact about the account, not a reason to refuse to
-    # describe it. Callers treat a missing owner the same as an older platform
-    # that never sent the field.
-    resource_owner = await CredentialService.get_resource_owner(principal.resource_owner_user_id)
-
+async def whoami(principal: OpenApiPrincipal = Depends(get_open_api_execution)):
+    credential = await CredentialRepository.get(principal.credential_id)
+    resource_owner = (
+        WhoamiResourceOwner(user_id=principal.resource_owner_user_id)
+        if principal.resource_owner_user_id is not None
+        else None
+    )
     return resp_200(
         data=WhoamiResponse(
-            subject_kind=principal.subject_kind,
-            service_account=service_account,
-            tenant_id=credential.user.tenant_id,
-            scopes=list(principal.scopes),
-            key_mask=key.key_mask if key else "",
-            expires_at=key.expires_at if key else None,
+            credential_id=principal.credential_id,
+            actor_kind=principal.actor_kind,
+            actor_id=principal.actor_id,
+            actor_name=principal.actor_name,
+            tenant_id=principal.tenant_id,
             resource_owner=resource_owner,
+            authorization_subject_type=principal.authorization_subject_type,
+            authorization_subject_id=principal.authorization_subject_id,
+            effective_user_id=principal.effective_user_id,
+            mode=principal.mode,
+            scopes=sorted(principal.scopes),
+            key_mask=credential.key_mask if credential is not None else "",
+            expires_at=credential.expires_at if credential is not None else None,
         )
     )

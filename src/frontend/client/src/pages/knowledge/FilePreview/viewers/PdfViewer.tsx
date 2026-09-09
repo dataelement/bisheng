@@ -201,7 +201,7 @@ export function PdfViewer({
 
     if (!pdfDoc) {
         return (
-            <div className="flex-1 flex items-center justify-center text-[#86909c]">
+            <div className="flex-1 flex items-center justify-center text-text-3">
                 {localize("com_knowledge.loading")}</div>
         );
     }

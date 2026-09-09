@@ -278,6 +278,46 @@ def json_search_exists(column, value: str, dialect_name: str):
     return sa.cast(column, Text()).like(f"%{value}%")
 
 
+class StrJoinKey(FunctionElement):
+    """Cast a numeric key to text for joining against a VARCHAR key column.
+
+    MySQL renders ``CAST(x AS CHAR) COLLATE utf8mb4_unicode_ci``. The explicit
+    collation is not cosmetic: a bare ``CAST(... AS CHAR)`` carries
+    ``collation_connection`` (``utf8mb4_0900_ai_ci`` on a stock MySQL 8), while
+    the VARCHAR column it is compared against carries its table collation
+    (``utf8mb4_unicode_ci`` for BiSheng's schema). Two IMPLICIT collations that
+    differ make MySQL raise ``1267 Illegal mix of collations`` instead of
+    running the join. An EXPLICIT collation on one side wins over the other
+    side's IMPLICIT one, so this compiles cleanly whatever the table collation
+    is — and the keys being compared are digit strings, which every utf8mb4
+    collation orders identically.
+
+    DaMeng / others: a plain CAST — they do not carry per-column collations
+    that can clash, and ``COLLATE utf8mb4_unicode_ci`` is not valid there.
+
+    Usage::
+
+        kid_str = StrJoinKey(col(Knowledge.id))
+        query.outerjoin(Member, kid_str == Member.business_id)
+    """
+
+    inherit_cache = True
+    name = "str_join_key"
+    type = sa.String()
+
+
+@compiles(StrJoinKey)
+def _compile_str_join_key(element, compiler, **kw):
+    (inner,) = element.clauses
+    return compiler.process(sa.cast(inner, sa.String()), **kw)
+
+
+@compiles(StrJoinKey, "mysql")
+def _compile_str_join_key_mysql(element, compiler, **kw):
+    (inner,) = element.clauses
+    return f"{compiler.process(sa.cast(inner, sa.String()), **kw)} COLLATE utf8mb4_unicode_ci"
+
+
 def get_dialect_name(conn_or_engine) -> str:
     """Return the SQLAlchemy dialect name: 'mysql' | 'dm' | 'sqlite' | 'postgresql'."""
     if hasattr(conn_or_engine, "dialect"):

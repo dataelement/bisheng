@@ -1,0 +1,127 @@
+---
+status: done
+component: Radio
+---
+
+# 单选框 Radio
+
+一组**全部摊开可见**的选项里**只选一个**,结果随表单提交才生效;选项 2~7 个用单选框,再多摊不开换下拉选择。**选中后点已选项不会取消**——需要「一个都不选」的合法状态,就明确加一项「无 / 不需要」。组件库 `@bisheng/ui` 导出 **`RadioGroup`**、**`Radio`** 与 **`RadioCard`**(卡片式)。规范全文见「文档 → 组件规范 → 单选框 Radio」。
+
+**壳把规范写死的部分**:圆圈与复选框方块同一套 14 / 16 / 18 阶梯,选中品牌色实心 + 白色内点(直径 = 外圈 − 8);按钮组形态走按钮的 24 / 32 / 40 高度阶梯;方向键在组内移动、Tab 只进出组一次;触屏整行热区 ≥44px。这些没有 prop。
+
+## 基础用法
+
+选项文案写并列同构的名词或短语(「按天 / 按周 / 按月」),读者扫一遍就能比出差别。有安全的默认值就预选它;没有就一项都不预选。
+
+```tsx
+import { Radio, RadioGroup } from '@bisheng/ui';
+
+export default () => (
+  <RadioGroup defaultValue="week">
+    <Radio value="day">按天</Radio>
+    <Radio value="week">按周</Radio>
+    <Radio value="month">按月</Radio>
+  </RadioGroup>
+);
+```
+
+## 三档尺寸
+
+圆圈 14 / 16 / 18,内点 6 / 8 / 10;`size` 写在 `RadioGroup` 上,整组统一。
+
+```tsx
+import { Radio, RadioGroup } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 16 }}>
+    <RadioGroup size="small" defaultValue="a">
+      <Radio value="a">small</Radio>
+      <Radio value="b">表格行内</Radio>
+    </RadioGroup>
+    <RadioGroup size="medium" defaultValue="a">
+      <Radio value="a">medium</Radio>
+      <Radio value="b">默认</Radio>
+    </RadioGroup>
+    <RadioGroup size="large" defaultValue="a">
+      <Radio value="a">large</Radio>
+      <Radio value="b">登录页、大表单</Radio>
+    </RadioGroup>
+  </div>
+);
+```
+
+## 竖排与次要说明
+
+文案长就竖排(横排 16px、竖排 8px 间距,窄屏自动转竖排);说明是一行次要文字,规则同复选框。
+
+```tsx
+import { Radio, RadioGroup } from '@bisheng/ui';
+
+export default () => (
+  <RadioGroup direction="vertical" defaultValue="auto">
+    <Radio value="auto" description="按内容自动选择合适的切分策略">智能切分</Radio>
+    <Radio value="custom" description="手动指定分隔符与块大小">自定义切分</Radio>
+  </RadioGroup>
+);
+```
+
+## 按钮组
+
+筛选条、视图切换这类**高频切换**用按钮组——大热区 + 状态高亮;它是单选的另一张皮,不是一排按钮。选中项品牌色文字 + 品牌浅底 + 整圈淡品牌描边(100 档同卡片式,结构 antd 同构),**不做实心**——切换器不和主按钮抢视线。选项文字 2~4 个字,放不下就回到圆点或下拉。
+
+```tsx
+import { Radio, RadioGroup } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 16, justifyItems: 'start' }}>
+    <RadioGroup variant="button" size="small" defaultValue="list">
+      <Radio value="list">列表</Radio>
+      <Radio value="card">卡片</Radio>
+    </RadioGroup>
+    <RadioGroup variant="button" defaultValue="7d">
+      <Radio value="1d">今天</Radio>
+      <Radio value="7d">近 7 天</Radio>
+      <Radio value="30d">近 30 天</Radio>
+    </RadioGroup>
+  </div>
+);
+```
+
+## 卡片式
+
+带标题 + 描述的方案选择,卡壳同复选框卡片式(圆角 12、最小高 48、选中浅底 + 淡品牌描边),仅选中互斥。
+
+```tsx
+import { RadioCard, RadioGroup } from '@bisheng/ui';
+
+export default () => (
+  <RadioGroup
+    defaultValue="private"
+    style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, maxWidth: 560 }}
+  >
+    <RadioCard value="private" label="私有" description="仅自己与被授权成员可见" />
+    <RadioCard value="shared" label="共享" description="空间内所有成员可见" />
+  </RadioGroup>
+);
+```
+
+## 状态
+
+禁用与按钮 disabled 同一套 token;整组禁用写在 `RadioGroup`,单项禁用写在 `Radio`。组校验错误提示放组下方、用危险色,由调用方渲染;圆圈本身不变红。
+
+```tsx
+import { Radio, RadioGroup } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 16 }}>
+    <RadioGroup defaultValue="a">
+      <Radio value="a">正常已选</Radio>
+      <Radio value="b" disabled>单项禁用</Radio>
+    </RadioGroup>
+    <RadioGroup defaultValue="a" disabled>
+      <Radio value="a">整组禁用(已选)</Radio>
+      <Radio value="b">整组禁用</Radio>
+    </RadioGroup>
+  </div>
+);
+```

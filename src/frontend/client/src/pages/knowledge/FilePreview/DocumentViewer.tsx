@@ -123,7 +123,7 @@ export function DocumentViewer({
 
     if (!pdfDoc) {
         return (
-            <div className="flex-1 flex items-center justify-center text-[#86909c]">
+            <div className="flex-1 flex items-center justify-center text-text-3">
                 <div className="flex flex-col items-center gap-2">
                     <div className="animate-spin size-8 border-2 border-blue-500 border-t-transparent rounded-full" />
                     <span className="text-sm">{localize("com_knowledge.loading")}</span>

@@ -28,6 +28,30 @@ def _zip_bytes(entries: dict[str, bytes]) -> bytes:
     return buf.getvalue()
 
 
+def _zip_bytes_no_utf8_flag(entries: dict[str | bytes, bytes], encoding: str = "utf-8") -> bytes:
+    """Pack names as raw ``encoding`` bytes with ZIP's UTF-8 flag (bit 11) clear.
+
+    ``zipfile`` sets that flag whenever it encodes a non-ASCII name itself, so each
+    name goes in as an equal-length ASCII placeholder (flag stays clear) and the
+    placeholder bytes are substituted afterwards — a length-preserving swap that
+    needs no header surgery. This is the shape macOS Finder's "Compress" emits for
+    UTF-8 names, and Chinese Windows' built-in zip for GBK ones.
+    """
+    substitutions: list[tuple[bytes, bytes]] = []
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
+        for idx, (path, content) in enumerate(entries.items()):
+            target = path.encode(encoding) if isinstance(path, str) else path
+            placeholder = f"__ph{idx}".encode().ljust(len(target), b"_")
+            assert len(placeholder) == len(target), "placeholder must match the real name's byte length"
+            substitutions.append((placeholder, target))
+            zf.writestr(zipfile.ZipInfo(placeholder.decode("ascii")), content)
+    raw = buf.getvalue()
+    for placeholder, target in substitutions:
+        raw = raw.replace(placeholder, target)
+    return raw
+
+
 SKILL_MD_TEXT = (
     "---\nname: demo-skill\ndescription: demo description\nmetadata:\n  display-name: 演示技能\n---\n\n# Demo body\n"
 )
@@ -119,6 +143,45 @@ class TestUnpackZip:
     def test_bad_zip_raises(self):
         with pytest.raises(ValueError, match="invalid zip"):
             unpack_zip_bytes(b"not a zip at all")
+
+
+class TestUnpackZipNameEncoding:
+    """Chinese filenames must survive archives that mislabel their name encoding.
+
+    macOS Finder writes UTF-8 names without ZIP's UTF-8 flag, so ``zipfile`` reads
+    them back as CP437 mojibake. SKILL.md then points at ``references/外评检索指引.md``
+    while the bundle stores ``references/σñûΦ»äµúÇτ┤óµîçσ╝Ò.md`` and the agent's read
+    misses every reference file.
+    """
+
+    def test_macos_finder_utf8_names_recovered(self):
+        files = unpack_zip_bytes(_zip_bytes_no_utf8_flag({SKILL_MD: b"x", "references/外评检索指引.md": b"y"}))
+        assert set(files) == {SKILL_MD, "references/外评检索指引.md"}
+
+    def test_wrapper_dir_stripped_under_mojibake_names(self):
+        """The wrapper-strip runs on decoded names, so a Chinese-named tree still flattens."""
+        files = unpack_zip_bytes(
+            _zip_bytes_no_utf8_flag({"my-skill/SKILL.md": b"x", "my-skill/references/分析师保留规则.md": b"y"})
+        )
+        assert set(files) == {SKILL_MD, "references/分析师保留规则.md"}
+
+    def test_gbk_names_recovered(self):
+        """Chinese Windows' built-in zip writes GBK names, also without the flag."""
+        files = unpack_zip_bytes(
+            _zip_bytes_no_utf8_flag({SKILL_MD: b"x", "references/电力报告.md": b"y"}, encoding="gbk")
+        )
+        assert set(files) == {SKILL_MD, "references/电力报告.md"}
+
+    def test_real_cp437_names_kept(self):
+        """Bytes that decode as neither UTF-8 nor GBK stay on zipfile's CP437 reading."""
+        # 0x81 is an invalid UTF-8 start byte and an incomplete GBK sequence before 0x20.
+        files = unpack_zip_bytes(_zip_bytes_no_utf8_flag({SKILL_MD.encode(): b"x", b"a\x81 b.md": b"y"}))
+        assert set(files) == {SKILL_MD, "aü b.md"}
+
+    def test_flagged_utf8_archive_unaffected(self):
+        """Well-formed archives (the flag set — what zipfile, zip(1) and 7-Zip emit) are untouched."""
+        files = unpack_zip_bytes(_zip_bytes({SKILL_MD: b"x", "references/外评检索指引.md": b"y"}))
+        assert set(files) == {SKILL_MD, "references/外评检索指引.md"}
 
 
 class TestSkillStore:

@@ -7,7 +7,6 @@ from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
 from sqlmodel import col, select
 
-from bisheng.api.v1.schema.chat_schema import UseKnowledgeBaseParam
 from bisheng.api.v1.schemas import (
     KnowledgeFileOne,
     KnowledgeFileProcess,
@@ -50,6 +49,7 @@ from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType
 from bisheng.tool.domain.services.f048_tool_permission import SYSTEM_TOOL_ACTIONS
+from bisheng.workstation.domain.schemas.chat import UseKnowledgeBaseParam
 
 from ..models import TenantWorkstationConfigDao
 
@@ -594,6 +594,42 @@ class WorkStationService(BaseService):
         return [group for group in identified if "use" in action_map.get(str(group["id"]), frozenset())]
 
     @classmethod
+    async def afilter_org_kbs_by_visible_permission(
+        cls,
+        org_kbs: list[dict] | None,
+        login_user: UserPayload,
+    ) -> list[dict]:
+        """Keep configured organization knowledge bases visible to this user.
+
+        The public workstation config exposes knowledge-base metadata and seeds
+        the client's default selection. That presentation boundary intentionally
+        checks ``visible``; retrieval continues to enforce the stricter runtime
+        action independently.
+        """
+        from bisheng.permission.application.business_authorization import batch_check_business_actions
+
+        if not org_kbs:
+            return []
+
+        normalized = [cls._to_plain_dict(item) for item in org_kbs]
+        identified = [item for item in normalized if item and item.get("id") is not None]
+        if len(identified) != len(normalized):
+            logger.warning(
+                "[workstation.org_kbs] dropped {} configured knowledge base(s) without an id",
+                len(normalized) - len(identified),
+            )
+        if not identified:
+            return []
+
+        action_map = await batch_check_business_actions(
+            login_user,
+            resource_type="knowledge_library",
+            resource_ids=[item["id"] for item in identified],
+            actions=("visible",),
+        )
+        return [item for item in identified if "visible" in action_map.get(str(item["id"]), frozenset())]
+
+    @classmethod
     async def _aproject_daily_config_for_current_tenant(
         cls,
         config: WorkstationConfig | None,
@@ -761,6 +797,21 @@ class WorkStationService(BaseService):
         if inherited:
             ret = await cls._aproject_daily_config_for_current_tenant(ret, DEFAULT_TENANT_ID)
         return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
+
+    @classmethod
+    async def get_open_api_daily_config(cls, login_user: UserPayload) -> dict[str, list]:
+        """Project the daily configuration onto the two safe Open API fields."""
+
+        config = await cls.get_daily_chat_config()
+        if config is None:
+            return {"models": [], "tools": []}
+        tools = [tool.model_dump(mode="json") for tool in config.tools or []]
+        if tools:
+            tools = await cls.afilter_tools_by_use_permission(tools, login_user)
+        return {
+            "models": [model.model_dump(mode="json") for model in config.models or []],
+            "tools": tools,
+        }
 
     @classmethod
     async def update_daily_chat_config(cls, data: WorkstationConfig) -> WorkstationConfig:

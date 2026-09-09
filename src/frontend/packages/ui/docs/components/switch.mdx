@@ -1,0 +1,130 @@
+---
+status: done
+component: Switch
+---
+
+# 开关 Switch
+
+拨一个**独立设置的开 / 关**,拨动**立即生效**——不需要提交按钮,也不需要确认;要攒着随表单一起提交的,用复选框。label 描述「开着的是什么」(如「消息通知」),不写疑问句。拨一下就有破坏性后果的动作不用开关,用按钮 + 二次确认。组件库 `@bisheng/ui` 导出 **`Switch`**。规范全文见「文档 → 组件规范 → 开关 Switch」。
+
+**壳把规范写死的部分**:两档 22×38 / 18×32,胶囊轨道 + 正圆滑块 + 2px 内边距;开启品牌色轨道(随蓝⇄绿主题)、关闭中性灰轨道,悬停各加深一档;禁用保持当前侧别、整体降 40% 不透明度;loading 期间锁拨;聚焦环只在键盘 Tab 时出现;触屏热区 ≥44px。这些没有 prop。
+
+## 基础用法
+
+默认档高 22px 与正文行高同值,和 14px 文字同排天然居中。
+
+```tsx
+import { Switch } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+    <Switch defaultChecked aria-label="消息通知" />
+    <Switch aria-label="声音提醒" />
+  </div>
+);
+```
+
+## 两档尺寸
+
+`small`(18×32)用于表格行内、紧凑列表;触屏高频场景直接升 default。
+
+```tsx
+import { Switch } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+    <Switch defaultChecked aria-label="default 档" />
+    <Switch size="small" defaultChecked aria-label="small 档" />
+    <Switch size="small" aria-label="small 档关闭" />
+  </div>
+);
+```
+
+## 框内文字
+
+可选的强调,默认不放;要放就最多 2 个字或一个 icon,显示在滑块让出的那一侧。`small` 档装不下,不渲染框内文字。
+
+```tsx
+import { Switch } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+    <Switch defaultChecked checkedChildren="开" unCheckedChildren="关" aria-label="带框内文字" />
+    <Switch checkedChildren="开" unCheckedChildren="关" aria-label="带框内文字,关闭" />
+  </div>
+);
+```
+
+## 加载与失败回弹
+
+拨动后要等服务端确认的场景:期间 `loading` 锁住不可拨——连拨会让最终状态和服务端结果对不上。**失败要回弹**:开关回到原状态,并用轻提示说明原因;界面不能停在一个没生效的假状态上。
+
+```tsx
+import React from 'react';
+import { Switch, Toaster, toast } from '@bisheng/ui';
+
+export default () => {
+  const [checked, setChecked] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const flip = (next) => {
+    setChecked(next);
+    setLoading(true);
+    // Pretend the server rejects the change: roll back + explain.
+    setTimeout(() => {
+      setLoading(false);
+      setChecked(!next);
+      toast.error('保存失败,已恢复原状态');
+    }, 1200);
+  };
+  return (
+    <>
+      <Toaster />
+      <Switch checked={checked} loading={loading} onCheckedChange={flip} aria-label="演示失败回弹" />
+    </>
+  );
+};
+```
+
+## 禁用
+
+保持当前开 / 关的颜色、整体降 40% 不透明度——开关的禁用要能看出**停在哪一侧**,所以不改成统一灰底。
+
+```tsx
+import { Switch } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+    <Switch disabled defaultChecked aria-label="禁用,停在开" />
+    <Switch disabled aria-label="禁用,停在关" />
+  </div>
+);
+```
+
+## 设置行
+
+label 放开关左侧,设置列表里开关靠行尾右对齐;整行可点、触屏热区 ≥44px 由调用方的行布局保证。
+
+```tsx
+import React from 'react';
+import { Switch } from '@bisheng/ui';
+
+const Row = ({ label, hint, ...props }) => {
+  const id = React.useId();
+  return (
+    <label htmlFor={id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, minHeight: 44, cursor: 'pointer' }}>
+      <span style={{ display: 'grid' }}>
+        <span className="text-body text-text-1">{label}</span>
+        {hint && <span className="text-caption text-text-3">{hint}</span>}
+      </span>
+      <Switch id={id} {...props} />
+    </label>
+  );
+};
+
+export default () => (
+  <div style={{ display: 'grid', maxWidth: 360 }}>
+    <Row label="消息通知" hint="有新回复时推送" defaultChecked />
+    <Row label="声音提醒" />
+  </div>
+);
+```

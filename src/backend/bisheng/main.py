@@ -17,17 +17,25 @@ from bisheng.common.services.config_service import settings
 from bisheng.core.context import close_app_context, initialize_app_context
 from bisheng.core.logger import set_logger_config
 from bisheng.open_api.api.exception_handlers import register_open_api_exception_handlers
+from bisheng.open_api.api.middleware import OpenApiAuditMiddleware
+from bisheng.open_api.api.openapi_schema import install_open_api_schema
+from bisheng.open_api.domain.services.call_audit_service import open_api_call_audit_service
+from bisheng.public_endpoints.api.exception_handlers import register_public_exception_handlers
+from bisheng.public_endpoints.api.router import router_public
 from bisheng.utils.http_middleware import CustomMiddleware, WebSocketLoggingMiddleware
 from bisheng.utils.threadpool import thread_pool
 
 
 def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
+    is_v2 = req.url.path.startswith("/api/v2")
     http_status = status.HTTP_200_OK
     if isinstance(exc, HTTPException):
         msg = {
             "status_code": exc.status_code,
             "status_message": exc.detail["error"] if isinstance(exc.detail, dict) else exc.detail,
         }
+        if is_v2:
+            http_status = exc.status_code
     elif isinstance(exc, BaseErrorCode):
         data = {"exception": str(exc), **exc.kwargs} if exc.kwargs else {"exception": str(exc)}
         msg = {"status_code": exc.code, "status_message": exc.message, "data": data}
@@ -40,6 +48,28 @@ def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
 
 
 def handle_request_validation_error(req: Request, exc: RequestValidationError) -> JSONResponse:
+    if req.url.path.startswith("/api/v2"):
+        body = exc.body if isinstance(exc.body, dict) else {}
+        from bisheng.common.errcode.open_api import (
+            OpenApiAsyncUnsupportedError,
+            OpenApiTaskModeUnsupportedError,
+        )
+
+        if body.get("task_mode") is True or (
+            "run_mode" in body and body.get("run_mode") != "daily"
+        ):
+            error = OpenApiTaskModeUnsupportedError(msg="Task mode is not available: run_mode/task_mode")
+            req.scope["open_api_error_code"] = error.code
+            return JSONResponse(status_code=400, content=error.to_dict())
+        if body.get("execution") not in (None, "sync") or body.get("background") is True:
+            error = OpenApiAsyncUnsupportedError(msg="Asynchronous execution is not available: execution")
+            req.scope["open_api_error_code"] = error.code
+            return JSONResponse(status_code=400, content=error.to_dict())
+        msg = {
+            "status_code": status.HTTP_400_BAD_REQUEST,
+            "status_message": exc.errors(),
+        }
+        return JSONResponse(status_code=400, content=msg)
     msg = {"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "status_message": exc.errors()}
     logger.error(f"{req.method} {req.url} {str(exc.errors())[:100]}")
     return JSONResponse(content=msg)
@@ -100,6 +130,7 @@ async def lifespan(app: FastAPI):
     await initialize_app_context(config=settings)
     _register_permission_runtime_contexts()
     _register_app_publish_composition()
+    open_api_call_audit_service.start()
     try:
         await init_default_data()
         # F035 task-mode compatibility data remains unrelated to F048 resource
@@ -145,6 +176,7 @@ async def lifespan(app: FastAPI):
         # LangfuseInstance.update()
         yield
     finally:
+        await open_api_call_audit_service.stop()
         thread_pool.tear_down()
         await close_app_context()
 
@@ -156,6 +188,19 @@ def create_app():
         exception_handlers=_EXCEPTION_HANDLERS,
         lifespan=lifespan,
     )
+    # /api/v2 and /api/v3 answer with real HTTP status codes while keeping the
+    # platform envelope in the body. Registered via add_exception_handler rather
+    # than in ``_EXCEPTION_HANDLERS`` because they must sit *below*
+    # ``BaseErrorCode`` in the lookup — Starlette walks ``type(exc).__mro__``
+    # and picks the first registered class, so the narrower handlers win for
+    # their own errors and ``handle_http_exception`` keeps every other error
+    # unchanged.
+    register_open_api_exception_handlers(app)
+    install_open_api_schema(app)
+    register_public_exception_handlers(app)
+    # F054: app-proxy branches on a real 401 to tell "our shared secret is
+    # wrong" from "this visitor may not enter" (which is 200 + a decision).
+    register_app_runtime_exception_handlers(app)
 
     # Browsers reject ACAO=* when axios uses withCredentials=true.
     # Override with comma-separated BISHENG_CORS_ORIGINS when needed.
@@ -191,6 +236,7 @@ def create_app():
     # the inbound path, which means AdminScopeMiddleware must be added
     # *first* (inner). See ``common/middleware/admin_scope.py`` docstring.
     app.add_middleware(AdminScopeMiddleware)
+    app.add_middleware(OpenApiAuditMiddleware)
     app.add_middleware(CustomMiddleware)
     app.add_middleware(WebSocketLoggingMiddleware)
 
@@ -198,19 +244,9 @@ def create_app():
     def authjwt_exception_handler(request: Request, exc: AuthJWTException):
         return JSONResponse(status_code=401, content={"detail": str(exc)})
 
-    # F049 (design K4 / D2): /api/v2 answers with real HTTP status codes while
-    # keeping the platform envelope in the body. Registered here rather than in
-    # ``_EXCEPTION_HANDLERS`` because it must sit *below* ``BaseErrorCode`` in
-    # the lookup — Starlette walks ``type(exc).__mro__`` and picks the first
-    # registered class, so the narrower 260xx handler wins for those errors and
-    # ``handle_http_exception`` keeps every other error unchanged.
-    register_open_api_exception_handlers(app)
-    # F054: app-proxy branches on a real 401 to tell "our shared secret is
-    # wrong" from "this visitor may not enter" (which is 200 + a decision).
-    register_app_runtime_exception_handlers(app)
-
     app.include_router(router)
     app.include_router(router_rpc)
+    app.include_router(router_public)
     from bisheng.department.api.endpoints.department_limit import (
         router as department_limit_router,
     )

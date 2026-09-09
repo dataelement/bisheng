@@ -1,47 +1,64 @@
-"""Request-scoped open API principal (F049 design D2 / §4.2 ``UserPayload.open_api_principal``).
-
-``OpenApiPrincipal`` is a standalone pydantic model on purpose - it imports
-nothing from the ``user`` domain, so ``LoginUser`` can reference it as an
-optional field without a ``user <-> open_api`` import cycle (T012).
-
-The ContextVar is written by the router-level ``verify_open_api_access``
-dependency after a credential (or share token) validates and is what
-``get_open_api_login_user`` and business services read to learn the acting
-subject / resource owner. It is ``None`` for every JWT-authenticated request.
-"""
+"""Immutable identities propagated through Open API execution paths."""
 
 from __future__ import annotations
 
 from contextvars import ContextVar, Token
+from typing import Literal
 
-from pydantic import BaseModel, Field
-
-# ``subject_kind`` values a principal can carry. ``hosted_app`` appears once
-# F055 registers its resolver; ``share_link`` comes from the share-token channel.
-PRINCIPAL_KIND_SERVICE_ACCOUNT = "service_account"
-PRINCIPAL_KIND_SHARE_LINK = "share_link"
-PRINCIPAL_KIND_HOSTED_APP = "hosted_app"
+from pydantic import BaseModel, ConfigDict
 
 
 class OpenApiPrincipal(BaseModel):
-    """Who is calling ``/api/v2`` and on whose behalf resources are owned."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
-    model_config = {"frozen": True}
-
-    # ``api_credential.id`` for credential-backed calls; ``None`` for share links.
-    credential_id: int | None = None
-    subject_kind: str = Field(description="service_account | share_link | hosted_app")
-    # The executing user id: the service-account user row, or the share link's
-    # creator (D8). Sessions and audit rows keep using this id (AC-25).
-    subject_user_id: int
-    # ``service_account.resource_owner_user_id`` - creation relations of
-    # resources created through the open API land on this person (AC-24).
-    resource_owner_user_id: int | None = None
-    share_link_id: str | None = None
-    scopes: tuple[str, ...] = ()
+    credential_id: int
+    actor_kind: Literal["service_account", "natural_person"]
+    actor_id: int
+    actor_name: str
+    tenant_id: int
+    resource_owner_user_id: int | None
+    scopes: frozenset[str]
+    mode: Literal["S", "D"] = "S"
+    authorization_subject_type: Literal["service_account", "user"]
+    authorization_subject_id: int
+    effective_user_id: int | None
+    on_behalf_of_user_id: int | None = None
+    end_user_id: str | None = None
 
     def has_scope(self, scope: str) -> bool:
         return scope in self.scopes
+
+
+class OpenApiExecutionSnapshot(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tenant_id: int
+    actor_kind: Literal["service_account", "natural_person"]
+    actor_id: int
+    authorization_subject_type: Literal["service_account", "user"]
+    authorization_subject_id: int
+    resource_owner_user_id: int | None
+    effective_user_id: int | None
+    mode: Literal["S", "D"]
+    credential_id: int | None
+    trace_id: str
+    channel: Literal["open_api_v2", "public_v3"]
+
+    @classmethod
+    def from_principal(cls, principal: OpenApiPrincipal, *, trace_id: str) -> OpenApiExecutionSnapshot:
+        return cls(
+            tenant_id=principal.tenant_id,
+            actor_kind=principal.actor_kind,
+            actor_id=principal.actor_id,
+            authorization_subject_type=principal.authorization_subject_type,
+            authorization_subject_id=principal.authorization_subject_id,
+            resource_owner_user_id=principal.resource_owner_user_id,
+            effective_user_id=principal.effective_user_id,
+            mode=principal.mode,
+            credential_id=principal.credential_id,
+            trace_id=trace_id,
+            channel="open_api_v2",
+        )
 
 
 current_open_api_principal: ContextVar[OpenApiPrincipal | None] = ContextVar("current_open_api_principal", default=None)
@@ -52,7 +69,6 @@ def get_current_open_api_principal() -> OpenApiPrincipal | None:
 
 
 def set_current_open_api_principal(principal: OpenApiPrincipal | None) -> Token:
-    """Set the principal for the current request context; keep the token to ``reset``."""
     return current_open_api_principal.set(principal)
 
 

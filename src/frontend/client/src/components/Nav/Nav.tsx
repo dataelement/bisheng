@@ -149,7 +149,7 @@ const Nav = ({
         data-testid="nav"
         className={cn(
           // 须与 usePrefersMobileLayout（max-width:767px）一致：touch-mobile 为 max-1023，误伤 768–1023 会去掉边距/边框，像「盖在内容上」
-          'max-w-[260px] max-[767px]:max-w-none min-w-0 flex-shrink-0 overflow-x-hidden bg-white border-r border-[#ececec] max-[767px]:border-r-0',
+          'max-w-[260px] max-[767px]:max-w-none min-w-0 flex-shrink-0 overflow-x-hidden bg-white border-r border-border-base max-[767px]:border-r-0',
           isSmallScreen && 'fixed inset-y-0 left-0 z-[70] h-[100dvh] shadow-[4px_0_24px_rgba(0,0,0,0.06)]',
         )}
         style={{

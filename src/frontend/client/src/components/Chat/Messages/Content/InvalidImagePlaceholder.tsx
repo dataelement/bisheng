@@ -24,7 +24,7 @@ export function InvalidImagePlaceholder({
         // Same tint as the thumbnail it stands in for, and no border: in a row
         // of pictures the missing one should hold the place quietly rather than
         // draw a frame around itself.
-        'bg-[#F8F8F8] text-text-3/60',
+        'bg-fill-1 text-text-3/60',
         className,
       )}
     >

@@ -52,28 +52,40 @@ const EXTENSION_TO_TYPE: Record<string, FileTypeKey> = {
     webm: 'video',
 };
 
-const TYPE_TO_ICON: Record<FileTypeKey, React.ReactNode> = {
-    folder: <FolderIcon className={iconSlotClass} />,
-    doc: <Colored.FileDoc className={iconSlotClass} />,
-    ppt: <Colored.FilePptx className={iconSlotClass} />,
-    xls: <Colored.FileXls className={iconSlotClass} />,
-    csv: <Colored.FileCsv className={iconSlotClass} />,
-    txt: <Colored.FileTxt className={iconSlotClass} />,
-    md: <Colored.FileMd className={iconSlotClass} />,
-    html: <Colored.FileHtml className={iconSlotClass} />,
-    audio: <Colored.FileAudio className={iconSlotClass} />,
-    video: <Colored.FileVideo className={iconSlotClass} />,
+/** Icon components, not elements: the slot size is a render-time decision
+ *  (`iconClassName`), so baking `iconSlotClass` into a fixed element would make
+ *  every caller render at 64px and get center-cropped by a smaller slot. */
+type IconComponent = React.ComponentType<{ className?: string }>;
+
+const TYPE_TO_ICON: Record<FileTypeKey, IconComponent> = {
+    folder: FolderIcon,
+    doc: Colored.FileDoc,
+    ppt: Colored.FilePptx,
+    xls: Colored.FileXls,
+    csv: Colored.FileCsv,
+    txt: Colored.FileTxt,
+    md: Colored.FileMd,
+    html: Colored.FileHtml,
+    audio: Colored.FileAudio,
+    video: Colored.FileVideo,
 };
 
 const FileIconRenderer = ({ file, isFolder, iconClassName, thumbBordered, transparentBg }: { file: any; isFolder: boolean; iconClassName?: string; thumbBordered?: boolean; transparentBg?: boolean }) => {
     // H5 mobile list: suppress the per-type gradient backdrop so colored icons
     // sit on a transparent slot (desktop card path stays untouched).
     const bgFor = (key: FileTypeKey) => (transparentBg ? '' : FILE_TYPE_BG[key]);
+    // Every branch renders at this size — a slot smaller than the icon would
+    // otherwise crop the glyph instead of scaling it.
+    const slotClass = iconClassName ?? iconSlotClass;
+    const renderTypeIcon = (key: FileTypeKey) => {
+        const Icon = TYPE_TO_ICON[key];
+        return <Icon className={slotClass} />;
+    };
 
     if (isFolder) {
         return (
             <div className={cn(wrapperClass, bgFor('folder'))}>
-                <FolderIcon className={iconClassName ?? iconSlotClass} />
+                {renderTypeIcon('folder')}
             </div>
         );
     }
@@ -91,7 +103,7 @@ const FileIconRenderer = ({ file, isFolder, iconClassName, thumbBordered, transp
     if ((typeKey === 'md' || typeKey === 'txt' || typeKey === 'csv' || typeKey === 'html') && file.status === FileStatus.SUCCESS) {
         return (
             <div className={cn(wrapperClass, bgFor(typeKey))}>
-                {TYPE_TO_ICON[typeKey]}
+                {renderTypeIcon(typeKey)}
             </div>
         );
     }
@@ -100,7 +112,7 @@ const FileIconRenderer = ({ file, isFolder, iconClassName, thumbBordered, transp
     // object-top so the preview keeps the page header (title area) visible instead
     // of clipping it equally top & bottom.
     if (file.thumbnail && file.status === FileStatus.SUCCESS) {
-        return <img src={file.thumbnail} alt={file.name} className={cn("size-full object-cover object-top", thumbBordered && "rounded-md border border-[#EBECF0]")} />;
+        return <img src={file.thumbnail} alt={file.name} className={cn("size-full object-cover object-top", thumbBordered && "rounded-md border border-border-base")} />;
     }
 
     // For non-success states (uploading/processing/failed/etc.), use the neutral
@@ -109,7 +121,7 @@ const FileIconRenderer = ({ file, isFolder, iconClassName, thumbBordered, transp
     if (!isParsed) {
         return (
             <div className={wrapperClass}>
-                <TxtIcon className={iconSlotClass} />
+                <TxtIcon className={slotClass} />
             </div>
         );
     }
@@ -118,7 +130,7 @@ const FileIconRenderer = ({ file, isFolder, iconClassName, thumbBordered, transp
 
     return (
         <div className={cn(wrapperClass, bgFor(resolvedKey))}>
-            {TYPE_TO_ICON[resolvedKey]}
+            {renderTypeIcon(resolvedKey)}
         </div>
     );
 };

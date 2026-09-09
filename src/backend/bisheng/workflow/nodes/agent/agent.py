@@ -11,14 +11,12 @@ from pydantic import BaseModel, Field, SkipValidation, field_validator
 
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
-    CITATION_PROMPT_RULES,
     annotate_rag_documents_with_citations,
     annotate_web_results_with_citations,
     cache_citation_registry_items,
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
-    prompt_has_citation_rules,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
@@ -309,6 +307,12 @@ class AgentNode(BaseNode):
 
     @staticmethod
     def _wrap_citation_tool(tool: BaseTool) -> BaseTool:
+        # F054: an ephemeral source (workflow input-node upload) is left
+        # unwrapped, so no citation is registered for it and no badge appears.
+        # Its chunks cannot resolve back to a real file, and a badge that opens
+        # onto nothing is worse than no badge (design §3 decision 6).
+        if getattr(tool, "ephemeral_source", False):
+            return tool
         if tool.name == "web_search" or hasattr(tool, "knowledge_retriever_tool"):
             return WorkflowCitationToolWrapper.wrap(tool)
         return tool

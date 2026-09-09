@@ -351,7 +351,7 @@ export default function DataTableKnowledge<TData, TValue>({
             // value={(table.getColumn('file_name')?.getFilterValue() as string | undefined) ?? ''}
             onChange={handleSearch}
             // onChange={(event) =>  table.getColumn('file_name')?.setFilterValue(event.target.value)}
-            className="flex-1 text-sm"
+            className="flex-1"
           /> */}
         </div>
         <div>

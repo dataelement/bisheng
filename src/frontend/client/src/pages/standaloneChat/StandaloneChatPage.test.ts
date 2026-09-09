@@ -1,6 +1,18 @@
 /** @jest-environment node */
 
 import { loadStandaloneAutoRerunOnOpen } from './standaloneAutoRerunConfig';
+import { resolveStandaloneApiVersion } from './StandaloneChatContext';
+import { genTitle } from '../../api/chat/api-endpoints';
+
+describe('StandaloneChatPage API channel', () => {
+  it('uses v3 for every guest URL and keeps authenticated pages on v1', () => {
+    expect(resolveStandaloneApiVersion('guest')).toBe('v3');
+    expect(resolveStandaloneApiVersion('auth')).toBe('v1');
+    expect(genTitle('v3')).toBe('/api/v3/chat/gen_title');
+    expect(genTitle('v2')).toBe('/api/v2/chat/gen_title');
+    expect(genTitle('v1')).toBe('/api/v1/workstation/gen_title');
+  });
+});
 
 describe('StandaloneChatPage auto rerun configuration', () => {
   it.each([true, false])('uses an explicit workflow switch value: %s', async (value) => {

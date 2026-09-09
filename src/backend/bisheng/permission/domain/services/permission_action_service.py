@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Protocol
+from typing import Literal, Protocol
 
 from loguru import logger
 
@@ -31,12 +31,65 @@ HIGHER_CONSISTENCY = "HIGHER_CONSISTENCY"
 MAX_BATCH_CHECKS = 100
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class PermissionActor:
-    user_id: int
-    current_tenant_id: int
+    subject_type: Literal["user", "service_account"]
+    subject_id: int
+    tenant_id: int
     super_admin: bool = False
     tenant_admin_tenant_ids: frozenset[int] = frozenset()
+
+    def __init__(
+        self,
+        subject_type: Literal["user", "service_account"] = "user",
+        subject_id: int | None = None,
+        tenant_id: int | None = None,
+        *,
+        super_admin: bool = False,
+        tenant_admin_tenant_ids: frozenset[int] = frozenset(),
+        user_id: int | None = None,
+        current_tenant_id: int | None = None,
+    ) -> None:
+        """Build a typed actor while accepting legacy user-only keywords.
+
+        The aliases preserve existing callers during the F048 transition; all
+        authorization transport uses ``fga_subject`` and therefore never loses
+        the subject type.
+        """
+
+        if subject_type not in {"user", "service_account"}:
+            raise ValueError(f"unsupported permission subject type: {subject_type!r}")
+        resolved_subject_id = subject_id if subject_id is not None else user_id
+        resolved_tenant_id = tenant_id if tenant_id is not None else current_tenant_id
+        if resolved_subject_id is None or resolved_tenant_id is None:
+            raise TypeError("subject_id and tenant_id are required")
+        if subject_id is not None and user_id is not None and subject_id != user_id:
+            raise ValueError("subject_id and user_id disagree")
+        if tenant_id is not None and current_tenant_id is not None and tenant_id != current_tenant_id:
+            raise ValueError("tenant_id and current_tenant_id disagree")
+
+        object.__setattr__(self, "subject_type", subject_type)
+        object.__setattr__(self, "subject_id", int(resolved_subject_id))
+        object.__setattr__(self, "tenant_id", int(resolved_tenant_id))
+        if subject_type == "service_account":
+            super_admin = False
+            tenant_admin_tenant_ids = frozenset()
+        object.__setattr__(self, "super_admin", bool(super_admin))
+        object.__setattr__(self, "tenant_admin_tenant_ids", frozenset(tenant_admin_tenant_ids))
+
+    @property
+    def fga_subject(self) -> str:
+        return f"{self.subject_type}:{self.subject_id}"
+
+    @property
+    def user_id(self) -> int:
+        """Legacy user-only alias; authorization code must use ``fga_subject``."""
+
+        return self.subject_id
+
+    @property
+    def current_tenant_id(self) -> int:
+        return self.tenant_id
 
 
 class PermissionCatalogDecisionPort(Protocol):
@@ -178,7 +231,7 @@ class F048PermissionService:
         )
         try:
             allowed = await self._fga.check(
-                user=f"user:{actor.user_id}",
+                user=actor.fga_subject,
                 relation=f"can_{action}",
                 object=f"{target.resource_type}:{target.resource_id}",
                 consistency=consistency,
@@ -222,7 +275,7 @@ class F048PermissionService:
         )
         try:
             allowed = await self._fga.check(
-                user=f"user:{actor.user_id}",
+                user=actor.fga_subject,
                 relation="visible",
                 object=f"{target.resource_type}:{target.resource_id}",
                 consistency=consistency,
@@ -285,7 +338,7 @@ class F048PermissionService:
         if unresolved:
             checks = [
                 {
-                    "user": f"user:{actor.user_id}",
+                    "user": actor.fga_subject,
                     "relation": f"can_{action}",
                     "object": f"{target.resource_type}:{target.resource_id}",
                 }
@@ -321,9 +374,7 @@ class F048PermissionService:
         unresolved: list[tuple[int, VerifiedPermissionTarget]] = []
         consistency = None
         tenant_targets = tuple(
-            (index, target)
-            for index, target in enumerate(targets)
-            if target.tenant_id == actor.current_tenant_id
+            (index, target) for index, target in enumerate(targets) if target.tenant_id == actor.current_tenant_id
         )
         for index, target in enumerate(targets):
             if target.tenant_id != actor.current_tenant_id:
@@ -416,7 +467,7 @@ class F048PermissionService:
         if unresolved:
             checks = [
                 {
-                    "user": f"user:{actor.user_id}",
+                    "user": actor.fga_subject,
                     "relation": "visible",
                     "object": (f"{target.resource_type}:{target.resource_id}"),
                 }
@@ -460,7 +511,7 @@ class F048PermissionService:
         request = VisibleObjectEnumerationRequest(
             tenant_id=actor.current_tenant_id,
             resource_type=resource_type,
-            fga_user=f"user:{actor.user_id}",
+            fga_user=actor.fga_subject,
             max_results=max_results,
         )
         started = perf_counter()
@@ -582,7 +633,7 @@ class F048PermissionService:
         )
         try:
             objects = await self._fga.list_objects(
-                user=f"user:{actor.user_id}",
+                user=actor.fga_subject,
                 relation=f"can_{action}",
                 type=resource_type,
                 consistency=consistency,
@@ -747,6 +798,8 @@ class F048PermissionService:
                     "reason": reason,
                     "resource_type": target.resource_type,
                     "tenant_id": target.tenant_id,
+                    "subject_type": actor.subject_type,
+                    "subject_id": actor.subject_id,
                     "user_id": actor.user_id,
                 },
             )

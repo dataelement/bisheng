@@ -71,13 +71,13 @@ const CardShell = ({
 }) => (
     <div
         className={cn(
-            "group flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs text-[#212121]",
+            "group flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs text-text-1",
             onClick && "cursor-pointer",
         )}
         style={{ width: CARD_WIDTH }}
         onClick={onClick}
     >
-        <span className="flex size-4 shrink-0 items-center justify-center text-[#999]">{icon}</span>
+        <span className="flex size-4 shrink-0 items-center justify-center text-text-3">{icon}</span>
         <span className="min-w-0 flex-1 truncate text-left" title={title ?? label}>
             {label}
         </span>
@@ -229,7 +229,7 @@ const ArrowButton = ({
             // 8px gap only on the outer side (strip edge); the side facing the cards
             // stays flush at 0.
             className={cn(
-                "flex size-4 shrink-0 items-center justify-center text-[#666] transition-colors hover:text-[#212121]",
+                "flex size-4 shrink-0 items-center justify-center text-[#666] transition-colors hover:text-text-1",
                 direction === "left" ? "ml-2" : "mr-2",
             )}
         >

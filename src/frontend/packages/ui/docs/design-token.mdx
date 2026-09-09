@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   BRAND, BRAND_STEPS, GRAY, TEXT, FILL, BORDER, BG, FUNCTIONAL, TAG,
-  FONT_FAMILY, TYPE_SCALE, FONT_WEIGHT, RADIUS, ICON_SIZE,
+  FONT_FAMILY, TYPE_SCALE, FONT_WEIGHT, RADIUS, ICON_SIZE, Z_INDEX,
 } from '~/design-token.cjs';
 
 export const mono = 'ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace';
@@ -245,6 +245,18 @@ export const IconSizeTable = () => (
   />
 );
 
+export const ZIndexTable = () => (
+  <TokenTable
+    cols={[
+      { t: '变量名', r: (x) => <Name>z-{x.name}</Name> },
+      { t: '变量值', r: (x) => <Code>{x.value}</Code> },
+      { t: 'Tailwind 类', r: (x) => <Code>z-{x.name}</Code> },
+      { t: '用在哪', r: (x) => x.usage },
+    ]}
+    rows={Z_INDEX}
+  />
+);
+
 # 设计变量 Design Token
 
 组件库的全局 Token——单一源为 <code>src/design-token.cjs</code>（SSOT），本页所有表格与色块直接从该文件渲染，**改 token 即改此页**，规范不会与组件实际取值漂移。业务代码只消费 Tailwind 类 / CSS 变量（semantic 层），**禁止裸 hex**。色块与「变量值」随右上角站点主题切换，展示对应的亮 / 暗色取值。
@@ -326,3 +338,9 @@ export const IconSizeTable = () => (
 原始画布 24px、线宽 2；缩放只改容器尺寸，线宽随缩放视觉等比（xs / xl2 例外档单独标注）。
 
 <IconSizeTable />
+
+## 层级 Z-Index
+
+浮层前后关系只有四档，新增浮层一律从这四档里选，**不自造 `z-[100]` / `z-[9999]` 这类数值**。排在上面的层要能盖住下面的：弹窗里的下拉菜单得展得开，弹窗里点保存轻提示得看得见，任何图标按钮都还要能弹出文字提示。规范正文见「文档 → 组件规范 → 弹窗 Modal」§5（层级唯一事实源）。
+
+<ZIndexTable />

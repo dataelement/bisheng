@@ -4,7 +4,6 @@ import type { DynamicSettingProps } from '~/types/chat';
 import { Label, Input, HoverCard, HoverCardTrigger, Tag } from '~/components/ui';
 import { useChatContext, useToastContext } from '~/Providers';
 import { TranslationKeys, useLocalize, useParameterEffects } from '~/hooks';
-import { cn, defaultTextProps } from '~/utils';
 import OptionHover from './OptionHover';
 import { ESide } from '~/common';
 
@@ -175,7 +174,7 @@ function DynamicTags({
                 }}
                 onChange={(e) => setTagText(e.target.value)}
                 placeholder={placeholderCode ? localize(placeholder as TranslationKeys) ?? placeholder : placeholder}
-                className={cn('flex h-10 max-h-10 border-none bg-surface-secondary px-3 py-2')}
+                className="border-none bg-surface-secondary"
               />
             </div>
           </div>
