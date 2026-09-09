@@ -99,6 +99,7 @@ export function ChannelPermissionSettings({
                 activeSubjectType={activeSubjectType}
                 onActiveSubjectTypeChange={onActiveSubjectTypeChange}
                 onAddAuthorization={onAddAuthorization}
+                pendingInvites={settings.pendingInvites}
               />
             )}
           </>

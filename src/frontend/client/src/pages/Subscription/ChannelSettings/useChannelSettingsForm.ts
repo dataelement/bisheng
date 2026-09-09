@@ -14,10 +14,12 @@ import {
   getCreationPermissionContext,
   getAllResourcePermissionGrants,
   getGrantablePermissionModels,
+  getResourcePendingInvites,
   getResourcePermissionContext,
   mutateResourceGrants,
   type GrantablePermissionModel,
   type CreationPermissionContext,
+  type PendingInviteItem,
   type ResourcePermissionContext,
 } from "~/api/permission";
 import {
@@ -138,6 +140,15 @@ export function useChannelSettingsForm(channelId?: string) {
   const permissionQuery = useQuery({
     queryKey: ["channel-settings", channelId, "permissions"],
     queryFn: () => getAllResourcePermissionGrants("channel", channelId as string),
+    enabled: isEditMode && canManagePermissions,
+    retry: false,
+  });
+  // Somebody invited to a channel holds nothing until they confirm, so they
+  // appear in no grant. Without this the roster is simply missing them and the
+  // save looks like it did nothing.
+  const pendingInvitesQuery = useQuery({
+    queryKey: ["channel-settings", channelId, "pending-invites"],
+    queryFn: () => getResourcePendingInvites("channel", channelId as string),
     enabled: isEditMode && canManagePermissions,
     retry: false,
   });
@@ -328,6 +339,7 @@ export function useChannelSettingsForm(channelId?: string) {
     showPermissionSection,
     relationModels,
     permissionDraft,
+    pendingInvites: (pendingInvitesQuery.data ?? []) as PendingInviteItem[],
     submitting,
     authorizationRecovery,
     submit,
