@@ -139,7 +139,7 @@ def test_space_multipart_upload_keeps_legacy_contract_and_registers_temporary_st
     assert "object_name" not in data
     assert "tenant_id" not in data
     assert data["content_hash"]
-    owner.authorize_upload_stage.assert_awaited_once_with(101)
+    owner.authorize_upload_stage.assert_not_awaited()
     stage_service.create_stage.assert_awaited_once_with(
         space_id=101,
         uploader_user_id=7,
