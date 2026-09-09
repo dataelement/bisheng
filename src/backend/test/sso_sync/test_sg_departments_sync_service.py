@@ -57,6 +57,7 @@ def _enter_dao_patches(stack: ExitStack, **overrides):
         ),
         "bisheng.department.domain.services.department_change_handler.DepartmentChangeHandler.execute_async": AsyncMock(),
         "bisheng.department.domain.services.department_archive_cleanup_service.DepartmentArchiveCleanupService.arun_for_archived_department": AsyncMock(),
+        "bisheng.points.domain.services.department_org_level_labeler.relabel_subtree_standalone": AsyncMock(),
     }
     normalized_overrides = {
         (key if key.startswith(MODULE) or key.startswith("bisheng.") else f"{MODULE}.{key}"): value

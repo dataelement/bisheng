@@ -361,6 +361,11 @@ class OrgSyncService:
 
         # Fix path with actual ID
         dept.path = f"{path}{dept.id}/"
+        from bisheng.points.domain.services.department_org_level_labeler import (
+            resolve_org_level_for_path,
+        )
+
+        dept.org_level = await resolve_org_level_for_path(dept.path)
         await DepartmentDao.aupdate(dept)
 
         # Update mapping
@@ -416,6 +421,12 @@ class OrgSyncService:
         # Update all descendant paths
         if old_path and old_path != new_prefix:
             await DepartmentDao.aupdate_paths_batch(old_path, new_prefix)
+
+        from bisheng.points.domain.services.department_org_level_labeler import (
+            relabel_subtree_standalone,
+        )
+
+        await relabel_subtree_standalone(new_prefix)
 
         # OpenFGA tuples
         if old_parent_id:

@@ -399,6 +399,12 @@ class DepartmentService:
 
             # UPDATE path (two-phase: need auto_increment id first)
             dept.path = f"{parent.path}{dept.id}/"
+            # 租户已有公司根且新 path 在其子树内才打标, 否则保持 NULL
+            from bisheng.points.domain.services.department_org_level_labeler import (
+                apply_org_level_to_node,
+            )
+
+            await apply_org_level_to_node(session, dept)
             session.add(dept)
             await session.commit()
             await session.refresh(dept)
@@ -747,6 +753,12 @@ class DepartmentService:
             dept.parent_id = data.new_parent_id
             dept.path = new_path
             session.add(dept)
+            # 移动后按新 path 重算子树; 公司子树外清成 NULL
+            from bisheng.points.domain.services.department_org_level_labeler import (
+                relabel_subtree,
+            )
+
+            await relabel_subtree(session, new_path)
             await session.commit()
             await session.refresh(dept)
 

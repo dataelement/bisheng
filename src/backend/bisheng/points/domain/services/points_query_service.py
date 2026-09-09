@@ -252,8 +252,8 @@ class PointsQueryService:
     ) -> tuple[dict[int, str], dict[int, str]]:
         """批量解析用户名与积分部门名称。
 
-        部门桶与部门榜一致（``org_level=dept``）；展示名沿主部门链优先简称，无简称时回退桶全称。
-        path 上无 dept 标签时不回退叶子名，调用方按 ``—`` 展示（AC-22）。
+        部门桶与部门榜一致 (``org_level=dept``); 展示名只取该桶节点简称, 无简称时回退桶全称.
+        科室/班组简称不参与. path 上无 dept 标签时不回退叶子名, 调用方按 ``—`` 展示 (AC-22).
         """
         if not user_ids:
             return {}, {}

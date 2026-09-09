@@ -171,6 +171,12 @@ class SgDepartmentsSyncService:
                 tenant_id=ROOT_TENANT_ID,
                 sync_parent_external_id=pending_parent_code,
             )
+            from bisheng.points.domain.services.department_org_level_labeler import (
+                relabel_subtree_standalone,
+            )
+
+            if dept is not None and dept.path:
+                await relabel_subtree_standalone(dept.path)
             if row.status == 1:
                 archived = await DepartmentDao.aarchive_by_external_id(
                     cls.SOURCE,

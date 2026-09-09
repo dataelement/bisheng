@@ -184,8 +184,8 @@ async def test_display_maps_prefers_short_name_for_dept_bucket():
 
 
 @pytest.mark.asyncio
-async def test_display_maps_prefers_nearest_short_name_on_user_chain():
-    """用户所在节点有简称时，优先于上级 dept 桶全称。"""
+async def test_display_maps_ignores_leaf_short_name_when_dept_has_no_short_name():
+    """班组有简称、部门级无简称时, 展示部门全称, 不用班组简称。"""
     leaf = SimpleNamespace(
         id=94, path="/1/54/55/58/67/94/", name="五级积分部门1-1", org_level="squad", short_name="1-1班"
     )
@@ -211,7 +211,38 @@ async def test_display_maps_prefers_nearest_short_name_on_user_chain():
     ):
         _, depts = await PointsQueryService._leaderboard_display_maps([423])
 
-    assert depts[423] == "1-1班"
+    assert depts[423] == "二级积分部门1"
+
+
+@pytest.mark.asyncio
+async def test_display_maps_ignores_office_and_squad_short_names_when_dept_has_short_name():
+    """叶子和科室都有简称时, 仍只展示部门级简称。"""
+    leaf = SimpleNamespace(
+        id=94, path="/1/54/55/58/67/94/", name="五级积分部门1-1", org_level="squad", short_name="1-1班"
+    )
+    dept = SimpleNamespace(id=55, path="/1/54/55/", name="二级积分部门1", org_level="dept", short_name="质量部")
+    company = SimpleNamespace(id=54, path="/1/54/", name="测试积分部门", org_level="company", short_name=None)
+    office = SimpleNamespace(id=58, path="/1/54/55/58/", name="三级积分部门1", org_level="office", short_name="质检科")
+    squad = SimpleNamespace(id=67, path="/1/54/55/58/67/", name="四级积分部门1", org_level="squad", short_name="一班")
+
+    with (
+        patch.object(
+            UserDao,
+            "aget_user_by_ids",
+            AsyncMock(return_value=[SimpleNamespace(user_id=423, user_name="gzx01204")]),
+        ),
+        patch(
+            "bisheng.database.models.department.UserDepartmentDao.get_primary_department_map_by_user_ids",
+            return_value={423: leaf},
+        ),
+        patch(
+            "bisheng.database.models.department.DepartmentDao.aget_by_ids",
+            AsyncMock(return_value=[company, dept, office, squad]),
+        ),
+    ):
+        _, depts = await PointsQueryService._leaderboard_display_maps([423])
+
+    assert depts[423] == "质量部"
 
 
 @pytest.mark.asyncio

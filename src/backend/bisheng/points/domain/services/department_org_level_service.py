@@ -13,16 +13,14 @@ from bisheng.common.errcode.points import (
 )
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import Department, DepartmentDao
-from bisheng.points.domain.constants.org_levels import (
-    ORG_LEVEL_COMPANY,
-    ORG_LEVELS,
-    org_level_for_relative_depth,
-    relative_depth,
-)
+from bisheng.points.domain.constants.org_levels import ORG_LEVEL_COMPANY
 from bisheng.points.domain.schemas.points_schema import (
     ClearCompanyRootResponse,
     DepartmentOrgLevelItem,
     SetCompanyRootResponse,
+)
+from bisheng.points.domain.services.department_org_level_labeler import (
+    apply_org_level_to_nodes,
 )
 from bisheng.points.domain.services.points_auth import require_platform_admin
 
@@ -131,17 +129,9 @@ class DepartmentOrgLevelService:
                     )
                 )
             ).all()
-            levels = dict.fromkeys(ORG_LEVELS, 0)
-            labeled = 0
+            labeled, levels = apply_org_level_to_nodes(list(subtree), company.path)
             for node in subtree:
-                rel = relative_depth(company.path, node.path)
-                if rel is None:
-                    continue
-                label = org_level_for_relative_depth(rel)
-                node.org_level = label
                 session.add(node)
-                levels[label] = levels.get(label, 0) + 1
-                labeled += 1
             await session.commit()
 
         from bisheng.telemetry.domain.mid_table.knowledge_space_content import (

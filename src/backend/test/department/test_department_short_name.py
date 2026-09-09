@@ -110,7 +110,7 @@ def test_update_distinguishes_omitted_short_name_from_explicit_clear() -> None:
 
 async def test_create_persists_normalized_short_name() -> None:
     parent = _department(id=1, dept_id="BS@root", path="/1/", parent_id=None)
-    session = _Session([_Result(parent), _Result(None), _Result(None)])
+    session = _Session([_Result(parent), _Result(None), _Result(None), _Result(None)])
     login_user = SimpleNamespace(user_id=1, user_role=[1])
 
     with (
