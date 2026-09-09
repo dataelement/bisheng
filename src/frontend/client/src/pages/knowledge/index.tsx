@@ -50,7 +50,7 @@ import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
-import { resolveUploadSizeLimits } from "./knowledgeUtils";
+import { resolveUploadSizeLimits, shouldNavigateOnSpaceSelect } from "./knowledgeUtils";
 export default function Knowledge() {
     const localize = useLocalize();
     // 模块标题跟随后台配置的菜单显示名称
@@ -472,7 +472,13 @@ export default function Knowledge() {
         // Without this, clicking a space while the URL is on /folder/<id> leaves the
         // file list stuck on the folder's contents and the tree's folder highlight
         // pointing at the wrong space (Bug A + Bug B).
-        if (urlFolderId || spaceId !== space.id) {
+        // Never on a share route — see shouldNavigateOnSpaceSelect.
+        if (shouldNavigateOnSpaceSelect({
+            isShareRoute,
+            urlFolderId,
+            urlSpaceId: spaceId,
+            targetSpaceId: space.id,
+        })) {
             navigate(`/knowledge/space/${space.id}`);
         }
         // Set list-level data immediately for fast UI switch
