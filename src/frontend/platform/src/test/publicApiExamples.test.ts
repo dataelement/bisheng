@@ -17,8 +17,10 @@ describe("published API examples", () => {
   })
 
   it("keeps service-account key examples on authenticated v2", () => {
-    const keyDialog = source("pages/SystemPage/components/ServiceAccount/KeyIssueDialog.tsx")
-    expect(keyDialog).toContain("/api/v2/auth/whoami")
-    expect(keyDialog).toContain("Authorization: Bearer")
+    const keyReveal = source(
+      "pages/SystemPage/components/ServiceAccount/KeyRevealDialog.tsx",
+    )
+    expect(keyReveal).toContain("/api/v2/auth/whoami")
+    expect(keyReveal).toContain("Authorization: Bearer")
   })
 })

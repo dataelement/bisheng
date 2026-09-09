@@ -1,6 +1,8 @@
 # E2E 验证清单：F053 开放 API 鉴权与身份传递
 
-**自动化入口**：`F053_E2E=1 ... pytest test/e2e/test_e2e_f053_openapi_auth_identity.py -v`
+**自动化入口**：`F053_E2E=1 ... pytest test/e2e/test_e2e_f053_openapi_auth_identity.py -v`。专用环境可通过 `E2E_ADMIN_TOKEN` / `F053_E2E_USER_TOKEN` 注入短期测试 JWT，避免在命令历史中写管理员明文密码。
+
+**2026-09-09 环境证据**：在 `192.168.106.116:7861` 真实 MySQL、Redis、OpenFGA 环境完成 11/11 API E2E；QA 样本 47296 的拒绝测试前后内容 SHA-256 一致，测试服务账号残留为 0。`192.168.106.116:3001` 是前端入口，`/openapi.json` 不走 API 代理，且当前公开 v3 请求被商业许可证过期码 11001 拦截，浏览器 guest 验收须先续期许可证。
 
 **专用环境前置条件**：完成三条 F053 迁移；OpenFGA 已发布包含 `service_account` 的兼容模型；部署级 PAT 和 guest access 已开启；准备同租户普通用户、已发布工作流、已发布知识助手及至少一个可用模型。
 

@@ -121,11 +121,13 @@ async def service_account(
 
 @pytest.fixture(scope="module")
 async def personal_token(client: httpx.AsyncClient, admin_token: str):
-    user_token = await get_user_token(
-        client,
-        _required_env("F053_E2E_USER_NAME"),
-        _required_env("F053_E2E_USER_PASSWORD"),
-    )
+    user_token = os.environ.get("F053_E2E_USER_TOKEN", "").strip()
+    if not user_token:
+        user_token = await get_user_token(
+            client,
+            _required_env("F053_E2E_USER_NAME"),
+            _required_env("F053_E2E_USER_PASSWORD"),
+        )
     original = assert_resp_200(
         await client.get(
             f"{API_BASE}/personal-tokens/settings",
