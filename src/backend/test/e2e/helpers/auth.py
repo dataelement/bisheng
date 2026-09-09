@@ -10,7 +10,6 @@ import httpx
 
 from test.e2e.helpers.api import API_BASE, assert_resp_200
 
-
 # Default test admin password. 114 and other non-default-password deployments
 # override via the ``E2E_ADMIN_PASSWORD`` env var (e.g. ``Bisheng@top1`` on
 # 192.168.106.114). Local dev / CI leaves the helper's built-in default.
@@ -52,12 +51,17 @@ async def get_admin_token(client: httpx.AsyncClient) -> str:
     """Get admin JWT token.
 
     Password resolution order:
-      1. ``E2E_ADMIN_PASSWORD`` env var (set this on servers with non-default
+      1. ``E2E_ADMIN_TOKEN`` env var for an ephemeral dedicated-environment token.
+      2. ``E2E_ADMIN_PASSWORD`` env var (set this on servers with non-default
          admin passwords, e.g. ``Bisheng@top1`` on 192.168.106.114).
-      2. Hard-coded default ``admin123`` (local dev / CI).
+      3. Hard-coded default ``admin123`` (local dev / CI).
     """
+    token = os.environ.get('E2E_ADMIN_TOKEN', '').strip()
+    if token:
+        return token
     password = os.environ.get('E2E_ADMIN_PASSWORD', _DEFAULT_ADMIN_PASSWORD)
-    return await login(client, 'admin', password)
+    username = os.environ.get('E2E_ADMIN_USERNAME', 'admin')
+    return await login(client, username, password)
 
 
 async def get_user_token(

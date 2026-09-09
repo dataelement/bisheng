@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,6 +30,12 @@ class ServiceAccountOwner(BaseModel):
     disabled: bool
 
 
+class ServiceAccountDelegateScope(BaseModel):
+    subject_type: Literal["user", "department"]
+    subject_id: int
+    subject_name: str | None = None
+
+
 class ServiceAccountItem(BaseModel):
     id: int
     tenant_id: int
@@ -37,9 +44,12 @@ class ServiceAccountItem(BaseModel):
     status: str
     resource_owner: ServiceAccountOwner
     active_key_count: int = 0
+    has_delegate: bool = False
+    delegate_scopes: list[ServiceAccountDelegateScope] = Field(default_factory=list)
     last_used_at: datetime | None = None
     idle: bool = False
     created_by: int | None
+    creator_name: str | None = None
     create_time: datetime | None
     update_time: datetime | None
 

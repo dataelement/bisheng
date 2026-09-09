@@ -91,6 +91,7 @@ class UserTenantSyncService:
         current = await UserTenantDao.aget_active_user_tenant(user_id)
 
         if current is not None and current.tenant_id == new_leaf.id:
+            await cls._migrate_relocated_personal_token(user_id, new_leaf.id)
             return new_leaf  # No change — cheap exit.
 
         old_tenant_id: int | None = current.tenant_id if current is not None else None
@@ -124,8 +125,7 @@ class UserTenantSyncService:
             new_leaf.id,
         )
         await cls._invalidate_redis_caches(user_id)
-        if old_tenant_id is not None and old_tenant_id != new_leaf.id:
-            await cls._revoke_relocated_personal_token(user_id, old_tenant_id)
+        await cls._migrate_relocated_personal_token(user_id, new_leaf.id)
         # F019 AC-11: once ``token_version`` has been bumped the old JWT is
         # dead, so any admin-scope the user had set under that JWT must die
         # with it. Best-effort — a scope DEL failure does not block the
@@ -351,19 +351,10 @@ class UserTenantSyncService:
                 logger.debug("Redis delete %s failed: %s", key, exc)
 
     @staticmethod
-    async def _revoke_relocated_personal_token(user_id: int, old_tenant_id: int) -> None:
-        try:
-            from bisheng.open_api.domain.models.api_credential import REVOKE_REASON_TENANT_CHANGED
-            from bisheng.open_api.domain.services.personal_token_service import PersonalTokenService
+    async def _migrate_relocated_personal_token(user_id: int, tenant_id: int) -> None:
+        from bisheng.open_api.domain.services.personal_token_service import PersonalTokenService
 
-            await PersonalTokenService.cascade_revoke(
-                tenant_id=old_tenant_id,
-                user_id=user_id,
-                reason=REVOKE_REASON_TENANT_CHANGED,
-            )
-        except Exception as exc:
-            # The resolver still rejects this holder because the active tenant no longer matches.
-            logger.warning("personal token revoke on relocate failed for user=%s: %s", user_id, exc)
+        await PersonalTokenService.migrate_tenant(user_id=user_id, tenant_id=tenant_id)
 
     @classmethod
     async def _write_relocation_audit(
@@ -409,8 +400,8 @@ class UserTenantSyncService:
 
         title = "租户归属已变更 (tenant relocated)"
         body = (
-            f"您的主部门发生变更，已从 Tenant {old_tenant_id} 切换至 "
-            f"Tenant {new_tenant_id}。您名下仍有 {owned_count} 个资源保留在原 Tenant，"
+            f"您的主部门发生变更, 已从 Tenant {old_tenant_id} 切换至 "
+            f"Tenant {new_tenant_id}。您名下仍有 {owned_count} 个资源保留在原 Tenant, "
             f"请联系管理员完成资源交接。"
         )
         await send_inbox_notice(title, body, recipients=[user_id])

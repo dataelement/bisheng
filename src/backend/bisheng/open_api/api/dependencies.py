@@ -95,12 +95,27 @@ async def verify_open_api_access(conn: HTTPConnection) -> AsyncIterator[OpenApiP
         if principal.mode not in marker.modes:
             raise OpenApiDelegationModeUnsupportedError()
 
+        super_admin = False
+        tenant_admin_tenant_ids: frozenset[int] = frozenset()
+        if principal.actor_kind == "natural_person":
+            from bisheng.permission.application.relation_api import is_tenant_admin
+            from bisheng.utils.http_middleware import _check_is_global_super
+
+            try:
+                super_admin = await _check_is_global_super(principal.actor_id)
+                if not super_admin and await is_tenant_admin(principal.actor_id, principal.tenant_id):
+                    tenant_admin_tenant_ids = frozenset({principal.tenant_id})
+            except OpenApiAuthError:
+                raise
+            except Exception as exc:
+                raise OpenApiAuthDependencyUnavailableError() from exc
+
         actor = PermissionActor(
             subject_type=principal.authorization_subject_type,
             subject_id=principal.authorization_subject_id,
             tenant_id=principal.tenant_id,
-            super_admin=False,
-            tenant_admin_tenant_ids=frozenset(),
+            super_admin=super_admin,
+            tenant_admin_tenant_ids=tenant_admin_tenant_ids,
         )
         principal_token = set_current_open_api_principal(principal)
         permission_token = set_current_permission_actor(actor)
@@ -177,7 +192,13 @@ async def _assert_no_removed_identity_input(conn: HTTPConnection) -> None:
         raise OpenApiRemovedIdentityInputError()
     if not isinstance(conn, Request):
         return
-    if "application/json" not in (conn.headers.get("content-type") or ""):
+    content_type = conn.headers.get("content-type") or ""
+    if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
+        form = await conn.form()
+        if "user_id" in form:
+            raise OpenApiRemovedIdentityInputError()
+        return
+    if "application/json" not in content_type:
         return
     body = await conn.body()
     if not body:

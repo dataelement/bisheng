@@ -76,38 +76,52 @@ async def disable_service_account(
 async def delete_service_account(
     service_account_id: int,
     admin: UserPayload = Depends(get_service_account_admin),
+    api: ResourcePermissionApiPort = Depends(get_resource_permission_api),
 ):
+    account = await ServiceAccountService.get_row(service_account_id)
+    actor = await permission_actor(admin)
+    grants = await api.revoke_service_account_grants(
+        tenant_id=account.tenant_id,
+        service_account_id=service_account_id,
+        actor=actor,
+    )
     await ServiceAccountService.delete(admin, service_account_id)
-    return resp_200(data={"id": service_account_id})
+    return resp_200(data={"id": service_account_id, "grants": grants})
 
 
 @router.get("/{service_account_id}/resource-grants", response_model=UnifiedResponseModel)
 async def list_service_account_resource_grants(
     service_account_id: int,
-    resource_type: str = Query(min_length=1, max_length=64),
-    resource_id: str = Query(min_length=1, max_length=128),
-    admin: UserPayload = Depends(get_service_account_admin),
+    _admin: UserPayload = Depends(get_service_account_admin),
     api: ResourcePermissionApiPort = Depends(get_resource_permission_api),
 ):
-    """List this account's grants on one explicitly selected resource."""
+    """List all resource grants for the service-account subject."""
 
-    await ServiceAccountService.get_row(service_account_id)
-    page = await api.list_grants(
-        resource_type=resource_type,
-        resource_id=resource_id,
-        actor=await permission_actor(admin),
-        cursor=None,
-        page_size=200,
+    account = await ServiceAccountService.get_row(service_account_id)
+    return resp_200(
+        data=await api.list_service_account_grants(
+            tenant_id=account.tenant_id,
+            service_account_id=service_account_id,
+        )
     )
-    subject_id = str(service_account_id)
-    page["data"] = [
-        item
-        for item in page["data"]
-        if item["subject"]["type"] == "service_account" and item["subject"]["id"] == subject_id
-    ]
-    page["has_more"] = False
-    page["next_cursor"] = None
-    return resp_200(data=page)
+
+
+@router.get("/{service_account_id}/grantable-resources", response_model=UnifiedResponseModel)
+async def list_service_account_grantable_resources(
+    service_account_id: int,
+    resource_type: str | None = Query(default=None, min_length=1, max_length=64),
+    keyword: str | None = Query(default=None, max_length=128),
+    _admin: UserPayload = Depends(get_service_account_admin),
+    api: ResourcePermissionApiPort = Depends(get_resource_permission_api),
+):
+    account = await ServiceAccountService.get_row(service_account_id)
+    return resp_200(
+        data=await api.list_grantable_resources(
+            tenant_id=account.tenant_id,
+            resource_type=resource_type,
+            keyword=keyword,
+        )
+    )
 
 
 @router.post("/{service_account_id}/resource-grants:mutate", response_model=UnifiedResponseModel)

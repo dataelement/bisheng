@@ -159,6 +159,34 @@ class PersonalTokenService:
         return len(rows)
 
     @classmethod
+    async def migrate_tenant(cls, *, user_id: int, tenant_id: int) -> int:
+        """Keep an active PAT usable when its holder moves to another tenant."""
+
+        migrated = await CredentialRepository.migrate_natural_person_tenant(
+            user_id=user_id,
+            tenant_id=tenant_id,
+        )
+        await CredentialService.invalidate_cache(row.token_hash for row, _old in migrated)
+        for row, old_tenant_id in migrated:
+            await AuditLogDao.ainsert_v2(
+                tenant_id=tenant_id,
+                operator_id=user_id,
+                operator_tenant_id=tenant_id,
+                action="open_api.pat.tenant_migrate",
+                target_type="api_credential",
+                target_id=str(row.id),
+                metadata={
+                    "credential_id": row.id,
+                    "subject_kind": SUBJECT_KIND_NATURAL_PERSON,
+                    "subject_id": user_id,
+                    "old_tenant_id": old_tenant_id,
+                    "new_tenant_id": tenant_id,
+                    "key_mask": row.key_mask,
+                },
+            )
+        return len(migrated)
+
+    @classmethod
     async def _revoke_active(
         cls,
         *,
@@ -258,4 +286,3 @@ class PersonalTokenService:
                 "key_mask": key_mask,
             },
         )
-

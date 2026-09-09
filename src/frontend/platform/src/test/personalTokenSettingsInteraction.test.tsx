@@ -107,4 +107,33 @@ describe("personal-token tenant settings interaction", () => {
     await waitFor(() => expect(saveButton).toBeEnabled())
     expect(message).not.toHaveBeenCalled()
   })
+
+  it("renders localized permission names instead of raw scope codes", async () => {
+    vi.mocked(listPersonalTokensApi).mockResolvedValue({
+      data: [
+        {
+          id: 1,
+          holder_user_id: 12,
+          holder_name: "User 12",
+          key_mask: "bs_pat_****",
+          scopes: ["knowledge:read"],
+          expires_at: "2026-10-09T00:00:00",
+          revoked_at: null,
+          last_used_at: null,
+          revoke_reason: null,
+          is_valid: true,
+          holder_is_admin: false,
+          create_time: "2026-09-09T00:00:00",
+        },
+      ],
+      total: 1,
+    })
+
+    render(<PersonalToken />)
+
+    expect(
+      await screen.findByText("openApiManagement.scopes.knowledge_read.label"),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("knowledge:read")).not.toBeInTheDocument()
+  })
 })

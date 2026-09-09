@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any
 
@@ -28,14 +29,26 @@ class OpenApiAuditMiddleware:
         started_at = time.perf_counter()
         result_status = 500
         response_finished = False
+        is_sse = False
+        sse_tail = bytearray()
 
         async def audit_send(message: dict[str, Any]) -> None:
-            nonlocal response_finished, result_status
+            nonlocal response_finished, result_status, is_sse
             message_type = message.get("type")
             if message_type == "http.response.start":
                 result_status = int(message.get("status", 500))
+                headers = dict(message.get("headers") or [])
+                is_sse = b"text/event-stream" in headers.get(b"content-type", b"")
             elif message_type == "http.response.body" and not message.get("more_body", False):
+                if is_sse:
+                    sse_tail.extend(message.get("body") or b"")
+                    if len(sse_tail) > 65536:
+                        del sse_tail[:-65536]
                 response_finished = True
+            elif message_type == "http.response.body" and is_sse:
+                sse_tail.extend(message.get("body") or b"")
+                if len(sse_tail) > 65536:
+                    del sse_tail[:-65536]
             elif message_type == "websocket.accept":
                 result_status = 101
             elif message_type == "websocket.close":
@@ -48,9 +61,38 @@ class OpenApiAuditMiddleware:
             await self.app(scope, receive, audit_send)
         finally:
             if scope.get("type") == "websocket" or response_finished:
+                if is_sse:
+                    self._record_sse_result(scope, bytes(sse_tail))
                 self._enqueue(scope, result_status, started_at)
             else:
                 self._enqueue(scope, 500, started_at)
+
+    @staticmethod
+    def _record_sse_result(scope: dict[str, Any], payload: bytes) -> None:
+        result = "unknown"
+        for raw_line in payload.decode("utf-8", errors="ignore").splitlines():
+            if not raw_line.startswith("data:"):
+                continue
+            data = raw_line[5:].strip()
+            if data == "[DONE]":
+                if result != "failed":
+                    result = "success"
+                continue
+            try:
+                event = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+            body = event.get("data", event) if isinstance(event, dict) else {}
+            if not isinstance(body, dict) or body.get("event") != "close":
+                continue
+            message = (body.get("output_schema") or {}).get("message") or {}
+            code = message.get("status_code") if isinstance(message, dict) else None
+            if isinstance(code, int) and code != 200:
+                result = "failed"
+                scope["open_api_error_code"] = code
+            elif result != "failed":
+                result = "success"
+        scope["open_api_sse_final_result"] = result
 
     @staticmethod
     def _enqueue(scope: dict[str, Any], result_status: int, started_at: float) -> None:
@@ -85,6 +127,7 @@ class OpenApiAuditMiddleware:
             "scope": marker.scope if marker else None,
             "http_status": result_status,
             "error_code": error_code,
+            "sse_final_result": scope.get("open_api_sse_final_result"),
             "latency_ms": latency_ms,
             "trace_id": str(trace_id_var.get() or ""),
         }

@@ -427,7 +427,7 @@ async def test_delete_model_fails_closed_for_unknown_or_nonzero_references() -> 
 
 
 @pytest.mark.asyncio
-async def test_publish_orders_fence_stage_marker_two_tuple_commit_and_finalize() -> None:
+async def test_publish_orders_fence_stage_marker_pointer_commit_and_finalize() -> None:
     service, state, projector, events = _service(_draft())
     outcome = await _publish(service)
     assert outcome.status == "CURRENT"
@@ -442,9 +442,14 @@ async def test_publish_orders_fence_stage_marker_two_tuple_commit_and_finalize()
     ]
     assert [change.action for change in projector.commits[0]] == [
         "DELETE",
+        "DELETE",
+        "WRITE",
         "WRITE",
     ]
-    assert len(projector.commits[0]) == 2
+    assert {change.user for change in projector.commits[0]} == {
+        "user:*",
+        "service_account:*",
+    }
     assert events.audit[-1][0] == "permission_catalog_publish"
     assert events.metrics[-1][0] == "permission_catalog_publish"
 

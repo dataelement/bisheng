@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, FastAPI, Request
+from types import SimpleNamespace
+
+from fastapi import APIRouter, Depends, FastAPI, File, Request, UploadFile
 from httpx import ASGITransport, AsyncClient
 
 from bisheng.common.errcode.open_api import OpenApiAuthDependencyUnavailableError
@@ -24,6 +26,8 @@ def build_app() -> FastAPI:
             "scope_actor": request.scope["open_api_principal"].actor_id,
             "principal_actor": principal.actor_id,
             "permission_subject": actor.fga_subject,
+            "super_admin": actor.super_admin,
+            "tenant_admin_tenants": sorted(actor.tenant_admin_tenant_ids),
             "tenant": get_current_tenant_id(),
             "visible": sorted(get_visible_tenant_ids()),
         }
@@ -36,6 +40,11 @@ def build_app() -> FastAPI:
     @router.get("/unregistered")
     async def unregistered():
         return {"unsafe": True}
+
+    @router.post("/upload")
+    @open_api_scope("knowledge:write")
+    async def upload(file: UploadFile = File(...)):
+        return {"filename": file.filename}
 
     app.include_router(router)
     return app
@@ -96,6 +105,8 @@ async def test_valid_key_installs_all_three_request_contexts(monkeypatch):
         "scope_actor": 31,
         "principal_actor": 31,
         "permission_subject": "service_account:31",
+        "super_admin": False,
+        "tenant_admin_tenants": [],
         "tenant": 9,
         "visible": [1, 9],
     }
@@ -146,6 +157,34 @@ async def test_pat_policy_dependency_outage_is_real_503_before_scope(monkeypatch
     assert response.json()["status_code"] == 26030
 
 
+async def test_pat_permission_actor_inherits_holder_tenant_admin_fact(monkeypatch):
+    async def validate(_authorization):
+        return natural_person_principal()
+
+    async def tenant_policy(_tenant_id):
+        return SimpleNamespace(enabled=True)
+
+    async def is_global_super(_user_id):
+        return False
+
+    async def is_tenant_admin(user_id, tenant_id):
+        assert (user_id, tenant_id) == (12, 9)
+        return True
+
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.validate_bearer", validate)
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.settings.open_api.pat_enabled", True)
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.TenantSettingService.get_policy", tenant_policy)
+    monkeypatch.setattr("bisheng.utils.http_middleware._check_is_global_super", is_global_super)
+    monkeypatch.setattr("bisheng.permission.application.relation_api.is_tenant_admin", is_tenant_admin)
+
+    response = await request(build_app(), "/api/v2/registered", authorization="Bearer opaque")
+
+    assert response.status_code == 200
+    assert response.json()["super_admin"] is False
+    assert response.json()["tenant_admin_tenants"] == [9]
+    assert response.json()["visible"] == [1, 9]
+
+
 async def test_identity_headers_are_not_silently_ignored(monkeypatch):
     async def validate(_authorization):
         return service_account_principal()
@@ -158,3 +197,28 @@ async def test_identity_headers_are_not_silently_ignored(monkeypatch):
         )
     assert response.status_code == 403
     assert response.json()["status_code"] == 26004
+
+
+async def test_removed_user_id_is_rejected_in_multipart_before_upload_handler(monkeypatch):
+    async def validate(_authorization):
+        return service_account_principal(scopes=frozenset({"knowledge:write"}))
+
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.validate_bearer", validate)
+    headers = {"Authorization": "Bearer opaque"}
+    async with AsyncClient(transport=ASGITransport(app=build_app()), base_url="http://test") as client:
+        rejected = await client.post(
+            "/api/v2/upload",
+            headers=headers,
+            data={"user_id": "123"},
+            files={"file": ("sample.txt", b"content", "text/plain")},
+        )
+        accepted = await client.post(
+            "/api/v2/upload",
+            headers=headers,
+            files={"file": ("sample.txt", b"content", "text/plain")},
+        )
+
+    assert rejected.status_code == 400
+    assert rejected.json()["status_code"] == 26019
+    assert accepted.status_code == 200
+    assert accepted.json() == {"filename": "sample.txt"}

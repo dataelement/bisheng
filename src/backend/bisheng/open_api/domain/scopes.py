@@ -14,7 +14,11 @@ WS = "WS"
 class OpenApiScope:
     code: str
     endpoints: tuple[tuple[str, str], ...]
+    group: str
+    label_key: str
+    desc_key: str
     issuable: bool = True
+    hint_keys: tuple[str, ...] = ()
 
 
 _V2 = "/api/v2"
@@ -26,8 +30,17 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
             ("POST", f"{_V2}/workflow/stop"),
             (WS, f"{_V2}/workflow/chat/{{workflow_id}}"),
         ),
+        "workflow",
+        "openApiManagement.scopes.workflow_invoke.label",
+        "openApiManagement.scopes.workflow_invoke.desc",
     ),
-    OpenApiScope("workflow:read", (("GET", f"{_V2}/flows/{{flow_id}}"),)),
+    OpenApiScope(
+        "workflow:read",
+        (("GET", f"{_V2}/flows/{{flow_id}}"),),
+        "workflow",
+        "openApiManagement.scopes.workflow_read.label",
+        "openApiManagement.scopes.workflow_read.desc",
+    ),
     OpenApiScope(
         "assistant:invoke",
         (
@@ -36,6 +49,9 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
             ("POST", f"{_V2}/llm/workbench/asr"),
             ("POST", f"{_V2}/llm/workbench/tts"),
         ),
+        "assistant",
+        "openApiManagement.scopes.assistant_invoke.label",
+        "openApiManagement.scopes.assistant_invoke.desc",
     ),
     OpenApiScope(
         "assistant:read",
@@ -43,6 +59,9 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
             ("GET", f"{_V2}/assistant/list"),
             ("GET", f"{_V2}/assistant/info/{{assistant_id}}"),
         ),
+        "assistant",
+        "openApiManagement.scopes.assistant_read.label",
+        "openApiManagement.scopes.assistant_read.desc",
     ),
     OpenApiScope(
         "chat:invoke",
@@ -53,6 +72,9 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
             ("POST", f"{_V2}/knowledge/upload"),
             ("GET", f"{_V2}/chat/info"),
         ),
+        "assistant",
+        "openApiManagement.scopes.chat_invoke.label",
+        "openApiManagement.scopes.chat_invoke.desc",
     ),
     OpenApiScope(
         "knowledge:read",
@@ -65,6 +87,9 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
             ("POST", f"{_V2}/filelib/query_qa"),
             ("GET", f"{_V2}/citation/{{citation_id}}"),
         ),
+        "knowledge",
+        "openApiManagement.scopes.knowledge_read.label",
+        "openApiManagement.scopes.knowledge_read.desc",
     ),
     OpenApiScope(
         "knowledge:write",
@@ -91,11 +116,44 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
             ("DELETE", f"{_V2}/knowledge/file/delete_user_metadata"),
             ("POST", f"{_V2}/knowledge/file/list_user_metadata"),
         ),
+        "knowledge",
+        "openApiManagement.scopes.knowledge_write.label",
+        "openApiManagement.scopes.knowledge_write.desc",
     ),
-    OpenApiScope("model:invoke", (), issuable=False),
-    OpenApiScope("identity:read", (), issuable=False),
-    OpenApiScope("app:manage", (), issuable=False),
-    OpenApiScope("delegate", (), issuable=True),
+    OpenApiScope(
+        "model:invoke",
+        (),
+        "local_dev_toolkit",
+        "openApiManagement.scopes.model_invoke.label",
+        "openApiManagement.scopes.model_invoke.desc",
+        issuable=False,
+    ),
+    OpenApiScope(
+        "identity:read",
+        (),
+        "local_dev_toolkit",
+        "openApiManagement.scopes.identity_read.label",
+        "openApiManagement.scopes.identity_read.desc",
+        issuable=False,
+        hint_keys=("openApiManagement.scopes.identity_read.warning",),
+    ),
+    OpenApiScope(
+        "app:manage",
+        (),
+        "local_dev_toolkit",
+        "openApiManagement.scopes.app_manage.label",
+        "openApiManagement.scopes.app_manage.desc",
+        issuable=False,
+        hint_keys=("openApiManagement.scopes.app_manage.hint",),
+    ),
+    OpenApiScope(
+        "delegate",
+        (),
+        "delegation",
+        "openApiManagement.scopes.delegate.label",
+        "openApiManagement.scopes.delegate.desc",
+        hint_keys=("openApiManagement.scopes.delegate.warning",),
+    ),
 )
 
 OPEN_API_SCOPE_MAP = {scope.code: scope for scope in OPEN_API_SCOPES}

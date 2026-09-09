@@ -4,6 +4,7 @@ import { getMyResourcePermissionsApi } from "@/controllers/API/permission"
 import { DashboardDetail } from "@/pages/Dashboard/components/dashboard/DashboardDetail"
 import {
   useDashboardPermissions,
+  useLazyDashboardPermission,
   type DashboardPermissionMap,
 } from "@/pages/Dashboard/hook"
 import { DashboardListItem } from "@/pages/Dashboard/components/dashboard/DashboardListItem"
@@ -18,26 +19,11 @@ vi.mock("@/controllers/API/permission", () => ({
   getMyResourcePermissionsApi: vi.fn(),
 }))
 
-// `DashboardListItem` no longer takes its capabilities as props: it resolves
-// them itself through `useLazyDashboardPermission`, which fires only when the
-// user reaches for the menu (F027 — the list must not spend one request per
-// row). Driving the row therefore means controlling the hook, not the props.
-// `useDashboardPermissions` stays real; the Probe below asserts on it.
-const lazyPermission = vi.hoisted(() => ({
-  current: {
-    actions: [] as string[],
-    loaded: true,
-    loading: false,
-    privileged: false,
-    ensureLoaded: () => {},
-  },
-}))
-
 vi.mock("@/pages/Dashboard/hook", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/pages/Dashboard/hook")>()
   return {
     ...actual,
-    useLazyDashboardPermission: () => lazyPermission.current,
+    useLazyDashboardPermission: vi.fn(),
   }
 })
 
@@ -91,14 +77,17 @@ const dashboard = {
   components: [],
 } as Dashboard
 
-function renderItem(permissionActions: string[], { privileged = false } = {}) {
-  lazyPermission.current = {
+function renderItem(
+  permissionActions: string[],
+  { privileged = false } = {},
+) {
+  vi.mocked(useLazyDashboardPermission).mockReturnValue({
     actions: permissionActions,
     loaded: true,
     loading: false,
     privileged,
-    ensureLoaded: () => {},
-  }
+    ensureLoaded: vi.fn(),
+  })
   const callbacks = {
     onSelect: vi.fn(),
     onRename: vi.fn(),
@@ -156,11 +145,6 @@ describe("F048 dashboard permission UI", () => {
       roster_complete: false,
     })
   })
-
-  // The row used to take a `visible` prop and refuse to render without it. That
-  // gate moved up: the sidebar's list request now returns visible dashboards
-  // only, so a row that reaches this component is by construction one the user
-  // may see, and the row's own job is narrowed to the mutating actions below.
 
   it("keeps share, default, and copy behind visibility without implying edit", () => {
     // Visible with no granted action at all — the case an action list can never

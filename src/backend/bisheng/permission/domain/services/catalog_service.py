@@ -22,6 +22,7 @@ from bisheng.common.errcode.permission import (
     PermissionProjectionFailedError,
     PermissionPublishNotReadyError,
 )
+from bisheng.core.openfga.authorization_model_f048 import TECHNICAL_MARKER_SUBJECTS
 from bisheng.permission.domain.services.catalog_policy import (
     CatalogAction,
     CatalogActionImpact,
@@ -138,7 +139,7 @@ class CatalogPublishContext:
 
 @dataclass(frozen=True, slots=True)
 class CatalogTupleChange:
-    """One member of the two-tuple active-pointer commit."""
+    """One member of the atomic active-pointer commit."""
 
     action: str
     user: str
@@ -233,7 +234,7 @@ class CatalogProjectorPort(Protocol):
 
     async def commit_active(
         self,
-        changes: tuple[CatalogTupleChange, CatalogTupleChange],
+        changes: tuple[CatalogTupleChange, ...],
     ) -> str: ...
 
     async def read_active_release_keys(self) -> frozenset[str]: ...
@@ -363,7 +364,7 @@ class CatalogService:
         expected_current_release_id: int,
         idempotency_key: str,
     ) -> CatalogPublishOutcome:
-        """Fence writes, stage the release, and atomically switch two tuples."""
+        """Fence writes, stage the release, and atomically switch active pointers."""
 
         context = await self._state.prepare_publish(
             draft_id=draft_id,
@@ -443,20 +444,19 @@ class CatalogService:
     @staticmethod
     def _active_pointer_changes(
         context: CatalogPublishContext,
-    ) -> tuple[CatalogTupleChange, CatalogTupleChange]:
-        return (
+    ) -> tuple[CatalogTupleChange, ...]:
+        return tuple(
             CatalogTupleChange(
-                action="DELETE",
-                user="user:*",
+                action=action,
+                user=subject,
                 relation="active",
-                object=(f"permission_catalog_release:{context.current_release_key}"),
-            ),
-            CatalogTupleChange(
-                action="WRITE",
-                user="user:*",
-                relation="active",
-                object=f"permission_catalog_release:{context.draft.release_key}",
-            ),
+                object=f"permission_catalog_release:{release_key}",
+            )
+            for action, release_key in (
+                ("DELETE", context.current_release_key),
+                ("WRITE", context.draft.release_key),
+            )
+            for subject in TECHNICAL_MARKER_SUBJECTS
         )
 
     async def _abort(

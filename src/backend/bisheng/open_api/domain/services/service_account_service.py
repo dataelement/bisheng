@@ -23,6 +23,7 @@ from bisheng.open_api.domain.repositories.owner_repository import NaturalPersonR
 from bisheng.open_api.domain.repositories.service_account_repository import ServiceAccountRepository
 from bisheng.open_api.domain.schemas.service_account import (
     ServiceAccountCreate,
+    ServiceAccountDelegateScope,
     ServiceAccountDetail,
     ServiceAccountItem,
     ServiceAccountOwner,
@@ -154,9 +155,25 @@ class ServiceAccountService:
     async def _to_item(cls, row: ServiceAccount) -> ServiceAccountItem:
         owner = await OwnerRepository.get_active_natural_person(row.resource_owner_user_id)
         keys = await CredentialService.list_by_subject(SUBJECT_KIND_SERVICE_ACCOUNT, row.id)
+        active_keys = [key for key in keys if key.is_valid]
         last_used_values = [key.last_used_at for key in keys if key.last_used_at is not None]
         last_used_at = max(last_used_values) if last_used_values else None
         idle_before = datetime.now() - timedelta(days=settings.open_api.service_account_idle_days)
+        raw_delegate_scopes = {
+            (scope.subject_type, scope.subject_id): scope.subject_name
+            for key in active_keys
+            if "delegate" in key.scopes
+            for scope in key.delegate_scopes
+        }
+        delegate_scopes: list[ServiceAccountDelegateScope] = []
+        for (subject_type, subject_id), subject_name in sorted(raw_delegate_scopes.items()):
+            delegate_scopes.append(
+                ServiceAccountDelegateScope(
+                    subject_type=subject_type,
+                    subject_id=subject_id,
+                    subject_name=subject_name,
+                )
+            )
         return ServiceAccountItem(
             id=row.id,
             tenant_id=row.tenant_id,
@@ -165,13 +182,20 @@ class ServiceAccountService:
             status=cls.status(row),
             resource_owner=ServiceAccountOwner(
                 user_id=row.resource_owner_user_id,
-                user_name=owner.user_name if owner else None,
+                user_name=(
+                    owner.user_name
+                    if owner
+                    else await OwnerRepository.get_user_name(row.resource_owner_user_id)
+                ),
                 disabled=owner is None,
             ),
-            active_key_count=sum(key.is_valid for key in keys),
+            active_key_count=len(active_keys),
+            has_delegate=bool(raw_delegate_scopes),
+            delegate_scopes=delegate_scopes,
             last_used_at=last_used_at,
             idle=last_used_at is None or last_used_at < idle_before,
             created_by=row.created_by,
+            creator_name=await OwnerRepository.get_user_name(row.created_by),
             create_time=row.create_time,
             update_time=row.update_time,
         )

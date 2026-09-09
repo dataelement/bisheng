@@ -130,7 +130,21 @@ export function PersonalToken() {
                 {item.holder_is_admin ? <Badge className="ml-2" variant="secondary">{t("openApiManagement.personalToken.adminRisk")}</Badge> : null}
               </TableCell>
               <TableCell><code>{item.key_mask}</code></TableCell>
-              <TableCell>{item.scopes.join(", ")}</TableCell>
+              <TableCell>
+                <div className="flex flex-wrap gap-1">
+                  {item.scopes.map((scope) => (
+                    <span
+                      key={scope}
+                      className="rounded bg-muted px-1.5 py-0.5 text-xs"
+                    >
+                      {t(
+                        `openApiManagement.scopes.${scope.replace(":", "_")}.label`,
+                        { defaultValue: scope },
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </TableCell>
               <TableCell>{formatDate(item.create_time)}</TableCell>
               <TableCell>{formatDate(item.last_used_at)}</TableCell>
               <TableCell>{formatDate(item.expires_at)}</TableCell>

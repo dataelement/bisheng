@@ -2,13 +2,13 @@
 
 > **本文档定位 — 总体设计 + 分工边界（Why this How）**
 >
-> - 需求的 **What** 以上游 PRD（`docs/product/3.0 开放 API 鉴权与身份传递 PRD.md` v2.4）为基础；本文按 2026-09-04 的范围裁定覆盖其中已变更部分：R8 / P2 不做、现有分享链接链路不改、服务账号不进入 `user` 表、日常模式复用既有 v1 能力但收窄对外请求字段、免登录发布接口迁至 v3。
+> - 需求的 **What** 以上游 PRD（`docs/product/3.0 开放 API 鉴权与身份传递 PRD.md` v2.6）为基础；本文覆盖 R8 / P2 不做、现有分享链接链路不改、服务账号不进入 `user` 表、日常模式复用既有 v1 能力但收窄对外请求字段、免登录发布接口迁至 v3，以及 v2.6 的权限闭环、错误传输语义和 PAT 随持有人迁租户规则。
 > - 本文回答 **怎么做、为什么这么做、谁做哪块、接口在哪对齐**。6 个工作流（WS-A～F）通过 §6 的共享契约协作。
 > - `reference/vibe-049-design.md` 只作为凭据生命周期、管理界面和端点标记的实现参考；其“服务账号复用 User”“新增分享凭据通道”“P2 运营能力”均不继承。
 > - `文件:行号` 会漂移，落地前以符号名和路由清单重新定位。
 
 **关联**: [discovery.md](../000-openapi-auth-discovery/discovery.md) · [spec.md](./spec.md) · [tasks.md](./tasks.md) · [release-contract.md](../release-contract.md) · [reference/](./reference/README.md)
-**版本**: v3.0.0-beta1 · **Feature 编号**: F053 · **最后更新**: 2026-09-04（按范围新裁定重写，待 ★ 用户确认）
+**版本**: v3.0.0-beta1 · **Feature 编号**: F053 · **最后更新**: 2026-09-08（同步 PRD v2.6）
 
 ---
 
@@ -252,11 +252,11 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 
 ### 5.B 管理界面（platform）
 
-**B1：页面结构。** 系统管理提供“服务账号”和“个人访问令牌”两个同级入口。服务账号详情含概览、API 密钥、资源授权；PAT 台账与开关不放进某个服务账号详情。实现前以 `src/frontend/packages/ui/docs/` 当前规范和 landed 组件为准；platform 沿用自己的 Zustand、request wrapper 与 bs-ui，不混用 client 技术栈。
+**B1：页面结构与交互。** 系统管理提供“服务账号”和“个人访问令牌”两个同级入口。服务账号详情含概览、API 密钥、资源授权；PAT 台账与开关不放进某个服务账号详情。列表按服务端分页，展示状态、有效密钥数、委托范围摘要、资源归属人、最后调用、创建人和创建时间；零密钥、长期未调用和归属人失效均就地提示。创建账号的资源归属人使用组织用户选择器，禁止要求管理员填写 user id。启用、停用、创建、删除、签发、编辑、吊销、授权和撤权都必须在请求期间锁定触发按钮，成功给出 Toast，失败交给统一 request wrapper 展示。删除、单把/全部吊销、单项/全部撤权使用确认弹窗，并明确即时失效范围。实现前以 `src/frontend/packages/ui/docs/` 当前规范和 landed 组件为准；platform 沿用自己的 Zustand、request wrapper 与 bs-ui，不混用 client 技术栈。
 
-**B2：密钥表单只有三组。** 基本信息、权限位、委托配置。原“网络”组及 IP 白名单 / 限流 / 日配额字段全部删除。委托范围为空不能保存；`delegate` 与未部署的扩展位保持互斥。
+**B2：密钥表单与列表。** 表单只有基本信息、权限位、委托配置三组，支持签发后编辑名称、有效期、权限位和委托范围并立即生效。委托用户和部门都支持多选、可混用，以可读名称回显；范围为空不能保存。原“网络”组及 IP 白名单 / 限流 / 日配额字段全部删除；`delegate` 与未部署的扩展位保持互斥。密钥列表展示掩码、权限位、委托范围、最后使用、有效期和有效/已过期/已吊销状态；明文仍只在签发后展示一次。
 
-**B3：资源授权。** 服务账号详情页调用主体侧授权接口，mutation 固定写 `subject_type='service_account' / subject_id=sa_id`；通用用户选择器不增加服务账号。来源列区分管理员授予与创建回授，“全部撤销”不删除保障当前集成继续访问父资源所需的回授行。
+**B3：主体侧资源授权。** 详情页直接列出该服务账号在全部资源上的授权，展示资源名称、类型、权限模型和来源。新增授权用弹窗：先选资源类型、按名称/ID 搜索并勾选一个或多个资源，再从该资源类型当前可授予模型中下拉选择；前端不暴露 `resource_type/resource_id` 文本输入。列表来源通过 `permission_grant_assignee(subject_type, subject_id, state)` 反向索引查询，再由业务资源目录批量补名称；写入固定为 `subject_type='service_account' / subject_id=sa_id` 且只走 F048 `grants:mutate`，通用用户选择器不增加服务账号。受保护授权只读；`CREATOR_GRANT` 可经风险确认后单条撤销，但不提供档位编辑，“全部撤销”只处理管理员显式授予的 `DIRECT`。
 
 **B4：发布文档。** `ApiAccess.tsx`、`ApiAccessFlow.tsx` 等“对外发布、无需密钥”的示例统一改 `/api/v3`。密钥开放 API 文档继续使用 `/api/v2`，示例必须携带 `Authorization: Bearer <key>`，两者不得出现在同一个无鉴权示例里。
 
@@ -275,7 +275,7 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 - `action='open_api.call'`；`target_type='api_endpoint'`；`target_id` 使用路由模板（如 `POST /api/v2/filelib/retrieve`）；
 - `tenant_id / operator_tenant_id` 均为密钥租户；PAT 的 `operator_id=holder_user_id`，SA 的 `operator_id=0`、`operator_name=service_account.name`；
 - Python 字段 `audit_metadata`（数据库 JSON 列 `metadata`）保存 `credential_id / actor_kind / actor_id / identity_mode / authorization_subject_type / authorization_subject_id / on_behalf_of_user_id / end_user_id / scope / http_status / error_code / latency_ms / trace_id`；
-- `ip_address` 使用现有列；不写 Authorization、原始请求体、文件内容或其它请求头；
+- `ip_address` 使用现有列；不写 Authorization、原始请求体、文件内容或其它请求头；普通响应同时记录业务错误码与真实 HTTP 状态，SSE 额外记录 `sse_final_result=success|failed|unknown`，终态业务错误码写入同一 `error_code`；
 - `open_api.call` 不加入旧“系统操作”页面白名单，避免高频调用淹没管理操作；需要查询时走结构化 action 查询；
 - 不新增独立清理任务，保留期跟随项目统一审计数据策略。队列满或批量写失败时记录 `open_api.audit.write_failed` 结构化日志，不影响业务响应。
 
@@ -287,7 +287,7 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 
 **D1：主体与校验。** `subject_kind='natural_person'`、前缀 `bs-pat-`，`subject_id=user_id`。resolver 校验 User 存在、`delete=0`、活跃租户与凭据 tenant 一致，再加载角色与管理员事实；不读取 `user_type`。可见租户集合始终按密钥租户限制，不因持有人是超管而放开跨租户过滤。
 
-**D2：一人一把与权限白名单。** 获取新 PAT 时撤销旧 PAT；员工删除、管理员吊销、用户禁用/删除/换租户均主动失效。权限位本期固定 `knowledge:read`，不支持 delegate。管理员持有人按既有 PRD 规则警示并收紧 TTL。
+**D2：一人一把、迁租户与权限白名单。** 获取新 PAT 时撤销旧 PAT；员工删除、管理员吊销、用户禁用/删除仍主动失效。持有人更换活跃租户时不得吊销 PAT：在租户成员切换后把未撤销凭据及其委托范围元数据改写到新租户、清理 credential hash 缓存，并写 `open_api.pat.tenant_migrate` 审计（旧/新 tenant id）；重复同步也会修复上次中断产生的错位。PAT 权限判定动态继承持有人的普通资源授权及管理员事实，但可见租户集合仍锁定凭据租户。权限位本期固定 `knowledge:read`，不支持 delegate。管理员持有人按既有 PRD 规则警示并收紧 TTL。
 
 **D3：两层开关。** 部署级 `open_api.pat_enabled=false` 与租户级 `open_api_tenant_setting.pat_enabled=false` 均默认关闭；关闭只让校验拒绝，不改撤销位，重新开启可恢复未过期令牌。
 
@@ -438,7 +438,11 @@ v2 请求头只有：`Authorization: Bearer <key>`、`X-On-Behalf-Of: <user_id>`
 
 ### 7.2 OpenFGA 模型
 
-新增 `service_account` type，并将其加入各业务资源可直接授权关系的 `directly_related_user_types`。发布模型前运行 schema contract：registry 中每个支持直接授权的资源类型都允许 `service_account`，owner / tenant admin / super admin 关系均不允许。模型升级是向后兼容添加，不重写既有 user / department / group tuple。
+新增 `service_account` type，并将其加入各业务资源可直接授权关系的 `directly_related_user_types`。发布模型前运行 schema contract：registry 中每个支持直接授权的资源类型都允许 `service_account`，owner / tenant admin / super admin 关系均不允许。
+
+F048 的 Catalog active、模型 enabled、动作 active、grant level 以及资源 permission_enabled/custom_mode/inherit_mode 都是技术状态 tuple。所有这些 relation 必须同时投影到 `user:*` 与 `service_account:*`；仅 public/system/admin/owner 等自然人语义继续保持 user-only。Catalog 切版、模式切换、资源创建/移动/删除和迁移协调器必须在同一 operation 中写入两类技术标记，避免出现“业务授权已存在但动作模型对 service_account 不可判定”的 18040。
+
+存量升级使用 `scripts/reconcile_f048_visible_projection.py`：默认 dry-run；`--apply` 时先发布兼容模型，再按每条 CURRENT `ResourcePermissionMode` 补齐 service_account 的 permission_enabled 与当前模式标记，同时对账 visible tuple。报告分别输出可见性 tuple 和服务账号技术标记 tuple 数量，任何写入/校验失败均非零退出。
 
 ---
 
@@ -459,7 +463,9 @@ v2 请求头只有：`Authorization: Bearer <key>`、`X-On-Behalf-Of: <user_id>`
 | 11 | v3 history / gen_title 当前只靠 chat_id 容易越界 | 增加 `public_v3` 会话来源校验并绑定资源 |
 | 12 | client guest 页面除 WS 外还会请求 flow/info/history/title | v3 allowlist 必须覆盖完整调用图，端到端验证浏览器 Network |
 | 13 | commercial gateway 目前显式写有 v2 assistant/chat 规则 | v3 HTTP + WS 路由必须同步调整并做商业版回归 |
-| 14 | 平台全局 HTTP handler 会把部分异常压成 200 信封 | v2 新异常继承 `OpenApiAuthError` 并返回真实 401/403/500/503；v3 沿用发布面既有形状 |
+| 14 | 平台全局 HTTP handler 会把部分异常压成 200 信封 | v2 对全部 `BaseErrorCode` 统一映射：权限拒绝 403、防枚举 404、权限依赖故障 503、其余请求类业务错误 400；业务码保持原值；v1 信封不变 |
+| 15 | QA id 可以绕过知识库入口形成 IDOR | `detail_qa/update_qa/delete/add_relative/query_qa` 均先由 QA 定位所属知识库，再经 `KnowledgeService` 内的 `PermissionService` 校验 visible/edit；鉴权通过前禁止 DAO 写入、索引或异步任务 |
+| 16 | multipart 的废弃 `user_id` 不会进入 JSON 检查 | v2 全局依赖同时检查 query、JSON、multipart 和 urlencoded；出现即 400/26019，不能静默忽略 |
 
 ---
 
@@ -476,6 +482,7 @@ v2 请求头只有：`Authorization: Bearer <key>`、`X-On-Behalf-Of: <user_id>`
 | 身份传递 | 五道准入逐条；新头有效；旧品牌头拒绝；裸 user_id 拒绝；文件级过滤异常 503 且无数据 |
 | 审计 | `audit_log.action='open_api.call'`；metadata actor/subject 双归属完整；无密钥/请求体；SA operator_id=0；DM8 可批量写 |
 | PAT | 一人一把、两层开关、级联失效、只 knowledge:read、超管不跨 tenant、OBO 拒绝 |
+| 安全修复 | QA IDOR 读写拒绝且无副作用；知识空间列表 DTO 含 `user_name/actions`；v2 403/404/503 传输状态；multipart `user_id` 26019；SSE 终态进入审计 |
 | 日常模式 | 五个 v2 端点复用 v1 业务/信封/SSE；请求 schema 删除 `use_knowledge_base`、`task_mode` 但保留 `files`；内部固定 `task_mode=False`；config 只有 models/tools；SA/PAT/D 会话归属矩阵；跨主体 chat/file 统一 404 |
 | v3 发布面 | 九路由 allowlist；未发布/开关关拒绝；两个 WS 正常；history/title/stop 不能跨资源；`/api/v3/assistant/list` 真 404 |
 | 前端/网关 | guest 页面所有 v3 HTTP/WS 无 v2 遗留；发布示例为 v3；密钥文档为 v2；商业网关可转发 v3 WS |
@@ -542,3 +549,4 @@ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/v2/assistant/info/$ASSISTANT
 | 2026-08-31 | `/sdd-review design` 自查修订 | 初版评审 |
 | 2026-09-04 | 重写：移除 R8/P2 与分享链路改造；请求头去品牌；审计改复用 `audit_log.metadata`；服务账号改独立主体且不写 User；日常模式改为五个 v1 同路径 v2 接口；工作流/知识助手免登录发布接口迁至 v3，与 v2 密钥面彻底分离 | 用户新范围裁定 |
 | 2026-09-04 | 收窄日常对话请求：对外删除 `use_knowledge_base`、`task_mode`，内部固定 `task_mode=False`；`files` 与临时文件上传能力保持不变 | 用户补充裁定 |
+| 2026-09-08 | 同步 PRD v2.6：补齐服务账号 F048 技术标记与存量对账、主体侧资源选择弹窗、管理操作反馈、QA 所属知识库鉴权、知识空间列表 DTO、v2 HTTP/SSE 结果语义、multipart 废弃字段拒绝，以及 PAT 随持有人迁租户 | PRD 后续修订与验收问题 |
