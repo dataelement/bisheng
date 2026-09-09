@@ -293,10 +293,10 @@
   - **模型文件落 `database/models/resource_tier.py`，不落 `app_publish/domain/models/`**：`ResourceTier` 实体归 F055、**F054 只读**（F054 design D11），放在 `app_publish` 里会逼 `app_runtime` 反向 import，双向依赖当场成立且**没有任何 arch-guard 规则会拦**（C1 / D16 的订正）。业务逻辑仍全在 `ResourceTierService`。
   - **只可停用、不可删除**（管理 tab 不提供删除入口）：`app_version.tier_id` 是历史快照的引用，档位被删 → 老版本重新上线时解析不出规格。F054 D11 的"何时重新考虑"里假设了"F055 支持删档"这一情形——**本设计明确不支持**，从而 `tier_id` 永远可解析；已回写为 §6.1 的 Outgoing 契约行。
 - **三档 seed 与数值裁定（F054 与本 spec 的直接冲突，必须裁一套）**：
-  - F054 design:294 `DEFAULT_TIERS` = 轻量 0.5 vCPU/512 MiB · 标准 1/1024 · **增强** 2/2048；本 spec **AC-44** = 轻量 **1C/2G** · 标准 **2C/4G** · **性能** **4C/8G**。
+  - F054 design:294 `DEFAULT_TIERS` = 轻量 0.5 vCPU/512 MiB · 标准 1/1024 · **增强** 2/2048；本 spec **AC-44** 当时 = 轻量 **1C/2G** · 标准 **2C/4G** · **性能** **4C/8G**。⚠️ 轻量档已于 2026-09-09 按实测下调回 **0.5C/1G**（spec 决议-10），标准与性能两档维持 AC-44 原值。
   - → **以本 spec 的产品口径为准**（AC-44 是写进 PRD 与 ui-demo 的产品承诺，F054 的数值是实现期临时值），**回写 F054 的 `DEFAULT_TIERS` 常量与第三档名称**（"增强" → "性能"）。
   - **seed 仍从 F054 `DEFAULT_TIERS` 常量读取落库**（F054 D11 已把这条登记为 Outgoing 契约），保证"表未落"与"表刚 seed 完"两个时刻规格恒等。
-  - **规格初始默认值是部署配置项**（AC-44）：优先级 = `settings.app_runtime.default_tiers`（K10）> `DEFAULT_TIERS` 常量。⚠️ **114 上必须用这个覆盖**：114 曾长期 available ~0.9G（F054 K2），1C/2G 的轻量档会在容量准入闸上直接被拒 → 演示前把 114 的 `light` 下调到 0.5C/512M（坑 27）。
+  - **规格初始默认值是部署配置项**（AC-44）：优先级 = `settings.app_runtime.default_tiers`（K10）> `DEFAULT_TIERS` 常量。⚠️ **这个配置项只在首次启动播种时有效**：seed 按 `code` 幂等跳过，表一旦落库，改配置与改常量都不再影响它。**已播种的部署要调档位只能更新 `resource_tier` 行**（档位管理 tab 是 T065，尚未落地），新规格自各应用下一次发布或重新上线起生效（AC-64）。2026-09-09 的 114 走的正是这条路：配置项从未配上而表早已播种，最终直接改表 + 逐个原地重建（spec 决议-10）。
   - seed 时机：`init_default_data` 内（与审批场景 seed 同批），**幂等按 `code` 判存在即跳过**（超管调过的规格不被升级重置，与 AC-19 同判据）。
 - **选档与停用**（AC-46 / AC-47）：CLI 取 manifest `tier`、未声明取 `light`；声明了不存在或 `enabled=False` 的档 → 预检拒（16223）。停用**只拦新选择**：存量应用照常运行、迭代发布沿用原档位（迭代若在 manifest 里仍写着已停用的档 → 拒，owner 需改声明；**这是有意的**：停用的语义就是"新发布不可再选"）。
 - **写入快照**：`app_version.tier_id`（F054 已定的显式列）记**档位标识**，规格取运行时当前值（AC-48）→ 规格调整自下一次发布 / 重新上线生效（F054 AC-64 由此成立）。
@@ -662,7 +662,7 @@ platform 发布面 / F052 MCP 应用状态工具
 | 24 | **审批场景名是后端硬编码中文**（`approval_registry.py:19/30/40`），前端直接渲染 `s.scenario_name`（`:1660`） | 以为新场景会自动三语，结果日语环境显示"应用发布" | D14 接受中文单语（与既有三场景一致），别默认它三语 |
 | 25 | **`ApprovalCenterDialog.tsx` 有 4 条冻结的硬编码中文违规**（`client/eslint-suppressions.json:1714-1723`），其中 `:331` 的 `"同意"/"驳回"` 正是 AC-24 要改的那一行 | 改了这行但没抽 i18n → `pnpm lint` 挂；或者不知道"谁触碰谁还债"规则，PR 被打回 | D14；tasks 单列"抽 4 条中文 + `pnpm lint:prune`" |
 | 26 | **F054 没有提供"创建草稿应用"的服务方法**（§4.2 ② 只有五个状态动作 + `stage_version` + `update_meta`），而 release-contract 定「本册唯一创建路径 = CLI 首发」 | 首发 deploy 时无处建 `app` 行 → 要么 F055 直写 `app` 表（违反决议-8「F054 是应用态唯一写入方」），要么整条剧本卡在第一步 | D2；需 F054 补 `AppProvisionService.create_draft(...)`，已登记 §6.2 |
-| 27 | **F054 `DEFAULT_TIERS`（design:294 = 0.5/512 · 1/1024 · 2/2048「增强」）与本 spec AC-44（1C/2G · 2C/4G · 4C/8G「性能」）数值与命名都冲突**，而 F054 D11 要求 F055 的 seed **从该常量读取落库** | 两边各按各的实现 → seed 一落库，F054 的兜底常量与 DB 表给出两套规格，`docker inspect` 核对 AC-63 时必然对不上 | D11 裁定以 spec 为准并**回写 F054 常量**；114 上另用 `settings.app_runtime.default_tiers` 下调（否则 1C/2G 过不了容量闸） |
+| 27 | **F054 `DEFAULT_TIERS`（design:294 = 0.5/512 · 1/1024 · 2/2048「增强」）与本 spec AC-44（1C/2G · 2C/4G · 4C/8G「性能」）数值与命名都冲突**，而 F054 D11 要求 F055 的 seed **从该常量读取落库** | 两边各按各的实现 → seed 一落库，F054 的兜底常量与 DB 表给出两套规格，`docker inspect` 核对 AC-63 时必然对不上 | D11 裁定以 spec 为准并**回写 F054 常量**。**2026-09-09 后续修订**：轻量档按实测改回 0.5C/1G（spec 决议-10），命名仍以 AC-44 为准；「114 用配置项下调」这条当时的解法已被证伪——配置项只在首次播种生效，表已落库就只能改表 |
 | 28 | **申请人必须是自然人 owner、不是发起 deploy 的服务账号**（INV-29：服务账号不出现在任何面向人的场景），主部门也要取 **owner** 的（`principal.subject_user_id` 是服务账号，它没有部门） | 审批单申请人显示成一个服务账号名；`department_admin` 来源按服务账号的部门解析（服务账号会被自动兜底进 guest 部门）→ 审批人解析到完全无关的人 | D7；`applicant_user_id = principal.resource_owner_user_id` |
 | 29 | **`CardSelectVersion`（`platform/src/pages/BuildPage/CardSelectVersion.tsx`）切换即写库**（`:25-31` 调 `changeCurrentVersion`），且 `version_list` 对托管应用**恒空** | 想复用它做版本列表 → 点一下就去改了某个工作流的当前版本；或者渲染出来永远是空 | D15 另起只读组件 |
 | 30 | **client 审批弹窗宽度上限 800px**（`ApprovalCenterDialog.tsx:392`） | 审读视图（左文件树 + 右只读代码 + 4 tab）实施到一半发现塞不进去，当场返工 | D14 案 A（review 态放宽到 1200px）；MVP 期整块不渲染 |
@@ -753,7 +753,7 @@ platform 发布面 / F052 MCP 应用状态工具
 3. **步 4（审批人处理 → 上线）**：用**审批人账号**（非发起人）登录 client → 铃铛应有一条"提交了应用发布申请"的站内信（AC-64；若显示裸 action_code 说明 `APPROVAL_TASK_SCENARIO_TEXT_KEYS` 没加，坑 24 邻近）→ 打开审批中心 → 详情应是**四分区**而不是两列网格（坑 7）→ 不填理由点「驳回」应**置灰点不动**（AC-24）→ 填理由点「通过」；
    - 观察 `docker ps` 出现 `bisheng-app-*` 容器、应用态 → 已上线、`app_version.terminal_state='online'`；
    - 审计页筛选「应用」命名空间应能看到 `app.release.submit` / `approval_created` / `approved` / `online` 四条且带应用名（AC-01；看不到 = 坑 21 的四处漏了一处）。
-4. **待上线分支**（AC-31，可选但强烈建议）：把 `settings.app_runtime.reserve_mb` 临时调到极大值使容量闸必然拒 → 再走一遍审批通过 → 断言**审批单仍是"通过"**、应用态「待上线（资源不足）」、owner 与超管各收到一条**无跳转按钮**的站内信（AC-65）；恢复配置后在发布面点「手动上线」→ 成功且**不产生新版本记录**（决议-6）。
+4. **待上线分支**（AC-31，可选但强烈建议）：把 runtime-manager 的 `RTM_RESERVE_MB` 临时调到极大值并重启该进程，使容量闸必然拒（⚠️ 改 `config.yaml` 的 `app_runtime.reserve_mb` **不生效**——闸在 runtime-manager 进程里、只读自己的环境变量） → 再走一遍审批通过 → 断言**审批单仍是"通过"**、应用态「待上线（资源不足）」、owner 与超管各收到一条**无跳转按钮**的站内信（AC-65）；恢复配置后在发布面点「手动上线」→ 成功且**不产生新版本记录**（决议-6）。
 5. **驳回 / 撤回**：驳回一次 → owner 在发布面能看到**理由全文**（AC-33）；再提交一次后 owner 点「撤回」→ 审批人待办消失（AC-34）；对已撤回的实例再调一次 withdraw API → 应被拒（AC-22，若守卫已实现）。
 6. **删除致取消**：新建一个应用提交到待审 → 删除该应用 → 断言审批单 CANCELLED 且审批人收到通知（AC-35）。
 
@@ -791,7 +791,7 @@ platform 发布面 / F052 MCP 应用状态工具
   - **平台内造应用的发布面提交入口**：随 PRD-2（决议-2）；DEV-06 改码权交接落地后对已交接应用开放。
   - **k8s 形态下的构建 / 上线 / 终检差异**：F059；**本 Feature 的管线对形态无感**（INV-33）——这是设计约束不是巧合，任何在管线里出现 `compose` / `container` 字样的代码都是 bug。
 - **必须回写上游的三项（tasks.md 首波内完成）**：
-  1. **F054 design 的 `DEFAULT_TIERS`** 数值与第三档名称按 D11 的裁定回写（1C/2G · 2C/4G · 4C/8G，"增强"→"性能"），并把 D11「何时重新考虑」里的"支持删档"改为"档位只可停用不可删"；
+  1. **F054 design 的 `DEFAULT_TIERS`** 数值与第三档名称按 D11 的裁定回写（2C/4G · 4C/8G，"增强"→"性能"；轻量档 2026-09-09 按 spec 决议-10 改为 0.5C/1G），并把 D11「何时重新考虑」里的"支持删档"改为"档位只可停用不可删"；
   2. **F054 需补 `AppProvisionService.create_draft(...)`**（坑 26）——在 F054 的 §4.2 ② 与 §6.1 各加一行；
   3. **F053 spec AC-32 的上限取值口径**——补一句「上限经 `GET /api/v2/apps/deploy-limits` 取，取不到则直接上传由服务端 16201 兜底」（D2；否则 CLI 只能硬编码 50 MiB，正是 K7 反对的形态）。
   - ~~原第 1 项「把 `release-contract.md:98` 的 `_待分配_` 落定为 161/162/163/164 并回写 constitution C5」~~ **已删除：该项早已完成**（F054 落码时一并写入），release-contract 全文已无「待分配」，constitution C5 也已登记 `162 = F055 (publish pipeline)`。照原文写进 tasks.md 会产生一条空转任务，还可能让实现者去"修正"本已正确的表（K9）。

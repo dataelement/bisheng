@@ -171,6 +171,102 @@ class TestStart:
         assert await _state(app_db, app.id) == AppState.STOPPED.value
         assert [name for name, _ in fake_orchestrator.calls] == ["admission"]
 
+    @pytest.mark.parametrize("failure", ("admission", "deploy"))
+    async def test_start_failure_from_online_keeps_the_app_online(
+        self, app_db, app_factory, app_owner, fake_orchestrator, failure
+    ):
+        """AC-05 — an iteration that fails does not cost users the running version.
+
+        The previous instance is still serving (the orchestrator builds the new
+        one beside it), so moving the app to ``pending_capacity`` would take a
+        working application off the entry — that state is not in
+        ``ENTRY_VISIBLE_STATES``, so the entry answers "does not exist" — and
+        would block the owner's next ``bisheng deploy`` with 16252, all to
+        describe a failure that cost nobody anything.
+        """
+        from bisheng.app_runtime.domain.services.app_state_service import AppStateService
+        from bisheng.common.errcode.app_factory import AppProbeFailedError
+
+        if failure == "admission":
+            fake_orchestrator.responses["admission"] = {"admitted": False, "reason": "cpu_quota", "snapshot": {}}
+        else:
+            fake_orchestrator.responses["deploy"] = AppProbeFailedError(msg="readiness probe never passed")
+
+        app, _ = await app_factory(state=AppState.ONLINE.value)
+        result = await AppStateService.publish(app.id, actor=app_owner.payload)
+
+        assert result.ok is False
+        assert result.state == AppState.ONLINE.value
+        assert await _state(app_db, app.id) == AppState.ONLINE.value
+        # And nothing was torn down on the way out: the old instance is
+        # untouched, which is what makes staying online honest.
+        assert "stop" not in [name for name, _ in fake_orchestrator.calls]
+        assert "destroy" not in [name for name, _ in fake_orchestrator.calls]
+
+    @pytest.mark.parametrize("source", ALL_STATES)
+    @pytest.mark.parametrize("action", ("publish", "manual_publish", "resume"))
+    @pytest.mark.parametrize("failure", ("admission", "deploy"))
+    async def test_a_failed_start_never_writes_an_illegal_state(
+        self, app_db, app_factory, app_owner, fake_orchestrator, source, action, failure
+    ):
+        """The invariant the whole table exists for, asserted on the failure paths.
+
+        The matrix above only ever exercises successful starts, because its
+        orchestrator admits everything — which is precisely how ``_park`` came
+        to write ``online → pending_capacity`` for a year without a red test.
+        This walks every (prior state, action, failure) cell instead and asks
+        one question of each: whatever the app ended up as, is that somewhere
+        the table allows it to go?
+        """
+        from bisheng.app_runtime.domain.constants import ALLOWED_TRANSITIONS
+        from bisheng.app_runtime.domain.services.app_state_service import AppStateService
+        from bisheng.common.errcode.app_factory import AppProbeFailedError
+
+        if source == AppState.DELETED.value:
+            pytest.skip("a deleted app answers 'does not exist' to every action")
+
+        if failure == "admission":
+            fake_orchestrator.responses["admission"] = {"admitted": False, "reason": "cpu_quota", "snapshot": {}}
+        else:
+            fake_orchestrator.responses["deploy"] = AppProbeFailedError(msg="readiness probe never passed")
+
+        app, _ = await app_factory(state=source)
+        method = getattr(AppStateService, action)
+        try:
+            await method(app.id, actor=app_owner.payload)
+        except AppStateConflictError:
+            # The action was refused outright — nothing was written, which is
+            # the strongest form of "no illegal state".
+            pass
+
+        ended = await _state(app_db, app.id)
+        allowed = {state.value for state in ALLOWED_TRANSITIONS[AppState(source)]} | {source}
+        assert ended in allowed, f"{source} --{action}({failure} failed)--> {ended} is not an edge the table allows"
+
+    async def test_park_reports_the_state_it_actually_left_behind(
+        self, app_db, app_factory, app_owner, fake_orchestrator, monkeypatch
+    ):
+        """A parking that loses the compare-and-set must not report the intent.
+
+        F055 reads ``state`` straight out of this result and writes it into the
+        release audit, so an optimistic answer here becomes a permanent record
+        of a state the application was never in.
+        """
+        from bisheng.app_runtime.domain.services.app_state_service import AppStateService
+
+        fake_orchestrator.responses["admission"] = {"admitted": False, "reason": "cpu_quota", "snapshot": {}}
+        app, _ = await app_factory(state=AppState.DRAFT.value)
+
+        async def _lost_race(app_id, **kwargs):
+            return False
+
+        monkeypatch.setattr(AppStateService, "_transition", staticmethod(_lost_race))
+
+        result = await AppStateService.publish(app.id, actor=app_owner.payload)
+
+        assert result.ok is False
+        assert result.state == AppState.DRAFT.value, "reported the intent instead of the outcome"
+
     async def test_resume_uses_pending_version(self, app_db, app_factory, app_owner, fake_orchestrator):
         """AC-04 — the version approved while the app was stopped is the one that starts."""
         from bisheng.app_runtime.domain.services.app_state_service import AppStateService

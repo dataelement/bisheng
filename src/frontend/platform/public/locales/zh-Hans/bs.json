@@ -1339,6 +1339,7 @@
       "appReleaseCancelled": "发布申请取消",
       "appReleaseOnline": "发布上线",
       "appReleasePendingOnline": "待上线（未能启动）",
+      "appReleaseIterationFailed": "新版本未上线（线上未受影响）",
       "appReleaseManualPublish": "手动上线",
       "appReleaseCapabilityDeclared": "声明能力依赖",
       "appReleaseRollback": "发布回滚"
@@ -2117,6 +2118,7 @@
     "state": {
       "draft": "草稿",
       "online": "已上线",
+      "pending": "待上线",
       "pendingCapacity": "待上线（资源不足）",
       "pendingDeployFailed": "待上线（上线失败）",
       "stopped": "已下线",
@@ -2269,6 +2271,7 @@
       "pendingTitle": "待上线成因",
       "pendingCapacity": "审批已通过，但运行环境暂时没有足够资源启动该应用。可稍后点击「手动上线」重试，或联系平台管理员释放资源。",
       "pendingDeployFailed": "审批已通过，但应用上一次启动失败。请先在「运行日志」中定位原因，修复后重新执行 bisheng deploy，或点击「手动上线」重试。",
+      "pendingUnknown": "审批已通过，但应用尚未上线。可点击「手动上线」重试；若仍不成功，请在「运行日志」中查看原因。",
       "schemaChangeTitle": "表结构变更"
     },
     "versionList": {

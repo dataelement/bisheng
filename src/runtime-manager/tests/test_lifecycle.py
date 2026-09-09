@@ -242,9 +242,7 @@ def test_healthcheck_params(rtm_config, fake_docker):
     assert light["Retries"] == 3
     assert 20 * 1_000_000_000 <= light["StartPeriod"] <= 60 * 1_000_000_000
 
-    _service(rtm_config, fake_docker).deploy(
-        _request(app_id="app-2", slug="big", tier=TierIn(cpu=2, mem=2048))
-    )
+    _service(rtm_config, fake_docker).deploy(_request(app_id="app-2", slug="big", tier=TierIn(cpu=2, mem=2048)))
     heavy = fake_docker.last_call("create_container")["payload"]["Healthcheck"]
     # A bigger tier means a heavier app: more start-up slack, still bounded.
     assert heavy["StartPeriod"] > light["StartPeriod"]
@@ -262,7 +260,7 @@ def test_single_instance_per_app(rtm_config, fake_docker):
 
     running = [c for c in fake_docker.containers.values() if c.running]
     assert len(running) == 1
-    assert running[0].name == container_name("sales-report", "ver-fedcba9876543210")
+    assert running[0].name == container_name("sales-report", "ver-fedcba9876543210", 2)
     assert len(get_store(rtm_config).list()) == 1
 
 
@@ -271,7 +269,7 @@ def test_new_version_switches_only_after_probe_passes(rtm_config, fake_docker):
     scheduler = RecordingScheduler()
     service = _service(rtm_config, fake_docker, scheduler=scheduler)
     service.deploy(_request())
-    old = container_name("sales-report", "ver-0123456789abcdef")
+    old = container_name("sales-report", "ver-0123456789abcdef", 1)
 
     service.deploy(_request(version_id="ver-fedcba9876543210", version_no=4))
 
@@ -289,18 +287,16 @@ def test_failed_probe_keeps_old_instance_and_reports(rtm_config, fake_docker):
     """A new version that never becomes ready must not take the app down."""
     service = _service(rtm_config, fake_docker)
     service.deploy(_request())
-    old = container_name("sales-report", "ver-0123456789abcdef")
+    old = container_name("sales-report", "ver-0123456789abcdef", 1)
 
-    failing = _service(
-        rtm_config, fake_docker, prober=FakeProber(ready=False, reason="timeout after 90s")
-    )
+    failing = _service(rtm_config, fake_docker, prober=FakeProber(ready=False, reason="timeout after 90s"))
     with pytest.raises(ProbeFailedError) as excinfo:
         failing.deploy(_request(version_id="ver-fedcba9876543210", version_no=4))
 
     assert "timeout" in excinfo.value.detail["message"]
     assert fake_docker.get(old).running is True
     # The stillborn container is cleaned up rather than left behind as an orphan.
-    assert container_name("sales-report", "ver-fedcba9876543210") not in [
+    assert container_name("sales-report", "ver-fedcba9876543210", 2) not in [
         c.name for c in fake_docker.containers.values()
     ]
     record = get_store(rtm_config).get("app-1")

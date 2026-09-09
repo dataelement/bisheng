@@ -1339,6 +1339,7 @@
       "appReleaseCancelled": "公開申請をキャンセル",
       "appReleaseOnline": "公開開始",
       "appReleasePendingOnline": "公開保留（起動できず）",
+      "appReleaseIterationFailed": "新バージョン未公開（稼働中は影響なし）",
       "appReleaseManualPublish": "手動で公開",
       "appReleaseCapabilityDeclared": "能力依存を宣言",
       "appReleaseRollback": "公開をロールバック"
@@ -2117,6 +2118,7 @@
     "state": {
       "draft": "下書き",
       "online": "公開中",
+      "pending": "公開待ち",
       "pendingCapacity": "公開待ち（リソース不足）",
       "pendingDeployFailed": "公開待ち（起動失敗）",
       "stopped": "オフライン",
@@ -2269,6 +2271,7 @@
       "pendingTitle": "公開待ちの原因",
       "pendingCapacity": "承認は通りましたが、実行環境に起動できるだけのリソースが一時的にありません。しばらくしてから「手動公開」で再試行するか、プラットフォーム管理者にリソースの解放を依頼してください。",
       "pendingDeployFailed": "承認は通りましたが、前回の起動に失敗しました。「実行ログ」で原因を特定し、修正後に bisheng deploy を再実行するか、「手動公開」で再試行してください。",
+      "pendingUnknown": "承認は通りましたが、アプリはまだ公開されていません。「手動公開」で再試行し、それでも起動しない場合は「実行ログ」で原因を確認してください。",
       "schemaChangeTitle": "テーブル構造の変更"
     },
     "versionList": {

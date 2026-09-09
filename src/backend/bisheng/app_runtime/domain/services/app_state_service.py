@@ -40,7 +40,6 @@ from bisheng.app_runtime.domain.constants import (
     DEFAULT_TIER_ID,
     AppAuditAction,
     AppState,
-    allowed_sources,
     default_tier,
     is_transition_allowed,
 )
@@ -252,6 +251,19 @@ class AppStateService:
         version = await cls._load_version(app_id, version_id)
         tier = await cls._resolve_tier(version.tier_id)
 
+        # An application that is *already online* keeps its state when a start
+        # fails. The previous version is still serving — a new instance is
+        # created beside the old one and a failed probe only tears down the new
+        # one — so parking it would take a working application off the entry
+        # (``pending_capacity`` is not in ``ENTRY_VISIBLE_STATES``) and block
+        # its owner's next ``bisheng deploy`` (16252), to describe a failure
+        # that cost the user nothing. This mirrors AC-05, which keeps a
+        # rejected *iteration* online with the current version running, and
+        # AC-41's "a resume that loses the capacity gate stays stopped": the
+        # source state decides where a failure lands. F055's AC-31 describes
+        # the first release, where there is no running version to protect.
+        shortage_state = None if app.state == AppState.ONLINE.value else shortage_state
+
         verdict = await orchestrator_client.admission(tier=tier, purpose="run")
         if not verdict.get("admitted"):
             return await cls._park(
@@ -325,7 +337,14 @@ class AppStateService:
         """Record "it did not start, and here is why" without leaving anything half-up."""
         target = shortage_state.value if shortage_state is not None else app.state
         if shortage_state is not None and app.state != shortage_state.value:
-            await cls._transition(app.id, to_state=shortage_state, from_states=(app.state,))
+            won = await cls._transition(app.id, to_state=shortage_state, from_states=(app.state,))
+            if not won:
+                # The parking did not stick — a concurrent action moved the app
+                # first, or the edge is one the table refuses. Report the state
+                # we actually left behind: returning the intent would write a
+                # fiction into the audit trail and into F055's release record,
+                # which reads ``state`` back out of this result.
+                target = app.state
         await cls._audit(
             AppAuditAction.PUBLISH_PENDING,
             app,
@@ -413,18 +432,44 @@ class AppStateService:
         except Exception as exc:
             logger.debug("app_runtime.resolve_tier table lookup failed code={}: {}", code, exc)
         spec = default_tier(code) or default_tier(DEFAULT_TIER_ID) or {}
-        return {"cpu": float(spec.get("cpu", 1.0)), "mem": int(spec.get("memory_mb", 2048))}
+        return {"cpu": float(spec.get("cpu", 0.5)), "mem": int(spec.get("memory_mb", 1024))}
 
     @staticmethod
     async def _transition(
         app_id: str,
         *,
         to_state: AppState,
-        from_states: tuple[str, ...] | None = None,
+        from_states: tuple[str, ...],
         current_version_id: Any = ...,
         pending_version_id: Any = ...,
     ) -> bool:
-        sources = from_states if from_states is not None else allowed_sources(to_state.value)
+        """The single writer's single gate: check the table, then compare-and-set.
+
+        The module docstring promises that every write of ``app.state`` is
+        validated against ``ALLOWED_TRANSITIONS`` first. That promise used to
+        live in each caller, and ``_park`` was the one that did not keep it —
+        it wrote ``online → pending_capacity``, an edge the table deliberately
+        omits, and the CAS let it through because ``from_states`` only answers
+        "is it still the state I read", never "is this edge legal". Checking
+        here covers every caller, including the ones not written yet.
+
+        A refused edge is a **programming error surfaced as a no-op**: log it
+        loudly and report the write as lost, exactly as a CAS that lost a race
+        would, so the caller's existing "it did not stick" path handles it.
+        ``stage_version`` deliberately does not come through here — it writes a
+        self-edge to fence concurrent stops, and self-edges are not in the
+        table.
+        """
+        illegal = [src for src in from_states if not is_transition_allowed(src, to_state.value)]
+        if illegal:
+            logger.error(
+                "app_runtime.illegal_transition app_id={} to={} from={} — refused, state left as is",
+                app_id,
+                to_state.value,
+                illegal,
+            )
+            return False
+        sources = from_states
         kwargs: dict[str, Any] = {}
         if current_version_id is not ...:
             kwargs["current_version_id"] = current_version_id

@@ -505,6 +505,7 @@
   "com_notifications_action_approval_execute_failed": "「{{target}}」审批已通过，但业务执行失败，请处理",
   "com_notifications_action_app_publish_pending_capacity": "「{{target}}」审批已通过，但运行环境容量不足，暂未上线；资源空出后可在应用详情页手动上线",
   "com_notifications_action_app_publish_deploy_failed": "「{{target}}」审批已通过，但启动失败，暂未上线；请查看运行日志后在应用详情页手动上线",
+  "com_notifications_action_app_publish_iteration_failed": "「{{target}}」审批已通过，但新版本未能上线；线上版本仍在正常服务，可修复后重新执行 bisheng deploy",
   "com_notifications_action_approval_instance_cancelled": "你的「{{target}}」审批申请已被取消",
   "com_notifications_action_menu_grant_revoked": "你对菜单「{{target}}」的访问权限已被撤回",
   "com_notifications_action_revoked_channel_admin": "你已不再是频道「{{target}}」的管理员",

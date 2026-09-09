@@ -116,7 +116,7 @@ async def test_build_intent_carries_presigned_code_url_and_tier(prepared, fake_o
     assert payload["code_object_key"] == prepared.deployment.code_object_key
     assert payload["runtime"] == "python3.11"
     # ``tier`` speaks vCPU / MiB — the table's millicores are converted exactly once.
-    assert payload["tier"] == {"cpu": 1.0, "mem": 2048}
+    assert payload["tier"] == {"cpu": 0.5, "mem": 1024}
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +152,57 @@ async def test_build_failure_16227_carries_manager_stage_message_tail(prepared, 
     details = excinfo.value.kwargs["details"]
     assert (excinfo.value.code, details["build_stage"]) == (16227, "docker_build")
     assert "pandas" in " ".join(details["tail"])
+
+
+async def test_unreachable_package_index_is_not_blamed_on_the_dependency_list(prepared, fake_orchestrator):
+    """A build container with no route to any index is an environment fault.
+
+    Taken verbatim from the real incident: a stale proxy setting on the build
+    host made every ``pip install`` fail, ``fastapi`` included, and the platform
+    answered "fix your requirements.txt" — the one instruction guaranteed not
+    to help. The code stays 16227; what changes is what it tells the owner.
+    """
+    from bisheng.common.errcode.app_publish import AppDependencyBuildFailedError
+
+    fake_orchestrator.responses["build_status"] = {
+        "status": "failed",
+        "stage": "docker_build",
+        "message": "pip install failed",
+        "tail": [
+            "WARNING: Retrying after connection broken by "
+            "'ProxyError('Cannot connect to proxy.', NewConnectionError('...Connection refused'))'",
+            "ERROR: Could not find a version that satisfies the requirement fastapi (from versions: none)",
+            "ERROR: No matching distribution found for fastapi",
+        ],
+        "image_ref": None,
+    }
+    with pytest.raises(AppDependencyBuildFailedError) as excinfo:
+        await _build(prepared)
+
+    details = excinfo.value.kwargs["details"]
+    hints = " ".join(excinfo.value.kwargs["hints"])
+    assert excinfo.value.code == 16227
+    assert details["reason"] == "build_network_blocked"
+    assert "requirements.txt" in hints, "must say explicitly that editing it will not help"
+    assert "网络" in hints or "代理" in hints
+
+
+async def test_an_ordinary_bad_dependency_still_points_at_the_dependency_list(prepared, fake_orchestrator):
+    """The other half of the same decision: a real bad pin must not be excused as a network fault."""
+    from bisheng.common.errcode.app_publish import AppDependencyBuildFailedError
+
+    fake_orchestrator.responses["build_status"] = {
+        "status": "failed",
+        "stage": "docker_build",
+        "message": "pip install failed",
+        "tail": ["ERROR: No matching distribution found for pandas==99.0"],
+        "image_ref": None,
+    }
+    with pytest.raises(AppDependencyBuildFailedError) as excinfo:
+        await _build(prepared)
+
+    assert excinfo.value.kwargs["details"]["reason"] == "build_failed"
+    assert "requirements.txt" in " ".join(excinfo.value.kwargs["hints"])
 
 
 async def test_manager_unreachable_during_build_is_16227_with_upstream_reason(prepared, fake_orchestrator):

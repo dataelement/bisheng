@@ -5,20 +5,19 @@ The manager knows nothing about the platform database, OpenFGA or tenants
 one of the ``RTM_*`` environment variables below, so a deployment can move the
 process to another host without touching the platform.
 
-Naming contract with the backend (design §4.2 ⑧ / K10):
+Shared with the backend (design §4.2 ⑧ / K10): exactly one value, the HMAC
+secret. ``RTM_HMAC_SECRET`` has to equal ``settings.app_runtime.manager_hmac_secret``
+or every intent is answered 401, which the backend folds into 16121.
 
-===========================  =========================================
-env var                      backend-side counterpart
-===========================  =========================================
-``RTM_HMAC_SECRET``          ``settings.app_runtime.manager_hmac_secret``
-``RTM_DATA_ROOT``            ``settings.app_runtime.data_root``
-``RTM_HOST_DATA_ROOT``       (deployment-only) the same directory as seen by
-                             the **host** dockerd — see below
-``RTM_RESERVE_MB``           ``settings.app_runtime.reserve_mb``
-``RTM_OVERCOMMIT_RATIO``     ``settings.app_runtime.overcommit_ratio``
-``RTM_BUILD_RESERVE_MB``     ``settings.app_runtime.build_reserve_mb``
-``RTM_BUILD_INDEX_URL``      ``settings.app_runtime.build_index_url``
-===========================  =========================================
+**Everything else here has one source and it is this file's environment.**
+Capacity admission, the data root and the build's package index are decisions
+only this process can make — it is the one that can see the host — so the
+platform holds no copy of them. It used to: ``AppRuntimeConf`` declared
+matching ``reserve_mb`` / ``overcommit_ratio`` / ``build_reserve_mb`` /
+``data_root`` / ``build_index_url`` fields that nothing read, and the
+deployment guide sent operators to edit them, where editing them changed
+nothing. If you find yourself adding a backend-side twin for one of these,
+that is the thing to avoid.
 
 ``RTM_HOST_DATA_ROOT`` exists because ``HostConfig.Binds`` is resolved by the
 **dockerd that creates the container**, not by this process. In the systemd

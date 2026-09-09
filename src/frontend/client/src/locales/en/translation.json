@@ -517,6 +517,7 @@
   "com_notifications_action_approval_execute_failed": "Approval for「{{target}}」passed, but the business action failed. Please handle it",
   "com_notifications_action_app_publish_pending_capacity": "Approval for「{{target}}」passed, but the runtime is out of capacity, so it is not live yet. You can publish it manually from the application detail page once resources free up",
   "com_notifications_action_app_publish_deploy_failed": "Approval for「{{target}}」passed, but it failed to start, so it is not live yet. Check the runtime logs, then publish it manually from the application detail page",
+  "com_notifications_action_app_publish_iteration_failed": "Approval for「{{target}}」passed, but the new version did not go live. The version already running is unaffected; fix the problem and run bisheng deploy again",
   "com_notifications_action_approval_instance_cancelled": "Your approval request for「{{target}}」has been cancelled",
   "com_notifications_action_menu_grant_revoked": "Your access to menu「{{target}}」has been revoked",
   "com_notifications_action_revoked_channel_admin": "You are no longer an administrator of channel「{{target}}」",

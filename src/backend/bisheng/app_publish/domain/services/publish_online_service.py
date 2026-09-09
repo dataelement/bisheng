@@ -46,6 +46,8 @@ from bisheng.app_publish.domain.constants import AppReleaseAuditAction
 from bisheng.app_publish.domain.models.app_deployment import (
     STAGE_ONLINE,
     STAGE_PENDING_ONLINE,
+    STAGE_PUBLISHING,
+    STATUS_FAILED,
     STATUS_SUCCEEDED,
     AppDeploymentDao,
 )
@@ -67,6 +69,9 @@ from bisheng.database.models.app_version import TERMINAL_STATE_ONLINE
 STATUS_ONLINE = "online"
 STATUS_PENDING_CAPACITY = "pending_capacity"
 STATUS_PENDING_DEPLOY_FAILED = "pending_deploy_failed"
+#: The start failed but the application stayed online on its previous version.
+#: Not a parked outcome: nothing is waiting, the submission just did not land.
+STATUS_ITERATION_FAILED = "iteration_failed"
 STATUS_STAGED_ONLY = "staged_only"
 STATUS_APP_DELETED = "app_deleted"
 
@@ -83,6 +88,7 @@ CODE_STARTUP_PROBE_FAILED = AppStartupProbeFailedError.Code
 
 _APP_STATE_STOPPED = "stopped"
 _APP_STATE_DELETED = "deleted"
+_APP_STATE_ONLINE = "online"
 
 
 class PublishOnlineService:
@@ -235,6 +241,23 @@ class PublishOnlineService:
             logger.info(f"app_publish.online app_id={app.id} version_id={version.id} state={result.state}")
             return {"status": STATUS_ONLINE, "app_id": app.id, "version_id": version.id, "app_state": result.state}
 
+        if result.state == _APP_STATE_ONLINE:
+            # The start failed and the application is *still online*: this was an
+            # iteration, and the version it was already running never stopped
+            # serving (F054 keeps an online app online precisely so that a bad
+            # new version costs its users nothing). Calling this "待上线" would be
+            # false twice — the app is up, and its owner is not blocked from
+            # deploying again — so it gets its own outcome instead.
+            return await cls._settle_iteration_failed(
+                app,
+                version,
+                deployment,
+                payload_snapshot,
+                result=result,
+                audit_action=audit_action,
+                instance_id=instance_id,
+            )
+
         # Parked. terminal_state stays NULL on purpose: "待上线" is derived from
         # app.state + app.pending_version_id, not stored as a fourth outcome —
         # the version-outcome line and the availability line stay orthogonal.
@@ -278,6 +301,92 @@ class PublishOnlineService:
             "reason": result.reason,
         }
 
+    @classmethod
+    async def _settle_iteration_failed(
+        cls,
+        app,
+        version,
+        deployment,
+        payload_snapshot: dict,
+        *,
+        result,
+        audit_action: AppReleaseAuditAction,
+        instance_id: int | None,
+    ) -> dict[str, Any]:
+        """The new version did not go up and the live one never went down.
+
+        Unlike the parked outcome, this **is** a failed pipeline run: nothing is
+        waiting for capacity or for a human to press a button, the submission
+        simply did not make it. Reporting ``status=failed`` is what lets
+        ``bisheng deploy --wait`` say so and what makes "fix it and deploy
+        again" the obvious next step — the option AC-31 already offers.
+        """
+        await cls._advance_deployment(
+            deployment,
+            stage=STAGE_PUBLISHING,
+            status=STATUS_FAILED,
+            failure=cls._iteration_failure(result),
+        )
+        await write_release_audit(
+            AppReleaseAuditAction.ITERATION_FAILED,
+            deployment=deployment,
+            version_no=version.version_no,
+            operator_id=int(app.owner_user_id or 0),
+            reason=result.reason,
+            metadata={
+                "status": STATUS_ITERATION_FAILED,
+                "reason_kind": "iteration_failed",
+                "app_state": result.state,
+                "live_version_id": app.current_version_id,
+                "detail": result.detail,
+            },
+        )
+        await publish_notification_service.notify_pending_online(
+            tenant_id=int(app.tenant_id or 0),
+            owner_user_id=int(app.owner_user_id or 0),
+            business_name=str(payload_snapshot.get("app_name") or app.name),
+            instance_id=int(instance_id or 0),
+            reason_kind="iteration_failed",
+            reason=result.reason,
+        )
+        logger.info(
+            f"app_publish.iteration_failed app_id={app.id} version_id={version.id} "
+            f"live_version_id={app.current_version_id} reason={result.reason}"
+        )
+        return {
+            "status": STATUS_ITERATION_FAILED,
+            "app_id": app.id,
+            "version_id": version.id,
+            "app_state": result.state,
+            "reason": result.reason,
+        }
+
+    @staticmethod
+    def _iteration_failure(result) -> dict[str, Any]:
+        """Failure tuple for a release that did not go up while the app stayed up."""
+        detail = result.detail if isinstance(result.detail, dict) else {}
+        capacity = PublishOnlineService._is_capacity(result)
+        return {
+            "stage": STAGE_PUBLISHING,
+            "code": CODE_CAPACITY_INSUFFICIENT if capacity else CODE_STARTUP_PROBE_FAILED,
+            "message": (
+                "运行环境容量不足, 新版本未能上线; 线上版本未受影响"
+                if capacity
+                else "新版本启动失败, 未能上线; 线上版本未受影响"
+            ),
+            "details": {
+                "reason": "iteration_failed",
+                "app_reason": result.reason,
+                "park_stage": detail.get("stage"),
+                "park_code": detail.get("code"),
+            },
+            "hints": (
+                ["线上版本仍在服务, 可等运行环境释放资源后重新执行 bisheng deploy"]
+                if capacity
+                else ["线上版本仍在服务, 查看运行日志定位启动失败原因后重新执行 bisheng deploy"]
+            ),
+        }
+
     # ------------------------------------------------------------------
     # helpers
     # ------------------------------------------------------------------
@@ -286,12 +395,18 @@ class PublishOnlineService:
     def _is_capacity(result) -> bool:
         """Capacity refused it, as opposed to it having failed to start.
 
-        F054 tags the parking reason in ``detail["stage"]``. Falling back to the
-        state name keeps the two apart even if that key ever goes missing —
-        guessing "deploy_failed" for a capacity shortage would tell an owner to
-        debug code that is fine.
+        The **error code** decides, not the stage name. There are two capacity
+        gates and only the first one runs at stage ``admission``: the
+        orchestrator evaluates capacity a second time inside ``deploy``, and a
+        refusal there arrives tagged ``stage="deploy"``. Reading the stage
+        therefore called a genuine shortage "it failed to start" and sent the
+        owner to debug code that was fine. The stage is still the fallback for
+        the pre-flight refusal, which carries no code.
         """
         detail = result.detail if isinstance(result.detail, dict) else {}
+        code = detail.get("code")
+        if code is not None:
+            return int(code) == CODE_CAPACITY_INSUFFICIENT
         return str(detail.get("stage") or "") == _STAGE_ADMISSION
 
     @staticmethod
@@ -377,22 +492,35 @@ class PublishOnlineService:
         }
 
     @staticmethod
-    async def _advance_deployment(deployment, *, stage: str, failure: dict[str, Any] | None = None) -> None:
-        """Move the attempt to its terminal stage. Both outcomes are ``succeeded``.
+    async def _advance_deployment(
+        deployment,
+        *,
+        stage: str,
+        status: str = STATUS_SUCCEEDED,
+        failure: dict[str, Any] | None = None,
+    ) -> None:
+        """Move the attempt to its terminal stage.
 
-        "待上线" is a successful *pipeline* outcome — everything the pipeline was
-        asked to do happened, and what remains is capacity or a code fix. The
-        CLI reads ``stage`` for that distinction, not ``status``.
+        Online and parked are both ``succeeded``: "待上线" is a successful
+        *pipeline* outcome — everything the pipeline was asked to do happened,
+        and what remains is capacity or a code fix. The CLI reads ``stage`` for
+        that distinction, not ``status``. The one run that is genuinely
+        ``failed`` is an iteration whose new version never went up: there the
+        pipeline's own job did not finish, and the caller says so explicitly.
         """
         if not getattr(deployment, "id", None):
             return
         async with get_async_db_session() as session:
-            await AppDeploymentDao.aadvance_stage(
-                session, deployment.id, stage=stage, status=STATUS_SUCCEEDED, failure=failure
-            )
+            await AppDeploymentDao.aadvance_stage(session, deployment.id, stage=stage, status=status, failure=failure)
             await session.commit()
 
 
 def _detail_dict(result) -> dict[str, Any]:
+    """The parts of F054's parking detail worth keeping in the failure tuple.
+
+    ``park_code`` is here because it, not the stage, is what tells the two
+    capacity gates apart — dropping it was how a shortage inside ``deploy``
+    became indistinguishable from a crash once the row was written.
+    """
     detail = result.detail if isinstance(result.detail, dict) else {}
-    return {"park_stage": detail.get("stage")}
+    return {"park_stage": detail.get("stage"), "park_code": detail.get("code")}

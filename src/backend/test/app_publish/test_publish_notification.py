@@ -21,7 +21,7 @@ tell "we chose not to notify" from "this particular branch happened not to".
 
 The delete-cancel event is covered end to end in
 ``test_release_terminal_states.py::test_app_deleted_cancels_active_instance_and_notifies_approvers``
-and is not duplicated here; :func:`test_app_publish_owns_exactly_two_notification_call_sites`
+and is not duplicated here; :func:`test_app_publish_owns_exactly_three_notification_call_sites`
 is what keeps this file honest about the other four.
 
 Two fixtures, two different questions:
@@ -55,7 +55,14 @@ SCENARIO_CODE = "app_publish_request"
 
 #: The two action codes ``publish_notification_service`` is allowed to send.
 #: Everything else on the AC-64 table belongs to the approval engine.
-OUR_ACTION_CODES = frozenset({"app_publish_pending_capacity", "app_publish_deploy_failed", "approval_task_pending"})
+OUR_ACTION_CODES = frozenset(
+    {
+        "app_publish_pending_capacity",
+        "app_publish_deploy_failed",
+        "app_publish_iteration_failed",
+        "approval_task_pending",
+    }
+)
 
 #: Content block types that carry an operation. AC-65 forbids every one of them
 #: on a publish notification — the handling happens on the publish face or in
@@ -379,14 +386,19 @@ async def test_manual_publish_after_resources_freed_notifies_nobody(
     assert approval_notifications == []
 
 
-async def test_app_publish_owns_exactly_two_notification_call_sites():
+async def test_app_publish_owns_exactly_three_notification_call_sites():
     """The structural half of "these two classes send nothing".
 
     A behavioural test can only show that *one* run stayed quiet. This walks the
     whole ``app_publish`` package and pins the complete set of notification call
-    sites at two — the first-node notice and the parked notice. A third would
-    mean either a duplicate of an engine-sent event or a message for one of the
-    two classes AC-64 says must stay silent, and both are invisible at runtime.
+    sites: the first-node notice, the parked notice, and the notice for an
+    iteration whose new version did not go up while the live one kept serving.
+    Anything beyond this set would mean either a duplicate of an engine-sent
+    event or a message for one of the two classes AC-64 says must stay silent,
+    and both are invisible at runtime.
+
+    The third site is the *same* function as the second — the outcome differs,
+    not the channel — which is why it reads as a repeat below.
     """
     import ast
     from pathlib import Path
@@ -410,6 +422,7 @@ async def test_app_publish_owns_exactly_two_notification_call_sites():
     assert sorted(call_sites) == [
         "domain/services/publish_approval_service.py::notify_approvers_of_new_task",
         "domain/services/publish_online_service.py::notify_pending_online",
+        "domain/services/publish_online_service.py::notify_pending_online",
     ], f"unexpected notification call site(s) in app_publish: {sorted(call_sites)}"
 
 
@@ -428,7 +441,12 @@ async def test_publish_notification_service_declares_no_silent_class_action_code
         if name.startswith("ACTION_") and isinstance(value, str)
     }
 
-    assert declared == {"app_publish_pending_capacity", "app_publish_deploy_failed", "approval_task_pending"}
+    assert declared == {
+        "app_publish_pending_capacity",
+        "app_publish_deploy_failed",
+        "app_publish_iteration_failed",
+        "approval_task_pending",
+    }
     assert not [one for one in declared if "resource" in one or "capabilit" in one or "revoke" in one]
 
 

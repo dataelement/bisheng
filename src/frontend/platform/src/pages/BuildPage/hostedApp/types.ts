@@ -30,7 +30,11 @@ export const HOSTED_APP_STATES: HostedAppState[] = ["draft", "online", "pending_
 const STATE_I18N: Record<HostedAppState, string> = {
   draft: "hostedApp.state.draft",
   online: "hostedApp.state.online",
-  pending_capacity: "hostedApp.state.pendingCapacity",
+  // Deliberately the *neutral* word: this map is what the list card and the
+  // detail header render, and neither of them is given the parking reason. It
+  // used to say "待上线（资源不足）" for every parked app, including the ones
+  // that had plenty of room and simply failed to start.
+  pending_capacity: "hostedApp.state.pending",
   stopped: "hostedApp.state.stopped",
   deleted: "hostedApp.state.deleted",
 }
@@ -52,18 +56,19 @@ export function stateI18nKey(state: string | undefined | null): string {
 /**
  * State label refined by *why* the application is parked.
  *
- * `pending_capacity` is one application state with two causes, and the plain
- * label names only one of them (the capacity one). An owner whose release
- * built fine and then failed its readiness probe would be told to wait for
- * memory that is not the problem, so where the reason is known the label says
- * it. Everything else falls straight through to `stateI18nKey`.
+ * One application state, two causes, and the remedies are opposites: wait for
+ * room, or go read the logs. So the label names the cause wherever the backend
+ * knows it, and stays with the neutral word where it does not — a parked app
+ * whose cause nothing recorded is not evidence of a shortage, and saying so
+ * would send its owner waiting for memory that was never the problem.
  */
 export function pendingAwareStateI18nKey(
   state: string | undefined | null,
   pendingReason: HostedAppPendingReason | null | undefined,
 ): string {
-  if (state === "pending_capacity" && pendingReason === "deploy_failed") {
-    return "hostedApp.state.pendingDeployFailed"
+  if (state === "pending_capacity") {
+    if (pendingReason === "deploy_failed") return "hostedApp.state.pendingDeployFailed"
+    if (pendingReason === "capacity") return "hostedApp.state.pendingCapacity"
   }
   return stateI18nKey(state)
 }
@@ -161,14 +166,16 @@ export function approvalStatusBadgeClass(status: string | undefined | null): str
 /**
  * Why the release is parked — the two causes need different remedies, so they
  * get different copy: capacity is "wait or ask for room", a failed start is
- * "read the logs and fix the application".
+ * "read the logs and fix the application". With no recorded cause the copy
+ * says what is actually known — it is parked, retry or check the logs —
+ * rather than picking one of the two and being wrong half the time.
  */
 export function pendingReasonI18nKey(
   reason: HostedAppPendingReason | null | undefined,
 ): string {
-  return reason === "deploy_failed"
-    ? "hostedApp.publishStatus.pendingDeployFailed"
-    : "hostedApp.publishStatus.pendingCapacity"
+  if (reason === "deploy_failed") return "hostedApp.publishStatus.pendingDeployFailed"
+  if (reason === "capacity") return "hostedApp.publishStatus.pendingCapacity"
+  return "hostedApp.publishStatus.pendingUnknown"
 }
 
 /**

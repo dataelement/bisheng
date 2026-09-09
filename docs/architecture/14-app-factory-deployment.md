@@ -128,7 +128,8 @@ docker compose --profile app-runtime up -d runtime-manager app-proxy
 ### 5. 两个进程的环境变量
 
 它们**不读 config.yaml**（独立包，不 import 平台代码），配置全部来自环境变量。
-必须与 `config.yaml` 的 `app_runtime` 段一一对应，对不上的症状见文末「排障对照表」。
+与 `config.yaml` 之间只有一个值要对齐：HMAC 密钥。其余各项**只有环境变量一处来源**，
+`config.yaml` 里没有对应项，写了也不生效（后端启动时会就此告警）。对不上的症状见文末「排障对照表」。
 
 **runtime-manager**：
 
@@ -136,11 +137,11 @@ docker compose --profile app-runtime up -d runtime-manager app-proxy
 |---------|:---:|----------------------|------|
 | `RTM_HOST` / `RTM_PORT` | | | 容器内监听 `0.0.0.0:8091`；宿主 systemd 形态用 `127.0.0.1:8091` |
 | `RTM_HMAC_SECRET` | ✅ | `app_runtime.manager_hmac_secret` | 不一致 = 所有编排请求被回 401 |
-| `RTM_DATA_ROOT` | ✅ | `app_runtime.data_root` | **本进程看到的**数据目录路径 |
+| `RTM_DATA_ROOT` | ✅ | — | **本进程看到的**数据目录路径 |
 | `RTM_HOST_DATA_ROOT` | compose 必填 | — | **宿主 dockerd 看到的**同一个目录。容器化跑时两者不同（容器内 `/app-data`，宿主 `/opt/bisheng/app-data`），不设会让应用数据落到一个没人看的地方且**不报错** |
 | `RTM_NETWORK` | | — | 默认 `bisheng-apps` |
-| `RTM_RESERVE_MB` / `RTM_OVERCOMMIT_RATIO` / `RTM_BUILD_RESERVE_MB` | | 同名 `app_runtime.*` | 容量准入，见下 |
-| `RTM_BUILD_INDEX_URL` | | `app_runtime.build_index_url` | 内网 pip 源 |
+| `RTM_RESERVE_MB` / `RTM_OVERCOMMIT_RATIO` / `RTM_BUILD_RESERVE_MB` | | — | 容量准入，见下。**改这里，不是改 config.yaml** |
+| `RTM_BUILD_INDEX_URL` | | — | 内网 pip 源。不设 = 走镜像内默认源（公网 PyPI） |
 | `RTM_DOCKER_HOST` | | — | 留空 = 本机 `/var/run/docker.sock` |
 
 **app-proxy**：
@@ -279,11 +280,6 @@ config.yaml 里；要避免明文密钥，用 `!env ${VAR}` 语法从环境变�
 | `obo_ttl_seconds` | `900` | 注入应用的身份令牌寿命（秒），最小 60 |
 | `entry_base_url` | `""` | 用户实际访问平台的对外基地址，如 `https://bisheng.example.com`（不带结尾斜杠）。**强烈建议配**：留空时应用地址只能给出相对路径 `/apps/{slug}`，浏览器里能用，但二维码、CLI 回显、外发链接都是残缺的 |
 | `ws_max_lifetime_seconds` | `28800` | 单条被反代 WebSocket 的授权寿命上限（秒）。能力后置，当前占位 |
-| `data_root` | `/opt/bisheng/app-data` | 每应用数据目录的父目录。**必须本机磁盘**（SQLite WAL） |
-| `reserve_mb` | `2048` | 容量准入闸①，见下 |
-| `overcommit_ratio` | `0.8` | 容量准入闸②，取值 (0, 1] |
-| `build_reserve_mb` | `2048` | 构建过闸时按这个数字预留内存 |
-| `build_index_url` | `""` | 构建期注入容器的 pip 索引地址；内网 / 离线环境填私有镜像源，留空 = 镜像内默认源 |
 | `max_package_mb` | `50` | 上传包体积上限（MB） |
 | `max_unpacked_mb` | `200` | 解包后总体积上限（MB），防解压炸弹 |
 | `max_package_entries` | `20000` | 包内条目数上限，防海量小文件 |
@@ -302,7 +298,7 @@ config.yaml 里；要避免明文密钥，用 `!env ${VAR}` 语法从环境变�
 
 ### 资源档位
 
-不配 `default_tiers` 时用内置三档：**轻量 1C/2G · 标准 2C/4G · 性能 4C/8G**。
+不配 `default_tiers` 时用内置三档：**轻量 0.5C/1G · 标准 2C/4G · 性能 4C/8G**。
 
 ⚠️ **档位只在首次启动播种时写库**，之后改 config.yaml 无效（播种按 code 幂等）。
 内存吃紧的机器**必须在第一次启动前**就配好，否则只能事后到超管界面逐个改。
@@ -329,6 +325,12 @@ app_runtime:
 启动实例和构建镜像都要过两道闸，任一不过就返回 16125「运行环境容量不足」，
 应用停在「待上线（资源不足）」状态。
 
+> **这几个数只在 runtime-manager 的环境变量里生效**：`RTM_RESERVE_MB` /
+> `RTM_OVERCOMMIT_RATIO` / `RTM_BUILD_RESERVE_MB`。compose 形态改
+> `docker-compose.yml` 的 runtime-manager 服务（或对应的 `BISHENG_RTM_*`），
+> systemd 形态写进它的 `EnvironmentFile`，**改完要重启该进程**（配置只在启动时读一次）。
+> 判定发生在这个进程里，后端的 `config.yaml` 既看不到也改不动它。
+
 - **闸①（此刻真有多少）**：`MemAvailable - reserve_mb ≥ 本次所需`。
   `MemAvailable` 是 `/proc/meminfo` 里内核自己的估算，也就是 `free -m` 的
   **available 列**（不是 free 列，后者会把页缓存算成"已用"而误拒健康的机器）。
@@ -345,11 +347,16 @@ app_runtime:
 
 1. 在目标机器上跑 `free -m`，看 **available** 那一列，记为 A。
 2. `reserve_mb` 取 A 的 20%~30%，且不低于 2048。
-3. 用 `A - reserve_mb` 除以最常用档位的内存，得到大致能跑几个应用。
-4. **轻量档 1C/2G 是安全的**；**性能档 4C/8G 会实打实挤压平台本体**——
+3. 用 `A - RTM_RESERVE_MB` 除以最常用档位的内存，得到大致能跑几个应用。
+   ⚠️ **也算一遍 CPU**：`nproc × RTM_OVERCOMMIT_RATIO ÷ 档位核数`。两个数取小的那个才是
+   真上限，而先撞的往往是 CPU——8 核按 0.8 只有 6.4 核可承诺，轻量档若占满一整核，
+   第 7 个应用必被拒，此时机器的内存和负载都还很空。
+4. **轻量档 0.5C/1G 是安全的**；**性能档 4C/8G 会实打实挤压平台本体**——
    在只有 16GB 且同机跑着 MySQL / ES / Milvus 的机器上，一个性能档实例就足以
-   让知识库解析开始 OOM。这类机器建议用 `default_tiers` 把档位整体调小，
-   而不是靠调低 `reserve_mb` 硬塞。
+   让知识库解析开始 OOM。这类机器建议把档位整体调小，而不是靠调低
+   `RTM_RESERVE_MB` 硬塞。⚠️ `default_tiers` **只在首次启动播种时生效**：表一旦落库，
+   改它和改代码常量都不再有任何影响，只能直接更新 `resource_tier` 行，新规格自各应用
+   下一次发布或重新上线起生效。
 
 ## ⚠️ 升级顺序（不可颠倒）
 
@@ -443,7 +450,7 @@ curl -s -b "access_token_cookie=<token>" http://<host>:3001/api/v1/apps/runtime-
 | 访问 `/apps/{slug}` 一直是"应用暂时不可用"兜底页 | ①`proxy_hmac_secret` 与 `APP_PROXY_BACKEND_SECRET` 不一致（后端日志 401）；②`APP_PROXY_BACKEND_BASE` 指向了 `127.0.0.1`（在容器里就是它自己） |
 | 裸访问 `/apps/{slug}`（不带结尾斜杠）白屏 | 缺 308 跳转，相对路径资源解析到了别的应用。确认 app-proxy 是当前版本 |
 | 所有上线 / 下线动作返回 16121「应用运行时不可用」 | `manager_hmac_secret` 与 `RTM_HMAC_SECRET` 不一致（**不是** dockerd 挂了，先查这个） |
-| 上线卡在「待上线（资源不足）」 | 容量准入没过。看 `runtime-status` 的 `capacity`，调 `reserve_mb` 或改用更小的档位 |
+| 上线卡在「待上线（资源不足）」 | 容量准入没过。看 `runtime-status` 的 `capacity`：先比 `committed_cpu` 与 `cpu × overcommit_ratio`（CPU 常常先于内存撞顶），再看内存。调 runtime-manager 的 `RTM_RESERVE_MB` / `RTM_OVERCOMMIT_RATIO`（**不是 config.yaml**，改完重启该进程），或改用更小的档位 |
 | 构建一直失败在拉包 | 内网无外网出口 → 配 `build_index_url` 指向私有 pip 源 |
 | 应用能跑，但重启后数据没了 | compose 形态漏配 `RTM_HOST_DATA_ROOT`，数据落在了容器内路径对应的宿主目录之外 |
 | CLI `bisheng deploy` 报 16207 | 该环境没装运行时层（或 `enabled` 是 false） |

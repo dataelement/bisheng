@@ -48,6 +48,12 @@ class AppReleaseAuditAction(StrEnum):
     ONLINE = "app.release.online"
     #: Approved but parked — capacity admission or the start itself failed.
     PENDING_ONLINE = "app.release.pending_online"
+    #: Approved, the start failed, and the application stayed online because the
+    #: version it was already running never stopped serving. Distinct from
+    #: ``PENDING_ONLINE`` on purpose: that one means "not serving anyone", and
+    #: reading this event as if it did would send an operator hunting an outage
+    #: that never happened.
+    ITERATION_FAILED = "app.release.iteration_failed"
     MANUAL_PUBLISH = "app.release.manual_publish"
     #: Capability declaration of a release (AC-55) — first writer lands with
     #: the capability bus wave; registered now so the whitelist is touched once.

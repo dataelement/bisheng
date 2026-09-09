@@ -310,6 +310,16 @@ class PublishStatusService:
         Read off the parked attempt's failure tuple rather than re-derived from
         audit rows, which are best-effort. An application that is not parked has
         no reason at all, even if an old attempt left one behind.
+
+        ``None`` is also the honest answer for a parked application whose cause
+        nothing recorded, and there are real paths there: F054's own action
+        endpoints park an app without touching ``app_deployment`` at all, and
+        the latest attempt on file may belong to an unrelated, successful
+        release. This used to guess "capacity" — on the theory that nothing but
+        a shortage could park an app behind the pipeline's back, which was
+        never true: a start that fails its readiness probe parks it too. The
+        guess sent owners to wait for resources that were not the problem, so
+        now the caller renders "we do not know yet" instead of a wrong cause.
         """
         if app.state != _APP_STATE_PENDING_CAPACITY:
             return None
@@ -318,10 +328,7 @@ class PublishStatusService:
             reason = (failure.get("details") or {}).get("reason")
             if reason in (PENDING_REASON_CAPACITY, PENDING_REASON_DEPLOY_FAILED):
                 return reason
-        # The state says parked but no attempt explains it — an app parked by a
-        # path outside the pipeline (F054's resume, say). Capacity is the only
-        # thing that reaches this state without our involvement.
-        return PENDING_REASON_CAPACITY
+        return None
 
     @staticmethod
     async def _tier_payload(version) -> dict[str, Any] | None:

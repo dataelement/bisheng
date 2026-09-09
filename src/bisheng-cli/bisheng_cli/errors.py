@@ -141,7 +141,8 @@ ERROR_HINTS: dict[int, tuple[str, str]] = {
     ),
     16227: (
         "依赖构建失败",
-        "按 details/hints 里的构建日志片段修依赖清单（requirements.txt / package.json）后重发。",
+        "看下面的构建日志与提示: 依赖装不上就改依赖清单（requirements.txt / package.json）,"
+        " 连不上软件源则是构建环境的网络问题, 找管理员而不是改代码。",
     ),
     16228: (
         "应用启动探活失败",
@@ -351,8 +352,31 @@ def delegate_refusal() -> CliError:
     )
 
 
+#: How many lines of a server-supplied log excerpt to print for a person.
+#: The whole tail is 80 lines and reaches ``--json`` intact; a person reading a
+#: terminal wants the end of it, which is where the actual error is.
+_HUMAN_LOG_LINES = 20
+
+
+def _log_excerpt(details: Any) -> list[str]:
+    """The build log tail, when the platform sent one.
+
+    Hints routinely say "look at the log excerpt below", and until this existed
+    there was no below: ``details`` only ever reached ``--json``, so in the
+    terminal the advice pointed at nothing. A failure a person cannot diagnose
+    from the output is a failure they will re-run unchanged.
+    """
+    if not isinstance(details, dict):
+        return []
+    tail = details.get("tail")
+    if not isinstance(tail, (list, tuple)):
+        return []
+    lines = [str(one).rstrip() for one in tail]
+    return [one for one in lines if one][-_HUMAN_LOG_LINES:]
+
+
 def render_human(err: CliError) -> str:
-    """Format a failure for a person: raw code, sentence, next step, hints."""
+    """Format a failure for a person: raw code, sentence, next step, hints, log."""
     head = f"错误 {err.code}: {err.message}" if err.code is not None else f"错误: {err.message}"
     lines = [head]
     if err.platform_message and err.platform_message != err.message:
@@ -361,4 +385,8 @@ def render_human(err: CliError) -> str:
         lines.append(f"  下一步: {err.next_step}")
     for hint in err.hints:
         lines.append(f"  提示: {hint}")
+    excerpt = _log_excerpt(err.details)
+    if excerpt:
+        lines.append("  构建日志(末尾):")
+        lines.extend(f"    {one}" for one in excerpt)
     return mask("\n".join(lines))

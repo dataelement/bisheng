@@ -26,11 +26,44 @@ from ``!env`` or the Fernet-encrypted YAML — never a literal (C6). An empty
 secret is a **fail-closed** signal for the HMAC verifiers, not "auth off".
 """
 
-from pydantic import BaseModel, Field
+from loguru import logger
+from pydantic import BaseModel, Field, model_validator
+
+#: Keys that used to live here and never did anything. Kept as a list so an
+#: existing ``config.yaml`` carrying them gets told where the real setting is,
+#: instead of pydantic silently ignoring the line and the operator concluding
+#: the value simply had no effect.
+_RETIRED_KEYS: dict[str, str] = {
+    "reserve_mb": "RTM_RESERVE_MB",
+    "overcommit_ratio": "RTM_OVERCOMMIT_RATIO",
+    "build_reserve_mb": "RTM_BUILD_RESERVE_MB",
+    "data_root": "RTM_DATA_ROOT",
+    "build_index_url": "RTM_BUILD_INDEX_URL",
+}
 
 
 class AppRuntimeConf(BaseModel):
     """``app_runtime:`` — the app-factory runtime layer of this deployment."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _warn_about_retired_keys(cls, data):
+        """Say so when a config file still sets something only the manager reads.
+
+        A warning rather than an error: these keys were inert, so refusing to
+        boot over one would turn a stale comment into an outage. What it must
+        not do is stay quiet — that is the state that had operators tuning
+        capacity in a file the capacity gate never opens.
+        """
+        if isinstance(data, dict):
+            for key in [one for one in _RETIRED_KEYS if one in data]:
+                logger.warning(
+                    "app_runtime.{} in config.yaml is ignored — capacity, storage and build source "
+                    "belong to runtime-manager; set {} in its environment instead",
+                    key,
+                    _RETIRED_KEYS[key],
+                )
+        return data
 
     enabled: bool = Field(
         default=False,
@@ -70,31 +103,17 @@ class AppRuntimeConf(BaseModel):
         description="Hard cap on one proxied WebSocket connection's authorized lifetime (deferred wave)",
     )
 
-    # --- capacity admission & storage (design D10 / D11) -----------------
-    data_root: str = Field(
-        default="/opt/bisheng/app-data",
-        description="Host directory holding per-app volumes; local disk only — SQLite WAL must not sit on network storage (K6)",
-    )
-    reserve_mb: int = Field(
-        default=2048,
-        ge=0,
-        description="Memory held back from MemAvailable before admitting a start (gate ①)",
-    )
-    overcommit_ratio: float = Field(
-        default=0.8,
-        gt=0,
-        le=1,
-        description="Fraction of total memory / nproc that committed limits may reach (gate ②)",
-    )
-    build_reserve_mb: int = Field(
-        default=2048,
-        ge=0,
-        description="Memory a build needs to pass admission; builds go through the same gate (K2)",
-    )
-    build_index_url: str = Field(
-        default="",
-        description="Package index injected as a build arg (PIP_INDEX_URL); empty = image default",
-    )
+    # --- capacity admission, storage and build source ---------------------
+    # Deliberately absent. ``reserve_mb`` / ``overcommit_ratio`` /
+    # ``build_reserve_mb`` / ``data_root`` / ``build_index_url`` used to be
+    # declared here, mirroring the runtime-manager's own settings — and nothing
+    # in this process ever read one of them. Capacity admission, the app data
+    # directory and the build's package index all belong to that process, which
+    # takes them from ``RTM_*`` environment variables and never asks the
+    # platform. A second copy here could only ever be a copy that drifts, and
+    # it did worse than drift: the deployment guide taught operators to change
+    # these values in ``config.yaml``, where changing them does nothing at all.
+    # See ``runtime_manager/config.py`` for the variables that are real.
 
     # --- publish pipeline (F055 design D2 / D11) -------------------------
     # These three are the package gates. They are deployment configuration

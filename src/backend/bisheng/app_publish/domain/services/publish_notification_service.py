@@ -38,9 +38,21 @@ from loguru import logger
 ACTION_PENDING_CAPACITY = "app_publish_pending_capacity"
 #: Parked after approval because the start or the readiness probe failed.
 ACTION_DEPLOY_FAILED = "app_publish_deploy_failed"
+#: The new version did not start, but the application is still serving the
+#: version it was already running. Separate from the two above because the
+#: remedy is the same while the urgency is not: nothing is down.
+ACTION_ITERATION_FAILED = "app_publish_iteration_failed"
 #: An approver has a new task waiting. Existing code — the gate creates the
 #: task rows but sends nothing, so every scenario notifies from its own side.
 ACTION_TASK_PENDING = "approval_task_pending"
+
+#: ``reason_kind`` → action code. A mapping rather than a chain of conditionals
+#: so adding an outcome cannot silently fall through to "it failed to start".
+_ACTION_BY_REASON: dict[str, str] = {
+    "capacity": ACTION_PENDING_CAPACITY,
+    "deploy_failed": ACTION_DEPLOY_FAILED,
+    "iteration_failed": ACTION_ITERATION_FAILED,
+}
 
 SCENARIO_CODE = "app_publish_request"
 
@@ -87,14 +99,15 @@ async def notify_pending_online(
 ) -> list[int]:
     """Approved, but it did not start — tell the owner and the administrators (AC-31 / AC-64).
 
-    ``reason_kind`` is ``"capacity"`` or ``"deploy_failed"``; they map to
-    different action codes because the remedy differs ("wait for room, or
-    publish manually" vs "your application failed to start"). Returns the
-    recipients so a caller can log or assert on them.
+    ``reason_kind`` is ``"capacity"``, ``"deploy_failed"`` or
+    ``"iteration_failed"``; they map to different action codes because the
+    remedy differs ("wait for room, or publish manually" vs "your application
+    failed to start" vs "the new version did not go up, the live one is
+    untouched"). Returns the recipients so a caller can log or assert on them.
     """
     from bisheng.approval.domain.services.approval_notification_service import ApprovalNotificationService
 
-    action_code = ACTION_PENDING_CAPACITY if reason_kind == "capacity" else ACTION_DEPLOY_FAILED
+    action_code = _ACTION_BY_REASON.get(reason_kind, ACTION_DEPLOY_FAILED)
     recipients = {int(owner_user_id)} if owner_user_id else set()
     try:
         admins = await ApprovalNotificationService._get_admin_recipient_ids(tenant_id=int(tenant_id))

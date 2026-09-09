@@ -39,12 +39,12 @@ async def _service():
 
 
 async def test_seed_creates_three_platform_level_tiers(publish_db, tier_seed):
-    """轻量 1C/2G · 标准 2C/4G · 性能 4C/8G, shared across tenants (no ``tenant_id``)."""
+    """轻量 0.5C/1G · 标准 2C/4G · 性能 4C/8G, shared across tenants (no ``tenant_id``)."""
     from bisheng.database.models.resource_tier import ResourceTier
 
     by_code = {tier.code: tier for tier in tier_seed}
     assert set(by_code) == {"light", "standard", "performance"}
-    assert (by_code["light"].cpu_millicores, by_code["light"].memory_mb) == (1000, 2048)
+    assert (by_code["light"].cpu_millicores, by_code["light"].memory_mb) == (500, 1024)
     assert (by_code["standard"].cpu_millicores, by_code["standard"].memory_mb) == (2000, 4096)
     assert (by_code["performance"].cpu_millicores, by_code["performance"].memory_mb) == (4000, 8192)
     # Every tier ships plain-language guidance (AC-44) and a display order.
@@ -163,7 +163,7 @@ async def test_disabled_tier_existing_apps_keep_running_and_resolve_spec(publish
 
 
 async def test_dao_has_no_delete_method():
-    """"``tier_id`` always resolves" is an invariant F054 relies on (AC-47 / design D11)."""
+    """ "``tier_id`` always resolves" is an invariant F054 relies on (AC-47 / design D11)."""
     from bisheng.app_publish.domain.services import resource_tier_service
     from bisheng.database.models.resource_tier import ResourceTierDao
 

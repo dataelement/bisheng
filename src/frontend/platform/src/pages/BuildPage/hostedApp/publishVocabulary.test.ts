@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   approvalStatusI18nKey,
   pendingAwareStateI18nKey,
+  pendingReasonI18nKey,
   versionOutcomeI18nKey,
   versionTerminalStateI18nKey,
 } from "./types"
@@ -81,18 +82,44 @@ describe("pendingAwareStateI18nKey", () => {
     )
   })
 
-  it("test_capacity_and_unknown_reason_keep_the_plain_label", () => {
+  it("test_a_known_shortage_says_so", () => {
     expect(pendingAwareStateI18nKey("pending_capacity", "capacity")).toBe(
       "hostedApp.state.pendingCapacity",
     )
+  })
+
+  it("test_an_unrecorded_cause_is_not_guessed_as_a_shortage", () => {
+    // Parked with nothing on file explaining why: F054's own action endpoints
+    // park an app without writing a deployment row at all. Reading that as
+    // "insufficient resources" sent owners waiting for memory that was never
+    // the problem, so the label stays neutral until a cause is known.
     expect(pendingAwareStateI18nKey("pending_capacity", null)).toBe(
-      "hostedApp.state.pendingCapacity",
+      "hostedApp.state.pending",
     )
   })
 
   it("test_other_states_are_untouched_by_a_stale_reason", () => {
     expect(pendingAwareStateI18nKey("online", "deploy_failed")).toBe(
       "hostedApp.state.online",
+    )
+  })
+})
+
+describe("pendingReasonI18nKey", () => {
+  it("test_each_known_cause_gets_its_own_remedy", () => {
+    // The remedies are opposites — wait for room, or go read the logs — so
+    // collapsing the two would make one of them wrong every time.
+    expect(pendingReasonI18nKey("capacity")).toBe(
+      "hostedApp.publishStatus.pendingCapacity",
+    )
+    expect(pendingReasonI18nKey("deploy_failed")).toBe(
+      "hostedApp.publishStatus.pendingDeployFailed",
+    )
+  })
+
+  it("test_an_unrecorded_cause_says_what_is_known_instead_of_picking_one", () => {
+    expect(pendingReasonI18nKey(null)).toBe(
+      "hostedApp.publishStatus.pendingUnknown",
     )
   })
 })

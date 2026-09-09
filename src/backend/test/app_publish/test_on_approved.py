@@ -230,6 +230,104 @@ async def test_parked_causes_are_distinguished_by_the_park_stage(
     assert capacity["status"] != failed["status"]
 
 
+async def test_second_capacity_gate_is_reported_as_capacity_not_as_a_crash(
+    publish_db, app_factory, deployment_factory, state_actions, audit_sink, approval_notifications
+):
+    """There are two capacity gates and only the first runs at stage ``admission``.
+
+    The orchestrator evaluates capacity a second time inside ``deploy``, and a
+    refusal there arrives tagged ``stage="deploy"`` carrying 16125. Reading the
+    stage called that a crash and sent the owner to debug code that was fine,
+    so the **code** is what decides.
+    """
+    from bisheng.common.errcode.app_publish import AppCapacityInsufficientError
+
+    _, _, _, payload = await _scene(app_factory, deployment_factory)
+    state_actions.responses["publish"] = _result(
+        state="pending_capacity",
+        ok=False,
+        reason="capacity_exhausted",
+        detail={"stage": "deploy", "code": AppCapacityInsufficientError.Code},
+    )
+
+    outcome = await _handler().on_approved(1, payload)
+
+    assert outcome["status"] == "pending_capacity"
+
+
+# ---------------------------------------------------------------------------
+# AC-05 — an iteration that fails leaves the live version serving
+# ---------------------------------------------------------------------------
+
+
+async def test_failed_iteration_is_not_reported_as_pending_online(
+    publish_db, app_factory, deployment_factory, state_actions, audit_sink, approval_notifications
+):
+    """The app stayed online, so none of the "待上线" vocabulary applies.
+
+    F054 keeps an already-online application online when a start fails, because
+    the version it was running never stopped serving. Reporting that as parked
+    would tell the owner their application is down while its users are still
+    being served, and would send an operator hunting an outage that never
+    happened.
+    """
+    _, _, _, payload = await _scene(app_factory, deployment_factory, state="online")
+    state_actions.responses["publish"] = _result(
+        state="online", ok=False, reason="probe failed", detail={"stage": "deploy", "code": 16124}
+    )
+
+    outcome = await _handler().on_approved(1, payload)
+
+    assert outcome["status"] == "iteration_failed"
+    assert outcome["app_state"] == "online"
+
+
+async def test_failed_iteration_notifies_with_its_own_action_code(
+    publish_db, app_factory, deployment_factory, state_actions, audit_sink, approval_notifications
+):
+    """Same channel, different message: nothing is down, so nothing says it is."""
+    _, _, _, payload = await _scene(app_factory, deployment_factory, state="online")
+    state_actions.responses["publish"] = _result(
+        state="online", ok=False, reason="probe failed", detail={"stage": "deploy", "code": 16124}
+    )
+
+    await _handler().on_approved(1, payload)
+
+    codes = [one.get("action_code") for one in approval_notifications]
+    assert "app_publish_iteration_failed" in codes
+    assert "app_publish_pending_capacity" not in codes
+    assert "app_publish_deploy_failed" not in codes
+
+
+async def test_failed_iteration_records_the_run_as_failed(
+    publish_db, app_factory, deployment_factory, state_actions, audit_sink, approval_notifications
+):
+    """Unlike a parked release this really is a failed run, and the CLI needs to say so.
+
+    Nothing is waiting for capacity or for a human to press a button — the
+    submission simply did not land, and "fix it and deploy again" is the next
+    step. ``bisheng deploy --wait`` reads ``status`` to tell the user that.
+    """
+    from bisheng.app_publish.domain.models.app_deployment import (
+        STAGE_PUBLISHING,
+        STATUS_FAILED,
+        AppDeploymentDao,
+    )
+
+    _, _, deployment, payload = await _scene(app_factory, deployment_factory, state="online")
+    state_actions.responses["publish"] = _result(
+        state="online", ok=False, reason="probe failed", detail={"stage": "deploy", "code": 16124}
+    )
+
+    await _handler().on_approved(1, payload)
+
+    async with publish_db() as session:
+        row = await AppDeploymentDao.aget(session, deployment.id)
+    assert row.status == STATUS_FAILED
+    assert row.stage == STAGE_PUBLISHING
+    assert row.failure["details"]["reason"] == "iteration_failed"
+
+
 async def test_parked_keeps_terminal_state_null(
     publish_db, app_factory, deployment_factory, state_actions, audit_sink, approval_notifications
 ):

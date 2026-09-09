@@ -224,26 +224,15 @@ logger_conf:
   # 单条被反代的 WebSocket 连接的授权寿命上限（秒），最小 60（能力后置，先占位）
 #   ws_max_lifetime_seconds: 28800
 
-  # ── 存储与容量准入 ────────────────────────────────────────────────────
-  # 托管应用的每应用数据目录所在的宿主机目录（{data_root}/apps/{app_id}/db → 容器内 /data）。
-  # 必须是**本机磁盘**：应用的 SQLite 用 WAL，放网络存储会损坏。
-#   data_root: "/opt/bisheng/app-data"
-
-  # 闸①：从实际可用内存（/proc/meminfo 的 MemAvailable，即 free -m 的 available 列）
-  # 里先扣掉这么多 MB 再判断能否放行。这是给平台本体（uvicorn / celery / 灵思 worker /
-  # 商业版 JVM）的抖动留的余量，不是保险系数。
-  # ⚠️ 按 available 配，不要按总内存配。
-#   reserve_mb: 2048
-
-  # 闸②：已运行实例的规格之和 + 本次 ≤ 总内存 × 本比例（CPU 同理按 nproc × 本比例）。
-  # 取值范围 (0, 1]。
-#   overcommit_ratio: 0.8
-
-  # 构建同样过闸，按这个数字预留内存（pip install 的内存尖峰就是这么把机器压垮的）
-#   build_reserve_mb: 2048
-
-  # 构建期注入给容器的包索引（PIP_INDEX_URL）。内网/离线环境填私有镜像源；留空 = 用镜像内默认源。
-#   build_index_url: ""
+  # ── 存储、容量准入与构建源：不在这里配 ──────────────────────────────────
+  # 这几项只有 runtime-manager 读得到，它一律走自己的环境变量，不看本文件：
+  #   data_root        → RTM_DATA_ROOT          每应用数据目录所在的宿主机目录
+  #   reserve_mb       → RTM_RESERVE_MB         闸①：先从 MemAvailable 扣掉的余量
+  #   overcommit_ratio → RTM_OVERCOMMIT_RATIO   闸②：承诺规格之和的天花板比例
+  #   build_reserve_mb → RTM_BUILD_RESERVE_MB   构建同样过闸，按此预留
+  #   build_index_url  → RTM_BUILD_INDEX_URL    构建期注入容器的包索引 PIP_INDEX_URL
+  # compose 形态在 docker-compose.yml 的 runtime-manager 服务上设；systemd 形态写进
+  # 它的 EnvironmentFile。写在本文件里不会报错，但也**不会生效**（后端启动时会就此告警）。
 
   # ── 应用包上限（同时是 CLI 上传前自检的取值来源，GET /api/v2/apps/deploy-limits）──
 #   max_package_mb: 50           # 上传包体积上限（MB）
@@ -251,7 +240,7 @@ logger_conf:
 #   max_package_entries: 20000   # 包内条目数上限，防海量小文件
 
   # ── 出厂资源档位（可选）───────────────────────────────────────────────
-  # 不配 = 用内置三档：轻量 1C/2G · 标准 2C/4G · 性能 4C/8G。
+  # 不配 = 用内置三档：轻量 0.5C/1G · 标准 2C/4G · 性能 4C/8G。
   # ⚠️ 档位只在**首次启动播种**时写库，之后改本项无效（改档位请走超管界面）。
   #    小内存机器必须在第一次启动前就配好。配置会**整体替换**内置三档，不是合并。
   # default_tiers:

@@ -289,6 +289,7 @@
   - B. **只看已承诺额度之和**（sum of limits ≤ 总量 × 比例）— 缺点：忽略平台自身（ES / OpenFGA 双 JVM + uvicorn + celery×3 + linsight worker×4）的实际占用，在 114 上会在 available 只剩 0.9G 时仍判"额度还够"
   - C. **双闸取与**（选定）
 - **选定**：**C**。判定在 **runtime-manager**（只有它知道实际），backend 经 `POST /v1/admission` 取结果（AC-19），`purpose ∈ {run, build}`：
+  > ⚠️ 下面三个参数用 `app_runtime.*` 只是**记法**，不是配置位置。实现里它们只有一处来源：runtime-manager 自己的 `RTM_RESERVE_MB` / `RTM_OVERCOMMIT_RATIO` / `RTM_BUILD_RESERVE_MB`。后端曾经也声明过同名字段，从落地第一天起就零消费者，已于 2026-09-09 删除（T005 记录了这次订正）。
   - 闸①（实时）：`MemAvailable - app_runtime.reserve_mb`（默认 2048，给 114 的 JVM 抖动留余量）≥ 本次所需；
   - 闸②（承诺）：`已运行实例的 mem limit 之和 + 本次` ≤ `总内存 × app_runtime.overcommit_ratio`（默认 0.8）；CPU 同理按 `nproc × ratio`；
   - **构建同样过闸**（`purpose=build`，所需 = `app_runtime.build_reserve_mb`，默认 2048）——K2；不足时 AC-15 的失败阶段 = `build_admission`、原因文案是「运行环境容量不足」。
@@ -606,7 +607,7 @@ runtime-manager reconcile 循环（15s）
 | `AppStateService.stage_version(app_id, version_id)`（落已审批待运行版本，写 `app.pending_version_id`、不改应用态；`resume` / `publish` 取 `pending ?? current`） | 内部 Python API | **F055**（审批通过节点；AC-04「已下线态可落新版本但不自动启用」的唯一落点） |
 | `AppMetaService.update_meta` + `PATCH /api/v1/apps/{app_id}`（不改态 / 不产版本 / 计审计 `app.meta_update`，AC-06） | 内部 Python API + HTTP | **F055**（release-contract「元信息随 deploy 更新」调它，**不另写一份**）· platform 详情页 |
 | **删除事件钩子** `lifecycle_hooks.register_app_deleted_hook(fn)` → 删除动作末尾同步 `on_app_deleted(app_id, actor, tenant_id)`（AC-43） | 内部 Python 回调（**F055 在组合根注册**） | **F055**（收到即取消在途审批单 → 已取消 + 通知审批人，F055 AC-35）。**钩子失败不回滚删除**（写 `app.delete_hook_failed` 审计）→ **F055 侧必须自带防御**：审批单读侧对"应用已删除"独立判定并按已取消呈现 |
-| `DEFAULT_TIERS` 三档出厂规格常量（轻量 **1C/2G** · 标准 **2C/4G** · 性能 **4C/8G**；数值与第三档名以 F055 spec AC-44 为准，2026-08-17 由 F055 T015 回写，坑 27） | 内部 Python 常量 | **F055** 的 `ResourceTier` seed **从本常量读取落库**（保证"表未落"与"表刚 seed"两个时刻规格恒等，D11 对账口径）；超管调整后以表为准 |
+| `DEFAULT_TIERS` 三档出厂规格常量（轻量 **0.5C/1G** · 标准 **2C/4G** · 性能 **4C/8G**；标准与性能两档的数值与第三档名以 F055 spec AC-44 为准，2026-08-17 由 F055 T015 回写，坑 27；轻量档 2026-09-09 按实测下调，见 F055 spec 决议-10） | 内部 Python 常量 | **F055** 的 `ResourceTier` seed **从本常量读取落库**（保证"表未落"与"表刚 seed"两个时刻规格恒等，D11 对账口径）；超管调整后以表为准 |
 | runtime-manager 意图 RPC（§4.2 ①）经 `orchestrator_client` 暴露的 Python 门面：`build / deploy / stop / destroy / probe / admission / status / logs / runtime_status` | 内部 Python API | **F055**（托管预检、上线终检、预览实例）· **F059**（同一门面换 k8s 后端，INV-33） |
 | `GET /api/v1/apps/{id}/logs`（三入口同一服务方法、内容范围一致） | HTTP + Python | 详情页运行日志 tab · **F053** CLI `logs` · **F052** MCP 日志工具 |
 | `GET /api/v1/apps/{id}/instance`、`GET /api/v1/apps/runtime-status` | HTTP | **F052** MCP 应用状态工具 · 超管运行环境状态 |

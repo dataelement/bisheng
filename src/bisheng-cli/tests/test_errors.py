@@ -91,6 +91,39 @@ def test_16207_maps_to_layer_not_enabled() -> None:
     assert "应用工场" in render_human(err)
 
 
+def test_build_failure_prints_the_log_excerpt_it_tells_you_to_read() -> None:
+    """The hints say "look at the log excerpt"; there has to be one to look at.
+
+    ``details`` used to reach ``--json`` only, so in a terminal that advice
+    pointed at nothing and the natural next move was to re-run the same deploy
+    unchanged.
+    """
+    err = _err(
+        16227,
+        "依赖构建失败",
+        details={
+            "reason": "build_network_blocked",
+            "tail": [
+                "Step 5/17 : RUN pip install -r requirements.txt",
+                "ERROR: No matching distribution found for fastapi",
+            ],
+        },
+        hints=["构建容器连不上任何软件源, 这是构建环境的网络问题, 与 requirements.txt 无关"],
+    )
+
+    text = render_human(err)
+
+    assert "No matching distribution found for fastapi" in text
+    assert "构建环境的网络问题" in text
+
+
+def test_a_failure_without_a_log_excerpt_prints_no_empty_section() -> None:
+    """Most codes carry no ``tail``; they must not grow a dangling header."""
+    text = render_human(_err(26003, "scope missing", details={"required": "app:manage"}))
+
+    assert "构建日志" not in text
+
+
 def test_unknown_code_falls_back_to_exit_19_not_exit_1() -> None:
     err = _err(16999, "brand new failure")
     assert err.exit_code == EXIT_UNKNOWN_CODE == 19

@@ -176,6 +176,49 @@ async def test_running_app_has_no_pending_reason(publish_db, app_factory, deploy
     assert status["pending_reason"] is None
 
 
+async def test_parked_with_no_recorded_cause_is_not_guessed_as_a_shortage(
+    publish_db, app_factory, deployment_factory, tier_seed
+):
+    """An unexplained parking reads as unknown, not as "no room".
+
+    F054's own action endpoints park an application without touching
+    ``app_deployment`` at all, so "parked with nothing on file" is a state the
+    product reaches routinely — and a readiness probe that fails gets there
+    just as easily as a capacity shortage. Guessing sent owners to wait for
+    resources that were never the problem.
+    """
+    app, _version = await app_factory(state="pending_capacity", with_version=True)
+
+    status = await _service().get_publish_status(app.id, actor=_actor(OWNER_USER_ID))
+
+    assert status["app_state"] == "pending_capacity"
+    assert status["pending_reason"] is None
+
+
+async def test_parked_with_an_unrecognised_reason_is_not_guessed_either(
+    publish_db, app_factory, deployment_factory, tier_seed
+):
+    """The pipeline's own catch-all writes ``unexpected_error``, which is neither cause."""
+    app, version = await app_factory(state="pending_capacity", with_version=True)
+    await deployment_factory(
+        app_id=app.id,
+        stage="pending_online",
+        status="succeeded",
+        version_id=version.id,
+        failure={
+            "stage": "publishing",
+            "code": 0,
+            "message": "",
+            "details": {"reason": "unexpected_error"},
+            "hints": [],
+        },
+    )
+
+    status = await _service().get_publish_status(app.id, actor=_actor(OWNER_USER_ID))
+
+    assert status["pending_reason"] is None
+
+
 async def test_status_returns_reject_reason_full_text(
     publish_db, app_factory, deployment_factory, approval_env, audit_sink, approval_notifications, super_admin_user
 ):

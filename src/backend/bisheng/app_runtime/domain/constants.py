@@ -82,15 +82,6 @@ def is_transition_allowed(source: str, target: str) -> bool:
         return False
 
 
-def allowed_sources(target: str) -> tuple[str, ...]:
-    """States that may transition into ``target`` — the ``WHERE state IN (...)`` of the CAS UPDATE."""
-    try:
-        goal = AppState(target)
-    except ValueError:
-        return ()
-    return tuple(source.value for source, targets in ALLOWED_TRANSITIONS.items() if goal in targets)
-
-
 class AppAuditAction(StrEnum):
     """``audit_log.action`` values owned by F054 (namespace ``app.``).
 
@@ -130,13 +121,19 @@ class AppAuditAction(StrEnum):
 #: frozen into them at create time (AC-63).
 #:
 #: **Numbers and the third tier's name are F055 spec AC-44's, not F054's**
-#: (F055 design D11 / 坑 27): 轻量 1C/2G · 标准 2C/4G · 性能 4C/8G. The earlier
-#: 0.5/512 · 1/1024 · 2/2048「增强」 disagreed with the product copy in both
-#: values and naming, which would have made ``docker inspect`` contradict the
-#: admin page the moment the table was seeded. A machine too small for 1C/2G
-#: sets ``settings.app_runtime.default_tiers`` instead of editing this table —
-#: seeding is idempotent by code, so the override has to be in place *before*
-#: the first boot that seeds.
+#: (F055 design D11 / 坑 27): 轻量 0.5C/1G · 标准 2C/4G · 性能 4C/8G. The naming
+#: came from that ruling; the light tier's numbers were revised down from 1C/2G
+#: on 2026-09-09 against measurement — see AC-44. One whole core per light app
+#: makes the CPU quota gate, not the machine, the binding constraint: an 8-core
+#: host tops out at 6 concurrent applications while they idle at 0.05% CPU, and
+#: 0.5 core costs only 0.3 to 1.2 s of extra cold start (Python's start-up is
+#: single-threaded, so 2 cores is no faster than 1).
+#:
+#: A machine that still cannot fit this sets ``settings.app_runtime.default_tiers``
+#: instead of editing this table — but only *before* the first boot that seeds,
+#: because seeding is idempotent by code. An already-seeded deployment has to
+#: update the ``resource_tier`` row itself; the new spec then applies from each
+#: application's next publish or restart (AC-64).
 #:
 #: ``cpu`` stays a **vCPU float** here because that is what runtime-manager's
 #: ``tier{cpu, mem}`` payload speaks; the ``resource_tier`` table stores integer
@@ -147,8 +144,8 @@ DEFAULT_TIERS: tuple[dict[str, object], ...] = (
     {
         "tier_id": "light",
         "name": "轻量",
-        "cpu": 1.0,
-        "memory_mb": 2048,
+        "cpu": 0.5,
+        "memory_mb": 1024,
         "description": "内部工具、表单、看板类应用, 并发个位数",
         "sort_order": 0,
     },

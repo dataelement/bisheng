@@ -29,7 +29,7 @@ from runtime_manager.admission import AdmissionService
 from runtime_manager.api.schemas import DeployRequest, TierIn
 from runtime_manager.config import set_config
 from runtime_manager.desired_state import ALL_PHASES, get_store
-from runtime_manager.lifecycle import LifecycleService, container_name
+from runtime_manager.lifecycle import LifecycleService
 from tests.fakes import FakeHostProbe
 
 APP_ID = "app-1"
@@ -83,7 +83,7 @@ def _deploy(config, fake_docker, **env) -> str:
         admission=AdmissionService(config, host_probe=FakeHostProbe()),
         prober=_Ready(),
     ).deploy(request)
-    return container_name(SLUG, VERSION_ID)
+    return get_store(config).get(request.app_id).container_name
 
 
 # ---------------------------------------------------------------------------

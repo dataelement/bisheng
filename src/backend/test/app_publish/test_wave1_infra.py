@@ -251,7 +251,7 @@ async def test_resource_tier_dao_roundtrip_and_disable_semantics(publish_db):
     async with publish_db() as session:
         for index, (code, name, cpu, memory) in enumerate(
             (
-                (TIER_CODE_LIGHT, "轻量", 1000, 2048),
+                (TIER_CODE_LIGHT, "轻量", 500, 1024),
                 (TIER_CODE_STANDARD, "标准", 2000, 4096),
                 (TIER_CODE_PERFORMANCE, "性能", 4000, 8192),
             )
@@ -268,7 +268,7 @@ async def test_resource_tier_dao_roundtrip_and_disable_semantics(publish_db):
             TIER_CODE_STANDARD,
             TIER_CODE_PERFORMANCE,
         ]
-        assert (await ResourceTierDao.aget_by_code(session, TIER_CODE_LIGHT)).cpu_millicores == 1000
+        assert (await ResourceTierDao.aget_by_code(session, TIER_CODE_LIGHT)).cpu_millicores == 500
         assert await ResourceTierDao.aget_by_code(session, "nope") is None
 
     async with publish_db() as session:

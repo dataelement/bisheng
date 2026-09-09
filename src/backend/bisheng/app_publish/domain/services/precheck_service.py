@@ -81,6 +81,51 @@ PROBE_HINTS: tuple[str, ...] = (
 )
 
 
+#: Hints for a build that failed on the developer's own dependency list.
+_BUILD_FAILED_HINTS: tuple[str, ...] = (
+    "按构建日志尾部定位失败的依赖, 修好 requirements.txt 后重新 bisheng deploy",
+    "私有源 / 离线环境请与管理员确认构建镜像源配置",
+)
+
+#: Hints for a build whose container could not reach any package index. This is
+#: an **environment** fault, not the developer's: sending them to edit
+#: ``requirements.txt`` is the one piece of advice guaranteed not to help, and
+#: it is what the platform used to say when a stale proxy setting on the build
+#: host made every ``pip install`` fail, ``fastapi`` included.
+_NETWORK_BLOCKED_HINTS: tuple[str, ...] = (
+    "构建容器连不上任何软件源, 这是构建环境的网络问题, 与 requirements.txt 无关",
+    "请管理员检查构建主机的代理设置与软件源可达性(容器内的 127.0.0.1 不是宿主机)",
+    "网络恢复后直接重新执行 bisheng deploy 即可, 应用代码无需改动",
+)
+
+#: Signatures of "the build container has no working route to a package index".
+#: Matched case-insensitively against the build log tail. Deliberately about
+#: reachability only — a 404 on one package is the developer's problem, an
+#: unreachable proxy is not.
+_NETWORK_BLOCKED_SIGNATURES: tuple[str, ...] = (
+    "proxyerror",
+    "cannot connect to proxy",
+    "connection refused",
+    "failed to establish a new connection",
+    "temporary failure in name resolution",
+    "name or service not known",
+    "network is unreachable",
+    "read timed out",
+    "retries exceeded with url",
+)
+
+
+def _looks_network_blocked(tail: list[str], message: object) -> bool:
+    """Whether the build failed because it could not reach a package index.
+
+    A best-effort read of the log tail, and deliberately so: guessing wrong
+    only changes which set of hints is shown, never the error code or the
+    outcome, so a miss degrades to the old advice rather than to a lie.
+    """
+    haystack = "\n".join([*tail, str(message or "")]).lower()
+    return any(signature in haystack for signature in _NETWORK_BLOCKED_SIGNATURES)
+
+
 def _client():
     """F054's orchestrator facade, imported at call time.
 
@@ -179,18 +224,17 @@ async def _await_build(client, build_id: str, *, poll_interval: float, timeout: 
             return str(image_ref)
         if state == "failed":
             tail = status.get("tail") or []
+            lines = list(tail) if isinstance(tail, (list, tuple)) else [str(tail)]
+            blocked = _looks_network_blocked(lines, status.get("message"))
             raise AppDependencyBuildFailedError(
                 msg=f"依赖构建失败: {status.get('message') or ''}".strip(),
                 details={
-                    "reason": "build_failed",
+                    "reason": "build_network_blocked" if blocked else "build_failed",
                     "build_id": build_id,
                     "build_stage": status.get("stage"),
-                    "tail": list(tail) if isinstance(tail, (list, tuple)) else [str(tail)],
+                    "tail": lines,
                 },
-                hints=[
-                    "按下面的构建日志尾部定位失败的依赖, 修好 requirements.txt 后重新 bisheng deploy",
-                    "私有源 / 离线环境请与管理员确认构建镜像源配置",
-                ],
+                hints=_NETWORK_BLOCKED_HINTS if blocked else _BUILD_FAILED_HINTS,
             )
 
         if waited >= timeout:

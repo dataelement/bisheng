@@ -47,7 +47,8 @@ from runtime_manager.desired_state import (
     get_store,
     reset_stores,
 )
-from runtime_manager.lifecycle import LifecycleService, container_name
+from runtime_manager.errors import ProbeFailedError
+from runtime_manager.lifecycle import LifecycleService
 from runtime_manager.reconciler import (
     HEALTHCHECK_DETECTION_BUDGET_SECONDS,
     RECOVERY_BUDGET_SECONDS,
@@ -120,7 +121,10 @@ def _deploy(config, fake_docker, request: DeployRequest | None = None, scheduler
         scheduler=scheduler or ImmediateScheduler(),
     )
     service.deploy(request)
-    return container_name(request.slug, request.version_id)
+    # Read the name back off the record rather than recomputing it: the name
+    # carries a generation now, and a test that recomputes it would be
+    # asserting the naming scheme instead of the behaviour under test.
+    return get_store(config).get(request.app_id).container_name
 
 
 def _reconciler(config, fake_docker, *, store=None, prober=None, clock=None) -> Reconciler:
@@ -159,6 +163,53 @@ def test_missing_container_recreated(rtm_config, fake_docker):
     assert record.container_id == fake_docker.get(name).id
     # The rebuilt instance keeps the app's data: same host bind, untouched.
     assert created["payload"]["HostConfig"]["Binds"] == [f"{rtm_config.app_data_dir('app-1')}:/data:rw"]
+    # ...and the record's tier, which is the right source here: after a crash
+    # the record *is* the truth about what should be running. Pinned so that a
+    # future change cannot quietly make recovery read the spec from somewhere
+    # else — the failure mode that used to hide a botched tier change.
+    host = created["payload"]["HostConfig"]
+    assert (host["NanoCpus"], host["Memory"]) == (
+        round(record.tier_cpu * 1_000_000_000),
+        record.tier_mem_mb * 1024 * 1024,
+    )
+
+
+def test_failed_same_version_redeploy_leaves_nothing_for_the_reconciler_to_undo(rtm_config, fake_docker):
+    """A tier change that fails its probe must not cost the app its instance.
+
+    Redeploying the *same* version is how AC-64 lands: a super admin retunes a
+    tier, the owner restarts the application. That used to collide on the
+    container name, so the create deleted the running container first and a
+    failed probe left nothing at all — and then this reconciler dutifully
+    recreated the instance from its record, at the **old** tier, while the
+    route table kept sending traffic to it. Both halves were individually
+    correct; the seam between them was not.
+    """
+    old = _deploy(rtm_config, fake_docker, _request(tier=TierIn(cpu=0.5, mem=512)))
+
+    failing = LifecycleService(
+        rtm_config,
+        docker=fake_docker,
+        admission=AdmissionService(rtm_config, host_probe=FakeHostProbe()),
+        prober=FakeProber(ready=False, reason="timeout after 90s"),
+        scheduler=ImmediateScheduler(),
+    )
+    with pytest.raises(ProbeFailedError):
+        # Same version_id, new tier — the AC-64 path.
+        failing.deploy(_request(tier=TierIn(cpu=1.0, mem=1024)))
+
+    # The instance that was serving never stopped serving.
+    assert fake_docker.get(old).running is True
+    record = get_store(rtm_config).get("app-1")
+    assert record.container_name == old
+    assert (record.tier_cpu, record.tier_mem_mb) == (0.5, 512)
+
+    # And there is nothing for the reconciler to resurrect, so it cannot
+    # resurrect it at the wrong spec.
+    creates_before = fake_docker.call_count("create_container")
+    report = _reconciler(rtm_config, fake_docker).reconcile_once()
+    assert report.recreated == []
+    assert fake_docker.call_count("create_container") == creates_before
 
 
 def test_exited_container_is_started_not_rebuilt(rtm_config, fake_docker):
@@ -499,14 +550,14 @@ def test_loop_aligns_on_start_and_stops_cleanly(rtm_config, fake_docker):
 
 def test_loop_survives_a_backend_outage(rtm_config, fake_docker):
     """dockerd bouncing must not kill the reconcile thread — degraded, not dead."""
-    _deploy(rtm_config, fake_docker)
+    name = _deploy(rtm_config, fake_docker)
     fake_docker.reachable = False
     reconciler = _reconciler(rtm_config, fake_docker)
 
     report = reconciler.reconcile_once()  # must not raise
 
     assert report.failures
-    assert fake_docker.get(container_name("sales-report", "ver-0123456789abcdef")).running is True
+    assert fake_docker.get(name).running is True
 
 
 @pytest.mark.docker

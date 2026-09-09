@@ -1356,6 +1356,7 @@
       "appReleaseCancelled": "Publish request cancelled",
       "appReleaseOnline": "Published live",
       "appReleasePendingOnline": "Pending publish (could not start)",
+      "appReleaseIterationFailed": "New version not published (live version unaffected)",
       "appReleaseManualPublish": "Manually published",
       "appReleaseCapabilityDeclared": "Capabilities declared",
       "appReleaseRollback": "Publish rolled back"
@@ -2172,6 +2173,7 @@
     "state": {
       "draft": "Draft",
       "online": "Online",
+      "pending": "Pending publish",
       "pendingCapacity": "Pending (insufficient resources)",
       "pendingDeployFailed": "Pending (start failed)",
       "stopped": "Offline",
@@ -2324,6 +2326,7 @@
       "pendingTitle": "Why it is pending",
       "pendingCapacity": "Approved, but the runtime does not currently have enough resources to start this application. Retry later with \"Bring online\", or ask a platform administrator to free capacity.",
       "pendingDeployFailed": "Approved, but the application failed to start last time. Find the cause under \"Run logs\", fix it and run bisheng deploy again, or retry with \"Bring online\".",
+      "pendingUnknown": "Approved, but the application is not live yet. Retry with \"Bring online\"; if it still does not start, check \"Run logs\" for the cause.",
       "schemaChangeTitle": "Table structure change"
     },
     "versionList": {

@@ -280,6 +280,17 @@ services:
       # SQLite 落在谁也不看的地方。systemd 形态两者相同，所以那边可以不设。
       RTM_DATA_ROOT: /app-data
       RTM_HOST_DATA_ROOT: ${BISHENG_APP_DATA_ROOT:-/opt/bisheng/app-data}
+      # 容量准入与构建源。这里是它们**唯一**生效的位置：判定发生在本进程里，
+      # backend 的 config.yaml 看不到也管不着。默认值即代码里的出厂值，改了要
+      # 重启本服务（配置在进程启动时读一次）。
+      #   RESERVE_MB       闸①：先从宿主 MemAvailable 扣掉的余量，按 available 配不按总量配
+      #   OVERCOMMIT_RATIO 闸②：已承诺规格之和的天花板比例，(0, 1]
+      #   BUILD_RESERVE_MB 构建同样过闸，按此预留（pip install 的内存尖峰）
+      #   BUILD_INDEX_URL  构建期注入容器的 PIP_INDEX_URL；内网/离线填私有源
+      RTM_RESERVE_MB: ${BISHENG_RTM_RESERVE_MB:-2048}
+      RTM_OVERCOMMIT_RATIO: ${BISHENG_RTM_OVERCOMMIT_RATIO:-0.8}
+      RTM_BUILD_RESERVE_MB: ${BISHENG_RTM_BUILD_RESERVE_MB:-2048}
+      RTM_BUILD_INDEX_URL: ${BISHENG_RTM_BUILD_INDEX_URL:-}
     volumes:
       - /etc/localtime:/etc/localtime:ro
       # 这是全平台唯一被允许挂 docker socket 的地方（arch-guard RULE-10 的另一

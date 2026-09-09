@@ -16,6 +16,12 @@ Two numbers in there are load bearing:
   failed probe here tears down what it just created and raises, instead of
   recording a broken current version.
 
+"Beside the old one" is only true because the container name carries the
+generation as well as the version (see :func:`container_name`). Without it a
+redeploy of the *same* version collided with the running container and had to
+delete it before creating anything, which turned a probe failure into an
+outage that the reconciler then papered over at the old tier.
+
 Data lives outside the instance (AC-39): ``{data_root}/apps/{app_id}/db`` is
 bind-mounted at ``/data`` and is untouched by stop, destroy, crash or rebuild.
 (That path is the *host* one — ``Config.host_app_data_dir`` — whenever the
@@ -93,9 +99,24 @@ class ThreadScheduler:
         timer.start()
 
 
-def container_name(slug: str, version_id: str) -> str:
-    """Name carries the version so old and new coexist during a switch."""
-    return f"{CONTAINER_NAME_PREFIX}{slug}-{version_id[:8]}"
+def container_name(slug: str, version_id: str, generation: int) -> str:
+    """Name carries the version **and the generation**, so every deploy lands
+    beside the one it replaces.
+
+    The version alone was not enough. Redeploying the *same* version is a real
+    product path — it is how AC-64 takes effect: a super admin retunes a tier,
+    the owner restarts the application, same ``version_id``. That produced the
+    same container name, so the create had to delete the running container
+    first, and a failed probe then left nothing at all. Fifteen seconds later
+    the reconciler resurrected the instance from its record, at the **old**
+    tier, silently, while the route table kept sending traffic to it.
+
+    With the generation in the name, the "create beside the old one, switch
+    after the probe passes" flow this module documents holds for *every*
+    deploy, not just version changes: a failure simply leaves the previous
+    instance serving, and the reconciler has nothing to disagree with.
+    """
+    return f"{CONTAINER_NAME_PREFIX}{slug}-{version_id[:8]}-g{generation}"
 
 
 def start_period_seconds(tier: Tier) -> int:
@@ -272,7 +293,7 @@ class LifecycleService:
 
         previous = self._store.get(request.app_id)
         generation = (previous.generation if previous else 0) + 1
-        name = container_name(request.slug, request.version_id)
+        name = container_name(request.slug, request.version_id, generation)
         health = request.health
         start_period = health.start_period or start_period_seconds(tier)
 
@@ -319,6 +340,9 @@ class LifecycleService:
             generation=generation,
         )
 
+        # Defensive, not part of the flow: the generation makes this name new
+        # every time. It still matters after a lost state file, where the
+        # generation restarts from what the labels say and could collide.
         self._remove_if_exists(name)
         container_id = self._docker.create_container(name, payload)
         self._docker.start_container(container_id)
