@@ -1491,12 +1491,13 @@ class F048CatalogApi:
         },
         {
             "key": "permission_management",
-            # Level 1 + level 2 + the two level-3 actions this preset is named
-            # for. It used to jump from level 1 straight to level 3, so applying
-            # it produced a level-3 model whose holder could not rename, edit or
-            # upload anything — the one preset that was not a complete ladder.
-            # What still separates it from 高级管理 is delete, publish and
-            # unpublish.
+            # Levels 1 through 3, complete. It used to jump from level 1 to
+            # level 3, so its holder could manage permissions but not rename,
+            # edit or upload; filling level 2 then left level 3 itself partial,
+            # holding manage_permission and share but not publish or unpublish.
+            # A preset that reaches a level takes the whole level — otherwise
+            # the level it advertises is not the level it grants. What separates
+            # it from 高级管理 is delete, the only level-4 action.
             "name": "权限管理",
             "action_codes": (
                 "download",
@@ -1508,6 +1509,8 @@ class F048CatalogApi:
                 "move",
                 "manage_permission",
                 "share",
+                "publish",
+                "unpublish",
             ),
         },
         {

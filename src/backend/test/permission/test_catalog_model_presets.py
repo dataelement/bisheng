@@ -31,21 +31,27 @@ def test_a_preset_leaves_no_level_behind(key):
 
 @pytest.mark.parametrize("key", sorted(_PRESETS))
 def test_a_preset_holds_every_action_of_the_levels_it_claims(key):
-    """Within a level a preset takes all of it, or the checkbox count lies."""
+    """Within a level a preset takes all of it, or the checkbox count lies.
+
+    The top level counts too. This once stopped one short of it, which let
+    权限管理 reach level 3 holding manage_permission and share but neither
+    publish nor unpublish — a level-3 preset granting part of level 3.
+    """
     selected = set(_PRESETS[key])
     claimed = _levels(selected)
     top = max(claimed)
-    for level in range(1, top):
+    for level in range(1, top + 1):
         of_level = {code for code, value in INITIAL_ACTION_LEVELS.items() if value == level}
         assert of_level <= selected, f"{key} is missing {sorted(of_level - selected)} from level {level}"
 
 
-def test_permission_management_reaches_level_three_through_level_two():
+def test_permission_management_holds_all_of_levels_one_to_three():
     codes = set(_PRESETS["permission_management"])
     assert {"rename", "edit", "create_folder", "upload_file", "move"} <= codes
-    assert {"manage_permission", "share"} <= codes
-    # Still short of 高级管理, which is what keeps the two presets distinct.
-    assert not {"delete", "publish", "unpublish"} & codes
+    assert {"manage_permission", "share", "publish", "unpublish"} <= codes
+    # Delete is the whole of level 4 and the only thing 高级管理 adds, which is
+    # what keeps the two presets distinct.
+    assert "delete" not in codes
 
 
 def test_collaborative_editing_stops_below_permission_management():
