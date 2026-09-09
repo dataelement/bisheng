@@ -768,20 +768,44 @@ class KnowledgeSpaceService(KnowledgeUtils):
         parent_type: str,
         parent_id: int,
     ) -> None:
+        await self.initialize_child_resource_permissions_for_actor(
+            object_type=object_type,
+            object_id=object_id,
+            parent_type=parent_type,
+            parent_id=parent_id,
+            actor=await self._permission_actor(),
+        )
+
+    @classmethod
+    async def initialize_child_resource_permissions_for_actor(
+        cls,
+        *,
+        object_type: str,
+        object_id: int,
+        parent_type: str,
+        parent_id: int,
+        actor: PermissionActor,
+    ) -> None:
+        """Register a newly created folder or file with F048.
+
+        Takes the actor rather than reading it off a request-scoped service, so
+        the F046 upload saga can run the same registration from a Celery worker
+        where there is no logged-in user. One definition, because the saga used
+        to write the tuples itself through the legacy permission service — which
+        F048 closed to business resources, leaving every approved upload
+        retrying forever on `upload.fga`.
+        """
         row = await KnowledgeFileDao.query_by_id(object_id)
         if row is None:
             raise SpaceFileNotFoundError()
-        record = self._new_file_permission_record(
+        record = cls._new_file_permission_record(
             row=row,
             resource_type=object_type,
             parent_type=parent_type,
             parent_id=parent_id,
         )
-        adapter = await self._resource_adapter(object_type)
-        await adapter.authorize_created(
-            record=record,
-            actor=await self._permission_actor(),
-        )
+        adapter = await cls._resource_adapter(object_type)
+        await adapter.authorize_created(record=record, actor=actor)
 
     async def _project_resource_deletes(
         self,

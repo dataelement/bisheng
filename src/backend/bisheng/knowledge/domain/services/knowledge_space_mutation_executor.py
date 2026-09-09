@@ -2445,41 +2445,40 @@ class KnowledgeSpaceMutationExecutor:
 
     @staticmethod
     async def _authorize_file(context: UploadStepDispatchContext) -> str:
-        from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem
-        from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
-        from bisheng.permission.domain.services.permission_service import PermissionService
+        """Register the approved upload's folders and file with F048.
+
+        This hand-wrote the parent tuple and the owner grant through the legacy
+        permission service. F048 migrated `folder` and `knowledge_file` and then
+        closed that service to business resources, so the step raised
+        `Legacy PermissionService cannot authorize an F048 business resource`
+        on every attempt: the approval was granted, the formal file row existed,
+        and it sat in WAITING forever while the retry loop spun. Use the same
+        registration an ordinary upload uses — it writes the parent link and the
+        creator grant together, and it is idempotent, which this step needs.
+        """
+        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+        from bisheng.knowledge.domain.services.space_flow_retrieval import abuild_scoped_login_user
+        from bisheng.permission.application.identity import resolve_permission_actor
 
         resources = context.checkpoint.get("fga_resources") or []
         if not resources:
             raise RuntimeError("F046 upload checkpoint has no FGA resource manifest")
-        for resource in resources:
-            await PermissionService.batch_write_tuples(
-                [
-                    TupleOperation(
-                        action="write",
-                        user=f"{resource['parent_type']}:{int(resource['parent_id'])}",
-                        relation="parent",
-                        object=f"{resource['resource_type']}:{int(resource['resource_id'])}",
-                    )
-                ],
-                crash_safe=True,
-                raise_on_failure=True,
-                stop_on_failure=True,
+
+        # The worker has no logged-in user; the applicant owns what they uploaded.
+        login_user = await abuild_scoped_login_user(context.applicant_user_id, context.tenant_id)
+        if login_user is None:
+            raise RuntimeError(
+                f"F046 upload cannot resolve applicant {context.applicant_user_id} for permission registration"
             )
-            # OwnerService.write_owner_tuple was only ever a wrapper around this
-            # call; it goes with the rest of the pre-f048 runtime.
-            await PermissionService.authorize(
+        actor = await resolve_permission_actor(login_user)
+
+        for resource in resources:
+            await KnowledgeSpaceService.initialize_child_resource_permissions_for_actor(
                 object_type=str(resource["resource_type"]),
-                object_id=str(resource["resource_id"]),
-                grants=[
-                    AuthorizeGrantItem(
-                        subject_type="user",
-                        subject_id=int(resource["owner_user_id"]),
-                        relation="owner",
-                        include_children=False,
-                    ),
-                ],
-                enforce_fga_success=True,
+                object_id=int(resource["resource_id"]),
+                parent_type=str(resource["parent_type"]),
+                parent_id=int(resource["parent_id"]),
+                actor=actor,
             )
         return f"fga:{context.idempotency_key}"
 
