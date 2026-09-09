@@ -50,7 +50,7 @@ import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
-import { resolveUploadSizeLimits, shouldNavigateOnSpaceSelect } from "./knowledgeUtils";
+import { canOpenSharedSpace, resolveUploadSizeLimits, shouldNavigateOnSpaceSelect } from "./knowledgeUtils";
 export default function Knowledge() {
     const localize = useLocalize();
     // 模块标题跟随后台配置的菜单显示名称
@@ -401,7 +401,14 @@ export default function Knowledge() {
                 const info = await getSpaceInfoApi(previewSpaceId);
                 if (cancelled) return;
 
-                if (info.role === SpaceRole.CREATOR) {
+                // Anyone who can already read the space goes straight into it —
+                // a share link is a way in, not an application form. Only the
+                // creator short-circuited here, so a member or a granted user
+                // landed on the intro-and-apply drawer for a space that was
+                // already sitting in their own sidebar. `visible` is the same
+                // decision the space's own pages enforce; `role` cannot answer it,
+                // because an absent role maps to MEMBER exactly like a real one.
+                if (canOpenSharedSpace(info)) {
                     navigateRef.current(`/knowledge/space/${previewSpaceId}`, { replace: true });
                     return;
                 }

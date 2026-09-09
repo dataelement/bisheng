@@ -1648,6 +1648,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         result.follower_num = follower_num
         result.file_num = total_file_num
+        # The share link has to tell "already has access" from "may only preview
+        # and apply", and `user_role` cannot: it is absent for a non-member, and
+        # the client maps an absent role to MEMBER — the same value a real member
+        # gets. Report the effective actions the way the space list and the
+        # channel detail already do, so `visible` answers it outright.
+        #
+        # Only for a caller who holds the space. The square preview deliberately
+        # answers without `visible` — asking the permission runtime for a viewer
+        # who has none would both cost a lookup and require a runtime the preview
+        # path does not depend on. No actions is the honest answer there.
+        result.actions = (
+            sorted(await self._get_effective_actions("knowledge_space", space_id))
+            if has_content_permission
+            else []
+        )
         await self._decorate_department_metadata([result])
         await self._decorate_auto_tag_for_info(result)
 
