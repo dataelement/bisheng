@@ -13,7 +13,8 @@ import logging
 import re
 from collections.abc import Iterable
 
-from bisheng.core.openfga.authorization_model_f048 import LEGACY_RESOURCE_TYPES
+from bisheng.core.openfga.authorization_model_f048 import LEGACY_RESOURCE_TYPES, build_authorization_model_f048
+from bisheng.core.openfga.contextual import dependent_relations
 from bisheng.core.openfga.exceptions import FGAConnectionError, FGAWriteError
 from bisheng.permission.domain.schemas.permission_schema import (
     UNCACHEABLE_RELATIONS,
@@ -31,6 +32,9 @@ logger = logging.getLogger(__name__)
 
 F048PermissionService = f048_permission_action_service.F048PermissionService
 PermissionActor = f048_permission_action_service.PermissionActor
+
+
+_CONTEXTUAL_RELATIONS = dependent_relations(build_authorization_model_f048(), "department", "subtree_member")
 
 
 class PermissionService:
@@ -89,7 +93,8 @@ class PermissionService:
             return True
 
         strong_consistency = bool(consistency)
-        if relation not in UNCACHEABLE_RELATIONS and not strong_consistency:
+        cacheable = relation not in UNCACHEABLE_RELATIONS and (object_type, relation) not in _CONTEXTUAL_RELATIONS
+        if cacheable and not strong_consistency:
             from bisheng.permission.domain.services.permission_cache import (
                 PermissionCache,
             )
@@ -126,7 +131,7 @@ class PermissionService:
             )
             return False
 
-        if relation not in UNCACHEABLE_RELATIONS and not strong_consistency:
+        if cacheable and not strong_consistency:
             from bisheng.permission.domain.services.permission_cache import (
                 PermissionCache,
             )
@@ -158,7 +163,8 @@ class PermissionService:
             PermissionCache,
         )
 
-        if relation not in UNCACHEABLE_RELATIONS:
+        cacheable = relation not in UNCACHEABLE_RELATIONS and (object_type, relation) not in _CONTEXTUAL_RELATIONS
+        if cacheable:
             cached = await PermissionCache.get_list_objects(
                 user_id,
                 relation,
@@ -197,7 +203,7 @@ class PermissionService:
                 if value.startswith(prefix) and value.removeprefix(prefix)
             )
         )
-        if relation not in UNCACHEABLE_RELATIONS:
+        if cacheable:
             await PermissionCache.set_list_objects(
                 user_id,
                 relation,
