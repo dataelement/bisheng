@@ -69,6 +69,7 @@ from bisheng.common.errcode.channel import (
     ChannelCreateLimitExceededError,
     ChannelCreationRequestConflictError,
     ChannelNotFoundError,
+    ChannelNotSubscribedError,
     ChannelOrganizationGrantUnsubscribeDeniedError,
 )
 from bisheng.common.errcode.knowledge_space import SpaceFileNameDuplicateError, SpacePermissionDeniedError
@@ -2414,7 +2415,12 @@ class ChannelService:
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
-            raise ValueError("You are not subscribed to this channel")
+            # A bare ValueError here surfaced as a 500 with an English sentence.
+            # The followed list is resolved from `visible`, so it also carries
+            # channels reached through a Grant instead of a subscription; asking
+            # to unsubscribe from one of those is an ordinary answerable state,
+            # not a server fault.
+            raise ChannelNotSubscribedError()
 
         sources = await self.space_channel_member_repository.find_channel_membership_sources(
             channel_id,
