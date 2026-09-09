@@ -416,3 +416,26 @@ export function shouldNavigateOnSpaceSelect(params: {
     if (isShareRoute) return false;
     return Boolean(urlFolderId) || urlSpaceId !== targetSpaceId;
 }
+
+/**
+ * Does this viewer already have the space open to them?
+ *
+ * A share link is a way in. Only the creator was let straight through, so a
+ * member — or someone granted the space through their department — landed on
+ * the intro-and-apply preview for a space already listed in their own sidebar.
+ *
+ * `role` cannot decide it: `/info` leaves it unset for a non-member and the
+ * client maps unset to MEMBER, the same value a real member carries. The
+ * effective F048 actions do, and `visible` is the very decision the space's own
+ * pages enforce. The creator is admitted first, whatever the actions say.
+ */
+export function canOpenSharedSpace(info: {
+    actions?: readonly string[] | null;
+    role?: string;
+}): boolean {
+    // Creator first and unconditionally: this is their own space, and letting
+    // them in can never be the wrong answer — where an empty action list would
+    // otherwise lock the owner out of their own share link.
+    if (info?.role === "creator") return true;
+    return Array.isArray(info?.actions) && info.actions.includes("visible");
+}
