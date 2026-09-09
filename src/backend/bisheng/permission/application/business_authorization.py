@@ -11,6 +11,7 @@ from bisheng.common.errcode.permission import (
     PermissionInvalidResourceError,
     PermissionPublishNotReadyError,
 )
+from bisheng.core.openfga.contextual import contextual_operation
 from bisheng.permission.application.access import (
     get_f048_resource_registry,
     get_f048_runtime,
@@ -25,6 +26,7 @@ from bisheng.permission.domain.services.permission_action_service import Permiss
 _MAX_BATCH_CHECKS = 100
 
 
+@contextual_operation
 async def check_business_action(
     login_user: LoginPermissionIdentity,
     *,
@@ -95,6 +97,7 @@ async def list_business_effective_direct_user_ids_by_model(
     )
 
 
+@contextual_operation
 async def batch_check_business_actions(
     login_user: LoginPermissionIdentity,
     *,
@@ -171,6 +174,7 @@ async def batch_check_business_actions(
     return {resource_id: frozenset(action_codes) for resource_id, action_codes in result.items()}
 
 
+@contextual_operation
 async def batch_check_business_visible(
     login_user: LoginPermissionIdentity,
     *,
@@ -230,6 +234,7 @@ async def batch_check_business_visible(
     return result
 
 
+@contextual_operation
 async def batch_check_verified_business_visible(
     *,
     actor: PermissionActor,
