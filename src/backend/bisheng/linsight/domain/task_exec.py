@@ -468,19 +468,20 @@ class LinsightWorkflowTask:
     async def _managed_resume(self):
         """Like ``_managed_execution`` but for continue / ask_user resume.
 
-        Parked ask_user is ``WAITING_FOR_USER_INPUT``, not ``IN_PROGRESS``, so
-        a legitimate resume still enters. A second continue/resume while
-        another worker is already driving the same session (status
-        ``IN_PROGRESS`` or the Redis run lock is held) is rejected — both
-        workers used to finalize the same ChatMessage row and the later
-        write overwrote a cited report with a marker-less wrap-up.
+        Mutual exclusion here is the Redis run lock ONLY. The DB status must
+        not be used as a guard: /workbench/continue flips the row to
+        ``IN_PROGRESS`` before it enqueues the continue item (so the worker
+        pre-flight non-terminal check accepts it), so every follow-up turn
+        arrives with status ``IN_PROGRESS`` — a status guard would reject all
+        of them and leave the session stuck as running. A second
+        continue/resume while another worker is already driving the same
+        session is rejected by the lock — both workers used to finalize the
+        same ChatMessage row and the later write overwrote a cited report with
+        a marker-less wrap-up.
         """
         self._state_manager = LinsightStateMessageManager(self.session_version_id)
-        session_model = await self._get_session_model(self.session_version_id)
         async with self._acquire_session_run_lock():
             session_model = await self._get_session_model(self.session_version_id)
-            if await self._is_session_in_progress(session_model):
-                raise TaskAlreadyInProgressError("Task already in progress")
             try:
                 await self._start_termination_monitor(session_model)
                 # F035 problem 2: resume/continue can also produce session-level

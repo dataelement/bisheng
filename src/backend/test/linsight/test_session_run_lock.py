@@ -1,9 +1,11 @@
 """One session_version_id must not be finalized by two worker processes.
 
-Continue/resume used to skip the IN_PROGRESS guard (the comment claimed a
-parked session stayed IN_PROGRESS; park actually writes WAITING_FOR_USER_INPUT).
-Two queue items for the same svid then both wrote FINAL_RESULT onto the same
-ChatMessage row, and the later wrap-up erased a cited report.
+Continue/resume used to have no mutual exclusion at all: two queue items for
+the same svid both wrote FINAL_RESULT onto the same ChatMessage row, and the
+later wrap-up erased a cited report. The Redis run lock is the ONLY mutex for
+continue/resume — the DB status cannot be one, because /workbench/continue
+flips the row to IN_PROGRESS before it enqueues, so every follow-up turn
+arrives in that status.
 """
 
 from __future__ import annotations
@@ -107,19 +109,22 @@ async def test_run_lock_fail_open_when_redis_client_unavailable(monkeypatch: pyt
     assert entered is True
 
 
-async def test_managed_resume_rejects_in_progress(monkeypatch: pytest.MonkeyPatch, fail_open_lock):
+async def test_managed_resume_enters_in_progress_after_api_flip(monkeypatch: pytest.MonkeyPatch, fail_open_lock):
+    """/workbench/continue writes IN_PROGRESS before enqueue, so a follow-up
+    turn always arrives in that status and must still be driven; a DB status
+    guard here rejected every follow-up and left the session stuck as running."""
     session_model = _session(status=SessionVersionStatusEnum.IN_PROGRESS)
     task, state = _task(session_model)
     monkeypatch.setattr(te.LinsightSessionVersionDao, "get_by_id", AsyncMock(return_value=session_model))
     monkeypatch.setattr(te, "LinsightStateMessageManager", lambda _svid: state)
     task._start_termination_monitor = AsyncMock()
     task._ensure_session_pseudo_task = AsyncMock()
+    task._ingest_pending_attachments = AsyncMock()
     task._init_file_directory = AsyncMock(return_value="/tmp/linsight-sv")
 
-    with pytest.raises(TaskAlreadyInProgressError):
-        async with task._managed_resume():
-            raise AssertionError("must not drive an in-progress session")
-    task._init_file_directory.assert_not_awaited()
+    async with task._managed_resume() as resumed:
+        assert resumed.id == session_model.id
+    task._init_file_directory.assert_awaited_once()
 
 
 async def test_managed_resume_allows_waiting_for_user_input(monkeypatch: pytest.MonkeyPatch, fail_open_lock):
