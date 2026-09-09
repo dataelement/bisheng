@@ -25,7 +25,7 @@ from bisheng.core.openfga.authorization_model_f048 import (
     build_authorization_model_f048,
 )
 from bisheng.core.openfga.client import FGAClient
-from bisheng.core.openfga.exceptions import FGAClientError, FGAWriteError
+from bisheng.core.openfga.exceptions import FGAWriteError
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("F048_OPENFGA_INTEGRATION") != "1",
@@ -428,14 +428,17 @@ async def test_real_check_batch_list_and_higher_consistency_semantics(
         ],
         consistency="HIGHER_CONSISTENCY",
     ) == [True, True, False, True]
-    assert set(
-        await client.stream_list_objects(
-            "user:1",
-            "visible",
-            "workflow",
-            consistency="HIGHER_CONSISTENCY",
+    assert (
+        set(
+            await client.stream_list_objects(
+                "user:1",
+                "visible",
+                "workflow",
+                consistency="HIGHER_CONSISTENCY",
+            )
         )
-    ) == expected_visible
+        == expected_visible
+    )
 
 
 async def test_store_scoped_legacy_delete_with_new_model(
@@ -453,10 +456,7 @@ async def test_store_scoped_legacy_delete_with_new_model(
         object=legacy["object"],
         consistency="HIGHER_CONSISTENCY",
     )
-    assert [
-        {key: row[key] for key in ("user", "relation", "object")}
-        for row in stored
-    ] == [legacy]
+    assert [{key: row[key] for key in ("user", "relation", "object")} for row in stored] == [legacy]
     await openfga_runtime.client.delete_tuples_store_scoped([legacy])
     assert (
         await openfga_runtime.old_client.read_tuples(
@@ -514,33 +514,19 @@ async def _write_department_chain(
     return root, leaf
 
 
-async def test_pinned_max_resolve_depth_is_exercised(
+async def test_contextual_department_membership_avoids_department_depth_expansion(
     openfga_runtime: OpenFGARuntime,
 ) -> None:
     client = openfga_runtime.client
-    safe_depth = max(2, openfga_runtime.resolve_node_limit // 3)
-    root, _ = await _write_department_chain(
-        client,
-        prefix="safe",
-        depth=safe_depth,
-    )
-    assert await client.check(
-        "user:88",
-        "subtree_member",
-        root,
-        consistency="HIGHER_CONSISTENCY",
-    )
+    depth = openfga_runtime.resolve_node_limit + 2
+    root, _ = await _write_department_chain(client, prefix="deep", depth=depth)
+    assert not await client.check("user:88", "subtree_member", root)
 
-    over_depth = openfga_runtime.resolve_node_limit + 2
-    too_deep_root, _ = await _write_department_chain(
-        client,
-        prefix="too-deep",
-        depth=over_depth,
-    )
-    with pytest.raises(FGAClientError):
-        await client.check(
-            "user:88",
-            "subtree_member",
-            too_deep_root,
-            consistency="HIGHER_CONSISTENCY",
+    async def inputs(user):
+        return tuple(
+            {"user": user, "relation": "subtree_member", "object": f"department:deep-{n}"} for n in range(depth + 1)
         )
+
+    client.configure_contextual_tuple_provider(inputs)
+    assert await client.check("user:88", "subtree_member", root, consistency="HIGHER_CONSISTENCY")
+    assert not await client.check("user:88", "member", root, consistency="HIGHER_CONSISTENCY")

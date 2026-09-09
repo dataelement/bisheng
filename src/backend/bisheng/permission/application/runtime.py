@@ -16,6 +16,7 @@ from bisheng.common.errcode.permission import (
     PermissionVersionConflictError,
 )
 from bisheng.core.openfga.client import FGAClient
+from bisheng.core.openfga.contextual import contextual_operation
 from bisheng.permission.application.control_state import (
     PermissionResourceSnapshot,
     RuntimeCatalogSnapshot,
@@ -129,6 +130,7 @@ class F048PermissionRuntime:
         self._modes = modes
         self._explain = explain
 
+    @contextual_operation
     async def check_action(
         self,
         actor: PermissionActor,
@@ -139,6 +141,7 @@ class F048PermissionRuntime:
             return await self._decision.check_visible(actor, target)
         return await self._decision.check_action(actor, target, action)
 
+    @contextual_operation
     async def batch_check_actions(
         self,
         actor: PermissionActor,
@@ -199,6 +202,7 @@ class F048PermissionRuntime:
 
         return await self._state.mode_for_target(target)
 
+    @contextual_operation
     async def list_action_objects(
         self,
         actor: PermissionActor,
@@ -214,6 +218,7 @@ class F048PermissionRuntime:
             max_results=max_results,
         )
 
+    @contextual_operation
     async def list_visible_objects(
         self,
         actor: PermissionActor,
@@ -1022,6 +1027,7 @@ class F048PermissionRuntime:
             existing_visible_sources=visible_sources,
         )
 
+    @contextual_operation
     async def _grant_capabilities(
         self,
         actor: PermissionActor,

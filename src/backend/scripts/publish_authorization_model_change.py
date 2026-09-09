@@ -352,6 +352,15 @@ async def _publish_noop_catalog_cutover(
     return outcome.release_id
 
 
+async def _assert_no_persisted_department_context(client: FGAClient) -> None:
+    """Prevent historical Store facts from becoming active under the new model."""
+    async for key in client.iter_tuples(consistency="HIGHER_CONSISTENCY"):
+        if key.get("object", "").startswith("department:") and key.get("relation") == "subtree_member":
+            raise AuthorizationModelPublishBlockedError(
+                "Store contains persisted department.subtree_member tuples; audit and remove them before publication"
+            )
+
+
 async def execute(args: argparse.Namespace, *, live_settings: Any = settings) -> int:
     await initialize_app_context(config=_offline_settings(live_settings))
     source_client: FGAClient | None = None
@@ -366,7 +375,9 @@ async def execute(args: argparse.Namespace, *, live_settings: Any = settings) ->
             required_store_id=current.store_id,
             required_model_id=current.model_id,
         )
-        _require(current_pin.model_checksum == current.model_checksum, "CURRENT SQL model checksum differs from OpenFGA")
+        _require(
+            current_pin.model_checksum == current.model_checksum, "CURRENT SQL model checksum differs from OpenFGA"
+        )
         latest_pin = await discover_openfga_runtime(
             config,
             expected_model=None,
@@ -400,6 +411,7 @@ async def execute(args: argparse.Namespace, *, live_settings: Any = settings) ->
         )
         print(json.dumps(asdict(report), ensure_ascii=False, sort_keys=True))
         if not args.apply:
+            await _assert_no_persisted_department_context(source_client)
             print("[dry-run] no SQL, OpenFGA, or Catalog mutations were requested")
             return EXIT_OK
 
@@ -410,6 +422,7 @@ async def execute(args: argparse.Namespace, *, live_settings: Any = settings) ->
         )
         _require(not current.write_fenced, "CURRENT Catalog is write fenced")
         await _assert_apply_window()
+        await _assert_no_persisted_department_context(source_client)
         if current.model_checksum == target_checksum:
             print(
                 json.dumps(
