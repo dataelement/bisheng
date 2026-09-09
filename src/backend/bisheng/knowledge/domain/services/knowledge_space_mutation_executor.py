@@ -2180,7 +2180,6 @@ class KnowledgeSpaceMutationExecutor:
             SpaceFileSizeLimitError,
             SpaceFolderNotFoundError,
             SpaceNotFoundError,
-            SpacePermissionDeniedError,
         )
         from bisheng.knowledge.domain.models.knowledge import KnowledgeState, KnowledgeTypeEnum
         from bisheng.knowledge.domain.repositories.knowledge_space_file_change_repository import (
@@ -2212,11 +2211,6 @@ class KnowledgeSpaceMutationExecutor:
             )
             if parent is None:
                 raise SpaceFolderNotFoundError()
-            permission_object_type = "folder"
-            permission_object_id = parent_id
-        else:
-            permission_object_type = "knowledge_space"
-            permission_object_id = space_id
 
         applicant_role_ids = await mutation_repository.get_current_user_role_ids(
             tenant_id=tenant_id,
@@ -2230,18 +2224,10 @@ class KnowledgeSpaceMutationExecutor:
         )
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
-        permission_id_allowed = await KnowledgeSpaceService(
+        await KnowledgeSpaceService(
             request=None,
             login_user=applicant,
-        ).has_effective_action_strict(
-            permission_object_type,
-            permission_object_id,
-            "upload_file",
-            space_id=space_id,
-            locked_space=space,
-        )
-        if not permission_id_allowed:
-            raise SpacePermissionDeniedError()
+        ).authorize_file_change(request)
 
         # Stage registration/attachment and execution serialize quota decisions
         # through the same tenant policy row. The current ATTACHED stage is
@@ -2287,10 +2273,7 @@ class KnowledgeSpaceMutationExecutor:
     ) -> None:
         del session
         from bisheng.common.dependencies.user_deps import UserPayload
-        from bisheng.common.errcode.knowledge_space import (
-            SpaceNotFoundError,
-            SpacePermissionDeniedError,
-        )
+        from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
         from bisheng.knowledge.domain.models.knowledge import KnowledgeState
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
@@ -2307,8 +2290,6 @@ class KnowledgeSpaceMutationExecutor:
             int(space.state) != KnowledgeState.PUBLISHED.value for space in spaces
         ):
             raise SpaceNotFoundError()
-        spaces_by_id = {int(space.id): space for space in spaces}
-
         applicant_user_id = int(request.applicant_user_id)
         applicant_role_ids = await mutation_repository.get_current_user_role_ids(
             tenant_id=tenant_id,
@@ -2321,40 +2302,7 @@ class KnowledgeSpaceMutationExecutor:
             user_role=applicant_role_ids,
         )
         service = KnowledgeSpaceService(request=None, login_user=applicant)
-        source_type = "folder" if request.resource_type == "folder" else "knowledge_file"
-        if request.action == KnowledgeSpaceFileChangeAction.RENAME:
-            # 3.0 scopes actions by resource type, so the _folder/_file suffix is gone.
-            source_permission = "rename"
-        elif request.action == KnowledgeSpaceFileChangeAction.MOVE:
-            source_permission = "move"
-        else:
-            source_permission = "delete"
-        source_allowed = await service.has_effective_action_strict(
-            source_type,
-            int(request.resource_id),
-            source_permission,
-            space_id=source_space_id,
-            locked_space=spaces_by_id[source_space_id],
-        )
-        if not source_allowed:
-            raise SpacePermissionDeniedError()
-
-        if request.action == KnowledgeSpaceFileChangeAction.MOVE:
-            if request.target_parent_id is None:
-                target_type = "knowledge_space"
-                target_id = target_space_id
-            else:
-                target_type = "folder"
-                target_id = int(request.target_parent_id)
-            target_allowed = await service.has_effective_action_strict(
-                target_type,
-                target_id,
-                "upload_file",
-                space_id=target_space_id,
-                locked_space=spaces_by_id[target_space_id],
-            )
-            if not target_allowed:
-                raise SpacePermissionDeniedError()
+        await service.authorize_file_change(request)
         if request.action == KnowledgeSpaceFileChangeAction.DELETE:
             await mutation_repository.validate_delete_manifest_current(
                 tenant_id=tenant_id,

@@ -1118,6 +1118,15 @@ async def test_runtime_revalidation_rejects_revoked_rename_permission_before_ste
         mutation_step_compensator=effects.compensate,
         mutation_step_owner=_AuthoritativeOwner(),
     )
+    authorized = {}
+
+    async def reject_authorization(request):
+        authorized.update(
+            resource_type=request.resource_type,
+            resource_id=request.resource_id,
+            action=request.action,
+        )
+        raise SpacePermissionDeniedError()
 
     with (
         patch(
@@ -1126,20 +1135,22 @@ async def test_runtime_revalidation_rejects_revoked_rename_permission_before_ste
             return_value=[],
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_action_strict",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.authorize_file_change",
             new_callable=AsyncMock,
-            return_value=False,
-        ) as permission_check,
+            side_effect=reject_authorization,
+        ) as authorize_file_change,
     ):
         with pytest.raises(SpacePermissionDeniedError):
             await executor.execute(
                 request_id=request_id,
             )
 
-    permission_check.assert_awaited_once()
-    assert permission_check.await_args.args == ("knowledge_file", 101, "rename")
-    assert permission_check.await_args.kwargs["space_id"] == 10
-    assert permission_check.await_args.kwargs["locked_space"] is not None
+    authorize_file_change.assert_awaited_once()
+    assert authorized == {
+        "resource_type": "knowledge_file",
+        "resource_id": 101,
+        "action": "rename",
+    }
     assert await _steps(saga_engine, request_id) == []
     assert (await _row(saga_engine, KnowledgeFile, 101)).file_name == "old.pdf"
 
@@ -1168,9 +1179,9 @@ async def test_runtime_revalidation_rejects_unpublished_move_target_before_steps
             return_value=[],
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_action_strict",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.authorize_file_change",
             new_callable=AsyncMock,
-            return_value=True,
+            return_value=None,
         ),
     ):
         with pytest.raises(SpaceNotFoundError):
@@ -1189,8 +1200,9 @@ async def test_cutover_revalidates_revoked_permission_and_compensates_old_name(s
     effects = _VerifiedEffects(saga_engine)
     permission_revoked = False
 
-    async def current_permission(*_args, **_kwargs):
-        return not permission_revoked
+    async def current_authorization(*_args, **_kwargs):
+        if permission_revoked:
+            raise SpacePermissionDeniedError()
 
     def revoke_after_verify(context):
         nonlocal permission_revoked
@@ -1212,17 +1224,17 @@ async def test_cutover_revalidates_revoked_permission_and_compensates_old_name(s
             return_value=[],
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_action_strict",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.authorize_file_change",
             new_callable=AsyncMock,
-            side_effect=current_permission,
-        ) as permission_check,
+            side_effect=current_authorization,
+        ) as authorize_file_change,
     ):
         with pytest.raises(SpacePermissionDeniedError):
             await executor.execute(
                 request_id=request_id,
             )
 
-    assert permission_check.await_count == 2
+    assert authorize_file_change.await_count == 2
     assert (await _row(saga_engine, KnowledgeFile, 101)).file_name == "old.pdf"
     assert [context.step_code for context in effects.compensated] == [RenameExecutionStepCode.INDEX_SHADOW]
     request = await _row(saga_engine, KnowledgeSpaceFileChangeRequest, request_id)
@@ -1261,9 +1273,9 @@ async def test_cutover_revalidates_target_space_state_and_compensates_old_positi
             return_value=[],
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_action_strict",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.authorize_file_change",
             new_callable=AsyncMock,
-            return_value=True,
+            return_value=None,
         ),
     ):
         with pytest.raises(SpaceNotFoundError):

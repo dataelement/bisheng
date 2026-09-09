@@ -392,20 +392,32 @@ async def test_runtime_validator_rejects_permission_revoked_after_approval(uploa
     request_id, _stage_id = await _seed_upload_bundle(upload_engine)
     side_effects = _SideEffects(upload_engine)
     executor = _executor(upload_engine, side_effects, execution_validator=None)
+    authorized = {}
+
+    async def reject_authorization(request):
+        authorized.update(
+            action=request.action,
+            space_id=request.space_id,
+            source_parent_id=request.source_parent_id,
+        )
+        raise SpacePermissionDeniedError()
 
     with patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_action_strict",
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.authorize_file_change",
         new_callable=AsyncMock,
-        return_value=False,
-    ) as permission_id_check:
+        side_effect=reject_authorization,
+    ) as authorize_file_change:
         with pytest.raises(SpacePermissionDeniedError):
             await executor.execute(
                 request_id=request_id,
             )
 
-    permission_id_check.assert_awaited_once()
-    assert permission_id_check.await_args.args == ("knowledge_space", 8, "upload_file")
-    assert permission_id_check.await_args.kwargs["locked_space"] is not None
+    authorize_file_change.assert_awaited_once()
+    assert authorized == {
+        "action": "upload",
+        "space_id": 8,
+        "source_parent_id": None,
+    }
     assert await _rows(upload_engine, KnowledgeFile) == []
     assert await _rows(upload_engine, KnowledgeSpaceFileChangeExecutionStep) == []
     assert side_effects.events == []
@@ -439,19 +451,32 @@ async def test_runtime_validator_checks_locked_source_folder_permission(upload_e
     )
     side_effects = _SideEffects(upload_engine)
     executor = _executor(upload_engine, side_effects, execution_validator=None)
+    authorized = {}
+
+    async def reject_authorization(request):
+        authorized.update(
+            action=request.action,
+            space_id=request.space_id,
+            source_parent_id=request.source_parent_id,
+        )
+        raise SpacePermissionDeniedError()
 
     with patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_action_strict",
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.authorize_file_change",
         new_callable=AsyncMock,
-        return_value=False,
-    ) as permission_check:
+        side_effect=reject_authorization,
+    ) as authorize_file_change:
         with pytest.raises(SpacePermissionDeniedError):
             await executor.execute(
                 request_id=request_id,
             )
 
-    assert permission_check.await_args.args == ("folder", 33, "upload_file")
-    assert permission_check.await_args.kwargs["space_id"] == 8
+    authorize_file_change.assert_awaited_once()
+    assert authorized == {
+        "action": "upload",
+        "space_id": 8,
+        "source_parent_id": 33,
+    }
     assert await _rows(upload_engine, KnowledgeSpaceFileChangeExecutionStep) == []
 
 
@@ -482,9 +507,9 @@ async def test_runtime_validator_rejects_role_quota_tightened_below_reserved_sta
 
     with (
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_action_strict",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.authorize_file_change",
             new_callable=AsyncMock,
-            return_value=True,
+            return_value=None,
         ),
         patch(
             "bisheng.role.domain.services.quota_service.QuotaService.get_knowledge_space_upload_limit_bytes",

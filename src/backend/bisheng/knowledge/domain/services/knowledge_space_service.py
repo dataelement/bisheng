@@ -599,6 +599,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
         folder = await KnowledgeFileDao.query_by_id(folder_id)
         return self._ensure_space_folder(folder, space_id)
 
+    async def _require_folder_delete_permissions(
+        self,
+        folder: KnowledgeFile,
+    ) -> list[KnowledgeFile]:
+        """Authorize a folder deletion against the folder and its current subtree."""
+        await self._require_action("folder", folder.id, "delete")
+        prefix = f"{folder.file_level_path}/{folder.id}"
+        children = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
+        for child in children:
+            resource_type = "folder" if child.file_type == FileType.DIR.value else "knowledge_file"
+            await self._require_action(resource_type, child.id, "delete")
+        return children
+
     async def _require_file_action(
         self,
         file_id: int,
@@ -670,37 +683,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 ("knowledge_space", space_id),
             ]
         )
-
-    async def has_effective_action_strict(
-        self,
-        object_type: str,
-        object_id: int,
-        action: str,
-        *,
-        space_id: int | None = None,
-        locked_space: Knowledge | None = None,
-    ) -> bool:
-        """Fail-closed re-check used just before an approved change executes.
-
-        Replaces COFCO's has_effective_permission_id_strict, which read OpenFGA
-        tuples directly because the old projection could not be trusted at
-        execution time. 3.0's decision layer carries that guarantee itself: a
-        target whose projection is stale raises PermissionPublishNotReadyError
-        and resolves to False, and a degraded projection forces the check up to
-        HIGHER_CONSISTENCY rather than answering from the projection. A target
-        that cannot be resolved yields no actions at all, so it is denied.
-
-        Bypasses the per-instance action cache on purpose: an approval may have
-        sat for days, and a decision cached earlier in this request must not
-        stand in for the state at execution time.
-        """
-        del space_id, locked_space  # kept for call-site compatibility
-        tenant_id = get_current_tenant_id()
-        if tenant_id is None or int(tenant_id) != int(self.login_user.tenant_id):
-            raise SpaceTenantMismatchError.http_exception()
-        self.__dict__.pop("_effective_actions_cache", None)
-        action_map = await self._batch_actions(object_type, [object_id], (action,))
-        return action in action_map.get(str(object_id), frozenset())
 
     async def _get_space_or_raise(self, space_id: int) -> Knowledge:
         """Fetch a space row or raise. 3.0 inlined this lookup; COFCO code and
@@ -1659,9 +1641,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # who has none would both cost a lookup and require a runtime the preview
         # path does not depend on. No actions is the honest answer there.
         result.actions = (
-            sorted(await self._get_effective_actions("knowledge_space", space_id))
-            if has_content_permission
-            else []
+            sorted(await self._get_effective_actions("knowledge_space", space_id)) if has_content_permission else []
         )
         await self._decorate_department_metadata([result])
         await self._decorate_auto_tag_for_info(result)
@@ -2327,9 +2307,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             # batch_check_business_visible returns dict[str, bool]; this line used
             # to read it as a set of actions, which is always falsy against a bool.
-            if (
-                subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
-                and visible_map.get(str(space.id), False)
+            if subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED and visible_map.get(
+                str(space.id), False
             ):
                 subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
             result_list.append(
@@ -3400,28 +3379,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
         folder = await self._get_folder_for_action(space_id, folder_id)
-        await self._require_action("folder", folder_id, "delete")
+        children = await self._require_folder_delete_permissions(folder)
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space:
             raise SpaceNotFoundError()
         self._ensure_space_async_task_tenant_consistency(space, "delete_folder")
 
-        prefix = f"{folder.file_level_path}/{folder.id}"
-        children = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
         floder_ids = [folder_id]
         file_ids = []
         resource_tuples_to_cleanup = [("folder", folder_id)]
         for child in children:
             if child.file_type == FileType.DIR.value:
-                await self._require_action("folder", child.id, "delete")
                 floder_ids.append(child.id)
                 resource_tuples_to_cleanup.append(("folder", child.id))
             else:
-                await self._require_action(
-                    "knowledge_file",
-                    child.id,
-                    "delete",
-                )
                 file_ids.append(child.id)
                 resource_tuples_to_cleanup.append(("knowledge_file", child.id))
 
@@ -5436,11 +5407,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             record = await self._get_file_for_action(command.resource_id, space_id=command.space_id)
         # 3.0's actions are scoped by resource type, so no _folder / _file suffix.
-        await self._require_action(
-            "folder" if is_folder else "knowledge_file",
-            int(record.id),
-            command.action,
-        )
+        if command.action == "delete" and is_folder:
+            await self._require_folder_delete_permissions(record)
+        else:
+            await self._require_action(
+                "folder" if is_folder else "knowledge_file",
+                int(record.id),
+                command.action,
+            )
         if command.action == "move":
             target_space_id = int(command.target_space_id)
             if command.target_parent_id is not None:
