@@ -2067,12 +2067,15 @@
   },
   "openApiManagement": {
     "empty": "暂无记录",
-    "fields": { "name": "名称", "description": "描述", "ownerUserId": "资源归属人用户 ID", "owner": "资源归属人", "status": "状态", "activeKeys": "有效密钥", "lastUsed": "最后使用", "createdAt": "创建时间", "expiresAt": "过期时间" },
-    "status": { "active": "有效", "enabled": "已启用", "disabled": "已停用", "revoked": "已吊销" },
-    "actions": { "back": "返回", "details": "详情", "enable": "启用", "disable": "停用", "revoke": "吊销", "revokeHolder": "按持有人吊销", "copy": "复制", "load": "加载资源" },
-    "serviceAccount": { "title": "服务账号", "create": "创建服务账号", "createHint": "资源归属人必须是当前租户内的有效自然人。", "search": "搜索服务账号", "overview": "概览", "keys": "API 密钥", "grants": "资源授权" },
-    "keys": { "issue": "签发 API 密钥", "issueHint": "仅配置基本信息、权限位和委托配置。", "once": "请立即复制此密钥，之后将无法再次查看。", "saved": "我已安全保存此密钥", "mask": "密钥", "permissions": "权限位", "delegateScopes": "委托范围", "delegatePlaceholder": "user:12, department:34", "delegateRequired": "委托至少需要一个用户或部门范围。" },
-    "grants": { "resourceType": "资源类型", "resourceId": "资源 ID", "model": "权限模型", "source": "授权来源", "scope": "范围", "grantModel": "授予 {{model}}" },
+    "fields": { "name": "名称", "description": "描述", "ownerUserId": "资源归属人用户 ID", "owner": "资源归属人", "status": "状态", "activeKeys": "有效密钥", "delegate": "委托范围", "lastUsed": "最后使用", "creator": "创建人 / 创建时间", "createdAt": "创建时间", "expiresAt": "过期时间" },
+    "status": { "active": "有效", "enabled": "已启用", "disabled": "已停用", "revoked": "已吊销", "expired": "已过期" },
+    "actions": { "back": "返回", "details": "详情", "enable": "启用", "disable": "停用", "revoke": "吊销", "revokeHolder": "按持有人吊销", "copy": "复制", "load": "加载资源", "revokeAll": "全部吊销" },
+    "serviceAccount": { "title": "服务账号", "create": "创建服务账号", "createHint": "请选择当前租户内的有效自然人作为资源归属人。该集成创建的资源将归属此人并由其在平台内管理。", "search": "搜索服务账号", "overview": "概览", "keys": "API 密钥", "grants": "资源授权", "ownerPlaceholder": "选择资源归属人", "ownerSearch": "搜索用户", "deleteConfirm": "删除后该账号的全部密钥立即失效，并撤销 {{count}} 项资源授权，依赖该账号的集成将立即失败。确定删除吗？", "deleteGrantListTitle": "将失效的资源授权", "deleteNoGrants": "该账号当前没有资源授权。", "noKeyWarning": "没有有效密钥，任何调用都会被拒绝。", "ownerDisabled": "资源归属人已停用；账号与密钥仍有效，需要回收请停用或删除该账号。", "neverUsed": "从未调用", "idleWarning": "已超过 {{days}} 天没有调用，可考虑停用。", "departmentScope": "{{name}}及下级", "moreScopes": " 等 {{count}} 项" },
+    "keys": { "issue": "签发 API 密钥", "edit": "编辑 API 密钥", "issueHint": "仅配置基本信息、权限位和委托配置。", "once": "请立即复制此密钥，之后将无法再次查看。", "saved": "我已安全保存此密钥", "mask": "密钥", "permissions": "权限位", "delegateScopes": "委托范围", "delegatePlaceholder": "选择用户或部门", "delegateRequired": "委托至少需要一个用户或部门范围。", "delegateUsers": "可代表用户", "delegateUserPlaceholder": "选择一个或多个用户", "delegateDepartment": "可代表部门", "delegateDepartmentPlaceholder": "添加部门（可多选）", "revokeConfirm": "吊销后，使用该密钥的调用会立即失败。确定吊销吗？", "revokeAllConfirm": "全部吊销后，该服务账号当前所有有效密钥都会立即失效。确定继续吗？" },
+    "grants": { "resourceType": "资源类型", "resourceId": "资源 ID", "model": "权限模型", "source": "授权来源", "scope": "范围", "grantModel": "授予 {{model}}", "resource": "资源", "add": "添加资源授权", "change": "修改资源授权", "addHint": "先选择资源类型，再搜索并勾选一个或多个资源，然后选择权限模型。无需填写资源类型或资源 ID。", "search": "搜索资源名称或 ID", "granted": "已授权", "empty": "暂无资源授权", "noResources": "没有可授权的资源", "loadingResources": "正在加载资源", "modelPlaceholder": "选择权限模型", "revokeConfirm": "确定撤销“{{name}}”的资源授权吗？", "creatorRevokeConfirm": "这是创建时自动回授。撤销后，该集成将无法再写入“{{name}}”。确定继续吗？", "revokeAllConfirm": "将撤销 {{count}} 项管理员授予的权限，创建时自动回授会保留。确定继续吗？", "keyScopeSummary": "当前有 {{count}} 把有效密钥。资源授权还必须与密钥权限位同时满足后才能调用。", "noKeyScopes": "未配置权限位", "delegateWarning": "检测到委托密钥：委托调用完全按被代表用户的资源权限判定，本页授权不参与。" },
+    "resourceTypes": { "knowledge_space": "知识空间", "knowledge_library": "知识库", "workflow": "工作流", "assistant": "助手", "tool": "工具", "channel": "频道", "dashboard": "看板" },
+    "grantSources": { "DIRECT": "管理员授权", "CREATOR_GRANT": "创建时自动回授" },
+    "feedback": { "created": "服务账号创建成功", "enabled": "服务账号已启用", "disabled": "服务账号已停用", "deleted": "服务账号已删除", "keyIssued": "API 密钥签发成功", "keyUpdated": "API 密钥修改成功，已立即生效", "keyRevoked": "API 密钥已吊销", "keysRevoked": "已吊销 {{count}} 个 API 密钥", "grantAdded": "资源授权添加成功", "grantUpdated": "资源授权修改成功", "grantRevoked": "资源授权已撤销", "copied": "复制成功" },
     "personalToken": { "title": "个人访问令牌", "settings": "租户策略", "settingsSaved": "已保存租户策略", "deploymentDisabled": "部署级个人访问令牌开关已关闭。", "tenantEnabled": "允许员工使用令牌", "ttlDays": "最长有效期（天）", "holder": "持有人", "adminRisk": "管理员风险" }
   },
   "mediaPreview": {

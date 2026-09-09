@@ -129,10 +129,10 @@ async def openfga_runtime():
             assert cleanup.status_code in {200, 204}
 
 
-def _release_tuples() -> list[dict[str, str]]:
+def _release_tuples(*, marker_subject: str = "user:*") -> list[dict[str, str]]:
     return [
         {
-            "user": "user:*",
+            "user": marker_subject,
             "relation": "active",
             "object": "permission_catalog_release:integration",
         },
@@ -142,17 +142,17 @@ def _release_tuples() -> list[dict[str, str]]:
             "object": "permission_model_release:integration",
         },
         {
-            "user": "user:*",
+            "user": marker_subject,
             "relation": "enabled_marker",
             "object": "permission_model_release:integration",
         },
         {
-            "user": "user:*",
+            "user": marker_subject,
             "relation": "use_marker",
             "object": "permission_model_release:integration",
         },
         {
-            "user": "user:*",
+            "user": marker_subject,
             "relation": "download_marker",
             "object": "permission_model_release:integration",
         },
@@ -170,6 +170,7 @@ def _resource_grant(
     grant_id: str,
     assignee: str,
     custom: bool = True,
+    marker_subject: str = "user:*",
 ) -> list[dict[str, str]]:
     tuples = [
         {
@@ -188,7 +189,7 @@ def _resource_grant(
             "object": resource,
         },
         {
-            "user": "user:*",
+            "user": marker_subject,
             "relation": "permission_enabled",
             "object": resource,
         },
@@ -196,12 +197,35 @@ def _resource_grant(
     if custom:
         tuples.append(
             {
-                "user": "user:*",
+                "user": marker_subject,
                 "relation": "custom_mode",
                 "object": resource,
             }
         )
     return tuples
+
+
+async def test_service_account_direct_grant_passes_real_openfga_action_gates(
+    openfga_runtime: OpenFGARuntime,
+) -> None:
+    client = openfga_runtime.client
+    tuples = _release_tuples(marker_subject="service_account:*")
+    tuples.extend(
+        _resource_grant(
+            resource="workflow:service-account",
+            grant_id="service-account-editor",
+            assignee="service_account:5",
+            marker_subject="service_account:*",
+        )
+    )
+    await client.write_tuples(writes=tuples)
+
+    assert await client.check(
+        "service_account:5",
+        "can_use",
+        "workflow:service-account",
+        consistency="HIGHER_CONSISTENCY",
+    )
 
 
 async def test_same_store_single_new_model_and_model_checksum(

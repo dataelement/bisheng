@@ -1,4 +1,7 @@
 import { Button } from "@/components/bs-ui/button"
+import DepartmentUsersSelect, {
+  type DepartmentUserOption,
+} from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
 import {
   Dialog,
   DialogContent,
@@ -7,10 +10,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/bs-ui/dialog"
-import { Input } from "@/components/bs-ui/input"
+import { Input, Textarea } from "@/components/bs-ui/input"
+import { message } from "@/components/bs-ui/toast/use-toast"
 import { createServiceAccountApi } from "@/controllers/API/serviceAccount"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Loader2 } from "lucide-react"
 
 export interface CreateServiceAccountDialogProps {
   open: boolean
@@ -26,29 +32,41 @@ export function CreateServiceAccountDialog({
   const { t } = useTranslation()
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [ownerId, setOwnerId] = useState("")
+  const [owners, setOwners] = useState<DepartmentUserOption[]>([])
   const [loading, setLoading] = useState(false)
 
   const handleCreate = async () => {
     setLoading(true)
     try {
-      const account = await createServiceAccountApi({
+      const account = await captureAndAlertRequestErrorHoc(createServiceAccountApi({
         name: name.trim(),
         description: description.trim() || null,
-        resource_owner_user_id: Number(ownerId),
-      })
+        resource_owner_user_id: owners[0].value,
+      }))
+      if (!account) return
       setName("")
       setDescription("")
-      setOwnerId("")
+      setOwners([])
       onOpenChange(false)
+      message({ description: t("openApiManagement.feedback.created") })
       onCreated(account.id)
     } finally {
       setLoading(false)
     }
   }
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && loading) return
+    if (!nextOpen) {
+      setName("")
+      setDescription("")
+      setOwners([])
+    }
+    onOpenChange(nextOpen)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("openApiManagement.serviceAccount.create")}</DialogTitle>
@@ -61,22 +79,30 @@ export function CreateServiceAccountDialog({
           </label>
           <label className="block space-y-1 text-sm">
             <span>{t("openApiManagement.fields.description")}</span>
-            <Input
+            <Textarea
               value={description}
               maxLength={512}
+              rows={3}
               onChange={(event) => setDescription(event.target.value)}
             />
           </label>
           <label className="block space-y-1 text-sm">
-            <span>{t("openApiManagement.fields.ownerUserId")}</span>
-            <Input type="number" min={1} value={ownerId} onChange={(event) => setOwnerId(event.target.value)} />
+            <span>{t("openApiManagement.fields.owner")}</span>
+            <DepartmentUsersSelect
+              value={owners}
+              onChange={setOwners}
+              multiple={false}
+              placeholder={t("openApiManagement.serviceAccount.ownerPlaceholder")}
+              searchPlaceholder={t("openApiManagement.serviceAccount.ownerSearch")}
+            />
           </label>
         </div>
         <DialogFooter>
-          <Button variant="outline" disabled={loading} onClick={() => onOpenChange(false)}>
+          <Button variant="outline" disabled={loading} onClick={() => handleOpenChange(false)}>
             {t("cancel")}
           </Button>
-          <Button disabled={loading || !name.trim() || Number(ownerId) < 1} onClick={handleCreate}>
+          <Button disabled={loading || !name.trim() || owners.length !== 1} onClick={handleCreate}>
+            {loading ? <Loader2 aria-hidden="true" className="mr-2 size-4 animate-spin" /> : null}
             {t("confirmButton")}
           </Button>
         </DialogFooter>

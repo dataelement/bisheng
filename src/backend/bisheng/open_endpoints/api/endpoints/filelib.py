@@ -9,9 +9,8 @@ from starlette.responses import FileResponse
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge_imp import text_knowledge
-from bisheng.api.v1.schemas import ChunkInput, ExcelRule, KnowledgeFileOne, KnowledgeFileProcess, resp_200, resp_500
+from bisheng.api.v1.schemas import ChunkInput, ExcelRule, KnowledgeFileOne, KnowledgeFileProcess, resp_200
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
-from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.common.errcode.open_api import OpenApiAuthDependencyUnavailableError
@@ -58,6 +57,16 @@ router = APIRouter(prefix='/filelib', tags=['OpenAPI', 'Knowledge'])
 
 
 _KB_TYPES = (KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.QA.value)
+
+
+def _qa_with_knowledge_access(qa_id: int, *, login_user, action: str):
+    """Resolve a QA row and authorize its owning library before it is exposed or changed."""
+
+    qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(qa_id)
+    if qa is None:
+        raise NotFoundError.http_exception()
+    knowledge = KnowledgeService.judge_knowledge_access(login_user, qa.knowledge_id, action)
+    return qa, knowledge
 
 
 def _build_space_service(
@@ -301,7 +310,7 @@ async def upload_file(
     if file:
         file_name = file.filename
         if not file_name:
-            return resp_500(message='file name must be not empty')
+            raise HTTPException(status_code=400, detail='file name must be not empty')
         # Cache Local
         file_path = await sync_func_to_async(save_download_file)(file.file, 'bisheng', file_name)
     else:
@@ -449,7 +458,7 @@ async def post_chunks(request: Request,
     """ Upload files to the knowledge base and sync the interface """
     file_name = file.filename
     if not file_name:
-        return resp_500(message='file name must be not empty')
+        raise HTTPException(status_code=400, detail='file name must be not empty')
     file_path = await sync_func_to_async(save_download_file)(file.file, 'bisheng', file_name)
 
     login_user = await get_open_api_operator_async()
@@ -526,7 +535,7 @@ def add_qa(*,
            data: list[APIAddQAParam] = Body(embed=True)):
     # Seed the tenant ContextVar (multi-tenant safe) — QAKnowledge is tenant-aware.
     login_user = get_open_api_operator()
-    knowledge = KnowledgeDao.query_by_id(knowledge_id)
+    knowledge = KnowledgeService.judge_knowledge_access(login_user, knowledge_id, "edit")
     logger.info('add_qa_data knowledge_id={} size={}', knowledge_id, len(data))
     res = []
     for item in data:
@@ -548,11 +557,10 @@ def append_qa(*,
               knowledge_id: int = Body(embed=True),
               data: APIAppendQAParam = Body(embed=True)):
     # Seed the tenant ContextVar (multi-tenant safe) — QAKnowledge is tenant-aware.
-    get_open_api_operator()
-    knowledge = KnowledgeDao.query_by_id(knowledge_id)
-    qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(data.id)
-    if not qa_db:
-        return HTTPException(404, detail='qa Right, nothing found.')
+    login_user = get_open_api_operator()
+    qa_db, knowledge = _qa_with_knowledge_access(data.id, login_user=login_user, action="edit")
+    if qa_db.knowledge_id != knowledge_id:
+        raise NotFoundError.http_exception()
 
     t = qa_db.dict()
     t['answers'] = json.loads(t['answers'])
@@ -568,9 +576,7 @@ def delete_qa_data(*, qa_id: int, question: str | None = None):
     """ Deleteqa Question to Information """
     # Seed the tenant ContextVar before any tenant-aware read/write.
     login_user = get_open_api_operator()
-    qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(qa_id)
-    if not qa:
-        raise HTTPException(status_code=404, detail='qa Does not exist')
+    qa, knowledge = _qa_with_knowledge_access(qa_id, login_user=login_user, action="edit")
 
     if question:
         qa.questions = [q for q in qa.questions if q != question]
@@ -580,14 +586,10 @@ def delete_qa_data(*, qa_id: int, question: str | None = None):
         telemetry_service.log_event_sync(user_id=login_user.user_id,
                                          event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_FILE,
                                          trace_id=trace_id_var.get())
-    try:
-        knowledge = KnowledgeDao.query_by_id(qa.knowledge_id)
-        knowledge_imp.delete_vector_data(knowledge, file_ids=[qa_id])
-        if question:
-            knowledge_imp.QA_save_knowledge(knowledge, qa)
-        return resp_200()
-    except Exception as e:
-        return resp_500(message=f'error e={e!s}')
+    knowledge_imp.delete_vector_data(knowledge, file_ids=[qa_id])
+    if question:
+        knowledge_imp.QA_save_knowledge(knowledge, qa)
+    return resp_200()
 
 
 @router.post('/update_qa', status_code=200)
@@ -601,28 +603,23 @@ def update_qa(
 ):
     """ Deleteqa Question to Information """
     # Seed the tenant ContextVar before any tenant-aware read/write.
-    get_open_api_operator()
-    qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
+    login_user = get_open_api_operator()
+    qa, knowledge = _qa_with_knowledge_access(id, login_user=login_user, action="edit")
 
-    if not qa:
-        raise HTTPException(status_code=404, detail='qa Does not exist')
-
+    if original_question and question is None:
+        raise HTTPException(status_code=400, detail='question is required with original_question')
     if original_question:
-        qa.questions = [q if q != question else question for q in qa.questions]
-    else:
+        qa.questions = [question if q == original_question else q for q in qa.questions]
+    elif question is not None:
         qa.questions = [question]
     if answer:
         qa.answers = json.dumps(answer, ensure_ascii=False)
     QAKnoweldgeDao.update(qa)
 
-    try:
-        knowledge = KnowledgeDao.query_by_id(qa.knowledge_id)
-        if question:
-            knowledge_imp.delete_vector_data(knowledge, file_ids=[id])
-            knowledge_imp.QA_save_knowledge(knowledge, qa)
-        return resp_200()
-    except Exception as e:
-        return resp_500(message=f'error e={e!s}')
+    if question:
+        knowledge_imp.delete_vector_data(knowledge, file_ids=[id])
+        knowledge_imp.QA_save_knowledge(knowledge, qa)
+    return resp_200()
 
 
 @router.get('/detail_qa', status_code=200)
@@ -630,8 +627,8 @@ def update_qa(
 def detail_qa(*, id: int):
     """ Get questions on information """
     # Seed the tenant ContextVar before the tenant-aware read.
-    get_open_api_operator()
-    qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
+    login_user = get_open_api_operator()
+    qa, _knowledge = _qa_with_knowledge_access(id, login_user=login_user, action="visible")
     return resp_200(qa)
 
 
@@ -671,8 +668,6 @@ async def retrieve_chunks(
         )
     except (PermissionBackendUnavailableError, PermissionServiceUnavailableError) as exc:
         raise OpenApiAuthDependencyUnavailableError() from exc
-    except BaseErrorCode as e:
-        return e.return_resp_instance()
 
     chunks = [
         RetrieveChunk(
@@ -693,13 +688,20 @@ async def retrieve_chunks(
 def query_qa(QueryQAParam: QueryQAParam):
     """ Deleteqa Question to Information """
     # Seed the tenant ContextVar before the tenant-aware read.
-    get_open_api_operator()
+    login_user = get_open_api_operator()
     sources = [1, 2]  # 3 Yes apiInverted
     qa_list = QAKnoweldgeDao.query_by_condition_v1(source=sources,
                                                    create_start=QueryQAParam.timeRange[0],
                                                    create_end=QueryQAParam.timeRange[1])
-    if qa_list:
-        for q in qa_list:
-            q.answers = json.loads(q.answers)
+    visible_qa = []
+    for q in qa_list or []:
+        if not KnowledgeService.permission_service.check_action_sync(
+            login_user,
+            q.knowledge_id,
+            "visible",
+        ):
+            continue
+        q.answers = json.loads(q.answers)
+        visible_qa.append(q)
 
-    return resp_200(qa_list)
+    return resp_200(visible_qa)

@@ -3,15 +3,18 @@ import type {
   ApiKeyIssueForm,
   ApiKeyIssued,
   ApiKeyItem,
+  ApiKeyUpdateForm,
   OpenApiScopeCatalog,
   ServiceAccountForm,
+  ServiceAccountDeleteResult,
+  ServiceAccountGrantableResource,
   ServiceAccountItem,
   ServiceAccountPage,
+  ServiceAccountResourceGrant,
 } from "@/types/api/openApi"
 import type {
   MutateResourceGrantsRequest,
   MutateResourceGrantsResult,
-  PermissionGrantCursorPage,
 } from "./permission"
 
 export async function listServiceAccountsApi(params: {
@@ -44,7 +47,7 @@ export async function setServiceAccountEnabledApi(
   return await axios.post(`/api/v1/service-accounts/${id}/${enabled ? "enable" : "disable"}`)
 }
 
-export async function deleteServiceAccountApi(id: number): Promise<{ id: number }> {
+export async function deleteServiceAccountApi(id: number): Promise<ServiceAccountDeleteResult> {
   return await axios.delete(`/api/v1/service-accounts/${id}`)
 }
 
@@ -63,18 +66,33 @@ export async function issueServiceAccountKeyApi(
   return await axios.post(`/api/v1/service-accounts/${id}/keys`, data)
 }
 
+export async function updateServiceAccountKeyApi(
+  id: number,
+  keyId: number,
+  data: ApiKeyUpdateForm,
+): Promise<ApiKeyItem> {
+  return await axios.patch(`/api/v1/service-accounts/${id}/keys/${keyId}`, data)
+}
+
 export async function revokeServiceAccountKeyApi(id: number, keyId: number): Promise<ApiKeyItem> {
   return await axios.post(`/api/v1/service-accounts/${id}/keys/${keyId}/revoke`)
 }
 
+export async function revokeAllServiceAccountKeysApi(id: number): Promise<{ revoked: number }> {
+  return await axios.post(`/api/v1/service-accounts/${id}/keys/revoke-all`)
+}
+
 export async function listServiceAccountResourceGrantsApi(
   id: number,
-  resourceType: string,
-  resourceId: string,
-): Promise<PermissionGrantCursorPage> {
-  return await axios.get(`/api/v1/service-accounts/${id}/resource-grants`, {
-    params: { resource_type: resourceType, resource_id: resourceId },
-  })
+): Promise<ServiceAccountResourceGrant[]> {
+  return await axios.get(`/api/v1/service-accounts/${id}/resource-grants`)
+}
+
+export async function listServiceAccountGrantableResourcesApi(
+  id: number,
+  params: { resource_type?: string; keyword?: string },
+): Promise<ServiceAccountGrantableResource[]> {
+  return await axios.get(`/api/v1/service-accounts/${id}/grantable-resources`, { params })
 }
 
 export async function mutateServiceAccountResourceGrantsApi(

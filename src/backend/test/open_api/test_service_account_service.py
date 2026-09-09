@@ -113,3 +113,35 @@ async def test_disabled_owner_is_rejected(open_api_db, fake_redis, audit_events)
             actor(),
             ServiceAccountCreate(name="invalid-owner", resource_owner_user_id=10),
         )
+
+
+async def test_list_exposes_creator_and_delegate_summary(open_api_db, fake_redis, audit_events):
+    await seed_user(open_api_db, 2, 1)
+    await seed_user(open_api_db, 10, 1)
+    await seed_user(open_api_db, 11, 1)
+    row = await ServiceAccountService.create(
+        actor(),
+        ServiceAccountCreate(name="integration", resource_owner_user_id=10),
+    )
+    await CredentialService.issue(
+        tenant_id=1,
+        subject_kind=SUBJECT_KIND_SERVICE_ACCOUNT,
+        subject_id=row.id,
+        request=KeyIssueRequest(
+            name="delegated-key",
+            scopes=["delegate"],
+            delegate_scopes=[{"subject_type": "user", "subject_id": 11}],
+        ),
+        created_by=2,
+    )
+
+    result = await ServiceAccountService.list_page(keyword=None, page=1, page_size=20)
+
+    assert result.total == 1
+    assert result.data[0].creator_name == "user-2"
+    assert result.data[0].has_delegate is True
+    assert result.data[0].delegate_scopes[0].model_dump() == {
+        "subject_type": "user",
+        "subject_id": 11,
+        "subject_name": "user-11",
+    }

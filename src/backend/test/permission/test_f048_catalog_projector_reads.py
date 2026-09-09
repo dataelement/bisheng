@@ -96,5 +96,23 @@ async def test_active_release_keys_filter_names_the_object_type() -> None:
             "user": "user:*",
             "relation": "active",
             "object": "permission_catalog_release:",
-        }
+        },
+        {
+            "user": "service_account:*",
+            "relation": "active",
+            "object": "permission_catalog_release:",
+        },
     ]
+
+
+@pytest.mark.asyncio
+async def test_active_release_keys_reject_divergent_subject_pointers() -> None:
+    client = _RecordingClient(
+        {
+            ("user:*", "active", "permission_catalog_release:c1"),
+            ("service_account:*", "active", "permission_catalog_release:c2"),
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="service_account"):
+        await _projector(client).read_active_release_keys()

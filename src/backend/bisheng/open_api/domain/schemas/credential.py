@@ -21,6 +21,10 @@ class DelegateScopeInput(BaseModel):
     subject_id: int = Field(gt=0)
 
 
+class DelegateScopeItem(DelegateScopeInput):
+    subject_name: str | None = None
+
+
 class KeyIssueRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -63,7 +67,7 @@ class KeyItem(BaseModel):
     is_valid: bool
     created_by: int | None
     create_time: datetime | None
-    delegate_scopes: list[DelegateScopeInput] = Field(default_factory=list)
+    delegate_scopes: list[DelegateScopeItem] = Field(default_factory=list)
 
     @classmethod
     def from_row(cls, row: ApiCredential, *, now: datetime | None = None) -> KeyItem:

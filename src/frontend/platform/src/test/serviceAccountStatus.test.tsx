@@ -41,9 +41,12 @@ function account(status: ServiceAccountStatus): ServiceAccountItem {
     status,
     resource_owner: { user_id: 10, user_name: "owner", disabled: false },
     active_key_count: 1,
+    has_delegate: false,
+    delegate_scopes: [],
     last_used_at: null,
     idle: false,
     created_by: 1,
+    creator_name: "admin",
     create_time: null,
     update_time: null,
   }
