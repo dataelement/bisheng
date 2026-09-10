@@ -15,7 +15,7 @@
 > **本文是"要建成的样子"**：F055 尚未开工，`app_publish` 模块、`resource_tier` / `app_deployment` 两张表、密钥扫描规则集、`app_publish_request` 审批场景全是绿地；**唯三例外**是三项阻塞前置（`approver_resolver` / seed / `withdraw` 守卫）——它们是对**存量代码**的修改，且对既有审批场景有行为变更。实现后按现状覆盖本文。
 
 **关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)（待写）· [release-contract.md](../release-contract.md)（表 1 **ResourceTier** / **「应用发布」审批场景预置** / **AppManifest** 三项归本 Feature；INV-28 / INV-29 / INV-31 / INV-33 / INV-34 / INV-36）· [mvp-114-path.md](../mvp-114-path.md)（**§6 MVP-核心是本轮裁剪基准**、§3 114 环境事实、§1 演示剧本步 3–4）
-**上游 / 姊妹**: [F054 design](../054-app-domain-runtime/design.md)（领域对象 D8 / 容量与档位 D11 / 状态动作与编排 RPC §4.2 / 删除钩子 §4.1-C）· [F049 design](../049-openapi-auth-baseline/design.md)（凭据底座 D2 / `open_api_subject` 工厂 / `OpenApiPrincipal.resource_owner_user_id`）· [F053 spec](../053-dev-cli-skills/spec.md)（CLI 侧 AC-31～AC-38）· [F056 spec](../056-app-square-governance/spec.md)（可见范围区 / 审计面）
+**上游 / 姊妹**: [F054 design](../054-app-domain-runtime/design.md)（领域对象 D8 / 容量与档位 D11 / 状态动作与编排 RPC §4.2 / 删除钩子 §4.1-C）· [F049 design](../049-openapi-auth-baseline/design.md)（凭据底座 D2 / 端点 `open_api_scope` marker + `router_rpc` 的 `verify_open_api_access`〔2026-09-10 改接 beta2，原 `open_api_subject` 工厂作废〕 / `OpenApiPrincipal.resource_owner_user_id`）· [F053 spec](../053-dev-cli-skills/spec.md)（CLI 侧 AC-31～AC-38）· [F056 spec](../056-app-square-governance/spec.md)（可见范围区 / 审计面）
 **审批模块权威参考**: `.claude/skills/approval-module/SKILL.md`（**改审批中心代码必须同 PR 更新该 skill**，见 §8）
 **版本**: v3.0.0
 **最后更新**: 2026-08-17
@@ -47,10 +47,10 @@
 | **K5** | **快照体一律走 MinIO 引用、库里只存对象键（C2 加强）**：代码包 tar、构建产物、生产数据快照**绝不入库**。反面教训 `FlowVersion.data` 全量 JSON 入库在 DM8 上撑爆 undo（memory `project_linsight_dm8_history_write_amplification`）。桶与键布局**已由 F054 design 定死、F055 沿用不另起**：独立桶 `bisheng-apps`（不挂 nginx location、不设匿名策略），代码快照 `apps/{app_id}/versions/{version_id}/code.tar.gz`。**真正的风险在 nginx 不在 MinIO 策略**：`src/frontend/nginx.conf:49` 的 `location ~ ^(/workspace/bisheng|bisheng|tmp-dir)/` 把公共桶任意 key 匿名转发出去 | F054 design **D10「per-app SQLite …… 快照走 `.backup` 后 tar 上独立 bucket」**（约 `:266-273`，桶与键布局在该决策末段；**不是 D8**，D8 是领域对象决策）；E1 §2.2 |
 | **K6** | **多租户（C3）的两处非常规**：① `app_deployment` 带 `tenant_id`、登记进 `core/database/tenant_filter.py:39 _TENANT_AWARE_MODEL_MODULES` 走自动过滤；② **`resource_tier` 是平台级跨租户实体、无 `tenant_id` 列**（spec AC-44），模型定义落 `database/models/resource_tier.py`（**两模块共读，见 C1 的双向依赖说明**），登记进该元组**只为保证 metadata 被 import**，不代表受自动过滤——这与 F054 的 `app_version` 同形（F054 K5 ②）。另：租户过滤监听器**只拦 SELECT**（`tenant_filter.py:164-165`），管线里任何批量 UPDATE / DELETE 必须手写租户条件 | C3；memory `reference_tenant_filter_in_list_trap` |
 | **K7** | **AppManifest（`bisheng-app.yaml` 对外形态）是本 Feature 拥有的对外契约**（release-contract 表 1）：F053 CLI 按它打包与本地必填校验、F054 运行时按它取 `runtime` / `port` / `tier` / `egress.domains`，**三方不各自定义**。权威 schema 只有一份（§4.2 ③）；**CLI 不复制 schema、也不复制密钥扫描规则集**（F053 决议-2：同一规则集分两处必漂移），CLI 侧只做"必填项存在"级快速失败 | release-contract 表 1；F053 spec §3 / 决议-2 |
-| **K8** | **`deploy` / `logs` 的服务端权限判定复用 F049 底座、不自建**：新 router 每个端点挂 `Depends(open_api_subject("app:manage"))`（`open_api/api/dependencies.py:103-115`，docstring 逐字点名 F053 / F055）；owner 判定读 `OpenApiPrincipal.resource_owner_user_id`（`open_api/domain/context.py:39`）**不是** `subject_user_id`；`app:manage` 已注册（`open_api/domain/scopes.py:177-184`，`requires_open_platform=True`）；`delegate` 位在 F049 期**根本发不出来**（`scopes.py:186-195` 只留 `DELEGATE_SCOPE_CODE` 用于精确报错 26024）→ AC-04「持 delegate 一律拒」在本期天然成立，F055 只需对齐错误文案（INV-31） | E1 §2.4；F049 design §6.1 |
+| **K8** | **`deploy` / `logs` 的服务端权限判定复用开放 API 底座、不自建**（2026-09-10 改接 beta2 F053）：`v2_router` 挂在 `router_rpc`（`Depends(verify_open_api_access)`）之下，每个端点打 `@open_api_scope("app:manage", modes=("S",))` marker——漏标记即 fail-closed 拒绝（beta2 K14 单一管线）；owner 判定读 `OpenApiPrincipal.resource_owner_user_id` **不是** `actor_id`；`app:manage` 随 `open_platform.enabled` 可签发、与 `delegate` 在签发期硬阻断（迁移方案 M7 / INV-31）→ AC-04「持 delegate 一律拒」靠互斥成立，F055 只需对齐错误文案 | E1 §2.4；F049 design §6.1 |
 | **K9** | **错误码段 = 162**（`app_factory` 家族第二段），**分配已完成、不需要 F055 再去"落定"**：`release-contract.md` 的「已分配模块编码」表已写死 `162 = app_factory · F055 段`（F054 落码时一并写入），`docs/constitution.md` C5 的 `12x–18x` 行与 `161–164 = app_factory` 段落也已登记 **162 = F055 (publish pipeline)**。→ **落码时真正要做的只剩两件**：① 新建 `common/errcode/app_publish.py`（**勿写进 F054 的 `app_factory.py`**）② `src/frontend/packages/locales/src/api_errors/{zh-Hans,en,ja}.json` 三语各一条（生成物勿手改，CI `pnpm check-i18n`）。⚠️ **不要去"修正"上游那两张表**——它们已经是对的，改动只会制造 diff 噪声 | C5；release-contract「已分配模块编码」；E1 §3.4 |
 | **K10** | **部署配置项一律挂进 F054 已开的 `settings.app_runtime` 块，不再开顶层键**：档位出厂规格默认值（`default_tiers`）、预览实例超时（决议-5，7 天，`preview_ttl_days`）、**包体与解包三闸**（`max_package_mb` / `max_unpacked_mb` / `max_package_entries`，**本期就做、不是"将来"**，见 D2 与 F053 AC-32）。⚠️ `load_settings_from_yaml`（`common/services/config_service.py:91-107`，`:105-107` 对未知顶层键直接 `raise KeyError`）→ **必须先发代码、再改 `config.yaml`、再重启**，顺序反了直接拒启 | F054 design K12；E1 §3.2 |
-| **K11** | **前端三条硬约束**：① platform 的 react-query v3 被 eslint 冻结（`platform/eslint.config.mjs:45`）→ 发布面用 `platform/src/util/hook.ts:215 useTable` 或裸 `useState+useEffect`；② platform 拦截器对 `403/404` **整页跳转 `/403`**（`platform/src/controllers/request.ts:160-166`）→ 发布面只读接口对无权者**不能回 403/404**，用业务码或 `silent: true`；③ client 审批弹窗 `DialogContent` 宽度上限 **800px**（`ApprovalCenterDialog.tsx:392` `md:max-w-[800px] md:h-[80vh]`）→ 审读视图（左文件树 + 右只读代码 + 4 tab）塞不进去，是 D14 的尺寸级前提 | E2 §0-4 / §3.2 |
+| **K11** | **前端三条硬约束**：① platform 的 react-query v3 被 eslint 冻结（`platform/eslint.config.mjs:45`）→ 发布面用 `platform/src/util/hook.ts:215 useTable` 或裸 `useState+useEffect`；② platform 拦截器对 `403/404` **整页跳转 `/403`**（`platform/src/controllers/request.ts:160-166`）→ 发布面只读接口对无权者**不能回 403/404**，用业务码或 `silent: true`；③ ~~client 审批弹窗宽度上限 800px~~（**2026-09-10 前提已变**：beta2 把审批中心由弹窗改为设置页 `pages/settings/SettingsPage.tsx` 内嵌 `approval/ApprovalPane.tsx` 承载，审读视图的尺寸前提按页面重估，坑 30） | E2 §0-4 / §3.2 |
 | **K12** | **114 是单租户形态 + 存量环境**：`ROOT_TENANT_ID` 场景下 `list_tenant_admins` 恒空 → 演示必然走「回退平台超管」；deploy.sh 一条命令部署（memory `reference_remote_dev`）；**审批 outbox 走默认 `celery` 队列**（`worker/config.py` 不为 `bisheng.worker.approval.*` 配路由），部署时必须有 worker 消费默认队列，否则审批通过后业务不执行（skill §6 的 ⚠️） | `mvp-114-path.md` §3；skill §6 |
 
 **Constitution Check（自查）**：
@@ -63,7 +63,7 @@
 - **C3（多租户）**：见 K6。审批相关读写全部经审批模块既有服务（它们已在租户上下文内）；**Celery worker 里的租户上下文经 header 自动透传**（`worker/tenant_context.py:63-90`），`on_approved` 内**不需要**手动 `set_current_tenant_id`。
 - **C4（权限）**：应用侧判权一律经 F054 已注册的 `app` 资源类型与 `permission/application/business_authorization.py` 三个函数；**`deploy` / `logs` / 撤回 / 手动上线的 owner-only 是业务规则前置拦截**（管理员在权限运行时被身份短路放行，`permission_action_service.py:372-385`），不能靠权限运行时——spec §3 已声明。开放面权限位判定经 F049 `Depends`，不自建。
 - **C5（错误码）**：见 K9。
-- **C6（无硬编码密钥）**：密钥扫描规则集里的 `bs-sak-` 模式**引用 `open_api/domain/models/api_credential.py:35-38` 的 `KEY_PREFIX` / `KEY_SECRET_LENGTH` 常量拼接**，不硬编码字面量；扫描结果**绝不含命中的密钥值本身**（AC-10）。
+- **C6（无硬编码密钥）**：密钥扫描规则集里的 `bs-sak-` 模式**引用 `open_api/domain/models/api_credential.py` 的 `SERVICE_ACCOUNT_KEY_PREFIX` / `KEY_SECRET_LENGTH` 常量拼接**（`bs-pat-` 规则同理引 `PERSONAL_TOKEN_PREFIX`，迁移方案 M11），不硬编码字面量；扫描结果**绝不含命中的密钥值本身**（AC-10）。
 - **C7（前端 store 不直连 HTTP）**：platform 发布面经 `controllers/API/hostedApp.ts`（F054 已建）扩展，client 审批弹窗经 `client/src/api/approval.ts`；两边都不 import axios。
 
 ---
@@ -92,8 +92,8 @@
 - **备选（端点位置）**：
   - A. 挂 `/api/v1` 并复用登录态 — **不成立**：CLI 持的是服务账号密钥（`Bearer bs-sak-…`），v1 走 cookie / JWT 登录态
   - B. 塞进既有 `/api/v2` 共享 router — 缺点：F049 `api/router.py:114-126` 的共享 router 依赖提升尚在 T040 之后，塞进去会与 F049 的接入节奏耦合
-  - C. **F055 自建 router（`/api/v2/apps`），每个端点挂 `Depends(open_api_subject("app:manage"))`**（选定）
-- **选定端点位置**：**C**——这正是 F049 `dependencies.py:103-115` 的 docstring 逐字预留的用法（*"For routers that F053 / F055 add outside the shared /api/v2 router"*）。
+  - C. **F055 自建 router（`/api/v2/apps`），每个端点挂 `Depends(open_api_subject("app:manage"))`**（选定；**2026-09-10 改接 beta2**：router 挂 `router_rpc`、鉴权由其 `verify_open_api_access` 单一管线承担，端点改打 `open_api_scope("app:manage")` marker，迁移方案 M8）
+- **选定端点位置**：**C**——vibe 期依据是 F049 `dependencies.py` docstring 预留的 `open_api_subject` 用法；改接 beta2 后该工厂不存在，端点 marker + `router_rpc` 管线是 beta2 `open_endpoints` 的统一写法。
 - **备选（首发时 App 行何时创建）**：
   - A. **预检通过后与版本记录同事务创建** — 优点：预检失败不留草稿应用；**致命缺点**：构建 RPC 入参是 `(app_id, version_id, runtime, code_object_key)`（F054 §4.2 ①）、MinIO 键前缀是 `apps/{app_id}/…`——预检期根本没有 app_id，只能造一个占位 id 污染编排器期望态与对象键
   - B. **接收成功（manifest 基本校验通过）后立即创建草稿应用**（选定）— 代价：连续预检失败会在构建页留下草稿应用
@@ -158,7 +158,7 @@
   - B. 复用 `sensitive_word/domain/services/ac_automaton.py`（Aho-Corasick）— **不适用**：它是**字面词多模匹配**，不支持正则；但它的「规则集 → 命中项（含位置）上报」接口形状可参考
   - C. **模块常量规则表 + `re` 编译**（选定），形态同 `open_api/domain/scopes.py:66-185 OPEN_API_SCOPES`
 - **选定**：**C**。`SECRET_SCAN_RULES: tuple[SecretRule, ...]`，`SecretRule(rule_id, name_i18n_key, pattern: re.Pattern, description_i18n_key)`，放 `app_publish/domain/services/secret_scanner.py`。首批规则：
-  - `bs_sak`：**引 `api_credential.KEY_PREFIX` / `KEY_SECRET_LENGTH` 拼**（C6），即 `\bbs-sak-[A-Za-z0-9_-]{43}\b`——**不硬编码字面量**，F049 改前缀时这条自动跟随
+  - `bs_sak`：**引 `api_credential.SERVICE_ACCOUNT_KEY_PREFIX` / `KEY_SECRET_LENGTH` 拼**（C6；`bs_pat` 规则同理引 `PERSONAL_TOKEN_PREFIX`，迁移方案 M11），即 `\bbs-sak-[A-Za-z0-9_-]{43}\b`——**不硬编码字面量**，F049 改前缀时这条自动跟随
   - `aws_akid`（`\bAKIA[0-9A-Z]{16}\b`）· `openai_sk`（`\bsk-[A-Za-z0-9]{20,}\b`）· `private_key_pem`（`-----BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY-----`）· `db_conn_string`（`(mysql|postgresql|postgres|mongodb(\+srv)?|redis)://[^\s:@/]+:[^\s@/]+@`，**用户名密码都在串里才算命中**——只有 host 的连接串是正常配置）· `generic_high_entropy`（`(?i)(password|passwd|secret|token|api[_-]?key)\s*[=:]\s*["']([^"'\s]{20,})["']`，且值不匹配占位符白名单 `^(xxx+|your[_-]|<.*>|\$\{|change[_-]?me|example)`）
 - **扫描范围与性能闸**：解包后逐文件；跳过 `.git/` · `node_modules/` · `venv/` · `__pycache__/` · `dist/` · `build/`；**二进制嗅探**（前 8KB 含 `\x00` 即跳过）；单文件 > **1 MiB** 跳过并在结果里标 `skipped`（不静默——大文件被跳过必须可见，否则等于假通过）。
 - **输出（AC-10 硬承诺）**：`hits: [{rule_id, name_i18n_key, file, line}]`——**连脱敏后的值都不给**。理由：任何"前 4 后 4"式脱敏在低熵密钥上等于泄漏，而定位一个密钥有 `file:line` 已经足够。
@@ -192,11 +192,11 @@
 ### D7：审批场景接入 = `app_publish_request` 四件套 + 结构化 `build_detail` + 出口过滤申请人
 
 - **备选（详情载荷形态）**：
-  - A. **扁平 key-value**（照既有三场景，`menu_access_handler.py:15-20` 只回 3 个扁平键）— 走 client 通用两列网格 `ApprovalCenterDialog.tsx:696-724`；**装不下 AC-24 的四分区**：数组会被 `Array.isArray(v) ? v.join(", ")` 拍平（`:718`）、对象直接变 `[object Object]`、未映射的 key 原样显示英文键名（`localizeFieldKey :138-150` 只有 8 条硬编码）
+  - A. **扁平 key-value**（照既有三场景，`menu_access_handler.py:15-20` 只回 3 个扁平键）— 走 client 通用两列网格（`approval/ApprovalDetailPanels.tsx`）；**装不下 AC-24 的四分区**：数组会被 `Array.isArray(v) ? v.join(", ")` 拍平、对象直接变 `[object Object]`、未映射的 key 原样显示英文键名（`approval/approvalPresentation.tsx` 的 `localizeFieldKey` 只有 8 条硬编码）
   - B. **结构化嵌套 payload + client 按 `scenario_code` 分派自定义面板**（选定）
   - C. 结构化 payload + 后端预渲染成 HTML 片段 — 否决：把渲染责任推给后端，i18n 三语与主题适配全部失守
 - **选定**：**B**。`build_detail(req)` 返回结构化载荷（字段表见 §4.2 ④），client 在 `TaskDetailPanel`（`:682`）内按 `detail.scenario_code === 'app_publish_request'` 早分派到新组件 `AppPublishDetailPanel`（D14）。
-  - **⚠️ 必须同时给旧渲染路径兜底**：`detail_snapshot` 顶层**再放三个扁平键**（`app_name` / `release_kind_text` / `tier_name`）供未识别该场景的路径显示，并把结构化子树的键（`capabilities` / `visibility_snapshot` / `tier` / `schema_change` 等）加进 `DETAIL_INTERNAL_KEYS`（`ApprovalCenterDialog.tsx:136`）——否则通用网格会把它们渲染成 `[object Object]` 一坨（坑 7）。
+  - **⚠️ 必须同时给旧渲染路径兜底**：`detail_snapshot` 顶层**再放三个扁平键**（`app_name` / `release_kind_text` / `tier_name`）供未识别该场景的路径显示，并把结构化子树的键（`capabilities` / `visibility_snapshot` / `tier` / `schema_change` 等）加进 `DETAIL_INTERNAL_KEYS`（`approval/approvalPresentation.tsx`）——否则通用网格会把它们渲染成 `[object Object]` 一坨（坑 7）。
 - **四件套落点**（K1）：
   1. **preset**：`approval_registry.py:16-44` 加一条
      `ApprovalScenarioPreset(scenario_code='app_publish_request', scenario_name='应用发布', handler_key='app_publish_request', approver_source_types=['department_admin','tenant_admin','direct_user'])`。
@@ -273,7 +273,7 @@
 - **撤回（AC-34）**：owner 在发布面点撤回 → 直接调既有 `POST /api/v1/approval/instances/{instance_id}/withdraw`（`approval_center_service.py:418-492`），owner-only 由它已有的 `applicant_user_id` 校验天然成立（`:430`）；`on_withdrawn` → `mark_terminal_state('withdrawn')` + deployment 置 failed + 审计。通知"已收到待办的审批人"由既有 `withdraw_instance` 负责（skill §8）。
 - **`withdraw` 终态守卫（AC-22）**：`withdraw_instance` 今天**只校验申请人**（`:430`），已 EXECUTED / EXCEPTION / WITHDRAWN 的实例可被**反复撤回并重复触发 `on_withdrawn`**（`:481-482`）。修点 = `:432` 之前加 `if instance.status != ApprovalInstanceStatus.PENDING: raise <18xxx>`。
   - **错误码归属**：这是**审批模块的通用缺陷修复、不是应用发布特有** → 用 approval 自己的段 **181xx**（`common/errcode/approval.py`），**不占 162 段**。
-  - 爆炸半径：既有前端只在 `status === "pending"` 时显示撤回按钮（`ApprovalCenterDialog.tsx:376`），正常路径不受影响；受影响的只有并发 / 重放 / 直接打 API。
+  - 爆炸半径：既有前端只在 `status === "pending"` 时显示撤回按钮（`approval/ApprovalPane.tsx`），正常路径不受影响；受影响的只有并发 / 重放 / 直接打 API。
 - **删除致取消（AC-35）**：
   - **没有可复用的"取消在途实例"通用入口**——唯一置 `CANCELLED` 的路径 `approval_exception_service.py:159-230 cancel_exception_api` **从 exception 记录起手**且通知的是**申请人**（`:221` `approval_exception_cancelled`），与 AC-35 要求的"通知审批人"相反（坑 6）。
   - → **新增** `ApprovalCenterService.cancel_instance_by_business(*, instance_id | (scenario_code, business_key), reason, operator_user_id)`：置 instance=CANCELLED + 全部 PENDING task → CANCELLED + 写 `approval_action_log` + 审计 + **通知审批人**（新 action_code `approval_instance_cancelled`）+ 调 handler `on_cancelled`。放**审批模块**（它操作的是审批实体，放 F055 里就是跨模块直写别人的表）。
@@ -332,7 +332,7 @@
 ### D14：审批人侧界面落位 = client 弹窗内早分派 + 审读视图走弹窗放宽（**后置部分已标注**）
 
 - **落点**（决议-3）：审批人侧全部界面在 **client 审批中心弹窗**（既有处理面）；场景配置在 **platform 审批中心场景配置**。
-- **四分区（AC-24）—— MVP 做**：新组件 `client/src/components/approval/AppPublishDetailPanel.tsx`（新文件，避开 `ApprovalCenterDialog.tsx` 已 1037 行 + 600 行硬规），在 `TaskDetailPanel`（`:682`）内按 `detail.scenario_code` **早分派**。
+- **四分区（AC-24）—— MVP 做**：新组件 `client/src/components/approval/AppPublishDetailPanel.tsx`，在 `approval/ApprovalDetailPanels.tsx` 的 `TaskDetailPanel` / `RequestDetailPanel` 内按 `detail.scenario_code` **早分派**（vibe 期落点 `ApprovalCenterDialog.tsx` 已随 beta2 拆分删除；`DetailHeader` / `DETAIL_INTERNAL_KEYS` 下沉到 `approval/approvalPresentation.tsx`）。
   - **备选**：先建 `SCENARIO_DETAIL_RENDERERS: Record<string, FC<{detail}>>` 注册表再分派 — **本轮否决**：一个场景不值得建注册表，且本仓既有的"场景专属"先例（`canRevoke` `:378-382` 只对 `menu_access_request`）就是"顶层算个布尔 + 条件渲染"。**何时重新考虑**：出现第二个需要自定义详情的场景，那一刻抽注册表（届时两个场景的差异已经能告诉你注册表该长什么样）。
   - 分区映射：① 头部基本信息 → 复用 `DetailHeader`（`:650-680`）+ `InfoGrid`（`:152-166`），把「来源 / 首发·迭代」两行加进 `basicRows`（`:686-694`）；② 能力声明白话摘要 → 新分区（`InfoGrid` 签名是 `[string,string][]`，装不下"图标 + 名称 + 说明 + 失效标记"三段行）；③ 可见范围快照 + 「仅供参考」黄注 → 新分区（可参考「申请理由」灰底块 `:726-731`）；④ 资源档位（+ 含结构变更时的「结构变更」行）→ 并进 ① 或独立一行。
 - **驳回理由必填（AC-24）—— MVP 做**：`runTaskDecision`（`:328-334`）的 `:331` 今天在评论为空时兜底成**硬编码中文** `"同意"/"驳回"`；改为 ① 驳回按钮 `disabled={actionLoading || !decisionComment.trim()}`（现成范式：撤销弹窗确认按钮 `:613` `disabled={!revokeReason.trim()}`、`confirmRevokeGrant :362-368` 的空值 toast）② 去掉中文兜底。**通过仍可空**——AC-24 只要求驳回必填，别一刀切。
@@ -342,15 +342,15 @@
   - **MVP 期整块不渲染**（连「查看待上线版本」按钮也不出），避免死链。只读代码 / 文件树 / diff **platform 与 client 都无现成件**，client 侧 `pages/knowledge/FilePreview/` 与 `components/Messages/Content/CodeBlock.tsx` 可参考。
 - **审批期临时预览实例（AC-26～28）—— 后置**：走 F054 已登记为 Outgoing 的预览入口路由 `/apps/preview/{session}`（F054 §6.1，后置 Wave）；**实例生命周期归 F055**：以待上线版本快照拉起（复用 `POST /v1/intents/probe` 的临时形态 + `deploy` 意图但不占应用实例名额）、连一个临时空库、注入**审批人本人身份**、平台能力按 **owner** 权限放行（NFR-1.2 审批例外，INV-36 已登记）并计审计；审批出终态或超时（默认 **7 天**，`settings.app_runtime.preview_ttl_days`）即回收，回收后可再拉起。
 - **站内消息（AC-64 / AC-65）—— MVP 做（改动极小）**：
-  - **审批类**沿用既有通用动作码，差异靠 `scenario_code` → **一处代码**：`client/src/components/NotificationsDialog.tsx:96-100 APPROVAL_TASK_SCENARIO_TEXT_KEYS` 加 `app_publish_request: 'com_notifications_action_request_app_publish'`；**三处 i18n**：`client/src/locales/{zh-Hans,en,ja}/translation.json`（同族键 `com_notifications_action_request_channel` 在 `zh-Hans:489` / `en:501` / `ja:486`）。
+  - **审批类**沿用既有通用动作码，差异靠 `scenario_code` → **一处代码**：`client/src/components/messageApproval/notificationContent.ts` 的 `APPROVAL_TASK_SCENARIO_TEXT_KEYS` 加 `app_publish_request: 'com_notifications_action_request_app_publish'`；**三处 i18n**：`client/src/locales/{zh-Hans,en,ja}/translation.json`（同族键 `com_notifications_action_request_channel` 在 `zh-Hans:489` / `en:501` / `ja:486`）。
   - **非审批类新事件**（待上线-资源不足 / 上线失败）→ 新 `action_code` **只要不进** `APPROVAL_CENTER_ACTION_CODES`（`:77-88`），`getNotificationText` 的兜底 key `com_notifications_action_{action_code}`（`:470`）自动生效 → **零前端代码，只加三语 key**。
-    - **⚠️「天然没有跳转按钮」有一个必须写进发送契约的前提**：按钮显示条件是 `isApprovalMessageType(message_type, action_code) && isPendingApprovalStatus(status) && !APPROVAL_NO_BUTTON_ACTION_CODES.has(...)`，而 `isApprovalMessageType`（`NotificationsDialog.tsx:152-156`）在 **`message_type === "request" || "approve"` 时也为真**，并不只看 `action_code` 白名单。→ **发送这两类非审批通知时，`message_type` 一律不得为 `request` / `approve`**（用中性类型），否则按钮照样长出来，AC-65「消息只通知不承载操作」当场破。已写进 §4.2 ⑦。
+    - **⚠️「天然没有跳转按钮」有一个必须写进发送契约的前提**：按钮显示条件是 `isApprovalMessageType(message_type, action_code) && isPendingApprovalStatus(status) && !APPROVAL_NO_BUTTON_ACTION_CODES.has(...)`，而 `isApprovalMessageType`（`messageApproval/notificationContent.ts`）在 **`message_type === "request" || "approve"` 时也为真**，并不只看 `action_code` 白名单。→ **发送这两类非审批通知时，`message_type` 一律不得为 `request` / `approve`**（用中性类型），否则按钮照样长出来，AC-65「消息只通知不承载操作」当场破。已写进 §4.2 ⑦。
   - platform 侧**不加铃铛**（PRD §3.0.3：管理后台不设消息面）。
 - **platform 场景配置（AC-19）—— MVP 做（两处小改）**：
   - 场景 seed 落库后**自动出现在左栏列表**（`ApprovalPage/index.tsx:1632-1700`），且因为已存在而不出现在「新增」下拉（`:232` 减去已存在的 `scenario_code`）→ **AC-19 的"展示"部分零前端改动**。
   - **必改**：`APPROVER_SOURCE_OPTIONS`（`ApprovalPage/index.tsx:590-597`）**补 `tenant_admin` 一项**——今天这个下拉只有 6 项且没有它，而 `APPROVER_SOURCE_LABEL_KEYS`（`:180-188`）与三语 i18n（`platform/public/locales/zh-Hans/bs.json` 的 `approverSource.tenant_admin`，**两处** `:1832` / `:1842`）**早就有**。不补 = 租户管理员改配后**没法把「租户管理员」这个来源加回来**，AC-19 半残。
   - **场景名 `应用发布` 是后端硬编码中文**（与既有三场景 `approval_registry.py:19/30/40` 一致），前端直接渲染 `s.scenario_name`（`:1660`）——**接受中文单语**，不另开映射表（一致性 > 单点完美）。
-- **i18n / lint 债（触碰即还，根 AGENTS.md）**：`ApprovalCenterDialog.tsx` 在 `client/eslint-suppressions.json:1714-1723` 有冻结违规（`no-explicit-any ×16` / **`no-restricted-syntax ×4` 硬编码中文** / `exhaustive-deps ×3`）；F055 改该文件的 PR **必须**顺手把 4 条中文抽成 i18n 并 `pnpm lint:prune`。这是实打实的任务成本，tasks.md 单列。
+- **i18n / lint 债（触碰即还，根 AGENTS.md）**：vibe 期 `ApprovalCenterDialog.tsx` 的冻结违规已随 beta2 拆分一并消失（2026-09-10 核实 `client/eslint-suppressions.json` 无 `approval/` 条目）；F055 触碰 `approval/ApprovalPane.tsx` / `ApprovalDetailPanels.tsx` 时仍以 lint 实跑为准。
 - **何时该重新考虑**：见上文注册表触发条件；或审读视图的 1200px 仍不够（那时才考虑案 B 的独立路由）。
 
 ### D15：发布面最小区块与状态只读接口 = 区块组件填 F054 的 slot + 一个 service 供两处消费
@@ -414,7 +414,7 @@
 
 ```
 CLI: POST /api/v2/apps/deploy  (multipart: package.tar.gz + app_id? + confirm_schema_change?)
-  │  Depends(open_api_subject("app:manage"))         # F049，缺位→26xxx；delegate 位发不出来
+  │  @open_api_scope("app:manage") + router_rpc verify_open_api_access   # beta2 单一管线，缺位→26xxx；delegate 与 app:manage 签发期互斥（M7）
   ├─ ① 同步前段（秒级，deploy_endpoint → PublishPipelineService.accept）
   │    │  ⚠️ 本段不发任何 RPC：manager 不可达就会把 deploy 变成挂在超时上的请求（D4 / D1 选 C 的兑现）
   │    ├ 归属判定：principal.resource_owner_user_id == app.owner_user_id ?  否→16205
@@ -486,7 +486,7 @@ platform 发布面 / F052 MCP 应用状态工具
 
 ### 4.2 关键数据结构 / 字段约定（对外契约）
 
-**① 管线接收与轮询端点**（新 router `/api/v2/apps`，逐端点 `Depends(open_api_subject("app:manage"))`）
+**① 管线接收与轮询端点**（新 router `/api/v2/apps` 挂 `router_rpc`，逐端点打 `open_api_scope("app:manage")` marker，鉴权在 `verify_open_api_access`）
 
 | 端点 | 入参 | 返回 | 消费者 |
 |---|---|---|---|
@@ -550,7 +550,7 @@ platform 发布面 / F052 MCP 应用状态工具
   "approver_note": "no_department_admin_source" | null }
 ```
 
-  **client 侧必须把嵌套键加进 `DETAIL_INTERNAL_KEYS`**（`ApprovalCenterDialog.tsx:136`），否则通用两列网格会把它们渲染成 `[object Object]`（坑 7）。
+  **client 侧必须把嵌套键加进 `DETAIL_INTERNAL_KEYS`**（`approval/approvalPresentation.tsx`），否则通用两列网格会把它们渲染成 `[object Object]`（坑 7）。
 - 节点配置（seed 落库形态）：单条 catch-all 分支（`match_config={}`）→ 单节点 `node_mode='or'`，`approver_config.sources = [{"type":"department_admin"},{"type":"tenant_admin"}]`。
 
 **⑤ 新表**
@@ -579,7 +579,7 @@ platform 发布面 / F052 MCP 应用状态工具
 | 待上线（上线失败） | **`app_publish_deploy_failed`（新，非审批类）** | 同上 | 同上 |
 
 > **⚠️ 非审批类两条的发送契约（写死，别只记 action_code）**：`message_type` **不得为 `request` / `approve`**。
-> `isApprovalMessageType(message_type, action_code)`（`client/src/components/NotificationsDialog.tsx:152-156`）在 `message_type === "request" || "approve"` 时**也为真**，并不只看 `APPROVAL_CENTER_ACTION_CODES` 白名单——按钮显示条件是 `isApprovalMessageType(...) && isPendingApprovalStatus(status) && !APPROVAL_NO_BUTTON_ACTION_CODES.has(...)`。
+> `isApprovalMessageType(message_type, action_code)`（`client/src/components/messageApproval/notificationContent.ts`；2026-09-10 改接 beta2 后原 `NotificationsDialog.tsx` 已删）在 `message_type === "request" || "approve"` 时**也为真**，并不只看 `APPROVAL_CENTER_ACTION_CODES` 白名单——按钮显示条件是 `isApprovalMessageType(...) && isPendingApprovalStatus(status) && !APPROVAL_NO_BUTTON_ACTION_CODES.has(...)`。
 > → D14「新 action_code 天然没有跳转按钮」**只在发送侧用中性 `message_type` 时成立**；用错类型 = 通知里长出一个点了会报错的跳转按钮，AC-65「消息只通知不承载操作」当场破。
 | 资源释放后可手动上线 / 能力被收回 | — | — | **不主动提示**（AC-64），发布面自查 |
 
@@ -605,7 +605,7 @@ platform 发布面 / F052 MCP 应用状态工具
 
 | 模块 / 文件 | 职责 | 不做什么 |
 |---|---|---|
-| `bisheng/app_publish/api/router.py` · `api/endpoints/{deploy,deployment_status,publish_status,resource_tier}.py` | `/api/v2/apps` 管线端点（逐个挂 `open_api_subject("app:manage")`）+ `/api/v1` 发布状态与档位读写端点 | 不直接 import `database/models`（RULE-3）；不自建鉴权（K8） |
+| `bisheng/app_publish/api/router.py` · `api/endpoints/{deploy,deployment_status,publish_status,resource_tier}.py` | `/api/v2/apps` 管线端点（逐个打 `open_api_scope("app:manage")` marker）+ `/api/v1` 发布状态与档位读写端点 | 不直接 import `database/models`（RULE-3）；不自建鉴权（K8） |
 | `domain/services/publish_pipeline_service.py` | 管线编排：同步前段 `accept()` + 异步后段 `run_pipeline()` 的阶段机与 `app_deployment` 推进 | 不直连 docker；不写应用态（只调 F054） |
 | `domain/services/package_service.py` | 落 MinIO、解包安全闸、大小 / 条目闸、孤儿快照清理 | 不解析业务语义 |
 | `domain/schemas/app_manifest.py` | **AppManifest 权威 schema**（pydantic v2，`extra='forbid'`） | 不含校验之外的业务逻辑；F053 / F054 只消费不改 |
@@ -642,7 +642,7 @@ platform 发布面 / F052 MCP 应用状态工具
 | 4 | **`withdraw_instance` 无终态守卫**（`approval_center_service.py:418-492`，`:430` 只校验申请人） | 已 EXECUTED / EXCEPTION / WITHDRAWN 的实例可被反复撤回并**重复触发 `on_withdrawn`** → 已上线的版本被反复标成 `withdrawn` | D10；修点 `:432` 之前，错误码走 approval 段 181xx |
 | 5 | **Gate 建完首节点 task 后不发站内信**（`approval_gate.py:232-248` 只建 task + 审计），三个既有场景都在自己那侧补发 | 审批人永远收不到"有单待审"的通知，只能自己去审批中心翻 → AC-64 直接不成立 | D7；`publish_approval_service` 在 Gate 返回 PENDING 后自发 |
 | 6 | **没有"取消在途实例"的通用入口**：唯一置 `CANCELLED` 的 `cancel_exception_api`（`approval_exception_service.py:159-230`）**从 exception 记录起手**，且 `:221` 通知的是**申请人** | 想复用它做 AC-35 → 应用删除时通知了 owner（人已经知道，是他删的）而审批人还在待办里看到一个不存在的应用 | D10 新增 `cancel_instance_by_business`（放审批模块，通知**审批人**） |
-| 7 | **`detail_snapshot` 无任何 schema**（`approval_instance.py:62` 是裸 `JsonType`），前端把它拍平成两列网格（`ApprovalCenterDialog.tsx:696-724`）：**数组被 `join(", ")`**（`:718`）、**对象变 `[object Object]`**、未在 `localizeFieldKey`（`:138-150`，仅 8 条）里的 key **原样显示英文键名** | 能力声明数组渲染成一坨逗号串、档位对象显示 `[object Object]`、字段名显示 `release_kind` —— 审批人看不懂在审什么 | D7 结构化 payload + client 早分派 + 嵌套键加进 `DETAIL_INTERNAL_KEYS`（`:136`） |
+| 7 | **`detail_snapshot` 无任何 schema**（`approval_instance.py:62` 是裸 `JsonType`），前端把它拍平成两列网格（`approval/ApprovalDetailPanels.tsx`）：**数组被 `join(", ")`**、**对象变 `[object Object]`**、未在 `localizeFieldKey`（`approval/approvalPresentation.tsx`，仅 8 条）里的 key **原样显示英文键名** | 能力声明数组渲染成一坨逗号串、档位对象显示 `[object Object]`、字段名显示 `release_kind` —— 审批人看不懂在审什么 | D7 结构化 payload + client 早分派 + 嵌套键加进 `DETAIL_INTERNAL_KEYS`（`approvalPresentation.tsx`） |
 | 8 | **Gate 的重复提交拦截是"静默返回既有实例"**（`approval_gate.py:93-103`，按 `(tenant_id, scenario_code, business_key, applicant_user_id)` 且 status ∈ `pending/exception/execute_failed`） | AC-03 靠 Gate 兜 → 第二次 deploy 得到 200 + 上一个审批单，CLI 显示"提交成功"但实际什么都没提交 | K2；`publish_approval_service` 在**调 Gate 之前**自查并抛 16251 |
 | 9 | **`resolve_approvers` 由 handler 自己实现**（`approval_gate.py:195`），通用来源要**显式转调** `resolve_approvers_from_sources`（范式 `knowledge_space_subscribe_scenario_handler.py:111-118`） | handler 里返回 `[]` 或忘了转调 → 每次发布都 approver_empty 异常态，且现象与"没配审批人"完全一样、极难定位 | D7 handler 契约；单测断言"seed 后首次 Gate 返回 PENDING 且 approvers 非空" |
 | 10 | **outbox 判成败只看是否抛异常**（`worker/approval/tasks.py:111-120`），但**"待上线（资源不足 / 上线失败）"是产品终态不是失败**（AC-31 要求审批单保持通过） | 把容量不足 raise 出去 → instance 变 `execute_failed` + 建异常 + 通知管理员，产品上是"审批失败了"，与 AC-31 直接矛盾；反过来把编排器不可达吞掉 → 假成功 | D9 的判据：**"应用最终会不会自己好起来"——会就返回，不会就抛** |
@@ -660,12 +660,12 @@ platform 发布面 / F052 MCP 应用状态工具
 | 22 | **platform 拦截器对 `403/404` 整页跳转 `/403`**（`platform/src/controllers/request.ts:160-166`） | 非 owner 打开别人的应用详情页 → 整页跳走，而不是看到一个"你没有权限操作"的区块 | K11 ②；发布面只读接口用业务码或 `silent: true` |
 | 23 | **platform 场景配置的 `APPROVER_SOURCE_OPTIONS`（`ApprovalPage/index.tsx:590-597`）没有 `tenant_admin`**，而 `APPROVER_SOURCE_LABEL_KEYS`（`:180-188`）与三语（`platform/public/locales/zh-Hans/bs.json` 的 `approverSource.tenant_admin`，`:1832` / `:1842` 两处）早就有 | 租户管理员一旦改配审批人，就**再也没法把「租户管理员」这个来源加回来**（下拉里没有），AC-19 半残 | D14；同批补该选项 + preset 的 `approver_source_types` 含它 |
 | 24 | **审批场景名是后端硬编码中文**（`approval_registry.py:19/30/40`），前端直接渲染 `s.scenario_name`（`:1660`） | 以为新场景会自动三语，结果日语环境显示"应用发布" | D14 接受中文单语（与既有三场景一致），别默认它三语 |
-| 25 | **`ApprovalCenterDialog.tsx` 有 4 条冻结的硬编码中文违规**（`client/eslint-suppressions.json:1714-1723`），其中 `:331` 的 `"同意"/"驳回"` 正是 AC-24 要改的那一行 | 改了这行但没抽 i18n → `pnpm lint` 挂；或者不知道"谁触碰谁还债"规则，PR 被打回 | D14；tasks 单列"抽 4 条中文 + `pnpm lint:prune`" |
+| 25 | ~~`ApprovalCenterDialog.tsx` 有 4 条冻结的硬编码中文违规~~ **已失效（2026-09-10）**：该文件随 beta2 拆分删除，驳回必填落 `approval/ApprovalPane.tsx`，`eslint-suppressions.json` 已无 `approval/` 条目 | — | 触碰 `approval/*` 时仍按「谁触碰谁还债」以 lint 实跑为准 |
 | 26 | **F054 没有提供"创建草稿应用"的服务方法**（§4.2 ② 只有五个状态动作 + `stage_version` + `update_meta`），而 release-contract 定「本册唯一创建路径 = CLI 首发」 | 首发 deploy 时无处建 `app` 行 → 要么 F055 直写 `app` 表（违反决议-8「F054 是应用态唯一写入方」），要么整条剧本卡在第一步 | D2；需 F054 补 `AppProvisionService.create_draft(...)`，已登记 §6.2 |
 | 27 | **F054 `DEFAULT_TIERS`（design:294 = 0.5/512 · 1/1024 · 2/2048「增强」）与本 spec AC-44（1C/2G · 2C/4G · 4C/8G「性能」）数值与命名都冲突**，而 F054 D11 要求 F055 的 seed **从该常量读取落库** | 两边各按各的实现 → seed 一落库，F054 的兜底常量与 DB 表给出两套规格，`docker inspect` 核对 AC-63 时必然对不上 | D11 裁定以 spec 为准并**回写 F054 常量**。**2026-09-09 后续修订**：轻量档按实测改回 0.5C/1G（spec 决议-10），命名仍以 AC-44 为准；「114 用配置项下调」这条当时的解法已被证伪——配置项只在首次播种生效，表已落库就只能改表 |
 | 28 | **申请人必须是自然人 owner、不是发起 deploy 的服务账号**（INV-29：服务账号不出现在任何面向人的场景），主部门也要取 **owner** 的（`principal.subject_user_id` 是服务账号，它没有部门） | 审批单申请人显示成一个服务账号名；`department_admin` 来源按服务账号的部门解析（服务账号会被自动兜底进 guest 部门）→ 审批人解析到完全无关的人 | D7；`applicant_user_id = principal.resource_owner_user_id` |
 | 29 | **`CardSelectVersion`（`platform/src/pages/BuildPage/CardSelectVersion.tsx`）切换即写库**（`:25-31` 调 `changeCurrentVersion`），且 `version_list` 对托管应用**恒空** | 想复用它做版本列表 → 点一下就去改了某个工作流的当前版本；或者渲染出来永远是空 | D15 另起只读组件 |
-| 30 | **client 审批弹窗宽度上限 800px**（`ApprovalCenterDialog.tsx:392`） | 审读视图（左文件树 + 右只读代码 + 4 tab）实施到一半发现塞不进去，当场返工 | D14 案 A（review 态放宽到 1200px）；MVP 期整块不渲染 |
+| 30 | ~~client 审批弹窗宽度上限 800px~~ **前提已变（2026-09-10）**：beta2 把审批中心由弹窗改为设置页承载（`pages/settings/SettingsPage.tsx` 内嵌 `approval/ApprovalPane.tsx`） | 审读视图按旧弹窗尺寸前提设计会错 | D14 案 A 的「review 态放宽到 1200px」改为按设置页布局重定；MVP 期整块不渲染 |
 
 ---
 
@@ -687,7 +687,7 @@ platform 发布面 / F052 MCP 应用状态工具
 | `withdraw_instance` 终态守卫（非 PENDING 一律拒） | 行为变更（全场景） | 审批中心所有场景（AC-22） |
 | `SECRET_SCAN_RULES` 规则集 + `scan_package()` | 内部 Python 常量 + 函数 | **PRD-2 平台内发布**（AC-10「与平台内发布同一规则集」的落地手段 = 只有一份常量） |
 | `app.release.*` 审计事件族（§4.2 ⑥） | 审计事件 | **F056** 审计查询面（登记 + 查询归它，写入归本 Feature） |
-| 新通知 action_code：`approval_instance_cancelled` / `app_publish_pending_capacity` / `app_publish_deploy_failed` | 站内信契约 | client `NotificationsDialog`（前两者需三语 key，后两者零代码） |
+| 新通知 action_code：`approval_instance_cancelled` / `app_publish_pending_capacity` / `app_publish_deploy_failed` | 站内信契约 | client `messageApproval/notificationContent.ts`（前两者需三语 key，后两者零代码） |
 | 错误码段 **162**（§4.2 ⑧） | 错误码 | 全部调用方；**分配已在上游登记完毕**（release-contract「已分配模块编码」表 + constitution C5 均已写 `162 = F055`）→ 落码同 PR 只需新建 `common/errcode/app_publish.py` + 三语 `api_errors`，**不要再去改那两张表**（K9） |
 | `GET /api/v2/apps/deploy-limits`（包体 / 解包 / 条目三闸的当前值，§4.2 ①） | HTTP（`app:manage`） | **F053** 打包后上传前自查（AC-32）；取不到时退化为服务端 16201 兜底 |
 
@@ -703,8 +703,8 @@ platform 发布面 / F052 MCP 应用状态工具
 | **F054 `DEFAULT_TIERS` 常量**（档位 seed 的唯一代码来源） | 内部 Python 常量 | 数值与本 spec AC-44 冲突（坑 27），**需回写 F054**；改常量而不重跑 seed 不会影响存量表（幂等按 `code` 跳过） |
 | **F054 `app_version` 表**（含 `terminal_state` / `tier_id` / `code_object_key` 列）与 `app.pending_version_id` | 表结构 | 列改名 → 版本记录与派生显示同时坏；`app_version` 无 `tenant_id`（坑 19） |
 | **F054 MinIO 桶与键布局**（`bisheng-apps`、`apps/{app_id}/versions/{version_id}/code.tar.gz`） | 存储契约 | 键布局改动 → 快照取回、审读视图、预览拉起三处同时失效 |
-| **F049 `open_api_subject(scope)` / `verify_open_api_access` / `OpenApiPrincipal`**（含 `resource_owner_user_id`） | 内部 Python `Depends` | 工厂签名变化 → 全部 v2 端点失守；`resource_owner_user_id` 若改成"可追溯变更"，AC-04 的归属判定要重议 |
-| **F049 `api_credential.KEY_PREFIX` / `KEY_SECRET_LENGTH`** | 内部 Python 常量 | 前缀变更时扫描规则自动跟随（这正是不硬编码的理由） |
+| **beta2 F053 `open_api_scope(scope)` marker / `router_rpc` 的 `verify_open_api_access` / `OpenApiPrincipal`**（含 `resource_owner_user_id`；2026-09-10 改接） | 内部 Python `Depends` + 端点 marker | 管线或 marker 语义变化 → 全部 v2 端点失守（漏标记 fail-closed）；`resource_owner_user_id` 若改成"可追溯变更"，AC-04 的归属判定要重议 |
+| **beta2 `api_credential.SERVICE_ACCOUNT_KEY_PREFIX` / `PERSONAL_TOKEN_PREFIX` / `KEY_SECRET_LENGTH`** | 内部 Python 常量 | 前缀变更时扫描规则自动跟随（这正是不硬编码的理由） |
 | **F049 `CredentialService.issue/revoke` + `SUBJECT_RESOLVERS` 注册点**（`hosted_app` 主体，**后置**） | 内部 Python | 未注册解析器前该 kind 在 `/api/v2` 上按 `26002` 拒绝（F049 design D2 已声明） |
 | **审批中心引擎**：`ApprovalGate.request_or_pass` · `ApprovalRegistry` · `approval_runtime_handler_factory` · `ApprovalCenterService.decide_task` / `withdraw_instance` · `approval_outbox_service` · `ApprovalNotificationService` | 内部 Python + 注册点 | Gate 的两个"静默"语义（K2）· outbox 的抛异常判据（K3）· 工厂漏分支（K1 ③）—— 三者任一变化都会让发布流程静默半失效；**改这些代码必须同 PR 更新 `.claude/skills/approval-module/SKILL.md`** |
 | `UserDepartmentDao.aget_user_primary_department`（`database/models/department.py:1377-1388`，只取主部门不回溯） | 内部 Python | 若改成向上回溯，AC-14「只取主部门」当场破 |
@@ -712,7 +712,7 @@ platform 发布面 / F052 MCP 应用状态工具
 | `MinioStorage`（`put_object` / `get_object` / `create_bucket_sync`）+ 独立桶 `bisheng-apps` | 基础设施 | `_init_bucket_conf` 不建新桶（坑 14）；桶策略在存量环境不会被收窄 |
 | Celery 默认队列 + `worker/tenant_context.py` 的 header 透传 | 基础设施 | 部署缺 default worker → 管线后段与审批 outbox 双双不执行（K12） |
 | `settings.app_runtime.*`（档位默认值 / 预览超时 / 包体上限覆盖） | 部署配置 | `load_settings_from_yaml` 对未知顶层键 `raise KeyError` → **必须先发代码再改 YAML**（K10） |
-| client / platform 既有件：`ApprovalCenterDialog` · `NotificationsDialog` · `ApprovalPage` · `hostedApp` 壳 · `useHostedAppActions` · `bs-ui/*` | 前端组件 | `ApprovalCenterDialog` 是 1037 行单文件且有冻结违规（坑 25）；`hostedApp` 壳归 F054，F055 只填 slot |
+| client / platform 既有件：`approval/ApprovalPane` · `approval/ApprovalDetailPanels` · `approval/approvalPresentation` · `messageApproval/notificationContent` · `ApprovalPage` · `hostedApp` 壳 · `useHostedAppActions` · `bs-ui/*` | 前端组件 | beta2 已把 vibe 期 `ApprovalCenterDialog` / `NotificationsDialog` 拆成前四件（坑 25 / 30 随之失效）；`hostedApp` 壳归 F054，F055 只填 slot |
 
 ---
 
@@ -722,7 +722,7 @@ platform 发布面 / F052 MCP 应用状态工具
 
 - **单元**（`test/app_publish/`，`asyncio_mode=auto`）：
   - **AppManifest 校验矩阵**：三个必填项各缺一次 · `runtime` 越界 · `port` 越界 · 未知字段（`extra='forbid'`）· `manifest_version` 超前 · 密钥引用出现 → 各自断言 `failure.code` 与 `details` 结构（AC-07 / AC-11 / AC-56）。
-  - **密钥扫描规则集遍历**（AC-10 的直接承载）：每条规则一个正样本必命中、一个反样本必不命中，且断言输出的 JSON 序列化结果**不含样本密钥子串**；另测二进制跳过、大文件 `skipped` 可见、`bs-sak-` 规则随 `KEY_PREFIX` 常量变化。
+  - **密钥扫描规则集遍历**（AC-10 的直接承载）：每条规则一个正样本必命中、一个反样本必不命中，且断言输出的 JSON 序列化结果**不含样本密钥子串**；另测二进制跳过、大文件 `skipped` 可见、`bs-sak-` 规则随 `SERVICE_ACCOUNT_KEY_PREFIX` 常量变化。
   - **解包安全闸**：绝对路径 / `..` 穿越 / 符号链接 / 硬链接 / 设备文件 / FIFO 六类恶意条目全部被拒（坑 15）；条目数闸与解包大小闸。
   - **审批人解析**：seed 后首次 Gate 返回 PENDING 且 approvers 非空（坑 9）· 申请人在候选中被过滤（AC-17）· 仅一名管理员且无其他候选时保留本人 + `self_approval` 标注（**并发两单：一自审一非自审 → 审计里 `self_approval` 恰一条且挂对 deployment**，验证 handler 未被复用，D7）· owner 无主部门时落到租户管理员（AC-14）· **Root 租户回退超管**（AC-15）· 两来源皆空 → `decision=EXCEPTION`（AC-18，**断言不抛异常**）。
   - **`on_approved` 三分支**：online / 容量不足 / 上线失败三种 `publish` 返回值下 **均正常返回**；编排器不可达 **抛异常**（K3 / D9 的判据）；已下线态只 stage 不 publish（AC-36）。

@@ -134,7 +134,7 @@
 - **选定**：**B**。区块内部只做三件事：读状态（`GET /api/v1/permissions/resources/app/{id}/grants` → `getResourcePermissionGrantsApi`，`platform/controllers/API/permission.ts:313-327`）、渲染「仅 owner 可见」提示条或已授主体摘要、点按钮 `setOpen(true)` 拉起 `<PermissionDialog resourceType="app" resourceId={app.id} resourceName={app.name} />`（`platform/src/components/bs-comp/permission/PermissionDialog.tsx`，props `:26-32`）。弹窗关闭后**重新拉一次 grants** 刷新摘要（不做乐观更新——授权是低频动作，一次往返换准确性）。
   - 另一个入口（卡片 ⚙️「管理权限」）**F054 T063 已接线**：`platform/src/pages/BuildPage/apps.tsx:215-218 handleOpenPermission` 的 `typeMap` 补 `35: 'app'`、`:139-140 useResourceActions` 加第三桶、`:150 canManage` 判 `manage_permission`、`:415-423` 弹窗挂载均为既有结构。F056 **只做回归验证**（AC-16）。
   - `PermissionDialog` 组件本身**无 per-type 分支**（F054 design `:250` 原话），三处 `ResourceType` union 已含 `app`（`platform/controllers/API/permission.ts:19`、`platform/components/bs-comp/permission/types.ts:16`、`client/src/api/permission.ts:15`），**本 Feature 对弹窗零改动**。
-- **原因**：slot 是三方书面约定，B 是唯一不制造合并冲突的落法；复用弹窗是 AC-11 的字面要求，也天然满足 INV-29（选人不出现服务账号——`permission/domain/services/grant_subject_service.py:95` 的 `User.user_type == USER_TYPE_HUMAN` 过滤在数据层，**AC-11 的这半句是回归验证不是新工作**）。
+- **原因**：slot 是三方书面约定，B 是唯一不制造合并冲突的落法；复用弹窗是 AC-11 的字面要求，也天然满足 INV-29（选人不出现服务账号——**服务账号为独立 `service_account` 表**、不在 `user` 表内，选人查询天然不含〔2026-09-10 改接 beta2，迁移方案 M4；原 `user_type` 数据层过滤已移除〕，**AC-11 的这半句是回归验证不是新工作**）。
 - **何时该重新考虑**：F055 交付发布 tab 后 slot 机制被改成别的（如 tab 内路由）——那时本区块跟着换挂载点，内容不变。
 
 ### D5：「仅 owner 可见」的判据 = grants 首页里**非 protected** 的授权行数为 0，不是"列表为空"
@@ -370,7 +370,7 @@ client 广场页 pages/apps/explore.tsx:60-62
 | **F054 T071 / AC-62**：`useAppRuntimeEnabled` hook（读 `GET /api/v1/env.app_runtime_enabled`） | react-query v4 hook + HTTP 字段 | 字段或 hook 缺失 → 未部署形态下广场出现相关文案（AC-10 不成立）。**别引成 T090 / AC-61**：T090 是审批期预览入口、AC-61 是"两开关任意组合可启动" |
 | **F054 AC-38**：访问记录写入（合并窗口 = **1800s**，本文 D7 定义，**待回写 F054 design `:339` 的 300s**） | 业务日志 | 勘误未回写 = F054 按 300s 落地；写入方若改口径（记请求级明细）→ 审计页高频事件量级爆炸 |
 | **F048（既有）**：`PermissionDialog` / `getResourcePermissionGrantsApi` / `getResourcePermissionContextApi` / `mutateResourceGrantsApi` / `batch_check_business_actions` / `_identity_shortcut` / `catalog_policy.ACTION_RESOURCE_SCOPES` | 前端组件 + HTTP + Python | `ACTION_RESOURCE_SCOPES` 里 `app` 的动作集若变（比如有人"顺手"加了 `share`），D3 的裁剪就成了多余甚至错误；`PermissionGrantAssignee.protected` 语义变 → D5 判据静默失效（坑 13） |
-| **F048（既有）**：`grant_subject_service.py:95` 的 `user_type == USER_TYPE_HUMAN` 过滤 | SQL | INV-29「选人不出现服务账号」靠它；改了会让服务账号出现在授权弹窗里 |
+| **beta2 F053**：服务账号为独立 `service_account` 表、不在 `user` 表内（2026-09-10 改接 beta2，原 `user_type` 过滤已移除） | 数据模型 | INV-29「选人不出现服务账号」靠它；若有人把服务账号回写进 `user` 表，服务账号会出现在授权弹窗里 |
 | **审计基建**：`AuditLogDao.ainsert_v2` / `_UI_VISIBLE_V2_ACTIONS` / `_V2_NAMESPACE_TO_ACTION_PREFIX` / `log.ts` / 三语 `bs.json` | Python + 前端常量 + i18n | 签名或白名单机制变 → 事件写了查不到（K3） |
 | **F055**：`app.release.*` 白名单登记 | 审计登记 | F055 自登记；F056 只验收"可查"，若 F055 漏登记，AC-27 会记在本 Feature 头上（故 §7 有断言测试） |
 | **114 部署**：nginx `location /apps/`（`/etc/nginx/conf.d/bisheng-lilu.conf`，F054 交付） | 运维配置 | 没这条 location，卡片点击落 platform SPA → `/404`；外网 13000 快照需手动重建 |

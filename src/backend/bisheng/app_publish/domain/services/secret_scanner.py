@@ -33,7 +33,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from bisheng.open_api.domain.models.api_credential import KEY_PREFIX, KEY_SECRET_LENGTH
+from bisheng.open_api.domain.models.api_credential import (
+    KEY_SECRET_LENGTH,
+    PERSONAL_TOKEN_PREFIX,
+    SERVICE_ACCOUNT_KEY_PREFIX,
+)
 
 #: Files above this size are skipped and reported as skipped.
 MAX_SCAN_FILE_BYTES = 1024 * 1024
@@ -69,14 +73,28 @@ class SecretRule:
 #: turns red when one is missing, which is what makes AC-10's "100% of the
 #: samples are blocked" a checkable statement rather than a hope.
 SECRET_SCAN_RULES: tuple[SecretRule, ...] = (
+    # Both platform credential shapes, one rule each. 伴生 PRD §4.2.6 requires
+    # the leak scan to know *both* prefixes; the personal token is a distinct
+    # rule rather than an alternation so a hit names which kind of credential
+    # was committed — the remedy differs (revoke a service-account key vs. tell
+    # a person their own token is in a package).
     SecretRule(
         rule_id="bs_sak",
         name_i18n_key="app_publish.secret_rule.bs_sak.name",
         description_i18n_key="app_publish.secret_rule.bs_sak.desc",
-        # Built from F049's constants rather than written out: when the prefix
-        # or the secret length changes, this rule follows instead of quietly
-        # stopping to match (C6 forbids the hardcoded literal for exactly this).
-        pattern=re.compile(rf"\b{re.escape(KEY_PREFIX)}[A-Za-z0-9_\-]{{{KEY_SECRET_LENGTH}}}\b"),
+        # Built from the credential model's constants rather than written out:
+        # when the prefix or the secret length changes, this rule follows
+        # instead of quietly stopping to match (C6 forbids the hardcoded
+        # literal for exactly this).
+        pattern=re.compile(rf"\b{re.escape(SERVICE_ACCOUNT_KEY_PREFIX)}[A-Za-z0-9_\-]{{{KEY_SECRET_LENGTH}}}\b"),
+    ),
+    SecretRule(
+        rule_id="bs_pat",
+        name_i18n_key="app_publish.secret_rule.bs_pat.name",
+        description_i18n_key="app_publish.secret_rule.bs_pat.desc",
+        # Same secret alphabet and length as a service-account key — the
+        # validator's ``_TOKEN_RE`` accepts both prefixes with one body shape.
+        pattern=re.compile(rf"\b{re.escape(PERSONAL_TOKEN_PREFIX)}[A-Za-z0-9_\-]{{{KEY_SECRET_LENGTH}}}\b"),
     ),
     SecretRule(
         rule_id="aws_akid",

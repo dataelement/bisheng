@@ -299,7 +299,15 @@ async def _identity_material(*, app: App, user_id: int, subject: dict, request_i
 
 
 async def _user_facts(user_id: int, subject: dict) -> tuple[str, str]:
-    from bisheng.user.domain.models.user import USER_TYPE_HUMAN, UserDao
+    """The visitor's display name plus the constant subject kind ``human``.
+
+    A platform session belongs to a natural person by construction: service
+    accounts are not rows of ``user`` (F053 design K15 / K17) and reach the
+    platform only through ``/api/v2`` keys, never through ``/apps/{slug}``.
+    The kind is still emitted so app-proxy's ``X-BiSheng-Subject-Kind`` (AC-31)
+    keeps one authoritative writer.
+    """
+    from bisheng.user.domain.models.user import UserDao
 
     name = str(subject.get("user_name") or "")
     kind = "human"
@@ -310,7 +318,6 @@ async def _user_facts(user_id: int, subject: dict) -> tuple[str, str]:
         return name, kind
     if row is not None:
         name = row.user_name or name
-        kind = "human" if (row.user_type or USER_TYPE_HUMAN) == USER_TYPE_HUMAN else "service_account"
     return name, kind
 
 

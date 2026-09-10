@@ -9,6 +9,8 @@
 > 调整原则（详见 `docs/SDD-Guide.md` §3-§4）：实现变化 → 覆盖更新本文档、只留"今天的状态"；但每个决策保留"为什么 + 被否方案"和坑。推翻已 ★ 确认的决策 → 停下与用户重新确认；纯实现细节 → 直接改 design。
 >
 > **代码事实口径**：本文所有 `文件:行号` 均按 `3.0-vibe`（HEAD `b63a320f2`，含 F048）在 2026-08-17 核实，路径以 `src/backend/bisheng/` 为根（前端另注 `platform/` = `src/frontend/platform/src/`、`client/` = `src/frontend/client/src/`）。行号会漂移，符号名不会——落地前以符号名重定位。凡文档锚点已在代码中消失的，标「已失效」。
+>
+> **⚠️ 2026-09-10 归档标注**：open_api 底座整体改接 beta2 F053（见 [beta2-openapi-base-migration.md](../beta2-openapi-base-migration.md)），本文保留为历史、不再更新。已被取代的口径：D1「复用 `User` 表 + `user_type` 列」→ beta2 独立 `service_account` 表（M4，`user_type` 列已用 drop 迁移移除）；`open_api_subject(scope)` `Depends` 工厂 → 端点 `@open_api_scope` marker + `router_rpc` 的 `verify_open_api_access` 单一管线（M8）；个人 key `bs-pat-`「整条废除」→ 伴生 PRD D13 改判交付（主体类型 `natural_person`）。
 
 **关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)（待写）· [release-contract.md](../release-contract.md)（表 1 ApiCredential / ServiceAccount / ShareLink，INV-27~31）· [mvp-114-path.md](../mvp-114-path.md) · [baseline-recheck.md](../000-prd1-discovery/baseline-recheck.md)
 **版本**: v3.0.0
@@ -22,7 +24,7 @@
 ## 1. 目标与非目标
 
 - **目标**：给 `/api/v2/**` 装上唯一一条凭据校验路径——服务账号密钥 `bs-sak-`（只存哈希、软撤销、5 秒内失效、按位授权），让每个外部调用都能定位到"哪个集成、哪个租户、哪些权限位"，并把匿名超管通道彻底关掉。为此交付三块地基：服务账号主体（不可登录、不进选人、必填资源归属人）、管理界面（列表 / 新建 / 详情三 tab，含主体侧唯一授权入口）、开放能力层开关与三扩展位登记（F051–F053 复用）。两个免登录分享页同步改走 share-token 通道。
-- **非目标**（详见 spec 范围边界，此处防扩范围）：身份传递（模式 D / OBO / End-User 头 / `delegate` 位 / 审计双归属）→ F050；三扩展位的运行期消费与入口拒绝 → F051 / F052 / F053；接入信息区 → F053；应用运行期凭据编排 → F055；Responses 契约 → F058；文件级检索过滤 → F052；限流 / 配额 / IP 白名单 / 幂等 → P2；个人 key（`bs-pat-`）整条废除；平台侧任何存量迁移。
+- **非目标**（详见 spec 范围边界，此处防扩范围）：身份传递（模式 D / OBO / End-User 头 / `delegate` 位 / 审计双归属）→ F050；三扩展位的运行期消费与入口拒绝 → F051 / F052 / F053；接入信息区 → F053；应用运行期凭据编排 → F055；Responses 契约 → F058；文件级检索过滤 → F052；限流 / 配额 / IP 白名单 / 幂等 → P2；个人 key（`bs-pat-`）整条废除（**⚠️ 2026-08-27 改判：PAT 交付，伴生 PRD D13，实现在 beta2 F053；本条保留为历史**）；平台侧任何存量迁移。
 
 ---
 
@@ -370,7 +372,7 @@
 
 - **P1（随后续 Feature）**：HTTP 逐调用审计表化 + 双归属（F050）；`delegate` 位、委托配置区、`26005–26007/26010/26016`（F050）；guest 会话从分享创建者会话列表摘出 + history 逐访客绑定（等 F050 `MessageSession` 分区键）；`chat:invoke` 端点标记与清 `pending_note_key`（F058）；`hosted_app` 主体解析器（F055）；文件级检索过滤（F052，本期 `POST /filelib/retrieve` 只加鉴权，过滤强度维持知识资源级 + fail-closed）；接入信息区（F053）；应用运行期凭据编排（F055，本底座只保证 `subject_kind='hosted_app'` 可用）；WS 吊销事件驱动断连（F054 app-proxy 的 connection 索引方案，本期用 3s 轮询 watchdog 够用）。
 - **P2（PRD R8）**：限流 / 配额 / IP 白名单 / 幂等键——平台无 HTTP 限流基础设施，最近原语 fail-open（PRD 附录 E.5），不可按"接现成库"估。
-- **不做**：兼容窗口 / 鉴权开关 / 迁移期放行（INV-27）；密钥级资源白名单（PRD D3）；个人 key；平台侧存量迁移或转型脚本；`share_link.status` 改成时间戳（既有读路径按枚举判，本期只补写入端点）；给 `share_link.resource_type` 加枚举值；把 `default_operator` 残留 DB 键清理成脚本；密钥经查询参数传递；F018 归属转移接口。
+- **不做**：兼容窗口 / 鉴权开关 / 迁移期放行（INV-27）；密钥级资源白名单（PRD D3）；个人 key（⚠️ 2026-08-27 改判为交付，伴生 D13，实现在 beta2 F053；保留为历史）；平台侧存量迁移或转型脚本；`share_link.status` 改成时间戳（既有读路径按枚举判，本期只补写入端点）；给 `share_link.resource_type` 加枚举值；把 `default_operator` 残留 DB 键清理成脚本；密钥经查询参数传递；F018 归属转移接口。
 - **重写 / 拆分触发条件**：F051–F053 上线后凭据校验 QPS 使 Redis 成瓶颈 → 评估本地 LRU 只作"正缓存 + 版本号校验"的两级方案（仍靠 Redis 版本号保证 5 秒）；服务账号数量或授权条目达到万级 → 反查与名称水合改批量 join。
 
 ---

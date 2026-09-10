@@ -13,9 +13,10 @@ import {
 import { Input, Textarea } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import { toast } from "@/components/bs-ui/toast/use-toast"
+import { locationContext } from "@/contexts/locationContext"
 import { createServiceAccountApi } from "@/controllers/API/serviceAccount"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { useState } from "react"
+import { useContext, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Loader2 } from "lucide-react"
 
@@ -31,6 +32,13 @@ export function CreateServiceAccountDialog({
   onCreated,
 }: CreateServiceAccountDialogProps) {
   const { t } = useTranslation()
+  const { appConfig } = useContext(locationContext)
+  // Single-tenant deployments have no "current tenant" to scope the owner
+  // picker to; the hint keeps its substance (pick an active user) and drops
+  // the tenant qualifier.
+  const createHintKey = appConfig?.multiTenantEnabled
+    ? "openApiManagement.serviceAccount.createHint"
+    : "openApiManagement.serviceAccount.createHintSingle"
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [owners, setOwners] = useState<DepartmentUserOption[]>([])
@@ -79,9 +87,7 @@ export function CreateServiceAccountDialog({
           <DialogTitle>
             {t("openApiManagement.serviceAccount.create")}
           </DialogTitle>
-          <DialogDescription>
-            {t("openApiManagement.serviceAccount.createHint")}
-          </DialogDescription>
+          <DialogDescription>{t(createHintKey)}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">

@@ -12,8 +12,8 @@ import json
 from hashlib import sha256
 from typing import Any
 
-# v4 is the union of two independent v3s (2026-09-10), the same way v3 was
-# the union of two independent v2s.
+# v5 is the union of two lines that had diverged since v2 (2026-09-10), the
+# same way v3 on `3.0-vibe` was the union of two independent v2s.
 #
 # - `3.0-vibe` v3 (2026-08-18): beta1's visibility-projection upgrade
 #   (`FLAT_VISIBLE_RESOURCE_TYPES`, `_visible_subject_types`, `published`)
@@ -25,19 +25,24 @@ from typing import Any
 #   from the computed `system_*` branches (2026-09-03, no bump of its own):
 #   the relation stays declared so existing tuples still write, but it no
 #   longer feeds `visible` or `system_can_*`.
+# - `feat/3.0.0-beta1` v4 (2026-09-09, f6bf9f51f): beta2's v3 plus
+#   `TECHNICAL_MARKER_SUBJECTS` — every Catalog / resource-state marker
+#   relation accepts `service_account:*` next to `user:*`, so a service
+#   account's direct grant can pass the same technical gates a user's does.
+#   That shape is already published (release history calls it `f048-v4`).
 #
-# This file is the union of beta2's v3 and vibe's v3: `service_account`
-# subjects together with the `app` resource type. Both lines had called
-# their own shape `f048-v3`, so the union is a third shape and needs a
-# third name.
+# This file is beta1's v4 plus vibe's `app` resource type — nothing else.
+# `app` is modelled exactly like the other flat, never-system-shared types
+# (`channel`, `dashboard`), so it picks up the `service_account` subjects and
+# technical markers for free.
 #
 # The name is bumped rather than reused because it is written into
 # `authorization_model_release.model_version` next to the checksum. Correctness
 # is carried by the checksum, so nothing breaks either way; but an operator
-# reading the release history would see two `f048-v3` rows with different
+# reading the release history would see two `f048-v4` rows with different
 # checksums and no way to tell which model each one is. A version string whose
 # only job is to be readable must not name two different things.
-MODEL_VERSION = "f048-v4"
+MODEL_VERSION = "f048-v5"
 
 DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "manage_permission",
@@ -171,10 +176,7 @@ TECHNICAL_MARKER_SUBJECTS: tuple[str, ...] = ("user:*", "service_account:*")
 def _technical_marker_subject_types() -> list[dict]:
     """Subjects gated by Catalog and resource-state markers."""
 
-    return [
-        {"type": subject.removesuffix(":*"), "wildcard": {}}
-        for subject in TECHNICAL_MARKER_SUBJECTS
-    ]
+    return [{"type": subject.removesuffix(":*"), "wildcard": {}} for subject in TECHNICAL_MARKER_SUBJECTS]
 
 
 def _subject_types() -> list[dict]:

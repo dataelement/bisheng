@@ -88,10 +88,13 @@ describe("personal-token tenant settings interaction", () => {
     pending.resolve({ ...initialSetting, pat_enabled: true, effective_enabled: true })
 
     await waitFor(() => expect(saveButton).toBeEnabled())
+    // No locationContext provider here, so the component sees a single-tenant
+    // deployment and reports with the tenant-free key; the tenancy switch
+    // itself is covered by openApiManagementTenantCopy.test.tsx.
     expect(message).toHaveBeenCalledWith({
       title: "prompt",
       variant: "success",
-      description: "openApiManagement.personalToken.settingsSaved",
+      description: "openApiManagement.personalToken.settingsSavedSingle",
     })
   })
 

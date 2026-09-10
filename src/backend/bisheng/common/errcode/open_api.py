@@ -190,3 +190,23 @@ class PersonalTokenHolderInvalidError(OpenApiAuthError):
     Code = 26043
     Msg = "Personal access token holder is no longer active in this tenant"
     http_status = 401
+
+
+# 26050+: issue-time scope policy shared by service-account keys and personal
+# tokens (伴生 PRD §4.2.4 / §4.7.3 AC-48). 26032-26039 and 26044-26049 stay
+# reserved (test/open_api/test_error_codes.py).
+
+
+class OpenApiDelegateExclusiveScopeError(OpenApiAuthError):
+    """``delegate`` combined with a local development toolkit scope.
+
+    A delegated key must send ``X-On-Behalf-Of`` on every call, while the
+    toolkit surfaces (``model:invoke`` / ``identity:read`` / ``app:manage``)
+    execute as the service account itself — such a key is unusable on both
+    sides, so the combination is refused at issue and edit time rather than
+    left to fail at runtime.
+    """
+
+    Code = 26050
+    Msg = "A delegated credential cannot carry local development toolkit scopes; issue a separate key"
+    http_status = 400

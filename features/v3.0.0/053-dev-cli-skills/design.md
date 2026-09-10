@@ -25,7 +25,7 @@
 > 文案侧同步订正：`_print_reference_guide` 原本断言「Claude Code：自动发现 SKILL.md，无需配置」并指向包内根本不存在的 `README.md`（该 README 只在平台源码 `bisheng/dev_toolkit/skills/README.md`，不随 tar 分发），两句都朝「你不用再做什么」的方向误导；教程 `hosted-app.html` 步 1/2 与排障段同改。**`logout` 仍然不做**（§8 四不做项）——软链在每次 sync 时按当前平台重建，切平台自然重指向，不需要一个专门的清理命令。
 
 **关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)（待写）· [release-contract.md](../release-contract.md)（表 1 **AppManifest 归 F055**、表 3 F053 行；INV-27 / INV-31 / INV-32）· [mvp-114-path.md](../mvp-114-path.md)（**§6 MVP-核心是本轮裁剪基准**、§3 114 环境事实、§1 演示剧本步 2–3）
-**上游 / 姊妹**: [F055 design §4.2 ①③ / §4.2 ⑧](../055-app-publish-pipeline/design.md)（`deploy` / `logs` 端点、AppManifest 形态、失败五元组、162 段错误码——**冲突时一律以 F055 为准**）· [F055 tasks T039](../055-app-publish-pipeline/tasks.md)（端点鉴权顺序与归属判定字段）· [F054 contracts-runtime-manager.md §5](../054-app-domain-runtime/contracts-runtime-manager.md)（注入应用的环境变量清单——`bisheng dev` 顺延，但清单来源在此定死）· [F049 design](../049-openapi-auth-baseline/design.md)（`whoami` / `open_api_subject` / 260 段错误码）
+**上游 / 姊妹**: [F055 design §4.2 ①③ / §4.2 ⑧](../055-app-publish-pipeline/design.md)（`deploy` / `logs` 端点、AppManifest 形态、失败五元组、162 段错误码——**冲突时一律以 F055 为准**）· [F055 tasks T039](../055-app-publish-pipeline/tasks.md)（端点鉴权顺序与归属判定字段）· [F054 contracts-runtime-manager.md §5](../054-app-domain-runtime/contracts-runtime-manager.md)（注入应用的环境变量清单——`bisheng dev` 顺延，但清单来源在此定死）· [F049 design](../049-openapi-auth-baseline/design.md)（`whoami` / 端点 `open_api_scope` marker + `router_rpc` 的 `verify_open_api_access` / 260 段错误码；**2026-09-10 起以 beta2 F053 实现为准，`open_api_subject` 工厂已作废**）
 **版本**: v3.0.0
 **最后更新**: 2026-08-18
 
@@ -561,7 +561,7 @@ bisheng logs [--app-id] [--tail N] [--since TS] [--keyword K] [--follow] [--json
 | **F055 162 段错误码语义**（design §4.2 ⑧ `:588-598`） | 错误码 | **一码一义红线**：`16225`（审批场景未启用，找管理员）vs `16226`（容量不足，等资源）—— F055 早期版本曾把两者写成同码；CLI 的 `ERROR_HINTS` 若跟着写错，用户会按完全错误的方向排障。→ **本文 §4.2 ② 已把二者分成 exit 13 / exit 14 兑现该红线**，落码时不得回退成同一格 |
 | **F055 AppManifest 形态**（design §4.2 ③，`extra='forbid'`） | 数据契约（YAML） | CLI 只校验三必填；**CLI 与技能包都不得自造字段**，否则"本地过、上传被拒" |
 | **F049 `GET /api/v2/auth/whoami`** + 260 段错误码与真 HTTP 状态 | HTTP | `WhoamiResponse` 若改字段名 → `login` 输出坏；**⚠️ 回写项 1：需 F049 给它加 `resource_owner: {user_id, user_name}`**，否则 AC-06 只能降级（D14） |
-| **F049 `open_api_subject("app:manage")` 与 3 秒缓存上界** | 服务端行为 | 缓存上界变化 → AC-52 的验收余量要跟着改 |
+| **F049 `app:manage` 位判定（端点 `open_api_scope("app:manage")` marker + `router_rpc` 的 `verify_open_api_access`，2026-09-10 改接 beta2）与 3 秒缓存上界** | 服务端行为 | 缓存上界变化 → AC-52 的验收余量要跟着改 |
 | **F049 `whoami` 恒在注册 + 服务账号模块恒在** | 部署形态 | **⚠️ 回写项 4（spec 侧）**：`open_api_v2_router` 挂在 `router_rpc` 上恒在（`api/router.py:123-126`），服务账号模块「恒在、不随 open_platform 开关消失」是 F049 显式设计（`core/config/open_platform.py:17-18` 注释）→ **AC-05 的"login 校验入口不可达"这一半本轮不实现**，CLI 用前置探测在打 whoami 之前退出 8 作等价保证（D10 偏离登记）。建议改 spec 措辞而非改 F049 实现 |
 | **F055 `logs` 返回形状** | HTTP | **⚠️ 回写项 2：目前只有 `{lines[]}`，缺 `app_state` / `pending_reason`**，AC-43「明确提示应用态」只能降级实现（D8） |
 | **F054 `GET /api/v1/apps/{id}/logs` → runtime-manager `GET /v1/apps/{id}/logs`** | 服务端链路 | manager 段**已实现**（批 4 `d693feeb3`）；缺的是中段 **F054 T057 + F055 T039** → `logs` 联调排在这两条之后（坑 18） |

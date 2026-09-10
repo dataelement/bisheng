@@ -43,6 +43,14 @@ SAMPLES: dict[str, tuple[str, str]] = {
         'KEY = "bs-sak-Ab3dEf6hIj9lMn2pQr5tUv8xYz1cDe4gHi7kLm0nOp3"',
         'KEY = os.environ["BISHENG_SAK"]  # bs-sak- keys are read from the environment',
     ),
+    # 43-character body, like a real personal token (伴生 PRD §4.10 shares the
+    # secret shape with §4.2.5). The negative sample is one character short
+    # *and* keeps the prefix, so a rule that only looked at the prefix would
+    # fire on it and fail here.
+    "bs_pat": (
+        'TOKEN = "bs-pat-Zk8vQ2mN4pR7tW1yB5xC9eH3jL6sD0fG2aB4cD6eF8g"',
+        'TOKEN = "bs-pat-Zk8vQ2mN4pR7tW1yB5xC9eH3jL6sD0fG2aB4cD6eF8"  # one short: not a token',
+    ),
     "aws_akid": (
         'AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"',
         'AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")',
@@ -130,18 +138,54 @@ async def test_output_never_contains_secret_value(tmp_path):
     assert secret[-8:] not in serialized
 
 
-async def test_bs_sak_rule_follows_key_prefix_constant():
-    """The rule is *built from* F049's constants, so changing the prefix cannot leave it behind (C6)."""
-    from bisheng.open_api.domain.models.api_credential import KEY_PREFIX, KEY_SECRET_LENGTH
+@pytest.mark.parametrize(
+    ("rule_id", "prefix_name"),
+    [("bs_sak", "SERVICE_ACCOUNT_KEY_PREFIX"), ("bs_pat", "PERSONAL_TOKEN_PREFIX")],
+)
+async def test_platform_credential_rules_follow_the_model_constants(rule_id, prefix_name):
+    """Both rules are *built from* the credential model's constants, so changing a prefix cannot leave one behind (C6).
 
-    rule = next(rule for rule in _rules() if rule.rule_id == "bs_sak")
-    # Asserted by behaviour rather than by substring: the pattern is built with
-    # ``re.escape``, so the literal prefix does not appear verbatim in it. What
-    # must hold is that a key of exactly the shape F049 issues matches, and one
-    # a character short does not.
-    assert rule.pattern.search(f"{KEY_PREFIX}{'a' * KEY_SECRET_LENGTH}")
-    assert not rule.pattern.search(f"{KEY_PREFIX}{'a' * (KEY_SECRET_LENGTH - 1)} ")
-    assert not rule.pattern.search(f"bs-xxx-{'a' * KEY_SECRET_LENGTH}")
+    伴生 PRD §4.2.6: the leak scan must know both prefixes. Asserted by behaviour
+    rather than by substring: the pattern is built with ``re.escape``, so the
+    literal prefix does not appear verbatim in it. What must hold is that a
+    credential of exactly the shape the platform issues matches, one a
+    character short does not, and a look-alike prefix does not.
+    """
+    from bisheng.open_api.domain.models import api_credential
+
+    prefix = getattr(api_credential, prefix_name)
+    length = api_credential.KEY_SECRET_LENGTH
+    rule = next(rule for rule in _rules() if rule.rule_id == rule_id)
+
+    assert rule.pattern.search(f"{prefix}{'a' * length}")
+    assert not rule.pattern.search(f"{prefix}{'a' * (length - 1)} ")
+    assert not rule.pattern.search(f"bs-xxx-{'a' * length}")
+
+
+async def test_the_two_platform_prefixes_do_not_cross_match(tmp_path):
+    """A hit names which kind of credential leaked — the remedies differ.
+
+    A service-account key is revoked by an administrator; a personal token
+    belongs to a person who has to be told. One alternation rule would report
+    both as the same finding, so they are two rules, and neither may fire on
+    the other's sample.
+    """
+    from bisheng.open_api.domain.models.api_credential import (
+        KEY_SECRET_LENGTH,
+        PERSONAL_TOKEN_PREFIX,
+        SERVICE_ACCOUNT_KEY_PREFIX,
+    )
+
+    body = "b" * KEY_SECRET_LENGTH
+    result = _scan(
+        tmp_path,
+        {
+            "sak.py": f'KEY = "{SERVICE_ACCOUNT_KEY_PREFIX}{body}"\n',
+            "pat.py": f'TOKEN = "{PERSONAL_TOKEN_PREFIX}{body}"\n',
+        },
+    )
+    by_file = {(hit["file"], hit["rule_id"]) for hit in result.hits if hit["rule_id"] in {"bs_sak", "bs_pat"}}
+    assert by_file == {("sak.py", "bs_sak"), ("pat.py", "bs_pat")}
 
 
 async def test_db_conn_string_requires_user_and_password(tmp_path):

@@ -9,10 +9,6 @@ from fastapi import Depends, HTTPException, Request, UploadFile
 from loguru import logger
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
-from bisheng.common.errcode.open_api import (
-    ServiceAccountLoginForbiddenError,
-    ServiceAccountOperationForbiddenError,
-)
 from bisheng.common.errcode.user import (
     CaptchaError,
     UserForbiddenError,
@@ -42,15 +38,7 @@ from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
-from bisheng.user.domain.models.user import (
-    USER_TYPE_HUMAN,
-    USER_TYPE_SERVICE,
-    User,
-    UserCreate,
-    UserDao,
-    UserLogin,
-    UserRead,
-)
+from bisheng.user.domain.models.user import User, UserCreate, UserDao, UserLogin, UserRead
 from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid, get_request_ip, md5_hash
 from bisheng.utils.constants import RSA_KEY
@@ -424,19 +412,10 @@ class UserService:
 
         需审批模式下角色可仅勾选一级菜单（workstation/admin）而无二级项，仍视为有菜单权限，允许登录。
 
-        v3.0.0 F049: service accounts are rejected first — before the bypass and
-        before the AdminRole short-circuit below, so a wrongly granted AdminRole
-        cannot buy a session (AC-15 / design pit 3). It ``raise``s rather than
-        returning a response: two of this function's four call sites translate a
-        returned value into ``UserNoWebMenuForLoginError``, which would turn
-        "service accounts cannot log in" into a misleading "no menu".
+        No service-account guard is needed here: service accounts are not rows
+        of ``user`` (F053 design K15 / K17), so no login path can ever hand one
+        in as ``db_user``.
         """
-        # ``getattr``: several callers hand in a lightweight user-like object
-        # (login-sync payloads, tests); an object without the column is a
-        # natural person by definition of the ``server_default``.
-        if getattr(db_user, "user_type", USER_TYPE_HUMAN) == USER_TYPE_SERVICE:
-            raise ServiceAccountLoginForbiddenError()
-
         # Pre-tenant-context check: any role/dept/group access across all tenants
         # qualifies for login. Without bypass, every DAO below trips
         # NoTenantContextError because do_orm_execute can't infer a tenant for
@@ -469,33 +448,6 @@ class UserService:
             ):
                 return UserNoWebMenuForLoginError.return_resp()
             return None
-
-    @classmethod
-    def assert_natural_persons(cls, user_ids: list[int]) -> None:
-        """Refuse (26022) when any target is a service account — synchronous callers.
-
-        v3.0.0 F049 / design D7: the DAO default (``_filter_users_statement``)
-        keeps service accounts out of every people picker, but it cannot stop a
-        direct POST that names a user id. Every "actively add / actively
-        rewrite" management entry asserts the target's type first.
-        """
-        if not user_ids:
-            return
-        rows = UserDao.get_user_by_ids(list(user_ids)) or []
-        cls._reject_service_account_targets(rows)
-
-    @classmethod
-    async def aassert_natural_persons(cls, user_ids: list[int]) -> None:
-        """Async twin of :meth:`assert_natural_persons` — same semantics, same error."""
-        if not user_ids:
-            return
-        rows = await UserDao.aget_user_by_ids(list(user_ids)) or []
-        cls._reject_service_account_targets(rows)
-
-    @staticmethod
-    def _reject_service_account_targets(rows) -> None:
-        if any(getattr(row, "user_type", USER_TYPE_HUMAN) == USER_TYPE_SERVICE for row in rows):
-            raise ServiceAccountOperationForbiddenError()
 
     @classmethod
     async def user_login(cls, request: Request, user: UserLogin, auth_jwt: AuthJwt = Depends()):

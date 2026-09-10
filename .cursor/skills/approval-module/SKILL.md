@@ -111,7 +111,13 @@ ApprovalCenterService.decide_task()
 
 | 文件 | 职责 |
 |------|------|
-| `src/frontend/client/src/components/approval/ApprovalCenterDialog.tsx` | 审批中心弹窗（我的审批 + 我的申请 + 时间线） |
+| `src/frontend/client/src/pages/settings/SettingsPage.tsx` | 「设置」页：承载我的审批 / 我的申请 / 通知三个区的外壳（取代旧的审批中心弹窗） |
+| `src/frontend/client/src/components/approval/ApprovalPane.tsx` | 我的审批 / 我的申请 列表 + 详情 + 同意/拒绝/撤回/撤销授权 |
+| `src/frontend/client/src/components/approval/ApprovalDetailPanels.tsx` | 任务详情 / 实例详情面板（基础信息、业务内容、进度时间轴） |
+| `src/frontend/client/src/components/approval/approvalPresentation.tsx` | 审批公共展示层（状态徽章、时间轴节点、信息网格、格式化） |
+| `src/frontend/client/src/components/messageApproval/NotificationPane.tsx` | 通知区：未读/已读页签（服务端过滤）+ 搜索 + 全部已读 |
+| `src/frontend/client/src/components/messageApproval/NotificationRow.tsx` | 单条通知；仅在用户主动打开时置已读，不做 hover / 曝光自动已读 |
+| `src/frontend/client/src/components/messageApproval/notificationContent.ts` | 站内信 payload 解析（action_code、业务对象、审批深链） |
 | `src/frontend/client/src/api/approval.ts` | 审批 API 封装，含 `ApprovalApiError`（非 200 自动抛出） |
 | `src/frontend/client/src/pages/MenuUnavailablePage.tsx` | 无权限占位页 + 申请入口 |
 | `src/frontend/client/src/layouts/MenuApprovalPluginGate.tsx` | 菜单审批路由守卫 |

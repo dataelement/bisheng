@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from bisheng.common.errcode.open_api import ServiceAccountNotGrantSubjectError
 from bisheng.common.errcode.permission import PermissionInvalidResourceError
 from bisheng.database.models.department import (
     DepartmentDao,
@@ -21,7 +20,7 @@ from bisheng.permission.domain.services.grant_subject_service import GrantSubjec
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
-from bisheng.user.domain.models.user import USER_TYPE_SERVICE, UserDao
+from bisheng.user.domain.models.user import UserDao
 
 
 class TenantPermissionSubjectDirectory:
@@ -147,26 +146,16 @@ class TenantPermissionSubjectDirectory:
         subject_id: str,
         userset_relation: str | None,
         include_children: bool,
-        allow_service_account_subject: bool = False,
     ) -> GrantSourceRecord:
-        """Validate a grant subject.
-
-        ``allow_service_account_subject`` (v3.0.0 F049 / D7) defaults to False:
-        the resource-side ``grants:mutate`` never sets it, so a service account
-        can only be granted from its own detail page (T065), which passes True
-        explicitly. The permission domain still knows nothing about "service
-        accounts" — it reads ``user_type`` and one caller-supplied flag (C4).
-        """
         normalized_type = subject_type.strip().lower()
         normalized_id = subject_id.strip()
         if not normalized_id.isdigit():
             raise PermissionInvalidResourceError()
         identifier = int(normalized_id)
         if normalized_type == "user":
-            if not allow_service_account_subject:
-                subject_user = await UserDao.aget_user(identifier)
-                if subject_user is not None and subject_user.user_type == USER_TYPE_SERVICE:
-                    raise ServiceAccountNotGrantSubjectError()
+            # A ``user`` subject is always a natural person: service accounts
+            # are their own subject type below, not rows of ``user`` (F053
+            # design K15 / K17), so no per-row type check is needed here.
             rows = await UserTenantDao.aget_user_tenants(identifier)
             valid = any(row.tenant_id == tenant_id and row.status == "active" and row.is_active == 1 for row in rows)
             source_type = "DIRECT"
@@ -290,11 +279,7 @@ class TenantPermissionSubjectDirectory:
         from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 
         ids_by_type = {
-            resource_type: tuple(
-                resource_id
-                for item_type, resource_id in resources
-                if item_type == resource_type
-            )
+            resource_type: tuple(resource_id for item_type, resource_id in resources if item_type == resource_type)
             for resource_type in ("workflow", "assistant", "channel", "tool", "dashboard")
         }
         if not any(ids_by_type.values()):
@@ -302,11 +287,7 @@ class TenantPermissionSubjectDirectory:
         labels: dict[tuple[str, str], str] = {}
         async with get_async_db_session() as session:
             if ids_by_type["workflow"]:
-                rows = (
-                    await session.exec(
-                        select(Flow).where(col(Flow.id).in_(ids_by_type["workflow"]))
-                    )
-                ).all()
+                rows = (await session.exec(select(Flow).where(col(Flow.id).in_(ids_by_type["workflow"])))).all()
                 labels.update({("workflow", str(row.id)): row.name for row in rows})
             if ids_by_type["assistant"]:
                 rows = (
@@ -319,11 +300,7 @@ class TenantPermissionSubjectDirectory:
                 ).all()
                 labels.update({("assistant", str(row.id)): row.name for row in rows})
             if ids_by_type["channel"]:
-                rows = (
-                    await session.exec(
-                        select(Channel).where(col(Channel.id).in_(ids_by_type["channel"]))
-                    )
-                ).all()
+                rows = (await session.exec(select(Channel).where(col(Channel.id).in_(ids_by_type["channel"])))).all()
                 labels.update({("channel", str(row.id)): row.name for row in rows})
 
             tool_ids = tuple(int(value) for value in ids_by_type["tool"] if value.isdigit())
@@ -338,14 +315,8 @@ class TenantPermissionSubjectDirectory:
                 ).all()
                 labels.update({("tool", str(row.id)): row.name for row in rows})
 
-            dashboard_ids = tuple(
-                int(value) for value in ids_by_type["dashboard"] if value.isdigit()
-            )
+            dashboard_ids = tuple(int(value) for value in ids_by_type["dashboard"] if value.isdigit())
             if dashboard_ids:
-                rows = (
-                    await session.exec(
-                        select(Dashboard).where(col(Dashboard.id).in_(dashboard_ids))
-                    )
-                ).all()
+                rows = (await session.exec(select(Dashboard).where(col(Dashboard.id).in_(dashboard_ids)))).all()
                 labels.update({("dashboard", str(row.id)): row.title for row in rows})
         return labels

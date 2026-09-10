@@ -227,14 +227,13 @@ def _payload(user_id: int, user_name: str, tenant_id: int):
 
 async def _seed_user(app_db, user_id: int, user_name: str, tenant_id: int = ROOT_TENANT_ID):
     from bisheng.database.models.tenant import UserTenant
-    from bisheng.user.domain.models.user import USER_TYPE_HUMAN, User
+    from bisheng.user.domain.models.user import User
 
     async with app_db() as session:
         user = User(
             user_id=user_id,
             user_name=user_name,
             password=SEED_PASSWORD_PLACEHOLDER,
-            user_type=USER_TYPE_HUMAN,
             delete=0,
         )
         session.add(user)
@@ -313,7 +312,7 @@ async def chinese_name_user(app_db):
 async def sub_tenant(app_db):
     """A child tenant (id 2, parent Root) plus its non-super admin payload."""
     from bisheng.database.models.tenant import Tenant, UserTenant
-    from bisheng.user.domain.models.user import USER_TYPE_HUMAN, User
+    from bisheng.user.domain.models.user import User
 
     async with app_db() as session:
         session.add(
@@ -329,7 +328,6 @@ async def sub_tenant(app_db):
             user_id=SUB_TENANT_ADMIN_USER_ID,
             user_name="f054-sub-admin",
             password=SEED_PASSWORD_PLACEHOLDER,
-            user_type=USER_TYPE_HUMAN,
             delete=0,
         )
         session.add(admin)
@@ -723,7 +721,7 @@ async def build_list_env(tmp_path, monkeypatch):
     from bisheng.database.models.flow_version import FlowVersion
     from bisheng.database.models.session import MessageSession
     from bisheng.database.models.tag import Tag, TagLink
-    from bisheng.user.domain.models.user import USER_TYPE_HUMAN, User
+    from bisheng.user.domain.models.user import User
 
     db_path = tmp_path / "build_list.db"
     sync_engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
@@ -833,7 +831,6 @@ async def build_list_env(tmp_path, monkeypatch):
                         user_id=user_id,
                         user_name=user_name,
                         password=SEED_PASSWORD_PLACEHOLDER,
-                        user_type=USER_TYPE_HUMAN,
                         delete=0,
                     )
                 )

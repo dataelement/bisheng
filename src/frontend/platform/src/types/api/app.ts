@@ -28,4 +28,12 @@ export type AppConfig = {
      * can decide what to say before anyone logs in.
      */
     app_runtime_enabled?: boolean;
+    /** F053: personal access tokens (deployment level; the tenant policy sits on top). */
+    personal_token_enabled?: boolean;
+    /**
+     * F053: service-account / personal-token management tabs on the system page
+     * (`open_api.management_ui_enabled`, default off). Independent of
+     * `open_platform_enabled`, which only gates the three dev-toolkit scopes.
+     */
+    open_api_management_enabled?: boolean;
 };

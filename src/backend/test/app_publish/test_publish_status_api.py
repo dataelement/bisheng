@@ -236,12 +236,20 @@ async def test_tenant_admin_check_uses_the_apps_tenant_not_the_callers(
 async def test_v1_router_carries_no_open_api_credential_dependency(publish_db):
     """These are session endpoints; a service-account key must not reach them.
 
-    Merging the two routers would put a cookie-authenticated endpoint one typo
-    away from being callable with ``Bearer bs-sak-…``.
+    Two things are pinned. No v1 route depends on ``verify_open_api_access`` —
+    the ``/api/v2`` pipeline is mounted on the aggregate ``router_rpc``, not on
+    these routers, and merging the two would put a cookie-authenticated
+    endpoint one typo away from being callable with ``Bearer bs-sak-…``. And
+    no v1 route carries an ``@open_api_scope`` marker: a marker here would be
+    a session endpoint declaring itself key-callable, which is the same typo
+    seen from the other side.
     """
-    from bisheng.app_publish.api.endpoints.deploy import app_manage_subject
     from bisheng.app_publish.api.router import v1_router
+    from bisheng.open_api.api.dependencies import verify_open_api_access
+    from bisheng.open_api.domain.scopes import get_open_api_scope_marker
 
+    assert v1_router.routes
     for route in v1_router.routes:
-        names = {getattr(dep.call, "__name__", "") for dep in route.dependant.dependencies}
-        assert app_manage_subject.__name__ not in names
+        calls = {dep.call for dep in route.dependant.dependencies}
+        assert verify_open_api_access not in calls, route.path
+        assert get_open_api_scope_marker(route.endpoint) is None, route.path

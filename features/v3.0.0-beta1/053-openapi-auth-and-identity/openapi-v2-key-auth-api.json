@@ -1461,7 +1461,7 @@
           "Knowledge"
         ],
         "summary": "Query Qa",
-        "description": "Deleteqa Question to Information",
+        "description": "Return visible QA rows while tolerating invalid legacy records.",
         "operationId": "query_qa_api_v2_filelib_query_qa_post",
         "requestBody": {
           "content": {
@@ -2168,6 +2168,228 @@
           }
         ]
       }
+    },
+    "/api/v2/apps/deploy-limits": {
+      "get": {
+        "tags": [
+          "HostedAppPublish"
+        ],
+        "summary": "Package limits of this deployment",
+        "description": "What the CLI checks a package against **before** uploading it (F053 AC-32).\n\nThe limits are deployment configuration rather than a constant precisely so\nthis endpoint can exist: a CLI that hardcoded 50 MiB would be a second copy\nof a contract that only the server can know. A CLI that cannot reach this\nendpoint uploads anyway and gets 16201 — a soft check must never be able to\nblock a publish.",
+        "operationId": "deploy_limits_api_v2_apps_deploy_limits_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnifiedResponseModel_dict_"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/apps/deploy": {
+      "post": {
+        "tags": [
+          "HostedAppPublish"
+        ],
+        "summary": "Submit an application package",
+        "description": "Receive one package and start the pipeline (AC-01).\n\nReturns as soon as the fast checks pass; everything slow runs on a worker\nand is observed through ``GET /deployments/{id}``.\n\n``confirm_schema_change`` is accepted and recorded but not acted on this\nrelease — the flag exists now so the CLI does not have to change its\ncommand surface again when structural evolution ships.",
+        "operationId": "deploy_api_v2_apps_deploy_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_deploy_api_v2_apps_deploy_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnifiedResponseModel_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/apps/deployments/{deployment_id}": {
+      "get": {
+        "tags": [
+          "HostedAppPublish"
+        ],
+        "summary": "Poll one publish attempt",
+        "description": "The CLI's polling payload: stage, status, the failure five-tuple, the approval.\n\nDeclared before ``/{app_id}/logs`` because Starlette matches in declaration\norder and an application whose id happened to be \"deployments\" would\notherwise shadow this route.",
+        "operationId": "get_deployment_api_v2_apps_deployments__deployment_id__get",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnifiedResponseModel_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/apps/{app_id}/logs": {
+      "get": {
+        "tags": [
+          "HostedAppPublish"
+        ],
+        "summary": "Recent application output",
+        "description": "``bisheng logs`` (F053).\n\nForwarded to the **same** service method the detail page's log tab uses, with\n``entry=\"cli\"`` — which narrows it to the credential's resource owner. A\ntenant administrator's key must not read every application's logs in the\ntenant: that would widen the open API past what the key holder was granted.",
+        "operationId": "get_logs_api_v2_apps__app_id__logs_get",
+        "parameters": [
+          {
+            "name": "app_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "App Id"
+            }
+          },
+          {
+            "name": "tail",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 5000,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tail"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "epoch seconds, or a window like 30m / 2h / 7d",
+              "title": "Since"
+            },
+            "description": "epoch seconds, or a window like 30m / 2h / 7d"
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keyword"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnifiedResponseModel_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -2363,6 +2585,38 @@
           "field_names"
         ],
         "title": "Body_delete_metadata_fields_api_v2_knowledge_delete_metadata_fields_delete"
+      },
+      "Body_deploy_api_v2_apps_deploy_post": {
+        "properties": {
+          "package": {
+            "type": "string",
+            "format": "binary",
+            "title": "Package",
+            "description": "tar.gz built by `bisheng deploy`"
+          },
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id",
+            "description": "Omit on a first publish; required for an iteration"
+          },
+          "confirm_schema_change": {
+            "type": "boolean",
+            "title": "Confirm Schema Change",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "package"
+        ],
+        "title": "Body_deploy_api_v2_apps_deploy_post"
       },
       "Body_invoke_workbench_asr_api_v2_llm_workbench_asr_post": {
         "properties": {
@@ -3896,6 +4150,29 @@
           "status_message"
         ],
         "title": "UnifiedResponseModel[WhoamiResponse]"
+      },
+      "UnifiedResponseModel_dict_": {
+        "properties": {
+          "status_code": {
+            "type": "integer",
+            "title": "Status Code"
+          },
+          "status_message": {
+            "type": "string",
+            "title": "Status Message"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status_code",
+          "status_message"
+        ],
+        "title": "UnifiedResponseModel[dict]"
       },
       "UpdateKnowledgeMetadataFieldsReq": {
         "properties": {

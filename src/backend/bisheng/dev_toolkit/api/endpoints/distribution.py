@@ -6,9 +6,10 @@ an administrator forwards a link and the developer installs the CLI *before*
 anyone hands them a key — "it is a link, not a file". The template is
 ``GET /api/v1/env``: a plain ``@router.get`` whose signature has no ``Depends``.
 
-Why ``/api/v1`` and not ``/api/v2``: F049 plans to lift ``verify_open_api_access``
-onto the whole ``router_rpc``, at which point every ``/api/v2`` endpoint must
-carry a key — an anonymous endpoint there would become a permanent exception. A
+Why ``/api/v1`` and not ``/api/v2``: ``router_rpc`` carries ``verify_open_api_access``
+as its one router-level dependency (F053 design K14), so every ``/api/v2``
+endpoint needs a key and is refused outright without an ``@open_api_scope``
+marker — an anonymous endpoint there is impossible, not merely an exception. A
 bare path such as ``/cli/download`` is not reachable either: the commercial
 gateway and the OSS nginx both forward only ``/api/v1/**`` and ``/api/v2/**``.
 

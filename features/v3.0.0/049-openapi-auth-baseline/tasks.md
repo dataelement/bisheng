@@ -14,7 +14,9 @@
 | spec.md | ✅ 已评审 | 2026-08-17 ★ 已过（决议-6 f/g/h/i 拍板，65 AC 定稿） |
 | design.md | ✅ 已评审 | 本轮（2026-08-17 初版 + 同日 `/sdd-review design` 两轮 26 条修订）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；同日 `/sdd-review tasks` 一轮 21 条修订（1 high / 8 medium / 12 low）已就地吸收 |
-| 实现 | 🚧 进行中 | 33 / 76 完成（Wave 1 T001–T019 + Wave 2 T020–T033，即 `[MVP-114]` 全部）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 📦 归档（2026-09-10） | vibe 实现至合并前止于 33 / 76（Wave 1 T001–T019 + Wave 2 T020–T033）；实现由 beta2 F053 承接，见下方状态说明 |
+
+> **⚠️ 2026-09-10 状态说明**：open_api 底座整体改接 beta2 F053（合并 `feat/3.0.0-beta2`，见 [beta2-openapi-base-migration.md](../beta2-openapi-base-migration.md)）。Wave 1–2（T001–T033）的 vibe 实现已归档、由 beta2 同等能力取代；**T034–T075 不再逐条推进**，去向按该方案 §5：T034–T046（端点接入 / 缺陷修复 / 配置移除）已由 beta2 实现、T047–T056（share-token）beta2 明确不采纳、T057–T071（资源归属人 / 主体侧授权 / 对账豁免 / 管理接口矩阵）由 beta2 `ResourceGrantsTab` + `owner_repository` 承接、T072–T075 随 beta2 F053 发布验收。本文其余内容保留为历史，不再更新。
 
 ---
 

@@ -28,8 +28,18 @@ from bisheng.core.database.alembic.versions import (
     v3_0_0_f048_visible_source_projection as visible_revision,
 )
 from bisheng.core.database.dialect_helpers import LargeText
-from bisheng.core.openfga.authorization_model_f048 import build_authorization_model_f048
+from bisheng.core.openfga.authorization_model_f048 import (
+    DEFAULT_ACTION_CODES,
+    FLAT_VISIBLE_RESOURCE_TYPES,
+    MIGRATED_RESOURCE_TYPES,
+    OWNER_PROJECTION_RESOURCE_TYPES,
+    PARENT_TYPES,
+    RESOURCE_ACTION_SCOPES,
+    SYSTEM_SHARED_ACTION_TYPES,
+    build_authorization_model_f048,
+)
 from bisheng.permission.domain import models as permission_models
+from bisheng.permission.domain.services import catalog_policy
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 REVISION_PATH = BACKEND_ROOT / "bisheng/core/database/alembic/versions/f048_permission_model_grants.py"
@@ -288,19 +298,85 @@ def test_service_account_is_only_an_ordinary_direct_grant_subject() -> None:
         ("knowledge_file", ("permission_enabled", "custom_mode", "inherit_mode")),
     ):
         for relation in relations:
-            allowed = definitions[type_name]["metadata"]["relations"][relation][
-                "directly_related_user_types"
-            ]
+            allowed = definitions[type_name]["metadata"]["relations"][relation]["directly_related_user_types"]
             assert {entry["type"] for entry in allowed} == {
                 "service_account",
                 "user",
             }
 
     for relation in ("public_reader", "system_download_marker", "system_use_marker"):
-        allowed = definitions["knowledge_space"]["metadata"]["relations"][relation][
-            "directly_related_user_types"
-        ]
+        allowed = definitions["knowledge_space"]["metadata"]["relations"][relation]["directly_related_user_types"]
         assert {entry["type"] for entry in allowed} == {"user"}
+
+
+def test_catalog_policy_and_authorization_model_resource_lists_are_twins() -> None:
+    """The Catalog validator and the model builder enumerate the same resources.
+
+    ``catalog_policy`` validates every Catalog row on snapshot load; the model
+    builder decides which object types OpenFGA accepts tuples for. A type in
+    one list but not the other fails only at runtime (Catalog reads raise, or
+    every tuple write 400s), so the two lists are held equal here — as whole
+    sets and per action, not just for the type that was added last.
+    """
+
+    assert set(MIGRATED_RESOURCE_TYPES) == catalog_policy.MIGRATED_RESOURCE_TYPES
+    assert set(DEFAULT_ACTION_CODES) == set(catalog_policy.REGISTERED_ACTION_CODES)
+    assert set(RESOURCE_ACTION_SCOPES) == set(DEFAULT_ACTION_CODES)
+    assert set(catalog_policy.ACTION_RESOURCE_SCOPES) == set(DEFAULT_ACTION_CODES)
+    for action in DEFAULT_ACTION_CODES:
+        assert RESOURCE_ACTION_SCOPES[action] == catalog_policy.ACTION_RESOURCE_SCOPES[action], action
+        assert RESOURCE_ACTION_SCOPES[action] <= set(MIGRATED_RESOURCE_TYPES), action
+
+    # Every Catalog-scoped type is a modelled object type, so a Catalog row can
+    # never reference a type OpenFGA would reject.
+    model = build_authorization_model_f048()
+    modelled = {definition["type"] for definition in model["type_definitions"]}
+    assert catalog_policy.MIGRATED_RESOURCE_TYPES <= modelled
+    assert set(OWNER_PROJECTION_RESOURCE_TYPES) <= modelled
+
+    # `app` (F054) is on both sides and is a flat, never-system-shared type.
+    assert "app" in MIGRATED_RESOURCE_TYPES
+    assert "app" in catalog_policy.MIGRATED_RESOURCE_TYPES
+    assert "app" in FLAT_VISIBLE_RESOURCE_TYPES
+    assert "app" not in PARENT_TYPES
+    assert all("app" not in shared_types for shared_types in SYSTEM_SHARED_ACTION_TYPES.values())
+
+
+def test_app_resource_type_is_shaped_like_the_other_flat_resource_types() -> None:
+    """The union model gives ``app`` every subject the other flat types have.
+
+    ``app`` came from one line and the ``service_account`` subject type from
+    the other. The merge is correct only if the type that arrived last is
+    built by the same code path as its peers: same technical-marker subjects,
+    same ordinary assignees, same visibility subjects, no parent or inherit
+    relations. ``dashboard`` is the reference because, like ``app``, it is
+    flat and appears in no ``SYSTEM_SHARED_ACTION_TYPES`` entry.
+    """
+
+    model = build_authorization_model_f048()
+    definitions = {definition["type"]: definition for definition in model["type_definitions"]}
+    app = definitions["app"]
+    reference = dict(definitions["dashboard"], type="app")
+    assert app == reference
+
+    metadata = app["metadata"]["relations"]
+    for relation in ("permission_enabled", "custom_mode"):
+        assert {entry["type"] for entry in metadata[relation]["directly_related_user_types"]} == {
+            "service_account",
+            "user",
+        }
+    assert {"type": "service_account"} in metadata["visible"]["directly_related_user_types"]
+    assert "parent" not in app["relations"]
+    assert "inherit_mode" not in app["relations"]
+    assert app["relations"]["visible"] == {
+        "union": {
+            "child": [
+                {"this": {}},
+                {"computedUserset": {"relation": "system_visible"}},
+            ]
+        }
+    }
+    assert {f"can_{action}" for action in DEFAULT_ACTION_CODES} <= set(app["relations"])
 
 
 def _qualified_name(node: ast.expr) -> str:

@@ -15,7 +15,7 @@
 
 | # | Feature | 批次 | 状态 | 依赖 | 覆盖 |
 |---|---------|------|------|------|------|
-| F049 | openapi-auth-baseline | A | ✅ Spec 定稿（65 AC）· ✅ design 已评审（13 决策 / 27 坑，双审 26 条修订）· ✅ tasks 已拆解（76 任务，40 条 [MVP-114]，65 AC 全覆盖）· 实现 0/76 | — | 伴生 P0：凭据底座 / 服务账号（含资源归属人）/ 全端点接入 / 管理界面 / 零迁移升级；三扩展位登记 |
+| F049 | openapi-auth-baseline | A | ✅ spec / design / tasks 存档 · **实现由 `feat/3.0.0-beta2` F053 承接**（2026-09-10，见 [beta2-openapi-base-migration.md](./beta2-openapi-base-migration.md)） | — | 伴生 P0：凭据底座 / 服务账号（含资源归属人）/ 全端点接入 / 管理界面 / 零迁移升级；三扩展位登记 |
 | F050 | identity-modes | A | 📝 Spec 已写（48 AC，独立审查中） | F049（+F052） | 伴生 P1：两种身份模式 / 受限委托 / 审计双归属 / 裸 `user_id` 收口 / `delegate` 位与互斥 |
 | F051 | model-protocol-gateway | A | ✅ Spec 定稿（36 AC，经独立审查修订） | F049 | DEV-02 模型协议面（仅 OpenAI 兼容）+ 模型调用逐条审计 |
 | F052 | mcp-server-face | A | ✅ Spec 定稿（47 AC，经独立审查修订） | F049 | DEV-02 MCP 六类工具 + 统一检索门面（文件级 fail-closed） |
@@ -53,3 +53,4 @@
 | 2026-08-06 | F049 spec 初稿 + 四项待澄清拍板（个人 key 整条取消）；F050 更名 identity-modes；F051/F052 依赖放宽为 F049。 |
 | 2026-08-15 | F049 spec 对齐伴生 PRD v2.0（兼容窗口废止、服务账号不进选人场景、主体侧授权唯一入口）。 |
 | **2026-08-17** | **按 PRD-1 v2.0 + 伴生 v2.1 重做 spec 层地基**：Discovery 拆分 v2（11 个 Feature，新增 F058 / F059；F050–F057 范围重排）+ release-contract 表 1 / 表 2（INV-29 修正、INV-31 新登记、候选 INV-32~36）/ 表 3 重写 + F049 spec 整体重写（AC 47 → 65）。待第二次 ★。 |
+| **2026-09-10** | **open_api 底座整体改接 beta2 F053**：合并 `feat/3.0.0-beta2` 与 beta1 tip 到 `feat/3.0-vibe/openapi-beta2-base`，F049 实现归档、spec / design / tasks 存档；应用工场（F053–F056）改接 beta2 鉴权管线（端点 `open_api_scope` marker + `router_rpc` 的 `verify_open_api_access`）；release-contract INV-28 按伴生 D19 修订。方案与冲突解法见 [beta2-openapi-base-migration.md](./beta2-openapi-base-migration.md)。 |

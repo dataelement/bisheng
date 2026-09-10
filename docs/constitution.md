@@ -6,7 +6,7 @@
 > - `scripts/arch-guard.sh` is the **machine-enforcement arm** of this document: each RULE maps to a clause below (see the anchor table).
 > - Violations are reported as **BLOCKER** during `/sdd-review design`.
 > - **Change governance**: editing this file requires PR review (a law change affects every feature). If a RULE is involved, sync the "→ Cx" note in `arch-guard.sh`.
-> - Last revised: 2026-08-14 (C8: no shared state on the local filesystem).
+> - Last revised: 2026-09-10 (C5: 260 open_api band assigned to F053, sub-bands recorded).
 
 ## Anchor Table (clause ↔ arch-guard RULE)
 

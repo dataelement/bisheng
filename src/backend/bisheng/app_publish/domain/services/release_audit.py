@@ -33,13 +33,18 @@ async def write_release_audit(
     deployment,
     version_no: int | None = None,
     operator_id: int | None = None,
+    operator_name: str | None = None,
     metadata: dict[str, Any] | None = None,
     reason: str | None = None,
 ) -> None:
     """Record one release event against the version it is about.
 
-    ``operator_id`` defaults to the acting subject of the submission (the
-    service account); pass the owner explicitly for events a person triggered.
+    ``operator_id`` defaults to ``deployment.submitted_by_user_id`` — the
+    natural person who submitted, or ``0`` when a service account did (see
+    ``publish_pipeline_service.NO_NATURAL_PERSON_SUBMITTER``); pass the owner
+    explicitly for events a person triggered. ``operator_name`` is how a
+    service-account submission stays attributable on the audit page: the same
+    ``operator_id=0`` + name convention beta2's ``OpenApiAuditMiddleware`` uses.
     """
     payload: dict[str, Any] = {
         "app_id": deployment.app_id,
@@ -51,6 +56,7 @@ async def write_release_audit(
         await AuditLogDao.ainsert_v2(
             tenant_id=deployment.tenant_id,
             operator_id=operator_id if operator_id is not None else deployment.submitted_by_user_id,
+            operator_name=operator_name,
             operator_tenant_id=deployment.tenant_id,
             action=str(action),
             target_type=RELEASE_AUDIT_TARGET_TYPE,

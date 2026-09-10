@@ -94,6 +94,73 @@ class AcceptResult:
     version_id: str
 
 
+#: ``app_deployment.submitted_by_user_id`` when no natural person submitted.
+#:
+#: Under the beta2 credential model a service account is **not** a user row
+#: (migration plan M4), so there is no user id to write for a ``bisheng deploy``
+#: run with a service-account key. ``0`` is the platform's documented
+#: "non-person operator" value (``AuditLogDao.ainsert_v2``: "system trigger
+#: (operator_id=0)") and is exactly what beta2's ``OpenApiAuditMiddleware``
+#: stamps on every service-account call. Writing ``principal.actor_id`` here
+#: instead would put a ``service_account.id`` into a user-id column, and the
+#: ``app.release.*`` audit rows that default their operator to this column
+#: would then name whichever *person* happens to share that number.
+NO_NATURAL_PERSON_SUBMITTER = 0
+
+
+def resource_owner_of(principal) -> int:
+    """The natural person the credential creates resources for (伴生 PRD §4.5 定义 6 / M9).
+
+    ``OpenApiPrincipal.resource_owner_user_id`` is typed ``int | None``. beta2's
+    ``service_account.resource_owner_user_id`` column is NOT NULL, so a key
+    resolved today always carries one — but the type admits ``None`` (a future
+    ``hosted_app`` resolver, M10, has no owner), and every consumer in this
+    module used to read it as ``getattr(principal, "resource_owner_user_id", 0)
+    or 0``. That spelling turns "no owner" into owner ``0``: a first publish
+    would create an application owned by nobody, and the ownership comparison
+    would admit any other ownerless row. Refused instead, with the same code an
+    ownership mismatch gets (16205: "``app:manage`` says the key may publish, the
+    resource owner says whose") — a key without an owner may publish nobody's.
+    """
+    owner = getattr(principal, "resource_owner_user_id", None)
+    if owner is None:
+        raise AppNotOwnedBySubjectError(
+            msg="当前密钥未绑定资源归属人, 无法发布应用",
+            details={"reason": "resource_owner_missing"},
+            hints=["请管理员在服务账号详情页为该账号指定资源归属人后重试"],
+        )
+    return int(owner)
+
+
+def submitting_user_id(principal) -> int:
+    """What ``app_deployment.submitted_by_user_id`` records for this principal.
+
+    ``effective_user_id`` is the beta2 field that is a *user* id whenever the
+    caller is one (a personal token, or a delegation target); it is ``None``
+    for a service account acting as itself, which is the only shape that can
+    reach ``/api/v2/apps/*`` this release (INV-31: ``app:manage`` is mode S
+    only and never issued to a personal token). See
+    :data:`NO_NATURAL_PERSON_SUBMITTER` for why that becomes ``0`` rather than
+    the service account's id.
+    """
+    effective = getattr(principal, "effective_user_id", None)
+    return int(effective) if effective is not None else NO_NATURAL_PERSON_SUBMITTER
+
+
+def _actor_audit_fields(principal) -> dict[str, Any]:
+    """The acting credential, in the shape beta2's ``open_api.call`` audit rows use.
+
+    This is where "which service account ran ``deploy``" lives now that the
+    deployment row cannot hold it (see :data:`NO_NATURAL_PERSON_SUBMITTER`).
+    """
+    return {
+        "credential_id": getattr(principal, "credential_id", None),
+        "actor_kind": getattr(principal, "actor_kind", None),
+        "actor_id": getattr(principal, "actor_id", None),
+        "actor_name": getattr(principal, "actor_name", None),
+    }
+
+
 async def enqueue_pipeline(deployment_id: str) -> None:
     """Hand the attempt to the default Celery queue.
 
@@ -137,7 +204,7 @@ class PublishPipelineService:
             )
 
         tenant = tenant_id if tenant_id is not None else get_current_tenant_id()
-        owner_user_id = int(principal.resource_owner_user_id)
+        owner_user_id = resource_owner_of(principal)
         package_service.check_upload_size(Path(package_path).stat().st_size)
 
         workdir = Path(tempfile.mkdtemp(prefix="bisheng-app-"))
@@ -162,7 +229,7 @@ class PublishPipelineService:
                 tenant_id=tenant,
                 app_id=app_id,
                 owner_user_id=owner_user_id,
-                submitted_by_user_id=int(principal.subject_user_id),
+                submitted_by_user_id=submitting_user_id(principal),
                 version_id=version_id,
                 stage=STAGE_RECEIVED,
                 status=STATUS_RUNNING,
@@ -179,11 +246,17 @@ class PublishPipelineService:
         await write_release_audit(
             AppReleaseAuditAction.SUBMIT,
             deployment=deployment,
+            # A service account is not a person: operator 0 + its name, the
+            # convention beta2's ``OpenApiAuditMiddleware`` uses for the very
+            # same call. ``operator_id`` defaults to ``submitted_by_user_id``
+            # either way; the name is what keeps the row attributable.
+            operator_name=getattr(principal, "actor_name", None),
             metadata={
                 "source": "cli",
                 "tier_code": validated.tier.code,
                 "confirm_schema_change": bool(confirm_schema_change),
                 "manifest_hints": validated.hints,
+                **_actor_audit_fields(principal),
             },
         )
         # Best effort, on the receive leg rather than on a schedule (design D2).
@@ -246,9 +319,11 @@ class PublishPipelineService:
         A miss answers 16205 rather than "not found": distinguishing "no such
         deployment" from "not yours" hands a caller an id oracle for free.
         """
+        # Before the SELECT: a key without a resource owner has nothing to poll,
+        # and asking the database first would only make the refusal slower.
+        owner_user_id = resource_owner_of(principal)
         async with get_async_db_session() as session:
             deployment = await AppDeploymentDao.aget(session, deployment_id)
-        owner_user_id = int(getattr(principal, "resource_owner_user_id", 0) or 0)
         if deployment is None or int(deployment.owner_user_id or 0) != owner_user_id:
             raise AppNotOwnedBySubjectError(
                 msg="该发布记录不存在或不属于当前密钥",

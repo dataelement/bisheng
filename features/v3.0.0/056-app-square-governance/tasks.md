@@ -278,7 +278,7 @@
   **⚠️ 前端权限闸的正确写法**：`can_manage_permission`（`GET .../context`）为 false 时**根本不发起 grants 请求**——platform 拦截器对 GET 的 403/404 会**整页跳** `/403` / `/404`（`platform/src/controllers/request.ts:160-166`），用户会被甩出整个详情页而不是看到区块内提示（坑 16）。前端闸只是体验，**安全边界是后端 403**（AC-15）。
   **⚠️ 状态管理**: platform 的 react-query v3 已被 lint 冻结（`platform/eslint.config.mjs:45,51`）→ 用 `useState + useEffect` / `useTable`，**不得照抄同目录的 `useQuery`**（坑 17）。
   **手动验证**（owner 账号，见 T021 步 1–2）:
-  - 构建 → 应用 → 托管应用卡片 ⚙️ →「管理权限」→ 弹窗出现（`resourceType=app`），选人框里**不出现服务账号**（INV-29，由 `permission/domain/services/grant_subject_service.py:95` 的 `user_type == USER_TYPE_HUMAN` 数据层过滤保证，回归验证不是新工作）；
+  - 构建 → 应用 → 托管应用卡片 ⚙️ →「管理权限」→ 弹窗出现（`resourceType=app`），选人框里**不出现服务账号**（INV-29，服务账号为独立 `service_account` 表、不在 `user` 表内〔2026-09-10 改接 beta2，迁移方案 M4〕，回归验证不是新工作）；
   - 应用详情页 · 发布 tab → 首发上线后未设可见范围时**顶部常驻提示条**；点提示条内设置按钮 → 拉起**同一个**弹窗；授予后提示条消失、改为摘要呈现；把授权全部撤销后刷新 → 提示条**重新出现**（AC-12 双向验证）；
   - 两个入口保存后的可见范围结果一致（AC-11）；
   - 换非 owner 非管理员账号打开详情页 → 无管理入口、直接调 grants 接口得 403 且**不被甩去 `/403` 整页**（AC-15）。

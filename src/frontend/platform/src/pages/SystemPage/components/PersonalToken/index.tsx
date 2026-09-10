@@ -19,8 +19,9 @@ import {
   updatePersonalTokenSettingApi,
 } from "@/controllers/API/personalToken"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { locationContext } from "@/contexts/locationContext"
 import type { PersonalTokenLedgerItem, PersonalTokenSetting } from "@/types/api/openApi"
-import { useEffect, useState } from "react"
+import { useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 function formatDate(value: string | null): string {
@@ -29,6 +30,17 @@ function formatDate(value: string | null): string {
 
 export function PersonalToken() {
   const { t } = useTranslation()
+  const { appConfig } = useContext(locationContext)
+  // The policy row is per tenant; on a single-tenant deployment "tenant policy"
+  // names a concept the rest of the console never shows, so it reads as
+  // "token policy" there. Same setting, same endpoint — copy only.
+  const multiTenantEnabled = !!appConfig?.multiTenantEnabled
+  const settingsTitleKey = multiTenantEnabled
+    ? "openApiManagement.personalToken.settings"
+    : "openApiManagement.personalToken.settingsSingle"
+  const settingsSavedKey = multiTenantEnabled
+    ? "openApiManagement.personalToken.settingsSaved"
+    : "openApiManagement.personalToken.settingsSavedSingle"
   const [setting, setSetting] = useState<PersonalTokenSetting | null>(null)
   const [items, setItems] = useState<PersonalTokenLedgerItem[]>([])
   const [enabled, setEnabled] = useState(false)
@@ -66,7 +78,7 @@ export function PersonalToken() {
       message({
         title: t("prompt"),
         variant: "success",
-        description: t("openApiManagement.personalToken.settingsSaved"),
+        description: t(settingsSavedKey),
       })
     } finally {
       setSaving(false)
@@ -87,7 +99,7 @@ export function PersonalToken() {
     <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pb-8">
       <section className="rounded-md border p-4">
         <div className="mb-4">
-          <h2 className="font-semibold">{t("openApiManagement.personalToken.settings")}</h2>
+          <h2 className="font-semibold">{t(settingsTitleKey)}</h2>
           {!setting?.deployment_enabled ? (
             <p className="mt-1 text-sm text-muted-foreground">{t("openApiManagement.personalToken.deploymentDisabled")}</p>
           ) : null}

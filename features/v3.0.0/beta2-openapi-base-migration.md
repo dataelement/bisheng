@@ -49,7 +49,7 @@
 | | `test/permission/test_f048_schema_contract.py` | 并集断言（既有 `service_account` 主体、又有 `app` 类型） |
 | D · 前端 content | client `@types/chat.ts` | 两个可选字段并存 |
 | | client `pages/apps/components/AgentNavigation.tsx`、`hooks/useAppCenter.ts`、`components/AgentCard.tsx` | 并集：beta2 的分页 / 加载错误回调 + vibe 的 `searchActive` 与托管应用 `/apps/{slug}` 新开页 |
-| | client `components/NotificationsDialog.tsx`、`components/approval/ApprovalCenterDialog.tsx`（beta2 删除、vibe 修改） | 取 beta2 删除；找到 beta2 的新落点，把 vibe 的场景文案 / 应用发布分区改动搬过去 |
+| | client `components/NotificationsDialog.tsx`、`components/approval/ApprovalCenterDialog.tsx`（beta2 删除、vibe 修改） | 取 beta2 删除；vibe 改动按 beta2 新落点搬：早分派 → `approval/ApprovalDetailPanels.tsx`；`DETAIL_INTERNAL_KEYS` / `DetailHeader` → `approval/approvalPresentation.tsx`；驳回必填 → `approval/ApprovalPane.tsx`；场景文案键映射 + `isApprovalMessageType` → `messageApproval/notificationContent.ts`。vibe 独有的 `approval/ApprovalDetailPrimitives.tsx` 已删、其 `DetailHeader` 下沉到 `approvalPresentation.tsx`；审批中心外壳由弹窗改为设置页 `pages/settings/SettingsPage.tsx` |
 | | platform `contexts/locationContext.tsx` | 四开关并存（M14） |
 | | platform `pages/SystemPage/index.tsx` | 取 beta2 结构（`ServiceAccount` + `PersonalToken` + `openApiManagementEnabled` 门控） |
 | | platform `i18n.js` | 取 beta2（语言归一化），ns 列表去掉 `serviceAccount` |
@@ -91,8 +91,19 @@
 ## 5. 顺延与不做
 
 - `hosted_app` 运行期凭据主体（F055 T055）、`model:invoke` / `identity:read` 可签发（F051 / F052）。
-- beta2 与 PRD 的 4 处产品裁定项（D4 独立表、头名 `X-On-Behalf-Of`、日常模式砍功能 + `/chat/list`、v3 匿名面）**按 beta2 现状接受**，裁定权在产品，清单已在 `features/v3.0.0-beta1/053-openapi-auth-and-identity/prd-deviation-review.md`。
+- beta2 与 PRD 的 4 处产品裁定项（D4 独立表、头名 `X-On-Behalf-Of`、日常模式砍功能 + `/chat/list`、v3 匿名面）**按 beta2 现状接受**，裁定权在产品，清单拟落 `features/v3.0.0-beta1/053-openapi-auth-and-identity/prd-deviation-review.md`（2026-09-10 核实：该文件在 beta2 与 vibe 两侧都尚未写，随 §7 回流 beta2 时补）。
 - vibe F049 tasks.md 的 43 条未完成任务不再逐条推进：T034–T046（端点接入 / 缺陷修复 / 配置移除）已由 beta2 实现；T047–T056（share-token）beta2 明确不采纳；T057–T071（资源归属人 / 主体侧授权 / 对账豁免 / 管理接口矩阵）已由 beta2 `ResourceGrantsTab` + `owner_repository` 承接；T072–T075 随 beta2 F053 发布验收。
+
+---
+
+## 7. 待回流 beta2（合并期发现的上游悬空引用，本分支不越界改）
+
+| # | 位置 | 问题 | 处置 |
+|---|---|---|---|
+| 1 | `AGENTS.md:60` | 引用 `packages/ui/docs/基础-阴影与圆角规范.mdx`，实际文件名是 `基础-圆角与阴影规范.mdx`（词序颠倒） | 回流 beta2 改文件名引用 |
+| 2 | `docs/constitution.md` C7 | 引用 `.claude/rules/platform-frontend.md` / `.claude/rules/client-frontend.md`，仓库无 `.claude/rules/` 目录（前端约定实际在 `src/frontend/platform/AGENTS.md` / `src/frontend/client/AGENTS.md`） | 回流 beta2 改指向两份 AGENTS.md |
+| 3 | `.claude/skills/approval-module/SKILL.md`（beta2 侧文件） | 前端表引用 `messageApproval/MessageApprovalDialog.tsx`（已被 `pages/settings/SettingsPage.tsx` 取代）；§8 注仍写 `isApprovalMessageType`（`NotificationsDialog.tsx:152-156`），真身在 `messageApproval/notificationContent.ts` | 回流 beta2 同步落点（`.cursor` 副本本分支已按现状同步） |
+| 4 | `features/v3.0.0-beta1/053-openapi-auth-and-identity/prd-deviation-review.md` | §5 所引的 4 处产品裁定清单文件尚不存在 | 回流 beta2 时补写 |
 
 ---
 
@@ -101,3 +112,4 @@
 | 日期 | 进度 |
 |---|---|
 | 2026-09-10 | 方案定稿；worktree `bisheng-prd1` + 分支建立；开始合并 |
+| 2026-09-10 | 合并完成：`d2dadca8f`（beta2 da2be5697，54 处冲突按 §2 解）+ `e590ac60a`（beta1 tip 59b27d1c1，含 D17 / D19 修复 `f6bf9f51f`）；§3 适配（deploy 管线 marker 化 / `secret_scanner` / `user_type` 移除 + alembic 单头 / M7 互斥 / 前端收口 / FGA `f048-v4`）分组并行进行中；文档回写：release-contract（表 1 主体类型 + INV-28 D19 + 260 段 owner）/ README / mvp-114-path / F049 三件归档标注 / F053–F056 过时引用 / 架构文档 14 配置键 / constitution `Last revised` / `.cursor` approval-module skill 落点 |

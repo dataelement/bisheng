@@ -17,10 +17,6 @@ from bisheng.database.models.tenant import UserTenant
 from bisheng.database.models.user_group import UserGroup
 from bisheng.user.domain.models.user_role import UserRole
 
-# v3.0.0 F049 principal types (``user.user_type``).
-USER_TYPE_HUMAN = "human"
-USER_TYPE_SERVICE = "service"
-
 
 class UserBase(SQLModelSerializable):
     user_name: str = Field(index=True, max_length=128)
@@ -94,21 +90,10 @@ class User(UserBase, table=True):
             comment="v2.5.1 F012: JWT invalidation counter; +1 on leaf tenant change",
         ),
     )
-    # v3.0.0 F049: principal type. ``'human'`` for every natural person (all
-    # pre-existing rows via server_default); ``'service'`` for service accounts,
-    # which never log in and never appear in people pickers. Extra
-    # service-account attributes live in ``service_account`` (open_api module).
-    user_type: str = Field(
-        default=USER_TYPE_HUMAN,
-        sa_column=Column(
-            "user_type",
-            String(16),
-            nullable=False,
-            index=True,
-            server_default=text("'human'"),
-            comment="v3.0.0 F049: principal type — human | service",
-        ),
-    )
+    # Every row here is a natural person. Service accounts live in their own
+    # ``service_account`` table (F053 design K15 / K17), so there is no
+    # principal-type column: the vibe-era ``user_type`` was dropped by the
+    # ``vibe_drop_user_user_type`` revision.
 
     # DefinitiongroupsAndrolesQuery Relationships for
     groups: list["Group"] = Relationship(link_model=UserGroup)
@@ -231,10 +216,8 @@ class UserDao(UserBase):
     async def aget_login_candidates_by_account(cls, account: str) -> list[User]:
         """登录账号仅支持 external_id（人员ID），并过滤禁用账号。
 
-        v3.0.0 F049: ``user_type == 'human'`` is the second lock. Service
-        accounts are created with ``external_id=NULL`` and therefore never match
-        here anyway (design pit 5); this condition makes that a stated rule
-        rather than an accident of the create path.
+        No principal-type lock is needed: service accounts are not rows of this
+        table (F053 design K15 / K17), so they structurally cannot log in.
         """
         acc = (account or "").strip()
         if not acc:
@@ -243,7 +226,6 @@ class UserDao(UserBase):
             statement = select(User).where(
                 User.delete == 0,
                 User.external_id == acc,
-                User.user_type == USER_TYPE_HUMAN,
             )
             result = await session.exec(statement)
             return list(result.all())
@@ -282,41 +264,24 @@ class UserDao(UserBase):
             return user
 
     @classmethod
-    def _filter_users_statement(
-        cls,
-        statement,
-        user_ids: list[int],
-        keyword: str = None,
-        user_type: str | None = USER_TYPE_HUMAN,
-    ):
-        """Shared base of ``/user/list`` and its eight consumers.
+    def _filter_users_statement(cls, statement, user_ids: list[int], keyword: str = None):
+        """Shared base of ``/user/list`` and its consumers.
 
-        v3.0.0 F049 / design D7: ``user_type`` defaults to ``'human'`` so service
-        accounts disappear from every people picker without each consumer opting
-        in — the failure direction of a forgotten parameter is "cannot see",
-        never "leaked". Pass ``user_type=None`` to include every principal type.
+        People pickers need no service-account exclusion here: service accounts
+        are not rows of this table (F053 design K15 / K17).
         """
         if user_ids:
             statement = statement.where(User.user_id.in_(user_ids))
         if keyword:
             statement = statement.where(User.user_name.like(f"%{keyword}%"))
-        if user_type is not None:
-            statement = statement.where(User.user_type == user_type)
         return statement.order_by(User.user_id.desc())
 
     @classmethod
-    def filter_users(
-        cls,
-        user_ids: list[int],
-        keyword: str = None,
-        page: int = 0,
-        limit: int = 0,
-        user_type: str | None = USER_TYPE_HUMAN,
-    ) -> (list[User], int):
+    def filter_users(cls, user_ids: list[int], keyword: str = None, page: int = 0, limit: int = 0) -> (list[User], int):
         statement = select(User)
-        statement = cls._filter_users_statement(statement, user_ids, keyword, user_type)
+        statement = cls._filter_users_statement(statement, user_ids, keyword)
         count_statement = select(func.count(User.user_id))
-        count_statement = cls._filter_users_statement(count_statement, user_ids, keyword, user_type)
+        count_statement = cls._filter_users_statement(count_statement, user_ids, keyword)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(User.user_id.desc())
@@ -324,16 +289,9 @@ class UserDao(UserBase):
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
-    async def afilter_users(
-        cls,
-        user_ids: list[int],
-        keyword: str = None,
-        page: int = 0,
-        limit: int = 0,
-        user_type: str | None = USER_TYPE_HUMAN,
-    ) -> list[User]:
+    async def afilter_users(cls, user_ids: list[int], keyword: str = None, page: int = 0, limit: int = 0) -> list[User]:
         statement = select(User)
-        statement = cls._filter_users_statement(statement, user_ids, keyword, user_type)
+        statement = cls._filter_users_statement(statement, user_ids, keyword)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(User.user_id.desc())

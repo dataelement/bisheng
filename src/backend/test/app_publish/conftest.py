@@ -75,7 +75,23 @@ OWNER_USER_ID = 92001
 DEPT_ADMIN_USER_ID = 92002
 TENANT_ADMIN_USER_ID = 92003
 SUPER_ADMIN_USER_ID = 92004
+#: ``service_account.id`` of the key that runs ``bisheng deploy`` — the
+#: principal's ``actor_id``. Under the beta2 credential model a service account
+#: is **not** a user row (migration plan M4), so this is not a user id and must
+#: never be compared with one; the name keeps its historical spelling because
+#: several suites import it.
 SERVICE_ACCOUNT_USER_ID = 92010
+SERVICE_ACCOUNT_NAME = "f055-ci-deployer"
+
+
+#: What ``api_app(principal=...)`` sends as ``Authorization``. Shaped like a
+#: real key so beta2's ``extract_bearer_token`` accepts it *before* the patched
+#: lookup runs — a malformed header must still be refused by the real code.
+def _test_bearer_token() -> str:
+    from bisheng.open_api.domain.models.api_credential import KEY_SECRET_LENGTH, SERVICE_ACCOUNT_KEY_PREFIX
+
+    return SERVICE_ACCOUNT_KEY_PREFIX + "0" * KEY_SECRET_LENGTH
+
 
 DEPT_BUSINESS_KEY = "BS@f055dept"
 DEPT_NAME = "研发中心"
@@ -309,14 +325,13 @@ def _payload(user_id: int, user_name: str, tenant_id: int, *, is_global_super: b
 
 async def _seed_user(publish_db, user_id: int, user_name: str, tenant_id: int = ROOT_TENANT_ID):
     from bisheng.database.models.tenant import UserTenant
-    from bisheng.user.domain.models.user import USER_TYPE_HUMAN, User
+    from bisheng.user.domain.models.user import User
 
     async with publish_db() as session:
         user = User(
             user_id=user_id,
             user_name=user_name,
             password=SEED_PASSWORD_PLACEHOLDER,
-            user_type=USER_TYPE_HUMAN,
             delete=0,
         )
         session.add(user)
@@ -439,32 +454,53 @@ async def super_admin_user(publish_db):
     return _identity(user, is_global_super=True)
 
 
+_DEFAULT_OWNER = object()
+
+
 @pytest.fixture()
 def service_account_principal(owner_user):
     """``service_account_principal(scopes=[...], resource_owner_user_id=...)`` → ``OpenApiPrincipal``.
 
-    The shape ``open_api_subject("app:manage")`` puts into the request context
-    (F049 T005). ``resource_owner_user_id`` defaults to ``owner_user`` — the
-    natural person the CLI's key creates resources on behalf of — because
-    "whose apps may this key publish" is the whole of AC-04's ownership rule and
-    a principal without it silently makes every app look unowned.
+    The shape beta2's ``resolve_service_account`` builds for a ``bs-sak-`` key
+    (``open_api/domain/services/credential_validator.py``): the acting subject
+    is the service account (``actor_kind="service_account"``, ``actor_id`` =
+    ``service_account.id``), authorization is judged as that account
+    (``authorization_subject_type="service_account"``), and there is no
+    effective user — a service account acting as itself is nobody.
+
+    ``resource_owner_user_id`` defaults to ``owner_user`` — the natural person
+    the CLI's key creates resources on behalf of — because "whose apps may this
+    key publish" is the whole of AC-04's ownership rule. Pass ``None``
+    explicitly to build the ownerless principal M9 must refuse.
+
+    ``mode`` is exposed so INV-31 ("mode S only") can be asserted against the
+    real pipeline: a mode-D principal with no delegation header is handed back
+    by ``resolve_request_identity`` unchanged and then refused by the marker.
     """
-    from bisheng.open_api.domain.context import PRINCIPAL_KIND_SERVICE_ACCOUNT, OpenApiPrincipal
+    from bisheng.open_api.domain.context import OpenApiPrincipal
 
     def _make(
         *,
         scopes: list[str] | tuple[str, ...] = ("app:manage",),
-        resource_owner_user_id: int | None = None,
-        subject_user_id: int = SERVICE_ACCOUNT_USER_ID,
-        credential_id: int | None = 1,
-        subject_kind: str = PRINCIPAL_KIND_SERVICE_ACCOUNT,
+        resource_owner_user_id: int | None | object = _DEFAULT_OWNER,
+        actor_id: int = SERVICE_ACCOUNT_USER_ID,
+        credential_id: int = 1,
+        tenant_id: int = ROOT_TENANT_ID,
+        mode: str = "S",
     ) -> OpenApiPrincipal:
+        owner = owner_user.user_id if resource_owner_user_id is _DEFAULT_OWNER else resource_owner_user_id
         return OpenApiPrincipal(
             credential_id=credential_id,
-            subject_kind=subject_kind,
-            subject_user_id=subject_user_id,
-            resource_owner_user_id=(owner_user.user_id if resource_owner_user_id is None else resource_owner_user_id),
-            scopes=tuple(scopes),
+            actor_kind="service_account",
+            actor_id=actor_id,
+            actor_name=SERVICE_ACCOUNT_NAME,
+            tenant_id=tenant_id,
+            resource_owner_user_id=owner,
+            scopes=frozenset(scopes),
+            mode=mode,
+            authorization_subject_type="service_account",
+            authorization_subject_id=actor_id,
+            effective_user_id=None,
         )
 
     return _make
@@ -1155,14 +1191,25 @@ def api_app(monkeypatch):
       brings a middleware chain that re-resolves tenants against a database
       these tests replaced; a failure here should point at F055.
 
-    ``principal`` replaces the ``app:manage`` credential dependency and seeds
-    the open-API principal ContextVar, which is what the ownership rule reads.
-    Passing ``None`` leaves the real dependency in place, which is how the
-    "a session cookie cannot call /api/v2" and "missing scope" cases are
-    exercised.
+    ``/api/v2`` is mounted exactly as ``bisheng/api/router.py`` mounts it: under
+    an ``APIRouter`` whose one router-level dependency is the **real**
+    ``verify_open_api_access`` (F053 design K14). ``principal`` does not replace
+    that dependency — FastAPI would let it, but then "no marker → refused",
+    "wrong scope → 26003" and "mode D → 26006" would all be stubbed out of the
+    very tests that exist to prove them. Instead only the credential *lookup*
+    (``validate_bearer``) is patched: a well-formed ``Authorization`` header
+    carrying the fixture token resolves to ``principal``, anything else goes
+    through the real parser and is refused exactly as in production. The
+    pipeline then installs the principal, the tenant and the permission actor
+    per request, the way it does on the live app.
+
+    Passing ``None`` leaves the lookup real too, which is how the "a session
+    cookie cannot call /api/v2" case is exercised. The v2 exception handlers
+    are the ones ``bisheng.main`` registers, so an auth refusal arrives as a
+    real 401 / 403 rather than in the 200 envelope business errors use.
     """
     import httpx
-    from fastapi import FastAPI
+    from fastapi import APIRouter, Depends, FastAPI
     from fastapi.responses import JSONResponse
 
     from bisheng.common.dependencies.user_deps import UserPayload
@@ -1175,29 +1222,39 @@ def api_app(monkeypatch):
         return JSONResponse(status_code=200, content=exc.to_dict())
 
     def _build(principal=None, payload=None, app_runtime_enabled: bool = True):
-        from bisheng.app_publish.api.endpoints import deploy as deploy_endpoints
         from bisheng.app_publish.api.router import v1_router, v2_router
+        from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError
         from bisheng.common.services.config_service import settings
-        from bisheng.core.context.tenant import set_current_tenant_id
-        from bisheng.open_api.domain.context import set_current_open_api_principal
+        from bisheng.open_api.api import dependencies as open_api_dependencies
+        from bisheng.open_api.api.dependencies import verify_open_api_access
+        from bisheng.open_api.api.exception_handlers import register_open_api_exception_handlers
+        from bisheng.open_api.domain.services.credential_validator import extract_bearer_token
 
         monkeypatch.setattr(settings.app_runtime, "enabled", app_runtime_enabled)
 
         app = FastAPI(exception_handlers={BaseErrorCode: _handle})
+        register_open_api_exception_handlers(app)
         app.include_router(v1_router, prefix="/api/v1")
-        app.include_router(v2_router, prefix="/api/v2")
+        rpc = APIRouter(prefix="/api/v2", dependencies=[Depends(verify_open_api_access)])
+        rpc.include_router(v2_router)
+        app.include_router(rpc)
+
+        headers: dict[str, str] = {}
         if principal is not None:
-            set_current_open_api_principal(principal)
-            # The real credential dependency seeds this too. Without it the
-            # receive leg writes ``app_deployment.tenant_id = NULL`` and fails
-            # on the NOT NULL constraint — which is the same guard that stops a
-            # child tenant's row landing in Root.
-            set_current_tenant_id(ROOT_TENANT_ID)
-            resolved = _payload(principal.subject_user_id, "service-account", ROOT_TENANT_ID)
-            app.dependency_overrides[deploy_endpoints.app_manage_subject] = lambda: resolved
+            token = _test_bearer_token()
+
+            async def _validate_bearer(authorization):
+                # The real parser first: a missing / malformed header is a real
+                # 26001 here, not a principal handed out for free.
+                if extract_bearer_token(authorization) != token:
+                    raise OpenApiCredentialInvalidError()
+                return principal
+
+            monkeypatch.setattr(open_api_dependencies, "validate_bearer", _validate_bearer)
+            headers["Authorization"] = f"Bearer {token}"
         if payload is not None:
             app.dependency_overrides[UserPayload.get_login_user] = lambda: payload
-        return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver")
+        return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver", headers=headers)
 
     return _build
 

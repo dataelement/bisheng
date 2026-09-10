@@ -13,6 +13,7 @@ from redis.exceptions import RedisError
 from bisheng.common.errcode.open_api import (
     ApiCredentialNotFoundError,
     OpenApiDelegateConfigurationInvalidError,
+    OpenApiDelegateExclusiveScopeError,
     OpenApiExtensionScopeNotDeployedError,
     OpenApiUnknownScopeError,
     PersonalTokenScopeInvalidError,
@@ -32,7 +33,12 @@ from bisheng.open_api.domain.models.api_credential import (
 )
 from bisheng.open_api.domain.repositories.credential_repository import CredentialRepository
 from bisheng.open_api.domain.schemas.credential import KeyIssuedResponse, KeyIssueRequest, KeyItem, KeyUpdateRequest
-from bisheng.open_api.domain.scopes import ISSUABLE_OPEN_API_SCOPE_CODES, OPEN_API_SCOPE_CODES
+from bisheng.open_api.domain.scopes import (
+    DELEGATE_SCOPE_CODE,
+    LOCAL_DEV_TOOLKIT_SCOPE_CODES,
+    OPEN_API_SCOPE_CODES,
+    issuable_scope_codes,
+)
 from bisheng.open_api.domain.services.delegate_scope_service import DelegateScopeService
 
 CREDENTIAL_CACHE_KEY = "oapi:cred:{}"
@@ -55,11 +61,21 @@ def credential_prefix(subject_kind: str) -> str:
 class CredentialService:
     @classmethod
     def validate_scopes(cls, scopes: list[str]) -> list[str]:
+        """Issue- and edit-time scope policy; both paths hand the full new list here.
+
+        Issuability is read per call (``open_platform.enabled`` gates the
+        extension scopes), and ``delegate`` is refused together with any local
+        development toolkit scope (伴生 PRD §4.2.4 / AC-48, INV-31) — validating
+        the complete list on edit is what stops "issue first, then edit it in".
+        """
+        issuable = issuable_scope_codes()
         for scope in scopes:
             if scope not in OPEN_API_SCOPE_CODES:
                 raise OpenApiUnknownScopeError()
-            if scope not in ISSUABLE_OPEN_API_SCOPE_CODES:
+            if scope not in issuable:
                 raise OpenApiExtensionScopeNotDeployedError()
+        if DELEGATE_SCOPE_CODE in scopes and not LOCAL_DEV_TOOLKIT_SCOPE_CODES.isdisjoint(scopes):
+            raise OpenApiDelegateExclusiveScopeError()
         return list(scopes)
 
     @classmethod
@@ -149,9 +165,7 @@ class CredentialService:
         if "delegate" not in (row.scopes or []):
             requested_entries = []
         else:
-            requested_entries = (
-                request.delegate_scopes if request.delegate_scopes is not None else current_entries
-            )
+            requested_entries = request.delegate_scopes if request.delegate_scopes is not None else current_entries
         delegate_entries = await cls._delegate_entries(
             tenant_id=row.tenant_id,
             subject_kind=row.subject_kind,
@@ -252,9 +266,7 @@ class CredentialService:
     @staticmethod
     async def _to_item(row: ApiCredential, *, now: datetime | None = None) -> KeyItem:
         item = KeyItem.from_row(row, now=now)
-        return item.model_copy(
-            update={"delegate_scopes": await DelegateScopeService.response_entries(row.id)}
-        )
+        return item.model_copy(update={"delegate_scopes": await DelegateScopeService.response_entries(row.id)})
 
     @staticmethod
     async def _delegate_entries(

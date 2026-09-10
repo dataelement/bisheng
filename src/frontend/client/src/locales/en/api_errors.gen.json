@@ -493,6 +493,7 @@
   "26041": "This permission is not allowed for a personal access token",
   "26042": "The token expiration exceeds the allowed maximum",
   "26043": "The personal access token holder is no longer active in this tenant",
+  "26050": "A key configured for delegation cannot be used for local development; issue a separate key",
   "90001": "You do not have permission to access the admin backend. Please contact the administrator to request access if needed.",
   "90002": "Your current role does not have permission to access the workbench. Please contact the administrator if needed.",
   "fallback": "The operation failed. Please try again later.",
