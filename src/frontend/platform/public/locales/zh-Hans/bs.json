@@ -2206,7 +2206,10 @@
     "settingsAdminOnly": "仅超级管理员可修改实例配置。",
     "settingsSaved": "配置已保存",
     "settingsSaveFailed": "保存失败，请检查下载地址或稍后重试。",
-    "licenseDeploymentOnly": "License 由 Gateway 部署配置；此处不管理授权密钥。"
+    "licenseDeploymentOnly": "License 由 Gateway 部署配置；此处不管理授权密钥。",
+    "department": "部门",
+    "noDepartment": "未设置部门",
+    "authorizeWithDepartment": "以 {{name}}（{{department}}）的身份授权 DSH Desktop 使用企业模型。请确认这是你刚刚在客户端发起的登录。"
   },
   "request": {
     "session_expired": "登录过期",

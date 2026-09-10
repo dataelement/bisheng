@@ -1,6 +1,7 @@
 import { Button } from '@/components/bs-ui/button'
 import { Input } from '@/components/bs-ui/input'
 import { userContext } from '@/contexts/userContext'
+import { useDshProfile } from '@/hooks/useDshProfile'
 import { useDshBrowserConfig } from '@/hooks/useDshBrowserConfig'
 import { rememberDesktopLoginReturnTo } from '@/utils/loginReturnTo'
 import { useContext, useEffect, useState } from 'react'
@@ -52,7 +53,8 @@ export function DshLogin() {
             setCopied(false)
         }
     }
-    const tenantName = user?.leaf_tenant_name?.trim() || user?.tenant_name?.trim()
+    const profile = useDshProfile(user?.user_id, !!config?.enabled)
+    const departmentName = profile?.department_name?.trim()
     const base = location.origin
     const download = config?.download_url
     return (
@@ -115,9 +117,9 @@ export function DshLogin() {
                         ) : (
                             <>
                                 <p>
-                                    {t(tenantName ? 'dsh.authorizeHelp' : 'dsh.authorize_without_tenant', {
+                                    {t(departmentName ? 'dsh.authorizeWithDepartment' : 'dsh.authorize_without_tenant', {
                                         name: user.user_name,
-                                        tenant: tenantName,
+                                        department: departmentName,
                                     })}
                                 </p>
                                 {flow.status === 'idle' && (

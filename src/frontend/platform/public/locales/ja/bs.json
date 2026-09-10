@@ -2206,7 +2206,10 @@
     "settingsAdminOnly": "インスタンス設定を変更できるのは全体管理者のみです。",
     "settingsSaved": "設定を保存しました",
     "settingsSaveFailed": "保存できませんでした。ダウンロード URL を確認するか、後で再試行してください。",
-    "licenseDeploymentOnly": "License は Gateway のデプロイ時に設定します。ここではライセンスキーを管理しません。"
+    "licenseDeploymentOnly": "License は Gateway のデプロイ時に設定します。ここではライセンスキーを管理しません。",
+    "department": "部門",
+    "noDepartment": "部門未設定",
+    "authorizeWithDepartment": "{{name}}（{{department}}）として DSH Desktop を認証します。ご自身がアプリで開始したログインであることを確認してください。"
   },
   "request": {
     "session_expired": "セッションの有効期限が切れました",

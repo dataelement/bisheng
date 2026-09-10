@@ -92,7 +92,7 @@ async def get_admin_runtime(runtime, *, quota=None, usage=None):
         return runtime.administration
     from bisheng.dsh.runtime import get_model_runtime, read_policy
     from bisheng.llm.domain.services.llm import LLMService
-    from bisheng.user.domain.services.user import UserService
+    from bisheng.user.domain.services.dsh_display import read_dsh_display_profiles
     from bisheng.worker.dsh.profiles import ProfileOutboxWorker
 
     model_runtime = None
@@ -160,7 +160,7 @@ async def get_admin_runtime(runtime, *, quota=None, usage=None):
         repository_scope=operation_repository_scope,
         gateway=runtime.gateway,
         authorize=authorize_admin,
-        profiles=UserService.batch_dsh_profiles,
+        profiles=read_dsh_display_profiles,
         policy=policy,
         policy_view=policy_view,
         now=now,

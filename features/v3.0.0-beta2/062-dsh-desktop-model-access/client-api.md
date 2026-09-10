@@ -830,3 +830,8 @@ sequenceDiagram
 
 
 2026-09-10 接入修订：BASE 与唤起链接的 `server` 参数允许 HTTP；客户端需同步放开原 HTTPS-only 地址校验。接口路径、PKCE、票据、Token 与调用时序不变，契约仍为 0.4.0。
+
+
+## 2026-09-10 工作台本人弹窗与部门展示
+
+用户已批准本人会话/用量查询和逐会话吊销；完整接口及验收边界见 [self-service-revision.md](./self-service-revision.md)。部门仅展示，不同步 Gateway；客户端冻结的登录与模型协议不变。

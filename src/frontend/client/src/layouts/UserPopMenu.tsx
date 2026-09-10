@@ -1,4 +1,6 @@
-import { Check, ChevronRight } from "lucide-react";
+import { DshDesktopDialog } from "~/components/dsh/DshDesktopDialog";
+import { useDshDesktop } from "~/hooks/useDshDesktop";
+import { Check, ChevronRight, Monitor } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { useRecoilState } from "recoil";
@@ -58,6 +60,7 @@ function UserPopMenuDrawer() {
     const displayName = user?.username || "admin";
     const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatar || "");
     const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+    const dsh = useDshDesktop();
     const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
     const [approvalDialogTarget, setApprovalDialogTarget] = useState<ApprovalCenterTarget>({ tab: "my_tasks" });
     const {
@@ -187,6 +190,10 @@ function UserPopMenuDrawer() {
                         </div>
                     </button>
 
+                    {dsh.enabled && <button type="button" className="flex w-full items-center gap-3 rounded-xl px-3 py-1.5 text-body text-text-primary"
+                        onClick={() => { dsh.setOpen(true); setMenuOpen(false); }}>
+                        <Monitor className="size-4" />{localize('dsh_title')}
+                    </button>}
                     <button
                         type="button"
                         className="group flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left outline-none hover:bg-gray-50"
@@ -225,7 +232,7 @@ function UserPopMenuDrawer() {
                                     className="flex w-full items-center rounded-lg py-2 pl-2 pr-3 text-left text-sm hover:bg-gray-50"
                                     onClick={() => changeLang("zh-Hans")}
                                 >
-                                    <span className="flex-1">中文</span>
+                                    <span className="flex-1">{localize('com_nav_lang_chinese')}</span>
                                     {langcode === "zh-Hans" && <Check className="size-4 text-blue-600" />}
                                 </button>
                                 <button
@@ -242,7 +249,7 @@ function UserPopMenuDrawer() {
                                         className="flex w-full items-center rounded-lg py-2 pl-2 pr-3 text-left text-sm hover:bg-gray-50"
                                         onClick={() => changeLang("ja")}
                                     >
-                                        <span className="flex-1">日本語</span>
+                                        <span className="flex-1">{localize('com_nav_lang_japanese')}</span>
                                         {langcode === "ja" && <Check className="size-4 text-blue-600" />}
                                     </button>
                                 )}
@@ -265,6 +272,7 @@ function UserPopMenuDrawer() {
                 </div>
             ) : null}
 
+            {dsh.open && <DshDesktopDialog open={dsh.open} onOpenChange={dsh.setOpen} downloadUrl={dsh.downloadUrl} />}
             <AccountInfoDialog
                 open={accountDialogOpen}
                 onOpenChange={setAccountDialogOpen}
@@ -295,6 +303,7 @@ function UserPopMenuRail() {
     const [menuSideOffset, setMenuSideOffset] = useState(0);
     const triggerRef = useRef<HTMLDivElement>(null);
     const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+    const dsh = useDshDesktop();
     const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
     const [approvalDialogTarget, setApprovalDialogTarget] = useState<ApprovalCenterTarget>({ tab: "my_tasks" });
     const {
@@ -452,6 +461,8 @@ function UserPopMenuRail() {
                         onSelect={runMenuItemSelect(() => openApprovalCenter({ tab: "my_tasks" }))}
                     />
 
+                    {dsh.enabled && <ActionMenuItem icon={<Monitor />} label={localize('dsh_title')}
+                        onSelect={runMenuItemSelect(() => dsh.setOpen(true))} />}
                     <ActionMenuItem
                         icon={<Outlined.Bell />}
                         onSelect={runMenuItemSelect(handleNotificationsClick)}
@@ -471,7 +482,7 @@ function UserPopMenuRail() {
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent className={cn(actionMenuSurfaceClassName, "z-[100] ml-2 min-w-[140px] gap-0 p-2")}>
                             <ActionMenuItem onSelect={runMenuItemSelect(() => changeLang('zh-Hans'))}>
-                                <span className={cn(actionMenuLabelClassName, "flex-1")}>中文</span>
+                                <span className={cn(actionMenuLabelClassName, "flex-1")}>{localize('com_nav_lang_chinese')}</span>
                                 {langcode === 'zh-Hans' && <Check className="ml-2 size-4 text-blue-500" />}
                             </ActionMenuItem>
                             <ActionMenuItem onSelect={runMenuItemSelect(() => changeLang('en'))}>
@@ -480,7 +491,7 @@ function UserPopMenuRail() {
                             </ActionMenuItem>
                             {!window.APP_CONFIG?.disableJa && (
                                 <ActionMenuItem onSelect={runMenuItemSelect(() => changeLang('ja'))}>
-                                    <span className={cn(actionMenuLabelClassName, "flex-1")}>日本語</span>
+                                    <span className={cn(actionMenuLabelClassName, "flex-1")}>{localize('com_nav_lang_japanese')}</span>
                                     {langcode === 'ja' && <Check className="ml-2 size-4 text-blue-500" />}
                                 </ActionMenuItem>
                             )}
@@ -496,6 +507,7 @@ function UserPopMenuRail() {
                 </ActionMenuContent>
             </DropdownMenu >
 
+            {dsh.open && <DshDesktopDialog open={dsh.open} onOpenChange={dsh.setOpen} downloadUrl={dsh.downloadUrl} />}
             <AccountInfoDialog
                 open={accountDialogOpen}
                 onOpenChange={setAccountDialogOpen}

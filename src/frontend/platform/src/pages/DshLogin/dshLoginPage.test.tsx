@@ -1,10 +1,12 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createContext } from 'react'
 import english from '../../../public/locales/en-US/bs.json'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DshLogin } from './index'
 import { consumeLoginReturnTo } from '@/utils/loginReturnTo'
 import { getDshBrowserConfig } from '@/controllers/API/dshSettings'
+import request from '@/controllers/request'
+vi.mock('@/controllers/request', () => ({ default: { get: vi.fn() } }))
 
 const identity = vi.hoisted(() => ({ user: null as null | {
     user_id: number; user_name: string; tenant_name?: string | null; leaf_tenant_name?: string | null;
@@ -27,6 +29,7 @@ const origin = 'http://192.168.106.109:13001'
 const assign = vi.fn()
 beforeEach(() => {
     vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null })
+    vi.mocked(request.get).mockResolvedValue({ department_name: null })
     assign.mockClear()
     identity.user = null
     const values = new Map<string, string>()
@@ -78,17 +81,17 @@ describe('desktop HTTP login entry', () => {
 
 describe('desktop consent identity', () => {
     it.each([
-        { leaf_tenant_name: 'Default Tenant', tenant_name: null, expected: 'dshadmin (Default Tenant)' },
-        { leaf_tenant_name: 'Current Tenant', tenant_name: 'Old Tenant', expected: 'dshadmin (Current Tenant)' },
-        { tenant_name: 'Legacy Tenant', expected: 'dshadmin (Legacy Tenant)' },
-        { leaf_tenant_name: '  ', tenant_name: null, expected: 'dshadmin.' },
-        { expected: 'dshadmin.' },
-    ])('shows the available tenant without empty parentheses: $expected', async ({ expected, ...tenant }) => {
-        identity.user = { user_id: 1, user_name: 'dshadmin', ...tenant }
+        { department: 'Engineering', expected: 'dshadmin (Engineering)' },
+        { department: null, expected: 'dshadmin.' },
+        { department: '  ', expected: 'dshadmin.' },
+    ])('shows the primary department without tenant or empty parentheses: $expected', async ({ expected, department }) => {
+        vi.mocked(request.get).mockResolvedValue({ department_name: department })
+        identity.user = { user_id: 1, user_name: 'dshadmin', tenant_name: 'Hidden Tenant' }
         vi.stubGlobal('location', { origin, pathname: '/desktop-login', href: origin + '/desktop-login?auth_id=fixture', search: '?auth_id=fixture', assign })
         render(<DshLogin />)
         await screen.findByRole('button', { name: english.dsh.authorize })
-        expect(screen.getByText(/Authorize DSH Desktop as/).textContent).toContain(expected)
+        await waitFor(() => expect(screen.getByText(/Authorize DSH Desktop as/).textContent).toContain(expected))
+        expect(screen.queryByText(/Hidden Tenant/)).toBeNull()
         expect(screen.getByText(/Authorize DSH Desktop as/).textContent).not.toContain('()')
     })
 })

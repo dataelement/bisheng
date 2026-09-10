@@ -2261,7 +2261,10 @@
     "settingsAdminOnly": "Only a global administrator can change instance settings.",
     "settingsSaved": "Settings saved",
     "settingsSaveFailed": "Could not save. Check the download URL or try again later.",
-    "licenseDeploymentOnly": "License is configured during Gateway deployment. License keys are not managed here."
+    "licenseDeploymentOnly": "License is configured during Gateway deployment. License keys are not managed here.",
+    "department": "Department",
+    "noDepartment": "No department",
+    "authorizeWithDepartment": "Authorize DSH Desktop as {{name}} ({{department}}). Confirm that you started this sign-in in the desktop app."
   },
   "request": {
     "session_expired": "Session expired",

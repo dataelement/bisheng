@@ -156,3 +156,12 @@ describe('DSH seat pagination and commands', () => {
         unmount()
     })
 })
+
+it('shows department and omits a zero count after no sessions', async () => {
+    vi.mocked(getDshSeats).mockResolvedValue({ items: [{ ...seat(1), department_name: 'Engineering' }], next_cursor: null, has_more: false })
+    const { unmount } = render(<SeatsView operations={{}} revision={0} onOperation={vi.fn()} />)
+    await screen.findByText('Engineering')
+    expect(screen.getByText('dsh.NO_SESSIONS').closest('td')?.textContent?.trim()).toBe('dsh.NO_SESSIONS')
+    expect(screen.queryByRole('columnheader', { name: 'dsh.tenant' })).toBeNull()
+    unmount()
+})

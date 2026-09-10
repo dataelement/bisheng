@@ -188,7 +188,7 @@ export function SeatsView({
                             <TableRow>
                                 {[
                                     'user',
-                                    'tenant',
+                                    'department',
                                     'seatState',
                                     'loginState',
                                     'lastLogin',
@@ -223,16 +223,13 @@ export function SeatsView({
                                                 {item.user_id}
                                             </span>
                                         </TableCell>
-                                        <TableCell>{item.tenant_id}</TableCell>
+                                        <TableCell>{item.department_name || t('dsh.noDepartment')}</TableCell>
                                         <TableCell>
                                             {t(`dsh.${item.state}`)}
                                         </TableCell>
                                         <TableCell>
                                             {t(`dsh.${item.login_state}`)}{' '}
-                                            {item.login_state === 'UNAVAILABLE'
-                                                ? ''
-                                                : (item.active_session_count ??
-                                                  '')}
+                                            {item.login_state === 'HAS_SESSIONS' ? item.active_session_count : ''}
                                         </TableCell>
                                         <TableCell>
                                             {dshTime(item.last_login_at)}

@@ -113,13 +113,14 @@ class DshManagementService:
                 raise ValueError()
             snapshots = await self.profiles(ids)
             for row in result["items"]:
+                row["department_name"] = None
                 snapshot = snapshots.get(int(row["user_id"]))
                 # Cross-tenant moves never relocate a historical seat or its grant.
                 if snapshot and str(snapshot["tenant_id"]) == str(row["tenant_id"]):
                     row.update(
                         {
                             key: snapshot[key]
-                            for key in ("username", "display_name", "profile_version")
+                            for key in ("username", "display_name", "profile_version", "department_name")
                             if key in snapshot
                         }
                     )

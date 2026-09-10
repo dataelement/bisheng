@@ -19,6 +19,7 @@ export type DshPage<T> = {
     as_of?: string
 }
 export type DshSeat = {
+    department_name?: string | null
     seat_id: string
     tenant_id: string
     user_id: string
