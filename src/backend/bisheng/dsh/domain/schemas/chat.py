@@ -3,12 +3,33 @@
 import json
 from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from bisheng.core.config.dsh import ChatCapabilities as ChatCapabilities
 from bisheng.dsh.domain.schemas.contracts import DshContract
 
 PositiveInt = Annotated[int, Field(strict=True, gt=0)]
+
+
+class ChatCapabilities(BaseModel):
+    """Protocol capabilities supplied by existing provider adapters to the chat contract."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    streaming: bool = Field(default=True, description="Whether the provider supports streamed chat responses.")
+    tools: bool = Field(default=True, description="Whether the provider supports function tools and tool choice.")
+    reasoning_content: bool = Field(
+        default=False, description="Whether assistant reasoning content is supported by the provider."
+    )
+    max_completion_tokens: bool = Field(
+        default=False, description="Whether the provider accepts max_completion_tokens instead of max_tokens."
+    )
+    stop: bool = Field(default=True, description="Whether the provider accepts stop sequences.")
+    temperature: bool = Field(
+        default=True, description="Whether the provider accepts a temperature sampling parameter."
+    )
+    top_p: bool = Field(default=True, description="Whether the provider accepts a top_p sampling parameter.")
+
+    def client_fields(self) -> dict[str, bool]:
+        return self.model_dump(include={"streaming", "tools", "reasoning_content"})
 
 
 class ToolFunction(DshContract):

@@ -7,28 +7,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-class ChatCapabilities(BaseModel):
-    """Protocol capabilities supplied by existing provider adapters to the chat contract."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-    streaming: bool = Field(default=True, description="Whether the provider supports streamed chat responses.")
-    tools: bool = Field(default=True, description="Whether the provider supports function tools and tool choice.")
-    reasoning_content: bool = Field(
-        default=False, description="Whether assistant reasoning content is supported by the provider."
-    )
-    max_completion_tokens: bool = Field(
-        default=False, description="Whether the provider accepts max_completion_tokens instead of max_tokens."
-    )
-    stop: bool = Field(default=True, description="Whether the provider accepts stop sequences.")
-    temperature: bool = Field(
-        default=True, description="Whether the provider accepts a temperature sampling parameter."
-    )
-    top_p: bool = Field(default=True, description="Whether the provider accepts a top_p sampling parameter.")
-
-    def client_fields(self) -> dict[str, bool]:
-        return self.model_dump(include={"streaming", "tools", "reasoning_content"})
-
-
 class DshSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True, hide_input_in_errors=True)
 
