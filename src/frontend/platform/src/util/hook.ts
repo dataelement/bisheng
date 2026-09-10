@@ -211,12 +211,12 @@ export function useCopyText() {
 }
 
 // 表格通用逻辑（分页展示、表格数据、关键词检索）
-export function useTable<T extends object>(param, apiFun) {
+export function useTable<T extends object>(param, apiFun, initialPage = 1) {
     const unInitDataRef = useRef(!!param.unInitData);
 
     const cancelLoadingWhenReload = param.cancelLoadingWhenReload || false;
     const [page, setPage] = useState({
-        page: 1,
+        page: initialPage,
         pageSize: param.pageSize || 20,
         keyword: "",
     });

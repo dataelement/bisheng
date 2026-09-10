@@ -1,5 +1,6 @@
 
-import FilterByApp from "@/components/bs-comp/filterTableDataComponent/FilterByApp";
+import FilterByApp, { type AppOption } from "@/components/bs-comp/filterTableDataComponent/FilterByApp";
+import ClearableFilter from "@/components/bs-comp/filterTableDataComponent/ClearableFilter";
 import FilterByDate from "@/components/bs-comp/filterTableDataComponent/FilterByDate";
 import FilterByUser from "@/components/bs-comp/filterTableDataComponent/FilterByUser";
 import FilterByUsergroup from "@/components/bs-comp/filterTableDataComponent/FilterByUsergroup";
@@ -19,9 +20,9 @@ import { userContext } from "@/contexts/userContext";
 import { exportCsvDataApi, getAuditAppListApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
 import { exportCsv, formatDate } from "@/util/utils";
-import { useContext, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useContext, useMemo, useReducer, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useStandalonePrefix } from "@/routes/standalone";
 
 const getStrTime = (date) => {
@@ -43,19 +44,28 @@ type Action =
     | { type: 'SET_FILTER'; payload: Partial<FilterState> }
     | { type: 'RESET' };
 
+type AppLogSnapshot = {
+    filters: FilterState;
+    appliedFilters: FilterState;
+    page: number;
+    appOptions: AppOption[];
+};
+
+const createEmptyFilters = (): FilterState => ({
+    appName: [],
+    userName: [],
+    userGroup: '',
+    dateRange: [],
+    feedback: '',
+    sensitive_status: ''
+});
+
 const filterReducer = (state: FilterState, action: Action): FilterState => {
     switch (action.type) {
         case 'SET_FILTER':
             return { ...state, ...action.payload };
         case 'RESET':
-            return {
-                appName: [],
-                userName: [],
-                userGroup: '',
-                dateRange: [],
-                feedback: '',
-                sensitive_status: ''
-            };
+            return createEmptyFilters();
         default:
             return state;
     }
@@ -67,11 +77,20 @@ export default function AppUseLog() {
     const { message } = useToast()
     // Keep the shell-less chrome when this page is opened as a standalone/embedded route
     const routePrefix = useStandalonePrefix()
+    const location = useLocation()
+    const navigate = useNavigate()
+    const [restored] = useState<AppLogSnapshot | undefined>(() => location.state?.appLogSnapshot)
+    const [filters, dispatch] = useReducer(filterReducer, restored?.filters ?? createEmptyFilters())
+    const appliedFiltersRef = useRef(restored?.appliedFilters ?? createEmptyFilters())
+    const appOptionsRef = useRef(new Map((restored?.appOptions ?? []).map((option) => [option.value, option])))
+    const handleAppOptionsLoad = useCallback((options: AppOption[]) => {
+        options.forEach((option) => appOptionsRef.current.set(option.value, option))
+    }, [])
     // 20 items per page
-    const { page, pageSize, data: datalist, total, loading, setPage, filterData } = useTable({}, (param) => {
+    const { page, pageSize, data: datalist, total, loading, setPage, filterData } = useTable(appliedFiltersRef.current, (param) => {
         const [start_date, end_date] = getStrTime(param.dateRange || [])
         return getAuditAppListApi({
-            page: page,
+            page: param.page,
             page_size: param.pageSize,
             flow_ids: param.appName?.length ? param.appName : undefined,
             user_ids: param.userName?.[0]?.value || undefined,
@@ -81,7 +100,7 @@ export default function AppUseLog() {
             feedback: param.feedback || undefined,
             sensitive_status: param.sensitive_status || undefined,
         })
-    });
+    }, restored?.page ?? 1);
     const processedData = useMemo(() =>
         datalist.map(el => ({
             ...el,
@@ -89,15 +108,6 @@ export default function AppUseLog() {
         })),
         [datalist] // Dependency: datalist
     );
-
-    const [filters, dispatch] = useReducer(filterReducer, {
-        appName: [],
-        userName: [],
-        userGroup: '',
-        dateRange: [],
-        feedback: '',
-        sensitive_status: ''
-    });
 
     const appLogTableCols = useMemo(() => {
         const cols = [
@@ -129,28 +139,22 @@ export default function AppUseLog() {
 
     const resetClick = () => {
         dispatch({ type: 'RESET' });
-        filterData({
-            appName: [],
-            userName: [],
-            userGroup: '',
-            dateRange: [],
-            feedback: '',
-            sensitive_status: ''
+        appliedFiltersRef.current = createEmptyFilters()
+        filterData(appliedFiltersRef.current)
+    }
+    // Keep the draft and the executed query separate in this history entry.
+    const handleCachePage = () => {
+        const snapshot: AppLogSnapshot = {
+            filters,
+            appliedFilters: appliedFiltersRef.current,
+            page,
+            appOptions: filters.appName.map((id) => appOptionsRef.current.get(id)).filter(Boolean),
+        }
+        navigate(`${location.pathname}${location.search}${location.hash}`, {
+            replace: true,
+            state: { ...location.state, appLogSnapshot: snapshot },
         })
     }
-    // Cache page before entering detail page, temporary solution
-    const handleCachePage = () => {
-        window.LogPage = page
-    }
-    useEffect(() => {
-        const _page = window.LogPage
-        if (_page) {
-            setPage(_page);
-            delete window.LogPage
-        } else {
-            setPage(1);
-        }
-    }, [])
 
     const { user } = useContext(userContext)
     const [auditing, setAuditing] = useState(false);
@@ -303,9 +307,13 @@ export default function AppUseLog() {
         </div>}
         <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-20">
             <div className="mb-4 flex flex-wrap gap-4">
-                <FilterByApp value={filters.appName} placeholder={t('log.appName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['appName']: value } })} />
-                <FilterByUser value={filters.userName} placeholder={t('log.userName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userName']: value } })} />
-                <FilterByUsergroup value={filters.userGroup} placeholder={t('log.userGroup')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userGroup']: value } })} />
+                <FilterByApp value={filters.appName} initialOptions={restored?.appOptions} onOptionsLoad={handleAppOptionsLoad} placeholder={t('log.appName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['appName']: value } })} />
+                <ClearableFilter hasValue={filters.userName.length > 0} label={t('log.userName')} onClear={() => dispatch({ type: 'SET_FILTER', payload: { userName: [] } })}>
+                    <FilterByUser value={filters.userName} placeholder={t('log.userName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userName']: value } })} />
+                </ClearableFilter>
+                <ClearableFilter hasValue={Boolean(filters.userGroup)} label={t('log.userGroup')} onClear={() => dispatch({ type: 'SET_FILTER', payload: { userGroup: '' } })}>
+                    <FilterByUsergroup value={filters.userGroup} placeholder={t('log.userGroup')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userGroup']: value } })} />
+                </ClearableFilter>
                 <FilterByDate value={filters.dateRange} placeholders={[`${t('log.startDate')}`, `${t('log.endDate')}`]} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['dateRange']: value } })} />
                 <div className="w-[200px] relative">
                     <ClearableFilterSelect
@@ -346,7 +354,8 @@ export default function AppUseLog() {
                         adjustedStart = undefined;
                     }
 
-                    filterData({ ...filters, dateRange: [adjustedStart, adjustedEnd] })
+                    appliedFiltersRef.current = { ...filters, dateRange: [adjustedStart, adjustedEnd] }
+                    filterData(appliedFiltersRef.current)
                 }} >{t('log.searchButton')}</Button>
                 <Button onClick={resetClick} variant="outline">{t('log.resetButton')}</Button>
                 <Button onClick={handleExport} disabled={auditing}>

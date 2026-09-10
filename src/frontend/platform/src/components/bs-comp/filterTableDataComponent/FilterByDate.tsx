@@ -1,5 +1,6 @@
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { useCallback } from "react";
+import ClearableFilter from "./ClearableFilter";
 
 interface DateFilterProps {
     value?: [Date | null, Date | null];
@@ -40,20 +41,20 @@ export default function FilterByDate({ value = [null, null], placeholders = ['St
 
     return (
         <div className="flex gap-2 flex-wrap">
-            <div className="w-[180px] relative">
+            <ClearableFilter className="w-[180px]" isDate hasValue={Boolean(startDate)} label={placeholders[0]} onClear={() => handleDateChange("start", null)}>
                 <DatePicker
                     value={startDate}
                     placeholder={placeholders[0]}
                     onChange={(v) => handleDateChange("start", v)}
                 />
-            </div>
-            <div className="w-[180px] relative">
+            </ClearableFilter>
+            <ClearableFilter className="w-[180px]" isDate hasValue={Boolean(endDate)} label={placeholders[1]} onClear={() => handleDateChange("end", null)}>
                 <DatePicker
                     value={endDate}
                     placeholder={placeholders[1]}
                     onChange={(v) => handleDateChange("end", v)}
                 />
-            </div>
+            </ClearableFilter>
         </div>
     );
 };

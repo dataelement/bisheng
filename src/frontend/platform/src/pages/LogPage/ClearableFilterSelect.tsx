@@ -1,4 +1,5 @@
 import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select"
+import ClearableFilter from "@/components/bs-comp/filterTableDataComponent/ClearableFilter"
 import { Check } from "lucide-react"
 import { useState, type ReactNode } from "react"
 
@@ -51,6 +52,10 @@ export function ClearableFilterSelect({
     }
 
     return (
+        <ClearableFilter hasValue={Boolean(selected)} label={placeholder} onClear={() => {
+            onValueChange("")
+            handleOpenChange(false)
+        }}>
         <Select open={open} onOpenChange={handleOpenChange}>
             <SelectTrigger className={triggerClassName}>
                 {selectedLabel ? (
@@ -87,5 +92,6 @@ export function ClearableFilterSelect({
                 </div>
             </SelectContent>
         </Select>
+        </ClearableFilter>
     )
 }

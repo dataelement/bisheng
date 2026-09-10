@@ -1,4 +1,5 @@
 import { Button } from "@/components/bs-ui/button";
+import ClearableFilter from "@/components/bs-comp/filterTableDataComponent/ClearableFilter";
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import MultiSelect from "@/components/bs-ui/select/multi";
@@ -179,7 +180,7 @@ export default function SystemLog() {
         )}
         <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-10">
             <div className="mb-4 flex flex-wrap gap-4">
-                <div className="w-[240px] relative">
+                <ClearableFilter className="w-[240px]" hasValue={keys.userIds.length > 0} label={t('log.selectUser')} onClear={() => setKeys({ ...keys, userIds: [] })}>
                     <MultiSelect contentClassName="overflow-y-auto max-w-[240px]" multiple
                         options={users}
                         value={keys.userIds}
@@ -188,8 +189,8 @@ export default function SystemLog() {
                         // onSearch={(key) => { searchUser(key); selectedRef.current = keys.userIds }}
                         onChange={(values) => setKeys({ ...keys, userIds: values })}
                     ></MultiSelect>
-                </div>
-                <div className="w-[220px] relative">
+                </ClearableFilter>
+                <ClearableFilter className="w-[220px]" hasValue={keys.responsibleUserIds.length > 0} label={t('log.selectResponsiblePerson')} onClear={() => setKeys({ ...keys, responsibleUserIds: [] })}>
                     <MultiSelect contentClassName="overflow-y-auto max-w-[220px]" multiple
                         options={responsiblePersons}
                         value={keys.responsibleUserIds}
@@ -197,7 +198,7 @@ export default function SystemLog() {
                         onLoad={loadResponsiblePersons}
                         onChange={(values) => setKeys({ ...keys, responsibleUserIds: values })}
                     ></MultiSelect>
-                </div>
+                </ClearableFilter>
                 <div className="w-[200px] relative">
                     <ClearableFilterSelect
                         value={keys.groupId}
@@ -209,12 +210,12 @@ export default function SystemLog() {
                         onValueChange={(value) => setKeys({ ...keys, groupId: value })}
                     />
                 </div>
-                <div className="w-[180px] relative">
+                <ClearableFilter className="w-[180px]" isDate hasValue={Boolean(keys.start)} label={t('log.startDate')} onClear={() => setKeys({ ...keys, start: undefined })}>
                     <DatePicker value={keys.start} placeholder={t('log.startDate')} onChange={(t) => setKeys({ ...keys, start: t })} />
-                </div>
-                <div className="w-[180px] relative">
+                </ClearableFilter>
+                <ClearableFilter className="w-[180px]" isDate hasValue={Boolean(keys.end)} label={t('log.endDate')} onClear={() => setKeys({ ...keys, end: undefined })}>
                     <DatePicker value={keys.end} placeholder={t('log.endDate')} onChange={(t) => setKeys({ ...keys, end: t })} />
-                </div>
+                </ClearableFilter>
                 <div className="w-[180px] relative">
                     <ClearableFilterSelect
                         value={keys.moduleId}

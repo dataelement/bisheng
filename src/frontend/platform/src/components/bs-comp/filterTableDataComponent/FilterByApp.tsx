@@ -2,14 +2,26 @@ import { MultiSelect } from "@/components/bs-ui/multiSelect.tsx";
 import { getGroupsApi } from "@/controllers/API/log";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-interface AppOption {
+export interface AppOption {
     label: string;
     value: string;
     placeholder?: string;
 }
 
-export default function FilterByApp({ value, placeholder = 'App Name', onChange }) {
-    const { apps, loadApps, searchApps, loadMoreApps } = useApps();
+interface FilterByAppProps {
+    value: string[];
+    placeholder?: string;
+    onChange: (value: string[]) => void;
+    initialOptions?: AppOption[];
+    onOptionsLoad?: (options: AppOption[]) => void;
+}
+
+export default function FilterByApp({ value, placeholder = 'App Name', onChange, initialOptions, onOptionsLoad }: FilterByAppProps) {
+    const { apps, loadApps, searchApps, loadMoreApps } = useApps(initialOptions);
+
+    useEffect(() => {
+        onOptionsLoad?.(apps);
+    }, [apps, onOptionsLoad]);
 
     useEffect(() => {
         loadApps("");
@@ -35,8 +47,8 @@ export default function FilterByApp({ value, placeholder = 'App Name', onChange 
 /**
  * 自定义 Hook：用于管理应用列表的数据加载逻辑
  */
-const useApps = () => {
-    const [apps, setApps] = useState<AppOption[]>([]); // 应用列表数据
+const useApps = (initialOptions: AppOption[] = []) => {
+    const [apps, setApps] = useState<AppOption[]>(initialOptions); // 应用列表数据
     const pageRef = useRef(1); // 当前页码
     const hasMoreRef = useRef(true); // 是否还有更多数据
     const loadLock = useRef(false); // 加载锁，防止重复请求
