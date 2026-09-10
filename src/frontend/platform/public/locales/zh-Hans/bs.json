@@ -2184,7 +2184,17 @@
     },
     "independentQuota": "每个模型的月度 Token 额度独立计算，互不借用。汇总仅供参考。",
     "zeroModelQuota": "额度为 0 的模型不能发起新请求，其他模型不受影响。",
-    "notConfigured": "未配置"
+    "notConfigured": "未配置",
+    "modelAccess": "DSH 开放范围",
+    "modelAccessHelp": "为当前模型配置可用用户和额度，仅影响 DSH Desktop。",
+    "preAuthorizeHelp": "可搜索当前租户的毕昇用户并提前授权，无需用户先登录 DSH，也不会占用席位。",
+    "modelQuotaHelp": "每个用户的当前模型额度独立计算，按北京时间每月重置；0 表示不可调用。每行单独保存。",
+    "allowed": "可调用",
+    "monthlyTokens": "每月 Token 额度",
+    "allowUser": "允许 {{name}} 调用当前模型",
+    "userMonthlyLimit": "{{name}} 每月 Token 额度",
+    "userUsage": "用户用量",
+    "usageScope": "按用户名查看 DSH 用量。模型授权与额度请到“模型管理 → DSH 开放范围”配置。"
   },
   "request": {
     "session_expired": "登录过期",

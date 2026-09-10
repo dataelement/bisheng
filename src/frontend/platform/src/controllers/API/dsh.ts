@@ -1,5 +1,6 @@
 import request from '@/controllers/request'
 import type {
+    DshModelAccessPage,
     DshAuthorization,
     DshDenial,
     DshConfig,
@@ -15,6 +16,24 @@ import type {
 
 const admin = '/api/v1/dsh/admin'
 const malformed = () => new Error('Invalid DSH response')
+
+export async function getDshModelUsers(
+    modelId: number,
+    query: { cursor?: string; keyword?: string; limit: number },
+    signal?: AbortSignal,
+): Promise<DshModelAccessPage> {
+    const data: DshModelAccessPage = await request.get(`${admin}/models/${modelId}/users`, { params: query, signal })
+    if (!data || data.model?.id !== modelId || typeof data.model.name !== 'string'
+        || !Number.isSafeInteger(data.tenant_id) || data.tenant_id < 1
+        || !Array.isArray(data.items) || data.items.length > query.limit
+        || typeof data.has_more !== 'boolean'
+        || (data.has_more && !data.next_cursor)
+        || data.items.some((row) => !Number.isSafeInteger(row.user_id) || row.user_id < 1
+            || typeof row.user_name !== 'string' || !Number.isSafeInteger(row.version) || row.version < 0
+            || !validModelConfigs(row.models)
+            || (row.pending_operation_id !== null && typeof row.pending_operation_id !== 'string'))) throw malformed()
+    return data
+}
 function validModelConfigs(value: unknown): boolean {
     if (!Array.isArray(value)) return false
     const ids = new Set<number>()

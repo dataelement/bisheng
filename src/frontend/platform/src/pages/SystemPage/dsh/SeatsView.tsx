@@ -294,7 +294,7 @@ export function SeatsView({
                     setCursors((old) => [...old, data.next_cursor!])
                 }
             />
-            {seat && <SeatSessions key={seat.seat_id} seat={seat} />}
+            {seat && <SeatSessions key={seat.seat_id} seat={seat} onClose={() => setSeat(null)} />}
         </section>
     )
 }

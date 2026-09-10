@@ -2184,7 +2184,17 @@
     },
     "independentQuota": "各モデルの月間トークン上限は独立して計算され、共有できません。合計は参考値です。",
     "zeroModelQuota": "上限が 0 のモデルでは新しいリクエストを開始できません。他のモデルには影響しません。",
-    "notConfigured": "未設定"
+    "notConfigured": "未設定",
+    "modelAccess": "DSH 公開範囲",
+    "modelAccessHelp": "このモデルを利用できるユーザーと上限を設定します。DSH Desktop のみに適用されます。",
+    "preAuthorizeHelp": "現在のテナントのユーザーを検索し、DSH に初めてログインする前に利用権限を設定できます。席数は消費しません。",
+    "modelQuotaHelp": "このモデルの上限はユーザーごとに独立し、北京時間で毎月リセットされます。0 は呼び出し不可です。行ごとに保存してください。",
+    "allowed": "利用可能",
+    "monthlyTokens": "月間トークン上限",
+    "allowUser": "{{name}} にこのモデルの利用を許可",
+    "userMonthlyLimit": "{{name}} の月間トークン上限",
+    "userUsage": "ユーザー使用量",
+    "usageScope": "ユーザー名で DSH の使用量を検索します。権限と上限は「モデル管理 → DSH 公開範囲」で設定してください。"
   },
   "request": {
     "session_expired": "セッションの有効期限が切れました",

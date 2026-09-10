@@ -164,6 +164,7 @@ async def get_admin_runtime(runtime, *, quota=None, usage=None):
         policy=policy,
         policy_view=policy_view,
         now=now,
+        model_users_view=read_model_users,
     )
     result = AdminRuntime(
         admin,
@@ -301,17 +302,38 @@ async def read_available_models(model_ids, model_loader):
     result = []
     for model_id in sorted({int(value) for value in model_ids}):
         try:
-            model, _server = await model_loader(model_id)
+            model, server = await model_loader(model_id)
         except DshModelNotAllowedError:
             continue
         result.append(
             AvailableModel(
                 id=model.id,
-                name=model.name or model.model_name,
+                name=f"{server.name.strip() or server.type} / {model.model_name.strip() or model.name}",
                 is_root_shared=model.tenant_id == 1 and tenant_id != 1,
             ).model_dump()
         )
     return result
+
+
+async def read_model_users(model_id, *, after_user_id=0, limit=20, keyword=""):
+    import asyncio
+
+    from bisheng.common.errcode.dsh import DshModelNotAllowedError
+    from bisheng.core.database import get_sync_db_session
+    from bisheng.dsh.domain.repositories.model_access import DshModelAccessRepository
+    from bisheng.llm.domain.services.llm import LLMService
+    from bisheng.user.domain.services.dsh_access import list_dsh_access_users
+
+    candidates = await read_available_models([model_id], LLMService.get_dsh_model_snapshot)
+    if not candidates:
+        raise DshModelNotAllowedError()
+    rows = await list_dsh_access_users(after_user_id=after_user_id, limit=limit, keyword=keyword)
+
+    def read():
+        with get_sync_db_session() as session:
+            return DshModelAccessRepository(session).users(rows, limit=limit)
+
+    return {"model": candidates[0], "tenant_id": get_current_tenant_id(), **await asyncio.to_thread(read)}
 
 
 async def read_last_call(user_id):

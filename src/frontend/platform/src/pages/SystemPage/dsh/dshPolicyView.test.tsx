@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDshPolicy, saveDshPolicy } from '@/controllers/API/dsh'
 import { getUsersApi } from '@/controllers/API/user'
@@ -46,45 +46,14 @@ beforeEach(() => {
     vi.mocked(saveDshPolicy).mockRejectedValue(new Error('Uncertain'))
 })
 describe('policy target and governed model view', () => {
-    it('resolves a simple user without guessing tenant and saves with the authorized response tenant', async () => {
-        render(<PolicyView operations={{}} onOperation={vi.fn()} />)
+    it('shows usage without a seat and directs authorization to model management', async () => {
+        render(<PolicyView />)
         fireEvent.click(await screen.findByText('Child user'))
-        await screen.findByText('dsh.editPolicy')
-        expect(getDshPolicy).toHaveBeenCalledWith(
-            '20',
-            undefined,
-            expect.any(AbortSignal),
-        )
-        expect(screen.getByText('dsh.shared')).toBeTruthy()
-        expect(screen.getByText(/dsh.unknownUsage/)).toBeTruthy()
-        expect(screen.getByText(/call-20/)).toBeTruthy()
-        fireEvent.click(screen.getByRole('checkbox'))
-        fireEvent.change(screen.getAllByRole('textbox')[1], {
-            target: { value: '200' },
-        })
-        fireEvent.click(screen.getByText('dsh.save'))
-        await waitFor(() =>
-            expect(saveDshPolicy).toHaveBeenCalledWith(
-                '20',
-                '2',
-                expect.objectContaining({
-                    models: [{ model_id: 7, monthly_token_limit: 200 }],
-                }),
-            ),
-        )
-    })
-    it('does not save when authoritative candidate models are unavailable', async () => {
-        vi.mocked(getDshPolicy).mockResolvedValue({
-            ...policy,
-            available_models: [],
-            available_models_source: 'unavailable',
-        })
-        render(<PolicyView operations={{}} onOperation={vi.fn()} />)
-        fireEvent.click(await screen.findByText('Child user'))
-        await screen.findByText('dsh.modelsUnavailable')
-        fireEvent.click(screen.getByText('dsh.save'))
-        expect(saveDshPolicy).not.toHaveBeenCalled()
-        expect(screen.queryByText('dsh.emptyModels')).toBeNull()
+        await screen.findByText(/call-20/)
+        expect(getDshPolicy).toHaveBeenCalledWith('20', undefined, expect.any(AbortSignal))
+        expect(screen.getByText('dsh.usageScope')).toBeTruthy()
+        expect(screen.queryByText('dsh.save')).toBeNull()
+        expect(vi.mocked(getUsersApi).mock.calls[0][0]).not.toHaveProperty('withDepartmentPath')
     })
     it('distinguishes absent persisted history from unavailable history', () => {
         const { rerender } = render(

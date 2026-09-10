@@ -562,7 +562,7 @@ Redis 的 `unknown_usage` 集合仅统计缺失用量请求，不参与准入。
 | Gateway `dsh/controller、service、repository、dto/` | 发证、刷新、验席、固定席位事务、会话管理 | 不调用模型 SDK，不读取 BiSheng 模型 Secret |
 | Gateway License 业务、BsClient、服务认证、过滤器 | capability 校验、双向可信通信、DSH 自有路由 | DSH 到期不能通过全局商业过滤器连带阻断普通代理 |
 
-管理仍在 BiSheng 系统管理 / DSH Desktop 接入，无独立 Gateway 网站。分为“席位与登录”和“模型与额度”两个视图，共享用户选择与权限；席位列表不展示模型、额度、用量或最后模型调用。
+管理仍在 BiSheng，无独立 Gateway 网站。系统管理 / DSH Desktop 保留“席位与登录”“用户用量”和操作审计，登录会话用弹窗展示；席位列表不展示模型、额度、用量或最后模型调用。经 2026-09-10 用户批准，模型授权和额度统一移至“模型管理 → DSH 开放范围”，按模型搜索当前租户用户，包含未登录 DSH 的用户。具体界面边界、配套接口和验收见 [ui-demo-alignment.md](ui-demo-alignment.md)。
 
 #### 4.8.1 万级席位分页与检索
 
@@ -726,10 +726,10 @@ DSH Token 的 JOSE header 固定 typ=bisheng-dsh-access+jwt、alg=HS256、kid=ds
 | 提供方 / 接口 | 鉴权 | 请求与返回 |
 |---|---|---|
 | Gateway `POST /api/internal/dsh/profiles/upsert` | BiSheng 服务 HMAC | 最多 100 条 user_id、username/display_name、profile_version；按版本幂等更新已有席位检索投影，不创建席位或改变授权 |
-| BiSheng `GET /api/v1/dsh/admin/users/{id}/policy` | 管理员 JWT、同租户 | 指定用户的模型策略、额度及 source/as_of 用量，供独立模型与额度视图 |
+| BiSheng `GET /api/v1/dsh/admin/users/{id}/policy` | 管理员 JWT、同租户 | 指定用户的模型策略、额度及 source/as_of 用量，供用户用量视图及保存后单行刷新 |
 | BiSheng `GET /api/v1/dsh/admin/users/{id}/sessions` | 管理员 JWT、同租户 | cursor/limit 的设备会话列表，内部复用 Gateway management/read |
 
-管理 `GET /api/v1/dsh/admin/users/{id}/policy` 的已实现补充字段：`tenant_id` 是后端授权解析的真实目标，前端保存沿用该值，不能从 simple 用户列表或管理员登录租户猜测。`available_models` 为 `{id:int,name:string,is_root_shared:boolean}[]`，由目标租户原模型强读筛选在线 LLM 后逐模型强校验；`available_models_source=live|unavailable` 区分无候选与依赖失败。`last_call` 为最近 SQL 投影的 `{request_id,model_id,status,started_at,finished_at,total_tokens,projected_at}` 或 null，`last_call_source=persisted|unavailable` 区分无历史和读取失败；未知用量为 null，记录允许投影延迟。以上只补普通管理员接口，7 个 Desktop 客户端接口及 0.3.0 不变。
+管理 `GET /api/v1/dsh/admin/users/{id}/policy` 的已实现补充字段：`tenant_id` 是后端授权解析的真实目标，前端保存沿用该值，不能从 simple 用户列表或管理员登录租户猜测。`available_models` 为 `{id:int,name:string,is_root_shared:boolean}[]`，其中 name 展示“提供方名称 / 实际 model_name”，不使用自动生成的模型配置标签；由目标租户原模型强读筛选在线 LLM 后逐模型强校验；`available_models_source=live|unavailable` 区分无候选与依赖失败。`last_call` 为最近 SQL 投影的 `{request_id,model_id,status,started_at,finished_at,total_tokens,projected_at}` 或 null，`last_call_source=persisted|unavailable` 区分无历史和读取失败；未知用量为 null，记录允许投影延迟。以上只补普通管理员接口，7 个 Desktop 客户端接口及 0.3.0 不变。
 
 ### 6.2 内部接口与权限
 
@@ -775,7 +775,7 @@ BiSheng 管理入口采用既有管理员能力校验并限定目标租户；模
 | 回归 | DSH 关闭/Gateway 不可用、常规 JWT 与 V2 PAT/SAK、其他租户、管理员作用域 | 16–17、25–34 |
 | 规模与故障 | 分页/检索无 N+1；跨模型原子计数、重复乱序事件、SQL 提交后 ACK 丢失、消费者崩溃、积压背压、Redis 丢尾/主切换门禁、策略冻结中断恢复 | 22–23、27、33–34 |
 
-手动验证使用测试环境中的租户 T1/T2、T1 管理员 A、普通用户 U1～U11；测试 License 为 10 席。访问系统管理的 DSH Desktop / 模型与额度视图开放一个支持工具调用且有计量适配的模型，DSH 登录后选择该模型。随后登出 U1 验证仍占席，撤销 U1 后验证其旧 Token 调用和刷新失败，重新分配后验证只有重新登录得到的新 Token 可用。全程观察 request_id 与 operation_id，不在文档或命令行参数中填入真实密钥。
+手动验证使用测试环境中的租户 T1/T2、T1 管理员 A、普通用户 U1～U11；测试 License 为 10 席。访问模型管理的 DSH 开放范围弹窗开放一个支持工具调用且有计量适配的模型，DSH 登录后选择该模型。随后登出 U1 验证仍占席，撤销 U1 后验证其旧 Token 调用和刷新失败，重新分配后验证只有重新登录得到的新 Token 可用。全程观察 request_id 与 operation_id，不在文档或命令行参数中填入真实密钥。
 
 指标建议：DSH 登录/拒绝原因计数、席位 used/limit、验席延迟与失败率、模型首 token 延迟、实际 used、超额 token 数、USAGE_UNKNOWN 请求数、管理操作积压。日志关联 trace_id、request_id、operation_id；user_id/seat_id 只进入受控日志，不作高基数指标标签。Authorization、refresh_token、票据、供应商配置及完整消息默认不记录。
 

@@ -1,4 +1,4 @@
-"""Eight browser administration endpoints; actors always come from platform JWT."""
+"""Browser administration endpoints; actors always come from platform JWT."""
 
 from typing import Annotated, Literal
 
@@ -55,6 +55,28 @@ async def users(
 @router.get("/license")
 async def license(user=Depends(admin_user), service=Depends(get_management), tenant_id: TenantId = None):
     return resp_200(data=await service.license(user.user_id, tenant_id=tenant_id))
+
+
+@router.get("/models/{model_id}/users")
+async def model_users(
+    model_id: UserId,
+    user=Depends(admin_user),
+    service=Depends(get_management),
+    tenant_id: TenantId = None,
+    cursor: Annotated[int | None, Query(gt=0, le=9223372036854775807)] = None,
+    limit: Limit = 20,
+    keyword: Annotated[str | None, Query(max_length=128)] = None,
+):
+    return resp_200(
+        data=await service.model_users(
+            user.user_id,
+            model_id,
+            tenant_id=tenant_id,
+            cursor=cursor,
+            limit=limit,
+            keyword=keyword,
+        )
+    )
 
 
 @router.put("/users/{user_id}/policy")

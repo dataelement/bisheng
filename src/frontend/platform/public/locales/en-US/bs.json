@@ -2239,7 +2239,17 @@
     },
     "independentQuota": "Each model has an independent monthly token limit. Quotas cannot be shared; totals are for reference only.",
     "zeroModelQuota": "A model with a zero limit cannot start new requests. Other models are unaffected.",
-    "notConfigured": "Not configured"
+    "notConfigured": "Not configured",
+    "modelAccess": "DSH access",
+    "modelAccessHelp": "Configure users and quotas for this model. Applies only to DSH Desktop.",
+    "preAuthorizeHelp": "Search platform users in the current tenant and grant access before their first DSH login. This does not assign a seat.",
+    "modelQuotaHelp": "Each user has an independent quota for this model, reset monthly in Beijing time. Zero blocks calls. Save each row separately.",
+    "allowed": "Allowed",
+    "monthlyTokens": "Monthly token quota",
+    "allowUser": "Allow {{name}} to use this model",
+    "userMonthlyLimit": "Monthly token quota for {{name}}",
+    "userUsage": "User usage",
+    "usageScope": "Search by username to view DSH usage. Configure model access and quotas in Model management → DSH access."
   },
   "request": {
     "session_expired": "Session expired",

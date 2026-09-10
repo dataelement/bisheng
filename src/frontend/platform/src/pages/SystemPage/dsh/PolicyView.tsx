@@ -3,18 +3,13 @@ import { Input } from '@/components/bs-ui/input'
 import { getDshPolicy } from '@/controllers/API/dsh'
 import { getUsersApi } from '@/controllers/API/user'
 import type { User } from '@/types/api/user'
-import type { DshOperation, DshOperationRef, DshPolicy } from '@/types/dsh'
+import type { DshPolicy } from '@/types/dsh'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DshPager } from './common'
-import { PolicyEditor } from './PolicyEditor'
 import { UsageSummary } from './UsageSummary'
 
-interface PolicyViewProps {
-    onOperation: (ref: DshOperationRef, result?: DshOperation) => void
-    operations: Record<string, DshOperation>
-}
-export function PolicyView({ onOperation, operations }: PolicyViewProps) {
+export function PolicyView() {
     const { t } = useTranslation()
     const [keyword, setKeyword] = useState('')
     const [page, setPage] = useState(1)
@@ -37,7 +32,6 @@ export function PolicyView({ onOperation, operations }: PolicyViewProps) {
                     page,
                     pageSize: 20,
                     simple: true,
-                    withDepartmentPath: true,
                 },
                 { signal: abort.signal },
             )
@@ -72,7 +66,7 @@ export function PolicyView({ onOperation, operations }: PolicyViewProps) {
     return (
         <section className="space-y-4">
             <p className="text-sm text-muted-foreground">
-                {t('dsh.policyScope')}
+                {t('dsh.usageScope')}
             </p>
             <Input
                 className="max-w-sm"
@@ -100,10 +94,7 @@ export function PolicyView({ onOperation, operations }: PolicyViewProps) {
                             }
                             onClick={() => setSelected(item)}
                         >
-                            {item.user_name}{' '}
-                            {item.department_path
-                                ? `· ${item.department_path}`
-                                : ''}
+                            {item.user_name}
                         </Button>
                     ))}
                     {!users.data.length && <p>{t('dsh.empty')}</p>}
@@ -119,6 +110,7 @@ export function PolicyView({ onOperation, operations }: PolicyViewProps) {
             {selected && (
                 <>
                     <h3 className="font-semibold">{selected.user_name}</h3>
+                    <Button variant="outline" onClick={() => setRevision((old) => old + 1)}>{t('dsh.refresh')}</Button>
                     {!policy ? (
                         <p role="status">
                             {t(error ? 'dsh.unavailable' : 'dsh.loading')}
@@ -135,15 +127,6 @@ export function PolicyView({ onOperation, operations }: PolicyViewProps) {
                                         model.name,
                                     ]),
                                 )}
-                            />
-                            <PolicyEditor
-                                key={`${selected.user_id}:${revision}`}
-                                userId={String(selected.user_id)}
-                                tenantId={String(policy.tenant_id)}
-                                policy={policy}
-                                operations={operations}
-                                onOperation={onOperation}
-                                onReload={() => setRevision((old) => old + 1)}
                             />
                         </>
                     )}

@@ -71,15 +71,15 @@ async def test_candidates_use_configured_ids_and_target_tenant_governance():
         if model_id == 6:
             raise DshModelNotAllowedError()
         return SimpleNamespace(
-            id=model_id, tenant_id=1 if model_id == 5 else 2, name=f"Model {model_id}", model_name="fallback"
-        ), None
+            id=model_id, tenant_id=1 if model_id == 5 else 2, name=f"Model {model_id}", model_name="qwen-max"
+        ), SimpleNamespace(name=f"Provider {model_id}", type="openai")
 
     loader = AsyncMock(side_effect=snapshot)
     with profile_scope(2):
         result = await read_available_models({"4": object(), "5": object(), "6": object()}, loader)
     assert result == [
-        {"id": 4, "name": "Model 4", "is_root_shared": False},
-        {"id": 5, "name": "Model 5", "is_root_shared": True},
+        {"id": 4, "name": "Provider 4 / qwen-max", "is_root_shared": False},
+        {"id": 5, "name": "Provider 5 / qwen-max", "is_root_shared": True},
     ]
     assert [call.args[0] for call in loader.await_args_list] == [4, 5, 6]
     with profile_scope(2), pytest.raises(TimeoutError):

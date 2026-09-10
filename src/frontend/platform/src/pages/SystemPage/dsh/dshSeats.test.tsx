@@ -76,6 +76,9 @@ describe('DSH seat pagination and commands', () => {
                 expect.any(AbortSignal),
             ),
         )
+        expect(screen.getByRole('dialog')).toBeTruthy()
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+        expect(screen.queryByRole('dialog')).toBeNull()
         fireEvent.click(screen.getAllByText('dsh.next')[0])
         await waitFor(() => expect(screen.getByText('User 51')).toBeTruthy())
         expect(screen.queryByText('User 1')).toBeNull()

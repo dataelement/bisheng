@@ -3,14 +3,43 @@
 from contextlib import contextmanager
 
 from sqlalchemy import inspect
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
-from bisheng.database.models.tenant import UserTenant
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
+from bisheng.database.models.tenant import Tenant, UserTenant
 from bisheng.user.domain.models.user import User
 
 
 class UserDshProfileRepository:
     PROFILE_FIELDS = {"user_name"}
+
+    @staticmethod
+    def access_users(
+        session: Session, *, after_user_id: int = 0, limit: int = 20, keyword: str = ""
+    ) -> list[tuple[int, str]]:
+        """Read one page plus a lookahead of active users for DSH administration."""
+        tenant = get_current_tenant_id()
+        if tenant is None or not 1 <= limit <= 100:
+            raise ValueError("A current tenant and a bounded page are required")
+        statement = (
+            select(User.user_id, User.user_name)
+            .join(UserTenant, UserTenant.user_id == User.user_id)
+            .join(Tenant, Tenant.id == UserTenant.tenant_id)
+            .where(
+                UserTenant.tenant_id == tenant,
+                UserTenant.is_active == 1,
+                UserTenant.status == "active",
+                Tenant.status == "active",
+                User.delete == 0,
+                User.user_id > after_user_id,
+            )
+            .order_by(User.user_id)
+            .limit(limit + 1)
+        )
+        if keyword:
+            statement = statement.where(col(User.user_name).contains(keyword, autoescape=True))
+        with strict_tenant_filter():
+            return [(user_id, name) for user_id, name in session.exec(statement).all()]
 
     @staticmethod
     @contextmanager

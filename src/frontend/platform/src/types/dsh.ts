@@ -130,3 +130,15 @@ export type DshOperationRef = {
     rejected?: boolean
     retry?: () => Promise<void>
 }
+export type DshModelAccessUser = {
+    user_id: number
+    user_name: string
+    version: number
+    models: { model_id: number; monthly_token_limit: number }[]
+    pending_operation_id: string | null
+}
+
+export type DshModelAccessPage = DshPage<DshModelAccessUser> & {
+    tenant_id: number
+    model: { id: number; name: string; is_root_shared: boolean }
+}

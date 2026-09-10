@@ -99,7 +99,7 @@ export function DshManagement() {
             <Tabs defaultValue="seats">
                 <TabsList>
                     <TabsTrigger value="seats">{t('dsh.seats')}</TabsTrigger>
-                    <TabsTrigger value="policy">{t('dsh.policy')}</TabsTrigger>
+                    <TabsTrigger value="policy">{t('dsh.userUsage')}</TabsTrigger>
                     <TabsTrigger value="operations">
                         {t('dsh.operations')} ({references.length})
                     </TabsTrigger>
@@ -120,10 +120,7 @@ export function DshManagement() {
                     value="policy"
                     className="data-[state=inactive]:hidden"
                 >
-                    <PolicyView
-                        onOperation={handleOperation}
-                        operations={operations}
-                    />
+                    <PolicyView />
                 </TabsContent>
                 <TabsContent value="operations">
                     <p className="mb-4 text-sm text-muted-foreground">

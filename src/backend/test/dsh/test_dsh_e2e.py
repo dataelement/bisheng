@@ -453,6 +453,31 @@ async def test_ac25_three_roles_and_tenant_scope(live):
     )
 
 
+async def test_ac26_model_access_lists_platform_users_without_a_dsh_session(live):
+    """AC-26/27/30: model access targets platform users and respects administrator scope."""
+    model_id = live.manifest.get("model_id")
+    if not model_id:
+        pytest.skip("Manifest model_id missing; read-only model access check requires a configured LLM")
+    user = live.actors["user"]
+    path = f"{ADMIN}/models/{model_id}/users"
+    params = {"tenant_id": user.tenant_id, "keyword": user.name, "limit": 20}
+    data = platform(await live.request("GET", path, actor="root", params=params))
+    require(str(data["tenant_id"]) == user.tenant_id, "Model user page returned a different tenant")
+    rows = [row for row in data["items"] if str(row["user_id"]) == user.user_id]
+    require(len(rows) == 1, "Platform user missing from model access page")
+    policy = platform(
+        await live.request(
+            "GET", f"{ADMIN}/users/{user.user_id}/policy", actor="root", params={"tenant_id": user.tenant_id}
+        )
+    )
+    require(
+        rows[0]["models"] == policy["models"] and rows[0]["version"] == policy["version"],
+        "Model access page does not match the authoritative user policy",
+    )
+    assert_resp_error(await live.request("GET", path, actor="user", params=params), 19801)
+    assert_resp_error(await live.request("GET", path, actor="t2_admin", params=params), 403)
+
+
 async def test_ac05_session_refresh_logout_revoke_reassign(seat_user):
     """AC-05/06/08/09/11/13/15/17/18/28/29: fixed seat and complete session lifecycle."""
     live = seat_user

@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 from pydantic import Field, field_validator
 
 from bisheng.dsh.domain.schemas.contracts import DshContract, NonnegativeInt, SubjectId
+from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig
 
 
 class SeatItem(DshContract):
@@ -74,6 +75,14 @@ class AvailableModel(DshContract):
     id: Annotated[int, Field(strict=True, ge=1)]
     name: str
     is_root_shared: bool
+
+
+class ModelAccessUser(DshContract):
+    user_id: Annotated[int, Field(strict=True, ge=1)]
+    user_name: str
+    version: Annotated[int, Field(strict=True, ge=0)]
+    models: list[DshModelQuotaConfig]
+    pending_operation_id: str | None
 
 
 class LastCallSnapshot(DshContract):

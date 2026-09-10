@@ -21,8 +21,10 @@ import ModelConfig from "./ModelConfig"
 import { canManageModelSettings } from "./permissions"
 import { ScopeBar } from "./ScopeBar"
 import SystemModelConfig from "./SystemModelConfig"
+import { getDshConfig } from "@/controllers/API/dsh"
+import { ModelAccessDialog, type DshAccessModel } from "./dsh/ModelAccessDialog"
 
-function CustomTableRow({ data, index, user, onModel, onCheck, onVerified }) {
+function CustomTableRow({ data, index, user, onModel, onCheck, onVerified, onDshAccess }) {
     const { t } = useTranslation()
     const { message } = useToast()
     const { appConfig } = useContext(locationContext)
@@ -62,7 +64,6 @@ function CustomTableRow({ data, index, user, onModel, onCheck, onVerified }) {
                     <Badge variant="secondary" className="ml-2">
                         {t('model.tenantSharedReadonly', {
                             tenantName: data.tenant_name || 'Root',
-                            defaultValue: '{{tenantName}} 共享 · 只读',
                         })}
                     </Badge>
                 )}
@@ -85,6 +86,7 @@ function CustomTableRow({ data, index, user, onModel, onCheck, onVerified }) {
                             <TableHead className="w-[200px] min-w-[100px]">{t('model.status')}</TableHead>
                             <TableHead className="w-[180px] min-w-[140px]">{t('model.statusUpdateTime')}</TableHead>
                             <TableHead className="w-[100px] min-w-[100px]">{t('model.onlineOfflineOperation')}</TableHead>
+                            {onDshAccess && <TableHead>{t('dsh.modelAccess')}</TableHead>}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -120,6 +122,12 @@ function CustomTableRow({ data, index, user, onModel, onCheck, onVerified }) {
                                         onCheckedChange={(bool) => onCheck(index, bool, m.id)}
                                     />
                                 </TableCell>
+                                {onDshAccess && <TableCell>
+                                    {m.model_type === 'llm' ? <Button variant="link" size="sm" disabled={!m.online}
+                                        onClick={() => onDshAccess({ id: m.id, name: `${data.name} / ${m.model_name}` })}>
+                                        {t('dsh.modelAccess')}
+                                    </Button> : '—'}
+                                </TableCell>}
                             </TableRow>
                         ))}
                     </TableBody>
@@ -149,6 +157,17 @@ export default function Management() {
     const [loading, setLoading] = useState(false)
     const { refetch } = useModel()
     const canManage = canManageModelSettings(user, appConfig.multiTenantEnabled)
+    const canManageDsh = user?.role === 'admin' || !!user?.is_global_super || !!user?.is_child_admin
+    const [dshEnabled, setDshEnabled] = useState(false)
+    const [dshModel, setDshModel] = useState<DshAccessModel | null>(null)
+    useEffect(() => {
+        if (!canManageDsh) { setDshEnabled(false); return }
+        const abort = new AbortController()
+        getDshConfig(abort.signal).then((config) => {
+            if (!abort.signal.aborted) setDshEnabled(config.enabled)
+        }).catch(() => { if (!abort.signal.aborted) setDshEnabled(false) })
+        return () => abort.abort()
+    }, [canManageDsh])
 
     const [searchParams, setSearchParams] = useSearchParams()
     useEffect(() => {
@@ -267,6 +286,7 @@ export default function Management() {
                             onCheck={handleCheck}
                             onVerified={handleVerified}
                             onModel={setModelId}
+                            onDshAccess={canManageDsh && dshEnabled ? setDshModel : undefined}
                         />)
                     }
                 </div>
@@ -275,6 +295,7 @@ export default function Management() {
         <div className="bisheng-table-footer bg-background-login px-6">
             <p className="desc">{t('model.modelCollectionCaption')}.</p>
         </div>
+        <ModelAccessDialog model={dshModel} onClose={() => setDshModel(null)} />
     </div>
 
 }

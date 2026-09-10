@@ -17,9 +17,24 @@ from bisheng.dsh.infrastructure.gateway_client import GatewayCommandRejected
 
 
 class DshManagementService:
-    def __init__(self, *, repository_scope, gateway, authorize, profiles, policy, policy_view, now):
+    def __init__(
+        self, *, repository_scope, gateway, authorize, profiles, policy, policy_view, now, model_users_view=None
+    ):
         self.repository_scope, self.gateway, self.authorize = repository_scope, gateway, authorize
         self.profiles, self.policy, self.policy_view, self.now = profiles, policy, policy_view, now
+        self.model_users_view = model_users_view
+
+    async def model_users(self, actor_id, model_id, *, tenant_id=None, cursor=None, limit=20, keyword=None):
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        _actor, tenant = await self.authorize(actor_id, tenant_id)
+        tenant = tenant if tenant is not None else get_current_tenant_id()
+        if tenant is None or self.model_users_view is None:
+            raise DshAuthorizationUnavailableError()
+        with profile_scope(tenant):
+            return await self.model_users_view(
+                model_id, after_user_id=int(cursor or 0), limit=limit, keyword=keyword or ""
+            )
 
     async def _request(self, operation, payload):
         try:
