@@ -364,6 +364,13 @@ upload 准备先在无 `FOR UPDATE` 的 preflight 中完成执行阶段权限、
 
 Beat 注册四个 Knowledge coordinator：动态审批人对账、执行 watchdog、step recovery/compensation、stage/residue/delete cleanup。coordinator 只在 `bypass_tenant_filter()` 内枚举租户，再带显式 tenant header 逐租户派发；逐租户 keyset 有界扫描、ContextVar finally reset、单租户失败隔离。所有 F046 task 与 Beat 字符串均位于 `bisheng.worker.knowledge.file_change_tasks` 并路由到默认 `celery`。
 
+F046 的 coordinate、watchdog、recovery、cleanup 及逐租户分页任务在发布前按业务 identity 获取 Redis
+single-flight 派发租约，消息携带 token；消费端必须校验/接管同一 token，并在执行期间续租。发布失败释放
+token，成功后释放；Celery 自动重试期间保留 producer token，防止下一轮 Beat 重复堆积。同一个 request 的
+coordinate 不区分 execution token，避免首次 prepare 与 generation recovery 并发。Redis 租约只削减默认
+`celery` 队列中的重复控制消息，不替代 request/generation/step 的数据库幂等与 claim；Redis 故障时必须
+fail-open 继续投递/执行，不能让已通过审批的业务被锁服务阻断。不为 F046 单独新增 worker 队列。
+
 **两条终态兜底（缺一都会让请求永远停在非终态，文件也删不掉）：**
 
 - **派发租约与预算**：`dispatch_ready_steps` 必须先在数据库事务内原子 claim due step，再发布 broker task；`dispatched + next_retry_at` 是租约，租约有效期内不得重复派发。broker task ID 使用稳定业务幂等键加 `attempt:N`，不能把固定 task ID 当作 broker 去重。发布失败只释放与当前 task ID 精确匹配的 claim。达到 `MAX_STEP_DISPATCH_ATTEMPTS`（当前 50）后 step 置 failed，由 `reconcile()` 终结 request。step recovery 对 applying request 只唤醒当前代第一个未完成且已到期的 step，不能由后续 pending step 越过有效租约制造协调任务风暴。
