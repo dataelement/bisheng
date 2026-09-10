@@ -13,6 +13,7 @@ import pytest
 from bisheng.common.errcode.knowledge_space import (
     SpaceFolderDepthError,
     SpaceNotFoundError,
+    SpaceOrganizationGrantExitDeniedError,
     SpacePermissionDeniedError,
 )
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
@@ -126,8 +127,7 @@ async def test_get_space_info_raises_when_space_is_missing(
     service: KnowledgeSpaceService,
 ) -> None:
     with patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service."
-        "KnowledgeDao.aquery_by_id",
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
         new_callable=AsyncMock,
         return_value=None,
     ):
@@ -141,20 +141,17 @@ async def test_create_limit_count_excludes_department_spaces(
     with (
         # A finite quota keeps the count path alive; -1 would skip it entirely.
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service."
-            "QuotaService.get_effective_quota",
+            "bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_effective_quota",
             new_callable=AsyncMock,
             return_value=50,
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service."
-            "KnowledgeDao.async_count_spaces_by_user",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user",
             new_callable=AsyncMock,
             return_value=0,
         ) as mock_count,
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service."
-            "LLMService.get_workbench_llm",
+            "bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm",
             new_callable=AsyncMock,
             return_value=None,
         ),
@@ -219,26 +216,115 @@ async def test_unsubscribe_space_blocks_creator(
 
     with (
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service."
-            "KnowledgeDao.aquery_by_id",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
             new_callable=AsyncMock,
             return_value=owned_space,
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service."
-            "SpaceChannelMemberDao.async_find_member",
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member",
             new_callable=AsyncMock,
             return_value=creator_member,
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service."
-            "SpaceChannelMemberDao.delete_space_member",
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.delete_space_member",
             new_callable=AsyncMock,
         ) as mock_delete_member,
     ):
         with pytest.raises(SpacePermissionDeniedError):
             await service.unsubscribe_space(1)
 
+    mock_delete_member.assert_not_awaited()
+
+
+async def test_directly_invited_user_can_exit_without_membership_row(
+    service: KnowledgeSpaceService,
+) -> None:
+    invited_space = _make_space(user_id=99)
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=invited_space,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch.object(
+            service,
+            "_actor_space_permission_sources",
+            new_callable=AsyncMock,
+            return_value=[SimpleNamespace(subject_type="user", source_type="DIRECT")],
+        ),
+        patch.object(
+            service,
+            "_revoke_direct_space_invitation",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_revoke_invitation,
+        patch.object(
+            service,
+            "_revoke_direct_space_user_permissions",
+            new_callable=AsyncMock,
+        ) as mock_revoke_membership,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.delete_space_member",
+            new_callable=AsyncMock,
+            return_value=False,
+        ) as mock_delete_member,
+    ):
+        assert await service.unsubscribe_space(1) is True
+
+    mock_revoke_invitation.assert_awaited_once_with(1)
+    mock_revoke_membership.assert_awaited_once_with(1, service.login_user.user_id)
+    mock_delete_member.assert_awaited_once_with(1, service.login_user.user_id)
+
+
+async def test_organization_granted_user_still_cannot_exit(
+    service: KnowledgeSpaceService,
+) -> None:
+    granted_space = _make_space(user_id=99)
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=granted_space,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch.object(
+            service,
+            "_actor_space_permission_sources",
+            new_callable=AsyncMock,
+            return_value=[SimpleNamespace(subject_type="department", source_type="DEPARTMENT")],
+        ),
+        patch.object(
+            service,
+            "_revoke_direct_space_invitation",
+            new_callable=AsyncMock,
+        ) as mock_revoke_invitation,
+        patch.object(
+            service,
+            "_revoke_direct_space_user_permissions",
+            new_callable=AsyncMock,
+        ) as mock_revoke_membership,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.delete_space_member",
+            new_callable=AsyncMock,
+        ) as mock_delete_member,
+        pytest.raises(SpaceOrganizationGrantExitDeniedError) as exc_info,
+    ):
+        await service.unsubscribe_space(1)
+
+    assert exc_info.value.kwargs["blocked_by"] == ["department"]
+    mock_revoke_invitation.assert_not_awaited()
+    mock_revoke_membership.assert_not_awaited()
     mock_delete_member.assert_not_awaited()
 
 
@@ -274,8 +360,7 @@ async def test_add_folder_under_level_9_parent_raises_depth_error(
             return_value=parent_folder,
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service."
-            "KnowledgeFileDao.aadd_file",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aadd_file",
             new_callable=AsyncMock,
         ) as mock_add_file,
     ):
@@ -312,14 +397,12 @@ async def test_add_folder_under_level_8_parent_creates_level_9_child(
             return_value=parent_folder,
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service."
-            "SpaceFileDao.count_folder_by_name",
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.count_folder_by_name",
             new_callable=AsyncMock,
             return_value=0,
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service."
-            "KnowledgeFileDao.aadd_file",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aadd_file",
             new_callable=AsyncMock,
             side_effect=lambda folder: folder,
         ) as mock_add_file,
