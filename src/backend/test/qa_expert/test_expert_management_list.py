@@ -144,6 +144,10 @@ async def test_repository_returns_distinct_filter_options(expert_engine) -> None
 async def test_service_sorts_department_names_before_paginating(monkeypatch) -> None:
     service = ExpertService()
     service.repository = AsyncMock()
+    monkeypatch.setattr(
+        "bisheng.database.models.department.UserDepartmentDao.aget_by_user_ids",
+        AsyncMock(return_value=[]),
+    )
     service.repository.list_all.return_value = (
         [
             Expert(
@@ -180,8 +184,8 @@ async def test_service_sorts_department_names_before_paginating(monkeypatch) -> 
         "bisheng.qa_expert.domain.services.DepartmentDao.aget_by_ids",
         AsyncMock(
             return_value=[
-                SimpleNamespace(id=101, name="质量部", short_name="质量"),
-                SimpleNamespace(id=102, name="设备部", short_name="设备"),
+                SimpleNamespace(id=101, name="质量部", short_name="质量", org_level="dept"),
+                SimpleNamespace(id=102, name="设备部", short_name="设备", org_level="dept"),
             ]
         ),
     )
@@ -225,6 +229,82 @@ async def test_service_sorts_department_names_before_paginating(monkeypatch) -> 
         adoption_desc=None,
         vote_desc=None,
     )
+
+
+@pytest.mark.parametrize(
+    ("primary_id", "short_name", "expected_name", "expected_short"),
+    [
+        (10, "公司简称", "公司简称", "公司简称"),
+        (20, "部门简称", "部门简称", "部门简称"),
+        (30, "部门简称", "部门简称", "部门简称"),
+        (40, "部门简称", "部门简称", "部门简称"),
+        (10, "  ", "公司全称", None),
+        (40, "  ", "部门全称", None),
+        (50, "部门简称", None, None),
+        (None, "部门简称", "部门简称", "部门简称"),
+    ],
+    ids=[
+        "company",
+        "department",
+        "office",
+        "squad",
+        "company-no-short-name",
+        "department-no-short-name",
+        "unclassified",
+        "legacy-profile",
+    ],
+)
+async def test_expert_list_department_display_stops_at_department_level(
+    monkeypatch,
+    primary_id,
+    short_name,
+    expected_name,
+    expected_short,
+) -> None:
+    service = ExpertService()
+    service.repository = AsyncMock()
+    expert = Expert(id=1, user_id=11, expert_name="测试专家", depart_ment="40")
+    service.repository.list_all.return_value = ([expert], 1)
+    departments = {
+        10: SimpleNamespace(id=10, name="公司全称", short_name=short_name, org_level="company", path="/10/"),
+        20: SimpleNamespace(id=20, name="部门全称", short_name=short_name, org_level="dept", path="/10/20/"),
+        30: SimpleNamespace(id=30, name="科室全称", short_name="科室简称", org_level="office", path="/10/20/30/"),
+        40: SimpleNamespace(id=40, name="班组全称", short_name="班组简称", org_level="squad", path="/10/20/30/40/"),
+        50: SimpleNamespace(id=50, name="未分级组织", short_name="未分级简称", org_level=None, path="/50/"),
+    }
+
+    async def get_departments(ids):
+        return [departments[item] for item in ids if item in departments]
+
+    memberships = [SimpleNamespace(user_id=11, department_id=50, is_primary=0)]
+    if primary_id is not None:
+        memberships.append(SimpleNamespace(user_id=11, department_id=primary_id, is_primary=1))
+    monkeypatch.setattr(
+        "bisheng.database.models.department.UserDepartmentDao.aget_by_user_ids",
+        AsyncMock(return_value=memberships),
+    )
+    monkeypatch.setattr("bisheng.qa_expert.domain.services.DepartmentDao.aget_by_ids", get_departments)
+    monkeypatch.setattr(
+        "bisheng.qa_expert.domain.services.UserDao.aget_user_by_ids",
+        AsyncMock(return_value=[]),
+    )
+    service._build_dict_key_maps = AsyncMock(
+        return_value={
+            "job_family": {},
+            "job_category": {},
+            "position": {},
+            "major": {},
+        }
+    )
+
+    rows, total = await service.list_experts()
+
+    assert total == 1
+    assert rows[0]["department_display_name"] == expected_name
+    assert rows[0]["department_short_name"] == expected_short
+    assert rows[0]["depart_ment"] == (None if expected_name is None else "公司全称" if primary_id == 10 else "部门全称")
+    assert rows[0]["department_id"] == "40"
+    assert expert.depart_ment == "40"
 
 
 async def test_service_maps_department_filter_options(monkeypatch) -> None:

@@ -30,7 +30,7 @@ from bisheng.common.errcode.qa_expert import (
 from bisheng.common.utils.beijing_time import beijing_epoch_seconds, dump_qa_datetimes, to_beijing_iso
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
-from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.department import Department, DepartmentDao, UserDepartmentDao
 from bisheng.database.models.qa_expert import (
     ANSWER_STATUS_DELETED,
     EXPERT_STATUS_ACTIVE,
@@ -418,8 +418,24 @@ class ExpertService:
             if expert.major:
                 major_keys.add(expert.major)
 
+        memberships = await UserDepartmentDao.aget_by_user_ids(sorted(set(user_ids)))
+        primary_department_ids = {
+            membership.user_id: membership.department_id
+            for membership in memberships
+            if membership.is_primary == 1
+        }
+        department_ids.update(primary_department_ids.values())
         departments = await DepartmentDao.aget_by_ids(sorted(department_ids))
         department_map = {int(department.id): department for department in departments if department.id is not None}
+        ancestor_ids = {
+            int(part)
+            for department in departments
+            for part in str(getattr(department, "path", None) or "").strip("/").split("/")
+            if part.isdigit() and int(part) not in department_map
+        }
+        if ancestor_ids:
+            ancestors = await DepartmentDao.aget_by_ids(sorted(ancestor_ids))
+            department_map.update({int(department.id): department for department in ancestors if department.id is not None})
 
         users = await UserDao.aget_user_by_ids(list(set(user_ids))) or []
         wechat_user_ids = {user.user_id: user.wechat_user_id for user in users if user.user_id is not None}
@@ -439,9 +455,11 @@ class ExpertService:
                 department_id = int(expert.depart_ment) if expert.depart_ment else None
             except (TypeError, ValueError):
                 department_id = None
+            # 展示跟随用户当前主部门；旧档案无主部门关联时使用原组织。
+            primary = department_map.get(primary_department_ids.get(expert.user_id, department_id))
             expert_dict = self._with_department_projection(
                 expert,
-                department_map.get(department_id),
+                self._resolve_list_display_department(primary, department_map),
             )
             expert_dict["job_family"] = dict_key_maps["job_family"].get(expert.job_family, expert.job_family)
             expert_dict["job_category"] = dict_key_maps["job_category"].get(expert.job_category, expert.job_category)
@@ -453,6 +471,25 @@ class ExpertService:
             expert_dict["wechat_user_id"] = wechat_user_ids.get(expert.user_id)
             experts_all.append(expert_dict)
         return dump_qa_datetimes(experts_all)
+
+    @staticmethod
+    def _resolve_list_display_department(
+        primary: Department | None,
+        departments: dict[int, Department],
+    ) -> Department | None:
+        """列表最低展示部门级；科室、班组沿组织路径向上查找。"""
+        if primary is None:
+            return None
+        if getattr(primary, "org_level", None) in {"company", "dept"}:
+            return primary
+        path_ids = str(getattr(primary, "path", None) or "").strip("/").split("/")
+        for part in reversed(path_ids):
+            if not part.isdigit():
+                continue
+            ancestor = departments.get(int(part))
+            if ancestor is not None and getattr(ancestor, "org_level", None) in {"company", "dept"}:
+                return ancestor
+        return None
 
     async def disable_expert(self, expert_id: int, user) -> Expert:
         """停用专家：status=0；回调转公开默认同意。"""
