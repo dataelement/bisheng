@@ -4,6 +4,7 @@
  * the multi-select skill list).
  */
 import { Check } from 'lucide-react';
+import { useState } from 'react';
 import { Outlined } from 'bisheng-icons';
 import {
     DropdownMenu,
@@ -14,11 +15,13 @@ import {
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '~/components/ui';
-import { useLocalize } from '~/hooks';
+import { useLocalize, useMediaQuery } from '~/hooks';
 import type { TaskModeSkill } from '~/store/linsight';
 import { cn } from '~/utils';
 import { SkillSelector } from './SkillSelector';
 import { SkillMenuEntries, SkillUploadHost } from '~/components/Skills/SkillMenuEntries';
+import { SkillMenuPanel } from '~/components/Skills/SkillMenuPanel';
+import { skillCenterPreviewEnabled } from '~/components/Skills/types';
 
 interface PlusMenuProps {
     disabled?: boolean;
@@ -48,10 +51,12 @@ export function PlusMenu({
     showAddSkill = true,
 }: PlusMenuProps) {
     const localize = useLocalize();
+    const isMobile = useMediaQuery('(max-width: 576px)');
+    const [skillPanelOpen, setSkillPanelOpen] = useState(false);
 
     return (
         <SkillUploadHost>{(openSkillUpload) => (
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={(open) => { if (!open) setSkillPanelOpen(false); }}>
             <DropdownMenuTrigger asChild disabled={disabled}>
                 <button
                     type="button"
@@ -67,8 +72,9 @@ export function PlusMenu({
 
             <DropdownMenuContent
                 align="start"
-                className="flex w-[200px] flex-col gap-1 rounded-2xl border-slate-100 p-3 shadow-xl"
+                className={cn('flex w-[200px] flex-col gap-1 rounded-2xl border-slate-100 p-3 shadow-xl', isMobile && skillPanelOpen && 'max-h-[min(440px,var(--radix-dropdown-menu-content-available-height))] w-[min(calc(100vw-24px),320px)] gap-0 p-2')}
             >
+                {isMobile && skillPanelOpen ? <SkillMenuPanel onUpload={openSkillUpload} onBack={() => setSkillPanelOpen(false)} /> : <>
                 {/* Upload file — same icon component as the daily-mode "+" menu:
                     the old `link.svg` asset bakes its own colour in and can't
                     follow the shared resting tint. */}
@@ -96,7 +102,7 @@ export function PlusMenu({
                     </DropdownMenuItem>
                 )}
 
-                <SkillMenuEntries onUpload={openSkillUpload} />
+                <SkillMenuEntries onUpload={openSkillUpload} onOpenMobile={isMobile ? () => setSkillPanelOpen(true) : undefined} />
 
                 {/* Divider between upload and the mode entries (spec §1) */}
                 <div className="my-1 h-px bg-slate-100" />
@@ -119,7 +125,7 @@ export function PlusMenu({
                 </DropdownMenuItem>
 
                 {/* Add Skill submenu — task mode only (hidden in daily mode) */}
-                {showAddSkill && (
+                {!skillCenterPreviewEnabled && showAddSkill && (
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger
                             className={cn(
@@ -154,6 +160,7 @@ export function PlusMenu({
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
                 )}
+                </>}
             </DropdownMenuContent>
         </DropdownMenu>
         )}</SkillUploadHost>

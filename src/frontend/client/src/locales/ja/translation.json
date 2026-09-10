@@ -2319,5 +2319,10 @@
   "com_skill_center_error_conflict": "このスキルは別のページで更新されました。再読み込みして再試行してください。",
   "com_skill_center_error_identity": "アカウント情報を読み込めません。再試行するか、再ログインしてください。",
   "com_skill_center_error_storage": "個人スキルを読み込み・保存できません。ブラウザの空き容量を確認して再試行してください。",
-  "com_skill_center_error_platform": "アカウントのスキルを読み込めません。保存済みの個人スキルは確認できます。"
+  "com_skill_center_error_platform": "アカウントのスキルを読み込めません。保存済みの個人スキルは確認できます。",
+  "com_skill_center_menu": "スキル",
+  "com_skill_center_manage": "スキルを管理",
+  "com_skill_center_menu_available": "利用できるスキル",
+  "com_skill_center_menu_upload_hint": "既存の SKILL.md、.zip、.skill をアップロード",
+  "com_skill_center_menu_preview": "個人スキルは現在プレビューとして保存されます。"
 }

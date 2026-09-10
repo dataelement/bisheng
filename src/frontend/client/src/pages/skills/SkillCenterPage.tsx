@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Outlined } from 'bisheng-icons';
 import { Button, SearchInput, StateView, Tag } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
@@ -13,7 +14,14 @@ export function SkillCenterPage() {
   const [search, setSearch] = useState('');
   const [uploadOpen, setUploadOpen] = useState(false);
   const [target, setTarget] = useState<PersonalSkill>();
-  const [selectedId, setSelectedId] = useState<string>();
+  const [params, setParams] = useSearchParams();
+  const selectedId = params.get('skill');
+  const setSelectedId = (id?: string) => {
+    const next = new URLSearchParams(params);
+    if (id) next.set('skill', id);
+    else next.delete('skill');
+    setParams(next, { replace: true });
+  };
   const [saved, setSaved] = useState(false);
   const skills = useMemo<CenterSkill[]>(() => [
     ...(platform.data ?? []), ...(personal.data ?? []),
