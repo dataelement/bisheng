@@ -75,11 +75,17 @@ def test_agent_chat_history_includes_persisted_citations():
         ),
         create_time=now,
         update_time=now,
+        liked=2,
+        remark='需要明确出处',
     )
     grouped_item = CitationRegistryService(None).to_registry_item(build_persisted_citation(102))
     citation = CitationRegistryService.flatten_registry_item(grouped_item)[0]
 
     result = format_agent_history_message(message, [citation])
+
+    assert result['liked'] == 2
+    assert result['comment'] == '需要明确出处'
+    assert result['feedback_allowed'] is True
 
     assert result["citations"][0]["key"] == "knowledgesearch_history:5"
     assert result["citations"][0]["sourcePayload"]["documentId"] == 86146

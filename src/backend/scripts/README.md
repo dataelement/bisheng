@@ -684,6 +684,8 @@ PYTHONPATH=./ python scripts/backfill_word_pdf_preview.py --apply
 
 重新解析知识空间文件。默认 dry-run，只统计将处理的文件；传入 `--apply` 后会直接在脚本进程内执行解析，默认单并发，可通过 `--concurrency` 调整。每个文件重解析前只清理该文件在 Milvus 和 Elasticsearch 中的旧索引，不删除 MinIO 原文件或预览产物。
 
+始终排除 `deleted_at` 非空的逻辑删除文件，显式指定 `--file-id` 或执行中状态参数也不会绕过；指定已删除目录时不展开其内容。每个文件执行前再次检查删除状态，已删除时不修改文件状态、不清理索引、不触发解析。该检查不替代停写要求，运行期间仍应避免并发删除文件。
+
 Usage:
 
 ```bash

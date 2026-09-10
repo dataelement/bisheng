@@ -1934,6 +1934,8 @@
     "userName": "Username",
     "externalId": "Person ID",
     "userFeedback": "User Feedback",
+    "userRating": "User Rating",
+    "unratedFeedback": "Unrated",
     "enterQuestion": "Please enter a question first",
     "qaLibQuestionAnswerRequired": "QA Knowledge Base, Question, and Answer cannot be empty",
     "max100CharsForSimilarQuestions": "Similar questions can have a maximum of 100 characters",

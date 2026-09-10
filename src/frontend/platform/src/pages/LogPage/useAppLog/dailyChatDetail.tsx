@@ -10,6 +10,7 @@ import { useContext, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useParams } from "react-router-dom"
 import { MessageContent } from "./DailyMessageContent"
+import MessageFeedback from "./MessageFeedback"
 import { locationContext } from "@/contexts/locationContext"
 
 interface Message {
@@ -19,6 +20,8 @@ interface Message {
     isCreatedByUser: boolean;
     user_name: string;
     source: number;
+    liked?: 0 | 1 | 2;
+    comment?: string;
 }
 
 // v2.5: backend stores daily-mode `message.message` as JSON
@@ -157,6 +160,7 @@ export default function DailyChatDetail() {
                                                 </div>}
                                             </div>
                                     }
+                                    {!msg.isCreatedByUser && <MessageFeedback liked={msg.liked} comment={msg.comment} />}
                                     {/* <div className="max-w-none ">
                                         <MessageMarkDown message={msg.text}> </MessageMarkDown>
                                     </div> */}
@@ -171,4 +175,3 @@ export default function DailyChatDetail() {
         </div>
     )
 }
-

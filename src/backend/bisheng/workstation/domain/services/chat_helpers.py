@@ -202,7 +202,10 @@ def _is_new_format(msg: ChatMessage) -> bool:
 
 
 def _message_base_fields(msg: ChatMessage) -> dict:
+    from bisheng.chat_session.domain.feedback import feedback_fields
+
     return {
+        **feedback_fields(msg),
         'message_id': msg.id,
         'is_bot': msg.is_bot,
         'files': json.loads(msg.files) if msg.files else [],

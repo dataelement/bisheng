@@ -4,7 +4,9 @@ import asyncio
 import json
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from sqlalchemy import text
@@ -94,6 +96,7 @@ async def _seed_file(
     file_type: int = FileType.FILE.value,
     file_name: str | None = None,
     file_level_path: str | None = None,
+    deleted_at: datetime | None = None,
 ) -> None:
     session.add(
         KnowledgeFile(
@@ -104,6 +107,7 @@ async def _seed_file(
             status=status,
             file_level_path=file_level_path,
             object_name=f"knowledge/{knowledge_id}/{file_id}.pdf",
+            deleted_at=deleted_at,
         )
     )
     await session.commit()
@@ -123,6 +127,63 @@ async def _seed_space_scope(
         ).bindparams(space_id=space_id, level=level.value)
     )
     await session.commit()
+
+
+@pytest.mark.parametrize("scope", [{}, {"space_ids": [1]}, {"folder_ids": [10]}, {"file_ids": [101, 102]}])
+async def test_collect_excludes_soft_deleted_files_for_every_scope(async_db_session, scope):
+    await _seed_space(async_db_session, 1)
+    await _seed_file(async_db_session, file_id=10, knowledge_id=1, file_type=FileType.DIR.value)
+    await _seed_file(async_db_session, file_id=101, knowledge_id=1, file_level_path="/10")
+    await _seed_file(
+        async_db_session, file_id=102, knowledge_id=1, file_level_path="/10", deleted_at=datetime(2026, 9, 10)
+    )
+    report = await script_mod.collect_candidate_files(async_db_session, **scope)
+    assert [row.id for row in report.selected_files] == [101]
+
+
+async def test_collect_does_not_traverse_explicit_deleted_folder(async_db_session):
+    await _seed_space(async_db_session, 1)
+    await _seed_file(
+        async_db_session,
+        file_id=10,
+        knowledge_id=1,
+        file_type=FileType.DIR.value,
+        deleted_at=datetime(2026, 9, 10),
+    )
+    await _seed_file(async_db_session, file_id=101, knowledge_id=1, file_level_path="/10")
+    report = await script_mod.collect_candidate_files(async_db_session, folder_ids=[10])
+    assert report.selected_files == []
+
+
+@pytest.mark.parametrize("force_inflight", [False, True])
+def test_reparse_rechecks_soft_delete_before_any_write(monkeypatch, force_inflight):
+    row = KnowledgeFile(
+        id=101,
+        knowledge_id=1,
+        file_name="deleted.pdf",
+        file_type=FileType.FILE.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+        deleted_at=datetime(2026, 9, 10),
+    )
+    before = row.model_dump()
+    monkeypatch.setattr(script_mod, "_get_file_sync", lambda _: row)
+    guards = []
+    for name in (
+        "_get_knowledge_sync",
+        "_update_file_sync",
+        "_delete_existing_vectors",
+        "_run_parse_pipeline",
+        "_mark_file_failed",
+    ):
+        guard = Mock(side_effect=AssertionError("deleted file must not be processed"))
+        monkeypatch.setattr(script_mod, name, guard)
+        guards.append(guard)
+    result = script_mod.reparse_one_file(101, force_inflight=force_inflight)
+    assert not result.success
+    assert result.error == "file is soft-deleted"
+    assert row.model_dump() == before
+    for guard in guards:
+        guard.assert_not_called()
 
 
 @pytest.mark.asyncio

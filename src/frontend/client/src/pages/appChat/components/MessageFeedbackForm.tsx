@@ -26,7 +26,7 @@ const MessageFeedbackForm = forwardRef((props, ref) => {
 
     const { showToast } = useToastContext();
     const handleSubmit = () => {
-        if (!msgRef.current?.value) {
+        if (!msgRef.current?.value.trim()) {
             showToast({ message: t('com_feedback_required'), status: 'warning' });
             return setError(true);
         }
@@ -43,7 +43,7 @@ const MessageFeedbackForm = forwardRef((props, ref) => {
             </DialogHeader>
             <div className="">
                 <p className="mb-2"></p>
-                <Textarea ref={msgRef} maxLength={9999} className={`textarea ${error ? 'border border-red-400' : ''}`} ></Textarea>
+                <Textarea ref={msgRef} maxLength={4096} className={`textarea ${error ? 'border border-red-400' : ''}`} ></Textarea>
                 <div className="flex justify-end gap-4 mt-4">
                     <Button className='px-11' variant="outline" onClick={() => setOpen(false)}>{t('com_ui_cancel')}</Button>
                     <Button className='px-11' onClick={handleSubmit}>{t('com_ui_submit')}</Button>

@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, case, delete, exists, or_, update
+from sqlalchemy import and_, case, delete, exists, func, or_, update
 from sqlalchemy.orm import aliased
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -36,6 +36,44 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
     def __init__(self, session: AsyncSession):
         super().__init__(session, KnowledgeFile)
         track_fulltext_file_changes(session)
+
+    async def list_qa_category_candidates(
+        self,
+        *,
+        space_ids: list[int],
+        document_type: str | None,
+        file_subcategory_code: str | None,
+        before_id: int | None,
+        limit: int,
+    ) -> list[KnowledgeFile]:
+        if not space_ids:
+            return []
+        statement = select(KnowledgeFile).where(
+            col(KnowledgeFile.knowledge_id).in_(space_ids),
+            KnowledgeFile.file_type == FileType.FILE.value,
+            KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+            col(KnowledgeFile.deleted_at).is_(None),
+        )
+        if document_type:
+            # 编码解析会忽略分段两侧空白, 候选查询也保留这一兼容行为。
+            encoding = func.upper(KnowledgeFile.file_encoding)
+            for whitespace in (" ", "\t", "\r", "\n"):
+                encoding = func.replace(encoding, whitespace, "")
+            statement = statement.where(
+                encoding.contains(
+                    f"-{document_type.strip().upper()}-",
+                    autoescape=True,
+                )
+            )
+        if file_subcategory_code:
+            statement = statement.where(
+                func.upper(func.trim(KnowledgeFile.file_subcategory_code)) == file_subcategory_code.strip().upper()
+            )
+        if before_id is not None:
+            statement = statement.where(KnowledgeFile.id < before_id)
+        statement = statement.order_by(col(KnowledgeFile.id).desc()).limit(min(max(limit, 1), 200))
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
 
     async def save(self, entity: KnowledgeFile) -> KnowledgeFile:
         self.session.add(entity)

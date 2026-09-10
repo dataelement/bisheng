@@ -1879,6 +1879,8 @@
     "userName": "用户名",
     "externalId": "人员 ID",
     "userFeedback": "用户反馈",
+    "userRating": "用户评价",
+    "unratedFeedback": "未评价",
     "enterQuestion": "请先输入问题",
     "qaLibQuestionAnswerRequired": "QA知识库、问题、答案不能为空",
     "max100CharsForSimilarQuestions": "相似问最多100个字",

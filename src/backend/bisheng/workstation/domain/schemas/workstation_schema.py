@@ -4,6 +4,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, field_validator
 
+from bisheng.chat_session.domain.feedback import feedback_fields
 from bisheng.database.models.message import ChatMessage
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.user.domain.models.user import UserDao
@@ -25,6 +26,9 @@ class WorkstationMessage(BaseModel):
     unfinished: Optional[bool] = False
     flow_name: Optional[str] = None
     source: Optional[int] = None
+    liked: int = 0
+    comment: str = ''
+    feedback_allowed: bool = False
 
     @field_validator('messageId', mode='before')
     @classmethod
@@ -50,6 +54,7 @@ class WorkstationMessage(BaseModel):
         user_model = await UserDao.aget_user(message.user_id)
         message_session_model = await MessageSessionDao.async_get_one(chat_id=message.chat_id)
         return cls(
+            **feedback_fields(message),
             messageId=str(message.id),
             conversationId=message.chat_id,
             createdAt=message.create_time,

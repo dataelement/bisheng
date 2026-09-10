@@ -9,6 +9,18 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
     """Knowledge Base File Repository Interface Class"""
 
+    async def list_qa_category_candidates(
+        self,
+        *,
+        space_ids: list[int],
+        document_type: str | None,
+        file_subcategory_code: str | None,
+        before_id: int | None,
+        limit: int,
+    ) -> list[KnowledgeFile]:
+        """按分类和 ID 游标读取有限候选, 业务层继续执行文件权限检查。"""
+        ...
+
     async def find_by_id_for_update(self, entity_id: int) -> KnowledgeFile | None:
         """锁定文件行，用于串行化申请创建与绑定校验。"""
         ...

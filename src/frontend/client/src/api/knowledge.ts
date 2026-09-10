@@ -3718,7 +3718,7 @@ export interface SimilarCandidateEntry {
     doc_code?: string;
     current_primary_version_no: number;
     similarity: number; // raw simhash similarity
-    refined_similarity?: number; // TF-IDF cosine; preferred for display when present
+    refined_similarity?: number; // TF-IDF 余弦分数，展示时占 20%，缺失时回退到 SimHash
     primary_uploader_name?: string;
     primary_upload_time?: string;
     primary_knowledge_file_id: number; // primary version's file id, used for preview

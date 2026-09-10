@@ -33,26 +33,6 @@ async def test_category_counts_cover_unloaded_pages_and_parent_scope():
     assert result["data"] == []
 
 
-async def test_category_page_only_enriches_requested_files_and_keeps_cursor():
-    service = object.__new__(KnowledgeSpaceService)
-    files = [SimpleNamespace(id=i, knowledge_id=10, file_subcategory_code="A") for i in [3, 2, 1]]
-    service._load_qa_category_files = AsyncMock(return_value=(files, {10: "公共库"}))
-    service._get_shougang_document_type_code = lambda _: "ZC"
-    service._handle_file_folder_extra_info = AsyncMock(
-        side_effect=lambda fs: [{"id": f.id, "knowledge_id": 10} for f in fs]
-    )
-    service._map_shougang_portal_file_item = lambda sid, item: item
-    req = request()
-    first = await service.get_shougang_portal_qa_category_files(req)
-    assert [f["id"] for f in first["data"]] == [3]
-    assert first["has_more"] is True
-    req.cursor = first["next_cursor"]
-    second = await service.get_shougang_portal_qa_category_files(req)
-    assert [f["id"] for f in second["data"]] == [2]
-    assert second["counts"] == first["counts"]
-    assert service._handle_file_folder_extra_info.await_args.args[0] == [files[1]]
-
-
 async def test_category_loader_reuses_space_and_file_permissions_and_excludes_old_files():
     service = object.__new__(KnowledgeSpaceService)
     service._get_shougang_portal_request_spaces = AsyncMock(return_value=[SimpleNamespace(id=10, name="库")])

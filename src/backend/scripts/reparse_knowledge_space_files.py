@@ -5,6 +5,9 @@ This maintenance script reruns the normal knowledge-file parse pipeline for
 knowledge-space files. It is intended for operational repair after parser,
 index, or metadata logic changes.
 
+Soft-deleted files are excluded, including explicitly selected IDs. The deletion
+state is checked again before processing each file.
+
 By default the script is a dry-run and only prints the files that would be
 processed. Pass ``--apply`` to mutate data. Before each file is reparsed,
 the script deletes only that file's existing Milvus and Elasticsearch records;
@@ -221,6 +224,7 @@ class SelectionReport:
     skipped_non_folder_records: int = 0
     skipped_space_level_records: int = 0
     skipped_status_records: int = 0
+    skipped_deleted_records: int = 0
     duplicate_records: int = 0
     warnings: list[str] = field(default_factory=list)
 
@@ -239,6 +243,7 @@ class SelectionReport:
             + self.skipped_non_folder_records
             + self.skipped_space_level_records
             + self.skipped_status_records
+            + self.skipped_deleted_records
             + self.duplicate_records
         )
 
@@ -412,6 +417,9 @@ def _is_eligible_file(
     report: SelectionReport,
     eligible_statuses: tuple[int, ...],
 ) -> bool:
+    if record.deleted_at is not None:
+        report.skipped_deleted_records += 1
+        return False
     if record.knowledge_id not in all_space_ids:
         report.skipped_non_space_records += 1
         return False
@@ -452,6 +460,7 @@ async def _select_space_files(
         .where(
             col(KnowledgeFile.knowledge_id).in_(space_ids),
             KnowledgeFile.file_type == FileType.FILE.value,
+            col(KnowledgeFile.deleted_at).is_(None),
             col(KnowledgeFile.status).in_(eligible_statuses),
         )
         .order_by(col(KnowledgeFile.id).asc())
@@ -473,6 +482,7 @@ async def _count_space_scope_skips(
         .where(
             col(KnowledgeFile.knowledge_id).in_(space_ids),
             KnowledgeFile.file_type == FileType.DIR.value,
+            col(KnowledgeFile.deleted_at).is_(None),
         )
     )
     ineligible_count = await session.scalar(
@@ -481,11 +491,21 @@ async def _count_space_scope_skips(
         .where(
             col(KnowledgeFile.knowledge_id).in_(space_ids),
             KnowledgeFile.file_type == FileType.FILE.value,
+            col(KnowledgeFile.deleted_at).is_(None),
             col(KnowledgeFile.status).notin_(eligible_statuses),
         )
     )
     report.skipped_folder_records += int(folder_count or 0)
     report.skipped_status_records += int(ineligible_count or 0)
+    deleted_count = await session.scalar(
+        select(func.count())
+        .select_from(KnowledgeFile)
+        .where(
+            col(KnowledgeFile.knowledge_id).in_(space_ids),
+            col(KnowledgeFile.deleted_at).is_not(None),
+        )
+    )
+    report.skipped_deleted_records += int(deleted_count or 0)
 
 
 async def _select_files_by_ids(
@@ -509,6 +529,7 @@ async def _select_folder_descendants(
         .where(
             KnowledgeFile.knowledge_id == folder.knowledge_id,
             KnowledgeFile.file_type == FileType.FILE.value,
+            col(KnowledgeFile.deleted_at).is_(None),
             col(KnowledgeFile.status).in_(eligible_statuses),
             or_(
                 KnowledgeFile.file_level_path == prefix,
@@ -580,6 +601,9 @@ async def collect_candidate_files(
         if missing_folder_ids:
             report.warnings.append(f"ignored missing folder IDs: {sorted(missing_folder_ids)}")
         for folder in folders_by_id.values():
+            if folder.deleted_at is not None:
+                report.skipped_deleted_records += 1
+                continue
             if folder.knowledge_id not in all_space_ids:
                 report.skipped_non_space_records += 1
                 continue
@@ -649,6 +673,8 @@ def reparse_one_file(
 
         file_name = db_file.file_name
         knowledge_id = db_file.knowledge_id
+        if db_file.deleted_at is not None:
+            return FileReparseResult(file_id, knowledge_id, file_name, False, db_file.status, "file is soft-deleted")
         if db_file.file_type != FileType.FILE.value:
             return FileReparseResult(file_id, knowledge_id, file_name, False, db_file.status, "record is not a file")
         if eligible_statuses is None:
@@ -831,6 +857,7 @@ def print_selection_report(report: SelectionReport) -> None:
         f"non_folders={report.skipped_non_folder_records} "
         f"space_level={report.skipped_space_level_records} "
         f"ineligible_status={report.skipped_status_records} "
+        f"soft_deleted={report.skipped_deleted_records} "
         f"duplicates={report.duplicate_records}"
     )
     for warning in report.warnings:
@@ -856,6 +883,7 @@ def _selection_report_payload(report: SelectionReport) -> dict[str, int]:
         "non_folders": report.skipped_non_folder_records,
         "space_level": report.skipped_space_level_records,
         "ineligible_status": report.skipped_status_records,
+        "soft_deleted": report.skipped_deleted_records,
         "duplicates": report.duplicate_records,
     }
 
