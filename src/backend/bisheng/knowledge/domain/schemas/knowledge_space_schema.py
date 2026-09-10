@@ -793,6 +793,16 @@ class ShougangPortalRelatedFilesResp(BaseModel):
     total: int = 0
 
 
+class ShougangPortalQaCategoryFilesReq(BaseModel):
+    space_ids: list[int] = Field(default_factory=list, max_length=200)
+    discovery_scope: Literal["legacy", "public"] = "legacy"
+    document_type: str | None = Field(default=None, max_length=100)
+    file_subcategory_code: str | None = Field(default=None, max_length=100)
+    stats_only: bool = False
+    cursor: str | None = Field(default=None, pattern=r"^[0-9]{1,20}$")
+    page_size: int = Field(default=20, ge=1, le=100)
+
+
 class ShougangPortalQaFileSearchReq(BaseModel):
     q: str = Field(..., min_length=1, description="File name keyword")
     discovery_scope: Literal[

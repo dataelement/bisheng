@@ -230,6 +230,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFileSearchReq,
     ShougangPortalHomeReq,
     ShougangPortalPersonalSpaceItemResp,
+    ShougangPortalQaCategoryFilesReq,
     ShougangPortalQaFileSearchReq,
     ShougangPortalShareLinkAccessResp,
     ShougangPortalShareLinkCreateReq,
@@ -7078,6 +7079,93 @@ class KnowledgeSpaceService(KnowledgeUtils):
             except Exception:
                 pass
             _portal_search_perf_var.reset(perf_token)
+
+    async def _load_qa_category_files(
+        self, req: ShougangPortalQaCategoryFilesReq
+    ) -> tuple[list[KnowledgeFile], dict[int, str]]:
+        # 空候选范围不能回退为全部知识库。
+        if not req.space_ids:
+            return [], {}
+        spaces = await self._get_shougang_portal_request_spaces(
+            requested_space_ids=req.space_ids,
+            space_level=None,
+            discovery_scope=req.discovery_scope,
+        )
+        space_ids = [int(space.id) for space in spaces]
+        if not space_ids:
+            return [], {}
+        if req.discovery_scope == "legacy":
+            for space_id in space_ids:
+                await self._require_read_permission(space_id)
+
+        excluded_ids: set[int] = set()
+        if self.version_repo is not None:
+            excluded_ids.update(await self.version_repo.find_non_primary_file_ids_by_knowledge_ids(space_ids) or [])
+        from bisheng.knowledge.domain.services.knowledge_recycle_service import KnowledgeRecycleService
+
+        for space_id in space_ids:
+            excluded_ids.update(await KnowledgeRecycleService.list_recycled_file_ids(space_id) or [])
+        files = await KnowledgeFileDao.aget_file_by_space_filters(
+            knowledge_ids=space_ids,
+            status=[KnowledgeFileStatus.SUCCESS.value],
+            order_by="update_time",
+            order_sort="desc",
+        )
+        candidates = [
+            file
+            for file in files
+            if int(file.id) not in excluded_ids
+            and int(file.file_type) == FileType.FILE.value
+            and int(file.status) == KnowledgeFileStatus.SUCCESS.value
+        ]
+        visible_files: list[KnowledgeFile] = []
+        if req.discovery_scope == "legacy":
+            for space_id in space_ids:
+                visible_files.extend(
+                    await self._filter_visible_child_items(
+                        [file for file in candidates if int(file.knowledge_id) == space_id],
+                        space_id=space_id,
+                    )
+                )
+        else:
+            visible_files = await self._filter_shougang_portal_visible_files(candidates, spaces=spaces)
+        return visible_files, {int(space.id): str(space.name or space.id) for space in spaces}
+
+
+    async def get_shougang_portal_qa_category_files(self, req: ShougangPortalQaCategoryFilesReq) -> dict:
+        files, space_names = await self._load_qa_category_files(req)
+        counts: dict[str, int] = {}
+        matched: list[KnowledgeFile] = []
+        for file in files:
+            document_type = self._get_shougang_document_type_code(file)
+            subcategory = self._get_shougang_file_subcategory_code(file)
+            if document_type:
+                key = f"l1:{document_type}"
+                counts[key] = counts.get(key, 0) + 1
+                if subcategory:
+                    key = f"l2:{document_type}:{subcategory}"
+                    counts[key] = counts.get(key, 0) + 1
+            if req.document_type and document_type != req.document_type:
+                continue
+            if req.file_subcategory_code and subcategory != req.file_subcategory_code:
+                continue
+            matched.append(file)
+        result = {"counts": counts, "data": [], "has_more": False, "next_cursor": None}
+        if req.stats_only:
+            return result
+        # 用文件 ID 游标保持翻页稳定, 统计不受游标影响。
+        matched.sort(key=lambda file: int(file.id), reverse=True)
+        if req.cursor:
+            matched = [file for file in matched if int(file.id) < int(req.cursor)]
+        page = matched[: req.page_size]
+        items = await self._handle_file_folder_extra_info(page) if page else []
+        for item in items:
+            space_id = int(item["knowledge_id"])
+            item["knowledge_name"] = space_names[space_id]
+            result["data"].append(self._map_shougang_portal_file_item(space_id, item))
+        result["has_more"] = len(matched) > len(page)
+        result["next_cursor"] = str(page[-1].id) if result["has_more"] else None
+        return result
 
     async def search_shougang_portal_qa_files_by_name(self, req: ShougangPortalQaFileSearchReq) -> dict:
         keyword = (req.q or "").strip()

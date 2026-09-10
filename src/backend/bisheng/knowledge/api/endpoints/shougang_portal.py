@@ -50,6 +50,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalHomeResp,
     ShougangPortalHomeStatsResp,
     ShougangPortalPersonalSpacesResp,
+    ShougangPortalQaCategoryFilesReq,
     ShougangPortalQaFileSearchReq,
     ShougangPortalQaFileSearchResp,
     ShougangPortalRelatedFilesResp,
@@ -556,6 +557,14 @@ async def browse_shougang_portal_files(
 ) -> Any:
     result = await svc.browse_shougang_portal_files(req)
     return resp_200(ShougangPortalFileSearchResp(**result).model_dump(mode="json"))
+
+
+@router.post("/qa/category-files")
+async def get_shougang_portal_qa_category_files(
+    req: ShougangPortalQaCategoryFilesReq,
+    svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(await svc.get_shougang_portal_qa_category_files(req))
 
 
 @router.post("/qa/files/search")
