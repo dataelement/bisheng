@@ -384,6 +384,7 @@ client 广场页 pages/apps/explore.tsx:60-62
 - **后端单元测试**（`src/backend/test/workflow/`，`asyncio_mode=auto`）：
   - **第一层（合法性过滤）**：断言 `app` 桶请求集**不含 `share`**；`workflow`/`assistant` 桶请求集与改动前**逐元素相同**（防回归）；`visible` 在任何桶都不被滤掉（它不在 `ACTION_RESOURCE_SCOPES` 里，滤掉即广场空列表）。**并对 `aenrich_apps_can_share` 单独跑一次**：传 `("share",)` + 含 `flow_type=35` 的 data → **不抛 25001**、`can_share` 为 false（这条覆盖坑 1 的另外 4 个调用方，只测广场是测不到的）。
   - **第二层（口径切换）**：`_scan_visible_apps_page` 的 app 桶请求 `("use","edit")`、`kept` 按行类型取可见性 action；另 6 个 `_application_action_map` 调用方的入参与结果**逐元素不变**。
+    - ⚠️ 2026-09-10 订正：beta1 权限懒加载（7559c9871 `additional_actions=()`）落地后，扫描期只问可见性动作，`_SQUARE_ACTIONS_BY_TYPE` 整元组覆盖已改为 `_SQUARE_VISIBILITY_ACTION_BY_TYPE` 只钉「哪个动作判可见」，额外动作随调用方；app 桶实际请求 `("use",)`。
   - `_apply_page_can_share` 对 `flow_type=35` 恒 false。
   - `status` 类型豁免：传 `status=2` + 豁免集合 `{35}` 时，SQL 条件对第三支不生效（可用 DAO 层构造断言或对拼出的 SQL 文本断言）。
   - `_scan_visible_apps_page` 出口补 `slug` / `app_state`：托管应用有值、另两类为 None，且**不额外发起 N 次查询**（批量一次）。

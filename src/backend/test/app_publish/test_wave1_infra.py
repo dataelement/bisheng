@@ -374,7 +374,18 @@ def test_service_account_principal_defaults_to_the_owner(service_account_princip
     principal = service_account_principal()
     assert principal.has_scope("app:manage")
     assert principal.resource_owner_user_id == owner_user.user_id
-    assert principal.subject_user_id != owner_user.user_id, "the acting subject is the service account, not the owner"
+    # beta2 shape: the acting subject is the service account itself — not a user
+    # row (M4) — authorization is judged as that account, and there is no
+    # effective user behind it. Mode S is the only mode ``app:manage`` travels in
+    # (INV-31), so a fixture defaulting to anything else would test a dead path.
+    assert principal.actor_kind == "service_account"
+    assert principal.actor_id != owner_user.user_id, "the acting subject is the service account, not the owner"
+    assert (principal.authorization_subject_type, principal.authorization_subject_id) == (
+        "service_account",
+        principal.actor_id,
+    )
+    assert principal.effective_user_id is None
+    assert principal.mode == "S"
 
 
 def test_tenant_admin_fixture_is_not_a_super_admin(tenant_admin_user, super_admin_user):

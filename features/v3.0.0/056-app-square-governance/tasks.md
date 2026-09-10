@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查修订（45 AC、11 决议，跨 Feature 归属规则全文改写） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日 `/sdd-review design` 14 条修订（D1–D11 / K1–K11 / 坑 21 条）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文（33 任务 / 4 Wave / 21 条 `[MVP-核心]`）；2026-08-17 初稿 + 同日 `/sdd-review tasks` 15 条修订（审计租户字段口径、client i18n、`objectTypeEnum.app` 新增认领、T009/T011 实现手段写死、夹具与追溯口径） |
-| 实现 | 🟡 进行中（2026-08-18） | **19 / 33 完成**；`[MVP-核心]` 21 条中完成 19（T001–T015 / T017–T020），未完成 2：**T016**（集成测试需 MySQL / Redis / OpenFGA，本地无中间件，CI 跑）、**T021**（114 部署与人工验收）。Wave 3–4 顺延 12 条未启。偏差见文末「实际偏差记录」 |
+| 实现 | 🟡 进行中（2026-08-18） | **20 / 33 完成**；`[MVP-核心]` 21 条中完成 20（T001–T020），未完成 1：**T021**（114 部署与人工验收）；**T016** 代码已齐、2026-09-10 勾选，但需 `F056_E2E=1` 对真实部署（MySQL / Redis / OpenFGA）跑、114 重建后执行。Wave 3–4 顺延 12 条未启。偏差见文末「实际偏差记录」 |
 
 ---
 
@@ -146,6 +146,7 @@
   **文件**: `src/backend/test/workflow/test_square_scan_page.py`（新）
   **逻辑**: 对 `WorkFlowService._scan_visible_apps_page`（`workflow.py:401-478`）与其两个入口断言：
   - `test_app_bucket_requests_use_edit` → app 桶请求 `("use","edit")`、另两类保持 `(action,"edit","share")`（`share` 由第一层裁，**此处不重复裁**）；
+    - ⚠️ 2026-09-10 订正：合入 beta1 权限懒加载（`additional_actions=()`）后该用例改名 `test_square_buckets_ask_only_their_visibility_action`——广场页各桶只问自己的可见性动作（app 桶 `("use",)`、另两类 `("visible",)`），`edit` / `share` 不再在扫描期预取；`can_share` 由 `aenrich_apps_can_share` 另算（`test_square_page_defers_can_share` + `test_can_share_false_for_app`）。
   - `test_kept_filter_per_row_type` → `kept` 筛选（`:450-455`）不再用外部传入的 `action` 一刀切，改为**按行的 `flow_type` 取该桶实际请求的可见性 action**（`app` 行看 `use`，其余行看 `action`）——这是 AC-06 同源的机器化护栏（入口用 `check_business_action("app", id, actor, "use")`，广场默认传 `visible`，二者在 FGA 里是两条不同关系，design K7 / 坑 2）；
   - `test_slug_and_app_state_batched` → 出口对 `flow_type==35` 的行**批量一次**回查补 `slug` / `app_state`，另两类为 `None`，且**不额外发起 N 次查询**；
   - `test_both_entries_carry_slug`（**坑 21 / 坑 8 的护栏**）→ `get_online_flows_page:500` 与 `get_uncategorized_flows:977` 的返回体里托管应用行**都带** `slug` / `app_state`——后者从不调 `add_extra_field`（`:1012-1016` 只补 `logo` 后直接 `_apply_page_can_share` 返回），补在 `add_extra_field` 里就只对标签 tab 生效，而未分类 tab 正是 §7 指定的唯一验收面；
@@ -222,7 +223,7 @@
   **覆盖 AC**: AC-19, AC-20, AC-27
   **依赖**: T002
 
-- [ ] **T016**: `[MVP-核心]` 广场端到端集成测试（**非管理员账号**）
+- [x] **T016**: `[MVP-核心]` 广场端到端集成测试（**非管理员账号**）
   **文件**: `src/backend/test/workflow/test_square_hosted_app_e2e.py`（新，pytest + httpx，连 test 中间件 MySQL / Redis / OpenFGA，CI 跑）
   **逻辑**: 用**非管理员、非 owner 的普通用户**跑 `GET /api/v1/chat/online` 与 `GET /api/v1/workstation/app/uncategorized`：
   - `test_grant_then_revoke_visibility` → 授权前 0 条托管应用、授权后 1 条、撤销后 0 条，且生效发生在**下一次请求**（无需重新登录、不依赖任何缓存到期，AC-05）；
@@ -233,6 +234,7 @@
   - `test_manage_dialog_denied_for_grantee` → 仅被授予可见范围的用户调 `GET/POST /api/v1/permissions/resources/app/{id}/grants*` → 403（AC-15：被授予可见范围只获得广场可见与入口访问，不获得任何管理入口）。
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-15
   **依赖**: T009, T011, T014
+  ✅ 2026-09-10 核实已落地（`src/backend/test/workflow/test_square_hosted_app_e2e.py` 7 例：本任务所列 6 例 + `test_uncategorized_tab_shows_untagged_hosted_app`）——**代码齐、需 `F056_E2E=1` 对真实部署（MySQL / Redis / OpenFGA）跑**，本机无中间件时整文件 skip；**114 重建后执行**
 
 ### Wave 2 · `[MVP-核心]` 前端 Client（手动验证）
 

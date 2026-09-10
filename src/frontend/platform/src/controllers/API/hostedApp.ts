@@ -140,16 +140,59 @@ export async function getHostedAppInstanceApi(
 }
 
 /**
- * Read-only version list, newest first.
+ * One page of the version list, in the `{ data, total }` envelope `useTable`
+ * consumes. `total` counts every version, not the page.
+ */
+export interface HostedAppVersionPage {
+  data: HostedAppVersion[]
+  total: number
+}
+
+export interface HostedAppVersionPageQuery {
+  /** 1-based; backend default 1. */
+  page?: number
+  /** 1–200. Omitted, the backend answers with the whole list. */
+  pageSize?: number
+}
+
+/**
+ * `GET /api/v1/apps/{id}/versions` — read-only version list, newest first.
  *
- * The source is `app_version`. It is *not* the `version_list` the app list
- * attaches to flow rows — that one is always empty for a hosted app, and the
- * component built for it writes back to a workflow when a version is picked.
+ * The wire shape is always `{ data, total }`; without `pageSize` the backend
+ * sends every version and `total` equals `data.length`. The source is
+ * `app_version`. It is *not* the `version_list` the app list attaches to flow
+ * rows — that one is always empty for a hosted app, and the component built
+ * for it writes back to a workflow when a version is picked.
+ */
+export async function getHostedAppVersionPageApi(
+  appId: string,
+  query: HostedAppVersionPageQuery = {},
+): Promise<HostedAppVersionPage> {
+  const params = new URLSearchParams()
+  if (query.page !== undefined) params.set("page", String(query.page))
+  if (query.pageSize !== undefined)
+    params.set("page_size", String(query.pageSize))
+  const qs = params.toString()
+  return await axios.get(
+    `${APPS_BASE}/${appId}/versions${qs ? `?${qs}` : ""}`,
+    { silent: true },
+  )
+}
+
+/**
+ * The whole version list, newest first — the unpaged read for surfaces that
+ * need every row (the card dropdown looks for the running version, which a
+ * page may not contain). Same endpoint as `getHostedAppVersionPageApi`, with
+ * the envelope unwrapped.
  */
 export async function getHostedAppVersionsApi(
   appId: string,
 ): Promise<HostedAppVersion[]> {
-  return await axios.get(`${APPS_BASE}/${appId}/versions`, { silent: true })
+  const page: HostedAppVersionPage | undefined = await axios.get(
+    `${APPS_BASE}/${appId}/versions`,
+    { silent: true },
+  )
+  return page?.data ?? []
 }
 
 export async function getHostedAppLogsApi(

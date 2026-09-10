@@ -135,6 +135,37 @@ class AppQueryService:
         ]
 
     @classmethod
+    async def list_versions_page(
+        cls,
+        app_id: str,
+        *,
+        actor,
+        page: int = 1,
+        page_size: int | None = None,
+    ) -> dict[str, Any]:
+        """:meth:`list_versions` in the ``{"data", "total"}`` envelope the
+        platform's ``useTable`` consumes (F055 T044b).
+
+        ``page_size=None`` means *no paging*: ``data`` is the whole list and
+        ``total`` its length — what the card dropdown wants, since it looks for
+        the running version and a page may not contain it. With ``page_size``,
+        ``data`` is that page and ``total`` counts every version.
+
+        The slice is taken here rather than as SQL ``LIMIT``/``OFFSET`` on
+        purpose: the list is bounded by one application's deploy count and the
+        dropdown reads it whole anyway, while ``AppVersionDao`` is kept to its
+        structurally-asserted INSERT-only surface (``test_app_state_service_registry``)
+        — a count method there is a surface change this read does not justify.
+        """
+        rows = await cls.list_versions(app_id, actor=actor)
+        if page_size:
+            start = (max(int(page), 1) - 1) * int(page_size)
+            data = rows[start : start + int(page_size)]
+        else:
+            data = rows
+        return {"data": data, "total": len(rows)}
+
+    @classmethod
     async def list_apps(cls, *, actor, tenant_id: int | None = None) -> list[dict[str, Any]]:
         """AC-57 — an owner's own apps, or a tenant administrator's whole tenant.
 

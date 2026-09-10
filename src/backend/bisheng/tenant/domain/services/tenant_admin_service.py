@@ -39,17 +39,14 @@ class TenantAdminService:
 
         Raises RootTenantAdminNotAllowedError (19204) for the Root tenant.
         Raises PermissionBackendUnavailableError (19201) when permissions are unavailable.
-        Raises ServiceAccountOperationForbiddenError (26022) for a service
-        account: F049 AC-22 — a credential must never have an administrator
-        identity behind it.
+
+        ``user_id`` is a natural person by construction: service accounts live
+        in their own ``service_account`` table and never in ``user`` (F053
+        design K15), so no per-row subject-kind check is needed here.
         """
         # Root guard first: it must stay a pure short-circuit that touches
         # neither the database nor the permission backend.
         await cls._guard_not_root(tenant_id)
-
-        from bisheng.user.domain.services.user import UserService
-
-        await UserService.aassert_natural_persons([user_id])
         relation = PermissionRelation(
             subject=PermissionSubject("user", str(user_id)),
             relation="admin",

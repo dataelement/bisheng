@@ -65,6 +65,7 @@ async def test_resource_display_names_resolves_spaces_and_folders(monkeypatch) -
         "Channel": [SimpleNamespace(id="ch-1", name="News Channel")],
         "GptsToolsType": [SimpleNamespace(id=8, name="CRM Tool")],
         "Dashboard": [SimpleNamespace(id=9, title="Sales Dashboard")],
+        "App": [SimpleNamespace(id="app-1", name="Survey Form")],
     }
 
     class Session:
@@ -90,6 +91,7 @@ async def test_resource_display_names_resolves_spaces_and_folders(monkeypatch) -
             ("channel", "ch-1"),
             ("tool", "8"),
             ("dashboard", "9"),
+            ("app", "app-1"),
         )
     )
 
@@ -101,4 +103,35 @@ async def test_resource_display_names_resolves_spaces_and_folders(monkeypatch) -
         ("channel", "ch-1"): "News Channel",
         ("tool", "8"): "CRM Tool",
         ("dashboard", "9"): "Sales Dashboard",
+        ("app", "app-1"): "Survey Form",
     }
+
+
+async def test_resource_display_names_skips_deleted_hosted_apps(monkeypatch) -> None:
+    """A hosted app is soft-deleted through ``app.state``, not an ``is_delete``
+    flag: the lookup must carry that predicate, or a service account's grant
+    list keeps naming applications that no longer exist."""
+
+    from bisheng.database.models.app import App
+
+    statements = []
+
+    class Session:
+        async def exec(self, statement):
+            statements.append(statement)
+            return SimpleNamespace(all=lambda: [SimpleNamespace(id="app-1", name="Survey Form")])
+
+    @asynccontextmanager
+    async def db_session():
+        yield Session()
+
+    monkeypatch.setattr("bisheng.core.database.get_async_db_session", lambda: db_session())
+
+    labels = await TenantPermissionSubjectDirectory().resource_display_names((("app", "app-1"),))
+
+    assert labels == {("app", "app-1"): "Survey Form"}
+    assert len(statements) == 1
+    assert statements[0].column_descriptions[0]["entity"] is App
+    compiled = str(statements[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "app.id IN ('app-1')" in compiled
+    assert "app.state != 'deleted'" in compiled

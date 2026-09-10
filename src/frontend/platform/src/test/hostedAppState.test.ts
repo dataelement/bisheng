@@ -4,6 +4,7 @@ import {
   isDeleteBlockedByState,
   isOnline,
   isStateShownBySwitch,
+  pendingAwareStateI18nKey,
   phaseI18nKey,
   stateI18nKey,
 } from "@/pages/BuildPage/hostedApp/types"
@@ -21,8 +22,33 @@ describe("hosted application vocabulary", () => {
       "stopped",
     ])
     expect(HOSTED_APP_STATES).not.toContain("deleted")
-    expect(stateI18nKey("pending_capacity")).toBe(
+  })
+
+  it("names a parked application neutrally unless the cause is known", () => {
+    // The list card and the detail header render the plain state map and are
+    // never handed the parking reason, so that map must stay with the neutral
+    // word: it used to say "insufficient resources" for every parked app,
+    // including the ones with plenty of room that simply failed to start.
+    expect(stateI18nKey("pending_capacity")).toBe("hostedApp.state.pending")
+
+    // Where the release read model does record the cause, the label names it —
+    // the two remedies are opposites (wait for room vs. read the logs).
+    expect(pendingAwareStateI18nKey("pending_capacity", "capacity")).toBe(
       "hostedApp.state.pendingCapacity",
+    )
+    expect(pendingAwareStateI18nKey("pending_capacity", "deploy_failed")).toBe(
+      "hostedApp.state.pendingDeployFailed",
+    )
+    // No recorded cause is not evidence of a shortage.
+    expect(pendingAwareStateI18nKey("pending_capacity", null)).toBe(
+      "hostedApp.state.pending",
+    )
+    expect(pendingAwareStateI18nKey("pending_capacity", undefined)).toBe(
+      "hostedApp.state.pending",
+    )
+    // The reason only refines the parked state; any other state ignores it.
+    expect(pendingAwareStateI18nKey("online", "capacity")).toBe(
+      "hostedApp.state.online",
     )
   })
 

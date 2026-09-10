@@ -136,19 +136,30 @@ def square_env(build_list_env, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-async def test_app_bucket_requests_use_edit(square_env, tenant_scope):
-    """Hosted apps are asked for ``use``/``edit``; the other two keep their trio."""
+async def test_square_buckets_ask_only_their_visibility_action(square_env, tenant_scope):
+    """Every bucket is asked for exactly one action — ``use`` for hosted apps too.
+
+    The square stopped asking for ``edit`` / ``share`` up front when per-card
+    actions went lazy (``additional_actions=()``, beta1 ``7559c9871``): the
+    answer would be discarded with the action map. The hosted-application
+    override may swap *which* action decides visibility (AC-06: ``use``, the
+    entry's own decision) but must not re-add extras the caller dropped.
+
+    Both entries are asserted: the tagged tab decides with ``use`` for every
+    type, the "uncategorised" tab keeps ``visible`` for workflows / assistants
+    and still asks ``use`` for hosted apps.
+    """
     tenant_scope(ROOT_TENANT_ID)
     square_env.seed_app(name="hosted")
     square_env.seed_flow(name="wf")
     square_env.seed_assistant(name="asst")
 
     await _tagged_tab(square_env)
+    assert dict(square_env.asked_actions) == {"app": ("use",), "workflow": ("use",), "assistant": ("use",)}
 
-    asked = dict(square_env.asked_actions)
-    assert set(asked["app"]) == {"use", "edit"}
-    assert asked["workflow"] == ("use", "edit", "share")
-    assert asked["assistant"] == ("use", "edit", "share")
+    square_env.asked_actions.clear()
+    await _uncategorized_tab(square_env)
+    assert dict(square_env.asked_actions) == {"app": ("use",), "workflow": ("visible",), "assistant": ("visible",)}
 
 
 async def test_kept_filter_per_row_type(square_env, tenant_scope):
@@ -174,16 +185,49 @@ async def test_kept_filter_per_row_type(square_env, tenant_scope):
     assert {row["id"] for row in await _tagged_tab(square_env)} == {flow.id}
 
 
-async def test_can_share_false_for_app(square_env, tenant_scope):
-    """``can_share`` is false for hosted apps without a single change to the card."""
+async def test_square_page_defers_can_share(square_env, tenant_scope):
+    """The square page carries no ``can_share`` for any type — the card resolves it lazily.
+
+    beta1 ``ffa1e9266``: ``useLazyAppSharePermission`` asks
+    ``checkResourceAction(..., "share")`` on first interaction, and only for
+    workflows and assistants — ``getAppPermissionResourceType`` maps a hosted
+    app to ``null``, so its card never asks and never shows the action (决议-6).
+    Emitting the field here again would make the client trust it
+    (``app.can_share ?? ...``) and quietly re-open the eager path.
+    """
     tenant_scope(ROOT_TENANT_ID)
     square_env.seed_app(name="hosted")
     square_env.seed_flow(name="wf")
 
-    by_type = {row["flow_type"]: row for row in await _tagged_tab(square_env)}
+    rows = await _tagged_tab(square_env)
 
-    assert by_type[HOSTED]["can_share"] is False
-    assert by_type[WORKFLOW]["can_share"] is True
+    assert {row["flow_type"] for row in rows} == {HOSTED, WORKFLOW}
+    assert all("can_share" not in row for row in rows)
+
+
+async def test_can_share_false_for_app(square_env, tenant_scope):
+    """Wherever ``can_share`` *is* computed, a hosted app gets ``False`` without asking FGA.
+
+    ``aenrich_apps_can_share`` is the server-side answer behind every list that
+    still pre-computes the field (application centre, frequently used, the
+    workbench strip). ``share`` is not a legal action for ``app``
+    (``catalog_policy.py``, design K6 / 决议-6): the bucket is never asked, so
+    the answer is ``False`` even when FGA would grant everything — asking would
+    fabricate a capability and come back as business code 25001 besides.
+    """
+    from bisheng.api.services.workflow import WorkFlowService
+
+    tenant_scope(ROOT_TENANT_ID)
+    square_env.seed_app(name="hosted")
+    square_env.seed_flow(name="wf")
+    rows = await _tagged_tab(square_env)
+    square_env.asked_actions.clear()
+
+    enriched = {row["flow_type"]: row for row in await WorkFlowService.aenrich_apps_can_share(_payload(), rows)}
+
+    assert enriched[HOSTED]["can_share"] is False
+    assert enriched[WORKFLOW]["can_share"] is True
+    assert dict(square_env.asked_actions) == {"workflow": ("share",)}, "the app bucket must never be asked for share"
 
 
 # ---------------------------------------------------------------------------

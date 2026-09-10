@@ -273,6 +273,7 @@ class TenantPermissionSubjectDirectory:
 
         from bisheng.channel.domain.models.channel import Channel
         from bisheng.core.database import get_async_db_session
+        from bisheng.database.models.app import APP_STATE_DELETED, App
         from bisheng.database.models.assistant import Assistant
         from bisheng.database.models.flow import Flow
         from bisheng.telemetry_search.domain.models.dashboard import Dashboard
@@ -280,7 +281,7 @@ class TenantPermissionSubjectDirectory:
 
         ids_by_type = {
             resource_type: tuple(resource_id for item_type, resource_id in resources if item_type == resource_type)
-            for resource_type in ("workflow", "assistant", "channel", "tool", "dashboard")
+            for resource_type in ("workflow", "assistant", "channel", "tool", "dashboard", "app")
         }
         if not any(ids_by_type.values()):
             return {}
@@ -302,6 +303,18 @@ class TenantPermissionSubjectDirectory:
             if ids_by_type["channel"]:
                 rows = (await session.exec(select(Channel).where(col(Channel.id).in_(ids_by_type["channel"])))).all()
                 labels.update({("channel", str(row.id)): row.name for row in rows})
+            if ids_by_type["app"]:
+                # Hosted applications (F054): ``app.id`` is a str like Flow /
+                # Assistant, and "deleted" is a state, not an ``is_delete`` flag.
+                rows = (
+                    await session.exec(
+                        select(App).where(
+                            col(App.id).in_(ids_by_type["app"]),
+                            App.state != APP_STATE_DELETED,
+                        )
+                    )
+                ).all()
+                labels.update({("app", str(row.id)): row.name for row in rows})
 
             tool_ids = tuple(int(value) for value in ids_by_type["tool"] if value.isdigit())
             if tool_ids:

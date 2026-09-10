@@ -94,11 +94,19 @@ async def get_logs(
     return resp_200(data=await AppQueryService.get_logs(app_id, actor=user, tail=tail, since=since, keyword=keyword))
 
 
-@router.get("/{app_id}/versions", response_model=UnifiedResponseModel[list], summary="Version list (read-only)")
-async def list_versions(app_id: str, user: UserPayload = Depends(UserPayload.get_login_user)):
-    """AC-52 — the shape defined here is the one the card dropdown and the version
-    tab both consume; there is deliberately no switch or rollback write."""
-    return resp_200(data=await AppQueryService.list_versions(app_id, actor=user))
+@router.get("/{app_id}/versions", response_model=UnifiedResponseModel[dict], summary="Version list (read-only)")
+async def list_versions(
+    app_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int | None = Query(default=None, ge=1, le=200, description="omit to receive every version"),
+    user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """AC-52 — ``{"data": [...], "total": n}``; the row shape defined here is the
+    one the card dropdown, the version tab and the publish tab's version list all
+    consume. Without ``page_size`` the list is whole (``total == len(data)``);
+    with it the list is one page and ``total`` counts every version. There is
+    deliberately no switch or rollback write."""
+    return resp_200(data=await AppQueryService.list_versions_page(app_id, actor=user, page=page, page_size=page_size))
 
 
 # ---------------------------------------------------------------------------

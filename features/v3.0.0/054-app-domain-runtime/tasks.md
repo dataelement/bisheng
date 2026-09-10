@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 定稿（65 AC，同日独立审查 28 条已修订；决议-1～8） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日独立审查 16 条修订；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；`/sdd-review tasks` 独立审查 16 条已修订（补 7 个测试任务 T082a/T084a/T086a/T087a/T089a/T090a/T094a + 可观测任务 T097） |
-| 实现 | 🚧 进行中 | Wave 1（T001–T017）· Wave 2 runtime-manager（T018–T031）与 app-proxy（T036–T045）· **Wave 2 backend 入口判定（T032–T035）** · **Wave 3 领域服务与 API（T046–T057）** · **Wave 3 构建页第三类型（T058–T061）** · **Wave 3 platform 前端（T062–T070）** 已完成；`uv run pytest test/app_runtime test/app_publish` = **484 passed / 7 skipped / 1 xfailed**（其中 `test/app_runtime` 单独 229 passed / 7 skipped；总数与 T057 那批的 346 不可直接相比——F055 同期在并发补测试）；`test/workflow/test_flow_dao_tenant_isolation.py` 7 → 8 例全绿，`test/api` 20 例全绿。platform `pnpm lint` + `pnpm typecheck` 全绿，前端单测 3 文件 16 例全通过（`src/test/hostedApp{Api,State,CardComponent}.test.*`）。余 T071 / T072 / T074（部分）/ T075。**2026-08-19 收口批**：勾上 **T073**（nginx 仓内两份同构，实现早于勾选）；**T074 标 🟡 部分完成不勾**——compose 形态此前有三个真缺陷（app-proxy 环境变量名全错 / `bisheng-apps` 网络无人创建 / bind 路径用了容器坐标系），配置面已修正并新增 `docker/verify-app-runtime-compose.sh` 静态契约守卫 + `.github/workflows/app-runtime-quality.yml`，但**没有任何人真的用 compose 起过这两个 service**，逐条见该任务的实际偏差记录。⚠️ **这三个缺陷全部符合同一模式：systemd 形态恰好正确，所以掩盖了 compose 形态**——114 是 systemd，在 114 跑通不能证明 compose 跑得通，凡「两种部署形态」的任务都要分别验。**T062–T070 的联调与 E2E 仍未做**（后端契约现已齐备，可以开跑）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4；逐条偏差见各任务的「实际偏差记录」与文末汇总 |
+| 实现 | 🚧 进行中 | Wave 1（T001–T017）· Wave 2 runtime-manager（T018–T031）与 app-proxy（T036–T045）· **Wave 2 backend 入口判定（T032–T035）** · **Wave 3 领域服务与 API（T046–T057）** · **Wave 3 构建页第三类型（T058–T061）** · **Wave 3 platform 前端（T062–T070）** 已完成；`uv run pytest test/app_runtime test/app_publish` = **484 passed / 7 skipped / 1 xfailed**（其中 `test/app_runtime` 单独 229 passed / 7 skipped；总数与 T057 那批的 346 不可直接相比——F055 同期在并发补测试）；`test/workflow/test_flow_dao_tenant_isolation.py` 7 → 8 例全绿，`test/api` 20 例全绿。platform `pnpm lint` + `pnpm typecheck` 全绿，前端单测 3 文件 16 例全通过（`src/test/hostedApp{Api,State,CardComponent}.test.*`）。余 T072 / T074（部分）/ T075（**T071** 于 2026-09-10 按代码证据核实并勾选）。**2026-08-19 收口批**：勾上 **T073**（nginx 仓内两份同构，实现早于勾选）；**T074 标 🟡 部分完成不勾**——compose 形态此前有三个真缺陷（app-proxy 环境变量名全错 / `bisheng-apps` 网络无人创建 / bind 路径用了容器坐标系），配置面已修正并新增 `docker/verify-app-runtime-compose.sh` 静态契约守卫 + `.github/workflows/app-runtime-quality.yml`，但**没有任何人真的用 compose 起过这两个 service**，逐条见该任务的实际偏差记录。⚠️ **这三个缺陷全部符合同一模式：systemd 形态恰好正确，所以掩盖了 compose 形态**——114 是 systemd，在 114 跑通不能证明 compose 跑得通，凡「两种部署形态」的任务都要分别验。**T062–T070 的联调与 E2E 仍未做**（后端契约现已齐备，可以开跑）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4；逐条偏差见各任务的「实际偏差记录」与文末汇总 |
 
 ---
 
@@ -570,12 +570,13 @@
 
 ### Wave 3 · `[MVP-核心]` 前端 Client（手动验证）
 
-- [ ] **T071**: `[MVP-核心]` Client：读取工场运行时层开关
+- [x] **T071**: `[MVP-核心]` Client：读取工场运行时层开关
   **文件**: `src/frontend/client/src/@types/chat.ts:102`（`BishengConfig.app_runtime_enabled`）, `src/frontend/client/src/hooks/useAppRuntimeEnabled.ts`（新）
   **逻辑**: 用 **react-query v4** 拉 `/api/v1/env`（**不得 import recoil**——lint 冻结）。F056 的广场据此决定是否渲染托管应用；本 Feature 只交付读取能力与类型，不改广场。
   **手动验证**: 开关关 → hook 返回 false；`pnpm typecheck` 通过；client 现有页面行为零变化。
   **覆盖 AC**: AC-62
   **依赖**: T005
+  ✅ 2026-09-10 核实已落地（`src/frontend/client/src/hooks/useAppRuntimeEnabled.ts` + `useAppRuntimeEnabled.test.tsx` 5 例；`hooks/index.ts` 已导出、`@types/chat.ts` 已带 `app_runtime_enabled`）
 
 ### Wave 3 · `[MVP-核心]` 114 部署增量与联调
 

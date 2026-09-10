@@ -22,9 +22,9 @@
 | F053 | dev-cli-skills | A 尾 / B | ✅ Spec 定稿（55 有效 AC，经独立审查修订） | F049, F051, F052 | DEV-03 两包 / DEV-04 CLI 四命令 / DEV-05 本地身份注入 / DEV-01 接入信息区 |
 | F057 | bisheng-sdk | A 尾 / B | ✅ Spec 定稿（36 AC，经独立审查修订） | F052, F053（storage 依赖 F054） | DEV-07 三件套 + 开发者指南 |
 | F058 | openapi-responses | A | ✅ Spec 定稿（36 AC，经独立审查修订） | F050 | 伴生 P1 日常模式会话 Responses 契约（不在 PRD-1） |
-| F054 | app-domain-runtime | B | ✅ Spec 定稿（65 AC，经独立审查重写）· 📝 design / tasks 工作流进行中 | F049 | 托管应用领域模型 / compose 运行时 / app-proxy / RT-01 / RT-07 / RT-08 / GOV-01 类型注册 / 详情页壳 WB-13 · WB-06 / GOV-10 层开关 |
-| F055 | app-publish-pipeline | B | ✅ Spec 定稿（65 AC，经独立审查重写）· design / tasks 待启动 | F054, F049, F051, F052 | RT-03 / RT-04 / RT-05 / deploy 管线 / GOV-02 预置审批流 / GOV-03 档位 / GOV-05 能力总线 / WB-14 · WB-15 |
-| F056 | app-square-governance | B | ✅ Spec 定稿（45 AC，经独立审查修订）· design / tasks 待启动 | F054, F055 | RT-02 广场 / GOV-01 授权交互 / GOV-04 审计 / GOV-07 权限控制 / 事件触达 |
+| F054 | app-domain-runtime | B | ✅ Spec / design / tasks 定稿 · 🚧 实现 72/104（MVP-核心代码面已齐，余 114 部署与非核心波次，见 tasks.md） | F049 | 托管应用领域模型 / compose 运行时 / app-proxy / RT-01 / RT-07 / RT-08 / GOV-01 类型注册 / 详情页壳 WB-13 · WB-06 / GOV-10 层开关 |
+| F055 | app-publish-pipeline | B | ✅ Spec / design / tasks 定稿 · 🚧 实现 52/70（MVP-核心 3.1–3.8 全部完成，余审读 / 预览 / 能力总线等非核心项） | F054, F049, F051, F052 | RT-03 / RT-04 / RT-05 / deploy 管线 / GOV-02 预置审批流 / GOV-03 档位 / GOV-05 能力总线 / WB-14 · WB-15 |
+| F056 | app-square-governance | B | ✅ Spec / design / tasks 定稿 · 🚧 实现 20/33（广场 + 授权已落地，T016 需真实部署跑，余审计面扩展与触达全表） | F054, F055 | RT-02 广场 / GOV-01 授权交互 / GOV-04 审计 / GOV-07 权限控制 / 事件触达 |
 | F059 | k8s-runtime-backend | B | ✅ Spec 定稿（42 有效 AC，经独立审查修订） | F054 | GOV-10 k8s 形态 + 镜像构建与分发（方案 F113，不可裁剪） |
 
 批次 A = 开放能力层（可独立于工场运行时交付，GOV-10）；批次 B = 工场运行时层。建议顺序：A：F049 → F052 → F051 → F053 → F050 →（F058）→ F057；B：F054 → F055 → F056，F059 与 F055 并行。

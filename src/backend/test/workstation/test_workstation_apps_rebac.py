@@ -145,13 +145,15 @@ async def test_used_apps_filter_with_visible_before_pagination():
             limit=20,
         )
 
+    # No ``exclude_flow_types`` here on purpose: hosted-app opens are recorded
+    # as USED_APP_RECENT_TYPE links, so a hosted application is a legitimate
+    # "recently used" entry (workstation/api/endpoints/apps.py) — the recorded
+    # candidate set bounds the list, and ``visible`` still drops what the user
+    # may no longer see.
     filter_by_action.assert_awaited_once_with(
         login_user,
         candidates,
         "visible",
-        # F056: this list's cards open the conversation page, which hosted
-        # applications do not have.
-        exclude_flow_types=CHAT_ENTRY_EXCLUDED_FLOW_TYPES,
     )
     assert result.data["total"] == 1
     assert [item["id"] for item in result.data["list"]] == ["wf-1"]

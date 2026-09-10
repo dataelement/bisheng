@@ -181,6 +181,10 @@ logger_conf:
 # open_api:
 #   service_account_idle_days: 90       # 多少天无调用后在列表里标记为"闲置"
 #   credential_cache_ttl_seconds: 3     # 凭据校验的 Redis 正缓存秒数；硬上限 5，超过按 5 处理
+#   management_ui_enabled: false        # 管理后台是否显示「服务账号」/「个人令牌」两个 tab；默认 false = 不显示
+#                                       # 只管界面可见性、接口不受影响；要在界面上建服务账号 / 签 CLI 部署用的密钥须改 true
+#   pat_enabled: false                  # 个人访问令牌：部署级开关；管理后台另有租户级开关，两层都开才生效（默认都关）
+#   pat_admin_ttl_days: 7               # 管理员持有的个人访问令牌有效期上限（天），取租户默认有效期与本值的较小者
 
 # ── 工场运行时层（F054）─────────────────────────────────────────────────
 # 这一层可以整层不装：enabled 保持 false 时，平台其余部分零变化，

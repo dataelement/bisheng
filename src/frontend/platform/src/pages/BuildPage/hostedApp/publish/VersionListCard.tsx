@@ -8,6 +8,12 @@
  * application. Reusing it would give an empty dropdown that mutates a
  * *workflow* when clicked.
  *
+ * The list is paged through `useTable` (design K11: `react-query` is frozen
+ * on the platform, and this hook is the platform's own table state). It asks
+ * the backend for `{ data, total }` one page at a time; the pager only appears
+ * once there is a second page, because a card with a single row does not need
+ * to announce that it has one page.
+ *
  * The outcome column is mapped through i18n rather than printing the enum:
  * `online` / `rejected` / `withdrawn` are wire values, and an owner reading
  * "withdrawn" in a Chinese UI is reading a database column.
@@ -17,14 +23,18 @@
  * states that look identical in the row data and completely different to the
  * person waiting on them.
  */
+import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
 import {
   getHostedAppErrorMessage,
-  getHostedAppVersionsApi,
+  getHostedAppVersionPageApi,
   type HostedAppVersion,
 } from "@/controllers/API/hostedApp"
-import { useEffect, useState } from "react"
+import { useTable } from "@/util/hook"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { versionOutcomeI18nKey } from "../types"
+
+const PAGE_SIZE = 10
 
 interface VersionListCardProps {
   appId: string
@@ -40,34 +50,49 @@ interface VersionListCardProps {
 
 export function VersionListCard({ appId, reloadKey = "" }: VersionListCardProps) {
   const { t } = useTranslation()
-  const [versions, setVersions] = useState<HostedAppVersion[]>([])
-  const [loading, setLoading] = useState(true)
+  // `useTable` swallows a rejected fetch (it only clears `loading`), and a
+  // non-owner is refused with a business code inside a 200 envelope. The
+  // message is captured here so the refusal is shown, not rendered as "no
+  // versions yet".
   const [failure, setFailure] = useState("")
 
+  const { data, total, page, pageSize, loading, loaded, setPage, reload, filterData } =
+    useTable<HostedAppVersion>(
+      { pageSize: PAGE_SIZE },
+      (param: { page: number; pageSize: number }) =>
+        getHostedAppVersionPageApi(appId, {
+          page: param.page,
+          pageSize: param.pageSize,
+        })
+          .then((res) => {
+            setFailure("")
+            return res
+          })
+          .catch((error: unknown) => {
+            setFailure(
+              getHostedAppErrorMessage(error) ||
+                t("hostedApp.versionList.loadFailed"),
+            )
+            throw error
+          }),
+    )
+
+  // The hook loads on mount by itself; these two only react to *changes*. A
+  // different application starts over from page 1, a moved release re-reads
+  // the page the reader is on.
+  const tableRef = useRef({ reload, filterData })
+  tableRef.current = { reload, filterData }
+  const prevRef = useRef({ appId, reloadKey })
   useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    getHostedAppVersionsApi(appId)
-      .then((rows) => {
-        if (cancelled) return
-        setVersions(rows || [])
-        setFailure("")
-      })
-      .catch((error) => {
-        if (cancelled) return
-        setVersions([])
-        setFailure(
-          getHostedAppErrorMessage(error) ||
-            t("hostedApp.versionList.loadFailed"),
-        )
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [appId, reloadKey, t])
+    const prev = prevRef.current
+    if (prev.appId === appId && prev.reloadKey === reloadKey) return
+    prevRef.current = { appId, reloadKey }
+    if (prev.appId !== appId) tableRef.current.filterData({})
+    else tableRef.current.reload()
+  }, [appId, reloadKey])
+
+  const rows = failure ? [] : data
+  const waiting = loading || !loaded
 
   return (
     <section className="rounded-md border bg-background-login p-4">
@@ -97,7 +122,7 @@ export function VersionListCard({ appId, reloadKey = "" }: VersionListCardProps)
             </tr>
           </thead>
           <tbody>
-            {versions.map((version) => (
+            {rows.map((version) => (
               <tr key={version.version_id} className="border-t">
                 <td className="px-3 py-2">
                   <span className="mr-2">{`v${version.version_no}`}</span>
@@ -122,18 +147,28 @@ export function VersionListCard({ appId, reloadKey = "" }: VersionListCardProps)
         </table>
       </div>
 
-      {loading && (
+      {waiting && (
         <p className="mt-3 text-sm text-muted-foreground">
           {t("hostedApp.versionList.loading")}
         </p>
       )}
-      {!loading && !failure && versions.length === 0 && (
+      {!waiting && !failure && rows.length === 0 && (
         <p className="mt-3 text-sm text-muted-foreground">
           {t("hostedApp.versionList.empty")}
         </p>
       )}
       {!!failure && (
         <p className="mt-3 text-sm text-muted-foreground">{failure}</p>
+      )}
+      {!failure && total > pageSize && (
+        <AutoPagination
+          className="mt-3 justify-end"
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          showTotal={true}
+          onChange={(next: number) => setPage(next)}
+        />
       )}
     </section>
   )

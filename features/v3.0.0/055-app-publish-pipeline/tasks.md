@@ -15,7 +15,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 33 条修订，65 AC 定稿（决议-1～9） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日评审 15 条修订（D1–D16 / 30 坑）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；70 任务 / 7 Wave / 53 条 `[MVP-核心]`（2026-08-17 独立审查 14 条修订：Celery 登记 / 组合根接线 / 跨 Wave 执行序 / 档位依赖链 / 图标落地 / 16207 闸 / T044·T027 拆分 / 路径与 i18n 补齐 / 建桶接线 / 顺延任务测试载体 / 追溯表订正 / T051 上提） |
-| 实现 | 🚧 进行中 | **46 / 70 完成**（Wave 1 + Wave 2 + **Wave 3.1–3.5**（T024–T043）+ **3.8**（T051）+ **T050**（上游回写）落地。2026-08-17 落 T024–T041；**2026-08-19 收口批**核实并勾上 T042 / T043（事件触达——实现早于勾选，服务与两个调用点在 3.1–3.4 那批就已随 `publish_approval_service` / `publish_online_service` 落地）、完成 T051（`withdraw` 终态守卫 + 18118）。`pytest test/app_publish` **343 passed**（2026-08-19 实测，含新增 `test_publish_notification.py` 14 例 + `test_withdraw_guard.py` 15 例）。⚠️ `test/approval` 有 13 例失败，逐条归因为**本批之前就红的既有漂移**（4–5 例本地 MySQL 未起、6 例 fake 与被测 API 漂移、2 例断言漂移），无一走 `withdraw_instance`——详见 T051 偏差记录与 followup）。剩余 Wave 3：3.6–3.7 前端（T044–T048，**代码已在工作区落地但本文未勾**——本次收口 agent 未收到那几波的实施结论，不替它们勾）· 3.9 只剩 **T049**（114 部署与手动验证；T050 上游回写已于 2026-08-19 完成并勾选）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | **52 / 70 完成**（Wave 1 + Wave 2 + **Wave 3.1–3.5**（T024–T043）+ **3.8**（T051）+ **T050**（上游回写）落地。2026-08-17 落 T024–T041；**2026-08-19 收口批**核实并勾上 T042 / T043（事件触达——实现早于勾选，服务与两个调用点在 3.1–3.4 那批就已随 `publish_approval_service` / `publish_online_service` 落地）、完成 T051（`withdraw` 终态守卫 + 18118）。`pytest test/app_publish` **343 passed**（2026-08-19 实测，含新增 `test_publish_notification.py` 14 例 + `test_withdraw_guard.py` 15 例）。⚠️ `test/approval` 有 13 例失败，逐条归因为**本批之前就红的既有漂移**（4–5 例本地 MySQL 未起、6 例 fake 与被测 API 漂移、2 例断言漂移），无一走 `withdraw_instance`——详见 T051 偏差记录与 followup）。剩余 Wave 3：3.6 只剩 **T044b**（另批核实；**T044a / T045–T048 于 2026-09-10 按代码证据核实并勾选**，逐条证据见各任务末行）· 3.9 只剩 **T049**（114 部署与手动验证；T050 上游回写已于 2026-08-19 完成并勾选）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -419,7 +419,7 @@ T001–T007（Wave 1，可并行）
 
 #### 3.6 前端 Platform（手动验证）
 
-- [ ] **T044a**: `[MVP-核心]` Platform：发布面 API 层 + 审批状态卡
+- [x] **T044a**: `[MVP-核心]` Platform：发布面 API 层 + 审批状态卡
   **文件**: `src/frontend/platform/src/controllers/API/hostedApp.ts`（F054 已建，**增量**加 `getPublishStatus` / `manualPublish` / `getVersions` / `withdrawApproval` 四个方法）, `src/frontend/platform/src/pages/BuildPage/hostedApp/publish/ApprovalStatusCard.tsx`（新）, `src/frontend/platform/public/locales/{zh-Hans,en,ja}/bs.json`（三语一组：本卡新增 key；**与 T045 是同一组文件、必须同 PR**）
   **逻辑**:
   - 四个 API 方法：`getPublishStatus(appId)` → `GET /api/v1/apps/{appId}/publish-status`（T041）· `manualPublish(appId)` → `POST /api/v1/apps/{appId}/publish/manual-publish` · `getVersions(appId, params)` → 版本列表（**返回体须是 `{data,total}`**，供 T044b 的 `useTable` 消费）· `withdrawApproval(instanceId)` → 直接调既有 `POST /api/v1/approval/instances/{id}/withdraw`（**不新建撤回端点**）。**一律经 `controllers/request` 封装，禁 `import axios`**（C7）。
@@ -428,8 +428,9 @@ T001–T007（Wave 1，可并行）
   **手动验证**: 打开 `http://192.168.106.114:3001/build/apps/{appId}` 的「发布」tab —— ① 在途时状态卡显示「待审」且「撤回」可点，点后变「已撤回」；② 驳回后能看到**理由全文**（不截断）；③ 待上线（资源不足）时出现「手动上线」，点击成功后状态变「已上线」；④ 非 owner 打开**不整页跳 `/403`**，而是看到只读或提示区块；⑤ 切 en / ja 无裸键名。
   **覆盖 AC**: AC-32, AC-33, AC-34, AC-62
   **依赖**: T041
+  ✅ 2026-09-10 核实已落地（`src/frontend/platform/src/controllers/API/hostedApp.ts` 的 `getPublishStatusApi` / `manualPublishViaPipelineApi` / `withdrawApprovalApi` 三方法 + `pages/BuildPage/hostedApp/publish/ApprovalStatusCard.tsx` 已接入；版本列表方法见 T044b 偏差注（2026-09-10 已改 `{data,total}` 分页契约））
 
-- [ ] **T044b**: `[MVP-核心]` Platform：版本列表卡 + 危险操作卡 + 填 F054 slot
+- [x] **T044b**: `[MVP-核心]` Platform：版本列表卡 + 危险操作卡 + 填 F054 slot
   **文件**: `src/frontend/platform/src/pages/BuildPage/hostedApp/publish/{VersionListCard,DangerZoneCard}.tsx`（新，**每块一个文件**，避开 F054 `PublishTab.tsx` 与 600 行硬规）, `src/frontend/platform/src/pages/BuildPage/hostedApp/tabs/PublishTab.tsx`（**只填 slot**，不重写壳）, `src/frontend/platform/public/locales/{zh-Hans,en,ja}/bs.json`（三语一组：本批新增 key；同 T044a / T045 一组）
   **逻辑**:
   - `VersionListCard`：只读列表（版本号 / 类型 / 提交时间 / 终态标注；待上线版本显示「待上线」），**不提供回滚入口**。⚠️ **绝不复用 `CardSelectVersion`**（`BuildPage/CardSelectVersion.tsx`）——它**切换即写库**（`handleChange :25-31` 调 `changeCurrentVersion`），且 `version_list` 对托管应用**恒空**（坑 29）。数据拉取用 `util/hook.ts:215 useTable`（**要求接口返回 `{data,total}`**，否则 `:238` 直接 console.error）。
@@ -439,24 +440,27 @@ T001–T007（Wave 1，可并行）
   **手动验证**: 同一「发布」tab —— ① 版本列表只读、无任何切换 / 回滚控件；② 手动上线成功后版本列表该行终态由「待上线」变「已上线」且**不多出一行**；③ 「提交发布」置灰并提示走 `bisheng deploy`；④ 已上线态下删除按钮置灰并提示「请先下线」；⑤ F056 的可见范围槽位为空时布局不塌；⑥ 三卡同屏布局正常、无横向滚动。
   **覆盖 AC**: AC-06, AC-39, AC-61
   **依赖**: T044a
+  ✅ 2026-09-10 收尾并勾选。DangerZoneCard / 三卡填 slot / AC-06「提交发布」置灰并提示走 `bisheng deploy` 早已落地（`hostedApp/index.tsx:132-156`、`publish/DangerZoneCard.tsx`、`publish/ApprovalStatusCard.tsx:140-148`），本批只补版本列表的分页契约。**实际偏差记录**：①**版本列表契约**——`GET /api/v1/apps/{app_id}/versions` 返回体由裸数组改为 **`{data,total}`**，新增查询参数 `page`（≥1，默认 1）/ `page_size`（1–200，**缺省 = 不分页、整表返回、`total == len(data)`**；越界 422 不静默夹紧；超出末页答空 `data` 不报错），行形状（`version_id / version_no / kind / terminal_state / submitted_at / is_current / is_pending`）不变；服务侧新增 `AppQueryService.list_versions_page`，切片在内存做而非 SQL `LIMIT/OFFSET`——数据以单应用部署次数为界、卡片下拉本就整表读取（要找运行中版本，分页可能不含它），且 `AppVersionDao` 的 INSERT-only 结构断言（`test_app_state_service_registry.py::test_version_insert_only_no_update_method` 钉死方法集）不值得为一个 count 方法开口；后端单测 `test/app_runtime/test_apps_api.py::TestVersions` 2 例（信封 + 跨页 `total` / 末页 / 越界 / 422）。②**前端 API 拆两个方法**：`getHostedAppVersionPageApi(appId, {page, pageSize})` 回 `{data,total}` 供 `useTable`；`getHostedAppVersionsApi(appId)` 保留数组返回（拆信封）供卡片下拉与版本 tab，后两处调用方零改动。③`VersionListCard` 改 `util/hook.ts useTable`（pageSize 10；只有超过一页才渲染 `AutoPagination`，复用 `pagination.totalPrefix / totalSuffixWithPageSize` 既有文案，**本批未新增 i18n key**）；`useTable` 吞掉拒绝（只清 loading），卡内在 `apiFun` 里截获业务码文案后再抛回，非 owner 的 16106 显示为提示而不是「暂无版本记录」；`appId` 变更回第 1 页重拉、`reloadKey` 变更留在当前页重拉。验证：`pytest test/app_runtime` 309 passed / 13 skipped；platform `vitest`（hostedAppApi / hostedAppState / publishVocabulary / visibilityScope 31 例）、`pnpm typecheck`、`pnpm lint`、`check-i18n` 全绿。
 
-- [ ] **T045**: `[MVP-核心]` Platform：审计前端 lockstep + 三语 i18n
+- [x] **T045**: `[MVP-核心]` Platform：审计前端 lockstep + 三语 i18n
   **文件**: `src/frontend/platform/src/controllers/API/log.ts`（`actions` / `getModulesApi` 加 `app.release.*`）, `src/frontend/platform/public/locales/{zh-Hans,en,ja}/bs.json`（三语一组：`log.systemIdEnum` / `log.eventTypeEnum` + 发布面新增 key）
   **逻辑**: 完成 design 坑 21 的**四处 lockstep 的第 2–4 处**（第 1 处是 T006）——**必须与 T006 同 PR**，漏任一处 = 事件写库了但审计页与筛选下拉一条看不到，排查半天以为审计没写。同批补 T044a / T044b 发布面的三语 key（**`bs.json` 三语是本任务与 T044a/T044b 共用的同一组文件，三者必须同 PR**；新 key 三语齐全，CI `pnpm check-i18n` 校验 key parity）。**不加铃铛**（PRD §3.0.3：管理后台不设消息面）。
   **手动验证**: 审计页「系统操作」筛选出现「应用」命名空间，筛选后能看到 `app.release.submit` / `approval_created` / `approved` / `online` 四条且带应用名；切换 en / ja 无裸键名。
   **覆盖 AC**: AC-01
   **依赖**: T006, T044a, T044b
+  ✅ 2026-09-10 核实已落地（`src/frontend/platform/src/controllers/API/log.ts` 的 `V2_ACTIONS` 含 `app.release.*` 全量并经 `actionToI18nKey` 映射；`public/locales/{zh-Hans,en-US,ja}/bs.json` 的 `log.eventTypeEnum.appRelease*` 三语齐）
 
-- [ ] **T046**: `[MVP-核心]` Platform：审批场景配置补 `tenant_admin` 来源选项
+- [x] **T046**: `[MVP-核心]` Platform：审批场景配置补 `tenant_admin` 来源选项
   **文件**: `src/frontend/platform/src/pages/ApprovalPage/index.tsx`（`APPROVER_SOURCE_OPTIONS`，约 `:590-597`）
   **逻辑**: 该下拉今天**只有 6 项、没有 `tenant_admin`**，而 `APPROVER_SOURCE_LABEL_KEYS`（`:180-188`）与三语（`bs.json` 的 `approverSource.tenant_admin`，**两处** `:1832` / `:1842`）**早就有**（坑 23）→ 只需补选项一行。不补 = 租户管理员一旦改配审批人，就**再也没法把「租户管理员」这个来源加回来**，AC-19 半残。「应用发布」场景**自动出现在左栏列表**（seed 落库即有，`:1632-1700`）且因已存在而不出现在「新增」下拉（`:232`）→ AC-19 的"展示"部分**零前端改动**。场景名 `应用发布` 是**后端硬编码中文**、前端直接渲染 `s.scenario_name`（`:1660`）——**接受中文单语**（与既有三场景一致，坑 24），不另开映射表。
   **手动验证**: 管理后台 → 审批中心 → 场景配置 → 左栏出现「应用发布」并展示预置配置（单条无条件分支 / 单节点或签 / 两个来源）；改配审批人时下拉里能选到「租户管理员」；改完后新发布按新配置生成审批单，重启后端不被重置。
   **覆盖 AC**: AC-19
   **依赖**: T027a
+  ✅ 2026-09-10 核实已落地（`src/frontend/platform/src/pages/ApprovalPage/approverSources.ts` 含 `tenant_admin` 来源，`ApprovalPage/index.tsx` 消费该表）
 
 #### 3.7 前端 Client（手动验证）
 
-- [ ] **T047**: `[MVP-核心]` Client：审批单四分区面板 + 驳回理由必填 + i18n 债
+- [x] **T047**: `[MVP-核心]` Client：审批单四分区面板 + 驳回理由必填 + i18n 债
   **文件**: `src/frontend/client/src/components/approval/AppPublishDetailPanel.tsx`（新）, **存量落点（2026-09-10 改接 beta2 后，原 `ApprovalCenterDialog.tsx` 已删）**：`src/frontend/client/src/components/approval/ApprovalDetailPanels.tsx`（早分派）· `approval/approvalPresentation.tsx`（`DETAIL_INTERNAL_KEYS` / `DetailHeader`）· `approval/ApprovalPane.tsx`（驳回必填）, `src/frontend/client/src/locales/{zh-Hans,en,ja}/translation.json`（三语一组：四分区面板文案 + 抽出的 4 条中文；**与 T048 是同一组文件、必须同 PR**——新 key 三语同 PR 是根 AGENTS.md 硬规、CI `pnpm check-i18n` 拦）
   **逻辑**:
   - 在 `approval/ApprovalDetailPanels.tsx` 的 `TaskDetailPanel` / `RequestDetailPanel` 内按 `detail.scenario_code === 'app_publish_request'` **早分派**到新组件（**不建通用注册表**——一个场景不值得，既有先例 `canRevoke :378-382` 就是"顶层算个布尔 + 条件渲染"；出现第二个场景时再抽，D14）。（vibe 期落点 `ApprovalCenterDialog.tsx` 已随 beta2 拆分删除。）
@@ -468,13 +472,15 @@ T001–T007（Wave 1，可并行）
   **手动验证**: 用审批人账号登录 `http://192.168.106.114:4001/workspace` → 审批中心 → 打开应用发布单：① 详情是**四分区**而不是两列网格，无 `[object Object]`、无裸英文键名；② 不填理由点「驳回」按钮**置灰点不动**，填了才可点；③ 点「通过」不填评论可提交；④ 无「查看待上线版本」按钮（不出死链）；⑤ `pnpm lint` 通过。
   **覆盖 AC**: AC-24
   **依赖**: T029
+  ✅ 2026-09-10 核实已落地（`src/frontend/client/src/components/approval/AppPublishDetailPanel.tsx` 四分区，`ApprovalDetailPanels.tsx` 按 `isAppPublishScenario` 早分派；`ApprovalPane.tsx` 驳回按钮 `disabled={actionLoading || !decisionComment.trim()}`）
 
-- [ ] **T048**: `[MVP-核心]` Client：站内信场景文案 + 三语 key
+- [x] **T048**: `[MVP-核心]` Client：站内信场景文案 + 三语 key
   **文件**: `src/frontend/client/src/components/messageApproval/notificationContent.ts`（`APPROVAL_TASK_SCENARIO_TEXT_KEYS`；2026-09-10 改接 beta2 后原 `NotificationsDialog.tsx` 已删）, `src/frontend/client/src/locales/{zh-Hans,en,ja}/translation.json`（三语一组）
   **逻辑**: **一处代码**：`APPROVAL_TASK_SCENARIO_TEXT_KEYS` 加 `app_publish_request: 'com_notifications_action_request_app_publish'`（同族键 `com_notifications_action_request_channel` 在 `zh-Hans:489` / `en:501` / `ja:486`）。**三语 key**：该键 + `approval_instance_cancelled` + **两条非审批类** `com_notifications_action_app_publish_pending_capacity` / `com_notifications_action_app_publish_deploy_failed`——后两者走 `messageApproval/NotificationRow.tsx` 的兜底 key `com_notifications_action_{action_code}`**零前端代码**，前提是发送侧用中性 `message_type`（T042 的发送契约）。
   **手动验证**: 审批人铃铛出现「提交了应用发布申请」（**不是裸 action_code**）；owner 在待上线时收到「资源不足」通知且**没有跳转按钮**（AC-65）；切 en / ja 无裸键。
   **覆盖 AC**: AC-64, AC-65
   **依赖**: T043, T047
+  ✅ 2026-09-10 核实已落地（`src/frontend/client/src/components/messageApproval/notificationContent.ts` 的 `app_publish_request` / `app_publish_pending_capacity` / `app_publish_deploy_failed` 文案键 + `locales/{zh-Hans,en,ja}/translation.json` 三语齐）
 
 #### 3.8 `withdraw` 终态守卫（§6 字面读法留在 MVP 内）
 

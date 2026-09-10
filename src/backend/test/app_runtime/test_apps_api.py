@@ -28,41 +28,47 @@ def _data(response):
     return body
 
 
+async def _add_versions(app_db, app, version_nos):
+    """Append iteration versions ``version_nos`` to ``app`` straight through the DAO."""
+    from bisheng.database.models.app_version import VERSION_KIND_ITERATION, AppVersion, AppVersionDao
+
+    async with app_db() as session:
+        for version_no in version_nos:
+            row = AppVersion(
+                app_id=app.id,
+                version_no=version_no,
+                kind=VERSION_KIND_ITERATION,
+                code_object_key=f"apps/x/v{version_no}/code.tar.gz",
+                manifest={},
+                capabilities={},
+                injections={},
+                tier_id="light",
+                runtime="python3.11",
+            )
+            await AppVersionDao.ainsert(session, row)
+        await session.commit()
+
+
 class TestVersions:
     async def test_versions_endpoint_path_and_shape(self, api_app, app_db, app_factory, app_owner):
-        """AC-52 — the path and the row shape are defined *here*.
+        """AC-52 — the path, the ``{data, total}`` envelope and the row shape are
+        defined *here*.
 
-        The card dropdown, the version tab and the CLI all read this one
-        endpoint; letting each derive its own shape is how ``version_list`` from
-        ``FlowVersionDao`` ended up wired to a hosted app in the first place
-        (pit 13).
+        The card dropdown, the version tab and the publish tab's version list all
+        read this one endpoint; letting each derive its own shape is how
+        ``version_list`` from ``FlowVersionDao`` ended up wired to a hosted app
+        in the first place (pit 13). Without paging parameters the list is whole
+        — the dropdown looks for the running version, which a page may not hold.
         """
-        from bisheng.database.models.app_version import VERSION_KIND_ITERATION, AppVersion, AppVersionDao
-
         app, _first = await app_factory(state=AppState.ONLINE.value)
-
-        async def _add_second():
-            async with app_db() as session:
-                row = AppVersion(
-                    app_id=app.id,
-                    version_no=2,
-                    kind=VERSION_KIND_ITERATION,
-                    code_object_key="apps/x/v2/code.tar.gz",
-                    manifest={},
-                    capabilities={},
-                    injections={},
-                    tier_id="light",
-                    runtime="python3.11",
-                )
-                await AppVersionDao.ainsert(session, row)
-                await session.commit()
-
-        await _add_second()
+        await _add_versions(app_db, app, [2])
 
         body = _data(await api_app(app_owner.payload).get(f"/api/v1/apps/{app.id}/versions"))
 
-        rows = body["data"]
+        assert set(body["data"]) == {"data", "total"}
+        rows = body["data"]["data"]
         assert [row["version_no"] for row in rows] == [2, 1]
+        assert body["data"]["total"] == 2
         assert set(rows[0]) == {
             "version_id",
             "version_no",
@@ -72,6 +78,31 @@ class TestVersions:
             "is_current",
             "is_pending",
         }
+
+    async def test_versions_endpoint_pages_with_total_across_pages(self, api_app, app_db, app_factory, app_owner):
+        """F055 T044b — ``page`` / ``page_size`` slice the newest-first list and
+        ``total`` still counts every version, which is what ``useTable`` needs to
+        draw the pager; a page past the end is empty, not an error."""
+        app, _first = await app_factory(state=AppState.ONLINE.value)
+        await _add_versions(app_db, app, [2, 3, 4, 5])
+        client = api_app(app_owner.payload)
+
+        first = _data(await client.get(f"/api/v1/apps/{app.id}/versions", params={"page": 1, "page_size": 2}))["data"]
+        assert [row["version_no"] for row in first["data"]] == [5, 4]
+        assert first["total"] == 5
+
+        last = _data(await client.get(f"/api/v1/apps/{app.id}/versions", params={"page": 3, "page_size": 2}))["data"]
+        assert [row["version_no"] for row in last["data"]] == [1]
+        assert last["total"] == 5
+        # ``is_current`` is computed against the app row, not against the page.
+        assert last["data"][0]["is_current"] is True
+
+        beyond = _data(await client.get(f"/api/v1/apps/{app.id}/versions", params={"page": 4, "page_size": 2}))["data"]
+        assert beyond == {"data": [], "total": 5}
+
+        # Bounds are validated at the edge (FastAPI 422), not silently clamped.
+        assert (await client.get(f"/api/v1/apps/{app.id}/versions", params={"page": 0})).status_code == 422
+        assert (await client.get(f"/api/v1/apps/{app.id}/versions", params={"page_size": 0})).status_code == 422
 
     async def test_versions_endpoint_non_owner_gets_business_code_not_403(self, api_app, app_factory, normal_user):
         """Pit 25 — an HTTP 403 here would navigate the SPA away from the page."""

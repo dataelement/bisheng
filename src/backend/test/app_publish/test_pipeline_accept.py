@@ -81,8 +81,15 @@ async def _accept(package: Path, principal, **kwargs):
 
 
 async def test_first_deploy_creates_draft_app_via_f054_create_app(
-    publish_db, tier_seed, tarball_factory, fake_minio, service_account_principal, fake_f054_services,
-    fake_publish_approval, audit_sink, enqueued,
+    publish_db,
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    service_account_principal,
+    fake_f054_services,
+    fake_publish_approval,
+    audit_sink,
+    enqueued,
 ):
     """F055 must not write ``app`` itself (决议-8); the owner is the credential's resource owner."""
     from bisheng.database.models.app import AppDao
@@ -99,25 +106,44 @@ async def test_first_deploy_creates_draft_app_via_f054_create_app(
         assert await AppDao.aget(session, "app-created-by-f054") is None, "no app row is written by F055"
 
 
-async def test_owner_read_from_resource_owner_user_id_not_subject_user_id(
-    tier_seed, tarball_factory, fake_minio, service_account_principal, fake_f054_services, fake_publish_approval,
-    audit_sink, enqueued,
+async def test_owner_read_from_resource_owner_user_id_not_actor_id(
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    service_account_principal,
+    fake_f054_services,
+    fake_publish_approval,
+    audit_sink,
+    enqueued,
 ):
-    """坑 28 — the acting subject is a service account and is nobody's owner."""
+    """坑 28 / M9 — the acting subject is a service account and is nobody's owner.
+
+    Under beta2 the actor is ``service_account.id`` (``actor_kind`` /
+    ``actor_id``) — not a user row at all (M4) — and whatever the key creates
+    belongs to the account's ``resource_owner_user_id``.
+    """
     from .conftest import SERVICE_ACCOUNT_USER_ID
 
     fake_f054_services.responses["create_draft"] = "app-1"
     principal = service_account_principal(resource_owner_user_id=OWNER_USER_ID)
-    assert principal.subject_user_id == SERVICE_ACCOUNT_USER_ID
+    assert (principal.actor_kind, principal.actor_id) == ("service_account", SERVICE_ACCOUNT_USER_ID)
+    assert principal.effective_user_id is None, "a service account acting as itself is no user"
 
     await _accept(tarball_factory(), principal)
     create = dict(next(payload for name, payload in fake_f054_services.calls if name == "create_draft"))
-    assert create["owner_user_id"] == OWNER_USER_ID != SERVICE_ACCOUNT_USER_ID
+    assert create["owner_user_id"] == OWNER_USER_ID != principal.actor_id
 
 
 async def test_iteration_deploy_requires_owner_match_else_16205(
-    tier_seed, tarball_factory, fake_minio, app_factory, service_account_principal, fake_f054_services,
-    fake_publish_approval, audit_sink, enqueued,
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    app_factory,
+    service_account_principal,
+    fake_f054_services,
+    fake_publish_approval,
+    audit_sink,
+    enqueued,
 ):
     """A key may publish, its resource owner decides *whose* apps (AC-04)."""
     from bisheng.common.errcode.app_publish import AppNotOwnedBySubjectError
@@ -130,8 +156,16 @@ async def test_iteration_deploy_requires_owner_match_else_16205(
 
 
 async def test_retry_deploy_reuses_same_app_id_not_new_draft(
-    publish_db, tier_seed, tarball_factory, fake_minio, app_factory, service_account_principal, fake_f054_services,
-    fake_publish_approval, audit_sink, enqueued,
+    publish_db,
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    app_factory,
+    service_account_principal,
+    fake_f054_services,
+    fake_publish_approval,
+    audit_sink,
+    enqueued,
 ):
     """The CLI stores ``app_id`` with the project, so a retry is an iteration (design D2-B)."""
     app_row, _ = await app_factory(with_version=False)
@@ -149,8 +183,15 @@ async def test_retry_deploy_reuses_same_app_id_not_new_draft(
 
 
 async def test_active_approval_blocks_new_submit_16251(
-    tier_seed, tarball_factory, fake_minio, app_factory, service_account_principal, fake_f054_services,
-    fake_publish_approval, audit_sink, enqueued,
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    app_factory,
+    service_account_principal,
+    fake_f054_services,
+    fake_publish_approval,
+    audit_sink,
+    enqueued,
 ):
     """Checked *before* the gate — the gate's own answer to a duplicate is a silent 200 (坑 8)."""
     from bisheng.common.errcode.app_publish import AppApprovalInFlightError
@@ -167,8 +208,15 @@ async def test_active_approval_blocks_new_submit_16251(
 
 
 async def test_pending_online_state_blocks_new_submit_16252(
-    tier_seed, tarball_factory, fake_minio, app_factory, service_account_principal, fake_f054_services,
-    fake_publish_approval, audit_sink, enqueued,
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    app_factory,
+    service_account_principal,
+    fake_f054_services,
+    fake_publish_approval,
+    audit_sink,
+    enqueued,
 ):
     from bisheng.common.errcode.app_publish import AppPendingOnlineError
 
@@ -185,16 +233,25 @@ async def test_pending_online_state_blocks_new_submit_16252(
 
 
 async def test_deployment_row_created_with_stage_received(
-    publish_db, tier_seed, tarball_factory, fake_minio, app_factory, service_account_principal, fake_f054_services,
-    fake_publish_approval, audit_sink, enqueued,
+    publish_db,
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    app_factory,
+    service_account_principal,
+    fake_f054_services,
+    fake_publish_approval,
+    audit_sink,
+    enqueued,
 ):
     from bisheng.app_publish.domain.models.app_deployment import (
         STAGE_RECEIVED,
         STATUS_RUNNING,
         AppDeploymentDao,
     )
+    from bisheng.app_publish.domain.services.publish_pipeline_service import NO_NATURAL_PERSON_SUBMITTER
 
-    from .conftest import SERVICE_ACCOUNT_USER_ID
+    from .conftest import SERVICE_ACCOUNT_NAME, SERVICE_ACCOUNT_USER_ID
 
     app_row, _ = await app_factory(with_version=False)
     result = await _accept(tarball_factory(), service_account_principal(), app_id=app_row.id)
@@ -202,16 +259,38 @@ async def test_deployment_row_created_with_stage_received(
     async with publish_db() as session:
         row = await AppDeploymentDao.aget(session, result.deployment_id)
     assert (row.stage, row.status) == (STAGE_RECEIVED, STATUS_RUNNING)
-    assert (row.owner_user_id, row.submitted_by_user_id) == (OWNER_USER_ID, SERVICE_ACCOUNT_USER_ID)
+    # The owner is the credential's resource owner. ``submitted_by_user_id`` is a
+    # *user* id column and a beta2 service account is not a user row (M4), so it
+    # holds the platform's "no natural person" value — never the account's own
+    # id, which would name whichever person happens to share that number.
+    assert (row.owner_user_id, row.submitted_by_user_id) == (OWNER_USER_ID, NO_NATURAL_PERSON_SUBMITTER)
+    assert row.submitted_by_user_id != SERVICE_ACCOUNT_USER_ID
     assert row.manifest["runtime"] == "python3.11"
     assert row.tier_code == "light", "an undeclared tier resolves to 轻量 at receive time (AC-46)"
     assert enqueued == [result.deployment_id], "the async leg is handed off exactly once"
     assert "app.release.submit" in {call["action"] for call in audit_sink}
+    # "Which service account ran deploy" lives on the audit row, in beta2's
+    # ``open_api.call`` convention: operator 0 + the account's name, actor in
+    # the metadata.
+    submit = next(call for call in audit_sink if call["action"] == "app.release.submit")
+    assert (submit["operator_id"], submit["operator_name"]) == (NO_NATURAL_PERSON_SUBMITTER, SERVICE_ACCOUNT_NAME)
+    assert (submit["metadata"]["actor_kind"], submit["metadata"]["actor_id"]) == (
+        "service_account",
+        SERVICE_ACCOUNT_USER_ID,
+    )
 
 
 async def test_version_id_generated_at_accept_and_reused_by_version_row(
-    publish_db, tier_seed, tarball_factory, fake_minio, app_factory, service_account_principal, fake_f054_services,
-    fake_publish_approval, audit_sink, enqueued,
+    publish_db,
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    app_factory,
+    service_account_principal,
+    fake_f054_services,
+    fake_publish_approval,
+    audit_sink,
+    enqueued,
 ):
     """The object key is minted with the version id; there is no staging key and no copy (design D2)."""
     from bisheng.app_publish.domain.models.app_deployment import AppDeploymentDao
@@ -227,8 +306,15 @@ async def test_version_id_generated_at_accept_and_reused_by_version_row(
 
 
 async def test_meta_not_updated_at_accept(
-    tier_seed, tarball_factory, fake_minio, app_factory, service_account_principal, fake_f054_services,
-    fake_publish_approval, audit_sink, enqueued,
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    app_factory,
+    service_account_principal,
+    fake_f054_services,
+    fake_publish_approval,
+    audit_sink,
+    enqueued,
 ):
     """AC-05 updates metadata after precheck and the scan pass — never on receipt."""
     app_row, _ = await app_factory(with_version=False)
@@ -237,8 +323,16 @@ async def test_meta_not_updated_at_accept(
 
 
 async def test_accept_returns_deployment_id_within_seconds_no_rpc(
-    tier_seed, tarball_factory, fake_minio, app_factory, service_account_principal, fake_f054_services,
-    fake_publish_approval, fake_orchestrator, audit_sink, enqueued,
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    app_factory,
+    service_account_principal,
+    fake_f054_services,
+    fake_publish_approval,
+    fake_orchestrator,
+    audit_sink,
+    enqueued,
 ):
     """Design D1's choice C, asserted: an unreachable manager cannot slow this leg down."""
     app_row, _ = await app_factory(with_version=False)
@@ -249,8 +343,16 @@ async def test_accept_returns_deployment_id_within_seconds_no_rpc(
 
 
 async def test_illegal_package_rejected_before_anything_is_created(
-    publish_db, tier_seed, tarball_factory, fake_minio, app_factory, service_account_principal, fake_f054_services,
-    fake_publish_approval, audit_sink, enqueued,
+    publish_db,
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    app_factory,
+    service_account_principal,
+    fake_f054_services,
+    fake_publish_approval,
+    audit_sink,
+    enqueued,
 ):
     """A hostile package leaves no deployment row, no object and no draft app."""
     from bisheng.app_publish.domain.models.app_deployment import AppDeploymentDao
@@ -267,8 +369,16 @@ async def test_illegal_package_rejected_before_anything_is_created(
 
 
 async def test_runtime_layer_disabled_is_16207(
-    tier_seed, tarball_factory, fake_minio, app_factory, service_account_principal, app_runtime_settings,
-    fake_f054_services, fake_publish_approval, audit_sink, enqueued,
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    app_factory,
+    service_account_principal,
+    app_runtime_settings,
+    fake_f054_services,
+    fake_publish_approval,
+    audit_sink,
+    enqueued,
 ):
     """A deployment without the app factory says so on the first call, not after a build times out."""
     from bisheng.common.errcode.app_publish import AppPublishRuntimeLayerDisabledError

@@ -59,9 +59,13 @@ _APP_COMPAT_PAGE_SCAN_BATCH_SIZE = 50
 
 #: F056: hosted applications are asked for ``use`` in the square, matching the
 #: public entry's own decision (``check_business_action("app", id, actor,
-#: "use")``). ``share`` is absent because there is no share-token bypass for a
-#: hosted application — requesting it would fabricate a capability.
-_SQUARE_ACTIONS_BY_TYPE: dict[str, tuple[str, ...]] = {"app": ("use", "edit")}
+#: "use")``). This pins only *which action decides visibility* for a type; any
+#: further actions come from the caller's ``additional_actions`` exactly as for
+#: the other types, so a caller that lazy-loads per-card actions (beta1
+#: ``7559c9871``, ``additional_actions=()``) asks the ``app`` bucket for ``use``
+#: alone. ``share`` is never legal for ``app`` (``catalog_policy.py``, K6) and is
+#: dropped by ``_legal_actions_for`` — there is no share-token bypass for a
+#: hosted application, and requesting it would fabricate a capability.
 _SQUARE_VISIBILITY_ACTION_BY_TYPE: dict[str, str] = {"app": "use"}
 
 #: F056: hosted-application states the square lists. "stopped" stays visible on
@@ -603,6 +607,13 @@ class WorkFlowService(BaseService):
         """
         normalized_page_size = max(int(page_size or 1), 1)
         requested_actions = tuple(dict.fromkeys((action, *additional_actions)))
+        # The per-type override swaps the visibility action only; the extras stay
+        # the caller's. Pinning a full tuple here would silently re-add ``edit``
+        # for hosted applications after every caller stopped asking for it.
+        square_actions_by_type = {
+            resource_type: tuple(dict.fromkeys((visibility_action, *additional_actions)))
+            for resource_type, visibility_action in _SQUARE_VISIBILITY_ACTION_BY_TYPE.items()
+        }
 
         visible: list[dict] = []
         visible_actions: dict[str, frozenset[str]] = {}
@@ -634,7 +645,7 @@ class WorkFlowService(BaseService):
                     user,
                     batch,
                     requested_actions,
-                    actions_by_type=_SQUARE_ACTIONS_BY_TYPE,
+                    actions_by_type=square_actions_by_type,
                 )
                 # Per row, not one action for the whole page: the hosted-application
                 # entry decides with ``use`` (F054), and asking the square with

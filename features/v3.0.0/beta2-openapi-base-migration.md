@@ -23,7 +23,7 @@
 | M10 | 托管应用运行期凭据主体 `hosted_app`（F055 T055）**本轮不做**；届时新增迁移放宽 `ck_api_credential_subject_kind` 并注册解析器；vibe 的 `SUBJECT_KIND_HOSTED_APP` / `SUBJECT_KIND_SHARE_LINK` 随 vibe 模型作废 | MVP-核心顺延项；不改 highway 的迁移文件 |
 | M11 | 密钥泄漏扫描新增 `bs_pat` 规则（`PERSONAL_TOKEN_PREFIX`），正负样本各一 | 伴生 PRD §4.2.6「两个前缀都要注册」；beta 线没有扫描器，此项只能在应用工场侧做 |
 | M12 | 错误码：`common/errcode/open_api.py` 取 beta2；vibe 独有 26012 / 26028 若合并后仍有消费者，按 beta2 段内空号补回；26029 语义按 beta2（不能当归属人）；前端 `api_errors` SSOT 冲突块取 beta2、vibe 独有 16xxx / 26xxx 文案保留、六份产物一律重跑 `build.mjs` | `project_beta1_to_vibe_sync_playbook`：`git checkout --theirs` 会丢 65 条文案 |
-| M13 | OpenFGA 模型取并集（beta2 `service_account` 主体类型 + vibe `app` 资源类型），`MODEL_VERSION` 升 `f048-v4` | 两侧都把各自的形状叫 `f048-v3`，并集是第三个形状；版本串只为可读，不能一名二物 |
+| M13 | OpenFGA 模型取并集（beta2 `service_account` 主体类型 + vibe `app` 资源类型），`MODEL_VERSION` 升 `f048-v5` | 两侧都把各自的形状叫 `f048-v3`，并集是第三个形状；版本串只为可读，不能一名二物。**不能用 `f048-v4`**：beta1 tip f6bf9f51f 已把 D17 / D19 修订后的形状命名为 `f048-v4` 并于 2026-09-09 在 116 发布（`features/v3.0.0-beta1/053-openapi-auth-and-identity/release-and-deployment.md`），并集只能顺延为 v5 |
 | M14 | platform 管理面：服务账号 / 个人令牌 tab 取 beta2 的 `open_api.management_ui_enabled` 门控（默认关）；`/api/v1/env` 四个开关并存：`open_platform_enabled`（三扩展位 + 接入信息区）、`app_runtime_enabled`（工场运行时层）、`personal_token_enabled`、`open_api_management_enabled` | 各自 gate 不同面，互不合并；⚠️ 应用工场演示剧本步 1 依赖管理面可见，部署清单必须开 `open_api.management_ui_enabled` |
 | M15 | 114 **不能原地升级**：两侧 `service_account` / `api_credential` 同名不同构，beta2 迁移的 `table_exists` 守卫会跳过建表、启动即崩。部署前须停服 → 备份 → DROP 两张 vibe 结构表 → `alembic upgrade head` → 发布 FGA 模型 v4 → 重建服务账号与密钥。**本轮不部署 114**（破坏性操作，等用户确认） | 审计四；2026-09-09 拍板暂不部署 |
 | M16 | 验证口径：后端分区测试零回归（基线 = 纯 beta2 同范围，在独立 worktree 跑）、ruff、arch-guard、alembic 单头、platform lint + typecheck、client typecheck、`check-i18n`、`docker/verify-app-runtime-compose.sh`、v2 OpenAPI 契约 JSON 重生成（`/api/v2/apps/*` 加入后 beta2 的契约测试必须跟着更新） | `project_beta1_to_vibe_sync_playbook`：差集里的新增失败必须回源分支跑相同组合复核 |
@@ -43,7 +43,7 @@
 | | `approval/domain/services/approver_resolver.py` | 两函数并存：vibe `resolve_tenant_admin_user_ids` + beta2 `resolve_resource_permission_role_users` |
 | | `common/middleware/admin_scope.py` | 取 beta2（已含 `/api/v1/service-accounts` 与 `/api/v1/personal-tokens`） |
 | | `core/config/settings.py` | 并集：beta2 beat 清理 + vibe `app_runtime: AppRuntimeConf` |
-| | `core/openfga/authorization_model_f048.py` | 并集 + `f048-v4`（M13） |
+| | `core/openfga/authorization_model_f048.py` | 并集 + `f048-v5`（M13） |
 | | `tenant/domain/services/f048_permission_subject.py` | 取 beta2（`service_account` 作为独立主体类型），去掉 vibe 的 `USER_TYPE_SERVICE` 排除 |
 | | `user/domain/models/user.py`、`user/domain/services/user.py` | 取 beta2 侧结构，vibe 的 `user_type` 相关全部不带（M4） |
 | | `test/permission/test_f048_schema_contract.py` | 并集断言（既有 `service_account` 主体、又有 `app` 类型） |
@@ -83,7 +83,7 @@
 2. `DROP TABLE api_credential, service_account;`（vibe 结构；演示数据可弃，托管应用表 `app*` 不动）。
 3. `bash /opt/bisheng-ops/deploy.sh`（分支改本分支）→ `alembic upgrade head`（建 beta2 结构 + `open_api_tenant_setting` + 委托范围 + merge + drop `user_type`）。
 4. `config.yaml` 加 `open_api.management_ui_enabled: true`、`open_platform.enabled: true`（保留既有 `app_runtime`）。
-5. 发布 FGA 模型 `f048-v4`（`--allow-model-upgrade`），跑 schema contract。
+5. 发布 FGA 模型 `f048-v5`（`--allow-model-upgrade`），跑 schema contract。
 6. 管理面重建服务账号（归属人 = 开发者）→ 签 `app:manage` 密钥 → 重跑 mvp-114-path 剧本步 1–7（步 6 非管理员）。
 
 ---
@@ -104,6 +104,7 @@
 | 2 | `docs/constitution.md` C7 | 引用 `.claude/rules/platform-frontend.md` / `.claude/rules/client-frontend.md`，仓库无 `.claude/rules/` 目录（前端约定实际在 `src/frontend/platform/AGENTS.md` / `src/frontend/client/AGENTS.md`） | 回流 beta2 改指向两份 AGENTS.md |
 | 3 | `.claude/skills/approval-module/SKILL.md`（beta2 侧文件） | 前端表引用 `messageApproval/MessageApprovalDialog.tsx`（已被 `pages/settings/SettingsPage.tsx` 取代）；§8 注仍写 `isApprovalMessageType`（`NotificationsDialog.tsx:152-156`），真身在 `messageApproval/notificationContent.ts` | 回流 beta2 同步落点（`.cursor` 副本本分支已按现状同步） |
 | 4 | `features/v3.0.0-beta1/053-openapi-auth-and-identity/prd-deviation-review.md` | §5 所引的 4 处产品裁定清单文件尚不存在 | 回流 beta2 时补写 |
+| 5 | `test/user/test_user_tenant_sync_service.py` | beta1 f6bf9f51f（D19 换租户随人迁移）让 `user_tenant_sync_service` 在换租户路径调用 `PersonalTokenService`，但同一提交没有给该测试补 patch——纯 beta1 / beta2 环境跑该文件即受此自带缺陷影响；本分支已在测试里 patch `PersonalTokenService` | 回流 beta2 同步补 patch |
 
 ---
 
@@ -113,3 +114,4 @@
 |---|---|
 | 2026-09-10 | 方案定稿；worktree `bisheng-prd1` + 分支建立；开始合并 |
 | 2026-09-10 | 合并完成：`d2dadca8f`（beta2 da2be5697，54 处冲突按 §2 解）+ `e590ac60a`（beta1 tip 59b27d1c1，含 D17 / D19 修复 `f6bf9f51f`）；§3 适配（deploy 管线 marker 化 / `secret_scanner` / `user_type` 移除 + alembic 单头 / M7 互斥 / 前端收口 / FGA `f048-v4`）分组并行进行中；文档回写：release-contract（表 1 主体类型 + INV-28 D19 + 260 段 owner）/ README / mvp-114-path / F049 三件归档标注 / F053–F056 过时引用 / 架构文档 14 配置键 / constitution `Last revised` / `.cursor` approval-module skill 落点 |
+| 2026-09-10 | 适配批一检查点 `865b1b9e2`（deploy 管线 marker 化 / `secret_scanner` 双前缀 / `user_type` 移除 + alembic 单头 / M7 互斥 26050 / 前端收口 / FGA 并集）；FGA 版本由 `f048-v4` 改判 **`f048-v5`**（beta1 已占 v4，M13 已订正）。修复批并行：测试桩改 beta2 `OpenApiPrincipal` 形状、`test_user_tenant_sync_service` patch `PersonalTokenService`（§7-5）、F054 T071 / F055 T044a · T045–T048 / F056 T016 按代码证据勾选、C5 与伴生 PRD 附录 C 登记 26050、`config.yaml` 注释补 `open_api` 三键（`management_ui_enabled` / `pat_enabled` / `pat_admin_ttl_days`） |
