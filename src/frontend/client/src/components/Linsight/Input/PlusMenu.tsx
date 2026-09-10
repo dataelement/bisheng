@@ -18,6 +18,7 @@ import { useLocalize } from '~/hooks';
 import type { TaskModeSkill } from '~/store/linsight';
 import { cn } from '~/utils';
 import { SkillSelector } from './SkillSelector';
+import { SkillMenuEntries, SkillUploadHost } from '~/components/Skills/SkillMenuEntries';
 
 interface PlusMenuProps {
     disabled?: boolean;
@@ -49,6 +50,7 @@ export function PlusMenu({
     const localize = useLocalize();
 
     return (
+        <SkillUploadHost>{(openSkillUpload) => (
         <DropdownMenu>
             <DropdownMenuTrigger asChild disabled={disabled}>
                 <button
@@ -93,6 +95,8 @@ export function PlusMenu({
                         </span>
                     </DropdownMenuItem>
                 )}
+
+                <SkillMenuEntries onUpload={openSkillUpload} />
 
                 {/* Divider between upload and the mode entries (spec §1) */}
                 <div className="my-1 h-px bg-slate-100" />
@@ -152,5 +156,6 @@ export function PlusMenu({
                 )}
             </DropdownMenuContent>
         </DropdownMenu>
+        )}</SkillUploadHost>
     );
 }

@@ -21,6 +21,7 @@ import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
 import { KnowledgeListPanel } from "./KnowledgeListPanel";
 import type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
+import { SkillMenuEntries, SkillUploadHost } from '~/components/Skills/SkillMenuEntries';
 
 export type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
 
@@ -284,6 +285,7 @@ export const ChatKnowledge = ({
   }, [isMobile, rootOpen, mobileTallPanel]);
 
   return (
+    <SkillUploadHost>{(openSkillUpload) => (
     <DropdownMenu open={rootOpen} onOpenChange={handleRootOpenChange}>
       <TooltipProvider delayDuration={50}>
         <Tooltip>
@@ -427,6 +429,8 @@ export const ChatKnowledge = ({
             <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_folder')}</span>
           </DropdownMenuItem>
         )}
+
+        {variant === 'plus' && (!isMobile || mobilePanel === 'root') && <SkillMenuEntries onUpload={openSkillUpload} />}
 
         {/* Knowledge pill: show the SPACES list directly — no drill, no sub.
             Same layout on both surfaces; only the outer width / position adapt
@@ -671,5 +675,6 @@ export const ChatKnowledge = ({
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+    )}</SkillUploadHost>
   );
 };

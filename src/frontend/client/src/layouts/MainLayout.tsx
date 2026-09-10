@@ -14,6 +14,7 @@ import { Button } from '~/components/ui/Button';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/Dialog';
 import store from '~/store';
+import { skillCenterPath, skillCenterPreviewEnabled } from '~/components/Skills/types';
 
 const systemNoticeTodayKey = () => {
   const d = new Date();
@@ -158,7 +159,7 @@ function Sidebar({
 
   // --- Sidebar link definitions with dynamic `to` for KeepAlive restoration ---
   const links = useMemo<Array<{
-    section: 'home' | 'apps' | 'channel' | 'knowledge';
+    section: 'home' | 'apps' | 'channel' | 'knowledge' | 'skills';
     to: string;
     icon: React.ReactNode;
     label: string;
@@ -173,10 +174,18 @@ function Sidebar({
         icon: <Outlined.Home />,
         activeIcon: <Filled.Home />,
         label: menuNames.home,
-        isActive: /^\/(c|linsight)(\/|$)/.test(pathname) || menuUnavailablePlugin === 'home',
+        isActive: (/^\/(c|linsight)(\/|$)/.test(pathname) && pathname !== skillCenterPath) || menuUnavailablePlugin === 'home',
         closeDrawerOnNavigate: true,
       },
 
+      {
+        section: 'skills' as const,
+        to: hasPlugin('home') ? skillCenterPath : '/menu-unavailable?plugin=home',
+        icon: <Outlined.Newspaper />,
+        label: localize('com_skill_center_title'),
+        isActive: pathname === skillCenterPath,
+        closeDrawerOnNavigate: true,
+      },
       {
         section: 'knowledge' as const,
         // Mobile is list-page-first: the menu always opens the space list (/knowledge),
@@ -210,6 +219,7 @@ function Sidebar({
       },
     ].filter((l) => {
       if (l.section === 'home') return showHomeTab;
+      if (l.section === 'skills') return skillCenterPreviewEnabled && showHomeTab;
       if (l.section === 'apps') return showAppsTab;
       if (l.section === 'channel') return showSubscriptionTab;
       if (l.section === 'knowledge') return showKnowledgeSpaceTab;
@@ -217,7 +227,7 @@ function Sidebar({
     });
     // Menu names are read field-by-field: the hook returns a fresh object each render.
   }, [canOpenWorkbenchEntry, pathname, menuUnavailablePlugin, isMobile, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins,
-    menuNames.home, menuNames.knowledge, menuNames.channel, menuNames.apps]);
+    menuNames.home, menuNames.knowledge, menuNames.channel, menuNames.apps, langcode]);
 
   const changeLang = useCallback((value: string) => {
     let userLang = value;
@@ -448,7 +458,7 @@ export default function MainLayout() {
 
   // Track last visited path per sidebar section.
   // Runs synchronously before Sidebar renders in the same cycle.
-  if (/^\/(c|linsight)(\/|$)/.test(pathname)) lastSectionPaths.home = pathname;
+  if (/^\/(c|linsight)(\/|$)/.test(pathname) && pathname !== '/c/skills') lastSectionPaths.home = pathname;
   else if (/^\/(apps|app)(\/|$)/.test(pathname)) {
     // 应用广场是应用中心的子页；从其它模块再点「应用」时应回到应用中心，而非恢复广场路由
     lastSectionPaths.apps = pathname.startsWith('/apps/explore') ? '/apps' : pathname;
@@ -465,6 +475,7 @@ export default function MainLayout() {
     // chat tree under that key, and coming back rebuilds the chat from scratch —
     // losing the attachments the user had staged but not yet sent.
     if (pathname.startsWith('/c/media-playback')) return 'media_playback_tab';
+    if (pathname === '/c/skills') return 'skill_center_tab';
     if (/^\/c(\/|$)/.test(pathname)) return 'chat_tab';
     if (/^\/(apps|app)(\/|$)/.test(pathname)) return 'apps_tab';
     if (/^\/channel(\/|$)/.test(pathname)) return 'channel_tab';
