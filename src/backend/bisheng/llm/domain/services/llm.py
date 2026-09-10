@@ -597,7 +597,7 @@ class LLMService:
             server = await LLMDao.aget_server_by_id(model.server_id, cache=False)
         if server is None or server.tenant_id != model.tenant_id:
             raise DshModelNotAllowedError()
-        return model.model_copy(deep=True), server.model_copy(deep=True)
+        return model, server
 
     @classmethod
     def build_dsh_llm(cls, model: LLMModel, server: LLMServer, *, user_id: int, streaming: bool = False):
@@ -605,7 +605,7 @@ class LLMService:
         return BishengLLM.get_class_instance_from_snapshot(
             model_info=model,
             server_info=server,
-            disable_retries=True,
+            max_retries=0,
             app_id="dsh-desktop",
             app_name="DSH Desktop",
             app_type=ApplicationTypeEnum.DSH_DESKTOP,

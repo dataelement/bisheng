@@ -43,29 +43,17 @@ class BishengBase(BaseModel):
         return instance
 
     @classmethod
-    def get_class_instance_from_snapshot(
-        cls, *, model_info: LLMModel, server_info: LLMServer, disable_retries: bool = False, **kwargs
-    ) -> Self:
+    def get_class_instance_from_snapshot(cls, *, model_info: LLMModel, server_info: LLMServer, **kwargs) -> Self:
         """Build from an already authorized snapshot without another cached read."""
         if "model_id" in kwargs or "model_name" in kwargs:
             raise ValueError("Snapshot identity cannot be overridden")
         if model_info is None or server_info is None or model_info.server_id != server_info.id:
             raise ValueError("Model and provider snapshots must match")
-        model_info = model_info.model_copy(deep=True)
-        if disable_retries:
-            import json
-
-            config = dict(model_info.config or {})
-            user_kwargs = config.get("user_kwargs") or {}
-            if isinstance(user_kwargs, str):
-                user_kwargs = json.loads(user_kwargs)
-            config["user_kwargs"] = {**user_kwargs, "max_retries": 0}
-            model_info.config = config
         return cls(
             model_id=model_info.id,
             model_name=model_info.model_name,
-            model_info=model_info.model_copy(deep=True),
-            server_info=server_info.model_copy(deep=True),
+            model_info=model_info,
+            server_info=server_info,
             **kwargs,
         )
 
