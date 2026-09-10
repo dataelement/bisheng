@@ -2322,7 +2322,5 @@
   "com_skill_center_error_platform": "アカウントのスキルを読み込めません。保存済みの個人スキルは確認できます。",
   "com_skill_center_menu": "スキル",
   "com_skill_center_manage": "スキルを管理",
-  "com_skill_center_menu_available": "利用できるスキル",
-  "com_skill_center_menu_upload_hint": "既存の SKILL.md、.zip、.skill をアップロード",
-  "com_skill_center_menu_preview": "個人スキルは現在プレビューとして保存されます。"
+  "com_skill_center_menu_available": "利用できるスキル"
 }

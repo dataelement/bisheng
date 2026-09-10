@@ -40,7 +40,7 @@ export function SkillMenuEntries({ onUpload, onOpenMobile }: SkillMenuEntriesPro
       <DropdownMenuSubContent
         align="center"
         collisionPadding={12}
-        className="ml-2 flex max-h-[min(480px,var(--radix-dropdown-menu-content-available-height))] w-[360px] max-w-[calc(100vw-24px)] flex-col gap-0 rounded-2xl bg-bg-page p-2"
+        className="ml-2 flex max-h-[min(440px,var(--radix-dropdown-menu-content-available-height))] w-[280px] max-w-[calc(100vw-24px)] flex-col gap-0 rounded-2xl bg-bg-page p-3"
       >
         <SkillMenuPanel onUpload={onUpload} />
       </DropdownMenuSubContent>

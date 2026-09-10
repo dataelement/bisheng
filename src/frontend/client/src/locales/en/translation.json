@@ -2399,7 +2399,5 @@
   "com_skill_center_error_platform": "Account skills could not be loaded. Saved personal skills are still available to view.",
   "com_skill_center_menu": "Skills",
   "com_skill_center_manage": "Manage skills",
-  "com_skill_center_menu_available": "Available skills",
-  "com_skill_center_menu_upload_hint": "Upload an existing SKILL.md, .zip or .skill file",
-  "com_skill_center_menu_preview": "Personal uploads are currently a frontend preview."
+  "com_skill_center_menu_available": "Available skills"
 }

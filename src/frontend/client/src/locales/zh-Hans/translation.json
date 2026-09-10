@@ -2328,7 +2328,5 @@
   "com_skill_center_error_platform": "账号可用技能加载失败，已保存的个人技能仍可查看。",
   "com_skill_center_menu": "技能",
   "com_skill_center_manage": "管理技能",
-  "com_skill_center_menu_available": "可用技能",
-  "com_skill_center_menu_upload_hint": "上传已有的 SKILL.md、.zip 或 .skill 文件",
-  "com_skill_center_menu_preview": "个人上传的技能当前仅作前端预览。"
+  "com_skill_center_menu_available": "可用技能"
 }
