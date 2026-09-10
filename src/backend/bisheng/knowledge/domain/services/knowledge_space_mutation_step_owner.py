@@ -168,10 +168,15 @@ class ProductionMutationStepOwner:
         shadow_es, _ = cls._shadow_clients(context, target)
         from bisheng.worker.knowledge.rebuild_knowledge_worker import get_all_es_chunks
 
-        shadow_chunks = get_all_es_chunks(
-            shadow_es.client,
-            cls._shadow_es_name(context),
-            cls._es_query(file_ids),
+        shadow_index = cls._shadow_es_name(context)
+        shadow_chunks = (
+            get_all_es_chunks(
+                shadow_es.client,
+                shadow_index,
+                cls._es_query(file_ids),
+            )
+            if shadow_es.client.indices.exists(index=shadow_index)
+            else []
         )
         # The request-scoped shadow is the durable replay source. Never infer
         # its contents from official rows: a prior same-index attempt may have

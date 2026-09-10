@@ -125,6 +125,8 @@ class _FakeRetrievalBackend:
         return _FakeMilvusStore(self, name)
 
     def chunks(self, client: _FakeESClient, index: str, query: dict) -> list[dict]:
+        if index not in self.es:
+            raise RuntimeError("index_not_found_exception")
         file_ids = set(query["query"]["terms"]["metadata.document_id"])
         return [
             dict(row) for row in self.es.get(index, []) if int(row["_source"]["metadata"]["document_id"]) in file_ids
