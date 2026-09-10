@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { consumeLoginReturnTo, hasDesktopLoginReturnTo } from './loginReturnTo'
+import { consumeLoginReturnTo, hasDesktopLoginReturnTo, rememberDesktopLoginReturnTo } from './loginReturnTo'
 beforeEach(() => {
     const values = new Map<string, string>()
     vi.stubGlobal('localStorage', {
@@ -33,4 +33,13 @@ describe('desktop SSO handoff', () => {
         localStorage.setItem('LOGIN_PATHNAME_AT', String(Date.now() - 700000))
         expect(hasDesktopLoginReturnTo()).toBe(false)
     })
+})
+
+
+it('does not overwrite workspace return targets on ordinary login pages', () => {
+    localStorage.setItem('LOGIN_PATHNAME', '/workspace/chat/session')
+    localStorage.setItem('LOGIN_PATHNAME_AT', String(Date.now()))
+    vi.stubGlobal('location', { origin: 'http://bisheng.example', pathname: '/', href: 'http://bisheng.example/' })
+    rememberDesktopLoginReturnTo()
+    expect(consumeLoginReturnTo()).toBe('http://bisheng.example/workspace/chat/session')
 })

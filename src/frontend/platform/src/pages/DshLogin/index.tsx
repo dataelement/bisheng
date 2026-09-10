@@ -3,6 +3,7 @@ import { Input } from '@/components/bs-ui/input'
 import { userContext } from '@/contexts/userContext'
 import { getDshConfig } from '@/controllers/API/dsh'
 import type { DshConfig } from '@/types/dsh'
+import { rememberDesktopLoginReturnTo } from '@/utils/loginReturnTo'
 import { useContext, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -49,8 +50,7 @@ export function DshLogin() {
         }
     }, [])
     function handleLogin() {
-        localStorage.setItem('LOGIN_PATHNAME', location.href)
-        localStorage.setItem('LOGIN_PATHNAME_AT', String(Date.now()))
+        rememberDesktopLoginReturnTo()
         location.assign(import.meta.env.BASE_URL)
     }
     async function handleCopy(value: string) {
@@ -89,7 +89,6 @@ export function DshLogin() {
                             <>
                                 <p>{t('dsh.entryHelp')}</p>
                                 <Button
-                                    disabled={!base.startsWith('https://')}
                                     onClick={() =>
                                         location.assign(
                                             `dsh-desktop://login?${new URLSearchParams({ server: base })}`,

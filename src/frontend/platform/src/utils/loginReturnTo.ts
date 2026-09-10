@@ -69,6 +69,17 @@ export function consumeLoginReturnTo(): string | null {
     }
 }
 
+/** Capture desktop navigation before the first user-info request can redirect on 401. */
+export function rememberDesktopLoginReturnTo(): void {
+    if (location.pathname !== '/desktop-login') return
+    try {
+        localStorage.setItem(LOGIN_PATHNAME_KEY, location.href)
+        localStorage.setItem(LOGIN_PATHNAME_AT_KEY, String(Date.now()))
+    } catch {
+        /* Storage may be disabled; leave the existing login behavior available. */
+    }
+}
+
 /** Preserve desktop consent through SSO before admin-console access is evaluated. */
 export function hasDesktopLoginReturnTo(): boolean {
     try {
