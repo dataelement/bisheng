@@ -107,6 +107,30 @@ async def test_redis_failure_keeps_dispatch_live_without_lease_metadata(worker, 
     )
 
 
+async def test_dispatch_installs_explicit_tenant_context_while_publishing(worker, monkeypatch):
+    lease = SimpleNamespace(key="f046:dispatch:coordinate:23:41", token="lease-1")
+    store = SimpleNamespace(claim=AsyncMock(return_value=lease), release=AsyncMock())
+    monkeypatch.setattr(worker, "_build_dispatch_lease_store", AsyncMock(return_value=store))
+    published_tenants = []
+    task = SimpleNamespace(
+        apply_async=MagicMock(side_effect=lambda **_kwargs: published_tenants.append(worker.current_tenant_id.get()))
+    )
+    outer_token = worker.set_current_tenant_id(1)
+    try:
+        dispatched = await worker._dispatch_once(
+            task,
+            lease_key=lease.key,
+            kwargs={"request_id": 41},
+            headers={"tenant_id": 23},
+        )
+        assert worker.current_tenant_id.get() == 1
+    finally:
+        worker.current_tenant_id.reset(outer_token)
+
+    assert dispatched is True
+    assert published_tenants == [23]
+
+
 async def test_consumer_ignores_competing_claim_and_releases_owned_claim(worker, monkeypatch):
     lease = SimpleNamespace(key="f046:dispatch:coordinate:23:41", token="lease-1")
     store = SimpleNamespace(

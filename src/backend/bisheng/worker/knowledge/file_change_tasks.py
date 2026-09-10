@@ -1148,6 +1148,14 @@ async def _dispatch_once(
     }
     if task_id is not None:
         apply_options["task_id"] = str(task_id)
+    publish_tenant_token = None
+    publish_tenant_id = apply_options["headers"].get("tenant_id")
+    if publish_tenant_id is not None:
+        # before_task_publish deliberately derives tenant_id from the active
+        # ContextVar and overwrites the explicit header. Global recovery tasks
+        # run under the default tenant while fanning out work for every tenant,
+        # so install the child's tenant only for the publish operation.
+        publish_tenant_token = set_current_tenant_id(int(publish_tenant_id))
     try:
         task.apply_async(**apply_options)
     except Exception:
@@ -1157,6 +1165,9 @@ async def _dispatch_once(
             except Exception:
                 logger.exception("F046 failed dispatch lease release failed: key={}", lease_key)
         raise
+    finally:
+        if publish_tenant_token is not None:
+            current_tenant_id.reset(publish_tenant_token)
     return True
 
 
