@@ -291,13 +291,15 @@ Content-Type: application/json
     "object":"model",
     "created":1788919200,
     "owned_by":"bisheng",
-    "display_name":"Enterprise Chat",
+    "display_name":"百炼 / qwen-max",
     "capabilities":{"streaming":true,"tools":true,"reasoning_content":false}
   }]
 }
 ```
 
 上述字段均必返；created 为 Unix 秒。capabilities 三项为布尔值，`reasoning_content` 表示该适配器已验证的 DeepSeek 兼容扩展能力；不依据模型名推断。模型列表必须已经过现有模型可访问性与 DSH 白名单过滤；合法共享模型的物理 tenant_id 不返回给客户端作为过滤依据。
+
+`display_name` 与毕昇管理端保持一致：`提供方名称 / 实际模型名`。两部分先去除首尾空白；提供方名称为空时使用提供方类型，实际模型名为空时回退模型配置名称。不新增 provider 字段，`owned_by` 仍为 `bisheng`。
 
 列表一次返回当前用户全部可用模型，本期无分页参数。空数组为成功结果，展示“管理员尚未开放可用企业模型”。模型名只用于展示，调用必须原样使用 id（`bisheng:<model_id>`），不传供应商原始模型名或自行拼接名称。
 

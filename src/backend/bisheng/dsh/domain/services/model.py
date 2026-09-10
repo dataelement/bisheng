@@ -88,7 +88,7 @@ class DshModelService:
                         "object": "model",
                         "created": created,
                         "owned_by": "bisheng",
-                        "display_name": model.name or model.model_name,
+                        "display_name": f"{server.name.strip() or server.type} / {model.model_name.strip() or model.name}",
                         "capabilities": capabilities.client_fields(),
                     }
                 )

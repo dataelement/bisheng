@@ -92,7 +92,7 @@
               "object": "model",
               "created": 1788919200,
               "owned_by": "bisheng",
-              "display_name": "Enterprise Chat",
+              "display_name": "百炼 / qwen-max",
               "capabilities": {
                 "streaming": true,
                 "tools": true,
