@@ -370,14 +370,29 @@ async def _coordinate_execution_async(
     execution_token: str | None,
 ) -> dict:
     from bisheng.common.errcode.base import BaseErrorCode
+    from bisheng.common.errcode.permission import (
+        PermissionPublishNotReadyError,
+        PermissionServiceUnavailableError,
+    )
     from bisheng.knowledge.domain.services.knowledge_space_mutation_executor import (
         MutationExecutionCompleted,
     )
+
+    # Infrastructure trouble wearing a business error's clothes. This branch
+    # assumed transient failures were not BaseErrorCode, which is false: a
+    # momentary authorization-service outage and the write fence a catalog
+    # publish raises both are. Clearing a queue in bulk made the first likely —
+    # many changes reach the permission service at once — and a change already
+    # cleared to run was then killed outright with no retry. Both say in their
+    # own message that they are temporary, so hand them back to Celery.
+    RETRYABLE = (PermissionServiceUnavailableError, PermissionPublishNotReadyError)
 
     coordinator = _build_execution_coordinator()
     executor = _build_mutation_executor()
     try:
         prepared = await executor.prepare_execution(request_id=int(request_id))
+    except RETRYABLE:
+        raise
     except BaseErrorCode as exc:
         # A deterministic business-rule violation raised while preparing the
         # approved change — e.g. the applicant no longer holds the required
@@ -386,11 +401,16 @@ async def _coordinate_execution_async(
         # SpaceFileNameDuplicateError). These never succeed on retry, and leaving
         # the request in `queued` hides the failure forever (nothing re-drives a
         # queued request). Fail it terminally so the error surfaces and the
-        # client stops showing 等待执行. Infra/transient errors are NOT BaseErrorCode
-        # and still propagate to Celery autoretry.
+        # client stops showing 等待执行.
+        #
+        # `str()` on one of these is the wrapped exception when there is one, and
+        # that can be empty — the reader was shown a bare "cannot be applied:"
+        # with nothing after it. Fall back to the code's own message so the
+        # reason always says something.
+        detail = str(exc) or getattr(exc, "message", "") or type(exc).__name__
         transitioned = await executor.fail_unstarted_request(
             request_id=int(request_id),
-            failure_reason=f"file change cannot be applied: {exc}",
+            failure_reason=f"file change cannot be applied: {detail}",
         )
         logger.warning(
             "F046 coordinate permanently failed ({}): request_id={} transitioned_to_failed={}",
