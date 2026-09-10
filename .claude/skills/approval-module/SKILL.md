@@ -167,7 +167,7 @@ resolver/OpenFGA 故障必须传播，绝不能伪造成空审批人集合，也
 | `approval/domain/services/user_menu_access_service.py` | 菜单授权增删查，含父级菜单依赖自动补全 | `grant_menu_access()`、`revoke_menu_access()`、`ensure_application_allowed()` |
 | `approval/domain/services/approval_service.py` + `message_handler.py` | **旧系统（已废弃）**：部门知识空间文件上传审批（`approval_request` 表），与审批中心独立，仅兼容存量、勿新增功能 | `ApprovalService.decide_request()` |
 | `worker/approval/tasks.py` | Celery 任务（走默认 `celery` 队列） | `execute_approval_outbox`、`retry_approval_outbox` |
-| `worker/knowledge/file_change_tasks.py` | F046 Knowledge-owned coordinate/step/ack/watchdog/补偿/cleanup/动态审批人任务；显式 tenant header，统一 `knowledge_celery` | `CeleryKnowledgeSpaceFileChangeDispatcher`、`coordinate_file_change_execution`、`execute_file_change_step`、`watchdog_all_file_change_executions`、`compensate_all_file_change_execution_steps`、`cleanup_all_file_change_residue`、`reconcile_all_file_change_approvers` |
+| `worker/knowledge/file_change_tasks.py` | F046 Knowledge-owned coordinate/step/ack/watchdog/补偿/cleanup/动态审批人控制任务；显式 tenant header，统一走默认 `celery`，避免被普通解析任务阻塞 | `CeleryKnowledgeSpaceFileChangeDispatcher`、`coordinate_file_change_execution`、`execute_file_change_step`、`watchdog_all_file_change_executions`、`compensate_all_file_change_execution_steps`、`cleanup_all_file_change_residue`、`reconcile_all_file_change_approvers` |
 | `knowledge/domain/services/knowledge_space_file_change_approval_policy.py` | F046 Knowledge-owned 提交/决定 policy；严格 owner/manager 集合、实时资格与 tenant/instance/fingerprint 绑定 fail-closed | `validate_submission()`、`authorize_decision()` |
 | `knowledge/domain/services/knowledge_space_file_change_approver_resolver.py` | F046 owner/manager 权威解析与 Permission 对账公共 DTO/port；OpenFGA/tenant/候选读取失败统一 fail-closed | `resolve_approver_user_ids()`、`resolve_reconciliation_targets()` |
 | `knowledge/domain/services/knowledge_space_file_change_decision_subscriber.py` | F046 幂等决定消费；先持久化 queued/closed 与 event，再补派业务任务或补做终态清理 | `accept()` |
@@ -182,7 +182,7 @@ resolver/OpenFGA 故障必须传播，绝不能伪造成空审批人集合，也
 | `knowledge/domain/services/knowledge_space_mutation_read_projection_service.py` | transition 期间按 durable phase 向正式读路径投影唯一 old/new view | `list_invisible_ids()`、`authoritative_space_ids()`、`name_projection()` |
 | `knowledge/domain/services/knowledge_space_file_change_compensation_service.py` | F046 纯 Knowledge 补偿扫描 Service：校验 tenant ContextVar，以 request/step ID 返回有界 keyset 页，不查询 Approval instance/outbox | `list_watchdog_page()`、`list_step_recovery_page()`、`list_cleanup_page()`、`list_expired_orphan_stage_page()` |
 | `knowledge/domain/services/knowledge_space_file_change_application_service.py` | Knowledge list/detail/decision/retry/cleanup；业务状态来自 Knowledge，审批状态只经 public read/decision port | `list_uploads()`、`get_detail()`、`decide_upload()`、`retry_ingest()`、`cleanup_upload()`、`batch_approve()` |
-| `worker/config.py` | Celery 路由：F046 精确匹配 `knowledge_celery`；Approval delivery、legacy outbox、F045 Permission worker落默认队列 | `task_routes` |
+| `worker/config.py` | Celery 路由：F046 控制任务、Approval delivery、legacy outbox、F045 Permission worker 落默认 `celery`；普通文件解析仍走知识/解析专用队列 | `task_routes` |
 | `approval/api/endpoints/approval_user.py` | Client 端 API（`/api/v1/approval/...`） | — |
 | `approval/api/endpoints/approval_admin.py` | Platform 管理 API（`/api/v1/approval/admin/...`） | — |
 | `approval/api/endpoints/approval.py` | 旧系统 legacy API（`/api/v1/approval/requests/...`），**已废弃** | — |
@@ -234,7 +234,7 @@ resolver/OpenFGA 故障必须传播，绝不能伪造成空审批人集合，也
 | `channel_subscribe_request` | legacy handler/outbox | Channel membership + OpenFGA | 默认 `celery` |
 | `knowledge_space_subscribe_request` | legacy handler/outbox | Knowledge membership + OpenFGA | 默认 `celery` |
 | `resource_user_invite_confirmation` | decision delivery | Permission request + ResourceGrantExecutor | 默认 `celery` |
-| `knowledge_space_file_change_request` | decision delivery | Knowledge request/saga | `knowledge_celery` |
+| `knowledge_space_file_change_request` | decision delivery | Knowledge request/saga | 默认 `celery`（解析任务仍由文件调度器进入专用队列） |
 
 **首次部署自动落库**：4.2 频道订阅、4.3 知识空间加入和 4.4 资源个人用户邀请由 `common/init_data.py::_init_default_approval_scenarios()` 为默认租户幂等 seed。按 `tenant_id+scenario_code` 存在即整体跳过，绝不覆盖人工改动。邀请场景的默认流程是单个 `or` 节点，唯一来源 `invited_user`。4.5 文件变更由 `ensure_system_file_change_scenario()` 在默认初始化、新租户、策略保存和首次需审 mutation 四入口幂等确保；菜单权限申请(4.1)不自动 seed。
 
@@ -289,7 +289,7 @@ resolver/OpenFGA 故障必须传播，绝不能伪造成空审批人集合，也
 - **执行**：审批决定交付只把 Knowledge request 置 `queued`；之后由 Knowledge generation token、request/step/footprint
   独立推进，业务失败不回写 F025。upload 的完成判据固定为正式文件图已提交、OpenFGA 权限写入成功且普通文件
   解析调度已接收；之后的解析、索引、向量化成功或失败只属于文件生命周期，不回写或回退审批状态。
-  upload 业务交接、rename/move transition 和 delete purge 的补偿由 `knowledge_celery` 任务持续处理
+  upload 业务交接、rename/move transition 和 delete purge 的补偿由默认 `celery` 控制任务持续处理
 
 ---
 
@@ -330,9 +330,9 @@ resolver/OpenFGA 故障必须传播，绝不能伪造成空审批人集合，也
 | `execute_approval_outbox` / `retry_approval_outbox` | 三个 legacy 场景 | 默认 `celery` | handler 完成且 outbox/instance 同事务进入 success/executed |
 | `deliver_approval_decision` / recovery coordinator | F045/F046 | 默认 `celery` | `approval_decision_outbox=delivered`，仅代表业务 subscriber 已接收决定 |
 | `execute_resource_user_invite` | F045 Permission | 默认 `celery` | ResourceGrantExecutor 权威读后校验通过，Permission request=`applied` |
-| `bisheng.worker.knowledge.file_change_tasks.*` | F046 Knowledge | `knowledge_celery` | 当前 generation 的 required steps、phase/guard 与 owner 权威判据全部满足，Knowledge request=`applied` |
+| `bisheng.worker.knowledge.file_change_tasks.*` | F046 Knowledge 控制面 | 默认 `celery` | 当前 generation 的 required steps、phase/guard 与 owner 权威判据全部满足，Knowledge request=`applied` |
 
-`worker/config.py` 只为 `bisheng.worker.knowledge.file_change_tasks.*` 叠加精确 `knowledge_celery` route，不覆盖其他 task routes。Approval decision delivery 与 Permission invite worker 不指定 queue，自然落默认队列；`workflow_celery` 只用于工作流 DAG。
+`worker/config.py` 为 `bisheng.worker.knowledge.file_change_tasks.*` 叠加精确默认 `celery` route，不覆盖其他 task routes。F046 只提交正式业务状态并把解析交给普通文件调度器；实际解析仍使用知识/解析专用队列。`workflow_celery` 只用于工作流 DAG。
 
 ### 6.2 legacy outbox
 
@@ -358,11 +358,11 @@ manifest 和当前 generation steps；随后 coordinator 只加载已准备的�
 - delete：DB cutover 与 deletion guard 同一 Knowledge 事务；FGA/MinIO/ES/Milvus purge 全部权威验证、required steps 属于当前 token且 guard 退役后才 applied。
 - retry/compensation：只操作 Knowledge request/step/footprint；业务失败保持 Approval approved，不创建 Approval exception。
 
-Beat 注册四个 Knowledge coordinator：动态审批人对账、执行 watchdog、step recovery/compensation、stage/residue/delete cleanup。coordinator 只在 `bypass_tenant_filter()` 内枚举租户，再带显式 tenant header 逐租户派发；逐租户 keyset 有界扫描、ContextVar finally reset、单租户失败隔离。所有 F046 task 与 Beat 字符串均位于 `bisheng.worker.knowledge.file_change_tasks` 并路由到 `knowledge_celery`。
+Beat 注册四个 Knowledge coordinator：动态审批人对账、执行 watchdog、step recovery/compensation、stage/residue/delete cleanup。coordinator 只在 `bypass_tenant_filter()` 内枚举租户，再带显式 tenant header 逐租户派发；逐租户 keyset 有界扫描、ContextVar finally reset、单租户失败隔离。所有 F046 task 与 Beat 字符串均位于 `bisheng.worker.knowledge.file_change_tasks` 并路由到默认 `celery`。
 
 **两条终态兜底（缺一都会让请求永远停在非终态，文件也删不掉）：**
 
-- **派发预算**：`dispatch_ready_steps` 在派发前检查 `attempt_count`，达到 `MAX_STEP_DISPATCH_ATTEMPTS`（coordinator 模块常量，当前 50）就改调 `mark_failed`，由随后的 `reconcile()` 把整个 request 判 failed。没有这道闸时，watchdog 与 step recovery 会把同一份注定失败的工作互相递回，而**每次派发都会刷新 request 心跳**——心跳过期恰恰是 watchdog 唯一的放弃依据，于是重试把看门狗喂饱，request 永远 `applying`。
+- **派发租约与预算**：`dispatch_ready_steps` 必须先在数据库事务内原子 claim due step，再发布 broker task；`dispatched + next_retry_at` 是租约，租约有效期内不得重复派发。broker task ID 使用稳定业务幂等键加 `attempt:N`，不能把固定 task ID 当作 broker 去重。发布失败只释放与当前 task ID 精确匹配的 claim。达到 `MAX_STEP_DISPATCH_ATTEMPTS`（当前 50）后 step 置 failed，由 `reconcile()` 终结 request。step recovery 对 applying request 只唤醒当前代第一个未完成且已到期的 step，不能由后续 pending step 越过有效租约制造协调任务风暴。
 - **watchdog 扫描覆盖 `queued`**：`list_watchdog_candidates` 除 `applying/compensating`（要求非空 token）外，还收心跳过期的 `queued`。`queued` 请求尚未持有 token 也没有 step（token 由 `begin_execution` 铸造），决定交付层认为 `delivered` 即完事、step recovery 又要求先有 step，所以没有这条谁都捞不到它。`ExecutionWatchdogCandidate` 因此带 `execution_state` 且 `execution_token` 可为 None；worker 按状态分流：`queued` 重投 `coordinate_file_change_execution`（begin 是幂等的，工作仍然欠着），其余仍走 `watchdog_file_change_execution`。
 
 > 部署至少需要同时消费默认 `celery` 与 `knowledge_celery`。task ID 和 broker ACK 只证明派发，不证明业务成功。
@@ -565,7 +565,7 @@ FROM knowledge_space_file_change_request WHERE approval_instance_id=<N>;
 - 决定事件 `pending/processing`：检查默认 `celery` 的 delivery worker 和显式 tenant header。
 - 决定事件 `failed + retryable`：等待 recovery；`permanent` 通常是 tenant/instance/key/fingerprint/version 绑定错误，先修事实，不要强改 delivered。
 - 事件 `delivered`、F045 `queued/applying`：检查默认队列 Permission worker；`failed` 从 Permission 原 request 重试。
-- 事件 `delivered`、F046 `queued/applying/compensating`：检查 `knowledge_celery`、当前 generation steps、footprint/guard 与 watchdog；`failed` 从 Knowledge retry API 重试。
+- 事件 `delivered`、F046 `queued/applying/compensating`：检查默认 `celery` 控制队列、当前 generation steps 的派发租约/attempt、footprint/guard 与 watchdog；普通文件已交接后再检查知识/解析专用队列；`failed` 从 Knowledge retry API 重试。
 - F045/F046 业务 `failed` 时 Approval 保持 approved；审批中心无 `execute_failed` 是正确行为。
 
 ### "审批人看不到任务"

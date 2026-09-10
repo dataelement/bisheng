@@ -33,7 +33,7 @@ def reset_tenant_context():
         current_tenant_id.reset(token)
 
 
-def test_dynamic_approver_tasks_are_registered_in_knowledge_worker_with_knowledge_queue(worker):
+def test_dynamic_approver_tasks_are_registered_in_knowledge_worker_with_default_control_queue(worker):
     expected = {
         "reconcile_space_file_change_approvers",
         "reconcile_tenant_file_change_approvers",
@@ -43,7 +43,7 @@ def test_dynamic_approver_tasks_are_registered_in_knowledge_worker_with_knowledg
     for name in expected:
         options = fake_celery.tasks[name].options
         assert options["acks_late"] is True
-        assert options["queue"] == "knowledge_celery"
+        assert options["queue"] == "celery"
         assert options["autoretry_for"] == (Exception,)
 
 
@@ -136,7 +136,7 @@ async def test_load_active_tenant_ids_uses_canonical_tenant_model(worker, monkey
 
     assert await worker._load_active_tenant_ids() == [11, 23]
     statement = session.exec.await_args.args[0]
-    assert 'tenant.status = :status_1' in str(statement)
+    assert "tenant.status = :status_1" in str(statement)
     assert statement.compile().params["status_1"] == "active"
 
 

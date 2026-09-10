@@ -32,11 +32,12 @@ def test_file_change_beat_preserves_operator_schedule_overrides():
     assert all(schedule[name]["schedule"] == 17.0 for name in configured)
 
 
-def test_worker_config_routes_every_f046_task_to_knowledge_queue_but_not_decision_delivery():
+def test_worker_config_routes_every_f046_task_to_default_control_queue():
     config_path = Path(__file__).resolve().parents[2] / "bisheng" / "worker" / "config.py"
     source = config_path.read_text(encoding="utf-8")
     assert f'"{KNOWLEDGE_TASK_PREFIX}.*"' in source
-    assert '"queue": "knowledge_celery"' in source
+    assert '"queue": "celery"' in source
+    assert source.index(f'"{KNOWLEDGE_TASK_PREFIX}.*"') < source.index("settings.celery_task.task_routers.items()")
     assert "bisheng.worker.approval.decision_delivery_tasks.*" not in source
 
 

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import and_, exists, or_
+from sqlalchemy.orm import aliased
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -148,6 +149,16 @@ class KnowledgeSpaceFileChangeCompensationRepository:
 
         tenant_id = int(tenant_id)
         bounded_limit = self._bounded_limit(limit)
+        prior_step = aliased(KnowledgeSpaceFileChangeExecutionStep)
+        has_prior_incomplete_step = exists(
+            select(prior_step.id).where(
+                prior_step.tenant_id == tenant_id,
+                prior_step.request_id == KnowledgeSpaceFileChangeExecutionStep.request_id,
+                prior_step.id < KnowledgeSpaceFileChangeExecutionStep.id,
+                prior_step.attempt_token == KnowledgeSpaceFileChangeRequest.execution_token,
+                prior_step.state != KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED,
+            )
+        )
         statement = (
             select(
                 KnowledgeSpaceFileChangeExecutionStep.id,
@@ -178,6 +189,11 @@ class KnowledgeSpaceFileChangeCompensationRepository:
                         KnowledgeSpaceFileChangeExecutionState.APPLYING,
                         KnowledgeSpaceFileChangeExecutionState.COMPENSATING,
                     )
+                ),
+                or_(
+                    KnowledgeSpaceFileChangeRequest.execution_state
+                    == KnowledgeSpaceFileChangeExecutionState.COMPENSATING,
+                    ~has_prior_incomplete_step,
                 ),
             )
             .order_by(KnowledgeSpaceFileChangeExecutionStep.id.asc())

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -137,23 +138,78 @@ async def _rows(engine: AsyncEngine, request_id: int):
     return request, steps
 
 
-async def test_same_generation_redispatch_reuses_stable_idempotency_key(coordinator_engine) -> None:
+async def test_same_generation_does_not_redispatch_before_lease_expires(coordinator_engine) -> None:
     request_id = await _seed(coordinator_engine)
-    coordinator = _coordinator(coordinator_engine)
-    dispatched: list[tuple[str, str, str]] = []
+    now = datetime(2026, 9, 10, 12, 0, 0)
+    coordinator = _coordinator(coordinator_engine, now=lambda: now)
+    dispatched: list[tuple[str, str, str, str]] = []
 
     async def dispatch(context):
-        dispatched.append((context.step_code, context.idempotency_key, context.execution_token))
-        return f"task-{len(dispatched)}"
+        dispatched.append((context.step_code, context.idempotency_key, context.execution_token, context.task_id))
+        return context.task_id
 
     first = await coordinator.dispatch_ready_steps(identity=_identity(request_id), dispatcher=dispatch)
     second = await coordinator.dispatch_ready_steps(identity=_identity(request_id), dispatcher=dispatch)
 
-    assert first == second == [UploadExecutionStepCode.FGA]
+    assert first == [UploadExecutionStepCode.FGA]
+    assert second == []
     assert dispatched == [
-        (UploadExecutionStepCode.FGA, f"f046:{request_id}:upload.fga", "generation-1"),
-        (UploadExecutionStepCode.FGA, f"f046:{request_id}:upload.fga", "generation-1"),
+        (
+            UploadExecutionStepCode.FGA,
+            f"f046:{request_id}:upload.fga",
+            "generation-1",
+            f"f046:{request_id}:upload.fga:attempt:1",
+        ),
     ]
+    _, steps = await _rows(coordinator_engine, request_id)
+    row = next(step for step in steps if step.step_code == UploadExecutionStepCode.FGA)
+    assert row.next_retry_at == now + timedelta(minutes=15)
+
+
+async def test_expired_dispatch_lease_allows_one_new_attempt(coordinator_engine) -> None:
+    request_id = await _seed(coordinator_engine)
+    now = datetime(2026, 9, 10, 12, 0, 0)
+    coordinator = _coordinator(coordinator_engine, now=lambda: now)
+    dispatch = AsyncMock(side_effect=lambda context: context.task_id)
+
+    await coordinator.dispatch_ready_steps(identity=_identity(request_id), dispatcher=dispatch)
+    async with AsyncSession(bind=coordinator_engine, expire_on_commit=False) as session, session.begin():
+        row = (
+            await session.exec(
+                select(KnowledgeSpaceFileChangeExecutionStep).where(
+                    KnowledgeSpaceFileChangeExecutionStep.request_id == request_id,
+                    KnowledgeSpaceFileChangeExecutionStep.step_code == UploadExecutionStepCode.FGA,
+                )
+            )
+        ).one()
+        row.next_retry_at = now - timedelta(seconds=1)
+        session.add(row)
+
+    assert await coordinator.dispatch_ready_steps(identity=_identity(request_id), dispatcher=dispatch) == [
+        UploadExecutionStepCode.FGA
+    ]
+    assert dispatch.await_count == 2
+    _, steps = await _rows(coordinator_engine, request_id)
+    row = next(step for step in steps if step.step_code == UploadExecutionStepCode.FGA)
+    assert row.attempt_count == 2
+    assert row.task_id == f"f046:{request_id}:upload.fga:attempt:2"
+
+
+async def test_broker_failure_releases_exact_dispatch_claim(coordinator_engine) -> None:
+    request_id = await _seed(coordinator_engine)
+    coordinator = _coordinator(coordinator_engine)
+
+    with pytest.raises(RuntimeError, match="broker unavailable"):
+        await coordinator.dispatch_ready_steps(
+            identity=_identity(request_id),
+            dispatcher=AsyncMock(side_effect=RuntimeError("broker unavailable")),
+        )
+
+    _, steps = await _rows(coordinator_engine, request_id)
+    row = next(step for step in steps if step.step_code == UploadExecutionStepCode.FGA)
+    assert row.state == KnowledgeSpaceFileChangeExecutionStepState.PENDING
+    assert row.next_retry_at is None
+    assert row.error_summary == "broker dispatch failed: broker unavailable"
 
 
 async def test_old_generation_ack_is_ignored_before_verifier(coordinator_engine) -> None:
@@ -211,7 +267,7 @@ async def test_rename_external_steps_unlock_in_order_and_cutover_stays_internal(
 
     async def dispatch(context):
         dispatched.append(context.step_code)
-        return context.step_code
+        return context.task_id
 
     assert await coordinator.dispatch_ready_steps(identity=_identity(request_id), dispatcher=dispatch) == [
         RenameExecutionStepCode.INDEX_SHADOW

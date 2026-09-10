@@ -153,7 +153,7 @@ def _identity(request_id: int) -> ExecutionIdentity:
 
 async def test_a_step_that_spent_its_budget_is_retired_instead_of_dispatched(engine) -> None:
     request_id = await _seed(engine, attempts=MAX_STEP_DISPATCH_ATTEMPTS)
-    dispatcher = AsyncMock(return_value="task-id")
+    dispatcher = AsyncMock(side_effect=lambda context: context.task_id)
 
     dispatched = await _coordinator(engine).dispatch_ready_steps(
         identity=_identity(request_id),
@@ -187,7 +187,7 @@ async def test_a_step_below_the_budget_still_dispatches(engine) -> None:
     """A step that is merely retrying must not be killed off early."""
 
     request_id = await _seed(engine, attempts=MAX_STEP_DISPATCH_ATTEMPTS - 1)
-    dispatcher = AsyncMock(return_value="task-id")
+    dispatcher = AsyncMock(side_effect=lambda context: context.task_id)
 
     dispatched = await _coordinator(engine).dispatch_ready_steps(
         identity=_identity(request_id),

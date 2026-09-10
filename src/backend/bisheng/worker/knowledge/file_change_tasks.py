@@ -17,7 +17,9 @@ _TASK_OPTIONS = {
     "retry_backoff": True,
     "retry_jitter": True,
     "retry_kwargs": {"max_retries": 8},
-    "queue": "knowledge_celery",
+    # F046 tasks only prepare durable business state and hand parsing to the
+    # file scheduler. Keep this control plane off the long-running parser queue.
+    "queue": "celery",
     "time_limit": 900,
     "soft_time_limit": 840,
 }
@@ -405,12 +407,12 @@ async def _coordinate_execution_async(
         #
         # `str()` on one of these is the wrapped exception when there is one, and
         # that can be empty — the reader was shown a bare "cannot be applied:"
-        # with nothing after it. Fall back to the code's own message so the
-        # reason always says something.
-        detail = str(exc) or getattr(exc, "message", "") or type(exc).__name__
+        # with nothing after it. Preserve the domain message and code so the
+        # stored failure reason always says something actionable.
+        reason = _business_error_reason(exc)
         transitioned = await executor.fail_unstarted_request(
             request_id=int(request_id),
-            failure_reason=f"file change cannot be applied: {detail}",
+            failure_reason=f"file change cannot be applied: {reason}",
         )
         logger.warning(
             "F046 coordinate permanently failed ({}): request_id={} transitioned_to_failed={}",
@@ -432,6 +434,19 @@ async def _coordinate_execution_async(
         return {"status": "ignored"}
     await coordinator.dispatch_ready_steps(identity=identity, dispatcher=_dispatch_file_change_step)
     return {"status": str(await coordinator.reconcile(identity=identity))}
+
+
+def _business_error_reason(exc) -> str:
+    """Return a non-empty, user-safe reason for a domain business error."""
+
+    for candidate in (str(exc), getattr(exc, "message", None), getattr(type(exc), "Msg", None)):
+        normalized = str(candidate or "").strip()
+        if normalized:
+            break
+    else:
+        normalized = type(exc).__name__
+    code = getattr(exc, "code", None) or getattr(type(exc), "Code", None)
+    return f"{normalized} [code={code}]" if code is not None else normalized
 
 
 async def _reconcile_space_async(*, tenant_id: int, space_id: int, reason: str) -> dict:
@@ -539,6 +554,7 @@ async def _watchdog_execution_async(
 
 
 async def _dispatch_file_change_step(context) -> str:
+    task_id = str(context.task_id or context.idempotency_key)
     execute_file_change_step.apply_async(
         kwargs={
             "request_id": int(context.request_id),
@@ -547,10 +563,10 @@ async def _dispatch_file_change_step(context) -> str:
             "step_code": str(context.step_code),
             "idempotency_key": str(context.idempotency_key),
         },
-        task_id=str(context.idempotency_key),
+        task_id=task_id,
         headers={"tenant_id": int(context.tenant_id)},
     )
-    return str(context.idempotency_key)
+    return task_id
 
 
 async def _execute_step_async(**kwargs) -> dict:

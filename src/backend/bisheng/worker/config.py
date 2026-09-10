@@ -11,14 +11,20 @@ result_serializer = "json"
 accept_content = ["json"]
 timezone = "Asia/Shanghai"
 enable_utc = False
-# Approval async tasks (outbox execution / retry) intentionally have NO route here,
-# so they fall through to Celery's default `celery` queue. The `workflow_celery`
-# queue is reserved for workflow DAG execution only.
-task_routes = {**settings.celery_task.task_routers}
-task_routes.setdefault(
-    "bisheng.worker.knowledge.file_change_tasks.*",
-    {"queue": "knowledge_celery"},
-)
+# Approval and F046 control tasks use the default `celery` queue. F046 only
+# persists business state and hands parsing to the file scheduler; routing it to
+# `knowledge_celery` lets long-running parsers block later approved requests.
+# Keep this specific route before the configurable broad Knowledge route so
+# named dispatches and Beat use the same queue as registered task dispatches.
+_F046_CONTROL_TASK_ROUTE = "bisheng.worker.knowledge.file_change_tasks.*"
+task_routes = {
+    _F046_CONTROL_TASK_ROUTE: {"queue": "celery"},
+    **{
+        pattern: route
+        for pattern, route in settings.celery_task.task_routers.items()
+        if pattern != _F046_CONTROL_TASK_ROUTE
+    },
+}
 # redisHealth check interval, unit sec
 redis_backend_health_check_interval = 5
 
