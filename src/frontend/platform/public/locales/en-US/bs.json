@@ -2249,7 +2249,19 @@
     "allowUser": "Allow {{name}} to use this model",
     "userMonthlyLimit": "Monthly token quota for {{name}}",
     "userUsage": "User usage",
-    "usageScope": "Search by username to view DSH usage. Configure model access and quotas in Model management → DSH access."
+    "usageScope": "Search by username to view DSH usage. Configure model access and quotas in Model management → DSH access.",
+    "accessSettings": "DSH Desktop access settings",
+    "businessEnabled": "Allow DSH Desktop access",
+    "businessOn": "Enabled",
+    "businessOff": "Disabled",
+    "businessSwitchHelp": "Disabling hides model access management and DSH user entries, and blocks new logins and model requests. Seats, grants and usage are retained. Changes apply after saving.",
+    "downloadAddress": "DSH Desktop download URL",
+    "downloadAddressHelp": "Use an HTTP or HTTPS URL, or leave blank to hide the download link. No frontend rebuild is required.",
+    "saveSettings": "Save settings",
+    "settingsAdminOnly": "Only a global administrator can change instance settings.",
+    "settingsSaved": "Settings saved",
+    "settingsSaveFailed": "Could not save. Check the download URL or try again later.",
+    "licenseDeploymentOnly": "License is configured during Gateway deployment. License keys are not managed here."
   },
   "request": {
     "session_expired": "Session expired",

@@ -1322,5 +1322,6 @@
       });
     });
   </script>
+<section style="padding:24px"><h2>2026-09-10：DSH 两层开关与下载地址</h2><p>部署 dsh.enabled 默认关闭，决定管理界面可见性；管理界面的业务开关默认关闭，决定整个 DSH 功能能否使用。两者均开启才能登录和调用模型。</p><p>业务关闭后隐藏模型开放范围和 DSH 用户入口，服务端拒绝新授权、身份换证校验与模型转发。保留席位、令牌、额度与历史用量，在途结算和后台投影继续。</p><p>配置页在部署开启时始终可访问。业务开关和下载 URL 保存到现有全局 Config 的 dsh_management 项，超级管理员通过 GET/PUT /api/v1/dsh/admin/settings 管理。公开浏览器配置 GET /api/v1/dsh/browser-config 返回 management_enabled、enabled、download_url；原 DSH 客户端 config 响应形状不变。</p><p>下载 URL 支持无凭证 HTTP/HTTPS，留空则隐藏链接，取消 VITE_DSH_DOWNLOAD_URL 构建变量。License 仍由 Gateway 部署配置，不提供界面编辑或验签。完整设计见 management-settings-revision.md。</p></section>
 </body>
 </html>

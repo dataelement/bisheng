@@ -21,7 +21,7 @@ import ModelConfig from "./ModelConfig"
 import { canManageModelSettings } from "./permissions"
 import { ScopeBar } from "./ScopeBar"
 import SystemModelConfig from "./SystemModelConfig"
-import { getDshConfig } from "@/controllers/API/dsh"
+import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig"
 import { ModelAccessDialog, type DshAccessModel } from "./dsh/ModelAccessDialog"
 
 function CustomTableRow({ data, index, user, onModel, onCheck, onVerified, onDshAccess }) {
@@ -158,16 +158,10 @@ export default function Management() {
     const { refetch } = useModel()
     const canManage = canManageModelSettings(user, appConfig.multiTenantEnabled)
     const canManageDsh = user?.role === 'admin' || !!user?.is_global_super || !!user?.is_child_admin
-    const [dshEnabled, setDshEnabled] = useState(false)
+    const { config: dshConfig } = useDshBrowserConfig()
+    const dshEnabled = canManageDsh && !!dshConfig?.enabled
     const [dshModel, setDshModel] = useState<DshAccessModel | null>(null)
-    useEffect(() => {
-        if (!canManageDsh) { setDshEnabled(false); return }
-        const abort = new AbortController()
-        getDshConfig(abort.signal).then((config) => {
-            if (!abort.signal.aborted) setDshEnabled(config.enabled)
-        }).catch(() => { if (!abort.signal.aborted) setDshEnabled(false) })
-        return () => abort.abort()
-    }, [canManageDsh])
+    useEffect(() => { if (!dshEnabled) setDshModel(null) }, [dshEnabled])
 
     const [searchParams, setSearchParams] = useSearchParams()
     useEffect(() => {

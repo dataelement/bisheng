@@ -1,8 +1,7 @@
 import { Button } from '@/components/bs-ui/button'
 import { Input } from '@/components/bs-ui/input'
 import { userContext } from '@/contexts/userContext'
-import { getDshConfig } from '@/controllers/API/dsh'
-import type { DshConfig } from '@/types/dsh'
+import { useDshBrowserConfig } from '@/hooks/useDshBrowserConfig'
 import { rememberDesktopLoginReturnTo } from '@/utils/loginReturnTo'
 import { useContext, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -15,8 +14,7 @@ import {
 export function DshLogin() {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
-    const [config, setConfig] = useState<DshConfig | null>(null)
-    const [failed, setFailed] = useState(false)
+    const { config, failed } = useDshBrowserConfig()
     const [copied, setCopied] = useState(false)
     useEffect(() => {
         const previous = document.title
@@ -34,18 +32,11 @@ export function DshLogin() {
     }
     const flow = useDshAuthorization(authId)
     useEffect(() => {
-        const abort = new AbortController()
-        getDshConfig(abort.signal)
-            .then(setConfig)
-            .catch(() => {
-                if (!abort.signal.aborted) setFailed(true)
-            })
         const meta = document.createElement('meta')
         meta.name = 'referrer'
         meta.content = 'no-referrer'
         document.head.appendChild(meta)
         return () => {
-            abort.abort()
             meta.remove()
         }
     }, [])
@@ -63,14 +54,7 @@ export function DshLogin() {
     }
     const tenantName = user?.leaf_tenant_name?.trim() || user?.tenant_name?.trim()
     const base = location.origin
-    let download: string | null = null
-    try {
-        const url = new URL(import.meta.env.VITE_DSH_DOWNLOAD_URL || '')
-        if (url.protocol === 'https:' && !url.username && !url.password)
-            download = url.href
-    } catch {
-        /* Installation links are optional deployment configuration. */
-    }
+    const download = config?.download_url
     return (
         <main className="flex min-h-screen items-center justify-center bg-background p-4">
             <section className="flex w-full max-w-xl flex-col gap-4 rounded-lg border bg-background p-6">

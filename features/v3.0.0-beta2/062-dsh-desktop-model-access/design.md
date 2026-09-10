@@ -107,13 +107,13 @@ flowchart LR
 
 客户端只访问同一 Nginx origin。Nginx 将全部 `/api/*` 交给 Gateway，Gateway 将已配置的 `/api/v1/*`、`/api/v2/*` 转发到 BiSheng，其余 `/api/*` 由自有 Controller 处理；版本前缀优先匹配。DSH 换证逻辑终点为 Gateway，模型请求逻辑终点为 BiSheng，传输均经过 Nginx/Gateway。模型实现不因代理链新增而重复。
 
-配置边界：BiSheng 新增 `dsh.enabled`（默认 false）、固定的 `gateway_internal_url`、同 Nginx origin 的 `platform_public_url`、`installation_id`、复用既有用户同步共享 Secret；Token issuer 和各用途 key_id 由代码固定。内部 URL 指向真实服务地址，避免经公共反向代理形成回环；客户端不能提交任意 issuer 或验席 URL。
+配置边界：BiSheng 部署 `dsh.enabled`（默认 false，决定是否显示 DSH 管理入口）；管理页另有默认 false 的实例业务开关，两者都开启才允许 DSH 新登录与模型调用。业务开关和下载地址保存在已有全局 Config 表的 dsh_management 项；部署信任字段包括固定的 `gateway_internal_url`、同 Nginx origin 的 `platform_public_url`、`installation_id`、复用既有用户同步共享 Secret；Token issuer 和各用途 key_id 由代码固定。内部 URL 指向真实服务地址，避免经公共反向代理形成回环；客户端不能提交任意 issuer 或验席 URL。
 
 Gateway 新增 `dsh.enabled`、BiSheng 内部地址、同一个 `platform_public_url`、实例标识、DSH 签名密钥引用及客户端回调规则。DSH 用户配置只有 Nginx BASE；公开 client_id 通过 config 返回，所有 API 路径固定拼接到 BASE，不发现第二公开服务地址。config 不访问用户或模型数据。身份凭证保存在操作系统安全凭证存储中，不随 Agent 配置导出或写入普通配置文件。
 
 ### 4.3 登录与固定占席
 
-浏览器确认接口 `POST /api/v1/dsh/authorize` 的可选 `decision` 为 `approve`（默认）或 `deny`。拒绝时只解析 Gateway 已绑定事务的 redirect_uri/state 并返回 access_denied，不签发 identity_ticket；页面据此执行客户端文档中已有的拒绝回调。固定页下载入口使用部署者提供的构建配置 `VITE_DSH_DOWNLOAD_URL`（仅无凭证 HTTPS），未配置时显示联系管理员与手动填写平台地址，不发现额外公开 API。
+浏览器确认接口 `POST /api/v1/dsh/authorize` 的可选 `decision` 为 `approve`（默认）或 `deny`。拒绝时只解析 Gateway 已绑定事务的 redirect_uri/state 并返回 access_denied，不签发 identity_ticket；页面据此执行客户端文档中已有的拒绝回调。固定页下载入口使用 DSH 管理页保存的无凭证 HTTP(S) 地址，未配置时显示联系管理员与手动填写平台地址；浏览器通过独立 `/api/v1/dsh/browser-config` 读取，不改变客户端冻结配置接口。
 
 2026-09-09 客户端细化：固定前端入口 `/desktop-login`；入口 A 由客户端创建 PKCE 事务后打开带 auth_id 的页面；入口 B 的 `dsh-desktop://login?server=...` 只唤起客户端并确认平台，再新建同一 PKCE 流程。此处调整 PRD 旧的“深链直接带 code”时序，避免无客户端 verifier 的换证。浏览器复用现有登录；loopback 不可达时仅在当前 auth_id/verifier 事务中粘贴 identity_ticket，不接受孤立票据导入。具体回调、失败与超时见 [客户端契约 §4](./client-api.md#4-浏览器登录)。以下时序箭头表示逻辑服务，外部流量均经 §4.2 Nginx/Gateway。
 
@@ -838,3 +838,11 @@ Desktop GET usage 增加可选 `model=bisheng:<id>`，响应字段不变；选�
 本轮 DM8 真库按用户授权暂缓。毕昇新增业务 SQL 使用 ORM；允许列默认值/约束表达式及 DDL 方言适配。Gateway 维持既有 Mapper 写法，独立审查其分页、行锁、字符与 LOB 兼容性。
 
 - 2026-09-09：按用户明确修订取消 UNKNOWN 冻结，缺失用量保留明细；删除 DSH 部门字段、筛选和同步。客户端契约升级 0.3.0，客户端确认与联调尚待完成。
+
+## 2026-09-10 两层开关与下载地址
+
+用户已确认：部署开关决定 DSH 管理界面可见性，初始化部署默认关闭；管理页业务开关控制整个 DSH 功能。关闭后隐藏模型开放范围和 DSH 用户入口，服务端拒绝模型转发、浏览器授权及身份换证/刷新检查；保留现有席位、授权、凭证及用量，不停止在途结算与后台投影。部署开启时配置页不依赖业务已开启，避免无法重开。
+
+新增管理 GET/PUT `/api/v1/dsh/admin/settings` 使用超级管理员 JWT 和类型化 `{enabled, download_url}`；新增公开只读 GET `/api/v1/dsh/browser-config` 返回 `{management_enabled, enabled, download_url}`，无部署秘密。原客户端 `/api/v1/dsh/config` 响应形状不变，enabled 为两层开关的有效状态。Gateway 仅补充 browser-config 精确路由归属，不改变 License 逻辑。下载地址不再使用构建变量。
+
+完整验收、依赖与已知坑见 [管理配置修订](./management-settings-revision.md)。当前分支无独立个人中心 DSH 详情页；现有 desktop-login 已受业务开关控制，后续详情页不得绕过该开关。

@@ -13,6 +13,7 @@ from bisheng.dsh.api.responses import DshRoute
 from bisheng.dsh.config import DshSettings
 from bisheng.dsh.domain.schemas.contracts import DshContract, SubjectId
 from bisheng.dsh.domain.services.identity import BrowserIdentity
+from bisheng.dsh.domain.services.settings import DshSettingsService
 
 router = APIRouter(route_class=DshRoute)
 browser_user = UserPayload.get_login_user
@@ -40,6 +41,8 @@ class CheckRequest(DshContract):
 @router.get("/dsh/config")
 async def config(settings: DshSettings = Depends(get_settings)):
     if not settings.enabled:
+        return {"enabled": False}
+    if not (await DshSettingsService().read()).enabled:
         return {"enabled": False}
     return {"enabled": True, "client_id": settings.client_id, "contract_version": settings.contract_version}
 

@@ -2194,7 +2194,19 @@
     "allowUser": "允许 {{name}} 调用当前模型",
     "userMonthlyLimit": "{{name}} 每月 Token 额度",
     "userUsage": "用户用量",
-    "usageScope": "按用户名查看 DSH 用量。模型授权与额度请到“模型管理 → DSH 开放范围”配置。"
+    "usageScope": "按用户名查看 DSH 用量。模型授权与额度请到“模型管理 → DSH 开放范围”配置。",
+    "accessSettings": "DSH Desktop 接入配置",
+    "businessEnabled": "允许使用 DSH Desktop",
+    "businessOn": "已打开",
+    "businessOff": "已关闭",
+    "businessSwitchHelp": "关闭后隐藏模型开放范围与 DSH 用户入口，禁止新登录和模型调用；已有席位、授权及用量保留。保存后生效。",
+    "downloadAddress": "DSH Desktop 下载地址",
+    "downloadAddressHelp": "支持 HTTP 或 HTTPS 地址；留空时不显示下载链接。保存后无需重新构建前端。",
+    "saveSettings": "保存配置",
+    "settingsAdminOnly": "仅超级管理员可修改实例配置。",
+    "settingsSaved": "配置已保存",
+    "settingsSaveFailed": "保存失败，请检查下载地址或稍后重试。",
+    "licenseDeploymentOnly": "License 由 Gateway 部署配置；此处不管理授权密钥。"
   },
   "request": {
     "session_expired": "登录过期",

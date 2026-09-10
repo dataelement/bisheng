@@ -1,10 +1,14 @@
 // @ts-strict-ignore
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 import { render, screen } from "@/test/test-utils";
 import { userContext } from "@/contexts/userContext";
 import SystemPage from "@/pages/SystemPage";
+
+const dsh = vi.hoisted(() => ({ management_enabled: false, enabled: false, download_url: null }));
+vi.mock("@/hooks/useDshBrowserConfig", () => ({ useDshBrowserConfig: () => ({ config: dsh, failed: false }) }));
+beforeEach(() => { dsh.management_enabled = false; dsh.enabled = false; });
 
 // Stub the heavy children — we only assert which tab triggers render.
 vi.mock("@/pages/SystemPage/components/Config", () => ({
@@ -54,6 +58,15 @@ const USER_GROUP = "system.userGroupsM";
 const LEGACY = "system.userManagement";
 
 describe("SystemPage tab visibility (PRD §3.3)", () => {
+  it("hides DSH management when deployment is off", () => {
+    renderWithUser({ role: "admin", user_id: 1 });
+    expect(screen.queryByRole("tab", { name: "dsh.title" })).toBeNull();
+  });
+  it("shows DSH management when deployed even if business is off", () => {
+    dsh.management_enabled = true;
+    renderWithUser({ role: "admin", user_id: 1 });
+    expect(screen.getByRole("tab", { name: "dsh.title" })).toBeTruthy();
+  });
   it("global super admin sees org/userGroup/role/orgSync/system/theme; legacy user table hidden", () => {
     renderWithUser({ role: "admin", user_id: 1 });
     expect(screen.getByText(ORG)).toBeInTheDocument();

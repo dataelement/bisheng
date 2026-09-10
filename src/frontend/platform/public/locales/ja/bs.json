@@ -2194,7 +2194,19 @@
     "allowUser": "{{name}} にこのモデルの利用を許可",
     "userMonthlyLimit": "{{name}} の月間トークン上限",
     "userUsage": "ユーザー使用量",
-    "usageScope": "ユーザー名で DSH の使用量を検索します。権限と上限は「モデル管理 → DSH 公開範囲」で設定してください。"
+    "usageScope": "ユーザー名で DSH の使用量を検索します。権限と上限は「モデル管理 → DSH 公開範囲」で設定してください。",
+    "accessSettings": "DSH Desktop 接続設定",
+    "businessEnabled": "DSH Desktop の利用を許可",
+    "businessOn": "有効",
+    "businessOff": "無効",
+    "businessSwitchHelp": "無効にするとモデルの公開範囲と DSH ユーザー入口が非表示になり、新しいログインとモデル呼び出しを拒否します。席位、権限、使用量は保持されます。保存後に適用されます。",
+    "downloadAddress": "DSH Desktop ダウンロード URL",
+    "downloadAddressHelp": "HTTP または HTTPS の URL を指定します。空欄の場合はリンクを表示しません。フロントエンドの再ビルドは不要です。",
+    "saveSettings": "設定を保存",
+    "settingsAdminOnly": "インスタンス設定を変更できるのは全体管理者のみです。",
+    "settingsSaved": "設定を保存しました",
+    "settingsSaveFailed": "保存できませんでした。ダウンロード URL を確認するか、後で再試行してください。",
+    "licenseDeploymentOnly": "License は Gateway のデプロイ時に設定します。ここではライセンスキーを管理しません。"
   },
   "request": {
     "session_expired": "セッションの有効期限が切れました",

@@ -1,4 +1,4 @@
-"""Lazy application-owned DSH dependencies; the disabled probe performs no IO."""
+"""Lazy application-owned DSH dependencies; the deployment-disabled probe performs no IO."""
 
 import asyncio
 from dataclasses import dataclass
@@ -12,6 +12,7 @@ from bisheng.dsh.domain.repositories.identities import CurrentIdentityRecords
 from bisheng.dsh.domain.repositories.tickets import TicketRepository
 from bisheng.dsh.domain.services.access import DshAccessService
 from bisheng.dsh.domain.services.identity import IdentityService
+from bisheng.dsh.domain.services.settings import DshSettingsService
 from bisheng.dsh.infrastructure.gateway_client import GatewayClient
 from bisheng.dsh.infrastructure.service_auth import RedisNonceStore, ServiceAuth, ServiceKey
 from bisheng.dsh.infrastructure.shared_trust import (
@@ -49,6 +50,9 @@ class DshRuntime:
 async def get_runtime(request: Request, config: DshSettings = Depends(get_settings)) -> DshRuntime:
     if not config.enabled:
         raise DshDshDisabledError()
+    # Check every new request, including requests reusing the initialized runtime.
+    # Background projection/settlement does not use this admission dependency.
+    await DshSettingsService().require_enabled()
     runtime = getattr(request.app.state, "dsh_runtime", None)
     if runtime is not None:
         return runtime

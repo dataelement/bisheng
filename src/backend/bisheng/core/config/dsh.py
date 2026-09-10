@@ -10,7 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 class DshSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True, hide_input_in_errors=True)
 
-    enabled: bool = Field(default=False, description="Enable DSH Desktop model access; disabled by default.")
+    enabled: bool = Field(
+        default=False,
+        description="Expose the DSH management module; disabled by default. Business access is enabled separately in its management page.",
+    )
     client_id: Literal["dsh-desktop"] = Field(
         default="dsh-desktop", description="Desktop OAuth client identifier fixed by the DSH contract."
     )

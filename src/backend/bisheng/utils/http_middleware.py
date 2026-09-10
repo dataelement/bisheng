@@ -50,6 +50,7 @@ _IS_SUPER_CACHE_TTL_SECONDS = 300
 DSH_CREDENTIAL_ROUTES = frozenset(
     {
         ("GET", "/api/v1/dsh/config"),
+        ("GET", "/api/v1/dsh/browser-config"),
         ("GET", "/api/v1/dsh/models"),
         ("GET", "/api/v1/dsh/usage"),
         ("POST", "/api/v1/dsh/chat/completions"),

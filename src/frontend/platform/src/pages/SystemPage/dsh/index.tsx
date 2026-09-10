@@ -7,7 +7,10 @@ import {
 } from '@/components/bs-ui/tabs'
 import { getDshLicense } from '@/controllers/API/dsh'
 import type { DshLicense, DshOperation, DshOperationRef } from '@/types/dsh'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { userContext } from '@/contexts/userContext'
+import { useDshBrowserConfig } from '@/hooks/useDshBrowserConfig'
+import { SettingsPanel } from './SettingsPanel'
 import { useTranslation } from 'react-i18next'
 import { OperationStatus } from './OperationStatus'
 import { PolicyView } from './PolicyView'
@@ -15,6 +18,18 @@ import { SeatsView } from './SeatsView'
 import { dshTime } from './common'
 
 export function DshManagement() {
+    const { t } = useTranslation()
+    const { user } = useContext(userContext)
+    const { config, failed } = useDshBrowserConfig()
+    if (!config) return <p role="status">{t(failed ? 'dsh.unavailable' : 'dsh.loading')}</p>
+    if (!config.management_enabled) return null
+    return <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
+        <SettingsPanel settings={config} canEdit={user?.role === 'admin' || !!user?.is_global_super} />
+        {config.enabled && <DshManagementContent />}
+    </div>
+}
+
+function DshManagementContent() {
     const { t } = useTranslation()
     const [license, setLicense] = useState<DshLicense | null>(null)
     const [error, setError] = useState(false)

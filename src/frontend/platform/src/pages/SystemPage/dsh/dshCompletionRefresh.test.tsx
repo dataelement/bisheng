@@ -5,6 +5,9 @@ import type { DshOperation, DshOperationRef } from '@/types/dsh'
 import { DshManagement } from './index'
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('@/controllers/API/dsh', () => ({ getDshLicense: vi.fn() }))
+vi.mock('@/controllers/API/dshSettings', () => ({ getDshBrowserConfig: vi.fn().mockResolvedValue({ management_enabled: true, enabled: true, download_url: null }) }))
+vi.mock('@/contexts/userContext', async () => ({ userContext: (await import('react')).createContext({ user: { role: 'admin' } }) }))
+vi.mock('./SettingsPanel', () => ({ SettingsPanel: () => null }))
 vi.mock('./PolicyView', () => ({ PolicyView: () => null }))
 vi.mock('./OperationStatus', () => ({ OperationStatus: () => null }))
 vi.mock('./SeatsView', () => ({ SeatsView: ({ revision, onOperation }: { revision: number; onOperation: (ref: DshOperationRef, result: DshOperation) => void }) => (
