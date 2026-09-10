@@ -10,7 +10,7 @@ from loguru import logger
 from redis.asyncio import ConnectionPool, Redis
 from redis.exceptions import RedisError
 
-from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig, model_configs_payload, validate_model_configs
+from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig, validate_model_configs
 from bisheng.dsh.domain.schemas.usage import UsageEvent
 from bisheng.dsh.infrastructure.quota_topology import QuotaTopology
 
@@ -236,6 +236,7 @@ class QuotaRedis:
         tenant_id: int,
         user_id: int,
         *,
+        model_id: int,
         operation_id: str,
         lease_generation: int,
         epoch: int,
@@ -243,7 +244,9 @@ class QuotaRedis:
     ):
         self._policy_arguments(operation_id, lease_generation, epoch, expected_version)
         await self._policy(
-            tenant_id, user_id, ["block", operation_id, str(lease_generation), str(epoch), str(expected_version)]
+            tenant_id,
+            user_id,
+            ["block", operation_id, str(lease_generation), str(epoch), str(expected_version), str(model_id)],
         )
 
     async def install_policy(
@@ -251,21 +254,22 @@ class QuotaRedis:
         tenant_id: int,
         user_id: int,
         *,
+        model_id: int,
         operation_id: str,
         lease_generation: int,
         epoch: int,
         expected_version: int,
         version: int,
-        model_configs: list[DshModelQuotaConfig],
+        monthly_token_limit: int,
+        enabled: bool,
     ):
         import json
 
         self._policy_arguments(operation_id, lease_generation, epoch, expected_version)
-        configs = validate_model_configs(model_configs)
-        if version != expected_version + 1:
-            raise ValueError("Invalid policy version")
-        limit = sum(item.monthly_token_limit for item in configs)
-        payload = json.dumps([version, model_configs_payload(configs)], separators=(",", ":"))
+        config = DshModelQuotaConfig(model_id=model_id, monthly_token_limit=monthly_token_limit)
+        if version != expected_version + 1 or type(enabled) is not bool:
+            raise ValueError("Invalid model policy transition")
+        payload = json.dumps([version, config.model_dump(), enabled], separators=(",", ":"))
         await self._policy(
             tenant_id,
             user_id,
@@ -275,10 +279,11 @@ class QuotaRedis:
                 str(lease_generation),
                 str(epoch),
                 str(expected_version),
+                str(model_id),
                 str(version),
-                str(limit),
+                str(monthly_token_limit),
                 payload,
-                *[value for item in configs for value in (str(item.model_id), str(item.monthly_token_limit))],
+                "1" if enabled else "0",
             ],
         )
 
@@ -287,6 +292,7 @@ class QuotaRedis:
         tenant_id: int,
         user_id: int,
         *,
+        model_id: int,
         operation_id: str,
         lease_generation: int,
         epoch: int,
@@ -296,7 +302,7 @@ class QuotaRedis:
         await self._policy(
             tenant_id,
             user_id,
-            ["finish", operation_id, str(lease_generation), str(epoch), str(expected_policy_version)],
+            ["finish", operation_id, str(lease_generation), str(epoch), str(expected_policy_version), str(model_id)],
         )
 
     @staticmethod
@@ -404,6 +410,12 @@ class QuotaRedis:
                         value
                         for item in manifest.model_configs
                         for value in (str(item.model_id), str(item.monthly_token_limit))
+                    ],
+                    str(len(manifest.model_versions)),
+                    *[
+                        value
+                        for model, version in sorted(manifest.model_versions.items())
+                        for value in (str(model), str(version))
                     ],
                     str(len(months)),
                 ]

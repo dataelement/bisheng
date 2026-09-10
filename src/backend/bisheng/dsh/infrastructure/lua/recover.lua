@@ -7,8 +7,10 @@ for i=1,#KEYS do
   if t~='none' and t~=expected then return {'DENY','bad_type'} end
 end
 local index=6; local models=tonumber(ARGV[5]); local fields=redis.call('HKEYS',KEYS[1])
-for _,f in ipairs(fields) do if string.sub(f,1,6)=='model:' or string.sub(f,1,6)=='limit:' then redis.call('HDEL',KEYS[1],f) end end
-for i=1,models do redis.call('HSET',KEYS[1],'model:'..ARGV[index],'1','limit:'..ARGV[index],ARGV[index+1]); index=index+2 end
+for _,f in ipairs(fields) do if string.sub(f,1,6)=='model:' or string.sub(f,1,6)=='limit:' or string.sub(f,1,8)=='version:' or string.sub(f,1,13)=='operation_id:' or string.sub(f,1,11)=='generation:' or string.sub(f,1,18)=='installed_version:' or string.sub(f,1,15)=='policy_payload:' then redis.call('HDEL',KEYS[1],f) end end
+for i=1,models do redis.call('HSET',KEYS[1],'model:'..ARGV[index],'1','limit:'..ARGV[index],ARGV[index+1],'version:'..ARGV[index],ARGV[3]); index=index+2 end
+local versions=tonumber(ARGV[index]); index=index+1
+for i=1,versions do redis.call('HSET',KEYS[1],'version:'..ARGV[index],ARGV[index+1]); index=index+2 end
 local months=tonumber(ARGV[index]); index=index+1; local key=4
 for m=1,months do
   local total=ARGV[index]; local count=tonumber(ARGV[index+1]); index=index+2

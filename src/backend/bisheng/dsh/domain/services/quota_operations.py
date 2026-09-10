@@ -57,6 +57,8 @@ class DshQuotaOperationsService:
             model_configs_payload(policy["model_configs"]),
         ):
             raise ValueError("Recovery policy must match the current committed SQL policy")
+        if manifest.model_versions != {row["model_id"]: row["version"] for row in policy["rows"]}:
+            raise ValueError("Recovery must include the committed version of every model row")
         if command == "initialize":
             current_month = self.now().astimezone(ZoneInfo(self.billing_timezone)).strftime("%Y-%m")
             if (

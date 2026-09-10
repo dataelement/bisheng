@@ -12,7 +12,7 @@ class DshModelAccessRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def users(self, rows: list[tuple[int, str]], *, limit: int = 20) -> dict:
+    def users(self, rows: list[tuple[int, str]], *, model_id: int, limit: int = 20) -> dict:
         tenant = require_tenant()
         if not 1 <= limit <= 100 or len(rows) > limit + 1:
             raise ValueError("A bounded user page is required")
@@ -23,7 +23,9 @@ class DshModelAccessRepository:
                     policy.user_id: policy
                     for policy in self.session.exec(
                         select(DshUserPolicy).where(
-                            DshUserPolicy.tenant_id == tenant, col(DshUserPolicy.user_id).in_(ids)
+                            DshUserPolicy.tenant_id == tenant,
+                            DshUserPolicy.model_id == model_id,
+                            col(DshUserPolicy.user_id).in_(ids),
                         )
                     ).all()
                 }
@@ -35,7 +37,8 @@ class DshModelAccessRepository:
                 user_id=user_id,
                 user_name=name,
                 version=policy.version if policy else 0,
-                models=policy.model_configs if policy else [],
+                enabled=bool(policy.enabled) if policy else False,
+                monthly_token_limit=policy.monthly_token_limit if policy else 0,
                 pending_operation_id=policy.pending_operation_id if policy else None,
             ).model_dump()
             for user_id, name in rows[:limit]
@@ -46,3 +49,22 @@ class DshModelAccessRepository:
             "next_cursor": str(items[-1]["user_id"]) if len(rows) > limit else None,
             "has_more": len(rows) > limit,
         }
+
+    def authorized_user_ids(self, model_id: int, *, after_user_id: int = 0, limit: int = 20) -> list[int]:
+        tenant = require_tenant()
+        if not 1 <= limit <= 100:
+            raise ValueError("A bounded page is required")
+        with strict_tenant_filter():
+            return list(
+                self.session.exec(
+                    select(DshUserPolicy.user_id)
+                    .where(
+                        DshUserPolicy.tenant_id == tenant,
+                        DshUserPolicy.model_id == model_id,
+                        DshUserPolicy.enabled == 1,
+                        DshUserPolicy.user_id > after_user_id,
+                    )
+                    .order_by(DshUserPolicy.user_id)
+                    .limit(limit + 1)
+                ).all()
+            )

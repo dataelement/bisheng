@@ -76,6 +76,6 @@ Redis 连接/主节点身份不再可信时，本进程关闭准入，不能以�
 ## 逐模型配置修订的发布准备（2026-09-09）
 
 - 主配置使用 `Settings.dsh: DshSettings`；字段含类型、含义与边界校验，密钥复用用户同步配置。`ChatCapabilities` 由供应商适配器生成，不是部署配置。用户策略为 `models: [{model_id, monthly_token_limit}]`，同一用户可有多个模型，每个模型仅一份配置。一期不配置 RPM、TPM 或并发限流。
-- 新策略表持久字段为 `model_configs`，其值由 `ModelConfigsType` 通过既有 `JsonType` 保存；旧草案的 `allowed_model_ids`＋共享额度列不是当前结构。全新安装可走模型发现建表；曾试装旧草案的环境必须先关闭 DSH、备份并只读核对 schema，安排保留数据的结构调整和人工确认每模型额度，重新生成绑定完整配置的恢复证据后再开启。不得直接 create_all 假定旧表会变更，也不得删表或清零账本。
+- 未发版结构已按用户确认改为 dsh_user_policy 一行一条用户模型授权，取消 model_configs JSON，不新增 Alembic。新安装由 ORM 建表；109 独立联调库单独备份并转换结构，旧镜像必须与新结构配套升级。详见 [单行授权修订](./model-policy-row-revision.md)。
 - Gateway 使用现有 `mybatis-plus.db-type`；DM 环境必须设为 `DM`，使席位短事务使用 READ_COMMITTED＋首条 EXCLUSIVE 表锁。锁在提交/回滚时释放；不可仅切换 JDBC URL 却保留 MYSQL 类型。DM 实机本轮暂缓，静态兼容检查不代表部署吞吐量已验证。
 - 发布前向客户端同步 [接口文档](./client-api.md) 的逐模型额度修订。模型选择/切换、调用结束、额度拒绝后查询 `GET /api/v1/dsh/usage?model=bisheng:<id>`；无参数只作汇总展示，汇总额度不能决定某个模型可调用。

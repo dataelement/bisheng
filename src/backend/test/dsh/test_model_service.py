@@ -73,7 +73,12 @@ class Ledger:
 def service_setup():
     llm, ledger = LLM(), Ledger()
     policy = SimpleNamespace(
-        version=1, quota_epoch=1, quota_sync_state="READY", allowed_model_ids=[42], monthly_token_limit=100
+        version=1,
+        quota_epoch=1,
+        quota_sync_state="READY",
+        allowed_model_ids=[42],
+        rows=[SimpleNamespace(model_id=42, version=1, quota_sync_state="READY")],
+        monthly_token_limit=100,
     )
     model = SimpleNamespace(
         id=42, name="Enterprise", model_name="provider", create_time=datetime(2026, 9, 9), config={}
@@ -225,6 +230,7 @@ async def test_real_redis_settlement_and_changed_model_keep_total(service_setup,
 
     service, llm, _ledger, policy, _state = service_setup
     policy.allowed_model_ids = [4, 5]
+    policy.rows = [SimpleNamespace(model_id=model, version=1, quota_sync_state="READY") for model in (4, 5)]
     policy.monthly_token_limit = 1000
 
     async def load_model(model_id):

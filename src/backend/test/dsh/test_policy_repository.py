@@ -62,6 +62,9 @@ def sql_store(tmp_path, monkeypatch, request):
     token = set_current_tenant_id(2)
     yield engine
     current_tenant_id.reset(token)
+    if request.param == "external":
+        for model in (DshModelCall, DshMonthlyUsage, DshAdminOperation, DshUserPolicy):
+            model.__table__.drop(engine, checkfirst=True)
     engine.dispose()
     with Session() as probe:
         for name, listeners in previous.items():
@@ -76,10 +79,9 @@ def register(session, op="a", expected=0, actor=90, models=None, limit=100):
         user_id=20,
         actor_user_id=actor,
         expected_version=expected,
-        model_configs=[
-            DshModelQuotaConfig(model_id=model, monthly_token_limit=limit)
-            for model in ([5, 2] if models is None else models)
-        ],
+        model_id=2 if models is None else models[0],
+        monthly_token_limit=limit,
+        enabled=True,
     )
 
 
@@ -105,7 +107,7 @@ def test_atomic_rollback_and_idempotent_first_update(sql_store):
     with Session(sql_store) as session, session.begin():
         assert register(session).status == "SUCCEEDED"
         policy = DshPolicyRepository(session).get(20)
-        assert (policy.version, policy.allowed_model_ids, policy.monthly_token_limit) == (1, [2, 5], 200)
+        assert (policy.version, policy.allowed_model_ids, policy.monthly_token_limit) == (1, [2], 100)
         assert policy.pending_operation_id is None
         assert policy.quota_sync_state == "READY"
 
@@ -150,11 +152,11 @@ def test_sequential_history_retains_actor_and_versions(sql_store):
     with Session(sql_store) as session, session.begin():
         register(session)
         finish(session)
-        register(session, op="b", expected=1, actor=91, models=[7], limit=200)
+        register(session, op="b", expected=1, actor=91, models=[2], limit=200)
         finish(session, op="b")
         history = DshOperationRepository(session).list_for_user(20)
         assert [op.operation_id for op in history] == ["a", "b"]
-        assert history[0].before_values == {"version": 0, "model_configs": []}
+        assert history[0].before_values == {"version": 0, "model_id": 2, "monthly_token_limit": 0, "enabled": False}
         assert history[0].after_values["version"] == history[1].before_values["version"] == 1
         assert history[0].actor_user_id == 90 and history[1].actor_user_id == 91
         assert history[0].committed_at <= history[0].effective_at
@@ -232,7 +234,9 @@ def test_external_sql_first_configuration_race(dsh_database_url, monkeypatch):
                             user_id=user_id,
                             actor_user_id=90,
                             expected_version=0,
-                            model_configs=[DshModelQuotaConfig(model_id=2, monthly_token_limit=100)],
+                            model_id=2,
+                            monthly_token_limit=100,
+                            enabled=True,
                         )
                     return "REGISTERED"
                 except DshOperationInProgressError:
@@ -268,8 +272,7 @@ def test_new_user_proof_requires_current_owner_fence_and_empty_history(sql_store
             repository.new_user_proof("a", generation + 1, now=NOW)
         session.add(DshMonthlyUsage(user_id=20, tenant_id=2, model_id=4, usage_month="2026-09", billing_timezone="UTC"))
         session.flush()
-        with pytest.raises(DshOperationConflictError):
-            repository.new_user_proof("a", generation, now=NOW)
+        assert repository.new_user_proof("a", generation, now=NOW) is None
 
 
 def test_model_configuration_identity_is_preserved_in_sql_and_intent(sql_store):
@@ -277,25 +280,33 @@ def test_model_configuration_identity_is_preserved_in_sql_and_intent(sql_store):
         DshModelQuotaConfig(model_id=2, monthly_token_limit=100),
         DshModelQuotaConfig(model_id=5, monthly_token_limit=200),
     ]
-    swapped = [
-        DshModelQuotaConfig(model_id=2, monthly_token_limit=200),
-        DshModelQuotaConfig(model_id=5, monthly_token_limit=100),
-    ]
     with Session(sql_store) as session, session.begin():
         repository = DshPolicyRepository(session)
         repository.register_update(
-            operation_id="pair", user_id=20, actor_user_id=90, expected_version=0, model_configs=first
+            operation_id="pair",
+            user_id=20,
+            actor_user_id=90,
+            expected_version=0,
+            model_id=2,
+            monthly_token_limit=100,
+            enabled=True,
         )
         with pytest.raises(DshOperationConflictError):
             repository.register_update(
-                operation_id="pair", user_id=20, actor_user_id=90, expected_version=0, model_configs=swapped
+                operation_id="pair",
+                user_id=20,
+                actor_user_id=90,
+                expected_version=0,
+                model_id=2,
+                monthly_token_limit=200,
+                enabled=True,
             )
         finish(session, "pair")
     with Session(sql_store) as session:
         policy = DshPolicyRepository(session).get(20)
-        assert policy.model_configs == first
+        assert policy.model_configs == first[:1]
         assert all(isinstance(item, DshModelQuotaConfig) for item in policy.model_configs)
-        assert policy.allowed_model_ids == [2, 5]
+        assert policy.allowed_model_ids == [2]
         assert "monthly_token_limit" not in policy.model_dump()
         assert "allowed_model_ids" not in policy.model_dump()
 

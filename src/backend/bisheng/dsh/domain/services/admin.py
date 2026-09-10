@@ -18,13 +18,26 @@ from bisheng.dsh.infrastructure.gateway_client import GatewayCommandRejected
 
 class DshManagementService:
     def __init__(
-        self, *, repository_scope, gateway, authorize, profiles, policy, policy_view, now, model_users_view=None
+        self,
+        *,
+        repository_scope,
+        gateway,
+        authorize,
+        profiles,
+        policy,
+        policy_view,
+        now,
+        model_users_view=None,
+        model_policy_view=None,
     ):
         self.repository_scope, self.gateway, self.authorize = repository_scope, gateway, authorize
         self.profiles, self.policy, self.policy_view, self.now = profiles, policy, policy_view, now
         self.model_users_view = model_users_view
+        self.model_policy_view = model_policy_view
 
-    async def model_users(self, actor_id, model_id, *, tenant_id=None, cursor=None, limit=20, keyword=None):
+    async def model_users(
+        self, actor_id, model_id, *, tenant_id=None, cursor=None, limit=20, keyword=None, authorized_only=False
+    ):
         from bisheng.core.context.tenant import get_current_tenant_id
 
         _actor, tenant = await self.authorize(actor_id, tenant_id)
@@ -33,7 +46,11 @@ class DshManagementService:
             raise DshAuthorizationUnavailableError()
         with profile_scope(tenant):
             return await self.model_users_view(
-                model_id, after_user_id=int(cursor or 0), limit=limit, keyword=keyword or ""
+                model_id,
+                after_user_id=int(cursor or 0),
+                limit=limit,
+                keyword=keyword or "",
+                authorized_only=authorized_only,
             )
 
     async def _request(self, operation, payload):
@@ -138,10 +155,17 @@ class DshManagementService:
         with profile_scope(tenant):
             return await self.policy_view(user_id)
 
-    async def update_policy(self, actor_id, user_id, request, *, tenant_id=None):
+    async def get_model_policy(self, actor_id, user_id, model_id, *, tenant_id=None):
         _actor, tenant = await self.authorize(actor_id, tenant_id, user_id)
         with profile_scope(tenant):
-            return await self.policy.update_policy(user_id=user_id, actor_user_id=actor_id, request=request)
+            return await self.model_policy_view(user_id, model_id)
+
+    async def update_policy(self, actor_id, user_id, request, *, model_id: int, tenant_id=None):
+        _actor, tenant = await self.authorize(actor_id, tenant_id, user_id)
+        with profile_scope(tenant):
+            return await self.policy.update_policy(
+                user_id=user_id, actor_user_id=actor_id, model_id=model_id, request=request
+            )
 
     async def sessions(self, actor_id, user_id, *, tenant_id=None, cursor=None, limit=50):
         actor, tenant = await self.authorize(actor_id, tenant_id, user_id)

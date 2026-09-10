@@ -26,7 +26,7 @@ import { useTranslation } from 'react-i18next'
 import { ModelAccessRow } from './ModelAccessRow'
 
 export type DshAccessModel = { id: number; name: string }
-type UserOperation = DshOperationRef & { user_id: number }
+type UserOperation = DshOperationRef & { user_id: number; model_id?: number }
 interface ModelAccessDialogProps {
     model: DshAccessModel | null
     onClose: () => void
@@ -206,6 +206,7 @@ function ModelAccessUsers({
                                         (reference) =>
                                             reference.user_id ===
                                                 user.user_id &&
+                                            reference.model_id === model.id &&
                                             reference.tenant_id ===
                                                 String(page.tenant_id) &&
                                             !reference.rejected &&

@@ -5,8 +5,6 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig, validate_model_configs
-
 SubjectId = Annotated[str, Field(strict=True, pattern=r"^[0-9]+$")]
 NonnegativeInt = Annotated[int, Field(strict=True, ge=0, le=9223372036854775807)]
 DisplayText = Annotated[str, Field(strict=True, min_length=1)]
@@ -88,14 +86,8 @@ class DshPolicySyncState(StrEnum):
 class DshUserPolicyInput(DshContract):
     operation_id: str = Field(min_length=1, max_length=36)
     expected_version: NonnegativeInt
-    models: list[DshModelQuotaConfig] = Field(
-        description="Independent monthly allowances, one configuration per model; no shared user ceiling or rate limiting."
-    )
-
-    @model_validator(mode="after")
-    def reject_duplicate_models(self):
-        self.models = validate_model_configs(self.models)
-        return self
+    monthly_token_limit: NonnegativeInt
+    enabled: bool
 
 
 class DshErrorDetail(DshContract):

@@ -15,11 +15,14 @@ local limit=redis.call('HGET',KEYS[1],'limit:'..ARGV[3])
 if not integer(used) or not integer(limit) or not integer(redis.call('HGET',KEYS[3],ARGV[3])) then return {'DENY','bad_counter'} end
 if redis.call('HGET',KEYS[1],'write_in_progress')=='1' then return {'DENY','ledger_write_incomplete'} end
 if redis.call('HGET',KEYS[1],'state')~='READY' or redis.call('HGET',KEYS[2],'state')~='READY' then return {'DENY','not_ready'} end
-if redis.call('HGET',KEYS[1],'epoch')~=ARGV[1] or redis.call('HGET',KEYS[2],'epoch')~=ARGV[1] or redis.call('HGET',KEYS[1],'version')~=ARGV[2] then return {'DENY','version_mismatch'} end
+if redis.call('HGET',KEYS[1],'epoch')~=ARGV[1] or redis.call('HGET',KEYS[2],'epoch')~=ARGV[1] or redis.call('HGET',KEYS[1],'version:'..ARGV[3])~=ARGV[2] then return {'DENY','version_mismatch'} end
 if redis.call('HGET',KEYS[1],'model:'..ARGV[3])~='1' then return {'DENY','model_not_allowed'} end
 local reason=pressure(KEYS[6],tonumber(ARGV[7]),tonumber(ARGV[8]),tonumber(ARGV[9]),tonumber(ARGV[10]))
 if reason then return {'DENY',reason} end
-if redis.call('SCARD',KEYS[4])~=0 then return {'DENY','blocked'} end
+for _,block in ipairs(redis.call('SMEMBERS',KEYS[4])) do
+  local policy_model=string.match(block,'^POLICY_SYNC:([0-9]+):')
+  if not policy_model or policy_model==ARGV[3] then return {'DENY','blocked'} end
+end
 if redis.call('EXISTS',KEYS[5])==1 then
   if redis.call('HGET',KEYS[5],'admission')~=ARGV[4] then return {'DENY','request_conflict'} end
   return {'EXISTS',redis.call('HGET',KEYS[5],'event')}

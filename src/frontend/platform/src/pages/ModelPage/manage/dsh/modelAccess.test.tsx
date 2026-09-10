@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
     getDshModelUsers,
     getDshOperation,
-    getDshPolicy,
+    getDshModelPolicy,
     saveDshPolicy,
 } from '@/controllers/API/dsh'
 import type {
@@ -28,7 +28,7 @@ vi.mock('react-i18next', () => ({
 vi.mock('@/controllers/API/dsh', () => ({
     getDshModelUsers: vi.fn(),
     getDshOperation: vi.fn(),
-    getDshPolicy: vi.fn(),
+    getDshModelPolicy: vi.fn(),
     saveDshPolicy: vi.fn(),
     isDshRequestRejected: (error: Error) => error.message === 'rejected',
 }))
@@ -36,7 +36,7 @@ const user: DshModelAccessUser = {
     user_id: 20,
     user_name: 'Before first login',
     version: 3,
-    models: [{ model_id: 9, monthly_token_limit: 900 }],
+    enabled: false, monthly_token_limit: 0,
     pending_operation_id: null,
 }
 const model = { id: 7, name: 'Bailian / qwen-max' }
@@ -71,7 +71,7 @@ beforeEach(() => {
     vi.mocked(saveDshPolicy).mockRejectedValue(new Error('Timeout'))
 })
 describe('model-scoped authorization', () => {
-    it('grants a model before DSH login and preserves other model quotas and version', async () => {
+    it('grants a model before DSH login and sends only the selected model quota and version', async () => {
         const onOperation = renderRow()
         fireEvent.click(screen.getByRole('checkbox'))
         fireEvent.change(screen.getByRole('textbox'), {
@@ -79,17 +79,15 @@ describe('model-scoped authorization', () => {
         })
         fireEvent.click(screen.getByText('dsh.save'))
         await waitFor(() => expect(saveDshPolicy).toHaveBeenCalledTimes(1))
-        const body = vi.mocked(saveDshPolicy).mock.calls[0][2]
+        const body = vi.mocked(saveDshPolicy).mock.calls[0][3]
         expect(body).toEqual({
             operation_id: expect.any(String),
             expected_version: 3,
-            models: [
-                { model_id: 9, monthly_token_limit: 900 },
-                { model_id: 7, monthly_token_limit: 200 },
-            ],
+            enabled: true, monthly_token_limit: 200,
         })
-        expect(vi.mocked(saveDshPolicy).mock.calls[0].slice(0, 2)).toEqual([
+        expect(vi.mocked(saveDshPolicy).mock.calls[0].slice(0, 3)).toEqual([
             '20',
+            7,
             '2',
         ])
         expect(screen.getByRole('textbox')).toHaveValue('200')
@@ -99,24 +97,22 @@ describe('model-scoped authorization', () => {
         await act(async () => {
             await reference.retry?.()
         })
-        expect(vi.mocked(saveDshPolicy).mock.calls[1][2]).toEqual(body)
+        expect(vi.mocked(saveDshPolicy).mock.calls[1][3]).toEqual(body)
     })
-    it('revokes only this model without clearing other models', async () => {
+    it('revokes only this model using a single-model request', async () => {
         renderRow({
-            models: [...user.models, { model_id: 7, monthly_token_limit: 100 }],
+            enabled: true, monthly_token_limit: 100,
         })
         fireEvent.click(screen.getByRole('checkbox'))
         fireEvent.click(screen.getByText('dsh.save'))
         await waitFor(() => expect(saveDshPolicy).toHaveBeenCalled())
-        expect(vi.mocked(saveDshPolicy).mock.calls[0][2].models).toEqual(
-            user.models,
-        )
+        expect(vi.mocked(saveDshPolicy).mock.calls[0][3]).toMatchObject({ enabled: false, monthly_token_limit: 0 })
     })
     it('restores an in-progress operation on reopening and blocks a new save', () => {
         const onOperation = renderRow({ pending_operation_id: 'pending-op' })
         expect(onOperation).toHaveBeenCalledWith(20, {
             operation_id: 'pending-op',
-            tenant_id: '2',
+            tenant_id: '2', model_id: 7,
         })
         expect(screen.getByRole('checkbox')).toBeDisabled()
         fireEvent.click(screen.getByText('dsh.save'))
@@ -131,7 +127,7 @@ describe('model-scoped authorization', () => {
         expect(screen.getByRole('checkbox')).toBeDisabled()
         fireEvent.click(screen.getByText('dsh.save'))
         expect(saveDshPolicy).toHaveBeenCalledTimes(1)
-        expect(getDshPolicy).not.toHaveBeenCalled()
+        expect(getDshModelPolicy).not.toHaveBeenCalled()
     })
     it('unblocks refresh when a retry from a previously closed row is rejected', () => {
         const row = (rejectedOperationIds: string[]) => (
@@ -152,19 +148,14 @@ describe('model-scoped authorization', () => {
         expect(screen.getByText('dsh.refresh')).not.toBeDisabled()
         expect(screen.getByText('dsh.save')).toBeDisabled()
     })
-    it('refreshes only the completed row and retains the latest other model config', async () => {
+    it('refreshes only the completed row using its independent version', async () => {
         const result = { status: 'SUCCEEDED' } as DshOperation
-        vi.mocked(getDshPolicy).mockResolvedValue({
-            tenant_id: 2,
+        vi.mocked(getDshModelPolicy).mockResolvedValue({
+            user_id: 20,
             version: 4,
-            models: user.models,
+            enabled: false,
+            monthly_token_limit: 0,
             pending_operation_id: null,
-            quota_sync_state: 'READY',
-            usage: null,
-            available_models: [],
-            available_models_source: 'live',
-            last_call: null,
-            last_call_source: 'persisted',
         })
         render(
             <table>
@@ -186,7 +177,7 @@ describe('model-scoped authorization', () => {
         fireEvent.click(screen.getByRole('checkbox'))
         fireEvent.click(screen.getByText('dsh.save'))
         await waitFor(() => expect(saveDshPolicy).toHaveBeenCalled())
-        expect(vi.mocked(saveDshPolicy).mock.calls[0][2].expected_version).toBe(
+        expect(vi.mocked(saveDshPolicy).mock.calls[0][3].expected_version).toBe(
             4,
         )
     })

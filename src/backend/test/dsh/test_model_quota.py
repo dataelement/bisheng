@@ -26,13 +26,49 @@ def configs(a, b):
     ]
 
 
+def set_policies(session, entries, version=1):
+    rows = list(session.scalars(select(DshUserPolicy).where(DshUserPolicy.user_id == 20)))
+    existing = {row.model_id: row for row in rows}
+    for row in rows:
+        row.enabled = 0
+    for config in entries:
+        row = existing.get(config.model_id)
+        if row is None:
+            row = DshUserPolicy(tenant_id=2, user_id=20, model_id=config.model_id, updated_by=1)
+            session.add(row)
+        row.enabled, row.version, row.monthly_token_limit = 1, version, config.monthly_token_limit
+
+
 async def install(quota, entries, version=2):
-    params = {"operation_id": f"models-{version}", "lease_generation": 1, "epoch": 1, "expected_version": version - 1}
-    await quota.block_policy(2, 20, **params)
-    await quota.install_policy(2, 20, **params, version=version, model_configs=entries)
-    await quota.finish_policy(
-        2, 20, operation_id=params["operation_id"], lease_generation=1, epoch=1, expected_policy_version=version
-    )
+    current = {4, 5}
+    by_model = {entry.model_id: entry for entry in entries}
+    for model in sorted(current | by_model.keys()):
+        entry = by_model.get(model)
+        params = {
+            "operation_id": f"model-{model}-{version}",
+            "model_id": model,
+            "lease_generation": 1,
+            "epoch": 1,
+            "expected_version": version - 1,
+        }
+        await quota.block_policy(2, 20, **params)
+        await quota.install_policy(
+            2,
+            20,
+            **params,
+            version=version,
+            monthly_token_limit=entry.monthly_token_limit if entry else 0,
+            enabled=entry is not None,
+        )
+        await quota.finish_policy(
+            2,
+            20,
+            operation_id=params["operation_id"],
+            model_id=model,
+            lease_generation=1,
+            epoch=1,
+            expected_policy_version=version,
+        )
 
 
 async def test_exhausted_model_does_not_borrow_or_block_another_and_inflight_may_exceed(quota):
@@ -71,7 +107,12 @@ async def test_zero_lower_and_removed_model_do_not_erase_or_spend_other_model_hi
 async def test_same_sum_swapped_model_limits_cannot_reuse_recovery_proof(quota, usage_db):
     with Session(usage_db) as session, session.begin():
         policy = session.scalar(select(DshUserPolicy).where(DshUserPolicy.user_id == 20))
-        policy.version, policy.model_configs = 1, configs(100, 900)
+        policy.version, policy.monthly_token_limit = 1, 100
+        session.add(
+            DshUserPolicy(
+                tenant_id=2, user_id=20, model_id=5, enabled=1, version=1, monthly_token_limit=900, updated_by=1
+            )
+        )
     manifest = RecoveryManifest(
         run_id=quota.topology.run_id,
         epoch=2,
@@ -82,8 +123,9 @@ async def test_same_sum_swapped_model_limits_cannot_reuse_recovery_proof(quota, 
         confirmed_tail_complete=True,
         tenant_id=2,
         user_id=20,
-        policy_version=1,
+        policy_version=2,
         model_configs=configs(900, 100),
+        model_versions={4: 1, 5: 1},
         current_month="2026-09",
         request_count=0,
     )
@@ -124,8 +166,7 @@ async def test_same_sum_swapped_model_limits_cannot_reuse_recovery_proof(quota, 
     with repository() as repo:
         _, before = repo.recovery_snapshot(20, billing_timezone="UTC")
     with Session(usage_db) as session, session.begin():
-        policy = session.scalar(select(DshUserPolicy).where(DshUserPolicy.user_id == 20))
-        policy.model_configs = configs(900, 100)
+        set_policies(session, configs(900, 100), version=1)
     with repository() as repo, pytest.raises(ValueError, match="SQL policy changed"):
         repo.complete_recovery(20, expected_policy=before, epoch=2)
 
@@ -153,7 +194,12 @@ def test_legacy_aggregate_only_recovery_proof_is_rejected():
 def test_sql_estimate_remaining_is_per_model_and_preserves_removed_model_usage(usage_db):
     with Session(usage_db) as session, session.begin():
         policy = session.scalar(select(DshUserPolicy).where(DshUserPolicy.user_id == 20))
-        policy.version, policy.model_configs = 1, configs(1000, 100)
+        policy.version, policy.monthly_token_limit = 1, 1000
+        session.add(
+            DshUserPolicy(
+                tenant_id=2, user_id=20, model_id=5, enabled=1, version=1, monthly_token_limit=100, updated_by=1
+            )
+        )
         repo = DshUsageRepository(session)
         repo.project_batch([terminal(running(4), amount=1200), terminal(running(5), amount=20)])
     with Session(usage_db) as session, session.begin():
@@ -162,7 +208,7 @@ def test_sql_estimate_remaining_is_per_model_and_preserves_removed_model_usage(u
         assert (value["used"], value["limit"], value["remaining"]) == (1220, 1100, 80)
         assert value["model_limits"] == {"4": 1000, "5": 100}
         policy = session.scalar(select(DshUserPolicy).where(DshUserPolicy.user_id == 20))
-        policy.model_configs = [DshModelQuotaConfig(model_id=5, monthly_token_limit=100)]
+        policy.enabled = 0
     with Session(usage_db) as session:
         value = DshUsageRepository(session).persisted_usage(20, "2026-09")
         assert (value["used"], value["limit"], value["remaining"]) == (1220, 100, 80)
@@ -173,16 +219,14 @@ def test_sql_estimate_remaining_is_per_model_and_preserves_removed_model_usage(u
 async def test_new_month_proof_requires_exact_model_limits(quota, usage_db):
     await install(quota, configs(900, 100))
     with Session(usage_db) as session, session.begin():
-        policy = session.scalar(select(DshUserPolicy).where(DshUserPolicy.user_id == 20))
-        policy.version, policy.model_configs = 2, configs(100, 900)
+        set_policies(session, configs(100, 900), version=2)
     with Session(usage_db) as session:
         proof = DshUsageRepository(session).new_month_proof(20, "2026-10")
     with pytest.raises(QuotaRejected, match="model_policy_mismatch"):
         await quota.ensure_month(2, 20, "2026-10", proof=proof)
     assert not await quota.redis.exists(quota.keys(running(month="2026-10"))[1])
     with Session(usage_db) as session, session.begin():
-        policy = session.scalar(select(DshUserPolicy).where(DshUserPolicy.user_id == 20))
-        policy.model_configs = configs(900, 100)
+        set_policies(session, configs(900, 100), version=2)
     with Session(usage_db) as session:
         proof = DshUsageRepository(session).new_month_proof(20, "2026-10")
     await quota.ensure_month(2, 20, "2026-10", proof=proof)

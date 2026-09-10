@@ -66,6 +66,7 @@ async def model_users(
     cursor: Annotated[int | None, Query(gt=0, le=9223372036854775807)] = None,
     limit: Limit = 20,
     keyword: Annotated[str | None, Query(max_length=128)] = None,
+    authorized_only: bool = False,
 ):
     return resp_200(
         data=await service.model_users(
@@ -75,19 +76,34 @@ async def model_users(
             cursor=cursor,
             limit=limit,
             keyword=keyword,
+            authorized_only=authorized_only,
         )
     )
 
 
-@router.put("/users/{user_id}/policy")
+@router.get("/users/{user_id}/models/{model_id}/policy")
+async def model_policy(
+    user_id: UserId,
+    model_id: UserId,
+    user=Depends(admin_user),
+    service=Depends(get_management),
+    tenant_id: TenantId = None,
+):
+    return resp_200(data=await service.get_model_policy(user.user_id, user_id, model_id, tenant_id=tenant_id))
+
+
+@router.put("/users/{user_id}/models/{model_id}/policy")
 async def update_policy(
     user_id: UserId,
+    model_id: UserId,
     body: DshUserPolicyInput,
     user=Depends(admin_user),
     service=Depends(get_management),
     tenant_id: TenantId = None,
 ):
-    return resp_200(data=await service.update_policy(user.user_id, user_id, body, tenant_id=tenant_id))
+    return resp_200(
+        data=await service.update_policy(user.user_id, user_id, body, model_id=model_id, tenant_id=tenant_id)
+    )
 
 
 @router.post("/users/{user_id}/revoke")

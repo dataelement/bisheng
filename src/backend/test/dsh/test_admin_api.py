@@ -29,11 +29,12 @@ async def test_eight_routes_use_verified_actor_and_reject_body_spoofing():
             ("GET", "/license", None),
             (
                 "PUT",
-                "/users/20/policy",
+                "/users/20/models/4/policy",
                 {
                     "operation_id": "00000000-0000-4000-8000-000000000001",
                     "expected_version": 0,
-                    "models": [],
+                    "enabled": False,
+                    "monthly_token_limit": 0,
                 },
             ),
             (
@@ -108,6 +109,8 @@ async def test_policy_view_survives_unavailable_quota_with_persisted_source(monk
     from bisheng.dsh.admin_runtime import build_policy_view
 
     policy = SimpleNamespace(
+        version=1,
+        quota_sync_state="READY",
         model_configs=[DshModelQuotaConfig(model_id=4, monthly_token_limit=100)],
         monthly_token_limit=100,
         model_dump=lambda: {"version": 1, "model_configs": [{"model_id": 4, "monthly_token_limit": 100}]},
@@ -148,6 +151,8 @@ async def test_unknown_count_remains_visible_without_a_reliable_summary():
     from bisheng.dsh.admin_runtime import build_policy_view
 
     policy = SimpleNamespace(
+        version=1,
+        quota_sync_state="READY",
         model_configs=[DshModelQuotaConfig(model_id=4, monthly_token_limit=100)],
         monthly_token_limit=100,
         model_dump=lambda: {"version": 1},

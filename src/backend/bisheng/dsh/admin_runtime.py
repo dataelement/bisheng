@@ -165,6 +165,7 @@ async def get_admin_runtime(runtime, *, quota=None, usage=None):
         policy_view=policy_view,
         now=now,
         model_users_view=read_model_users,
+        model_policy_view=read_model_policy,
     )
     result = AdminRuntime(
         admin,
@@ -264,7 +265,11 @@ def build_policy_view(
                 last_call_source = "persisted"
             except Exception:
                 pass
-        data = policy.model_dump() if policy else {"version": 0, "quota_sync_state": "PENDING"}
+        data = (
+            {"version": policy.version, "quota_sync_state": policy.quota_sync_state}
+            if policy
+            else {"version": 0, "quota_sync_state": "PENDING"}
+        )
         data.pop("model_configs", None)
         return {
             **data,
@@ -315,7 +320,7 @@ async def read_available_models(model_ids, model_loader):
     return result
 
 
-async def read_model_users(model_id, *, after_user_id=0, limit=20, keyword=""):
+async def read_model_users(model_id, *, after_user_id=0, limit=20, keyword="", authorized_only=False):
     import asyncio
 
     from bisheng.common.errcode.dsh import DshModelNotAllowedError
@@ -327,13 +332,28 @@ async def read_model_users(model_id, *, after_user_id=0, limit=20, keyword=""):
     candidates = await read_available_models([model_id], LLMService.get_dsh_model_snapshot)
     if not candidates:
         raise DshModelNotAllowedError()
-    rows = await list_dsh_access_users(after_user_id=after_user_id, limit=limit, keyword=keyword)
+    ids = None
+    if authorized_only:
+
+        def read_ids():
+            with get_sync_db_session() as session:
+                return DshModelAccessRepository(session).authorized_user_ids(
+                    model_id, after_user_id=after_user_id, limit=limit
+                )
+
+        ids = await asyncio.to_thread(read_ids)
+    rows = await list_dsh_access_users(
+        after_user_id=after_user_id, limit=limit, keyword=keyword, user_ids=ids[:limit] if ids is not None else None
+    )
 
     def read():
         with get_sync_db_session() as session:
-            return DshModelAccessRepository(session).users(rows, limit=limit)
+            return DshModelAccessRepository(session).users(rows, model_id=model_id, limit=limit)
 
-    return {"model": candidates[0], "tenant_id": get_current_tenant_id(), **await asyncio.to_thread(read)}
+    page = await asyncio.to_thread(read)
+    if ids is not None:
+        page.update(has_more=len(ids) > limit, next_cursor=str(ids[limit - 1]) if len(ids) > limit else None)
+    return {"model": candidates[0], "tenant_id": get_current_tenant_id(), **page}
 
 
 async def read_last_call(user_id):
@@ -345,5 +365,25 @@ async def read_last_call(user_id):
     def read():
         with get_sync_db_session() as session:
             return DshAdminQueryRepository(session).last_call(user_id)
+
+    return await asyncio.to_thread(read)
+
+
+async def read_model_policy(user_id, model_id):
+    import asyncio
+
+    from bisheng.core.database import get_sync_db_session
+
+    def read():
+        with get_sync_db_session() as session:
+            row = DshPolicyRepository(session).get_model(user_id, model_id)
+            return {
+                "user_id": user_id,
+                "model_id": model_id,
+                "enabled": bool(row.enabled) if row else False,
+                "monthly_token_limit": row.monthly_token_limit if row else 0,
+                "version": row.version if row else 0,
+                "pending_operation_id": row.pending_operation_id if row else None,
+            }
 
     return await asyncio.to_thread(read)

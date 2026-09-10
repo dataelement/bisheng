@@ -467,11 +467,16 @@ async def test_ac26_model_access_lists_platform_users_without_a_dsh_session(live
     require(len(rows) == 1, "Platform user missing from model access page")
     policy = platform(
         await live.request(
-            "GET", f"{ADMIN}/users/{user.user_id}/policy", actor="root", params={"tenant_id": user.tenant_id}
+            "GET",
+            f"{ADMIN}/users/{user.user_id}/models/{model_id}/policy",
+            actor="root",
+            params={"tenant_id": user.tenant_id},
         )
     )
     require(
-        rows[0]["models"] == policy["models"] and rows[0]["version"] == policy["version"],
+        all(
+            rows[0][key] == policy[key] for key in ("version", "enabled", "monthly_token_limit", "pending_operation_id")
+        ),
         "Model access page does not match the authoritative user policy",
     )
     assert_resp_error(await live.request("GET", path, actor="user", params=params), 19801)

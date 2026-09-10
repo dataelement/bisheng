@@ -129,9 +129,9 @@ def test_models_preserve_unknown_and_policy_history():
         session.refresh(row)
         assert row.total_tokens is None
         assert row.usage_source is None
-        session.add(DshUserPolicy(tenant_id=2, user_id=1001, updated_by=1004))
+        session.add(DshUserPolicy(model_id=4, enabled=1, tenant_id=2, user_id=1001, updated_by=1004))
         session.commit()
-        session.add(DshUserPolicy(tenant_id=2, user_id=1001, updated_by=1004))
+        session.add(DshUserPolicy(model_id=4, enabled=1, tenant_id=2, user_id=1001, updated_by=1004))
         with pytest.raises(IntegrityError):
             session.commit()
         session.rollback()

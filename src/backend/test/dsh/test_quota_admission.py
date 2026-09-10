@@ -7,7 +7,6 @@ from uuid import uuid4
 import pytest
 
 from bisheng.dsh.domain.repositories.usage import UsageEvent
-from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig
 from bisheng.dsh.infrastructure.quota_redis import QuotaRedis, QuotaRejected
 from bisheng.dsh.infrastructure.quota_topology import QuotaTopology, create_quota_redis
 
@@ -49,7 +48,9 @@ async def quota():
             "running_index": "1",
             "running_count": "0",
             "epoch": "1",
-            "version": "1",
+            "version": "2",
+            "version:4": "1",
+            "version:5": "1",
             "limit": "2000",
             "limit:4": "1000",
             "limit:5": "1000",
@@ -102,16 +103,18 @@ async def test_unknown_usage_does_not_block_new_month(quota):
 
 async def test_policy_fencing_preserves_storage_block_and_retries(quota):
     e = running()
-    params = {"operation_id": "op", "lease_generation": 1, "epoch": 1, "expected_version": 1}
+    params = {"operation_id": "op", "model_id": 5, "lease_generation": 1, "epoch": 1, "expected_version": 1}
     await quota.block_policy(2, 20, **params)
     await quota.redis.sadd(quota.keys(e)[3], "STORAGE_UNCERTAIN:x")
-    await quota.install_policy(
-        2, 20, **params, version=2, model_configs=[DshModelQuotaConfig(model_id=5, monthly_token_limit=2000)]
-    )
+    await quota.install_policy(2, 20, **params, version=2, monthly_token_limit=2000, enabled=True)
     await quota.block_policy(2, 20, **{**params, "lease_generation": 2})
     with pytest.raises(QuotaRejected):
-        await quota.finish_policy(2, 20, operation_id="op", lease_generation=1, epoch=1, expected_policy_version=2)
-    await quota.finish_policy(2, 20, operation_id="op", lease_generation=2, epoch=1, expected_policy_version=2)
+        await quota.finish_policy(
+            2, 20, operation_id="op", model_id=5, lease_generation=1, epoch=1, expected_policy_version=2
+        )
+    await quota.finish_policy(
+        2, 20, operation_id="op", model_id=5, lease_generation=2, epoch=1, expected_policy_version=2
+    )
     assert await quota.redis.smembers(quota.keys(e)[3]) == {"STORAGE_UNCERTAIN:x"}
     await quota.block_policy(2, 20, **{**params, "lease_generation": 3})
     await quota.install_policy(
@@ -119,9 +122,12 @@ async def test_policy_fencing_preserves_storage_block_and_retries(quota):
         20,
         **{**params, "lease_generation": 3},
         version=2,
-        model_configs=[DshModelQuotaConfig(model_id=5, monthly_token_limit=2000)],
+        monthly_token_limit=2000,
+        enabled=True,
     )
-    await quota.finish_policy(2, 20, operation_id="op", lease_generation=3, epoch=1, expected_policy_version=2)
+    await quota.finish_policy(
+        2, 20, operation_id="op", model_id=5, lease_generation=3, epoch=1, expected_policy_version=2
+    )
 
 
 async def test_stopped_projector_enforces_backpressure_at_admission(quota):
@@ -145,13 +151,13 @@ async def test_uncertain_or_duplicate_admission_never_authorizes_replay(quota):
 
 async def test_policy_adds_model_only_to_intact_month_ledger(quota):
     e = running(model=6)
-    params = {"operation_id": "newmodel", "lease_generation": 1, "epoch": 1, "expected_version": 1}
+    params = {"operation_id": "newmodel", "model_id": 6, "lease_generation": 1, "epoch": 1, "expected_version": 0}
     await quota.block_policy(2, 20, **params)
-    await quota.install_policy(
-        2, 20, **params, version=2, model_configs=[DshModelQuotaConfig(model_id=6, monthly_token_limit=2000)]
+    await quota.install_policy(2, 20, **params, version=1, monthly_token_limit=2000, enabled=True)
+    await quota.finish_policy(
+        2, 20, operation_id="newmodel", model_id=6, lease_generation=1, epoch=1, expected_policy_version=1
     )
-    await quota.finish_policy(2, 20, operation_id="newmodel", lease_generation=1, epoch=1, expected_policy_version=2)
-    assert (await quota.check_and_start(e.model_copy(update={"policy_version": 2}))).status == "RUNNING"
+    assert (await quota.check_and_start(e.model_copy(update={"policy_version": 1}))).status == "RUNNING"
     assert await quota.redis.hget(quota.keys(e)[2], "4") == "900"
 
 

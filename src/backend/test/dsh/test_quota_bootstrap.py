@@ -16,7 +16,6 @@ from bisheng.dsh.domain.models.user_policy import DshUserPolicy
 from bisheng.dsh.domain.repositories.policy import DshPolicyRepository
 from bisheng.dsh.domain.repositories.usage import DshUsageRepository
 from bisheng.dsh.domain.schemas.contracts import DshUserPolicyInput
-from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig
 from bisheng.dsh.domain.services.admin_policy import DshAdminService
 from bisheng.dsh.domain.services.quota_operations import DshQuotaOperationsService
 from bisheng.dsh.domain.services.quota_recovery import DshQuotaRecoveryService, RecoveryManifest
@@ -75,11 +74,13 @@ async def test_first_policy_pending_initialization_then_same_operation_succeeds(
     operation_id = str(uuid4())
     result = await service.update_policy(
         user_id=20,
+        model_id=4,
         actor_user_id=7,
         request=DshUserPolicyInput(
             operation_id=operation_id,
             expected_version=0,
-            models=[DshModelQuotaConfig(model_id=4, monthly_token_limit=1000)],
+            monthly_token_limit=1000,
+            enabled=True,
         ),
     )
     assert result["status"] == "PROCESSING"
@@ -103,6 +104,7 @@ async def test_first_policy_pending_initialization_then_same_operation_succeeds(
         user_id=20,
         policy_version=0,
         model_configs=[],
+        model_versions={4: 0},
         current_month="2026-09",
         request_count=0,
         events=[],

@@ -100,7 +100,8 @@ class DshModelService:
             policy = await self.policy_reader(int(principal.user_id))
             if policy is None or request.model_id not in policy.allowed_model_ids:
                 raise DshModelNotAllowedError()
-            if policy.quota_sync_state != "READY":
+            selected_policy = next(row for row in policy.rows if row.model_id == request.model_id)
+            if selected_policy.quota_sync_state != "READY":
                 raise DshQuotaUnavailableError()
             model, server = await self.model_loader(request.model_id)
             if model.id != request.model_id:
@@ -125,7 +126,7 @@ class DshModelService:
                 model_id=request.model_id,
                 usage_month=started.astimezone(self.timezone).strftime("%Y-%m"),
                 billing_timezone=self.billing_timezone,
-                policy_version=policy.version,
+                policy_version=selected_policy.version,
                 quota_epoch=policy.quota_epoch,
                 event_version=1,
                 status="RUNNING",

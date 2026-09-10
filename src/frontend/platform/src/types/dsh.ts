@@ -98,7 +98,8 @@ export type DshLastCall = {
 export type DshPolicyInput = {
     operation_id: string
     expected_version: number
-    models: DshModelQuotaConfig[]
+    enabled: boolean
+    monthly_token_limit: number
 }
 export type DshOperation = {
     operation_id: string
@@ -125,6 +126,7 @@ export type DshSeatQuery = {
     login_state?: 'HAS_SESSIONS' | 'NO_SESSIONS'
 }
 export type DshOperationRef = {
+    model_id?: number
     operation_id: string
     tenant_id: string
     rejected?: boolean
@@ -134,7 +136,8 @@ export type DshModelAccessUser = {
     user_id: number
     user_name: string
     version: number
-    models: { model_id: number; monthly_token_limit: number }[]
+    enabled: boolean
+    monthly_token_limit: number
     pending_operation_id: string | null
 }
 

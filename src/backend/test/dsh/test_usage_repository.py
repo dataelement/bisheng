@@ -57,7 +57,7 @@ def usage_db():
     )
     token = current_tenant_id.set(2)
     with Session(engine) as session:
-        session.add_all([DshUserPolicy(tenant_id=2, user_id=u, updated_by=1) for u in (20, 21)])
+        session.add_all([DshUserPolicy(model_id=4, enabled=1, tenant_id=2, user_id=u, updated_by=1) for u in (20, 21)])
         session.commit()
     yield engine
     current_tenant_id.reset(token)

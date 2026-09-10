@@ -21,7 +21,6 @@ from bisheng.dsh.config import DshSettings
 from bisheng.dsh.domain.models.monthly_usage import DshMonthlyUsage
 from bisheng.dsh.domain.models.user_policy import DshUserPolicy
 from bisheng.dsh.domain.repositories.usage import DshUsageRepository
-from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig
 from bisheng.dsh.domain.schemas.usage import UsageEvent
 from bisheng.dsh.domain.services.profile import profile_scope
 from bisheng.dsh.domain.services.projection import DshProjectionService
@@ -147,7 +146,7 @@ async def test_cross_process_settlement_projection_replay_and_visibility(quota, 
     await quota.redis.hset(quota.keys(running())[2], mapping={"4": "0", "5": "0"})
     with Session(usage_db) as session, session.begin():
         policy = session.scalar(select(DshUserPolicy).where(DshUserPolicy.user_id == 20))
-        policy.version, policy.model_configs = 1, [DshModelQuotaConfig(model_id=4, monthly_token_limit=1000)]
+        policy.version, policy.monthly_token_limit = 1, 1000
     await quota.redis.hdel(quota.keys(running())[0], "model:5", "limit:5")
     await quota.redis.hset(quota.keys(running())[0], "limit", "1000")
     body = b"[]"

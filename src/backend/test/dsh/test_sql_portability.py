@@ -15,8 +15,7 @@ from bisheng.core.database.dialect_helpers import JsonType
 from bisheng.dsh.domain.models.admin_operation import DshAdminOperation
 from bisheng.dsh.domain.models.model_call import DshModelCall
 from bisheng.dsh.domain.models.monthly_usage import DshMonthlyUsage
-from bisheng.dsh.domain.models.user_policy import DshUserPolicy, ModelConfigsType
-from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig
+from bisheng.dsh.domain.models.user_policy import DshUserPolicy
 
 BACKEND = Path(__file__).resolve().parents[2]
 MODELS = (DshUserPolicy, DshAdminOperation, DshMonthlyUsage, DshModelCall)
@@ -125,6 +124,9 @@ def test_model_ddl_and_profile_column_compile_with_real_dialect(sql_dialect):
 
 
 class _CapturedResult:
+    def all(self):
+        return []
+
     def one_or_none(self):
         return None
 
@@ -186,12 +188,5 @@ def test_json_and_typed_model_config_round_trip_through_bound_processors(dialect
     bound = adapter.bind_processor(dialect)(payload)
     assert isinstance(bound, str)
     assert adapter.result_processor(dialect, None)(bound) == payload
-    configs = [
-        DshModelQuotaConfig(model_id=17, monthly_token_limit=200),
-        DshModelQuotaConfig(model_id=3, monthly_token_limit=100),
-    ]
-    typed_adapter = ModelConfigsType().dialect_impl(dialect)
-    stored = typed_adapter.bind_processor(dialect)(configs)
-    restored = typed_adapter.result_processor(dialect, None)(stored)
-    assert restored == sorted(configs, key=lambda item: item.model_id)
-    assert all(isinstance(item, DshModelQuotaConfig) for item in restored)
+    assert "model_configs" not in DshUserPolicy.__table__.c
+    assert {"model_id", "monthly_token_limit", "enabled"} <= set(DshUserPolicy.__table__.c.keys())

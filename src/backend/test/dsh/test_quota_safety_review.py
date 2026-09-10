@@ -45,7 +45,7 @@ async def test_other_replica_cannot_admit_between_restore_and_sql_epoch_cas(quot
     other = await replica(quota, epoch=2)
     with Session(usage_db) as session, session.begin():
         policy = session.scalar(select(DshUserPolicy).where(DshUserPolicy.user_id == 20))
-        policy.version, policy.model_configs = 1, [DshModelQuotaConfig(model_id=4, monthly_token_limit=1000)]
+        policy.version, policy.monthly_token_limit = 1, 1000
     manifest = RecoveryManifest(
         run_id=quota.topology.run_id,
         epoch=2,
@@ -58,6 +58,7 @@ async def test_other_replica_cannot_admit_between_restore_and_sql_epoch_cas(quot
         user_id=20,
         policy_version=1,
         model_configs=[DshModelQuotaConfig(model_id=4, monthly_token_limit=1000)],
+        model_versions={4: 1},
         current_month="2026-09",
         request_count=0,
         events=[],
@@ -179,6 +180,7 @@ async def test_recovery_receipt_cannot_finish_a_newer_owner(quota):
         user_id=20,
         policy_version=1,
         model_configs=[DshModelQuotaConfig(model_id=4, monthly_token_limit=1000)],
+        model_versions={4: 1},
         current_month="2026-09",
         request_count=0,
         events=[],

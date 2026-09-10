@@ -65,6 +65,7 @@ def sharded_manifest(quota, count=10001):
         user_id=20,
         policy_version=1,
         model_configs=[DshModelQuotaConfig(model_id=4, monthly_token_limit=20000)],
+        model_versions={4: 1},
         current_month="2026-09",
         request_count=count,
         shards=shards,
@@ -77,7 +78,7 @@ async def test_over_ten_thousand_complete_sql_and_redis_restore(quota, usage_db)
     manifest, objects, events = sharded_manifest(quota)
     with Session(usage_db) as session, session.begin():
         policy = session.get(DshUserPolicy, 1)
-        policy.version, policy.model_configs = 1, [DshModelQuotaConfig(model_id=4, monthly_token_limit=20000)]
+        policy.version, policy.monthly_token_limit = 1, 20000
     for offset in range(0, len(events), 500):
         with Session(usage_db) as session, session.begin():
             DshUsageRepository(session).project_batch(events[offset : offset + 500])

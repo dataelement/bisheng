@@ -36,9 +36,11 @@ redis.call('HINCRBY',KEYS[key],'retained_stream_count',1)
 elseif command=='finish' then
   if redis.call('HGET',KEYS[1],'recovery_count')~=redis.call('HGET',KEYS[1],'recovery_expected') then return {'DENY','incomplete_recovery'} end
   for _,field in ipairs(redis.call('HKEYS',KEYS[1])) do
-    if string.sub(field,1,6)=='model:' or string.sub(field,1,6)=='limit:' then redis.call('HDEL',KEYS[1],field) end
+    if string.sub(field,1,6)=='model:' or string.sub(field,1,6)=='limit:' or string.sub(field,1,8)=='version:' or string.sub(field,1,13)=='operation_id:' or string.sub(field,1,11)=='generation:' or string.sub(field,1,18)=='installed_version:' or string.sub(field,1,15)=='policy_payload:' then redis.call('HDEL',KEYS[1],field) end
   end
-  for i=6,#ARGV,2 do redis.call('HSET',KEYS[1],'model:'..ARGV[i],'1','limit:'..ARGV[i],ARGV[i+1]) end
+  local last=6+tonumber(ARGV[6])*2
+  for i=7,last,2 do redis.call('HSET',KEYS[1],'model:'..ARGV[i],'1','limit:'..ARGV[i],ARGV[i+1],'version:'..ARGV[i],ARGV[4]) end
+  for i=last+1,#ARGV,2 do redis.call('HSET',KEYS[1],'version:'..ARGV[i],ARGV[i+1]) end
   redis.call('HSET',KEYS[1],'epoch',ARGV[3],'version',ARGV[4],'limit',ARGV[5],'write_in_progress','0','state','FROZEN','running_index','1','running_count','0')
 else return {'DENY','unknown_recovery_phase'} end
 return {'OK'}

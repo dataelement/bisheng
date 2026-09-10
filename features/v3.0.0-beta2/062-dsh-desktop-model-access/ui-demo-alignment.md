@@ -26,13 +26,13 @@
 
 新增 `GET /api/v1/dsh/admin/models/{model_id}/users`，普通管理员 JWT；可选 `tenant_id`、`cursor`（上页最后 user_id）、`limit`（1–100，默认20）、`keyword`（用户名，最多128字符）。使用现有管理员作用域及目标模型可见性校验。Root 未选择子租户时使用当前租户，不能返回跨租户用户。
 
-返回 `model: {id,name,is_root_shared}`、`tenant_id`、`items`、`next_cursor`、`has_more`。`items` 每项为 `{user_id,user_name,version,models:[{model_id,monthly_token_limit}],pending_operation_id}`。列出当前租户的有效用户，包括无策略/无席位/从未登录 DSH 的用户；前端按当前 model_id 展示已授权状态与额度。只读取一页用户及对应策略，不扫描全部用户、不读取部门或 Gateway 席位数据。
+返回 `model: {id,name,is_root_shared}`、`tenant_id`、`items`、`next_cursor`、`has_more`。`items` 每项为 `{user_id,user_name,version,enabled,monthly_token_limit,pending_operation_id}`。列出当前租户的有效用户，包括无策略/无席位/从未登录 DSH 的用户；前端按当前 model_id 展示已授权状态与额度。只读取一页用户及对应策略，不扫描全部用户、不读取部门或 Gateway 席位数据。
 
-保存复用 `PUT /api/v1/dsh/admin/users/{user_id}/policy`：保留列表快照中其他模型配置，只修改当前模型，携原 `version` 和一次性生成的 `operation_id`。并发冲突要求刷新，不能自动覆盖；结果不确定时只重试同一操作。操作沿用现有查询、审计与恢复机制。每行独立保存，不承诺跨用户原子提交。
+保存使用 `PUT /api/v1/dsh/admin/users/{user_id}/models/{model_id}/policy`，读取单行使用同路径 GET。提交 `{operation_id,expected_version,enabled,monthly_token_limit}`，只修改当前模型；不再提交该用户的完整模型列表。操作审计及同意图重试机制保留，但版本与待处理所有者按模型独立。
 
-不增加数据表，不新增手写 SQL，不修改非 DSH 模型调用/权限逻辑。
+用户查询由用户模块提供有效用户分页，DSH 模块仅查询当前模型的本页策略；无记录返回 version=0、enabled=false、monthly_token_limit=0。查询参数 `authorized_only=true` 先按额度表的模型索引分页，再通过用户模块校验有效性及用户名，不能以登录或席位筛选。分页游标以授权索引扫描位置为准，用户失效或用户名不匹配时可返回少于 limit 条，按 has_more 继续。
 
-用户查询由用户模块提供有效用户分页，DSH 模块批量读取本页策略。没有策略时返回 `version=0`、`models=[]`；不以登录记录、席位或策略存在性筛选用户。开发测试中发现，直接外连接策略表会将缺失行的 NULL 交给强类型模型配置列表校验，导致读取失败；两次有界读取解决的是缺失策略行的技术处理问题，与是否登录没有业务耦合。
+本次后续表结构修订经用户明确批准，详见 [单行授权修订](./model-policy-row-revision.md)。不新增明细表、Alembic 版本或业务手写 SQL。
 
 ## 验收
 

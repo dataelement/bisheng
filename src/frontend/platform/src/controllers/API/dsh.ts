@@ -1,6 +1,7 @@
 import request from '@/controllers/request'
 import type {
     DshModelAccessPage,
+    DshModelAccessUser,
     DshAuthorization,
     DshDenial,
     DshConfig,
@@ -30,7 +31,7 @@ export async function getDshModelUsers(
         || (data.has_more && !data.next_cursor)
         || data.items.some((row) => !Number.isSafeInteger(row.user_id) || row.user_id < 1
             || typeof row.user_name !== 'string' || !Number.isSafeInteger(row.version) || row.version < 0
-            || !validModelConfigs(row.models)
+            || typeof row.enabled !== 'boolean' || !Number.isSafeInteger(row.monthly_token_limit) || row.monthly_token_limit < 0
             || (row.pending_operation_id !== null && typeof row.pending_operation_id !== 'string'))) throw malformed()
     return data
 }
@@ -252,13 +253,14 @@ export async function getDshPolicy(
 }
 export async function saveDshPolicy(
     userId: string,
+    modelId: number,
     tenantId: string,
     body: DshPolicyInput,
 ): Promise<DshOperation> {
-    if (!validModelConfigs(body.models)) throw malformed()
+    if (typeof body.enabled !== 'boolean' || !Number.isSafeInteger(body.monthly_token_limit) || body.monthly_token_limit < 0) throw malformed()
     const config = { params: { tenant_id: tenantId }, preserveError: true }
     return await request.put(
-        `${admin}/users/${encodeURIComponent(userId)}/policy`,
+        `${admin}/users/${encodeURIComponent(userId)}/models/${modelId}/policy`,
         body,
         config,
     )
@@ -315,4 +317,12 @@ export function isDshRequestRejected(error: unknown): boolean {
         return [26101, 26129, 26130].includes(Number(response.data.status_code))
     }
     return false
+}
+
+
+export async function getDshModelPolicy(userId: string, modelId: number, tenantId: string, signal?: AbortSignal): Promise<Omit<DshModelAccessUser, 'user_name'>> {
+    const data: Omit<DshModelAccessUser, 'user_name'> = await request.get(`${admin}/users/${encodeURIComponent(userId)}/models/${modelId}/policy`, {params: {tenant_id: tenantId}, signal})
+    if (!data || !Number.isSafeInteger(data.version) || data.version < 0 || typeof data.enabled !== 'boolean'
+        || !Number.isSafeInteger(data.monthly_token_limit) || data.monthly_token_limit < 0) throw malformed()
+    return data
 }

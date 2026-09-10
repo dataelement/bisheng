@@ -32,6 +32,7 @@ class RecoveryManifest(DshContract):
     user_id: int = Field(gt=0)
     policy_version: int = Field(ge=0)
     model_configs: list[DshModelQuotaConfig]
+    model_versions: dict[int, int] = Field(default_factory=dict)
     current_month: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
     # This manifest must cover all retained months, including unsettled requests.
     request_count: int = Field(ge=0)
@@ -69,6 +70,13 @@ class RecoveryManifest(DshContract):
         ):
             raise ValueError("Recovery events must uniquely belong to the approved user")
         self.model_configs = validate_model_configs(self.model_configs)
+        if any(k <= 0 or v < 0 for k, v in self.model_versions.items()):
+            raise ValueError("Invalid model policy version")
+        if self.model_versions and (
+            sum(self.model_versions.values()) != self.policy_version
+            or not set(self.model_ids) <= self.model_versions.keys()
+        ):
+            raise ValueError("Recovery model versions must cover every policy row")
         return self
 
 

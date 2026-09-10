@@ -120,10 +120,16 @@ async def restore_sharded(quota, manifest, inventory, verify_covered):
                     str(manifest.epoch),
                     str(manifest.policy_version),
                     str(manifest.monthly_limit),
+                    str(len(manifest.model_configs)),
                     *[
                         value
                         for item in manifest.model_configs
                         for value in (str(item.model_id), str(item.monthly_token_limit))
+                    ],
+                    *[
+                        value
+                        for model, version in sorted(manifest.model_versions.items())
+                        for value in (str(model), str(version))
                     ],
                 ],
             )

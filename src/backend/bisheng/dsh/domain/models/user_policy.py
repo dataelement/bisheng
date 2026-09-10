@@ -2,34 +2,21 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, CheckConstraint, Column, DateTime, Integer, String, UniqueConstraint, text
-from sqlalchemy.types import TypeDecorator
+from sqlalchemy import BigInteger, CheckConstraint, Column, DateTime, Index, Integer, String, UniqueConstraint, text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
-from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig, model_configs_payload, validate_model_configs
-
-
-class ModelConfigsType(TypeDecorator):
-    """Keep business configuration typed while using the shared dual-database JSON adapter."""
-
-    impl = JsonType
-    cache_ok = True
-
-    def process_bind_param(self, value, dialect):
-        return model_configs_payload(value)
-
-    def process_result_value(self, value, dialect):
-        return validate_model_configs(value)
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 
 
 class DshUserPolicy(SQLModelSerializable, table=True):
-    """Current user policy; immutable history belongs to DshAdminOperation."""
+    """One independently versioned user/model grant; revocation retains its version."""
 
     __tablename__ = "dsh_user_policy"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "user_id", name="uq_dsh_policy_user"),
+        UniqueConstraint("tenant_id", "user_id", "model_id", name="uq_dsh_policy_user_model"),
+        Index("ix_dsh_policy_model_users", "tenant_id", "model_id", "enabled", "user_id"),
+        CheckConstraint("model_id > 0 AND monthly_token_limit >= 0 AND enabled IN (0,1)", name="ck_dsh_policy_model"),
         CheckConstraint("version >= 0 AND quota_epoch >= 1", name="ck_dsh_policy_counters"),
         CheckConstraint("quota_sync_state IN ('PENDING','READY','FROZEN')", name="ck_dsh_policy_sync"),
     )
@@ -48,18 +35,9 @@ class DshUserPolicy(SQLModelSerializable, table=True):
             DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT, onupdate=text("CURRENT_TIMESTAMP")
         ),
     )
-    model_configs: list[DshModelQuotaConfig] = Field(
-        default_factory=list, sa_column=Column(ModelConfigsType, nullable=False)
-    )
-
-    @property
-    def allowed_model_ids(self) -> list[int]:
-        return [item.model_id for item in self.model_configs]
-
-    @property
-    def monthly_token_limit(self) -> int:
-        """Informational total; admission must enforce the selected model's own allowance."""
-        return sum(item.monthly_token_limit for item in self.model_configs)
+    model_id: int = Field(sa_column=Column(BigInteger, nullable=False))
+    monthly_token_limit: int = Field(default=0, sa_column=Column(BigInteger, nullable=False, server_default=text("0")))
+    enabled: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=text("0")))
 
     version: int = Field(default=0, sa_column=Column(BigInteger, nullable=False, server_default=text("0")))
     quota_sync_state: str = Field(

@@ -10,7 +10,6 @@ from sqlmodel import Session
 from bisheng.dsh.domain.models.user_policy import DshUserPolicy
 from bisheng.dsh.domain.repositories.policy import DshPolicyRepository
 from bisheng.dsh.domain.schemas.contracts import DshUserPolicyInput
-from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig
 from bisheng.dsh.domain.services.admin_policy import DshAdminService
 from test.dsh.test_policy_repository import NOW, sql_store  # noqa: F401
 from test.dsh.test_quota_admission import quota as real_quota  # noqa: F401
@@ -75,7 +74,7 @@ def service_factory(sql_store):  # noqa: F811 - Imported pytest fixture is injec
             return state["allowed"]
 
         async def models(actor_user_id, user_id, model_ids):
-            assert model_ids == [2, 5]
+            assert model_ids == [2]
             return state["models_allowed"]
 
         quota = quota or QuotaDouble()
@@ -95,21 +94,19 @@ def request():
     return DshUserPolicyInput(
         operation_id="a",
         expected_version=0,
-        models=[
-            DshModelQuotaConfig(model_id=2, monthly_token_limit=100),
-            DshModelQuotaConfig(model_id=5, monthly_token_limit=200),
-        ],
+        monthly_token_limit=100,
+        enabled=True,
     )
 
 
 async def test_update_policy_keeps_storage_freeze_and_audit(service_factory):
     service, _state, quota = service_factory()
-    result = await service.update_policy(user_id=20, actor_user_id=90, request=request())
+    result = await service.update_policy(model_id=2, user_id=20, actor_user_id=90, request=request())
     assert result["status"] == "SUCCEEDED"
     assert quota.calls == ["block", "install", "finish"]
     assert quota.reasons == {"STORAGE_UNCERTAIN:request-1"}
     original = deepcopy(result)
-    repeated = await service.update_policy(user_id=20, actor_user_id=90, request=request())
+    repeated = await service.update_policy(model_id=2, user_id=20, actor_user_id=90, request=request())
     assert repeated == original
     assert quota.calls == ["block", "install", "finish"]
 
@@ -117,7 +114,7 @@ async def test_update_policy_keeps_storage_freeze_and_audit(service_factory):
 @pytest.mark.parametrize("failure", ["block", "install", "finish"])
 async def test_remote_result_loss_resumes_same_operation(service_factory, failure):
     service, state, quota = service_factory(quota=QuotaDouble(failure))
-    processing = await service.update_policy(user_id=20, actor_user_id=90, request=request())
+    processing = await service.update_policy(model_id=2, user_id=20, actor_user_id=90, request=request())
     assert processing["status"] == "PROCESSING"
     committed = deepcopy(processing["after_values"])
     state["now"] += timedelta(seconds=31)
@@ -133,7 +130,7 @@ async def test_remote_result_loss_resumes_same_operation(service_factory, failur
 @pytest.mark.parametrize("phase", ["SQL_COMMITTED", "SQL_READY", "EFFECTIVE"])
 async def test_sql_crash_resumes_without_extra_policy_version(service_factory, phase):
     service, state, quota = service_factory(failure=phase)
-    processing = await service.update_policy(user_id=20, actor_user_id=90, request=request())
+    processing = await service.update_policy(model_id=2, user_id=20, actor_user_id=90, request=request())
     assert processing["status"] == "PROCESSING"
     state["now"] += timedelta(seconds=31)
     result = await service.resume("a")
@@ -144,7 +141,7 @@ async def test_sql_crash_resumes_without_extra_policy_version(service_factory, p
 
 async def test_revoked_permission_before_commit_fails_but_committed_intent_finishes(service_factory):
     service, state, quota = service_factory(quota=QuotaDouble("block"))
-    await service.update_policy(user_id=20, actor_user_id=90, request=request())
+    await service.update_policy(model_id=2, user_id=20, actor_user_id=90, request=request())
     state["allowed"] = False
     state["now"] += timedelta(seconds=31)
     failed = await service.resume("a")
@@ -156,7 +153,7 @@ async def test_revoked_permission_before_commit_fails_but_committed_intent_finis
 
 async def test_revoked_permission_after_commit_preserves_authorized_intent(service_factory):
     service, state, _quota = service_factory(quota=QuotaDouble("install"))
-    await service.update_policy(user_id=20, actor_user_id=90, request=request())
+    await service.update_policy(model_id=2, user_id=20, actor_user_id=90, request=request())
     state["allowed"] = False
     state["models_allowed"] = False
     state["now"] += timedelta(seconds=31)
@@ -169,10 +166,10 @@ async def test_two_operations_cannot_replace_pending_owner(service_factory):
     from bisheng.common.errcode.dsh import DshOperationInProgressError
 
     service, _state, _quota = service_factory(quota=QuotaDouble("block"))
-    await service.update_policy(user_id=20, actor_user_id=90, request=request())
+    await service.update_policy(model_id=2, user_id=20, actor_user_id=90, request=request())
     other = request().model_copy(update={"operation_id": "b"})
     with pytest.raises(DshOperationInProgressError):
-        await service.update_policy(user_id=20, actor_user_id=90, request=other)
+        await service.update_policy(model_id=2, user_id=20, actor_user_id=90, request=other)
     assert service._read("a")["status"] == "PROCESSING"
 
 
@@ -193,7 +190,7 @@ async def test_old_worker_cannot_commit_after_new_lease(service_factory):
         return True
 
     service.validate_models = pause_first_validation
-    old = asyncio.create_task(service.update_policy(user_id=20, actor_user_id=90, request=request()))
+    old = asyncio.create_task(service.update_policy(model_id=2, user_id=20, actor_user_id=90, request=request()))
     await asyncio.wait_for(waiting.wait(), timeout=2)
     state["now"] += timedelta(seconds=31)
     latest = await service.resume("a")
@@ -208,7 +205,7 @@ async def test_old_worker_cannot_commit_after_new_lease(service_factory):
 async def test_inaccessible_models_fail_without_committing_policy(service_factory):
     service, state, quota = service_factory()
     state["models_allowed"] = False
-    result = await service.update_policy(user_id=20, actor_user_id=90, request=request())
+    result = await service.update_policy(model_id=2, user_id=20, actor_user_id=90, request=request())
     assert result["status"] == "FAILED"
     assert result["result_code"] == "model_not_allowed"
     assert result["before_values"] is None and result["after_values"] is None
@@ -234,6 +231,9 @@ async def test_real_redis_policy_recovery_preserves_storage_block(service_factor
 
             return invoke
 
+    await quota.redis.hset(
+        gate, mapping={"version:2": "1", "model:2": "1", "limit:2": "1000", "version": "3", "limit": "3000"}
+    )
     service, state, _quota = service_factory(quota=ResponseLoss())
     with service.repository_scope() as repository:
         repository.session.add(
@@ -241,15 +241,14 @@ async def test_real_redis_policy_recovery_preserves_storage_block(service_factor
                 user_id=20,
                 version=1,
                 quota_sync_state="READY",
-                model_configs=[
-                    DshModelQuotaConfig(model_id=4, monthly_token_limit=1000),
-                    DshModelQuotaConfig(model_id=5, monthly_token_limit=2000),
-                ],
+                model_id=2,
+                monthly_token_limit=1000,
+                enabled=1,
                 updated_by=90,
             )
         )
     result = await service.update_policy(
-        user_id=20, actor_user_id=90, request=request().model_copy(update={"expected_version": 1})
+        model_id=2, user_id=20, actor_user_id=90, request=request().model_copy(update={"expected_version": 1})
     )
     if failure:
         assert result["status"] == "PROCESSING"
@@ -257,12 +256,12 @@ async def test_real_redis_policy_recovery_preserves_storage_block(service_factor
         result = await service.resume("a")
     assert result["status"] == "SUCCEEDED"
     assert result["after_values"]["version"] == 2
-    assert await quota.redis.hget(gate, "version") == "2"
-    assert await quota.redis.hget(gate, "limit") == "300"
+    assert await quota.redis.hget(gate, "version:2") == "2"
+    assert await quota.redis.hget(gate, "limit") == "2100"
     assert await quota.redis.hget(gate, "limit:2") == "100"
-    assert await quota.redis.hget(gate, "limit:5") == "200"
+    assert await quota.redis.hget(gate, "limit:5") == "1000"
     assert await quota.redis.hget(gate, "model:2") == "1"
-    assert await quota.redis.hget(gate, "model:4") is None
+    assert await quota.redis.hget(gate, "model:4") == "1"
     assert await quota.redis.smembers(blocks) == {"STORAGE_UNCERTAIN:prior-month"}
 
 
@@ -272,13 +271,13 @@ async def test_first_policy_creates_only_proven_empty_redis_gate(service_factory
     if keys:
         await quota.redis.delete(*keys)
     service, _state, _ = service_factory(quota=quota)
-    result = await service.update_policy(user_id=20, actor_user_id=90, request=request())
+    result = await service.update_policy(model_id=2, user_id=20, actor_user_id=90, request=request())
     assert result["status"] == "SUCCEEDED"
     gate, *_ = quota.keys(running())
     assert await quota.redis.hget(gate, "version") == "1"
-    assert await quota.redis.hget(gate, "limit") == "300"
+    assert await quota.redis.hget(gate, "limit") == "100"
     assert await quota.redis.hget(gate, "limit:2") == "100"
-    assert await quota.redis.hget(gate, "limit:5") == "200"
+    assert await quota.redis.hget(gate, "limit:5") is None
 
 
 @pytest.mark.parametrize("denial", ["permission", "model", "dependency"])
@@ -290,7 +289,7 @@ async def test_production_callback_exceptions_close_only_definitive_rejections(s
     from bisheng.common.errcode.dsh import DshModelNotAllowedError
 
     service, state, quota = service_factory(quota=QuotaDouble("block"))
-    await service.update_policy(user_id=20, actor_user_id=90, request=request())
+    await service.update_policy(model_id=2, user_id=20, actor_user_id=90, request=request())
     state["now"] += timedelta(seconds=31)
     if denial == "permission":
         service.authorize = AsyncMock(side_effect=HTTPException(403, "Role removed"))

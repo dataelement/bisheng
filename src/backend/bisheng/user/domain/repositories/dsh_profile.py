@@ -15,7 +15,12 @@ class UserDshProfileRepository:
 
     @staticmethod
     def access_users(
-        session: Session, *, after_user_id: int = 0, limit: int = 20, keyword: str = ""
+        session: Session,
+        *,
+        after_user_id: int = 0,
+        limit: int = 20,
+        keyword: str = "",
+        user_ids: list[int] | None = None,
     ) -> list[tuple[int, str]]:
         """Read one page plus a lookahead of active users for DSH administration."""
         tenant = get_current_tenant_id()
@@ -36,6 +41,8 @@ class UserDshProfileRepository:
             .order_by(User.user_id)
             .limit(limit + 1)
         )
+        if user_ids is not None:
+            statement = statement.where(col(User.user_id).in_(user_ids))
         if keyword:
             statement = statement.where(col(User.user_name).contains(keyword, autoescape=True))
         with strict_tenant_filter():

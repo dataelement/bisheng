@@ -3,7 +3,7 @@ import { Checkbox } from '@/components/bs-ui/checkBox'
 import { Input } from '@/components/bs-ui/input'
 import { TableCell, TableRow } from '@/components/bs-ui/table'
 import {
-    getDshPolicy,
+    getDshModelPolicy,
     isDshRequestRejected,
     saveDshPolicy,
 } from '@/controllers/API/dsh'
@@ -40,10 +40,9 @@ export function ModelAccessRow({
 }: ModelAccessRowProps) {
     const { t } = useTranslation()
     const [snapshot, setSnapshot] = useState(user)
-    const initial = user.models.find((model) => model.model_id === modelId)
-    const [allowed, setAllowed] = useState(!!initial)
+    const [allowed, setAllowed] = useState(user.enabled)
     const [limit, setLimit] = useState(
-        String(initial?.monthly_token_limit ?? 0),
+        String(user.monthly_token_limit),
     )
     const [operationId, setOperationId] = useState(
         user.pending_operation_id ?? unresolved?.operation_id ?? null,
@@ -59,8 +58,9 @@ export function ModelAccessRow({
             onOperation(user.user_id, {
                 operation_id: user.pending_operation_id,
                 tenant_id: String(tenantId),
+                model_id: modelId,
             })
-    }, [user.pending_operation_id, user.user_id, tenantId, onOperation])
+    }, [user.pending_operation_id, user.user_id, tenantId, modelId, onOperation])
     const operation = operationId ? operations[operationId] : undefined
     const terminal =
         operation && ['SUCCEEDED', 'FAILED'].includes(operation.status)
@@ -69,10 +69,9 @@ export function ModelAccessRow({
     const stale = operationRejected || !!terminal
     const valid =
         !allowed || (/^\d+$/.test(limit) && Number.isSafeInteger(Number(limit)))
-    const original = snapshot.models.find((model) => model.model_id === modelId)
     const dirty =
-        allowed !== !!original ||
-        (allowed && Number(limit) !== original?.monthly_token_limit)
+        allowed !== snapshot.enabled ||
+        (allowed && Number(limit) !== snapshot.monthly_token_limit)
 
     async function handleSave() {
         if (!valid || !dirty || lock.current || pending || stale || refreshing)
@@ -81,22 +80,16 @@ export function ModelAccessRow({
         setError(false)
         const id = crypto.randomUUID()
         setOperationId(id)
-        const models = snapshot.models.filter(
-            (model) => model.model_id !== modelId,
-        )
-        if (allowed)
-            models.push({
-                model_id: modelId,
-                monthly_token_limit: Number(limit),
-            })
         const body = {
             operation_id: id,
             expected_version: snapshot.version,
-            models,
+            enabled: allowed,
+            monthly_token_limit: allowed ? Number(limit) : 0,
         }
         const reference: DshOperationRef = {
             operation_id: id,
             tenant_id: String(tenantId),
+                model_id: modelId,
         }
         reference.retry = async () => {
             try {
@@ -105,6 +98,7 @@ export function ModelAccessRow({
                     reference,
                     await saveDshPolicy(
                         String(user.user_id),
+                        modelId,
                         String(tenantId),
                         body,
                     ),
@@ -133,28 +127,28 @@ export function ModelAccessRow({
         refreshAbort.current = abort
         setRefreshing(true)
         try {
-            const policy = await getDshPolicy(
+            const policy = await getDshModelPolicy(
                 String(user.user_id),
+                modelId,
                 String(tenantId),
                 abort.signal,
             )
             if (abort.signal.aborted) return
             setSnapshot({
                 ...user,
-                models: policy.models,
+                enabled: policy.enabled,
+                monthly_token_limit: policy.monthly_token_limit,
                 version: policy.version,
                 pending_operation_id: policy.pending_operation_id ?? null,
             })
-            const model = policy.models.find(
-                (item) => item.model_id === modelId,
-            )
-            setAllowed(!!model)
-            setLimit(String(model?.monthly_token_limit ?? 0))
+            setAllowed(policy.enabled)
+            setLimit(String(policy.monthly_token_limit))
             setOperationId(policy.pending_operation_id ?? null)
             if (policy.pending_operation_id)
                 onOperation(user.user_id, {
                     operation_id: policy.pending_operation_id,
                     tenant_id: String(tenantId),
+                model_id: modelId,
                 })
             setRejected(false)
             setError(false)

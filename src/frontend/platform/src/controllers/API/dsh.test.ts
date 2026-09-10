@@ -108,22 +108,19 @@ describe('DSH API contract boundaries', () => {
         const body = {
             operation_id: 'same-operation',
             expected_version: 1,
-            models: [
-                { model_id: 7, monthly_token_limit: 100 },
-                { model_id: 8, monthly_token_limit: 0 },
-            ],
+            enabled: true, monthly_token_limit: 100,
         }
-        await saveDshPolicy('2', '1', body)
+        await saveDshPolicy('2', 7, '1', body)
         expect(request.put).toHaveBeenCalledWith(
-            '/api/v1/dsh/admin/users/2/policy',
+            '/api/v1/dsh/admin/users/2/models/7/policy',
             body,
             { params: { tenant_id: '1' }, preserveError: true },
         )
         const calls = vi.mocked(request.put).mock.calls.length
         await expect(
-            saveDshPolicy('2', '1', {
+            saveDshPolicy('2', 7, '1', {
                 ...body,
-                models: [body.models[0], body.models[0]],
+                monthly_token_limit: -1,
             }),
         ).rejects.toThrow()
         expect(request.put).toHaveBeenCalledTimes(calls)

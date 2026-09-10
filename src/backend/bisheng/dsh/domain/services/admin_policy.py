@@ -12,7 +12,6 @@ from bisheng.common.errcode.dsh import DshModelNotAllowedError, DshOperationConf
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.dsh.domain.repositories.policy import DshPolicyRepository
 from bisheng.dsh.domain.schemas.contracts import DshUserPolicyInput
-from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig, validate_model_configs
 
 
 class PolicyQuota(Protocol):
@@ -29,6 +28,7 @@ class PolicyQuota(Protocol):
         lease_generation: int,
         epoch: int,
         expected_version: int,
+        model_id: int,
     ) -> None: ...
 
     async def install_policy(
@@ -41,7 +41,9 @@ class PolicyQuota(Protocol):
         epoch: int,
         expected_version: int,
         version: int,
-        model_configs: list[DshModelQuotaConfig],
+        model_id: int,
+        monthly_token_limit: int,
+        enabled: bool,
     ) -> None: ...
 
     async def finish_policy(
@@ -53,6 +55,7 @@ class PolicyQuota(Protocol):
         lease_generation: int,
         epoch: int,
         expected_policy_version: int,
+        model_id: int,
     ) -> None: ...
 
 
@@ -83,7 +86,9 @@ class DshAdminService:
         self.now = now
         self.lease_seconds = lease_seconds
 
-    async def update_policy(self, *, user_id: int, actor_user_id: int, request: DshUserPolicyInput) -> dict:
+    async def update_policy(
+        self, *, user_id: int, actor_user_id: int, model_id: int, request: DshUserPolicyInput
+    ) -> dict:
         if not await self.authorize(actor_user_id, user_id):
             raise DshOperationConflictError()
         with self.repository_scope() as repository:
@@ -92,7 +97,9 @@ class DshAdminService:
                 user_id=user_id,
                 actor_user_id=actor_user_id,
                 expected_version=request.expected_version,
-                model_configs=request.models,
+                model_id=model_id,
+                monthly_token_limit=request.monthly_token_limit,
+                enabled=request.enabled,
             )
             result = operation.model_dump()
         if result["status"] in {"SUCCEEDED", "FAILED"}:
@@ -114,7 +121,7 @@ class DshAdminService:
             with self.repository_scope() as repository:
                 operation = repository.operations.claim(operation_id, now=self.now(), lease_seconds=self.lease_seconds)
                 current = operation.model_dump()
-                policy = repository.get(operation.user_id)
+                policy = repository.get_model(operation.user_id, operation.payload["model_id"])
                 if policy is None:
                     raise DshOperationConflictError()
                 epoch = policy.quota_epoch
@@ -125,13 +132,21 @@ class DshAdminService:
         if tenant_id is None:
             raise DshOperationConflictError()
         subject = (tenant_id, current["user_id"])
-        ownership = {"operation_id": operation_id, "lease_generation": generation, "epoch": epoch}
+        ownership = {
+            "operation_id": operation_id,
+            "lease_generation": generation,
+            "epoch": epoch,
+            "model_id": current["payload"]["model_id"],
+        }
         expected = current["expected_policy_version"]
         try:
             if expected == 0 and current["committed_at"] is None:
                 with self.repository_scope() as repository:
                     proof = repository.new_user_proof(operation_id, generation, now=self.now())
-                await self.quota.ensure_new_user(*subject, **ownership, proof=proof)
+                if proof is not None:
+                    await self.quota.ensure_new_user(
+                        *subject, **{k: v for k, v in ownership.items() if k != "model_id"}, proof=proof
+                    )
             # Reclaim the Redis owner even after response loss or SQL READY rollback.
             await self.quota.block_policy(*subject, **ownership, expected_version=expected)
             if current["committed_at"] is None:
@@ -141,7 +156,7 @@ class DshAdminService:
                     models_allowed = permitted and await self.validate_models(
                         current["actor_user_id"],
                         current["user_id"],
-                        [item.model_id for item in validate_model_configs(current["payload"]["model_configs"])],
+                        [current["payload"]["model_id"]] if current["payload"]["enabled"] else [],
                     )
                 except DshModelNotAllowedError:
                     models_allowed = False
@@ -168,7 +183,8 @@ class DshAdminService:
                 **ownership,
                 expected_version=expected,
                 version=after["version"],
-                model_configs=validate_model_configs(after["model_configs"]),
+                monthly_token_limit=after["monthly_token_limit"],
+                enabled=after["enabled"],
             )
             with self.repository_scope() as repository:
                 repository.mark_ready(operation_id, generation, now=self.now())

@@ -998,15 +998,17 @@
 <tr><td><code>POST</code> <code>/api/dsh/token</code><br><span class="tag tag-purple">Gateway</span></td><td>DSH<br>票据 + PKCE / refresh</td><td><code>grant_type + identity_ticket/auth_id/code_verifier 或 refresh_token</code></td><td>access_token, refresh_token, expires_in，身份及会话期限（见客户端契约）</td><td>有效 License（只读）, seat, session, refresh</td></tr>
 <tr><td><code>POST</code> <code>/api/dsh/logout</code><br><span class="tag tag-purple">Gateway</span></td><td>DSH<br>DSH Token / refresh</td><td><code>当前会话凭证</code></td><td>204；当前会话撤销，席位保留</td><td>session, refresh</td></tr>
 <tr><td><code>GET</code> <code>/api/dsh/jwks</code><br><span class="tag tag-purple">Gateway</span></td><td>BiSheng<br>公开只读</td><td><code>无</code></td><td>keys: kid, kty, alg, use 及公钥参数</td><td>受管公钥集</td></tr>
-<tr><td><code>GET</code> <code>/api/v1/dsh/models</code><br><span class="tag tag-green">BiSheng</span></td><td>DSH<br>DSH Token + 在线验席</td><td><code>无</code></td><td>OpenAI models 列表与能力说明</td><td>user_policy.model_configs + 既有模型</td></tr>
+<tr><td><code>GET</code> <code>/api/v1/dsh/models</code><br><span class="tag tag-green">BiSheng</span></td><td>DSH<br>DSH Token + 在线验席</td><td><code>无</code></td><td>OpenAI models 列表与能力说明</td><td>user_policy 中 enabled=1 的模型记录 + 既有模型</td></tr>
 <tr><td><code>POST</code> <code>/api/v1/dsh/chat/completions</code><br><span class="tag tag-green">BiSheng</span></td><td>DSH<br>DSH Token + 在线验席</td><td><code>model, messages, tools, stream, max_tokens</code></td><td>JSON / SSE + usage / tool_calls</td><td>policy, monthly_usage, model_call</td></tr>
 <tr><td><code>GET</code> <code>/api/v1/dsh/usage</code><br><span class="tag tag-green">BiSheng</span></td><td>DSH<br>DSH Token + 在线验席</td><td><code>可选 model=bisheng:&lt;id&gt;；仅当前用户</code></td><td>month, used, limit, remaining, source, as_of, quota_state 及计费时间边界（见客户端契约）</td><td>Redis live；SQL 仅降级展示</td></tr></tbody></table></div></div>
 <div class="technical-group"><h3>2. 统一管理接口</h3><p>均由 BiSheng 提供，管理员 JWT + 当前管理作用域；用户与租户不能由未验证参数替换。</p><div class="table-wrap"><table class="technical-table"><thead><tr><th scope="col">接口 / 提供方</th><th scope="col">调用方 · 鉴权</th><th scope="col">关键入参</th><th scope="col">返回</th><th scope="col">关联数据</th></tr></thead><tbody><tr><td><code>GET</code> <code>/api/v1/dsh/admin/users</code><br><span class="tag tag-green">BiSheng</span></td><td>管理页面<br>管理员 JWT</td><td><code>cursor, limit, keyword, seat_state, login_state</code></td><td>身份/席位/登录 items, next_cursor, has_more, as_of</td><td>Gateway 分页 + 当前页身份，不查模型</td></tr>
 <tr><td><code>GET</code> <code>/api/v1/dsh/admin/license</code><br><span class="tag tag-green">BiSheng</span></td><td>管理页面<br>管理员 JWT</td><td><code>无</code></td><td>授权状态, used, limit, valid_until</td><td>Gateway 当前有效 License + 席位统计</td></tr>
-<tr><td><code>PUT</code> <code>/api/v1/dsh/admin/users/{id}/policy</code><br><span class="tag tag-green">BiSheng</span></td><td>管理页面<br>管理员 JWT</td><td><code>operation_id, models: DshModelQuotaConfig[], expected_version</code></td><td>operation_id、status；成功含 policy/version，处理中含 phase</td><td>user_policy + admin_operation</td></tr>
+<tr><td><code>PUT</code> <code>/api/v1/dsh/admin/users/{id}/models/{model_id}/policy</code><br><span class="tag tag-green">BiSheng</span></td><td>管理页面<br>管理员 JWT</td><td><code>operation_id, enabled, monthly_token_limit, expected_version</code></td><td>operation_id、status；成功含 policy/version，处理中含 phase</td><td>user_policy + admin_operation</td></tr>
 <tr><td><code>POST</code> <code>/api/v1/dsh/admin/users/{id}/revoke</code><br><span class="tag tag-green">BiSheng</span></td><td>管理页面<br>管理员 JWT</td><td><code>operation_id, expected_grant_version</code></td><td>SUCCEEDED / PROCESSING + operation_id</td><td>admin_operation → Gateway</td></tr>
 <tr><td><code>POST</code> <code>/api/v1/dsh/admin/users/{id}/reassign</code><br><span class="tag tag-green">BiSheng</span></td><td>管理页面<br>管理员 JWT</td><td><code>operation_id, expected_grant_version</code></td><td>SUCCEEDED / PROCESSING + 新授权版本</td><td>admin_operation → Gateway</td></tr>
 <tr><td><code>GET</code> <code>/api/v1/dsh/admin/operations/{id}</code><br><span class="tag tag-green">BiSheng</span></td><td>管理页面<br>管理员 JWT</td><td><code>路径 operation_id</code></td><td>status, phase, action, actor/target, before/after, 时间、result_code 及 result</td><td>admin_operation；含策略审计</td></tr>
+<tr><td><code>GET /api/v1/dsh/admin/models/{model_id}/users</code></td><td>模型开放范围<br>管理员 JWT</td><td>cursor, limit, keyword, authorized_only</td><td>当前模型用户配置分页；可包含未配置用户</td><td>模型索引 + 有效毕昇用户</td></tr>
+<tr><td><code>GET /api/v1/dsh/admin/users/{id}/models/{model_id}/policy</code></td><td>单行刷新<br>管理员 JWT</td><td>user_id, model_id, tenant_id</td><td>enabled、monthly_token_limit、version、pending_operation_id</td><td>单条 user_policy</td></tr>
 <tr><td><code>GET /api/v1/dsh/admin/users/{id}/policy</code><br>BiSheng</td><td>模型与额度视图<br>管理员 JWT</td><td>路径 user_id；可选 tenant_id，由后端校验或定位授权目标</td><td>tenant_id、策略与月限额、available_models 及来源、用量 source/as_of、last_call 及来源</td><td>模型业务强读 + 策略 + Redis；SQL 用量降级与最近调用投影</td></tr>
 <tr><td><code>GET /api/v1/dsh/admin/users/{id}/sessions</code><br>BiSheng</td><td>席位会话详情<br>管理员 JWT</td><td>user_id, cursor, limit</td><td>会话/设备分页</td><td>Gateway management/read</td></tr></tbody></table></div></div>
 <p class="technical-note">管理策略读响应固定返回经授权定位的 tenant_id；保存必须使用该租户。available_models 只包含目标租户可用且已通过 DSH 能力验证的模型，标记 is_root_shared；available_models_source 为 live/unavailable，不可用时阻止保存。last_call 仅返回 request_id、model_id、status、started_at、finished_at、total_tokens、projected_at，last_call_source 为 persisted/unavailable；空历史、数据不可用及未知用量必须分别展示。成功撤销或重分配后回读席位与 License，操作进度显示 phase，审计保留前后 state/grant_version。这些是平台管理接口补充；客户端 0.4.0 保留七个端点；本次逐模型查询与额度语义变更须同步客户端。</p>
@@ -1106,7 +1108,7 @@
 <tr><td>Gateway<br><a href="#gt_dsh_session"><code>gt_dsh_session</code></a></td><td>登录设备与会话</td><td>PK session_id；UK auth_id；一个席位对应多个 Session</td></tr>
 <tr><td>Gateway<br><a href="#gt_dsh_refresh_token"><code>gt_dsh_refresh_token</code></a></td><td>刷新轮换与重放记录</td><td>PK refresh_id；UK token_hash；UK (session_id, generation)</td></tr>
 <tr><td>Gateway<br><a href="#gt_dsh_operation"><code>gt_dsh_operation</code></a></td><td>席位命令幂等与审计</td><td>PK operation_id；全局唯一，并校验 installation_id 作用域</td></tr>
-<tr><td>BiSheng<br><a href="#dsh_user_policy"><code>dsh_user_policy</code></a></td><td>用户逐模型独立月额度策略</td><td>PK id；UK (tenant_id, user_id)</td></tr>
+<tr><td>BiSheng<br><a href="#dsh_user_policy"><code>dsh_user_policy</code></a></td><td>用户逐模型独立月额度策略</td><td>PK id；UK (tenant_id, user_id, model_id)；索引 (tenant_id, model_id, enabled, user_id)</td></tr>
 
 <tr><td>BiSheng<br><a href="#dsh_monthly_usage"><code>dsh_monthly_usage</code></a></td><td>用户模型月用量汇总</td><td>PK id；UK (tenant_id, user_id, usage_month, model_id)</td></tr>
 <tr><td>BiSheng<br><a href="#dsh_model_call"><code>dsh_model_call</code></a></td><td>请求用量与结算明细</td><td>PK request_id；服务端生成 UUID，结算按 request_id 幂等</td></tr>
@@ -1140,12 +1142,12 @@
 <tr><td><code>payload_hash</code></td><td><code>CHAR(64)</code></td><td>非空</td><td>同 operation_id 不同负载返回 409</td></tr>
 <tr><td><code>status / result_grant_version</code></td><td><code>VARCHAR(16) / BIGINT</code></td><td>结果版本可空</td><td>SUCCEEDED / FAILED；与席位事务同提交，执行中不伪造成功</td></tr>
 <tr><td><code>result_code / result_payload</code></td><td><code>VARCHAR(64) / JsonType</code></td><td>可空</td><td>幂等重试返回原结果；不含 Token 或 Secret</td></tr></tbody></table></div></details>
-<details id="dsh_user_policy" class="technical-detail"><summary><code>dsh_user_policy</code> · 用户逐模型独立月额度策略</summary><p>PK id；UK (tenant_id, user_id)<br>用户策略强读；写入带 expected_version；完整策略历史保存在 UPDATE_POLICY 操作</p><div class="table-wrap"><table class="technical-table"><thead><tr><th>字段</th><th>逻辑类型</th><th>约束 / 默认</th><th>语义</th></tr></thead><tbody><tr><td>id / tenant_id / user_id</td><td>BIGINT</td><td>PK / 非空</td><td>租户字段由既有上下文与隔离机制维护</td></tr>
-<tr><td>model_configs</td><td>ModelConfigsType / JsonType</td><td>非空 / 默认 []</td><td>DshModelQuotaConfig[]，每个对象含唯一 model_id 与独立 monthly_token_limit；0 只禁止该模型新调用</td></tr>
+<details id="dsh_user_policy" class="technical-detail"><summary><code>dsh_user_policy</code> · 用户逐模型独立月额度策略</summary><p>PK id；UK (tenant_id, user_id, model_id)；索引 (tenant_id, model_id, enabled, user_id)<br>用户策略强读；写入带 expected_version；完整策略历史保存在 UPDATE_POLICY 操作</p><div class="table-wrap"><table class="technical-table"><thead><tr><th>字段</th><th>逻辑类型</th><th>约束 / 默认</th><th>语义</th></tr></thead><tbody><tr><td>id / tenant_id / user_id</td><td>BIGINT</td><td>PK / 非空</td><td>租户字段由既有上下文与隔离机制维护</td></tr>
+<tr><td>model_id / monthly_token_limit / enabled</td><td>BIGINT / BIGINT / INTEGER</td><td>非空 / 额度默认 0 / enabled 默认 0</td><td>每个用户模型一条记录；取消 JSON；enabled=0 取消授权并保留版本和历史用量</td></tr>
 <tr><td>version</td><td>BIGINT</td><td>非空 / 首次生效 1，占位 0</td><td>模型清单和月限额变更在同一事务递增；0 仅首次配置前的禁止调用占位</td></tr>
 <tr><td>quota_sync_state / quota_epoch</td><td>VARCHAR(16) / BIGINT</td><td>非空 / PENDING、初始 1</td><td>PENDING / READY / FROZEN；策略同步、恢复代次控制，不是逐请求计数器</td></tr>
 <tr><td>updated_by</td><td>BIGINT</td><td>非空</td><td>最近配置的真实管理员；完整变更历史见 UPDATE_POLICY 操作，未配置用户使用虚拟默认策略</td></tr>
-<tr><td>pending_operation_id</td><td>VARCHAR(36)</td><td>可空</td><td>当前策略编排所有者；同一用户一次只接受一个未完成策略操作，完成后清空</td></tr></tbody></table></div></details>
+<tr><td>pending_operation_id</td><td>VARCHAR(36)</td><td>可空</td><td>当前策略编排所有者；同一用户同一模型一次只接受一个未完成操作；不同模型可并行，完成后清空</td></tr></tbody></table></div></details>
 
 <details id="dsh_monthly_usage" class="technical-detail"><summary><code>dsh_monthly_usage</code> · 用户模型月用量汇总</summary><p>PK id；UK (tenant_id, user_id, usage_month, model_id)<br>唯一索引前缀支持用户月份汇总；由消费者批量更新，不参与每请求 SQL 锁定；不按席位重新建账</p><div class="table-wrap"><table class="technical-table"><thead><tr><th>字段</th><th>逻辑类型</th><th>约束 / 默认</th><th>语义</th></tr></thead><tbody><tr><td><code>id / tenant_id / user_id</code></td><td><code>BIGINT</code></td><td>PK / 非空</td><td>用量归属稳定用户，席位释放不重置</td></tr>
 <tr><td><code>model_id</code></td><td><code>BIGINT</code></td><td>非空 / 联合唯一键成员</td><td>毕昇模型主键，不是上游模型名；与请求明细一致，不使用 NULL/0 表示用户总量</td></tr>
@@ -1167,7 +1169,7 @@
 <tr><td>expected_grant_version / payload_hash</td><td>BIGINT / CHAR(64)</td><td>expected 仅席位动作必填 / hash 非空</td><td>按动作校验；相同 ID 不同操作者/目标/负载返回 409</td></tr>
 <tr><td>expected_policy_version / expected_event_version</td><td>BIGINT</td><td>按动作必填</td><td>UPDATE_POLICY / RECONCILE_USAGE 的乐观锁；其余动作为空</td></tr>
 <tr><td>payload</td><td>JsonType</td><td>非空且登记后不可覆盖</td><td>原始动作负载；补记包含 request_id、证据引用/摘要及可靠 usage；不含 Secret</td></tr>
-<tr><td>before_values / after_values</td><td>JsonType</td><td>策略提交时必填，其余按动作</td><td>UPDATE_POLICY 的旧新模型集合、月限额与 version；提交后不可覆盖；首次配置 before.version=0、model_configs=[]</td></tr>
+<tr><td>before_values / after_values</td><td>JsonType</td><td>策略提交时必填，其余按动作</td><td>UPDATE_POLICY 的 model_id、enabled、monthly_token_limit、version 旧新值；首次配置 before.version=0、enabled=false</td></tr>
 <tr><td>created_at / updated_at / committed_at / effective_at</td><td>UTC datetime</td><td>前两者非空，后两者可空</td><td>意图登记、进度更新、业务提交、最终生效时间；策略已提交不等于已解冻</td></tr>
 <tr><td>status</td><td>VARCHAR(16)</td><td>非空</td><td>PENDING / PROCESSING / SUCCEEDED / FAILED</td></tr>
 <tr><td>attempts / next_retry_at / lease_until / lease_generation</td><td>INTEGER / UTC datetime / UTC datetime / BIGINT</td><td>attempts/代次默认 0；时间可空</td><td>领取时原子递增 lease_generation 作为 fencing token，状态写入和 Redis 操作校验当前代次；不用于席位回收</td></tr>
@@ -1178,7 +1180,7 @@
           <tr><td>模型 101 每月 5 万、模型 202 每月 10 万 token</td><td>模型 101 用 4 万剩 1 万，模型 202 用 2 万剩 8 万；不可互借</td><td>R1 / 模型 101 完成后实际入账 1200</td></tr>
         </tbody></table></div>
         <p>按用户＋模型取各自月行并执行独立月额度；用户汇总只供展示。模型 A 用尽不影响模型 B，删除模型不删除历史消费。remaining 汇总为各模型 max(limit-used,0) 之和。</p>
-        <p>models 映射为强类型 model_configs 对象列表；JsonType 仅负责数据库存储，应用验证唯一 model_id 与每模型月限额，不做数据库 JSON 查询。每次调用仍校验模型权限。一期不实现任何限流。</p>
+        <p>额度配置直接使用一行一条用户模型授权；通过数据库唯一约束和模型索引查询，每条记录独立版本与同步，不再保存用户 JSON。每次调用仍校验模型权限。一期不实现任何限流。</p>
       </div>
       <p class="technical-note">实时路径：Redis Lua 检查用户已用量是否低于限额 → 登记请求及 Stream 事件（不扣减）→ 模型调用 → Lua 原子累计实际 usage。Worker 批量写 SQL，准入不读滞后 SQL，不逐 SSE chunk 写库。</p>
       <p class="technical-note">SQL 月行首次创建受唯一键保护；模型移除不删历史。结算沿用原 model_id/月，未知用量标 USAGE_UNKNOWN 待对账，不暂停该用户新调用，不估算扣款；/usage?model=bisheng:&lt;id&gt; 读该模型实时额度，无参数只作汇总展示，降级 SQL 展示必须带 source/as_of，不能用于准入。</p>

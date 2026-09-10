@@ -1,29 +1,33 @@
-if redis.call('TYPE',KEYS[1]).ok=='hash' and redis.call('HGET',KEYS[1],'state')~='READY' then return {'DENY','recovery_required'} end
+-- Policy ownership and versions belong to one user/model row. Usage remains a user hash slot.
 local gt=redis.call('TYPE',KEYS[1]).ok; local bt=redis.call('TYPE',KEYS[2]).ok
 if gt~='hash' or (bt~='none' and bt~='set') then return {'DENY','bad_policy_ledger'} end
+if redis.call('HGET',KEYS[1],'state')~='READY' then return {'DENY','recovery_required'} end
 if redis.call('HGET',KEYS[1],'epoch')~=ARGV[4] then return {'DENY','epoch_conflict'} end
+local model=ARGV[6]; local suffix=':'..model
+local owner=redis.call('HGET',KEYS[1],'operation_id'..suffix)
+local generation=redis.call('HGET',KEYS[1],'generation'..suffix) or '0'
+local current=redis.call('HGET',KEYS[1],'version'..suffix) or '0'
+local reason='POLICY_SYNC:'..model..':'..ARGV[2]
 local function less(a,b) return #a<#b or (#a==#b and a<b) end
-local owner=redis.call('HGET',KEYS[1],'operation_id')
-local generation=redis.call('HGET',KEYS[1],'generation') or '0'
-local current=redis.call('HGET',KEYS[1],'version')
-local reason='POLICY_SYNC:'..ARGV[2]
 if ARGV[1]=='block' then
   if owner==ARGV[2] then
     if less(ARGV[3],generation) then return {'DENY','stale_worker'} end
-    if current~=ARGV[5] and current~=redis.call('HGET',KEYS[1],'installed_version') then return {'DENY','version_conflict'} end
+    if current~=ARGV[5] and current~=redis.call('HGET',KEYS[1],'installed_version'..suffix) then return {'DENY','version_conflict'} end
   else
-    local all=redis.call('SMEMBERS',KEYS[2])
-    for _,r in ipairs(all) do if string.sub(r,1,12)=='POLICY_SYNC:' then return {'DENY','policy_owned'} end end
+    local prefix='POLICY_SYNC:'..model..':'
+    for _,r in ipairs(redis.call('SMEMBERS',KEYS[2])) do
+      if string.sub(r,1,#prefix)==prefix then return {'DENY','policy_owned'} end
+    end
     if current~=ARGV[5] then return {'DENY','version_conflict'} end
   end
-  redis.call('HSET',KEYS[1],'operation_id',ARGV[2],'generation',ARGV[3])
+  redis.call('HSET',KEYS[1],'operation_id'..suffix,ARGV[2],'generation'..suffix,ARGV[3])
   redis.call('SADD',KEYS[2],reason)
   return {'OK'}
 end
 if owner~=ARGV[2] or generation~=ARGV[3] then return {'DENY','stale_worker'} end
 if ARGV[1]=='install' then
-  if current==ARGV[6] then
-    if redis.call('HGET',KEYS[1],'policy_payload')~=ARGV[8] then return {'DENY','payload_conflict'} end
+  if current==ARGV[7] then
+    if redis.call('HGET',KEYS[1],'policy_payload'..suffix)~=ARGV[9] then return {'DENY','payload_conflict'} end
     return {'OK'}
   end
   if current~=ARGV[5] or redis.call('SISMEMBER',KEYS[2],reason)~=1 then return {'DENY','version_conflict'} end
@@ -51,13 +55,25 @@ if ARGV[1]=='install' then
     end
     if total~=used then return {'DENY','incomplete_model_ledger'} end
   end
-  for key=3,#KEYS,2 do
-    for i=9,#ARGV,2 do redis.call('HSETNX',KEYS[key+1],ARGV[i],'0') end
+
+  local total=ARGV[10]=='1' and ARGV[8] or '0'
+  for _,field in ipairs(redis.call('HKEYS',KEYS[1])) do
+    if string.sub(field,1,6)=='limit:' and field~='limit:'..model then
+      local value=redis.call('HGET',KEYS[1],field)
+      if not integer(value) then return {'DENY','bad_counter'} end
+      total=add(total,value)
+    end
   end
-  local fields=redis.call('HKEYS',KEYS[1])
-  for _,f in ipairs(fields) do if string.sub(f,1,6)=='model:' or string.sub(f,1,6)=='limit:' then redis.call('HDEL',KEYS[1],f) end end
-  for i=9,#ARGV,2 do redis.call('HSET',KEYS[1],'model:'..ARGV[i],'1','limit:'..ARGV[i],ARGV[i+1]) end
-  redis.call('HSET',KEYS[1],'version',ARGV[6],'installed_version',ARGV[6],'limit',ARGV[7],'policy_payload',ARGV[8])
+  if not integer(total) then return {'DENY','quota_total_overflow'} end
+  for key=3,#KEYS,2 do redis.call('HSETNX',KEYS[key+1],model,'0') end
+  if ARGV[10]=='1' then
+    redis.call('HSET',KEYS[1],'model:'..model,'1','limit:'..model,ARGV[8])
+  else
+    redis.call('HDEL',KEYS[1],'model:'..model,'limit:'..model)
+  end
+  redis.call('HINCRBY',KEYS[1],'version',1)
+  redis.call('HSET',KEYS[1],'version'..suffix,ARGV[7],'installed_version'..suffix,ARGV[7],
+             'limit',total,'policy_payload'..suffix,ARGV[9])
   return {'OK'}
 end
 if ARGV[1]=='finish' then

@@ -10,7 +10,7 @@
 |---|---|
 | 主配置 | `Settings.dsh: DshSettings`，模型能力为 `ChatCapabilities`，API/Worker共用；字段类型、描述、边界、默认关闭及密钥脱敏均有检查 |
 | 用户配置 | 管理 GET/PUT 的 `models` 为 `DshModelQuotaConfig[]`，每项仅 `model_id`（正整数、用户内唯一）与 `monthly_token_limit`（非负 int64、token/月，0仅禁该模型新调用）；没有顶层共享额度或 RPM/TPM/并发字段 |
-| 持久化与审计 | SQL策略保存强类型 `model_configs`；存储边界经既有JsonType转换。完整列表归一化并绑定操作意图与版本CAS；相同模型集合/额度总和但不同分配仍拒绝复用原操作ID |
+| 持久化与审计 | 已由 2026-09-10 [单行授权修订](./model-policy-row-revision.md) 替代：每个用户模型一条记录、独立 CAS；JSON 仅用于操作审计及恢复证据，不用于额度配置存储 |
 | 准入与结算 | Lua按所选模型已实际入账用量判断，额度不可互借；在途可超额并如实结算，移除模型不删历史；UNKNOWN仍按用户保守阻断 |
 | 恢复 | 新月证明、恢复摘要/回执、SQL epoch CAS均绑定完整逐模型配置；旧聚合证明拒绝，冻结至SQL提交后才READY |
 | 视图 | 每模型显示使用量、额度、剩余；缺失计数为不可用，显式0才展示0。汇总remaining为各模型非负剩余之和；管理用量的计数与额度取同一快照 |

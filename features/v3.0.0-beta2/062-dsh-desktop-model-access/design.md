@@ -286,17 +286,17 @@ BiSheng 所有用户表必须携带 tenant_id，读写均显式校验作用域�
 
 **BiSheng · `dsh_user_policy`：用户逐模型独立月额度策略**
 
-- PK id；UK (tenant_id, user_id)
-- 用户策略强读；写入带 expected_version
+- PK id；UK (tenant_id, user_id, model_id)；索引 (tenant_id, model_id, enabled, user_id)
+- 每个用户模型独立记录、版本与同步所有者；写入只携当前模型 expected_version
 
 | 字段 | 逻辑类型 | 约束 / 默认 | 含义 |
 |---|---|---|---|
 | id / tenant_id / user_id | BIGINT | PK / 非空 | 租户字段由既有上下文与隔离机制维护 |
-| model_configs | ModelConfigsType（内层 JsonType） | 非空 / 默认 [] | `DshModelQuotaConfig[]`；每个对象为 model_id 与 monthly_token_limit，model_id 在用户配置内唯一；0 只禁止该模型新调用 |
-| version | BIGINT | 非空 / 首次生效 1，占位 0 | 模型清单和月限额变更在同一事务递增；0 仅首次配置前的禁止调用占位 |
+| model_id / monthly_token_limit / enabled | BIGINT / BIGINT / INTEGER | 非空 / 额度默认 0 / enabled 默认 0 | 一条用户模型授权；enabled=0 取消授权，enabled=1 且额度=0 禁止新调用；不删除历史用量 |
+| version | BIGINT | 非空 / 首次生效 1，占位 0 | 当前模型授权与月限额变更在同一事务递增；0 仅首次配置前的禁止调用占位 |
 | quota_sync_state / quota_epoch | VARCHAR(16) / BIGINT | 非空 / PENDING、初始 1 | PENDING / READY / FROZEN；策略同步、恢复代次控制，不是逐请求计数器 |
 | updated_by | BIGINT | 非空 | 最近配置的真实管理员；完整变更历史见 UPDATE_POLICY 操作，未配置用户使用虚拟默认策略 |
-| pending_operation_id | VARCHAR(36) | 可空 | 当前策略编排所有者；同一用户一次只接受一个未完成策略操作，完成后清空 |
+| pending_operation_id | VARCHAR(36) | 可空 | 当前策略编排所有者；同一用户的同一模型一次只接受一个未完成操作；不同模型可并行，完成后清空 |
 
 **BiSheng · `dsh_monthly_usage`：用户模型月用量汇总**
 
@@ -341,7 +341,7 @@ BiSheng 所有用户表必须携带 tenant_id，读写均显式校验作用域�
 | expected_grant_version / payload_hash | BIGINT / CHAR(64) | expected 仅席位动作必填 / hash 非空 | 按动作校验；相同 ID 不同操作者/目标/负载返回 409 |
 | expected_policy_version / expected_event_version | BIGINT | 按动作必填 | UPDATE_POLICY / RECONCILE_USAGE 的乐观锁；其余动作为空 |
 | payload | JsonType | 非空且登记后不可覆盖 | 原始动作负载；补记包含 request_id、证据引用/摘要及可靠 usage；不含 Secret |
-| before_values / after_values | JsonType | 策略提交时必填，其余按动作 | UPDATE_POLICY 的旧新模型集合、月限额与 version；提交后不可覆盖；首次配置 before.version=0、model_configs=[] |
+| before_values / after_values | JsonType | 策略提交时必填，其余按动作 | UPDATE_POLICY 的 model_id、enabled、monthly_token_limit 与 version 旧新值；提交后不可覆盖；首次配置 before.version=0、enabled=false |
 | created_at / updated_at / committed_at / effective_at | UTC datetime | 前两者非空，后两者可空 | 意图登记、进度更新、业务提交、最终生效时间；策略已提交不等于已解冻 |
 | status | VARCHAR(16) | 非空 | PENDING / PROCESSING / SUCCEEDED / FAILED |
 | attempts / next_retry_at / lease_until / lease_generation | INTEGER / UTC datetime / UTC datetime / BIGINT | attempts/代次默认 0；时间可空 | 领取时原子递增 lease_generation 作为 fencing token，状态写入和 Redis 操作校验当前代次；不用于席位回收 |
@@ -373,7 +373,7 @@ Python实体通用创建/修改时间物理列统一为 `create_time/update_time
 | 月用量汇总 | dsh_monthly_usage | 用户在每个模型上本月实际已用多少？跨模型求和得到用户总量 |
 | 请求明细 | dsh_model_call | 哪次请求调用哪个 model_id、实际消耗多少、是否结算？支持审计和故障对账 |
 
-模型范围与额度由一条用户策略统一编排，内部是逐模型独立的强类型配置列表 `model_configs: list[DshModelQuotaConfig]`；这不是共用额度池。对象字段为 `model_id`（正整数、用户内唯一）与 `monthly_token_limit`（非负 int64，单位 token/月，0 禁止该模型新调用）。主键仍为 tenant_id＋user_id，每次保存完整列表并按 version/CAS 防止覆盖；列表顺序归一、重复模型拒绝。同 operation_id 即使模型集合和额度总和相同，只要分配到各模型的额度不同，仍是不同意图。
+额度配置直接保存在 `dsh_user_policy`：每个 tenant_id＋user_id＋model_id 一条记录，字段为 enabled、monthly_token_limit、version、quota_sync_state、quota_epoch、pending_operation_id；取消原 model_configs JSON，不增加主表或明细表。保存仅更新指定模型，以该行 version/CAS 和 operation_id 防止覆盖及重复执行；取消授权保留该行和递增版本，防止旧请求重放造成重新授权。同一用户不同模型的 SQL 及 Redis 策略版本独立。按模型查询已授权用户走 (tenant_id, model_id, enabled, user_id) 索引。聚合列表仅是模型列表、只读用量和恢复清单的临时 DTO，不落库为用户 JSON；恢复用的聚合版本为各行版本之和，不能作为管理写入版本。详见 [表结构修订](./model-policy-row-revision.md)。
 
 类型适配器在持久化边界将对象转换为 JSON，在读取时还原并验证对象；通过既有 JsonType 兼容 MySQL/DM8，不在数据库中查询 JSON 成员。不新增按模型反查用户的需求。`allowed_model_ids` 与 `monthly_token_limit` 仅为内存派生的 ID 列表及展示总和，不持久化，不是准入权威；模型自身配额才是准入依据。总和不得超过现有 int64 展示边界。旧草案模型清单＋共享额度不自动迁移成每模型额度，测试库按所有权重建，已有试装环境必须关闭 DSH 后重新确认模型配置及恢复证据。
 
@@ -658,11 +658,13 @@ DSH 仅配置 Nginx BASE，公开配置返回开关、client_id 与 contract_ver
 | Gateway `POST /api/dsh/token` | DSH；票据 + PKCE / refresh | grant_type + identity_ticket/auth_id/code_verifier 或 refresh_token | token_type, access_token, refresh_token, expires_in, refresh_expires_in, session_id, session_expires_at, user, tenant | 有效 License（只读）, seat, session, refresh |
 | Gateway `POST /api/dsh/logout` | DSH；DSH Token / refresh | 当前会话凭证 | HTTP 204；当前会话撤销，席位保留 | session, refresh |
 | Gateway `GET /api/dsh/jwks` | BiSheng；公开只读 | 无 | keys: kid, kty, alg, use 及公钥参数 | 受管公钥集 |
-| BiSheng `GET /api/v1/dsh/models` | DSH；DSH Token + 在线验席 | 无 | OpenAI models 列表与能力说明 | user_policy.model_configs + 既有模型 |
+| BiSheng `GET /api/v1/dsh/models` | DSH；DSH Token + 在线验席 | 无 | OpenAI models 列表与能力说明 | user_policy 中 enabled=1 的模型记录 + 既有模型 |
 | BiSheng `POST /api/v1/dsh/chat/completions` | DSH；DSH Token + 在线验席 | model, messages, tools, stream, max_tokens | JSON / SSE + usage / tool_calls | policy, monthly_usage, model_call |
 | BiSheng `GET /api/v1/dsh/usage` | DSH；DSH Token + 在线验席 | 无；仅当前用户 | month, billing_timezone, period_start, reset_at, used, limit, remaining, source, as_of, quota_state | Redis 实时，SQL 仅降级展示 |
 
 #### 统一管理接口
+
+2026-09-10：模型管理新增按模型分页用户 GET 及单模型策略 GET，策略 PUT 改为单模型正文；见 [完整修订契约](./model-policy-row-revision.md)。以下用户策略 GET 为只读用量聚合，不能用于保存版本。
 
 均由 BiSheng 提供，管理员 JWT + 当前管理作用域；用户与租户不能由未验证参数替换。users/{id} 的管理操作可携带 tenant_id 查询参数明确已加载记录的归属：Root管理可选择受控目标，租户管理员只能选择当前scope。Gateway席位仍按(installation_id,user_id)唯一；此参数不会创建跨租户重复席位或自动迁移授权，策略/历史仍按其原tenant隔离。
 
@@ -670,7 +672,7 @@ DSH 仅配置 Nginx BASE，公开配置返回开关、client_id 与 contract_ver
 |---|---|---|---|---|
 | BiSheng `GET /api/v1/dsh/admin/users` | 席位页；管理员 JWT | cursor, limit, keyword, seat_state, login_state | 身份/席位/登录 items, next_cursor, has_more, as_of | Gateway SQL 分页 + 当前页身份批量补齐，不查模型 |
 | BiSheng `GET /api/v1/dsh/admin/license` | 管理页面；管理员 JWT | 无 | 授权状态, used, limit, valid_until | Gateway 当前有效 License + 席位统计 |
-| BiSheng `PUT /api/v1/dsh/admin/users/{id}/policy` | 管理页面；管理员 JWT | operation_id, models: DshModelQuotaConfig[], expected_version | operation_id, status；成功含 policy/version，处理中含 phase | user_policy + admin_operation；见 §4.5.5 |
+| BiSheng `PUT /api/v1/dsh/admin/users/{id}/models/{model_id}/policy` | 管理页面；管理员 JWT | operation_id, enabled, monthly_token_limit, expected_version | operation_id, status；成功含 policy/version，处理中含 phase | user_policy + admin_operation；见 §4.5.5 |
 | BiSheng `POST /api/v1/dsh/admin/users/{id}/revoke` | 管理页面；管理员 JWT | operation_id, expected_grant_version | SUCCEEDED / PROCESSING + operation_id | admin_operation → Gateway |
 | BiSheng `POST /api/v1/dsh/admin/users/{id}/reassign` | 管理页面；管理员 JWT | operation_id, expected_grant_version | SUCCEEDED / PROCESSING + 新授权版本 | admin_operation → Gateway |
 | BiSheng `GET /api/v1/dsh/admin/operations/{id}` | 管理页面；管理员 JWT | 路径 operation_id | status, phase, action, actor/target, before/after, 时间、result_code 及 result | admin_operation；含策略审计 |
@@ -726,10 +728,10 @@ DSH Token 的 JOSE header 固定 typ=bisheng-dsh-access+jwt、alg=HS256、kid=ds
 | 提供方 / 接口 | 鉴权 | 请求与返回 |
 |---|---|---|
 | Gateway `POST /api/internal/dsh/profiles/upsert` | BiSheng 服务 HMAC | 最多 100 条 user_id、username/display_name、profile_version；按版本幂等更新已有席位检索投影，不创建席位或改变授权 |
-| BiSheng `GET /api/v1/dsh/admin/users/{id}/policy` | 管理员 JWT、同租户 | 指定用户的模型策略、额度及 source/as_of 用量，供用户用量视图及保存后单行刷新 |
+| BiSheng `GET /api/v1/dsh/admin/users/{id}/policy` | 管理员 JWT、同租户 | 指定用户的模型策略、额度及 source/as_of 用量，供用户用量只读视图；保存后单行刷新使用新增模型策略 GET |
 | BiSheng `GET /api/v1/dsh/admin/users/{id}/sessions` | 管理员 JWT、同租户 | cursor/limit 的设备会话列表，内部复用 Gateway management/read |
 
-管理 `GET /api/v1/dsh/admin/users/{id}/policy` 的已实现补充字段：`tenant_id` 是后端授权解析的真实目标，前端保存沿用该值，不能从 simple 用户列表或管理员登录租户猜测。`available_models` 为 `{id:int,name:string,is_root_shared:boolean}[]`，其中 name 展示“提供方名称 / 实际 model_name”，不使用自动生成的模型配置标签；由目标租户原模型强读筛选在线 LLM 后逐模型强校验；`available_models_source=live|unavailable` 区分无候选与依赖失败。`last_call` 为最近 SQL 投影的 `{request_id,model_id,status,started_at,finished_at,total_tokens,projected_at}` 或 null，`last_call_source=persisted|unavailable` 区分无历史和读取失败；未知用量为 null，记录允许投影延迟。以上只补普通管理员接口，7 个 Desktop 客户端接口及 0.3.0 不变。
+管理 `GET /api/v1/dsh/admin/users/{id}/policy` 的已实现补充字段：`tenant_id` 是后端授权解析的真实目标，单模型管理接口同样返回/使用该目标，不能从 simple 用户列表或管理员登录租户猜测。`available_models` 为 `{id:int,name:string,is_root_shared:boolean}[]`，其中 name 展示“提供方名称 / 实际 model_name”，不使用自动生成的模型配置标签；由目标租户原模型强读筛选在线 LLM 后逐模型强校验；`available_models_source=live|unavailable` 区分无候选与依赖失败。`last_call` 为最近 SQL 投影的 `{request_id,model_id,status,started_at,finished_at,total_tokens,projected_at}` 或 null，`last_call_source=persisted|unavailable` 区分无历史和读取失败；未知用量为 null，记录允许投影延迟。以上只补普通管理员接口，7 个 Desktop 客户端接口及 0.3.0 不变。
 
 ### 6.2 内部接口与权限
 

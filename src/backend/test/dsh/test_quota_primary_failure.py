@@ -116,7 +116,7 @@ async def test_actual_primary_change_rejects_old_approval_until_evidence_recover
 
     with Session(usage_db) as session, session.begin():
         policy = session.scalar(select(DshUserPolicy).where(DshUserPolicy.user_id == 20))
-        policy.version, policy.model_configs = 1, [DshModelQuotaConfig(model_id=4, monthly_token_limit=1000)]
+        policy.version, policy.monthly_token_limit = 1, 1000
     evidence = MinioEvidenceStore(client, bucket=bucket)
     approvals = MinioQuotaApprovalStore(client, bucket=bucket, installation_id="primary-failure-test")
 
@@ -138,6 +138,7 @@ async def test_actual_primary_change_rejects_old_approval_until_evidence_recover
             user_id=20,
             policy_version=1,
             model_configs=[DshModelQuotaConfig(model_id=4, monthly_token_limit=1000)],
+            model_versions={4: 1},
             current_month="2026-09",
             request_count=len(events),
             events=events,

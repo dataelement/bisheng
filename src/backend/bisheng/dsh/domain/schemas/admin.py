@@ -6,7 +6,6 @@ from typing import Annotated, Literal
 from pydantic import Field, field_validator
 
 from bisheng.dsh.domain.schemas.contracts import DshContract, NonnegativeInt, SubjectId
-from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig
 
 
 class SeatItem(DshContract):
@@ -81,7 +80,8 @@ class ModelAccessUser(DshContract):
     user_id: Annotated[int, Field(strict=True, ge=1)]
     user_name: str
     version: Annotated[int, Field(strict=True, ge=0)]
-    models: list[DshModelQuotaConfig]
+    enabled: bool
+    monthly_token_limit: NonnegativeInt
     pending_operation_id: str | None
 
 
