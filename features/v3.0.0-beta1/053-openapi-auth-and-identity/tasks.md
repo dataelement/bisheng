@@ -387,12 +387,12 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
   **完成条件**: v3 无 JWT/key 可访问已发布资源；v2 同能力仍要求 key
   **依赖**: F01
 
-- [ ] **F03：注册 v3 七个 HTTP allowlist 路由**
+- [ ] **F03：注册 v3 十个 HTTP allowlist 路由**
   **设计依据**: design §5.F1
-  **文件**: `public_endpoints/api/endpoints/{workflow,assistant,flow,chat}.py`、router；测试 `test/public_endpoints/test_http_allowlist.py`
+  **文件**: `public_endpoints/api/endpoints/{workflow,assistant,flow,chat,llm}.py`、router；测试 `test/public_endpoints/test_http_allowlist.py`
   **执行顺序**:
-  1. 先对 design §5.F1 七个 HTTP method+path 写精确集合测试。
-  2. 注册 workflow invoke/stop、assistant chat completions/info、flow detail、chat history/gen_title。
+  1. 先对 design §5.F1 十个 HTTP method+path 写精确集合测试。
+  2. 注册 workflow invoke/stop、assistant chat completions/info、flow detail、chat history/gen_title、语音配置/ASR/TTS。
   3. 不注册 assistant/list、知识库、日常会话或管理接口；额外 `/api/v3/**` 必须 404。
   4. 所有端点调用 F01 的共享 service，并经过 F02 guest policy。
   **完成条件**: HTTP 路由集合与 design §5.F1 完全一致
@@ -448,7 +448,7 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
   **设计依据**: design §4 M3、§9、§10
   **文件**: `test/public_endpoints/test_public_v3_e2e.py`、client/platform 测试
   **执行顺序**:
-  1. 精确断言 v3 只有七个 HTTP + 两个 WS allowlist；`/api/v3/assistant/list` 真 404。
+  1. 精确断言 v3 只有十个 HTTP + 两个 WS allowlist；`/api/v3/assistant/list` 真 404。
   2. 验证开关、发布状态、租户恢复、会话越权和身份头拒绝。
   3. 验证 v2 同路径仍为密钥版，v1/分享链路回归不变。
   4. 验证 client/platform/gateway 全部切换后再允许移除旧 v2 匿名语义。
@@ -882,7 +882,15 @@ A08 → B01 → B02/B03；D08 → B04；F07/C08 → B05 → B06
 
 > 只记录一行指针；原因与新决策写回 `design.md`。若偏差推翻最终设计，必须先暂停并取得用户确认。
 
-- 暂无。
+- 2026-09-10：按用户确认补齐发布页三个 v3 语音入口及 client 调用，allowlist 从 9 项增为 12 项；参见 design §5.F F5、spec AC-R9。现有 v2 暂不删除，是否保留密钥版本另待需求确认；历史任务中的“九路由”数量由本次补漏更新。
+
+### AC-R9 补漏执行记录
+
+- [x] 核对历史：ASR/TTS 曾为匿名 v2；无对应 v2 配置端点。
+- [x] 新增 v3 配置、ASR、TTS，沿用发布应用/租户准入和原模型服务。
+- [x] 接通 guest 语音组件和应用维度配置缓存；原 v2 路由和 scope 保持不变。
+- [x] 补充后端 HTTP 契约与前端语音回归测试；真实模型 E2E 及浏览器步骤见 e2e-checklist.md。
+- [ ] 专用部署上执行真实模型和无痕浏览器验收。
 
 ---
 

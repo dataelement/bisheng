@@ -2219,5 +2219,8 @@
   "com_personal_token_operation_success": "個人 API トークンを更新しました",
   "com_personal_token_copy": "コピー",
   "com_personal_token_done": "完了",
-  "com_personal_token_loading": "読み込み中..."
+  "com_personal_token_loading": "読み込み中...",
+  "com_voice": {
+    "playback_unavailable": "音声を再生できません。管理者にお問い合わせください。"
+  }
 }

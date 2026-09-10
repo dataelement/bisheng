@@ -10,6 +10,9 @@ EXPECTED_HTTP = {
     ("GET", "/api/v3/flows/{flow_id}"),
     ("GET", "/api/v3/chat/history"),
     ("POST", "/api/v3/chat/gen_title"),
+    ("GET", "/api/v3/llm/workbench"),
+    ("POST", "/api/v3/llm/workbench/asr"),
+    ("POST", "/api/v3/llm/workbench/tts"),
 }
 EXPECTED_WEBSOCKETS = {
     "/api/v3/workflow/chat/{workflow_id}",
@@ -25,9 +28,7 @@ def test_public_v3_route_allowlist_is_exact() -> None:
         for method in route.methods
     }
     websocket_routes = {
-        route.path
-        for route in app.routes
-        if isinstance(route, APIWebSocketRoute) and route.path.startswith("/api/v3")
+        route.path for route in app.routes if isinstance(route, APIWebSocketRoute) and route.path.startswith("/api/v3")
     }
 
     assert http_routes == EXPECTED_HTTP

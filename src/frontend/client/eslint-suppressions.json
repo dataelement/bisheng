@@ -1639,15 +1639,7 @@
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
-      "count": 5
-    }
-  },
-  "src/components/Voice/TextToSpeechButton.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
+      "count": 4
     }
   },
   "src/components/Voice/textToSpeechStore.tsx": {

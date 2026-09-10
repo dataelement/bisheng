@@ -2296,5 +2296,8 @@
   "com_personal_token_operation_success": "Personal API token updated",
   "com_personal_token_copy": "Copy",
   "com_personal_token_done": "Done",
-  "com_personal_token_loading": "Loading..."
+  "com_personal_token_loading": "Loading...",
+  "com_voice": {
+    "playback_unavailable": "Playback is unavailable. Please contact your administrator."
+  }
 }
