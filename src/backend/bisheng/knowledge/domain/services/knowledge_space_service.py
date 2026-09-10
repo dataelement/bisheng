@@ -39,6 +39,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderUploadCountExceededError,
     SpaceLimitError,
     SpaceNotFoundError,
+    SpaceOrganizationGrantExitDeniedError,
     SpacePermissionDeniedError,
     SpaceSubscribeLimitError,
     SpaceSubscribePrivateError,
@@ -866,6 +867,49 @@ class KnowledgeSpaceService(KnowledgeUtils):
             is_active=False,
             operator_user_id=self.login_user.user_id,
         )
+
+    async def _actor_space_permission_sources(self, space_id: int):
+        """Return the effective F048 sources that grant this user the space."""
+        from bisheng.permission.application.access import get_f048_runtime
+        from bisheng.tenant.domain.services.f048_permission_subject import (
+            TenantPermissionSubjectDirectory,
+        )
+
+        actor = await self._permission_actor()
+        adapter = await self._resource_adapter("knowledge_space")
+        target = await adapter.resolve_permission_target(
+            resource_type="knowledge_space",
+            resource_id=str(space_id),
+            actor=actor,
+            action="visible",
+        )
+        projected_subjects = await TenantPermissionSubjectDirectory().actor_projected_subjects(actor)
+        explanation = await (await get_f048_runtime()).explain_permissions(
+            actor=actor,
+            target=target,
+            actor_projected_subjects=projected_subjects,
+            include_roster=False,
+        )
+        return explanation.sources
+
+    async def _revoke_direct_space_invitation(self, space_id: int) -> bool:
+        """Remove the current user's direct invitation grants, if any."""
+        from bisheng.permission.application.access import get_f048_runtime
+
+        actor = await self._permission_actor()
+        adapter = await self._resource_adapter("knowledge_space")
+        target = await adapter.resolve_permission_target(
+            resource_type="knowledge_space",
+            resource_id=str(space_id),
+            actor=actor,
+            action="visible",
+        )
+        result = await (await get_f048_runtime()).remove_actor_direct_sources(
+            actor=actor,
+            target=target,
+            idempotency_key=f"space-leave-direct:{space_id}:{actor.user_id}:{target.resource_version}",
+        )
+        return result is not None
 
     async def _get_effective_actions(
         self,
@@ -2188,9 +2232,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 user_subscription_status,
                 user_subscription_update_time,
             )
-            if (
-                subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
-                and "visible" in visible_map.get(str(space.id), frozenset())
+            if subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED and "visible" in visible_map.get(
+                str(space.id), frozenset()
             ):
                 subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
             result_list.append(
@@ -2450,10 +2493,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 actor=actor,
                 action="visible",
             )
-            performance["target_build_elapsed_ms"] = performance.get(
-                "target_build_elapsed_ms",
-                0.0,
-            ) + (perf_counter() - target_started_at) * 1000
+            performance["target_build_elapsed_ms"] = (
+                performance.get(
+                    "target_build_elapsed_ms",
+                    0.0,
+                )
+                + (perf_counter() - target_started_at) * 1000
+            )
             performance["verified_target_count"] = performance.get(
                 "verified_target_count",
                 0,
@@ -2464,16 +2510,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 actor=actor,
                 targets=targets,
             )
-            performance["decision_elapsed_ms"] = performance.get(
-                "decision_elapsed_ms",
-                0.0,
-            ) + (perf_counter() - decision_started_at) * 1000
+            performance["decision_elapsed_ms"] = (
+                performance.get(
+                    "decision_elapsed_ms",
+                    0.0,
+                )
+                + (perf_counter() - decision_started_at) * 1000
+            )
             for resource_type, resource_ids in by_type.items():
                 for resource_id in resource_ids:
                     permissions[(resource_type, str(resource_id))] = (
-                        {"visible"}
-                        if visible_map.get((resource_type, str(resource_id)), False)
-                        else set()
+                        {"visible"} if visible_map.get((resource_type, str(resource_id)), False) else set()
                     )
         else:
             # Compatibility path for callers that have only ids. The children
@@ -2566,9 +2613,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 permission_decision_elapsed_ms=(permission_context or {})
                 .get("performance", {})
                 .get("decision_elapsed_ms", 0.0),
-                verified_target_count=(permission_context or {})
-                .get("performance", {})
-                .get("verified_target_count", 0),
+                verified_target_count=(permission_context or {}).get("performance", {}).get("verified_target_count", 0),
             )
 
         def candidate_cursor(item: KnowledgeFile) -> list:
@@ -2802,9 +2847,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 exclude_file_ids = (
                     await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([space_id]) or None
                 )
-            stage_elapsed_ms["version_filter_elapsed_ms"] = (
-                perf_counter() - stage_started_at
-            ) * 1000
+            stage_elapsed_ms["version_filter_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
             stage = "scan_visible"
             stage_started_at = perf_counter()
@@ -2827,9 +2870,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             stage = "version_enrich"
             stage_started_at = perf_counter()
             await self._enrich_with_version_info(visible_page_items)
-            stage_elapsed_ms["version_enrich_elapsed_ms"] = (
-                perf_counter() - stage_started_at
-            ) * 1000
+            stage_elapsed_ms["version_enrich_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
             stage = "extra_info"
             stage_started_at = perf_counter()
@@ -4930,6 +4971,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         ):
             raise SpacePermissionDeniedError()
 
+        permission_sources = await self._actor_space_permission_sources(space_id)
+        organization_sources = sorted(
+            {
+                source.subject_type
+                for source in permission_sources
+                if source.subject_type in {"department", "user_group"}
+            }
+        )
+        if organization_sources:
+            raise SpaceOrganizationGrantExitDeniedError(blocked_by=organization_sources)
+
+        direct_invitation_removed = await self._revoke_direct_space_invitation(space_id)
         await self._revoke_direct_space_user_permissions(space_id, self.login_user.user_id)
         deleted = await SpaceChannelMemberDao.delete_space_member(space_id, self.login_user.user_id)
-        return deleted
+        return bool(direct_invitation_removed or deleted)

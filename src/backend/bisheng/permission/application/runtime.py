@@ -789,6 +789,53 @@ class F048PermissionRuntime:
             idempotency_key=idempotency_key,
         )
 
+    async def remove_actor_direct_sources(
+        self,
+        *,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+        idempotency_key: str,
+    ):
+        """Remove only the actor's local, non-protected direct grants.
+
+        This is the narrow permission-layer primitive used when an invited user
+        leaves a resource. It deliberately does not require
+        ``manage_permission``: the actor may remove their own direct invitation,
+        but cannot remove creator, membership, department, user-group, inherited,
+        or another user's sources.
+        """
+
+        if target.tenant_id != actor.current_tenant_id:
+            raise PermissionInvalidResourceError()
+        context = replace(
+            await self.build_grant_context(actor=actor, target=target),
+            system_authorized=True,
+            capabilities=(),
+        )
+        changes = tuple(
+            CanonicalGrantChange(
+                operation="REMOVE",
+                assignee_id=source.source_id,
+                expected_assignee_version=source.version,
+            )
+            for grant in context.grants
+            for source in grant.sources
+            if source.active
+            and not source.protected
+            and source.source_type == "DIRECT"
+            and source.subject_type == "user"
+            and source.subject_id == str(actor.user_id)
+        )
+        if not changes:
+            return None
+        return await self._grants.mutate(
+            context,
+            changes=changes,
+            expected_resource_version=target.resource_version,
+            expected_catalog_release_id=context.current_catalog_release_id,
+            idempotency_key=idempotency_key,
+        )
+
     async def remove_ordinary_sources(
         self,
         *,
