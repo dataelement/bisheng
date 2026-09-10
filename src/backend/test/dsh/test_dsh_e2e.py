@@ -407,7 +407,7 @@ async def test_ac32_config_and_normal_platform_identity(live):
     """AC-01/AC-32: single HTTPS Nginx discovery and existing Web identity remain usable."""
     config = raw(await live.request("GET", "/api/v1/dsh/config"))
     require(
-        config == {"enabled": True, "client_id": "dsh-desktop", "contract_version": "0.4.0"},
+        config == {"enabled": True, "client_id": "dsh-desktop", "contract_version": "0.5.0"},
         "Live environment is not enabled with frozen DSH contract",
     )
 

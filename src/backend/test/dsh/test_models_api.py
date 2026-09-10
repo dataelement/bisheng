@@ -1,5 +1,6 @@
 """Frozen HTTP and stream lifetime regressions. AC-18, AC-20, AC-23, AC-31, AC-34."""
 
+import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -76,6 +77,40 @@ async def test_real_model_service_json_and_sse_contract(app_setup, reliable):
         body["user_id"] = "999"
         assert (await client.post("/api/v1/dsh/chat/completions", json=body, headers=headers)).status_code == 400
         assert llm.calls == 1
+
+
+@pytest.mark.parametrize("stream,include_usage", [(False, False), (True, True), (True, False)])
+async def test_cache_details_on_http_responses_and_settlement(app_setup, stream, include_usage):
+    """AC-22/23: Cache details reach JSON/SSE; omitted SSE usage still settles them."""
+    app, _, _, llm, ledger = app_setup
+    llm.measured = lambda: {
+        "input_tokens": 10,
+        "output_tokens": 2,
+        "total_tokens": 12,
+        "input_token_details": {"cache_read": 8, "cache_creation": 1},
+    }
+    llm.continue_stream.set()
+    body = {"model": "bisheng:42", "messages": [{"role": "user", "content": "test"}], "stream": stream}
+    if include_usage:
+        body["stream_options"] = {"include_usage": True}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://bisheng.example") as client:
+        response = await client.post(
+            "/api/v1/dsh/chat/completions", json=body, headers={"Authorization": "Bearer dedicated"}
+        )
+    assert response.status_code == 200
+    if stream:
+        assert response.text.endswith("data: [DONE]\n\n")
+        chunks = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: {")]
+        usages = [chunk["usage"] for chunk in chunks if "usage" in chunk]
+        assert bool(usages) is include_usage
+    else:
+        usages = [response.json()["usage"]]
+    for usage in usages:
+        assert usage["prompt_tokens_details"] == {"cached_tokens": 8, "cache_creation_tokens": 1}
+        assert usage["total_tokens"] == 12
+    assert ledger.events[-1].cache_read_tokens == 8
+    assert ledger.events[-1].cache_creation_tokens == 1
+    assert ledger.used == 102
 
 
 async def test_usage_fallback_keeps_unknown_null_and_projection_time(app_setup, monkeypatch):
@@ -196,7 +231,12 @@ async def test_missing_usage_json_returns_answer_and_next_call_remains_available
             )
             assert response.status_code == 200
             assert response.json()["choices"][0]["message"]["content"] == "ok"
-            assert response.json()["usage"] == {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
+            assert response.json()["usage"] == {
+                "prompt_tokens": None,
+                "completion_tokens": None,
+                "total_tokens": None,
+                "prompt_tokens_details": {"cached_tokens": None, "cache_creation_tokens": None},
+            }
             assert ledger.events[-1].status == "USAGE_UNKNOWN"
             assert ledger.events[-1].error_code == "usage_missing"
         assert llm.calls == 2

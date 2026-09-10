@@ -47,7 +47,7 @@ class DshIdentitySnapshot(DshContract):
         return self
 
 
-class DshTokenUsage(DshContract):
+class DshTokenTotals(DshContract):
     input_tokens: NonnegativeInt | None = None
     output_tokens: NonnegativeInt | None = None
     total_tokens: NonnegativeInt | None = None
@@ -60,6 +60,11 @@ class DshTokenUsage(DshContract):
         if any(value is None for value in values) or self.total_tokens != self.input_tokens + self.output_tokens:
             raise ValueError("Usage must be entirely unknown or a complete consistent measurement")
         return self
+
+
+class DshTokenUsage(DshTokenTotals):
+    cache_read_tokens: NonnegativeInt | None = None
+    cache_creation_tokens: NonnegativeInt | None = None
 
 
 class DshOperationAction(StrEnum):
@@ -108,4 +113,4 @@ class DshDisabledConfig(DshContract):
 class DshEnabledConfig(DshContract):
     enabled: Literal[True] = True
     client_id: Literal["dsh-desktop"] = "dsh-desktop"
-    contract_version: Literal["0.4.0"] = "0.4.0"
+    contract_version: Literal["0.5.0"] = "0.5.0"

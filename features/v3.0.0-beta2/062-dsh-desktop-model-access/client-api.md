@@ -1,12 +1,12 @@
 # DSH Desktop 接入 BiSheng：客户端开发与联调接口契约
 
 > 0.4.0 部署简化：服务端改用共享 HMAC 派生的 HS256；客户端不持有密钥，将 token 视为不透明凭证。月度默认 Asia/Shanghai。接口路径和时序保持，旧 access token 需重新登录。详见 deployment-simplification.md。
-版本：`0.4.0` · 日期：2026-09-09 · 所属：F062 / v3.0.0-beta2<br>
+版本：`0.5.0` · 日期：2026-09-10 · 所属：F062 / v3.0.0-beta2<br>
 开发分支：`feat/3.0.0-beta2-pre`
 
-**契约状态：`0.4.0` 为实现基线；2026-09-09 按用户确认取消未知用量冻结，缺失 usage 的成功响应仍正常结束，须同步客户端后联调。** Gateway 开发分支为 `feat/dsh-access`（基于 main）。后续路径、字段、鉴权、错误、刷新或 SSE/工具调用行为如有改动，必须按 [Design §6.0](./design.md#60-客户端接口冻结与变更同步) 更新版本、同步本文与时序图，并记录客户端团队确认和联调结果；不得只改服务端实现。
+**契约状态：`0.5.0` 新增缓存 Token 明细；字段扩展已获用户确认，客户端接收与联调待完成。** Gateway 开发分支为 `feat/dsh-access`（基于 main）。后续路径、字段、鉴权、错误、刷新或 SSE/工具调用行为如有改动，必须按 [Design §6.0](./design.md#60-客户端接口冻结与变更同步) 更新版本、同步本文与时序图，并记录客户端团队确认和联调结果；不得只改服务端实现。
 
-> **交付状态：待实现接口契约，可据此开发客户端和 Mock；尚无已部署的 DSH API 或联调通过结论。**
+> **交付状态：0.5.0 为本次服务端修订，客户端适配与真实缓存命中联调尚待完成；既有环境部署结果不等于本修订已部署。**
 > 本文细化客户端与平台之间的线协议；[design.md](./design.md) 持有整体架构与服务端设计，本文是其客户端契约附件。两者修改须同步。
 > 所有域名、凭证、账号和数值示例均为虚构。服务端及客户端按本文实现后，执行 §10 联调清单。
 
@@ -97,7 +97,7 @@ GET models 与 GET usage 是独立读取，可以并行；usage 的展示响应�
 200（已开启）：
 
 ```json
-{"enabled":true,"client_id":"dsh-desktop","contract_version":"0.4.0"}
+{"enabled":true,"client_id":"dsh-desktop","contract_version":"0.5.0"}
 ```
 
 200（部署未开启）：
@@ -359,7 +359,7 @@ tool 消息必带 tool_call_id 并对应前面的 assistant tool_calls；assista
   "created":1788919200,
   "model":"bisheng:42",
   "choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"lookup_document","arguments":"{\"id\":\"KB-1\"}"}}]},"finish_reason":"tool_calls"}],
-  "usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120}
+  "usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120,"prompt_tokens_details":{"cached_tokens":80,"cache_creation_tokens":null}}
 }
 ```
 
@@ -392,7 +392,7 @@ data: {"id":"chatcmpl-example","object":"chat.completion.chunk","created":178891
 
 data: {"id":"chatcmpl-example","object":"chat.completion.chunk","created":1788919200,"model":"bisheng:42","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
 
-data: {"id":"chatcmpl-example","object":"chat.completion.chunk","created":1788919200,"model":"bisheng:42","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":1,"total_tokens":11}}
+data: {"id":"chatcmpl-example","object":"chat.completion.chunk","created":1788919200,"model":"bisheng:42","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":1,"total_tokens":11,"prompt_tokens_details":{"cached_tokens":8,"cache_creation_tokens":null}}}
 
 data: [DONE]
 
@@ -427,6 +427,17 @@ data: {"error":{"message":"Upstream connection interrupted","type":"upstream_err
 服务端发出上述错误事件后关闭连接，不发 `[DONE]`。客户端既识别 `event: error`，也检查 data 中的 error 对象，避免被 SDK 当普通 chunk 丢弃。保留已收到的文字并标记未完成，停止工具执行，不自动重放。客户端取消请求通过关闭流 / AbortSignal 传播到平台和上游；已发生实际用量仍入账，不因取消归零。
 
 ### 7.3 DeepSeek 扩展与 usage
+
+自 0.5.0 起，JSON 回答和 SSE 最终 usage 块都包含 `usage.prompt_tokens_details`：
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `cached_tokens` | 非负整数或 null | 输入缓存命中读取量，对应 LangChain `input_token_details.cache_read`；兼容上游 `prompt_tokens_details.cached_tokens`、`cache_read_input_tokens`、`prompt_cache_hit_tokens` |
+| `cache_creation_tokens` | 非负整数或 null | 缓存写入量，DSH 扩展字段，对应 `input_token_details.cache_creation` / `cache_creation_input_tokens` |
+
+上游明确返回 0 才展示 0；未返回或格式无效则为 null。两项独立，不从输入总量推算缓存量，不从缓存量反推总量。归一化明细优先于上游原始明细；缓存明细异常不丢弃可靠的输入/输出/总 Token。保持原有 `total_tokens` 和月额度算法，不再次加上缓存量，也不做价格折算。缺失三个总量时，仍可保留供应商明确上报的缓存明细。
+
+SSE 仅在 `stream_options.include_usage=true` 时返回最终 usage 块；未请求该块仍记录缓存明细。请求路径、鉴权、PKCE、工具调用和时序不变。旧客户端不应拒绝新增字段；需要展示缓存量的客户端读取上述对象。服务端 `/config` 返回版本 0.5.0，客户端版本白名单需同步更新。新增字段及空值解析须在联合发布前联调确认，本次未对外发送同步消息。
 
 仅当 models.capabilities.reasoning_content=true 时，允许 assistant 消息及响应 message/delta 携带 `reasoning_content` 字符串，并在需要的工具多轮中保留它；它不等同于 content，不作为工具参数或最终正文拼接。false 时提交此字段返回 400 `unsupported_parameter`。供应商样本未通过 PoC 前服务端不得标 true。
 
@@ -742,7 +753,7 @@ sequenceDiagram
     platform-->>desktop: live / persisted / unavailable
 ```
 
-SSE 正常完成需收到 finish_reason 和 `[DONE]`，usage 块按 include_usage 输出；JSON 则以完整成功响应为准。图中 usage 是展示读取，不会给下一轮颁发调用许可；若读到明确拒绝或不可用，先按错误处理暂停后续动作。后续每一轮响应都按相同规则判断工具 / 文本 / 失败，不因第二轮省略展开而直接视作最终答案。执行工具可能耗时，下一次模型调用前必须重新检查 access。
+SSE 正常完成需收到 finish_reason 和 `[DONE]`，usage 块按 include_usage 输出（含 §7.3 缓存明细）；JSON 则以完整成功响应为准。图中 usage 是展示读取，不会给下一轮颁发调用许可；若读到明确拒绝或不可用，先按错误处理暂停后续动作。后续每一轮响应都按相同规则判断工具 / 文本 / 失败，不因第二轮省略展开而直接视作最终答案。执行工具可能耗时，下一次模型调用前必须重新检查 access。
 
 <a id="seq-errors"></a>
 

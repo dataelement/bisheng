@@ -21,7 +21,7 @@ from sqlmodel import Session, SQLModel
 
 
 def test_client_contract_surface_and_pkce(dsh_contracts):
-    client = dsh_contracts["client-0.4.0"]
+    client = dsh_contracts["client-0.5.0"]
     assert len({(e["method"], e["path"]) for e in client["endpoints"]}) == 7
     assert next(e for e in client["endpoints"] if e["path"].endswith("logout"))["response"] == {
         "http_status": 204,
@@ -192,7 +192,7 @@ def test_profile_migration_is_additive_and_retained(monkeypatch):
 def test_error_registry_matches_frozen_envelope(dsh_contracts):
     from bisheng.common.errcode.dsh import ERROR_BY_CLIENT_CODE
 
-    for case in dsh_contracts["client-0.4.0"]["errors"]:
+    for case in dsh_contracts["client-0.5.0"]["errors"]:
         detail = case["body"]["error"]
         error = ERROR_BY_CLIENT_CODE[detail["code"]]
         assert error.HttpStatus == case["http_status"]

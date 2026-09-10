@@ -54,6 +54,8 @@ class DshModelCall(SQLModelSerializable, table=True):
     input_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     output_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     total_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
+    cache_read_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
+    cache_creation_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     status: str = Field(
         default="RUNNING", sa_column=Column(String(24), nullable=False, server_default=text("'RUNNING'"))
     )

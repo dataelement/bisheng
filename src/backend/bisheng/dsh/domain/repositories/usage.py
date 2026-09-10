@@ -77,6 +77,8 @@ class DshUsageRepository:
                             "input_tokens",
                             "output_tokens",
                             "total_tokens",
+                            "cache_read_tokens",
+                            "cache_creation_tokens",
                             "status",
                             "usage_source",
                             "provider_request_id",

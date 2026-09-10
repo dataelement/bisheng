@@ -167,7 +167,12 @@ async def test_models_display_provider_and_actual_name_with_existing_fallbacks(
 async def test_known_usage_settled_before_success_and_inflight_overage_kept(service_setup):
     service, llm, ledger, _policy, _state = service_setup
     result = await service.complete(principal(), request())
-    assert result["usage"] == {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}
+    assert result["usage"] == {
+        "prompt_tokens": 10,
+        "completion_tokens": 2,
+        "total_tokens": 12,
+        "prompt_tokens_details": {"cached_tokens": None, "cache_creation_tokens": None},
+    }
     assert ledger.used == 102
     assert ledger.events[-1].status == "SUCCEEDED"
     assert llm.calls == 1

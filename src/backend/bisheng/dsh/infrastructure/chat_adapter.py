@@ -15,19 +15,41 @@ FINISH_REASONS = {"stop", "length", "tool_calls", "content_filter"}
 
 def normalize_usage(message) -> DshTokenUsage:
     usage = getattr(message, "usage_metadata", None)
+    raw = getattr(message, "response_metadata", {}).get("token_usage") or {}
+    raw = raw if isinstance(raw, dict) else {}
     if not usage:
-        raw = getattr(message, "response_metadata", {}).get("token_usage") or {}
         usage = {
             "input_tokens": raw.get("prompt_tokens"),
             "output_tokens": raw.get("completion_tokens"),
             "total_tokens": raw.get("total_tokens"),
         }
     try:
-        return DshTokenUsage.model_validate(
+        normalized = DshTokenUsage.model_validate(
             {key: usage.get(key) for key in ("input_tokens", "output_tokens", "total_tokens")}
         )
     except (ValidationError, AttributeError):
-        return DshTokenUsage()
+        normalized = DshTokenUsage()
+    details = usage.get("input_token_details") if isinstance(usage, dict) else None
+    details = details if isinstance(details, dict) else {}
+    raw_details = raw.get("prompt_tokens_details") if isinstance(raw, dict) else None
+    raw_details = raw_details if isinstance(raw_details, dict) else {}
+
+    def measured(*values):
+        # Missing or malformed optional detail must not invalidate reliable totals.
+        return next((value for value in values if type(value) is int and 0 <= value <= 9223372036854775807), None)
+
+    normalized.cache_read_tokens = measured(
+        details.get("cache_read"),
+        raw_details.get("cached_tokens"),
+        raw.get("cache_read_input_tokens"),
+        raw.get("prompt_cache_hit_tokens"),
+    )
+    normalized.cache_creation_tokens = measured(
+        details.get("cache_creation"),
+        raw_details.get("cache_creation_tokens"),
+        raw.get("cache_creation_input_tokens"),
+    )
+    return normalized
 
 
 class ChatExecution:

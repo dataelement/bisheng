@@ -11,12 +11,12 @@ from pydantic import Field, model_validator
 from bisheng.common.errcode.dsh import DshOperationConflictError, DshOperationInProgressError
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.dsh.domain.repositories.reconciliation import DshReconciliationRepository
-from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
+from bisheng.dsh.domain.schemas.contracts import DshTokenTotals
 from bisheng.dsh.domain.services.usage import DshUsageService
 from bisheng.dsh.infrastructure.evidence_store import EvidenceStore
 
 
-class ReconciliationInput(DshTokenUsage):
+class ReconciliationInput(DshTokenTotals):
     request_id: str = Field(min_length=1, max_length=36)
     operation_id: str = Field(min_length=1, max_length=36)
     expected_event_version: int = Field(gt=0)
@@ -31,7 +31,7 @@ class ReconciliationInput(DshTokenUsage):
         return self
 
 
-class UsageEvidence(DshTokenUsage):
+class UsageEvidence(DshTokenTotals):
     request_id: str
     provider_request_id: str | None
     model_id: int = Field(gt=0)
