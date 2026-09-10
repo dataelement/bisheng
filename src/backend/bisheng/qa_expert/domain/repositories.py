@@ -2,6 +2,7 @@
 """Expert QA Repositories - 数据访问层"""
 
 from types import SimpleNamespace
+from typing import NamedTuple
 
 from sqlalchemy import Integer, cast, desc, func, update
 from sqlmodel import and_, or_, select
@@ -26,6 +27,12 @@ from bisheng.database.models.qa_expert import (
 )
 
 RESOLUTION_RATE_PRECISION = 4
+
+
+class ExpertDepartmentSource(NamedTuple):
+    id: int
+    user_id: int | None
+    depart_ment: str | None
 
 
 class ExpertRepository:
@@ -85,11 +92,14 @@ class ExpertRepository:
         answer_desc: bool | None = None,
         adoption_desc: bool | None = None,
         vote_desc: bool | None = None,
+        expert_ids: list[int] | None = None,
     ) -> tuple[list[Expert], int]:
         """列表查询专家"""
         async with get_async_db_session() as session:
             # 1. 构建基础查询条件（复用条件，保证 count 和 data 一致）
             base_stmt = select(Expert)
+            if expert_ids is not None:
+                base_stmt = base_stmt.where(Expert.id.in_(expert_ids))
 
             if keyword:
                 normalized_keyword = keyword.strip()
@@ -155,6 +165,12 @@ class ExpertRepository:
             experts = result.all()
 
             return experts, total
+
+    async def list_department_sources(self) -> list[ExpertDepartmentSource]:
+        """只读取组织归并所需字段，完整档案仍在筛选后分页查询。"""
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Expert.id, Expert.user_id, Expert.depart_ment))
+            return [ExpertDepartmentSource(*row) for row in result.all()]
 
     async def list_filter_options(self) -> dict[str, list[str]]:
         """返回专家职业字段的去重筛选项。"""

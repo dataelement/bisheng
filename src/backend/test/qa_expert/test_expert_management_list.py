@@ -310,6 +310,14 @@ async def test_expert_list_department_display_stops_at_department_level(
 async def test_service_maps_department_filter_options(monkeypatch) -> None:
     service = ExpertService()
     service.repository = AsyncMock()
+    service.repository.list_department_sources.return_value = [
+        repository_module.ExpertDepartmentSource(1, 11, "101"),
+        repository_module.ExpertDepartmentSource(2, 12, "102"),
+    ]
+    monkeypatch.setattr(
+        "bisheng.qa_expert.domain.services.UserDepartmentDao.aget_by_user_ids",
+        AsyncMock(return_value=[]),
+    )
     service.repository.list_filter_options.return_value = {
         "department_ids": ["102", "101"],
         "job_families": [],
@@ -321,8 +329,8 @@ async def test_service_maps_department_filter_options(monkeypatch) -> None:
         "bisheng.qa_expert.domain.services.DepartmentDao.aget_by_ids",
         AsyncMock(
             return_value=[
-                SimpleNamespace(id=102, name="设备部", short_name="设备"),
-                SimpleNamespace(id=101, name="质量部", short_name=None),
+                SimpleNamespace(id=102, name="设备部", short_name="设备", org_level="dept"),
+                SimpleNamespace(id=101, name="质量部", short_name=None, org_level="dept"),
             ]
         ),
     )
@@ -333,3 +341,89 @@ async def test_service_maps_department_filter_options(monkeypatch) -> None:
         {"id": "102", "name": "设备部", "short_name": "设备", "display_name": "设备"},
         {"id": "101", "name": "质量部", "short_name": None, "display_name": "质量部"},
     ]
+
+
+@pytest.fixture()
+async def grouped_expert_service(expert_engine, monkeypatch):
+    departments = {
+        10: SimpleNamespace(id=10, name="公司全称", short_name="公司", org_level="company", path="/10/"),
+        20: SimpleNamespace(id=20, name="部门全称", short_name="部门", org_level="dept", path="/10/20/"),
+        30: SimpleNamespace(id=30, name="科室", short_name="科室", org_level="office", path="/10/20/30/"),
+        40: SimpleNamespace(id=40, name="班组", short_name="班组", org_level="squad", path="/10/20/30/40/"),
+        50: SimpleNamespace(id=50, name="未分级", short_name="未分级", org_level=None, path="/50/"),
+        60: SimpleNamespace(id=60, name="另一部门", short_name="部门", org_level="dept", path="/10/60/"),
+    }
+    async with AsyncSession(expert_engine, expire_on_commit=False) as session:
+        session.add_all(
+            [
+                Expert(id=i, user_id=10 + i, expert_name=f"专家{i}", depart_ment=department_id, answer_count=i)
+                for i, department_id in [(1, "40"), (2, "40"), (3, "40"), (4, "60"), (5, "50")]
+            ]
+        )
+        await session.commit()
+
+    async def load_departments(ids):
+        return [departments[i] for i in ids if i in departments]
+
+    monkeypatch.setattr("bisheng.qa_expert.domain.services.DepartmentDao.aget_by_ids", load_departments)
+    monkeypatch.setattr(
+        "bisheng.qa_expert.domain.services.UserDepartmentDao.aget_by_user_ids",
+        AsyncMock(
+            return_value=[
+                SimpleNamespace(user_id=11, department_id=30, is_primary=1),
+                SimpleNamespace(user_id=12, department_id=10, is_primary=1),
+                SimpleNamespace(user_id=11, department_id=60, is_primary=0),
+            ]
+        ),
+    )
+    monkeypatch.setattr("bisheng.qa_expert.domain.services.UserDao.aget_user_by_ids", AsyncMock(return_value=[]))
+    service = ExpertService()
+    service._build_dict_key_maps = AsyncMock(
+        return_value={
+            "job_family": {},
+            "job_category": {},
+            "position": {},
+            "major": {},
+        }
+    )
+    return service
+
+
+async def test_department_options_use_list_groups_and_keep_same_name_ids(grouped_expert_service):
+    options = await grouped_expert_service.list_filter_options()
+    assert {item["id"]: item["display_name"] for item in options["departments"]} == {
+        "10": "公司",
+        "20": "部门",
+        "60": "部门",
+    }
+    rows, total = await grouped_expert_service.list_experts(department_id="20", keyword="专家1")
+    assert total == 1
+    assert [row["id"] for row in rows] == [1]
+
+
+@pytest.mark.parametrize(
+    ("department_id", "skip", "expected_ids", "total"),
+    [
+        ("20", 0, [3], 2),
+        ("20", 1, [1], 2),
+        ("10", 0, [2], 1),
+        ("60", 0, [4], 1),
+        ("50", 0, [], 0),
+    ],
+)
+async def test_group_department_filter_before_count_and_pagination(
+    grouped_expert_service,
+    department_id,
+    skip,
+    expected_ids,
+    total,
+):
+    rows, actual_total = await grouped_expert_service.list_experts(
+        department_id=department_id,
+        skip=skip,
+        limit=1,
+        answer_desc=True,
+    )
+    assert actual_total == total
+    assert [row["id"] for row in rows] == expected_ids
+    assert all(str(row["department_filter_id"]) == department_id for row in rows)
