@@ -72,7 +72,7 @@ function getReferenceIconKey({
   detail: ChatCitation | null;
   preview: CitationPreview | null;
   item: CitationReferenceItem;
-  type: 'web' | 'rag' | 'article';
+  type: 'web' | 'rag' | 'article' | 'temp';
 }) {
   if (type === 'web') {
     return resolvePreviewUrl(detail, preview) || item.data.citationId;
@@ -109,6 +109,15 @@ export function buildCitationSourceIconData({
       type: 'rag',
       title: preview?.title || detail?.sourcePayload?.title || i18next.t('com_citation.source_article'),
       fileType: undefined,
+    };
+  }
+
+  if (normalizedType === 'temp') {
+    return {
+      key: `temp:${(detail ? getCitationDocumentName(detail) : '') || preview?.title || fallbackKey}`,
+      type: 'rag',
+      title: preview?.title || (detail ? getCitationDocumentName(detail) : i18next.t('com_citation.source_temp_kb')),
+      fileType: normalizeFileType(getCitationDocumentFileType(detail) || preview?.sourceMeta),
     };
   }
 

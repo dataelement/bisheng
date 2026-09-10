@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple
+from typing import TYPE_CHECKING
+
+from loguru import logger
 
 from bisheng.sensitive_word.domain.models.sensitive_word_policy import (
     SensitiveWordPolicy,
@@ -23,14 +26,18 @@ from bisheng.sensitive_word.domain.services.ac_automaton import ACAutomaton
 if TYPE_CHECKING:
     from bisheng.common.dependencies.user_deps import UserPayload
 
-DEFAULT_AUTO_REPLY = '上传内容命中敏感词，已被系统拒绝。'
-BUILTIN_WORDS_TYPE = 'builtin'
-CUSTOM_WORDS_TYPE = 'custom'
-WORD_SEPARATOR_RE = re.compile(r'[\r\n,，;；|]+')
+DEFAULT_AUTO_REPLY = "上传内容命中敏感词，已被系统拒绝。"
+WORKBENCH_DEFAULT_AUTO_REPLY = "当前对话内容违反相关规范，请修改后重新输入"
+BUILTIN_WORDS_TYPE = "builtin"
+CUSTOM_WORDS_TYPE = "custom"
+WORD_SEPARATOR_RE = re.compile(r"[\r\n,，;；|]+")
+WORKBENCH_WORD_TYPE_REQUIRED = "请至少选择一个敏感词表"
+WORKBENCH_AUTO_REPLY_REQUIRED = "自动回复内容不能为空"
+WORKBENCH_AUTO_REPLY_TOO_LONG = "自动回复内容不能超过500字"
 
 
 class SensitiveWordPolicyService:
-    _automaton_cache: Dict[Tuple, Tuple[ACAutomaton, Dict[str, str]]] = {}
+    _automaton_cache: dict[tuple, tuple[ACAutomaton, dict[str, str]]] = {}
 
     @staticmethod
     def _current_tenant_id(login_user: UserPayload) -> int:
@@ -39,10 +46,10 @@ class SensitiveWordPolicyService:
         return get_current_tenant_id() or login_user.tenant_id
 
     @classmethod
-    def normalize_words(cls, text: str) -> List[str]:
-        words: List[str] = []
+    def normalize_words(cls, text: str) -> list[str]:
+        words: list[str] = []
         seen = set()
-        for item in WORD_SEPARATOR_RE.split(text or ''):
+        for item in WORD_SEPARATOR_RE.split(text or ""):
             word = item.strip()
             if not word or word in seen:
                 continue
@@ -51,9 +58,9 @@ class SensitiveWordPolicyService:
         return words
 
     @classmethod
-    def normalize_words_types(cls, words_types: Iterable[str]) -> List[str]:
+    def normalize_words_types(cls, words_types: Iterable[str]) -> list[str]:
         allowed = {BUILTIN_WORDS_TYPE, CUSTOM_WORDS_TYPE}
-        result: List[str] = []
+        result: list[str] = []
         for item in words_types or []:
             if item in allowed and item not in result:
                 result.append(item)
@@ -61,11 +68,11 @@ class SensitiveWordPolicyService:
 
     @classmethod
     @lru_cache(maxsize=1)
-    def load_builtin_words(cls) -> Tuple[str, ...]:
-        words_file = Path(__file__).resolve().parents[1] / 'data' / 'words.txt'
+    def load_builtin_words(cls) -> tuple[str, ...]:
+        words_file = Path(__file__).resolve().parents[1] / "data" / "words.txt"
         if not words_file.exists():
             return ()
-        return tuple(cls.normalize_words(words_file.read_text(encoding='utf-8')))
+        return tuple(cls.normalize_words(words_file.read_text(encoding="utf-8")))
 
     @classmethod
     def clear_cache(cls) -> None:
@@ -81,13 +88,21 @@ class SensitiveWordPolicyService:
             scope_id=str(tenant_id),
             enabled=False,
             words_types=[],
-            custom_words='',
-            auto_reply=DEFAULT_AUTO_REPLY,
+            custom_words="",
+            auto_reply=cls._default_auto_reply(business_type),
             extra_config={},
         )
 
     @classmethod
-    def to_response(cls, policy: Optional[SensitiveWordPolicy], tenant_id: int, business_type: str) -> SensitiveWordPolicyResp:
+    def _default_auto_reply(cls, business_type: str) -> str:
+        if business_type == SensitiveWordBusinessType.WORKBENCH_CHAT.value:
+            return WORKBENCH_DEFAULT_AUTO_REPLY
+        return DEFAULT_AUTO_REPLY
+
+    @classmethod
+    def to_response(
+        cls, policy: SensitiveWordPolicy | None, tenant_id: int, business_type: str
+    ) -> SensitiveWordPolicyResp:
         if policy is None:
             return cls.default_response(tenant_id, business_type)
         return SensitiveWordPolicyResp(
@@ -97,13 +112,15 @@ class SensitiveWordPolicyService:
             scope_id=policy.scope_id,
             enabled=bool(policy.enabled),
             words_types=cls.normalize_words_types(policy.words_types),
-            custom_words=policy.custom_words or '',
-            auto_reply=policy.auto_reply or DEFAULT_AUTO_REPLY,
+            custom_words=policy.custom_words or "",
+            auto_reply=policy.auto_reply or cls._default_auto_reply(business_type),
             extra_config=policy.extra_config or {},
         )
 
     @classmethod
-    async def aget_policy(cls, login_user: UserPayload, business_type: SensitiveWordBusinessType) -> SensitiveWordPolicyResp:
+    async def aget_policy(
+        cls, login_user: UserPayload, business_type: SensitiveWordBusinessType
+    ) -> SensitiveWordPolicyResp:
         tenant_id = cls._current_tenant_id(login_user)
         policy = await SensitiveWordPolicyDao.aget_policy(
             tenant_id=tenant_id,
@@ -121,13 +138,21 @@ class SensitiveWordPolicyService:
         payload: SensitiveWordPolicyPayload,
     ) -> SensitiveWordPolicyResp:
         tenant_id = cls._current_tenant_id(login_user)
+        words_types = cls.normalize_words_types(payload.words_types)
+        if business_type == SensitiveWordBusinessType.WORKBENCH_CHAT:
+            cls._validate_enabled_workbench_payload(payload, words_types)
+            auto_reply = (payload.auto_reply or "")[:500]
+            if payload.enabled:
+                auto_reply = (payload.auto_reply or "").strip()[:500]
+        else:
+            auto_reply = (payload.auto_reply or DEFAULT_AUTO_REPLY)[:500]
         policy = await SensitiveWordPolicyDao.aupsert_policy(
             tenant_id=tenant_id,
             business_type=business_type.value,
             enabled=payload.enabled,
-            words_types=cls.normalize_words_types(payload.words_types),
-            custom_words=payload.custom_words or '',
-            auto_reply=(payload.auto_reply or DEFAULT_AUTO_REPLY)[:500],
+            words_types=words_types,
+            custom_words=payload.custom_words or "",
+            auto_reply=auto_reply,
             extra_config=payload.extra_config or {},
             operator_id=login_user.user_id,
             scope_type=SensitiveWordScopeType.TENANT.value,
@@ -137,17 +162,17 @@ class SensitiveWordPolicyService:
         return cls.to_response(policy, tenant_id, business_type.value)
 
     @classmethod
-    def _resolve_words(cls, policy: Optional[SensitiveWordPolicy]) -> List[str]:
+    def _resolve_words(cls, policy: SensitiveWordPolicy | None) -> list[str]:
         if policy is None or not policy.enabled:
             return []
         words_types = cls.normalize_words_types(policy.words_types)
-        words: List[str] = []
+        words: list[str] = []
         if BUILTIN_WORDS_TYPE in words_types:
             words.extend(cls.load_builtin_words())
         if CUSTOM_WORDS_TYPE in words_types:
-            words.extend(cls.normalize_words(policy.custom_words or ''))
+            words.extend(cls.normalize_words(policy.custom_words or ""))
 
-        deduped: List[str] = []
+        deduped: list[str] = []
         seen = set()
         for word in words:
             if word in seen:
@@ -162,7 +187,7 @@ class SensitiveWordPolicyService:
         tenant_id: int,
         business_type: SensitiveWordBusinessType,
         scope_type: SensitiveWordScopeType = SensitiveWordScopeType.TENANT,
-        scope_id: Optional[str] = None,
+        scope_id: str | None = None,
     ) -> bool:
         policy = SensitiveWordPolicyDao.get_policy(
             tenant_id=tenant_id,
@@ -180,10 +205,10 @@ class SensitiveWordPolicyService:
         scope_type: str,
         scope_id: str,
         policy: SensitiveWordPolicy,
-        words: List[str],
+        words: list[str],
         case_sensitive: bool,
-    ) -> Tuple:
-        words_digest = hashlib.sha256('\n'.join(words).encode('utf-8')).hexdigest()
+    ) -> tuple:
+        words_digest = hashlib.sha256("\n".join(words).encode("utf-8")).hexdigest()
         return (
             tenant_id,
             business_type,
@@ -203,11 +228,11 @@ class SensitiveWordPolicyService:
         scope_type: str,
         scope_id: str,
         policy: SensitiveWordPolicy,
-        words: List[str],
+        words: list[str],
         case_sensitive: bool,
-    ) -> Tuple[ACAutomaton, Dict[str, str]]:
-        normalized_map: Dict[str, str] = {}
-        normalized_words: List[str] = []
+    ) -> tuple[ACAutomaton, dict[str, str]]:
+        normalized_map: dict[str, str] = {}
+        normalized_words: list[str] = []
         for word in words:
             normalized = word if case_sensitive else word.lower()
             if not normalized or normalized in normalized_map:
@@ -238,7 +263,7 @@ class SensitiveWordPolicyService:
         business_type: SensitiveWordBusinessType,
         text: str,
         scope_type: SensitiveWordScopeType = SensitiveWordScopeType.TENANT,
-        scope_id: Optional[str] = None,
+        scope_id: str | None = None,
     ) -> SensitiveWordCheckResult:
         return cls.check_texts(
             tenant_id=tenant_id,
@@ -253,10 +278,10 @@ class SensitiveWordPolicyService:
         cls,
         tenant_id: int,
         business_type: SensitiveWordBusinessType,
-        texts: List[str],
+        texts: list[str],
         scope_type: SensitiveWordScopeType = SensitiveWordScopeType.TENANT,
-        scope_id: Optional[str] = None,
-    ) -> List[SensitiveWordCheckResult]:
+        scope_id: str | None = None,
+    ) -> list[SensitiveWordCheckResult]:
         final_scope_id = scope_id or str(tenant_id)
         policy = SensitiveWordPolicyDao.get_policy(
             tenant_id=tenant_id,
@@ -266,14 +291,16 @@ class SensitiveWordPolicyService:
         )
         words = cls._resolve_words(policy)
         if policy is None or not words:
-            return [
-                SensitiveWordCheckResult(enabled=False, hits=[], auto_reply=DEFAULT_AUTO_REPLY)
-                for _ in texts
-            ]
+            fallback = (
+                (policy.auto_reply or cls._default_auto_reply(business_type.value))
+                if policy is not None
+                else cls._default_auto_reply(business_type.value)
+            )
+            return [SensitiveWordCheckResult(enabled=False, hits=[], auto_reply=fallback) for _ in texts]
 
         extra_config = policy.extra_config or {}
-        case_sensitive = bool(extra_config.get('case_sensitive', False))
-        max_hits = extra_config.get('max_hits')
+        case_sensitive = bool(extra_config.get("case_sensitive", False))
+        max_hits = extra_config.get("max_hits")
         automaton, normalized_map = cls._get_automaton(
             tenant_id,
             business_type.value,
@@ -284,19 +311,67 @@ class SensitiveWordPolicyService:
             case_sensitive,
         )
 
-        results: List[SensitiveWordCheckResult] = []
+        results: list[SensitiveWordCheckResult] = []
         for text in texts:
-            scan_text = '' if text is None else str(text)
+            scan_text = "" if text is None else str(text)
             counter = automaton.find_all(scan_text if case_sensitive else scan_text.lower()) if scan_text else {}
-            hits: List[SensitiveWordHit] = [
-                SensitiveWordHit(word=normalized_map.get(word, word), count=count)
-                for word, count in counter.items()
+            hits: list[SensitiveWordHit] = [
+                SensitiveWordHit(word=normalized_map.get(word, word), count=count) for word, count in counter.items()
             ]
             if isinstance(max_hits, int) and max_hits > 0:
                 hits = hits[:max_hits]
-            results.append(SensitiveWordCheckResult(
-                enabled=True,
-                hits=hits,
-                auto_reply=policy.auto_reply or DEFAULT_AUTO_REPLY,
-            ))
+            results.append(
+                SensitiveWordCheckResult(
+                    enabled=True,
+                    hits=hits,
+                    auto_reply=policy.auto_reply or cls._default_auto_reply(business_type.value),
+                )
+            )
         return results
+
+    @classmethod
+    def _validate_enabled_workbench_payload(
+        cls,
+        payload: SensitiveWordPolicyPayload,
+        words_types: list[str] | None = None,
+    ) -> None:
+        if not payload.enabled:
+            return
+        resolved = words_types if words_types is not None else cls.normalize_words_types(payload.words_types)
+        if not resolved:
+            raise ValueError(WORKBENCH_WORD_TYPE_REQUIRED)
+        auto_reply = (payload.auto_reply or "").strip()
+        if not auto_reply:
+            raise ValueError(WORKBENCH_AUTO_REPLY_REQUIRED)
+        if len(auto_reply) > 500:
+            raise ValueError(WORKBENCH_AUTO_REPLY_TOO_LONG)
+
+    @classmethod
+    def _is_bisheng_pro(cls) -> bool:
+        import os
+
+        # Same source as `settings.get_system_login_method().bisheng_pro`.
+        return os.getenv("BISHENG_PRO") == "true"
+
+    @classmethod
+    def is_workbench_content_safety_active(cls, tenant_id: int) -> bool:
+        if not cls._is_bisheng_pro():
+            return False
+        try:
+            return cls.is_effective(tenant_id, SensitiveWordBusinessType.WORKBENCH_CHAT)
+        except Exception:
+            logger.exception("workbench content safety is_effective failed tenant_id={}", tenant_id)
+            return False
+
+    @classmethod
+    def evaluate_workbench_user_text(cls, tenant_id: int, text: str) -> SensitiveWordCheckResult | None:
+        if not cls.is_workbench_content_safety_active(tenant_id):
+            return None
+        result = cls.check_text(
+            tenant_id=tenant_id,
+            business_type=SensitiveWordBusinessType.WORKBENCH_CHAT,
+            text=text or "",
+        )
+        if result.enabled and result.hits:
+            return result
+        return None

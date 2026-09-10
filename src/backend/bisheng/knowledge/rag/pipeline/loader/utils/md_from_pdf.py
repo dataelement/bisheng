@@ -27,7 +27,7 @@ def convert_pdf_to_md(output_dir, pdf_path, doc_id):
     md_filename = f"{doc_id}.md"
     md_filepath = os.path.join(output_dir, md_filename)
 
-    img_dir = os.path.join(output_dir, f"images")
+    img_dir = os.path.join(output_dir, "images")
     if not os.path.exists(img_dir):
         os.makedirs(img_dir)
 
@@ -35,11 +35,12 @@ def convert_pdf_to_md(output_dir, pdf_path, doc_id):
 
     try:
         doc = fitz.open(pdf_path)
-    except Exception as e:
-        raise Exception('The file is damaged.')
+    except Exception:
+        raise Exception("The file is damaged.")
     try:
         md_content = ""
         image_counter = 1
+        elements = []
 
         for page_num in range(len(doc)):
             with pymu_lock:
@@ -85,15 +86,16 @@ def convert_pdf_to_md(output_dir, pdf_path, doc_id):
 
                         image_bbox = fitz.Rect(img_info["bbox"])
                         page_elements.append(
-                            {"type": "image", "bbox": image_bbox, "content": md_image}
+                            {
+                                "type": "image",
+                                "bbox": image_bbox,
+                                "content": md_image,
+                                "image_filename": img_filename,
+                            }
                         )
                         image_counter += 1
 
-                table_bboxes = (
-                    [fitz.Rect(tab.bbox) for tab in tables.tables]
-                    if tables.tables
-                    else []
-                )
+                table_bboxes = [fitz.Rect(tab.bbox) for tab in tables.tables] if tables.tables else []
 
                 text_blocks = page.get_text("blocks")
                 for b in text_blocks:
@@ -107,39 +109,108 @@ def convert_pdf_to_md(output_dir, pdf_path, doc_id):
                             break
 
                     if block_text and not is_in_table:
-                        page_elements.append(
-                            {"type": "text", "bbox": block_rect, "content": block_text}
-                        )
+                        page_elements.append({"type": "text", "bbox": block_rect, "content": block_text})
 
             page_elements.sort(key=lambda el: el["bbox"].y0)
 
             for elem in page_elements:
+                rect = elem["bbox"]
+                layout_elem = {
+                    "type": elem["type"],
+                    "page": page_num,
+                    "bbox": [float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1)],
+                    "content": elem["content"],
+                }
+                if elem.get("image_filename"):
+                    layout_elem["image_filename"] = elem["image_filename"]
+                elements.append(layout_elem)
                 md_content += elem["content"] + "\n\n"
 
         with open(md_filepath, "w", encoding="utf-8") as md_file:
             md_file.write(md_content)
+        return elements
 
     except Exception as e:
         logger.exception(f"Error processing pdf: {e}")
         raise Exception(
-            f"Document parsing failed: {str(e)[-100:]}")  # Capture last100characters to avoid overly long error messages
+            f"Document parsing failed: {str(e)[-100:]}"
+        )  # Capture last100characters to avoid overly long error messages
     finally:
         with pymu_lock:
             if doc:
                 doc.close()
 
 
+def align_pdf_elements(
+    content: str,
+    elements: list[dict],
+    *,
+    retain_images: bool = True,
+) -> dict:
+    """Map layout elements onto the final markdown so splitter indexes stay valid.
+
+    Indexes are inclusive ``[start, end]`` and must be computed after
+    post-processing / image-url rewrite: those steps can change string lengths.
+    Image refs are located by alt text so a rewritten MinIO URL still matches.
+    """
+    bboxes: list[list[float]] = []
+    pages: list[int] = []
+    indexes: list[list[int]] = []
+    types: list[str] = []
+    search_from = 0
+
+    for el in elements:
+        if el.get("type") == "image" and not retain_images:
+            continue
+        needle = el.get("content") or ""
+        if el.get("type") == "image" and el.get("image_filename"):
+            needle = f"![{el['image_filename']}]"
+        if not needle:
+            continue
+
+        pos = content.find(needle, search_from)
+        if pos < 0:
+            pos = content.find(needle)
+        if pos < 0:
+            continue
+
+        if el.get("type") == "image" and needle.startswith("!["):
+            close = content.find(")", pos + len(needle))
+            end = close if close >= 0 else pos + len(needle) - 1
+        else:
+            end = pos + len(needle) - 1
+        if end < pos:
+            continue
+
+        bbox = el.get("bbox") or []
+        if len(bbox) < 4:
+            continue
+
+        bboxes.append([float(x) for x in bbox[:4]])
+        pages.append(int(el.get("page", 0)))
+        indexes.append([pos, end])
+        types.append(el.get("type") or "text")
+        search_from = end + 1
+
+    return {
+        "bboxes": bboxes,
+        "pages": pages,
+        "indexes": indexes,
+        "types": types,
+    }
+
+
 def handler(cache_dir, file_or_url: str):
     doc_id = uuid4()
     ouput_dir = f"{cache_dir}/{doc_id}"
-    convert_pdf_to_md(ouput_dir, file_or_url, doc_id)
-    return f"{ouput_dir}/{doc_id}.md", f"{ouput_dir}/images", doc_id
+    elements = convert_pdf_to_md(ouput_dir, file_or_url, doc_id)
+    return f"{ouput_dir}/{doc_id}.md", f"{ouput_dir}/images", doc_id, elements or []
 
 
 def exec_thread_safe():
     pdf_path = "/Users/tju/Documents/Resources/pdf/bisheng/chen4.pdf"
     output_directory = "/Users/tju/Desktop/output"
-    md_file, local_image, doc_id = handler(output_directory, pdf_path)
+    _md_file, _local_image, _doc_id, _elements = handler(output_directory, pdf_path)
 
 
 if __name__ == "__main__":

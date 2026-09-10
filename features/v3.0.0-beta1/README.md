@@ -21,6 +21,8 @@
 | F050 | [unified-permission-settings](./050-unified-permission-settings/) | P0 | Spec、Design 已确认，Tasks 已拆解，实现中 | v2.6.0 F044, F048 |
 | F054 | [unified-citation-entries](./054-unified-citation-entries/) | P1 | Discovery + Spec + Design 已出，待确认 | F029, F041（F047 并行） |
 | F060 | [information-source-subscription-reconciliation](./060-information-source-subscription-reconciliation/) | P1 | ✅ 本地开发与评审完成；真实依赖 E2E、DM8 待执行 | v2.6.0 F031、Information 协议 v1.1 |
+| F062 | [workflow-temp-kb-citation](./062-workflow-temp-kb-citation/) | P1 | Spec + Design 已出，待 ★ 确认；tasks 已拆解（24 项 / 6 Wave） | F054 |
+| F063 | [workbench-content-safety](./063-workbench-content-safety/) | P1 | Spec + Design 已确认；tasks 已拆解（16 项 / 6 Wave） | 既有 sensitive_word、工作台聊天入口 |
 
 ---
 
@@ -68,3 +70,8 @@
 | 2026-08-21 | 用户确认 F060 Spec，进入 Design 与 Constitution Check。 |
 | 2026-08-21 | F060 Design 完成并按 design checklist 24 项自审通过（LGTM）；等待用户 SDD ★ 确认。 |
 | 2026-08-25 | 用户确认 F060 Design；tasks.md 完成 43 项拆解并按 tasks checklist 21 项自审通过（LGTM），等待用户确认。 |
+| 2026-09-09 | 登记 F062 工作流临时知识库溯源；Design 记录方向 B 实现方案，等待确认后再写 spec / tasks。 |
+| 2026-09-09 | F062 补完 spec.md；Design 按审查回写（现状、每文件 id、提升复用 F043、cache 时序）。等待 spec + design ★ 确认；tasks 未写。 |
+| 2026-09-09 | F062 tasks.md 完成 24 项拆解（6 个 Wave）；spec/design 全文 ★ 仍待口头确认。 |
+| 2026-09-09 | 登记 F063 日常/任务内容安全审查；Design 为《3.0 beta2》§5.2 实现方案。等待 spec + design ★ 确认；tasks 未写。 |
+| 2026-09-09 | 用户确认 F063 spec + design；tasks.md 完成 16 项拆解（6 个 Wave）。 |

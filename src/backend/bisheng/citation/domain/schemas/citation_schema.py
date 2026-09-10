@@ -25,6 +25,11 @@ class CitationType(str, Enum):
     # distinguishable from a web-search hit, and the article doc id is what an
     # in-app jump would need — folding it into WEB throws all three away.
     ARTICLE = "article"
+    # F062: workflow input-node "parse and ingest into a temporary knowledge
+    # base". Not a knowledge-space resource (no knowledge_file row, UUID
+    # document id), so it cannot reuse RAG + view_file. The enum stays `temp`;
+    # the user-visible label is "临时知识库".
+    TEMP = "temp"
 
 
 class RagCitationItemSchema(CitationSchemaBase):
@@ -84,6 +89,40 @@ class ArticleCitationPayloadSchema(CitationSchemaBase):
     )
 
 
+class TempCitationItemSchema(CitationSchemaBase):
+    """Chunk-level payload inside a grouped temporary-knowledge-base citation."""
+
+    itemId: str = Field(..., description="Stable item identifier inside the citation")
+    chunkId: str | None = Field(default=None, description="Chunk identifier")
+    chunkIndex: int | None = Field(default=None, description="Chunk index inside the file")
+    content: str | None = Field(default=None, description="Chunk content")
+    bbox: str | None = Field(default=None, description="Bounding box information when the parser produced one")
+    page: int | None = Field(default=None, description="Page number when the parser produced one")
+
+
+class TempCitationPayloadSchema(CitationSchemaBase):
+    """Payload for workflow temporary-knowledge-base citation items.
+
+    The locator is a UUID string plus a main-bucket ``objectName`` (F043
+    ``chat/{user_id}/{uuid}.ext``). Integers ``documentId`` / ``knowledgeId``
+    must never appear — those belong to RAG and would send resolve down
+    ``view_file``.
+    """
+
+    documentId: str = Field(..., description="Per-file UUID from the input-node ingest metadata")
+    documentName: str | None = Field(default=None, description="Original uploaded file name")
+    fileType: str | None = Field(default=None, description="File extension")
+    objectName: str | None = Field(default=None, description="Main-bucket object key after F043 promotion")
+    snippet: str | None = Field(default=None, description="Matched chunk text snippet")
+    previewUrl: str | None = Field(default=None, description="Freshly signed preview URL; resolve-time only")
+    downloadUrl: str | None = Field(default=None, description="Freshly signed download URL; resolve-time only")
+    sourceUrl: str | None = Field(default=None, description="Original upload URL used to match the promoted object")
+    items: list[TempCitationItemSchema] = Field(
+        default_factory=list,
+        description="Grouped chunk items for the same uploaded file",
+    )
+
+
 class WebCitationItemSchema(CitationSchemaBase):
     """Snippet-level payload inside a grouped web citation item."""
 
@@ -107,7 +146,12 @@ class WebCitationPayloadSchema(CitationSchemaBase):
     )
 
 
-CitationSourcePayload = Union[RagCitationPayloadSchema, WebCitationPayloadSchema, ArticleCitationPayloadSchema]
+CitationSourcePayload = Union[
+    RagCitationPayloadSchema,
+    WebCitationPayloadSchema,
+    ArticleCitationPayloadSchema,
+    TempCitationPayloadSchema,
+]
 
 
 class CitationRegistryItemSchema(CitationSchemaBase):

@@ -11,8 +11,11 @@ from loguru import logger
 
 from bisheng.citation.domain.services.citation_prompt_helper import (
     annotate_rag_documents_with_citations,
+    annotate_temp_documents_with_citations,
+    build_citation_turn_constraint,
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
+    collect_temp_citation_registry_items,
 )
 from bisheng.common.chat.types import IgnoreException
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
@@ -94,11 +97,22 @@ class RagNode(RagUtils):
             source_documents = [Document(page_content=str(e), metadata={})]
 
         qa_chain = create_stuff_documents_chain(llm=self._llm, prompt=self._qa_prompt)
-        source_documents_with_citations = annotate_rag_documents_with_citations(source_documents)
-        citation_items = collect_rag_citation_registry_items(source_documents_with_citations)
+        if self._knowledge_type in ("knowledge", "space"):
+            source_documents_with_citations = annotate_rag_documents_with_citations(source_documents)
+            citation_items = collect_rag_citation_registry_items(source_documents_with_citations)
+        else:
+            source_documents_with_citations = annotate_temp_documents_with_citations(source_documents)
+            citation_items = collect_temp_citation_registry_items(source_documents_with_citations)
         cache_citation_registry_items_sync(citation_items)
         self.graph_state.set_variable(self.id, WORKFLOW_SOURCE_DOCUMENTS_KEY, source_documents_with_citations)
         self.graph_state.set_variable(self.id, WORKFLOW_CITATION_REGISTRY_ITEMS_KEY, citation_items)
+        constraint = build_citation_turn_constraint(citation_items)
+        if constraint and self._log_system_prompt:
+            system_prompt = f"{self._log_system_prompt[0]}\n\n{constraint}"
+            self._log_system_prompt[0] = system_prompt
+            self._qa_prompt = ChatPromptTemplate.from_messages(
+                [SystemMessage(content=system_prompt), self._qa_prompt.messages[-1]]
+            )
         # Feed the inner QA model the <chunk_id> chunk format (citation_key lives in
         # <chunk_id>), consistent with the workstation/agent tool output and the citation
         # rules in the node's system prompt. Keep source_documents_with_citations intact for

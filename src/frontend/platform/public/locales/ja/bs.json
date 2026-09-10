@@ -1027,7 +1027,10 @@
     "contentSecurityR": "コンテンツセキュリティ審査",
     "errors": {
       "selectAtLeastOneWordType": "単語リストは少なくとも1種類選択してください",
-      "autoReplyNotEmpty": "自動返信内容は空にできません"
+      "autoReplyNotEmpty": "自動返信内容は空にできません",
+      "workbenchSelectAtLeastOneWordType": "少なくとも1つのセンシティブワードリストを選択してください",
+      "workbenchAutoReplyNotEmpty": "自動返信内容は空にできません",
+      "workbenchAutoReplyMaxLength": "自動返信内容は500文字以内にしてください"
     },
     "saveSuccess": "保存に成功しました",
     "contentSecurityDesc": "センシティブワードリストまたは API によって会話内容のセキュリティ審査を行います",
@@ -1084,6 +1087,9 @@
     "daily": "日常",
     "subscribe": "購読",
     "subscriptionContentSecurityDesc": "購読記事のセンシティブワードを審査し、ヒット時は一般ユーザーが詳細を閲覧できません。",
+    "workbenchContentSecurityDesc": "センシティブワードリストによって会話内容のセキュリティ審査を行います",
+    "workbenchCustomWordsPlaceholder": "改行で区切り、1行に1つ入力してください",
+    "workbenchAutoReplyPlaceholder": "セキュリティ審査にヒットしたときの自動返信を入力してください。例：「現在の会話内容は関連規定に違反しています。修正してから再入力してください」",
     "customWordsNewlinePlaceholder": "改行文字で区切り、1行に1つ入力してください",
     "knowledgeSpace": "知識空間",
     "model": "モデル",
@@ -2063,7 +2069,10 @@
     "references": "参考資料",
     "closeReferences": "参考資料を閉じる",
     "backToReferences": "参考資料一覧に戻る",
-    "noDownloadUrl": "ダウンロード可能なファイルアドレスがありません"
+    "noDownloadUrl": "ダウンロード可能なファイルアドレスがありません",
+    "tempKb": "一時ナレッジベース",
+    "noPermission": "このソースを閲覧する権限がありません",
+    "sourceExpired": "このソースは無効になりました"
   },
   "openApiManagement": {
     "empty": "レコードがありません",

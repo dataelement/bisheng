@@ -51,8 +51,10 @@
 | **OpenApiTenantSetting**（租户级 PAT 开关与默认有效期） | **F053-openapi-auth-and-identity** | PRD §4.10.7 闸门一的租户级半边；部署级半边在进程 Settings |
 | **ShareLink**（既有对象；本版增量 = `share_scope` 列 + 撤销写入 + 有效期强制生效 + share-token 会话执行主体） | **F053-openapi-auth-and-identity** | 两个免登录分享页改走 share_link 通道；只拥有本版对该对象的写行为增量，不拥有既有创建 / 读取 |
 | **MessageSession / ChatMessage**（既有对象；本版增量 = `external_user_id` 分区键列，只写不读） | **F053-openapi-auth-and-identity**（列）| 会话本体仍归既有会话模块；本 Feature 只拥有该列的写入语义（PRD §4.3.4 / §4.6.3 四） |
-| —（无新增领域对象；在 F029 拥有的 citation 链路上扩展第三种来源类型与其载荷） | **F054-unified-citation-entries** | 频道文章 AI 问答接入统一溯源：新增「文章」来源类型及其来源载荷（真实稳定定位标识 = 文章文档标识 / 原文链接，不伪造知识库片段标识）、「来源已失效」状态、来源详情对**无已登录用户**调用一律不返回、工作流输入节点临时文件停止登记来源。只读 / 调用现有 `MessageCitation` 与 citation 注册 / 解析服务；**不拥有** `message_citation` schema，不改 F041 已登记的 `accessScope` 两档语义，不改灵思任务模式（归 F047），不新增表 / Alembic / 对外 API / 错误码 |
+| —（无新增领域对象；在 F029 拥有的 citation 链路上扩展第三种来源类型与其载荷） | **F054-unified-citation-entries** | 频道文章 AI 问答接入统一溯源：新增「文章」来源类型及其来源载荷（真实稳定定位标识 = 文章文档标识 / 原文链接，不伪造知识库片段标识）、「来源已失效」状态、来源详情对**无已登录用户**调用一律不返回。只读 / 调用现有 `MessageCitation` 与 citation 注册 / 解析服务；**不拥有** `message_citation` schema，不改 F041 已登记的 `accessScope` 两档语义，不改灵思任务模式（归 F047），不新增表 / Alembic / 对外 API / 错误码。**不再拥有**「工作流临时来源是否出角标」的写语义——该条由 F062 取代（仅 `ingest_to_temp_kb` 召回） |
+| —（无新增领域对象；在 F029 拥有的 citation 链路上扩展第四种来源类型与其载荷） | **F062-workflow-temp-kb-citation** | 工作流输入节点「解析并存入临时知识库」召回可点击溯源：新增 `citation_type=temp`（前缀 `tempsearch_`，原件定位 = UUID + F043 `objectName`，不伪造知识库整数 id）。只读 / 调用现有 `MessageCitation` 与 citation 注册 / 解析服务；**不拥有** `message_citation` schema，不改 INV-7 / `view_file`，不把临时来源纳入知识空间 OpenFGA，不新增表 / Alembic / 对外 API / 错误码 |
 | —（无新增） | F061-qa-active-image-read | 日常模式 / 知识空间 / 频道订阅三条问答链路按需查看检索结果或文章正文中的 markdown 图片；复用既有工作台模型视觉开关、检索入口与 `view_file` / 敏感文过滤，不新增领域对象、表、对外 API、错误码或不变量 |
+| —（无新增领域对象；在 F036 拥有的 `SensitiveWordPolicy` 上增加枚举值 `workbench_chat`） | **F063-workbench-content-safety** | 商业版工作台日常模式（输入 + 最终回答）与任务模式（仅输入）关键词审查。只读 / 调用现有 `SensitiveWordPolicy` 与 `check_text`；**不拥有**策略表 schema，不改知识空间 / 频道 / 工作流 Gateway 审查，不新增表 / Alembic / 对外 API 路径 / 错误码 / 不变量 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -122,8 +124,10 @@
 | F052-workflow-session-auto-rerun | 既有工作流独立会话与手动重新运行能力 | 系统统一开关只影响免登录/需登录独立工作流会话的打开行为；不改变工作流执行、权限或其他会话入口 |
 | F060-information-source-subscription-reconciliation | v2.6.0 F031、Information 同步查询协议 v1.1 | 继承频道来源与知识同步配置；以远端实际订阅和公共文章状态替代 F031 的租户本地订阅推断，不依赖本版本权限 Feature |
 | F053-openapi-auth-and-identity | F048（`authorize_created` / `grants:mutate` / 主体校验 / 系统级放行谓词）；既有 `share_link`、`workstation` 日常模式链路、`knowledge` 检索与文件可见性服务 | 代码底座自 `3.0-vibe` 移植；工作流 A（底座 + 端点接入）与 C（身份传递）须同版发布；B / D / E / F / G 可后续合入。内部工作流依赖见 `053-openapi-auth-and-identity/design.md` §4 |
-| F054-unified-citation-entries | F029、F041（均为 v2.6.0 存量，已上线）；与 F047 共用同一 citation 链路但互不阻塞 | 接线 + 扩展型：新增「文章」来源类型、失效态、匿名收紧、临时文件停发角标（导出烘焙不在本 Feature，归 F047 Phase 2）。**与 F053 有一处待对齐**：F053 把免登录分享页改走 share_link 通道并引入 share-token 会话执行主体，本 Feature AC-14「无已登录用户即不返回来源详情」的判据需与之对齐（见 spec §2.4 待澄清）。灵思任务模式不在本 Feature，归 F047 |
+| F054-unified-citation-entries | F029、F041（均为 v2.6.0 存量，已上线）；与 F047 共用同一 citation 链路但互不阻塞 | 接线 + 扩展型：新增「文章」来源类型、失效态、匿名收紧（导出烘焙不在本 Feature，归 F047 Phase 2）。临时来源是否出角标改由 F062 拥有（仅工作流 `ingest_to_temp_kb`）。灵思任务模式不在本 Feature，归 F047 |
+| F062-workflow-temp-kb-citation | F054（文章类型扩展点、失效/无权限分态、匿名收紧）；F043（会话附件提升为 `chat/{user_id}/…`）；F029 / F041（正式库 `view_file` 与 INV-7，本 Feature **不改**） | 接线 + 扩展型：第四种来源 `temp`。免登录（含分享页、独立工作流当场点自己刚传的文件）一律不返回 temp 详情。日常附件 / 灵思上传仍排除 |
 | F061-qa-active-image-read | 既有工作台模型视觉开关、日常 ReAct、知识空间 / 频道问答入口；检索可见性守 v2.6.0 **INV-7**（`view_file`） | 接线型；只在已过滤的检索结果 / 文章正文上按需读图。不新增领域对象/表/对外 API/错误码/不变量；不改入库/OCR；不改灵思任务模式、工作流/助手 RAG；不新开取图鉴权口 |
+| F063-workbench-content-safety | 既有 `sensitive_word` 租户策略（F036）、工作台首页、F035 日常/任务统一 `chat/completions`、商业版 `BISHENG_PRO` | 接线型；新枚举值 `workbench_chat` 一份策略管两种模式。开源版不展示、不审查。不改工作流 Gateway 词表，不审文件/任务输出 |
 
 ---
 
@@ -186,3 +190,4 @@
 | 2026-08-27 | 登记 F052 工作流会话打开时自动重新运行：由系统级统一开关控制免登录与需登录独立会话；首次进入或切换历史会话时，若目标会话已经结束则至多自动重新运行一次，打开后的后续结束或中断不自动重试 | F052、既有工作流独立会话 |
 | 2026-08-31 | 登记 F053 开放 API 鉴权与身份传递（全量 P0+P1+P2，代码底座自 `3.0-vibe` 移植、需求以 PRD v2.4 为准）：新增 ApiCredential / ServiceAccount / OpenApiCallLog / OpenApiTenantSetting 领域对象与 ShareLink、MessageSession 增量；新增 INV-29～34；分配错误码模块 260；登记对既有 `/api/v2`、分享页、`user` 表与 F048 `authorize_created` 的影响 | F053、F048、既有开放 API 与分享页 |
 | 2026-09-07 | 登记 F061 问答场景主动读图：表 1 标"无新增领域对象"；表 3 记依赖既有工作台视觉开关与三场景问答入口，检索可见性守 v2.6.0 INV-7；无新增错误码/对外 API/不变量/alembic 迁移 | F061 |
+| 2026-09-09 | 登记 F063 日常/任务内容安全审查：表 1 标无新领域对象（扩展既有 `SensitiveWordPolicy` 的 `workbench_chat` 取值）；表 3 记依赖 F036 词表与工作台统一聊天入口；无新增错误码/对外路径/不变量/alembic | F063 |

@@ -293,6 +293,26 @@ class InputNode(BaseNode):
         self.graph_state.save_context(content=f"{human_input}", msg_sender="human")
         return ret
 
+    @staticmethod
+    def temp_file_identity_metadata(file_name: str, workflow_id: str) -> dict:
+        """Per-file identity written into the temp knowledge base.
+
+        One UUID per file (not per input variable). Must not carry bbox / page /
+        chunk_index — those keys would overwrite the parser's output when the
+        chunk dict is updated with this identity.
+        """
+        now = int(time.time())
+        return {
+            "document_id": generate_uuid(),
+            "document_name": file_name,
+            "knowledge_id": workflow_id,
+            "upload_time": now,
+            "update_time": now,
+            "uploader": "",
+            "updater": "",
+            "user_metadata": {},
+        }
+
     def parse_log(self, unique_id: str, result: dict) -> Any:
         ret = []
         for k, v in result.items():
@@ -379,8 +399,6 @@ class InputNode(BaseNode):
         if media_count > MAX_MEDIA_FILES_PER_VARIABLE:
             raise WorkflowMediaFileCountLimitError()
 
-        file_id = generate_uuid()
-
         file_content_length = 0
         for one_file_url in value:
             if not one_file_url:
@@ -390,19 +408,9 @@ class InputNode(BaseNode):
             file_name = unquote(url_obj.path.split("/")[-1])
             # get file original name
             file_name = KnowledgeService.get_upload_file_original_name(file_name)
-            all_metadata.append(
-                {
-                    "document_id": file_id,
-                    "document_name": file_name,
-                    "knowledge_id": self.workflow_id,
-                    "upload_time": int(time.time()),
-                    "update_time": int(time.time()),
-                    "uploader": "",
-                    "updater": "",
-                    "user_metadata": {},
-                    "bbox": "",  # Temporary files cannot be traced because the source files are not persisted
-                }
-            )
+            identity = self.temp_file_identity_metadata(file_name, self.workflow_id)
+            file_id = identity["document_id"]
+            all_metadata.append(identity)
 
             file_ext = file_name.split(".")[-1].lower()
             if file_ext in self._image_ext:
@@ -458,7 +466,11 @@ class InputNode(BaseNode):
             self._es_client.add_texts(texts=texts, metadatas=new_metadata)
 
             logger.debug(f"workflow_record_file_metadata file={key} file_name={file_name}")
-            all_metadata[-1] = new_metadata[0]
+            # Graph-state copy only: source_url is not in InputFileMetadata, so
+            # it never reaches Milvus/ES. Retrieval backfills it from here.
+            graph_meta = dict(new_metadata[0])
+            graph_meta["source_url"] = one_file_url
+            all_metadata[-1] = graph_meta
         # Documentation metadata, other nodes according to metadataData to retrieve corresponding files
         return {
             key_info["key"]: all_metadata,

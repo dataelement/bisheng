@@ -1044,7 +1044,10 @@
     "contentSecurityR": "Content Security Review",
     "errors": {
       "selectAtLeastOneWordType": "At least one word type must be selected",
-      "autoReplyNotEmpty": "Auto-reply content cannot be empty"
+      "autoReplyNotEmpty": "Auto-reply content cannot be empty",
+      "workbenchSelectAtLeastOneWordType": "Please select at least one sensitive word list",
+      "workbenchAutoReplyNotEmpty": "Auto-reply content cannot be empty",
+      "workbenchAutoReplyMaxLength": "Auto-reply cannot exceed 500 characters"
     },
     "saveSuccess": "Saved successfully",
     "contentSecurityDesc": "Review session content for safety with a sensitive word list or API",
@@ -1101,6 +1104,9 @@
     "daily": "Daily",
     "subscribe": "Subscribe",
     "subscriptionContentSecurityDesc": "Review subscription articles for sensitive words. Regular users cannot view details after a hit.",
+    "workbenchContentSecurityDesc": "Review conversation content for safety using a sensitive word list",
+    "workbenchCustomWordsPlaceholder": "Separate words with newlines, one per line",
+    "workbenchAutoReplyPlaceholder": "Enter the auto-reply shown when content safety review is triggered, e.g. “This conversation violates relevant policies. Please revise and try again.”",
     "customWordsNewlinePlaceholder": "Use newline characters to separate words, one per line",
     "knowledgeSpace": "KnowledgeSpace",
     "model": "Model",
@@ -2118,7 +2124,10 @@
     "references": "References",
     "closeReferences": "Close references",
     "backToReferences": "Back to reference list",
-    "noDownloadUrl": "No downloadable file address"
+    "noDownloadUrl": "No downloadable file address",
+    "tempKb": "Temporary knowledge base",
+    "noPermission": "You do not have permission to view this source",
+    "sourceExpired": "This source is no longer available"
   },
   "openApiManagement": {
     "empty": "No records",

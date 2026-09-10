@@ -4,7 +4,7 @@ import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel"
 import Echarts from "@/workspace/markdown/Echarts";
 import MermaidBlock from "@/workspace/markdown/Mermaid";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
-import { getCitationDetail, resolveCitationDetails, type ChatCitation } from "@/controllers/API";
+import { getCitationDetail, getCitationUnresolvedReason, resolveCitationDetails, type ChatCitation } from "@/controllers/API";
 import CitationDocumentPreviewDrawer, { type CitationDocumentPreviewState } from "@/components/bs-comp/chatComponent/CitationDocumentPreviewDrawer";
 import { CitationSourceIcon } from "@/components/bs-comp/chatComponent/CitationSourceIcon";
 import {
@@ -13,7 +13,7 @@ import {
     getCitationClassName,
     getCitationSourceLabel,
     getLegacyCitationPreview,
-    isRagCitation,
+    isFilePreviewCitation,
     isRagCitationMissingPreviewUrl,
     normalizeCitationType,
     transformPrivateCitations,
@@ -22,6 +22,7 @@ import {
     type CitationPreview,
 } from "@/components/bs-comp/chatComponent/citationUtils";
 import { Loader2 } from "lucide-react";
+import i18next from "i18next";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 // @ts-ignore rehype-mathjax has no local type declaration in platform.
@@ -54,6 +55,8 @@ function CitationPreviewCard({
     detail,
     isLoading,
     error,
+    notPermitted,
+    expired,
     onCardClick,
     onOpenDocumentPreview,
 }: {
@@ -61,6 +64,8 @@ function CitationPreviewCard({
     detail?: ChatCitation | null;
     isLoading: boolean;
     error: boolean;
+    notPermitted?: boolean;
+    expired?: boolean;
     onCardClick?: () => void;
     onOpenDocumentPreview?: () => void;
 }) {
@@ -68,7 +73,23 @@ function CitationPreviewCard({
         return (
             <div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg border border-[#ECECEC] bg-white text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
                 <Loader2 className="mr-2 size-4 animate-spin" />
-                加载溯源详情...
+                {i18next.t("citation.loadingDetail")}
+            </div>
+        );
+    }
+
+    if (notPermitted) {
+        return (
+            <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg border border-[#ECECEC] bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+                {i18next.t("citation.noPermission")}
+            </div>
+        );
+    }
+
+    if (expired) {
+        return (
+            <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg border border-[#ECECEC] bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+                {i18next.t("citation.sourceExpired")}
             </div>
         );
     }
@@ -76,7 +97,7 @@ function CitationPreviewCard({
     if (error || !preview) {
         return (
             <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg border border-[#ECECEC] bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
-                暂无溯源详情
+                {i18next.t("citation.loadDetailFailed")}
             </div>
         );
     }
@@ -240,6 +261,8 @@ const Citation = ({
     data: rawData,
     children,
     initialDetail,
+    initialNotPermitted,
+    initialExpired,
     webContent,
     loadCitationDetail,
     popoverKey,
@@ -251,6 +274,8 @@ const Citation = ({
     data: Partial<CitationDisplayData>;
     children: React.ReactNode;
     initialDetail?: ChatCitation | null;
+    initialNotPermitted?: boolean;
+    initialExpired?: boolean;
     webContent?: any;
     loadCitationDetail: CitationDetailLoader;
     popoverKey: string;
@@ -265,6 +290,8 @@ const Citation = ({
     const [detail, setDetail] = useState<ChatCitation | null>(initialDetail ?? null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(false);
+    const [notPermitted, setNotPermitted] = useState(!!initialNotPermitted);
+    const [expired, setExpired] = useState(!!initialExpired);
     const closeTimerRef = useRef<number | null>(null);
     const citationClassName = getCitationClassName(data.type);
     const legacyPreview = data.ref?.startsWith("citation:")
@@ -273,7 +300,7 @@ const Citation = ({
     const preview = legacyPreview ?? buildCitationPreview(detail, data);
 
     const fetchDetail = async () => {
-        if (detail || legacyPreview || !data.citationId || data.citationId.startsWith("citation:")) {
+        if (detail || notPermitted || expired || legacyPreview || !data.citationId || data.citationId.startsWith("citation:")) {
             return detail;
         }
 
@@ -283,9 +310,15 @@ const Citation = ({
             const nextDetail = await loadCitationDetail(data.citationId);
             setDetail(nextDetail);
             return nextDetail;
-        } catch (err) {
-            console.error("Failed to load citation detail:", err);
-            setError(true);
+        } catch (err: any) {
+            if (err?.citationExpired) {
+                setExpired(true);
+            } else if (err?.citationForbidden) {
+                setNotPermitted(true);
+            } else {
+                console.error("Failed to load citation detail:", err);
+                setError(true);
+            }
             return null;
         } finally {
             setIsLoading(false);
@@ -309,6 +342,11 @@ const Citation = ({
         event?.preventDefault();
         event?.stopPropagation();
 
+        if (notPermitted || expired) {
+            handleOpenChange(!isOpen);
+            return;
+        }
+
         const isWebCitation = normalizeCitationType(preview?.type || data.type) === "web";
         if (isWebCitation && preview?.link) {
             openWebCitation(preview.link);
@@ -324,7 +362,7 @@ const Citation = ({
         }
         pendingWebWindow?.close();
 
-        if (!nextDetail || !isRagCitation(nextDetail, data.type)) {
+        if (!nextDetail || !isFilePreviewCitation(nextDetail, data.type)) {
             return;
         }
 
@@ -341,6 +379,18 @@ const Citation = ({
             setDetail(initialDetail);
         }
     }, [initialDetail]);
+
+    useEffect(() => {
+        if (initialExpired) {
+            setExpired(true);
+        }
+    }, [initialExpired]);
+
+    useEffect(() => {
+        if (initialNotPermitted) {
+            setNotPermitted(true);
+        }
+    }, [initialNotPermitted]);
 
     useEffect(() => {
         return () => {
@@ -390,7 +440,7 @@ const Citation = ({
                     onClick={handleCitationClick}
                     onMouseEnter={() => handleOpenChange(true)}
                     onMouseLeave={scheduleClose}
-                    className={`ml-2 inline-flex h-4 min-w-4 cursor-pointer items-center justify-center rounded-[6px] px-1 text-[12px] font-normal leading-[18px] ${citationClassName}`}
+                    className={`${notPermitted || expired ? "ml-2 cursor-default" : "ml-2 cursor-pointer"} inline-flex h-4 min-w-4 items-center justify-center rounded-[6px] px-1 text-[12px] font-normal leading-[18px] ${citationClassName}`}
                 >
                     <span className="flex h-[18px] items-center">{children}</span>
                 </button>
@@ -408,6 +458,8 @@ const Citation = ({
                     detail={detail}
                     isLoading={isLoading}
                     error={error}
+                    notPermitted={notPermitted}
+                    expired={expired}
                     onCardClick={() => void handleCitationClick()}
                     onOpenDocumentPreview={() => void handleCitationClick()}
                 />
@@ -465,6 +517,8 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
     const citationRequestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
     const citationBatchRequestKeyRef = useRef<string>("");
     const citationResolvedIdsRef = useRef<Set<string>>(new Set());
+    const [forbiddenCitationIds, setForbiddenCitationIds] = useState<Set<string>>(() => new Set());
+    const [expiredCitationIds, setExpiredCitationIds] = useState<Set<string>>(() => new Set());
 
     useEffect(() => {
         Object.entries(initialCitationDetailMap).forEach(([citationId, detail]) => {
@@ -517,6 +571,23 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
                         ...current,
                         ...nextMap,
                     }));
+                }
+                const unresolvedIds = citationIds.filter((id) => !citationDetailCacheRef.current[id]);
+                const expiredIds = unresolvedIds.filter((id) => getCitationUnresolvedReason(id) === "expired");
+                const forbidden = unresolvedIds.filter((id) => getCitationUnresolvedReason(id) !== "expired");
+                if (forbidden.length) {
+                    setForbiddenCitationIds((prev) => {
+                        const next = new Set(prev);
+                        forbidden.forEach((id) => next.add(id));
+                        return next;
+                    });
+                }
+                if (expiredIds.length) {
+                    setExpiredCitationIds((prev) => {
+                        const next = new Set(prev);
+                        expiredIds.forEach((id) => next.add(id));
+                        return next;
+                    });
                 }
             })
             .catch((error) => {
@@ -639,6 +710,8 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
                                                     key={`private-${matchIndex}`}
                                                     data={citationData}
                                                     initialDetail={citationDetailMap[citationData.citationId]}
+                                                    initialNotPermitted={forbiddenCitationIds.has(citationData.citationId)}
+                                                    initialExpired={expiredCitationIds.has(citationData.citationId)}
                                                     loadCitationDetail={loadCitationDetail}
                                                     popoverKey={`private-${matchIndex}`}
                                                     activePopoverKey={activeCitationPopoverKey}

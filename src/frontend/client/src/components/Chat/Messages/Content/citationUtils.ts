@@ -1,3 +1,4 @@
+import i18next from 'i18next';
 import type { ChatCitation } from '~/api/chatApi';
 import { getFilePathApi } from '~/api/chat/data-service';
 
@@ -23,6 +24,8 @@ export type CitationPreview = {
 export type CitationReferenceItem = {
   key: string;
   data: CitationDisplayData;
+  /** All cited chunk ids for this document. A file-level click highlights them all. */
+  itemIds?: string[];
   detail?: ChatCitation | null;
   legacyPreview?: CitationPreview | null;
 };
@@ -218,6 +221,11 @@ export function normalizeCitationType(type?: string) {
   if (normalizedType === 'article' || normalizedType === 'articlesearch') {
     return 'article';
   }
+  // F062: workflow temporary knowledge base. Must not fall through to rag —
+  // rag clicks go to /knowledge/file_share, which these files do not have.
+  if (normalizedType === 'temp' || normalizedType === 'tempsearch') {
+    return 'temp';
+  }
   return 'rag';
 }
 
@@ -225,8 +233,17 @@ export function isRagCitation(detail?: ChatCitation | null, type?: string) {
   return normalizeCitationType(detail?.type || type) === 'rag';
 }
 
+export function isTempCitation(detail?: ChatCitation | null, type?: string) {
+  return normalizeCitationType(detail?.type || type) === 'temp';
+}
+
 export function isArticleCitation(detail?: ChatCitation | null, type?: string) {
   return normalizeCitationType(detail?.type || type) === 'article';
+}
+
+export function isFilePreviewCitation(detail?: ChatCitation | null, type?: string) {
+  const normalizedType = normalizeCitationType(detail?.type || type);
+  return normalizedType === 'rag' || normalizedType === 'temp';
 }
 
 /** Where an article badge sends the reader: the original post, in a new tab.
@@ -242,6 +259,7 @@ export function getCitationSourceLabelKey(type?: string) {
   const normalizedType = normalizeCitationType(type);
   if (normalizedType === 'web') return 'com_citation.source_web';
   if (normalizedType === 'article') return 'com_citation.source_article';
+  if (normalizedType === 'temp') return 'com_citation.source_temp_kb';
   return 'com_citation.source_document';
 }
 
@@ -288,7 +306,11 @@ export function getCitationDocumentFileType(detail?: ChatCitation | null) {
 
 export function getCitationDocumentPreviewUrl(detail?: ChatCitation | null) {
   const payload = detail?.sourcePayload;
-  return payload?.downloadUrl || '';
+  const signedUrl = payload?.previewUrl || payload?.downloadUrl || '';
+  if (signedUrl) {
+    return signedUrl;
+  }
+  return isTempCitation(detail) ? payload?.sourceUrl || '' : '';
 }
 
 function getCitationKnowledgeFileId(detail?: ChatCitation | null): number | null {
@@ -322,6 +344,12 @@ export type CitationDocumentUrls = { originalUrl: string; previewUrl: string };
 const inflightFileShareCache: Record<string, Promise<CitationDocumentUrls>> = {};
 
 export async function resolveCitationDocumentUrls(detail?: ChatCitation | null): Promise<CitationDocumentUrls> {
+  // Temp citations are conversation uploads, not knowledge_file rows.
+  // Never call /knowledge/file_share for them (F062 AC-05).
+  if (isTempCitation(detail)) {
+    const signedUrl = getCitationDocumentPreviewUrl(detail);
+    return { originalUrl: signedUrl, previewUrl: signedUrl };
+  }
   const fileId = getCitationKnowledgeFileId(detail);
   if (fileId != null) {
     const cacheKey = String(fileId);
@@ -414,9 +442,35 @@ export function parseCitationBBoxes(rawBBox?: string | null): CitationPdfBBox[] 
   }
 }
 
-export function getCitationItemBBoxes(detail: ChatCitation | null, itemId?: string) {
-  const item = getCitationItem(detail, itemId);
-  return parseCitationBBoxes(item?.bbox);
+export function getCitationItemBBoxes(detail: ChatCitation | null, itemId?: string | string[]) {
+  const items = detail?.sourcePayload?.items;
+  if (!items?.length) {
+    return [];
+  }
+
+  const requestedIds = (Array.isArray(itemId) ? itemId : itemId ? [itemId] : [])
+    .map((id) => String(id))
+    .filter(Boolean);
+  const matched = requestedIds.length
+    ? items.filter(
+        (item) => requestedIds.includes(String(item.itemId)) || requestedIds.includes(String(item.chunkId)),
+      )
+    : [];
+  const selected = matched.length ? matched : [items[0]];
+
+  const seen = new Set<string>();
+  const bboxes: CitationPdfBBox[] = [];
+  for (const item of selected) {
+    for (const box of parseCitationBBoxes(item?.bbox)) {
+      const key = `${box.page}:${box.bbox.map((value) => value.toFixed(2)).join(',')}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      bboxes.push(box);
+    }
+  }
+  return bboxes;
 }
 
 export function getLegacyCitationPreview(webContent: any, label?: number): CitationPreview | null {
@@ -487,6 +541,17 @@ export function buildCitationPreview(detail: ChatCitation | null, data: Partial<
     };
   }
 
+  if (type === 'temp') {
+    return {
+      title: getCitationDocumentName(detail) || `引用 ${data.label ?? ''}`,
+      snippet: extractRagParagraphContent(item?.content || item?.snippet || payload.snippet),
+      sourceName: i18next.t('com_citation.source_temp_kb'),
+      sourceMeta: payload.page ? `第 ${payload.page} 页` : item?.page ? `第 ${item.page} 页` : '',
+      link: payload.previewUrl || payload.downloadUrl || payload.sourceUrl,
+      type,
+    };
+  }
+
   return {
     title: getCitationDocumentName(detail) || `引用 ${data.label ?? ''}`,
     snippet: extractRagParagraphContent(item?.content || item?.snippet || payload.snippet),
@@ -523,6 +588,17 @@ export function buildCitationDocumentPreview(detail: ChatCitation | null, data: 
       sourceName: payload.source || payload.url || '网页',
       sourceMeta: formatCitationWebDate(payload.datePublished || ''),
       link: payload.url || payload.sourceUrl,
+      type,
+    };
+  }
+
+  if (type === 'temp') {
+    return {
+      title: getCitationDocumentName(detail) || `引用 ${data.label ?? ''}`,
+      snippet: '',
+      sourceName: i18next.t('com_citation.source_temp_kb'),
+      sourceMeta: payload.fileType || '',
+      link: payload.previewUrl || payload.downloadUrl || payload.sourceUrl,
       type,
     };
   }
@@ -579,19 +655,26 @@ export function buildCitationReferenceItems({
   const { transformedContent, citationMap } = transformPrivateCitations(content || '');
   const items: CitationReferenceItem[] = [];
   const seen = new Set<string>();
+  const grouped = new Map<string, CitationReferenceItem>();
 
   Object.values(citationMap).forEach((data) => {
     const key = `private:${data.citationId}`;
-    if (seen.has(key)) {
+    const existing = grouped.get(key);
+    if (existing) {
+      if (data.itemId && !existing.itemIds?.includes(data.itemId)) {
+        existing.itemIds = [...(existing.itemIds || []), data.itemId];
+      }
       return;
     }
-    seen.add(key);
-    items.push({
+    grouped.set(key, {
       key,
       data,
+      itemIds: data.itemId ? [data.itemId] : [],
       detail: detailMap[data.citationId] ?? null,
     });
   });
+  items.push(...grouped.values());
+  grouped.forEach((item) => seen.add(item.key));
 
   for (const match of transformedContent.matchAll(/\[citation:(\d+)\]/g)) {
     const label = Number(match[1]);

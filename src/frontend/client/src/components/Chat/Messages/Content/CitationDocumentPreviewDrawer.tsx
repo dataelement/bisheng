@@ -11,8 +11,8 @@ import {
   getCitationDocumentFileType,
   getCitationDocumentName,
   getCitationItemBBoxes,
+  isFilePreviewCitation,
   isMediaCitation,
-  isRagCitation,
   resolveCitationDocumentUrls,
   resolveCitationDownloadUrl,
   toAbsolutePreviewUrl,
@@ -22,6 +22,8 @@ import {
 export type CitationDocumentPreviewState = {
   detail: ChatCitation;
   itemId?: string;
+  /** File-level clicks pass every cited chunk so the PDF can highlight them all. */
+  itemIds?: string[];
   locateChunk?: boolean;
 };
 
@@ -63,8 +65,8 @@ export function CitationDocumentPreviewContent({
   className,
 }: CitationDocumentPreviewContentProps) {
   const detail = preview?.detail ?? null;
-  const canRenderPreview = !!detail && isRagCitation(detail);
-  const itemId = preview?.itemId;
+  const canRenderPreview = !!detail && isFilePreviewCitation(detail);
+  const itemId = preview?.itemIds?.length ? preview.itemIds : preview?.itemId;
   const locateChunk = preview?.locateChunk;
   const fileName = detail ? getCitationDocumentName(detail) : '';
   const isMedia = isMediaCitation(detail);
@@ -155,7 +157,7 @@ export default function CitationDocumentPreviewDrawer({
   // preview — otherwise a clip downloads as its transcript under an .mp4 name.
   const [resolvedRawFileUrl, setResolvedRawFileUrl] = useState('');
   const fileUrl = toAbsolutePreviewUrl(resolvedRawFileUrl);
-  const canRenderPreview = !!preview && isRagCitation(preview.detail);
+  const canRenderPreview = !!preview && isFilePreviewCitation(preview.detail);
 
   useEffect(() => {
     if (!canRenderPreview || !isFullBleedMobile) return;
@@ -203,7 +205,7 @@ export default function CitationDocumentPreviewDrawer({
     let active = true;
     setResolvedRawFileUrl('');
 
-    if (!detail || !isRagCitation(detail)) {
+    if (!detail || !isFilePreviewCitation(detail)) {
       return () => {
         active = false;
       };

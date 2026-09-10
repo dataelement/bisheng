@@ -2198,6 +2198,7 @@
   "com_citation.source_web": "网页",
   "com_citation.source_document": "文档",
   "com_citation.source_article": "文章",
+  "com_citation.source_temp_kb": "临时知识库",
   "com_citation.badge_aria": "{{source}}引用 {{index}}",
   "com_citation.no_permission": "暂无权限查看该来源",
   "com_citation.source_expired": "来源已失效",

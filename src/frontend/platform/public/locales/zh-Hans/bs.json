@@ -1033,7 +1033,10 @@
     "contentSecurityR": "内容安全审查",
     "errors": {
       "selectAtLeastOneWordType": "词表至少需要选择一个",
-      "autoReplyNotEmpty": "自动回复内容不可为空"
+      "autoReplyNotEmpty": "自动回复内容不可为空",
+      "workbenchSelectAtLeastOneWordType": "请至少选择一个敏感词表",
+      "workbenchAutoReplyNotEmpty": "自动回复内容不能为空",
+      "workbenchAutoReplyMaxLength": "自动回复内容不能超过500字"
     },
     "saveSuccess": "保存成功",
     "contentSecurityDesc": "通过敏感词表或 API 对会话内容进行安全审查",
@@ -1090,6 +1093,9 @@
     "daily": "日常",
     "subscribe": "订阅",
     "subscriptionContentSecurityDesc": "对订阅文章进行敏感词审查，命中后普通用户不可查看详情。",
+    "workbenchContentSecurityDesc": "通过敏感词表对会话内容进行安全审查",
+    "workbenchCustomWordsPlaceholder": "使用换行符进行分隔，每行一个",
+    "workbenchAutoReplyPlaceholder": "填写命中安全审查时的自动回复内容，例如“当前对话内容违反相关规范，请修改后重新输入”",
     "customWordsNewlinePlaceholder": "使用换行符进行分割，每行一个",
     "knowledgeSpace": "知识空间",
     "model": "模型",
@@ -2063,7 +2069,10 @@
     "references": "参考资料",
     "closeReferences": "关闭参考资料",
     "backToReferences": "返回参考资料列表",
-    "noDownloadUrl": "暂无可下载文件地址"
+    "noDownloadUrl": "暂无可下载文件地址",
+    "tempKb": "临时知识库",
+    "noPermission": "暂无权限查看该来源",
+    "sourceExpired": "来源已失效"
   },
   "openApiManagement": {
     "empty": "暂无记录",
