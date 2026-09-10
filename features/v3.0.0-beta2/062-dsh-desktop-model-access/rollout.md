@@ -4,15 +4,15 @@
 
 ## 入口与相互信任
 
-客户端只配置一个 HTTPS Nginx origin。Nginx 的 `/api/*` 进入 Gateway；Gateway 的版本化 `/api/v1/*`、`/api/v2/*` 进入 Python。页面由平台 SPA 提供 `/desktop-login`。DSH 模型流不得经过旧响应包装或整段缓存，Nginx 也应关闭对应 SSE 缓存并允许长连接。
+客户端只配置一个 HTTP 或 HTTPS Nginx origin。Nginx 的 `/api/*` 进入 Gateway；Gateway 的版本化 `/api/v1/*`、`/api/v2/*` 进入 Python。页面由平台 SPA 提供 `/desktop-login`。DSH 模型流不得经过旧响应包装或整段缓存，Nginx 也应关闭对应 SSE 缓存并允许长连接。
 
-两服务的内部地址使用固定 HTTPS origin，并通过证书验证。仅复用原用户同步的一个共享 Secret，不另配双向 HMAC、Token 公私钥或 issuer；两端派生规则见 [部署配置简化](./deployment-simplification.md)。
+两服务的内部地址使用固定 HTTP/HTTPS origin；HTTPS 仍校验证书。109 联调使用 HTTP，公开地址为 `http://192.168.106.109:13001`，无证书导入要求。仅复用原用户同步的一个共享 Secret，不另配双向 HMAC、Token 公私钥或 issuer；两端派生规则见 [部署配置简化](./deployment-simplification.md)。
 
 | Python 配置 | Gateway 配置 | 约束 |
 |---|---|---|
 | dsh.installation_id | dsh.installation-id | 同一安装实例 |
 | dsh.platform_public_url | dsh.public-origin | 客户端可访问的 Nginx origin |
-| dsh.gateway_internal_url | dsh.python-origin | 分别指向对端内部 HTTPS origin |
+| dsh.gateway_internal_url | dsh.python-origin | 分别指向对端内部 HTTP/HTTPS origin |
 | sso_sync.gateway_hmac_secret | bisheng.gateway-hmac-secret | 现有共享 Secret |
 | settings.redis_url | Gateway 原 Redis 配置 | 不新增 DSH Redis 地址 |
 | dsh.billing_timezone | — | 默认 Asia/Shanghai |
