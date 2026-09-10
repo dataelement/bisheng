@@ -61,6 +61,7 @@ export function DshLogin() {
             setCopied(false)
         }
     }
+    const tenantName = user?.leaf_tenant_name?.trim() || user?.tenant_name?.trim()
     const base = location.origin
     let download: string | null = null
     try {
@@ -130,9 +131,9 @@ export function DshLogin() {
                         ) : (
                             <>
                                 <p>
-                                    {t('dsh.authorizeHelp', {
+                                    {t(tenantName ? 'dsh.authorizeHelp' : 'dsh.authorize_without_tenant', {
                                         name: user.user_name,
-                                        tenant: user.tenant_name ?? '',
+                                        tenant: tenantName,
                                     })}
                                 </p>
                                 {flow.status === 'idle' && (

@@ -2072,6 +2072,7 @@
     "login": "登录毕昇以继续",
     "confirm": "确认",
     "authorizeHelp": "以 {{name}}（{{tenant}}）的身份授权 DSH Desktop 使用企业模型。请确认这是你刚刚在客户端发起的登录。",
+    "authorize_without_tenant": "以 {{name}} 的身份授权 DSH Desktop 使用企业模型。请确认这是你刚刚在客户端发起的登录。",
     "authorize": "确认授权",
     "cancel": "拒绝授权",
     "auth_pending": "正在处理，请稍候…",

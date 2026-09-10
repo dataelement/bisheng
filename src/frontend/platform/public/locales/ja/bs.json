@@ -2072,6 +2072,7 @@
     "login": "BiSheng にログイン",
     "confirm": "確認",
     "authorizeHelp": "{{name}}（{{tenant}}）として DSH Desktop を認証します。ご自身がアプリで開始したログインであることを確認してください。",
+    "authorize_without_tenant": "{{name}} として DSH Desktop を認証します。ご自身がアプリで開始したログインであることを確認してください。",
     "authorize": "認証する",
     "cancel": "拒否する",
     "auth_pending": "処理中…",

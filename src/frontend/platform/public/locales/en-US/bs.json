@@ -2127,6 +2127,7 @@
     "login": "Sign in to BiSheng",
     "confirm": "Confirm",
     "authorizeHelp": "Authorize DSH Desktop as {{name}} ({{tenant}}). Confirm that you started this sign-in in the desktop app.",
+    "authorize_without_tenant": "Authorize DSH Desktop as {{name}}. Confirm that you started this sign-in in the desktop app.",
     "authorize": "Authorize",
     "cancel": "Deny",
     "auth_pending": "Processing…",
