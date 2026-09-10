@@ -257,6 +257,42 @@ def _clear_proxy_env(monkeypatch):
         monkeypatch.delenv(key, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_request_contextvars():
+    """Reset the process-wide request ContextVars around every test.
+
+    Same fixture as ``test/dev_toolkit/conftest.py`` and for the same reason,
+    with two more variables: this package seeds ``current_tenant_id`` directly
+    (``app_factory`` / ``deployment_factory`` and the pipeline tests) and runs
+    requests through the real ``verify_open_api_access``, so it can leave a
+    tenant, a permission actor or an open-API principal behind for whatever
+    runs next in the same process.
+
+    Measured after moving the factory onto the beta2 open-API base: running
+    ``test/app_publish`` before ``test/open_api`` made
+    ``test_execution_snapshot.py::test_worker_context_is_restored_and_reset``
+    fail on ``get_current_tenant_id() is None`` — that test asserts the worker
+    context is *torn down*, which a leaked tenant id makes untrue. Each package
+    passed on its own; only the combination showed it, which is exactly the
+    shape of failure a per-directory CI run hides.
+    """
+    from bisheng.core.context.tenant import _bypass_tenant_filter, current_tenant_id
+    from bisheng.open_api.domain.context import current_open_api_principal
+    from bisheng.permission.application.identity import current_permission_actor
+
+    tokens = [
+        (current_tenant_id, current_tenant_id.set(None)),
+        (_bypass_tenant_filter, _bypass_tenant_filter.set(False)),
+        (current_permission_actor, current_permission_actor.set(None)),
+        (current_open_api_principal, current_open_api_principal.set(None)),
+    ]
+    try:
+        yield
+    finally:
+        for var, token in reversed(tokens):
+            var.reset(token)
+
+
 # ---------------------------------------------------------------------------
 # Database (aiosqlite) + session binding
 # ---------------------------------------------------------------------------
