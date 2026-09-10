@@ -2,6 +2,7 @@
 import request from "./request";
 import { resolveKnowledgeParseFailureMessage } from "./knowledgeParseFailureMessage";
 import { mapInitialPermissionResult } from "./permission";
+import { createApiStatusError } from "~/utils/apiStatusError";
 import type {
     InitialPermissionResult,
     InitialPermissionsPayload,
@@ -1800,7 +1801,9 @@ export async function addFilesApi(
         { showError: true }
     ) as ApiResponse<RawFileMutationItemResult[]> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
-        throw new Error(res.status_message || res.message || res.msg || "register files failed");
+        // Carry the code, not just the words: the caller decides whether to
+        // retry from it, and a considered rejection must not be repeated.
+        throw createApiStatusError(res);
     }
     return extractList<RawFileMutationItemResult>(res?.data).map((raw) =>
         mapFileMutationItem(raw, space_id)

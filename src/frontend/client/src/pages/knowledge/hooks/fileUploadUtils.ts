@@ -10,6 +10,26 @@ import {
     type KnowledgeFile,
     type UploadFileResponse,
 } from "~/api/knowledge";
+import { extractApiStatusCode } from "~/utils/apiStatusError";
+
+/**
+ * Was this rejection the server's considered answer, or did the call fall over?
+ *
+ * Registering staged uploads used to retry on any failure. A deterministic
+ * rejection — the space's size quota, say — cleans the staged object up on its
+ * way out, so the retry found nothing to register and failed with a raw S3
+ * "NoSuchKey". That surfaces as business code 500, which the response
+ * interceptor treats as a dead backend and covers the screen with the
+ * maintenance overlay. The uploader was told the service was down; they were
+ * over quota.
+ *
+ * A business code means the server considered the request and said no: repeat
+ * it and the answer is the same. Only a call that never got an answer is worth
+ * repeating.
+ */
+export function isRetryableRegistrationFailure(error: unknown): boolean {
+    return extractApiStatusCode(error) == null;
+}
 
 interface UploadErrorShape {
     statusCode?: number;
@@ -173,6 +193,7 @@ export async function registerUploadedStagesWithRetry({
     try {
         return await register(spaceId, payload);
     } catch (firstError) {
+        if (!isRetryableRegistrationFailure(firstError)) throw firstError;
         console.warn("[useFileUpload] file registration failed, retrying once:", firstError);
         return register(spaceId, payload);
     }
@@ -193,6 +214,7 @@ export async function registerFolderStagesWithRetry({
     try {
         return await register(spaceId, payload);
     } catch (firstError) {
+        if (!isRetryableRegistrationFailure(firstError)) throw firstError;
         console.warn("[useFileUpload] folder registration failed, retrying once:", firstError);
         return register(spaceId, payload);
     }
