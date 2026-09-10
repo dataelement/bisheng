@@ -785,6 +785,7 @@ class KnowledgeDao(KnowledgeBase):
                 KnowledgeSpaceScope.owner_type == KnowledgeSpaceOwnerTypeEnum.USER.value,
                 KnowledgeSpaceScope.owner_id == int(owner_id),
             )
+            .order_by(Knowledge.id.asc())
         )
         if exclude_id is not None:
             statement = statement.where(Knowledge.id != int(exclude_id))

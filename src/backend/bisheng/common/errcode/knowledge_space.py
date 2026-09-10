@@ -27,6 +27,11 @@ class DepartmentKnowledgeSpaceAmbiguousError(BaseErrorCode):
     Msg: str = "部门存在多个可选知识库，请先明确目标知识库"
 
 
+class PersonalDefaultSpaceCreationBusyError(BaseErrorCode):
+    Code: int = 18005
+    Msg: str = "个人知识库正在创建或创建服务暂不可用, 请稍后重试"
+
+
 class SpaceFolderNotFoundError(BaseErrorCode):
     Code: int = 18010
     Msg: str = "Folder does not exist"

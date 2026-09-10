@@ -4745,7 +4745,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
     async def _ensure_personal_default_space(self) -> Knowledge:
-        """懒创建、按名幂等：已有同名个人默认库→返回；否则创建；并发/撞名兜底回查。"""
+        """复用已有默认库, 缺失时按租户和用户串行创建。"""
+        from bisheng.knowledge.domain.services.personal_default_space_creation_guard import (
+            PersonalDefaultSpaceCreationGuard,
+        )
+
+        existing = await self._find_personal_default_space()
+        if existing:
+            return existing
+        guard = PersonalDefaultSpaceCreationGuard(self.login_user.tenant_id, self.login_user.user_id)
+        return await guard.run(self._create_personal_default_space_if_missing)
+
+    async def _create_personal_default_space_if_missing(self) -> Knowledge:
+        # 等待锁时其他请求可能已经建成, 必须在锁内重新查询。
         existing = await self._find_personal_default_space()
         if existing:
             return existing
@@ -4766,6 +4778,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 validate_tag_libraries=False,
             )
         except Exception:
+            logger.exception("Personal default space creation failed user_id={}", self.login_user.user_id)
             again = await self._find_personal_default_space()
             if again:
                 return again

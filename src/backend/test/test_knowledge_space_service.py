@@ -4601,6 +4601,9 @@ async def test_shougang_portal_personal_spaces_filters_to_writable_personal_spac
 
 @pytest.mark.asyncio
 async def test_system_personal_spaces_are_created_with_private_auth_type(service):
+    async def run_guarded(operation):
+        return await operation()
+
     favorite_space = _make_space(
         space_id=7,
         user_id=service.login_user.user_id,
@@ -4626,6 +4629,11 @@ async def test_system_personal_spaces_are_created_with_private_auth_type(service
             "_find_personal_default_space",
             new_callable=AsyncMock,
             return_value=None,
+        ),
+        patch.object(service, "_resolve_default_tag_library_id", new=AsyncMock(return_value=None)),
+        patch(
+            "bisheng.knowledge.domain.services.personal_default_space_creation_guard.PersonalDefaultSpaceCreationGuard.run",
+            new=AsyncMock(side_effect=run_guarded),
         ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",

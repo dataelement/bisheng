@@ -875,6 +875,63 @@ bash scripts/move_api_sync_files_to_uploader_clinic_spaces.sh \
 没有科室库、解析未成功、目标重名、嵌入模型不一致的文件会跳过并打出原因。
 输出每行包含迁移文件、科室库名称、上传人和科室名称。
 
+### `merge_personal_knowledge_spaces.py`
+
+合并同一用户重复创建的默认个人知识库，只扫描 `personal` 作用域下名为
+`用户名的知识库` 的空间，排除收藏库、自建其他名称的个人库和其他类型知识库。
+保留 ID 最小的库，将其余库的根目录文件、子目录及空目录合并进去。
+
+在 `src/backend/` 执行：
+
+```bash
+# 默认只读预览，报告列出用户、目标库、待清理旧库及迁移/覆盖计划
+.venv/bin/python scripts/merge_personal_knowledge_spaces.py --all-users
+
+# 先核对单个用户
+.venv/bin/python scripts/merge_personal_knowledge_spaces.py --user-id 7
+
+# 执行该用户的合并、同名覆盖和空旧库清理
+.venv/bin/python scripts/merge_personal_knowledge_spaces.py --user-id 7 --apply
+
+# 全部用户；多租户开启时必须显式指定当前要处理的一个租户
+.venv/bin/python scripts/merge_personal_knowledge_spaces.py --all-users --tenant-id 2 --apply
+```
+
+- 按来源库 ID、文件 ID 升序迁移，保留 ID 最小的个人库，保持目录层级。同一目标目录内同名时，后迁入文档覆盖前面的及目标原有文档，数据库中的旧文件与完整旧版本链删除；不同目录的同名文件分别保留。
+- 默认采用原记录迁移：保留文件 ID、文档 ID、版本 ID、版本号、主版本及原文件对象地址，事务内调整文件/文档的知识库、目录和所有者。不会复制再删除来源原文件。为避免误删复用对象，被覆盖文件的 MinIO 对象也暂留，JSONL 的 `overwritten_objects_retained` 列出后续回收清单。
+- 优先读取 Milvus；无数据或读取失败时尝试 ES。可读分段尽量写入目标索引，两种索引独立处理。ES 通常不包含向量：可保留全文内容，但缺少向量会标记解析失败，不调用模型临时补算。
+- 两边都没有数据、索引读写失败、模型不一致、原文件已解析失败/超时、权限或附属资源清理异常：文件记录仍迁入，状态设为 `3`（解析失败），原因写入 `remark`、`user_metadata.personal_space_merge` 与 JSONL；以后可按需重新解析。索引失败不再通过计数一致性门禁阻断合库。
+- 仍保护正在解析/重建/排队的文件、违规内容、活动审批、发布/分享及被引用内容、损坏版本图、目录冲突、频道同步绑定或空间审批。这些结构/业务保护项会跳过并保留对应旧库。数据库提交、记录变化和审计失败仍停止，不能靠修改解析状态伪报成功。
+- 来源文件和文档全部迁出、目录映射及目标记录复查通过后删除空旧库。业务清理入口异常时，重新确认来源无文件/文档后事务删除空库记录及作用域；外部索引、权限等残留写入 `source_space_cleanup_pending`，并将受影响文件标记解析失败。重新解析只重建文件内容，权限和旧索引/对象残留仍需按清单单独处理。
+- 每次生成 `migration_reports/merge_personal_spaces/merge-<run_id>.json`；`--apply` 另生成同名 JSONL，可用 `--report-dir` 更改位置。报告列出 `reparse_file_ids`。`completed_with_reparse` 表示合库完成但有文件需要重新解析或附属资源待处理；`completed_with_skips` 表示仍有跳过或旧库保留。
+- 先扫描元数据，再分重复用户加载文件；逐单元只复查相关文件、版本链、目标目录及冲突项。Milvus 批次 500、ES 写入批次 100，写入请求上限 60 秒，ES 禁止自动重试。原记录迁移省去原文件复制、来源删除及失败回迁。
+- JSON 报告每 20 个单元或间隔 10 秒保存，来源结束及异常退出时也保存；JSONL 关键步骤立即落盘。进程强制中断后先检查 `record_merge_committed`，不能把来源库已无该文件理解成原文件丢失。
+- 退出码：`0` 预览或完成（可能有待解析/跳过），`2` 参数/入口失败，`3` 执行失败，`130` 中断。`--stop-on-error` 保留兼容，索引降级属于已迁入而非单元失败。Ctrl+C 在当前单元结束后停止。
+- 必须停写、串行执行并事先备份。同名覆盖的旧数据库记录无法由重新解析恢复；JSONL 提供核查线索，不能替代备份。仅需部署本脚本一份文件，不依赖其他 `scripts` 模块。
+
+### `move_department_files_to_personal.py`
+
+将部门知识库指定根目录下的文件，按当前 `KnowledgeFile.user_id` 迁入上传人的默认个人库，保留根目录和所有下级目录。脚本可单文件部署，不依赖其他 `scripts` 模块，不删除部门库或来源目录。
+
+```bash
+# 默认只读预览
+python scripts/move_department_files_to_personal.py --folder-name 待整理
+
+# 核对报告后执行；多租户开启时增加 --tenant-id <租户ID>
+python scripts/move_department_files_to_personal.py --folder-name 待整理 --apply
+```
+
+- 保留原文件 ID、文档/版本 ID、版本号、主版本及对象地址，通过数据库事务调整文件和文档的知识库、目录及所有者，不再复制后删除来源原文件。
+- 目标默认个人库不存在时调用业务创建入口；存在多个同名个人库时固定取 ID 最小者。新建个人库/目录在后续失败时保留并记录，重跑复用。
+- 按来源库 ID、文件 ID 顺序逐个迁移，同一用户、同一路径、同名时后迁入覆盖前面的及目标原有完整版本链。数据库中的旧文件/版本链删除与来源归属调整在同一事务内；事务失败回滚。旧目标 MinIO 对象暂留，JSONL 的 `overwritten_objects_retained` 列出回收线索，避免复用对象误删。不同目录同名分别保留，不按 MD5 扩大覆盖。
+- Milvus 无可读数据时读取 ES；可用内容尽量写入目标索引。两边均不可读、索引写入/清理失败、源状态为解析失败/超时、模型不一致时，记录仍迁入并设 `status=3`，原因写入 `remark` 与 `user_metadata.department_to_personal`。ES 通常无向量，只能保留全文，需重新解析才能补齐向量。
+- 部门转个人涉及访问范围变化：文件权限先切换并确认，再提交数据库。权限切换失败时保持来源归属并尝试恢复原权限；恢复失败记录 `permission_restore_failed` 后停止。数据库提交结果不明时先查询归属，不能把已迁入个人库的文件重新授权给旧部门。索引失败降级不适用于权限、数据库和审计失败。
+- 保留用户/租户有效性、目录结构、完整版本链、审批、发布/分享及外部引用保护。正在解析/重建/排队或违规文件跳过；源/目标记录在运行期间变化则拒绝覆盖。跳过项不会伪报成功。
+- 扫描先发现部门库，再按库读取命中目录的子树和相关上传人个人库；执行期间只复查当前文件、目录、版本链及相关目标记录。跨库引用采用单独定向查询，不为查引用反复加载全租户文件。报告每 20 个单元或间隔 10 秒保存，异常和退出也保存，JSONL 关键步骤立即落盘。
+- 报告默认在 `migration_reports/department_to_personal/move-<run_id>.json`，apply 另有 JSONL。`reparse_file_ids` 列出最终仍存在的待解析文件 ID；`completed_with_reparse` 表示有迁入内容需要重新解析，`completed_with_skips` 表示有跳过项。权限、旧索引或对象残留需按审计单独处理，重新解析不能替代权限恢复或旧对象回收。
+- 退出码 `0`：预览或处理完成（可有待解析/跳过）；`2`：入口失败；`3`：执行失败；`130`：中断。Ctrl+C 等当前单元结束后停止；重跑重新扫描已剩余内容。
+- 必须停写、串行执行并事先备份。事务只覆盖关系数据库，跨系统没有全局事务；强杀后检查 `record_merge_committed` 和权限审计，不能直接假定回滚成功。被覆盖的旧版本链无法靠重新解析或普通重跑恢复。
+
 ### `move_knowledge_space_files.py`
 
 扫描一个或多个来源知识空间的 `SUCCESS` 真实文件，可按来源文件夹、门户一级分类 code、
@@ -1562,4 +1619,3 @@ bash scripts/backfill_space_file_points.sh \
   --score-per-file 2 \
   --ignore-accounts "admin,system"
 ```
-

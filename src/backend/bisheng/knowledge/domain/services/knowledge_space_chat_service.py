@@ -21,7 +21,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeDepartmentFileUnavailableError,
     KnowledgeDepartmentFileViewApprovalRequiredError,
 )
-from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+from bisheng.common.errcode.knowledge_space import SpaceNotFoundError, SpacePermissionDeniedError
 from bisheng.common.schemas.telemetry.event_data_schema import PortalQaEventData
 from bisheng.common.stream_errors import StreamRetryEvent, StreamStageError, retry_async_stream
 from bisheng.common.telemetry.portal_event_service import (
@@ -968,10 +968,13 @@ class KnowledgeSpaceChatService:
         # Resolve the retrieval scope (permission check).
         permission_service = self._permission_service()
 
-        async def _space_read_checker(_tenant_id, user_id, space_id):
-            return await permission_service._user_can_read_space(
-                int(user_id), int(space_id)
-            )
+        async def _space_read_checker(_tenant_id, _user_id, space_id):
+            # 与选库、目录浏览共用业务权限并保留公共库和管理员的查看规则。
+            try:
+                await permission_service._require_read_permission(int(space_id))
+            except (SpaceNotFoundError, SpacePermissionDeniedError):
+                return False
+            return True
 
         async def _entry_view_checker(_tenant_id, _user_id, space_id, entry_id):
             if self.department_file_view_access_service is not None:

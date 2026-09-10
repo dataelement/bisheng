@@ -18,7 +18,7 @@ import pytest
 from fastapi import HTTPException
 from langchain_core.documents import Document
 
-from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+from bisheng.common.errcode.knowledge_space import SpaceNotFoundError, SpacePermissionDeniedError
 from bisheng.knowledge.domain.services import knowledge_space_chat_service as svc_mod
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.open_endpoints.api.dependencies import (
@@ -772,7 +772,7 @@ async def test_shared_path_applies_space_scope_before_file_and_tag_filters(monke
     svc._resolve_kb_target_file_ids = AsyncMock(return_value=[10, 11])
     svc._permission_service = MagicMock(
         return_value=SimpleNamespace(
-            _user_can_read_space=AsyncMock(return_value=True),
+            _require_read_permission=AsyncMock(),
             _get_effective_permission_ids=AsyncMock(return_value={"view_file"}),
         )
     )
@@ -861,6 +861,131 @@ async def test_shared_path_applies_space_scope_before_file_and_tag_filters(monke
     )
     reader.search_milvus.assert_awaited_once()
     assert reader.search_milvus.await_args.kwargs["filter_"] is backend_filter
+
+
+@pytest.mark.parametrize(
+    ("space_permissions", "business_error", "file_permissions", "expected_error"),
+    [
+        pytest.param({"view_space"}, None, {"view_file"}, None, id="business-allows-fga-denies"),
+        pytest.param(set(), None, {"view_file"}, "scope_space_not_visible", id="business-denies-fga-allows"),
+        pytest.param({"view_space"}, SpaceNotFoundError(), {"view_file"}, "scope_space_not_visible", id="space-gone"),
+        pytest.param(
+            {"view_space"},
+            RuntimeError("permission unavailable"),
+            {"view_file"},
+            "permission_service_unavailable",
+            id="permission-unavailable",
+        ),
+        pytest.param({"view_space"}, None, set(), None, id="file-denied"),
+    ],
+)
+async def test_shared_retrieval_uses_business_space_permissions(
+    monkeypatch,
+    space_permissions,
+    business_error,
+    file_permissions,
+    expected_error,
+):
+    from bisheng.knowledge.domain.contracts.errors import SharedStorageContractError
+    from bisheng.knowledge.domain.contracts.retrieval_scope import CanonicalChunkHit
+    from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+    svc = _make_service(user_id=1)
+    space = SimpleNamespace(id=3605, tenant_id=1, type=3, state=1)
+    entry = KnowledgeFile(
+        id=90615,
+        knowledge_id=3605,
+        tenant_id=1,
+        file_name="协同办公平台.md",
+        reference_document_id=2520,
+        entry_type="manager",
+        entry_status="active",
+        projection_status="ready",
+        desired_content_generation=1,
+        applied_content_generation=1,
+        desired_entry_generation=1,
+        applied_entry_generation=1,
+    )
+    document = KnowledgeDocument(
+        id=2520,
+        tenant_id=1,
+        knowledge_id=3605,
+        primary_version_id=501,
+        lifecycle_status="active",
+        content_generation=1,
+    )
+    svc.file_repo = SimpleNamespace(
+        find_by_ids=AsyncMock(return_value=[entry]),
+        find_active_entries_for_documents=AsyncMock(return_value=[entry]),
+        find_active_entries_for_documents_any_space=AsyncMock(return_value=[entry]),
+    )
+    svc.doc_repo.find_by_ids = AsyncMock(return_value=[document])
+    svc._resolve_kb_target_file_ids = AsyncMock(return_value=None)
+
+    permission_service = KnowledgeSpaceService(svc.request, svc.login_user)
+
+    async def effective_permissions(object_type, object_id, **kwargs):
+        if object_type == "knowledge_space":
+            if business_error is not None:
+                raise business_error
+            return space_permissions
+        return file_permissions
+
+    # 业务权限结果与底层关系检查相反以防止检索再次绕过业务规则。
+    permission_service._get_effective_permission_ids = AsyncMock(side_effect=effective_permissions)
+    permission_service._user_can_read_space = AsyncMock(return_value=not bool(space_permissions))
+    svc._knowledge_space_permission_service = permission_service
+    monkeypatch.setattr(svc_mod.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=space))
+    monkeypatch.setattr(
+        "bisheng.knowledge.rag.shared_space_storage.aresolve_space_shared_routing",
+        AsyncMock(return_value=SimpleNamespace(routing_version=8, collection_name="col_space_shared_1")),
+    )
+    hit = CanonicalChunkHit(
+        canonical_document_id=2520,
+        canonical_version_id=501,
+        chunk_index=0,
+        text="协同办公平台内容",
+        score=0.9,
+        content_generation=1,
+        membership_generation=1,
+    )
+    reader = SimpleNamespace(
+        search_milvus=AsyncMock(return_value=[hit]),
+        search_es=AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.rag.shared_space_storage.SharedSpaceStorageReader",
+        MagicMock(return_value=reader),
+    )
+    monkeypatch.setattr(svc_mod.LLMService, "aget_knowledge_default_embedding", AsyncMock(return_value=MagicMock()))
+    monkeypatch.setattr(
+        "bisheng.core.search.elasticsearch.manager.get_es_connection",
+        AsyncMock(return_value=MagicMock()),
+    )
+
+    async def retrieve():
+        return await svc._aretrieve_chunks_shared(
+            query="总结一下",
+            knowledge_base_ids=[3605],
+            kb_filters={3605: {"file_ids": [90615]}},
+            top_k=5,
+            max_content=8000,
+        )
+
+    if expected_error:
+        with pytest.raises(SharedStorageContractError) as exc:
+            await retrieve()
+        assert exc.value.code.value == expected_error
+        reader.search_milvus.assert_not_awaited()
+        reader.search_es.assert_not_awaited()
+    else:
+        result = await retrieve()
+        assert [(kb_id, doc.page_content) for kb_id, doc in result] == (
+            [(3605, "协同办公平台内容")] if file_permissions else []
+        )
+    permission_service._user_can_read_space.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

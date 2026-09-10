@@ -109,6 +109,7 @@ from bisheng.user.domain.models.user import User  # noqa: E402
 from bisheng.worker.knowledge.file_worker import copy_normal, copy_vector  # noqa: E402
 
 logger = logging.getLogger(__name__)
+PERSONAL_SPACE_MERGE_API_VERSION = 1
 
 EXIT_OK = 0
 EXIT_INPUT_ERROR = 2
@@ -453,14 +454,14 @@ class CategoryLabelIndex:
 class TargetContext:
     tenant_id: int
     space: Knowledge
-    folder: KnowledgeFile
+    folder: KnowledgeFile | None
     owner: User
     file_level_path: str
     level: int
 
     @property
     def key(self) -> tuple[int, int]:
-        return int(self.space.id or 0), int(self.folder.id or 0)
+        return int(self.space.id or 0), int(self.folder.id or 0) if self.folder else 0
 
 
 def build_explicit_target_context(
@@ -2485,7 +2486,11 @@ def _target_permission_rows(
     object_ref = f"knowledge_file:{target_file.id}"
     return (
         {"user": f"user:{target.owner.user_id}", "relation": "owner", "object": object_ref},
-        {"user": f"folder:{target.folder.id}", "relation": "parent", "object": object_ref},
+        {
+            "user": f"folder:{target.folder.id}" if target.folder else f"knowledge_space:{target.space.id}",
+            "relation": "parent",
+            "object": object_ref,
+        },
     )
 
 
@@ -3399,7 +3404,7 @@ def _result_for_source(
         ),
         version_no=version_number,
         target_space_id=int(target.space.id),
-        target_folder_id=int(target.folder.id),
+        target_folder_id=int(target.folder.id) if target.folder else None,
         category_code=unit.category_code
         if unit
         else _normalize_code(parse_shougang_file_encoding_codes(source_file)[0]),

@@ -31,8 +31,15 @@ async def test_ensure_personal_default_returns_existing():
 async def test_ensure_personal_default_creates_when_missing():
     svc = _svc()
     created = Knowledge(id=201, name="张三的知识库", user_id=7, type=3)
+
+    async def run_guarded(operation):
+        return await operation()
+
     with patch.object(KnowledgeSpaceService, "_find_personal_default_space",
                       new=AsyncMock(return_value=None)), \
+         patch.object(KnowledgeSpaceService, "_resolve_default_tag_library_id", new=AsyncMock(return_value=None)), \
+         patch("bisheng.knowledge.domain.services.personal_default_space_creation_guard.PersonalDefaultSpaceCreationGuard.run",
+               new=AsyncMock(side_effect=run_guarded)), \
          patch.object(KnowledgeSpaceService, "create_knowledge_space",
                       new=AsyncMock(return_value=created)) as creator:
         space = await svc._ensure_personal_default_space()
