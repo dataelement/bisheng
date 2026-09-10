@@ -6664,6 +6664,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def advanced_search_shougang_portal_files(
         self,
         req: ShougangPortalAdvancedFileSearchReq,
+        *,
+        deduplicate_documents: bool = False,
     ) -> dict:
         (
             spaces,
@@ -6707,7 +6709,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
         limit = min(max(int(req.limit or 20), 1), 100)
         search_service, file_repository = self._require_shougang_portal_fulltext_dependencies()
-        session = await search_service.begin(query, cursor=req.cursor)
+        if deduplicate_documents:
+            session = await search_service.begin(query, cursor=req.cursor, deduplicate_documents=True)
+        else:
+            session = await search_service.begin(query, cursor=req.cursor)
+        seen_documents = set(session.emitted_document_ids) if deduplicate_documents else set()
         visible_files: list[tuple[KnowledgeFile, list[Any]]] = []
         scanned_hits = 0
         scanned_batches = 0
@@ -6750,6 +6756,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     file_id = int(file.id)
                     if file_id not in visible_ids:
                         continue
+                    if deduplicate_documents:
+                        document_id = int(file.reference_document_id or file_id)
+                        if document_id in seen_documents:
+                            continue
+                        seen_documents.add(document_id)
                     visible_files.append((file, sort_by_file_id[file_id]))
                     if len(visible_files) > limit:
                         break
@@ -6780,11 +6791,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 file_subcategory_code=req.file_subcategory_code,
                 include_source_paths=True,
             )
-            next_cursor = (
-                search_service.encode_next_cursor(session, sort_values=cursor_sort)
-                if has_more and cursor_sort
-                else None
-            )
+            next_cursor = None
+            if has_more and cursor_sort:
+                if deduplicate_documents:
+                    # 只保存已返回文档。预读的下一篇必须留给下一页。
+                    emitted_ids = {int(item.id) for item in page_items}
+                    emitted_documents = session.emitted_document_ids | {
+                        int(file.reference_document_id or file.id) for file in page_files if int(file.id) in emitted_ids
+                    }
+                    next_cursor = await search_service.encode_document_cursor(
+                        session,
+                        sort_values=cursor_sort,
+                        emitted_document_ids=emitted_documents,
+                    )
+                else:
+                    next_cursor = search_service.encode_next_cursor(session, sort_values=cursor_sort)
             logger.info(
                 "portal advanced fulltext search completed: field={} sort={} "
                 "has_keywords={} has_uploader_filter={} has_source_filter={} "
@@ -9501,7 +9522,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         payload["sort"] = sort
         payload["document_type"] = self._normalize_shougang_document_type_code(req.document_type)
         advanced_req = ShougangPortalAdvancedFileSearchReq.model_validate(payload)
-        return await self.advanced_search_shougang_portal_files(advanced_req)
+        return await self.advanced_search_shougang_portal_files(advanced_req, deduplicate_documents=True)
 
     @staticmethod
     def _map_browse_sort_to_fulltext_sort(sort: str | None) -> str:

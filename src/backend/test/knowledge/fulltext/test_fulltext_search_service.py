@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -5,7 +6,11 @@ from elasticsearch import NotFoundError
 
 from bisheng.common.errcode.knowledge import (
     KnowledgeFulltextIndexIncompatibleError,
+    KnowledgeFulltextSearchUnavailableError,
     KnowledgeInvalidCursorError,
+)
+from bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_cursor_repository_impl import (
+    KnowledgeFulltextCursorRepositoryImpl,
 )
 from bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_index_repository_impl import (
     KnowledgeFulltextIndexConfigurationError,
@@ -121,3 +126,81 @@ async def test_expired_pit_is_invalid_cursor_and_sort_contract_is_checked():
     )
     with pytest.raises(KnowledgeFulltextIndexIncompatibleError):
         await service.fetch(query, session, size=20)
+
+
+async def test_document_cursor_snapshots_are_replayable_and_reject_changed_scope_or_expiry(monkeypatch):
+    values = {}
+
+    async def save(key, value, *, ex):
+        assert ex == 120
+        values[key] = value
+        return True
+
+    redis = SimpleNamespace(
+        async_connection=SimpleNamespace(
+            set=save,
+            get=AsyncMock(side_effect=lambda key: values.get(key)),
+        )
+    )
+    service, repository, _ = build_service()
+    service.cursor_repository = KnowledgeFulltextCursorRepositoryImpl(redis)
+    repository.open_pit.return_value = "pit-documents"
+    query = KnowledgeFulltextAdvancedSearchQuery(space_ids=[1], document_type="NEW")
+    first = await service.begin(query, cursor=None, deduplicate_documents=True)
+    token = await service.encode_document_cursor(
+        first,
+        sort_values=["2026-01-01", 42, 1],
+        emitted_document_ids={2505},
+    )
+    resumed = await service.begin(query, cursor=token, deduplicate_documents=True)
+    assert resumed.emitted_document_ids == {2505}
+    assert resumed.search_after == ["2026-01-01", 42, 1]
+    next_token = await service.encode_document_cursor(
+        resumed,
+        sort_values=["2026-01-02", 43, 2],
+        emitted_document_ids={2505, 2506},
+    )
+    assert token != next_token
+    replayed = await service.begin(query, cursor=token, deduplicate_documents=True)
+    assert replayed == resumed
+    assert first.emitted_document_ids == set()
+    changed = query.model_copy(update={"space_ids": [2]})
+    with pytest.raises(KnowledgeInvalidCursorError):
+        await service.begin(changed, cursor=token, deduplicate_documents=True)
+    with monkeypatch.context() as context:
+        context.setattr(
+            "bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_cursor_repository_impl.get_current_tenant_id",
+            lambda: 999,
+        )
+        with pytest.raises(KnowledgeInvalidCursorError):
+            await service.begin(query, cursor=token, deduplicate_documents=True)
+    values.clear()
+    with pytest.raises(KnowledgeInvalidCursorError):
+        await service.begin(query, cursor=token, deduplicate_documents=True)
+
+
+@pytest.mark.parametrize("operation", ["load", "save"])
+async def test_document_cursor_storage_failure_does_not_reset_pagination(monkeypatch, operation):
+    # 全局 fixture 将 redis.exceptions 预先 mock。这里恢复真实异常类的行为。
+    class RedisConnectionError(Exception):
+        pass
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_fulltext_search_service.RedisError",
+        RedisConnectionError,
+    )
+    service, repository, _ = build_service()
+    repository.open_pit.return_value = "pit-1"
+    service.cursor_repository = AsyncMock()
+    getattr(service.cursor_repository, operation).side_effect = RedisConnectionError("unavailable")
+    query = KnowledgeFulltextAdvancedSearchQuery(space_ids=[1], document_type="NEW")
+    with pytest.raises(KnowledgeFulltextSearchUnavailableError):
+        if operation == "load":
+            await service.begin(query, cursor="missing", deduplicate_documents=True)
+        else:
+            session = await service.begin(query, cursor=None, deduplicate_documents=True)
+            await service.encode_document_cursor(
+                session,
+                sort_values=["2026-01-01", 42, 1],
+                emitted_document_ids={2505},
+            )

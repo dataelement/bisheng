@@ -24,6 +24,9 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_file_reposi
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_similarity_candidate_repository_impl import (
     KnowledgeFileSimilarityCandidateRepositoryImpl,
 )
+from bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_cursor_repository_impl import (
+    KnowledgeFulltextCursorRepositoryImpl,
+)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_index_repository_impl import (
     KnowledgeFulltextIndexRepositoryImpl,
 )
@@ -118,6 +121,7 @@ async def get_knowledge_fulltext_search_service() -> KnowledgeFulltextSearchServ
     return KnowledgeFulltextSearchService(
         repository=KnowledgeFulltextSearchRepositoryImpl(client),
         readiness_guard=_knowledge_fulltext_readiness_guard,
+        cursor_repository=KnowledgeFulltextCursorRepositoryImpl(),
     )
 
 

@@ -12,6 +12,8 @@ from typing import Any
 
 from elastic_transport import TransportError
 from elasticsearch import ApiError, NotFoundError
+from pydantic import ValidationError
+from redis.exceptions import RedisError
 
 from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
 from bisheng.common.errcode.knowledge import (
@@ -22,6 +24,9 @@ from bisheng.common.errcode.knowledge import (
 from bisheng.knowledge.domain import knowledge_fulltext_constants as constants
 from bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_index_repository_impl import (
     KnowledgeFulltextIndexConfigurationError,
+)
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_fulltext_cursor_repository import (
+    KnowledgeFulltextCursorRepository,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_fulltext_index_repository import (
     KnowledgeFulltextIndexRepository,
@@ -79,9 +84,11 @@ class KnowledgeFulltextSearchService:
         *,
         repository: KnowledgeFulltextSearchRepository,
         readiness_guard: KnowledgeFulltextReadinessGuard,
+        cursor_repository: KnowledgeFulltextCursorRepository | None = None,
     ):
         self.repository = repository
         self.readiness_guard = readiness_guard
+        self.cursor_repository = cursor_repository
 
     @staticmethod
     def context_signature(query: KnowledgeFulltextAdvancedSearchQuery) -> str:
@@ -110,11 +117,32 @@ class KnowledgeFulltextSearchService:
         query: KnowledgeFulltextAdvancedSearchQuery,
         *,
         cursor: str | None,
+        deduplicate_documents: bool = False,
     ) -> KnowledgeFulltextSearchSession:
         await self.readiness_guard.ensure_ready()
         context = self.context_signature(query)
         expected_sort_values = self.expected_sort_values(query)
-        if cursor:
+        if deduplicate_documents:
+            context = hashlib.sha256(f"{context}:canonical-documents-v1".encode()).hexdigest()
+            if cursor:
+                if self.cursor_repository is None:
+                    raise KnowledgeFulltextSearchUnavailableError()
+                try:
+                    state = await self.cursor_repository.load(cursor)
+                except (RedisError, OSError) as exc:
+                    raise KnowledgeFulltextSearchUnavailableError(exception=exc) from exc
+                except ValidationError as exc:
+                    raise KnowledgeInvalidCursorError(exception=exc) from exc
+                if (
+                    state is None
+                    or state.context_signature != context
+                    or state.expected_sort_values != expected_sort_values
+                    or not state.search_after
+                    or len(state.search_after) != expected_sort_values
+                ):
+                    raise KnowledgeInvalidCursorError()
+                return state
+        elif cursor:
             try:
                 values = decode_cursor(
                     cursor,
@@ -186,6 +214,25 @@ class KnowledgeFulltextSearchService:
             (session.pit_id, *sort_values),
             context=session.context_signature,
         )
+
+    async def encode_document_cursor(
+        self,
+        session: KnowledgeFulltextSearchSession,
+        *,
+        sort_values: list[Any],
+        emitted_document_ids: set[int],
+    ) -> str:
+        if self.cursor_repository is None:
+            raise KnowledgeFulltextSearchUnavailableError()
+        if len(sort_values) != session.expected_sort_values:
+            raise KnowledgeFulltextIndexIncompatibleError()
+        state = session.model_copy(deep=True)
+        state.search_after = list(sort_values)
+        state.emitted_document_ids = set(emitted_document_ids)
+        try:
+            return await self.cursor_repository.save(state)
+        except (RedisError, OSError) as exc:
+            raise KnowledgeFulltextSearchUnavailableError(exception=exc) from exc
 
     async def close(self, session: KnowledgeFulltextSearchSession) -> None:
         try:

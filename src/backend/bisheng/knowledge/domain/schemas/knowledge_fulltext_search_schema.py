@@ -300,6 +300,7 @@ class KnowledgeFulltextSearchSession(StrictSchema):
     search_after: list[Any] | None = None
     context_signature: str = Field(min_length=64, max_length=64)
     expected_sort_values: int = Field(ge=2)
+    emitted_document_ids: set[int] = Field(default_factory=set)
 
 
 class KnowledgeFulltextUploaderCandidate(StrictSchema):
