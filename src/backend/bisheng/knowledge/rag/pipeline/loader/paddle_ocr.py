@@ -1,6 +1,8 @@
+import asyncio
 import base64
 import os
 import re
+import time
 
 import httpx
 import requests
@@ -19,6 +21,9 @@ _TABLE_HTML_RE = re.compile(r"<table[^>]*>.*?</table>", re.DOTALL | re.IGNORECAS
 
 class PaddleOcrLoader(BaseBishengLoader):
     """PaddleOCR document loader for parsing documents using PaddleOCR API."""
+
+    _RETRYABLE_HTTP_STATUS_CODES = {429, 502, 503, 504}
+    _RETRYABLE_ERROR_CODES = {10010, 12002}
 
     # Mapping from PaddleOCR block labels to standard types.
     # Observed labels in production: paragraph_title, doc_title, figure_title,
@@ -55,6 +60,8 @@ class PaddleOcrLoader(BaseBishengLoader):
         retain_images: bool = True,
         filter_page_header_footer: bool = False,
         request_kwargs: dict | None = None,
+        max_retries: int = 3,
+        retry_backoff: float = 1.0,
         *args,
         **kwargs,
     ):
@@ -65,6 +72,8 @@ class PaddleOcrLoader(BaseBishengLoader):
         self.request_kwargs = request_kwargs if request_kwargs else {}
 
         self.timeout = timeout
+        self.max_retries = max(0, max_retries)
+        self.retry_backoff = max(0.0, retry_backoff)
         self.retain_images = retain_images
         self.filter_page_header_footer = filter_page_header_footer
 
@@ -101,44 +110,90 @@ class PaddleOcrLoader(BaseBishengLoader):
             raise EtlException(f"PaddleOCR API error: {result.get('errorMsg', 'Unknown error')}")
         return result.get("result", {})
 
+    def _should_retry(self, status_code: int, result: dict | None) -> bool:
+        error_code = result.get("errorCode") if result else None
+        return status_code in self._RETRYABLE_HTTP_STATUS_CODES or error_code in self._RETRYABLE_ERROR_CODES
+
+    def _retry_delay(self, retry_index: int) -> float:
+        return self.retry_backoff * (2**retry_index)
+
+    @staticmethod
+    def _response_json(resp) -> dict | None:
+        try:
+            result = resp.json()
+        except ValueError:
+            return None
+        return result if isinstance(result, dict) else None
+
+    def _log_retry(self, status_code: int, result: dict | None, retry_number: int, delay: float) -> None:
+        error_code = result.get("errorCode") if result else None
+        logger.warning(
+            "PaddleOCR API temporarily unavailable (status={}, error_code={}); retry {}/{} in {}s",
+            status_code,
+            error_code,
+            retry_number,
+            self.max_retries,
+            delay,
+        )
+
     def _call_api_sync(self, b64_data: str) -> dict:
         """Call PaddleOCR API synchronously."""
         payload = self._build_payload(b64_data)
-        try:
-            resp = requests.post(
-                self.url,
-                json=payload,
-                headers=self.headers,
-                timeout=self.timeout,
-            )
-        except requests.Timeout as e:
-            logger.error(f"PaddleOCR API request timed out: {e}")
-            raise EtlException("PaddleOCR API timeout")
-        except Exception as e:
-            if "Timeout" in str(e):
+        for retry_index in range(self.max_retries + 1):
+            try:
+                resp = requests.post(
+                    self.url,
+                    json=payload,
+                    headers=self.headers,
+                    timeout=self.timeout,
+                )
+            except requests.Timeout as e:
                 logger.error(f"PaddleOCR API request timed out: {e}")
                 raise EtlException("PaddleOCR API timeout")
-            raise e
+            except Exception as e:
+                if "Timeout" in str(e):
+                    logger.error(f"PaddleOCR API request timed out: {e}")
+                    raise EtlException("PaddleOCR API timeout")
+                raise
 
-        if resp.status_code != 200:
-            raise EtlException(f"PaddleOCR API error: status={resp.status_code}, resp={resp.text}")
-        try:
-            resp_json = resp.json()
-        except (ValueError, requests.exceptions.JSONDecodeError) as e:
-            logger.error(f"PaddleOCR API returned invalid JSON: {e}")
-            raise EtlException("PaddleOCR API returned invalid JSON response")
-        return self._validate_response(resp_json)
+            resp_json = self._response_json(resp)
+            if self._should_retry(resp.status_code, resp_json) and retry_index < self.max_retries:
+                delay = self._retry_delay(retry_index)
+                self._log_retry(resp.status_code, resp_json, retry_index + 1, delay)
+                time.sleep(delay)
+                continue
+            if resp.status_code != 200:
+                raise EtlException(f"PaddleOCR API error: status={resp.status_code}, resp={resp.text}")
+            if resp_json is None:
+                logger.error("PaddleOCR API returned invalid JSON")
+                raise EtlException("PaddleOCR API returned invalid JSON response")
+            return self._validate_response(resp_json)
+
+        raise AssertionError("unreachable")
 
     async def _call_api_async(self, b64_data: str) -> dict:
         """Call PaddleOCR API asynchronously."""
         payload = self._build_payload(b64_data)
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.post(
-                    self.url,
-                    json=payload,
-                    headers=self.headers,
-                )
+                for retry_index in range(self.max_retries + 1):
+                    resp = await client.post(
+                        self.url,
+                        json=payload,
+                        headers=self.headers,
+                    )
+                    resp_json = self._response_json(resp)
+                    if self._should_retry(resp.status_code, resp_json) and retry_index < self.max_retries:
+                        delay = self._retry_delay(retry_index)
+                        self._log_retry(resp.status_code, resp_json, retry_index + 1, delay)
+                        await asyncio.sleep(delay)
+                        continue
+                    if resp.status_code != 200:
+                        raise EtlException(f"PaddleOCR API error: status={resp.status_code}, resp={resp.text}")
+                    if resp_json is None:
+                        logger.error("PaddleOCR API returned invalid JSON")
+                        raise EtlException("PaddleOCR API returned invalid JSON response")
+                    return self._validate_response(resp_json)
         except httpx.TimeoutException as e:
             logger.error(f"PaddleOCR API request timed out: {e}")
             raise EtlException("PaddleOCR API timeout")
@@ -146,16 +201,9 @@ class PaddleOcrLoader(BaseBishengLoader):
             if "Timeout" in str(e):
                 logger.error(f"PaddleOCR API request timed out: {e}")
                 raise EtlException("PaddleOCR API timeout")
-            raise e
+            raise
 
-        if resp.status_code != 200:
-            raise EtlException(f"PaddleOCR API error: status={resp.status_code}, resp={resp.text}")
-        try:
-            resp_json = resp.json()
-        except (ValueError, Exception) as e:
-            logger.error(f"PaddleOCR API returned invalid JSON: {e}")
-            raise EtlException("PaddleOCR API returned invalid JSON response")
-        return self._validate_response(resp_json)
+        raise AssertionError("unreachable")
 
     def _map_block_type(self, block_label: str) -> str:
         """Map PaddleOCR block label to standard type."""
@@ -262,7 +310,7 @@ class PaddleOcrLoader(BaseBishengLoader):
         # token appears twice), then SORT the page's entries by start before
         # appending to metadata. Across pages, ordering is naturally monotonic
         # because text_offset advances.
-        metadata = dict(bboxes=[], pages=[], indexes=[], types=[])
+        metadata = {"bboxes": [], "pages": [], "indexes": [], "types": []}
         text_offset = 0
 
         for page_idx, page_result in enumerate(layout_results):
@@ -292,7 +340,7 @@ class PaddleOcrLoader(BaseBishengLoader):
                 # Drift guard: short margin labels (`aside_text "汽车"`), page
                 # numbers (`number "2/4"`), and similar decoration blocks have
                 # block_order=None AND tokens that frequently alias substrings of
-                # body text (e.g. "汽车" appears 17× on the cover page). Without
+                # body text (e.g. "汽车" appears 17x on the cover page). Without
                 # a reading-order hint we cannot disambiguate which occurrence
                 # belongs to this bbox, and naively picking the leftmost binds
                 # the decoration's bbox to an unrelated body-text position.
@@ -420,10 +468,10 @@ class PaddleOcrLoader(BaseBishengLoader):
 
         Why: PaddleOCR rasterizes each PDF page (typically at 144 DPI, i.e. 2x
         PDF point dimensions) and returns block_bbox in that pixel space, e.g.
-        an A4 page becomes ~1191×1684. The frontend renders bbox overlays via
-        pdf.js's `getViewport({scale: 1})` (PDF point space, ~595×842 for A4)
+        an A4 page becomes ~1191x1684. The frontend renders bbox overlays via
+        pdf.js's `getViewport({scale: 1})` (PDF point space, ~595x842 for A4)
         and uses `scaleState = canvas_css_width / viewport.width`. Feeding raw
-        pixel bbox there draws every box at roughly 2× the intended location,
+        pixel bbox there draws every box at roughly 2x the intended location,
         visibly drifting to the lower-right of the actual text. Normalizing to
         PDF points before persisting matches the convention etl4lm/mineru already
         produce.
