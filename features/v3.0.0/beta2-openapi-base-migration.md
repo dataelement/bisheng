@@ -112,6 +112,7 @@
 | 7 | `src/backend/bisheng/open_api/domain/scopes.py` | 本分支给权限位登记补回了 vibe 侧原有的展示元数据（`group` / `label_key` / `desc_key` / `hint_keys`）与 `requires_open_platform`——签发弹窗的分组、文案、互斥判据都依赖它。beta2 侧没有，下次合并必冲突 | 建议整体回流发版线 |
 | 8 | `src/backend/test/tenant/test_tenant_users_query_source.py` | 它用 `extend_existing` 声明了一个也叫 `user` 的测试表并把 `user_name` 放宽到 255，于是 `test/tenant` 与 `test/user` **同进程跑必红**（`test_user_string_lengths` 读到 255）。判回归时要按目录分进程，或先修表名 | 回流发版线改表名 |
 | 9 | `src/backend/bisheng/open_api/domain/services/credential_validator.py` | `resolve_service_account` 跑在租户上下文装好之前，且没有 `bypass_tenant_filter()`（`CredentialRepository.get_by_hash` 有）。多租户部署下这条路径可能抛 `NoTenantContextError` 被包成 503；单租户看不出来 | 请 highway 裁定是否补显式 bypass |
+| 10 | `src/backend/bisheng/open_api/domain/services/credential_validator.py` | 伴生 PRD 附录 C 把「服务账号已停用」单列一码（`26027`，与 PAT 持有人失效的 `26043` 同理），beta2 运行期把它折进了 `26002`「凭据无效」——调用方分不清「密钥错了」和「账号被停用」，下一步指引方向不同。CLI 已按服务端事实把两种成因并进 26002 的文案 | 产品口径偏差，建议登记进 `prd-deviation-review.md` 一并转给 highway |
 
 
 ---
