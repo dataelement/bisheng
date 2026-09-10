@@ -5781,15 +5781,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         discovery_scope: str = "legacy",
     ) -> dict[str, int]:
-        """Count SUCCESS files per document-type category in each card's visible bound spaces."""
-        visible_scopes: dict[str, set[int]] = {}
-        if discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}:
-            discovery = await self.resolve_portal_discovery(scope=discovery_scope)
-            if discovery_scope == "portal_enabled":
-                enabled_space_ids = set(discovery.discoverable_space_ids)
-                return await KnowledgeFileDao.async_count_files_by_category_scopes(
-                    {category.code: set(enabled_space_ids) for category in categories}
+        """Count portal categories from their traversable lists; retain legacy bound-space counts."""
+        if discovery_scope == "portal_enabled":
+            counts: dict[str, int] = {}
+            for category in categories:
+                if category.code in counts:
+                    continue
+                result = await self.count_shougang_portal_files(
+                    ShougangPortalFileCountReq(
+                        query_type="browse",
+                        document_type=category.code,
+                        discovery_scope="portal_enabled",
+                        sort="updated_at_desc",
+                    )
                 )
+                counts[category.code] = int(result["total"])
+            return counts
+        visible_scopes: dict[str, set[int]] = {}
+        if discovery_scope in {"portal_public", "portal_configured"}:
+            discovery = await self.resolve_portal_discovery(scope=discovery_scope)
             full_space_ids = set(discovery.discoverable_space_ids) | set(discovery.explicitly_visible_space_ids)
             grant_only_parent_ids = set(discovery.grant_parent_space_ids) - full_space_ids
             visible_file_ids: dict[str, set[int]] = {}

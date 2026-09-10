@@ -16,6 +16,7 @@ from bisheng.knowledge.domain.schemas.knowledge_fulltext_search_schema import (
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalAdvancedFileSearchReq,
     ShougangPortalAdvancedUploaderSearchReq,
+    ShougangPortalCategoryFileCountItem,
     ShougangPortalFileBrowseReq,
     ShougangPortalFileCountReq,
     ShougangPortalFileItemResp,
@@ -163,18 +164,20 @@ async def test_uploader_candidates_require_strictly_visible_supporting_file():
 
 @pytest.mark.parametrize("limit", [1, 2, 100])
 async def test_category_browse_deduplicates_documents_across_batches_and_pages(monkeypatch, limit):
-    # 两组跨库入口外加一个先被权限过滤的入口。相同标题不能作为去重依据。
+    # 复用现场关联。2719、2725、2722 均为文档 2506。849 在数据库存在但索引缺失。
     pairs = [
-        (848, None),
-        (2719, None),
+        (848, 1658),
+        (2719, 2506),
         (2726, 2506),
         (2725, 2506),
         (2724, 2505),
-        (9992042, None),
+        (9992042, 9991033),
         (2722, 2506),
         (2721, 2505),
     ]
     files = {file_id: _file(file_id) for file_id, _ in pairs}
+    files[849] = _file(849)
+    files[849].reference_document_id = 812
     for file_id, document_id in pairs:
         files[file_id].reference_document_id = document_id
         if file_id in {2722, 2721}:
@@ -249,10 +252,25 @@ async def test_category_browse_deduplicates_documents_across_batches_and_pages(m
         cursor = result["next_cursor"]
     else:
         pytest.fail("分类分页未结束")
-    assert listed == [848, 2719, 2725, 2724, 9992042]
+    assert listed == [848, 2719, 2724, 9992042]
 
     service.browse_shougang_portal_files = service._list_shougang_portal_files_via_fulltext_document_type
     count = await service.count_shougang_portal_files(
         ShougangPortalFileCountReq(query_type="browse", document_type="NEW", discovery_scope="portal_enabled"),
     )
     assert count["total"] == len(listed)
+
+    service.resolve_portal_discovery = AsyncMock(
+        return_value=SimpleNamespace(discoverable_space_ids=[12, 366]),
+    )
+    database_count = AsyncMock(return_value={"NEW": 5})
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_files_by_category_scopes",
+        database_count,
+    )
+    navigation_counts = await service.count_shougang_portal_category_files(
+        [ShougangPortalCategoryFileCountItem(code="NEW")],
+        discovery_scope="portal_enabled",
+    )
+    assert navigation_counts == {"NEW": len(listed)}
+    database_count.assert_not_awaited()

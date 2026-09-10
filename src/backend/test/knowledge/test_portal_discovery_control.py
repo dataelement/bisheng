@@ -1188,6 +1188,9 @@ async def test_portal_enabled_counts_ignore_card_space_bindings() -> None:
             new_callable=AsyncMock,
             return_value={"STD": 3},
         ) as count_categories,
+        patch.object(
+            service, "count_shougang_portal_files", new_callable=AsyncMock, return_value={"total": 3}
+        ) as count_list,
     ):
         domain_result = await service.count_shougang_portal_domain_files(
             [ShougangPortalDomainFileCountItem(code="PM", space_ids=[])],
@@ -1201,7 +1204,13 @@ async def test_portal_enabled_counts_ignore_card_space_bindings() -> None:
     assert domain_result == {"PM": 4}
     assert category_result == {"STD": 3}
     count_domains.assert_awaited_once_with({"PM": {10, 20}})
-    count_categories.assert_awaited_once_with({"STD": {10, 20}})
+    count_categories.assert_not_awaited()
+    count_list.assert_awaited_once()
+    request = count_list.await_args.args[0]
+    assert request.discovery_scope == "portal_enabled"
+    assert request.document_type == "STD"
+    assert request.space_ids == []
+    assert request.query_type == "browse"
 
 
 @pytest.mark.asyncio
