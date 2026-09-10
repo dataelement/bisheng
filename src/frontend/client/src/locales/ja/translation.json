@@ -427,6 +427,7 @@
   "com_linsight_clarify_skip_answer": "スキップしました",
   "com_linsight_task_panel": "タスク",
   "com_linsight_task_panel_done": "タスク完了",
+  "com_linsight_task_panel_wrapping_up": "結果を生成中",
   "com_linsight_task_terminated": "タスクは終了されました",
   "com_linsight_error_view_detail": "詳細を表示",
   "com_linsight_error_hide_detail": "詳細を隠す",

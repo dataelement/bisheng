@@ -442,6 +442,7 @@
   "com_linsight_clarify_skip_answer": "Skipped",
   "com_linsight_task_panel": "Tasks",
   "com_linsight_task_panel_done": "Tasks completed",
+  "com_linsight_task_panel_wrapping_up": "Generating results",
   "com_linsight_task_terminated": "Task terminated",
   "com_linsight_error_view_detail": "View details",
   "com_linsight_error_hide_detail": "Hide details",
