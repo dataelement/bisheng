@@ -24,7 +24,7 @@
 | F062 | [workflow-temp-kb-citation](./062-workflow-temp-kb-citation/) | P1 | Spec + Design 已出，待 ★ 确认；tasks 已拆解（24 项 / 6 Wave） | F054 |
 | F063 | [workbench-content-safety](./063-workbench-content-safety/) | P1 | Spec + Design 已确认；tasks 已拆解（16 项 / 6 Wave） | 既有 sensitive_word、工作台聊天入口 |
 | F064 | [kb-list-file-abnormal](./064-kb-list-file-abnormal/) | P1 | Spec / Design / Tasks 已出，实现完成 | F027, F048, F051 |
-| F065 | [model-name-trim](./065-model-name-trim/) | P1 | Spec + Design 已出，待 ★ 确认 | 既有模型管理页、`POST/PUT /api/v1/llm` |
+| F065 | [model-name-trim](./065-model-name-trim/) | P1 | Spec / Design 已确认；实现完成 | 既有模型管理页、`POST/PUT /api/v1/llm` |
 
 ---
 
@@ -79,3 +79,4 @@
 | 2026-09-09 | 用户确认 F063 spec + design；tasks.md 完成 16 项拆解（6 个 Wave）。 |
 | 2026-09-10 | 登记 F064 文档知识库外层列表文件解析异常。 |
 | 2026-09-10 | 登记 F065 模型名称首尾空格兼容；Design 为《3.0 beta2》§5.7 修改方案。等待 spec + design ★ 确认；tasks 未写。 |
+| 2026-09-10 | 用户确认 F065 spec + design；tasks.md 完成 4 项拆解并落地前后端写入清洗。 |

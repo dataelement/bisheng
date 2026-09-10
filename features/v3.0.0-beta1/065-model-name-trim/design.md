@@ -109,7 +109,7 @@ handleSave
 
 LLMModelCreateReq
   field_validator("model_name") → strip()
-  空串 → pydantic 校验失败（400），不进 Service
+  strip 后空串 → pydantic 校验失败（FastAPI 默认 422），不进 Service
 
 LLMService.add/update
   model_dict / 唯一约束看到的已是 strip 后的名称
@@ -158,7 +158,7 @@ LLMService.add/update
 | `POST /api/v1/llm`、`PUT /api/v1/llm` 的 `models[].model_name` 写入前 strip | 既有 HTTP 请求体语义收紧 | Platform 模型管理；其它直调客户端 |
 | 落库后的 `llm_model.model_name` 不含首尾空白（新写入） | 表字段 | 所有 `get_bisheng_*` 实例化路径 |
 
-无新 API、无新字段、无新错误码。strip 后为空走请求校验失败（400），不是业务错误码。
+无新 API、无新字段、无新错误码。strip 后为空走请求体校验失败（FastAPI 默认 422），不是业务错误码。
 
 ### 6.2 我依赖别人的（Incoming）
 

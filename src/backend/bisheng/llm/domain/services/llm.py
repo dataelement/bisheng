@@ -60,7 +60,7 @@ from bisheng.llm.domain.schemas import (
     WSModel,
 )
 from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
-from bisheng.llm.domain.utils import invalidate_llm_info_cache
+from bisheng.llm.domain.utils import invalidate_llm_info_cache, usable_proxy_url
 from bisheng.tenant.domain.constants import TenantAuditAction
 from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
 from bisheng.utils import generate_uuid, md5_hash
@@ -196,7 +196,11 @@ class LLMService:
             if isinstance(value, dict):
                 result[key] = cls.strip_config_whitespace(value)
             elif isinstance(value, str) and key.endswith(cls.STRIP_CONFIG_KEY_SUFFIXES):
-                result[key] = value.strip()
+                stripped = value.strip()
+                if key.endswith("_proxy"):
+                    result[key] = usable_proxy_url(stripped) or ""
+                else:
+                    result[key] = stripped
             else:
                 result[key] = value
         return result

@@ -24,6 +24,7 @@ import { getAdvancedParamsTemplate, templateToJsonString } from "@/util/advanced
 import { canShareToChildren, isGlobalSuperUser } from "./permissions";
 import { useLinsightConfig } from "./tabs/WorkbenchModel";
 import { useModelProviderInfo } from "./useLink";
+import { hasDuplicateModelName, hasInvalidModelName, trimModelNames } from "./modelNameTrim";
 import { t } from "i18next";
 
 function ModelItem({ data, type, onDelete, onInput, onConfig }) {
@@ -547,27 +548,22 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 })
             }
 
-            const map = {}
-            let repeat = false
+            const trimmedModels = trimModelNames(formData.models)
+            setFormData({ ...formData, models: trimmedModels })
+
             let hasTTSVoiceError = false
-
-            const error = formData.models.some(model => {
-                if (map[model.model_name]) repeat = true
-                map[model.model_name] = true
-
+            for (const model of trimmedModels) {
                 if (model.model_type === 'tts' && !model.config?.voice) {
                     hasTTSVoiceError = true
                 }
-
-                return !model.model_name || model.model_name.length > 100
-            })
-            if (error) {
+            }
+            if (hasInvalidModelName(trimmedModels)) {
                 return message({
                     variant: 'warning',
                     description: t('model.modelNameValidation')
                 })
             }
-            if (repeat) {
+            if (hasDuplicateModelName(trimmedModels)) {
                 return message({
                     variant: 'warning',
                     description: t('model.modelDuplicate')
@@ -582,6 +578,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
 
             const saveData = {
                 ...formData,
+                models: trimmedModels,
                 config
             }
 

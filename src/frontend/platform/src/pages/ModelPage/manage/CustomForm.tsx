@@ -65,7 +65,7 @@ const modelProviders = {
         {
             label: "OpenAI Proxy",
             type: "text",
-            placeholder: "",
+            placeholder: "http://host:port",
             default: "",
             required: false,
             key: "openai_proxy",
@@ -362,6 +362,7 @@ const FormField = ({ showDefault, field, value, providerName, apiKeySite, onChan
             </Label>
             <Input
                 type={field.type}
+                autoComplete="off"
                 placeholder={field.placeholder}
                 value={value}
                 onChange={(e) => onChange(field.key, e.target.value)}
