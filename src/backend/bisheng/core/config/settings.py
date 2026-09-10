@@ -581,6 +581,8 @@ class PaddleOcrConf(BaseModel):
 
     url: str = Field(default="", description="PaddleOcrService Address")
     timeout: int = Field(default=60, description="PaddleOcrService Request Timeout (sec)")
+    max_retries: int = Field(default=3, ge=0, description="Retries for transient PaddleOcrService errors")
+    retry_backoff: float = Field(default=1.0, ge=0, description="Initial PaddleOcrService retry delay (sec)")
     auth_token: str = Field(default="", description="PaddleOcrService Authentication Token")
     headers: dict = Field(default_factory=dict, description="PaddleOcrService Headers")
     request_kwargs: dict = Field(default_factory=dict, description="PaddleOcrService Request Arguments")
