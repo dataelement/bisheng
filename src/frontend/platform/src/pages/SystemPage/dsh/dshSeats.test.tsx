@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SeatsView } from './SeatsView'
 import {
     getDshSeats,
@@ -42,6 +42,7 @@ beforeEach(() => {
     vi.resetAllMocks()
     vi.useRealTimers()
 })
+afterEach(() => vi.unstubAllGlobals())
 describe('DSH seat pagination and commands', () => {
     it('renders one page from ten thousand seats and loads sessions independently', async () => {
         const fixtures = Array.from({ length: 10000 }, (_, i) => seat(i + 1))
@@ -121,7 +122,13 @@ describe('DSH seat pagination and commands', () => {
         ).toBeUndefined()
         unmount()
     })
-    it('retries a timed-out mutation with the exact original ID and version', async () => {
+    it.each(['HTTP', 'HTTPS'])('retries a timed-out mutation over %s with the original ID and version', async (protocol) => {
+        if (protocol === 'HTTP') {
+            vi.stubGlobal('crypto', {
+                getRandomValues: crypto.getRandomValues.bind(crypto),
+            })
+            expect(crypto.randomUUID).toBeUndefined()
+        }
         vi.mocked(getDshSeats).mockResolvedValue({
             items: [seat(1)],
             next_cursor: null,
@@ -140,6 +147,7 @@ describe('DSH seat pagination and commands', () => {
         fireEvent.click(screen.getByText('dsh.revoke'))
         await waitFor(() => expect(commandDshSeat).toHaveBeenCalledTimes(1))
         const first = vi.mocked(commandDshSeat).mock.calls[0]
+        expect(first[3]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
         await act(async () => {
             await onOperation.mock.calls[0][0].retry()
         })

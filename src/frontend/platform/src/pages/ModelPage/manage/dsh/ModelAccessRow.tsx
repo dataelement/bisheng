@@ -14,6 +14,7 @@ import type {
 } from '@/types/dsh'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { createDshOperationId } from '@/util/dshOperationId'
 
 interface ModelAccessRowProps {
     user: DshModelAccessUser
@@ -76,9 +77,9 @@ export function ModelAccessRow({
     async function handleSave() {
         if (!valid || !dirty || lock.current || pending || stale || refreshing)
             return
+        const id = createDshOperationId()
         lock.current = true
         setError(false)
-        const id = crypto.randomUUID()
         setOperationId(id)
         const body = {
             operation_id: id,

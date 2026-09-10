@@ -6,7 +6,7 @@ import {
     waitFor,
     within,
 } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
     getDshModelUsers,
     getDshOperation,
@@ -70,8 +70,15 @@ beforeEach(() => {
     vi.mocked(getDshOperation).mockRejectedValue(new Error('Unavailable'))
     vi.mocked(saveDshPolicy).mockRejectedValue(new Error('Timeout'))
 })
+afterEach(() => vi.unstubAllGlobals())
 describe('model-scoped authorization', () => {
-    it('grants a model before DSH login and sends only the selected model quota and version', async () => {
+    it.each(['HTTP', 'HTTPS'])('grants a model over %s and retries with the original operation ID', async (protocol) => {
+        if (protocol === 'HTTP') {
+            vi.stubGlobal('crypto', {
+                getRandomValues: crypto.getRandomValues.bind(crypto),
+            })
+            expect(crypto.randomUUID).toBeUndefined()
+        }
         const onOperation = renderRow()
         fireEvent.click(screen.getByRole('checkbox'))
         fireEvent.change(screen.getByRole('textbox'), {
@@ -80,6 +87,7 @@ describe('model-scoped authorization', () => {
         fireEvent.click(screen.getByText('dsh.save'))
         await waitFor(() => expect(saveDshPolicy).toHaveBeenCalledTimes(1))
         const body = vi.mocked(saveDshPolicy).mock.calls[0][3]
+        expect(body.operation_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
         expect(body).toEqual({
             operation_id: expect.any(String),
             expected_version: 3,

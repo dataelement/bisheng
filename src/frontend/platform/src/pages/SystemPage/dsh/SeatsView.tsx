@@ -23,6 +23,7 @@ import type {
 } from '@/types/dsh'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { createDshOperationId } from '@/util/dshOperationId'
 import { DshChoice, DshPager, dshTime } from './common'
 import { SeatSessions } from './SeatSessions'
 
@@ -100,8 +101,8 @@ export function SeatsView({
                     next()
                     return
                 }
+                const operationId = createDshOperationId()
                 commandLocks.current.add(item.seat_id)
-                const operationId = crypto.randomUUID()
                 setPending((old) => ({ ...old, [item.seat_id]: operationId }))
                 const ref: DshOperationRef = {
                     operation_id: operationId,
