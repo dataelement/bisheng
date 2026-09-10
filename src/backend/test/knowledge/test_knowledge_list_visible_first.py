@@ -88,6 +88,11 @@ def _stub_enrichment(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(ks_mod, "emit_metric", lambda *a, **k: None)
 
+    async def _no_abnormal(_ids):
+        return set()
+
+    monkeypatch.setattr(ks_mod.KnowledgeFileDao, "async_exists_abnormal_files_batch", _no_abnormal)
+
 
 @pytest.mark.asyncio
 async def test_regular_user_threads_visible_ids_into_dao_and_runs_use_check(

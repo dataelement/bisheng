@@ -42,7 +42,9 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeTenantMismatchError,
 )
 from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
+from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.common.schemas.api import PageInfiniteCursorData
+from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.cache.utils import async_file_download, file_download
@@ -83,7 +85,6 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeFilePermissionRecord,
     KnowledgePermissionService,
 )
-from bisheng.common.services.metric_log import emit_metric
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.permission.application.access import (
     get_f048_resource_adapter,
@@ -94,7 +95,6 @@ from bisheng.permission.application.business_authorization import (
     require_business_action,
 )
 from bisheng.permission.application.identity import resolve_permission_actor
-from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_knowledge_index_name, generate_uuid
 from bisheng.utils.async_utils import run_async_safe
@@ -443,6 +443,7 @@ class KnowledgeService(KnowledgeUtils):
         page_size: int = 10,
         action: str = "use",
         preferred_ids: list[int] | None = None,
+        has_abnormal: bool | None = None,
     ) -> PageInfiniteCursorData[KnowledgeRead]:
         """List knowledge libraries with cursor-based pagination (F027).
 
@@ -491,6 +492,16 @@ class KnowledgeService(KnowledgeUtils):
 
         page_size = max(int(page_size or 1), 1)
         fetch_limit = page_size + 1
+
+        # F064: QA libraries do not carry parse-status files. A "only abnormal"
+        # filter on type=QA is defined as an empty page, not a file-table scan.
+        if has_abnormal and knowledge_type is not KnowledgeTypeEnum.NORMAL:
+            return PageInfiniteCursorData(
+                data=[],
+                page_size=page_size,
+                has_more=False,
+                next_cursor=None,
+            )
 
         # ---- 2. Decide strategy: admin bypass vs visible-first ----
         actor = await resolve_permission_actor(login_user)
@@ -546,7 +557,7 @@ class KnowledgeService(KnowledgeUtils):
         # bypass skips this because every action is granted.
         needs_action_check = (not is_admin) and action != "visible"
 
-        empty_visible_set = (visible_ids is not None and not visible_ids)
+        empty_visible_set = visible_ids is not None and not visible_ids
         if empty_visible_set:
             # No visible resources → short-circuit to empty page without hitting
             # the DB. Keyset cursor is also meaningless in this branch.
@@ -565,6 +576,7 @@ class KnowledgeService(KnowledgeUtils):
                     limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
                     preferred_ids=preferred_ids,
                     id_in=visible_ids,
+                    has_abnormal=has_abnormal,
                 )
                 if not batch:
                     break
@@ -574,9 +586,7 @@ class KnowledgeService(KnowledgeUtils):
                         [int(one.id) for one in batch],
                         [action],
                     )
-                    authorized.extend(
-                        one for one in batch if action in batch_action_map.get(int(one.id), set())
-                    )
+                    authorized.extend(one for one in batch if action in batch_action_map.get(int(one.id), set()))
                 else:
                     authorized.extend(batch)
                 if len(batch) < _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE:
@@ -594,6 +604,7 @@ class KnowledgeService(KnowledgeUtils):
                     preferred_ids=preferred_ids,
                     cursor=candidate_cursor,
                     id_in=visible_ids,
+                    has_abnormal=has_abnormal,
                 )
                 if not batch:
                     break
@@ -684,11 +695,7 @@ class KnowledgeService(KnowledgeUtils):
                 fga_elapsed_ms=fga_elapsed_ms,
                 total_elapsed_ms=(perf_counter() - total_start) * 1000,
                 returned_count=len(result_data),
-                alert=(
-                    "capacity_80_percent"
-                    if visible_count >= _LIBRARY_VISIBLE_MAX_RESULTS * 0.8
-                    else None
-                ),
+                alert=("capacity_80_percent" if visible_count >= _LIBRARY_VISIBLE_MAX_RESULTS * 0.8 else None),
             )
 
         logger.info(
@@ -730,6 +737,8 @@ class KnowledgeService(KnowledgeUtils):
                 [int(one.id) for one in knowledge_list],
                 _KNOWLEDGE_LIST_ACTIONS,
             )
+        document_ids = [int(one.id) for one in knowledge_list if one.type == KnowledgeTypeEnum.NORMAL.value]
+        abnormal_ids = await KnowledgeFileDao.async_exists_abnormal_files_batch(document_ids)
 
         def _row(one: Knowledge) -> KnowledgeRead:
             actions = sorted(action_map.get(int(one.id), set()))
@@ -739,6 +748,7 @@ class KnowledgeService(KnowledgeUtils):
                 user_name=db_user_dict.get(one.user_id, str(one.user_id)),
                 copiable=copiable,
                 actions=actions,
+                has_abnormal_files=int(one.id) in abnormal_ids,
             )
 
         return [_row(one) for one in knowledge_list]

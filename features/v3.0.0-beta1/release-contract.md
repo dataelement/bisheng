@@ -55,6 +55,8 @@
 | —（无新增领域对象；在 F029 拥有的 citation 链路上扩展第四种来源类型与其载荷） | **F062-workflow-temp-kb-citation** | 工作流输入节点「解析并存入临时知识库」召回可点击溯源：新增 `citation_type=temp`（前缀 `tempsearch_`，原件定位 = UUID + F043 `objectName`，不伪造知识库整数 id）。只读 / 调用现有 `MessageCitation` 与 citation 注册 / 解析服务；**不拥有** `message_citation` schema，不改 INV-7 / `view_file`，不把临时来源纳入知识空间 OpenFGA，不新增表 / Alembic / 对外 API / 错误码 |
 | —（无新增） | F061-qa-active-image-read | 日常模式 / 知识空间 / 频道订阅三条问答链路按需查看检索结果或文章正文中的 markdown 图片；复用既有工作台模型视觉开关、检索入口与 `view_file` / 敏感文过滤，不新增领域对象、表、对外 API、错误码或不变量 |
 | —（无新增领域对象；在 F036 拥有的 `SensitiveWordPolicy` 上增加枚举值 `workbench_chat`） | **F063-workbench-content-safety** | 商业版工作台日常模式（输入 + 最终回答）与任务模式（仅输入）关键词审查。只读 / 调用现有 `SensitiveWordPolicy` 与 `check_text`；**不拥有**策略表 schema，不改知识空间 / 频道 / 工作流 Gateway 审查，不新增表 / Alembic / 对外 API 路径 / 错误码 / 不变量 |
+| —（无新增） | F064-kb-list-file-abnormal | 文档知识库外层列表只读展示库级文件解析异常，并支持仅异常筛选；复用既有 `Knowledge` / `KnowledgeFile` 与 F027 游标、F048 可见性，不新增领域对象、表、错误码或不变量。Alembic 仅增加 `knowledgefile` 复合索引 |
+| —（无新增） | F065-model-name-trim | 模型管理写入时去掉 `models[].model_name` 首尾空白；复用既有 `LLMModel` / `POST/PUT /api/v1/llm`，不新增领域对象、表、错误码、不变量或 Alembic |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -128,6 +130,8 @@
 | F062-workflow-temp-kb-citation | F054（文章类型扩展点、失效/无权限分态、匿名收紧）；F043（会话附件提升为 `chat/{user_id}/…`）；F029 / F041（正式库 `view_file` 与 INV-7，本 Feature **不改**） | 接线 + 扩展型：第四种来源 `temp`。免登录（含分享页、独立工作流当场点自己刚传的文件）一律不返回 temp 详情。日常附件 / 灵思上传仍排除 |
 | F061-qa-active-image-read | 既有工作台模型视觉开关、日常 ReAct、知识空间 / 频道问答入口；检索可见性守 v2.6.0 **INV-7**（`view_file`） | 接线型；只在已过滤的检索结果 / 文章正文上按需读图。不新增领域对象/表/对外 API/错误码/不变量；不改入库/OCR；不改灵思任务模式、工作流/助手 RAG；不新开取图鉴权口 |
 | F063-workbench-content-safety | 既有 `sensitive_word` 租户策略（F036）、工作台首页、F035 日常/任务统一 `chat/completions`、商业版 `BISHENG_PRO` | 接线型；新枚举值 `workbench_chat` 一份策略管两种模式。开源版不展示、不审查。不改工作流 Gateway 词表，不审文件/任务输出 |
+| F064-kb-list-file-abnormal | F027、F048、F051 | 文档知识库外层列表增加只读异常标记与 SQL 下推筛选；保持游标分页、可见-first 与行操作懒加载，不改 QA / 知识空间 / 解析写状态 |
+| F065-model-name-trim | 既有模型管理页、`POST/PUT /api/v1/llm` | 写入侧收紧 `model_name` 首尾空白；不改 19802、不回填存量、不新增错误码 |
 
 ---
 
@@ -143,6 +147,7 @@
 | F013/F017 | `system`、`tenant`、`department`、`user_group`、`shared_with` 等系统关系继续保留；不得被误转为普通资源 Grant |
 | F027/F040/F048 | F049 优化知识空间 `children` / `search` 的候选批次、重复门禁、文件夹统计和耗时观测；平台超级管理员遵守 C4 系统身份策略，普通用户继续执行有界 OpenFGA BatchCheck、稳定目录游标、既有搜索页码契约和 fail-closed，不改变个人可见空间枚举语义 |
 | F027/F048 | F051 保持知识库列表可见/可用资源集合、cursor 与分页契约，只移除列表行非筛选动作的预计算；设置、删除和权限管理能力在单资源操作菜单打开后读取，最终业务操作仍由 F048 执行时鉴权 |
+| F027/F048/F051 | F064 在文档知识库列表响应增加只读 `has_abnormal_files`，并增加可选 `has_abnormal` 筛选；不改变可见集合、cursor 形状或行操作懒加载 |
 | 既有工作流独立会话 | F052 在首次进入或切换历史会话时增加一次性状态判断；开关关闭时保持原行为，打开后的后续结束或中断不触发自动重试，手动重新运行契约不变 |
 | F018-resource-owner-transfer | 当前实现先提交资源 `user_id`、再删除旧/写入新 owner tuple，失败依赖 `failed_tuple` 补写；同时不更新 knowledge_space/channel CREATOR membership，且无已接入前端。OQ-07 已选择 A：F048 启服时退役其 API/Service 调用路径，本期不重构 owner transfer；历史差异按 preservation-first 迁移 |
 | F031-channel-source-subscription-reconcile | F060 替代其“各租户 `channel_info_source` 行存在即代表已订阅、按租户分别对账”的运行语义。频道来源意图改为全部活跃租户并集，远端 `/information/subscriptions` 完整分页成为实际订阅真相；`channel_info_source` 改为平台公共展示目录。F031 已交付的频道创建/编辑能力继续保留，但不得再以本地元数据行推断远端订阅状态 |
@@ -191,3 +196,5 @@
 | 2026-08-31 | 登记 F053 开放 API 鉴权与身份传递（全量 P0+P1+P2，代码底座自 `3.0-vibe` 移植、需求以 PRD v2.4 为准）：新增 ApiCredential / ServiceAccount / OpenApiCallLog / OpenApiTenantSetting 领域对象与 ShareLink、MessageSession 增量；新增 INV-29～34；分配错误码模块 260；登记对既有 `/api/v2`、分享页、`user` 表与 F048 `authorize_created` 的影响 | F053、F048、既有开放 API 与分享页 |
 | 2026-09-07 | 登记 F061 问答场景主动读图：表 1 标"无新增领域对象"；表 3 记依赖既有工作台视觉开关与三场景问答入口，检索可见性守 v2.6.0 INV-7；无新增错误码/对外 API/不变量/alembic 迁移 | F061 |
 | 2026-09-09 | 登记 F063 日常/任务内容安全审查：表 1 标无新领域对象（扩展既有 `SensitiveWordPolicy` 的 `workbench_chat` 取值）；表 3 记依赖 F036 词表与工作台统一聊天入口；无新增错误码/对外路径/不变量/alembic | F063 |
+| 2026-09-10 | 登记 F064 文档知识库外层列表文件解析异常：表 1 标无新领域对象；表 3 记依赖 F027/F048/F051；Alembic 仅加 `knowledgefile` 复合索引，无新增错误码/不变量 | F064、F027、F048、F051 |
+| 2026-09-10 | 登记 F065 模型名称首尾空格兼容：表 1 标无新领域对象；表 3 记依赖既有模型管理写入；无新增错误码/不变量/Alembic；不回填存量脏名 | F065 |

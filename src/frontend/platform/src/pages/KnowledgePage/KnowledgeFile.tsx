@@ -18,6 +18,7 @@ import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDial
 import { useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
+import { TableHeadEnumFilter } from "@/components/bs-ui/select/filter";
 import { toast, useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import Tip from "@/components/bs-ui/tooltip/tip";
@@ -33,6 +34,7 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useInfiniteCursorTable } from "../../util/hook";
 import { useModel } from "../ModelPage/manage";
 import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
+import { FileAbnormalStatusCell } from "./components/FileAbnormalStatusCell";
 
 // Knowledge base status
 const enum KnowledgeBaseStatus {
@@ -54,6 +56,7 @@ interface KnowledgeListRow {
     description?: string;
     update_time: string;
     user_name?: string;
+    has_abnormal_files?: boolean;
 }
 
 function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }) {
@@ -353,10 +356,16 @@ export default function KnowledgeFile() {
     } = useLazyResourceActions('knowledge_library', KB_ROW_ACTIONS);
 
     // F027: cursor-based infinite scroll; no `total` / `page` anymore.
-    const { data: datalist, loading, hasMore, search, reload, loadMore } = useInfiniteCursorTable(
+    const { data: datalist, loading, hasMore, search, reload, loadMore, filterData } = useInfiniteCursorTable(
         { cancelLoadingWhenReload: true },
         (param) =>
-            readFileLibDatabase({ cursor: param.cursor, pageSize: param.pageSize, name: param.keyword, action: 'visible' }),
+            readFileLibDatabase({
+                cursor: param.cursor,
+                pageSize: param.pageSize,
+                name: param.keyword,
+                action: 'visible',
+                has_abnormal: param.has_abnormal,
+            }),
     )
 
     // Permission levels for badge display
@@ -558,6 +567,20 @@ export default function KnowledgeFile() {
                             <TableHead>{t('lib.libraryName', { ns: 'bs' })}</TableHead>
                             <TableHead>{t('updateTime')}</TableHead>
                             <TableHead>{t('lib.createUser', { ns: 'bs' })}</TableHead>
+                            <TableHead>
+                                <div className="flex items-center">
+                                    {t('fileStatus')}
+                                    <TableHeadEnumFilter
+                                        options={[
+                                            { label: t('fileStatusFilterAll'), value: 'all' },
+                                            { label: t('fileStatusAbnormal'), value: 'abnormal' },
+                                        ]}
+                                        onChange={(value) => {
+                                            filterData({ has_abnormal: value === 'abnormal' ? true : undefined })
+                                        }}
+                                    />
+                                </div>
+                            </TableHead>
                             {showOperationsColumn && (
                                 <TableHead className="text-right">{t('operations')}</TableHead>
                             )}
@@ -572,7 +595,7 @@ export default function KnowledgeFile() {
                                     if (!canReadRow(el)) return;
                                     if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return;
                                     window.libname = [el.name, el.description];
-                                    navigate(`/filelib/${el.id}`);
+                                    navigate(el.has_abnormal_files ? `/filelib/${el.id}?fileStatus=abnormal` : `/filelib/${el.id}`);
                                     handleCachePage();
                                 }}
                             >
@@ -609,6 +632,10 @@ export default function KnowledgeFile() {
                                     className="max-w-[300px] break-all"
                                 >
                                     <div className="truncate-multiline text-[#5A5A5A]">{el.user_name || '--'}</div>
+                                </TableCell>
+
+                                <TableCell>
+                                    <FileAbnormalStatusCell hasAbnormalFiles={el.has_abnormal_files} />
                                 </TableCell>
 
                                 {showOperationsColumn && <TableCell className="text-right">

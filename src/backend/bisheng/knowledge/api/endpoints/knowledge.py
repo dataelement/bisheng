@@ -3,7 +3,7 @@ import json
 import urllib.parse
 from datetime import datetime
 from io import BytesIO
-from typing import List, Optional, Any, Literal
+from typing import Any, Literal
 
 import pandas as pd
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, UploadFile
@@ -15,36 +15,41 @@ from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.v1.schemas import (
     KnowledgeFileProcess,
+    KnowledgeFileReProcess,
+    UpdateKnowledgeReq,
     UpdatePreviewFileChunk,
     UploadFileResponse,
-    UpdateKnowledgeReq,
-    KnowledgeFileReProcess,
 )
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError, ServerError
+from bisheng.common.errcode.http_error import NotFoundError, ServerError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import (
+    KnowledgeCPEmptyError,
     KnowledgeCPError,
-    KnowledgeQAError,
-    KnowledgeRebuildingError,
-    KnowledgePreviewError,
-    KnowledgeNotQAError,
     KnowledgeNoEmbeddingError,
     KnowledgeNotExistError,
-    KnowledgeCPEmptyError,
+    KnowledgeNotQAError,
+    KnowledgePreviewError,
+    KnowledgeQAError,
+    KnowledgeRebuildingError,
     KnowledgeSpaceListNotSupportedError,
 )
 from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
-from bisheng.common.schemas.api import resp_200, resp_500, UnifiedResponseModel
+from bisheng.common.schemas.api import UnifiedResponseModel, resp_200, resp_500
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.role_access import WebMenuResource
-from bisheng.knowledge.api.dependencies import get_knowledge_service, get_knowledge_file_service
-from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate
-from bisheng.knowledge.domain.models.knowledge import KnowledgeState
+from bisheng.knowledge.api.dependencies import get_knowledge_file_service, get_knowledge_service
+from bisheng.knowledge.domain.models.knowledge import (
+    KnowledgeCreate,
+    KnowledgeDao,
+    KnowledgeState,
+    KnowledgeTypeEnum,
+    KnowledgeUpdate,
+)
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
@@ -52,21 +57,21 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     QAKnowledgeUpsert,
     QAStatus,
 )
-from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
 from bisheng.knowledge.domain.schemas.knowledge_schema import (
     AddKnowledgeMetadataFieldsReq,
-    UpdateKnowledgeMetadataFieldsReq,
+    BatchAddFileTagsReq,
     ModifyKnowledgeFileMetaDataReq,
     UpdateFileTagsReq,
-    BatchAddFileTagsReq,
+    UpdateKnowledgeMetadataFieldsReq,
 )
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
-from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType, QuotaService
+from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService, require_quota
 from bisheng.user.domain.models.user import UserDao
-from bisheng.utils import generate_uuid, calc_data_sha256
+from bisheng.utils import calc_data_sha256, generate_uuid
 from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router
@@ -386,7 +391,7 @@ async def get_knowledge(
     name: str = None,
     knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value, alias="type"),
     sort_by: Literal["create_time", "update_time", "name"] = Query(default="update_time"),
-    preferred_ids: Optional[str] = Query(
+    preferred_ids: str | None = Query(
         default=None,
         description=(
             "Comma-separated knowledge ids to pin to the top of the global "
@@ -395,11 +400,19 @@ async def get_knowledge(
             "when `cursor` is set."
         ),
     ),
-    page_size: Optional[int] = 10,
-    cursor: Optional[str] = Query(
+    page_size: int | None = 10,
+    cursor: str | None = Query(
         default=None,
         description="F027 cursor-based pagination token from the previous response's "
         "`next_cursor`. Omit (or pass empty) to fetch the first page.",
+    ),
+    has_abnormal: bool | None = Query(
+        default=None,
+        description=(
+            "F064: when true, only return document knowledge bases that have at least "
+            "one FILE in FAILED / TIMEOUT / VIOLATION. Ignored unless true. "
+            "QA type returns an empty page."
+        ),
     ),
 ):
     """List knowledge bases with cursor-based pagination (F027).
@@ -417,9 +430,9 @@ async def get_knowledge(
     # resolution, which super_admin bypasses.
     if knowledge_type is KnowledgeTypeEnum.SPACE:
         raise KnowledgeSpaceListNotSupportedError.http_exception()
-    pinned: Optional[List[int]] = None
+    pinned: list[int] | None = None
     if preferred_ids:
-        parsed: List[int] = []
+        parsed: list[int] = []
         for raw in preferred_ids.split(","):
             raw = raw.strip()
             if not raw:
@@ -439,6 +452,7 @@ async def get_knowledge(
         page_size=page_size,
         action=action,
         preferred_ids=pinned,
+        has_abnormal=has_abnormal,
     )
     return resp_200(data=result)
 
@@ -448,7 +462,7 @@ def get_knowledge_info(
     *,
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
-    knowledge_id: List[int] = Query(...),
+    knowledge_id: list[int] = Query(...),
 ):
     """Based on Knowledge BaseIDRead Knowledge Base Information."""
     res = KnowledgeService.get_knowledge_info(request, login_user, knowledge_id)
@@ -502,11 +516,11 @@ async def get_filelist(
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     file_name: str = None,
-    file_ids: List[int] = Query(default=None),
+    file_ids: list[int] = Query(default=None),
     knowledge_id: int = 0,
     page_size: int = 10,
     page_num: int = 1,
-    status: List[int] = Query(default=None),
+    status: list[int] = Query(default=None),
 ):
     """Get knowledge base file information."""
     data, total, flag = await KnowledgeService.aget_knowledge_files(
@@ -535,10 +549,10 @@ async def get_QA_list(
     qa_knowledge_id: int,
     page_size: int = 10,
     page_num: int = 1,
-    question: Optional[str] = None,
-    answer: Optional[str] = None,
-    keyword: Optional[str] = None,
-    status: Optional[int] = None,
+    question: str | None = None,
+    answer: str | None = None,
+    keyword: str | None = None,
+    status: int | None = None,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Get knowledge base file information."""
@@ -589,7 +603,7 @@ def get_knowledge_chunk(
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     knowledge_id: int = Query(..., description="The knowledge base uponID"),
-    file_ids: List[int] = Query(default=[], description="Doc.ID"),
+    file_ids: list[int] = Query(default=[], description="Doc.ID"),
     keyword: str = Query(default="", description="Keywords"),
     page: int = Query(default=1, description="Page"),
     limit: int = Query(default=10, description="Number of bars per page Number of bars per page"),
@@ -755,7 +769,7 @@ async def get_export_url():
     bio = BytesIO()
     with pd.ExcelWriter(bio, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="Sheet1", index=False)
-    file_name = f"qa_export_template.xlsx"
+    file_name = "qa_export_template.xlsx"
     bio.seek(0)
     file = UploadFile(filename=file_name, file=bio)
     file_path = await save_uploaded_file(file, "bisheng", file_name)
@@ -767,11 +781,11 @@ async def get_export_url():
 async def get_export_url(
     *,
     qa_knowledge_id: int,
-    question: Optional[str] = None,
-    answer: Optional[str] = None,
-    keyword: Optional[str] = None,
-    status: Optional[int] = None,
-    max_lines: Optional[int] = 10000,
+    question: str | None = None,
+    answer: str | None = None,
+    keyword: str | None = None,
+    status: int | None = None,
+    max_lines: int | None = 10000,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     # Query the current knowledge base, whether there are write permissions
@@ -838,8 +852,8 @@ def post_import_file(
     *,
     qa_knowledge_id: int,
     file_url: str = Body(..., embed=True),
-    size: Optional[int] = Body(default=0, embed=True),
-    offset: Optional[int] = Body(default=0, embed=True),
+    size: int | None = Body(default=0, embed=True),
+    offset: int | None = Body(default=0, embed=True),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     df = pd.read_excel(file_url)
@@ -1057,7 +1071,7 @@ async def batch_download_knowledge_files(
     *,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     knowledge_id: int = Body(..., embed=True, description="Knowledge base ID"),
-    file_ids: List[int] = Body(..., embed=True, description="List of file IDs to download"),
+    file_ids: list[int] = Body(..., embed=True, description="List of file IDs to download"),
 ):
     """Batch download files from a document knowledge base.
 
@@ -1229,7 +1243,7 @@ async def delete_metadata_fields(
     *,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     knowledge_id: int = Body(..., embed=True, description="The knowledge base uponID"),
-    field_names: List[str] = Body(..., embed=True, description="List of field names to delete"),
+    field_names: list[str] = Body(..., embed=True, description="List of field names to delete"),
     knowledge_service=Depends(get_knowledge_service),
     background_tasks: BackgroundTasks,
 ):

@@ -80,6 +80,10 @@ vi.mock("@/pages/ModelPage/manage", () => ({
   useModel: () => ({ embeddings: [], isLoading: false }),
 }))
 
+vi.mock("@/components/bs-ui/select/filter", () => ({
+  TableHeadEnumFilter: () => null,
+}))
+
 vi.mock("@/components/bs-ui/select", async () => {
   const React = await import("react")
   interface SelectContextValue {

@@ -366,12 +366,14 @@ export async function readFileLibDatabase(
         name = '',
         type = 0,
         action = 'use',
+        has_abnormal,
     }: {
         cursor?: string | null;
         pageSize?: number;
         name?: string;
         type?: number;
         action?: 'visible' | 'use';
+        has_abnormal?: boolean;
     },
 ): Promise<{ data: any[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
     const response = await axios.get('/api/v1/knowledge', {
@@ -381,6 +383,7 @@ export async function readFileLibDatabase(
             name,
             type,
             ...(cursor ? { cursor } : {}),
+            ...(has_abnormal ? { has_abnormal: true } : {}),
         },
     });
     return response as any;
