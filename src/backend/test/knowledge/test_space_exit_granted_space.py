@@ -1,10 +1,14 @@
-"""Exiting a space you were granted rather than joined must say so.
+"""Exiting a space you were granted rather than joined.
 
 The joined list is resolved from the F048 `visible` decision, so it also holds
-spaces reached through a Grant — a department grant, say — which carry no
-membership row. Exiting one of those revoked nothing, deleted no row, and still
-returned 200, so the client toasted "exited" and the space reappeared on the
-very next refresh.
+spaces reached through a Grant, which carry no membership row. Exiting one of
+those revoked nothing, deleted no row, and still returned 200, so the client
+toasted "exited" and the space reappeared on the very next refresh.
+
+Refusing outright was too broad, though: accepting an invitation also leaves no
+membership row, and that grant is the invitee's own to give up. The refusal now
+belongs to the case it was written for — access held through a department or a
+group, which an individual cannot resign from.
 """
 
 from __future__ import annotations
@@ -41,9 +45,17 @@ def _space(creator_id: int = 1):
     )
 
 
-async def test_exiting_a_granted_space_is_refused_with_its_own_code():
+def _adapter(*, removed: bool):
+    return SimpleNamespace(remove_own_sources=AsyncMock(return_value=removed))
+
+
+async def test_exiting_a_department_granted_space_is_refused_with_its_own_code():
     delete_member = AsyncMock(return_value=0)
     with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.get_f048_resource_adapter",
+            AsyncMock(return_value=_adapter(removed=False)),
+        ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
             AsyncMock(return_value=_space()),
@@ -63,6 +75,32 @@ async def test_exiting_a_granted_space_is_refused_with_its_own_code():
     assert exc_info.value.code == 18080
     # It must not pretend to act: no revoke, no delete, no "exited" toast.
     delete_member.assert_not_awaited()
+
+
+async def test_somebody_who_accepted_an_invitation_can_leave():
+    """Their access is a grant of their own, so dropping it is leaving."""
+
+    adapter = _adapter(removed=True)
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+            AsyncMock(return_value=_space()),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.get_f048_resource_adapter",
+            AsyncMock(return_value=adapter),
+        ),
+    ):
+        assert await _service().unsubscribe_space(_SPACE_ID) is True
+
+    adapter.remove_own_sources.assert_awaited_once_with(
+        resource_id=str(_SPACE_ID),
+        subject_user_id=_VIEWER,
+    )
 
 
 async def test_a_real_member_still_exits():

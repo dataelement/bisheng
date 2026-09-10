@@ -867,6 +867,62 @@ class F048PermissionRuntime:
             idempotency_key=idempotency_key,
         )
 
+    async def remove_subject_sources(
+        self,
+        *,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+        subject_type: str,
+        subject_id: str,
+        idempotency_key: str,
+    ):
+        """Remove one subject's own non-protected sources on a resource.
+
+        Leaving a space or a channel is this and nothing more: the member drops
+        what was granted to them personally. Somebody who accepted an
+        invitation holds a `direct:user:<id>` source and no membership row, so
+        the business-side membership projection has nothing to clear and they
+        were stuck inside.
+
+        It runs system-authorized because it is not permission management — the
+        caller is removing their own row, not somebody else's — and the filter
+        is what keeps that true: it can only ever match sources whose subject
+        is the one named. A department or user-group source has a different
+        subject and survives, which is correct; an individual cannot resign
+        from their department's access.
+
+        Like `remove_ordinary_sources`, one call is capped at the public
+        50-change contract; callers repeat until it returns None.
+        """
+
+        context = replace(
+            await self.build_grant_context(actor=actor, target=target),
+            system_authorized=True,
+            capabilities=(),
+        )
+        changes = tuple(
+            CanonicalGrantChange(
+                operation="REMOVE",
+                assignee_id=source.source_id,
+                expected_assignee_version=source.version,
+            )
+            for grant in context.grants
+            for source in grant.sources
+            if source.active
+            and not source.protected
+            and source.subject_type == subject_type
+            and str(source.subject_id) == str(subject_id)
+        )[:50]
+        if not changes:
+            return None
+        return await self._grants.mutate(
+            context,
+            changes=changes,
+            expected_resource_version=target.resource_version,
+            expected_catalog_release_id=(context.current_catalog_release_id),
+            idempotency_key=idempotency_key,
+        )
+
     async def sync_public_reader(
         self,
         *,

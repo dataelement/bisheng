@@ -2479,10 +2479,20 @@ class ChannelService:
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
         if not current_membership:
-            # No membership row at all, yet the caller reached this channel — the
-            # followed list is resolved from `visible`, so it also carries
-            # channels held through a Grant. There is nothing of theirs to
-            # remove; whoever granted it has to take it back.
+            # No membership row, but the caller may still be here by their own
+            # doing: accepting an invitation writes a personal Grant source and
+            # no row at all. Dropping that source is what leaving means for
+            # them, so try it before refusing.
+            adapter = await get_f048_resource_adapter("channel")
+            if await adapter.remove_own_sources(
+                resource_id=str(channel_id),
+                subject_user_id=login_user.user_id,
+            ):
+                return True
+            # Nothing of their own to give up: the channel reached them through
+            # a department or group grant, which an individual cannot resign
+            # from. The followed list is resolved from `visible`, so it carries
+            # those too; whoever granted it has to take it back.
             raise ChannelGrantedNotSubscribedError()
         if current_membership.status != MembershipStatusEnum.ACTIVE:
             # An application still pending, or one that was rejected.

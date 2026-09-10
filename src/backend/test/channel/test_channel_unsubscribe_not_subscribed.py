@@ -10,7 +10,7 @@ not branch on.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -39,14 +39,42 @@ def _login_user(user_id: int = 150041):
     return SimpleNamespace(user_id=user_id, user_name="gzx006", tenant_id=1)
 
 
-async def test_no_membership_at_all_says_the_channel_was_granted():
-    """Reached through a Grant, so there is no subscription of theirs to end."""
+def _adapter(*, removed: bool):
+    return SimpleNamespace(remove_own_sources=AsyncMock(return_value=removed))
+
+
+async def test_a_department_granted_channel_says_the_channel_was_granted():
+    """Held through their department, so there is nothing of theirs to end."""
     service = _service(membership=None)
 
-    with pytest.raises(ChannelGrantedNotSubscribedError) as exc_info:
+    with (
+        patch(
+            "bisheng.channel.domain.services.channel_service.get_f048_resource_adapter",
+            AsyncMock(return_value=_adapter(removed=False)),
+        ),
+        pytest.raises(ChannelGrantedNotSubscribedError) as exc_info,
+    ):
         await service.unsubscribe_channel(_CHANNEL_ID, _login_user())
 
     assert exc_info.value.code == 19015
+
+
+async def test_somebody_who_accepted_an_invitation_can_leave_a_channel():
+    """An accepted invitation is their own grant, so dropping it is leaving."""
+
+    service = _service(membership=None)
+    adapter = _adapter(removed=True)
+
+    with patch(
+        "bisheng.channel.domain.services.channel_service.get_f048_resource_adapter",
+        AsyncMock(return_value=adapter),
+    ):
+        assert await service.unsubscribe_channel(_CHANNEL_ID, _login_user()) is True
+
+    adapter.remove_own_sources.assert_awaited_once_with(
+        resource_id=_CHANNEL_ID,
+        subject_user_id=150041,
+    )
 
 
 @pytest.mark.parametrize(

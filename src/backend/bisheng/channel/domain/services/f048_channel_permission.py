@@ -149,6 +149,8 @@ class ChannelPermissionPort(Protocol):
 
     async def remove_ordinary_sources(self, **kwargs): ...
 
+    async def remove_subject_sources(self, **kwargs): ...
+
 
 def build_channel_membership_idempotency_key(
     *,
@@ -280,6 +282,39 @@ class F048ChannelPermissionAdapter:
                 permission_version=record.permission_version,
             ),
         )
+
+    async def remove_own_sources(
+        self,
+        *,
+        resource_id: str,
+        subject_user_id: int,
+    ) -> bool:
+        """Drop everything granted to one user personally on a channel.
+
+        Somebody who accepted an invitation holds a direct source and no
+        membership row, so the membership projection has nothing to clear and
+        unsubscribing found nothing to do. Returns whether anything was removed.
+        """
+
+        record = await self._loader.load_permission_record(resource_id)
+        if record is None:
+            raise PermissionInvalidResourceError()
+        actor = PermissionActor(user_id=subject_user_id, current_tenant_id=record.tenant_id)
+        removed = False
+        while True:
+            fresh = await self._loader.load_permission_record(resource_id)
+            if fresh is None:
+                raise PermissionInvalidResourceError()
+            result = await self._permission.remove_subject_sources(
+                actor=actor,
+                target=self._target(fresh, resource_id, actor),
+                subject_type="user",
+                subject_id=str(subject_user_id),
+                idempotency_key=(f"channel-leave:{resource_id}:{subject_user_id}:{fresh.permission_version}"),
+            )
+            if result is None:
+                return removed
+            removed = True
 
     async def remove_ordinary_sources(
         self,
