@@ -353,6 +353,10 @@ F046 subscriber 把 approved 先提交为 `queued`，Knowledge dispatcher 只发
 manifest 和当前 generation steps；随后 coordinator 只加载已准备的当前 token，旧 token 回调忽略。准备过程幂等，
 可修复已进入 applying 但准备上下文尚未完整提交的 generation，且不会提前执行 FGA、检索或解析派发副作用。
 
+upload 准备先在无 `FOR UPDATE` 的 preflight 中完成执行阶段权限、角色和配额重验，再进入短事务，固定按
+`request → tenant policy → space → stage/parent` 加锁并完成容量预占交接、正式文件图和 durable step 落库。
+已存在正式文件图的当前 generation 重投只锁 request/正式文件，不再重复争用空间、stage 或 policy 行。
+
 - upload：正式文件图、FGA 权限和普通解析任务调度均成功接受后才 applied；后续解析失败是普通文件状态。
 - rename/move：durable transition footprint 保证 OLD_VIEW/NEW_VIEW 单一正式视图，owner read-after-verify 后推进。
 - delete：DB cutover 与 deletion guard 同一 Knowledge 事务；FGA/MinIO/ES/Milvus purge 全部权威验证、required steps 属于当前 token且 guard 退役后才 applied。

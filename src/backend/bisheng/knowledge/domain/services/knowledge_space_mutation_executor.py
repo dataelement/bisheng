@@ -23,6 +23,9 @@ from bisheng.knowledge.domain.models.knowledge_space_file_change_request import 
 from bisheng.knowledge.domain.repositories.knowledge_space_file_change_execution_step_repository import (
     KnowledgeSpaceFileChangeExecutionStepRepository,
 )
+from bisheng.knowledge.domain.repositories.knowledge_space_file_change_repository import (
+    KnowledgeSpaceFileChangeRepository,
+)
 from bisheng.knowledge.domain.repositories.knowledge_space_file_change_request_repository import (
     KnowledgeSpaceFileChangeRequestRepository,
 )
@@ -321,6 +324,44 @@ class KnowledgeSpaceMutationExecutor:
         dispatch_after_commit: bool = True,
     ) -> MutationExecutionCompleted | MutationExecutionDispatch:
         tenant_id = self._tenant_id()
+        async with self.session_factory() as session:
+            request_repository = KnowledgeSpaceFileChangeRequestRepository(session)
+            request = await request_repository.get_by_id(
+                tenant_id=tenant_id,
+                request_id=int(request_id),
+            )
+            if request is None:
+                raise LookupError(f"F046 request not found: {request_id}")
+            self._validate_upload_request(request=request)
+            if request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLIED:
+                return MutationExecutionCompleted()
+            if request.execution_state == KnowledgeSpaceFileChangeExecutionState.FAILED:
+                raise RuntimeError("failed F046 upload requires the token-bound resume path")
+            if request.executed_resource_id is None:
+                mutation_repository = self.mutation_repository_factory(session)
+                stage = await mutation_repository.get_upload_stage(
+                    tenant_id=tenant_id,
+                    upload_stage_id=int(request.upload_stage_id or 0),
+                )
+                if stage is None:
+                    raise LookupError(f"F046 upload stage not found for request: {request_id}")
+                space = await mutation_repository.get_space(
+                    tenant_id=tenant_id,
+                    space_id=int(request.space_id),
+                )
+                if space is None:
+                    raise LookupError(f"F046 target knowledge space not found: {request.space_id}")
+                validation_result = self.execution_validator(
+                    session=session,
+                    mutation_repository=mutation_repository,
+                    request=request,
+                    stage=stage,
+                    space=space,
+                    payload_snapshot=payload_snapshot,
+                )
+                if isawaitable(validation_result):
+                    await validation_result
+
         dispatch_context: UploadStepDispatchContext | None = None
         async with self.session_factory() as session:
             async with session.begin():
@@ -342,13 +383,22 @@ class KnowledgeSpaceMutationExecutor:
                 if len(token) > 64 or not token:
                     raise ValueError("F046 execution token must contain 1 to 64 characters")
                 mutation_repository = self.mutation_repository_factory(session)
-                space = await mutation_repository.lock_space(
-                    tenant_id=tenant_id,
-                    space_id=int(request.space_id),
-                )
-                if space is None:
-                    raise LookupError(f"F046 target knowledge space not found: {request.space_id}")
                 if request.executed_resource_id is None:
+                    # Keep the quota reservation hand-off and formal graph
+                    # creation serialized, but do not hold shared SQL locks
+                    # during OpenFGA or quota-service calls above. Policy-first
+                    # matches the upload-stage lifecycle lock order.
+                    await KnowledgeSpaceFileChangeRepository(session).ensure_policy_row(
+                        tenant_id=tenant_id,
+                        for_update=True,
+                    )
+                    space = await mutation_repository.lock_space(
+                        tenant_id=tenant_id,
+                        space_id=int(request.space_id),
+                    )
+                    if space is None:
+                        raise LookupError(f"F046 target knowledge space not found: {request.space_id}")
+                    self._validate_upload_space(request=request, space=space)
                     stage = await mutation_repository.get_upload_stage(
                         tenant_id=tenant_id,
                         upload_stage_id=int(request.upload_stage_id or 0),
@@ -356,16 +406,6 @@ class KnowledgeSpaceMutationExecutor:
                     )
                     if stage is None:
                         raise LookupError(f"F046 upload stage not found for request: {request_id}")
-                    validation_result = self.execution_validator(
-                        session=session,
-                        mutation_repository=mutation_repository,
-                        request=request,
-                        stage=stage,
-                        space=space,
-                        payload_snapshot=payload_snapshot,
-                    )
-                    if isawaitable(validation_result):
-                        await validation_result
                     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
                     bundle = await KnowledgeSpaceService.add_file_in_uow(
@@ -2179,11 +2219,6 @@ class KnowledgeSpaceMutationExecutor:
         from bisheng.common.errcode.knowledge_space import (
             SpaceFileSizeLimitError,
             SpaceFolderNotFoundError,
-            SpaceNotFoundError,
-        )
-        from bisheng.knowledge.domain.models.knowledge import KnowledgeState, KnowledgeTypeEnum
-        from bisheng.knowledge.domain.repositories.knowledge_space_file_change_repository import (
-            KnowledgeSpaceFileChangeRepository,
         )
         from bisheng.knowledge.domain.repositories.knowledge_space_upload_stage_repository import (
             KnowledgeSpaceUploadStageRepository,
@@ -2193,13 +2228,7 @@ class KnowledgeSpaceMutationExecutor:
         tenant_id = int(request.tenant_id)
         space_id = int(request.space_id)
         applicant_user_id = int(request.applicant_user_id)
-        if (
-            int(space.tenant_id) != tenant_id
-            or int(space.id) != space_id
-            or int(space.type) != KnowledgeTypeEnum.SPACE.value
-            or int(space.state) != KnowledgeState.PUBLISHED.value
-        ):
-            raise SpaceNotFoundError()
+        KnowledgeSpaceMutationExecutor._validate_upload_space(request=request, space=space)
 
         if request.source_parent_id is not None:
             parent_id = int(request.source_parent_id)
@@ -2207,7 +2236,6 @@ class KnowledgeSpaceMutationExecutor:
                 tenant_id=tenant_id,
                 space_id=space_id,
                 folder_id=parent_id,
-                for_update=True,
             )
             if parent is None:
                 raise SpaceFolderNotFoundError()
@@ -2229,13 +2257,6 @@ class KnowledgeSpaceMutationExecutor:
             login_user=applicant,
         ).authorize_file_change(request)
 
-        # Stage registration/attachment and execution serialize quota decisions
-        # through the same tenant policy row. The current ATTACHED stage is
-        # already included in reserved bytes, so execution adds zero bytes here.
-        await KnowledgeSpaceFileChangeRepository(session).ensure_policy_row(
-            tenant_id=tenant_id,
-            for_update=True,
-        )
         stage_repository = KnowledgeSpaceUploadStageRepository(session)
         reserved_user = await stage_repository.get_reserved_bytes(
             tenant_id=tenant_id,
@@ -2261,6 +2282,19 @@ class KnowledgeSpaceMutationExecutor:
                 "",
             )
             raise QuotaService._make_storage_quota_error(blocker, "storage_gb")
+
+    @staticmethod
+    def _validate_upload_space(*, request, space) -> None:
+        from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeState, KnowledgeTypeEnum
+
+        if (
+            int(space.tenant_id) != int(request.tenant_id)
+            or int(space.id) != int(request.space_id)
+            or int(space.type) != KnowledgeTypeEnum.SPACE.value
+            or int(space.state) != KnowledgeState.PUBLISHED.value
+        ):
+            raise SpaceNotFoundError()
 
     @staticmethod
     async def _validate_non_upload_execution(
