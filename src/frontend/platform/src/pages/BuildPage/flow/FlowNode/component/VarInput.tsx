@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 import { useUpdateVariableState } from "../flowNodeStore";
 import SelectVar from "./SelectVar";
+import { htmlClipboardToInsertable } from "./varInputClipboard";
 
 function encodeHTMLEntities(text) {
     const textarea = document.createElement("textarea");
@@ -245,28 +246,25 @@ export default function VarInput({
     const handlePaste = (e) => {
         e.preventDefault();
 
-        // 1. Get the HTML content
         const copiedHtml = e.clipboardData.getData('text/html');
         const copiedText = e.clipboardData.getData('text/plain');
 
-        // If the clipboard doesn't contain HTML, directly insert the plain text and return
+        // External paste: text/plain already has the correct newlines.
+        // HTML is only required to keep variable badges from an in-editor copy.
         if (!copiedHtml) {
             document.execCommand('insertText', false, copiedText);
             return;
         }
 
-        // 2. Parse the HTML
         const parser = new DOMParser();
         const doc = parser.parseFromString(copiedHtml, 'text/html');
-
         const dataEl = doc.querySelector('[data-custom-data]');
+
         if (dataEl) {
             const rawData = dataEl.getAttribute('data-custom-data');
             if (rawData) {
                 try {
                     const parsedData = JSON.parse(decodeURIComponent(rawData));
-                    console.log('Cross-window data detected:', parsedData);
-
                     if (paramItem.varZh) {
                         paramItem.varZh = { ...paramItem.varZh, ...parsedData };
                     } else {
@@ -276,45 +274,19 @@ export default function VarInput({
                     console.error('Cross-window data error:', err);
                 }
             }
+            document.execCommand('insertHTML', false, htmlClipboardToInsertable(doc.body));
+            return;
         }
-        // 3. Define a recursive processing function
-        const processNodes = (node) => {
-            let result = '';
 
-            node.childNodes.forEach((child) => {
-                // If it is a text node, directly append the text
-                if (child.nodeType === Node.TEXT_NODE) {
-                    result += child.textContent;
-                }
-                // If it is an element node
-                else if (child.nodeType === Node.ELEMENT_NODE) {
-                    // Core logic: if it is a target badge element, keep its HTML (including styles and classes)
-                    if (child.tagName.toLowerCase() === 'span' && child.classList.contains('textarea-badge')) {
-                        result += child.outerHTML;
-                    }
-                    // Special handling: if it is a line break tag, convert it to a space or newline (optional, to prevent text from sticking together)
-                    else if (child.tagName.toLowerCase() === 'br') {
-                        // Here you can decide whether to convert <br> to '\n' or simply ignore it
-                        // result += '\n'; 
-                    }
-                    // For all other tags: ignore the tag itself, recursively extract the content of its child nodes
-                    else {
-                        result += processNodes(child);
-                    }
-                }
-            });
+        if (copiedText) {
+            document.execCommand('insertText', false, copiedText);
+            return;
+        }
 
-            return result;
-        };
-
-        // 4. Execute the processing
-        const cleanHtml = processNodes(doc.body);
-
-        console.log('Cleaned mixed content:', cleanHtml);
-
-        // 5. Insert the content
-        // Note: Since the span tags are retained, you still need to use insertHTML
-        document.execCommand('insertHTML', false, cleanHtml);
+        const fallbackHtml = htmlClipboardToInsertable(doc.body);
+        if (fallbackHtml) {
+            document.execCommand('insertHTML', false, fallbackHtml);
+        }
     };
 
     // resize
