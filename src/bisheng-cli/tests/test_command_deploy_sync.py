@@ -229,6 +229,24 @@ def test_26003_missing_app_manage_refused_and_names_the_required_scope(
     assert "app:manage" in err
 
 
+def test_26051_delegate_key_refused_without_sending_anyone_to_an_admin_for_a_scope(
+    monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path
+) -> None:
+    """INV-31 at the deploy entrance: "another key", never "another checkbox".
+
+    The failure this replaces was a loop. A delegate key got `26003`, whose next
+    step is "have an administrator tick the missing scope"; the administrator
+    then could not, because `delegate` + `app:manage` is refused at issue time
+    (26050). The only exit is a second key, and the message has to say so.
+    """
+    mock = _mock().post(DEPLOY, deploy_sync_err(26051, "credential is delegation-only"))
+    code, _, err = _run(["deploy", str(sample_project)], monkeypatch=monkeypatch, mock=mock)
+
+    assert code == EXIT_FORBIDDEN
+    assert "委托" in err and "另外签发" in err
+    assert "app:manage" not in err and "补勾" not in err
+
+
 def test_16205_other_owner_refused_and_names_the_owner(
     monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path
 ) -> None:

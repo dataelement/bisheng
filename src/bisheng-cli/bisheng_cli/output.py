@@ -44,9 +44,14 @@ STAGE_LABELS: dict[str, str] = {
 }
 
 _MASK_PATTERNS = (
-    # Service-account keys. The tail is greedy on purpose: a partially matched
-    # key is still a leaked key.
-    (re.compile(r"bs-sak-[A-Za-z0-9_\-]+"), "bs-sak-****"),
+    # Both credential prefixes the platform authenticates on this wire:
+    # `bs-sak-` service-account keys and `bs-pat-` personal access tokens
+    # (server-side `credential_validator._TOKEN_RE` accepts either). Matching
+    # only the first one left a pasted personal token printed in full — the CLI
+    # asks for a service-account key but cannot stop anyone typing the other.
+    # The tail is greedy on purpose: a partially matched key is still a leaked
+    # key. The prefix is kept so the reader can tell which kind leaked.
+    (re.compile(r"(bs-(?:sak|pat)-)[A-Za-z0-9_\-]+"), r"\1****"),
     (re.compile(r"(?i)(authorization\W{0,4}bearer)\s+\S+"), r"\1 ****"),
     (re.compile(r"(?i)\bbearer\s+[A-Za-z0-9_\-\.]{8,}"), "Bearer ****"),
 )

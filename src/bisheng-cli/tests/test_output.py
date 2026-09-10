@@ -12,7 +12,7 @@ import json
 import pytest
 
 from bisheng_cli.output import STAGE_LABELS, Emitter, mask, stage_label, wrap_stream
-from tests.helpers.platform_mock import FAKE_KEY
+from tests.helpers.platform_mock import FAKE_KEY, FAKE_PAT
 
 
 def _emitter(**kw):
@@ -81,6 +81,24 @@ def test_mask_never_emits_key_material() -> None:
     blob = out.getvalue() + err.getvalue()
     assert FAKE_KEY not in blob
     assert "bs-sak-****" in blob
+
+
+def test_mask_covers_personal_tokens_too() -> None:
+    """Both prefixes the platform authenticates, not just the one we ask for.
+
+    beta2's `credential_validator._TOKEN_RE` accepts `bs-sak-` **and**
+    `bs-pat-`. The CLI asks for a service-account key and cannot stop anyone
+    pasting a personal token, and a token that reaches an error message or a
+    `--verbose` line unmasked is just as leaked as a key would be.
+    """
+    em, out, err = _emitter()
+    em.info(f"Authorization: Bearer {FAKE_PAT}")
+    em.result("login", ok=False, exit_code=4, data={"echo": FAKE_PAT})
+    blob = out.getvalue() + err.getvalue()
+    assert FAKE_PAT not in blob
+    # The prefix survives so the reader can still tell which kind of credential
+    # was involved — that is the whole diagnostic value of the leftover.
+    assert "bs-pat-****" in blob
 
 
 def test_verbose_masks_authorization_header() -> None:

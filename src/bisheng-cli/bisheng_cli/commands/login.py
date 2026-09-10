@@ -10,13 +10,22 @@ Order is load-bearing in two places.
 
 **The probe runs before the key is sent.** If the open-capability layer is not
 deployed, the run ends at the probe with exit 8 and the credential never leaves
-the machine. `whoami` itself is always registered server-side (F049 keeps the
-service-account module on unconditionally), so this is the only place the
+the machine. `whoami` itself is always registered server-side (`open_api/api/router.py`
+mounts the auth router unconditionally), so this is the only place the
 "unusable in this environment" verdict can be produced.
 
 **The delegate check runs before the write.** A delegate-only key is refused, and
 refused *without* leaving a credential file behind — a stored key that every
 later command rejects is worse than no key at all.
+
+That check is the second line of defence, not the first. A key carrying
+`delegate` does not get as far as reading its own scopes: `whoami` requires no
+scope, so the platform's entrance gate waves it through and the delegation
+resolver then rejects the call with `26016` (INV-31 / 伴生 PRD §4.2.4). The CLI
+translates that code into the same refusal (`errors.py`), so `login` still ends
+with "委托专用，另签一把" and no credential file. The scope check below survives
+for the case the code path cannot cover: a platform that answers `whoami`
+successfully for such a key.
 """
 
 from __future__ import annotations
@@ -108,8 +117,6 @@ def run(args: Any, emitter: Emitter) -> int:
     if DELEGATE_SCOPE in scopes:
         raise delegate_refusal()
 
-    account = whoami.get("service_account") or {}
-    owner = whoami.get("resource_owner")
     credentials.save_profile(
         base_url,
         {
@@ -117,14 +124,20 @@ def run(args: Any, emitter: Emitter) -> int:
             "api_key": api_key,
             "key_mask": whoami.get("key_mask"),
             "tenant_id": whoami.get("tenant_id"),
-            "service_account": account or None,
-            "resource_owner": owner,
+            # Stored under the server's own field names. The previous spelling
+            # (`service_account: {id, name}`) was F049's shape and no longer
+            # exists on the wire; translating back into it here would put a
+            # personal token's holder under a key that says "service account".
+            "actor_kind": whoami.get("actor_kind"),
+            "actor_id": whoami.get("actor_id"),
+            "actor_name": whoami.get("actor_name"),
+            "resource_owner": whoami.get("resource_owner"),
             "expires_at": whoami.get("expires_at"),
         },
         warn=emitter.warn,
     )
 
-    _report(emitter, base_url, whoami, account, owner)
+    _report(emitter, base_url, whoami)
 
     # AC-08: pull the developer skill packs now so a first-time developer never
     # has to know `skills sync` exists. This login already succeeded — a sync
@@ -138,8 +151,10 @@ def run(args: Any, emitter: Emitter) -> int:
         exit_code=EXIT_OK,
         data={
             "base_url": base_url,
-            "service_account": account or None,
-            "resource_owner": owner,
+            "actor_kind": whoami.get("actor_kind"),
+            "actor_id": whoami.get("actor_id"),
+            "actor_name": whoami.get("actor_name"),
+            "resource_owner": whoami.get("resource_owner"),
             "tenant_id": whoami.get("tenant_id"),
             "key_mask": whoami.get("key_mask"),
             "expires_at": whoami.get("expires_at"),
@@ -148,21 +163,32 @@ def run(args: Any, emitter: Emitter) -> int:
     return EXIT_OK
 
 
-def _report(emitter: Emitter, base_url: str, whoami: dict[str, Any], account: dict[str, Any], owner: Any) -> None:
+def _report(emitter: Emitter, base_url: str, whoami: dict[str, Any]) -> None:
     emitter.info(f"登录成功：{base_url}")
-    emitter.info(f"  服务账号: {account.get('name') or '(未命名)'}")
-    if isinstance(owner, dict) and owner:
-        emitter.info(f"  资源归属人: {owner.get('user_name') or owner.get('user_id')}")
+
+    # `actor_kind` / `actor_name` replace F049's `service_account: {id, name}`.
+    # The kind is printed rather than assumed: a `bs-pat-` personal token
+    # authenticates the same way and answers `natural_person`, and labelling its
+    # holder "服务账号" would name the wrong subject.
+    if whoami.get("actor_kind") == "natural_person":
+        emitter.info(f"  登录主体: {whoami.get('actor_name') or '(未命名)'}（个人访问令牌）")
     else:
-        # F049 now sends `resource_owner` (write-back 1, landed 2026-08-17), so
-        # this branch is no longer "waiting for the platform" — it covers the
-        # two cases that remain: an older platform that predates the field, and
-        # an owner row that stopped resolving (deleted user), which the server
-        # reports as null rather than failing the probe. Printing the pointer
-        # beats omitting the line: this account owns every app the key will
-        # publish, and picking the wrong one is the exact mistake the issuing
-        # form warns about.
-        emitter.info("  资源归属人: 平台当前版本未返回该字段，请在服务账号详情页确认")
+        emitter.info(f"  服务账号: {whoami.get('actor_name') or '(未命名)'}")
+
+    owner_user_id = resource_owner_user_id(whoami)
+    if owner_user_id is not None:
+        # The server sends `resource_owner: {user_id}` and nothing else — the
+        # name F049 used to include is gone from the contract, so there is no
+        # honest way to print one. The id is what the platform actually knows,
+        # and the pointer says where to turn it into a person.
+        emitter.info(f"  资源归属人: 用户 #{owner_user_id}（姓名请在服务账号详情页核对）")
+    else:
+        # Not a display problem: a key with no resource owner cannot publish at
+        # all — the first deploy is refused with 16205 rather than creating an
+        # application owned by nobody. Saying so at login turns that into a
+        # fixable sentence now instead of a rejection ten minutes later.
+        emitter.info("  资源归属人: 平台未返回 —— 这把密钥还不能 deploy，请管理员在服务账号详情页指定归属人")
+
     # Printed only when the platform sends it. A single-tenant install has one
     # (Root) tenant, so the id is a constant the developer can do nothing with,
     # and "租户" is a word that deployment shape is supposed to never show. The
@@ -172,3 +198,16 @@ def _report(emitter: Emitter, base_url: str, whoami: dict[str, Any], account: di
     emitter.info(f"  密钥: {whoami.get('key_mask') or '(平台未返回掩码)'}")
     emitter.info(f"  到期时间: {whoami.get('expires_at') or '未设置'}")
     emitter.info(f"  凭据已写入 {credentials.credentials_path()}（仅当前用户可读写）")
+
+
+def resource_owner_user_id(whoami: dict[str, Any]) -> int | None:
+    """`resource_owner.user_id`, or None when the platform sends no owner.
+
+    Kept in one place because the shape moved once already: F049 sent
+    ``{user_id, user_name}``, beta2's ``WhoamiResourceOwner`` carries ``user_id``
+    alone (and the whole object is null for a credential without an owner).
+    """
+    owner = whoami.get("resource_owner")
+    if isinstance(owner, dict) and owner.get("user_id") is not None:
+        return owner.get("user_id")
+    return None

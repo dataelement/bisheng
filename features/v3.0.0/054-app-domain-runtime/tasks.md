@@ -437,7 +437,7 @@
 
 - [x] **T055**: `[MVP-核心]` `AppQueryService` 实现
   **文件**: `src/backend/bisheng/app_runtime/domain/services/app_query_service.py`（新）
-  **实际偏差记录**: ①`get_logs` 增 `entry` 参数（`detail` / `cli` / `mcp`）：三入口**内容完全同源**（同一次 `orchestrator_client.logs`），但 CLI / MCP 收窄为**仅 owner**——它们跑在密钥上，让租户管理员的密钥读遍全租户日志等于把开放 API 的授权面悄悄放大到密钥持有人没被授予的范围。②`list_apps` 显式写 `tenant_id` 谓词并新增 `AppDao.alist_by_tenant`，不靠自动过滤（监听器只改 SELECT 且只在装了它的进程里生效）。③跨租户 `app_id` 答 **16101**（与「不存在」同一个答案），不答无权限——否则 app_id 成了存在性探测器。
+  **实际偏差记录**: ①`get_logs` 增 `entry` 参数（`detail` / `cli` / `mcp`）：三入口**内容完全同源**（同一次 `orchestrator_client.logs`），但 CLI / MCP 收窄为**仅 owner**——它们跑在密钥上，让租户管理员的密钥读遍全租户日志等于把开放 API 的授权面悄悄放大到密钥持有人没被授予的范围。②`list_apps` 显式写 `tenant_id` 谓词并新增 `AppDao.alist_by_tenant`，不靠自动过滤（监听器只改 SELECT 且只在装了它的进程里生效）。③跨租户 `app_id` 答 **16101**（与「不存在」同一个答案），不答无权限——否则 app_id 成了存在性探测器。④（2026-09-10 补）CLI / MCP 入口在 owner 之外**再比一次应用租户与凭据租户**：`get_logs` 走 `_load` 而非 `_load_visible`，而 `/api/v2` 把 `visible_tenant_ids` 设成 `{根租户, 凭据租户}`、D19 令牌随人换租户不失效，两者叠加让「同一 owner + 根租户应用」穿过判定；不等同样答 16101。
   **逻辑**: 详情（含 `entry_url`）/ 实例状态 / 日志 / 运行环境状态 / 版本列表的读侧，三入口权限口径分派（详情页：owner ∪ 本租户租户管理员；MCP / CLI：仅密钥归属人 owner 的应用）。**不写库**。
   **测试**: T054 全部通过。
   **覆盖 AC**: AC-23, AC-25, AC-52, AC-55, AC-57

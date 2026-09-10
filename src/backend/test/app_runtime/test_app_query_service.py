@@ -213,6 +213,91 @@ class TestLogs:
         tables = set(sqlmodel.SQLModel.metadata.tables)
         assert not {name for name in tables if name.startswith("app_") and "log" in name}
 
+    async def test_owner_only_entries_refuse_a_root_tenant_app_from_a_leaf_key(
+        self, app_db, app_factory, app_owner, fake_orchestrator
+    ):
+        """The owner-only doors compare the tenant too — owner equality is not enough.
+
+        ``/api/v2`` seeds ``visible_tenant_ids`` as ``{root, credential tenant}``,
+        so the automatic filter hands a **Root-tenant** application to a
+        child-tenant key; and under D19 a token survives its holder moving
+        tenants, so ``owner_user_id`` still matches on the app they left behind.
+        ``get_logs`` reaches the check through ``_load`` rather than
+        ``_load_visible``, so without this comparison ``bisheng logs`` reads a
+        Root application the platform face already answers 16101 for.
+        """
+        from bisheng.app_runtime.domain.services.app_query_service import (
+            LOG_ENTRY_CLI,
+            LOG_ENTRY_MCP,
+            AppQueryService,
+        )
+        from bisheng.common.dependencies.user_deps import UserPayload
+
+        from .conftest import ROOT_TENANT_ID, SUB_TENANT_ID
+
+        app, _ = await app_factory(state=AppState.ONLINE.value)
+        assert app.tenant_id == ROOT_TENANT_ID and app.owner_user_id == app_owner.user_id
+        moved_owner = UserPayload(
+            user_id=app_owner.user_id,
+            user_name=app_owner.user_name,
+            user_role=[],
+            tenant_id=SUB_TENANT_ID,
+            is_global_super=False,
+        )
+
+        for entry in (LOG_ENTRY_CLI, LOG_ENTRY_MCP):
+            with pytest.raises(AppNotFoundError) as excinfo:
+                await AppQueryService.get_logs(app.id, actor=moved_owner, entry=entry)
+            # Same code a genuinely missing app gets: a caller must not learn
+            # the application exists in a tenant they cannot see.
+            assert excinfo.value.code == 16101
+        assert not [name for name, _kwargs in fake_orchestrator.calls if name == "logs"]
+
+    async def test_owner_only_entries_still_serve_the_owner_inside_one_leaf_tenant(
+        self, app_db, app_factory, app_owner, fake_orchestrator
+    ):
+        """The guard is a tenant *comparison*, not a "root only" rule: an app and a
+        key that live in the same child tenant are the ordinary case and pass."""
+        from bisheng.app_runtime.domain.services.app_query_service import LOG_ENTRY_CLI, AppQueryService
+        from bisheng.common.dependencies.user_deps import UserPayload
+
+        from .conftest import SUB_TENANT_ID
+
+        fake_orchestrator.responses["logs"] = {"lines": ["ready"]}
+        app, _ = await app_factory(state=AppState.ONLINE.value, tenant_id=SUB_TENANT_ID)
+        owner_in_leaf = UserPayload(
+            user_id=app_owner.user_id,
+            user_name=app_owner.user_name,
+            user_role=[],
+            tenant_id=SUB_TENANT_ID,
+            is_global_super=False,
+        )
+
+        result = await AppQueryService.get_logs(app.id, actor=owner_in_leaf, entry=LOG_ENTRY_CLI)
+        assert result["lines"] == ["ready"]
+
+    async def test_owner_only_entries_refuse_leaf_to_leaf_as_well(self, app_db, app_factory, app_owner):
+        """Leaf-to-leaf is already shut out by the ``visible_tenant_ids`` IN-list
+        one layer down; asserted here so the service answers the same 16101 on
+        its own, rather than depending on a filter that a call path without
+        tenant context would not have injected."""
+        from bisheng.app_runtime.domain.services.app_query_service import LOG_ENTRY_CLI, AppQueryService
+        from bisheng.common.dependencies.user_deps import UserPayload
+
+        from .conftest import SUB_TENANT_ID
+
+        app, _ = await app_factory(state=AppState.ONLINE.value, tenant_id=SUB_TENANT_ID)
+        other_leaf_owner = UserPayload(
+            user_id=app_owner.user_id,
+            user_name=app_owner.user_name,
+            user_role=[],
+            tenant_id=SUB_TENANT_ID + 1,
+            is_global_super=False,
+        )
+
+        with pytest.raises(AppNotFoundError):
+            await AppQueryService.get_logs(app.id, actor=other_leaf_owner, entry=LOG_ENTRY_CLI)
+
 
 class TestRuntimeStatus:
     async def test_runtime_status_superadmin_only(self, app_db, app_owner, tenant_admins, fake_orchestrator):

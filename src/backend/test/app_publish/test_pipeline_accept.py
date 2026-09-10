@@ -155,6 +155,78 @@ async def test_iteration_deploy_requires_owner_match_else_16205(
     assert fake_f054_services.calls == [], "a rejected submission creates nothing"
 
 
+async def test_iteration_deploy_refuses_a_root_tenant_app_from_a_leaf_tenant_key(
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    app_factory,
+    service_account_principal,
+    fake_f054_services,
+    fake_publish_approval,
+    audit_sink,
+    enqueued,
+):
+    """Owner equality is not enough: the tenant is compared too (AC-04).
+
+    ``/api/v2`` seeds ``visible_tenant_ids`` as ``{root, credential tenant}``,
+    so the automatic filter still returns a **Root-tenant** application to a
+    child-tenant key — the IN-list only shuts out leaf-to-leaf. Under D19 a
+    token survives its holder moving tenants, so the ``owner_user_id`` on the
+    app they left behind keeps matching. ``AppQueryService._load_visible``
+    already refuses this on the platform face; the CLI door must answer alike.
+    """
+    from bisheng.common.errcode.app_publish import AppNotOwnedBySubjectError
+    from bisheng.core.context.tenant import set_current_tenant_id
+
+    from .conftest import SUB_TENANT_ID
+
+    root_app, _ = await app_factory(with_version=False)
+    assert root_app.tenant_id == ROOT_TENANT_ID and root_app.owner_user_id == OWNER_USER_ID
+    # The owner moved to a child tenant and the key followed them (D19).
+    set_current_tenant_id(SUB_TENANT_ID)
+
+    with pytest.raises(AppNotOwnedBySubjectError) as excinfo:
+        await _accept(
+            tarball_factory(),
+            service_account_principal(tenant_id=SUB_TENANT_ID),
+            app_id=root_app.id,
+        )
+    # Indistinguishable from a plain ownership miss on purpose — a distinct
+    # code or reason would confirm the app exists in a tenant they cannot see.
+    assert excinfo.value.code == 16205
+    assert excinfo.value.kwargs["details"]["reason"] == "owner_mismatch"
+    assert fake_f054_services.calls == [], "a rejected submission creates nothing"
+
+
+async def test_iteration_deploy_accepted_inside_the_credential_tenant(
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    app_factory,
+    service_account_principal,
+    fake_f054_services,
+    fake_publish_approval,
+    audit_sink,
+    enqueued,
+):
+    """The guard is a tenant *comparison*, not a "root only" rule: a child-tenant
+    app published by that tenant's own key is the ordinary case and passes."""
+    from bisheng.core.context.tenant import set_current_tenant_id
+
+    from .conftest import SUB_TENANT_ID
+
+    sub_app, _ = await app_factory(tenant_id=SUB_TENANT_ID, with_version=False)
+    set_current_tenant_id(SUB_TENANT_ID)
+
+    result = await _accept(
+        tarball_factory(),
+        service_account_principal(tenant_id=SUB_TENANT_ID),
+        app_id=sub_app.id,
+    )
+    assert result.app_id == sub_app.id
+    assert [name for name, _ in fake_f054_services.calls if name == "create_draft"] == []
+
+
 async def test_retry_deploy_reuses_same_app_id_not_new_draft(
     publish_db,
     tier_seed,

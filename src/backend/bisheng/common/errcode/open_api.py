@@ -192,9 +192,13 @@ class PersonalTokenHolderInvalidError(OpenApiAuthError):
     http_status = 401
 
 
-# 26050+: issue-time scope policy shared by service-account keys and personal
-# tokens (伴生 PRD §4.2.4 / §4.7.3 AC-48). 26032-26039 and 26044-26049 stay
-# reserved (test/open_api/test_error_codes.py).
+# 26050+: the `delegate` ⊗ local development toolkit scope policy (伴生 PRD
+# §4.2.4), one code per gate — 26050 at issue / edit time (a form the admin can
+# fix), 26051 at the channel entrance (a call the developer cannot fix, only
+# re-key). They are deliberately not one code: the two gates have different
+# audiences, different transports (400 vs 403) and different next actions, and
+# `constitution.md` binds one HTTP status per code.
+# 26032-26039 and 26044-26049 stay reserved (test/open_api/test_error_codes.py).
 
 
 class OpenApiDelegateExclusiveScopeError(OpenApiAuthError):
@@ -210,3 +214,21 @@ class OpenApiDelegateExclusiveScopeError(OpenApiAuthError):
     Code = 26050
     Msg = "A delegated credential cannot carry local development toolkit scopes; issue a separate key"
     http_status = 400
+
+
+class OpenApiDelegateLocalDevRefusedError(OpenApiAuthError):
+    """A delegated key reached a local development toolkit endpoint.
+
+    The runtime half of INV-31 / 伴生 PRD §4.2.4「运行期兜底」. 26050 keeps such
+    a key from being issued, but keys predating that gate still exist, so the
+    channel entrance refuses them by scope — before the missing-scope check, or
+    a delegated key without ``app:manage`` would get 26003 and send its holder
+    to an administrator who then cannot tick the box (26050 refuses the
+    combination) — and before delegation resolution, which would otherwise
+    answer 26016 「补个身份头」, advice the PRD calls undiagnosable for a local
+    agent: the CLI never sends identity headers, so no header is the fix.
+    """
+
+    Code = 26051
+    Msg = "This credential is delegation-only; issue a separate key without delegate for local development"
+    http_status = 403

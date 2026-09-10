@@ -16,6 +16,7 @@ from bisheng.common.errcode.llm_tenant import LLMModelSharedReadonlyError
 from bisheng.common.errcode.open_api import (
     OpenApiAuthDependencyUnavailableError,
     OpenApiAuthError,
+    OpenApiDelegateLocalDevRefusedError,
     OpenApiDelegationModeUnsupportedError,
     OpenApiEndpointUnregisteredError,
     OpenApiRemovedIdentityInputError,
@@ -30,7 +31,11 @@ from bisheng.open_api.domain.context import (
     reset_current_open_api_principal,
     set_current_open_api_principal,
 )
-from bisheng.open_api.domain.scopes import get_open_api_scope_marker
+from bisheng.open_api.domain.scopes import (
+    DELEGATE_SCOPE_CODE,
+    LOCAL_DEV_TOOLKIT_SCOPE_CODES,
+    get_open_api_scope_marker,
+)
 from bisheng.open_api.domain.services.credential_validator import validate_bearer
 from bisheng.open_api.domain.services.identity_service import (
     assert_no_removed_identity_headers,
@@ -81,6 +86,18 @@ async def verify_open_api_access(conn: HTTPConnection) -> AsyncIterator[OpenApiP
         marker = get_open_api_scope_marker(conn.scope.get("endpoint"))
         if marker is None:
             raise OpenApiEndpointUnregisteredError()
+        # INV-31 runtime half: the local development toolkit faces execute as
+        # the service account itself and never carry delegation, so a delegated
+        # key is refused here rather than further down. Both neighbours are
+        # wrong answers for it, which is why this sits between them: the
+        # missing-scope check below would answer 26003 and send the developer to
+        # an administrator who cannot tick the box (26050 refuses the
+        # combination at issue time), and resolve_request_identity would answer
+        # 26016 "send X-On-Behalf-Of" to a CLI that never sends identity
+        # headers. Ordering before the scope check is deliberate: whether the
+        # key also carries ``app:manage`` changes nothing about the verdict.
+        if marker.scope in LOCAL_DEV_TOOLKIT_SCOPE_CODES and principal.has_scope(DELEGATE_SCOPE_CODE):
+            raise OpenApiDelegateLocalDevRefusedError()
         if marker.scope is not None and not principal.has_scope(marker.scope):
             raise OpenApiScopeMissingError(required=marker.scope)
 

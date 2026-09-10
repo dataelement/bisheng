@@ -41,6 +41,14 @@ def build_app() -> FastAPI:
     async def unregistered():
         return {"unsafe": True}
 
+    # Stands in for the local development toolkit endpoints (`app:manage` is the
+    # only one of the three with routes today: POST /apps/deploy, GET
+    # /apps/{app_id}/logs).
+    @router.get("/toolkit")
+    @open_api_scope("app:manage", modes=("S",))
+    async def toolkit():
+        return {"deployed": True}
+
     @router.post("/upload")
     @open_api_scope("knowledge:write")
     async def upload(file: UploadFile = File(...)):
@@ -222,3 +230,95 @@ async def test_removed_user_id_is_rejected_in_multipart_before_upload_handler(mo
     assert rejected.json()["status_code"] == 26019
     assert accepted.status_code == 200
     assert accepted.json() == {"filename": "sample.txt"}
+
+
+async def test_delegate_key_is_refused_at_the_toolkit_entrance_not_sent_to_an_admin(monkeypatch):
+    """INV-31 runtime half: 26051, whether or not the key also holds the scope.
+
+    The scope-less half is the one that used to hurt. It answered 26003 ("ask
+    an administrator to tick app:manage"), and the administrator then could not
+    — 26050 refuses `delegate` + a toolkit scope at issue time — so the two
+    gates pointed at each other.
+    """
+
+    async def with_scope(_authorization):
+        return service_account_principal(scopes=frozenset({"delegate", "app:manage"}))
+
+    async def without_scope(_authorization):
+        return service_account_principal(scopes=frozenset({"delegate"}))
+
+    app = build_app()
+    for validate in (with_scope, without_scope):
+        monkeypatch.setattr("bisheng.open_api.api.dependencies.validate_bearer", validate)
+        response = await request(app, "/api/v2/toolkit", authorization="Bearer opaque")
+        assert response.status_code == 403
+        assert response.json()["status_code"] == 26051
+
+
+async def test_delegate_refusal_beats_delegation_resolution_so_no_header_advice_is_given(monkeypatch):
+    """26051 even when the caller does everything a delegated key is told to do.
+
+    Sending `X-On-Behalf-Of` is what 26016 asks for; on a toolkit endpoint it
+    must not turn the refusal into a success, or INV-31 degrades into "delegate
+    keys work here as long as you pass a header".
+    """
+
+    async def validate(_authorization):
+        return service_account_principal(scopes=frozenset({"delegate", "app:manage"}))
+
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.validate_bearer", validate)
+    async with AsyncClient(transport=ASGITransport(app=build_app()), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v2/toolkit",
+            headers={"Authorization": "Bearer opaque", "X-On-Behalf-Of": "12"},
+        )
+
+    assert response.status_code == 403
+    assert response.json()["status_code"] == 26051
+
+
+async def test_a_key_without_delegate_is_untouched_by_the_toolkit_gate(monkeypatch):
+    async def holder(_authorization):
+        return service_account_principal(scopes=frozenset({"app:manage"}))
+
+    async def bystander(_authorization):
+        return service_account_principal(scopes=frozenset({"knowledge:read"}))
+
+    app = build_app()
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.validate_bearer", holder)
+    granted = await request(app, "/api/v2/toolkit", authorization="Bearer opaque")
+    assert granted.status_code == 200
+    assert granted.json() == {"deployed": True}
+
+    # Still the ordinary missing-scope verdict, which is actionable: an
+    # administrator can tick `app:manage` on a key that has no `delegate`.
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.validate_bearer", bystander)
+    refused = await request(app, "/api/v2/toolkit", authorization="Bearer opaque")
+    assert refused.status_code == 403
+    assert refused.json()["status_code"] == 26003
+
+
+async def test_delegate_key_on_a_non_toolkit_endpoint_keeps_its_existing_verdicts(monkeypatch):
+    """The gate is scoped to the toolkit faces and nothing else.
+
+    `whoami` is the case `bisheng login` hits, and it deliberately keeps 26016:
+    it requires no scope at all, is not one of the three faces, and "send
+    X-On-Behalf-Of" is correct advice for the general integration calling it.
+    The CLI — which never sends identity headers — translates 26016 into the
+    delegate refusal on its side (`bisheng_cli/errors.py`), which is what makes
+    `login` refuse such a key.
+    """
+
+    async def validate(_authorization):
+        return service_account_principal(scopes=frozenset({"delegate", "knowledge:read"}))
+
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.validate_bearer", validate)
+    app = build_app()
+
+    whoami = await request(app, "/api/v2/whoami", authorization="Bearer opaque")
+    assert whoami.status_code == 400
+    assert whoami.json()["status_code"] == 26016
+
+    scoped = await request(app, "/api/v2/registered", authorization="Bearer opaque")
+    assert scoped.status_code == 400
+    assert scoped.json()["status_code"] == 26016

@@ -24,6 +24,7 @@ from bisheng_cli.errors import (
     EXIT_UNKNOWN_CODE,
     EXIT_UNREACHABLE,
     CliError,
+    delegate_refusal,
     error_from_platform,
     render_human,
 )
@@ -70,13 +71,74 @@ def test_26003_prints_required_scope_verbatim() -> None:
     assert "app:manage" in render_human(err)
 
 
-def test_26001_26002_26027_are_distinguishable() -> None:
-    # Only three. 26002 alone covers unknown / revoked / expired — the server
-    # gives no signal that separates those three, so the CLI must not pretend to.
+def test_26016_and_26051_both_say_delegate_only_and_never_ask_for_a_header() -> None:
+    """INV-31: the two gates, one verdict.
+
+    `26016` is where a delegate-only key actually lands during `bisheng login`
+    (`whoami` requires no scope, so the entrance gate waves it through and the
+    delegation resolver rejects it), and its server-side sentence — "send
+    X-On-Behalf-Of" — is advice no CLI caller can take: the CLI never sends
+    identity headers on any command. `26051` is the entrance gate itself on
+    `deploy` / `logs`. Both must read as "this key is the wrong kind".
+    """
+    for code in (26016, 26051):
+        err = _err(code, "X-On-Behalf-Of is required for a delegated credential")
+        assert err.exit_code == EXIT_FORBIDDEN
+        assert "委托" in err.message and "本地开发" in err.message
+        assert "另外签发" in err.next_step
+        # The platform sentence is still echoed under 平台信息 (三部分，缺一不可);
+        # what must not happen is the CLI's own advice repeating it.
+        assert "X-On-Behalf-Of" not in err.message + err.next_step
+        assert "X-On-Behalf-Of" in render_human(err)
+
+
+def test_delegate_refusal_reads_identically_at_all_three_gates() -> None:
+    # The CLI-side check in `login`, 26016 and 26051 are one product rule. Three
+    # wordings for it would read as three different problems.
+    local = delegate_refusal()
+    for code in (26016, 26051):
+        err = _err(code)
+        assert (err.message, err.next_step) == (local.message, local.next_step)
+        assert err.exit_code == local.exit_code
+
+
+def test_delegate_only_key_is_not_a_defect_and_not_an_unknown_code() -> None:
+    # 18 says "stop and file a bug", 19 says "read the message, maybe retry with
+    # different arguments". Neither fits: the key is simply the wrong kind, and
+    # the fix is a new key from an administrator.
+    for code in (26016, 26051):
+        assert ERROR_EXIT_CODES[code] == EXIT_FORBIDDEN
+        assert ERROR_EXIT_CODES[code] not in (EXIT_DEFECT, EXIT_UNKNOWN_CODE, EXIT_INTERNAL)
+
+
+def test_26002_covers_the_disabled_account_case_it_actually_receives() -> None:
+    """The server folds four causes into 26002, and the copy has to say so.
+
+    `credential_validator.resolve_service_account` raises
+    `OpenApiCredentialInvalidError` — 26002 — when the account behind the key is
+    missing, disabled or in another tenant. The separate 26027 that F049 raised
+    on this path survives only on the management face (issuing a key), which no
+    CLI command calls. A next step reading only "get a new key" therefore sends
+    the holder of a disabled account round a loop that cannot terminate.
+    """
     texts = {code: render_human(_err(code)) for code in (26001, 26002, 26027)}
     assert len(set(texts.values())) == 3
     for code in texts:
         assert ERROR_EXIT_CODES[code] == EXIT_AUTH
+    assert "停用" in texts[26002]
+    assert "换一把密钥没有用" in texts[26027]
+
+
+def test_personal_token_codes_are_registered_not_generic_403_or_401() -> None:
+    # beta2 authenticates `bs-pat-` tokens on the same endpoints, so the CLI can
+    # receive these. Unregistered they degraded by HTTP status into "ask your
+    # admin about the permission bits" / "check whether the key expired", which
+    # is the wrong investigation: the problem is the credential *kind*.
+    disabled, holder_gone = _err(26040, http_status=403), _err(26043, http_status=401)
+    assert (disabled.exit_code, holder_gone.exit_code) == (EXIT_FORBIDDEN, EXIT_AUTH)
+    for err in (disabled, holder_gone):
+        assert "个人" in err.message
+        assert "bs-sak-" in err.next_step
 
 
 def test_26030_marked_retryable() -> None:
@@ -161,13 +223,34 @@ def test_unknown_code_without_usable_http_status_falls_to_19() -> None:
     assert _err(19002, "weird", http_status=400).exit_code == EXIT_UNKNOWN_CODE
 
 
-def test_26004_and_26031_are_reported_as_platform_or_cli_defect() -> None:
-    cli_defect = render_human(_err(26004))
-    platform_defect = render_human(_err(26031, http_status=500))
-    assert "CLI" in cli_defect and "缺陷" in cli_defect
-    assert "平台" in platform_defect and "缺陷" in platform_defect
-    for text in (cli_defect, platform_defect):
-        assert "密钥" not in text.split("下一步")[0]
+def test_26004_reads_as_delegation_refused_and_still_points_off_the_key() -> None:
+    """26004's meaning moved; its next step had to move with it.
+
+    Under F049 it meant "any identity-passing header at all". beta2 raises it
+    from `identity_service.resolve_request_identity` for a request that *did*
+    carry `X-On-Behalf-Of` and whose delegation was refused — no `delegate` bit,
+    or a target outside the key's delegate scope. What survives unchanged is the
+    part the caller acts on: this CLI sends no identity headers on any command,
+    so the header came from somewhere else on the path, and neither the key nor
+    its permission bits are the thing to go and change.
+    """
+    text = render_human(_err(26004))
+    assert "委托" in text
+    assert "X-On-Behalf-Of" in text
+    assert "网关" in text or "代理" in text
+    assert "CLI 从不发送" in text
+    # The head sentence now names the key, because that is what the server's
+    # verdict is about ("this key has no delegate bit"). What must not happen is
+    # the *next step* sending the reader off to change it: no CLI key delegates,
+    # so no key change and no permission bit can produce a different outcome.
+    next_step = _err(26004).next_step
+    assert "改密钥或权限位都不解决" in next_step
+
+
+def test_26031_is_reported_as_a_platform_defect() -> None:
+    text = render_human(_err(26031, http_status=500))
+    assert "平台" in text and "缺陷" in text
+    assert "密钥" not in text.split("下一步")[0]
 
 
 def test_defect_class_gets_its_own_exit_code_not_1_or_19() -> None:

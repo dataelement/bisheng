@@ -334,7 +334,7 @@
   - A. **应用日志写进平台库或 ES** — 缺点：高频写放大、要给每个应用配采集器；WB-13 只要"最近的、可筛的只读日志"
   - B. **`docker logs` 直读**（json-file driver + `--log-opt max-size=10m max-file=3` 轮转）（选定）
   - C. 挂宿主日志文件让 backend 直读 — 违反 K1（backend 又要认识容器布局）
-- **选定（日志）**：**B**。runtime-manager 提供 `GET /v1/apps/{app_id}/logs?tail=&since=&keyword=`（形态无关；k8s 侧换成 `kubectl logs` 等价调用）；backend `GET /api/v1/apps/{app_id}/logs` 是唯一服务方法，**三个入口（详情页 tab / CLI `logs` F053 / MCP 日志工具 F052）内容范围一致、权限各按入口口径**（详情页：owner ∪ 本租户租户管理员；MCP/CLI：仅密钥归属人 owner 的应用）——AC-23 / AC-55。**保留期 = docker 日志轮转窗口**（30MB / 应用），产品口径是"最近的运行日志"，不承诺永久留存。
+- **选定（日志）**：**B**。runtime-manager 提供 `GET /v1/apps/{app_id}/logs?tail=&since=&keyword=`（形态无关；k8s 侧换成 `kubectl logs` 等价调用）；backend `GET /api/v1/apps/{app_id}/logs` 是唯一服务方法，**三个入口（详情页 tab / CLI `logs` F053 / MCP 日志工具 F052）内容范围一致、权限各按入口口径**（详情页：owner ∪ 本租户租户管理员；MCP/CLI：仅密钥归属人 owner 的应用，**且应用租户须等于凭据租户**——owner 相等不足以判定，`/api/v2` 的 `visible_tenant_ids` 含根租户、D19 令牌随人换租户不失效）——AC-23 / AC-55。**保留期 = docker 日志轮转窗口**（30MB / 应用），产品口径是"最近的运行日志"，不承诺永久留存。
 - **日志里的密钥（AC-55「不出现密钥值」）**：运行日志是**应用自己打印的**，平台不做通用脱敏（那是幻觉级承诺）。可做且要做的两件：① 读取路径对**平台注入的已知敏感值**（如附件存储 token）做字面量替换为 `***`；② 密钥泄漏由**发布期扫描**兜（F055 的密钥扫描规则集）。这个口径要写进 tasks 的验收注释，别让评审误以为做了全量脱敏。
 - **备选（访问记录 AC-38）**：
   - A. 写 `audit_log` — 缺点：审计表有 UI 白名单与 `operator_name` 查询开销，且访问是高频事件

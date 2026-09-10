@@ -130,7 +130,7 @@ class AppDeployment(SQLModelSerializable, table=True):
         sa_column=Column(
             Integer,
             nullable=False,
-            comment="Acting subject of the /api/v2 call — the service-account user, not the owner",
+            comment="Natural person who submitted; 0 when a service-account key did (see NO_NATURAL_PERSON_SUBMITTER)",
         ),
     )
     version_id: str | None = Field(

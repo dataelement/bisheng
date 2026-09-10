@@ -632,7 +632,10 @@ async def deployment_factory(publish_db, owner_user):
         app_id: str | None = None,
         tenant_id: int = ROOT_TENANT_ID,
         owner_user_id: int | None = None,
-        submitted_by_user_id: int = SERVICE_ACCOUNT_USER_ID,
+        # 0 is what ``accept`` writes for a service-account key — the deployment
+        # row has no column that can hold a service_account id, and the two id
+        # spaces are unrelated now that service accounts left the ``user`` table.
+        submitted_by_user_id: int = 0,
         stage: str = STAGE_RECEIVED,
         status: str = STATUS_RUNNING,
         version_id: str | None = None,

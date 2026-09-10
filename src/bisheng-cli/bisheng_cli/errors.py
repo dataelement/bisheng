@@ -62,16 +62,43 @@ EXIT_APPROVAL_EXCEPTION = 25
 
 # ---- code → (sentence, next step) --------------------------------------
 
+# INV-31 has three gates that all mean the same thing to a developer, so they
+# say the same thing: the CLI-side scope check in `login`, the platform's
+# channel-entrance refusal (`26051`), and `26016`.
+#
+# `26016` is the platform saying "a delegated key must send X-On-Behalf-Of".
+# That reading is right for a general integration and useless here: **the CLI
+# never sends identity headers**, on any command, so there is no header to add
+# and the only thing 26016 can mean on this wire is "this key carries
+# `delegate`". Translating it to "add the header" would be advice no caller can
+# act on; leaving it unregistered dropped it to exit 19 ("未登记的错误码 26016"),
+# which is how a delegate-only key used to fail `bisheng login`.
+_DELEGATE_ONLY_SENTENCE = "这把密钥被配置为委托专用（delegate），不能用于本地开发"
+_DELEGATE_ONLY_NEXT_STEP = "请平台管理员另外签发一把不含 delegate 位的服务账号密钥用于 CLI。"
+
 ERROR_HINTS: dict[int, tuple[str, str]] = {
     # --- F049, 260 segment: credential and scope ---
     26001: (
         "请求没有携带可识别的 Authorization 头",
         "检查密钥的传法：--api-key、环境变量 BISHENG_API_KEY 或 --api-key-stdin，值需是完整的 bs-sak- 开头字符串。",
     ),
+    # 26002 covers four causes with one code, not three: the key is unknown /
+    # revoked / expired, **or the service account behind it is disabled or
+    # deleted**. That last one used to arrive as its own code (26027); on the
+    # beta2 server it does not — `credential_validator.resolve_service_account`
+    # raises `OpenApiCredentialInvalidError` for a missing, disabled or
+    # cross-tenant account. So "get a new key" can no longer be the only next
+    # step: for a disabled account a new key is just as dead as the old one, and
+    # a developer who is not told that will keep asking for re-issues.
     26002: (
-        "平台不接受这把密钥（不存在、已撤销或已过期——平台不区分这三种成因）",
-        "请平台管理员在服务账号详情页重新签发一把密钥，或改用另一把仍然有效的密钥。",
+        "平台不接受这把密钥（不存在、已撤销、已过期，或密钥所属的服务账号已被停用/删除——平台不区分这几种成因）",
+        "请平台管理员先确认该服务账号仍是启用状态，再在服务账号详情页重新签发一把密钥；账号本身被停用时，换密钥没有用。",
     ),
+    # Still registered because the code still exists and still means what it
+    # says — but on beta2 it is raised only on the management face (issuing a
+    # key for a disabled account, `open_api/api/endpoints/service_account_keys.py`),
+    # which no CLI command calls. A CLI run that receives it is talking to a
+    # platform whose runtime path differs from the one measured here.
     26027: (
         "密钥所属的服务账号已被停用或删除",
         "请平台管理员启用该服务账号；换一把密钥没有用，问题在账号本身。",
@@ -80,9 +107,40 @@ ERROR_HINTS: dict[int, tuple[str, str]] = {
         "这把密钥缺少本次操作需要的权限位",
         "请平台管理员在服务账号详情页编辑该密钥、补勾所缺权限位后重试（无需重新签发）。",
     ),
+    # 26004 changed meaning under the beta2 server. It used to be "any
+    # identity-passing header at all", which for this CLI could only ever be its
+    # own defect. It is now raised by `identity_service.resolve_request_identity`
+    # for a request that **did** carry `X-On-Behalf-Of` and whose delegation was
+    # refused (the key has no `delegate` bit, or the target is outside the key's
+    # delegate scope). The half that still holds is the diagnosis: the CLI sends
+    # no identity headers on any command, so the header came from something else
+    # on the path. Naming both origins is the difference between a bug report
+    # that goes to the right place and one that goes nowhere.
     26004: (
-        "请求携带了身份传递头，而 CLI 从不发送这两个头——这是 CLI 缺陷",
-        "请连同 --verbose 输出一起报 CLI 故障；不要改密钥或权限位，方向是错的。",
+        "平台按「委托被拒」拒绝了这次调用：请求里带了 X-On-Behalf-Of 身份头，而这把密钥未开启委托、或委托目标不在允许范围内",
+        "CLI 从不发送这个头，所以它来自链路上的其它环节：先查网关 / 反向代理是否注入了 X-On-Behalf-Of；确认没有再连同 --verbose 输出报 CLI 故障。改密钥或权限位都不解决它。",
+    ),
+    # 26016 / 26051 are the same verdict reached at two different gates: 26016
+    # by the delegation resolver (login's `whoami` requires no scope, so the
+    # entrance gate lets it through), 26051 by the entrance gate itself on the
+    # toolkit endpoints (`deploy` / `logs`). One next step, because there is
+    # only one: get a key without `delegate`.
+    26016: (_DELEGATE_ONLY_SENTENCE, _DELEGATE_ONLY_NEXT_STEP),
+    26051: (_DELEGATE_ONLY_SENTENCE, _DELEGATE_ONLY_NEXT_STEP),
+    # A `bs-pat-` personal token authenticates on the same wire as a service
+    # account key, so a developer can paste one into `bisheng login` and will:
+    # the platform then answers with these two codes, and unregistered they
+    # degraded to the generic "ask your admin about the permission bits" /
+    # "check whether the key expired" fallbacks — both of which point away from
+    # the actual cause. Note a personal token can never carry `app:manage`
+    # (伴生 PRD §4.10.3 whitelist), so it logs in and then fails every deploy.
+    26040: (
+        "这是一把个人访问令牌，而本平台没有开启个人访问令牌能力",
+        "改用服务账号密钥（bs-sak- 开头）——CLI 的 deploy 本来就只认服务账号密钥，个人令牌拿不到 app:manage 位。",
+    ),
+    26043: (
+        "个人访问令牌的持有人已停用、已删除，或已不在本租户",
+        "找平台管理员恢复该账号，或改用服务账号密钥（bs-sak- 开头）重新 login。",
     ),
     26030: (
         "平台鉴权服务暂时不可用（fail-closed，与密钥无关），可重试",
@@ -197,9 +255,21 @@ ERROR_EXIT_CODES: dict[int, int] = {
     26027: EXIT_AUTH,
     26003: EXIT_FORBIDDEN,
     # Both sides of the defect class land on 18 (see its definition above): the
-    # CLI sent something it should never send, or the platform is missing a
-    # scope marking. Neither is anything the caller did or can fix.
+    # request reached the platform carrying an identity header this CLI never
+    # sends, or the platform is missing a scope marking. Neither is anything the
+    # caller did or can fix by retrying or by changing arguments — 26004 stays
+    # on 18 under beta2's wider reading of it ("delegation refused") for exactly
+    # that reason, even though the platform now describes it as a key-
+    # configuration problem: no CLI key delegates, so no key change is the fix.
     26004: EXIT_DEFECT,
+    # Not EXIT_DEFECT: nothing is broken, the key is simply the wrong kind —
+    # and not EXIT_UNKNOWN_CODE either, which would invite a retry with
+    # different arguments. It is the same refusal `delegate_refusal()` raises
+    # locally, so it lands on the same exit code.
+    26016: EXIT_FORBIDDEN,
+    26051: EXIT_FORBIDDEN,
+    26040: EXIT_FORBIDDEN,
+    26043: EXIT_AUTH,
     26030: EXIT_UNREACHABLE,
     26031: EXIT_DEFECT,
     16101: EXIT_LOCAL_INVALID,
@@ -340,15 +410,20 @@ def _augment_next_step(code: int, next_step: str, details: Any) -> str:
 def delegate_refusal() -> CliError:
     """CLI-side refusal of a delegate-only key.
 
-    Shaped to match the server-side refusal on purpose (same exit code, same
-    "delegate-only, get a separate key" direction): the two rejections are the
-    same product rule enforced at two gates, and a caller that special-cases one
-    of them is a caller that will mishandle the other.
+    Shaped to match the server-side refusal on purpose (same sentence, same
+    next step, same exit code as `26016` / `26051`): the rejections are the same
+    product rule enforced at different gates, and a caller that special-cases
+    one of them is a caller that will mishandle the others.
+
+    This path is no longer the one a delegate-only key normally takes — the
+    platform refuses it during `whoami` (26016), before `login` ever sees a
+    scope list. It stays because it is the only gate that still works if a
+    future platform lets such a key read its own scopes.
     """
     return CliError(
-        "这把密钥被配置为委托专用（delegate），不能用于本地开发",
+        _DELEGATE_ONLY_SENTENCE,
         exit_code=EXIT_FORBIDDEN,
-        next_step="请平台管理员另外签发一把不含 delegate 位的服务账号密钥用于 CLI。",
+        next_step=_DELEGATE_ONLY_NEXT_STEP,
     )
 
 

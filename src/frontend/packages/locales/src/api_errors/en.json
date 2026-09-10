@@ -489,6 +489,7 @@
   "26042": "The token expiration exceeds the allowed maximum",
   "26043": "The personal access token holder is no longer active in this tenant",
   "26050": "A key configured for delegation cannot be used for local development; issue a separate key",
+  "26051": "This key is delegation-only; for local development, issue a separate key without delegate",
   "403": "No permission to perform this action",
   "404": "Resource not found",
   "429": "System is busy, please wait.",

@@ -327,6 +327,7 @@
   **覆盖 AC**: AC-28
 
 - [ ] **T024**: 审计列表列扩展（对象列显示应用名 + 标识 / 名称快照；操作人列对服务账号显示账号名 + 密钥掩码并附 owner）
+  ⚠️ **2026-09-10 现状（改接 beta2 底座后，本任务的输入条件已变）**：CLI 发布的 `app.release.*` 事件里，只有 SUBMIT 那条带 `operator_name`（=服务账号名），其余三条（审批通过 / 上线 / 失败）只有 `operator_id=0` 且无名字，审计页会渲染成「system」。原因是 `app_deployment` 没有能承载服务账号身份的列（`submitted_by_user_id` 是自然人 id 空间，服务账号已不在 `user` 表），而后三条事件在 Celery 腿里写、拿不到调用期的 principal。**本任务落地前需先定两件事**：① 产品口径——这些事件的操作人应显示服务账号名还是 system；② 若要显示账号名，需给 `app_deployment` 加一列承载「发起主体（kind + id + name）」并回填给 `write_release_audit`。
   **文件**: `src/frontend/platform/src/pages/LogPage/systemLog/index.tsx`, `src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/bs.json`
   **覆盖 AC**: AC-17, AC-29
 
@@ -450,5 +451,5 @@
 2. **`app.release.*` 的前端半边已补齐（16 条 × log.ts × 三语），T015 的 `xfail(strict=True)` 哨兵已摘除、转为正常断言（30 passed）。** 实施方测出的这个缺口是真的：后端白名单 17 条、前端 0 条——**发布事件写进了库却在审计页一条都筛不出来**，正是 F054 坑 24 记载的同一种失效，AC-27 判的就是筛得出来而不是写得进去。哨兵的设计在这里完全奏效：补齐当天 16 条全部 XPASS(strict) 报错，强制把待办项删掉而不是让它静静地活过它所描述的缺口。
 3. **越出「只改」清单的四个文件属正当**：`api/services/workflow.py` / `permission/application/resource_api.py` / `api/services/f048_permission_runtime.py` / `database/models/app.py` 都是 tasks.md 的 T005/T009/T011/T013/T014 直接点名的，不改则 F056 什么也做不成；我给的清单是并发边界（避开另两路的战场），不是任务范围，实施方按 tasks.md 执行且严格避开了四个「不碰」目录，判断正确。
 4. **T003 勘误①（访问记录合并窗口 300s → 1800s）登记为待办**：`app_access` 全仓只有 `tenant_filter.py:117` 一句 TODO，功能未实现，无处可回写——等该功能落地时随它一起定，不在本轮制造一个指向空处的引用。
-5. **T016 / T021 未做属正确取舍**：前者要真 FGA + MySQL 才有意义（AC-05 授权→撤销、AC-06 与入口判定同真同假、AC-15 被授予者调 grants 得 403），本地无中间件；**没写一个跑不起来的空壳是对的**——空壳会让人以为覆盖到了。后者要 114 环境与非管理员账号实操。两条都随 114 联调一起做。
+5. ~~**T016 / T021 未做属正确取舍**~~ → **2026-09-10 订正：T016 已交付**（`src/backend/test/workflow/test_square_hosted_app_e2e.py`，7 例，`F056_E2E=1` 门控、无中间件时整文件 skip——不是空壳），仍需在 114 重建后对真实部署跑一次；T021 仍待 114。以下为原判断，保留作历史：前者要真 FGA + MySQL 才有意义（AC-05 授权→撤销、AC-06 与入口判定同真同假、AC-15 被授予者调 grants 得 403），本地无中间件；**没写一个跑不起来的空壳是对的**——空壳会让人以为覆盖到了。后者要 114 环境与非管理员账号实操。两条都随 114 联调一起做。
 

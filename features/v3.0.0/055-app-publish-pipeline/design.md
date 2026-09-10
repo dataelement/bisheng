@@ -81,7 +81,7 @@
   - D. **状态机驱动 + Beat 轮询推进**（`app_deployment.stage` 由定时任务推进）— 缺点：仓内无先例、引入 Beat 依赖（114 上 Beat 曾因未起而让频道信息源永不同步，memory `project_channel_information_sync_tenant_fix`），且 stage 推进本就是线性的、不需要调度器
 - **选定**：**C**。
   - **进度载体 = 新表 `app_deployment`（一次发布尝试）**，不复用 `app_version`：AC-02 / 决议-9 要求"预检或扫描失败的提交不进版本列表"，而 F054 已把 `app_version` 定死为**只 INSERT 不 UPDATE**（唯一例外是 `terminal_state` 单列，由 F055 写）——把失败尝试塞进版本表既违反前者、又要给 `terminal_state` 加"预检失败"这类过程值。
-  - **CLI 轮询**：`GET /api/v2/apps/deployments/{deployment_id}`（同一把 `app:manage` 依赖），返回 `{stage, status, failure{stage,code,message,details,hints}, app_id, version_no, approval{...}, app_state}`。CLI 默认在"审批单生成"后返回（F053 AC-31b），`--wait` 继续轮到审批终态与上线结果。轮询间隔由 CLI 定（建议 2s，构建期退避到 5s），服务端不做长轮询（长轮询会把 uvicorn worker 又占回去）。
+  - **CLI 轮询**：`GET /api/v2/apps/deployments/{deployment_id}`（同一把 `app:manage` 依赖；**判定 = 归属人 + 发布记录租户双比对**，与 `deploy` / `logs` 同口径——自动过滤的 IN-list 是 `{根租户, 凭据租户}`、只挡叶子对叶子，跨租户靠这一次显式比对；三种不等〔无此记录 / 非本人 / 跨租户〕按同一个 16205 `not_owned` 同形答，否则 `deployment_id` 成了存在性探测器），返回 `{stage, status, failure{stage,code,message,details,hints}, app_id, version_no, approval{...}, app_state}`。CLI 默认在"审批单生成"后返回（F053 AC-31b），`--wait` 继续轮到审批终态与上线结果。轮询间隔由 CLI 定（建议 2s，构建期退避到 5s），服务端不做长轮询（长轮询会把 uvicorn worker 又占回去）。
   - **队列**：**走默认 `celery` 队列**（与审批 outbox 同队列，114 已有 default worker 在跑），**不新建队列**——新队列意味着 114 与 compose 都要加 worker 单元，而 MVP 期并发发布量是个位数。任务 `bisheng.worker.app_publish.run_pipeline(deployment_id)`。
   - **阶段与状态**：`stage ∈ {received, secret_scan, precheck_manifest, precheck_build, precheck_probe, version_recorded, approval_created, approved, publishing, online, pending_online}`；`status ∈ {running, waiting_approval, succeeded, failed}`。每次阶段推进 = 一次 `app_deployment` 单行 UPDATE + 一条审计（`app.release.*`）。
 - **原因**：C 是唯一同时满足「秒级错误秒级回」「分钟级阶段不占连接」「CLI 能分阶段输出」的落点，且不引入新队列 / 新调度器。A 被超时与 F053 AC-31a 证伪；B 把最常见的错误（manifest 少字段）反馈路径拉长；D 属为线性流程引调度器。
@@ -321,7 +321,7 @@
 
 > **本轮不做**（`mvp-114-path.md` §6：不集成平台能力）。本节只钉住落点方向，避免后置波次重新论证。**MVP 期的诚实表达见 D16**：manifest 的 `capabilities` 非空 → 预检**拒绝**并提示「本环境未启用能力总线」（16231），**不静默忽略**——静默忽略会让开发者以为声明生效了。
 
-- **运行期凭据主体**（决议-4）：F049 底座已备好第二类主体——`PRINCIPAL_KIND_HOSTED_APP = "hosted_app"`（`open_api/domain/context.py:23`）与 `SUBJECT_KIND_HOSTED_APP`（`api_credential.py:46`，`CREDENTIAL_SUBJECT_KINDS` 已含它）。**只差 F049 design D2 说的 `SUBJECT_RESOLVERS['hosted_app']` 解析器**（F049 明确"随 F055 定义并注册"，未注册前该 kind 在 `/api/v2` 上按 `26002` 拒绝）。
+- **运行期凭据主体**（决议-4）：⚠️ **2026-09-10 前提已变**——开放 API 底座已换成发版线 beta2 的 F053，`api_credential.subject_kind` 只接受 `service_account` / `natural_person` 两值并带 DB CHECK 约束，vibe 期的 `PRINCIPAL_KIND_HOSTED_APP` / `SUBJECT_KIND_HOSTED_APP` 常量**已随 vibe 模型一并删除**。接 T055 时不再是「只差一个解析器」：需先加一条迁移放宽 CHECK、在 beta2 的模型与解析器注册表里新增该主体类型，工作量按此重估（迁移方案 M10）。以下为改接前的原文，保留作历史：F049 底座已备好第二类主体——`PRINCIPAL_KIND_HOSTED_APP = "hosted_app"`（`open_api/domain/context.py:23`）与 `SUBJECT_KIND_HOSTED_APP`（`api_credential.py:46`，`CREDENTIAL_SUBJECT_KINDS` 已含它）。**只差 F049 design D2 说的 `SUBJECT_RESOLVERS['hosted_app']` 解析器**（F049 明确"随 F055 定义并注册"，未注册前该 kind 在 `/api/v2` 上按 `26002` 拒绝）。
   - **方向**：`subject_user_id = app.owner_user_id`（能力按 owner 权限的边界由能力声明白名单收窄，不是由主体放大）、`tenant_id = app.tenant_id`、`scopes` 由能力声明派生（声明模型 → `model:invoke`；声明知识库 → 检索位）。**审计双归属（AC-55）与执行身份是两件事**：执行身份是应用，审计 actor = 应用、subject = 当前访问用户（由 F054 AC-34 注入的 OBO 令牌确立）。
   - 签发 / 重签在**审批通过、拉起新容器之前**（新凭据随环境变量 `BISHENG_APP_TOKEN` 注入新容器）；旧凭据**撤销**即 5 秒内失效（INV-28；F049 凭据缓存 TTL 3s < 5s 上界，天然满足）。下线 → 主体停用语义（**不新增状态枚举**）；删除 → 撤销。全程无管理界面、不进服务账号列表（AC-59）。
 - **模型注入**：经 F051 的平台 OpenAI 兼容面；应用侧用**行业标准客户端**（`openai` SDK）+ 平台注入的 `BISHENG_PLATFORM_API_BASE` + `BISHENG_APP_TOKEN`，平台不做薄封装（PRD-1 DEV-07 已定"模型调用与应用数据库刻意不进 SDK"）。
@@ -417,7 +417,7 @@ CLI: POST /api/v2/apps/deploy  (multipart: package.tar.gz + app_id? + confirm_sc
   │  @open_api_scope("app:manage") + router_rpc verify_open_api_access   # beta2 单一管线，缺位→26xxx；delegate 与 app:manage 签发期互斥（M7）
   ├─ ① 同步前段（秒级，deploy_endpoint → PublishPipelineService.accept）
   │    │  ⚠️ 本段不发任何 RPC：manager 不可达就会把 deploy 变成挂在超时上的请求（D4 / D1 选 C 的兑现）
-  │    ├ 归属判定：principal.resource_owner_user_id == app.owner_user_id ?  否→16205
+  │    ├ 归属判定：principal.resource_owner_user_id == app.owner_user_id **且** app.tenant_id == 凭据租户 ?  否→16205（同形，不区分两种不等；owner 相等不够：visible_tenant_ids 含根租户 + D19 令牌随人迁移）
   │    ├ 大小闸 settings.app_runtime.max_package_mb（默认 50）→ 落临时盘 → put_object(file=Path) 到 bisheng-apps
   │    │    键 apps/{app_id}/versions/{version_id}/code.tar.gz     # version_id 此刻生成（D2）
   │    ├ 解包安全闸（拒 abs / .. / symlink / hardlink / dev / fifo）+ 解包大小闸 + 条目数闸
@@ -493,7 +493,7 @@ platform 发布面 / F052 MCP 应用状态工具
 | `GET /api/v2/apps/deploy-limits` | — | `{max_package_mb, max_unpacked_mb, max_package_entries}`（读 `settings.app_runtime.*`，默认 50 / 200 / 20000） | **F053** 打包后上传前自查（AC-32「按部署配置的上限」的取值途径；取不到 → 直接上传、服务端 16201 兜底，D2） |
 | `POST /api/v2/apps/deploy` | multipart：`package`（tar.gz，≤ `max_package_mb`）· `app_id`（迭代必填、首发省略）· `confirm_schema_change: bool`（本期只接受不消费，D3） | `{deployment_id, app_id, version_id, entry_url?}` | **F053** `bisheng deploy` |
 | `GET /api/v2/apps/deployments/{deployment_id}` | — | `{stage, status, failure{stage,code,message,details,hints[]}, app_id, version_no, approval{instance_id,status,reject_reason}, app_state, pending_reason}` | **F053** 轮询 / `--wait` |
-| `GET /api/v2/apps/{app_id}/logs` | `tail, since, keyword` | `{lines[]}`（**转发 F054 `GET /api/v1/apps/{id}/logs` 的同一服务方法**，只加 `app:manage` + 归属人判定） | **F053** `bisheng logs` |
+| `GET /api/v2/apps/{app_id}/logs` | `tail, since, keyword` | `{lines[]}`（**转发 F054 `GET /api/v1/apps/{id}/logs` 的同一服务方法**，只加 `app:manage` + 归属人与租户判定） | **F053** `bisheng logs` |
 
 **② 发布状态只读接口**（`/api/v1`，登录态；AC-38）
 

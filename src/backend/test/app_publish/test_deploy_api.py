@@ -268,6 +268,52 @@ async def test_unknown_deployment_id_answers_the_same_as_not_owned(publish_db, a
     assert payload["status_code"] == 16205
 
 
+async def test_polling_a_root_tenant_deployment_from_a_leaf_tenant_key_is_rejected(
+    publish_db, api_app, service_account_principal, app_factory, deployment_factory
+):
+    """Owner equality is not enough here either — the tenant is compared too.
+
+    The automatic filter only shuts out leaf-to-leaf: ``verify_open_api_access``
+    seeds ``visible_tenant_ids`` as ``{root, credential tenant}``, so a
+    **Root-tenant** attempt is still returned by the SELECT to a child-tenant
+    key. With the owner moved to that leaf under D19 the owner ids still match,
+    and stage / status / failure / approval of somebody else's publish would be
+    readable.
+    """
+    from .conftest import ROOT_TENANT_ID, SUB_TENANT_ID
+
+    app, _ = await app_factory(with_version=False)
+    deployment = await deployment_factory(app_id=app.id, stage="precheck_build", status="running")
+    assert deployment.tenant_id == ROOT_TENANT_ID and deployment.owner_user_id == OWNER_USER_ID
+
+    async with api_app(principal=service_account_principal(tenant_id=SUB_TENANT_ID)) as client:
+        payload = _body(await client.get(f"/api/v2/apps/deployments/{deployment.id}"))
+
+    # Indistinguishable from "no such deployment" and from "not yours".
+    assert payload["status_code"] == 16205
+    assert payload["data"]["details"]["reason"] == "not_owned"
+
+
+async def test_polling_inside_the_credential_tenant_still_returns_the_attempt(
+    publish_db, api_app, service_account_principal, app_factory, deployment_factory
+):
+    """The guard is a tenant *comparison*: a child-tenant attempt polled by that
+    tenant's own key is the ordinary case and still answers."""
+    from .conftest import SUB_TENANT_ID
+
+    app, _ = await app_factory(tenant_id=SUB_TENANT_ID, with_version=False)
+    deployment = await deployment_factory(
+        app_id=app.id, tenant_id=SUB_TENANT_ID, stage="precheck_build", status="running"
+    )
+
+    async with api_app(principal=service_account_principal(tenant_id=SUB_TENANT_ID)) as client:
+        payload = _body(await client.get(f"/api/v2/apps/deployments/{deployment.id}"))
+
+    assert payload["status_code"] == 200
+    assert payload["data"]["deployment_id"] == deployment.id
+    assert payload["data"]["stage"] == "precheck_build"
+
+
 # ---------------------------------------------------------------------------
 # AC-04 — scope and identity
 # ---------------------------------------------------------------------------

@@ -262,6 +262,28 @@ class AppQueryService:
     @staticmethod
     async def _require_log_access(app: App, actor, *, entry: str) -> None:
         user_id = int(getattr(actor, "user_id", 0) or 0)
+        if entry in _OWNER_ONLY_ENTRIES and int(app.tenant_id or 0) != int(getattr(actor, "tenant_id", 0) or 0):
+            # **Owner equality is not enough on a credential door**, so the
+            # tenant is compared before it. ``/api/v2`` seeds
+            # ``visible_tenant_ids`` as ``{DEFAULT_TENANT_ID, principal.
+            # tenant_id}`` (``open_api/api/dependencies.py``), so the automatic
+            # filter still returns a **Root-tenant** application to a
+            # child-tenant key — only leaf-to-leaf is shut out by the IN-list;
+            # and under D19 a token survives its holder moving tenants, so the
+            # ``owner_user_id`` on an app they left behind keeps matching.
+            # Unlike the platform entries, ``get_logs`` reaches here through
+            # ``_load`` rather than ``_load_visible``, so this is the only
+            # place the comparison gets made on this path.
+            #
+            # Read off the *actor*, the same spelling ``_load_visible`` uses —
+            # and not ``get_current_tenant_id()``, which ``_load`` has already
+            # overwritten with the application's own tenant two lines earlier,
+            # making a ContextVar comparison trivially true.
+            #
+            # Answered as "no such application": the same answer
+            # ``_load_visible`` gives the platform face, and the one that does
+            # not confirm the app exists in a tenant the caller cannot see.
+            raise AppNotFoundError(app_id=app.id)
         if user_id == int(app.owner_user_id or 0):
             return
         if entry in _OWNER_ONLY_ENTRIES:

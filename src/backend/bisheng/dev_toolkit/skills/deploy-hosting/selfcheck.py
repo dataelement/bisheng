@@ -58,7 +58,12 @@ def main() -> None:
             payload = json.loads(resp.read().decode("utf-8") or "{}")
     except urllib.error.HTTPError as exc:
         if exc.code in (401, 403):
-            fail("平台不认这把密钥(可能已被吊销或过期)。", "找管理员重新签发一把服务账号密钥,再 bisheng login。")
+            # 服务端把「密钥无效」与「服务账号已停用/删除」收进同一个 26002,
+            # 所以这里不能只说「重新签发」——账号被停用时新密钥同样用不了。
+            fail(
+                "平台不认这把密钥(已被吊销/过期,或所属服务账号已被停用)。",
+                "先请管理员确认该服务账号仍启用,再重新签发一把密钥,然后 bisheng login。",
+            )
         fail(f"平台返回 HTTP {exc.code}。", "确认平台地址正确、开放 API 能力已启用。")
     except urllib.error.URLError as exc:
         fail(f"连不上平台:{exc.reason}", "确认平台地址可达、在内网/VPN 里、没有代理拦截。")
@@ -67,8 +72,11 @@ def main() -> None:
 
     data = payload.get("data") if isinstance(payload, dict) else None
     owner = (data or {}).get("resource_owner") if isinstance(data, dict) else None
-    owner_name = owner.get("name") if isinstance(owner, dict) else None
-    print("✓ 已登录且平台可达,密钥有效。" + (f" 资源归属人:{owner_name}" if owner_name else ""))
+    # whoami 的 resource_owner 是 {"user_id": ...} 或 null —— 只有 ID,没有姓名
+    # (服务端 WhoamiResourceOwner)。此处一直读的是 owner["name"],那个键从来
+    # 不存在,所以这行永远打不出归属人;换成平台真正返回的 user_id。
+    owner_user_id = owner.get("user_id") if isinstance(owner, dict) else None
+    print("✓ 已登录且平台可达,密钥有效。" + (f" 资源归属人:用户 #{owner_user_id}" if owner_user_id else ""))
     print("  可以 bisheng deploy 了。部署前请对照 SKILL.md §5 的自检清单再过一遍。")
 
 

@@ -213,7 +213,7 @@ class PublishPipelineService:
             validated = await validate_manifest(package_service.read_manifest_bytes(extracted.root))
 
             if app_id:
-                await cls._assert_owned(app_id, owner_user_id)
+                await cls._assert_owned(app_id, owner_user_id, tenant_id=tenant)
             else:
                 app_id = await cls._create_draft(validated.manifest, owner_user_id=owner_user_id, tenant_id=tenant)
 
@@ -275,11 +275,36 @@ class PublishPipelineService:
         return AcceptResult(deployment_id=deployment.id, app_id=app_id, version_id=version_id)
 
     @classmethod
-    async def _assert_owned(cls, app_id: str, owner_user_id: int) -> None:
-        """An iteration only proceeds on an app the credential's resource owner owns (AC-04)."""
+    async def _assert_owned(cls, app_id: str, owner_user_id: int, *, tenant_id: int | None) -> None:
+        """An iteration only proceeds on an app the credential's resource owner owns (AC-04).
+
+        **The tenant is compared as well as the owner, because an equal owner is
+        not enough.** Two facts make "same ``owner_user_id``" reachable across a
+        tenant boundary on this door:
+
+        * ``/api/v2`` seeds ``visible_tenant_ids`` as ``{DEFAULT_TENANT_ID,
+          principal.tenant_id}`` (``open_api/api/dependencies.py``), so the
+          automatic tenant filter still hands a **Root-tenant** application to a
+          child-tenant credential — the IN-list only shuts out leaf-to-leaf.
+        * Under D19 a token survives its holder moving tenants ("令牌随人迁移不
+          失效"), so the owner recorded on an app the person left behind keeps
+          matching the credential that followed them.
+
+        ``AppQueryService._load_visible`` already applies exactly this guard on
+        the platform face; the CLI door must answer alike, or the same
+        application is refused in the UI and accepted by ``bisheng deploy``.
+
+        The mismatch is folded into the refusal below rather than given its own
+        code or message on purpose: a distinguishable answer would tell a caller
+        that the application exists in a tenant they cannot see.
+        """
         async with get_async_db_session() as session:
             app_row = await AppDao.aget(session, app_id)
-        if app_row is None or app_row.owner_user_id != owner_user_id:
+        if (
+            app_row is None
+            or app_row.owner_user_id != owner_user_id
+            or int(app_row.tenant_id or 0) != int(tenant_id or 0)
+        ):
             raise AppNotOwnedBySubjectError(
                 msg="该应用归属其他用户, 当前密钥无法发布",
                 details={"app_id": app_id, "reason": "owner_mismatch"},
@@ -310,21 +335,44 @@ class PublishPipelineService:
     async def get_deployment_status(cls, deployment_id: str, *, principal) -> dict[str, Any]:
         """What the CLI polls (design §4.2 ①). Read-only, and scoped to the caller's owner.
 
-        Two scoping layers, and both are needed. The tenant filter keeps another
-        tenant's attempt invisible on the SELECT; the explicit owner comparison
-        keeps a second service account inside the *same* tenant from watching
-        somebody else's publish. Neither is redundant — the first would let a
-        colleague poll, the second cannot see across tenants at all.
+        Two scoping layers, and both are needed — but **not** the two it is easy
+        to assume. The automatic tenant filter shuts out *leaf-to-leaf* only:
+        ``/api/v2`` seeds ``visible_tenant_ids`` as ``{DEFAULT_TENANT_ID,
+        principal.tenant_id}`` (``open_api/api/dependencies.py``), so a
+        **Root-tenant** attempt is still returned by the SELECT to a
+        child-tenant credential. Crossing tenants is therefore refused by the
+        *explicit* tenant comparison below, not by the filter; the owner
+        comparison beside it is what keeps a second service account inside the
+        same tenant from watching somebody else's publish. Neither is
+        redundant, and the owner one cannot stand in for the tenant one: under
+        D19 a token survives its holder moving tenants, so the owner recorded
+        on an attempt they left behind keeps matching.
 
         A miss answers 16205 rather than "not found": distinguishing "no such
-        deployment" from "not yours" hands a caller an id oracle for free.
+        deployment" from "not yours" hands a caller an id oracle for free. The
+        tenant mismatch is folded into that same refusal for the same reason —
+        a distinguishable answer would confirm the attempt exists in a tenant
+        the caller cannot see.
         """
         # Before the SELECT: a key without a resource owner has nothing to poll,
         # and asking the database first would only make the refusal slower.
+        #
+        # Both facts are read off the **credential**, not off the tenant
+        # ContextVar. They are the same value here today — ``verify_open_api_
+        # access`` seeds the ContextVar from this very principal — but the
+        # ContextVar is rewritten by every ``_load``-style helper that pins a
+        # row's own tenant (``AppQueryService._load:242`` and four siblings), so
+        # a later edit that put one above this check would silently turn the
+        # comparison into a row compared against itself.
         owner_user_id = resource_owner_of(principal)
+        credential_tenant_id = int(getattr(principal, "tenant_id", 0) or 0)
         async with get_async_db_session() as session:
             deployment = await AppDeploymentDao.aget(session, deployment_id)
-        if deployment is None or int(deployment.owner_user_id or 0) != owner_user_id:
+        if (
+            deployment is None
+            or int(deployment.owner_user_id or 0) != owner_user_id
+            or int(deployment.tenant_id or 0) != credential_tenant_id
+        ):
             raise AppNotOwnedBySubjectError(
                 msg="该发布记录不存在或不属于当前密钥",
                 details={"deployment_id": deployment_id, "reason": "not_owned"},

@@ -1,7 +1,8 @@
 """Executable snapshot of the platform contracts this CLI consumes.
 
 This module is deliberately dumb. Every payload here is shaped exactly like the
-one F049 / F054 / F055 actually return, including the parts that look wrong:
+one F053 (open_api, beta2) / F054 / F055 actually return, including the parts
+that look wrong:
 
 * `/api/v1` answers HTTP 200 with the business code inside the envelope, while
   `/api/v2` puts a real status on the status line *and* keeps the envelope body.
@@ -27,14 +28,27 @@ import httpx
 # matches a long key literal in this repo's Python (see conftest docstring).
 FAKE_KEY = "bs-sak-" + "x" * 24
 FAKE_KEY_MASK = "bs-sak-" + "*" * 8 + "wxyz"
+# beta2 authenticates two credential prefixes on the same wire
+# (`credential_validator._TOKEN_RE`): `bs-sak-` service-account keys and
+# `bs-pat-` personal tokens. Anything the CLI prints has to redact both.
+FAKE_PAT = "bs-pat-" + "y" * 24
 
-# Real statuses, measured in test/open_api/test_open_api_auth_api.py.
+# Real statuses, cross-checked against the server's own declarations by
+# tests/test_platform_contract.py.
 OPEN_API_HTTP_STATUS: dict[int, int] = {
     26001: 401,
     26002: 401,
     26027: 401,
     26003: 403,
     26004: 403,
+    26016: 400,
+    # Personal access tokens authenticate on the same wire (`bs-pat-`), so a
+    # developer who pastes one gets these two rather than 26001 / 26002.
+    26040: 403,
+    26043: 401,
+    # 26051 is 403, not the 400 its issue-time sibling 26050 carries: it is a
+    # channel-entrance refusal, so it sits with 26003 / 26004.
+    26051: 403,
     26030: 503,
     26031: 500,
 }
@@ -135,25 +149,86 @@ def env_unreachable() -> httpx.ConnectError:
 # ---- /api/v2/auth -------------------------------------------------------
 
 
+#: Every field ``WhoamiResponse`` declares, in declaration order. Kept as data
+#: rather than only inside :func:`whoami_ok` so that
+#: ``tests/test_platform_contract.py`` can compare it against the server model
+#: itself — the whole payload changed shape once already (F049 sent
+#: ``subject_kind`` / ``service_account: {id, name}`` / ``resource_owner:
+#: {user_id, user_name}``; beta2's F053 sends none of those) and the CLI suite
+#: stayed green throughout, asserting against a server that no longer existed.
+WHOAMI_FIELDS = (
+    "credential_id",
+    "actor_kind",
+    "actor_id",
+    "actor_name",
+    "tenant_id",
+    "resource_owner",
+    "authorization_subject_type",
+    "authorization_subject_id",
+    "effective_user_id",
+    "mode",
+    "scopes",
+    "key_mask",
+    "expires_at",
+)
+
+
+#: Sentinel for "the caller said nothing", so that an explicit
+#: ``resource_owner=None`` can mean what the server means by it: JSON null.
+_DEFAULT = object()
+
+
 def whoami_ok(
     *,
     scopes: list[str] | None = None,
-    resource_owner: dict[str, Any] | None = None,
-    service_account: dict[str, Any] | None = None,
+    resource_owner: Any = _DEFAULT,
+    actor_kind: str = "service_account",
+    actor_id: int = 123,
+    actor_name: str = "问卷小队开发号",
     tenant_id: int = 1,
     expires_at: str | None = "2026-12-31T00:00:00",
 ) -> httpx.Response:
+    """``GET /api/v2/auth/whoami`` exactly as beta2's ``WhoamiResponse`` serves it.
+
+    Two shapes here are easy to "tidy" into something wrong:
+
+    * ``resource_owner`` is ``{"user_id": int}`` **or null** — one key, no name.
+      A service account always has an owner (the column is NOT NULL), so the
+      null case means an ownerless subject, not an older platform.
+    * the subject is flat (``actor_kind`` / ``actor_id`` / ``actor_name``), and
+      ``actor_kind`` is ``"natural_person"`` for a ``bs-pat-`` personal token.
+    """
+    owner = {"user_id": 7} if resource_owner is _DEFAULT else resource_owner
+    natural_person = actor_kind == "natural_person"
     data: dict[str, Any] = {
-        "subject_kind": "service_account",
-        "service_account": service_account or {"id": 123, "name": "问卷小队开发号"},
+        "credential_id": 42,
+        "actor_kind": actor_kind,
+        "actor_id": actor_id,
+        "actor_name": actor_name,
         "tenant_id": tenant_id,
+        "resource_owner": owner,
+        # A personal token authorises as its holder; a service account
+        # authorises as itself and has no effective user (mode S, no delegation
+        # — the only shape a CLI key can have, INV-31).
+        "authorization_subject_type": "user" if natural_person else "service_account",
+        "authorization_subject_id": actor_id,
+        "effective_user_id": actor_id if natural_person else None,
+        "mode": "S",
         "scopes": scopes if scopes is not None else ["app:manage"],
         "key_mask": FAKE_KEY_MASK,
         "expires_at": expires_at,
     }
-    if resource_owner is not None:
-        data["resource_owner"] = resource_owner
     return v2_ok(data)
+
+
+def whoami_without_resource_owner(**kwargs: Any) -> httpx.Response:
+    """A credential the platform reports as having no resource owner at all.
+
+    ``resource_owner`` is nullable on the wire (``WhoamiResourceOwner | None``),
+    and a key in that state cannot publish: `deploy` refuses it with 16205
+    rather than creating an application owned by nobody.
+    """
+    return whoami_ok(resource_owner=None, **kwargs)
 
 
 def whoami_err(code: int, message: str = "credential rejected", *, http_status: int | None = None, **data: Any):

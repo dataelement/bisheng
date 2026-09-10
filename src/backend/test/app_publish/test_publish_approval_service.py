@@ -197,7 +197,8 @@ async def test_applicant_is_owner_not_the_service_account(
     from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
 
     _, deployment = await _publishable(app_factory, deployment_factory)
-    assert deployment.submitted_by_user_id == SERVICE_ACCOUNT_USER_ID
+    # A service-account submission records 0, not a user id (see conftest).
+    assert deployment.submitted_by_user_id == 0
 
     result = await _service().submit(deployment)
 

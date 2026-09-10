@@ -7,11 +7,14 @@ register the `delegate` scope (`open_api/domain/scopes.py` NOTE: "ships with
 F050"), so no key that exists today can carry it. Going to 114 to "verify AC-09"
 proves nothing and will be read as "the feature does not work".
 
-**`26002` covers three causes with one code.** Unknown, revoked and expired keys
-are indistinguishable on the wire — the server sends no signal that separates
-them. What is assertable, and what this file asserts, is that `26001` / `26002` /
-`26027` read differently, because their next steps differ (fix how you pass the
-key / get a new key / have the account re-enabled).
+**`26002` covers four causes with one code.** Unknown, revoked and expired keys
+are indistinguishable on the wire — and so is a disabled or deleted service
+account, which the beta2 server folds into the same code
+(`credential_validator.resolve_service_account`) instead of the separate `26027`
+F049 used to raise here. The server sends no signal that separates them, so the
+CLI must not pretend to: what this file asserts is that `26001` and `26002` read
+differently, and that `26002` names the disabled-account case rather than
+telling the developer to go get yet another key.
 """
 
 from __future__ import annotations
@@ -37,6 +40,7 @@ from bisheng_cli.errors import (
 from bisheng_cli.main import run as main_run
 from tests.helpers.platform_mock import (
     FAKE_KEY,
+    FAKE_PAT,
     PlatformMock,
     env_ok,
     skill_pack,
@@ -46,6 +50,7 @@ from tests.helpers.platform_mock import (
     versions_ok,
     whoami_err,
     whoami_ok,
+    whoami_without_resource_owner,
 )
 
 BASE = "http://platform.test"
@@ -83,37 +88,58 @@ def _run(argv: list[str], *, monkeypatch: pytest.MonkeyPatch, mock: PlatformMock
 def test_success_writes_profile_and_prints_platform_account_owner_mask_expiry(
     monkeypatch: pytest.MonkeyPatch, home_dir
 ) -> None:
-    mock = _mock(whoami_ok(resource_owner={"user_id": 7, "user_name": "李开发"}))
+    mock = _mock(whoami_ok(resource_owner={"user_id": 7}))
     code, _, err = _run(["login", BASE, "--api-key", FAKE_KEY], monkeypatch=monkeypatch, mock=mock)
 
     assert code == EXIT_OK
-    for expected in (BASE, "问卷小队开发号", "李开发", "2026-12-31"):
+    # AC-06: platform address, the account name and its resource owner. The
+    # owner reaches the CLI as an id and nothing else (`WhoamiResourceOwner` has
+    # exactly one field), so an id is what gets printed — inventing a name here
+    # would be inventing it about the person who ends up owning every app.
+    for expected in (BASE, "问卷小队开发号", "用户 #7", "2026-12-31"):
         assert expected in err
 
     stored = json.loads((home_dir / ".bisheng" / "credentials.json").read_text(encoding="utf-8"))
     profile = stored["profiles"][BASE]
     assert stored["current"] == BASE
     assert profile["api_key"] == FAKE_KEY
-    assert profile["resource_owner"] == {"user_id": 7, "user_name": "李开发"}
+    assert profile["resource_owner"] == {"user_id": 7}
+    assert (profile["actor_kind"], profile["actor_id"], profile["actor_name"]) == (
+        "service_account",
+        123,
+        "问卷小队开发号",
+    )
     # AC-52: a cached scope set can only ever produce "the admin ticked the box
     # but the CLI still says no".
     assert "scopes" not in profile
 
 
-def test_success_without_resource_owner_field_degrades_with_explicit_hint(
-    monkeypatch: pytest.MonkeyPatch, home_dir
-) -> None:
-    # F049 sends `resource_owner` as of 2026-08-17, so this covers what is left:
-    # an older platform that predates the field, and an owner row that stopped
-    # resolving (the server reports null rather than failing the probe).
-    # Saying so out loud beats omitting the line: the owner is the account that
-    # will end up owning every app this key deploys, and a wrong one is only
-    # discovered much later.
-    mock = _mock(whoami_ok())
+def test_personal_token_is_not_reported_as_a_service_account(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:
+    """A `bs-pat-` token authenticates on the same endpoint and answers `natural_person`.
+
+    The CLI asks for a service-account key but cannot stop anyone pasting the
+    other kind, and beta2 accepts it (`credential_validator._TOKEN_RE`). Printing
+    its holder under "服务账号" would name the wrong subject entirely.
+    """
+    mock = _mock(whoami_ok(actor_kind="natural_person", actor_id=7, actor_name="李开发", scopes=[]))
+    code, _, err = _run(["login", BASE, "--api-key", FAKE_PAT], monkeypatch=monkeypatch, mock=mock)
+
+    assert code == EXIT_OK
+    assert "个人访问令牌" in err and "李开发" in err
+    assert "服务账号: 李开发" not in err
+
+
+def test_login_says_so_when_the_key_has_no_resource_owner(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:
+    # `resource_owner` is nullable on the wire, and a credential in that state
+    # cannot publish anything: `resource_owner_of()` refuses the first deploy
+    # with 16205 rather than creating an application owned by nobody. Login is
+    # where that is cheap to say — ten minutes before the deploy that fails.
+    mock = _mock(whoami_without_resource_owner())
     code, _, err = _run(["login", BASE, "--api-key", FAKE_KEY], monkeypatch=monkeypatch, mock=mock)
 
     assert code == EXIT_OK
     assert "资源归属人" in err and "服务账号详情页" in err
+    assert "deploy" in err
 
 
 def test_no_scope_check_at_all(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:
@@ -149,18 +175,60 @@ def test_delegate_refusal_is_not_a_bare_param_error(monkeypatch: pytest.MonkeyPa
     assert "本地开发" in err or "另外签发" in err
 
 
-def test_missing_invalid_and_inactive_account_are_distinguishable(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:
+def test_delegate_key_is_refused_at_whoami_not_dropped_as_an_unknown_code(
+    monkeypatch: pytest.MonkeyPatch, home_dir
+) -> None:
+    """The path a real delegate key takes, which the scope check never sees.
+
+    `whoami` requires no scope, so the platform's entrance gate lets the call
+    through and the delegation resolver answers `26016` — `login` never gets a
+    scope list to check. Unregistered, that code fell through to exit 19
+    ("平台返回未登记的错误码 26016"), which is neither the right verdict nor a
+    diagnosis anyone can act on.
+    """
+    mock = _mock(whoami_err(26016, "X-On-Behalf-Of is required for a delegated credential"))
+    code, _, err = _run(["login", BASE, "--api-key", FAKE_KEY], monkeypatch=monkeypatch, mock=mock)
+
+    assert code == EXIT_FORBIDDEN
+    assert "委托" in err and "另外签发" in err
+    # The platform's own sentence still gets printed verbatim ("三部分，缺一不可"),
+    # but it must not be what the CLI tells the caller to act on: the CLI sends
+    # no identity headers, on any command, so adding one is not available.
+    assert "下一步: 请平台管理员另外签发" in err
+    assert not (home_dir / ".bisheng" / "credentials.json").exists()
+
+
+def test_malformed_header_and_rejected_key_are_distinguishable(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:
+    """26001 and 26002 are the two the runtime path can actually produce.
+
+    A disabled service account used to arrive as its own code (26027). On the
+    beta2 server `resolve_service_account` raises `OpenApiCredentialInvalidError`
+    for it — 26002 — so that is the code whose copy has to carry the case; 26027
+    survives only on the management face, which no CLI command calls.
+    """
     messages: dict[int, str] = {}
-    for code in (26001, 26002, 26027):
+    for code in (26001, 26002):
         mock = _mock(whoami_err(code, f"server text {code}"))
         exit_code, _, err = _run(["login", BASE, "--api-key", FAKE_KEY], monkeypatch=monkeypatch, mock=mock)
         assert exit_code == EXIT_AUTH
         messages[code] = err
 
-    assert len(set(messages.values())) == 3
+    assert messages[26001] != messages[26002]
     assert "Authorization" in messages[26001]
-    assert "重新签发" in messages[26002]
-    assert "启用" in messages[26027] and "换一把密钥没有用" in messages[26027]
+    # Re-issuing a key is no longer the whole answer: for a disabled account the
+    # new key is exactly as dead as the old one.
+    assert "停用" in messages[26002] and "重新签发" in messages[26002]
+
+
+def test_personal_token_rejections_are_not_generic_permission_errors(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:
+    # Unregistered, 26040 fell through to "ask your admin about the permission
+    # bits" (HTTP 403) and 26043 to "check whether the key expired" (401) —
+    # both point away from the cause, which is the credential *kind*.
+    for code, expected_exit in ((26040, EXIT_FORBIDDEN), (26043, EXIT_AUTH)):
+        mock = _mock(whoami_err(code, f"server text {code}"))
+        exit_code, _, err = _run(["login", BASE, "--api-key", FAKE_PAT], monkeypatch=monkeypatch, mock=mock)
+        assert exit_code == expected_exit
+        assert "个人" in err and "bs-sak-" in err
 
 
 def test_platform_unreachable_and_layer_absent_are_distinguishable(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:
@@ -208,7 +276,7 @@ def test_key_from_flag_env_stdin_tty_priority(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_key_never_echoed_in_any_output(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:
-    mock = _mock(whoami_ok(resource_owner={"user_id": 7, "user_name": "李开发"}))
+    mock = _mock(whoami_ok())
     code, out, err = _run(
         ["--verbose", "--json", "login", BASE, "--api-key", FAKE_KEY], monkeypatch=monkeypatch, mock=mock
     )

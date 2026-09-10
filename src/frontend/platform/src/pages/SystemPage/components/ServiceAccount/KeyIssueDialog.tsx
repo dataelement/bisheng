@@ -46,6 +46,16 @@ export interface KeyIssueDialogProps {
 
 type DelegateDepartment = { id: number; name: string }
 
+// 伴生 PRD §4.2.4 / AC-48: a key that acts on behalf of someone else and the
+// local development toolkit scopes cannot live on the same key — a delegated
+// key must carry an identity header on every call, which the toolkit surfaces
+// never send. The backend refuses the combination at issue / edit time (26050);
+// the form must not let it be built at all. Which codes belong to the toolkit
+// is read off the scope catalog's `group` (GET /service-accounts/scopes), never
+// from a code list copied into the frontend.
+const DELEGATE_SCOPE_CODE = "delegate"
+const LOCAL_DEV_TOOLKIT_GROUP = "local_dev_toolkit"
+
 function toBackendDateTime(date: Date): string {
   return formatDate(date, "yyyy-MM-ddTHH:mm:ss")
 }
@@ -81,14 +91,33 @@ export function KeyIssueDialog({
   >([])
   const [loading, setLoading] = useState(false)
 
+  const localDevToolkitCodes = useMemo(
+    () =>
+      new Set(
+        scopes
+          .filter((scope) => scope.group === LOCAL_DEV_TOOLKIT_GROUP)
+          .map((scope) => scope.code),
+      ),
+    [scopes],
+  )
+
+  const delegateSelected = selectedScopes.includes(DELEGATE_SCOPE_CODE)
+  const localDevToolkitSelected = selectedScopes.some((code) =>
+    localDevToolkitCodes.has(code),
+  )
+  // Only a key issued before the backend gate can arrive with both sides
+  // ticked. Every ticked box stays clickable so the admin can clear one side;
+  // saving is what gets blocked until they do.
+  const scopeConflict = delegateSelected && localDevToolkitSelected
+
   const delegateInvalid =
-    selectedScopes.includes("delegate") &&
-    !delegateUsers.length &&
-    !delegateDepartments.length
+    delegateSelected && !delegateUsers.length && !delegateDepartments.length
 
   const groupedScopes = useMemo(() => {
     const groups = new Map<string, OpenApiScopeItem[]>()
-    for (const scope of scopes.filter((item) => item.code !== "delegate")) {
+    for (const scope of scopes.filter(
+      (item) => item.code !== DELEGATE_SCOPE_CODE,
+    )) {
       const items = groups.get(scope.group) || []
       items.push(scope)
       groups.set(scope.group, items)
@@ -96,7 +125,9 @@ export function KeyIssueDialog({
     return Array.from(groups, ([group, items]) => ({ group, items }))
   }, [scopes])
 
-  const delegateScope = scopes.find((scope) => scope.code === "delegate")
+  const delegateScope = scopes.find(
+    (scope) => scope.code === DELEGATE_SCOPE_CODE,
+  )
 
   useEffect(() => {
     if (!open) return
@@ -128,20 +159,27 @@ export function KeyIssueDialog({
 
   const toggleScope = (code: string, checked: boolean) => {
     setSelectedScopes((current) => {
-      if (checked) return current.includes(code) ? current : [...current, code]
-      return current.filter((item) => item !== code)
+      if (!checked) return current.filter((item) => item !== code)
+      if (current.includes(code)) return current
+      // Guards the same pair the checkboxes disable, so no other path (keyboard,
+      // a future bulk "select all") can assemble the refused combination.
+      const wouldConflict =
+        code === DELEGATE_SCOPE_CODE
+          ? current.some((item) => localDevToolkitCodes.has(item))
+          : localDevToolkitCodes.has(code) &&
+            current.includes(DELEGATE_SCOPE_CODE)
+      if (wouldConflict) return current
+      return [...current, code]
     })
-    if (code === "delegate" && !checked) {
+    if (code === DELEGATE_SCOPE_CODE && !checked) {
       setDelegateUsers([])
       setDelegateDepartments([])
     }
   }
 
   const handleSubmit = async () => {
-    if (!name.trim() || delegateInvalid) return
-    const delegateScopes: DelegateScopeInput[] = selectedScopes.includes(
-      "delegate",
-    )
+    if (!name.trim() || delegateInvalid || scopeConflict) return
+    const delegateScopes: DelegateScopeInput[] = delegateSelected
       ? [
           ...delegateUsers.map((user) => ({
             subject_type: "user" as const,
@@ -220,11 +258,20 @@ export function KeyIssueDialog({
           .map((endpoint) => `${endpoint.method} ${endpoint.path}`)
           .join("\n")
       : ""
+    const checked = selectedScopes.includes(scope.code)
+    const blocked =
+      !checked && delegateSelected && localDevToolkitCodes.has(scope.code)
     return (
-      <label key={scope.code} className="flex cursor-pointer items-start gap-2">
+      <label
+        key={scope.code}
+        className={`flex items-start gap-2 ${
+          blocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+        }`}
+      >
         <Checkbox
           className="mt-0.5"
-          checked={selectedScopes.includes(scope.code)}
+          checked={checked}
+          disabled={blocked}
           onCheckedChange={(checked) =>
             toggleScope(scope.code, checked === true)
           }
@@ -314,19 +361,36 @@ export function KeyIssueDialog({
                 <p className="text-sm font-medium">
                   {t(`openApiManagement.scopeGroups.${group}`)}
                 </p>
+                {group === LOCAL_DEV_TOOLKIT_GROUP && delegateSelected ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t("openApiManagement.keys.localDevExclusiveHint")}
+                  </p>
+                ) : null}
                 <div className="space-y-3">{items.map(renderScope)}</div>
               </div>
             ))}
+            {scopeConflict ? (
+              <p className="text-xs text-destructive">
+                {t("openApiManagement.keys.scopeExclusiveConflict")}
+              </p>
+            ) : null}
           </div>
           {delegateScope ? (
             <div className="space-y-3 rounded-md border p-3 text-sm">
               <Label>{t("openApiManagement.keys.delegateConfig")}</Label>
-              <label className="flex cursor-pointer items-start gap-2">
+              <label
+                className={`flex items-start gap-2 ${
+                  localDevToolkitSelected && !delegateSelected
+                    ? "cursor-not-allowed opacity-60"
+                    : "cursor-pointer"
+                }`}
+              >
                 <Checkbox
                   className="mt-0.5"
-                  checked={selectedScopes.includes("delegate")}
+                  checked={delegateSelected}
+                  disabled={localDevToolkitSelected && !delegateSelected}
                   onCheckedChange={(checked) =>
-                    toggleScope("delegate", checked === true)
+                    toggleScope(DELEGATE_SCOPE_CODE, checked === true)
                   }
                 />
                 <span className="min-w-0 space-y-0.5">
@@ -338,7 +402,12 @@ export function KeyIssueDialog({
                   </span>
                 </span>
               </label>
-              {selectedScopes.includes("delegate") ? (
+              {localDevToolkitSelected && !delegateSelected ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("openApiManagement.keys.delegateExclusiveHint")}
+                </p>
+              ) : null}
+              {delegateSelected ? (
                 <>
                   {delegateScope.hint_keys.map((key) => (
                     <p
@@ -425,7 +494,9 @@ export function KeyIssueDialog({
             {t("cancel")}
           </Button>
           <Button
-            disabled={loading || !name.trim() || delegateInvalid}
+            disabled={
+              loading || !name.trim() || delegateInvalid || scopeConflict
+            }
             onClick={handleSubmit}
           >
             {loading ? (

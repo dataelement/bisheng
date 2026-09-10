@@ -37,12 +37,21 @@ FILE_NAME = "credentials.json"
 
 # The snapshot is for display only (design D3). Adding a field here means adding
 # something the CLI will show the user without re-checking it against the server.
+# The identity fields are spelled exactly as `GET /api/v2/auth/whoami` spells
+# them (`actor_kind` / `actor_id` / `actor_name` / `resource_owner`), so that a
+# server-side contract change shows up as a missing key rather than as a
+# translation layer quietly filling in the wrong subject. They replaced the
+# earlier `service_account: {id, name}` pair, which was F049's shape; a profile
+# written by an older CLI simply loses those two values on the next read
+# (`_to_profile` keeps only known fields) and `login` refills them.
 SNAPSHOT_FIELDS = (
     "base_url",
     "api_key",
     "key_mask",
     "tenant_id",
-    "service_account",
+    "actor_kind",
+    "actor_id",
+    "actor_name",
     "resource_owner",
     "expires_at",
     "logged_in_at",
@@ -55,7 +64,9 @@ class Profile:
     api_key: str
     key_mask: str | None = None
     tenant_id: int | None = None
-    service_account: dict[str, Any] | None = None
+    actor_kind: str | None = None
+    actor_id: int | None = None
+    actor_name: str | None = None
     resource_owner: dict[str, Any] | None = None
     expires_at: str | None = None
     logged_in_at: str | None = None

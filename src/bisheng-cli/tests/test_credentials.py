@@ -31,8 +31,10 @@ def _profile(base_url: str = BASE, **overrides) -> dict:
         "api_key": FAKE_KEY,
         "key_mask": FAKE_KEY_MASK,
         "tenant_id": 1,
-        "service_account": {"id": 123, "name": "问卷小队开发号"},
-        "resource_owner": {"user_id": 7, "user_name": "张三"},
+        "actor_kind": "service_account",
+        "actor_id": 123,
+        "actor_name": "问卷小队开发号",
+        "resource_owner": {"user_id": 7},
         "expires_at": "2026-12-31T00:00:00",
     }
     payload.update(overrides)
@@ -128,7 +130,9 @@ def test_stored_snapshot_fields() -> None:
         "api_key",
         "key_mask",
         "tenant_id",
-        "service_account",
+        "actor_kind",
+        "actor_id",
+        "actor_name",
         "resource_owner",
         "expires_at",
         "logged_in_at",
@@ -136,9 +140,33 @@ def test_stored_snapshot_fields() -> None:
     assert stored["logged_in_at"]
 
 
-def test_resource_owner_may_be_null_until_f049_adds_it() -> None:
+def test_resource_owner_may_be_null() -> None:
+    # `WhoamiResourceOwner | None`: a credential without a resource owner is a
+    # shape the server can send, and the snapshot has to survive it.
     credentials.save_profile(BASE, _profile(resource_owner=None))
     assert credentials.load_current().resource_owner is None
+
+
+def test_a_profile_written_by_an_older_cli_loads_without_its_dead_fields() -> None:
+    """`service_account: {id, name}` was F049's shape and is gone from the wire.
+
+    A developer upgrading the CLI has one of those on disk. It must not raise on
+    read (the key would otherwise reach `Profile(**...)` as an unexpected
+    argument) — the stale identity simply drops out and the next `login` refills
+    the current fields.
+    """
+    credentials.save_profile(BASE, _profile())
+    path = credentials.credentials_path()
+    store = json.loads(path.read_text(encoding="utf-8"))
+    legacy = store["profiles"][BASE]
+    for field in ("actor_kind", "actor_id", "actor_name"):
+        legacy.pop(field)
+    legacy["service_account"] = {"id": 123, "name": "问卷小队开发号"}
+    path.write_text(json.dumps(store, ensure_ascii=False), encoding="utf-8")
+
+    profile = credentials.load_current()
+    assert profile.api_key == FAKE_KEY
+    assert profile.actor_name is None
 
 
 def test_windows_acl_failure_warns_loudly_instead_of_pretending(monkeypatch: pytest.MonkeyPatch) -> None:
