@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 import tempfile
 from datetime import datetime
@@ -338,6 +339,25 @@ async def _load_qa_asset(source: str, title: str, storage) -> tuple[bytes, str]:
     return data, filename
 
 
+async def _base_qa_pdf(data: bytes, filename: str, *, source: str, tenant_id: int | None, storage) -> bytes:
+    """预览与下载共用基础 PDF; 用户水印不进入持久化缓存。"""
+    from bisheng.knowledge.pdf.converter import OFFICE_EXTENSIONS
+    from bisheng.qa_expert.domain.pdf_preview_service import QaPdfPreviewService
+
+    if data[:5] == b"%PDF-" or Path(filename).suffix.lower().lstrip(".") not in OFFICE_EXTENSIONS:
+        return _bytes_to_pdf(data, filename)
+    bucket, object_name = parse_qa_asset_location(source, default_bucket=storage.bucket, tmp_bucket=storage.tmp_bucket)
+    service = QaPdfPreviewService(storage=storage)
+    return await asyncio.to_thread(
+        service.get_or_generate,
+        source_bytes=data,
+        filename=filename,
+        source_bucket=bucket,
+        source_object=object_name,
+        tenant_id=tenant_id,
+    )
+
+
 async def _apply_qa_pdf_watermark(
     pdf_bytes: bytes,
     *,
@@ -384,7 +404,7 @@ async def build_qa_asset_download(
         media_type = _VIDEO_MEDIA_TYPES.get(video_suffix, "application/octet-stream")
         return data, safe_name, media_type
 
-    pdf_bytes = _bytes_to_pdf(data, filename)
+    pdf_bytes = await _base_qa_pdf(data, filename, source=source, tenant_id=tenant_id, storage=storage)
     payload, pdf_name = await _apply_qa_pdf_watermark(
         pdf_bytes,
         filename=filename,
@@ -408,7 +428,7 @@ async def build_watermarked_qa_pdf(
 ) -> tuple[bytes, str]:
     """拉取问答对象、转 PDF、打水印。"""
     data, filename = await _load_qa_asset(source, title, storage)
-    pdf_bytes = _bytes_to_pdf(data, filename)
+    pdf_bytes = await _base_qa_pdf(data, filename, source=source, tenant_id=tenant_id, storage=storage)
     return await _apply_qa_pdf_watermark(
         pdf_bytes,
         filename=filename,

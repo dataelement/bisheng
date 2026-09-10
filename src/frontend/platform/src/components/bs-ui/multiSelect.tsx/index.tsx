@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next"
 import { Badge } from "../badge"
 import { Button } from "../button"
 import { Input } from "../input"
+import { OverlayPortalContainer, useOverlayPortalContainer } from "../useOverlayPortalContainer"
 import { cname } from "../utils"
 
 // Types
@@ -55,6 +56,7 @@ export interface MultiSelectProps {
     className?: string
     triggerClassName?: string
     contentClassName?: string
+    portalContainer?: OverlayPortalContainer
 
     // Accessibility
     id?: string
@@ -389,6 +391,7 @@ export const MultiSelect = React.forwardRef<React.ElementRef<typeof PopoverPrimi
             className,
             triggerClassName,
             contentClassName,
+            portalContainer,
             id,
             name,
             "aria-label": ariaLabel,
@@ -398,6 +401,7 @@ export const MultiSelect = React.forwardRef<React.ElementRef<typeof PopoverPrimi
         ref,
     ) => {
         const [open, setOpen] = React.useState(false)
+        const resolvedPortalContainer = useOverlayPortalContainer(portalContainer)
         const searchInputRef = React.useRef<HTMLInputElement>(null)
         const footerRef = useScrollLoad(searchInputRef, onLoadMore)
 
@@ -521,7 +525,7 @@ export const MultiSelect = React.forwardRef<React.ElementRef<typeof PopoverPrimi
                     </div>
                 </PopoverPrimitive.Trigger>
 
-                <PopoverPrimitive.Portal>
+                <PopoverPrimitive.Portal container={resolvedPortalContainer}>
                     <PopoverPrimitive.Content
                         className={cname(
                             "z-50 w-full min-w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-md border bg-popover p-0 text-popover-foreground shadow-md outline-none",

@@ -259,7 +259,7 @@ async def test_personal_space_uses_existing_creator_only_when_missing(monkeypatc
     candidate = m.build_plan(s, "待整理").candidates[0]
     target = space(20, name="张三的知识库")
     service = SimpleNamespace(
-        login_user=SimpleNamespace(user_id=7), ensure_personal_default_space_for_owner=AsyncMock(return_value=target)
+        login_user=SimpleNamespace(user_id=7), ensure_personal_default_space=AsyncMock(return_value=target)
     )
     latest = snapshot()
     personal(latest)
@@ -278,7 +278,10 @@ async def test_personal_space_uses_existing_creator_only_when_missing(monkeypatc
     finally:
         journal.close()
     assert actual.id == 20
-    assert service.ensure_personal_default_space_for_owner.await_count == (0 if existing else 1)
+    if existing:
+        service.ensure_personal_default_space.assert_not_awaited()
+    else:
+        service.ensure_personal_default_space.assert_awaited_once_with()
 
 
 async def test_folder_creation_preserves_root_and_only_reuses_exact_parent(monkeypatch, tmp_path):

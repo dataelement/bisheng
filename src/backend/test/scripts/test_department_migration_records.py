@@ -310,7 +310,7 @@ async def test_missing_personal_library_creates_once_and_keeps_directory_tree(da
     env.db.exec(m.delete(m.Knowledge).where(m.Knowledge.id == 20))
     env.db.commit()
 
-    async def create(user):
+    async def create():
         target = space(20, name="张三的知识库")
         s = scope(20, "personal")
         s.created_by = 7
@@ -327,13 +327,13 @@ async def test_missing_personal_library_creates_once_and_keeps_directory_tree(da
         env.db.refresh(row)
         return row
 
-    env.service.ensure_personal_default_space_for_owner = AsyncMock(side_effect=create)
+    env.service.ensure_personal_default_space = AsyncMock(side_effect=create)
     env.service.add_folder = AsyncMock(side_effect=add)
     monkeypatch.setattr(m, "_transfer_record_indexes", Mock(return_value={"via": "none", "issues": ["no chunks"]}))
     monkeypatch.setattr(m, "_cleanup_record_indexes", Mock(return_value=[]))
     args = m.parse_args(["--folder-name", "待整理", "--apply", "--report-dir", str(tmp_path)])
     assert await m.run(args, backend=env.backend) == 0
-    env.service.ensure_personal_default_space_for_owner.assert_awaited_once()
+    env.service.ensure_personal_default_space.assert_awaited_once_with()
     assert env.service.add_folder.await_count == 2
     assert env.db.get(m.KnowledgeFile, 101).file_level_path == "/21/22"
 

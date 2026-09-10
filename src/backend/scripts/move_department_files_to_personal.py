@@ -1421,7 +1421,8 @@ class Backend:
         target = candidate.target_space
         if target is None:
             record_event(journal, "personal_space_create_started", candidate.preview())
-            target = await service.ensure_personal_default_space_for_owner(service.login_user)
+            # service_for 已绑定上传人身份, 使用容器旧版本也具备的当前用户入口。
+            target = await service.ensure_personal_default_space()
             record_event(
                 journal,
                 "personal_space_created",

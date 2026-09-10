@@ -25,6 +25,7 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_pdf_artifac
     PdfArtifactClaimState,
 )
 from bisheng.knowledge.domain.services.pdf_artifact_on_demand_service import PdfArtifactGenerationLock
+from bisheng.knowledge.pdf.artifact_builder import build_pdf_artifact
 from bisheng.knowledge.pdf.converter import (
     SUPPORTED_EXTENSIONS,
     ConversionContext,
@@ -274,30 +275,26 @@ class PdfArtifactProcessor:
             source_path = root / f"source.{extension}"
             self._download_to(artifact.source_object_name, source_path)
             output_directory = root / "output"
-            output_directory.mkdir(parents=True, exist_ok=True)
-            conversion = self.converter_registry.convert(
-                source_path,
-                output_directory,
-                self.conversion_context,
-            )
-            validation = validate_pdf(conversion.pdf_path)
             attempt_token = str(self.attempt_token_factory())
             if not _ATTEMPT_TOKEN_RE.fullmatch(attempt_token):
                 raise PdfConversionError("Invalid internal attempt token")
             generated_object_name = f"knowledge/pdf-artifacts/{knowledge_file_id}/{generation}/{attempt_token}.pdf"
             uploaded = False
             try:
-                self.storage.put_object_sync(
+                built = build_pdf_artifact(
+                    source_path=source_path,
+                    output_directory=output_directory,
                     object_name=generated_object_name,
-                    file=conversion.pdf_path,
-                    content_type="application/pdf",
+                    storage=self.storage,
+                    converter_registry=self.converter_registry,
+                    conversion_context=self.conversion_context,
                 )
                 uploaded = True
                 complete_result = self._complete(
                     artifact=artifact,
                     origin=KnowledgeFilePdfArtifactOrigin.GENERATED,
                     object_name=generated_object_name,
-                    validation=validation,
+                    validation=built.validation,
                 )
                 if not complete_result.completed:
                     self._best_effort_remove(

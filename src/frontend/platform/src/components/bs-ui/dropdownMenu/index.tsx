@@ -4,6 +4,7 @@ import * as React from "react"
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
 import { cn } from "@/utils"
+import { useOverlayPortalContainer } from "../useOverlayPortalContainer"
 
 function DropdownMenu({
     ...props
@@ -12,10 +13,17 @@ function DropdownMenu({
 }
 
 function DropdownMenuPortal({
+    container,
     ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
+    const resolvedPortalContainer = useOverlayPortalContainer(container)
+
     return (
-        <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
+        <DropdownMenuPrimitive.Portal
+            data-slot="dropdown-menu-portal"
+            container={resolvedPortalContainer}
+            {...props}
+        />
     )
 }
 
@@ -33,10 +41,13 @@ function DropdownMenuTrigger({
 function DropdownMenuContent({
     className,
     sideOffset = 4,
+    portalContainer,
     ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Content> & {
+    portalContainer?: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>["container"]
+}) {
     return (
-        <DropdownMenuPrimitive.Portal>
+        <DropdownMenuPortal container={portalContainer}>
             <DropdownMenuPrimitive.Content
                 data-slot="dropdown-menu-content"
                 sideOffset={sideOffset}
@@ -46,7 +57,7 @@ function DropdownMenuContent({
                 )}
                 {...props}
             />
-        </DropdownMenuPrimitive.Portal>
+        </DropdownMenuPortal>
     )
 }
 
