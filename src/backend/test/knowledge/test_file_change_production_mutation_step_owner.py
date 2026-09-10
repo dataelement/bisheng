@@ -352,6 +352,22 @@ async def test_production_owner_shadow_cleanup_is_idempotent_when_es_index_is_mi
     assert result.result_digest == "compensated:move.index_prepare"
 
 
+async def test_folder_rename_cleanup_succeeds_without_retrieval_rows(production_backend):
+    context = _rename_context("rename.verify")
+    context = replace(
+        context,
+        resource_type="folder",
+        manifest={
+            **context.manifest,
+            "root": {**context.manifest["root"], "file_type": 0},
+        },
+    )
+
+    result = await ProductionMutationStepOwner().cleanup_cutover_and_verify(context)
+
+    assert result.result_digest == "cutover:cleanup:verified:0"
+
+
 async def test_rename_target_ready_never_overwrites_old_production_before_phase_commit(production_backend):
     owner = ProductionMutationStepOwner()
     await owner.execute_and_verify(_rename_context("rename.index_shadow"))

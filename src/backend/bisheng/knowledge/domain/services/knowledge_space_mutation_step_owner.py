@@ -165,6 +165,8 @@ class ProductionMutationStepOwner:
     def _promote_shadow(cls, context) -> int:
         _source, target = cls._load_spaces(context)
         file_ids = cls._file_ids(context)
+        if not file_ids:
+            return 0
         shadow_es, _ = cls._shadow_clients(context, target)
         from bisheng.worker.knowledge.rebuild_knowledge_worker import get_all_es_chunks
 
