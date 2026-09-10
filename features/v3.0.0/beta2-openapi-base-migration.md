@@ -82,8 +82,8 @@
 
 1. `systemctl stop` 后端 / celery / runtime-manager / app-proxy；`mysqldump` 备份。
 2. 清 vibe 期的服务账号主体：`DROP TABLE api_credential, service_account;`（vibe 结构，演示数据可弃，托管应用表 `app*` 不动）**并删掉 vibe 建在 `user` 表里的服务账号行**（`DELETE FROM \`user\` WHERE user_type = 'service';`，必须在 upgrade 之前——drop 列迁移一跑，这些行就再也认不出来，会变成普通自然人用户）。
-3. `config.yaml` 先加 `open_api.management_ui_enabled: true`、`open_platform.enabled: true`（保留既有 `app_runtime`）。**这两个键是进程级的，必须在起进程之前写好**；`load_settings_from_yaml` 拒绝未知顶级键，所以顺序是先发代码、再写键。
-4. `bash /opt/bisheng-ops/deploy.sh`（分支改本分支）→ `alembic upgrade head`（建 beta2 结构 + `open_api_tenant_setting` + 委托范围 + merge + drop `user_type`）。
+3. `bash /opt/bisheng-ops/deploy.sh`（分支改本分支）→ `alembic upgrade head`（建 beta2 结构 + `open_api_tenant_setting` + 委托范围 + merge + drop `user_type`）。
+4. 代码到位后再写 `config.yaml`：`open_api.management_ui_enabled: true`、`open_platform.enabled: true`（保留既有 `app_runtime`）。**两个都是进程级键、改完要重启**（见步 6）；`load_settings_from_yaml` 拒绝未知顶级键，所以永远是先发代码、再写键。前者决定管理后台是否显示「服务账号 / 个人访问令牌」tab（beta2 默认关，是剧本步 1 的前置），后者决定 `app:manage` 位能否签发。
 5. 发布 FGA 模型 `f048-v5`（`--allow-model-upgrade`），跑 schema contract。⚠️ 是 v5 不是 v4：v4 是 beta1 tip 已在 116 用掉的形状，它**不含 `app` 资源类型**，发错版本会让托管应用的全部 ReBAC 判定失效。
 6. 重启全部进程：后端 / celery（审批 outbox 在 celery-default）/ **runtime-manager 与 app-proxy**（`deploy.sh` 不管这两个 systemd 单元，步 1 停了就得自己拉起来）。
 7. **重建 platform 静态 build**：版本列表接口本轮改成 `{data,total}` 信封，旧 build 的卡片版本下拉会拿到对象再 `.filter` 而崩；`deploy.sh` 不建前端。
