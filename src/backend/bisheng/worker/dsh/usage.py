@@ -21,9 +21,11 @@ def register_usage_tasks(app, runtime_factory):
 
     @app.task(bind=True, name="dsh.project_usage")
     def project_usage(task, tenant_id: int, user_id: int):
+        # Celery request state is thread-local; capture it before the async bridge.
+        headers = dict(task.request.headers or {})
+
         async def execute():
             async with runtime_factory() as service:
-                headers = task.request.headers or {}
                 if type(headers.get("tenant_id")) is not int or headers["tenant_id"] != tenant_id:
                     raise ValueError("Trusted task tenant header must match payload")
                 with profile_scope(tenant_id):

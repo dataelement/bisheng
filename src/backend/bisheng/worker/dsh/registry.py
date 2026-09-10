@@ -31,11 +31,11 @@ def register_dsh_tasks(app):
 
     @app.task(bind=True, name="dsh.inspect_usage")
     def inspect_usage(task, tenant_id: int, user_id: int, cursor: int = 0):
+        # Celery request state is thread-local; capture it before the async bridge.
+        headers = dict(task.request.headers or {})
+
         async def execute():
-            if (
-                type((task.request.headers or {}).get("tenant_id")) is not int
-                or task.request.headers["tenant_id"] != tenant_id
-            ):
+            if type(headers.get("tenant_id")) is not int or headers["tenant_id"] != tenant_id:
                 raise ValueError("DSH inspection requires a matching trusted tenant header")
             with profile_scope(tenant_id):
                 async with projection_worker_runtime() as service:

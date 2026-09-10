@@ -18,11 +18,12 @@ async def resume_operation(headers: dict, tenant_id: int, operation_id: str, ser
 def register_reconciliation_tasks(app, runtime_factory):
     @app.task(bind=True, name="dsh.reconcile_usage")
     def reconcile_usage(task, tenant_id: int, operation_id: str):
+        # Celery request state is thread-local; capture it before the async bridge.
+        headers = dict(task.request.headers or {})
+
         async def execute():
             async with runtime_factory() as runtime:
-                return await resume_operation(
-                    task.request.headers or {}, tenant_id, operation_id, runtime.reconciliation
-                )
+                return await resume_operation(headers, tenant_id, operation_id, runtime.reconciliation)
 
         from bisheng.worker._asyncio_utils import run_async_task
 

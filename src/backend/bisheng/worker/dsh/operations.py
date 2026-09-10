@@ -33,9 +33,12 @@ async def dispatch_operation(headers: dict, tenant_id: int, operation_id: str, r
 def register_operation_tasks(app, runtime_factory, tenant_ids, now):
     @app.task(bind=True, name="dsh.resume_operation")
     def resume_operation(task, tenant_id: int, operation_id: str):
+        # Celery request state is thread-local; capture it before the async bridge.
+        headers = dict(task.request.headers or {})
+
         async def execute():
             async with runtime_factory() as runtime:
-                return await dispatch_operation(task.request.headers or {}, tenant_id, operation_id, runtime)
+                return await dispatch_operation(headers, tenant_id, operation_id, runtime)
 
         from bisheng.worker._asyncio_utils import run_async_task
 
