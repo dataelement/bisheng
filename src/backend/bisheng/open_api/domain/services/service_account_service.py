@@ -20,7 +20,10 @@ from bisheng.open_api.domain.models.api_credential import (
 )
 from bisheng.open_api.domain.models.service_account import ServiceAccount
 from bisheng.open_api.domain.repositories.owner_repository import NaturalPersonRecord, OwnerRepository
-from bisheng.open_api.domain.repositories.service_account_repository import ServiceAccountRepository
+from bisheng.open_api.domain.repositories.service_account_repository import (
+    ServiceAccountRepository,
+    current_tenant_scope,
+)
 from bisheng.open_api.domain.schemas.service_account import (
     ServiceAccountCreate,
     ServiceAccountDelegateScope,
@@ -44,8 +47,20 @@ class ManagementActor(Protocol):
 class ServiceAccountService:
     @classmethod
     async def get_row(cls, service_account_id: int, *, include_deleted: bool = False) -> ServiceAccount:
+        """Load one account, refusing anything outside the caller's tenant.
+
+        Every management path — detail, update, enable/disable, delete, resource
+        grants, and the whole key surface — is addressed by id and funnels
+        through here, so this is where the tenant boundary is enforced. An
+        account belonging to another tenant answers exactly like a missing one:
+        the caller must not learn that the id exists elsewhere.
+        """
+
         row = await ServiceAccountRepository.get(service_account_id, include_deleted=include_deleted)
         if row is None:
+            raise ServiceAccountNotFoundError()
+        tenant_id = current_tenant_scope()
+        if tenant_id is not None and row.tenant_id != tenant_id:
             raise ServiceAccountNotFoundError()
         return row
 
