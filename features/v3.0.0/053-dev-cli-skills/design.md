@@ -283,6 +283,7 @@
 
 - **备选**：
   - A. **请 F049 给 `WhoamiResponse` 加 `resource_owner: {user_id, user_name}`**（选定）
+  - ⚠️ **2026-09-10 前提已变**：底座改接发版线 beta2 后，`WhoamiResponse` 的实际字段是 `credential_id / actor_kind / actor_id / actor_name / tenant_id / resource_owner / authorization_subject_type / authorization_subject_id / effective_user_id / mode / scopes / key_mask / expires_at`——主体已扁平化为 `actor_*`，`resource_owner` **只剩 `user_id`、没有姓名**。CLI 已改为如实只印 ID 并在无归属人时直说「这把密钥还不能 deploy」，不再要求服务端补姓名。下方以 vibe 形状写的示例与回写项保留作历史。
   - B. F053 降级：只输出服务账号名，提示"去详情页看归属人"
   - C. CLI 另调一个查归属人的端点 — **否决**：等于为 CLI 单开一条身份查询面，且那个端点的鉴权口径要重新论证
 - **选定**：**A**，B 作为 F049 未补前的**降级行为**。
@@ -433,6 +434,7 @@ bisheng logs [--app-id] [--tail N] [--since TS] [--keyword K] [--follow] [--json
       "api_key": "bs-sak-…",                      // 明文，权限位是唯一保护（D3）
       "key_mask": "bs-sak-********abcd",
       "tenant_id": 1,
+      // ⚠️ 以下为 vibe F049 形状，2026-09-10 已被 beta2 契约取代（见上方订正）
       "service_account": {"id": 123, "name": "…"},
       "resource_owner": {"user_id": 7, "user_name": "…"} | null,   // 待 F049 补（D14）
       "expires_at": "2026-12-31T00:00:00" | null,
@@ -560,7 +562,7 @@ bisheng logs [--app-id] [--tail N] [--since TS] [--keyword K] [--follow] [--json
 | **F055 `secret_scan` 的执行位置**（design D5 挂着一个"提前到构建之前"的**待 ★ 确认偏离**） | 顺序契约 | 若确认提前 → CLI 的 `STAGE_LABELS` 顺序、README 与 **spec AC-31a** 必须**同批**改；不同批 = CLI 打印的阶段顺序与实际不符 |
 | **F055 162 段错误码语义**（design §4.2 ⑧ `:588-598`） | 错误码 | **一码一义红线**：`16225`（审批场景未启用，找管理员）vs `16226`（容量不足，等资源）—— F055 早期版本曾把两者写成同码；CLI 的 `ERROR_HINTS` 若跟着写错，用户会按完全错误的方向排障。→ **本文 §4.2 ② 已把二者分成 exit 13 / exit 14 兑现该红线**，落码时不得回退成同一格 |
 | **F055 AppManifest 形态**（design §4.2 ③，`extra='forbid'`） | 数据契约（YAML） | CLI 只校验三必填；**CLI 与技能包都不得自造字段**，否则"本地过、上传被拒" |
-| **F049 `GET /api/v2/auth/whoami`** + 260 段错误码与真 HTTP 状态 | HTTP | `WhoamiResponse` 若改字段名 → `login` 输出坏；**⚠️ 回写项 1：需 F049 给它加 `resource_owner: {user_id, user_name}`**，否则 AC-06 只能降级（D14） |
+| **F049 `GET /api/v2/auth/whoami`** + 260 段错误码与真 HTTP 状态 | HTTP | `WhoamiResponse` 若改字段名 → `login` 输出坏；~~**⚠️ 回写项 1：需 F049 给它加 `resource_owner: {user_id, user_name}`**~~（2026-09-10 作废：beta2 契约只给 `user_id`，CLI 已按实呈现），否则 AC-06 只能降级（D14） |
 | **F049 `app:manage` 位判定（端点 `open_api_scope("app:manage")` marker + `router_rpc` 的 `verify_open_api_access`，2026-09-10 改接 beta2）与 3 秒缓存上界** | 服务端行为 | 缓存上界变化 → AC-52 的验收余量要跟着改 |
 | **F049 `whoami` 恒在注册 + 服务账号模块恒在** | 部署形态 | **⚠️ 回写项 4（spec 侧）**：`open_api_v2_router` 挂在 `router_rpc` 上恒在（`api/router.py:123-126`），服务账号模块「恒在、不随 open_platform 开关消失」是 F049 显式设计（`core/config/open_platform.py:17-18` 注释）→ **AC-05 的"login 校验入口不可达"这一半本轮不实现**，CLI 用前置探测在打 whoami 之前退出 8 作等价保证（D10 偏离登记）。建议改 spec 措辞而非改 F049 实现 |
 | **F055 `logs` 返回形状** | HTTP | **⚠️ 回写项 2：目前只有 `{lines[]}`，缺 `app_state` / `pending_reason`**，AC-43「明确提示应用态」只能降级实现（D8） |
@@ -621,7 +623,7 @@ bisheng logs --tail 200
 ## 8. 后续改进 / 不打算做的事
 
 **必须回写上游的四项**（已在 §6.2 登记，tasks 里各一条任务）：
-1. **F049 给 `WhoamiResponse` 加 `resource_owner: {user_id, user_name}`**——否则 AC-06 只能降级（D14）。
+1. ~~**F049 给 `WhoamiResponse` 加 `resource_owner: {user_id, user_name}`**~~——2026-09-10 作废：底座已换 beta2，姓名不再下发，AC-06 按「如实只印 ID + 无归属人时明确提示」交付。
 2. **F055 给 `GET /api/v2/apps/{id}/logs` 的返回补 `app_state` / `pending_reason`**——否则 AC-43 只能降级（D8）。
 3. **F055 给 `GET /api/v2/apps/deployments/{id}` 的轮询载荷补 `entry_url`**（`app_state=已上线` 时非空）——目前它只在 `POST /deploy` 的返回里、首发时大概率为 `null`，否则 AC-31c「通过并上线（输出入口地址）」/ AC-33 / 决议-12 只能降级为"指路应用详情页"（D7）。
 4. **F053 spec 的 AC-05 措辞**——「login 校验入口在开放能力层未部署时不可达」与 F049「服务账号模块恒在 + `whoami` 恒在注册」的既成实现冲突（D10 偏离登记）。建议把该半句改成「CLI 的 `login` 在该环境不可用并给出可读原因」，由前置探测 + exit 8 兑现；**改 spec 而不是改 F049**。

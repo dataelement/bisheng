@@ -133,11 +133,12 @@ async def test_child_tenant_admin_cannot_grant_resources_to_a_root_account(open_
     try:
         # The account lookup runs first, so the permission port is never called.
         with pytest.raises(ServiceAccountNotFoundError):
+            # Signature note: this branch carries beta1 tip's resource-grants
+            # rework, whose endpoint takes only the account id plus its two
+            # dependencies — the beta2-based fix branch has the older shape.
             await account_endpoints.list_service_account_resource_grants(
                 root.id,
-                resource_type="knowledge",
-                resource_id="1",
-                admin=admin,
+                _admin=admin,
                 api=None,
             )
     finally:
