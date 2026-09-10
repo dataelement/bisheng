@@ -8,7 +8,7 @@
 > - `文件:行号` 会漂移，落地前以符号名和路由清单重新定位。
 
 **关联**: [discovery.md](../000-openapi-auth-discovery/discovery.md) · [spec.md](./spec.md) · [tasks.md](./tasks.md) · [release-contract.md](../release-contract.md) · [reference/](./reference/README.md)
-**版本**: v3.0.0-beta1 · **Feature 编号**: F053 · **最后更新**: 2026-09-08（同步 PRD v2.6）
+**版本**: v3.0.0-beta1 · **Feature 编号**: F053 · **最后更新**: 2026-09-10（同步 PRD v2.6，补齐发布页语音）
 
 ---
 
@@ -328,6 +328,9 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 | `GET /api/v3/flows/{flow_id}` | 发布页工作流详情 | `/api/v2/flows/{flow_id}` |
 | `GET /api/v3/chat/history` | 发布页当前会话历史 | v2 不开放此端点 |
 | `POST /api/v3/chat/gen_title` | 发布页会话标题 | v2 不开放此端点 |
+| `GET /api/v3/llm/workbench` | 发布页语音能力配置，仅返回 `asr_model.id` / `tts_model.id` | 无对应 v2 配置接口 |
+| `POST /api/v3/llm/workbench/asr` | 发布页录音转文字 | `/api/v2/llm/workbench/asr`（本轮保留） |
+| `POST /api/v3/llm/workbench/tts` | 发布页文字朗读 | `/api/v2/llm/workbench/tts`（本轮保留） |
 
 `GET /assistant/list` 不是单个已发布资源所需能力，不进入 v3；它只保留 v2 密钥版本。
 
@@ -336,6 +339,8 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 **F3：会话绑定。** v3 创建的会话标记 `api_subject_type='public_v3'`，并绑定资源 ID / 默认操作员；history、gen_title、stop、续聊都校验该来源与资源匹配。不得仅凭随机 chat_id 读取或停止其它 v1/v2 会话。
 
 **F4：代码复用和切换。** v2/v3 endpoint 只做各自鉴权和 schema 适配，工作流/助手执行逻辑下沉到共享 domain service。client guest 模式 `apiVersion` 类型扩为 `v1 | v2 | v3` 且取 `v3`；platform 两个发布 API 页面改 v3；商业网关中显式代理/拦截的 assistant、workflow、chat 路径同步增加 v3。现有分享链接代码、URL 参数与 header 不在此工作流修改。
+
+**F5：发布页语音补齐（2026-09-10 用户确认补漏）。** ASR/TTS 在 F053 之前已有匿名 v2；语音配置没有对应 v2，现补齐三个 v3 入口。三者均要求 query `flow_id`（工作流或助手 UUID），先经 `public_application_execution` 解析已发布资源及租户，再复用 `LLMService`；ASR 沿用 multipart `file`，TTS 沿用 JSON `text`。配置只投影两个语音模型 ID，不开放整份工作台管理配置。client 共用语音组件通过 standalone guest context 选择 v3，配置查询按应用 ID 隔离缓存；配置在渲染时读取，ASR/TTS 在录音结束/点击朗读时调用。此次不删除、不取消鉴权任何 v2 入口；双版本最终是否保留待需求确认。已知漏项：仅将主对话 `apiVersion` 改为 v3 不会切换原来固定 v1 的共用语音组件，必须同时接通它们的请求。
 
 ---
 
@@ -371,7 +376,7 @@ class OpenApiPrincipal(BaseModel, frozen=True):
 | v2 密钥面 | 现有 knowledge / filelib / citation / llm / flow / assistant / workflow 开放端点（排除旧 chat 六端点） | API Key + scope + S/D |
 | | `GET /api/v2/auth/whoami` | API Key，`scope=None` |
 | | §5.E 五个日常模式端点 | API Key + `chat:invoke` + S/D |
-| v3 发布面 | §5.F 九个 allowlist 端点 | 无 JWT / 无 API Key；guest policy |
+| v3 发布面 | §5.F 十二个 allowlist 端点 | 无 JWT / 无 API Key；guest policy |
 | v1 管理面 | `/service-accounts/**`、`/personal-tokens/**` | JWT + 租户管理员及以上 |
 | v1 员工面 | `/me/api-token/**` | JWT |
 | v1 站内与分享 | 所有既有接口 | **保持现状** |
@@ -484,7 +489,7 @@ F048 的 Catalog active、模型 enabled、动作 active、grant level 以及资
 | PAT | 一人一把、两层开关、级联失效、只 knowledge:read、超管不跨 tenant、OBO 拒绝 |
 | 安全修复 | QA IDOR 读写拒绝且无副作用；知识空间列表 DTO 含 `user_name/actions`；v2 403/404/503 传输状态；multipart `user_id` 26019；SSE 终态进入审计 |
 | 日常模式 | 五个 v2 端点复用 v1 业务/信封/SSE；请求 schema 删除 `use_knowledge_base`、`task_mode` 但保留 `files`；内部固定 `task_mode=False`；config 只有 models/tools；SA/PAT/D 会话归属矩阵；跨主体 chat/file 统一 404 |
-| v3 发布面 | 九路由 allowlist；未发布/开关关拒绝；两个 WS 正常；history/title/stop 不能跨资源；`/api/v3/assistant/list` 真 404 |
+| v3 发布面 | 十二路由 allowlist；未发布/开关关拒绝；两个 WS 正常；history/title/stop 不能跨资源；`/api/v3/assistant/list` 真 404 |
 | 前端/网关 | guest 页面所有 v3 HTTP/WS 无 v2 遗留；发布示例为 v3；密钥文档为 v2；商业网关可转发 v3 WS |
 
 **手动验证**（`$BASE` 为实例地址）：
@@ -522,7 +527,7 @@ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/v2/assistant/info/$ASSISTANT
 
 1. 执行 §7 三个 Alembic revision；无需 `user`、审计表或分享表备份/变更。
 2. 先发布向后兼容的 OpenFGA `service_account` 模型，再部署后端；在模型就绪前保持服务账号签发入口关闭。
-3. 先上线 v3 后端九个路由并验证 HTTP / WS，再切 client guest、platform 发布示例和商业网关；旧 v2 发布 URL 在同一版本移除免登录语义，不能继续匿名调用。
+3. 先上线 v3 后端十二个路由并验证 HTTP / WS，再切 client guest、platform 发布示例和商业网关；旧 v2 发布 URL 在同一版本移除免登录语义，不能继续匿名调用。
 4. v2 发布后不再读取 `default_operator`；v3 继续依赖 `default_operator.enable_guest_access`。升级说明必须把两者写成不同通道。
 5. 对客文档分别成章：v2 密钥开放 API（含新身份头）与 v3 免登录发布 API。不得宣称“所有 `/api/v2/**` 都可匿名”，也不得要求 v3 携带 API Key。
 6. 最小可发版集为 A + C + F；B 缺失时不建议对外启用服务账号，E/D 可在同版后续里程碑启用。

@@ -2225,5 +2225,8 @@
   "com_personal_token_operation_success": "个人 API 令牌已更新",
   "com_personal_token_copy": "复制",
   "com_personal_token_done": "完成",
-  "com_personal_token_loading": "加载中..."
+  "com_personal_token_loading": "加载中...",
+  "com_voice": {
+    "playback_unavailable": "播放功能不可用，请联系管理员"
+  }
 }

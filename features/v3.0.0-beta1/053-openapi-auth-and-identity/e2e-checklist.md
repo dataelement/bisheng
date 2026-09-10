@@ -50,6 +50,20 @@
 - [ ] guest 请求携带 `X-On-Behalf-Of` 或 `X-End-User` 时被拒绝；`/api/v3/assistant/list` 为真 404。
 - [ ] 关闭 guest access 或下线资源后，HTTP 与 WebSocket 均无法继续建立新调用。
 
+## Client：AC-R9 发布页语音补漏（2026-09-10）
+
+- [ ] 清空浏览器 cookie、localStorage 和查询缓存，分别打开工作流、助手免登录链接。
+- [ ] 输入框挂载只请求 `GET /api/v3/llm/workbench?flow_id=<当前应用>`；响应仅含 `asr_model.id` / `tts_model.id`；不请求 v1/v2 的语音配置或转换接口。
+- [ ] 配置了 ASR 后录音按钮可用，录音结束才发送 `POST /api/v3/llm/workbench/asr?flow_id=<当前应用>`（multipart `file`），识别文字回填输入框。
+- [ ] 配置了 TTS 后回答出现朗读按钮，点击才发送 `POST /api/v3/llm/workbench/tts?flow_id=<当前应用>`（JSON `text`），返回音频可播放、暂停；绝对音频 URL 不被错误添加页面路径前缀。
+- [ ] 同一浏览器先登录、再打开 guest；或在两个应用间切换，语音配置不串用登录态缓存或其他应用的缓存。
+- [ ] 关闭 guest / 下线应用后，三类请求分别按既有发布规则拒绝；不携带应用 ID 返回 422；身份传递头仍被拒绝。
+- [ ] 站内原语音入口仍可使用；v2 ASR/TTS 仍保持原密钥鉴权，本轮不删除。
+
+本轮自动化：`test/public_endpoints/test_voice.py` 覆盖真实路由、发布策略与租户上下文（替身模型服务）；client 测试覆盖通道、缓存隔离及朗读按钮调用。真实模型 E2E 入口为 `test/e2e/test_e2e_f053_public_voice.py`，需设置 `F053_VOICE_E2E=1`、`E2E_API_BASE`、两个应用 ID，以及 ASR 测试录音路径；未提供专用环境时跳过，不记为通过。
+
+2026-09-10 本地结果：后端 public_endpoints + v2 路由矩阵 35 项通过；client 相关 4 个测试文件共 20 项通过；工作区 `pnpm lint`、`pnpm typecheck`、`pnpm check-i18n`、backend Ruff 与架构守卫通过。后端单元测试使用临时空配置和既有外部服务替身，无需连接真实中间件；Jest 本地缺少可选 native canvas 构建产物，通过临时 preload 将其标记为不可用后执行，未修改仓库测试环境。真实模型 E2E 9 项因未提供专用部署参数而跳过，上述浏览器清单尚未实测。
+
 ## v2 日常会话与身份传递
 
 - [ ] 仅携带具有 `chat:invoke` 的 SAK，依次调用 config、chat/list、chat/info、knowledge/upload、workstation/chat/completions；不需要 JWT。

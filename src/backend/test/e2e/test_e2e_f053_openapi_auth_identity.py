@@ -270,9 +270,7 @@ class TestE2EF053OpenApiAuthIdentity:
         """AC-F053-06: published v3 is anonymous and exposes no assistant list."""
 
         assistant_id = _required_env("F053_E2E_PUBLISHED_ASSISTANT_ID")
-        assert_resp_200(
-            await client.get(f"{API_ORIGIN}/api/v3/assistant/info/{assistant_id}")
-        )
+        assert_resp_200(await client.get(f"{API_ORIGIN}/api/v3/assistant/info/{assistant_id}"))
 
         forbidden_header = await client.get(
             f"{API_ORIGIN}/api/v3/assistant/info/{assistant_id}",
@@ -280,6 +278,7 @@ class TestE2EF053OpenApiAuthIdentity:
         )
         assert forbidden_header.status_code == 403
 
+        # Public links expose one published assistant, not assistant discovery.
         missing_route = await client.get(f"{API_ORIGIN}/api/v3/assistant/list")
         assert missing_route.status_code == 404
 
@@ -287,7 +286,7 @@ class TestE2EF053OpenApiAuthIdentity:
         self,
         client: httpx.AsyncClient,
     ) -> None:
-        """AC-F053-07: live schema exposes exactly seven public-v3 HTTP routes."""
+        """AC-F053-07: live schema exposes exactly ten public-v3 HTTP routes."""
 
         schema_response = await client.get(f"{API_ORIGIN}/openapi.json")
         assert schema_response.status_code == 200
@@ -300,6 +299,9 @@ class TestE2EF053OpenApiAuthIdentity:
             "/api/v3/flows/{flow_id}",
             "/api/v3/chat/history",
             "/api/v3/chat/gen_title",
+            "/api/v3/llm/workbench",
+            "/api/v3/llm/workbench/asr",
+            "/api/v3/llm/workbench/tts",
         }
 
     async def test_ac_f053_08_service_account_grants_are_subject_side_lists(
