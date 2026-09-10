@@ -223,3 +223,35 @@ def test_missing_external_stores_fail_explicitly(monkeypatch):
         dsh_database_url.__wrapped__()
     with pytest.raises(pytest.UsageError):
         dsh_redis_url.__wrapped__()
+
+
+@pytest.mark.parametrize("scheme", ["http", "https"])
+def test_config_accepts_http_and_https_origins(scheme):
+    from bisheng.dsh.config import DshSettings
+
+    settings = DshSettings(
+        platform_public_url=f"{scheme}://192.168.106.109:13001/",
+        gateway_internal_url=f"{scheme}://gateway:8080/",
+    )
+    assert settings.platform_public_url == f"{scheme}://192.168.106.109:13001"
+    assert settings.gateway_internal_url == f"{scheme}://gateway:8080"
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "ftp://gateway",
+        "http://user:password@gateway",
+        "http://gateway/path",
+        "http://gateway?key=value",
+        "http://gateway#fragment",
+        "http://gateway:invalid",
+        "http:///",
+    ],
+)
+def test_config_rejects_non_origin_addresses(origin):
+    from bisheng.dsh.config import DshSettings
+
+    for field in ("platform_public_url", "gateway_internal_url"):
+        with pytest.raises(ValidationError):
+            DshSettings(**{field: origin})

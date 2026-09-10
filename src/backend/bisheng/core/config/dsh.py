@@ -23,10 +23,11 @@ class DshSettings(BaseModel):
         description="Stable platform installation identifier used to scope DSH trust and quota state.",
     )
     platform_public_url: str | None = Field(
-        default=None, description="Public HTTPS origin of Bisheng used by the Desktop authorization flow; no path."
+        default=None, description="Public HTTP(S) origin of Bisheng used by the Desktop authorization flow; no path."
     )
     gateway_internal_url: str | None = Field(
-        default=None, description="Internal HTTPS origin of the gateway used for authenticated service calls; no path."
+        default=None,
+        description="Internal HTTP(S) origin of the gateway used for authenticated service calls; no path.",
     )
     quota_approval_object: str | None = Field(
         default=None,
@@ -94,7 +95,7 @@ class DshSettings(BaseModel):
             return None
         parsed = urlsplit(value)
         if (
-            parsed.scheme != "https"
+            parsed.scheme not in {"http", "https"}
             or not parsed.hostname
             or parsed.username is not None
             or parsed.password is not None
@@ -102,7 +103,7 @@ class DshSettings(BaseModel):
             or parsed.fragment
             or parsed.path not in {"", "/"}
         ):
-            raise ValueError("DSH endpoints require a credential-free HTTPS origin without a path")
+            raise ValueError("DSH endpoints require a credential-free HTTP(S) origin without a path")
         try:
             _ = parsed.port
         except ValueError:

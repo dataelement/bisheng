@@ -1,4 +1,4 @@
-"""Fixed-origin HTTPS client for DSH's authenticated Gateway surface."""
+"""Fixed-origin HTTP(S) client for DSH's authenticated Gateway surface."""
 
 import json
 from typing import Any
@@ -46,7 +46,7 @@ class GatewayClient:
     def __init__(self, origin: str, auth: ServiceAuth, client: httpx.AsyncClient, timeout: float = 2.0):
         parsed = urlsplit(origin)
         if (
-            parsed.scheme != "https"
+            parsed.scheme not in {"http", "https"}
             or not parsed.hostname
             or parsed.username is not None
             or parsed.password is not None
@@ -54,7 +54,7 @@ class GatewayClient:
             or parsed.query
             or parsed.fragment
         ):
-            raise ValueError("Gateway requires a credential-free HTTPS origin")
+            raise ValueError("Gateway requires a credential-free HTTP(S) origin")
         self.origin = origin.rstrip("/")
         self.auth = auth
         self.client = client

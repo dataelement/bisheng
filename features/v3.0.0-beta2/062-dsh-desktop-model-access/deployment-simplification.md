@@ -35,3 +35,7 @@ Ticket 保持随机、短期、Redis 原子一次性消费和 PKCE/授权事务�
 config.contract_version 升为 0.4.0；HTTP 路径、调用顺序、ticket 兑换和正常 JSON/SSE 形状不变。旧 RS256 access token 失效，应重新登录；已有席位和逐模型额度记录保留。共享 Secret 轮换同时影响用户同步与 DSH，应协调两端同步更新。客户端契约已更新在本地，未向客户端团队发送消息。
 
 部署目标为 192.168.106.109。毕昇通过 feat/3.0.0-beta2-pre 推送构建；Gateway 通过带 -dsh- 的 v 前缀联调 tag 构建，跳过旧流水线对 115 的自动部署。最终构建 SHA、镜像 digest、运行版本和实测结果另行记录，不将本设计说明视为部署完成证明。
+
+## 2026-09-10：HTTP 部署支持
+
+按用户确认，平台公开地址、Gateway 内部地址及 Gateway 的 Python 地址允许 HTTP 或 HTTPS origin；不额外引入协议开关。109 独立联调入口统一为 `http://192.168.106.109:13001`，取消 3443、HTTPS 跳转及客户端 CA 要求。服务内部直接使用 Compose DNS `http://gateway:8080` / `http://backend:7860`。原 HMAC、防重放、PKCE、一次性票据和精确 Origin 校验保持不变；HTTP 登录 Cookie 沿用原 `secure=false` 配置。客户端同步放开 BASE / 唤起 server 参数的 HTTP 校验，接口形状及调用时序不变。

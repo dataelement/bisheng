@@ -677,7 +677,7 @@ DSH 仅配置 Nginx BASE，公开配置返回开关、client_id 与 contract_ver
 
 #### 内部服务接口
 
-HTTPS + 现有用户同步 Secret 派生的双向 HMAC；key_id 由代码固定并绑定安装实例，签名包含时间戳和 nonce。DSH 客户端不持有服务 Secret。
+HTTP 或 HTTPS + 现有用户同步 Secret 派生的双向 HMAC；key_id 由代码固定并绑定安装实例，签名包含时间戳和 nonce。DSH 客户端不持有服务 Secret。
 
 | 提供方 / 方法 / 路径 | 调用方 / 鉴权 | 关键入参 | 返回契约 | 关联数据 |
 |---|---|---|---|---|
@@ -737,7 +737,7 @@ DSH Token 的 JOSE header 固定 typ=bisheng-dsh-access+jwt、alg=HS256、kid=ds
 
 BiSheng 管理入口采用既有管理员能力校验并限定目标租户；模型选择调用现有模型业务授权。需要具体资源授权的操作由业务侧构造已验证目标后进入 `permission.application`；不直接访问 OpenFGA，也不把 DSH model grant 当成可绕过原权限的替代结论。
 
-内部服务通信采用 HTTPS + 独立 HMAC-SHA256 协议，复用现有 SSO Secret 并按方向/Token 用途派生密钥，不新增密钥配置，不使用 License 密钥。签名覆盖 method、规范化 path、body_hash、installation_id、key_id、timestamp、nonce；内部端点不使用 query 参数传签名数据。时间窗建议 ±60 秒，nonce 共享存储原子占用 120 秒；重试用新 nonce、同 operation_id。服务端从 key_id 的受信注册映射验证安装实例，不能只信请求体中的 installation_id。响应使用校验证书的 HTTPS。
+内部服务通信采用固定 HTTP/HTTPS origin + 独立 HMAC-SHA256 协议，复用现有 SSO Secret 并按方向/Token 用途派生密钥，不新增密钥配置，不使用 License 密钥。签名覆盖 method、规范化 path、body_hash、installation_id、key_id、timestamp、nonce；内部端点不使用 query 参数传签名数据。时间窗建议 ±60 秒，nonce 共享存储原子占用 120 秒；重试用新 nonce、同 operation_id。服务端从 key_id 的受信注册映射验证安装实例，不能只信请求体中的 installation_id。采用 HTTPS 时仍校验证书，不禁用 TLS 验证；采用 HTTP 时直接连接配置的固定 origin，不新增开关。
 
 ### 6.3 依赖与风险
 

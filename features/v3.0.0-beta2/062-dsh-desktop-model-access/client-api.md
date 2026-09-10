@@ -14,7 +14,7 @@
 
 ## 1. 接入结论与需求来源
 
-用户只配置一个 **BiSheng Nginx 公开地址**，例如 `https://bisheng.example.com`。登录、换证、刷新、模型与用量请求全部使用这个地址；无需填写 Gateway 地址、模型供应商地址或供应商密钥。
+用户只配置一个 **BiSheng Nginx 公开地址**，支持 HTTP 或 HTTPS，例如 `http://192.168.106.109:13001`。登录、换证、刷新、模型与用量请求全部使用这个地址；无需填写 Gateway 地址、模型供应商地址或供应商密钥。
 
 需求依据：2026-09-09 实际读取的[飞书 PRD v0.7（2026-09-03）](https://dataelem.feishu.cn/wiki/NHkFwHOrjizdmekwnuYc1CHsnPc) §4.1、§4.2、§4.5、§4.6，当前 [F062 Spec](./spec.md)、[Design](./design.md)，以及本次确认的单入口部署与商业控制边界。PRD 与后续设计存在演进，按下表接入：
 
@@ -37,7 +37,7 @@
 
 ### 2.1 一个地址，两类接口
 
-设 `BASE = https://bisheng.example.com`，保存时删除末尾 `/`。本期地址为 origin（协议、主机、可选端口），不支持额外部署路径前缀；不填写 `/api`、`/api/v1` 或 `/workspace`。生产使用 HTTPS 和有效证书，禁止通过关闭证书验证处理连接问题。
+设 `BASE = https://bisheng.example.com`，保存时删除末尾 `/`。本期地址为 origin（协议、主机、可选端口），不支持额外部署路径前缀；不填写 `/api`、`/api/v1` 或 `/workspace`。客户端接受 HTTP 和 HTTPS，不强制跳转或升级协议；使用 HTTPS 时校验证书。109 联调 BASE 为 `http://192.168.106.109:13001`，无需导入 CA。
 
 ```text
 DSH / 浏览器 → BASE 对应的 Nginx
@@ -133,7 +133,7 @@ PKCE：verifier 为 43～128 个 RFC 7636 unreserved ASCII 字符，建议 32 �
 dsh-desktop://login?server=https%3A%2F%2Fbisheng.example.com
 ```
 
-客户端注册此协议，处理首次启动和已运行时的协议事件。仅接受 `login` host、空 path、一个 URL 编码的 `server` 参数；重复参数、userinfo、片段、额外路径和非 HTTPS server 拒绝。解析后展示平台地址并让用户确认；未确认不得替换现有 BASE 或向新平台发送任何已有凭证。
+客户端注册此协议，处理首次启动和已运行时的协议事件。仅接受 `login` host、空 path、一个 URL 编码的 `server` 参数；重复参数、userinfo、片段、额外路径和非 HTTP/HTTPS server 拒绝。解析后展示平台地址并让用户确认；未确认不得替换现有 BASE 或向新平台发送任何已有凭证。
 
 确认后从 §4.1 第 1 步开始，新建自己的 state/verifier。已登录的平台浏览器可以复用 Web 会话，再完成本次 DSH 授权；最终姓名 / 租户取自换证后的可信响应，不信任深链的姓名参数。
 
@@ -509,7 +509,7 @@ error.message 为可展示的服务端说明，不解析其文案；error.code �
 
 ### 10.2 联调环境由平台方提供
 
-一个 HTTPS BASE；Gateway DSH 模块和 BiSheng DSH API 版本；桌面下载版本；T1/T2 测试租户及普通用户 / 管理员；有效测试 License（例如 10 席）；已开放且 tools/usage 适配验证通过的模型 ID；可控席位撤销与配额配置入口；按 X-Request-ID 查询服务端日志的方式。真实供应商和模型名单目前未提供，不能据示例宣称任意模型已兼容。
+一个 HTTP 或 HTTPS BASE；Gateway DSH 模块和 BiSheng DSH API 版本；桌面下载版本；T1/T2 测试租户及普通用户 / 管理员；有效测试 License（例如 10 席）；已开放且 tools/usage 适配验证通过的模型 ID；可控席位撤销与配额配置入口；按 X-Request-ID 查询服务端日志的方式。真实供应商和模型名单目前未提供，不能据示例宣称任意模型已兼容。
 
 Nginx/Gateway 联调检查：完整路径转发、Authorization 透传、DSH 独立认证不误走普通 JWT/V2、SSE 无代理缓冲与自动重试、取消能传到上游、超时覆盖长生成、公开 origin 不变；反向代理外部 host/proto 来自受信部署配置，不采信任意外部转发头拼授权 URL。
 
@@ -827,3 +827,6 @@ sequenceDiagram
 - `usage_unavailable` 仅用于无法可靠确认账本写入等存储异常；供应商没有返回 usage 不再产生该错误。
 - 部门筛选/同步移除属于平台管理与内部接口调整，不增加 Desktop 调用。
 - 本地文档及契约样例已更新；尚未向客户端团队发送消息，确认与真实联调待记录。
+
+
+2026-09-10 接入修订：BASE 与唤起链接的 `server` 参数允许 HTTP；客户端需同步放开原 HTTPS-only 地址校验。接口路径、PKCE、票据、Token 与调用时序不变，契约仍为 0.4.0。

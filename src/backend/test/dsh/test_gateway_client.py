@@ -77,7 +77,8 @@ async def test_bad_signatures_do_not_consume_nonce_and_clock_is_bounded():
             service.sign("POST", path, b"{}")
 
 
-async def test_http_uses_fixed_https_origin_and_does_not_follow_redirects():
+@pytest.mark.parametrize("scheme", ["http", "https"])
+async def test_http_uses_fixed_origin_and_does_not_follow_redirects(scheme):
     seen = []
 
     def handler(request):
@@ -85,13 +86,13 @@ async def test_http_uses_fixed_https_origin_and_does_not_follow_redirects():
         return httpx.Response(302, headers={"location": "https://evil.example/"})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as transport:
-        client = GatewayClient("https://gateway.example", auth(), transport)
+        client = GatewayClient(f"{scheme}://gateway.example", auth(), transport)
         with pytest.raises(DshAuthorizationUnavailableError):
             await client.introspect("test-token")
     assert len(seen) == 1 and seen[0].url.host == "gateway.example"
     assert seen[0].headers["x-dsh-key-id"] == "python-test"
     with pytest.raises(ValueError):
-        GatewayClient("http://gateway.example", auth(), None)
+        GatewayClient("ftp://gateway.example", auth(), None)
 
 
 @pytest.mark.parametrize(
