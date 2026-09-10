@@ -22,7 +22,7 @@ import {
 } from "~/components/ui";
 import { buildDeleteImpactDescription, mergeDeleteImpacts } from "../utils/deleteImpact";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
-import { dispatchKnowledgeSpaceFilesRefresh } from "../hooks/useFileManager";
+import { dispatchKnowledgeSpaceFilesRefresh } from "../knowledgeFileRefresh";
 import {
     MAX_FOLDER_UPLOAD_COUNT,
     MAX_UPLOAD_COUNT,
@@ -1385,9 +1385,10 @@ export function KnowledgeSpaceContent({
         if (batchFileIds.length === 0) return;
 
         if (context?.mode === "overwrite") {
-            // Overwrite replaces each file's whole tag set (possibly with an
-            // empty one), which an in-place merge can't express correctly —
-            // pull the fresh state instead of trying to patch it.
+            if (tags !== undefined) {
+                const updatedIds = new Set(batchFileIds);
+                setFiles((prev) => prev.map((file) => updatedIds.has(file.id) ? { ...file, tags } : file));
+            }
             dispatchKnowledgeSpaceFilesRefresh(space.id);
             return;
         }

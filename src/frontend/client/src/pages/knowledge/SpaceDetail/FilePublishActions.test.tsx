@@ -1,9 +1,12 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { useState } from "react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import * as knowledgeApi from "~/api/knowledge";
 import { FileStatus, FileType, SpaceRole, SortDirection, SortType, type KnowledgeFile } from "~/api/knowledge";
 import { FileCard } from "./FileCard";
 import { FileTable } from "./FileTable";
 
 const mockOnPublishFile = jest.fn();
+let mockShougangEnabled = false;
 
 jest.mock("~/hooks", () => ({
     useLocalize: () => (key: string) => {
@@ -35,7 +38,7 @@ jest.mock("~/hooks", () => ({
 }));
 
 jest.mock("~/hooks/queries/endpoints/queries", () => ({
-    useGetBsConfig: () => ({ data: { shougang: { enabled: false } } }),
+    useGetBsConfig: () => ({ data: { shougang: { enabled: mockShougangEnabled } } }),
 }));
 
 jest.mock("~/Providers", () => ({
@@ -107,7 +110,9 @@ jest.mock("./TagGroup", () => ({
 }));
 
 jest.mock("./EditEncodingModal", () => ({
-    EditEncodingModal: () => null,
+    EditEncodingModal: ({ open, onSubmit }: any) => open
+        ? <button onClick={() => onSubmit("NEW-CODE")}>保存编码</button>
+        : null,
 }));
 
 jest.mock("../hooks/useInlineRename", () => ({
@@ -153,6 +158,27 @@ beforeAll(() => {
 describe("普通知识空间文件发布入口", () => {
     beforeEach(() => {
         mockOnPublishFile.mockClear();
+        mockShougangEnabled = false;
+    });
+
+    test("手动保存编码后直接显示服务端返回的新编码", async () => {
+        mockShougangEnabled = true;
+        jest.spyOn(knowledgeApi, "updateFileEncoding").mockResolvedValue({ ...baseFile, fileEncoding: "SAVED-CODE" });
+        function Harness() {
+            const [files, setFiles] = useState([{ ...baseFile, fileEncoding: "OLD-CODE" }]);
+            return <FileTable
+                files={files} selectedFiles={new Set()} handleSelectAll={jest.fn()} handleSelectFile={jest.fn()}
+                isAdmin currentUserRole={SpaceRole.ADMIN} onDownload={jest.fn()} onEditTags={jest.fn()}
+                onRename={jest.fn()} onDelete={jest.fn()} onRetry={jest.fn()} onNavigateFolder={jest.fn()}
+                onPreview={jest.fn()} onValidateName={() => null} onSort={jest.fn()}
+                onFileEncodingUpdated={(id, fileEncoding) => setFiles((previous) => previous.map((file) => file.id === id ? { ...file, fileEncoding } : file))}
+            />;
+        }
+        render(<Harness />);
+        fireEvent.click(screen.getByTitle("com_knowledge.file_encoding_edit_title"));
+        fireEvent.click(screen.getByRole("button", { name: "保存编码" }));
+        await waitFor(() => expect(screen.getByText("SAVED-CODE")).toBeInTheDocument());
+        expect(screen.queryByText("OLD-CODE")).not.toBeInTheDocument();
     });
 
     test("表格行更多菜单展示发布并触发发布回调", () => {

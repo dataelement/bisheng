@@ -9,6 +9,7 @@ import {
   listMyApprovalRequestsApi,
   listMyApprovalTasksApi,
   revokeDepartmentFileViewGrantApi,
+  withdrawApprovalInstanceApi,
 } from "~/api/approval";
 import { getSpaceInfoApi } from "~/api/knowledge";
 
@@ -57,6 +58,10 @@ jest.mock("~/api/knowledge", () => ({
 }));
 
 const mockShowToast = jest.fn();
+const mockRefresh = jest.fn();
+jest.mock("~/pages/knowledge/knowledgeFileRefresh", () => ({
+  dispatchKnowledgeSpaceFilesRefresh: (...args: any[]) => mockRefresh(...args),
+}));
 
 jest.mock("~/Providers", () => ({
   useToastContext: () => ({ showToast: mockShowToast }),
@@ -84,6 +89,20 @@ describe("ApprovalCenterDialog", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(getSpaceInfoApi).mockRejectedValue(new Error("skip live space lookup"));
+  });
+
+  it("撤回发布审批后通知知识库重新获取锁定状态", async () => {
+    const user = userEvent.setup();
+    const item = { instance_id: 22, business_name: "发布文件", status: "pending", scenario_code: "knowledge_space_file_publish" };
+    jest.mocked(listMyApprovalRequestsApi).mockResolvedValue({ data: [item], total: 1 } as any);
+    jest.mocked(getApprovalInstanceDetailApi).mockResolvedValue(item as any);
+    jest.mocked(withdrawApprovalInstanceApi).mockResolvedValue({} as any);
+    render(<ApprovalCenterDialog open onOpenChange={jest.fn()} target={{ tab: "my_requests", instanceId: 22 }} />);
+    await user.click(await screen.findByRole("button", { name: "com_approval_action_withdraw" }));
+    const buttons = screen.getAllByRole("button", { name: "com_approval_action_withdraw" });
+    await user.click(buttons[buttons.length - 1]);
+    await waitFor(() => expect(withdrawApprovalInstanceApi).toHaveBeenCalledWith(22, { reason: undefined }));
+    expect(mockRefresh).toHaveBeenCalledWith();
   });
 
   it("does not render withdraw for pending qa_question_publish requests", async () => {
@@ -642,6 +661,7 @@ describe("ApprovalCenterDialog", () => {
     await user.click(await screen.findByRole("button", { name: "com_approval_action_reject" }));
 
     expect(decideApprovalTaskApi).not.toHaveBeenCalled();
+    expect(mockRefresh).not.toHaveBeenCalled();
     expect(screen.getByText("请填写拒绝原因")).toBeInTheDocument();
     expect(mockShowToast).toHaveBeenCalledWith(
       expect.objectContaining({ message: "请填写拒绝原因" }),
@@ -659,6 +679,7 @@ describe("ApprovalCenterDialog", () => {
         comment: "资料不完整",
       });
     });
+    expect(mockRefresh).toHaveBeenCalledWith();
   });
 
   it("lets an approver revoke an executed department-file grant", async () => {

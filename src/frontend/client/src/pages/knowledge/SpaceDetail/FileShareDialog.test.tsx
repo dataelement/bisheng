@@ -7,6 +7,10 @@ const mockSubmit = jest.fn();
 const mockRevoke = jest.fn();
 const mockShowToast = jest.fn();
 const mockGetTargetFolders = jest.fn();
+const mockRefresh = jest.fn();
+jest.mock("../knowledgeFileRefresh", () => ({
+    dispatchKnowledgeSpaceFilesRefresh: (...args: any[]) => mockRefresh(...args),
+}));
 
 jest.mock("~/api/approval", () => ({
     getShougangFileShareTargetSpacesApi: (...args: any[]) => mockGetTargets(...args),
@@ -86,6 +90,8 @@ describe("FileShareDialog", () => {
             });
         });
         expect(onOpenChange).toHaveBeenCalledWith(false);
+        expect(mockRefresh).toHaveBeenCalledWith("10");
+        expect(mockRefresh).toHaveBeenCalledWith("20");
     });
 
     test("展开全部部门目标并提交所选目录", async () => {
@@ -165,5 +171,16 @@ describe("FileShareDialog", () => {
         await waitFor(() => {
             expect(screen.queryByText("仅查看")).not.toBeInTheDocument();
         });
+        expect(mockRefresh).toHaveBeenCalledWith(20);
+        expect(mockRefresh).toHaveBeenCalledWith("10");
+    });
+    test("分享失败不通知刷新", async () => {
+        mockSubmit.mockRejectedValue(new Error("提交失败"));
+        render(<FileShareDialog open activeSpace={activeSpace} file={managerFile} onOpenChange={jest.fn()} />);
+        await screen.findByRole("button", { name: "选择生产部知识库根目录" });
+        fireEvent.change(screen.getByPlaceholderText("请输入分享原因"), { target: { value: "联合检修" } });
+        fireEvent.click(screen.getByRole("button", { name: "提交审批" }));
+        await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({ message: "提交失败" })));
+        expect(mockRefresh).not.toHaveBeenCalled();
     });
 });

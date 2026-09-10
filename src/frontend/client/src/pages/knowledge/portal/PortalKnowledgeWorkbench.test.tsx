@@ -230,7 +230,7 @@ jest.mock("../FilePreview", () => ({
 }));
 
 jest.mock("../SpaceDetail/EditTagsModal", () => ({
-    EditTagsModal: ({ isOpen, spaceId, fileId, initialTagIds, onSaved }: any) => (
+    EditTagsModal: ({ isOpen, spaceId, fileId, fileIds, initialTagIds, onSaved }: any) => (
         isOpen ? (
             <div data-testid="edit-tags-modal">
                 编辑标签弹窗
@@ -246,6 +246,7 @@ jest.mock("../SpaceDetail/EditTagsModal", () => ({
                 >
                     保存标签
                 </button>
+                {fileIds && <button onClick={() => onSaved([{ id: 3, name: "新标签" }], { fileIds, mode: "overwrite" })}>覆盖标签</button>}
             </div>
         ) : null
     ),
@@ -6109,6 +6110,55 @@ describe("PortalKnowledgeWorkbench", () => {
                 file_status: [3],
             }));
         });
+    });
+
+    test("批量覆盖标签立即替换旧标签，不等待后台刷新", async () => {
+        const space = makeSpace("personal-1", "我的技术文档", { role: SpaceRole.ADMIN });
+        const file = makeFile("201", "覆盖测试.md", { tags: [{ id: 1, name: "旧标签" }] });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [], departmentSpaces: [], teamSpaces: [], personalSpaces: [space],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({ data: [file], total: 1 } as any);
+        renderWorkbench();
+        const row = await screen.findByTestId("file-tree-row-201");
+        await screen.findAllByText("旧标签");
+        fireEvent.click(within(row).getByRole("checkbox"));
+        fireEvent.click(screen.getByRole("button", { name: /批量操作|Batch operation|com_knowledge\.batch_operation/i }));
+        fireEvent.click(await screen.findByText(/批量编辑标签|Batch edit tags|com_knowledge\.batch_edit_tags/i));
+        jest.mocked(getSpaceChildrenApi).mockReturnValue(new Promise(() => {}));
+        fireEvent.click(await screen.findByRole("button", { name: "覆盖标签" }));
+        expect((await screen.findAllByText("新标签")).length).toBeGreaterThan(0);
+        expect(screen.queryAllByText("旧标签")).toHaveLength(0);
+    });
+
+    test.each([false, true])("刷新事件同步文件状态并保留搜索条件（搜索：%s）", async (searching) => {
+        const space = makeSpace("personal-1", "我的技术文档", { role: SpaceRole.ADMIN });
+        const file = makeFile("201", "待同步.md");
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [], departmentSpaces: [], teamSpaces: [], personalSpaces: [space],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({ data: [file], total: 1 } as any);
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({ data: [file], total: 1 } as any);
+        renderWorkbench();
+        await screen.findByText("待同步.md");
+        const input = await screen.findByPlaceholderText("com_knowledge.search_in_current_space");
+        if (searching) {
+            fireEvent.change(input, { target: { value: "待同步" } });
+            fireEvent.keyDown(input, { key: "Enter" });
+            await waitFor(() => expect(searchSpaceChildrenApi).toHaveBeenCalled());
+        }
+        const updated = { ...file, name: "已同步.md", hasPendingPublishApproval: true };
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({ data: [updated], total: 1 } as any);
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({ data: [updated], total: 1 } as any);
+        act(() => {
+            window.dispatchEvent(new CustomEvent("knowledge-space-files:refresh", {
+                detail: { spaceId: "personal-1" },
+            }));
+        });
+        expect(await screen.findByText("已同步.md")).toBeInTheDocument();
+        expect(screen.getByTitle("com_knowledge.edit_tags")).toBeDisabled();
+        expect(input).toHaveValue(searching ? "待同步" : "");
+        expect(screen.queryByText("待同步.md")).not.toBeInTheDocument();
     });
 
     test("searches files as a flat result list and restores tree when keyword is cleared", async () => {

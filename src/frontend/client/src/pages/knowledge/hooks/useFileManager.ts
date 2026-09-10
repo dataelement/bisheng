@@ -17,6 +17,9 @@ import { useToastContext } from "~/Providers";
 import { SearchParams } from "../SpaceDetail/CompoundSearchInput";
 import { useLocalize } from "~/hooks";
 import { isKnowledgeItemPending } from "../knowledgeUtils";
+import { useKnowledgeFileRefresh } from "./useKnowledgeFileRefresh";
+export { KNOWLEDGE_SPACE_FILES_REFRESH_EVENT, dispatchKnowledgeSpaceFilesRefresh } from "../knowledgeFileRefresh";
+export type { KnowledgeSpaceFilesRefreshEventDetail } from "../knowledgeFileRefresh";
 
 interface UseFileManagerOptions {
     activeSpace: KnowledgeSpace | null;
@@ -24,12 +27,6 @@ interface UseFileManagerOptions {
     initialFolderId?: string;
     /** Disable background loading/polling while the detail file list is not visible. */
     enabled?: boolean;
-}
-
-export const KNOWLEDGE_SPACE_FILES_REFRESH_EVENT = "knowledge-space-files:refresh";
-
-export interface KnowledgeSpaceFilesRefreshEventDetail {
-    spaceId?: number | string;
 }
 
 interface FileListState {
@@ -76,16 +73,6 @@ function buildFilesViewKey({
         sortBy: sortBy ?? "",
         sortDirection: sortDirection ?? "",
     });
-}
-
-/** Dispatch the global "knowledge space files changed" event (folder create/delete/rename, etc). */
-export function dispatchKnowledgeSpaceFilesRefresh(spaceId?: number | string): void {
-    window.dispatchEvent(
-        new CustomEvent<KnowledgeSpaceFilesRefreshEventDetail>(
-            KNOWLEDGE_SPACE_FILES_REFRESH_EVENT,
-            { detail: { spaceId } },
-        ),
-    );
 }
 
 type KnowledgeFileAliasDecision = {
@@ -568,19 +555,14 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     const refreshLoadedStatusesRef = useRef(refreshLoadedStatuses);
     refreshLoadedStatusesRef.current = refreshLoadedStatuses;
 
-    useEffect(() => {
-        if (!enabled || !activeSpace?.id || typeof window === "undefined") return;
-        const handleKnowledgeSpaceFilesRefresh = (event: Event) => {
-            const detail = (event as CustomEvent<KnowledgeSpaceFilesRefreshEventDetail>).detail;
-            if (!detail?.spaceId) return;
-            if (String(detail.spaceId) !== String(activeSpace.id)) return;
-            loadFilesRef.current(1);
-        };
-        window.addEventListener(KNOWLEDGE_SPACE_FILES_REFRESH_EVENT, handleKnowledgeSpaceFilesRefresh);
-        return () => {
-            window.removeEventListener(KNOWLEDGE_SPACE_FILES_REFRESH_EVENT, handleKnowledgeSpaceFilesRefresh);
-        };
-    }, [enabled, activeSpace?.id]);
+    useKnowledgeFileRefresh(
+        enabled ? activeSpace?.id : undefined,
+        () => loadFilesRef.current(1, { background: true }),
+        files.some((file) => file.hasPendingPublishApproval),
+        () => searchQuery.trim() || searchTagIds.length
+            ? loadFilesRef.current(1, { background: true })
+            : refreshLoadedStatusesRef.current(),
+    );
 
     useEffect(() => {
         if (!enabled) return;

@@ -20,6 +20,7 @@ import {
     DialogTitle,
 } from "~/components/ui";
 import { FilePublishTargetTree } from "./FilePublishTargetTree";
+import { dispatchKnowledgeSpaceFilesRefresh } from "../knowledgeFileRefresh";
 
 interface FileShareDialogProps {
     open: boolean;
@@ -127,6 +128,8 @@ export function FileShareDialog({
             if (result.decision === "exception") {
                 throw new Error("审批流程不可用，请联系管理员");
             }
+            dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
+            if (String(activeSpace.id) !== targetSpaceId) dispatchKnowledgeSpaceFilesRefresh(targetSpaceId);
             showToast({
                 message: "已提交分享申请",
                 severity: NotificationSeverity.SUCCESS,
@@ -152,6 +155,10 @@ export function FileShareDialog({
                 source_file_id: file.id,
                 share_entry_id: entry.entry_id,
             });
+            dispatchKnowledgeSpaceFilesRefresh(entry.target_space_id);
+            if (activeSpace && String(activeSpace.id) !== String(entry.target_space_id)) {
+                dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
+            }
             setEntries((current) => current.filter(
                 (item) => item.entry_id !== entry.entry_id,
             ));

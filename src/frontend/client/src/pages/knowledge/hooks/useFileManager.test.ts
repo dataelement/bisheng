@@ -86,11 +86,6 @@ describe("useFileManager — F027 infinite-scroll guards", () => {
     expect(body).toMatch(/applyKnowledgeFileAliasDecision\(incoming\)/);
   });
 
-  it("external knowledge-space-files refresh event resets to page 1", () => {
-    // Structural change handler must call loadFiles(1), not the previous
-    // currentPage — the accumulated tail is no longer trustworthy.
-    expect(src).toMatch(/handleKnowledgeSpaceFilesRefresh[\s\S]{0,400}?loadFilesRef\.current\(1\)/);
-  });
 });
 
 describe("SpaceDetail UI — F027 infinite-scroll guards", () => {

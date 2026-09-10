@@ -52,6 +52,7 @@ import { buildAutoTagLibraryPayload } from "../createKnowledgeSpaceApproval";
 import { extractKnowledgeActionErrorMessage } from "../errorUtils";
 import { useAiSplitPane } from "../hooks/useAiSplitPane";
 import { applyKnowledgeFileAliasDecision } from "../hooks/useFileManager";
+import { useKnowledgeFileRefresh } from "../hooks/useKnowledgeFileRefresh";
 import { useFileUpload } from "../hooks/useFileUpload";
 import { DEFAULT_MAX_FILE_SIZE_MB, isKnowledgeFileReparseRetryable, isKnowledgeItemPending, resolveUploadSizeLimits, type UploadSizeEnvConfig } from "../knowledgeUtils";
 import { submitKnowledgeSpaceCreate } from "../createKnowledgeSpaceApproval";
@@ -1122,7 +1123,7 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [activeSpace, patchFileById, searchMode, searchTagIds, searchText, statusFilterNumbers]);
 
-    const loadRootTree = useCallback(async (page = 1, append = false, spaceId = activeSpace?.id) => {
+    const loadRootTree = useCallback(async (page = 1, append = false, spaceId = activeSpace?.id, background = false) => {
         if (!spaceId) {
             setTreeNodes([]);
             setTreeRootTotal(0);
@@ -1132,7 +1133,7 @@ export default function PortalKnowledgeWorkbench() {
         }
         if (append) {
             setTreeRootLoadingMore(true);
-        } else {
+        } else if (!background) {
             setTreeLoading(true);
         }
         try {
@@ -1167,15 +1168,15 @@ export default function PortalKnowledgeWorkbench() {
             void loadFolderStats(spaceId, nextFiles);
         } catch {
             if (activeSpaceIdRef.current !== spaceId) return;
-            if (!append) {
+            if (!append && !background) {
                 setTreeNodes([]);
                 setTreeRootTotal(0);
                 setTreeRootHasMore(false);
                 setTreeRootNextCursor(null);
             }
-            showToast({ message: "文件列表加载失败", severity: NotificationSeverity.ERROR });
+            if (!background) showToast({ message: "文件列表加载失败", severity: NotificationSeverity.ERROR });
         } finally {
-            if (activeSpaceIdRef.current === spaceId) {
+            if (activeSpaceIdRef.current === spaceId && !background) {
                 setTreeLoading(false);
                 setTreeRootLoadingMore(false);
             }
@@ -1192,13 +1193,13 @@ export default function PortalKnowledgeWorkbench() {
     const loadRootTreeRef = useRef(loadRootTree);
     loadRootTreeRef.current = loadRootTree;
 
-    const reloadFiles = useCallback(async () => {
+    const reloadFiles = useCallback(async (_page?: number, background = false) => {
         setSearchMode(false);
         setSearchResults([]);
         const spaceId = activeSpace?.id;
         if (!spaceId) return;
         if (!currentFolderId) {
-            await loadRootTree(1, false, spaceId);
+            await loadRootTree(1, false, spaceId, background);
             return;
         }
         const folderId = currentFolderId;
@@ -1229,12 +1230,42 @@ export default function PortalKnowledgeWorkbench() {
             void loadFolderStats(spaceId, nextFiles);
         } catch {
             if (activeSpaceIdRef.current !== spaceId) return;
-            showToast({ message: "文件列表加载失败", severity: NotificationSeverity.ERROR });
+            if (!background) showToast({ message: "文件列表加载失败", severity: NotificationSeverity.ERROR });
         }
     }, [activeSpace?.id, currentFolderId, loadFolderStats, loadRootTree, rememberCanReorderFolders, showToast, sortBy, sortDirection, statusFilterNumbers]);
 
     const reloadFilesRef = useRef(reloadFiles);
     reloadFilesRef.current = reloadFiles;
+
+    const refreshViewKey = JSON.stringify([activeSpace?.id, currentFolderId, searchMode, searchText, searchTagIds, sortBy, sortDirection, statusFilterNumbers]);
+    const refreshViewKeyRef = useRef(refreshViewKey);
+    refreshViewKeyRef.current = refreshViewKey;
+    const refreshVisibleFiles = useCallback(async () => {
+        if (!activeSpace?.id) return;
+        if (!searchMode) {
+            await reloadFiles(undefined, true);
+            return;
+        }
+        const requestViewKey = refreshViewKey;
+        try {
+            const res = await searchSpaceChildrenApi({
+                space_id: activeSpace.id,
+                parent_id: currentFolderId,
+                keyword: searchText.trim(),
+                tag_ids: searchTagIds,
+                page: 1,
+                page_size: TREE_PAGE_SIZE,
+                order_field: sortBy,
+                order_sort: sortDirection,
+                file_status: statusFilterNumbers,
+            });
+            if (refreshViewKeyRef.current !== requestViewKey) return;
+            setSearchResults(res.data);
+            setTreeRootTotal(res.total);
+        } catch {
+            // Retain the current search results when background reconciliation fails.
+        }
+    }, [activeSpace?.id, currentFolderId, refreshViewKey, reloadFiles, searchMode, searchText, searchTagIds, sortBy, sortDirection, statusFilterNumbers]);
 
     const fileUpload = useFileUpload({
         activeSpace,
@@ -1345,6 +1376,13 @@ export default function PortalKnowledgeWorkbench() {
 
     const refreshLoadedStatusesRef = useRef(refreshLoadedStatuses);
     refreshLoadedStatusesRef.current = refreshLoadedStatuses;
+
+    useKnowledgeFileRefresh(
+        activeSpace?.id,
+        refreshVisibleFiles,
+        (searchMode ? searchResults : currentFolderFiles).some((file) => file.hasPendingPublishApproval),
+        () => searchMode ? refreshVisibleFiles() : refreshLoadedStatusesRef.current(),
+    );
 
     useEffect(() => {
         if (!activeSpace?.id || searchMode) return;
@@ -2885,12 +2923,14 @@ export default function PortalKnowledgeWorkbench() {
 
     const handleDeleteFile = useCallback(async (fileId: string) => {
         if (!activeSpace) return;
+        if (!fileId) {
+            await refreshVisibleFiles();
+            return;
+        }
         if (!searchMode) {
             await fileUpload.handleDeleteFile(fileId);
             return;
         }
-
-        if (!fileId) return;
 
         const target = searchResults.find((file) => file.id === fileId);
         if (!target) return;
@@ -2926,6 +2966,7 @@ export default function PortalKnowledgeWorkbench() {
         effectiveDeleteEntryIds,
         fileUpload,
         loadRootTree,
+        refreshVisibleFiles,
         searchMode,
         searchResults,
         showToast,

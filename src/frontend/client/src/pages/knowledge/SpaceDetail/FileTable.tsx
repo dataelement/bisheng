@@ -32,6 +32,7 @@ import { cn } from "~/utils";
 import TagGroup from "./TagGroup";
 import { ApprovalLockGuard } from "./ApprovalLockGuard";
 import { ApprovalLockMenuItem } from "./ApprovalLockMenuItem";
+import { dispatchKnowledgeSpaceFilesRefresh } from "../knowledgeFileRefresh";
 import { EditEncodingModal } from "./EditEncodingModal";
 import FileIconRenderer from "./FileIcon";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
@@ -874,15 +875,17 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const handleSubmitEncoding = async (newEncoding: string) => {
         if (!editingEncodingFile) return;
         try {
-            await updateFileEncoding(
+            const updatedFile = await updateFileEncoding(
                 String(editingEncodingFile.spaceId),
                 String(editingEncodingFile.id),
                 newEncoding,
             );
-            // Trigger file list reload via the existing custom event mechanism
-            window.dispatchEvent(new CustomEvent("knowledge-space-files:refresh", {
-                detail: { spaceId: editingEncodingFile.spaceId },
-            }));
+            onFileEncodingUpdated?.(
+                editingEncodingFile.id,
+                updatedFile.fileEncoding?.trim() || newEncoding,
+                updatedFile.fileSubcategoryCode,
+            );
+            dispatchKnowledgeSpaceFilesRefresh(editingEncodingFile.spaceId);
             showToast?.({
                 message: localize("com_knowledge.file_encoding_update_success"),
                 severity: NotificationSeverity.SUCCESS,
@@ -953,9 +956,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                 const { [file.id]: _, ...rest } = prev;
                 return rest;
             });
-            window.dispatchEvent(new CustomEvent("knowledge-space-files:refresh", {
-                detail: { spaceId: file.spaceId },
-            }));
+            dispatchKnowledgeSpaceFilesRefresh(file.spaceId);
             showToast?.({
                 message: "编码已更新",
                 severity: NotificationSeverity.SUCCESS,

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { dispatchKnowledgeSpaceFilesRefresh } from "~/pages/knowledge/knowledgeFileRefresh";
 import {
   decideApprovalTaskApi,
   getApprovalInstanceDetailApi,
@@ -607,7 +608,13 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     setDecisionCommentError(false);
     setActionLoading(true);
     const submittedComment = comment || "同意";
-    try { await decideApprovalTaskApi(selectedTaskId, { action, comment: submittedComment }); setDecisionComment(""); await loadTasks(selectedTaskId); toast(true); }
+    try {
+      await decideApprovalTaskApi(selectedTaskId, { action, comment: submittedComment });
+      dispatchKnowledgeSpaceFilesRefresh();
+      setDecisionComment("");
+      await loadTasks(selectedTaskId);
+      toast(true);
+    }
     catch { toast(false); } finally { setActionLoading(false); }
   };
   const runWithdraw = () => {
@@ -620,6 +627,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     setActionLoading(true);
     try {
       await withdrawApprovalInstanceApi(selectedInstanceId, { reason: withdrawReason.trim() || undefined });
+      dispatchKnowledgeSpaceFilesRefresh();
       toast(true);
       const resp = await listMyApprovalRequestsApi();
       setRequestItems(resp.data);
@@ -652,6 +660,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
       } else {
         await revokeMenuAccessGrantApi(instanceId, { reason });
       }
+      dispatchKnowledgeSpaceFilesRefresh();
       await loadTasks(selectedTaskId);
       toast(true);
     }

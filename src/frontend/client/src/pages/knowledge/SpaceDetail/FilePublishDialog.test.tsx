@@ -8,6 +8,10 @@ const mockSubmitApproval = jest.fn();
 const mockShowToast = jest.fn();
 const mockListKnowledgeFolders = jest.fn();
 const mockGetTargetFolders = jest.fn();
+const mockRefresh = jest.fn();
+jest.mock("../knowledgeFileRefresh", () => ({
+    dispatchKnowledgeSpaceFilesRefresh: (...args: any[]) => mockRefresh(...args),
+}));
 
 jest.mock("~/api/approval", () => ({
     getShougangFilePublishTargetSpacesApi: (...args: any[]) => mockGetTargetSpaces(...args),
@@ -62,6 +66,16 @@ describe("FilePublishDialog", () => {
         mockListKnowledgeFolders.mockResolvedValue({ items: [], total: 0 });
         mockSearchDocuments.mockResolvedValue({ data: [] });
         mockSubmitApproval.mockResolvedValue({});
+    });
+
+    test.each(["pending", "executed"])("发布返回 %s 后通知源和目标知识库刷新", async (decision) => {
+        mockGetSimilarCandidates.mockResolvedValue({ data: [] });
+        mockSubmitApproval.mockResolvedValue({ decision });
+        render(<FilePublishDialog open activeSpace={activeSpace} file={file} onOpenChange={jest.fn()} />);
+        await waitFor(() => expect(screen.getByRole("button", { name: "提交申请" })).toBeEnabled());
+        fireEvent.click(screen.getByRole("button", { name: "提交申请" }));
+        await waitFor(() => expect(mockRefresh).toHaveBeenCalledWith(10));
+        expect(mockRefresh).toHaveBeenCalledWith("20");
     });
 
     test("推荐文件返回前展示加载态", async () => {
@@ -382,6 +396,7 @@ describe("FilePublishDialog", () => {
             severity: "success",
         });
         expect(onOpenChange).not.toHaveBeenCalledWith(false);
+        expect(mockRefresh).not.toHaveBeenCalled();
     });
 
     test("目标知识库存在相同内容时展示后端提示且不关闭弹窗", async () => {
@@ -414,5 +429,6 @@ describe("FilePublishDialog", () => {
             });
         });
         expect(onOpenChange).not.toHaveBeenCalledWith(false);
+        expect(mockRefresh).not.toHaveBeenCalled();
     });
 });

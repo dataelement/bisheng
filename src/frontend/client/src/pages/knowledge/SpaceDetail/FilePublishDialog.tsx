@@ -14,6 +14,7 @@ import { useToastContext } from "~/Providers";
 import { useDebounce } from "~/hooks/Input";
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui";
 import { FilePublishTargetTree } from "./FilePublishTargetTree";
+import { dispatchKnowledgeSpaceFilesRefresh } from "../knowledgeFileRefresh";
 
 type VersionTarget = {
     type: "document" | "file";
@@ -299,6 +300,8 @@ export function FilePublishDialog({
                 });
                 return;
             }
+            dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
+            if (String(activeSpace.id) !== targetSpaceId) dispatchKnowledgeSpaceFilesRefresh(targetSpaceId);
             showToast({ message: "已提交发布申请", severity: NotificationSeverity.SUCCESS });
             onOpenChange(false);
         } catch (error) {
