@@ -297,8 +297,10 @@ class ProductionMutationStepOwner:
         if target is None:
             raise LookupError(f"F046 target knowledge space not found: {target_id}")
         shadow_es = KnowledgeRag.init_es_vectorstore_sync(cls._shadow_es_name(context))
-        if shadow_es.client.indices.exists(index=cls._shadow_es_name(context)):
-            shadow_es.client.indices.delete(index=cls._shadow_es_name(context))
+        shadow_es.client.indices.delete(
+            index=cls._shadow_es_name(context),
+            ignore=[400, 404],
+        )
         embeddings = LLMService.get_bisheng_knowledge_embedding_sync(
             model_id=int(target.model), invoke_user_id=int(context.applicant_user_id)
         )
