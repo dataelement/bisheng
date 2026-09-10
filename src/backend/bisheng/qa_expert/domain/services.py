@@ -10,6 +10,7 @@ Expert QA Services - 业务逻辑层
 
 import asyncio
 import inspect
+from collections.abc import Sequence
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -88,6 +89,7 @@ from bisheng.qa_expert.domain.repositories import (
     AnswerEligibilityRepository,
     AnswerRepository,
     CommentRepository,
+    ExpertDepartmentSource,
     ExpertRepository,
     NotificationRepository,
     PublishApproverRepository,
@@ -287,9 +289,18 @@ class ExpertService:
     ) -> tuple[list[dict], int]:
         """列表查询专家"""
         sort_by_department = sort_by == "department"
+        department_filter: dict[str, list[int]] = {}
+        if department_id and department_id.strip():
+            sources = await self.repository.list_department_sources()
+            display_departments = await self._load_expert_display_departments(sources)
+            department_filter["expert_ids"] = [
+                expert_id
+                for expert_id, department in display_departments.items()
+                if department is not None and str(department.id) == department_id.strip()
+            ]
         experts, total = await self.repository.list_all(
             keyword=keyword,
-            department_id=department_id,
+            department_id=None,
             job_family=job_family,
             job_category=job_category,
             position=position,
@@ -302,6 +313,7 @@ class ExpertService:
             adoption_desc=adoption_desc,
             vote_desc=vote_desc,
             status=status,
+            **department_filter,
         )
         experts_all = await self._build_expert_rows(experts)
         if sort_by_department:
@@ -322,16 +334,15 @@ class ExpertService:
     async def list_filter_options(self) -> dict[str, object]:
         """获取专家管理页部门及四个职业维度的筛选项。"""
         options = await self.repository.list_filter_options()
-        department_ids = []
-        for value in options.get("department_ids", []):
-            try:
-                department_ids.append(int(value))
-            except (TypeError, ValueError):
-                continue
-
-        departments = await DepartmentDao.aget_by_ids(department_ids)
+        sources = await self.repository.list_department_sources()
+        display_departments = await self._load_expert_display_departments(sources)
+        departments = {
+            department.id: department
+            for department in display_departments.values()
+            if department is not None
+        }
         department_options = []
-        for department in departments:
+        for department in departments.values():
             if department.id is None or not str(department.name or "").strip():
                 continue
             projection = build_department_name_projection(department)
@@ -399,29 +410,24 @@ class ExpertService:
                 result[field] = {item.dict_key: item.dict_value for item in dict_items}
         return result
 
-    async def _build_expert_rows(self, experts: list[Expert]) -> list[dict]:
+    async def _load_expert_display_departments(
+        self,
+        experts: Sequence[Expert | ExpertDepartmentSource],
+    ) -> dict[int, Department | None]:
+        """列表和下拉共用组织归并，按批次加载主部门及祖先。"""
+        if not experts:
+            return {}
         department_ids: set[int] = set()
-        user_ids: list[int] = []
-        job_family_keys: set[str] = set()
-        job_category_keys: set[str] = set()
-        position_keys: set[str] = set()
-        major_keys: set[str] = set()
+        stored_department_ids: dict[int, int | None] = {}
+        user_ids = [expert.user_id for expert in experts if expert.user_id]
         for expert in experts:
             try:
-                if expert.depart_ment:
-                    department_ids.add(int(expert.depart_ment))
+                department_id = int(expert.depart_ment) if expert.depart_ment else None
             except (TypeError, ValueError):
-                pass
-            if expert.user_id:
-                user_ids.append(expert.user_id)
-            if expert.job_family:
-                job_family_keys.add(expert.job_family)
-            if expert.job_category:
-                job_category_keys.add(expert.job_category)
-            if expert.position:
-                position_keys.add(expert.position)
-            if expert.major:
-                major_keys.add(expert.major)
+                department_id = None
+            stored_department_ids[expert.id] = department_id
+            if department_id is not None:
+                department_ids.add(department_id)
 
         memberships = await UserDepartmentDao.aget_by_user_ids(sorted(set(user_ids)))
         primary_department_ids = {
@@ -442,6 +448,33 @@ class ExpertService:
             ancestors = await DepartmentDao.aget_by_ids(sorted(ancestor_ids))
             department_map.update({int(department.id): department for department in ancestors if department.id is not None})
 
+        return {
+            expert.id: self._resolve_list_display_department(
+                department_map.get(primary_department_ids.get(expert.user_id, stored_department_ids[expert.id])),
+                department_map,
+            )
+            for expert in experts
+        }
+
+    async def _build_expert_rows(self, experts: list[Expert]) -> list[dict]:
+        user_ids: list[int] = []
+        job_family_keys: set[str] = set()
+        job_category_keys: set[str] = set()
+        position_keys: set[str] = set()
+        major_keys: set[str] = set()
+        for expert in experts:
+            if expert.user_id:
+                user_ids.append(expert.user_id)
+            if expert.job_family:
+                job_family_keys.add(expert.job_family)
+            if expert.job_category:
+                job_category_keys.add(expert.job_category)
+            if expert.position:
+                position_keys.add(expert.position)
+            if expert.major:
+                major_keys.add(expert.major)
+
+        display_departments = await self._load_expert_display_departments(experts)
         users = await UserDao.aget_user_by_ids(list(set(user_ids))) or []
         wechat_user_ids = {user.user_id: user.wechat_user_id for user in users if user.user_id is not None}
 
@@ -456,16 +489,9 @@ class ExpertService:
 
         experts_all = []
         for expert in experts:
-            try:
-                department_id = int(expert.depart_ment) if expert.depart_ment else None
-            except (TypeError, ValueError):
-                department_id = None
-            # 展示跟随用户当前主部门；旧档案无主部门关联时使用原组织。
-            primary = department_map.get(primary_department_ids.get(expert.user_id, department_id))
-            expert_dict = self._with_department_projection(
-                expert,
-                self._resolve_list_display_department(primary, department_map),
-            )
+            department = display_departments.get(expert.id)
+            expert_dict = self._with_department_projection(expert, department)
+            expert_dict["department_filter_id"] = department.id if department is not None else None
             expert_dict["job_family"] = dict_key_maps["job_family"].get(expert.job_family, expert.job_family)
             expert_dict["job_category"] = dict_key_maps["job_category"].get(expert.job_category, expert.job_category)
             expert_dict["position"] = dict_key_maps["position"].get(expert.position, expert.position)
