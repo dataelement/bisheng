@@ -843,6 +843,8 @@ Desktop GET usage 增加可选 `model=bisheng:<id>`，响应字段不变；选�
 
 用户已确认：部署开关决定 DSH 管理界面可见性，初始化部署默认关闭；管理页业务开关控制整个 DSH 功能。关闭后隐藏模型开放范围和 DSH 用户入口，服务端拒绝模型转发、浏览器授权及身份换证/刷新检查；保留现有席位、授权、凭证及用量，不停止在途结算与后台投影。部署开启时配置页不依赖业务已开启，避免无法重开。
 
-新增管理 GET/PUT `/api/v1/dsh/admin/settings` 使用超级管理员 JWT 和类型化 `{enabled, download_url}`；新增公开只读 GET `/api/v1/dsh/browser-config` 返回 `{management_enabled, enabled, download_url}`，无部署秘密。原客户端 `/api/v1/dsh/config` 响应形状不变，enabled 为两层开关的有效状态。Gateway 仅补充 browser-config 精确路由归属，不改变 License 逻辑。下载地址不再使用构建变量。
+新增管理 GET/PUT `/api/v1/dsh/admin/settings` 使用超级管理员 JWT 和类型化 `{enabled, download_url, launch_url}`；新增公开只读 GET `/api/v1/dsh/browser-config` 返回 `{management_enabled, enabled, download_url, launch_url}`，无部署秘密。原客户端 `/api/v1/dsh/config` 响应形状不变，enabled 为两层开关的有效状态。Gateway 仅补充 browser-config 精确路由归属，不改变 License 逻辑。下载地址不再使用构建变量。
 
 完整验收、依赖与已知坑见 [管理配置修订](./management-settings-revision.md)。2026-09-10 用户批准工作台本人弹窗与逐会话吊销，详见 [本人弹窗修订](./self-service-revision.md)。工作台入口、弹窗和 desktop-login 均受同一业务开关控制。
+
+唤起地址配置与管理页紧凑布局的 2026-09-10 修订见 [管理配置修订](./management-settings-revision.md#唤起配置及紧凑布局修订2026-09-10)。默认客户端协议与 PKCE 时序不变。

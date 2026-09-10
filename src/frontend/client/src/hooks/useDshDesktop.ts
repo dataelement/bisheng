@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { getDshBrowserConfig } from '~/api/dsh';
+import { DEFAULT_DSH_LAUNCH_URL } from '~/utils/dshLaunch';
 
 export function useDshDesktop() {
   const [open, setOpen] = useState(false);
@@ -10,5 +11,5 @@ export function useDshDesktop() {
   });
   const enabled = !query.isError && query.data?.enabled === true && query.data.management_enabled;
   useEffect(() => { if (!enabled) setOpen(false); }, [enabled]);
-  return { open: open && enabled, setOpen, enabled, downloadUrl: query.data?.download_url ?? null };
+  return { open: open && enabled, setOpen, enabled, downloadUrl: query.data?.download_url ?? null, launchUrl: query.data?.launch_url ?? DEFAULT_DSH_LAUNCH_URL };
 }

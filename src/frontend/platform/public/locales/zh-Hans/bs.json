@@ -2060,6 +2060,8 @@
     "noWebSnapshot": "暂无网页快照，请查看入库文本或打开原网页。"
   },
   "dsh": {
+    "launchAddressHelp": "基础协议地址，自动附加当前毕昇地址；默认无需修改。更换协议需客户端支持。",
+    "launchAddress": "DSH Desktop 唤起地址",
     "title": "DSH Desktop",
     "loading": "正在加载…",
     "unavailable": "暂不可用，请稍后重试",
@@ -2199,9 +2201,9 @@
     "businessEnabled": "允许使用 DSH Desktop",
     "businessOn": "已打开",
     "businessOff": "已关闭",
-    "businessSwitchHelp": "关闭后隐藏模型开放范围与 DSH 用户入口，禁止新登录和模型调用；已有席位、授权及用量保留。保存后生效。",
+    "businessSwitchHelp": "关闭后隐藏模型开放范围与用户入口，禁止新登录及模型调用；席位、授权与用量保留。保存后生效。",
     "downloadAddress": "DSH Desktop 下载地址",
-    "downloadAddressHelp": "支持 HTTP 或 HTTPS 地址；留空时不显示下载链接。保存后无需重新构建前端。",
+    "downloadAddressHelp": "支持 HTTP(S)；留空隐藏下载入口。",
     "saveSettings": "保存配置",
     "settingsAdminOnly": "仅超级管理员可修改实例配置。",
     "settingsSaved": "配置已保存",

@@ -272,7 +272,7 @@ function UserPopMenuDrawer() {
                 </div>
             ) : null}
 
-            {dsh.open && <DshDesktopDialog open={dsh.open} onOpenChange={dsh.setOpen} downloadUrl={dsh.downloadUrl} />}
+            {dsh.open && <DshDesktopDialog open={dsh.open} onOpenChange={dsh.setOpen} downloadUrl={dsh.downloadUrl} launchUrl={dsh.launchUrl} />}
             <AccountInfoDialog
                 open={accountDialogOpen}
                 onOpenChange={setAccountDialogOpen}
@@ -507,7 +507,7 @@ function UserPopMenuRail() {
                 </ActionMenuContent>
             </DropdownMenu >
 
-            {dsh.open && <DshDesktopDialog open={dsh.open} onOpenChange={dsh.setOpen} downloadUrl={dsh.downloadUrl} />}
+            {dsh.open && <DshDesktopDialog open={dsh.open} onOpenChange={dsh.setOpen} downloadUrl={dsh.downloadUrl} launchUrl={dsh.launchUrl} />}
             <AccountInfoDialog
                 open={accountDialogOpen}
                 onOpenChange={setAccountDialogOpen}

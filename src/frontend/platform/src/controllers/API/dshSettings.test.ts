@@ -10,15 +10,15 @@ describe('typed DSH management configuration', () => {
         expect(() => parseDshManagementSettings({ enabled: true, download_url })).toThrow()
     })
     it('reads the exact browser endpoint and preserves both switch states', async () => {
-        vi.mocked(request.get).mockResolvedValue({ management_enabled: true, enabled: false, download_url: null })
-        expect(await getDshBrowserConfig()).toEqual({ management_enabled: true, enabled: false, download_url: null })
+        vi.mocked(request.get).mockResolvedValue({ management_enabled: true, enabled: false, download_url: null, launch_url: 'dsh-desktop://login' })
+        expect(await getDshBrowserConfig()).toEqual({ management_enabled: true, enabled: false, download_url: null, launch_url: 'dsh-desktop://login' })
         expect(request.get).toHaveBeenCalledWith('/api/v1/dsh/browser-config', { signal: undefined })
     })
     it('publishes refresh only after a successful save', async () => {
         const changed = vi.fn()
         window.addEventListener('dsh-settings-changed', changed)
         try {
-            const value = { enabled: true, download_url: 'http://downloads.test/file' }
+            const value = { enabled: true, download_url: 'http://downloads.test/file', launch_url: 'dsh-desktop://login' }
             vi.mocked(request.put).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(value)
             await expect(saveDshManagementSettings(value)).rejects.toThrow()
             expect(changed).not.toHaveBeenCalled()

@@ -2115,6 +2115,8 @@
     "noWebSnapshot": "No web snapshot yet — check the stored text or open the source page."
   },
   "dsh": {
+    "launchAddressHelp": "Native protocol base URL; the current BiSheng address is appended automatically. Changing the protocol requires client support.",
+    "launchAddress": "DSH Desktop launch URL",
     "title": "DSH Desktop",
     "loading": "Loading…",
     "unavailable": "Unavailable. Try again later.",
@@ -2254,9 +2256,9 @@
     "businessEnabled": "Allow DSH Desktop access",
     "businessOn": "Enabled",
     "businessOff": "Disabled",
-    "businessSwitchHelp": "Disabling hides model access management and DSH user entries, and blocks new logins and model requests. Seats, grants and usage are retained. Changes apply after saving.",
+    "businessSwitchHelp": "Disabling hides model access and user entries and blocks new logins and model calls. Seats, grants and usage are retained. Save to apply.",
     "downloadAddress": "DSH Desktop download URL",
-    "downloadAddressHelp": "Use an HTTP or HTTPS URL, or leave blank to hide the download link. No frontend rebuild is required.",
+    "downloadAddressHelp": "HTTP(S) only. Leave blank to hide the download link.",
     "saveSettings": "Save settings",
     "settingsAdminOnly": "Only a global administrator can change instance settings.",
     "settingsSaved": "Settings saved",

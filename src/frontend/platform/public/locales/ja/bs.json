@@ -2060,6 +2060,8 @@
     "noWebSnapshot": "ウェブスナップショットがありません。登録テキストを確認するか、元のページを開いてください。"
   },
   "dsh": {
+    "launchAddressHelp": "プロトコルのベース URL。現在の BiSheng アドレスを自動付加します。プロトコルの変更にはクライアント側の対応が必要です。",
+    "launchAddress": "DSH Desktop 起動 URL",
     "title": "DSH Desktop",
     "loading": "読み込み中…",
     "unavailable": "現在利用できません。後でもう一度お試しください。",
@@ -2199,9 +2201,9 @@
     "businessEnabled": "DSH Desktop の利用を許可",
     "businessOn": "有効",
     "businessOff": "無効",
-    "businessSwitchHelp": "無効にするとモデルの公開範囲と DSH ユーザー入口が非表示になり、新しいログインとモデル呼び出しを拒否します。席位、権限、使用量は保持されます。保存後に適用されます。",
+    "businessSwitchHelp": "無効にするとモデル公開範囲とユーザー入口を非表示にし、新規ログインとモデル呼び出しを停止します。席位・認可・使用量は保持されます。保存後に反映されます。",
     "downloadAddress": "DSH Desktop ダウンロード URL",
-    "downloadAddressHelp": "HTTP または HTTPS の URL を指定します。空欄の場合はリンクを表示しません。フロントエンドの再ビルドは不要です。",
+    "downloadAddressHelp": "HTTP(S) に対応。空欄の場合はダウンロードリンクを非表示にします。",
     "saveSettings": "設定を保存",
     "settingsAdminOnly": "インスタンス設定を変更できるのは全体管理者のみです。",
     "settingsSaved": "設定を保存しました",

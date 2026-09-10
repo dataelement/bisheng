@@ -1,6 +1,7 @@
 import request from '@/controllers/request'
+import { parseDshLaunchBase } from '@/utils/dshLaunch'
 
-export type DshManagementSettings = { enabled: boolean; download_url: string | null }
+export type DshManagementSettings = { enabled: boolean; download_url: string | null; launch_url: string }
 export type DshBrowserConfig = DshManagementSettings & { management_enabled: boolean }
 
 export function parseDshManagementSettings(raw: unknown): DshManagementSettings {
@@ -14,7 +15,7 @@ export function parseDshManagementSettings(raw: unknown): DshManagementSettings 
             throw new Error('Invalid DSH download URL')
         }
     }
-    return { enabled: raw.enabled, download_url: raw.download_url }
+    return { enabled: raw.enabled, download_url: raw.download_url, launch_url: parseDshLaunchBase('launch_url' in raw ? raw.launch_url : undefined) }
 }
 
 export async function getDshBrowserConfig(signal?: AbortSignal): Promise<DshBrowserConfig> {

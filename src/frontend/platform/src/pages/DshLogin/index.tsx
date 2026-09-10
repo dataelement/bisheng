@@ -1,3 +1,4 @@
+import { dshLaunchUrl } from '@/utils/dshLaunch'
 import { Button } from '@/components/bs-ui/button'
 import { Input } from '@/components/bs-ui/input'
 import { userContext } from '@/contexts/userContext'
@@ -78,7 +79,7 @@ export function DshLogin() {
                                 <Button
                                     onClick={() =>
                                         location.assign(
-                                            `dsh-desktop://login?${new URLSearchParams({ server: base })}`,
+                                            dshLaunchUrl(config.launch_url),
                                         )
                                     }
                                 >

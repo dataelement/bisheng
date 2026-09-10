@@ -59,11 +59,20 @@ async def test_default_off_enable_disable_and_reopen_preserves_other_configurati
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         assert (await client.get("/api/v1/dsh/config")).json() == {"enabled": False}
         browser = await client.get("/api/v1/dsh/browser-config")
-        assert browser.json()["data"] == {"management_enabled": True, "enabled": False, "download_url": None}
+        assert browser.json()["data"] == {
+            "management_enabled": True,
+            "enabled": False,
+            "download_url": None,
+            "launch_url": "dsh-desktop://login",
+        }
         assert browser.headers["cache-control"] == "no-store"
         url = "/api/v1/dsh/admin/settings"
         assert (await client.get(url)).json()["data"]["enabled"] is False
-        value = {"enabled": True, "download_url": "http://downloads.test/desktop/latest"}
+        value = {
+            "enabled": True,
+            "download_url": "http://downloads.test/desktop/latest",
+            "launch_url": "dsh-desktop-test://login",
+        }
         assert (await client.put(url, json=value)).json()["data"] == value
         assert (await client.get("/api/v1/dsh/config")).json()["enabled"] is True
         request = Request({"type": "http", "app": app})
@@ -103,7 +112,12 @@ async def test_deployment_gate_wins_without_reading_database(settings_app, monke
     monkeypatch.setattr(DshSettingsService, "read", read)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/api/v1/dsh/browser-config")
-        assert response.json()["data"] == {"management_enabled": False, "enabled": False, "download_url": None}
+        assert response.json()["data"] == {
+            "management_enabled": False,
+            "enabled": False,
+            "download_url": None,
+            "launch_url": "dsh-desktop://login",
+        }
         assert (await client.get("/api/v1/dsh/config")).json() == {"enabled": False}
         assert (await client.put("/api/v1/dsh/admin/settings", json={"enabled": True})).status_code == 403
     read.assert_not_awaited()
@@ -155,3 +169,34 @@ async def test_settings_use_existing_global_administrator_guard(monkeypatch):
     assert denied.value.status_code == 403
     user.is_admin = lambda: True
     assert await settings_api.settings_admin(auth_jwt=object()) is user
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "javascript://alert",
+        "data://text",
+        "file://host/path",
+        "https://site.test",
+        "dsh-desktop://login?server=evil",
+        "dsh-desktop://login#evil",
+        "dsh-desktop://user:pass@login",
+        "",
+        None,
+    ],
+)
+def test_launch_rejects_unsafe_or_non_base_urls(value):
+    with pytest.raises(ValidationError):
+        DshManagementSettings(launch_url=value)
+
+
+async def test_existing_settings_default_launch_and_failed_writes_preserve_it(settings_app):
+    app, _, sessions = settings_app
+    async with sessions() as session:
+        session.add(Config(key="dsh_management", value='{"enabled":true,"download_url":null}'))
+        await session.commit()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        url = "/api/v1/dsh/admin/settings"
+        assert (await client.get(url)).json()["data"]["launch_url"] == "dsh-desktop://login"
+        assert (await client.put(url, json={"enabled": True, "launch_url": "javascript://alert"})).status_code == 400
+        assert (await client.get(url)).json()["data"]["launch_url"] == "dsh-desktop://login"

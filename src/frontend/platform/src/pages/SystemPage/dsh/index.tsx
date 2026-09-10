@@ -23,7 +23,7 @@ export function DshManagement() {
     const { config, failed } = useDshBrowserConfig()
     if (!config) return <p role="status">{t(failed ? 'dsh.unavailable' : 'dsh.loading')}</p>
     if (!config.management_enabled) return null
-    return <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
+    return <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4">
         <SettingsPanel settings={config} canEdit={user?.role === 'admin' || !!user?.is_global_super} />
         {config.enabled && <DshManagementContent />}
     </div>
@@ -78,18 +78,14 @@ function DshManagementContent() {
         [],
     )
     return (
-        <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
-            <div className="flex items-center justify-between gap-4">
-                <h2 className="text-lg font-semibold">{t('dsh.title')}</h2>
-                <Button
-                    variant="outline"
-                    onClick={() => setRevision((old) => old + 1)}
-                >
-                    {t('dsh.refresh')}
-                </Button>
-            </div>
+        <div className="flex shrink-0 flex-col gap-4">
             <section className="space-y-2 rounded-lg border p-4">
-                <h3 className="font-semibold">{t('dsh.license')}</h3>
+                <div className="flex items-center justify-between gap-4">
+                    <h3 className="font-semibold">{t('dsh.license')}</h3>
+                    <Button variant="outline" onClick={() => setRevision((old) => old + 1)}>
+                        {t('dsh.refresh')}
+                    </Button>
+                </div>
                 {!license ? (
                     <p role="status">
                         {t(error ? 'dsh.unavailable' : 'dsh.loading')}

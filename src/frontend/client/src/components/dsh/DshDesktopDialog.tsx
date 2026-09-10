@@ -1,13 +1,14 @@
 import { Button } from '@bisheng/ui';
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
-import { dshLaunchUrl, getDshSessions, getDshUsage, revokeDshSession } from '~/api/dsh';
+import { dshLaunchUrl } from '~/utils/dshLaunch';
+import { getDshSessions, getDshUsage, revokeDshSession } from '~/api/dsh';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '~/components/ui/Dialog';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { useConfirm } from '~/Providers/ConfirmContext';
 
-interface DshDesktopDialogProps { open: boolean; onOpenChange: (open: boolean) => void; downloadUrl: string | null }
+interface DshDesktopDialogProps { open: boolean; onOpenChange: (open: boolean) => void; downloadUrl: string | null; launchUrl: string }
 
-export function DshDesktopDialog({ open, onOpenChange, downloadUrl }: DshDesktopDialogProps) {
+export function DshDesktopDialog({ open, onOpenChange, downloadUrl, launchUrl }: DshDesktopDialogProps) {
   const t = useLocalize();
   const { user } = useAuthContext();
   const confirm = useConfirm();
@@ -33,7 +34,7 @@ export function DshDesktopDialog({ open, onOpenChange, downloadUrl }: DshDesktop
       <section className="space-y-3 border-b border-border-base pb-5">
         <h3 className="text-h4 font-medium">{t('dsh_local_models')}</h3>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => window.location.assign(dshLaunchUrl())}>{t('dsh_open')}</Button>
+          <Button onClick={() => window.location.assign(dshLaunchUrl(launchUrl))}>{t('dsh_open')}</Button>
           {downloadUrl && <Button color="secondary" variant="outline" onClick={() => window.open(downloadUrl, '_blank', 'noopener,noreferrer')}>{t('dsh_download')}</Button>}
         </div>
         <p className="text-body-sm text-text-secondary">{t('dsh_download_help')}</p>

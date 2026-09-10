@@ -28,7 +28,7 @@ vi.mock('@/controllers/API/dshSettings', () => ({ getDshBrowserConfig: vi.fn() }
 const origin = 'http://192.168.106.109:13001'
 const assign = vi.fn()
 beforeEach(() => {
-    vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null })
+    vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })
     vi.mocked(request.get).mockResolvedValue({ department_name: null })
     assign.mockClear()
     identity.user = null
@@ -45,13 +45,13 @@ afterEach(() => {
 })
 describe('desktop HTTP login entry', () => {
     it('uses the saved HTTP download address without a frontend build variable', async () => {
-        vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: 'http://downloads.test/dsh' })
+        vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: 'http://downloads.test/dsh', launch_url: 'dsh-desktop://login' })
         vi.stubGlobal('location', { origin, pathname: '/desktop-login', search: '', assign })
         render(<DshLogin />)
         expect(await screen.findByRole('link', { name: english.dsh.download })).toHaveAttribute('href', 'http://downloads.test/dsh')
     })
     it('removes download and launch actions when the business switch closes', async () => {
-        vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: false, download_url: 'http://downloads.test/dsh' })
+        vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: false, download_url: 'http://downloads.test/dsh', launch_url: 'dsh-desktop://login' })
         vi.stubGlobal('location', { origin, pathname: '/desktop-login', search: '', assign })
         render(<DshLogin />)
         await screen.findByText(english.dsh.disabled)

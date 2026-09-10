@@ -33,7 +33,7 @@ async def browser_config(
 ):
     response.headers["Cache-Control"] = "no-store"
     if not config.enabled:
-        return resp_200(data={"management_enabled": False, "enabled": False, "download_url": None})
+        return resp_200(data={"management_enabled": False, **DshManagementSettings().model_dump()})
     current = await service.read()
     return resp_200(data={"management_enabled": True, **current.model_dump()})
 

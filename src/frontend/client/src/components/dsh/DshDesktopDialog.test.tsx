@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DshDesktopDialog } from './DshDesktopDialog';
 import { getDshSessions, getDshUsage, revokeDshSession } from '~/api/dsh';
 
-jest.mock('~/api/dsh', () => ({ getDshSessions: jest.fn(), getDshUsage: jest.fn(), revokeDshSession: jest.fn(), dshLaunchUrl: () => 'dsh-desktop://login' }));
+jest.mock('~/api/dsh', () => ({ getDshSessions: jest.fn(), getDshUsage: jest.fn(), revokeDshSession: jest.fn() }));
 jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key, useAuthContext: () => ({ user: { id: '20' } }) }));
 jest.mock('~/Providers/ConfirmContext', () => ({ useConfirm: () => async () => true }));
 jest.mock('@bisheng/ui', () => ({ Button: ({ children, onClick, disabled }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean }) => <button onClick={onClick} disabled={disabled}>{children}</button> }));
@@ -15,7 +15,7 @@ jest.mock('~/components/ui/Dialog', () => ({
 }));
 function show() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } }, logger: { log: () => undefined, warn: console.warn, error: () => undefined } });
-  return render(<QueryClientProvider client={client}><DshDesktopDialog open onOpenChange={jest.fn()} downloadUrl={null} /></QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><DshDesktopDialog open onOpenChange={jest.fn()} downloadUrl={null} launchUrl="dsh-desktop://login" /></QueryClientProvider>);
 }
 beforeEach(() => {
   jest.mocked(getDshSessions).mockResolvedValue({ items: [], next_cursor: null, has_more: false });

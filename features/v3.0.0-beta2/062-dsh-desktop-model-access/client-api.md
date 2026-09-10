@@ -837,3 +837,5 @@ sequenceDiagram
 ## 2026-09-10 工作台本人弹窗与部门展示
 
 用户已批准本人会话/用量查询和逐会话吊销；完整接口及验收边界见 [self-service-revision.md](./self-service-revision.md)。部门仅展示，不同步 Gateway；客户端冻结的登录与模型协议不变。
+
+2026-09-10 网页入口配置修订：管理页可保存 `launch_url` 基础协议地址，默认 `dsh-desktop://login`；网页附加当前毕昇 origin 的唯一 `server` 参数。现有桌面端默认无需改动。更换基础协议或路径需要客户端相应支持及安装注册；本项不修改 0.4.0 的客户端接口、PKCE 或回调时序。详见 [管理配置修订](./management-settings-revision.md)。
