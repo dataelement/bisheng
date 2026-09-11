@@ -24,15 +24,13 @@ class Nonces:
 
 
 def auth(now=1000):
-    return ServiceAuth(ServiceKey("instance-test", "python-test", b"a" * 32), Nonces(), lambda: now)
+    return ServiceAuth(ServiceKey("python-test", b"a" * 32), Nonces(), lambda: now)
 
 
-@pytest.mark.parametrize(
-    "installation,key_id", [("a.b", "valid"), ("a" * 65, "valid"), ("valid", "key:one"), ("valid", "a" * 129)]
-)
-def test_python_service_key_uses_gateway_registration_alphabet(installation, key_id):
+@pytest.mark.parametrize("key_id", ["key:one", "a" * 129, ""])
+def test_python_service_key_uses_gateway_registration_alphabet(key_id):
     with pytest.raises(ValueError):
-        ServiceKey(installation, key_id, b"a" * 32)
+        ServiceKey(key_id, b"a" * 32)
 
 
 async def test_exact_body_signature_and_replay():
@@ -44,14 +42,14 @@ async def test_exact_body_signature_and_replay():
             "POST",
             "/api/internal/dsh/introspect",
             hashlib.sha256(body).hexdigest(),
-            "instance-test",
             "python-test",
             "1000",
             headers["X-DSH-Nonce"],
         ]
     )
     assert headers["X-DSH-Signature"] == hmac.new(b"a" * 32, canonical.encode(), hashlib.sha256).hexdigest()
-    assert await service.verify("POST", "/api/internal/dsh/introspect", body, headers) == "instance-test"
+    assert "X-DSH-Installation-Id" not in headers
+    assert await service.verify("POST", "/api/internal/dsh/introspect", body, headers) == "python-test"
     with pytest.raises(DshInvalidAccessTokenError):
         await service.verify("POST", "/api/internal/dsh/introspect", body, headers)
 
@@ -61,7 +59,7 @@ async def test_bad_signatures_do_not_consume_nonce_and_clock_is_bounded():
     path = "/api/internal/dsh/introspect"
     headers = service.sign("POST", path, b"{}")
     for mutated in (
-        {**headers, "X-DSH-Installation-Id": "other"},
+        {**headers, "X-DSH-Nonce": "different-nonce"},
         {**headers, "X-DSH-Key-Id": "other"},
         {**headers, "X-DSH-Timestamp": "1"},
     ):
@@ -69,7 +67,7 @@ async def test_bad_signatures_do_not_consume_nonce_and_clock_is_bounded():
             await service.verify("POST", path, b"{}", mutated)
     with pytest.raises(DshInvalidAccessTokenError):
         await service.verify("POST", path, b'{"different":true}', headers)
-    assert await service.verify("POST", path, b"{}", headers) == "instance-test"
+    assert await service.verify("POST", path, b"{}", headers) == "python-test"
     with pytest.raises(DshInvalidAccessTokenError):
         await auth(1061).verify("POST", path, b"{}", headers)
     for path in ("/api/../admin", "/api//admin", "/api/%2fadmin", "/api/internal?nonce=x"):
@@ -146,15 +144,13 @@ async def test_nonce_claim_is_shared_and_atomic_on_real_redis(dsh_redis_url):
     from bisheng.dsh.infrastructure.service_auth import RedisNonceStore
 
     redis = Redis.from_url(dsh_redis_url)
-    services = [
-        ServiceAuth(ServiceKey("instance-test", "python-test", b"a" * 32), RedisNonceStore(redis)) for _ in range(8)
-    ]
+    services = [ServiceAuth(ServiceKey("python-test", b"a" * 32), RedisNonceStore(redis)) for _ in range(8)]
     headers = services[0].sign("POST", "/api/internal/dsh/introspect", b"{}")
     results = await asyncio.gather(
         *(service.verify("POST", "/api/internal/dsh/introspect", b"{}", headers) for service in services),
         return_exceptions=True,
     )
-    assert results.count("instance-test") == 1
+    assert results.count("python-test") == 1
     assert sum(isinstance(result, DshInvalidAccessTokenError) for result in results) == 7
     await redis.aclose()
 

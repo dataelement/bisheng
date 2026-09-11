@@ -13,7 +13,6 @@ from bisheng.dsh.infrastructure.quota_topology import QuotaTopology
 
 
 class QuotaApproval(DshContract):
-    installation_id: str = Field(min_length=1, max_length=64)
     run_id: str = Field(min_length=1, max_length=64)
     epoch: int = Field(gt=0)
     evicted_keys: int = Field(default=0, ge=0)
@@ -27,19 +26,17 @@ class QuotaApproval(DshContract):
 class MinioQuotaApprovalStore:
     """Use read-only credentials in API/workers; only the controlled recovery role may publish."""
 
-    def __init__(self, client, *, bucket: str, installation_id: str):
-        if not bucket or not installation_id or "/" in installation_id:
-            raise ValueError("Approval store requires a fixed installation and versioned bucket")
-        self.client, self.bucket, self.installation_id = client, bucket, installation_id
-        self.prefix = f"dsh/quota-approvals/{installation_id}/"
+    def __init__(self, client, *, bucket: str):
+        if not bucket:
+            raise ValueError("Approval store requires a versioned bucket")
+        self.client, self.bucket = client, bucket
+        self.prefix = "dsh/quota-approvals/"
 
     async def read(self, reference: str, *, sha256: str) -> QuotaApproval:
         content = await asyncio.to_thread(self._read, reference)
         if hashlib.sha256(content).hexdigest() != sha256:
             raise ValueError("Topology approval digest mismatch")
         approval = QuotaApproval.model_validate_json(content)
-        if approval.installation_id != self.installation_id:
-            raise ValueError("Topology approval belongs to another installation")
         return approval
 
     def _read(self, reference: str) -> bytes:
@@ -52,7 +49,7 @@ class MinioQuotaApprovalStore:
             or ".." in key.split("/")
             or "://" in reference
         ):
-            raise ValueError("Approval must name an immutable installation-scoped object version")
+            raise ValueError("Approval must name an immutable DSH object version")
         stat = self.client.stat_object(self.bucket, key, version_id=version)
         if stat.version_id != version or stat.size > 16384:
             raise ValueError("Approval object is not an immutable bounded version")
@@ -69,8 +66,7 @@ class MinioQuotaApprovalStore:
     async def publish(self, approval: QuotaApproval, *, topology: QuotaTopology) -> dict[str, str]:
         # Publication follows a successful recovery and an explicit administrator decision.
         await topology.check()
-        if (approval.installation_id, approval.run_id, approval.epoch) != (
-            self.installation_id,
+        if (approval.run_id, approval.epoch) != (
             topology.run_id,
             topology.epoch,
         ):

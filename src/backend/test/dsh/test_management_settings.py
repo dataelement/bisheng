@@ -34,9 +34,7 @@ async def settings_app(tmp_path, monkeypatch):
             yield session
 
     monkeypatch.setattr(settings_repo, "get_async_db_session", sessions)
-    deployment = DshSettings(
-        enabled=True, installation_id="test", platform_public_url="http://test", gateway_internal_url="http://gateway"
-    )
+    deployment = DshSettings(enabled=True, platform_public_url="http://test", gateway_internal_url="http://gateway")
     app = FastAPI()
     for router in (settings_api.router, identity.router, models.router):
         app.include_router(router, prefix="/api/v1")

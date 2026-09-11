@@ -38,7 +38,7 @@ def test_client_contract_surface_and_pkce(dsh_contracts):
 
 
 def test_license_vectors_signed_by_test_public_key_only(dsh_contracts):
-    bundle = dsh_contracts["license-entitlement-v1"]
+    bundle = dsh_contracts["license-entitlement-v2"]
     jwk = bundle["verification_jwks"]["keys"][0]
     assert not ({"d", "p", "q", "dp", "dq", "qi"} & jwk.keys())
 
@@ -206,7 +206,6 @@ def test_enabled_config_has_no_duplicate_secret_or_redis_fields():
 
     settings = DshSettings(
         enabled=True,
-        installation_id="test-installation",
         platform_public_url="https://bisheng.example.com",
         gateway_internal_url="https://gateway.example.com",
     )

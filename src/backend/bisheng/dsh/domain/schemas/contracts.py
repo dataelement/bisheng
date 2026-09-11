@@ -26,7 +26,6 @@ class DshTenantDisplay(DshContract):
 
 
 class DshIdentitySnapshot(DshContract):
-    installation_id: str = Field(min_length=1, max_length=64)
     tenant_id: SubjectId
     user_id: SubjectId
     active: bool

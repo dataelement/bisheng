@@ -19,7 +19,6 @@ class DshQuotaOperationsService:
         evidence_store,
         approval_store,
         authorize,
-        installation_id: str,
         billing_timezone: str,
         now,
     ):
@@ -30,7 +29,7 @@ class DshQuotaOperationsService:
             evidence_store,
         )
         self.approval_store, self.authorize = approval_store, authorize
-        self.installation_id, self.billing_timezone, self.now = installation_id, billing_timezone, now
+        self.billing_timezone, self.now = billing_timezone, now
 
     async def recover_quota(
         self,
@@ -82,7 +81,6 @@ class DshQuotaOperationsService:
             raise
         await self.recovery.quota.finish_recovery(manifest, receipt)
         approval = QuotaApproval(
-            installation_id=self.installation_id,
             run_id=manifest.run_id,
             epoch=manifest.epoch,
             recovery_evidence_object=manifest_object,

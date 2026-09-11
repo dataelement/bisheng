@@ -17,7 +17,6 @@ from bisheng.dsh.domain.schemas.contracts import DshContract, SubjectId
 
 
 class DshPrincipal(DshContract):
-    installation_id: str = Field(min_length=1)
     tenant_id: SubjectId
     user_id: SubjectId
     seat_id: str = Field(min_length=1)
@@ -46,8 +45,7 @@ def principal_scope(principal: DshPrincipal) -> Iterator[None]:
 
 
 class DshAccessService:
-    def __init__(self, installation_id: str, issuer: str, keys, identities, gateway):
-        self.installation_id = installation_id
+    def __init__(self, issuer: str, keys, identities, gateway):
         self.issuer = issuer
         self.keys = keys
         self.identities = identities
@@ -80,7 +78,6 @@ class DshAccessService:
                         "iss",
                         "aud",
                         "sub",
-                        "installation_id",
                         "tenant_id",
                         "seat_id",
                         "session_id",
@@ -93,7 +90,7 @@ class DshAccessService:
                 },
             )
             if (
-                claims["installation_id"] != self.installation_id
+                len(claims) != 10
                 or type(claims["iat"]) is not int
                 or type(claims["exp"]) is not int
                 or claims["exp"] <= claims["iat"]
@@ -103,7 +100,6 @@ class DshAccessService:
             ):
                 raise DshInvalidAccessTokenError()
             principal = DshPrincipal(
-                installation_id=claims["installation_id"],
                 tenant_id=claims["tenant_id"],
                 user_id=claims["sub"],
                 seat_id=claims["seat_id"],
@@ -118,8 +114,7 @@ class DshAccessService:
             identity = await self.identities.check(principal.tenant_id, principal.user_id)
             if not identity.active:
                 raise DshUserDisabledError()
-            if (identity.installation_id, identity.tenant_id, identity.user_id) != (
-                principal.installation_id,
+            if (identity.tenant_id, identity.user_id) != (
                 principal.tenant_id,
                 principal.user_id,
             ):

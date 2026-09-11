@@ -19,35 +19,47 @@ from bisheng.dsh.infrastructure.shared_trust import (
 )
 
 
-def test_single_shared_secret_is_separated_by_purpose_and_installation():
+def test_single_shared_secret_is_separated_by_purpose():
     secret = "dsh-integration-fixture-shared-secret"
-    keys = {derive_key(secret, "fixture", purpose) for purpose in (ACCESS_KEY_ID, INBOUND_KEY_ID, OUTBOUND_KEY_ID)}
+    keys = {derive_key(secret, purpose) for purpose in (ACCESS_KEY_ID, INBOUND_KEY_ID, OUTBOUND_KEY_ID)}
     assert len(keys) == 3
     assert all(len(key) == 32 for key in keys)
-    assert derive_key(secret, "other", ACCESS_KEY_ID) not in keys
+    assert derive_key("another-environment-secret", ACCESS_KEY_ID) not in keys
     with pytest.raises(ValueError):
-        derive_key("", "fixture", ACCESS_KEY_ID)
+        derive_key("", ACCESS_KEY_ID)
+
+
+async def test_java_python_share_directional_hmac_vectors(dsh_contracts):
+    from bisheng.dsh.infrastructure.service_auth import ServiceAuth, ServiceKey
+    from test.dsh.test_gateway_client import Nonces
+
+    fixture = dsh_contracts["shared-trust-v2"]
+    for purpose, expected in fixture["derived_keys"].items():
+        assert derive_key(fixture["shared_secret"], purpose).hex() == expected
+    for vector in fixture["service_requests"]:
+        purpose = vector["headers"]["X-DSH-Key-Id"]
+        auth = ServiceAuth(ServiceKey(purpose, fixture["derived_keys"][purpose].encode()), Nonces(), lambda: 1788919200)
+        assert (
+            await auth.verify(vector["method"], vector["path"], vector["body"].encode(), vector["headers"]) == purpose
+        )
 
 
 async def test_shared_hmac_verification_still_requires_online_identity_and_seat():
-    key = derive_key("dsh-integration-fixture-shared-secret", "fixture", ACCESS_KEY_ID)
+    key = derive_key("dsh-integration-fixture-shared-secret", ACCESS_KEY_ID)
     identities = SimpleNamespace(
-        check=AsyncMock(
-            return_value=SimpleNamespace(active=True, installation_id="fixture", tenant_id="2", user_id="12")
-        )
+        check=AsyncMock(return_value=SimpleNamespace(active=True, tenant_id="2", user_id="12"))
     )
     gateway = SimpleNamespace(
         introspect=AsyncMock(
             return_value=SimpleNamespace(active=True, seat_id="seat", session_id="session", grant_version=1)
         )
     )
-    service = DshAccessService("fixture", access_issuer("fixture"), GatewayKeys(key), identities, gateway)
+    service = DshAccessService(access_issuer(), GatewayKeys(key), identities, gateway)
     now = int(time.time())
     claims = {
-        "iss": access_issuer("fixture"),
+        "iss": access_issuer(),
         "aud": "bisheng-dsh-model",
         "sub": "12",
-        "installation_id": "fixture",
         "tenant_id": "2",
         "seat_id": "seat",
         "session_id": "session",
@@ -61,7 +73,7 @@ async def test_shared_hmac_verification_still_requires_online_identity_and_seat(
     gateway.introspect.assert_awaited_once_with(token)
     for wrong_key in (
         b"other-secret-for-test-only-32bytes",
-        derive_key("dsh-integration-fixture-shared-secret", "fixture", OUTBOUND_KEY_ID),
+        derive_key("dsh-integration-fixture-shared-secret", OUTBOUND_KEY_ID),
     ):
         bad = jwt.encode(
             claims, wrong_key, algorithm="HS256", headers={"kid": ACCESS_KEY_ID, "typ": "bisheng-dsh-access+jwt"}

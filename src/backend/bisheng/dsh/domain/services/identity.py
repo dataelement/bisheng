@@ -32,14 +32,12 @@ class AuthorizationIntent(DshContract):
     challenge: str = Field(pattern=r"^[A-Za-z0-9_-]{43}$")
     redirect_uri: str
     client_id: str
-    instance: str
     state: str = Field(min_length=1, max_length=512)
     expires_in: int = Field(strict=True, ge=1, le=300)
 
 
 class IdentityService:
-    def __init__(self, installation_id: str, tickets: TicketRepository, identities: IdentityRecords, gateway):
-        self.installation_id = installation_id
+    def __init__(self, tickets: TicketRepository, identities: IdentityRecords, gateway):
         self.tickets = tickets
         self.identities = identities
         self.gateway = gateway
@@ -54,11 +52,8 @@ class IdentityService:
         elif not record.tenant_active or record.tenant_id != tenant_id or record.user_id != user_id:
             reason = "tenant_unavailable"
         if reason:
-            return DshIdentitySnapshot(
-                installation_id=self.installation_id, tenant_id=tenant_id, user_id=user_id, active=False, reason=reason
-            )
+            return DshIdentitySnapshot(tenant_id=tenant_id, user_id=user_id, active=False, reason=reason)
         return DshIdentitySnapshot(
-            installation_id=self.installation_id,
             tenant_id=tenant_id,
             user_id=user_id,
             active=True,
@@ -95,7 +90,7 @@ class IdentityService:
             )
         except ValueError:
             raise DshAuthorizationUnavailableError() from None
-        if intent.instance != self.installation_id or intent.client_id != "dsh-desktop" or not valid_redirect:
+        if intent.client_id != "dsh-desktop" or not valid_redirect:
             raise DshInvalidGrantError()
         if decision == "deny":
             return {"error": "access_denied", "redirect_uri": intent.redirect_uri, "state": intent.state}

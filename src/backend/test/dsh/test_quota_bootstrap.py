@@ -129,7 +129,6 @@ async def test_first_policy_pending_initialization_then_same_operation_succeeds(
         evidence_store=Evidence(),
         approval_store=Approvals(),
         authorize=authorized,
-        installation_id="test",
         billing_timezone="UTC",
         now=lambda: clock[0].replace(tzinfo=UTC),
     )

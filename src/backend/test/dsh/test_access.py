@@ -26,7 +26,6 @@ class Identities:
     async def check(self, tenant_id, user_id):
         assert context.get_current_tenant_id() == int(tenant_id)
         return DshIdentitySnapshot(
-            installation_id="instance-test",
             tenant_id=tenant_id,
             user_id=user_id,
             active=True,
@@ -55,7 +54,6 @@ def token(**overrides):
         "iss": "test-issuer",
         "aud": "bisheng-dsh-model",
         "sub": "1001",
-        "installation_id": "instance-test",
         "tenant_id": "2",
         "seat_id": "42",
         "session_id": "session-test",
@@ -69,7 +67,7 @@ def token(**overrides):
 
 
 def service(seats=None):
-    return DshAccessService("instance-test", "test-issuer", Keys(), Identities(), seats or Seats())
+    return DshAccessService("test-issuer", Keys(), Identities(), seats or Seats())
 
 
 @pytest.mark.parametrize(

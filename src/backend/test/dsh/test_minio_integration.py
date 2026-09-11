@@ -85,7 +85,6 @@ def put(client, bucket, key, content):
 
 def approval_for(topology):
     return QuotaApproval(
-        installation_id="minio-test",
         run_id=topology.run_id,
         epoch=1,
         recovery_evidence_object="dsh/reconciliation/2/recovery.json@fixture",
@@ -163,7 +162,7 @@ async def test_real_evidence_digest_and_original_request_binding(object_store):
 async def test_real_approval_publish_pins_version_and_activates_only_matching_primary(object_store, approved_topology):
     client, create = object_store
     bucket = create()
-    store = MinioQuotaApprovalStore(client, bucket=bucket, installation_id="minio-test")
+    store = MinioQuotaApprovalStore(client, bucket=bucket)
     approval = approval_for(approved_topology)
     published = await store.publish(approval, topology=approved_topology)
     key, version = published["object"].rsplit("@", 1)
@@ -180,26 +179,26 @@ async def test_real_approval_publish_pins_version_and_activates_only_matching_pr
     with pytest.raises(ValueError, match="digest"):
         await activate_from_approval(approved_topology, store, reference=published["object"], sha256="0" * 64)
     assert not approved_topology.ready
-    with pytest.raises(ValueError, match="installation-scoped"):
+    with pytest.raises(ValueError, match="immutable DSH"):
         await store.read(
-            published["object"].replace("quota-approvals/minio-test/", "quota-approvals/other/"),
+            published["object"].replace("dsh/quota-approvals/", "unrelated/"),
             sha256=published["sha256"],
         )
 
 
 async def test_real_approval_rejects_unversioned_publish_and_stale_primary(object_store, approved_topology):
     client, create = object_store
-    plain = MinioQuotaApprovalStore(client, bucket=create(False), installation_id="minio-test")
+    plain = MinioQuotaApprovalStore(client, bucket=create(False))
     approval = approval_for(approved_topology)
     with pytest.raises(ValueError, match="versioning"):
         await plain.publish(approval, topology=approved_topology)
     versioned_bucket = create()
-    store = MinioQuotaApprovalStore(client, bucket=versioned_bucket, installation_id="minio-test")
+    store = MinioQuotaApprovalStore(client, bucket=versioned_bucket)
     stale = approval.model_copy(update={"run_id": "not-the-current-primary"})
     with pytest.raises(ValueError, match="verified recovered"):
         await store.publish(stale, topology=approved_topology)
     content = stale.model_dump_json().encode()
-    reference = put(client, versioned_bucket, "dsh/quota-approvals/minio-test/1/stale.json", content)
+    reference = put(client, versioned_bucket, "dsh/quota-approvals/1/stale.json", content)
     with pytest.raises(RuntimeError, match="Unapproved primary"):
         await activate_from_approval(
             approved_topology, store, reference=reference, sha256=hashlib.sha256(content).hexdigest()

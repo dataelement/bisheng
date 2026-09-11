@@ -1,3 +1,5 @@
+> 2026-09-11 修订：本文保留历史实施记录。安装 ID、License 激活与副本 ACK 相关段落已被 [解绑修订](./installation-unbinding-revision.md) 和 [验证记录](./installation-unbinding-validation.md) 替代；不再执行旧激活命令。
+
 # F062 两仓代码与交付审查
 
 > 历史记录：2026-09-09 用户后续取消 UNKNOWN 冻结及部门同步/筛选；当前语义以 [0.3.0 修订](./usage-and-search-revision.md) 和 design.md 为准。本页旧测试结果不代表修订后的验证结果。

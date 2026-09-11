@@ -150,7 +150,6 @@ async def test_same_sum_swapped_model_limits_cannot_reuse_recovery_proof(quota, 
         evidence_store=Evidence(),
         approval_store=object(),
         authorize=authorize,
-        installation_id="test",
         billing_timezone="UTC",
         now=lambda: datetime.now(UTC),
     )

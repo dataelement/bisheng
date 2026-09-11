@@ -153,9 +153,7 @@ class OperationsRuntime:
             backlog_high_watermark=config.quota_backlog_high_watermark,
             backlog_stop_seconds=config.backlog_stop_seconds,
         )
-        self.approvals = MinioQuotaApprovalStore(
-            minio_client, bucket=config.quota_evidence_bucket, installation_id=config.installation_id
-        )
+        self.approvals = MinioQuotaApprovalStore(minio_client, bucket=config.quota_evidence_bucket)
         self.evidence = MinioEvidenceStore(minio_client, bucket=config.quota_evidence_bucket)
         # Recovery inventories use a separate, explicitly bounded reader (not 1 MiB request evidence).
         self.manifests = MinioRecoveryEvidenceStore(minio_client, bucket=config.quota_evidence_bucket)
@@ -177,7 +175,6 @@ class OperationsRuntime:
             evidence_store=self.manifests,
             approval_store=self.approvals,
             authorize=self.authentication.authorize,
-            installation_id=config.installation_id,
             billing_timezone=config.billing_timezone,
             now=lambda: datetime.now(UTC),
         )
@@ -232,9 +229,8 @@ class OperationsRuntime:
 
         redis = (await get_redis_client()).async_connection
         key = ServiceKey(
-            self.config.installation_id,
             OUTBOUND_KEY_ID,
-            configured_key(self.config.installation_id, OUTBOUND_KEY_ID).hex().encode(),
+            configured_key(OUTBOUND_KEY_ID).hex().encode(),
         )
         self.http = httpx.AsyncClient(verify=True, follow_redirects=False)
         self.gateway = GatewayClient(

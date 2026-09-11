@@ -111,7 +111,6 @@ async def test_over_ten_thousand_complete_sql_and_redis_restore(quota, usage_db)
         evidence_store=Evidence(),
         approval_store=Approvals(),
         authorize=authorize,
-        installation_id="test",
         billing_timezone="UTC",
         now=lambda: datetime.now(UTC),
     )

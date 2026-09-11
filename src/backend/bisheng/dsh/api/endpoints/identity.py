@@ -33,7 +33,6 @@ class RedeemRequest(DshContract):
 
 
 class CheckRequest(DshContract):
-    installation_id: str = Field(min_length=1, max_length=64)
     tenant_id: SubjectId
     user_id: SubjectId
 
@@ -66,7 +65,7 @@ async def authorize(
 
 
 async def require_service(request: Request, runtime: DshRuntime = Depends(get_runtime)) -> DshRuntime:
-    required = ("x-dsh-installation-id", "x-dsh-key-id", "x-dsh-timestamp", "x-dsh-nonce", "x-dsh-signature")
+    required = ("x-dsh-key-id", "x-dsh-timestamp", "x-dsh-nonce", "x-dsh-signature")
     if any(len(request.headers.getlist(name)) != 1 for name in required) or request.url.query:
         raise DshInvalidAccessTokenError()
     body = await request.body()
@@ -85,7 +84,5 @@ async def redeem(body: RedeemRequest, runtime: DshRuntime = Depends(require_serv
 
 @router.post("/internal/dsh/identity/check")
 async def check(body: CheckRequest, runtime: DshRuntime = Depends(require_service)):
-    if body.installation_id != runtime.settings.installation_id:
-        raise DshInvalidAccessTokenError()
     snapshot = await runtime.identity.check(body.tenant_id, body.user_id)
     return snapshot.model_dump(exclude_none=not snapshot.active)

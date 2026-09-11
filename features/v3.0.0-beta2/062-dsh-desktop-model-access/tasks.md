@@ -210,25 +210,20 @@
   - 依赖：T017, T018。
   - 验证/完成条件：T018 全部通过；执行本任务所列文件的静态检查，保留失败/环境缺口证据。
 
-- [x] **T020 · License 多副本受控换版：先写测试**
-  - 分类：后端 Domain；类型：测试。
-  - 文件：[G:src/test/java/com/dataelem/gateway/dsh/DshLicenseActivationTest.java](/Users/zhangguoqing/works/bisheng-gateway/src/test/java/com/dataelem/gateway/dsh/DshLicenseActivationTest.java)。
-  - 逻辑/测试上下文：模拟两副本不同版本、换版失败、降配超员和仍有效在途；状态来源必须共享/受控，单机内存就绪不能证明全部副本一致。
-  - 依赖：T019。
-  - 覆盖 AC: AC-07, AC-12, AC-14, AC-31, AC-32。
-  - 验证/完成条件：只增加测试/fixture，不混入实现；先记录预期失败，再由配对实现转绿。真实存储用例必须实际运行，未具备环境保持待验证。
+- [x] **T020 · 各副本使用本地 License：测试（2026-09-11 修订）**
+  - 文件：Gateway `DshLocalLicenseTest.java`、`DshSeatRepositoryTest.java`。
+  - 验证：相同 License 独立验证；10→2→12 本地上限变化；已有席位保留；两个仓储实例共享 SQL 并发占席。
+  - 原全副本确认测试随用户取消协调机制而删除，替换为上述边界测试。
 
-- [x] **T021 · License 多副本受控换版**
-  - 分类：后端 Domain；类型：实现。
-  - 文件：[G:src/main/java/com/dataelem/gateway/dsh/service/DshActivationService.java](/Users/zhangguoqing/works/bisheng-gateway/src/main/java/com/dataelem/gateway/dsh/service/DshActivationService.java)、[G:src/main/java/com/dataelem/gateway/config/ReloadTask.java](/Users/zhangguoqing/works/bisheng-gateway/src/main/java/com/dataelem/gateway/config/ReloadTask.java)。
-  - 逻辑/测试上下文：接入暂停所有副本 DSH 新准入/席位变更、等待事务、换受管授权源、核对同摘要/版本后恢复的运维状态；失败关闭，普通业务保留。不得把旧按小时 reload 当到期判定。
-  - 依赖：T019, T020。
-  - 验证/完成条件：T020 全部通过；执行本任务所列文件的静态检查，保留失败/环境缺口证据。
+- [x] **T021 · 各副本使用本地 License（2026-09-11 修订）**
+  - 文件：Gateway `DshLicenseState.java`、`DshSeatService.java`、`ReloadTask.java`。
+  - 删除 replica-id、License 激活服务/命令和 DSH 心跳。各副本按本地有效授权准入，SQL 统计并锁定环境共享席位池；允许滚动更新期间暂时不同，不改变旧 License 定时检查。
+  - 验证：T020 通过，原 SSO 授权测试单独回归。
 
 - [x] **T022 · Gateway 双向服务认证：先写测试**
   - 分类：后端 Domain；类型：测试。
   - 文件：[G:src/test/java/com/dataelem/gateway/dsh/DshServiceAuthTest.java](/Users/zhangguoqing/works/bisheng-gateway/src/test/java/com/dataelem/gateway/dsh/DshServiceAuthTest.java)。
-  - 逻辑/测试上下文：模拟时钟、独立Redis nonce与Python响应：重放、body改动、实例不符拒绝；连接失败不伪造 active；固定 DTO 用户/租户显示及回退映射。
+  - 逻辑/测试上下文：模拟时钟、独立Redis nonce与Python响应：重放、body改动、错误密钥拒绝；连接失败不伪造 active；固定 DTO 用户/租户显示及回退映射。
   - 依赖：T012, T004。
   - 覆盖 AC: AC-02, AC-03, AC-04, AC-13, AC-14, AC-31。
   - 验证/完成条件：只增加测试/fixture，不混入实现；先记录预期失败，再由配对实现转绿。真实存储用例必须实际运行，未具备环境保持待验证。
@@ -236,7 +231,7 @@
 - [x] **T023 · Gateway 双向服务认证**
   - 分类：后端 Domain；类型：实现。
   - 文件：[G:src/main/java/com/dataelem/gateway/dsh/service/DshServiceAuth.java](/Users/zhangguoqing/works/bisheng-gateway/src/main/java/com/dataelem/gateway/dsh/service/DshServiceAuth.java)、[G:src/main/java/com/dataelem/gateway/dsh/client/DshIdentityClient.java](/Users/zhangguoqing/works/bisheng-gateway/src/main/java/com/dataelem/gateway/dsh/client/DshIdentityClient.java)。
-  - 逻辑/测试上下文：HMAC-SHA256覆盖 method/path/body_hash/instance/key_id/timestamp/nonce，±60s窗口/120s共享nonce；双向密钥隔离。IdentityClient redeem/check 返回 DshIdentitySnapshot，经 key_id 绑定实例；TLS固定地址，超时failclosed。
+  - 逻辑/测试上下文：HMAC-SHA256覆盖 method/path/body_hash/key_id/timestamp/nonce，±60s窗口/120s共享nonce；双向密钥隔离。IdentityClient redeem/check 返回 DshIdentitySnapshot，经方向固定的 key_id 验签；TLS固定地址，超时failclosed。
   - 依赖：T012, T004, T022。
   - 验证/完成条件：T022 全部通过；执行本任务所列文件的静态检查，保留失败/环境缺口证据。
 
@@ -328,7 +323,7 @@
 - [x] **T035 · Token 签发与刷新**
   - 分类：后端 Domain；类型：实现。
   - 文件：[G:src/main/java/com/dataelem/gateway/dsh/service/DshTokenService.java](/Users/zhangguoqing/works/bisheng-gateway/src/main/java/com/dataelem/gateway/dsh/service/DshTokenService.java)、[G:src/main/java/com/dataelem/gateway/dsh/service/DshJwtService.java](/Users/zhangguoqing/works/bisheng-gateway/src/main/java/com/dataelem/gateway/dsh/service/DshJwtService.java)。
-  - 逻辑/测试上下文：签发固定iss/aud/sub/instance/tenant/seat/session/grant_version，默认access5分钟/session30天；首次和刷新映射当前IdentitySnapshot，校验License/席位/会话版本，刷新重放撤family。服务Secret不下发。
+  - 逻辑/测试上下文：签发固定iss/aud/sub/tenant/seat/session/grant_version，默认access5分钟/session30天；首次和刷新映射当前IdentitySnapshot，校验License/席位/会话版本，刷新重放撤family。服务Secret不下发。
   - 依赖：T033, T031, T034。
   - 验证/完成条件：T034 全部通过；执行本任务所列文件的静态检查，保留失败/环境缺口证据。
 
@@ -1069,15 +1064,18 @@ T115/T116：补充有意义的基础验证与C5注册，原114项任务ID不变�
 - [x] 上述接口/页面回归和静态质量检查。
 - [ ] 用户部署后进行浏览器视觉及真实 DSH 客户端联调。
 
-## 2026-09-11：安装标识解绑（设计已按用户反馈修订，实施待开始）
+## 2026-09-11：安装标识与副本协调移除（本地回归完成，未部署）
 
 - [x] 核对客户端 7 个公开接口与 Token 解析：不依赖 installation_id，保持客户端 contract_version=0.5.0。
 - [x] 更新 Spec、Design、发行契约；输出独立客户端兼容说明。
-- [ ] 发行工具保留指纹输入、不比对机器；移除 installation_id，签发 schema 2。
-- [ ] Gateway 删除数据与授权绑定，更新索引/事务/内部协议及配套测试。
-- [ ] BiSheng 同步 HMAC、Token、内部 DTO、Redis、恢复证据与遥测接线。
-- [ ] 实现阶段生成新版 License 向量与 Java/Python 双向内部协议向量。
+- [x] 发行工具保留指纹输入、不比对机器；移除 installation_id，签发 schema 2。
+- [x] Gateway 删除数据与授权绑定，更新索引/事务/内部协议及配套测试。
+- [x] BiSheng 同步 HMAC、Token、内部 DTO、Redis、恢复证据接线；遥测原本已使用固定 dsh，无需改动。
+- [x] 生成新版 License 向量与 Java/Python 双向内部协议向量。
+- [x] 保留关闭后的退出能力：初始化基础组件不再依赖任何 ID，关闭时登录/Token/本人接口仍拒绝，退出路由回归通过。
+- [x] 删除 replica-id、全副本 ACK、License 激活命令与共享门禁，增加本地上限差异和共享数据库并发测试。
 - [ ] 109 独立环境备份、数据冲突检查、账本迁移和凭证清退；不使用 Alembic。实际执行按用户部署授权范围进行。
-- [ ] 完成多副本席位、跨环境 License、旧 SSO 回归及客户端重新登录联调。
+- [x] 完成共享存储多实例并发与同 License 独立验证回归。
+- [ ] 部署后执行两个独立环境和真实客户端重新登录联调。
 
-实施清单与验收见 [解绑修订](./installation-unbinding-revision.md)；本次文档提交不代表代码、环境或联调完成。
+实施清单与验收见 [解绑修订](./installation-unbinding-revision.md) 与 [本地验证记录](./installation-unbinding-validation.md)；不得把本地测试记为环境部署或真实客户端联调完成。不打正式 tag。

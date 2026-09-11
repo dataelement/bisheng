@@ -97,7 +97,6 @@ def test_real_celery_registration_and_existing_jwt_decoder(tmp_path):
         "redis_url: redis://127.0.0.1:16362/15\n"
         "celery_redis_url: redis://127.0.0.1:16362/15\n"
         "dsh:\n  enabled: true\n"
-        "  installation_id: registration-test\n"
         "  platform_public_url: https://bisheng.example\n"
         "  gateway_internal_url: https://gateway.example\n"
         "logger_conf:\n  log_level: ERROR\n"

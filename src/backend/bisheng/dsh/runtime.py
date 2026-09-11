@@ -78,7 +78,6 @@ class ModelRuntime:
             approval = MinioQuotaApprovalStore(
                 storage.minio_client_sync,
                 bucket=self.settings.quota_evidence_bucket,
-                installation_id=self.settings.installation_id,
             )
             await activate_from_approval(
                 self.quota.topology,

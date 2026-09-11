@@ -40,15 +40,21 @@ def _report(value, *, exit_code=0):
 
 
 async def _child(data):
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from test.dsh.conftest import dsh_redis_url
+
+    redis_url = dsh_redis_url.__wrapped__()
     config = json.loads(Path(os.environ["DSH_TEST_MINIO_CONFIG"]).read_text())
     client = Minio(config["endpoint"], access_key=config["access_key"], secret_key=config["secret_key"], secure=False)
     settings = DshSettings(
-        installation_id="failure-acceptance",
         quota_evidence_bucket=data["bucket"],
         quota_approval_object=data.get("object"),
         quota_approval_sha256=data.get("sha256"),
     )
-    runtime = OperationsRuntime(settings, client)
+    with patch("bisheng.common.services.config_service.settings", SimpleNamespace(redis_url=redis_url)):
+        runtime = OperationsRuntime(settings, client)
     runtime.quota.prefix = data["prefix"]
     engine = None
     try:
@@ -152,10 +158,9 @@ async def test_cross_process_settlement_projection_replay_and_visibility(quota, 
     body = b"[]"
     key = "dsh/reconciliation/2/controlled-empty-test-ledger.json"
     version = client.put_object(bucket, key, io.BytesIO(body), len(body)).version_id
-    store = MinioQuotaApprovalStore(client, bucket=bucket, installation_id="failure-acceptance")
+    store = MinioQuotaApprovalStore(client, bucket=bucket)
     approval = await store.publish(
         QuotaApproval(
-            installation_id="failure-acceptance",
             run_id=quota.topology.run_id,
             epoch=1,
             recovery_evidence_object=key + "@" + version,

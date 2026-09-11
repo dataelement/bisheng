@@ -25,7 +25,6 @@ class Intent:
             "challenge": "a" * 43,
             "redirect_uri": "http://127.0.0.1:54321/dsh/callback",
             "client_id": "dsh-desktop",
-            "instance": "instance-test",
             "state": "opaque-state",
             "expires_in": self.expires_in,
         }
@@ -33,7 +32,7 @@ class Intent:
 
 async def test_snapshot_always_reads_current_identity():
     records = Records()
-    service = IdentityService("instance-test", None, records, Intent())
+    service = IdentityService(None, records, Intent())
     snapshot = await service.check("2", "1001")
     assert snapshot.active and snapshot.user.display_name == "alice" and snapshot.tenant.name == "Tenant 2"
     records.record = replace(records.record, username="renamed", display_name="Alice", profile_version=1)
@@ -48,18 +47,18 @@ async def test_snapshot_always_reads_current_identity():
 async def test_inactive_identity_never_leaks_display(changes):
     records = Records()
     records.record = replace(records.record, **changes)
-    result = await IdentityService("instance-test", None, records, Intent()).check("2", "1001")
+    result = await IdentityService(None, records, Intent()).check("2", "1001")
     assert not result.active and result.user is None and result.tenant is None
 
 
 async def test_browser_authorization_refuses_service_identity():
-    service = IdentityService("instance-test", None, Records(), Intent())
+    service = IdentityService(None, Records(), Intent())
     with pytest.raises(DshUserDisabledError):
         await service.authorize(BrowserIdentity("2", "1001", "service_account"), "auth-test")
 
 
 async def test_browser_denial_resolves_safe_callback_without_issuing_ticket():
-    service = IdentityService("instance-test", None, Records(), Intent())
+    service = IdentityService(None, Records(), Intent())
     result = await service.authorize(BrowserIdentity("2", "1001"), "auth-test", decision="deny")
     assert result == {
         "error": "access_denied",
@@ -73,8 +72,8 @@ async def test_real_redis_ticket_is_atomic_bound_expiring_and_digest_only(dsh_re
     from redis.asyncio import Redis
 
     redis = Redis.from_url(dsh_redis_url, decode_responses=True)
-    tickets = TicketRepository(redis, "instance-test")
-    service = IdentityService("instance-test", tickets, Records(), Intent())
+    tickets = TicketRepository(redis)
+    service = IdentityService(tickets, Records(), Intent())
     result = await service.authorize(BrowserIdentity("2", "1001"), "auth-test")
     ticket = result["identity_ticket"]
     binding = {
@@ -105,8 +104,8 @@ async def test_ticket_does_not_outlive_authorization(dsh_redis_url):
     redis = Redis.from_url(dsh_redis_url)
     intent = Intent()
     intent.expires_in = 7
-    tickets = TicketRepository(redis, "instance-test")
-    service = IdentityService("instance-test", tickets, Records(), intent)
+    tickets = TicketRepository(redis)
+    service = IdentityService(tickets, Records(), intent)
     result = await service.authorize(BrowserIdentity("2", "1001"), "near-expiry")
     assert result["expires_in"] == 7
     assert 0 < await redis.ttl(tickets.key(result["identity_ticket"])) <= 7

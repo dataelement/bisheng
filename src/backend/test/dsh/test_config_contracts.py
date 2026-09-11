@@ -31,7 +31,6 @@ async def _construct_enabled_factories():
 
     settings = DshSettings(
         enabled=True,
-        installation_id="config-test",
         platform_public_url="https://bisheng.example.com",
         gateway_internal_url="https://gateway.example.com",
         quota_memory_budget_bytes=256 * 1024 * 1024,

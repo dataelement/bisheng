@@ -20,14 +20,12 @@ return payload
 
 
 class TicketRepository:
-    def __init__(self, redis, installation_id: str):
+    def __init__(self, redis):
         self.redis = redis
-        self.installation_id = installation_id
 
     def key(self, ticket: str) -> str:
-        scope = hashlib.sha256(self.installation_id.encode()).hexdigest()
         digest = hashlib.sha256(ticket.encode()).hexdigest()
-        return f"dsh:ticket:{scope}:{digest}"
+        return f"{{dsh}}:ticket:{digest}"
 
     @staticmethod
     def binding(binding: dict[str, str]) -> str:

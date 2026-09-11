@@ -20,11 +20,6 @@ class DshSettings(BaseModel):
     contract_version: Literal["0.5.0"] = Field(
         default="0.5.0", description="DSH wire contract version shared with the gateway and Desktop."
     )
-    installation_id: str | None = Field(
-        default=None,
-        pattern=r"^[A-Za-z0-9_-]{1,64}$",
-        description="Stable platform installation identifier used to scope DSH trust and quota state.",
-    )
     platform_public_url: str | None = Field(
         default=None, description="Public HTTP(S) origin of Bisheng used by the Desktop authorization flow; no path."
     )
@@ -131,12 +126,11 @@ class DshSettings(BaseModel):
         if not self.enabled:
             return self
         names = (
-            "installation_id",
             "platform_public_url",
             "gateway_internal_url",
         )
         if any(not getattr(self, name) for name in names):
-            raise ValueError("Enabled DSH requires instance and endpoint addresses")
+            raise ValueError("Enabled DSH requires endpoint addresses")
         if self.backlog_stop_seconds <= self.projection_target_seconds:
             raise ValueError("Backlog threshold must exceed the projection target")
         return self

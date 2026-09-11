@@ -101,7 +101,6 @@ async def test_other_replica_cannot_admit_between_restore_and_sql_epoch_cas(quot
         evidence_store=Evidence(),
         approval_store=Approvals(),
         authorize=authorize,
-        installation_id="test",
         billing_timezone="UTC",
         now=lambda: datetime.now(UTC),
     )

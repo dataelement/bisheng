@@ -18,7 +18,7 @@ def http_app():
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
     runtime = SimpleNamespace(
-        settings=SimpleNamespace(platform_public_url="https://bisheng.example", installation_id="i"),
+        settings=SimpleNamespace(platform_public_url="https://bisheng.example"),
         identity=SimpleNamespace(
             authorize=AsyncMock(
                 return_value={
@@ -29,9 +29,7 @@ def http_app():
                 }
             ),
             check=AsyncMock(
-                return_value=DshIdentitySnapshot(
-                    installation_id="i", tenant_id="2", user_id="1", active=False, reason="user_disabled"
-                )
+                return_value=DshIdentitySnapshot(tenant_id="2", user_id="1", active=False, reason="user_disabled")
             ),
         ),
         inbound_auth=SimpleNamespace(verify=AsyncMock(return_value="i")),
@@ -82,17 +80,16 @@ async def test_browser_requires_matching_origin_and_refuses_body_identity(http_a
         assert identity.user_id == "1" and identity.tenant_id == "2"
 
 
-async def test_internal_endpoint_requires_service_headers_and_instance_binding(http_app):
+async def test_internal_endpoint_requires_service_headers_and_rejects_removed_binding(http_app):
     app, _runtime = http_app
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://bisheng.example") as client:
         response = await client.post(
             "/api/v1/internal/dsh/identity/check",
-            json={"installation_id": "i", "tenant_id": "2", "user_id": "1"},
+            json={"tenant_id": "2", "user_id": "1"},
             headers={"Authorization": "Bearer ordinary-jwt"},
         )
         assert response.status_code == 401
         headers = {
-            "X-DSH-Installation-Id": "i",
             "X-DSH-Key-Id": "k",
             "X-DSH-Timestamp": "1",
             "X-DSH-Nonce": "n",
@@ -103,10 +100,10 @@ async def test_internal_endpoint_requires_service_headers_and_instance_binding(h
             json={"installation_id": "other", "tenant_id": "2", "user_id": "1"},
             headers=headers,
         )
-        assert response.status_code == 401
+        assert response.status_code == 400
         response = await client.post(
             "/api/v1/internal/dsh/identity/check",
-            json={"installation_id": "i", "tenant_id": "2", "user_id": "1"},
+            json={"tenant_id": "2", "user_id": "1"},
             headers=headers,
         )
         assert response.status_code == 200 and response.json()["active"] is False
@@ -122,10 +119,10 @@ async def test_internal_http_hmac_body_and_replay_with_real_redis(http_app, dsh_
 
     app, runtime = http_app
     redis = Redis.from_url(dsh_redis_url)
-    auth = ServiceAuth(ServiceKey("i", "gateway-test", b"s" * 32), RedisNonceStore(redis))
+    auth = ServiceAuth(ServiceKey("gateway-test", b"s" * 32), RedisNonceStore(redis))
     runtime.inbound_auth = auth
     path = "/api/v1/internal/dsh/identity/check"
-    body = json.dumps({"installation_id": "i", "tenant_id": "2", "user_id": "1"}).encode()
+    body = json.dumps({"tenant_id": "2", "user_id": "1"}).encode()
     headers = {**auth.sign("POST", path, body), "Content-Type": "application/json"}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://bisheng.example") as client:
         assert (await client.post(path, content=body, headers=headers)).status_code == 200

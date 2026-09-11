@@ -130,7 +130,6 @@ async def test_shared_immutable_approval_activates_only_matching_primary(quota):
     )
 
     approval = QuotaApproval(
-        installation_id="test",
         run_id=quota.topology.run_id,
         epoch=1,
         recovery_evidence_object="audit/manifest@v1",
@@ -152,7 +151,7 @@ async def test_shared_immutable_approval_activates_only_matching_primary(quota):
         def get_object(self, *args, **kwargs):
             return Response(body)
 
-    store = MinioQuotaApprovalStore(Objects(), bucket="audit", installation_id="test")
+    store = MinioQuotaApprovalStore(Objects(), bucket="audit")
     quota.topology.close()
     await activate_from_approval(
         quota.topology, store, reference="dsh/quota-approvals/test/1/object@v1", sha256=hashlib.sha256(body).hexdigest()

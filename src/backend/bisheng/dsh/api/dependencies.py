@@ -68,29 +68,24 @@ async def get_runtime(request: Request, config: DshSettings = Depends(get_settin
         nonces = RedisNonceStore(redis)
         outbound = ServiceAuth(
             ServiceKey(
-                config.installation_id,
                 OUTBOUND_KEY_ID,
-                configured_key(config.installation_id, OUTBOUND_KEY_ID).hex().encode(),
+                configured_key(OUTBOUND_KEY_ID).hex().encode(),
             ),
             nonces,
         )
         inbound = ServiceAuth(
             ServiceKey(
-                config.installation_id,
                 INBOUND_KEY_ID,
-                configured_key(config.installation_id, INBOUND_KEY_ID).hex().encode(),
+                configured_key(INBOUND_KEY_ID).hex().encode(),
             ),
             nonces,
         )
         http = httpx.AsyncClient(verify=True, follow_redirects=False)
         gateway = GatewayClient(config.gateway_internal_url, outbound, http, config.introspection_timeout_seconds)
-        identity = IdentityService(
-            config.installation_id, TicketRepository(redis, config.installation_id), CurrentIdentityRecords(), gateway
-        )
+        identity = IdentityService(TicketRepository(redis), CurrentIdentityRecords(), gateway)
         access = DshAccessService(
-            config.installation_id,
-            access_issuer(config.installation_id),
-            GatewayKeys(configured_key(config.installation_id, ACCESS_KEY_ID)),
+            access_issuer(),
+            GatewayKeys(configured_key(ACCESS_KEY_ID)),
             identity,
             gateway,
         )

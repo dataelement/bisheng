@@ -10,7 +10,6 @@
 
 | Python 配置 | Gateway 配置 | 约束 |
 |---|---|---|
-| dsh.installation_id | dsh.installation-id | 同一安装实例 |
 | dsh.platform_public_url | dsh.public-origin | 客户端可访问的 Nginx origin |
 | dsh.gateway_internal_url | dsh.python-origin | 分别指向对端内部 HTTP/HTTPS origin |
 | sso_sync.gateway_hmac_secret | bisheng.gateway-hmac-secret | 现有共享 Secret |
@@ -30,32 +29,15 @@ quota_evidence_bucket、quota_approval_object/sha256 保留为受控账本恢复
 
 6. 部署 `dsh.enabled` 默认 false；部署者开启后，超级管理员进入 DSH 管理页启用业务开关，并保存本组织受控的无凭证 HTTP(S) 下载地址。业务开关默认关闭，旧部署开关为 true 不会自动开启业务。未配置时页面保留联系管理员和手动填写平台地址，不能交付虚构链接。下载包和自定义协议注册由 DSH Desktop 项目提供。
 
-## Gateway License 激活
+## Gateway License 加载与更新
 
-扩展只追加到旧 License 解密 JSON 的 `dsh_entitlement`，不改变旧 `version/expireDay`。发布含扩展的旧 RSA 外层密文前，必须完成 [发行工具契约](./license-issuer-contract.md) 中的目标旧制品兼容验收；本地新签名向量不能代替厂商样本。
+不配置 installation_id 或 replica-id，不执行激活命令、暂停/ACK/恢复流程。沿用既有 License 配置入口，各 Gateway 加载并验证自己当前配置的 schema 2 License，依据本地有效期及席位上限处理请求。K8s 滚动更新期间允许短暂版本不一致；升级全部完成后，各副本使用目标配置。
 
-本地运维入口为打包内 `com.dataelem.gateway.dsh.cli.DshActivationCommand`。它只支持 pause/status/resume，不提供伪造副本 ACK、删除席位或强制清空 inflight。操作进程必须拥有本环境共享激活 Redis 的受控访问权限；凭据来自环境/Secret 注入，不放在命令参数。
+同环境所有副本从共享数据库统计 ASSIGNED 席位，通过原有事务与锁串行控制新增分配。假设旧副本上限为 10，新副本上限为 2，已用 2 席时新副本拒绝新增，旧副本仍可能分配至 10；更新不自动回收已有席位。不同环境使用独立数据库/Redis，同一 License 分别控制各环境的席位数。
 
-```sh
-# 由 Secret/运行环境提供：DSH_ACTIVATION_REDIS_HOST、PORT、DATABASE。
-# 如适用，另提供 USERNAME、PASSWORD、SSL=true；TLS 继续验证证书。
-java -Dloader.main=com.dataelem.gateway.dsh.cli.DshActivationCommand \
-  -cp gateway-0.0.1-SNAPSHOT.jar org.springframework.boot.loader.launch.PropertiesLauncher \
-  pause <installation-id> <signed-license-id> <compact-JWS-SHA256> <replica-a,replica-b>
-```
+指纹输入保留，但不匹配运行环境。公钥只用于验证发行签名，旧 SSO/trial/pro 逻辑保持。删除的旧共享激活 Redis key 不再读取，不需要通过手工修改 phase 来开放服务；历史 key 可在核实没有旧版本服务后按原命名空间清理。
 
-先 pause 目标版本和全部部署副本，再等 inflight 为 0。随后向每个副本安装同一 License，副本自行验证并通过周期观察提交 ACK。`digest` 是 Compact JWS 原始 ASCII 字节的 SHA256，不是外层密文或解密 JSON 的摘要。
-
-```sh
-java -Dloader.main=com.dataelem.gateway.dsh.cli.DshActivationCommand \
-  -cp gateway-0.0.1-SNAPSHOT.jar org.springframework.boot.loader.launch.PropertiesLauncher \
-  status <installation-id>
-java -Dloader.main=com.dataelem.gateway.dsh.cli.DshActivationCommand \
-  -cp gateway-0.0.1-SNAPSHOT.jar org.springframework.boot.loader.launch.PropertiesLauncher \
-  resume <installation-id>
-```
-
-status 显示 phase、version、digest、inflight 与 required/ack；未初始化退出码为 2。resume 缺少任一副本确认或尚未排空时退出码为 2，不能把它当成功。副本故障留下的 inflight 需要先确认相关事务结果，再受控修复；不可按超时自动归零。降配不会删除席位，容量已超限时只禁止新分配。
+此次内部协议与表结构切换仍须遵守 [安装标识解绑修订](./installation-unbinding-revision.md) 的备份和配套更新步骤；这属于一次性测试版格式切换，不是以后每次更换 License 的要求。额度账本的 Redis 恢复审批仍保留，它与删除的 License 副本确认是两件独立的事。
 
 ## 配额首次初始化和持续运行
 
@@ -69,7 +51,7 @@ Redis 连接/主节点身份不再可信时，本进程关闭准入，不能以�
 
 先完成 [客户端交接清单](./desktop-handoff-checklist.md) 中登录、刷新、退出、两个角色范围、流取消和故障场景。查看 DSH request_id 对应的 SQL 明细、Redis 投影积压和 `dsh_settlement` 日志；日志不得记录 Token、完整消息或票据。遥测不是硬账本。
 
-回退时先停止新 DSH 准入，保留已分配席位、会话/refresh 摘要、审计和配额数据，妥善结算在途请求。关闭开关仍保留 Gateway 安装实例标识和原用户同步共享 HMAC Secret，使本版 DSH 凭据可退出；DSH Token 不再配置公钥或私钥。License 验证配置继续独立保留。Python/Worker 停止后不删除 Stream、AOF 或证据。旧商业授权的有效性继续按原字段计算，不因 DSH 关闭延长或缩短。
+回退时先停止新 DSH 准入，保留已分配席位、会话/refresh 摘要、审计和配额数据，妥善结算在途请求。关闭开关仍保留原用户同步共享 HMAC Secret，使本版 DSH 凭据可退出；DSH Token 不再配置公钥或私钥。License 验证配置继续独立保留。Python/Worker 停止后不删除 Stream、AOF 或证据。旧商业授权的有效性继续按原字段计算，不因 DSH 关闭延长或缩短。
 
 仍未完成的环境/制品验收以各 acceptance/report 为准。本文不授权发布、生产数据修改或对外发送文档。
 

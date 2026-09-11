@@ -1,7 +1,7 @@
 # Design: F062 DSH Desktop 登录、固定席位与模型调用
 
 > 当前有效修订：[部署配置简化 0.4.0](./deployment-simplification.md)。共享 HMAC、现有 Redis、界面模型授权及北京时间默认值以此修订为准。
-> 本文是 F062 当前设计的唯一来源。2026-09-11 按用户确认更新安装标识解绑设计；本次修订尚未实现、部署，实施与验收见 [安装标识解绑修订](./installation-unbinding-revision.md)。此前实现与本次目标状态须区分。
+> 本文是 F062 当前设计的唯一来源。2026-09-11 安装标识解绑实现与本地回归已完成，未部署；关闭后的退出能力已保留，实施与验收见 [安装标识解绑修订](./installation-unbinding-revision.md)。
 > HTML 是评审图稿；[client-api.md](./client-api.md) 是本设计的客户端线协议附件，细化字段与示例，变更须双向同步。[tasks.md](./tasks.md) 记录实现与外部验收状态。DM 实机本轮暂缓，目标旧发行制品与真实客户端部署验收尚待外部证据。
 
 **关联**：[spec.md](./spec.md) · [评审图稿](./architecture-review.html) · [评审报告](./design-review.md)
@@ -82,7 +82,7 @@ Gateway 文件均相对其项目 `src/main/java/com/dataelem/gateway/`。实现�
 #### 实施现状（2026-09-09）
 
 - 冻结契约与发行样例已用于两仓测试；真实旧密文分段、旧发行工具与目标旧二进制仍是外部兼容门禁。
-- Python 已实现 15 个 HTTP 端点、四张新表、用户资料版本增量迁移、共享 Secret 派生的 HMAC/HS256、模型适配、Redis Lua 账本与 Stream/SQL 投影、管理审计和生产 Runtime。Gateway 已实现 11 个端点、四张新表、独立 License 能力验签、固定席位/会话/刷新与集群激活门禁。默认关闭不初始化远程依赖。
+- Python 已实现 15 个 HTTP 端点、四张新表、用户资料版本增量迁移、共享 Secret 派生的 HMAC/HS256、模型适配、Redis Lua 账本与 Stream/SQL 投影、管理审计和生产 Runtime。Gateway 已实现 11 个端点、四张新表、独立 License 能力验签、固定席位/会话/刷新；License 按各副本本地加载结果判断。默认关闭不初始化远程依赖。
 - User 迁移父 revision 为实际单 head `update_time_default_align`；SQLite 与隔离 MySQL 的增量/重入/保留字段验证已通过。DM8 未执行真库验证。
 - Platform 已接入 `/desktop-login` 与系统管理的席位、会话、模型额度、操作进度页面；客户端仍只配置同一个 Nginx origin。外部 Desktop 源码不在两仓范围内。
 - 生产 CLI、首次账本初始化、恢复审批与故障处置见 [rollout.md](./rollout.md)、[quota-operations.md](./quota-operations.md)；测试和外部环境缺口见各验收报告。实现与隔离服务测试不等于已经部署或完成真实桌面联调。
@@ -380,7 +380,7 @@ Python实体通用创建/修改时间物理列统一为 `create_time/update_time
 
 License 只保存于既有受管授权源；DSH 不建立第二份配置真相。免费席位也由签名内容给出。容量变更不修改 Seat 主键或清除 REVOKED 历史，已用数始终从席位状态统计；到期和降配超限仍按前述规则阻断新消费、允许管理员撤销。
 
-一期替换 License 采用受控切换：暂停所有副本的新 DSH 准入（含登录/刷新/验席与席位变更），等待席位事务结束，更新既有授权源并验证所有副本加载相同版本/摘要后恢复；已准入模型请求可完成。不依赖一次广播就假设切换成功，验签失败或版本不一致保持 DSH 关闭，普通业务不受影响。本期不承诺无停机热切换。
+各 Gateway 按当前加载并验证的 License 决定有效期与席位上限，不使用 replica-id、共享激活门禁、全副本 ACK 或暂停/恢复命令。滚动更新期间允许各副本短暂采用不同上限；同环境已占席位始终由共享 SQL 统计并通过事务锁限制新增。降配不自动回收已有席位，更新无效只影响该副本的 DSH 准入。
 
 不增加容量锁表。MySQL 使用 SERIALIZABLE 范围事务；DM 使用 READ_COMMITTED，并在事务首条 SQL 对 gt_dsh_seat 加 EXCLUSIVE 表锁，锁后统计当前已提交席位再写入；不是仅锁已有用户行。DM 表锁持续到提交/回滚，保护空表与临界容量，但会串行化不同安装实例的短席位事务。全部撤销/再分配复用此入口，事务内无外部 HTTP；冲突有界重试。真实 MySQL 空实例竞争、临界容量已通过；DM 分支的隔离级别、锁顺序、回滚、分页和字符容量有自动化检查，DM 实机本轮按用户确认暂缓，不能宣称运行时已验证。
 
@@ -419,9 +419,9 @@ License 只保存于既有受管授权源；DSH 不建立第二份配置真相�
 - 外层成功解析后，原 License 状态和 DSH 状态分别计算、分别发布。DSH 扩展格式错误、未知版本、签名无效、错误实例、过期或禁用仅关闭 DSH，不落入旧 Loader 的全局 markExpired 路径；原 License 自身解码失败则保留原有降级行为，同时 DSH 不可用。
 - 旧商业有效期与 DSH 签名有效期分别执行，不互相延长。DSH 是否可用以其有效签名、实例、capability 与开关为准；SSO 等旧商业功能仍按原授权执行。任何一侧未知状态都不能借另一侧的成功状态放行。
 - DSH Controller 和内部端点按明确路由分派独立策略；仅从旧商业过滤器中移交 DSH 路由，不豁免其他商业接口。登录/刷新/准入必须验 DSH，公钥读取与可验证身份的会话撤销按既有设计允许。缺少/失效扩展不返回旧 HTTP 200 + 11001 伪装成客户端成功。
-- DSH License 有效期及席位资格在每次验席/发证时检查；指纹不与机器、Pod、IP 或环境配置比对，不能等待旧按小时重载才拒绝已到期能力；更换授权仍按现有“全副本暂停 DSH 准入 → 安装同一版本 → 校验 → 恢复”规则，不改变席位、会话与用量归属。
+- DSH License 有效期及席位资格在每次验席/发证时检查；指纹不与机器、Pod、IP 或环境配置比对，不能等待旧按小时重载才拒绝已到期能力；更换授权通过既有配置入口逐副本加载，允许更新期短暂不一致，不改变席位、会话与用量归属。
 
-术语固定：**旧商业授权**是原 `version/expireDay` 的判定结果；**DSH 授权**是通过外层绑定验证的签名 entitlement；**外层有效**仅指密文与旧字段可解析，不表示旧商业授权仍在有效期。本文发席/发证/验席所称“License 有效”均指 DSH 授权有效且实例激活、DSH 开关启用。旧 trial 期满本身不使外层不可解析。
+术语固定：**旧商业授权**是原 `version/expireDay` 的判定结果；**DSH 授权**是通过外层绑定验证的签名 entitlement；**外层有效**仅指密文与旧字段可解析，不表示旧商业授权仍在有效期。本文发席/发证/验席所称“License 有效”均指 本副本 DSH 授权有效且 DSH 开关启用。旧 trial 期满本身不使外层不可解析。
 
 | 旧商业授权 | DSH 授权（外层可解析且绑定正确） | 旧商业端点 | DSH 发席/发证/新准入 |
 |---|---|---|---|
@@ -601,7 +601,7 @@ gt_dsh_seat 只保存最小身份检索投影，不成为用户主数据。首�
 | 现有 telemetry 缺 usage 可得到 0，写失败会被吞 | 月限额被低估 | Redis 原子账本与 Stream；SQL 是批量投影，不能实时放行 |
 | 恢复席位后仅校验 seat_id | 撤销前旧 Token 重新有效 | grant_version 与 session family 版本 |
 | operations/read 只返回 operation_id 与状态，不证明原意图 | 数据恢复后相同 ID 的其他动作可能被误认为本地操作成功 | 管理恢复用原动作/actor/target/expected version 重放，让 Gateway 比对持久 payload_hash 后才采信终态 |
-| REASSIGN 在写审计前因 License/开关被拒绝 | operation 永远 UNKNOWN，平台持续 PROCESSING | 已认证命令的明确 license_invalid/expired、实例不匹配、dsh_disabled 写 FAILED；依赖/激活不确定仍保持 503 与原 ID 重试 |
+| REASSIGN 在写审计前因 License/开关被拒绝 | operation 永远 UNKNOWN，平台持续 PROCESSING | 已认证命令的明确 license_invalid/expired、dsh_disabled 写 FAILED；数据库或网络依赖不确定仍保持 503 与原 ID 重试 |
 | 延迟到达的旧 revoke / reassign | 覆盖管理员后来操作 | expected_grant_version + 串行操作账本 |
 | 长流的 finally 可能不运行（进程退出） | 预算永久卡住或错误释放 | 持久化调用记录与后台 UNKNOWN 对账 |
 | SQL 在 WebFlux 事件循环执行 | Gateway 全部请求被阻塞 | 阻塞数据库操作调度到有界专用线程池，事务内无外部 HTTP |
@@ -861,4 +861,4 @@ Desktop GET usage 增加可选 `model=bisheng:<id>`，响应字段不变；选�
 
 按用户确认，删除 installation_id 及其在数据、Redis、HMAC、JWT、内部 DTO、遥测和恢复证据中的绑定；不换名为另一个环境 ID。指纹输入与外层 finger 字段继续保留并受签名完整性保护，但本期不收集机器指纹、不执行环境匹配，也不新增校验开关。允许相同 License 在多个独立环境使用，每套共享数据库独立控制总席位。
 
-DSH License schema 改为 2，不兼容未发布的 schema 1 测试授权；没有 DSH 扩展的旧 SSO License 保持兼容。公共客户端契约继续 0.5.0；内部协议需两端配套更新，详细密钥派生、数据切换、风险和验收以 [解绑修订](./installation-unbinding-revision.md) 为附件，客户端联调以 [0.5.0 兼容说明](./client-installation-unbinding-compatibility.md) 为附件。当前修订为设计，尚未实现或部署。
+DSH License schema 改为 2，不兼容未发布的 schema 1 测试授权；没有 DSH 扩展的旧 SSO License 保持兼容。公共客户端契约继续 0.5.0；内部协议需两端配套更新，详细密钥派生、数据切换、风险和验收以 [解绑修订](./installation-unbinding-revision.md) 为附件，客户端联调以 [0.5.0 兼容说明](./client-installation-unbinding-compatibility.md) 为附件。代码与本地验证已完成，未部署。

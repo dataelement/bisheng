@@ -14,7 +14,7 @@
 
 ## 身份协议
 
-> 2026-09-11 目标修订（待实现）：删除安装标识；以下派生方式由双方同步切换，详细要求见 [解绑修订](./installation-unbinding-revision.md)。公开客户端 contract_version 保持 0.5.0。
+> 2026-09-11 实现修订（未部署）：删除安装标识；以下派生方式由双方同步切换，详细要求见 [解绑修订](./installation-unbinding-revision.md)。公开客户端 contract_version 保持 0.5.0。
 
 现有用户同步 HMAC 协议不变。DSH 由同一共享 Secret 通过 HKDF-SHA256 派生用途密钥，不增加运维配置：salt=UTF-8("bisheng-dsh-v1")，info=UTF-8(purpose)，输出 32 字节；purpose 分别为 bisheng-to-gateway-v1、gateway-to-bisheng-v1、dsh-access-v1。服务请求继续使用时间窗和共享 nonce 防重放，其 HMAC secret 为派生结果的小写 hex UTF-8；Token 直接使用 32 字节派生结果签名。
 

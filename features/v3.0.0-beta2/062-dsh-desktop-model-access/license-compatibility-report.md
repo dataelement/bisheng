@@ -1,3 +1,5 @@
+> 2026-09-11 修订：本文保留历史实施记录。安装 ID、License 激活与副本 ACK 相关段落已被 [解绑修订](./installation-unbinding-revision.md) 和 [验证记录](./installation-unbinding-validation.md) 替代；不再执行旧激活命令。
+
 # F062 License compatibility evidence
 
 Date: 2026-09-09. Gateway branch `feat/dsh-access`, baseline `main@75a74ff28ea95cba0938ff4912317cade2353337`. Status: **local regression verified; historical binary/issuer acceptance pending**. No customer License or vendor signing secret is stored in this report or test fixtures.

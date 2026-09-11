@@ -16,9 +16,7 @@ from test.dsh.test_quota_admission import running
 
 
 def principal():
-    return DshPrincipal(
-        installation_id="i", tenant_id="2", user_id="20", seat_id="seat", session_id="session", grant_version=1
-    )
+    return DshPrincipal(tenant_id="2", user_id="20", seat_id="seat", session_id="session", grant_version=1)
 
 
 def request(stream=False):

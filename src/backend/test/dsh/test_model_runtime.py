@@ -19,7 +19,6 @@ async def test_concurrent_first_activation_waits_for_one_verified_approval(monke
         quota_approval_object="immutable@version",
         quota_approval_sha256="a" * 64,
         quota_evidence_bucket="evidence",
-        installation_id="i",
     )
     runtime = module.ModelRuntime(None, None, SimpleNamespace(topology=topology), config)
     started, release = asyncio.Event(), asyncio.Event()

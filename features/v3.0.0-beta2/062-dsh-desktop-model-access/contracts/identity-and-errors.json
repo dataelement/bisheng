@@ -1,7 +1,6 @@
 {
   "contract_version": "0.1.0",
   "snapshot": {
-    "installation_id": "installation_fixture_001",
     "tenant_id": "1",
     "user_id": "1001",
     "active": true,
@@ -18,7 +17,6 @@
     "profile_version": 0
   },
   "snapshot_name_fallback": {
-    "installation_id": "installation_fixture_001",
     "tenant_id": "1",
     "user_id": "1001",
     "active": true,
@@ -35,7 +33,6 @@
     "profile_version": 0
   },
   "inactive_snapshot": {
-    "installation_id": "installation_fixture_001",
     "tenant_id": "1",
     "user_id": "1001",
     "active": false,

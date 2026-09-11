@@ -10,22 +10,22 @@ OUTBOUND_KEY_ID = "bisheng-to-gateway-v1"
 INBOUND_KEY_ID = "gateway-to-bisheng-v1"
 
 
-def derive_key(secret: str, installation_id: str, purpose: str) -> bytes:
+def derive_key(secret: str, purpose: str) -> bytes:
     """HKDF-SHA256, 32 bytes; the same construction is used by Gateway."""
     if not secret or not secret.strip():
         raise ValueError("Configure the existing sso_sync.gateway_hmac_secret before enabling DSH")
     prk = hmac.digest(b"bisheng-dsh-v1", secret.encode(), hashlib.sha256)
-    return hmac.digest(prk, f"{installation_id}:{purpose}".encode() + b"\x01", hashlib.sha256)
+    return hmac.digest(prk, purpose.encode() + b"\x01", hashlib.sha256)
 
 
-def configured_key(installation_id: str, purpose: str) -> bytes:
+def configured_key(purpose: str) -> bytes:
     from bisheng.common.services.config_service import settings
 
-    return derive_key(settings.sso_sync.gateway_hmac_secret, installation_id, purpose)
+    return derive_key(settings.sso_sync.gateway_hmac_secret, purpose)
 
 
-def access_issuer(installation_id: str) -> str:
-    return f"bisheng-dsh:{installation_id}"
+def access_issuer() -> str:
+    return "bisheng-dsh"
 
 
 class GatewayKeys:
