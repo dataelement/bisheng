@@ -934,6 +934,47 @@ python scripts/move_department_files_to_personal.py --folder-name 待整理 --ap
 - 退出码 `0`：预览或处理完成（可有待解析/跳过）；`2`：入口失败；`3`：执行失败；`130`：中断。Ctrl+C 等当前单元结束后停止；重跑重新扫描已剩余内容。
 - 必须停写、串行执行并事先备份。事务只覆盖关系数据库，跨系统没有全局事务；强杀后检查 `record_merge_committed` 和权限审计，不能直接假定回滚成功。被覆盖的旧版本链无法靠重新解析或普通重跑恢复。
 
+### `diagnose_department_to_personal_impact.py`
+
+只读核对门户首页文档数口径，并归类 `move_department_files_to_personal.py` 标成「迁移完成，需重新解析」的原因。不写业务数据。对比三项：MySQL 里首页可计入的成功文件、统计 ES `mid_knowledge_space_content_stat` 的首页聚合、以及 remark 带迁后失败标记的文件。
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/diagnose_department_to_personal_impact.py
+PYTHONPATH=./ .venv/bin/python scripts/diagnose_department_to_personal_impact.py \
+  --output /tmp/diagnose-department-to-personal.json
+PYTHONPATH=./ .venv/bin/python scripts/diagnose_department_to_personal_impact.py --skip-es
+```
+
+- `conclusion.likely_causes` 用中文写判断：迁后解析失败、ES 快照落后、或 `space_level=unknown`。
+- `migration_marks.by_primary_reason` 区分模型不一致、源索引读不到、ES 无向量、读写超时、源库清理、覆盖清理、统计刷新等。
+- `--sample-limit` 控制每种原因保留的文件 ID 数量，默认 20，最大 200。
+- 统计 ES 不可用时加 `--skip-es`，仍输出 MySQL 与迁后失败归类。
+
+### `repair_department_to_personal_es_write.py`
+
+针对 `move_department_files_to_personal.py` 标成 `write_es_failed` 的文件：检查当前个人库 Milvus 是否已有向量，必要时从 Milvus 回写 ES，并把 `status` 恢复为成功。默认只读抽样，不重解析，不删 MinIO。
+
+```bash
+# 默认抽 20 个，只统计 Milvus / ES chunk 数
+PYTHONPATH=./ .venv/bin/python scripts/repair_department_to_personal_es_write.py
+
+# 指定诊断里的样例 ID
+PYTHONPATH=./ .venv/bin/python scripts/repair_department_to_personal_es_write.py \
+  --file-id 110858 --file-id 110883 --probe-error
+
+# 抽样 20 个确认可修后再写入
+PYTHONPATH=./ .venv/bin/python scripts/repair_department_to_personal_es_write.py --sample 20 --apply
+
+# 处理全部 write_es_failed
+PYTHONPATH=./ .venv/bin/python scripts/repair_department_to_personal_es_write.py --all --apply
+```
+
+- `milvus_ready_es_missing` / `milvus_ready_es_partial` / `both_present`：Milvus 已有向量，`--apply` 会回写 ES 并恢复 `status=2`，然后入队首页统计刷新。
+- `milvus_missing`：个人库没有向量，不能靠这个脚本恢复，应走 `reparse_knowledge_space_files.py`。
+- `--probe-error` 会用清洗后的一条文档试写 ES，保留 mapper/BulkIndexError 原文，便于确认是向量字段污染还是 mapping 冲突。
+- 个人库若还没有 ES 索引（新建后从未成功解析过），`--apply` 会按正常解析路径创建索引再写入，而不是报 `es index missing` 后跳过。
+- 回写前会按 `document_id` 删除该文件在目标 ES 中的旧 chunk，避免半写入残留。
+
 ### `move_knowledge_space_files.py`
 
 扫描一个或多个来源知识空间的 `SUCCESS` 真实文件，可按来源文件夹、门户一级分类 code、
