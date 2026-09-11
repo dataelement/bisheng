@@ -17,8 +17,8 @@ class DshSettings(BaseModel):
     client_id: Literal["dsh-desktop"] = Field(
         default="dsh-desktop", description="Desktop OAuth client identifier fixed by the DSH contract."
     )
-    contract_version: Literal["0.4.0"] = Field(
-        default="0.4.0", description="DSH wire contract version shared with the gateway and Desktop."
+    contract_version: Literal["0.5.0"] = Field(
+        default="0.5.0", description="DSH wire contract version shared with the gateway and Desktop."
     )
     installation_id: str | None = Field(
         default=None,

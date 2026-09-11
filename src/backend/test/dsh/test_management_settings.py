@@ -51,7 +51,7 @@ async def settings_app(tmp_path, monkeypatch):
         await engine.dispose()
 
 
-async def test_default_off_enable_disable_and_reopen_preserves_other_configuration(settings_app):
+async def test_default_off_enable_disable_and_reopen_preserves_other_configuration(settings_app, dsh_contracts):
     app, deployment, sessions = settings_app
     async with sessions() as session:
         session.add(Config(key="other_config", value="keep"))
@@ -74,7 +74,13 @@ async def test_default_off_enable_disable_and_reopen_preserves_other_configurati
             "launch_url": "dsh-desktop-test://login",
         }
         assert (await client.put(url, json=value)).json()["data"] == value
-        assert (await client.get("/api/v1/dsh/config")).json()["enabled"] is True
+        expected_config = next(
+            endpoint["response"]["body"]
+            for endpoint in dsh_contracts["client-0.5.0"]["endpoints"]
+            if endpoint["path"] == "/api/v1/dsh/config"
+        )
+        # Verify the actual endpoint with real deployment defaults, not a mocked version.
+        assert (await client.get("/api/v1/dsh/config")).json() == expected_config
         request = Request({"type": "http", "app": app})
         runtime = await dependencies.get_runtime(request, deployment)
         value["enabled"] = False
