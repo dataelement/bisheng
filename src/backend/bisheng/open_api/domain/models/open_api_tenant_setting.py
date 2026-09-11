@@ -10,7 +10,7 @@ from sqlmodel import Field
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 
-DEFAULT_PAT_TTL_DAYS = 30
+DEFAULT_PAT_TTL_DAYS = 365
 
 
 class OpenApiTenantSetting(SQLModelSerializable, table=True):
@@ -29,4 +29,3 @@ class OpenApiTenantSetting(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT),
     )
-

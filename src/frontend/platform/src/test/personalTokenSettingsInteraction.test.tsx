@@ -40,7 +40,7 @@ const initialSetting: PersonalTokenSetting = {
   deployment_enabled: true,
   pat_enabled: false,
   effective_enabled: false,
-  pat_ttl_days: 30,
+  pat_ttl_days: 365,
 }
 
 function deferred<T>() {
@@ -75,9 +75,11 @@ describe("personal-token tenant settings interaction", () => {
     const saveButton = await screen.findByRole("button", { name: "save" })
     const tenantSwitch = screen.getByRole("switch")
     const ttlInput = screen.getByRole("spinbutton")
+    expect(ttlInput).toHaveValue(365)
     await user.click(saveButton)
 
     expect(updatePersonalTokenSettingApi).toHaveBeenCalledTimes(1)
+    expect(updatePersonalTokenSettingApi).toHaveBeenCalledWith({ pat_enabled: false, pat_ttl_days: 365 })
     expect(saveButton).toBeDisabled()
     expect(saveButton).toHaveAttribute("aria-busy", "true")
     expect(tenantSwitch).toBeDisabled()

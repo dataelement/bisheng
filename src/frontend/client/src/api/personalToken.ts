@@ -41,6 +41,17 @@ type RequestErrorOptions = NonNullable<Parameters<typeof request.get>[1]>;
 
 const rejectBusinessErrors: RequestErrorOptions = { skip403Redirect: true };
 
+export function getPersonalTokenGuideUrls(origin: string) {
+  return {
+    skillPackUrl: new URL(
+      "/api/v1/open-api/skill-packs/bisheng-knowledge-search",
+      origin,
+    ).href,
+    tokenPageUrl: new URL("/workspace/settings/account?api-token=1", origin).href,
+    retrieveUrl: new URL("/api/v2/filelib/retrieve", origin).href,
+  };
+}
+
 export async function getPersonalTokenStatusApi(): Promise<PersonalTokenStatus> {
   return dataOf(
     await request.get<ApiEnvelope<PersonalTokenStatus>>(

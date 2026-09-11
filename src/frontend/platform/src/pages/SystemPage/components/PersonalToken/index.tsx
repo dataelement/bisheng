@@ -32,7 +32,7 @@ export function PersonalToken() {
   const [setting, setSetting] = useState<PersonalTokenSetting | null>(null)
   const [items, setItems] = useState<PersonalTokenLedgerItem[]>([])
   const [enabled, setEnabled] = useState(false)
-  const [ttlDays, setTtlDays] = useState(30)
+  const [ttlDays, setTtlDays] = useState(365)
   const [saving, setSaving] = useState(false)
 
   const load = async () => {

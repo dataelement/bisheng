@@ -2351,5 +2351,36 @@
   "com_personal_token_loading": "読み込み中...",
   "com_voice": {
     "playback_unavailable": "音声を再生できません。管理者にお問い合わせください。"
+  },
+  "com_personal_token": {
+    "action_failed": "操作に失敗しました。もう一度お試しください。",
+    "copy_all": "プロンプトをコピー",
+    "copy_example": "呼び出し例をコピー",
+    "copy_failed": "コピーに失敗しました。もう一度お試しください。",
+    "copy_key": "API Key をコピー",
+    "created_label": "作成日",
+    "delete": "API Key を削除",
+    "delete_confirmation": "削除すると、この API Key を使用するエージェントは BiSheng にアクセスできなくなります。",
+    "developer_guide": "BiSheng スキルの開発者ガイドを表示",
+    "empty_description": "API Key がまだありません。まず取得してください。\nAPI Key を使うと、エージェントがアクセス権のある BiSheng のナレッジを検索できます。",
+    "example_hint": "API Key を環境変数 BISHENG_API_KEY に設定し、knowledge_base_ids の 1 をアクセス権のあるナレッジベースまたはスペースの ID に置き換えてください。",
+    "example_query": "年次有給休暇の申請方法は？",
+    "expires_label": "有効期限",
+    "get_key": "API Key を取得",
+    "guide_title": "インストールガイド",
+    "install_prompt": "BiSheng ナレッジ検索スキルをインストールしてください。\nスキルのダウンロード先：{{skillPackUrl}}\nAPI Key の取得ページ：{{tokenPageUrl}}",
+    "install_step": "ステップ 1：プロンプトをエージェントに送り、BiSheng スキルをインストール",
+    "key_label": "API Key",
+    "key_step": "ステップ 2：API Key を取得し、エージェントに送って設定を完了",
+    "load_failed": "API Key 情報を読み込めませんでした。もう一度お試しください。",
+    "masked_hint": "API Key の全文は取得時にのみ表示されます。保存していない場合は再取得してください。",
+    "regenerate": "再取得",
+    "regenerate_confirmation": "以前の API Key は無効になります。使用中のエージェントに新しい API Key を設定してください。",
+    "retry": "再読み込み",
+    "status_active": "有効",
+    "status_disabled": "停止中",
+    "status_expired": "期限切れ",
+    "status_label": "状態",
+    "status_revoked": "失効済み"
   }
 }
