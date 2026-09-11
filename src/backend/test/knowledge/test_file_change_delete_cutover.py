@@ -9,7 +9,7 @@ from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.core.context.tenant import set_current_tenant_id
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
@@ -34,6 +34,7 @@ from bisheng.knowledge.domain.repositories.knowledge_space_file_change_footprint
 from bisheng.knowledge.domain.repositories.knowledge_space_file_change_request_repository import (
     KnowledgeSpaceFileChangeRequestRepository,
 )
+from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgeFilePermissionRecord
 from bisheng.knowledge.domain.services.knowledge_space_deletion_guard import KnowledgeSpaceDeletionGuard
 from bisheng.knowledge.domain.services.knowledge_space_file_change_execution_coordinator import (
     KnowledgeSpaceFileChangeExecutionCoordinator,
@@ -44,6 +45,7 @@ from bisheng.knowledge.domain.services.knowledge_space_mutation_executor import 
     MutationStepContext,
     VerifiedMutationStepResult,
 )
+from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
 
 @pytest.fixture
@@ -441,9 +443,39 @@ async def test_delete_fga_purge_propagates_tuple_cleanup_failure(monkeypatch: py
     the authoritative read now, so the step must surface its failure."""
     strict_delete = AsyncMock(side_effect=RuntimeError("tuple residue"))
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._cleanup_resource_tuples",
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._project_resource_deletes",
         strict_delete,
     )
+    permission_snapshot = {
+        "tenant_id": 42,
+        "resource_type": "knowledge_file",
+        "resource_id": "101",
+        "status": "SUCCESS",
+        "owner_user_id": 7,
+        "permission_version": 3,
+        "context_version": "context-v3",
+        "parent_type": "knowledge_space",
+        "parent_id": "10",
+        "mode": "INHERIT",
+        "ancestor_ids": [],
+    }
+    context = _delete_purge_context(
+        DeleteExecutionStepCode.FGA,
+        manifest={
+            "file_ids": [101],
+            "fga_resources": [{"resource_type": "knowledge_file", "resource_id": "101"}],
+            "fga_permission_records": [permission_snapshot],
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="tuple residue"):
+        await KnowledgeSpaceMutationExecutor._apply_delete_purge_step(context)
+    strict_delete.assert_awaited_once_with(
+        [KnowledgeFilePermissionRecord(**{**permission_snapshot, "ancestor_ids": ()})]
+    )
+
+
+async def test_delete_fga_purge_requires_permission_snapshot():
     context = _delete_purge_context(
         DeleteExecutionStepCode.FGA,
         manifest={
@@ -452,9 +484,68 @@ async def test_delete_fga_purge_propagates_tuple_cleanup_failure(monkeypatch: py
         },
     )
 
-    with pytest.raises(RuntimeError, match="tuple residue"):
+    with pytest.raises(RuntimeError, match="no FGA permission snapshot"):
         await KnowledgeSpaceMutationExecutor._apply_delete_purge_step(context)
-    strict_delete.assert_awaited_once_with([("knowledge_file", 101)])
+
+
+async def test_delete_validation_snapshots_fga_permission_records(monkeypatch: pytest.MonkeyPatch):
+    record = KnowledgeFilePermissionRecord(
+        tenant_id=42,
+        resource_type="knowledge_file",
+        resource_id="101",
+        status="SUCCESS",
+        owner_user_id=7,
+        permission_version=3,
+        context_version="context-v3",
+        parent_type="folder",
+        parent_id="9",
+        mode="INHERIT",
+        ancestor_ids=("9",),
+    )
+    authorize = AsyncMock()
+    load_records = AsyncMock(return_value=[record])
+    monkeypatch.setattr(KnowledgeSpaceService, "authorize_file_change", authorize)
+    monkeypatch.setattr(KnowledgeSpaceService, "_load_resource_permission_records", load_records)
+    repository = SimpleNamespace(
+        lock_spaces=AsyncMock(return_value=[SimpleNamespace(id=10, state=KnowledgeState.PUBLISHED.value)]),
+        get_current_user_role_ids=AsyncMock(return_value=[]),
+        validate_delete_manifest_current=AsyncMock(),
+    )
+    request = SimpleNamespace(
+        tenant_id=42,
+        space_id=10,
+        target_space_id=None,
+        action=KnowledgeSpaceFileChangeAction.DELETE,
+        applicant_user_id=7,
+    )
+    manifest = {
+        "fga_resources": [{"resource_type": "knowledge_file", "resource_id": 101}],
+    }
+
+    await KnowledgeSpaceMutationExecutor._validate_non_upload_execution(
+        session=SimpleNamespace(),
+        mutation_repository=repository,
+        request=request,
+        manifest=manifest,
+        payload_snapshot={"applicant_user_name": "owner"},
+    )
+
+    load_records.assert_awaited_once_with([("knowledge_file", 101)])
+    assert manifest["fga_permission_records"] == [
+        {
+            "tenant_id": 42,
+            "resource_type": "knowledge_file",
+            "resource_id": "101",
+            "status": "SUCCESS",
+            "owner_user_id": 7,
+            "permission_version": 3,
+            "context_version": "context-v3",
+            "parent_type": "folder",
+            "parent_id": "9",
+            "mode": "INHERIT",
+            "ancestor_ids": ("9",),
+        }
+    ]
 
 
 async def test_delete_minio_purge_fails_when_object_exists_after_remove(monkeypatch: pytest.MonkeyPatch):
