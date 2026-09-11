@@ -3,9 +3,6 @@ from fastapi.routing import APIRoute, APIWebSocketRoute
 from bisheng.main import app
 
 EXPECTED_HTTP = {
-    ("POST", "/api/v3/workflow/invoke"),
-    ("POST", "/api/v3/workflow/stop"),
-    ("POST", "/api/v3/assistant/chat/completions"),
     ("GET", "/api/v3/assistant/info/{assistant_id}"),
     ("GET", "/api/v3/flows/{flow_id}"),
     ("GET", "/api/v3/chat/history"),
@@ -34,3 +31,12 @@ def test_public_v3_route_allowlist_is_exact() -> None:
     assert http_routes == EXPECTED_HTTP
     assert websocket_routes == EXPECTED_WEBSOCKETS
     assert ("GET", "/api/v3/assistant/list") not in http_routes
+
+
+def test_rpc_execution_remains_exclusive_to_authenticated_v2() -> None:
+    http_routes = {
+        (method, route.path) for route in app.routes if isinstance(route, APIRoute) for method in route.methods
+    }
+    for path in ("assistant/chat/completions", "workflow/invoke", "workflow/stop"):
+        assert ("POST", f"/api/v2/{path}") in http_routes
+        assert ("POST", f"/api/v3/{path}") not in http_routes

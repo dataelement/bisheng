@@ -286,15 +286,12 @@ class TestE2EF053OpenApiAuthIdentity:
         self,
         client: httpx.AsyncClient,
     ) -> None:
-        """AC-F053-07: live schema exposes exactly ten public-v3 HTTP routes."""
+        """AC-F053-07: live schema exposes exactly seven public-v3 HTTP routes."""
 
         schema_response = await client.get(f"{API_ORIGIN}/openapi.json")
         assert schema_response.status_code == 200
         paths = schema_response.json()["paths"]
         assert {path for path in paths if path.startswith("/api/v3/")} == {
-            "/api/v3/workflow/invoke",
-            "/api/v3/workflow/stop",
-            "/api/v3/assistant/chat/completions",
             "/api/v3/assistant/info/{assistant_id}",
             "/api/v3/flows/{flow_id}",
             "/api/v3/chat/history",
