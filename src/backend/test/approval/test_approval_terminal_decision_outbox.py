@@ -642,5 +642,6 @@ async def test_terminal_decision_dispatches_the_delivery_worker(terminal_decisio
             operator_tenant_id=TENANT_ID,
         )
 
-    assert len(await _events(terminal_decision_db, instance_id=instance.id)) == 1
-    dispatch.assert_called_once_with(TENANT_ID)
+    events = await _events(terminal_decision_db, instance_id=instance.id)
+    assert len(events) == 1
+    dispatch.assert_called_once_with(TENANT_ID, int(events[0].id))

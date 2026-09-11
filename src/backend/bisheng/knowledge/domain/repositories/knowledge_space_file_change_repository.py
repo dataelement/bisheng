@@ -67,7 +67,7 @@ class KnowledgeSpaceFileChangeRepository:
         tenant_id: int,
         for_update: bool = False,
     ) -> KnowledgeSpaceFileChangePolicy:
-        """Insert the tenant lock row once and recover concurrent inserts safely."""
+        """Insert the tenant policy configuration once and recover concurrent inserts safely."""
         tenant_id = int(tenant_id)
         existing = await self.get_policy(tenant_id=tenant_id)
         if existing is not None:
@@ -85,8 +85,10 @@ class KnowledgeSpaceFileChangeRepository:
                 await self.session.flush()
         except IntegrityError:
             # Another transaction inserted the unique tenant row. The savepoint
-            # keeps the caller's UoW usable; lock the winner before quota work.
-            winner = await self.get_policy(tenant_id=tenant_id, for_update=True)
+            # keeps the caller's UoW usable; only configuration writers lock the
+            # winner. Runtime upload and cleanup paths do not use this row as a
+            # tenant-wide mutex.
+            winner = await self.get_policy(tenant_id=tenant_id, for_update=for_update)
             if winner is None:
                 raise RuntimeError(f"concurrent file change policy insert was not visible for tenant {tenant_id}")
             return winner

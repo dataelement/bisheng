@@ -138,6 +138,50 @@ class ApprovalDecisionOutboxRepository:
             )
         return None
 
+    async def claim_by_id(
+        self,
+        *,
+        tenant_id: int,
+        outbox_id: int,
+        claim_token: str,
+        now: datetime,
+        claim_deadline: datetime,
+    ) -> ApprovalDecisionOutbox | None:
+        """Atomically claim one specific recoverable event without committing."""
+
+        resolved_tenant_id = self._tenant_id(tenant_id)
+        resolved_claim_token = self._claim_token(claim_token)
+        resolved_outbox_id = int(outbox_id)
+        if resolved_outbox_id <= 0:
+            raise ValueError("outbox_id must be a positive integer")
+        if claim_deadline <= now:
+            raise ValueError("claim_deadline must be later than now")
+
+        claim_statement = (
+            update(ApprovalDecisionOutbox)
+            .where(
+                ApprovalDecisionOutbox.id == resolved_outbox_id,
+                ApprovalDecisionOutbox.tenant_id == resolved_tenant_id,
+                self._recoverable_condition(now=now),
+            )
+            .values(
+                status=ApprovalDecisionOutboxStatus.PROCESSING,
+                claim_token=resolved_claim_token,
+                claimed_at=now,
+                claim_deadline=claim_deadline,
+                next_retry_at=None,
+            )
+        )
+        result = await self.session.exec(claim_statement)
+        if not result.rowcount:
+            return None
+        await self.session.flush()
+        return await self._get_for_owner(
+            tenant_id=resolved_tenant_id,
+            outbox_id=resolved_outbox_id,
+            claim_token=resolved_claim_token,
+        )
+
     async def mark_delivered(
         self,
         *,

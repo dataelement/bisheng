@@ -478,7 +478,7 @@ class ApprovalExceptionService:
                         detail={"reason": reason, "exception_id": exception_id},
                     )
                 )
-                await self.instance_repository.create_terminal_decision_event_in_session(
+                decision_event = await self.instance_repository.create_terminal_decision_event_in_session(
                     session,
                     instance=instance,
                     decision="cancelled",
@@ -494,13 +494,18 @@ class ApprovalExceptionService:
                 payload_snapshot = dict(instance.payload_snapshot or {})
                 exception_type = exception.exception_type
                 is_decision_delivery = self.instance_repository.is_decision_delivery_instance(instance)
+                decision_event_id = (
+                    int(decision_event.id) if decision_event is not None and decision_event.id is not None else None
+                )
 
         if is_decision_delivery:
             # Cancelling an exception is a terminal decision too — the business domain only
             # learns about it through the delivery worker.
             from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
 
-            ApprovalCenterService._dispatch_decision_delivery(tenant_id)
+            if decision_event_id is None:
+                raise RuntimeError("committed approval decision event identity is missing")
+            ApprovalCenterService._dispatch_decision_delivery(tenant_id, decision_event_id)
 
         await self._write_audit_log(
             action="approval.exception.cancel",

@@ -33,12 +33,15 @@ _DELIVERY_RETRY_OPTIONS = {
     name="bisheng.worker.approval.decision_delivery_tasks.deliver_approval_decision",
     **_DELIVERY_RETRY_OPTIONS,
 )
-def deliver_approval_decision(self) -> dict:
+def deliver_approval_decision(self, event_id: int | None = None) -> dict:
     """Attempt one tenant-scoped decision event; the outbox remains authoritative."""
 
     return _run_in_task_tenant(
         request=self.request,
-        coroutine_factory=lambda tenant_id: _deliver_one_async(tenant_id=tenant_id),
+        coroutine_factory=lambda tenant_id: _deliver_one_async(
+            tenant_id=tenant_id,
+            event_id=int(event_id) if event_id is not None else None,
+        ),
     )
 
 
@@ -101,8 +104,11 @@ def _utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-async def _deliver_one_async(*, tenant_id: int) -> dict:
-    event = await _build_delivery_service().deliver_next(tenant_id=int(tenant_id))
+async def _deliver_one_async(*, tenant_id: int, event_id: int | None = None) -> dict:
+    event = await _build_delivery_service().deliver_next(
+        tenant_id=int(tenant_id),
+        event_id=int(event_id) if event_id is not None else None,
+    )
     if event is None:
         return {"claimed": False, "event_id": None}
     return {"claimed": True, "event_id": int(event.event_id)}
@@ -131,7 +137,10 @@ async def _coordinate_recoverable_async(
     dispatch_failed = 0
     for row in page:
         try:
-            dispatched_task = deliver_approval_decision.apply_async(headers={"tenant_id": tenant_id})
+            dispatched_task = deliver_approval_decision.apply_async(
+                args=[int(row.id)],
+                headers={"tenant_id": tenant_id},
+            )
         except Exception:
             dispatch_failed += 1
             logger.bind(

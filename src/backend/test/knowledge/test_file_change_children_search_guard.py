@@ -306,10 +306,12 @@ async def test_formal_list_enriches_root_and_inherited_children_with_one_batch_l
     match = SimpleNamespace(
         request=SimpleNamespace(
             id=71,
-            resource_id=60,
-            applicant_user_id=8,
-            action="delete",
-        ),
+                resource_id=60,
+                applicant_user_id=8,
+                action="delete",
+                approval_instance_id=81,
+                execution_state="not_started",
+            ),
         instance=SimpleNamespace(id=81, status="pending"),
         path_root="/60/",
         lock_scope="subtree",
@@ -334,9 +336,27 @@ async def test_formal_list_enriches_root_and_inherited_children_with_one_batch_l
     loader.assert_awaited_once()
     approver_check.assert_awaited_once_with(tenant_id=11, space_id=1, user_id=7)
     assert enriched[0]["file_change_approval"]["inherited"] is False
+    assert enriched[0]["file_change_approval"]["status"] == "pending"
     assert enriched[1]["file_change_approval"]["inherited"] is True
     assert enriched[1]["file_change_approval"]["root_resource_id"] == 60
     assert "file_change_approval" not in enriched[2]
+
+
+@pytest.mark.parametrize(
+    ("execution_state", "public_status"),
+    [
+        ("not_started", "pending"),
+        ("queued", "executing"),
+        ("applying", "executing"),
+        ("compensating", "executing"),
+        ("failed", "execute_failed"),
+    ],
+)
+def test_file_change_enrichment_uses_public_approval_status_vocabulary(
+    execution_state: str,
+    public_status: str,
+):
+    assert KnowledgeSpaceService._file_change_approval_view_status(execution_state) == public_status
 
 
 def test_guard_uses_verified_global_super_admin_scope_tenant():

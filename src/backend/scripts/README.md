@@ -2,6 +2,42 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Approval Scripts
+
+### `recover_approval_decision_events.py`
+
+Audit and re-dispatch terminal approval decision events that remain recoverable
+in `approval_decision_outbox`. The script supports the F045 resource-user invite
+and F046 knowledge-space file-change scenarios. It validates the terminal
+approval instance and reuses each subscriber's binding/idempotency checks on an
+in-memory copy. It never updates approval or business tables directly.
+
+Run a tenant-scoped dry-run first from `src/backend/` with the live `config`:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python scripts/recover_approval_decision_events.py \
+  --tenant-id 1 \
+  --scenario knowledge_space_file_change_request
+```
+
+After reviewing every event record, publish exact `tenant_id + event_id`
+deliveries to the existing default Celery queue:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/recover_approval_decision_events.py \
+  --tenant-id 1 \
+  --event-id 123 124 \
+  --apply
+```
+
+Only due `pending` rows and expired `processing` leases are eligible. Active
+leases, future retries, delivered/failed rows, non-terminal instances, binding
+mismatches, and invalid business states are reported and skipped. Exit code `3`
+means at least one selected row was skipped; exit code `4` means publishing
+failed. Re-running is safe because the normal worker atomically claims the exact
+event and the business subscribers are idempotent.
+
 ## Export Scripts
 
 ### `export_daily_chat_messages.py`

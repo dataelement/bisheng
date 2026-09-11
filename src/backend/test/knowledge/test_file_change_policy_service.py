@@ -573,6 +573,24 @@ async def test_concurrent_ensure_rolls_back_savepoint_then_locks_winning_policy_
     ]
 
 
+async def test_concurrent_plain_ensure_does_not_lock_winning_policy_row():
+    winner = KnowledgeSpaceFileChangePolicy(id=9, tenant_id=17)
+    session = _ConcurrentInsertSession(winner)
+    repository = KnowledgeSpaceFileChangeRepository(session)  # type: ignore[arg-type]
+
+    result = await repository.ensure_policy_row(tenant_id=17)
+
+    assert result is winner
+    assert session.events == [
+        "select.plain",
+        "savepoint.begin",
+        "insert",
+        "flush",
+        "savepoint.rollback",
+        "select.plain",
+    ]
+
+
 async def test_repository_bulk_setting_query_always_contains_explicit_tenant_predicate():
     session = SimpleNamespace(exec=None)
     repository = KnowledgeSpaceFileChangeRepository(session)  # type: ignore[arg-type]

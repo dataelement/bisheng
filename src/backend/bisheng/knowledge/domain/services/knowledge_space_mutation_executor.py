@@ -23,9 +23,6 @@ from bisheng.knowledge.domain.models.knowledge_space_file_change_request import 
 from bisheng.knowledge.domain.repositories.knowledge_space_file_change_execution_step_repository import (
     KnowledgeSpaceFileChangeExecutionStepRepository,
 )
-from bisheng.knowledge.domain.repositories.knowledge_space_file_change_repository import (
-    KnowledgeSpaceFileChangeRepository,
-)
 from bisheng.knowledge.domain.repositories.knowledge_space_file_change_request_repository import (
     KnowledgeSpaceFileChangeRequestRepository,
 )
@@ -384,14 +381,9 @@ class KnowledgeSpaceMutationExecutor:
                     raise ValueError("F046 execution token must contain 1 to 64 characters")
                 mutation_repository = self.mutation_repository_factory(session)
                 if request.executed_resource_id is None:
-                    # Keep the quota reservation hand-off and formal graph
-                    # creation serialized, but do not hold shared SQL locks
-                    # during OpenFGA or quota-service calls above. Policy-first
-                    # matches the upload-stage lifecycle lock order.
-                    await KnowledgeSpaceFileChangeRepository(session).ensure_policy_row(
-                        tenant_id=tenant_id,
-                        for_update=True,
-                    )
+                    # Capacity is deliberately best-effort. Keep only the
+                    # space/stage locks required for a consistent formal graph;
+                    # never serialize unrelated spaces through a tenant row.
                     space = await mutation_repository.lock_space(
                         tenant_id=tenant_id,
                         space_id=int(request.space_id),
