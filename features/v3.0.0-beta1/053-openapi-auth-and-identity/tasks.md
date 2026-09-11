@@ -387,12 +387,12 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
   **完成条件**: v3 无 JWT/key 可访问已发布资源；v2 同能力仍要求 key
   **依赖**: F01
 
-- [ ] **F03：注册 v3 十个 HTTP allowlist 路由**
+- [ ] **F03：注册 v3 七个 HTTP allowlist 路由**
   **设计依据**: design §5.F1
   **文件**: `public_endpoints/api/endpoints/{workflow,assistant,flow,chat,llm}.py`、router；测试 `test/public_endpoints/test_http_allowlist.py`
   **执行顺序**:
-  1. 先对 design §5.F1 十个 HTTP method+path 写精确集合测试。
-  2. 注册 workflow invoke/stop、assistant chat completions/info、flow detail、chat history/gen_title、语音配置/ASR/TTS。
+  1. 先对 design §5.F1 七个 HTTP method+path 写精确集合测试。
+  2. 注册 assistant info、flow detail、chat history/gen_title、语音配置/ASR/TTS；不注册 assistant chat completions、workflow invoke/stop。
   3. 不注册 assistant/list、知识库、日常会话或管理接口；额外 `/api/v3/**` 必须 404。
   4. 所有端点调用 F01 的共享 service，并经过 F02 guest policy。
   **完成条件**: HTTP 路由集合与 design §5.F1 完全一致
@@ -425,19 +425,19 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
   **文件**: `src/frontend/client/src/pages/standaloneChat/**`、`pages/appChat/useChatHelpers.ts`、`api/chat/api-endpoints.ts`、三语 locale；测试现有 `StandaloneChatPage.test.ts` 和 API URL 单元测试
   **执行顺序**:
   1. 开始前完整阅读 `src/frontend/packages/ui/docs/index.md` 和本任务涉及组件规范；不改视觉样式。
-  2. 先写 guest 调用图测试，覆盖详情、history、gen_title、invoke/stop 和两个 WS。
+  2. 先写 guest 调用图测试，覆盖详情、history、gen_title、语音配置/ASR/TTS 和两个 WS；执行和停止经 WS 完成。
   3. `apiVersion` 类型扩为 `v1|v2|v3`，guest 固定使用 v3；普通登录/分享链路保持原样。
   4. 删除 guest 分支中的 v2 URL，不增加 share_token 参数或身份头。
   5. 运行 client lint、typecheck、相关测试和 `lint:prune`。
-  **完成条件**: 浏览器 Network 中 guest 工作流/助手请求全部为 v3，且无 `/api/v2` 遗留
+  **完成条件**: 浏览器 Network 中 guest 工作流/助手原 v2 请求均迁至 v3，原 v1 请求保持不动，且无 guest `/api/v2` 遗留
   **依赖**: F05
 
-- [ ] **F07：platform 发布示例和商业网关切换**
+- [ ] **F07：platform API 文档恢复和商业网关切换**
   **设计依据**: design §5.B4、§5.F4、§8 坑 13
   **文件**: `src/frontend/platform/src/components/bs-comp/apiComponent/{ApiAccess,ApiAccessFlow}.tsx`、三语 locale；商业网关对应 route/filter 配置
   **执行顺序**:
   1. 开始前阅读 UI 规范；先写/更新 URL 生成测试。
-  2. “无需密钥发布”示例改为 v3；“密钥开放 API”示例继续使用 v2 并携带 Bearer Key。
+  2. “对外发布 → API访问”恢复 F053 修改前的完整 v2 文档；其对应接口保留密钥鉴权，免登录页面实际调用的接口仍使用 v3。
   3. 不改 `ChatLink` 的分享链接参数和现有 share_link 行为。
   4. 商业网关增加 v3 HTTP 与 WS 代理/拦截规则并验证升级顺序；不得把 v3 送入登录或 API Key 网关。
   5. 若商业网关源码不在本仓，必须在 PR 阻断项中给出对应仓库、负责人、完整路径清单和验证结果；未完成不能宣告 F07 完成。
@@ -448,7 +448,7 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
   **设计依据**: design §4 M3、§9、§10
   **文件**: `test/public_endpoints/test_public_v3_e2e.py`、client/platform 测试
   **执行顺序**:
-  1. 精确断言 v3 只有十个 HTTP + 两个 WS allowlist；`/api/v3/assistant/list` 真 404。
+  1. 精确断言 v3 只有七个 HTTP + 两个 WS allowlist；`/api/v3/assistant/list` 真 404。
   2. 验证开关、发布状态、租户恢复、会话越权和身份头拒绝。
   3. 验证 v2 同路径仍为密钥版，v1/分享链路回归不变。
   4. 验证 client/platform/gateway 全部切换后再允许移除旧 v2 匿名语义。
@@ -714,10 +714,10 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
   **设计依据**: design §5.B4、§5.C5、§5.F4
   **文件**: `ApiAccess.tsx`、`ApiAccessFlow.tsx`、`controllers/API/log.ts`、locale；`ChatLink.tsx` 仅回归不修改协议
   **执行顺序**:
-  1. 合并 F07 的 v3 发布示例，并验证 v2 密钥示例仍带 Authorization。
+  1. 合并 F07 恢复的完整 v2 API 访问文档，并验证密钥使用文档仍说明 Authorization。
   2. 管理操作 action 可按现有审计页规则展示；不要把高频 `open_api.call` 加入系统操作白名单。
   3. 回归现有分享链接生成、打开和撤销流程，确认无新参数、字段或 share-token 通道。
-  **手动验证**: 无密钥发布示例全为 v3；密钥示例全为 v2；分享链接行为与改造前一致
+  **手动验证**: API 访问文档为完整 v2；免登录页面使用 v3；密钥示例为 v2；分享链接行为与改造前一致
   **完成条件**: 发布示例、管理审计和既有分享链路三项回归均通过
   **依赖**: B02、B03、B04、F07、C08
 
@@ -726,7 +726,7 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
   **文件**: platform/client 相关测试与手动清单
   **执行顺序**:
   1. 从 `src/frontend/` 运行 `pnpm lint`、`pnpm typecheck` 和相关 test；修复触碰文件的旧 i18n 违规并 `lint:prune`。
-  2. 手动验证 SA 创建/密钥/委托/授权、PAT 台账/开关、v3 发布示例。
+  2. 手动验证 SA 创建/密钥/委托/授权、PAT 台账/开关、v2 API 访问文档和 v3 免登录页面。
   3. 不做视觉决策；发现需改样式时提交设计师确认。
   4. 运行前端范围扫描，确认无品牌身份头、P2、share-token 新逻辑。
   **完成条件**: 两个前端质量门禁全绿，手动清单有截图/Network 证据
@@ -891,6 +891,14 @@ A08 → B01 → B02/B03；D08 → B04；F07/C08 → B05 → B06
 - [x] 接通 guest 语音组件和应用维度配置缓存；原 v2 路由和 scope 保持不变。
 - [x] 补充后端 HTTP 契约与前端语音回归测试；真实模型 E2E 及浏览器步骤见 e2e-checklist.md。
 - [ ] 专用部署上执行真实模型和无痕浏览器验收。
+
+
+### AC-R10 范围纠正执行记录（2026-09-11）
+
+- [x] 按用户纠正恢复 highway 提交 `284ea1188` 之前的助手和工作流 v2 API 访问文档；工作流保留调用流程、事件字段、交互示例、上传示例和错误说明。
+- [x] 删除误增的三个 v3 HTTP 执行/停止路由，保留对应 v2 密钥鉴权及免登录页面的七个 HTTP、两个 WebSocket；见 design §5.F6。
+- [x] 后端 public_endpoints 与 v2 route matrix / OpenAPI contract 共 39 项通过；前端文档三语渲染、助手示例及密钥示例共 5 项通过；全前端 lint、typecheck、i18n 检查通过。
+- [ ] 部署后按 e2e-checklist.md 检查 API 访问页面和免登录聊天页面；本次未部署、未执行真实模型 E2E。
 
 ---
 

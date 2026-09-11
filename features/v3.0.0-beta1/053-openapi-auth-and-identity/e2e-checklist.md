@@ -44,7 +44,7 @@
 ## Client：v3 匿名发布面
 
 - [ ] 使用无痕窗口打开已发布工作流和知识助手 guest 页面，不携带 JWT、API Key 或分享参数。
-- [ ] Network 中详情、invoke/stop、history/gen_title 全部使用 `/api/v3/**`，两个 WebSocket 也使用 `/api/v3/**`；不得出现 guest `/api/v2/**`。
+- [ ] Network 中详情、history/gen_title、语音配置/ASR/TTS 使用 `/api/v3/**`，执行、输入和停止经两个 v3 WebSocket 完成；不请求三个已移除的 v3 HTTP 执行/停止接口；原 v1 请求保持，原 v2 请求迁至 v3。
 - [ ] 页面能够建立新会话、续聊、读取历史并生成标题；工作流等待输入字段对外为 `input`。
 - [ ] 猜测另一个资源、租户或来源的 `chat_id` 执行 history/title/stop/续聊，均得到同形 404。
 - [ ] guest 请求携带 `X-On-Behalf-Of` 或 `X-End-User` 时被拒绝；`/api/v3/assistant/list` 为真 404。
@@ -82,7 +82,7 @@
 - [ ] 已连接后撤销密钥或停用主体，5 秒内关闭连接；两个不同租户连续执行后 ContextVar 不串。
 - [ ] `audit_log` 中管理操作 action 可见；逐调用 action 固定为 `open_api.call`，metadata 有 actor/subject 双归属、HTTP 状态、业务错误码和 SSE 最终结果，且无 Authorization、明文密钥、请求体或文件内容。
 - [ ] 配对验证 v2 错误状态：权限拒绝 HTTP 403、防枚举 HTTP 404、权限依赖故障 HTTP 503；业务错误码保留。SSE 失败终态在审计中为 `failed`，不能按初始 HTTP 200 记成功。
-- [ ] v3 发布示例全部匿名且为 v3；v2 密钥示例全部带 Bearer；既有 ChatLink 创建、打开、撤销流程及参数保持不变。
+- [ ] 助手和工作流“对外发布 → API访问”展示完整 v2 文档（含工作流事件、交互、文件上传和错误示例）；文档不出现三个 v3 HTTP 执行/停止地址。对应 v2 接口仍要求 Bearer Key；既有 ChatLink 创建、打开、撤销流程及参数保持不变。
 - [ ] 商业版网关分别验证 v3 HTTP 与 WS 可达，且 v3 不被登录或 API Key 网关拦截。
 
 ## 清理
