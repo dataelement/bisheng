@@ -1,3 +1,4 @@
+import { locationContext } from "@/contexts/locationContext"
 import { userContext } from "@/contexts/userContext"
 import { useContext } from "react"
 import { useTranslation } from "react-i18next"
@@ -17,8 +18,9 @@ import Users from "./components/Users"
 import { PersonalToken } from "./components/PersonalToken"
 import { ServiceAccount } from "./components/ServiceAccount"
 
-export default function index() {
+export default function SystemPage() {
   const { user } = useContext(userContext)
+  const { appConfig } = useContext(locationContext)
 
   const { t } = useTranslation()
   const isSuperAdmin = user?.role === "admin"
@@ -44,7 +46,11 @@ export default function index() {
     || !!user?.is_child_admin
   /** Legacy flat user table is for accounts without org-tab access. */
   const showLegacyUserTab = !showOrgTab
-  const showOpenApiManagement = isSuperAdmin || isChildAdmin
+  /** F053 service accounts + personal tokens. Admin rights are necessary but not
+   *  sufficient: the console stays hidden until the deployment opts in, so a
+   *  release can ship the backend while the surface is still being built. */
+  const showOpenApiManagement =
+    (isSuperAdmin || isChildAdmin) && !!appConfig?.openApiManagementEnabled
 
   const defaultTab = showOrgTab
     ? "organization"

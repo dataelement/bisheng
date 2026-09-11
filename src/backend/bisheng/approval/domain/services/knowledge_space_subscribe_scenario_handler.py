@@ -7,8 +7,8 @@ from bisheng.common.models.space_channel_member import MembershipStatusEnum
 logger = logging.getLogger(__name__)
 
 
-async def _resolve_space_permission_roles(space_id: int) -> tuple[list[int], list[int]]:
-    """Return direct owner and manager IDs through the permission application.
+async def _resolve_space_permission_roles(space_id: int, req) -> tuple[list[int], list[int]]:
+    """Return effective direct owner and manager IDs through F048 Grants.
 
     Falls back to the SpaceChannelMember DB table when permission storage is unavailable so
     approver resolution degrades gracefully rather than blocking the flow.
@@ -16,23 +16,14 @@ async def _resolve_space_permission_roles(space_id: int) -> tuple[list[int], lis
     because approver tasks must be assigned to individual users.
     """
     try:
-        from bisheng.permission.application import PermissionObject, get_permission_relation_api
+        from bisheng.approval.domain.services.approver_resolver import (
+            resolve_resource_permission_role_users,
+        )
 
-        permissions = await get_permission_relation_api()
-        resource = PermissionObject("knowledge_space", str(space_id))
-        owner_ids = await permissions.list_subject_ids(
-            resource=resource,
-            relation="owner",
-            subject_type="user",
-        )
-        manager_ids = await permissions.list_subject_ids(
-            resource=resource,
-            relation="manager",
-            subject_type="user",
-        )
-        return (
-            [int(user_id) for user_id in owner_ids if user_id.isdigit()],
-            [int(user_id) for user_id in manager_ids if user_id.isdigit()],
+        return await resolve_resource_permission_role_users(
+            req=req,
+            resource_type="knowledge_space",
+            resource_id=space_id,
         )
     except Exception:
         logger.exception("resolve_approvers: permission query failed for space_id=%s, falling back to DB", space_id)
@@ -93,7 +84,7 @@ class KnowledgeSpaceSubscribeScenarioHandler:
         if has_space_source:
             space_id = req.payload_snapshot.get("space_id") or req.business_resource_id
             if space_id:
-                space_owner_ids, space_manager_ids = await _resolve_space_permission_roles(int(space_id))
+                space_owner_ids, space_manager_ids = await _resolve_space_permission_roles(int(space_id), req)
 
         for source in sources:
             source_type = source.get("type", "")

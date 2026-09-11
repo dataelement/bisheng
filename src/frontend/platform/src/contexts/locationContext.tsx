@@ -91,7 +91,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           enableMediaUpload: !!res.enable_media_upload,
           enableEtl4lm: res.enable_etl4lm,
           multiTenantEnabled: !!res.multi_tenant_enabled,
-          personalTokenEnabled: !!res.personal_token_enabled
+          personalTokenEnabled: !!res.personal_token_enabled,
+          openApiManagementEnabled: !!res.open_api_management_enabled
         }));
 
         // backend version

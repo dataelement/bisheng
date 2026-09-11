@@ -141,6 +141,7 @@ ApprovalCenterService.decide_task()
 ### 4.2 频道订阅审批 (`channel_subscribe_request`)
 - **入口**：`channel/domain/services/channel_service.py::subscribe_channel()`（`REVIEW` 可见性频道）
 - **Handler**：`ChannelSubscribeScenarioHandler`
+- 审批人来源从 F048 当前 Catalog 的有效 `permission_grant` / `permission_grant_assignee` roster 读取：`channel_owner` 仅取 `owner` 模型的直接用户，`channel_manager` / `channel_admin` 仅取 `manager` 模型的直接用户；权限运行时异常时才回退 `space_channel_member` 的 CREATOR / ADMIN，不能把 owner 与 manager 混成同一集合
 - 通过 / pass 路径调 `ChannelService.sync_direct_channel_user_permissions()` 写 ReBAC(OpenFGA) 关系（否则成员不出现在 ReBAC 成员列表）
 - `on_approved` 先把申请人的 **PENDING** membership 翻成 ACTIVE 再写 ReBAC（查 membership 注意频道默认只返回 ACTIVE，激活需带非 ACTIVE 状态）
 - PENDING 时调 `_send_channel_approval_notification()` 通知审批人
@@ -148,6 +149,7 @@ ApprovalCenterService.decide_task()
 ### 4.3 知识空间加入审批 (`knowledge_space_subscribe_request`)
 - **入口**：`knowledge/domain/services/knowledge_space_service.py::subscribe_space()`（`auth_type=APPROVAL`）
 - **Handler**：`KnowledgeSpaceSubscribeScenarioHandler`
+- 审批人来源从 F048 当前 Catalog 的有效 `permission_grant` / `permission_grant_assignee` roster 读取：`knowledge_space_owner` 仅取 `owner` 模型的直接用户，`knowledge_space_manager` / `space_admin` 仅取 `manager` 模型的直接用户；不要读取 F048 资源对象上不存在的 legacy `owner` / `manager` 直连 tuple。仅权限运行时异常时回退 `space_channel_member` 的 CREATOR / ADMIN
 - 通过 / ACTIVE 路径调 `sync_direct_space_user_permissions()` 写 ReBAC 关系
 - PENDING 时调 `_send_space_approval_notification()` 通知审批人
 - **不变量：先过网关、再落 membership。** `subscribe_space` 对 APPROVAL 空间必须先 `await gate.request_or_pass()`，按 gate 结果（pass→ACTIVE / pending·exception→PENDING）才通过 `_persist_space_member()` 写 `space_channel_member`。**严禁在调网关前预写 PENDING membership**——否则场景未配置/未启用时网关 `raise ApprovalScenarioDisabledError`，但 PENDING 行已落库，下次点"关注"会被 `subscribe_space` 顶部"已 PENDING 直接返回 pending"的早退分支短路，掩盖错误（首次报错、二次假成功）。无场景时每次点击都应一致报错。

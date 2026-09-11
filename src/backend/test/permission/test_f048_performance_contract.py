@@ -44,28 +44,15 @@ def test_fixed_fixture_covers_resource_visibility_and_source_matrix(
     contract: dict,
 ) -> None:
     assert contract["contract_version"] == CONTRACT_VERSION
-    assert contract_checksum(contract) == (
-        "6846b3a878c7c28c4bfc8c4c2f7a65e06edee3a16b93cc0450bd76dd340768c0"
-    )
-    assert dataset_checksum(contract) == (
-        "d083c56febda9eb055e9ae5356f800ca837a1e534628fdeda623dc4b8063ab22"
-    )
-    assert source_checksum(contract) == (
-        "9e2e7699dbe65851de0b04651ee8bdb009e2a85ac16e8c12a5b9e5092c220df0"
-    )
-    assert visible_checksum(contract) == (
-        "f185c204418fbd98d41c15b0bac7759060c2df73da8c8c4fcf381f0a02c1994e"
-    )
+    assert contract_checksum(contract) == ("0290180531d4f286b5a43540557b750a26465373d3cad0b18d6c64a1dd677ade")
+    assert dataset_checksum(contract) == ("d083c56febda9eb055e9ae5356f800ca837a1e534628fdeda623dc4b8063ab22")
+    assert source_checksum(contract) == ("9e2e7699dbe65851de0b04651ee8bdb009e2a85ac16e8c12a5b9e5092c220df0")
+    assert visible_checksum(contract) == ("f185c204418fbd98d41c15b0bac7759060c2df73da8c8c4fcf381f0a02c1994e")
     assert len(build_dataset_tuples(contract)) == 41_666
 
     scenarios = contract["dataset"]["scenarios"]
-    assert {
-        (int(item["resource_count"]), int(item["visible_count"]))
-        for item in scenarios
-    } == {
-        (resource_count, visible_count)
-        for resource_count in RESOURCE_SCALES
-        for visible_count in VISIBLE_RESULT_SIZES
+    assert {(int(item["resource_count"]), int(item["visible_count"])) for item in scenarios} == {
+        (resource_count, visible_count) for resource_count in RESOURCE_SCALES for visible_count in VISIBLE_RESULT_SIZES
     }
     assert {item["source_kind"] for item in scenarios} == SOURCE_KINDS
     assert contract["dataset"]["production_derived"] is False
@@ -150,15 +137,8 @@ class FakeBenchmarkClient:
         self.batch_sizes: list[int] = []
         self.stream_relations: list[str] = []
         self._sequence = 0
-        self._by_actor = {
-            f"user:{item['actor_id']}": item
-            for item in contract["dataset"]["scenarios"]
-        }
-        self._visible = {
-            object_key
-            for item in contract["dataset"]["scenarios"]
-            for object_key in object_keys(item)
-        }
+        self._by_actor = {f"user:{item['actor_id']}": item for item in contract["dataset"]["scenarios"]}
+        self._visible = {object_key for item in contract["dataset"]["scenarios"] for object_key in object_keys(item)}
 
     def _request_id(self) -> str:
         self._sequence += 1
@@ -224,12 +204,8 @@ async def test_workload_uses_single_slot_stream_batch_and_business_paths(
         warmup=0,
     )
     assert len([item for item in samples if item.operation == "check"]) == 8
-    assert len(
-        [item for item in samples if item.operation == "stream_list_objects"]
-    ) == 8
-    assert [
-        item.scenario for item in samples if item.operation == "batch_check"
-    ] == ["20", "50", "100"]
+    assert len([item for item in samples if item.operation == "stream_list_objects"]) == 8
+    assert [item.scenario for item in samples if item.operation == "batch_check"] == ["20", "50", "100"]
     assert {item.scenario for item in samples if item.operation == "business_path"} == {
         "joined",
         "department",
@@ -237,17 +213,9 @@ async def test_workload_uses_single_slot_stream_batch_and_business_paths(
     }
     assert set(client.stream_relations) == {"visible"}
     assert all(item.error is None for item in samples)
-    assert all(
-        item.stream_completed is True
-        for item in samples
-        if item.operation == "stream_list_objects"
-    )
+    assert all(item.stream_completed is True for item in samples if item.operation == "stream_list_objects")
 
-    paths = {
-        item.scenario: item
-        for item in samples
-        if item.operation == "business_path"
-    }
+    paths = {item.scenario: item for item in samples if item.operation == "business_path"}
     assert paths["joined"].strategy == "visible_id_first"
     assert paths["joined"].n_db == 100_000
     assert paths["joined"].visible_total == 100
@@ -278,10 +246,7 @@ async def test_complete_stream_and_metrics_are_release_gate(
     assert report["release_ready"] is True
     assert report["production_derived"] is False
     assert report["representative_distribution"] is True
-    assert all(
-        item["stream_completed"] and item["passed"]
-        for item in report["streamed_list_objects"].values()
-    )
+    assert all(item["stream_completed"] and item["passed"] for item in report["streamed_list_objects"].values())
     assert all(item["passed"] for item in report["business_paths"].values())
 
     truncated = await run_workloads(
