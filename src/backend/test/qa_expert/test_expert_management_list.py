@@ -141,6 +141,19 @@ async def test_repository_returns_distinct_filter_options(expert_engine) -> None
     }
 
 
+async def test_repository_job_family_filter_accepts_aliases(expert_engine) -> None:
+    await _seed_experts(expert_engine)
+
+    experts, total = await repository_module.ExpertRepository().list_all(
+        job_family=["expert_job_family_001", "制造技术族"],
+        skip=0,
+        limit=10,
+    )
+
+    assert total == 2
+    assert {expert.expert_name for expert in experts} == {"甲专家", "丙专家"}
+
+
 async def test_service_sorts_department_names_before_paginating(monkeypatch) -> None:
     service = ExpertService()
     service.repository = AsyncMock()

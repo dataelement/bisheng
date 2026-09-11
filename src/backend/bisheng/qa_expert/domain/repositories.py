@@ -81,10 +81,10 @@ class ExpertRepository:
         self,
         keyword: str | None = None,
         department_id: str | None = None,
-        job_family: str | None = None,
-        job_category: str | None = None,
-        position: str | None = None,
-        major: str | None = None,
+        job_family: str | list[str] | None = None,
+        job_category: str | list[str] | None = None,
+        position: str | list[str] | None = None,
+        major: str | list[str] | None = None,
         sort_by: str = "created_at",
         sort_order: str = "desc",
         skip: int = 0,
@@ -125,8 +125,12 @@ class ExpertRepository:
                 (Expert.major, major),
             )
             for column, value in exact_filters:
-                if value and value.strip():
-                    base_stmt = base_stmt.where(func.trim(column) == value.strip())
+                if isinstance(value, (list, tuple, set)):
+                    normalized = [str(item).strip() for item in value if str(item or "").strip()]
+                    if normalized:
+                        base_stmt = base_stmt.where(func.trim(column).in_(normalized))
+                elif value and str(value).strip():
+                    base_stmt = base_stmt.where(func.trim(column) == str(value).strip())
 
             if status is not None:
                 base_stmt = base_stmt.where(Expert.status == status)
