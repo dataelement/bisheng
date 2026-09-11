@@ -84,9 +84,10 @@ async def test_additions_are_canonicalized_and_sent_to_f048_mutation() -> None:
         ),
     )
 
-    result = await service.apply(actor=_actor(), target=_target(), request=request)
+    outcome = await service.apply(actor=_actor(), target=_target(), request=request)
 
-    assert result.resource_version == 2
+    assert outcome.pending == ()
+    assert outcome.mutation.resource_version == 2
     assert runtime.calls[0] == ("allocate", 2)
     mutation = runtime.calls[1][1]
     assert mutation["actor"] == _actor()

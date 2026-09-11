@@ -39,6 +39,9 @@ from bisheng.knowledge.domain.models.knowledge_space_upload_stage import (
     KnowledgeSpaceUploadStage,
     KnowledgeSpaceUploadStageState,
 )
+from bisheng.knowledge.domain.repositories.knowledge_space_file_change_repository import (
+    KnowledgeSpaceFileChangeRepository,
+)
 from bisheng.knowledge.domain.services.knowledge_space_mutation_executor import (
     KnowledgeSpaceMutationExecutor,
     MutationExecutionDispatch,
@@ -263,6 +266,129 @@ async def test_formal_file_document_version_request_link_and_steps_commit_before
     ]
 
 
+async def test_upload_revalidation_finishes_before_shared_write_locks(upload_engine, monkeypatch):
+    set_current_tenant_id(42)
+    request_id, _stage_id = await _seed_upload_bundle(upload_engine)
+    side_effects = _SideEffects(upload_engine)
+    events: list[str] = []
+
+    class ObservedRepository:
+        def __init__(self, session) -> None:
+            from bisheng.knowledge.domain.repositories.knowledge_space_mutation_repository import (
+                KnowledgeSpaceMutationRepository,
+            )
+
+            self.delegate = KnowledgeSpaceMutationRepository(session)
+
+        def __getattr__(self, name):  # pragma: no cover - defensive
+            return getattr(self.delegate, name)
+
+        async def get_space(self, **kwargs):
+            events.append("read_space")
+            return await self.delegate.get_space(**kwargs)
+
+        async def lock_space(self, **kwargs):
+            events.append("lock_space")
+            return await self.delegate.lock_space(**kwargs)
+
+        async def get_upload_stage(self, **kwargs):
+            events.append("lock_stage" if kwargs.get("for_update") else "read_stage")
+            return await self.delegate.get_upload_stage(**kwargs)
+
+    async def validate(**_kwargs) -> None:
+        events.append("validate")
+
+    ensure_policy_row = KnowledgeSpaceFileChangeRepository.ensure_policy_row
+
+    async def observed_ensure_policy_row(self, **kwargs):
+        events.append("lock_policy" if kwargs.get("for_update") else "read_policy")
+        return await ensure_policy_row(self, **kwargs)
+
+    monkeypatch.setattr(
+        KnowledgeSpaceFileChangeRepository,
+        "ensure_policy_row",
+        observed_ensure_policy_row,
+    )
+
+    result = await _executor(
+        upload_engine,
+        side_effects,
+        repository_factory=ObservedRepository,
+        execution_validator=validate,
+    ).prepare_execution(request_id=request_id)
+
+    assert isinstance(result, MutationExecutionDispatch)
+    assert events == [
+        "read_stage",
+        "read_space",
+        "validate",
+        "lock_policy",
+        "lock_space",
+        "lock_stage",
+    ]
+
+
+async def test_prepared_upload_replay_skips_shared_space_and_stage_locks(upload_engine, monkeypatch):
+    set_current_tenant_id(42)
+    request_id, _stage_id = await _seed_upload_bundle(upload_engine)
+    side_effects = _SideEffects(upload_engine)
+    events: list[str] = []
+
+    class ObservedRepository:
+        def __init__(self, session) -> None:
+            from bisheng.knowledge.domain.repositories.knowledge_space_mutation_repository import (
+                KnowledgeSpaceMutationRepository,
+            )
+
+            self.delegate = KnowledgeSpaceMutationRepository(session)
+
+        def __getattr__(self, name):  # pragma: no cover - defensive
+            return getattr(self.delegate, name)
+
+        async def get_space(self, **kwargs):
+            events.append("read_space")
+            return await self.delegate.get_space(**kwargs)
+
+        async def lock_space(self, **kwargs):
+            events.append("lock_space")
+            return await self.delegate.lock_space(**kwargs)
+
+        async def get_upload_stage(self, **kwargs):
+            events.append("lock_stage" if kwargs.get("for_update") else "read_stage")
+            return await self.delegate.get_upload_stage(**kwargs)
+
+    async def validate(**_kwargs) -> None:
+        events.append("validate")
+
+    ensure_policy_row = KnowledgeSpaceFileChangeRepository.ensure_policy_row
+
+    async def observed_ensure_policy_row(self, **kwargs):
+        events.append("lock_policy" if kwargs.get("for_update") else "read_policy")
+        return await ensure_policy_row(self, **kwargs)
+
+    monkeypatch.setattr(
+        KnowledgeSpaceFileChangeRepository,
+        "ensure_policy_row",
+        observed_ensure_policy_row,
+    )
+
+    executor = _executor(
+        upload_engine,
+        side_effects,
+        tokens=["attempt-token-1", "must-not-be-used"],
+        repository_factory=ObservedRepository,
+        execution_validator=validate,
+    )
+    first = await executor.prepare_execution(request_id=request_id)
+    assert isinstance(first, MutationExecutionDispatch)
+
+    events.clear()
+    replay = await executor.prepare_execution(request_id=request_id)
+
+    assert replay == first
+    assert events == []
+
+
 async def test_prepare_execution_repairs_incomplete_applying_upload_without_external_effects(upload_engine):
     set_current_tenant_id(42)
     request_id, _stage_id = await _seed_upload_bundle(upload_engine)
@@ -392,20 +518,32 @@ async def test_runtime_validator_rejects_permission_revoked_after_approval(uploa
     request_id, _stage_id = await _seed_upload_bundle(upload_engine)
     side_effects = _SideEffects(upload_engine)
     executor = _executor(upload_engine, side_effects, execution_validator=None)
+    authorized = {}
+
+    async def reject_authorization(request):
+        authorized.update(
+            action=request.action,
+            space_id=request.space_id,
+            source_parent_id=request.source_parent_id,
+        )
+        raise SpacePermissionDeniedError()
 
     with patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_action_strict",
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.authorize_file_change",
         new_callable=AsyncMock,
-        return_value=False,
-    ) as permission_id_check:
+        side_effect=reject_authorization,
+    ) as authorize_file_change:
         with pytest.raises(SpacePermissionDeniedError):
             await executor.execute(
                 request_id=request_id,
             )
 
-    permission_id_check.assert_awaited_once()
-    assert permission_id_check.await_args.args == ("knowledge_space", 8, "upload_file")
-    assert permission_id_check.await_args.kwargs["locked_space"] is not None
+    authorize_file_change.assert_awaited_once()
+    assert authorized == {
+        "action": "upload",
+        "space_id": 8,
+        "source_parent_id": None,
+    }
     assert await _rows(upload_engine, KnowledgeFile) == []
     assert await _rows(upload_engine, KnowledgeSpaceFileChangeExecutionStep) == []
     assert side_effects.events == []
@@ -439,19 +577,32 @@ async def test_runtime_validator_checks_locked_source_folder_permission(upload_e
     )
     side_effects = _SideEffects(upload_engine)
     executor = _executor(upload_engine, side_effects, execution_validator=None)
+    authorized = {}
+
+    async def reject_authorization(request):
+        authorized.update(
+            action=request.action,
+            space_id=request.space_id,
+            source_parent_id=request.source_parent_id,
+        )
+        raise SpacePermissionDeniedError()
 
     with patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_action_strict",
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.authorize_file_change",
         new_callable=AsyncMock,
-        return_value=False,
-    ) as permission_check:
+        side_effect=reject_authorization,
+    ) as authorize_file_change:
         with pytest.raises(SpacePermissionDeniedError):
             await executor.execute(
                 request_id=request_id,
             )
 
-    assert permission_check.await_args.args == ("folder", 33, "upload_file")
-    assert permission_check.await_args.kwargs["space_id"] == 8
+    authorize_file_change.assert_awaited_once()
+    assert authorized == {
+        "action": "upload",
+        "space_id": 8,
+        "source_parent_id": 33,
+    }
     assert await _rows(upload_engine, KnowledgeSpaceFileChangeExecutionStep) == []
 
 
@@ -482,9 +633,9 @@ async def test_runtime_validator_rejects_role_quota_tightened_below_reserved_sta
 
     with (
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.has_effective_action_strict",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.authorize_file_change",
             new_callable=AsyncMock,
-            return_value=True,
+            return_value=None,
         ),
         patch(
             "bisheng.role.domain.services.quota_service.QuotaService.get_knowledge_space_upload_limit_bytes",

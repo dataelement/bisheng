@@ -48,6 +48,7 @@
 | **OpenApiTenantSetting**（租户级 PAT 开关与默认有效期） | **F053-openapi-auth-and-identity** | PRD §4.10.7 闸门一的租户级半边；部署级半边在进程 Settings |
 | **ShareLink**（既有对象；本版增量 = `share_scope` 列 + 撤销写入 + 有效期强制生效 + share-token 会话执行主体） | **F053-openapi-auth-and-identity** | 两个免登录分享页改走 share_link 通道；只拥有本版对该对象的写行为增量，不拥有既有创建 / 读取 |
 | **MessageSession / ChatMessage**（既有对象；本版增量 = `external_user_id` 分区键列，只写不读） | **F053-openapi-auth-and-identity**（列）| 会话本体仍归既有会话模块；本 Feature 只拥有该列的写入语义（PRD §4.3.4 / §4.6.3 四） |
+| —（无新增） | F054-contextual-department-membership | 复用组织域 canonical 成员/祖先事实作为请求时权限输入，消除 OpenFGA 部门子树递归；仅演进 F048 授权模型与运行时装配，不新增组织对象、永久成员闭包或业务接口 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service

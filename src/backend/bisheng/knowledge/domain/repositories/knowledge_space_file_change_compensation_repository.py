@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import and_, exists, or_
+from sqlalchemy.orm import aliased
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -27,7 +28,9 @@ from bisheng.knowledge.domain.models.knowledge_space_upload_stage import (
 @dataclass(frozen=True, slots=True)
 class ExecutionWatchdogCandidate:
     request_id: int
-    execution_token: str
+    # A queued request owns no token yet: `begin_execution` mints it.
+    execution_token: str | None
+    execution_state: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,19 +96,31 @@ class KnowledgeSpaceFileChangeCompensationRepository:
             select(
                 KnowledgeSpaceFileChangeRequest.id,
                 KnowledgeSpaceFileChangeRequest.execution_token,
+                KnowledgeSpaceFileChangeRequest.execution_state,
             )
             .where(
                 KnowledgeSpaceFileChangeRequest.tenant_id == tenant_id,
                 KnowledgeSpaceFileChangeRequest.id > int(after_request_id),
-                KnowledgeSpaceFileChangeRequest.execution_token.is_not(None),
-                KnowledgeSpaceFileChangeRequest.execution_token != "",
-                KnowledgeSpaceFileChangeRequest.execution_state.in_(
-                    (
-                        KnowledgeSpaceFileChangeExecutionState.APPLYING,
-                        KnowledgeSpaceFileChangeExecutionState.COMPENSATING,
-                    )
-                ),
                 KnowledgeSpaceFileChangeRequest.update_time <= heartbeat_before,
+                or_(
+                    and_(
+                        KnowledgeSpaceFileChangeRequest.execution_token.is_not(None),
+                        KnowledgeSpaceFileChangeRequest.execution_token != "",
+                        KnowledgeSpaceFileChangeRequest.execution_state.in_(
+                            (
+                                KnowledgeSpaceFileChangeExecutionState.APPLYING,
+                                KnowledgeSpaceFileChangeExecutionState.COMPENSATING,
+                            )
+                        ),
+                    ),
+                    # A queued request is stranded rather than running: its
+                    # approval decision was delivered and the business dispatch
+                    # that should have followed never took effect, leaving no
+                    # token and no steps for anything else to find. Nothing else
+                    # scans this state, so without it the request sits at
+                    # "waiting to execute" for good.
+                    KnowledgeSpaceFileChangeRequest.execution_state == KnowledgeSpaceFileChangeExecutionState.QUEUED,
+                ),
             )
             .order_by(KnowledgeSpaceFileChangeRequest.id.asc())
             .limit(bounded_limit + 1)
@@ -115,9 +130,10 @@ class KnowledgeSpaceFileChangeCompensationRepository:
         candidates = [
             ExecutionWatchdogCandidate(
                 request_id=int(request_id),
-                execution_token=str(execution_token),
+                execution_token=None if execution_token is None else str(execution_token),
+                execution_state=str(execution_state),
             )
-            for request_id, execution_token in rows[:bounded_limit]
+            for request_id, execution_token, execution_state in rows[:bounded_limit]
         ]
         return candidates, has_more
 
@@ -133,6 +149,16 @@ class KnowledgeSpaceFileChangeCompensationRepository:
 
         tenant_id = int(tenant_id)
         bounded_limit = self._bounded_limit(limit)
+        prior_step = aliased(KnowledgeSpaceFileChangeExecutionStep)
+        has_prior_incomplete_step = exists(
+            select(prior_step.id).where(
+                prior_step.tenant_id == tenant_id,
+                prior_step.request_id == KnowledgeSpaceFileChangeExecutionStep.request_id,
+                prior_step.id < KnowledgeSpaceFileChangeExecutionStep.id,
+                prior_step.attempt_token == KnowledgeSpaceFileChangeRequest.execution_token,
+                prior_step.state != KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED,
+            )
+        )
         statement = (
             select(
                 KnowledgeSpaceFileChangeExecutionStep.id,
@@ -163,6 +189,11 @@ class KnowledgeSpaceFileChangeCompensationRepository:
                         KnowledgeSpaceFileChangeExecutionState.APPLYING,
                         KnowledgeSpaceFileChangeExecutionState.COMPENSATING,
                     )
+                ),
+                or_(
+                    KnowledgeSpaceFileChangeRequest.execution_state
+                    == KnowledgeSpaceFileChangeExecutionState.COMPENSATING,
+                    ~has_prior_incomplete_step,
                 ),
             )
             .order_by(KnowledgeSpaceFileChangeExecutionStep.id.asc())

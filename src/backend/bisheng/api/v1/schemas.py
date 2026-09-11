@@ -233,6 +233,9 @@ class UploadFileResponse(BaseModel):
     upload_id: str | None = None
     space_id: int | None = None
     file_size: int | None = None
+    # Poster frame for a video upload, so the chat bubble that shows the
+    # attachment has a thumbnail instead of a bare extension card.
+    cover_filepath: str | None = None
     content_hash: str | None = None
     state: str | None = None
     expire_at: datetime | None = None

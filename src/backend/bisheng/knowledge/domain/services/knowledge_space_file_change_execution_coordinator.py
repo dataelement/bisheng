@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from inspect import isawaitable
 from typing import Any
@@ -23,6 +23,7 @@ from bisheng.knowledge.domain.models.knowledge_space_file_change_request import 
     KnowledgeSpaceFileChangeRequest,
 )
 from bisheng.knowledge.domain.repositories.knowledge_space_file_change_execution_step_repository import (
+    ExecutionStepDispatchClaim,
     KnowledgeSpaceFileChangeExecutionStepRepository,
 )
 from bisheng.knowledge.domain.repositories.knowledge_space_file_change_request_repository import (
@@ -44,6 +45,18 @@ from bisheng.knowledge.domain.services.knowledge_space_mutation_read_projection_
 )
 
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+
+# A step dispatched this many times is not going to succeed. Celery's own
+# per-attempt retries are exhausted long before this; every dispatch beyond them
+# is the watchdog and the step recovery handing the same doomed work back to
+# each other. Left alone the loop never ends, because a dispatch refreshes the
+# request heartbeat and a stale heartbeat is the only thing that makes the
+# watchdog give up: the request stays "applying" forever and its file stays
+# undeletable. Retiring the step lets `reconcile` fail the request, which is the
+# way out. Keep the budget an order of magnitude above any plausible run of
+# transient failures so a step that would recover on its own still gets to.
+MAX_STEP_DISPATCH_ATTEMPTS = 50
+STEP_DISPATCH_LEASE = timedelta(minutes=15)
 
 
 class ExecutionReconcileStatus(StrEnum):
@@ -109,12 +122,18 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
         mutation_cutover: MutationCutover | None = None,
         delete_cutover: MutationCutover | None = None,
         delete_purge: MutationCutover | None = None,
+        now: Callable[[], datetime] | None = None,
+        dispatch_lease: timedelta = STEP_DISPATCH_LEASE,
     ) -> None:
+        if dispatch_lease.total_seconds() <= 0:
+            raise ValueError("F046 dispatch lease must be positive")
         self.session_factory = session_factory
         self.execution_token_factory = execution_token_factory or (lambda: str(uuid4()))
         self.mutation_cutover = mutation_cutover or self._cutover_verified_mutation
         self.delete_cutover = delete_cutover or self._cutover_delete
         self.delete_purge = delete_purge or self._purge_delete
+        self.now = now or (lambda: datetime.now(UTC).replace(tzinfo=None))
+        self.dispatch_lease = dispatch_lease
 
     async def begin_execution(self, *, tenant_id: int, request_id: int) -> ExecutionIdentity:
         """Claim one queued business request and enter its current generation."""
@@ -207,6 +226,7 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
                         KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED
                     ):
                         row.state = KnowledgeSpaceFileChangeExecutionStepState.PENDING
+                        row.attempt_count = 0
                         row.task_id = None
                         row.error_summary = None
                         row.next_retry_at = None
@@ -328,28 +348,83 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
         for row in rows:
             if row.step_code not in selected or row.step_code not in ready_codes:
                 continue
-            context = self._step_context(identity=identity, request=request, row=row)
-            task_id = dispatcher(context)
-            if isawaitable(task_id):
-                task_id = await task_id
-            async with self.session_factory() as session, session.begin():
-                current = await KnowledgeSpaceFileChangeRequestRepository(session).get_by_id(
-                    tenant_id=identity.tenant_id,
-                    request_id=identity.request_id,
-                    for_update=True,
+            claim = await self._claim_step_dispatch(identity=identity, row=row)
+            if claim is None:
+                continue
+            context = self._step_context(
+                identity=identity,
+                request=request,
+                row=row,
+                task_id=claim.task_id,
+            )
+            try:
+                published_task_id = dispatcher(context)
+                if isawaitable(published_task_id):
+                    published_task_id = await published_task_id
+                if published_task_id is not None and str(published_task_id) != claim.task_id:
+                    raise RuntimeError("F046 dispatcher returned a task id that does not match its durable claim")
+            except Exception as exc:
+                await self._release_step_dispatch(
+                    identity=identity,
+                    row=row,
+                    claim=claim,
+                    error_summary=f"broker dispatch failed: {exc}",
                 )
-                if not self._matches_identity(current, identity):
-                    continue
-                marked = await KnowledgeSpaceFileChangeExecutionStepRepository(session).mark_dispatched(
-                    tenant_id=identity.tenant_id,
-                    request_id=identity.request_id,
-                    step_code=row.step_code,
-                    attempt_token=identity.execution_token,
-                    task_id=None if task_id is None else str(task_id),
-                )
-                if marked:
-                    dispatched.append(row.step_code)
+                raise
+            dispatched.append(row.step_code)
         return dispatched
+
+    async def _claim_step_dispatch(
+        self,
+        *,
+        identity: ExecutionIdentity,
+        row: KnowledgeSpaceFileChangeExecutionStep,
+    ) -> ExecutionStepDispatchClaim | None:
+        now = self.now()
+        async with self.session_factory() as session, session.begin():
+            current = await KnowledgeSpaceFileChangeRequestRepository(session).get_by_id(
+                tenant_id=identity.tenant_id,
+                request_id=identity.request_id,
+                for_update=True,
+            )
+            if not self._matches_identity(current, identity) or current.execution_state != (
+                KnowledgeSpaceFileChangeExecutionState.APPLYING
+            ):
+                return None
+            return await KnowledgeSpaceFileChangeExecutionStepRepository(session).claim_dispatch(
+                tenant_id=identity.tenant_id,
+                request_id=identity.request_id,
+                step_code=row.step_code,
+                attempt_token=identity.execution_token,
+                now=now,
+                lease_until=now + self.dispatch_lease,
+                max_attempts=MAX_STEP_DISPATCH_ATTEMPTS,
+            )
+
+    async def _release_step_dispatch(
+        self,
+        *,
+        identity: ExecutionIdentity,
+        row: KnowledgeSpaceFileChangeExecutionStep,
+        claim: ExecutionStepDispatchClaim,
+        error_summary: str,
+    ) -> bool:
+        async with self.session_factory() as session, session.begin():
+            current = await KnowledgeSpaceFileChangeRequestRepository(session).get_by_id(
+                tenant_id=identity.tenant_id,
+                request_id=identity.request_id,
+                for_update=True,
+            )
+            if not self._matches_identity(current, identity):
+                return False
+            return await KnowledgeSpaceFileChangeExecutionStepRepository(session).release_dispatch_claim(
+                tenant_id=identity.tenant_id,
+                request_id=identity.request_id,
+                step_code=row.step_code,
+                attempt_token=identity.execution_token,
+                task_id=claim.task_id,
+                error_summary=error_summary,
+            )
 
     async def acknowledge_step(
         self,
@@ -556,6 +631,7 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
         identity: ExecutionIdentity,
         request: KnowledgeSpaceFileChangeRequest,
         row: KnowledgeSpaceFileChangeExecutionStep,
+        task_id: str | None = None,
         acknowledgement: Any = None,
     ) -> ExecutionStepContext:
         return ExecutionStepContext(
@@ -565,7 +641,7 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
             action=str(request.action),
             step_code=str(row.step_code),
             idempotency_key=str(row.idempotency_key),
-            task_id=row.task_id,
+            task_id=task_id if task_id is not None else row.task_id,
             acknowledgement=acknowledgement,
         )
 

@@ -50,7 +50,7 @@ import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
-import { resolveUploadSizeLimits } from "./knowledgeUtils";
+import { canOpenSharedSpace, resolveUploadSizeLimits, shouldNavigateOnSpaceSelect } from "./knowledgeUtils";
 export default function Knowledge() {
     const localize = useLocalize();
     // 模块标题跟随后台配置的菜单显示名称
@@ -401,7 +401,14 @@ export default function Knowledge() {
                 const info = await getSpaceInfoApi(previewSpaceId);
                 if (cancelled) return;
 
-                if (info.role === SpaceRole.CREATOR) {
+                // Anyone who can already read the space goes straight into it —
+                // a share link is a way in, not an application form. Only the
+                // creator short-circuited here, so a member or a granted user
+                // landed on the intro-and-apply drawer for a space that was
+                // already sitting in their own sidebar. `visible` is the same
+                // decision the space's own pages enforce; `role` cannot answer it,
+                // because an absent role maps to MEMBER exactly like a real one.
+                if (canOpenSharedSpace(info)) {
                     navigateRef.current(`/knowledge/space/${previewSpaceId}`, { replace: true });
                     return;
                 }
@@ -472,7 +479,13 @@ export default function Knowledge() {
         // Without this, clicking a space while the URL is on /folder/<id> leaves the
         // file list stuck on the folder's contents and the tree's folder highlight
         // pointing at the wrong space (Bug A + Bug B).
-        if (urlFolderId || spaceId !== space.id) {
+        // Never on a share route — see shouldNavigateOnSpaceSelect.
+        if (shouldNavigateOnSpaceSelect({
+            isShareRoute,
+            urlFolderId,
+            urlSpaceId: spaceId,
+            targetSpaceId: space.id,
+        })) {
             navigate(`/knowledge/space/${space.id}`);
         }
         // Set list-level data immediately for fast UI switch
@@ -723,6 +736,10 @@ export default function Knowledge() {
                         onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
                         collapsed={sidebarCollapsed}
                         onCollapsedChange={setSidebarCollapsed}
+                        // The URL names a space on both of these routes, so the
+                        // default-pick has nothing to decide and must not race
+                        // the route effect for the address bar.
+                        suppressAutoSelect={!!detailSpaceId || isShareRoute}
                         hideExpandToggleWhenCollapsed={isDesktop && !!activeSpace}
                     />
                 </div>

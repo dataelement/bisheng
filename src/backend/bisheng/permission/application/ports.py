@@ -107,6 +107,15 @@ class InitialGrantRuntimePort(Protocol):
 
     async def allocate_source_ids(self, count: int) -> tuple[int, ...]: ...
 
+    # Only reached when initial Grants are gated: the gate decides from the
+    # models and the grants the resource already holds.
+    async def build_grant_context(
+        self,
+        *,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+    ): ...
+
     async def mutate_grants(
         self,
         *,

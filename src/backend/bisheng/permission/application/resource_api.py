@@ -170,6 +170,44 @@ class F048ResourcePermissionApi:
             "can_manage_permission": can_manage,
         }
 
+    @staticmethod
+    async def _without_hidden_creator_row(
+        *,
+        resource_type: str,
+        resource_id: str,
+        rows,
+    ):
+        """Withhold the protected creator row where it is noise (COFCO).
+
+        Only the row is withheld — the grant itself stays. The creator holds the
+        resource either way, and read paths still expect an owner to exist.
+
+        A **channel** never shows one: ownership is implicit and the row cannot
+        be edited or removed, so it only takes up the panel.
+
+        A **department knowledge space** never shows one either, for a stronger
+        reason: ``Knowledge.user_id`` records the super admin who operated the
+        creation, for auditing, and the space's responsible figure is its single
+        space admin, surfaced through the manager grant. Listing the creator put
+        that super admin in front of every department space as an owner nobody
+        could remove. An ordinary knowledge space keeps its creator, who is a
+        real person's real space.
+
+        The cursor keeps running off the unfiltered page, so paging cannot skip.
+        """
+        without_creator = [row for row in rows if str(row.source_type).upper() != "CREATOR"]
+        if resource_type == "channel":
+            return without_creator
+        if resource_type != "knowledge_space" or not str(resource_id).isdigit():
+            return rows
+        from bisheng.knowledge.domain.models.department_knowledge_space import (
+            DepartmentKnowledgeSpaceDao,
+        )
+
+        if await DepartmentKnowledgeSpaceDao.aget_by_space_id(int(resource_id)) is None:
+            return rows
+        return without_creator
+
     async def list_grants(
         self,
         *,
@@ -208,6 +246,11 @@ class F048ResourcePermissionApi:
         )
         parent_names = await self._subjects.resource_display_names(parents) if parents else {}
         model_names = {item.snapshot.model_key: item.name for item in catalog.models}
+        listed = await self._without_hidden_creator_row(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            rows=selected,
+        )
         data = [
             {
                 "assignee_id": str(row.source_id),
@@ -239,7 +282,7 @@ class F048ResourcePermissionApi:
                 "protected": row.protected,
                 "editable": row.editable,
             }
-            for row in selected
+            for row in listed
         ]
         next_cursor = None
         if has_more and selected:

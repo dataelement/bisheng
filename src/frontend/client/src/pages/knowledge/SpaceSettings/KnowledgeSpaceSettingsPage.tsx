@@ -1,13 +1,15 @@
 import { Outlined } from "bisheng-icons";
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { VisibilityType } from "~/api/knowledge";
 import {
   getCreationDepartmentChildren,
   getCreationUserGroups,
+  getResourcePendingInvites,
   searchCreationDepartments,
   getCreationUserTreeChildren,
   searchCreationUserTree,
+  type PendingInviteItem,
   type SubjectType,
 } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
@@ -96,6 +98,29 @@ export function KnowledgeSpaceSettingsPage() {
         : settings.permissionRows,
     [creatorRow, settings.permissionRows],
   );
+  // People added here hold no permission until they confirm, so they are in
+  // neither the saved rows nor the draft. Read them separately or the panel
+  // looks like it dropped them.
+  const [pendingInvites, setPendingInvites] = useState<PendingInviteItem[]>([]);
+  useEffect(() => {
+    if (!spaceId) {
+      setPendingInvites([]);
+      return;
+    }
+    let cancelled = false;
+    void getResourcePendingInvites("knowledge_space", spaceId)
+      .then((items) => {
+        if (!cancelled) setPendingInvites(items);
+      })
+      // A tenant with confirmation switched off has no such list; empty is the
+      // right answer, not a reason to fail the page.
+      .catch(() => {
+        if (!cancelled) setPendingInvites([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [spaceId, settings.permissionRows]);
   const permissionSearchApi = useMemo<PermissionDraftSearchApi | undefined>(
     () => settings.mode === "create" ? {
       userTreeChildrenApi: (_type, _id, parentId, params, config) =>
@@ -569,6 +594,7 @@ export function KnowledgeSpaceSettingsPage() {
                         onActiveSubjectTypeChange={setActiveSubjectType}
                         onAddAuthorization={() => setPickerOpen(true)}
                         canAddAuthorization={settings.canManagePermissions}
+                        pendingInvites={pendingInvites}
                       />
                     </>
                   )}

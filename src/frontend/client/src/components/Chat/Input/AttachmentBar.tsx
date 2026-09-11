@@ -258,6 +258,13 @@ interface AttachmentBarProps {
     files: any[];
     kbs: any[];
     skills: any[];
+    /**
+     * `strip` is the gray band stacked ABOVE the input box (Figma 12841:47449):
+     * it overlaps the box by its 16px corner radius so the white box appears to
+     * emerge from it. `inline` is the plain row that sits inside the box.
+     * Knowledge spaces use the strip; attachments stay inline.
+     */
+    appearance?: "inline" | "strip";
     onRemoveFile?: (file: any) => void;
     onRemoveKb?: (kb: any) => void;
     onRemoveSkill?: (skill: any) => void;
@@ -278,6 +285,7 @@ export const AttachmentBar = ({
     files,
     kbs,
     skills,
+    appearance = "inline",
     onRemoveFile,
     onRemoveKb,
     onRemoveSkill,
@@ -411,7 +419,16 @@ export const AttachmentBar = ({
     }, []);
 
     return (
-        <div className="w-full pb-2 mb-1">
+        <div
+            className={cn(
+                appearance === "strip"
+                    // The -mb-4 is the overlap: the box's rounded top corner
+                    // reaches the edge exactly at the strip's bottom, so the two
+                    // read as one continuous shape rather than stacked cards.
+                    ? "relative -mb-4 w-full overflow-hidden rounded-t-2xl bg-[rgba(244,244,244,0.55)] px-2 pb-6 pt-2"
+                    : "w-full pb-2 mb-1",
+            )}
+        >
             <div className="flex items-center">
                 {canLeft && <ArrowButton direction="left" onClick={() => pageScroll("left")} />}
                 <div className="relative min-w-0 flex-1">

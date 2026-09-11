@@ -62,17 +62,28 @@ class KnowledgeSpaceMutationRepository:
             statement = statement.with_for_update()
         return (await self.session.exec(statement)).first()
 
-    async def lock_space(self, *, tenant_id: int, space_id: int) -> Knowledge | None:
-        statement = (
-            select(Knowledge)
-            .where(
-                Knowledge.tenant_id == int(tenant_id),
-                Knowledge.id == int(space_id),
-                Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-            )
-            .with_for_update()
+    async def get_space(
+        self,
+        *,
+        tenant_id: int,
+        space_id: int,
+        for_update: bool = False,
+    ) -> Knowledge | None:
+        statement = select(Knowledge).where(
+            Knowledge.tenant_id == int(tenant_id),
+            Knowledge.id == int(space_id),
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
         )
+        if for_update:
+            statement = statement.with_for_update()
         return (await self.session.exec(statement)).first()
+
+    async def lock_space(self, *, tenant_id: int, space_id: int) -> Knowledge | None:
+        return await self.get_space(
+            tenant_id=tenant_id,
+            space_id=space_id,
+            for_update=True,
+        )
 
     async def get_current_user_role_ids(self, *, tenant_id: int, user_id: int) -> list[int]:
         """Read the applicant's current tenant roles in the caller-owned UoW."""

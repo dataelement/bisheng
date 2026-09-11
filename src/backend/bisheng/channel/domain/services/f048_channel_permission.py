@@ -149,6 +149,25 @@ class ChannelPermissionPort(Protocol):
 
     async def remove_ordinary_sources(self, **kwargs): ...
 
+    async def remove_subject_sources(self, **kwargs): ...
+
+
+def build_channel_membership_idempotency_key(
+    *,
+    resource_id: str,
+    subject_user_id: int | str,
+    model_key: str | None,
+    permission_version: int,
+) -> str:
+    """The projection key for one member's channel grant.
+
+    Named rather than inlined so its width can be asserted against the column
+    that stores it: a channel id is 32 hex characters, so this key passes 64 as
+    soon as the user id reaches six digits, and the insert used to fail — taking
+    an already-approved subscription to `execute_failed`.
+    """
+    return f"channel-membership:{resource_id}:{subject_user_id}:{model_key or 'remove'}:{permission_version}"
+
 
 class F048ChannelPermissionAdapter:
     """Validate channel and grant-subject facts before permission evaluation."""
@@ -256,11 +275,46 @@ class F048ChannelPermissionAdapter:
             target=target,
             source=source,
             model_key=model_key,
-            idempotency_key=(
-                f"channel-membership:{resource_id}:{subject_user_id}:"
-                f"{model_key or 'remove'}:{record.permission_version}"
+            idempotency_key=build_channel_membership_idempotency_key(
+                resource_id=resource_id,
+                subject_user_id=subject_user_id,
+                model_key=model_key,
+                permission_version=record.permission_version,
             ),
         )
+
+    async def remove_own_sources(
+        self,
+        *,
+        resource_id: str,
+        subject_user_id: int,
+    ) -> bool:
+        """Drop everything granted to one user personally on a channel.
+
+        Somebody who accepted an invitation holds a direct source and no
+        membership row, so the membership projection has nothing to clear and
+        unsubscribing found nothing to do. Returns whether anything was removed.
+        """
+
+        record = await self._loader.load_permission_record(resource_id)
+        if record is None:
+            raise PermissionInvalidResourceError()
+        actor = PermissionActor(user_id=subject_user_id, current_tenant_id=record.tenant_id)
+        removed = False
+        while True:
+            fresh = await self._loader.load_permission_record(resource_id)
+            if fresh is None:
+                raise PermissionInvalidResourceError()
+            result = await self._permission.remove_subject_sources(
+                actor=actor,
+                target=self._target(fresh, resource_id, actor),
+                subject_type="user",
+                subject_id=str(subject_user_id),
+                idempotency_key=(f"channel-leave:{resource_id}:{subject_user_id}:{fresh.permission_version}"),
+            )
+            if result is None:
+                return removed
+            removed = True
 
     async def remove_ordinary_sources(
         self,

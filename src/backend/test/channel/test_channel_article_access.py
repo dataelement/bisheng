@@ -1,12 +1,23 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from bisheng.channel.domain.models.channel import ChannelVisibilityEnum
 from bisheng.channel.domain.services.channel_service import ChannelService
 
 
 async def test_article_search_uses_f048_visible_action_without_legacy_permission_lookup():
     channel_repository = SimpleNamespace(
-        find_channels_by_ids=AsyncMock(return_value=[SimpleNamespace(id="channel-1", source_list=[])])
+        find_channels_by_ids=AsyncMock(
+            return_value=[
+                # Not public: a public channel skips the `visible` gate on purpose,
+                # which is what this test is asserting still happens otherwise.
+                SimpleNamespace(
+                    id="channel-1",
+                    source_list=[],
+                    visibility=ChannelVisibilityEnum.PRIVATE,
+                )
+            ]
+        )
     )
     member_repository = SimpleNamespace(find_membership=AsyncMock(return_value=None))
     service = ChannelService(

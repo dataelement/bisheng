@@ -41,6 +41,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderDuplicateError,
     SpaceFolderNotFoundError,
     SpaceFolderUploadCountExceededError,
+    SpaceGrantedNotJoinedError,
     SpaceLimitError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
@@ -138,6 +139,7 @@ from bisheng.permission.application.initial_grant import (
     InitialGrantRequest,
 )
 from bisheng.permission.application.prospective_grant import ProspectiveGrantApplication
+from bisheng.permission.domain.schemas.permission_schema import AuthorizationItemResult
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.user.domain.models.user import UserDao
@@ -598,6 +600,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
         folder = await KnowledgeFileDao.query_by_id(folder_id)
         return self._ensure_space_folder(folder, space_id)
 
+    async def _require_folder_delete_permissions(
+        self,
+        folder: KnowledgeFile,
+    ) -> list[KnowledgeFile]:
+        """Authorize a folder deletion against the folder and its current subtree."""
+        await self._require_action("folder", folder.id, "delete")
+        prefix = f"{folder.file_level_path}/{folder.id}"
+        children = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
+        for child in children:
+            resource_type = "folder" if child.file_type == FileType.DIR.value else "knowledge_file"
+            await self._require_action(resource_type, child.id, "delete")
+        return children
+
     async def _require_file_action(
         self,
         file_id: int,
@@ -670,37 +685,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ]
         )
 
-    async def has_effective_action_strict(
-        self,
-        object_type: str,
-        object_id: int,
-        action: str,
-        *,
-        space_id: int | None = None,
-        locked_space: Knowledge | None = None,
-    ) -> bool:
-        """Fail-closed re-check used just before an approved change executes.
-
-        Replaces COFCO's has_effective_permission_id_strict, which read OpenFGA
-        tuples directly because the old projection could not be trusted at
-        execution time. 3.0's decision layer carries that guarantee itself: a
-        target whose projection is stale raises PermissionPublishNotReadyError
-        and resolves to False, and a degraded projection forces the check up to
-        HIGHER_CONSISTENCY rather than answering from the projection. A target
-        that cannot be resolved yields no actions at all, so it is denied.
-
-        Bypasses the per-instance action cache on purpose: an approval may have
-        sat for days, and a decision cached earlier in this request must not
-        stand in for the state at execution time.
-        """
-        del space_id, locked_space  # kept for call-site compatibility
-        tenant_id = get_current_tenant_id()
-        if tenant_id is None or int(tenant_id) != int(self.login_user.tenant_id):
-            raise SpaceTenantMismatchError.http_exception()
-        self.__dict__.pop("_effective_actions_cache", None)
-        action_map = await self._batch_actions(object_type, [object_id], (action,))
-        return action in action_map.get(str(object_id), frozenset())
-
     async def _get_space_or_raise(self, space_id: int) -> Knowledge:
         """Fetch a space row or raise. 3.0 inlined this lookup; COFCO code and
         its tests still address it by name, and it carries no permission
@@ -767,20 +751,44 @@ class KnowledgeSpaceService(KnowledgeUtils):
         parent_type: str,
         parent_id: int,
     ) -> None:
+        await self.initialize_child_resource_permissions_for_actor(
+            object_type=object_type,
+            object_id=object_id,
+            parent_type=parent_type,
+            parent_id=parent_id,
+            actor=await self._permission_actor(),
+        )
+
+    @classmethod
+    async def initialize_child_resource_permissions_for_actor(
+        cls,
+        *,
+        object_type: str,
+        object_id: int,
+        parent_type: str,
+        parent_id: int,
+        actor: PermissionActor,
+    ) -> None:
+        """Register a newly created folder or file with F048.
+
+        Takes the actor rather than reading it off a request-scoped service, so
+        the F046 upload saga can run the same registration from a Celery worker
+        where there is no logged-in user. One definition, because the saga used
+        to write the tuples itself through the legacy permission service — which
+        F048 closed to business resources, leaving every approved upload
+        retrying forever on `upload.fga`.
+        """
         row = await KnowledgeFileDao.query_by_id(object_id)
         if row is None:
             raise SpaceFileNotFoundError()
-        record = self._new_file_permission_record(
+        record = cls._new_file_permission_record(
             row=row,
             resource_type=object_type,
             parent_type=parent_type,
             parent_id=parent_id,
         )
-        adapter = await self._resource_adapter(object_type)
-        await adapter.authorize_created(
-            record=record,
-            actor=await self._permission_actor(),
-        )
+        adapter = await cls._resource_adapter(object_type)
+        await adapter.authorize_created(record=record, actor=actor)
 
     async def _project_resource_deletes(
         self,
@@ -1332,19 +1340,41 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         for grant in initial_permissions.grants
                     ),
                 )
-                mutation = await self.initial_grant_application.apply(
+                outcome = await self.initial_grant_application.apply(
                     actor=actor,
                     target=target,
                     request=request,
                 )
+                mutation = outcome.mutation
                 permission_result = InitialPermissionApplyResult(
                     status="succeeded",
-                    resource_version=mutation.resource_version,
-                    assignee_ids=[
-                        str(source.source_id)
-                        for grant in mutation.grants
-                        for source in grant.sources
-                        if source.active and not source.protected
+                    # None when every person named at creation was invited
+                    # instead of granted, which leaves the resource untouched.
+                    resource_version=(target.resource_version if mutation is None else mutation.resource_version),
+                    assignee_ids=(
+                        []
+                        if mutation is None
+                        else [
+                            str(source.source_id)
+                            for grant in mutation.grants
+                            for source in grant.sources
+                            if source.active and not source.protected
+                        ]
+                    ),
+                    direct_applied_count=0 if mutation is None else len(mutation.grants),
+                    invite_created_count=sum(1 for item in outcome.pending if item.outcome == "invite_created"),
+                    invite_existing_count=sum(1 for item in outcome.pending if item.outcome == "invite_existing"),
+                    results=[
+                        AuthorizationItemResult(
+                            operation="grant",
+                            subject_type="user",
+                            subject_id=int(item.subject_id),
+                            relation=item.model_key,
+                            model_id=item.model_key,
+                            outcome=item.outcome,
+                            approval_instance_id=item.approval_instance_id,
+                        )
+                        for item in outcome.pending
                     ],
                 )
             except Exception as exc:
@@ -1623,6 +1653,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         result.follower_num = follower_num
         result.file_num = total_file_num
+        # The share link has to tell "already has access" from "may only preview
+        # and apply", and `user_role` cannot: it is absent for a non-member, and
+        # the client maps an absent role to MEMBER — the same value a real member
+        # gets. Report the effective actions the way the space list and the
+        # channel detail already do, so `visible` answers it outright.
+        #
+        # Only for a caller who holds the space. The square preview deliberately
+        # answers without `visible` — asking the permission runtime for a viewer
+        # who has none would both cost a lookup and require a runtime the preview
+        # path does not depend on. No actions is the honest answer there.
+        result.actions = (
+            sorted(await self._get_effective_actions("knowledge_space", space_id)) if has_content_permission else []
+        )
         await self._decorate_department_metadata([result])
         await self._decorate_auto_tag_for_info(result)
 
@@ -2285,9 +2328,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 user_subscription_status,
                 user_subscription_update_time,
             )
-            if (
-                subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
-                and visible_map.get(str(space.id), False)
+            # batch_check_business_visible returns dict[str, bool]; this line used
+            # to read it as a set of actions, which is always falsy against a bool.
+            if subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED and visible_map.get(
+                str(space.id), False
             ):
                 subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
             result_list.append(
@@ -3358,28 +3402,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
         folder = await self._get_folder_for_action(space_id, folder_id)
-        await self._require_action("folder", folder_id, "delete")
+        children = await self._require_folder_delete_permissions(folder)
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space:
             raise SpaceNotFoundError()
         self._ensure_space_async_task_tenant_consistency(space, "delete_folder")
 
-        prefix = f"{folder.file_level_path}/{folder.id}"
-        children = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
         floder_ids = [folder_id]
         file_ids = []
         resource_tuples_to_cleanup = [("folder", folder_id)]
         for child in children:
             if child.file_type == FileType.DIR.value:
-                await self._require_action("folder", child.id, "delete")
                 floder_ids.append(child.id)
                 resource_tuples_to_cleanup.append(("folder", child.id))
             else:
-                await self._require_action(
-                    "knowledge_file",
-                    child.id,
-                    "delete",
-                )
                 file_ids.append(child.id)
                 resource_tuples_to_cleanup.append(("knowledge_file", child.id))
 
@@ -5216,6 +5252,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
         ):
             raise SpacePermissionDeniedError()
 
+        if not current_membership:
+            # No membership row, but the caller may still be here by their own
+            # doing: accepting an invitation writes a personal Grant source and
+            # no row at all. Dropping that source is exactly what leaving means
+            # for them, so try it before refusing.
+            adapter = await get_f048_resource_adapter("knowledge_space")
+            if await adapter.remove_own_sources(
+                resource_id=str(space_id),
+                subject_user_id=self.login_user.user_id,
+            ):
+                return True
+            # Nothing of their own to give up: the space reached them through a
+            # department or group grant, which an individual cannot resign from.
+            # The joined list is resolved from the `visible` decision, so it
+            # carries those too — exiting one revoked nothing, deleted no row
+            # and still reported success, so the space came back on refresh.
+            raise SpaceGrantedNotJoinedError()
+
         await self._revoke_direct_space_user_permissions(space_id, self.login_user.user_id)
         deleted = await SpaceChannelMemberDao.delete_space_member(space_id, self.login_user.user_id)
         return deleted
@@ -5387,11 +5441,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             record = await self._get_file_for_action(command.resource_id, space_id=command.space_id)
         # 3.0's actions are scoped by resource type, so no _folder / _file suffix.
-        await self._require_action(
-            "folder" if is_folder else "knowledge_file",
-            int(record.id),
-            command.action,
-        )
+        if command.action == "delete" and is_folder:
+            await self._require_folder_delete_permissions(record)
+        else:
+            await self._require_action(
+                "folder" if is_folder else "knowledge_file",
+                int(record.id),
+                command.action,
+            )
         if command.action == "move":
             target_space_id = int(command.target_space_id)
             if command.target_parent_id is not None:

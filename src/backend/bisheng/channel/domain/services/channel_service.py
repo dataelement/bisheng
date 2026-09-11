@@ -68,7 +68,9 @@ from bisheng.common.errcode.channel import (
     ChannelAdminLimitExceededError,
     ChannelCreateLimitExceededError,
     ChannelCreationRequestConflictError,
+    ChannelGrantedNotSubscribedError,
     ChannelNotFoundError,
+    ChannelNotSubscribedError,
     ChannelOrganizationGrantUnsubscribeDeniedError,
 )
 from bisheng.common.errcode.knowledge_space import SpaceFileNameDuplicateError, SpacePermissionDeniedError
@@ -241,10 +243,27 @@ class ChannelService:
         self.initial_grant_application = initial_grant_application
         self.prospective_grant_application = prospective_grant_application
 
+    @staticmethod
+    def _reads_without_subscribing(channel: Channel) -> bool:
+        """A public channel's articles are open to anyone who can find it.
+
+        F048 hands out `visible` only through a subscription or an explicit
+        grant, and being public grants nothing — so a public channel opened
+        from the square told a non-subscriber its content needed an approval
+        that a public channel does not even have.
+
+        Deliberately a business predicate and not a permission tuple: an older
+        build wrote `user:* public_reader` tuples, they were removed on
+        purpose, and the authorization model no longer reads them.
+        """
+
+        return channel.visibility == ChannelVisibilityEnum.PUBLIC
+
     async def _get_channel_actions(
         self,
         channel_id: str,
         login_user: UserPayload,
+        channel: Channel | None = None,
     ) -> set[str]:
         action_map = await batch_check_business_actions(
             login_user,
@@ -252,7 +271,12 @@ class ChannelService:
             resource_ids=(channel_id,),
             actions=CHANNEL_EFFECTIVE_ACTIONS,
         )
-        return set(action_map.get(str(channel_id), frozenset()))
+        actions = set(action_map.get(str(channel_id), frozenset()))
+        # The client decides from this set whether to ask for the articles at
+        # all, so a channel the read gates now allow has to say so here too.
+        if channel is not None and self._reads_without_subscribing(channel):
+            actions.add("visible")
+        return actions
 
     @staticmethod
     def _resolve_subscription_status(
@@ -652,20 +676,27 @@ class ChannelService:
                         for grant in channel_data.initial_permissions.grants
                     ),
                 )
-                mutation = await self.initial_grant_application.apply(
+                outcome = await self.initial_grant_application.apply(
                     actor=actor,
                     target=target,
                     request=initial_request,
                 )
+                mutation = outcome.mutation
                 permission_result = ChannelInitialPermissionApplyResult(
                     status="succeeded",
-                    resource_version=mutation.resource_version,
-                    assignee_ids=[
-                        str(source.source_id)
-                        for grant in mutation.grants
-                        for source in grant.sources
-                        if source.active and not source.protected
-                    ],
+                    # None when everyone named at creation was invited to
+                    # confirm instead of granted, leaving the channel untouched.
+                    resource_version=(target.resource_version if mutation is None else mutation.resource_version),
+                    assignee_ids=(
+                        []
+                        if mutation is None
+                        else [
+                            str(source.source_id)
+                            for grant in mutation.grants
+                            for source in grant.sources
+                            if source.active and not source.protected
+                        ]
+                    ),
                 )
             except Exception as exc:
                 # The Channel and protected owner are already durable; ordinary
@@ -2133,7 +2164,7 @@ class ChannelService:
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=login_user.user_id,
         )
-        actions = await self._get_channel_actions(channel_id, login_user)
+        actions = await self._get_channel_actions(channel_id, login_user, channel=channel)
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             # If private, only members can view unless special requirement
             if channel.visibility == ChannelVisibilityEnum.PRIVATE and "visible" not in actions:
@@ -2447,8 +2478,25 @@ class ChannelService:
         current_membership = await self.space_channel_member_repository.find_membership(
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
-        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
-            raise ValueError("You are not subscribed to this channel")
+        if not current_membership:
+            # No membership row, but the caller may still be here by their own
+            # doing: accepting an invitation writes a personal Grant source and
+            # no row at all. Dropping that source is what leaving means for
+            # them, so try it before refusing.
+            adapter = await get_f048_resource_adapter("channel")
+            if await adapter.remove_own_sources(
+                resource_id=str(channel_id),
+                subject_user_id=login_user.user_id,
+            ):
+                return True
+            # Nothing of their own to give up: the channel reached them through
+            # a department or group grant, which an individual cannot resign
+            # from. The followed list is resolved from `visible`, so it carries
+            # those too; whoever granted it has to take it back.
+            raise ChannelGrantedNotSubscribedError()
+        if current_membership.status != MembershipStatusEnum.ACTIVE:
+            # An application still pending, or one that was rejected.
+            raise ChannelNotSubscribedError()
 
         sources = await self.space_channel_member_repository.find_channel_membership_sources(
             channel_id,
@@ -2561,12 +2609,21 @@ class ChannelService:
         channel = channels[0]
         if login_user is None:
             raise ChannelAccessDeniedError()
-        await require_business_action(
-            login_user,
-            resource_type="channel",
-            resource_id=channel_id,
-            action="visible",
-        )
+        if not self._reads_without_subscribing(channel):
+            await require_business_action(
+                login_user,
+                resource_type="channel",
+                resource_id=channel_id,
+                action="visible",
+            )
+
+        # The `visible` check above IS the gate, exactly as in get_article_detail.
+        # An ACTIVE-membership-or-view_channel block used to sit here; F048 replaced
+        # it with `visible` in both methods, and a later merge resurrected it in this
+        # one alone — calling a helper F048 had deleted. Anyone who reached it had
+        # already passed `visible`, so it could only deny, and it denied by raising
+        # AttributeError: a user who holds the channel through a grant rather than a
+        # subscription row (a department grant, say) got a 500 on every article page.
 
         # 2. Determine info source list
         channel_source_ids = channel.source_list or []
@@ -2650,12 +2707,13 @@ class ChannelService:
             raise ChannelNotFoundError()
         channel = channels[0]
 
-        await require_business_action(
-            login_user,
-            resource_type="channel",
-            resource_id=channel_id,
-            action="visible",
-        )
+        if not self._reads_without_subscribing(channel):
+            await require_business_action(
+                login_user,
+                resource_type="channel",
+                resource_id=channel_id,
+                action="visible",
+            )
 
         # 1. Fetch article from ES
         article = await self.article_es_service.get_article(article_id)

@@ -133,7 +133,7 @@ def test_all_f046_tasks_are_owned_by_knowledge_and_never_import_approval():
     assert "bisheng.worker.knowledge.file_change_tasks" in source
 
 
-def test_execution_tasks_are_retryable_acks_late_and_explicitly_use_knowledge_queue(worker):
+def test_execution_tasks_are_retryable_acks_late_and_use_default_control_queue(worker):
     expected = {
         "coordinate_file_change_execution",
         "watchdog_file_change_execution",
@@ -159,7 +159,7 @@ def test_execution_tasks_are_retryable_acks_late_and_explicitly_use_knowledge_qu
         assert options["retry_backoff"] is True
         assert options["retry_jitter"] is True
         assert options["retry_kwargs"]["max_retries"] > 0
-        assert options["queue"] == "knowledge_celery"
+        assert options["queue"] == "celery"
 
 
 def test_broker_identity_never_accepts_approval_ids(worker):
@@ -178,6 +178,36 @@ def test_broker_identity_never_accepts_approval_ids(worker):
         assert "instance_id" not in parameters
         assert "request_id" in parameters
     assert "execution_token" in inspect.signature(worker.execute_file_change_step.function).parameters
+
+
+async def test_business_failure_persists_message_and_code_when_exception_text_is_empty(worker, monkeypatch):
+    from bisheng.common.errcode.base import BaseErrorCode
+
+    class EmptyTextBusinessError(BaseErrorCode):
+        Code = 18999
+        Msg = "permission denied for the target folder"
+
+        def __init__(self):
+            super().__init__(exception=Exception())
+
+    executor = SimpleNamespace(
+        prepare_execution=AsyncMock(side_effect=EmptyTextBusinessError()),
+        fail_unstarted_request=AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(worker, "_build_execution_coordinator", MagicMock())
+    monkeypatch.setattr(worker, "_build_mutation_executor", lambda: executor)
+
+    result = await worker._coordinate_execution_async(
+        tenant_id=23,
+        request_id=41,
+        execution_token=None,
+    )
+
+    assert result == {"status": "failed", "reason": "business_rule_violation"}
+    executor.fail_unstarted_request.assert_awaited_once_with(
+        request_id=41,
+        failure_reason="file change cannot be applied: permission denied for the target folder [code=18999]",
+    )
 
 
 @pytest.mark.parametrize(
@@ -237,13 +267,13 @@ async def test_step_dispatch_uses_stable_key_request_token_and_tenant_header(wor
         action="rename",
         step_code="rename.index_shadow",
         idempotency_key="f046:41:rename.index_shadow",
-        task_id=None,
+        task_id="f046:41:rename.index_shadow:attempt:2",
     )
 
     task_id = await worker._dispatch_file_change_step(context)
 
     call = worker.execute_file_change_step.apply_async.call_args
-    assert call.kwargs["task_id"] == "f046:41:rename.index_shadow"
+    assert call.kwargs["task_id"] == "f046:41:rename.index_shadow:attempt:2"
     assert call.kwargs["headers"] == {"tenant_id": 23}
     assert call.kwargs["kwargs"] == {
         "request_id": 41,
@@ -252,7 +282,7 @@ async def test_step_dispatch_uses_stable_key_request_token_and_tenant_header(wor
         "step_code": "rename.index_shadow",
         "idempotency_key": "f046:41:rename.index_shadow",
     }
-    assert task_id == "f046:41:rename.index_shadow"
+    assert task_id == "f046:41:rename.index_shadow:attempt:2"
 
 
 def test_execution_step_loads_current_business_identity_before_owner_verification(worker, monkeypatch):
@@ -350,7 +380,13 @@ def test_watchdog_is_token_bound_and_only_fails_current_knowledge_request(worker
 
 async def test_watchdog_scan_dispatches_only_request_token_and_request_cursor(worker, monkeypatch):
     page = SimpleNamespace(
-        items=[SimpleNamespace(request_id=41, execution_token="generation-1")],
+        items=[
+            SimpleNamespace(
+                request_id=41,
+                execution_token="generation-1",
+                execution_state="applying",
+            )
+        ],
         has_more=True,
         next_after_id=41,
     )

@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Iterable
 
-from bisheng.core.openfga.authorization_model_f048 import LEGACY_RESOURCE_TYPES
+from bisheng.core.openfga.authorization_model_f048 import LEGACY_RESOURCE_TYPES, build_authorization_model_f048
+from bisheng.core.openfga.contextual import dependent_relations
 from bisheng.core.openfga.exceptions import FGAConnectionError, FGAWriteError
 from bisheng.permission.domain.schemas.permission_schema import (
     UNCACHEABLE_RELATIONS,
@@ -30,6 +32,9 @@ logger = logging.getLogger(__name__)
 
 F048PermissionService = f048_permission_action_service.F048PermissionService
 PermissionActor = f048_permission_action_service.PermissionActor
+
+
+_CONTEXTUAL_RELATIONS = dependent_relations(build_authorization_model_f048(), "department", "subtree_member")
 
 
 class PermissionService:
@@ -88,7 +93,8 @@ class PermissionService:
             return True
 
         strong_consistency = bool(consistency)
-        if relation not in UNCACHEABLE_RELATIONS and not strong_consistency:
+        cacheable = relation not in UNCACHEABLE_RELATIONS and (object_type, relation) not in _CONTEXTUAL_RELATIONS
+        if cacheable and not strong_consistency:
             from bisheng.permission.domain.services.permission_cache import (
                 PermissionCache,
             )
@@ -125,7 +131,7 @@ class PermissionService:
             )
             return False
 
-        if relation not in UNCACHEABLE_RELATIONS and not strong_consistency:
+        if cacheable and not strong_consistency:
             from bisheng.permission.domain.services.permission_cache import (
                 PermissionCache,
             )
@@ -157,7 +163,8 @@ class PermissionService:
             PermissionCache,
         )
 
-        if relation not in UNCACHEABLE_RELATIONS:
+        cacheable = relation not in UNCACHEABLE_RELATIONS and (object_type, relation) not in _CONTEXTUAL_RELATIONS
+        if cacheable:
             cached = await PermissionCache.get_list_objects(
                 user_id,
                 relation,
@@ -196,7 +203,7 @@ class PermissionService:
                 if value.startswith(prefix) and value.removeprefix(prefix)
             )
         )
-        if relation not in UNCACHEABLE_RELATIONS:
+        if cacheable:
             await PermissionCache.set_list_objects(
                 user_id,
                 relation,
@@ -831,29 +838,32 @@ class PermissionService:
         )
 
     @classmethod
-    async def resolve_permanent_creator_user_ids_strict(
+    async def filter_active_user_ids_strict(
         cls,
         *,
         tenant_id: int,
-        object_type: str,
-        object_id: str,
+        user_ids: Iterable[int],
     ) -> set[int]:
-        """Resolve active creators whose resource type defines permanent ownership.
+        """Keep only the ids that are active users of ``tenant_id``.
 
-        The OpenFGA availability boundary remains the caller's responsibility;
-        this method only projects the established knowledge-space creator rule
-        after the caller has completed its strict relation read.
+        Subjects a caller resolved outside OpenFGA, such as a resource creator
+        who holds permanent ownership, still have to clear the same
+        tenant-activity filter the strict relation reads apply. The caller owns
+        the business read; this service never loads business resources.
+
+        The knowledge-space variant of this used to live here and read the
+        creator out of Knowledge's own tables. F048 removed that read together
+        with its private helper, but one caller kept calling the helper, so
+        every approver resolution raised ``AttributeError`` at runtime.
         """
         from bisheng.core.context.tenant import get_current_tenant_id
 
         current_tenant_id = get_current_tenant_id()
         if current_tenant_id is None or int(current_tenant_id) != int(tenant_id):
-            raise RuntimeError("a matching tenant context is required for permanent creator resolution")
-        if object_type != "knowledge_space":
-            return set()
+            raise RuntimeError("a matching tenant context is required for active user filtering")
 
-        creator_id = await cls._get_resource_creator(object_type, object_id)
-        if creator_id is None:
+        normalized = {int(user_id) for user_id in user_ids}
+        if not normalized:
             return set()
 
         from bisheng.permission.domain.repositories.grant_subject_query_repository import (
@@ -861,60 +871,9 @@ class PermissionService:
         )
 
         return await GrantSubjectQueryRepository().filter_active_user_ids_in_tenant(
-            user_ids={int(creator_id)},
+            user_ids=normalized,
             tenant_id=int(tenant_id),
         )
-
-    @classmethod
-    async def get_resource_permissions_from_bindings(
-        cls,
-        bindings: list[dict],
-        model_map: dict[str, dict],
-    ) -> list[ResourcePermissionItem]:
-        """Build the permission-management list from persisted UI bindings.
-
-        This is intentionally a display-only read path. It does not query
-        OpenFGA and must never be used for permission decisions. Callers remain
-        responsible for access checks through the normal permission service.
-        """
-        tuple_rows: list[dict] = []
-        binding_map: dict[tuple[str, int, str], dict] = {}
-        seen: set[tuple[str, int, str]] = set()
-
-        for binding in bindings:
-            subject_type = binding.get("subject_type")
-            relation = binding.get("relation")
-            if subject_type not in {"user", "department", "user_group"}:
-                continue
-            if relation not in {"owner", "manager", "editor", "viewer"}:
-                continue
-            try:
-                subject_id = int(binding.get("subject_id"))
-            except (TypeError, ValueError):
-                continue
-
-            key = (subject_type, subject_id, relation)
-            binding_map[key] = binding
-            if key in seen:
-                continue
-            seen.add(key)
-            member_suffix = "" if subject_type == "user" else "#member"
-            tuple_rows.append(
-                {
-                    "user": f"{subject_type}:{subject_id}{member_suffix}",
-                    "relation": relation,
-                }
-            )
-
-        permissions = await cls._enrich_permission_tuples(tuple_rows)
-        for item in permissions:
-            binding = binding_map.get((item.subject_type, int(item.subject_id), item.relation))
-            if binding is None:
-                continue
-            item.include_children = binding.get("include_children")
-            item.model_id = binding.get("model_id")
-            item.model_name = model_map.get(item.model_id, {}).get("name")
-        return permissions
 
     @classmethod
     async def resolve_resource_tenant_id(cls, object_type: str, object_id: str) -> int | None:

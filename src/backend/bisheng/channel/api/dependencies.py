@@ -66,6 +66,7 @@ async def get_channel_service(
     from bisheng.permission.application.access import get_f048_runtime
     from bisheng.permission.application.initial_grant import InitialGrantApplication
     from bisheng.permission.application.prospective_grant import ProspectiveGrantApplication
+    from bisheng.permission.domain.services.personal_grant_invite_gate import PersonalGrantInviteGate
     from bisheng.tenant.domain.services.f048_permission_subject import TenantPermissionSubjectDirectory
 
     runtime = await get_f048_runtime()
@@ -81,6 +82,9 @@ async def get_channel_service(
         initial_grant_application=InitialGrantApplication(
             runtime=runtime,
             subjects=subject_directory,
+            # Same reason as the knowledge space, and stricter: a personal
+            # channel grant is gated even for somebody already on the channel.
+            invite_gate=PersonalGrantInviteGate(),
         ),
         prospective_grant_application=ProspectiveGrantApplication(
             runtime=runtime,

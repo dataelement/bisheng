@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest_asyncio
 from fastapi import APIRouter, FastAPI
@@ -598,6 +598,50 @@ async def test_folder_file_change_authorization_uses_folder_lookup_and_permissio
         5117,
         "rename",
     )
+
+
+async def test_folder_delete_authorization_matches_direct_subtree_permissions():
+    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+    owner = KnowledgeSpaceService(
+        request=MagicMock(),
+        login_user=SimpleNamespace(user_id=7, user_name="applicant", tenant_id=42),
+    )
+    folder = SimpleNamespace(
+        id=5117,
+        file_type=0,
+        knowledge_id=81,
+        file_level_path="/5000",
+    )
+    children = [
+        SimpleNamespace(id=5118, file_type=0),
+        SimpleNamespace(id=5119, file_type=1),
+    ]
+    owner._get_folder_for_action = AsyncMock(return_value=folder)
+    owner._require_action = AsyncMock()
+    command = FileChangeRequestCommand(
+        action="delete",
+        space_id=81,
+        applicant_user_id=7,
+        applicant_user_name="applicant",
+        resource_type="folder",
+        resource_name="to-delete",
+        resource_id=5117,
+    )
+
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.get_children_by_prefix",
+        new_callable=AsyncMock,
+        return_value=children,
+    ) as get_children:
+        await owner.authorize_file_change(command)
+
+    get_children.assert_awaited_once_with(81, "/5000/5117")
+    assert owner._require_action.await_args_list == [
+        call("folder", 5117, "delete"),
+        call("folder", 5118, "delete"),
+        call("knowledge_file", 5119, "delete"),
+    ]
 
 
 async def test_failed_upload_cleanup_is_request_bound_permissionless_and_retry_idempotent(monkeypatch):

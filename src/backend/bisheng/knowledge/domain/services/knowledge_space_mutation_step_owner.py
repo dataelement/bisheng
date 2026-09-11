@@ -165,13 +165,20 @@ class ProductionMutationStepOwner:
     def _promote_shadow(cls, context) -> int:
         _source, target = cls._load_spaces(context)
         file_ids = cls._file_ids(context)
+        if not file_ids:
+            return 0
         shadow_es, _ = cls._shadow_clients(context, target)
         from bisheng.worker.knowledge.rebuild_knowledge_worker import get_all_es_chunks
 
-        shadow_chunks = get_all_es_chunks(
-            shadow_es.client,
-            cls._shadow_es_name(context),
-            cls._es_query(file_ids),
+        shadow_index = cls._shadow_es_name(context)
+        shadow_chunks = (
+            get_all_es_chunks(
+                shadow_es.client,
+                shadow_index,
+                cls._es_query(file_ids),
+            )
+            if shadow_es.client.indices.exists(index=shadow_index)
+            else []
         )
         # The request-scoped shadow is the durable replay source. Never infer
         # its contents from official rows: a prior same-index attempt may have
@@ -297,8 +304,10 @@ class ProductionMutationStepOwner:
         if target is None:
             raise LookupError(f"F046 target knowledge space not found: {target_id}")
         shadow_es = KnowledgeRag.init_es_vectorstore_sync(cls._shadow_es_name(context))
-        if shadow_es.client.indices.exists(index=cls._shadow_es_name(context)):
-            shadow_es.client.indices.delete(index=cls._shadow_es_name(context))
+        shadow_es.client.indices.delete(
+            index=cls._shadow_es_name(context),
+            ignore=[400, 404],
+        )
         embeddings = LLMService.get_bisheng_knowledge_embedding_sync(
             model_id=int(target.model), invoke_user_id=int(context.applicant_user_id)
         )

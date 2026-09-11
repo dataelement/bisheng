@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from collections.abc import Callable
 
 from loguru import logger
@@ -11,13 +13,16 @@ from bisheng.worker.main import bisheng_celery
 COMPENSATION_BATCH_SIZE = 100
 RECONCILE_BATCH_SIZE = 100
 DEFAULT_HEARTBEAT_TIMEOUT_SECONDS = 900
+DISPATCH_LEASE_TTL_SECONDS = 300
 _TASK_OPTIONS = {
     "acks_late": True,
     "autoretry_for": (Exception,),
     "retry_backoff": True,
     "retry_jitter": True,
     "retry_kwargs": {"max_retries": 8},
-    "queue": "knowledge_celery",
+    # F046 tasks only prepare durable business state and hand parsing to the
+    # file scheduler. Keep this control plane off the long-running parser queue.
+    "queue": "celery",
     "time_limit": 900,
     "soft_time_limit": 840,
 }
@@ -33,9 +38,14 @@ def coordinate_file_change_execution(
     *,
     request_id: int,
     execution_token: str | None = None,
+    dispatch_lease_key: str | None = None,
+    dispatch_lease_token: str | None = None,
 ) -> dict:
-    return _run_in_task_tenant(
+    return _run_claimed_in_task_tenant(
         request=self.request,
+        dispatch_lease_key=dispatch_lease_key,
+        dispatch_lease_token=dispatch_lease_token,
+        key_factory=lambda tenant_id: _dispatch_key("coordinate", tenant_id, int(request_id)),
         coroutine_factory=lambda tenant_id: _coordinate_execution_async(
             tenant_id=tenant_id,
             request_id=int(request_id),
@@ -55,9 +65,19 @@ def watchdog_file_change_execution(
     request_id: int,
     execution_token: str,
     heartbeat_timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
+    dispatch_lease_key: str | None = None,
+    dispatch_lease_token: str | None = None,
 ) -> dict:
-    return _run_in_task_tenant(
+    return _run_claimed_in_task_tenant(
         request=self.request,
+        dispatch_lease_key=dispatch_lease_key,
+        dispatch_lease_token=dispatch_lease_token,
+        key_factory=lambda tenant_id: _dispatch_key(
+            "watchdog",
+            tenant_id,
+            int(request_id),
+            str(execution_token),
+        ),
         coroutine_factory=lambda tenant_id: _watchdog_execution_async(
             tenant_id=tenant_id,
             request_id=int(request_id),
@@ -129,9 +149,14 @@ def cleanup_file_change_upload_stage(
     upload_id: str,
     terminal_action: str,
     reason: str | None = None,
+    dispatch_lease_key: str | None = None,
+    dispatch_lease_token: str | None = None,
 ) -> dict:
-    return _run_in_task_tenant(
+    return _run_claimed_in_task_tenant(
         request=self.request,
+        dispatch_lease_key=dispatch_lease_key,
+        dispatch_lease_token=dispatch_lease_token,
+        key_factory=lambda tenant_id: _dispatch_key("cleanup-stage", tenant_id, int(request_id), str(upload_id)),
         coroutine_factory=lambda tenant_id: _cleanup_upload_stage_async(
             tenant_id=tenant_id,
             request_id=int(request_id),
@@ -147,9 +172,18 @@ def cleanup_file_change_upload_stage(
     name="bisheng.worker.knowledge.file_change_tasks.cleanup_orphan_file_change_upload_stage",
     **_TASK_OPTIONS,
 )
-def cleanup_orphan_file_change_upload_stage(self, *, upload_id: str) -> dict:
-    return _run_in_task_tenant(
+def cleanup_orphan_file_change_upload_stage(
+    self,
+    *,
+    upload_id: str,
+    dispatch_lease_key: str | None = None,
+    dispatch_lease_token: str | None = None,
+) -> dict:
+    return _run_claimed_in_task_tenant(
         request=self.request,
+        dispatch_lease_key=dispatch_lease_key,
+        dispatch_lease_token=dispatch_lease_token,
+        key_factory=lambda tenant_id: _dispatch_key("cleanup-orphan", tenant_id, str(upload_id)),
         coroutine_factory=lambda tenant_id: _cleanup_orphan_upload_stage_async(
             tenant_id=tenant_id,
             upload_id=str(upload_id),
@@ -162,9 +196,19 @@ def cleanup_orphan_file_change_upload_stage(self, *, upload_id: str) -> dict:
     name="bisheng.worker.knowledge.file_change_tasks.purge_file_change_delete",
     **_TASK_OPTIONS,
 )
-def purge_file_change_delete(self, *, request_id: int, execution_token: str) -> dict:
-    return _run_in_task_tenant(
+def purge_file_change_delete(
+    self,
+    *,
+    request_id: int,
+    execution_token: str,
+    dispatch_lease_key: str | None = None,
+    dispatch_lease_token: str | None = None,
+) -> dict:
+    return _run_claimed_in_task_tenant(
         request=self.request,
+        dispatch_lease_key=dispatch_lease_key,
+        dispatch_lease_token=dispatch_lease_token,
+        key_factory=lambda tenant_id: _dispatch_key("delete-purge", tenant_id, int(request_id), str(execution_token)),
         coroutine_factory=lambda tenant_id: _run_owner_async(
             tenant_id=tenant_id,
             request_id=int(request_id),
@@ -180,9 +224,21 @@ def purge_file_change_delete(self, *, request_id: int, execution_token: str) -> 
     name="bisheng.worker.knowledge.file_change_tasks.cleanup_file_change_mutation",
     **_TASK_OPTIONS,
 )
-def cleanup_file_change_mutation(self, *, request_id: int, execution_token: str) -> dict:
-    return _run_in_task_tenant(
+def cleanup_file_change_mutation(
+    self,
+    *,
+    request_id: int,
+    execution_token: str,
+    dispatch_lease_key: str | None = None,
+    dispatch_lease_token: str | None = None,
+) -> dict:
+    return _run_claimed_in_task_tenant(
         request=self.request,
+        dispatch_lease_key=dispatch_lease_key,
+        dispatch_lease_token=dispatch_lease_token,
+        key_factory=lambda tenant_id: _dispatch_key(
+            "mutation-cleanup", tenant_id, int(request_id), str(execution_token)
+        ),
         coroutine_factory=lambda tenant_id: _run_owner_async(
             tenant_id=tenant_id,
             request_id=int(request_id),
@@ -198,9 +254,19 @@ def cleanup_file_change_mutation(self, *, request_id: int, execution_token: str)
     name="bisheng.worker.knowledge.file_change_tasks.continue_file_change_compensation",
     **_TASK_OPTIONS,
 )
-def continue_file_change_compensation(self, *, request_id: int, execution_token: str) -> dict:
-    return _run_in_task_tenant(
+def continue_file_change_compensation(
+    self,
+    *,
+    request_id: int,
+    execution_token: str,
+    dispatch_lease_key: str | None = None,
+    dispatch_lease_token: str | None = None,
+) -> dict:
+    return _run_claimed_in_task_tenant(
         request=self.request,
+        dispatch_lease_key=dispatch_lease_key,
+        dispatch_lease_token=dispatch_lease_token,
+        key_factory=lambda tenant_id: _dispatch_key("compensate", tenant_id, int(request_id), str(execution_token)),
         coroutine_factory=lambda tenant_id: _run_owner_async(
             tenant_id=tenant_id,
             request_id=int(request_id),
@@ -216,9 +282,18 @@ def continue_file_change_compensation(self, *, request_id: int, execution_token:
     name="bisheng.worker.knowledge.file_change_tasks.watchdog_tenant_file_change_executions",
     **_TASK_OPTIONS,
 )
-def watchdog_tenant_file_change_executions(self, *, after_request_id: int = 0) -> dict:
-    return _run_in_task_tenant(
+def watchdog_tenant_file_change_executions(
+    self,
+    *,
+    after_request_id: int = 0,
+    dispatch_lease_key: str | None = None,
+    dispatch_lease_token: str | None = None,
+) -> dict:
+    return _run_claimed_in_task_tenant(
         request=self.request,
+        dispatch_lease_key=dispatch_lease_key,
+        dispatch_lease_token=dispatch_lease_token,
+        key_factory=lambda tenant_id: _dispatch_key("scan-watchdog", tenant_id, int(after_request_id)),
         coroutine_factory=lambda tenant_id: _watchdog_tenant_page_async(
             tenant_id=tenant_id,
             after_request_id=int(after_request_id),
@@ -227,15 +302,26 @@ def watchdog_tenant_file_change_executions(self, *, after_request_id: int = 0) -
 
 
 @bisheng_celery.task(
+    bind=True,
     name="bisheng.worker.knowledge.file_change_tasks.watchdog_all_file_change_executions",
     **_TASK_OPTIONS,
 )
-def watchdog_all_file_change_executions() -> dict:
-    return run_async_task(
-        lambda: _coordinate_all_tenants_async(
+def watchdog_all_file_change_executions(
+    self,
+    *,
+    dispatch_lease_key: str | None = None,
+    dispatch_lease_token: str | None = None,
+) -> dict:
+    return _run_claimed_without_tenant(
+        request=self.request,
+        expected_key=_dispatch_key("scan-watchdog-all"),
+        dispatch_lease_key=dispatch_lease_key,
+        dispatch_lease_token=dispatch_lease_token,
+        coroutine_factory=lambda: _coordinate_all_tenants_async(
             tenant_task=watchdog_tenant_file_change_executions,
             initial_kwargs={"after_request_id": 0},
-        )
+            dispatch_kind="scan-watchdog",
+        ),
     )
 
 
@@ -244,9 +330,18 @@ def watchdog_all_file_change_executions() -> dict:
     name="bisheng.worker.knowledge.file_change_tasks.compensate_tenant_file_change_execution_steps",
     **_TASK_OPTIONS,
 )
-def compensate_tenant_file_change_execution_steps(self, *, after_step_id: int = 0) -> dict:
-    return _run_in_task_tenant(
+def compensate_tenant_file_change_execution_steps(
+    self,
+    *,
+    after_step_id: int = 0,
+    dispatch_lease_key: str | None = None,
+    dispatch_lease_token: str | None = None,
+) -> dict:
+    return _run_claimed_in_task_tenant(
         request=self.request,
+        dispatch_lease_key=dispatch_lease_key,
+        dispatch_lease_token=dispatch_lease_token,
+        key_factory=lambda tenant_id: _dispatch_key("scan-compensation", tenant_id, int(after_step_id)),
         coroutine_factory=lambda tenant_id: _compensate_tenant_step_page_async(
             tenant_id=tenant_id,
             after_step_id=int(after_step_id),
@@ -255,15 +350,26 @@ def compensate_tenant_file_change_execution_steps(self, *, after_step_id: int = 
 
 
 @bisheng_celery.task(
+    bind=True,
     name="bisheng.worker.knowledge.file_change_tasks.compensate_all_file_change_execution_steps",
     **_TASK_OPTIONS,
 )
-def compensate_all_file_change_execution_steps() -> dict:
-    return run_async_task(
-        lambda: _coordinate_all_tenants_async(
+def compensate_all_file_change_execution_steps(
+    self,
+    *,
+    dispatch_lease_key: str | None = None,
+    dispatch_lease_token: str | None = None,
+) -> dict:
+    return _run_claimed_without_tenant(
+        request=self.request,
+        expected_key=_dispatch_key("scan-compensation-all"),
+        dispatch_lease_key=dispatch_lease_key,
+        dispatch_lease_token=dispatch_lease_token,
+        coroutine_factory=lambda: _coordinate_all_tenants_async(
             tenant_task=compensate_tenant_file_change_execution_steps,
             initial_kwargs={"after_step_id": 0},
-        )
+            dispatch_kind="scan-compensation",
+        ),
     )
 
 
@@ -277,9 +383,16 @@ def cleanup_tenant_file_change_residue(
     *,
     after_request_id: int = 0,
     after_stage_id: int = 0,
+    dispatch_lease_key: str | None = None,
+    dispatch_lease_token: str | None = None,
 ) -> dict:
-    return _run_in_task_tenant(
+    return _run_claimed_in_task_tenant(
         request=self.request,
+        dispatch_lease_key=dispatch_lease_key,
+        dispatch_lease_token=dispatch_lease_token,
+        key_factory=lambda tenant_id: _dispatch_key(
+            "scan-cleanup", tenant_id, int(after_request_id), int(after_stage_id)
+        ),
         coroutine_factory=lambda tenant_id: _cleanup_tenant_page_async(
             tenant_id=tenant_id,
             after_request_id=int(after_request_id),
@@ -289,15 +402,26 @@ def cleanup_tenant_file_change_residue(
 
 
 @bisheng_celery.task(
+    bind=True,
     name="bisheng.worker.knowledge.file_change_tasks.cleanup_all_file_change_residue",
     **_TASK_OPTIONS,
 )
-def cleanup_all_file_change_residue() -> dict:
-    return run_async_task(
-        lambda: _coordinate_all_tenants_async(
+def cleanup_all_file_change_residue(
+    self,
+    *,
+    dispatch_lease_key: str | None = None,
+    dispatch_lease_token: str | None = None,
+) -> dict:
+    return _run_claimed_without_tenant(
+        request=self.request,
+        expected_key=_dispatch_key("scan-cleanup-all"),
+        dispatch_lease_key=dispatch_lease_key,
+        dispatch_lease_token=dispatch_lease_token,
+        coroutine_factory=lambda: _coordinate_all_tenants_async(
             tenant_task=cleanup_tenant_file_change_residue,
             initial_kwargs={"after_request_id": 0, "after_stage_id": 0},
-        )
+            dispatch_kind="scan-cleanup",
+        ),
     )
 
 
@@ -332,9 +456,19 @@ def reconcile_tenant_file_change_approvers(
     *,
     after_update_time: str | None = None,
     after_request_id: int = 0,
+    dispatch_lease_key: str | None = None,
+    dispatch_lease_token: str | None = None,
 ) -> dict:
-    return _run_in_task_tenant(
+    return _run_claimed_in_task_tenant(
         request=self.request,
+        dispatch_lease_key=dispatch_lease_key,
+        dispatch_lease_token=dispatch_lease_token,
+        key_factory=lambda tenant_id: _dispatch_key(
+            "scan-reconcile",
+            tenant_id,
+            after_update_time if after_update_time else "root",
+            int(after_request_id) if after_update_time else None,
+        ),
         coroutine_factory=lambda tenant_id: _reconcile_tenant_page_async(
             tenant_id=tenant_id,
             after_update_time=after_update_time,
@@ -357,7 +491,9 @@ class CeleryKnowledgeSpaceFileChangeDispatcher:
     async def dispatch(self, *, tenant_id: int, request_id: int) -> None:
         if isinstance(tenant_id, bool) or isinstance(request_id, bool) or int(tenant_id) <= 0 or int(request_id) <= 0:
             raise ValueError("F046 dispatcher requires positive tenant_id and request_id")
-        coordinate_file_change_execution.apply_async(
+        await _dispatch_once(
+            coordinate_file_change_execution,
+            lease_key=_dispatch_key("coordinate", int(tenant_id), int(request_id)),
             kwargs={"request_id": int(request_id)},
             headers={"tenant_id": int(tenant_id)},
         )
@@ -369,16 +505,30 @@ async def _coordinate_execution_async(
     request_id: int,
     execution_token: str | None,
 ) -> dict:
+    from bisheng.common.errcode.base import BaseErrorCode
+    from bisheng.common.errcode.permission import (
+        PermissionPublishNotReadyError,
+        PermissionServiceUnavailableError,
+    )
     from bisheng.knowledge.domain.services.knowledge_space_mutation_executor import (
         MutationExecutionCompleted,
     )
 
-    from bisheng.common.errcode.base import BaseErrorCode
+    # Infrastructure trouble wearing a business error's clothes. This branch
+    # assumed transient failures were not BaseErrorCode, which is false: a
+    # momentary authorization-service outage and the write fence a catalog
+    # publish raises both are. Clearing a queue in bulk made the first likely —
+    # many changes reach the permission service at once — and a change already
+    # cleared to run was then killed outright with no retry. Both say in their
+    # own message that they are temporary, so hand them back to Celery.
+    RETRYABLE = (PermissionServiceUnavailableError, PermissionPublishNotReadyError)
 
     coordinator = _build_execution_coordinator()
     executor = _build_mutation_executor()
     try:
         prepared = await executor.prepare_execution(request_id=int(request_id))
+    except RETRYABLE:
+        raise
     except BaseErrorCode as exc:
         # A deterministic business-rule violation raised while preparing the
         # approved change — e.g. the applicant no longer holds the required
@@ -387,11 +537,16 @@ async def _coordinate_execution_async(
         # SpaceFileNameDuplicateError). These never succeed on retry, and leaving
         # the request in `queued` hides the failure forever (nothing re-drives a
         # queued request). Fail it terminally so the error surfaces and the
-        # client stops showing 等待执行. Infra/transient errors are NOT BaseErrorCode
-        # and still propagate to Celery autoretry.
+        # client stops showing 等待执行.
+        #
+        # `str()` on one of these is the wrapped exception when there is one, and
+        # that can be empty — the reader was shown a bare "cannot be applied:"
+        # with nothing after it. Preserve the domain message and code so the
+        # stored failure reason always says something actionable.
+        reason = _business_error_reason(exc)
         transitioned = await executor.fail_unstarted_request(
             request_id=int(request_id),
-            failure_reason=f"file change cannot be applied: {exc}",
+            failure_reason=f"file change cannot be applied: {reason}",
         )
         logger.warning(
             "F046 coordinate permanently failed ({}): request_id={} transitioned_to_failed={}",
@@ -413,6 +568,19 @@ async def _coordinate_execution_async(
         return {"status": "ignored"}
     await coordinator.dispatch_ready_steps(identity=identity, dispatcher=_dispatch_file_change_step)
     return {"status": str(await coordinator.reconcile(identity=identity))}
+
+
+def _business_error_reason(exc) -> str:
+    """Return a non-empty, user-safe reason for a domain business error."""
+
+    for candidate in (str(exc), getattr(exc, "message", None), getattr(type(exc), "Msg", None)):
+        normalized = str(candidate or "").strip()
+        if normalized:
+            break
+    else:
+        normalized = type(exc).__name__
+    code = getattr(exc, "code", None) or getattr(type(exc), "Code", None)
+    return f"{normalized} [code={code}]" if code is not None else normalized
 
 
 async def _reconcile_space_async(*, tenant_id: int, space_id: int, reason: str) -> dict:
@@ -462,7 +630,14 @@ async def _reconcile_tenant_page_async(
             logger.exception("F046 approver reconciliation failed for space_id={}", space_id)
     if has_more:
         last = candidates[-1]
-        reconcile_tenant_file_change_approvers.apply_async(
+        await _dispatch_once(
+            reconcile_tenant_file_change_approvers,
+            lease_key=_dispatch_key(
+                "scan-reconcile",
+                int(tenant_id),
+                last.update_time.isoformat(),
+                int(last.request_id),
+            ),
             kwargs={
                 "after_update_time": last.update_time.isoformat(),
                 "after_request_id": int(last.request_id),
@@ -482,11 +657,13 @@ async def _coordinate_reconcile_all_tenants_async() -> dict:
     dispatched, failed = 0, 0
     for tenant_id in tenant_ids:
         try:
-            reconcile_tenant_file_change_approvers.apply_async(
+            was_dispatched = await _dispatch_once(
+                reconcile_tenant_file_change_approvers,
+                lease_key=_dispatch_key("scan-reconcile", int(tenant_id), "root"),
                 kwargs={"after_update_time": None, "after_request_id": 0},
                 headers={"tenant_id": int(tenant_id)},
             )
-            dispatched += 1
+            dispatched += int(was_dispatched)
         except Exception:
             failed += 1
             logger.exception("F046 tenant approver reconciliation dispatch failed for tenant_id={}", tenant_id)
@@ -520,6 +697,7 @@ async def _watchdog_execution_async(
 
 
 async def _dispatch_file_change_step(context) -> str:
+    task_id = str(context.task_id or context.idempotency_key)
     execute_file_change_step.apply_async(
         kwargs={
             "request_id": int(context.request_id),
@@ -528,10 +706,10 @@ async def _dispatch_file_change_step(context) -> str:
             "step_code": str(context.step_code),
             "idempotency_key": str(context.idempotency_key),
         },
-        task_id=str(context.idempotency_key),
+        task_id=task_id,
         headers={"tenant_id": int(context.tenant_id)},
     )
-    return str(context.idempotency_key)
+    return task_id
 
 
 async def _execute_step_async(**kwargs) -> dict:
@@ -563,7 +741,13 @@ async def _execute_step_async(**kwargs) -> dict:
     # next ready step immediately; the watchdog stays as the safety net if this
     # hand-off is ever lost.
     if status == ExecutionReconcileStatus.RUNNING:
-        coordinate_file_change_execution.apply_async(
+        await _dispatch_once(
+            coordinate_file_change_execution,
+            lease_key=_dispatch_key(
+                "coordinate",
+                int(kwargs["tenant_id"]),
+                int(kwargs["request_id"]),
+            ),
             kwargs={
                 "request_id": int(kwargs["request_id"]),
                 "execution_token": str(kwargs["execution_token"]),
@@ -638,6 +822,10 @@ async def _run_owner_async(
 
 
 async def _watchdog_tenant_page_async(*, tenant_id: int, after_request_id: int) -> dict:
+    from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
+        KnowledgeSpaceFileChangeExecutionState,
+    )
+
     page = await _build_compensation_service().list_watchdog_page(
         tenant_id=int(tenant_id),
         after_request_id=int(after_request_id),
@@ -646,20 +834,42 @@ async def _watchdog_tenant_page_async(*, tenant_id: int, after_request_id: int) 
     dispatched, failed = 0, 0
     for candidate in page.items:
         try:
-            watchdog_file_change_execution.apply_async(
+            if candidate.execution_state == KnowledgeSpaceFileChangeExecutionState.QUEUED:
+                # Stranded before it ever began: re-drive it rather than fail
+                # it. The change was already cleared to run, so the work is
+                # still owed, and beginning execution is idempotent — it reuses
+                # any token already minted and leaves a started run alone.
+                was_dispatched = await _dispatch_once(
+                    coordinate_file_change_execution,
+                    lease_key=_dispatch_key("coordinate", int(tenant_id), int(candidate.request_id)),
+                    kwargs={"request_id": int(candidate.request_id)},
+                    headers={"tenant_id": int(tenant_id)},
+                )
+                dispatched += int(was_dispatched)
+                continue
+            was_dispatched = await _dispatch_once(
+                watchdog_file_change_execution,
+                lease_key=_dispatch_key(
+                    "watchdog",
+                    int(tenant_id),
+                    int(candidate.request_id),
+                    str(candidate.execution_token),
+                ),
                 kwargs={
                     "request_id": int(candidate.request_id),
                     "execution_token": str(candidate.execution_token),
                 },
                 headers={"tenant_id": int(tenant_id)},
             )
-            dispatched += 1
+            dispatched += int(was_dispatched)
         except Exception:
             failed += 1
             logger.exception("F046 watchdog dispatch failed for request_id={}", candidate.request_id)
     if page.has_more:
         _require_advanced_id_cursor(after_request_id, page.next_after_id, "request")
-        watchdog_tenant_file_change_executions.apply_async(
+        await _dispatch_once(
+            watchdog_tenant_file_change_executions,
+            lease_key=_dispatch_key("scan-watchdog", int(tenant_id), int(page.next_after_id)),
             kwargs={"after_request_id": int(page.next_after_id)},
             headers={"tenant_id": int(tenant_id)},
         )
@@ -689,20 +899,37 @@ async def _compensate_tenant_step_page_async(*, tenant_id: int, after_step_id: i
             else coordinate_file_change_execution
         )
         try:
-            task.apply_async(
+            dispatch_kind = (
+                "compensate"
+                if candidate.execution_state == KnowledgeSpaceFileChangeExecutionState.COMPENSATING
+                else "coordinate"
+            )
+            lease_key = _dispatch_key(dispatch_kind, int(tenant_id), int(candidate.request_id))
+            if dispatch_kind == "compensate":
+                lease_key = _dispatch_key(
+                    dispatch_kind,
+                    int(tenant_id),
+                    int(candidate.request_id),
+                    str(candidate.execution_token),
+                )
+            was_dispatched = await _dispatch_once(
+                task,
+                lease_key=lease_key,
                 kwargs={
                     "request_id": int(candidate.request_id),
                     "execution_token": str(candidate.execution_token),
                 },
                 headers={"tenant_id": int(tenant_id)},
             )
-            dispatched += 1
+            dispatched += int(was_dispatched)
         except Exception:
             failed += 1
             logger.exception("F046 recovery dispatch failed for request_id={}", candidate.request_id)
     if page.has_more:
         _require_advanced_id_cursor(after_step_id, page.next_after_id, "step")
-        compensate_tenant_file_change_execution_steps.apply_async(
+        await _dispatch_once(
+            compensate_tenant_file_change_execution_steps,
+            lease_key=_dispatch_key("scan-compensation", int(tenant_id), int(page.next_after_id)),
             kwargs={"after_step_id": int(page.next_after_id)},
             headers={"tenant_id": int(tenant_id)},
         )
@@ -731,26 +958,52 @@ async def _cleanup_tenant_page_async(*, tenant_id: int, after_request_id: int, a
         kwargs = {"request_id": int(candidate.request_id)}
         if candidate.kind == "stage":
             kwargs.update(upload_id=str(candidate.upload_id), terminal_action=str(candidate.terminal_action))
+            lease_key = _dispatch_key(
+                "cleanup-stage",
+                int(tenant_id),
+                int(candidate.request_id),
+                str(candidate.upload_id),
+            )
         else:
             kwargs["execution_token"] = str(candidate.execution_token)
+            lease_key = _dispatch_key(
+                candidate.kind.replace("_", "-"),
+                int(tenant_id),
+                int(candidate.request_id),
+                str(candidate.execution_token),
+            )
         try:
-            tasks[candidate.kind].apply_async(kwargs=kwargs, headers={"tenant_id": int(tenant_id)})
-            dispatched += 1
+            was_dispatched = await _dispatch_once(
+                tasks[candidate.kind],
+                lease_key=lease_key,
+                kwargs=kwargs,
+                headers={"tenant_id": int(tenant_id)},
+            )
+            dispatched += int(was_dispatched)
         except Exception:
             failed += 1
             logger.exception("F046 residue dispatch failed for request_id={}", candidate.request_id)
     for candidate in stage_page.items:
         try:
-            cleanup_orphan_file_change_upload_stage.apply_async(
+            was_dispatched = await _dispatch_once(
+                cleanup_orphan_file_change_upload_stage,
+                lease_key=_dispatch_key("cleanup-orphan", int(tenant_id), str(candidate.upload_id)),
                 kwargs={"upload_id": str(candidate.upload_id)},
                 headers={"tenant_id": int(tenant_id)},
             )
-            dispatched += 1
+            dispatched += int(was_dispatched)
         except Exception:
             failed += 1
             logger.exception("F046 stage dispatch failed for stage_id={}", candidate.stage_id)
     if page.has_more or stage_page.has_more:
-        cleanup_tenant_file_change_residue.apply_async(
+        await _dispatch_once(
+            cleanup_tenant_file_change_residue,
+            lease_key=_dispatch_key(
+                "scan-cleanup",
+                int(tenant_id),
+                int(page.next_after_id),
+                int(stage_page.next_after_id),
+            ),
             kwargs={
                 "after_request_id": int(page.next_after_id),
                 "after_stage_id": int(stage_page.next_after_id),
@@ -765,13 +1018,22 @@ async def _cleanup_tenant_page_async(*, tenant_id: int, after_request_id: int, a
     }
 
 
-async def _coordinate_all_tenants_async(*, tenant_task, initial_kwargs: dict) -> dict:
+async def _coordinate_all_tenants_async(*, tenant_task, initial_kwargs: dict, dispatch_kind: str) -> dict:
     tenant_ids = await _load_active_tenant_ids()
-    dispatched = 0
+    dispatched, failed = 0, 0
     for tenant_id in tenant_ids:
-        tenant_task.apply_async(kwargs=dict(initial_kwargs), headers={"tenant_id": int(tenant_id)})
-        dispatched += 1
-    return {"processed": len(tenant_ids), "dispatched": dispatched}
+        try:
+            was_dispatched = await _dispatch_once(
+                tenant_task,
+                lease_key=_dispatch_key(dispatch_kind, int(tenant_id), *initial_kwargs.values()),
+                kwargs=dict(initial_kwargs),
+                headers={"tenant_id": int(tenant_id)},
+            )
+            dispatched += int(was_dispatched)
+        except Exception:
+            failed += 1
+            logger.exception("F046 tenant coordinator dispatch failed for tenant_id={}", tenant_id)
+    return {"processed": len(tenant_ids), "dispatched": dispatched, "failed": failed}
 
 
 async def _load_active_tenant_ids() -> list[int]:
@@ -823,6 +1085,187 @@ def _build_file_change_service():
     )
 
     return KnowledgeSpaceFileChangeTerminalCleanupService()
+
+
+def _dispatch_key(*parts: object) -> str:
+    normalized = [str(part).strip() for part in parts if part is not None]
+    if not normalized or any(not part for part in normalized):
+        raise ValueError("F046 dispatch key parts must not be empty")
+    return "f046:dispatch:" + ":".join(normalized)
+
+
+async def _build_dispatch_lease_store():
+    from bisheng.core.cache.redis_manager import get_redis_client
+    from bisheng.worker.knowledge.file_change_dispatch_lease import FileChangeDispatchLeaseStore
+
+    return FileChangeDispatchLeaseStore(
+        await get_redis_client(),
+        ttl_seconds=DISPATCH_LEASE_TTL_SECONDS,
+    )
+
+
+def _new_dispatch_lease(*, key: str, token: str | None = None):
+    from bisheng.worker.knowledge.file_change_dispatch_lease import new_file_change_dispatch_lease
+
+    return new_file_change_dispatch_lease(key=key, token=token)
+
+
+async def _dispatch_once(
+    task,
+    *,
+    lease_key: str,
+    kwargs: dict,
+    headers: dict,
+    task_id: str | None = None,
+) -> bool:
+    """Publish one outstanding copy of a control task.
+
+    Redis is load-shedding rather than a correctness dependency. If it is
+    unavailable, keep the durable saga live and publish normally.
+    """
+
+    store = None
+    lease = None
+    try:
+        store = await _build_dispatch_lease_store()
+        lease = await store.claim(lease_key)
+    except Exception:
+        store = None
+        logger.exception("F046 dispatch lease unavailable; publishing without deduplication: key={}", lease_key)
+    if store is not None and lease is None:
+        logger.debug("F046 duplicate dispatch suppressed: key={}", lease_key)
+        return False
+
+    published_kwargs = dict(kwargs)
+    if lease is not None:
+        published_kwargs.update(
+            dispatch_lease_key=str(lease.key),
+            dispatch_lease_token=str(lease.token),
+        )
+    apply_options = {
+        "kwargs": published_kwargs,
+        "headers": dict(headers),
+    }
+    if task_id is not None:
+        apply_options["task_id"] = str(task_id)
+    publish_tenant_token = None
+    publish_tenant_id = apply_options["headers"].get("tenant_id")
+    if publish_tenant_id is not None:
+        # before_task_publish deliberately derives tenant_id from the active
+        # ContextVar and overwrites the explicit header. Global recovery tasks
+        # run under the default tenant while fanning out work for every tenant,
+        # so install the child's tenant only for the publish operation.
+        publish_tenant_token = set_current_tenant_id(int(publish_tenant_id))
+    try:
+        task.apply_async(**apply_options)
+    except Exception:
+        if store is not None and lease is not None:
+            try:
+                await store.release(lease)
+            except Exception:
+                logger.exception("F046 failed dispatch lease release failed: key={}", lease_key)
+        raise
+    finally:
+        if publish_tenant_token is not None:
+            current_tenant_id.reset(publish_tenant_token)
+    return True
+
+
+async def _renew_dispatch_lease(*, store, lease) -> None:
+    while True:
+        await asyncio.sleep(DISPATCH_LEASE_TTL_SECONDS / 3)
+        try:
+            if not await store.renew(lease):
+                logger.warning("F046 dispatch lease ownership lost: key={}", lease.key)
+                return
+        except Exception:
+            logger.exception("F046 dispatch lease renewal failed: key={}", lease.key)
+            return
+
+
+async def _run_claimed_async(
+    *,
+    expected_key: str,
+    dispatch_lease_key: str | None,
+    dispatch_lease_token: str | None,
+    coroutine_factory: Callable[[], object],
+):
+    if dispatch_lease_key is not None and str(dispatch_lease_key) != expected_key:
+        raise ValueError("F046 dispatch lease key does not match task identity")
+
+    try:
+        store = await _build_dispatch_lease_store()
+        lease = _new_dispatch_lease(key=expected_key, token=dispatch_lease_token)
+        if not await store.adopt_or_acquire(lease):
+            logger.debug("F046 duplicate task ignored: key={}", expected_key)
+            return {"status": "deduplicated"}
+    except Exception:
+        # The database request/step token remains the source of truth. Redis
+        # failure must not strand an approved business change.
+        logger.exception("F046 task lease unavailable; executing with durable idempotency: key={}", expected_key)
+        return await coroutine_factory()
+
+    renewal = asyncio.create_task(_renew_dispatch_lease(store=store, lease=lease))
+    try:
+        result = await coroutine_factory()
+    except BaseException:
+        # Producer-issued tokens survive Celery autoretry, so retaining the
+        # lease suppresses periodic re-delivery between attempts. Legacy tasks
+        # have no token in their retry kwargs and must release so they can retry.
+        if dispatch_lease_token is None:
+            try:
+                await store.release(lease)
+            except Exception:
+                logger.exception("F046 legacy task lease release failed: key={}", expected_key)
+        raise
+    else:
+        try:
+            await store.release(lease)
+        except Exception:
+            logger.exception("F046 completed task lease release failed: key={}", expected_key)
+        return result
+    finally:
+        renewal.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await renewal
+
+
+def _run_claimed_in_task_tenant(
+    *,
+    request,
+    dispatch_lease_key: str | None,
+    dispatch_lease_token: str | None,
+    key_factory: Callable[[int], str],
+    coroutine_factory: Callable[[int], object],
+):
+    return _run_in_task_tenant(
+        request=request,
+        coroutine_factory=lambda tenant_id: _run_claimed_async(
+            expected_key=key_factory(tenant_id),
+            dispatch_lease_key=dispatch_lease_key,
+            dispatch_lease_token=dispatch_lease_token,
+            coroutine_factory=lambda: coroutine_factory(tenant_id),
+        ),
+    )
+
+
+def _run_claimed_without_tenant(
+    *,
+    request,
+    expected_key: str,
+    dispatch_lease_key: str | None,
+    dispatch_lease_token: str | None,
+    coroutine_factory: Callable[[], object],
+):
+    del request
+    return run_async_task(
+        lambda: _run_claimed_async(
+            expected_key=expected_key,
+            dispatch_lease_key=dispatch_lease_key,
+            dispatch_lease_token=dispatch_lease_token,
+            coroutine_factory=coroutine_factory,
+        )
+    )
 
 
 async def _build_upload_stage_service():

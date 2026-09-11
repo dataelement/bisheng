@@ -189,9 +189,7 @@ async def test_watchdog_candidates_come_only_from_stale_current_knowledge_reques
         )
         await session.commit()
 
-        rows, has_more = await KnowledgeSpaceFileChangeCompensationRepository(
-            session
-        ).list_watchdog_candidates(
+        rows, has_more = await KnowledgeSpaceFileChangeCompensationRepository(session).list_watchdog_candidates(
             tenant_id=11,
             after_request_id=0,
             heartbeat_before=now - timedelta(minutes=15),
@@ -236,9 +234,7 @@ async def test_step_recovery_scan_uses_current_request_token_and_due_step_cursor
             ]
         )
         await session.commit()
-        rows, has_more = await KnowledgeSpaceFileChangeCompensationRepository(
-            session
-        ).list_step_recovery_candidates(
+        rows, has_more = await KnowledgeSpaceFileChangeCompensationRepository(session).list_step_recovery_candidates(
             tenant_id=11,
             after_step_id=0,
             now=now,
@@ -246,11 +242,57 @@ async def test_step_recovery_scan_uses_current_request_token_and_due_step_cursor
         )
 
     assert not has_more
-    assert [
-        (row.step_id, row.request_id, row.execution_token, row.execution_state) for row in rows
-    ] == [(301, 111, "generation-1", KnowledgeSpaceFileChangeExecutionState.APPLYING)]
+    assert [(row.step_id, row.request_id, row.execution_token, row.execution_state) for row in rows] == [
+        (301, 111, "generation-1", KnowledgeSpaceFileChangeExecutionState.APPLYING)
+    ]
     assert not hasattr(rows[0], "instance_id")
     assert not hasattr(rows[0], "outbox_id")
+
+
+async def test_step_recovery_waits_for_the_first_incomplete_step_lease(compensation_engine):
+    now = datetime.utcnow()
+    async with AsyncSession(compensation_engine) as session:
+        session.add_all(
+            [
+                _request(row_id=112),
+                _step(
+                    row_id=304,
+                    request_id=112,
+                    code="upload.fga",
+                    state=KnowledgeSpaceFileChangeExecutionStepState.DISPATCHED,
+                    next_retry_at=now + timedelta(minutes=10),
+                ),
+                _step(
+                    row_id=305,
+                    request_id=112,
+                    code="upload.parse",
+                    state=KnowledgeSpaceFileChangeExecutionStepState.PENDING,
+                ),
+            ]
+        )
+        await session.commit()
+        repository = KnowledgeSpaceFileChangeCompensationRepository(session)
+
+        rows, _ = await repository.list_step_recovery_candidates(
+            tenant_id=11,
+            after_step_id=0,
+            now=now,
+            limit=10,
+        )
+        assert rows == []
+
+        first = await session.get(KnowledgeSpaceFileChangeExecutionStep, 304)
+        first.next_retry_at = now - timedelta(seconds=1)
+        session.add(first)
+        await session.commit()
+        rows, _ = await repository.list_step_recovery_candidates(
+            tenant_id=11,
+            after_step_id=0,
+            now=now,
+            limit=10,
+        )
+
+    assert [row.step_id for row in rows] == [304]
 
 
 async def test_cleanup_candidates_use_business_state_step_and_footprint_only(compensation_engine):

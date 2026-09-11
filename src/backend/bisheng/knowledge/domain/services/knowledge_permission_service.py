@@ -351,6 +351,8 @@ class KnowledgeContainerPermissionPort(Protocol):
 
     async def remove_ordinary_sources(self, **kwargs): ...
 
+    async def remove_subject_sources(self, **kwargs): ...
+
     async def sync_public_reader(self, **kwargs): ...
 
 
@@ -597,6 +599,40 @@ class F048KnowledgeContainerPermissionAdapter:
             ),
         )
 
+    async def remove_own_sources(
+        self,
+        *,
+        resource_id: str,
+        subject_user_id: int,
+    ) -> bool:
+        """Drop everything granted to one user personally on a space.
+
+        This is what leaving means for somebody who was invited: they hold a
+        direct source and no membership row, so clearing the membership
+        projection would find nothing. Returns whether anything was removed.
+        """
+
+        record = await self._loader.load_permission_record("knowledge_space", resource_id)
+        if record is None:
+            raise PermissionInvalidResourceError()
+        actor = PermissionActor(user_id=subject_user_id, current_tenant_id=record.tenant_id)
+        removed = False
+        while True:
+            fresh = await self._loader.load_permission_record("knowledge_space", resource_id)
+            if fresh is None:
+                raise PermissionInvalidResourceError()
+            target = self._target(fresh, actor, "knowledge_space", resource_id)
+            result = await self._permission.remove_subject_sources(
+                actor=actor,
+                target=target,
+                subject_type="user",
+                subject_id=str(subject_user_id),
+                idempotency_key=(f"space-leave:{resource_id}:{subject_user_id}:{fresh.permission_version}"),
+            )
+            if result is None:
+                return removed
+            removed = True
+
     async def sync_department(
         self,
         *,
@@ -792,11 +828,7 @@ class KnowledgeFileDaoPermissionLoader:
         ancestors = tuple(part for part in (row.file_level_path or "").split("/") if part)
         if ancestors:
             return "folder", ancestors[-1], ancestors
-        root_type = (
-            "knowledge_space"
-            if knowledge.type == KnowledgeTypeEnum.SPACE.value
-            else "knowledge_library"
-        )
+        root_type = "knowledge_space" if knowledge.type == KnowledgeTypeEnum.SPACE.value else "knowledge_library"
         return root_type, str(knowledge.id), ancestors
 
     async def load_permission_records_from_rows(
@@ -854,10 +886,7 @@ class KnowledgeFileDaoPermissionLoader:
                 status = "ACTIVE"
             parent_type, parent_id, ancestors = self._parent_scope(row, knowledge)
             context_version = sha256(
-                (
-                    f"{snapshot.context_version}|"
-                    f"{row.update_time.isoformat() if row.update_time else '0'}"
-                ).encode()
+                (f"{snapshot.context_version}|{row.update_time.isoformat() if row.update_time else '0'}").encode()
             ).hexdigest()[:64]
             records.append(
                 KnowledgeFilePermissionRecord(
