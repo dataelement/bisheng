@@ -179,3 +179,16 @@
 ## 2026-09-10 工作台本人弹窗与部门展示
 
 用户已批准本人会话/用量查询和逐会话吊销；完整接口及验收边界见 [self-service-revision.md](./self-service-revision.md)。部门仅展示，不同步 Gateway；客户端冻结的登录与模型协议不变。
+
+## 2026-09-11：License 与业务数据解除部署绑定
+
+用户确认：指纹输入保留，本期不校验指纹与目标机器或部署环境的匹配；移除 installation_id 以及相关的数据和协议绑定；不兼容未发布的旧 DSH 测试 License；继续兼容旧 SSO License。
+
+- **AC-UNB-01**：同一份合法 DSH License 可在两个独立环境使用，各自的总席位上限均为 License 授予数，不跨环境累计。
+- **AC-UNB-02**：同一环境的所有 Gateway 副本共享席位计数；并发分配仍不超过上限，一个自然人不因设备或租户切换重复占席。
+- **AC-UNB-03**：更换 Pod、节点或 License 不改变用户、模型授权、席位和用量的归属；迁移保留数据库、Redis、共享 Secret 后可继续使用。
+- **AC-UNB-04**：License 指纹与运行机器不同不拒绝授权；签名被篡改、授权过期或无效仍拒绝 DSH 使用。
+- **AC-UNB-05**：客户端公开接口保持 0.5.0 的路径、字段及调用顺序；本次切换允许清退旧登录凭证并重新登录，不要求客户端理解安装标识或 License schema。
+- **AC-UNB-06**：此未发布功能直接更新建表脚本及测试环境结构，不新增 Alembic 或重复明细表；持久化授权和用量保留，迁移前检查重复用户、幂等记录和待投影用量。
+
+目标设计见 [解绑修订](./installation-unbinding-revision.md)，客户端影响见 [兼容说明](./client-installation-unbinding-compatibility.md)。这些验收项尚未实施验证。

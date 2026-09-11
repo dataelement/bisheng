@@ -1,5 +1,7 @@
 # DSH Desktop 接入 BiSheng：客户端开发与联调接口契约
 
+> **2026-09-11 兼容修订（待服务端实现）**：移除安装标识不改变本公开契约，`contract_version` 保持 `0.5.0`。客户端无需新增参数或解析 JWT，现有登录、刷新、模型调用和缓存用量协议保持不变；测试环境切换需重新登录。详见可独立交付客户端的 [安装标识解绑兼容说明](./client-installation-unbinding-compatibility.md)。License schema=2 和内部 HMAC 变化仅由服务端/发行工具处理，不应因此把本接口升为 0.6.0。
+
 > 0.4.0 部署简化：服务端改用共享 HMAC 派生的 HS256；客户端不持有密钥，将 token 视为不透明凭证。月度默认 Asia/Shanghai。接口路径和时序保持，旧 access token 需重新登录。详见 deployment-simplification.md。
 版本：`0.5.0` · 日期：2026-09-10 · 所属：F062 / v3.0.0-beta2<br>
 开发分支：`feat/3.0.0-beta2-pre`

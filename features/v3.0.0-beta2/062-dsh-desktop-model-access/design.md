@@ -1,13 +1,13 @@
 # Design: F062 DSH Desktop 登录、固定席位与模型调用
 
 > 当前有效修订：[部署配置简化 0.4.0](./deployment-simplification.md)。共享 HMAC、现有 Redis、界面模型授权及北京时间默认值以此修订为准。
-> 本文是 F062 当前设计的唯一来源。两仓接口、席位、模型逐项额度、恢复与管理界面已实现；当前接线见 §4.1，验证范围见修订验收。
+> 本文是 F062 当前设计的唯一来源。2026-09-11 按用户确认更新安装标识解绑设计；本次修订尚未实现、部署，实施与验收见 [安装标识解绑修订](./installation-unbinding-revision.md)。此前实现与本次目标状态须区分。
 > HTML 是评审图稿；[client-api.md](./client-api.md) 是本设计的客户端线协议附件，细化字段与示例，变更须双向同步。[tasks.md](./tasks.md) 记录实现与外部验收状态。DM 实机本轮暂缓，目标旧发行制品与真实客户端部署验收尚待外部证据。
 
 **关联**：[spec.md](./spec.md) · [评审图稿](./architecture-review.html) · [评审报告](./design-review.md)
 **版本**：v3.0.0-beta2
-**状态**：用户已确认官方链路边界、单 Nginx 入口、接口冻结规则与逐模型修订；当前客户端契约为 `0.3.0`；逐模型额度、取消未知用量冻结及部门同步/筛选修订已实现；完整发布验收仍独立保留
-**最后更新**：2026-09-09
+**状态**：用户已确认官方链路边界、单 Nginx 入口、接口冻结规则与逐模型修订；当前客户端契约为 `0.5.0`（本次解绑不升版）；逐模型额度、取消未知用量冻结及部门同步/筛选修订已实现；完整发布验收仍独立保留
+**最后更新**：2026-09-11
 
 ## 1. 目标与非目标
 
@@ -107,7 +107,7 @@ flowchart LR
 
 客户端只访问同一 Nginx origin。Nginx 将全部 `/api/*` 交给 Gateway，Gateway 将已配置的 `/api/v1/*`、`/api/v2/*` 转发到 BiSheng，其余 `/api/*` 由自有 Controller 处理；版本前缀优先匹配。DSH 换证逻辑终点为 Gateway，模型请求逻辑终点为 BiSheng，传输均经过 Nginx/Gateway。模型实现不因代理链新增而重复。
 
-配置边界：BiSheng 部署 `dsh.enabled`（默认 false，决定是否显示 DSH 管理入口）；管理页另有默认 false 的实例业务开关，两者都开启才允许 DSH 新登录与模型调用。业务开关和下载地址保存在已有全局 Config 表的 dsh_management 项；部署信任字段包括固定的 `gateway_internal_url`、同 Nginx origin 的 `platform_public_url`、`installation_id`、复用既有用户同步共享 Secret；Token issuer 和各用途 key_id 由代码固定。内部 URL 指向真实服务地址，避免经公共反向代理形成回环；客户端不能提交任意 issuer 或验席 URL。
+配置边界：BiSheng 部署 `dsh.enabled`（默认 false，决定是否显示 DSH 管理入口）；管理页另有默认 false 的实例业务开关，两者都开启才允许 DSH 新登录与模型调用。业务开关和下载地址保存在已有全局 Config 表的 dsh_management 项；部署信任字段包括固定的 `gateway_internal_url`、同 Nginx origin 的 `platform_public_url`、复用既有用户同步共享 Secret；Token issuer 和各用途 key_id 由代码固定。内部 URL 指向真实服务地址，避免经公共反向代理形成回环；客户端不能提交任意 issuer 或验席 URL。
 
 Gateway 新增 `dsh.enabled`、BiSheng 内部地址、同一个 `platform_public_url`、实例标识、DSH 签名密钥引用及客户端回调规则。DSH 用户配置只有 Nginx BASE；公开 client_id 通过 config 返回，所有 API 路径固定拼接到 BASE，不发现第二公开服务地址。config 不访问用户或模型数据。身份凭证保存在操作系统安全凭证存储中，不随 Agent 配置导出或写入普通配置文件。
 
@@ -159,7 +159,7 @@ sequenceDiagram
 3. 先验证 DSH 签名，再设置 tenant ContextVar，通过用户业务入口读取当前有效自然人。忽略客户端提供的管理租户覆盖，按现有隔离规则建立可见范围；不将整个 DSH 前缀加入 TENANT_CHECK_EXEMPT_PATHS。
 4. Gateway 每个新请求在线检查当前 entitlement、seat.state、grant_version 和 session.state。无正向缓存；超时/未知即拒绝本次请求。HS256 使用共享 Secret 派生的 Token 密钥，拒绝其他算法和 kid，不远程取钥。
 5. 可调用集合为“现有模型业务允许的集合”与“DSH 用户模型授权”的交集；合法 Root 共享通过 LLMService 判定。online=false 禁止调用；探活 status 不是永久权限，不因历史探活异常自行跳过 SDK 错误处理。
-6. 适配器把消息转换为 LangChain 消息，调用 `LLMService.get_bisheng_llm`，携带服务器确定的 model_id/user_id，以及 `app_type=DSH_DESKTOP`、`app_id=dsh:<installation_id>`。DSH 仅收到逻辑模型标识，不收到模型配置、api_key 或 upstream URL。
+6. 适配器把消息转换为 LangChain 消息，调用 `LLMService.get_bisheng_llm`，携带服务器确定的 model_id/user_id，以及 `app_type=DSH_DESKTOP`、`app_id=dsh`。DSH 仅收到逻辑模型标识，不收到模型配置、api_key 或 upstream URL。
 7. 适配器使用 ainvoke/astream 和工具绑定；不得直接请求 llm.llm 绕开外层治理。SSE 逐块转发、自然背压，不缓存完整回答；取消时关闭上游迭代器，在 finally 中提交 Redis 结算事件或未知状态；提交失败按 §4.7.3 冻结受影响的准入并告警，不把未知用量记为零。
 8. 流式响应的租户/主体上下文覆盖生成器整个生命周期；应在流生成任务内显式建立并 finally reset，不能依赖一个在返回 StreamingResponse 时已经结束的上下文。
 
@@ -184,11 +184,11 @@ sequenceDiagram
 
 | 存储 | 对象 | 核心约定 |
 |---|---|---|
-| Gateway 既有 License 模块 | 当前生效授权 | 复用验签解析结果提供 capability、seat_limit、有效期与实例绑定；不新增 License 配置表，不持久化解析副本 |
-| Gateway DB | SeatAssignment | seat_id、installation_id、tenant_id、user_id、state、grant_version；唯一键 installation_id + user_id，租户归属单独校验 |
+| Gateway 既有 License 模块 | 当前生效授权 | 复用验签解析结果提供 capability、seat_limit、有效期；保留指纹输入但不匹配部署环境；不新增 License 配置表，不持久化解析副本 |
+| Gateway DB | SeatAssignment | seat_id、tenant_id、user_id、state、grant_version；唯一键 user_id，租户归属单独校验 |
 | Gateway DB | DshSession | session_id、seat_id、grant_version、auth_id、state、expires_at、device_label；session_id 即 refresh family，设备信息只是描述 |
 | Gateway DB | DshRefreshToken | session_id、token_hash、generation、state；保存 ACTIVE / USED / REVOKED 历史，支持轮换重放检测 |
-| Gateway DB | GatewayOperation | operation_id 全局主键并校验 installation_id 作用域；记录动作、payload 摘要与结果，拒绝同 key 不同 payload |
+| Gateway DB | GatewayOperation | operation_id 为当前环境数据库内全局主键并校验 actor/目标权限；记录动作、payload 摘要与结果，拒绝同 key 不同 payload |
 | BiSheng DB | DshUserPolicy | tenant_id + user_id 唯一策略；保存逐模型独立月额度对象列表及版本，不复制 LLMModel |
 | BiSheng DB | DshMonthlyUsage | 用户模型月用量的异步持久化投影；唯一键不变，准入读取 Redis 实时用户总量和模型分量，不读滞后 SQL |
 | BiSheng DB | DshModelCall | Stream 批量投影的逐请求完整状态；request_id + event_version 去重，与月汇总差额在同一 SQL 事务提交 |
@@ -227,13 +227,12 @@ BiSheng 所有用户表必须携带 tenant_id，读写均显式校验作用域�
 
 **Gateway · `gt_dsh_seat`：固定用户席位**
 
-- PK seat_id；UK (installation_id, user_id)
-- INDEX (installation_id, state) 保护容量；管理索引按 installation_id、tenant_id 前缀，分别接 (state, created_at, seat_id)、(username_search, seat_id)、(display_name_search, seat_id)、(created_at, seat_id)；SQL 执行计划验证后确定最终组合
+- PK seat_id；UK (user_id)
+- INDEX (state) 支持全库席位计数；容量并发仍由事务锁保护；管理索引按 tenant_id 前缀，分别接 (state, created_at, seat_id)、(username_search, seat_id)、(display_name_search, seat_id)、(created_at, seat_id)；SQL 执行计划验证后确定最终组合
 
 | 字段 | 逻辑类型 | 约束 / 默认 | 含义 |
 |---|---|---|---|
 | seat_id | VARCHAR(36) | PK | UUID；被 Token、Session 与调用记录引用 |
-| installation_id | VARCHAR(64) | 非空 / 稳定实例标识 | 不引用某份 License，替换授权不改变用户占席记录 |
 | tenant_id / user_id | BIGINT / BIGINT | 非空 | 稳定用户与归属租户；用户名、设备 ID 不参与席位唯一性 |
 | state | VARCHAR(16) | 非空 | ASSIGNED / REVOKED；无历史行才是 NEVER_ASSIGNED |
 | grant_version | BIGINT | 非空 / 初始 1 | 撤销、重新分配均递增，旧 Token 不可恢复 |
@@ -272,12 +271,12 @@ BiSheng 所有用户表必须携带 tenant_id，读写均显式校验作用域�
 
 **Gateway · `gt_dsh_operation`：席位命令幂等与审计**
 
-- PK operation_id；全局唯一，并校验 installation_id 作用域
-- INDEX (installation_id, tenant_id, user_id, created_at)
+- PK operation_id；当前环境数据库内全局唯一，并校验 actor 与业务目标
+- INDEX (tenant_id, user_id, created_at)
 
 | 字段 | 逻辑类型 | 约束 / 默认 | 含义 |
 |---|---|---|---|
-| operation_id / installation_id | VARCHAR(36) / VARCHAR(64) | PK / 非空 | 从 BiSheng 传入的稳定操作 ID |
+| operation_id | VARCHAR(36) | PK / 非空 | 从 BiSheng 传入的稳定操作 ID |
 | tenant_id / user_id / actor_user_id | BIGINT | 非空 | 受信请求中的目标与管理员身份 |
 | action / expected_grant_version | VARCHAR(16) / BIGINT | 非空 | REVOKE / REASSIGN；阻止延迟旧命令覆盖新状态 |
 | payload_hash | CHAR(64) | 非空 | 同 operation_id 不同负载返回 409 |
@@ -413,14 +412,14 @@ License 只保存于既有受管授权源；DSH 不建立第二份配置真相�
 }
 ```
 
-- `dsh_entitlement` 内部为厂商签名载荷，包含独立 schema version、发行方、用途 audience、License 标识、实例绑定、签发生效/到期时间、`capabilities.dsh.enabled` 和非负整数 `seat_limit`。算法由服务端固定白名单，kid 仅查预配厂商公钥；不从载荷提供的任意 URL 取钥，不使用旧解密密钥作为签名信任根。
+- `dsh_entitlement` 内部为厂商签名载荷，包含独立 schema version、发行方、用途 audience、License 标识、签发生效/到期时间、`capabilities.dsh.enabled` 和非负整数 `seat_limit`。算法由服务端固定白名单，kid 仅查预配厂商公钥；不从载荷提供的任意 URL 取钥，不使用旧解密密钥作为签名信任根。
 - 签名内容同时绑定对应旧授权字段（含字段是否存在及原值），与解密外层逐项比对，防止把 DSH 扩展拼接到另一份旧 License。签名编码与测试向量已在 license-issuer-contract.md 和 contracts/license-entitlement-v1.json 固定；真实发行工具/旧密文样本仍须在 Gateway 实施时验证；不影响客户端 `0.3.0` API。
 - 不重命名或删除旧 `version/expireDay`，不把 version 改为 `dsh`、`v2` 等新值。当前旧程序的非 trial 分支会被视作 pro，新类型值可能错误扩大旧商业授权。
 - 未配置 DSH 扩展时，新 Gateway 只执行原 License 行为；已启用 DSH 的请求报告缺少有效 DSH 授权。只有合法厂商签名明确授权时才有免费 10 席 / 付费席位；旧 pro 不意味着 DSH 无限额。
 - 外层成功解析后，原 License 状态和 DSH 状态分别计算、分别发布。DSH 扩展格式错误、未知版本、签名无效、错误实例、过期或禁用仅关闭 DSH，不落入旧 Loader 的全局 markExpired 路径；原 License 自身解码失败则保留原有降级行为，同时 DSH 不可用。
 - 旧商业有效期与 DSH 签名有效期分别执行，不互相延长。DSH 是否可用以其有效签名、实例、capability 与开关为准；SSO 等旧商业功能仍按原授权执行。任何一侧未知状态都不能借另一侧的成功状态放行。
 - DSH Controller 和内部端点按明确路由分派独立策略；仅从旧商业过滤器中移交 DSH 路由，不豁免其他商业接口。登录/刷新/准入必须验 DSH，公钥读取与可验证身份的会话撤销按既有设计允许。缺少/失效扩展不返回旧 HTTP 200 + 11001 伪装成客户端成功。
-- DSH License 到期和实例绑定在每次验席/发证时检查，不能等待旧按小时重载才拒绝已到期能力；更换授权仍按现有“全副本暂停 DSH 准入 → 安装同一版本 → 校验 → 恢复”规则，不改变席位、会话与用量归属。
+- DSH License 有效期及席位资格在每次验席/发证时检查；指纹不与机器、Pod、IP 或环境配置比对，不能等待旧按小时重载才拒绝已到期能力；更换授权仍按现有“全副本暂停 DSH 准入 → 安装同一版本 → 校验 → 恢复”规则，不改变席位、会话与用量归属。
 
 术语固定：**旧商业授权**是原 `version/expireDay` 的判定结果；**DSH 授权**是通过外层绑定验证的签名 entitlement；**外层有效**仅指密文与旧字段可解析，不表示旧商业授权仍在有效期。本文发席/发证/验席所称“License 有效”均指 DSH 授权有效且实例激活、DSH 开关启用。旧 trial 期满本身不使外层不可解析。
 
@@ -667,7 +666,7 @@ DSH 仅配置 Nginx BASE，公开配置返回开关、client_id 与 contract_ver
 
 2026-09-10：模型管理新增按模型分页用户 GET 及单模型策略 GET，策略 PUT 改为单模型正文；见 [完整修订契约](./model-policy-row-revision.md)。以下用户策略 GET 为只读用量聚合，不能用于保存版本。
 
-均由 BiSheng 提供，管理员 JWT + 当前管理作用域；用户与租户不能由未验证参数替换。users/{id} 的管理操作可携带 tenant_id 查询参数明确已加载记录的归属：Root管理可选择受控目标，租户管理员只能选择当前scope。Gateway席位仍按(installation_id,user_id)唯一；此参数不会创建跨租户重复席位或自动迁移授权，策略/历史仍按其原tenant隔离。
+均由 BiSheng 提供，管理员 JWT + 当前管理作用域；用户与租户不能由未验证参数替换。users/{id} 的管理操作可携带 tenant_id 查询参数明确已加载记录的归属：Root管理可选择受控目标，租户管理员只能选择当前scope。Gateway席位按当前环境全局 user_id 唯一；此参数不会创建跨租户重复席位或自动迁移授权，策略/历史仍按其原tenant隔离。
 
 | 提供方 / 方法 / 路径 | 调用方 / 鉴权 | 关键入参 | 返回契约 | 关联数据 |
 |---|---|---|---|---|
@@ -685,10 +684,10 @@ HTTP 或 HTTPS + 现有用户同步 Secret 派生的双向 HMAC；key_id 由代�
 | 提供方 / 方法 / 路径 | 调用方 / 鉴权 | 关键入参 | 返回契约 | 关联数据 |
 |---|---|---|---|---|
 | BiSheng `POST /api/v1/internal/dsh/identity/redeem` | Gateway → BiSheng；服务 HMAC | identity_ticket, auth_id, client_id, redirect_uri, code_challenge | DshIdentitySnapshot（见下） | Redis 消费票据 + 用户业务 |
-| BiSheng `POST /api/v1/internal/dsh/identity/check` | Gateway → BiSheng；服务 HMAC | 受信实例、租户、用户 | DshIdentitySnapshot（见下） | 既有用户/租户业务 |
+| BiSheng `POST /api/v1/internal/dsh/identity/check` | Gateway → BiSheng；服务 HMAC | 受信租户、用户 | DshIdentitySnapshot（见下） | 既有用户/租户业务 |
 | Gateway `POST /api/internal/dsh/introspect` | BiSheng → Gateway；服务 HMAC + DSH Token | token | active, seat_id, session_id, grant_version, reason | 有效 License（只读）, seat, session |
-| Gateway `POST /api/internal/dsh/authorizations/resolve` | BiSheng → Gateway；服务 HMAC | auth_id | challenge, redirect_uri, client_id, instance, state, expires_in | Redis 授权事务 |
-| Gateway `POST /api/internal/dsh/management/read` | BiSheng → Gateway；HMAC + 管理员上下文 | resource, cursor, limit, keyword, seat_state, login_state, target | license / seats / sessions 分页摘要 | License、席位检索投影与有效会话；目标实例/租户受限 |
+| Gateway `POST /api/internal/dsh/authorizations/resolve` | BiSheng → Gateway；服务 HMAC | auth_id | challenge, redirect_uri, client_id, state, expires_in | Redis 授权事务 |
+| Gateway `POST /api/internal/dsh/management/read` | BiSheng → Gateway；HMAC + 管理员上下文 | resource, cursor, limit, keyword, seat_state, login_state, target | license / seats / sessions 分页摘要 | License、席位检索投影与有效会话；目标租户受限 |
 | Gateway `POST /api/internal/dsh/seats/revoke` | BiSheng → Gateway；服务 HMAC + 管理员上下文 | operation_id, target, expected_grant_version | 结果、新授权版本 | operation + seat/session；License 只读 |
 | Gateway `POST /api/internal/dsh/seats/reassign` | BiSheng → Gateway；服务 HMAC + 管理员上下文 | operation_id, target, expected_grant_version | 结果、新授权版本 | operation + seat；License 只读 |
 | Gateway `POST /api/internal/dsh/operations/read` | BiSheng → Gateway；服务 HMAC | operation_id | UNKNOWN / SUCCEEDED / FAILED | operation |
@@ -697,7 +696,6 @@ HTTP 或 HTTPS + 现有用户同步 Secret 派生的双向 HMAC；key_id 由代�
 
 | 字段 | 类型 / 规则 |
 |---|---|
-| installation_id | string；服务 key_id 绑定的实例 |
 | tenant_id / user_id | string；既有业务主键的十进制字符串，必须分别等于 tenant.id / user.id |
 | active / reason | boolean / string 或 null；成功为 true/null，拒绝为 false/稳定原因，不附身份显示对象 |
 | user | active=true 时必返 `{id:string, username:string, display_name:string}` |
@@ -710,7 +708,7 @@ Gateway 在首次换证与每次刷新时，将该次受信快照的 user/tenant
 
 resolve 的 expires_in 为 Redis 剩余 TTL 秒（1–300）；Python 票据 TTL=min(60,expires_in)，拒绝过期事务。此为内部字段补全，客户端 0.3.0 不变。
 
-DSH Token 的 JOSE header 固定 typ=bisheng-dsh-access+jwt、alg=HS256、kid=dsh-access-v1。DSH Token 声明固定为 `iss, aud, sub, installation_id, tenant_id, seat_id, session_id, grant_version, iat, exp, jti`；sub 是稳定 user_id 字符串，不能作为可任意更换的邮箱或用户名。所有状态更新主体从可信认证结果建立。
+DSH Token 的 JOSE header 固定 typ=bisheng-dsh-access+jwt、alg=HS256、kid=dsh-access-v1。DSH Token 声明固定为 `iss, aud, sub, tenant_id, seat_id, session_id, grant_version, iat, exp, jti`；sub 是稳定 user_id 字符串，不能作为可任意更换的邮箱或用户名。所有状态更新主体从可信认证结果建立。
 
 | 补充契约 | 约束 |
 |---|---|
@@ -740,7 +738,7 @@ DSH Token 的 JOSE header 固定 typ=bisheng-dsh-access+jwt、alg=HS256、kid=ds
 
 BiSheng 管理入口采用既有管理员能力校验并限定目标租户；模型选择调用现有模型业务授权。需要具体资源授权的操作由业务侧构造已验证目标后进入 `permission.application`；不直接访问 OpenFGA，也不把 DSH model grant 当成可绕过原权限的替代结论。
 
-内部服务通信采用固定 HTTP/HTTPS origin + 独立 HMAC-SHA256 协议，复用现有 SSO Secret 并按方向/Token 用途派生密钥，不新增密钥配置，不使用 License 密钥。签名覆盖 method、规范化 path、body_hash、installation_id、key_id、timestamp、nonce；内部端点不使用 query 参数传签名数据。时间窗建议 ±60 秒，nonce 共享存储原子占用 120 秒；重试用新 nonce、同 operation_id。服务端从 key_id 的受信注册映射验证安装实例，不能只信请求体中的 installation_id。采用 HTTPS 时仍校验证书，不禁用 TLS 验证；采用 HTTP 时直接连接配置的固定 origin，不新增开关。
+内部服务通信采用固定 HTTP/HTTPS origin + 独立 HMAC-SHA256 协议，复用现有 SSO Secret 并按方向/Token 用途派生密钥，不新增密钥配置，不使用 License 密钥。签名覆盖 method、规范化 path、body_hash、key_id、timestamp、nonce；内部端点不使用 query 参数传签名数据。时间窗建议 ±60 秒，nonce 共享存储原子占用 120 秒；重试用新 nonce、同 operation_id。服务端从固定方向的 key_id 与既有共享 Secret 验证发送方；不接受请求体指定信任域，不携带安装标识。采用 HTTPS 时仍校验证书，不禁用 TLS 验证；采用 HTTP 时直接连接配置的固定 origin，不新增开关。
 
 ### 6.3 依赖与风险
 
@@ -752,7 +750,7 @@ BiSheng 管理入口采用既有管理员能力校验并限定目标租户；模
 | Gateway 开发基线 | `feat/dsh-access` 基于 `main@75a74ff2`；按 §4.5.4 保留旧 License 兼容，不能混入 cofco 特有改动；迁移与 SDK 实施时再核对 |
 | MySQL/DM8 与 Gateway JDBC 方言 | 两侧唯一键、行锁、条件更新和大整数都要验证；首次开发即避免数据库专用 JSON 查询 |
 | Redis | 新增配额持久化区、同槽脚本、Stream 与恢复门禁；状态不可确认即失败关闭，不能直接沿用通用自动重试 |
-| 厂商 License 发行与客户端 | 提供签名的新能力载荷与可信实例绑定；DSH 交付支持 PKCE、凭证安全存储、tools 与 SSE |
+| 厂商 License 发行与客户端 | 提供签名的新能力载荷，保留指纹输入但不校验环境匹配；DSH 交付支持 PKCE、凭证安全存储、tools 与 SSE |
 | 现有 C4 及 F053 | 共享身份/租户/授权基础设施可复用；不 import F053 凭据校验器或修改 api_credential 表 |
 
 ### 6.4 部署与升级
@@ -858,3 +856,9 @@ Desktop GET usage 增加可选 `model=bisheng:<id>`，响应字段不变；选�
 - 成功、失败或取消时以已观察到的供应商用量记录缓存详情；未知总量不伪造零值。人工补记接口不扩展新参数，本次不新增界面、缓存价格或额度折算。
 - 客户端字段、JSON/SSE 示例与空值语义见 client-api.md §7.3；本轮无需改变时序。
 - 按用户确认的未发布功能处理方式不新增 Alembic revision。109 独立 DSH 库先给原表增加上述可空列，再由用户统一更新 Bisheng API 与消费用量事件的 Worker 镜像；旧 Worker 不应与会产生新字段的 API 混用。新代码兼容缺失缓存字段的旧事件。Gateway 不需要修改。
+
+## 2026-09-11：部署解绑与协议分层
+
+按用户确认，删除 installation_id 及其在数据、Redis、HMAC、JWT、内部 DTO、遥测和恢复证据中的绑定；不换名为另一个环境 ID。指纹输入与外层 finger 字段继续保留并受签名完整性保护，但本期不收集机器指纹、不执行环境匹配，也不新增校验开关。允许相同 License 在多个独立环境使用，每套共享数据库独立控制总席位。
+
+DSH License schema 改为 2，不兼容未发布的 schema 1 测试授权；没有 DSH 扩展的旧 SSO License 保持兼容。公共客户端契约继续 0.5.0；内部协议需两端配套更新，详细密钥派生、数据切换、风险和验收以 [解绑修订](./installation-unbinding-revision.md) 为附件，客户端联调以 [0.5.0 兼容说明](./client-installation-unbinding-compatibility.md) 为附件。当前修订为设计，尚未实现或部署。

@@ -14,9 +14,11 @@
 
 ## 身份协议
 
-现有用户同步 HMAC 协议不变。DSH 由同一共享 Secret 通过 HKDF-SHA256 派生用途密钥，不增加运维配置：salt=UTF-8("bisheng-dsh-v1")，info=UTF-8(installation_id+":"+purpose)，输出 32 字节；purpose 分别为 bisheng-to-gateway-v1、gateway-to-bisheng-v1、dsh-access-v1。服务请求继续使用时间窗和共享 nonce 防重放，其 HMAC secret 为派生结果的小写 hex UTF-8；Token 直接使用 32 字节派生结果签名。
+> 2026-09-11 目标修订（待实现）：删除安装标识；以下派生方式由双方同步切换，详细要求见 [解绑修订](./installation-unbinding-revision.md)。公开客户端 contract_version 保持 0.5.0。
 
-DSH access token 固定 HS256、typ=bisheng-dsh-access+jwt、kid=dsh-access-v1、iss=bisheng-dsh:<installation_id>、aud=bisheng-dsh-model，最长 600 秒。验签之后仍在线检查真实用户、租户、席位和会话。普通 JWT/PAT/SAK 不成为 DSH 凭证。客户端不获得共享 Secret，也不本地验签；将 token 视为不透明凭证。
+现有用户同步 HMAC 协议不变。DSH 由同一共享 Secret 通过 HKDF-SHA256 派生用途密钥，不增加运维配置：salt=UTF-8("bisheng-dsh-v1")，info=UTF-8(purpose)，输出 32 字节；purpose 分别为 bisheng-to-gateway-v1、gateway-to-bisheng-v1、dsh-access-v1。服务请求继续使用时间窗和共享 nonce 防重放，其 HMAC secret 为派生结果的小写 hex UTF-8；Token 直接使用 32 字节派生结果签名。
+
+DSH access token 固定 HS256、typ=bisheng-dsh-access+jwt、kid=dsh-access-v1、iss=bisheng-dsh、aud=bisheng-dsh-model，最长 600 秒。验签之后仍在线检查真实用户、租户、席位和会话。普通 JWT/PAT/SAK 不成为 DSH 凭证。客户端不获得共享 Secret，也不本地验签；将 token 视为不透明凭证。
 
 Ticket 保持随机、短期、Redis 原子一次性消费和 PKCE/授权事务绑定，Gateway 通过 HMAC 认证的内部接口兑换。无需为 ticket 新增签名格式。/api/dsh/jwks 为旧接线保留空 keys 响应，任何密钥都不通过该接口发布。License 发行和验证继续独立，不以共享 HMAC 生成 License。
 
@@ -30,7 +32,7 @@ Ticket 保持随机、短期、Redis 原子一次性消费和 PKCE/授权事务�
 
 共享模式按服务器已有 maxmemory 判断余量，不将其他业务占用算入原 DSH 512 MiB 上限；未设置全局上限时保留 DSH Stream 积压数量/时间保护和异步清理，不擅自设置全局上限。既有受控恢复审批对象仍需配置，此次取消的是重复 Redis 地址，不是丢账恢复校验。
 
-## 兼容与联调
+## 2026-09-09 历史切换记录（非本次升版要求）
 
 config.contract_version 升为 0.4.0；HTTP 路径、调用顺序、ticket 兑换和正常 JSON/SSE 形状不变。旧 RS256 access token 失效，应重新登录；已有席位和逐模型额度记录保留。共享 Secret 轮换同时影响用户同步与 DSH，应协调两端同步更新。客户端契约已更新在本地，未向客户端团队发送消息。
 
