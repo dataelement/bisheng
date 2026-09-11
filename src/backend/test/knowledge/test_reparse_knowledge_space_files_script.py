@@ -58,7 +58,11 @@ class _FakeAsyncSessionContext:
         return False
 
 
-def _patch_run_dependencies(monkeypatch, selection: script_mod.SelectionReport) -> None:
+def _patch_run_dependencies(
+    monkeypatch,
+    selection: script_mod.SelectionReport,
+    skip_ledger_path: Path | None = None,
+) -> None:
     async def fake_collect_candidate_files(session, **kwargs):
         return selection
 
@@ -68,6 +72,8 @@ def _patch_run_dependencies(monkeypatch, selection: script_mod.SelectionReport) 
     monkeypatch.setattr(script_mod, "get_async_db_session", _FakeAsyncSessionContext)
     monkeypatch.setattr(script_mod, "collect_candidate_files", fake_collect_candidate_files)
     monkeypatch.setattr(script_mod, "close_app_context", fake_close_app_context)
+    if skip_ledger_path is not None:
+        monkeypatch.setattr(script_mod, "DEFAULT_SKIP_LEDGER", skip_ledger_path)
 
 
 async def _seed_space(
@@ -529,6 +535,9 @@ def test_parse_args_defaults_to_dry_run_and_single_concurrency():
     assert args.space_level is None
     assert args.statuses == []
     assert args.report_file is None
+    assert args.skip_ledger is None
+    assert args.retry_skipped is False
+    assert args.no_skip_ledger is False
 
 
 def test_parse_args_accepts_space_level_and_repeated_statuses():
@@ -653,7 +662,7 @@ async def test_apply_run_writes_complete_jsonl_lifecycle(monkeypatch, tmp_path: 
         KnowledgeFile(id=2, knowledge_id=10, file_name="b.pdf"),
     ]
     selection = script_mod.SelectionReport(selected_files=files)
-    _patch_run_dependencies(monkeypatch, selection)
+    _patch_run_dependencies(monkeypatch, selection, tmp_path / "reparse-skip.json")
 
     def fake_reparse(file_id: int, **kwargs) -> script_mod.FileReparseResult:
         if file_id == 2:
@@ -728,6 +737,7 @@ async def test_apply_run_flushes_file_events_while_batch_is_still_running(
     _patch_run_dependencies(
         monkeypatch,
         script_mod.SelectionReport(selected_files=files),
+        tmp_path / "reparse-skip.json",
     )
     lock = threading.Lock()
     release_second = threading.Event()
@@ -779,7 +789,7 @@ async def test_apply_run_flushes_file_events_while_batch_is_still_running(
 
 @pytest.mark.asyncio
 async def test_apply_run_with_empty_selection_writes_run_summary(monkeypatch, tmp_path: Path):
-    _patch_run_dependencies(monkeypatch, script_mod.SelectionReport())
+    _patch_run_dependencies(monkeypatch, script_mod.SelectionReport(), tmp_path / "reparse-skip.json")
     report_path = tmp_path / "empty.jsonl"
     args = script_mod.parse_args(["--apply", "--report-file", str(report_path)])
 
@@ -801,7 +811,7 @@ async def test_apply_run_with_empty_selection_writes_run_summary(monkeypatch, tm
 @pytest.mark.asyncio
 async def test_dry_run_does_not_create_jsonl_report(monkeypatch, tmp_path: Path):
     selection = script_mod.SelectionReport(selected_files=[KnowledgeFile(id=1, knowledge_id=10, file_name="a.pdf")])
-    _patch_run_dependencies(monkeypatch, selection)
+    _patch_run_dependencies(monkeypatch, selection, tmp_path / "reparse-skip.json")
     report_path = tmp_path / "dry-run.jsonl"
     args = script_mod.parse_args(["--report-file", str(report_path)])
 
@@ -826,6 +836,7 @@ async def test_apply_run_refuses_existing_report_before_selection(monkeypatch, t
     monkeypatch.setattr(script_mod, "get_async_db_session", _FakeAsyncSessionContext)
     monkeypatch.setattr(script_mod, "collect_candidate_files", fake_collect_candidate_files)
     monkeypatch.setattr(script_mod, "close_app_context", fake_close_app_context)
+    monkeypatch.setattr(script_mod, "DEFAULT_SKIP_LEDGER", tmp_path / "reparse-skip.json")
     report_path = tmp_path / "existing.jsonl"
     report_path.write_text('{"existing": true}\n', encoding="utf-8")
     args = script_mod.parse_args(["--apply", "--report-file", str(report_path)])
@@ -839,7 +850,7 @@ async def test_apply_run_refuses_existing_report_before_selection(monkeypatch, t
 
 @pytest.mark.asyncio
 async def test_apply_run_returns_nonzero_when_writer_close_fails(monkeypatch, tmp_path: Path):
-    _patch_run_dependencies(monkeypatch, script_mod.SelectionReport())
+    _patch_run_dependencies(monkeypatch, script_mod.SelectionReport(), tmp_path / "reparse-skip.json")
 
     class FailingCloseWriter:
         def __init__(self, path, *, run_id):
@@ -874,6 +885,7 @@ async def test_apply_run_records_failed_terminal_event_before_reraising(monkeypa
     monkeypatch.setattr(script_mod, "get_async_db_session", _FakeAsyncSessionContext)
     monkeypatch.setattr(script_mod, "collect_candidate_files", fake_collect_candidate_files)
     monkeypatch.setattr(script_mod, "close_app_context", fake_close_app_context)
+    monkeypatch.setattr(script_mod, "DEFAULT_SKIP_LEDGER", tmp_path / "reparse-skip.json")
     report_path = tmp_path / "failed-run.jsonl"
     args = script_mod.parse_args(["--apply", "--report-file", str(report_path)])
 
@@ -885,3 +897,160 @@ async def test_apply_run_records_failed_terminal_event_before_reraising(monkeypa
     assert events[-1]["run_status"] == "failed"
     assert events[-1]["error_type"] == "RuntimeError"
     assert events[-1]["error"] == "selection failed"
+
+
+def test_classify_reparse_outcome() -> None:
+    success = script_mod.FileReparseResult(1, 10, "a.pdf", True, KnowledgeFileStatus.SUCCESS.value)
+    failed = script_mod.FileReparseResult(2, 10, "b.pdf", False, KnowledgeFileStatus.FAILED.value, "parse failed")
+    crashed = script_mod.FileReparseResult(3, 10, "c.pdf", False, None, "RuntimeError: boom")
+    ignored = script_mod.FileReparseResult(
+        4, 10, "d.pdf", False, KnowledgeFileStatus.WAITING.value, "file is in-flight"
+    )
+    assert script_mod.classify_reparse_outcome(success) == "success"
+    assert script_mod.classify_reparse_outcome(failed) == "failed"
+    assert script_mod.classify_reparse_outcome(crashed) == "crashed"
+    assert script_mod.classify_reparse_outcome(ignored) == "ignored"
+
+
+def test_skip_ledger_roundtrip_and_started_becomes_crashed(tmp_path: Path) -> None:
+    path = tmp_path / "skip.json"
+    store = script_mod.SkipLedgerStore(path)
+    store.mark_started(11, 10, "running.pdf")
+    store.record_result(
+        script_mod.FileReparseResult(12, 10, "failed.pdf", False, KnowledgeFileStatus.FAILED.value, "parse failed")
+    )
+    reloaded = script_mod.SkipLedgerStore(path).load()
+    assert set(reloaded.failed) == {12}
+    assert set(reloaded.crashed) == {11}
+    assert reloaded.skipped_ids == {11, 12}
+
+
+def test_apply_skip_ledger_filters_failed_and_crashed() -> None:
+    selection = script_mod.SelectionReport(
+        selected_files=[
+            KnowledgeFile(id=1, knowledge_id=10, file_name="keep.pdf"),
+            KnowledgeFile(id=2, knowledge_id=10, file_name="failed.pdf"),
+            KnowledgeFile(id=3, knowledge_id=10, file_name="crashed.pdf"),
+        ]
+    )
+    store = script_mod.SkipLedgerStore("/unused.json")
+    store.failed[2] = {"file_id": 2}
+    store.crashed[3] = {"file_id": 3}
+    script_mod.apply_skip_ledger(selection, store, retry_skipped=False)
+    assert [row.id for row in selection.selected_files] == [1]
+    assert selection.skipped_previously_failed_records == 1
+    assert selection.skipped_previously_crashed_records == 1
+
+
+def test_apply_skip_ledger_retry_keeps_files() -> None:
+    selection = script_mod.SelectionReport(
+        selected_files=[KnowledgeFile(id=2, knowledge_id=10, file_name="failed.pdf")]
+    )
+    store = script_mod.SkipLedgerStore("/unused.json")
+    store.failed[2] = {"file_id": 2}
+    script_mod.apply_skip_ledger(selection, store, retry_skipped=True)
+    assert [row.id for row in selection.selected_files] == [2]
+    assert selection.skipped_previously_failed_records == 0
+
+
+def test_parse_args_skip_ledger_flags() -> None:
+    args = script_mod.parse_args(["--retry-skipped", "--skip-ledger", "/tmp/skip.json"])
+    assert args.retry_skipped is True
+    assert args.skip_ledger == "/tmp/skip.json"
+    with pytest.raises(SystemExit):
+        script_mod.parse_args(["--no-skip-ledger", "--retry-skipped"])
+    with pytest.raises(SystemExit):
+        script_mod.parse_args(["--no-skip-ledger", "--skip-ledger", "/tmp/skip.json"])
+
+
+@pytest.mark.asyncio
+async def test_run_reparse_files_records_failed_and_crashed_in_skip_ledger(tmp_path: Path) -> None:
+    files = [
+        KnowledgeFile(id=1, knowledge_id=10, file_name="ok.pdf"),
+        KnowledgeFile(id=2, knowledge_id=10, file_name="fail.pdf"),
+        KnowledgeFile(id=3, knowledge_id=10, file_name="crash.pdf"),
+    ]
+    store = script_mod.SkipLedgerStore(tmp_path / "skip.json")
+
+    def fake_reparse(file_id: int) -> script_mod.FileReparseResult:
+        if file_id == 2:
+            return script_mod.FileReparseResult(
+                file_id=2,
+                knowledge_id=10,
+                file_name="fail.pdf",
+                success=False,
+                final_status=KnowledgeFileStatus.FAILED.value,
+                error="parse failed",
+            )
+        if file_id == 3:
+            raise RuntimeError("boom")
+        return script_mod.FileReparseResult(
+            file_id=1,
+            knowledge_id=10,
+            file_name="ok.pdf",
+            success=True,
+            final_status=KnowledgeFileStatus.SUCCESS.value,
+        )
+
+    report = await script_mod.run_reparse_files(
+        files,
+        concurrency=1,
+        reparse_func=fake_reparse,
+        skip_ledger=store,
+    )
+    reloaded = script_mod.SkipLedgerStore(tmp_path / "skip.json").load()
+    assert report.success == 1
+    assert report.failed == 2
+    assert set(reloaded.failed) == {2}
+    assert set(reloaded.crashed) == {3}
+    assert 1 not in reloaded.skipped_ids
+
+
+@pytest.mark.asyncio
+async def test_second_run_skips_previously_failed_and_crashed_files(monkeypatch, tmp_path: Path) -> None:
+    ledger_path = tmp_path / "reparse-skip.json"
+    files = [
+        KnowledgeFile(id=1, knowledge_id=10, file_name="ok.pdf"),
+        KnowledgeFile(id=2, knowledge_id=10, file_name="fail.pdf"),
+        KnowledgeFile(id=3, knowledge_id=10, file_name="crash.pdf"),
+    ]
+    _patch_run_dependencies(
+        monkeypatch,
+        script_mod.SelectionReport(selected_files=files),
+        ledger_path,
+    )
+    parsed: list[int] = []
+
+    def fake_reparse(file_id: int, **kwargs) -> script_mod.FileReparseResult:
+        parsed.append(file_id)
+        if file_id == 2:
+            return script_mod.FileReparseResult(
+                file_id=2,
+                knowledge_id=10,
+                file_name="fail.pdf",
+                success=False,
+                final_status=KnowledgeFileStatus.FAILED.value,
+                error="parse failed",
+            )
+        if file_id == 3:
+            raise RuntimeError("boom")
+        return script_mod.FileReparseResult(
+            file_id=1,
+            knowledge_id=10,
+            file_name="ok.pdf",
+            success=True,
+            final_status=KnowledgeFileStatus.SUCCESS.value,
+        )
+
+    monkeypatch.setattr(script_mod, "reparse_one_file", fake_reparse)
+    first = script_mod.parse_args(["--apply", "--report-file", str(tmp_path / "first.jsonl"), "--concurrency", "1"])
+    assert await script_mod.run(first) == 2
+    assert sorted(parsed) == [1, 2, 3]
+
+    parsed.clear()
+    second = script_mod.parse_args(["--apply", "--report-file", str(tmp_path / "second.jsonl"), "--concurrency", "1"])
+    assert await script_mod.run(second) == 0
+    assert parsed == [1]
+    reloaded = script_mod.SkipLedgerStore(ledger_path).load()
+    assert set(reloaded.failed) == {2}
+    assert set(reloaded.crashed) == {3}

@@ -697,6 +697,7 @@ PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply 
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --file-id 101 --file-id 102
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --space-level public
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --space-level department --status failed --status waiting --status violation
+PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --retry-skipped
 
 bash scripts/reparse_knowledge_space_files.sh
 bash scripts/reparse_knowledge_space_files.sh --apply --concurrency 4
@@ -726,8 +727,9 @@ Progress and report:
 - 报告由独立线程通过共享队列串行写入并逐行刷新；运行期间可以直接读取已完成的 JSON 行
 - 指定的报告文件已存在时脚本会拒绝覆盖；目录创建、序列化或写入失败会导致脚本非零退出
 - 单文件普通 Python 异常会被独立记录，其他文件继续执行；原生崩溃、解释器退出和永久阻塞不在隔离范围内
+- `--apply` 会把解析失败的文件和执行中崩溃的文件写入 `./reparse_reports/reparse-skip.json`（可用 `--skip-ledger` 改路径）。开始处理某个文件时先记为崩溃中，成功后删除，失败则改记为 failed。进程中途退出时该文件会留在 crashed 里。下次运行默认跳过这些 ID；需要重试时加 `--retry-skipped`，完全关闭该机制用 `--no-skip-ledger`
 - 提高 `--concurrency` 会同时增加数据库、Milvus、Elasticsearch、MinIO 和解析服务压力，应按环境容量设置
-- dry-run 不创建 JSONL 报告，也不会执行文件解析
+- dry-run 不创建 JSONL 报告，也不会执行文件解析；仍会读取 skip ledger 并在候选结果里排除已失败/已崩溃文件
 
 ### `enqueue_reparse_knowledge_space_files.py`
 
