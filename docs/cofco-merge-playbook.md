@@ -435,7 +435,42 @@ cd src/backend && uv run pytest test/celery/ -q
 `Context 'permission_runtime' is in error state: authorization_model_migration_required`,
 **所有走权限的接口 500**。这是 F048 的设计行为(发现模型是前代就拒绝启动,等运维迁移),不是 bug。
 
-### 唯一正确的处置:跑迁移脚本
+### 先分清两种情况,再选脚本(⚠️ 2026-09-11 在这里踩过)
+
+两个脚本名字都像"迁移",用错的那个不会静默做坏事,但会白跑一次并留下一大堆垃圾数据。
+
+| 环境状态 | 用哪个 |
+|---|---|
+| **还没上过 F048**(旧 RBAC 数据要翻译成 grant/投影) | `migrate_f048_permission_data.py` —— 一辈子只跑一次 |
+| **已经在 F048 上,只是模型 DSL 变了**(合主线的常态) | `publish_authorization_model_change.py` |
+
+判断方法:查 `permission_migration_run`,已经有一行 `COMPLETED` 就是第二种。
+
+#### 情况二(合主线之后几乎总是这种):只发模型
+
+```bash
+C=<backend容器>
+# 1. dry-run 是默认行为,它会打出 store_id 和目标 checksum
+docker exec -w /app -e PYTHONPATH=/app $C \
+  python scripts/publish_authorization_model_change.py
+# 2. 把上一步打出的两个值填进来再 apply
+docker exec -w /app -e PYTHONPATH=/app $C \
+  python scripts/publish_authorization_model_change.py --apply \
+    --confirm-store-id <store_id> \
+    --confirm-target-model-checksum <target_model_checksum> \
+    --operator-id 1
+# 3. 重启后端和 worker
+docker compose restart backend backend_worker backend_worker_ocr
+```
+
+它只做三件事:把新模型写进 OpenFGA、在 `authorization_model_release` 登记并置 ACTIVE、
+发一个空的 Catalog release 把 CURRENT 指过去。**不碰任何权限数据**,所以没有 verify 那道坎。
+
+`--apply` 的前置条件:没有活跃的 F048 运行时心跳、没有在途的投影操作、CURRENT Catalog 没被写围栏、
+store-id 和 checksum 对得上。模型没发出去的时候所有进程的权限运行时都是 error 态、心跳为 0,
+所以这一步可以直接在**正在运行的** backend 容器里跑,不用先停容器。
+
+#### 情况一:首次迁移
 
 ```bash
 docker exec -w /app -e PYTHONPATH=/app <backend容器> \
@@ -445,6 +480,12 @@ docker exec -w /app -e PYTHONPATH=/app <backend容器> \
 
 它会一次做完三件事:在 OpenFGA 里发布新模型、在 `authorization_model_release` 登记它、
 把 `permission_catalog_release` 指过去,并把旧权限数据翻译成新模型的 grant/投影。
+
+**已经在 F048 上还跑它会怎样**(2026-09-11 实测):扫到的关系它都不认识,报
+`F048 migration blocked: UNKNOWN_LEGACY_RELATION` 退出。权限数据一行没动,但它在
+`permission_migration_run` 留下一行 `BLOCKED`,并在 `permission_migration_item` 里落了
+**26 万行**扫描结果。这些行不会被任何投影引用(查 `permission_visible_source_projection`
+的 `migration_item_id` 全是 NULL 即可确认),但要清就得先删 item 再删 run —— 有外键,顺序反了删不掉。
 
 ### ⚠️ 不要用 `openfga.force_write_model` 抄近路
 
@@ -471,7 +512,15 @@ authorization_model_release 那一行 status = ACTIVE      ← 最容易漏
 
 **第二条单独说**:catalog 变 CURRENT 但模型还是 `STAGED` 时,报的是
 `CURRENT Catalog authorization model is not active` —— 和 `migration_required` 是**不同的错**,
-别当成同一个问题查。模型转 ACTIVE 发生在 verify 通过之后。
+别当成同一个问题查。走首次迁移时,模型转 ACTIVE 发生在 verify 通过之后;走
+`publish_authorization_model_change.py` 时它当场就是 ACTIVE,没有 verify 这一步。
+
+再补一条**功能判据**:未登录打一个走权限的接口,应当是 401 而不是 500。
+
+> 2026-09-11 在 105 的实际结果,可作为对照样板:
+> `permission_catalog_release` 37 CURRENT → `authorization_model_release` 4 ACTIVE
+> (`f048-v5` / `01M27RXA627215TZ0SH363ZYPW`),前一条 3 自动转 RETIRED;
+> 重启后 60 秒内 `migration_required` 零次,`/api/v1/knowledge/space/mine` 返回 401。
 
 ### verify 的现实问题:慢库上跑不完
 
