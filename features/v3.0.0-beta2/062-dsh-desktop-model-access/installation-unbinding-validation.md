@@ -30,4 +30,4 @@
 
 按 [rollout.md](./rollout.md) 和 [解绑修订](./installation-unbinding-revision.md) 配套切换内部协议/表结构、保留席位/模型额度/历史用量、清退旧测试凭证。移除旧 installation-id、installation_id、replica-id 配置及激活脚本调用，使用新 schema 2 License。以后普通 License 滚动更新不需要全副本 ACK。额度账本恢复审批继续保留。
 
-交付分支：毕昇 `feat/3.0.0-beta2-pre`、Gateway `feat/dsh-access`、发行工具 `main`。本轮不打正式或测试 tag，不部署。
+交付分支：毕昇 `feat/3.0.0-beta2-pre`、Gateway `feat/dsh-access`、发行工具 `codex/dsh-license-unbinding`（独立开发分支，远端 main 未更新）。本轮不打正式或测试 tag，不部署。
