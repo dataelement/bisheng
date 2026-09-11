@@ -111,7 +111,13 @@ ApprovalCenterService.decide_task()
 
 | 文件 | 职责 |
 |------|------|
-| `src/frontend/client/src/components/approval/ApprovalCenterDialog.tsx` | 审批中心弹窗（我的审批 + 我的申请 + 时间线） |
+| `src/frontend/client/src/components/messageApproval/MessageApprovalDialog.tsx` | 「消息与审批」统一弹窗外壳（导航栏：我的审批 / 我的申请 / 通知 + 徽标） |
+| `src/frontend/client/src/components/approval/ApprovalPane.tsx` | 我的审批 / 我的申请 列表 + 详情 + 同意/拒绝/撤回/撤销授权 |
+| `src/frontend/client/src/components/approval/ApprovalDetailPanels.tsx` | 任务详情 / 实例详情面板（基础信息、业务内容、进度时间轴） |
+| `src/frontend/client/src/components/approval/approvalPresentation.tsx` | 审批公共展示层（状态徽章、时间轴节点、信息网格、格式化） |
+| `src/frontend/client/src/components/messageApproval/NotificationPane.tsx` | 通知区：未读/已读页签（服务端过滤）+ 搜索 + 全部已读 |
+| `src/frontend/client/src/components/messageApproval/NotificationRow.tsx` | 单条通知；仅在用户主动打开时置已读，不做 hover / 曝光自动已读 |
+| `src/frontend/client/src/components/messageApproval/notificationContent.ts` | 站内信 payload 解析（action_code、业务对象、审批深链） |
 | `src/frontend/client/src/api/approval.ts` | 审批 API 封装，含 `ApprovalApiError`（非 200 自动抛出） |
 | `src/frontend/client/src/pages/MenuUnavailablePage.tsx` | 无权限占位页 + 申请入口 |
 | `src/frontend/client/src/layouts/MenuApprovalPluginGate.tsx` | 菜单审批路由守卫 |
@@ -135,6 +141,7 @@ ApprovalCenterService.decide_task()
 ### 4.2 频道订阅审批 (`channel_subscribe_request`)
 - **入口**：`channel/domain/services/channel_service.py::subscribe_channel()`（`REVIEW` 可见性频道）
 - **Handler**：`ChannelSubscribeScenarioHandler`
+- 审批人来源从 F048 当前 Catalog 的有效 `permission_grant` / `permission_grant_assignee` roster 读取：`channel_owner` 仅取 `owner` 模型的直接用户，`channel_manager` / `channel_admin` 仅取 `manager` 模型的直接用户；权限运行时异常时才回退 `space_channel_member` 的 CREATOR / ADMIN，不能把 owner 与 manager 混成同一集合
 - 通过 / pass 路径调 `ChannelService.sync_direct_channel_user_permissions()` 写 ReBAC(OpenFGA) 关系（否则成员不出现在 ReBAC 成员列表）
 - `on_approved` 先把申请人的 **PENDING** membership 翻成 ACTIVE 再写 ReBAC（查 membership 注意频道默认只返回 ACTIVE，激活需带非 ACTIVE 状态）
 - PENDING 时调 `_send_channel_approval_notification()` 通知审批人
@@ -142,6 +149,7 @@ ApprovalCenterService.decide_task()
 ### 4.3 知识空间加入审批 (`knowledge_space_subscribe_request`)
 - **入口**：`knowledge/domain/services/knowledge_space_service.py::subscribe_space()`（`auth_type=APPROVAL`）
 - **Handler**：`KnowledgeSpaceSubscribeScenarioHandler`
+- 审批人来源从 F048 当前 Catalog 的有效 `permission_grant` / `permission_grant_assignee` roster 读取：`knowledge_space_owner` 仅取 `owner` 模型的直接用户，`knowledge_space_manager` / `space_admin` 仅取 `manager` 模型的直接用户；不要读取 F048 资源对象上不存在的 legacy `owner` / `manager` 直连 tuple。仅权限运行时异常时回退 `space_channel_member` 的 CREATOR / ADMIN
 - 通过 / ACTIVE 路径调 `sync_direct_space_user_permissions()` 写 ReBAC 关系
 - PENDING 时调 `_send_space_approval_notification()` 通知审批人
 - **不变量：先过网关、再落 membership。** `subscribe_space` 对 APPROVAL 空间必须先 `await gate.request_or_pass()`，按 gate 结果（pass→ACTIVE / pending·exception→PENDING）才通过 `_persist_space_member()` 写 `space_channel_member`。**严禁在调网关前预写 PENDING membership**——否则场景未配置/未启用时网关 `raise ApprovalScenarioDisabledError`，但 PENDING 行已落库，下次点"关注"会被 `subscribe_space` 顶部"已 PENDING 直接返回 pending"的早退分支短路，掩盖错误（首次报错、二次假成功）。无场景时每次点击都应一致报错。
@@ -198,6 +206,7 @@ uv run celery -A bisheng.worker.main worker -l info -c 100 -P threads -n default
 ### 用户端（`/approval`）
 ```
 GET  /approval/my-tasks                        # 我的待办（审批人视角）
+GET  /approval/my-tasks/pending-count          # 待我处理数量（徽标），返回 {"count": n}；必须声明在 {task_id} 之前
 GET  /approval/my-tasks/{task_id}              # 任务详情
 POST /approval/tasks/{task_id}/decision        # 同意/拒绝
 GET  /approval/my-requests                     # 我的申请（申请人视角）
@@ -251,6 +260,10 @@ POST   /approval/admin/exceptions/{exception_id}/cancel      # 取消审批（�
 | 异常产生（route_missing/approver_empty） | 管理员（AdminRole） | `ApprovalGate._notify_admins_of_exception()` / `ApprovalNotificationService.notify_admins()` |
 | 异常取消 | 申请人 | `ApprovalExceptionService.cancel_exception_api()` |
 
+> **待办类通知不进通知列表**：`approval_task_pending` / `request_menu_access` / `request_channel` /
+> `request_knowledge_space`（`MessageService.APPROVAL_TODO_ACTION_CODES`）只属于【我的审批-待我处理】。
+> `/message/list?tab=notify` 与未读数 `notify` 都会排除它们，`全部已读` 也不会把它们置为已读。
+>
 > 注：申请人侧"通过"通知是在**最后节点 finalize** 时发的（即审批通过即通知），不等 outbox 业务真正执行完。若要"业务执行成功"的精确通知，需在 `execute_outbox` 成功回调里补。
 
 ---

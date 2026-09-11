@@ -41,6 +41,11 @@ Two React apps that **must not be mixed**. Per-app rules auto-load from each sub
 - `src/frontend/platform/AGENTS.md` — Admin/builder UI (Zustand, react-query v3, bs-ui, `@/`)
 - `src/frontend/client/AGENTS.md` — End-user chat UI (Recoil, react-query v4, shadcn, `~/`)
 
+**Design specs & component library — mandatory entry for ANY UI work (new pages AND edits to existing ones):**
+- **Read the design spec docs first.** They are the SSOT for "when to use what" (typography, color, radius/shadow, multi-device, per-component usage rules). They live at `src/frontend/packages/ui/docs/` (git-tracked; entry `index.md`, specs in `基础-*` / `组件-*` files; browsable as a site via `pnpm dev:ui` at `src/frontend/`). The specs are actively maintained and keep evolving — read the current version each time; never code from memory of an old read.
+- **Component selection**: when a UI needs a component, use a **landed** one from the component overview (`src/frontend/packages/ui/docs/components/index.mdx` — i.e. pages marked `status: done`, shipped in `@bisheng/ui`). If the component you need is not finalized or not built yet, do NOT invent a new pattern — find the closest existing implementation in the current client code and follow it.
+- **Ownership**: design spec content and component visual styles belong to the designer. Non-designers must not edit spec decisions, change component styles, or add new components on their own. Frontend engineers MAY improve existing component internals (refactor, perf, a11y), but any style/visual change requires designer sign-off.
+
 **Hard rules (both apps — single source of truth here; per-app files add only app-specific detail):**
 - TypeScript only (`.ts` / `.tsx`); functional components only; no class components.
 - Single file ≤ 600 lines. Extract sub-components or hooks when exceeded.

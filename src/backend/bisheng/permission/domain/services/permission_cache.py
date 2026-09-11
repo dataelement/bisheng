@@ -11,7 +11,6 @@ UNCACHEABLE_RELATIONS (can_manage, can_delete) bypass cache entirely.
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +34,7 @@ class PermissionCache:
         relation: str,
         object_type: str,
         object_id: str,
-    ) -> Optional[bool]:
+    ) -> bool | None:
         """Get cached check result. Returns None on miss."""
         try:
             redis = await cls._get_redis()
@@ -75,7 +74,7 @@ class PermissionCache:
         user_id: int,
         relation: str,
         object_type: str,
-    ) -> Optional[List[str]]:
+    ) -> list[str] | None:
         """Get cached list_objects result. Returns None on miss."""
         try:
             redis = await cls._get_redis()
@@ -96,7 +95,7 @@ class PermissionCache:
         user_id: int,
         relation: str,
         object_type: str,
-        ids: List[str],
+        ids: list[str],
     ) -> None:
         """Cache a list_objects result."""
         try:

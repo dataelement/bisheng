@@ -4,10 +4,17 @@ from bisheng.open_endpoints.api.endpoints.citation import router as citation_rou
 from bisheng.open_endpoints.api.endpoints.filelib import router as filelib_router_rpc
 from bisheng.open_endpoints.api.endpoints.flow import router as flow_router_rpc
 from bisheng.open_endpoints.api.endpoints.workflow import router as workflow_router_rpc
+from bisheng.open_endpoints.api.endpoints.workstation import router as workstation_router_rpc
+
 from .endpoints.knowledge import router as knowledge_router_rpc
 
 __all__ = [
-    'knowledge_router_rpc', 'chat_router_rpc', 'flow_router_rpc',
-    'assistant_router_rpc', 'workflow_router_rpc', 'filelib_router_rpc',
-    'citation_router_rpc'
+    'assistant_router_rpc',
+    'chat_router_rpc',
+    'citation_router_rpc',
+    'filelib_router_rpc',
+    'flow_router_rpc',
+    'knowledge_router_rpc',
+    'workflow_router_rpc',
+    'workstation_router_rpc',
 ]

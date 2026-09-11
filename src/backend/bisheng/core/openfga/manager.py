@@ -16,6 +16,7 @@ from bisheng.core.openfga.authorization_model_f048 import (
     build_authorization_model_f048,
 )
 from bisheng.core.openfga.client import FGAClient
+from bisheng.core.openfga.contextual import dependent_relations
 from bisheng.core.openfga.discovery import discover_openfga_runtime
 from bisheng.core.openfga.runtime_heartbeat import (
     RedisRuntimeHeartbeatStore,
@@ -95,6 +96,8 @@ class FGAManager(BaseContextManager[FGAClient]):
             store_id=pin.store_id,
             model_id=pin.model_id,
             timeout=config.timeout,
+            require_contextual_provider=True,
+            affected_relations=dependent_relations(expected_model, "department", "subtree_member"),
         )
         self._runtime_store_id = pin.store_id
         self._runtime_model_id = pin.model_id

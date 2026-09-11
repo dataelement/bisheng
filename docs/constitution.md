@@ -123,7 +123,7 @@ grep -rhoE "Code:\s*int\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.py 
 
 - ⚠️ **190 and 220 are each shared by two modules** — pre-existing collisions, not a precedent. Never reuse an occupied number.
 - **130 was registered as `chat` but is not used by any error code.** Do not treat it as free without checking; do not cite it as an example.
-- **260 is reserved** for the Open API (`/api/v2`) authentication module. Not yet implemented — do not claim it for anything else.
+- **260 is assigned** to Open API authentication and identity (`/api/v2`). Do not reuse it.
 - When you claim a number, add it here in the same change.
 
 ## C6. No Hardcoded Secrets (RULE-7)

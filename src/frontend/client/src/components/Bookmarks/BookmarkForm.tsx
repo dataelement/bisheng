@@ -114,7 +114,7 @@ const BookmarkForm = ({
                 );
               },
             })}
-            aria-invalid={!!errors.tag}
+            status={errors.tag ? 'error' : 'default'}
             placeholder="Bookmark"
           />
           {errors.tag && <span className="text-sm text-red-500">{errors.tag.message}</span>}

@@ -100,7 +100,12 @@ function UploadedFileList({ files, conversationId }: { files: any[]; conversatio
                 </div>
             )}
             {others.length > 0 && (
-                <div className="mb-2 mt-1 flex max-w-sm flex-col gap-2">
+                /* 444px = three 120px cards, their three 8px gaps, and half of a
+                   fourth. The old max-w-sm (384px) fit exactly three, so a fourth
+                   attachment sat entirely out of view and the row looked complete
+                   — nobody knew to scroll. Cutting a card in half is the whole
+                   point: a clipped edge is what reads as "there is more". */
+                <div className="mb-2 mt-1 flex max-w-[444px] flex-col gap-2">
                     <div
                         ref={scrollRef}
                         onScroll={updateFade}

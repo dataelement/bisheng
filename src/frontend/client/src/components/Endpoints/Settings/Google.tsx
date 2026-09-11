@@ -10,7 +10,7 @@ import {
   SelectDropDown,
   HoverCardTrigger,
 } from '~/components/ui';
-import { cn, defaultTextProps, optionText, removeFocusOutlines, removeFocusRings } from '~/utils';
+import { cn, defaultTextProps, optionText, removeFocusRings } from '~/utils';
 import OptionHoverAlt from '~/components/SidePanel/Parameters/OptionHover';
 import { useLocalize, useDebouncedInput } from '~/hooks';
 import OptionHover from './OptionHover';
@@ -74,11 +74,7 @@ export default function Settings({ conversation, setOption, models, readonly }: 
             value={modelLabel || ''}
             onChange={(e) => setModelLabel(e.target.value ?? null)}
             placeholder={localize('com_endpoint_google_custom_name_placeholder')}
-            className={cn(
-              defaultTextProps,
-              'flex h-10 max-h-10 w-full resize-none px-3 py-2',
-              removeFocusOutlines,
-            )}
+            className="w-full"
           />
         </div>
         <div className="grid w-full items-center gap-2">

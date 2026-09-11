@@ -1956,6 +1956,7 @@ class LinsightWorkflowTask:
             "all_from_session_files": [],
         }
         self._flag_phantom_deliverables(session_model, answer, final_files)
+        self._flag_invalid_deliverables(session_model, file_details)
         await self._state_manager.set_session_version_info(session_model)
         # F035 problem 2: finalize the session pseudo task carrying any
         # planning/direct-answer steps so it isn't left stuck in_progress.
@@ -1987,6 +1988,25 @@ class LinsightWorkflowTask:
             ", ".join(phantom),
         )
         session_model.output_result["phantom_deliverables"] = phantom
+
+    def _flag_invalid_deliverables(self, session_model, file_details: list[dict]) -> None:
+        """Record deliverables dropped for not being the format their name claims.
+
+        ``get_final_result_file`` already refuses to publish them — a .pptx that is
+        really prose opens nowhere — but a silent drop turns into "暂无产物文件" with
+        no explanation, and the run afterwards looks like the model simply wrote
+        nothing. Same contract as the phantom flag: describe, never repair.
+        """
+        invalid = linsight_execute_utils.detect_invalid_deliverables(file_details, self._baseline_files)
+        if not invalid:
+            return
+        logger.warning(
+            "[linsight-invalid-deliverable] session={} dropped {} file(s) whose bytes contradict their name: {}",
+            session_model.id,
+            len(invalid),
+            "; ".join(f"{f['file_name']}: {f['reason']}" for f in invalid),
+        )
+        session_model.output_result["invalid_deliverables"] = invalid
 
     def _with_soft_landing_note(self, answer: str) -> str:
         """Append the wrap-up note when the turn budget cut the run short.
@@ -2066,6 +2086,7 @@ class LinsightWorkflowTask:
             "partial": True,
         }
         self._flag_phantom_deliverables(session_model, answer, final_files)
+        self._flag_invalid_deliverables(session_model, file_details)
         await self._state_manager.set_session_version_info(session_model)
         await self._complete_session_pseudo_task(session_model)
         await self._converge_task_rows_on_completion()
@@ -2112,6 +2133,7 @@ class LinsightWorkflowTask:
                 "all_from_session_files": all_from_session_files,
             }
             self._flag_phantom_deliverables(session_model, answer, final_result_files)
+            self._flag_invalid_deliverables(session_model, file_details)
 
             # Save session information and push messages
             await self._state_manager.set_session_version_info(session_model)

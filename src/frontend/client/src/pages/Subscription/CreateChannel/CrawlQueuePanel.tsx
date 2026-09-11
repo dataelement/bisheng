@@ -38,7 +38,7 @@ export function CrawlQueuePanel({
             <button
                 type="button"
                 onClick={() => onPanelOpenChange(!panelOpen)}
-                className="inline-flex items-center gap-1 whitespace-nowrap text-[12px] text-[#86909C] hover:text-[#4E5969]"
+                className="inline-flex items-center gap-1 whitespace-nowrap text-[12px] text-text-3 hover:text-text-2"
             >
                 <span>{localize("com_subscription.website_crawl_queue")}</span>
                 {inProgressCount > 0 ? (
@@ -57,15 +57,15 @@ export function CrawlQueuePanel({
                             return (
                                 <div
                                     key={item.id}
-                                    className="group relative flex items-center gap-[8px] rounded-md px-[12px] py-[6px] hover:bg-[#F8F8F8]"
+                                    className="group relative flex items-center gap-[8px] rounded-md px-[12px] py-[6px] hover:bg-fill-1"
                                 >
-                                    <span className="flex-1 truncate text-[14px] leading-[22px] text-[#999]">
+                                    <span className="flex-1 truncate text-[14px] leading-[22px] text-text-3">
                                         {truncate(item.url)}
                                     </span>
                                     <button
                                         type="button"
                                         onClick={() => onAbort(item.id)}
-                                        className="shrink-0 p-1 text-[#86909C] opacity-0 transition-opacity hover:text-[#F53F3F] group-hover:opacity-100"
+                                        className="shrink-0 p-1 text-text-3 opacity-0 transition-opacity hover:text-[#F53F3F] group-hover:opacity-100"
                                         aria-label={localize("cancel")}
                                     >
                                         <X className="size-3.5" />
@@ -82,10 +82,10 @@ export function CrawlQueuePanel({
                             return (
                                 <div
                                     key={item.id}
-                                    className="group flex items-center gap-[8px] rounded-md px-[12px] py-[6px] hover:bg-[#F8F8F8]"
+                                    className="group flex items-center gap-[8px] rounded-md px-[12px] py-[6px] hover:bg-fill-1"
                                 >
                                     <CircleCheck className="size-4 shrink-0 text-[#00B42A]" />
-                                    <span className="flex-1 truncate text-[14px] leading-[22px] text-[#212121]">
+                                    <span className="flex-1 truncate text-[14px] leading-[22px] text-text-1">
                                         {truncate(item.sourceName ?? item.url, 28)}
                                     </span>
                                     <button
@@ -113,10 +113,10 @@ export function CrawlQueuePanel({
                                                 onOpenFeedback();
                                             }
                                         }}
-                                        className="flex items-center gap-[8px] rounded-md px-[12px] py-[6px] cursor-pointer hover:bg-[#F8F8F8]"
+                                        className="flex items-center gap-[8px] rounded-md px-[12px] py-[6px] cursor-pointer hover:bg-fill-1"
                                     >
                                         <TriangleAlert className="size-4 shrink-0 text-[#FF7D00]" />
-                                        <span className="flex-1 truncate text-[14px] leading-[22px] text-[#212121]">
+                                        <span className="flex-1 truncate text-[14px] leading-[22px] text-text-1">
                                             {truncate(item.url)}
                                         </span>
                                     </div>

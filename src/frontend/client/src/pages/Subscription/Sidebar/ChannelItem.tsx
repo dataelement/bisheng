@@ -82,7 +82,7 @@ export default function ChannelItem({
         <div
             className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer border ${isActive
                 ? "bg-blue-500/[0.07] border-primary shadow-sm"
-                : "border-transparent hover:bg-[#F7F7F7]"
+                : "border-transparent hover:bg-fill-1"
                 }`}
             style={{
                 transitionProperty: 'background-color',
@@ -112,7 +112,7 @@ export default function ChannelItem({
                     />
                 ) : (
                     <div className="flex items-center gap-1 flex-1 min-w-0">
-                        <span onDoubleClick={() => type === "created" && setIsEditing(true)} className="text-[14px] truncate text-[#1d2129]">
+                        <span onDoubleClick={() => type === "created" && setIsEditing(true)} className="text-[14px] truncate text-text-1">
                             {channel.name}
                         </span>
                         {channel.isPinned && (
@@ -133,7 +133,7 @@ export default function ChannelItem({
                 {channel.unreadCount > 0 && (
                     <span
                         className={cn(
-                            "flex items-center justify-center rounded-md bg-blue-500/20 px-1.5 py-[1px] text-[10px] font-medium text-primary",
+                            "flex items-center justify-center rounded-md bg-blue-500/20 px-1.5 py-[1px] text-caption-sm font-medium text-primary",
                             "coarse-pointer:relative coarse-pointer:shrink-0 coarse-pointer:opacity-100",
                             "fine-pointer:absolute fine-pointer:right-0",
                             menuOpen
@@ -162,7 +162,7 @@ export default function ChannelItem({
                             )}
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <MoreHorizontal className="size-4 text-[#4e5969]" />
+                            <MoreHorizontal className="size-4 text-text-2" />
                         </button>
                     </DropdownMenuTrigger>
 

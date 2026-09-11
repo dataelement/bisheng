@@ -131,15 +131,14 @@ describe("SpaceDetail UI — F027 infinite-scroll guards", () => {
     expect(src).toMatch(/hasMore:\s*boolean/);
   });
 
-  it("loads more only when scroll nears the bottom", () => {
-    expect(src).toMatch(/if\s*\(!hasMore\s*\|\|\s*loading\)\s*return/);
-    expect(src).toMatch(/scrollHeight\s*-\s*el\.scrollTop\s*-\s*el\.clientHeight\s*<=\s*240/);
-    expect(src).toMatch(/onLoadMore\(\)/);
+  it("renders the <LoadMore> sentinel through a shared bottom status", () => {
+    expect(src).toMatch(/const\s+listBottomStatus[\s\S]{0,800}?<LoadMore/);
+    expect(src).toMatch(/onLoad=\{onLoadMore\}/);
+    expect(src).toMatch(/footer=\{listBottomStatus\}/);
   });
 
-  it("wires the scroll loader to both card and list views", () => {
-    expect(src).toMatch(/onScroll=\{handleListScroll\}/);
-    expect(src).toMatch(/<FileTable[\s\S]{0,400}?onScroll=\{handleListScroll\}/);
+  it("LoadMore calls the KnowledgeSpaceContent onLoadMore prop", () => {
+    expect(src).toMatch(/onLoad=\{onLoadMore\}/);
   });
 });
 

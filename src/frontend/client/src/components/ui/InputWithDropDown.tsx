@@ -1,8 +1,9 @@
 import * as React from 'react';
+import type { InputProps } from '@bisheng/ui';
 import { Input } from '~/components/ui/Input';
 import { cn } from '~/utils';
 
-export type InputWithDropdownProps = React.InputHTMLAttributes<HTMLInputElement> & {
+export type InputWithDropdownProps = InputProps & {
   options: string[];
   onSelect?: (value: string) => void;
 };

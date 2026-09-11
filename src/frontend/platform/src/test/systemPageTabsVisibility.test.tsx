@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 import { render, screen } from "@/test/test-utils";
+import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import SystemPage from "@/pages/SystemPage";
 
@@ -28,20 +29,34 @@ vi.mock("@/pages/SystemPage/components/UserGroup", () => ({
 vi.mock("@/pages/SystemPage/components/Users", () => ({
   default: () => <div data-testid="legacy-users" />,
 }));
+vi.mock("@/pages/SystemPage/components/ServiceAccount", () => ({
+  ServiceAccount: () => <div data-testid="service-accounts" />,
+}));
+vi.mock("@/pages/SystemPage/components/PersonalToken", () => ({
+  PersonalToken: () => <div data-testid="personal-tokens" />,
+}));
 
 type UserShape = Record<string, unknown>;
 
-const renderWithUser = (user: UserShape) => {
+/** The Open API tabs need admin rights AND the deployment opt-in, so every case
+ *  has to say which one it is exercising. Default true keeps the pre-existing
+ *  role assertions about role, not about the switch. */
+const renderWithUser = (user: UserShape, openApiManagementEnabled = true) => {
   const value = {
     user,
     setUser: () => {},
     contextOpen: false,
     setContextOpen: () => {},
   } as unknown as React.ContextType<typeof userContext>;
+  const location = {
+    appConfig: { openApiManagementEnabled },
+  } as unknown as React.ContextType<typeof locationContext>;
   return render(
-    <userContext.Provider value={value}>
-      <SystemPage />
-    </userContext.Provider> as ReactNode,
+    <locationContext.Provider value={location}>
+      <userContext.Provider value={value}>
+        <SystemPage />
+      </userContext.Provider>
+    </locationContext.Provider> as ReactNode,
   );
 };
 
@@ -52,6 +67,8 @@ const THEME = "system.appearanceSettings";
 const ORG_SYNC = "orgSync:title";
 const USER_GROUP = "system.userGroupsM";
 const LEGACY = "system.userManagement";
+const SERVICE_ACCOUNT = "openApiManagement.serviceAccount.title";
+const PERSONAL_TOKEN = "openApiManagement.personalToken.title";
 
 describe("SystemPage tab visibility (PRD §3.3)", () => {
   it("global super admin sees org/userGroup/role/orgSync/system/theme; legacy user table hidden", () => {
@@ -63,6 +80,9 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
     expect(screen.getByText(SYSCFG)).toBeInTheDocument();
     expect(screen.getByText(THEME)).toBeInTheDocument();
     expect(screen.queryByText(LEGACY)).toBeNull();
+    expect(screen.getByText(SERVICE_ACCOUNT)).toBeInTheDocument();
+    expect(screen.getByText(PERSONAL_TOKEN)).toBeInTheDocument();
+    expect(screen.getByText(SERVICE_ACCOUNT).closest("[role=tablist]")?.parentElement).toHaveClass("overflow-x-auto");
   });
 
   it("Child Admin sees org/role but NOT system config / theme / org sync (instance-level only)", () => {
@@ -73,6 +93,17 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
     expect(screen.queryByText(THEME)).toBeNull();
     expect(screen.queryByText(ORG_SYNC)).toBeNull();
     expect(screen.queryByText(LEGACY)).toBeNull();
+    expect(screen.getByText(SERVICE_ACCOUNT)).toBeInTheDocument();
+    expect(screen.getByText(PERSONAL_TOKEN)).toBeInTheDocument();
+  });
+
+  it("hides the Open API tabs from a global super admin when the deployment has not opted in", () => {
+    renderWithUser({ role: "admin", user_id: 1 }, false);
+    // Everything the role earns is still there — only the F053 surface is gated.
+    expect(screen.getByText(ORG)).toBeInTheDocument();
+    expect(screen.getByText(ROLE)).toBeInTheDocument();
+    expect(screen.queryByText(SERVICE_ACCOUNT)).toBeNull();
+    expect(screen.queryByText(PERSONAL_TOKEN)).toBeNull();
   });
 
   it("Department Admin sees org/role but NOT system config / theme / org sync", () => {
@@ -82,6 +113,8 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
     expect(screen.queryByText(SYSCFG)).toBeNull();
     expect(screen.queryByText(THEME)).toBeNull();
     expect(screen.queryByText(ORG_SYNC)).toBeNull();
+    expect(screen.queryByText(SERVICE_ACCOUNT)).toBeNull();
+    expect(screen.queryByText(PERSONAL_TOKEN)).toBeNull();
   });
 
   it("plain user sees neither org nor role; falls back to legacy user table", () => {
@@ -92,6 +125,8 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
     expect(screen.queryByText(THEME)).toBeNull();
     expect(screen.queryByText(ORG_SYNC)).toBeNull();
     expect(screen.getByText(LEGACY)).toBeInTheDocument();
+    expect(screen.queryByText(SERVICE_ACCOUNT)).toBeNull();
+    expect(screen.queryByText(PERSONAL_TOKEN)).toBeNull();
   });
 
   it("user-group manager sees the user-group tab even without admin flags", () => {

@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 import { useAuthContext } from "~/hooks/AuthContext";
 import { useToastContext } from "~/Providers";
 import { ArticleCard } from "./ArticleList/ArticleCard";
+import { canReadChannelContent } from "./channelContentAccess";
 import { mapToArticle } from "./ArticleList/ArticleList";
 
 const PREVIEW_PAGE_SIZE = 10;
@@ -38,7 +39,9 @@ interface ChannelPreviewDrawerProps {
     onSubscriptionChanged?: () => void;
 }
 
-type SubscribeStatus = "none" | "subscribed" | "pending" | "rejected";
+/** `rejected` is deliberately absent: a rejected application can be resubmitted,
+ *  so it collapses into "none" (the plain 订阅 button). */
+type SubscribeStatus = "none" | "subscribed" | "pending";
 
 export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscriptionChanged }: ChannelPreviewDrawerProps) {
     const previewListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
@@ -83,10 +86,32 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
         refetchOnMount: "always",
     });
 
+    const isCreatorView =
+        Boolean(user?.username) && Boolean(channelDetail?.creator_name) && user?.username === channelDetail?.creator_name;
+
+    const effectiveSubscribeStatus: SubscribeStatus = (() => {
+        if (subscribeStatus !== "none") return subscribeStatus;
+        const sub = String(channelDetail?.subscription_status ?? "").toLowerCase();
+        if (sub === "subscribed") return "subscribed";
+        if (sub === "pending") return "pending";
+        // "rejected" included: the user may apply again, so show the 订阅 button.
+        return "none";
+    })();
+
+    const canLoadArticles = canReadChannelContent({
+        actions: channelDetail?.actions,
+        isSubscribed: effectiveSubscribeStatus === "subscribed",
+        isCreatorView,
+    });
+    // Anyone who may not read the content gets the intro-and-apply view. This
+    // used to be scoped to `review` channels, which left every other
+    // no-permission case asking for articles the server refuses.
+    const hideArticles = !!channelDetail && !canLoadArticles;
+
     // Fetch article list
     const {
         data: articlesData,
-        isLoading: isArticlesLoading,
+        isInitialLoading: isArticlesInitialLoading,
         isError: isArticlesError,
     } = useQuery({
         queryKey: ["channelPreviewArticles", channelId],
@@ -101,12 +126,18 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
             }
             return res;
         },
-        enabled: !!channelId && open,
+        // Never ask for a list the server will refuse: a 403 trips the global
+        // redirect and throws the viewer out of the square onto the home page,
+        // toast and all. The drawer is the non-member's intro-and-apply view and
+        // has to be able to render without the articles.
+        enabled: !!channelId && open && canLoadArticles,
         staleTime: 0,
         refetchOnMount: "always",
     });
 
-    const isLoading = isDetailLoading || isArticlesLoading;
+    // `isLoading` stays true forever on a disabled query in react-query v4;
+    // `isInitialLoading` is the disabled-aware form.
+    const isLoading = isDetailLoading || isArticlesInitialLoading;
 
     useEffect(() => {
         if (!channelId) {
@@ -154,12 +185,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
     // Handle subscribe action
     const handleSubscribe = async () => {
         if (!channelId || subscribing) return;
-        if (subscribeStatus === "subscribed" || subscribeStatus === "pending" || subscribeStatus === "rejected") return;
-        if (
-            String(channelDetail?.subscription_status ?? "").toLowerCase() === "rejected"
-        ) {
-            return;
-        }
+        if (subscribeStatus === "subscribed" || subscribeStatus === "pending") return;
 
         setSubscribing(true);
         try {
@@ -207,35 +233,9 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
         if (status === "pending") {
             return { text: localize("com_subscription.applying"), disabled: true, variant: "secondary" as const };
         }
-        if (status === "rejected") {
-            return { text: localize("rejected") || "已驳回", disabled: true, variant: "secondary" as const };
-        }
         return { text: localize("com_subscription.subscribe"), disabled: false, variant: "outline" as const };
     };
-    const isCreatorView =
-        Boolean(user?.username) && Boolean(channelDetail?.creator_name) && user?.username === channelDetail?.creator_name;
-
-
-
-    const effectiveSubscribeStatus: SubscribeStatus = (() => {
-        if (subscribeStatus !== "none") return subscribeStatus;
-        const sub = String(channelDetail?.subscription_status ?? "").toLowerCase();
-        if (sub === "subscribed") return "subscribed";
-        if (sub === "pending") return "pending";
-        if (sub === "rejected") return "rejected";
-        return "none";
-    })();
     const btnConfig = getButtonConfig(effectiveSubscribeStatus);
-
-    // REVIEW channels hide the article list until the viewer subscribes and is
-    // approved. F048 `visible` is the sole permission-derived content gate.
-    const canViewChannelContent =
-        channelDetail?.actions?.includes("visible") ?? false;
-    const hideArticles =
-        channelDetail?.visibility === "review" &&
-        !isCreatorView &&
-        effectiveSubscribeStatus !== "subscribed" &&
-        !canViewChannelContent;
 
     // Handle error — channel not found, inaccessible, or articles cannot be loaded
     useEffect(() => {
@@ -255,21 +255,21 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                 onCloseAutoFocus={(e) => e.preventDefault()}
             >
                 {isLoading ? (
-                    <div className="flex flex-col items-center justify-center h-full gap-3 text-[#86909c]">
+                    <div className="flex flex-col items-center justify-center h-full gap-3 text-text-3">
                         <LoadingIcon className="size-20 text-primary" />
                     </div>
                 ) : channelDetail ? (
                     <>
                         {/* Channel Info Header */}
-                        <SheetHeader className="gap-4 border-b border-[#ECECEC] pb-6 text-left">
+                        <SheetHeader className="gap-4 border-b border-border-base pb-6 text-left">
                             <div className="flex items-center justify-between">
-                                <SheetTitle className="text-[20px] font-medium leading-7 text-[#212121]">
+                                <SheetTitle className="text-[20px] font-medium leading-7 text-text-1">
                                     {channelDetail.name}
                                 </SheetTitle>
                                 <button
                                     type="button"
                                     onClick={() => onOpenChange(false)}
-                                    className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                                    className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-text-2 hover:bg-fill-1"
                                     aria-label={localize("close")}
                                 >
                                     <X className="size-5" />
@@ -296,12 +296,12 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                     {/* Backend currently doesn't provide creator_avatar, use AvatarName fallback directly for now */}
                                     <AvatarName name={channelDetail.creator_name} className="text-xs" />
                                 </Avatar>
-                                <span className="text-[14px] leading-[22px] text-[#818181]">{channelDetail.creator_name}</span>
+                                <span className="text-[14px] leading-[22px] text-text-3">{channelDetail.creator_name}</span>
                             </div>
 
                             {/* Data Overview Row & Button */}
                             <div className="flex items-center justify-between gap-3">
-                                <div className="flex min-w-0 flex-wrap items-center gap-2 text-[14px] leading-[22px] text-[#818181]">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2 text-[14px] leading-[22px] text-text-3">
                                     {channelDetail.source_infos && channelDetail.source_infos.length > 0 && (
                                         <div className="flex items-center">
                                             <div className="flex -space-x-1.5">
@@ -332,10 +332,10 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                         disabled={btnConfig.disabled || subscribing}
                                         onClick={handleSubscribe}
                                         className={`h-8 rounded-md px-4 py-[5px] text-[14px] font-normal leading-[22px] flex-shrink-0 ${effectiveSubscribeStatus === "subscribed"
-                                            ? "bg-[#f2f3f5] text-[#86909c] border-[#e5e6eb] cursor-default"
-                                            : effectiveSubscribeStatus === "pending" || effectiveSubscribeStatus === "rejected"
-                                                ? "bg-[#f2f3f5] text-[#c9cdd4] border-[#e5e6eb] cursor-not-allowed"
-                                                : "text-[#1d2129] border-[#e5e6eb] hover:bg-gray-50"
+                                            ? "bg-fill-2 text-text-3 border-border-base cursor-default"
+                                            : effectiveSubscribeStatus === "pending"
+                                                ? "bg-fill-2 text-text-4 border-border-base cursor-not-allowed"
+                                                : "text-text-1 border-border-base hover:bg-gray-50"
                                             }`}
                                     >
                                         {subscribing ? localize("com_subscription.processing") : btnConfig.text}
@@ -349,7 +349,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                             {hideArticles ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
                                     <NoPermissionIllustration className="size-[120px] mb-4" />
-                                    <div className="text-[14px] font-normal text-[#999999]">{localize("com_subscription.channel_content_needs_approval")}</div>
+                                    <div className="text-[14px] font-normal text-text-3">{localize("com_subscription.channel_content_needs_approval")}</div>
                                 </div>
                             ) : articles.length > 0 ? (
                                 <InfiniteScroll
@@ -362,7 +362,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                     {articles.map((article, i) => (
                                         <div
                                             key={article.id}
-                                            className={i > 0 ? "border-t border-dashed border-[#EBECF0]" : undefined}
+                                            className={i > 0 ? "border-t border-dashed border-border-base" : undefined}
                                         >
                                             <ArticleCard
                                                 article={article}
@@ -392,7 +392,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                     ))}
                                 </InfiniteScroll>
                             ) : (
-                                <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">{localize("com_subscription.no_articles")}</div>
+                                <div className="flex items-center justify-center h-64 text-text-3 text-sm">{localize("com_subscription.no_articles")}</div>
                             )}
                         </div>
                     </>

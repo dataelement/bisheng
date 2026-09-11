@@ -12,11 +12,11 @@ interface SectionHeaderProps {
 export function SectionHeader({ title, collapsed, onToggle, sortText, onSort }: SectionHeaderProps) {
     return (
         <div className="flex items-center justify-between mb-2">
-            <button onClick={onToggle} className="flex items-center gap-1 text-[12px] text-[#999] hover:text-[#4e5969]">
+            <button onClick={onToggle} className="flex items-center gap-1 text-[12px] text-text-3 hover:text-text-2">
                 <ChevronDown className={`size-4 transition-transform ${collapsed ? "-rotate-90" : ""}`} />
                 {title}
             </button>
-            <button onClick={onSort} className="flex items-center gap-1 text-[12px] text-[#999] hover:text-[#4e5969]">
+            <button onClick={onSort} className="flex items-center gap-1 text-[12px] text-text-3 hover:text-text-2">
                 {sortText}
                 <ChannelExchangeFourIcon className="w-4 h-4" />
             </button>

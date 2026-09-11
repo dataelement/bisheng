@@ -1,0 +1,4221 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "BiSheng API-key API",
+    "version": "2.0",
+    "description": "HTTP and WebSocket endpoints authenticated with a Bearer API key."
+  },
+  "paths": {
+    "/api/v2/auth/whoami": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "Auth"
+        ],
+        "summary": "Whoami",
+        "operationId": "whoami_api_v2_auth_whoami_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnifiedResponseModel_WhoamiResponse_"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/knowledge/upload": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Upload Daily Attachment",
+        "operationId": "upload_daily_attachment_api_v2_knowledge_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_daily_attachment_api_v2_knowledge_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnifiedResponseModel_UploadFileResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/knowledge/add_metadata_fields": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Add Metadata Fields",
+        "description": "Add metadata fields to a knowledge base.\nArgs:\n    default_user:\n    req_data:\n    knowledge_service:\n\nReturns:",
+        "operationId": "add_metadata_fields_api_v2_knowledge_add_metadata_fields_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddKnowledgeMetadataFieldsReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/bisheng__api__v1__schemas__UnifiedResponseModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/knowledge/modify_metadata_fields": {
+      "put": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Update Metadata Fields",
+        "description": "Update metadata fields in a knowledge base.\nArgs:\n    default_user:\n    req_data:\n    knowledge_service:\n    background_tasks:\n\nReturns:",
+        "operationId": "update_metadata_fields_api_v2_knowledge_modify_metadata_fields_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateKnowledgeMetadataFieldsReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/bisheng__api__v1__schemas__UnifiedResponseModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/knowledge/delete_metadata_fields": {
+      "delete": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Delete Metadata Fields",
+        "description": "Delete metadata fields from a knowledge base.\nArgs:\n    default_user:\n    knowledge_id:\n    field_names:\n    knowledge_service:\n    background_tasks:\nReturns:",
+        "operationId": "delete_metadata_fields_api_v2_knowledge_delete_metadata_fields_delete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_delete_metadata_fields_api_v2_knowledge_delete_metadata_fields_delete"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/bisheng__api__v1__schemas__UnifiedResponseModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/knowledge/get_metadata_fields/{knowledge_id}": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "List Metadata Fields",
+        "description": "List metadata fields of a knowledge base.\nArgs:\n     default_user:\n     knowledge_id:\n     knowledge_service:\n\nReturns:",
+        "operationId": "list_metadata_fields_api_v2_knowledge_get_metadata_fields__knowledge_id__get",
+        "parameters": [
+          {
+            "name": "knowledge_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Knowledge Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/bisheng__api__v1__schemas__UnifiedResponseModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/knowledge/file/add_user_metadata": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Add File User Metadata",
+        "description": "Add user metadata to a knowledge file.\nArgs:\n    knowledge_id:\n    add_metadata_list:\n    default_user:\n    knowledge_file_service:\n\nReturns:",
+        "operationId": "add_file_user_metadata_api_v2_knowledge_file_add_user_metadata_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_add_file_user_metadata_api_v2_knowledge_file_add_user_metadata_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/bisheng__api__v1__schemas__UnifiedResponseModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/knowledge/file/modify_user_metadata": {
+      "put": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Modify File User Metadata",
+        "description": "Modify user metadata of a knowledge file.\nArgs:\n    modify_metadata_list:\n    knowledge_id:\n    default_user:\n    knowledge_file_service:\n\nReturns:",
+        "operationId": "modify_file_user_metadata_api_v2_knowledge_file_modify_user_metadata_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_modify_file_user_metadata_api_v2_knowledge_file_modify_user_metadata_put"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/bisheng__api__v1__schemas__UnifiedResponseModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/knowledge/file/delete_user_metadata": {
+      "delete": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Delete File User Metadata",
+        "description": "Delete user metadata from a knowledge file.\nArgs:\n    default_user:\n    knowledge_id:\n    delete_user_metadatas:\n    knowledge_file_service:\n\nReturns:",
+        "operationId": "delete_file_user_metadata_api_v2_knowledge_file_delete_user_metadata_delete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_delete_file_user_metadata_api_v2_knowledge_file_delete_user_metadata_delete"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/bisheng__api__v1__schemas__UnifiedResponseModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/knowledge/file/list_user_metadata": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "List File User Metadata",
+        "description": "List user metadata of knowledge files.\nArgs:\n    default_user:\n    knowledge_id:\n    knowledge_file_ids:\n    knowledge_file_service:\n\nReturns:",
+        "operationId": "list_file_user_metadata_api_v2_knowledge_file_list_user_metadata_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_list_file_user_metadata_api_v2_knowledge_file_list_user_metadata_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/bisheng__api__v1__schemas__UnifiedResponseModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Create",
+        "description": "Create a knowledge resource (F030 facade, dispatch by ``type``).\n\nTypes 0/1 create document or QA libraries through KnowledgeService;\ntype 3 creates a knowledge space through KnowledgeSpaceService with the\nworkbench embedding model. Type 2 and invalid values are unsupported.",
+        "operationId": "create_api_v2_filelib__post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Update Knowledge",
+        "description": "Update name/description of a knowledge resource (F030, dispatch by row.type).",
+        "operationId": "update_knowledge_api_v2_filelib__put",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      },
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Get Knowledge",
+        "description": "List knowledge resources by ``type`` (F030 cursor pagination, INV-6).\n\nIdentity delegation is supplied only through ``X-On-Behalf-Of``.\nResponse is ``PageInfiniteCursorData`` (data/page_size/has_more/next_cursor).",
+        "operationId": "get_knowledge_api_v2_filelib__get",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Type"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Name"
+            }
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "update_time",
+              "title": "Sort By"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": 10,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/{knowledge_id}": {
+      "delete": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Delete Knowledge Api",
+        "description": "Delete a knowledge resource (F030, dispatch by row.type).\n\nKnowledge space (3) → ``KnowledgeSpaceService.delete_space`` (cascade child\nfiles/folders + ReBAC tuple cleanup + members). Knowledge base (0/1) →\n``KnowledgeService.delete_knowledge``.",
+        "operationId": "delete_knowledge_api_api_v2_filelib__knowledge_id__delete",
+        "parameters": [
+          {
+            "name": "knowledge_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Knowledge Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/clear/{knowledge_id}": {
+      "delete": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Clear Knowledge Files",
+        "description": "Clear a knowledge resource's contents (F030, dispatch by row.type).\n\nKnowledge space (3) → ``KnowledgeSpaceService.clear_space`` (remove child\nfiles/folders + child tuples, keep the space). Knowledge base (0/1) →\n``KnowledgeService.delete_knowledge(only_clear=True)``.",
+        "operationId": "clear_knowledge_files_api_v2_filelib_clear__knowledge_id__delete",
+        "parameters": [
+          {
+            "name": "knowledge_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Knowledge Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/file/{knowledge_id}": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Upload File",
+        "description": "Upload a file to a knowledge resource (F030 facade, dispatch by row.type).\n\nKnowledge base (0/1) → existing parse/split/ingest pipeline (``parent_id``\nignored). Knowledge space (3) → ``KnowledgeSpaceService.add_file`` which\nnatively places the file under ``parent_id`` (must exist, else 18010).",
+        "operationId": "upload_file_api_v2_filelib_file__knowledge_id__post",
+        "parameters": [
+          {
+            "name": "knowledge_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Knowledge Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_file_api_v2_filelib_file__knowledge_id__post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/file/{file_id}": {
+      "delete": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Delete Knowledge File",
+        "description": "Delete files in the Knowledge Base",
+        "operationId": "delete_knowledge_file_api_v2_filelib_file__file_id__delete",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/delete_file": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Delete File Batch Api",
+        "description": "Bulk delete knowledge file information",
+        "operationId": "delete_file_batch_api_api_v2_filelib_delete_file_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array",
+                "title": "File Ids"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/file/list": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Get Filelist",
+        "description": "List files of a knowledge resource (F030 cursor pagination, dispatch by row.type).\n\nKnowledge base (0/1) → flat cursor list (``aget_knowledge_files_cursor``,\n``parent_id`` ignored). Knowledge space (3) → hierarchical cursor list\n(``list_space_children``) under ``parent_id`` (root when omitted).",
+        "operationId": "get_filelist_api_v2_filelib_file_list_get",
+        "parameters": [
+          {
+            "name": "knowledge_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Knowledge Id"
+            }
+          },
+          {
+            "name": "parent_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Id"
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keyword"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "title": "Status"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/chunks": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Post Chunks",
+        "description": "Upload files to the knowledge base and sync the interface",
+        "operationId": "post_chunks_api_v2_filelib_chunks_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_post_chunks_api_v2_filelib_chunks_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/chunks_string": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Post String Chunks",
+        "description": "Get knowledge base file information.",
+        "operationId": "post_string_chunks_api_v2_filelib_chunks_string_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/download_statistic": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Download Statistic File",
+        "operationId": "download_statistic_file_api_v2_filelib_download_statistic_get",
+        "parameters": [
+          {
+            "name": "file_path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/add_qa": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Add Qa",
+        "operationId": "add_qa_api_v2_filelib_add_qa_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_add_qa_api_v2_filelib_add_qa_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/add_relative_qa": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Append Qa",
+        "operationId": "append_qa_api_v2_filelib_add_relative_qa_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_append_qa_api_v2_filelib_add_relative_qa_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/qa/{qa_id}": {
+      "delete": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Delete Qa Data",
+        "description": "Deleteqa Question to Information",
+        "operationId": "delete_qa_data_api_v2_filelib_qa__qa_id__delete",
+        "parameters": [
+          {
+            "name": "qa_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Qa Id"
+            }
+          },
+          {
+            "name": "question",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Question"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/update_qa": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Update Qa",
+        "description": "Deleteqa Question to Information",
+        "operationId": "update_qa_api_v2_filelib_update_qa_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_update_qa_api_v2_filelib_update_qa_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/detail_qa": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Detail Qa",
+        "description": "Get questions on information",
+        "operationId": "detail_qa_api_v2_filelib_detail_qa_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/retrieve": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Retrieve Chunks",
+        "description": "Retrieve top-k chunks across one or more knowledge bases (no LLM generation).\n\nDesigned for external retrieval-tool integrations. Delegation is supplied\nonly through ``X-On-Behalf-Of``.",
+        "operationId": "retrieve_chunks_api_v2_filelib_retrieve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetrieveReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/filelib/query_qa": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Query Qa",
+        "description": "Deleteqa Question to Information",
+        "operationId": "query_qa_api_v2_filelib_query_qa_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryQAParam"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/assistant/chat/completions": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Assistant"
+        ],
+        "summary": "Assistant Chat Completions",
+        "operationId": "assistant_chat_completions_api_v2_assistant_chat_completions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenAIChatCompletionReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/assistant/info/{assistant_id}": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "Assistant"
+        ],
+        "summary": "Get Assistant Info",
+        "operationId": "get_assistant_info_api_v2_assistant_info__assistant_id__get",
+        "parameters": [
+          {
+            "name": "assistant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Assistant Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/assistant/list": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "Assistant"
+        ],
+        "summary": "Get Assistant List",
+        "operationId": "get_assistant_list_api_v2_assistant_list_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "assistant name, fuzzy matching",
+              "title": "Name"
+            },
+            "description": "assistant name, fuzzy matching"
+          },
+          {
+            "name": "tag_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "label ID",
+              "title": "Tag Id"
+            },
+            "description": "label ID"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Page",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "Page"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Listings Per Page",
+              "default": 10,
+              "title": "Limit"
+            },
+            "description": "Listings Per Page"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Online status",
+              "title": "Status"
+            },
+            "description": "Online status"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/workflow/invoke": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Workflow"
+        ],
+        "summary": "Invoke Workflow",
+        "operationId": "invoke_workflow_api_v2_workflow_invoke_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenWorkflowInvokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/workflow/stop": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Workflow"
+        ],
+        "summary": "Stop Workflow",
+        "operationId": "stop_workflow_api_v2_workflow_stop_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_stop_workflow_api_v2_workflow_stop_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/llm/workbench/asr": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "llm"
+        ],
+        "summary": "Invoke Workbench Asr",
+        "description": "Call the workbench'sasrModels Convert Voice to Text",
+        "operationId": "invoke_workbench_asr_api_v2_llm_workbench_asr_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_invoke_workbench_asr_api_v2_llm_workbench_asr_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/llm/workbench/tts": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "llm"
+        ],
+        "summary": "Invoke Workbench Tts",
+        "description": "Call the workbench'sttsModels Convert text to speech",
+        "operationId": "invoke_workbench_tts_api_v2_llm_workbench_tts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_invoke_workbench_tts_api_v2_llm_workbench_tts_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/flows/{flow_id}": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "FlowV2"
+        ],
+        "summary": "Get Flow",
+        "description": "Exposed interfaces for obtaining skill information",
+        "operationId": "get_flow_api_v2_flows__flow_id__get",
+        "parameters": [
+          {
+            "name": "flow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Flow Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/citation/{citation_id}": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "Citation"
+        ],
+        "summary": "Get Open Citation Detail",
+        "operationId": "get_open_citation_detail_api_v2_citation__citation_id__get",
+        "parameters": [
+          {
+            "name": "citation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnifiedResponseModel_OpenCitationResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/workstation/config": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "WorkStation"
+        ],
+        "summary": "Get Daily Config",
+        "operationId": "get_daily_config_api_v2_workstation_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/bisheng__api__v1__schemas__UnifiedResponseModel"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/workstation/chat/completions": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "WorkStation"
+        ],
+        "summary": "Daily Chat Completions",
+        "operationId": "daily_chat_completions_api_v2_workstation_chat_completions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenDailyChatCompletionReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/chat/list": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "Chat"
+        ],
+        "summary": "List Daily Sessions",
+        "operationId": "list_daily_sessions_api_v2_chat_list_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/bisheng__api__v1__schemas__UnifiedResponseModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/chat/info": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "Chat"
+        ],
+        "summary": "Get Daily Session Info",
+        "operationId": "get_daily_session_info_api_v2_chat_info_get",
+        "parameters": [
+          {
+            "name": "chat_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Chat Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/bisheng__api__v1__schemas__UnifiedResponseModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "APIAddQAParam": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "answer": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Answer"
+          },
+          "extra": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "question",
+          "answer"
+        ],
+        "title": "APIAddQAParam"
+      },
+      "APIAppendQAParam": {
+        "properties": {
+          "relative_questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Relative Questions",
+            "default": []
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          }
+        },
+        "type": "object",
+        "title": "APIAppendQAParam"
+      },
+      "AddKnowledgeMetadataFieldsReq": {
+        "properties": {
+          "knowledge_id": {
+            "type": "integer",
+            "title": "Knowledge Id",
+            "description": "The knowledge base uponID"
+          },
+          "metadata_fields": {
+            "items": {
+              "$ref": "#/components/schemas/MetadataField"
+            },
+            "type": "array",
+            "title": "Metadata Fields",
+            "description": "List of metadata fields to add"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_id",
+          "metadata_fields"
+        ],
+        "title": "AddKnowledgeMetadataFieldsReq",
+        "description": "Add Knowledge Base Metadata Field Request Body"
+      },
+      "AuthTypeEnum": {
+        "type": "string",
+        "enum": [
+          "public",
+          "private",
+          "approval"
+        ],
+        "title": "AuthTypeEnum"
+      },
+      "Body_add_file_user_metadata_api_v2_knowledge_file_add_user_metadata_post": {
+        "properties": {
+          "knowledge_id": {
+            "type": "integer",
+            "title": "Knowledge Id",
+            "description": "Knowledge ID"
+          },
+          "add_metadata_list": {
+            "items": {
+              "$ref": "#/components/schemas/ModifyKnowledgeFileMetaDataReq"
+            },
+            "type": "array",
+            "title": "Add Metadata List",
+            "description": "File User Metadata List"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_id",
+          "add_metadata_list"
+        ],
+        "title": "Body_add_file_user_metadata_api_v2_knowledge_file_add_user_metadata_post"
+      },
+      "Body_add_qa_api_v2_filelib_add_qa_post": {
+        "properties": {
+          "knowledge_id": {
+            "type": "integer",
+            "title": "Knowledge Id"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/APIAddQAParam"
+            },
+            "type": "array",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_id",
+          "data"
+        ],
+        "title": "Body_add_qa_api_v2_filelib_add_qa_post"
+      },
+      "Body_append_qa_api_v2_filelib_add_relative_qa_post": {
+        "properties": {
+          "knowledge_id": {
+            "type": "integer",
+            "title": "Knowledge Id"
+          },
+          "data": {
+            "$ref": "#/components/schemas/APIAppendQAParam"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_id",
+          "data"
+        ],
+        "title": "Body_append_qa_api_v2_filelib_add_relative_qa_post"
+      },
+      "Body_delete_file_user_metadata_api_v2_knowledge_file_delete_user_metadata_delete": {
+        "properties": {
+          "knowledge_id": {
+            "type": "integer",
+            "title": "Knowledge Id",
+            "description": "Knowledge ID"
+          },
+          "delete_user_metadatas": {
+            "items": {
+              "$ref": "#/components/schemas/DeleteUserMetadataReq"
+            },
+            "type": "array",
+            "title": "Delete User Metadatas",
+            "description": "Delete User Metadata List"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_id",
+          "delete_user_metadatas"
+        ],
+        "title": "Body_delete_file_user_metadata_api_v2_knowledge_file_delete_user_metadata_delete"
+      },
+      "Body_delete_metadata_fields_api_v2_knowledge_delete_metadata_fields_delete": {
+        "properties": {
+          "knowledge_id": {
+            "type": "integer",
+            "title": "Knowledge Id",
+            "description": "Knowledge ID"
+          },
+          "field_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Field Names",
+            "description": "List of field names to delete"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_id",
+          "field_names"
+        ],
+        "title": "Body_delete_metadata_fields_api_v2_knowledge_delete_metadata_fields_delete"
+      },
+      "Body_invoke_workbench_asr_api_v2_llm_workbench_asr_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "title": "Body_invoke_workbench_asr_api_v2_llm_workbench_asr_post"
+      },
+      "Body_invoke_workbench_tts_api_v2_llm_workbench_tts_post": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Text that needs to be synthesized"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "Body_invoke_workbench_tts_api_v2_llm_workbench_tts_post"
+      },
+      "Body_list_file_user_metadata_api_v2_knowledge_file_list_user_metadata_post": {
+        "properties": {
+          "knowledge_id": {
+            "type": "integer",
+            "title": "Knowledge Id",
+            "description": "Knowledge ID"
+          },
+          "knowledge_file_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Knowledge File Ids",
+            "description": "Knowledge File IDs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_id",
+          "knowledge_file_ids"
+        ],
+        "title": "Body_list_file_user_metadata_api_v2_knowledge_file_list_user_metadata_post"
+      },
+      "Body_modify_file_user_metadata_api_v2_knowledge_file_modify_user_metadata_put": {
+        "properties": {
+          "knowledge_id": {
+            "type": "integer",
+            "title": "Knowledge Id",
+            "description": "Knowledge ID"
+          },
+          "modify_metadata_list": {
+            "items": {
+              "$ref": "#/components/schemas/ModifyKnowledgeFileMetaDataReq"
+            },
+            "type": "array",
+            "title": "Modify Metadata List",
+            "description": "File User Metadata List"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_id",
+          "modify_metadata_list"
+        ],
+        "title": "Body_modify_file_user_metadata_api_v2_knowledge_file_modify_user_metadata_put"
+      },
+      "Body_post_chunks_api_v2_filelib_chunks_post": {
+        "properties": {
+          "knowledge_id": {
+            "type": "integer",
+            "title": "Knowledge Id"
+          },
+          "metadata": {
+            "type": "string",
+            "title": "Metadata"
+          },
+          "split_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "custom",
+                  "hierarchical"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split Mode",
+            "default": "auto"
+          },
+          "separator": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Separator"
+          },
+          "separator_rule": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Separator Rule"
+          },
+          "chunk_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Size"
+          },
+          "chunk_overlap": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Overlap"
+          },
+          "hierarchy_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hierarchy Level",
+            "default": 3
+          },
+          "append_title": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Append Title",
+            "default": false
+          },
+          "max_chunk_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Chunk Size",
+            "default": 1000
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_id",
+          "metadata",
+          "file"
+        ],
+        "title": "Body_post_chunks_api_v2_filelib_chunks_post"
+      },
+      "Body_stop_workflow_api_v2_workflow_stop_post": {
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Workflow Id",
+            "description": "Workflow UniqueID"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id",
+            "description": "SessionsID,Once,workflowUnique identifier of the call"
+          }
+        },
+        "type": "object",
+        "required": [
+          "workflow_id",
+          "session_id"
+        ],
+        "title": "Body_stop_workflow_api_v2_workflow_stop_post"
+      },
+      "Body_update_qa_api_v2_filelib_update_qa_post": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "original_question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Question"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "Body_update_qa_api_v2_filelib_update_qa_post"
+      },
+      "Body_upload_daily_attachment_api_v2_knowledge_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_daily_attachment_api_v2_knowledge_upload_post"
+      },
+      "Body_upload_file_api_v2_filelib_file__knowledge_id__post": {
+        "properties": {
+          "split_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "custom",
+                  "hierarchical"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split Mode",
+            "default": "auto"
+          },
+          "separator": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Separator",
+            "description": "Split text rule, If not passed on, it is the default"
+          },
+          "separator_rule": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Separator Rule",
+            "description": "Segmentation before or after the segmentation rule;before/after"
+          },
+          "chunk_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Size",
+            "description": "Split text length, default if not passed"
+          },
+          "chunk_overlap": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Overlap",
+            "description": "Split text overlap length, default if not passed"
+          },
+          "hierarchy_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hierarchy Level",
+            "default": 3
+          },
+          "append_title": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Append Title",
+            "default": false
+          },
+          "max_chunk_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Chunk Size",
+            "default": 1000
+          },
+          "callback_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Callback Url",
+            "description": "Return URL"
+          },
+          "file_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Url",
+            "description": "File URL"
+          },
+          "file": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "binary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File",
+            "description": "Upload file"
+          },
+          "retain_images": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retain Images",
+            "description": "Keep document image",
+            "default": 1
+          },
+          "force_ocr": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Force Ocr",
+            "description": "EnableOCR",
+            "default": 0
+          },
+          "enable_formula": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enable Formula",
+            "description": "latexFormula Recognition",
+            "default": 1
+          },
+          "filter_page_header_footer": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filter Page Header Footer",
+            "description": "Filter Header Footer",
+            "default": 0
+          },
+          "excel_rule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExcelRule"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "excel rule",
+            "default": {}
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id",
+            "description": "Target folder id; knowledge-space only, must exist. Ignored for knowledge bases."
+          }
+        },
+        "type": "object",
+        "title": "Body_upload_file_api_v2_filelib_file__knowledge_id__post"
+      },
+      "ChunkInput": {
+        "properties": {
+          "knowledge_id": {
+            "type": "integer",
+            "title": "Knowledge Id"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/Document"
+            },
+            "type": "array",
+            "title": "Documents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_id",
+          "documents"
+        ],
+        "title": "ChunkInput"
+      },
+      "DeleteUserMetadataReq": {
+        "properties": {
+          "knowledge_file_id": {
+            "type": "integer",
+            "title": "Knowledge File Id"
+          },
+          "field_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Field Names"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_file_id",
+          "field_names"
+        ],
+        "title": "DeleteUserMetadataReq"
+      },
+      "Document": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          },
+          "page_content": {
+            "type": "string",
+            "title": "Page Content"
+          },
+          "type": {
+            "type": "string",
+            "const": "Document",
+            "title": "Type",
+            "default": "Document"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page_content"
+        ],
+        "title": "Document",
+        "description": "Class for storing a piece of text and associated metadata.\n\n!!! note\n\n    `Document` is for **retrieval workflows**, not chat I/O. For sending text\n    to an LLM in a conversation, use message types from `langchain.messages`.\n\nExample:\n    ```python\n    from langchain_core.documents import Document\n\n    document = Document(\n        page_content=\"Hello, world!\", metadata={\"source\": \"https://example.com\"}\n    )\n    ```"
+      },
+      "ExcelRule": {
+        "properties": {
+          "slice_length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slice Length",
+            "description": "Data Line",
+            "default": 10
+          },
+          "header_start_row": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Header Start Row",
+            "description": "Table header start",
+            "default": 1
+          },
+          "header_end_row": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Header End Row",
+            "description": "End of header",
+            "default": 1
+          },
+          "append_header": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Append Header",
+            "description": "Whether to add a header",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "title": "ExcelRule"
+      },
+      "FileUserMetaDataInfo": {
+        "properties": {
+          "field_name": {
+            "type": "string",
+            "title": "Field Name",
+            "description": "Metadata field name"
+          },
+          "field_value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field Value",
+            "description": "Metadata field value"
+          },
+          "updated_at": {
+            "type": "integer",
+            "title": "Updated At",
+            "description": "Metadata field update timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field_name"
+        ],
+        "title": "FileUserMetaDataInfo"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "KnowledgeBaseFilter": {
+        "properties": {
+          "knowledge_base_id": {
+            "type": "integer",
+            "title": "Knowledge Base Id",
+            "description": "Must appear in knowledge_base_ids"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "Tag names defined under this knowledge base used to narrow files"
+          },
+          "tag_match_mode": {
+            "type": "string",
+            "enum": [
+              "ANY",
+              "ALL"
+            ],
+            "title": "Tag Match Mode",
+            "description": "ANY = file matches any tag; ALL is reserved for future use",
+            "default": "ANY"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_base_id"
+        ],
+        "title": "KnowledgeBaseFilter",
+        "description": "Per-knowledge-base filter applied when retrieving chunks."
+      },
+      "KnowledgeCreate": {
+        "properties": {
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "description": "Knowledge Base Name"
+          },
+          "type": {
+            "type": "integer",
+            "title": "Type",
+            "description": "Knowledge Base Type, value from KnowledgeTypeEnum",
+            "default": 0
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "collection_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Name"
+          },
+          "index_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Name"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State",
+            "description": "value from KnowledgeState",
+            "default": 1
+          },
+          "is_released": {
+            "type": "boolean",
+            "title": "Is Released",
+            "description": "is released to knowledge space square",
+            "default": false
+          },
+          "auth_type": {
+            "$ref": "#/components/schemas/AuthTypeEnum",
+            "description": "Authentication Type",
+            "default": "public"
+          },
+          "is_shared": {
+            "type": "boolean",
+            "title": "Is Shared",
+            "default": false
+          },
+          "auto_tag_enabled": {
+            "type": "boolean",
+            "title": "Auto Tag Enabled",
+            "default": false
+          },
+          "auto_tag_library_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Tag Library Id"
+          },
+          "metadata_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Fields",
+            "description": "Metadata Field Configuration for Knowledge Base"
+          },
+          "is_partition": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Partition"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "KnowledgeCreate"
+      },
+      "KnowledgeUpdate": {
+        "properties": {
+          "knowledge_id": {
+            "type": "integer",
+            "title": "Knowledge Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_id"
+        ],
+        "title": "KnowledgeUpdate"
+      },
+      "MetadataField": {
+        "properties": {
+          "field_name": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Field Name",
+            "description": "Metadata field name"
+          },
+          "field_type": {
+            "$ref": "#/components/schemas/MetadataFieldType"
+          },
+          "updated_at": {
+            "type": "integer",
+            "title": "Updated At",
+            "description": "Metadata field update timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field_name",
+          "field_type"
+        ],
+        "title": "MetadataField",
+        "description": "Metadata Field Model"
+      },
+      "MetadataFieldType": {
+        "type": "string",
+        "enum": [
+          "string",
+          "number",
+          "time"
+        ],
+        "title": "MetadataFieldType",
+        "description": "Metadata field type"
+      },
+      "ModifyKnowledgeFileMetaDataReq": {
+        "properties": {
+          "knowledge_file_id": {
+            "type": "integer",
+            "title": "Knowledge File Id",
+            "description": "Knowledge Base FilesID"
+          },
+          "user_metadata_list": {
+            "items": {
+              "$ref": "#/components/schemas/FileUserMetaDataInfo"
+            },
+            "type": "array",
+            "title": "User Metadata List",
+            "description": "List of file metadata to add"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_file_id",
+          "user_metadata_list"
+        ],
+        "title": "ModifyKnowledgeFileMetaDataReq",
+        "description": "Change Knowledge Base File Metadata Request Body"
+      },
+      "OpenAIChatCompletionReq": {
+        "properties": {
+          "messages": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Messages",
+            "description": "Chat message list, only supporteduser、assistant。systemUse data from within the database"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "The only assistantID"
+          },
+          "n": {
+            "type": "integer",
+            "title": "N",
+            "description": "Number of answers returned, The assistant side defaults to1, multiple answers are not supported at this time",
+            "default": 1
+          },
+          "stream": {
+            "type": "boolean",
+            "title": "Stream",
+            "description": "Whether to turn on streaming replies",
+            "default": false
+          },
+          "temperature": {
+            "type": "number",
+            "title": "Temperature",
+            "description": "Model Temperature, Incoming0or don't post means don't overwrite",
+            "default": 0.0
+          },
+          "tools": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Tools",
+            "description": "Tools List, The assistant is temporarily unsupported, use the configuration of the assistant"
+          }
+        },
+        "type": "object",
+        "required": [
+          "messages",
+          "model"
+        ],
+        "title": "OpenAIChatCompletionReq"
+      },
+      "OpenCitationResponse": {
+        "properties": {
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id",
+            "description": "Knowledge file ID"
+          },
+          "file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Name",
+            "description": "Knowledge file name"
+          },
+          "file_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Type",
+            "description": "Knowledge file type"
+          },
+          "knowledge_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Name",
+            "description": "Knowledge base name"
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url",
+            "description": "File download URL"
+          },
+          "preview_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Url",
+            "description": "File preview URL"
+          },
+          "bbox": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bbox",
+            "description": "Bounding box information"
+          }
+        },
+        "type": "object",
+        "title": "OpenCitationResponse"
+      },
+      "OpenDailyChatCompletionReq": {
+        "properties": {
+          "clientTimestamp": {
+            "type": "string",
+            "title": "Clienttimestamp"
+          },
+          "conversationId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversationid"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "default": false
+          },
+          "generation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation",
+            "default": ""
+          },
+          "isCreatedByUser": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iscreatedbyuser",
+            "default": false
+          },
+          "isContinued": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iscontinued",
+            "default": false
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text",
+            "default": ""
+          },
+          "tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OpenDailyToolPayload"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tools"
+          },
+          "skills": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skills"
+          },
+          "files": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files"
+          },
+          "search_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Enabled",
+            "default": false
+          },
+          "parentMessageId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parentmessageid"
+          },
+          "overrideParentMessageId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrideparentmessageid"
+          },
+          "responseMessageId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responsemessageid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "clientTimestamp",
+          "model"
+        ],
+        "title": "OpenDailyChatCompletionReq",
+        "description": "Current APIChatCompletion minus task and knowledge-base selectors."
+      },
+      "OpenDailyToolPayload": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "default": 0
+          },
+          "tool_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Key"
+          },
+          "type": {
+            "type": "string",
+            "const": "tool",
+            "title": "Type",
+            "default": "tool"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "OpenDailyToolPayload"
+      },
+      "OpenWorkflowInvokeRequest": {
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Workflow Id",
+            "description": "Workflow UniqueID"
+          },
+          "override": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Override",
+            "description": "Override node parameters"
+          },
+          "stream": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stream",
+            "description": "Whether to stream calls",
+            "default": true
+          },
+          "input": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input",
+            "description": "User input"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id",
+            "description": "Unique user-input message ID"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id",
+            "description": "Workflow call session ID"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "workflow_id"
+        ],
+        "title": "OpenWorkflowInvokeRequest"
+      },
+      "QueryQAParam": {
+        "properties": {
+          "timeRange": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Timerange"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timeRange"
+        ],
+        "title": "QueryQAParam"
+      },
+      "RetrieveFilters": {
+        "properties": {
+          "knowledge_base_filters": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeBaseFilter"
+            },
+            "type": "array",
+            "title": "Knowledge Base Filters"
+          }
+        },
+        "type": "object",
+        "title": "RetrieveFilters"
+      },
+      "RetrieveReq": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Query",
+            "description": "User question"
+          },
+          "knowledge_base_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Knowledge Base Ids",
+            "description": "Knowledge base ids to search across"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RetrieveFilters"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "top_k": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "description": "Max chunks to return",
+            "default": 10
+          },
+          "max_content": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Max Content",
+            "description": "Per-knowledge-base content length cap during merge",
+            "default": 15000
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "knowledge_base_ids"
+        ],
+        "title": "RetrieveReq"
+      },
+      "UnifiedResponseModel_OpenCitationResponse_": {
+        "properties": {
+          "status_code": {
+            "type": "integer",
+            "title": "Status Code"
+          },
+          "status_message": {
+            "type": "string",
+            "title": "Status Message"
+          },
+          "data": {
+            "$ref": "#/components/schemas/OpenCitationResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status_code",
+          "status_message"
+        ],
+        "title": "UnifiedResponseModel[OpenCitationResponse]"
+      },
+      "UnifiedResponseModel_UploadFileResponse_": {
+        "properties": {
+          "status_code": {
+            "type": "integer",
+            "title": "Status Code"
+          },
+          "status_message": {
+            "type": "string",
+            "title": "Status Message"
+          },
+          "data": {
+            "$ref": "#/components/schemas/UploadFileResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status_code",
+          "status_message"
+        ],
+        "title": "UnifiedResponseModel[UploadFileResponse]"
+      },
+      "UnifiedResponseModel_WhoamiResponse_": {
+        "properties": {
+          "status_code": {
+            "type": "integer",
+            "title": "Status Code"
+          },
+          "status_message": {
+            "type": "string",
+            "title": "Status Message"
+          },
+          "data": {
+            "$ref": "#/components/schemas/WhoamiResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status_code",
+          "status_message"
+        ],
+        "title": "UnifiedResponseModel[WhoamiResponse]"
+      },
+      "UpdateKnowledgeMetadataFieldsReq": {
+        "properties": {
+          "knowledge_id": {
+            "type": "integer",
+            "title": "Knowledge Id",
+            "description": "The knowledge base uponID"
+          },
+          "metadata_fields": {
+            "items": {
+              "$ref": "#/components/schemas/UpdateMetadataFieldName"
+            },
+            "type": "array",
+            "title": "Metadata Fields",
+            "description": "List of metadata fields to update"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_id",
+          "metadata_fields"
+        ],
+        "title": "UpdateKnowledgeMetadataFieldsReq",
+        "description": "Update Knowledge Base Metadata Field Request Body"
+      },
+      "UpdateMetadataFieldName": {
+        "properties": {
+          "old_field_name": {
+            "type": "string",
+            "title": "Old Field Name",
+            "description": "Old Metadata Field Name"
+          },
+          "new_field_name": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "New Field Name",
+            "description": "New Metadata Field Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "old_field_name",
+          "new_field_name"
+        ],
+        "title": "UpdateMetadataFieldName",
+        "description": "Update Metadata Field Name Model"
+      },
+      "UploadFileResponse": {
+        "properties": {
+          "flowId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flowid"
+          },
+          "file_path": {
+            "type": "string",
+            "title": "File Path"
+          },
+          "relative_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relative Path"
+          },
+          "file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Name"
+          },
+          "repeat": {
+            "type": "boolean",
+            "title": "Repeat",
+            "default": false
+          },
+          "repeat_file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repeat File Name"
+          },
+          "repeat_update_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repeat Update Time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_path"
+        ],
+        "title": "UploadFileResponse",
+        "description": "Upload file response schema."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WhoamiResourceOwner": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "WhoamiResourceOwner"
+      },
+      "WhoamiResponse": {
+        "properties": {
+          "credential_id": {
+            "type": "integer",
+            "title": "Credential Id"
+          },
+          "actor_kind": {
+            "type": "string",
+            "title": "Actor Kind"
+          },
+          "actor_id": {
+            "type": "integer",
+            "title": "Actor Id"
+          },
+          "actor_name": {
+            "type": "string",
+            "title": "Actor Name"
+          },
+          "tenant_id": {
+            "type": "integer",
+            "title": "Tenant Id"
+          },
+          "resource_owner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WhoamiResourceOwner"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "authorization_subject_type": {
+            "type": "string",
+            "title": "Authorization Subject Type"
+          },
+          "authorization_subject_id": {
+            "type": "integer",
+            "title": "Authorization Subject Id"
+          },
+          "effective_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective User Id"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
+          },
+          "key_mask": {
+            "type": "string",
+            "title": "Key Mask"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "credential_id",
+          "actor_kind",
+          "actor_id",
+          "actor_name",
+          "tenant_id",
+          "resource_owner",
+          "authorization_subject_type",
+          "authorization_subject_id",
+          "effective_user_id",
+          "mode",
+          "scopes",
+          "key_mask",
+          "expires_at"
+        ],
+        "title": "WhoamiResponse"
+      },
+      "bisheng__api__v1__schemas__UnifiedResponseModel": {
+        "properties": {
+          "status_code": {
+            "type": "integer",
+            "title": "Status Code"
+          },
+          "status_message": {
+            "type": "string",
+            "title": "Status Message"
+          },
+          "data": {
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status_code",
+          "status_message"
+        ],
+        "title": "UnifiedResponseModel",
+        "description": "Unified Response Model"
+      }
+    },
+    "securitySchemes": {
+      "OpenApiBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "API Key"
+      }
+    }
+  },
+  "x-websocket-endpoints": [
+    {
+      "url": "/api/v2/workflow/chat/{workflow_id}",
+      "authorization": "Bearer API Key",
+      "headers": [
+        "Authorization",
+        "X-End-User",
+        "X-On-Behalf-Of"
+      ],
+      "query": [
+        "chat_id"
+      ]
+    },
+    {
+      "url": "/api/v2/assistant/chat/{assistant_id}",
+      "authorization": "Bearer API Key",
+      "headers": [
+        "Authorization",
+        "X-End-User",
+        "X-On-Behalf-Of"
+      ],
+      "query": [
+        "chat_id"
+      ]
+    }
+  ]
+}

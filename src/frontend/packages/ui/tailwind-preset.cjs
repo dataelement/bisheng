@@ -7,9 +7,14 @@ const plugin = require('tailwindcss/plugin');
  *   presets: [require('@bisheng/ui/tailwind-preset')],
  *   content: [..., '../packages/ui/src/** / *.{ts,tsx}']
  *
- * Values are seeded verbatim from client/tailwind.config.cjs so adopting the
- * preset changes nothing visually. Keep the two in sync until client fully
- * migrates onto the preset (then delete the duplicated keys there).
+ * client adopted this preset and deleted its duplicated theme keys — verified by
+ * diffing the fully-resolved theme AND the compiled CSS before/after (identical
+ * but for the order of the two pointer variants, which the preset now owns).
+ * platform has not adopted it yet and still has no semantic layer at all.
+ *
+ * The CSS custom properties this file points at have a single definition too —
+ * src/styles/tokens.css, which client loads from its entry. Change a token value
+ * there and both the app and the docs site follow; there is no second copy.
  *
  * @type {Partial<import('tailwindcss').Config>}
  */
@@ -43,6 +48,7 @@ module.exports = {
       // semantic CSS vars in tokens.css, which remap under 768px, so
       // classNames never change per breakpoint.
       fontSize: {
+        'caption-sm': ['var(--text-caption-sm)', { lineHeight: 'var(--leading-caption-sm)', fontWeight: '400' }],
         caption: ['var(--text-caption)', { lineHeight: 'var(--leading-caption)', fontWeight: '400' }],
         'body-sm': ['var(--text-body-sm)', { lineHeight: 'var(--leading-body-sm)', fontWeight: '400' }],
         body: ['var(--text-body)', { lineHeight: 'var(--leading-body)', fontWeight: '400' }],
@@ -85,6 +91,12 @@ module.exports = {
         'btn-disabled-border': 'rgb(var(--btn-disabled-border) / <alpha-value>)',
         'btn-disabled-bg': 'rgb(var(--btn-disabled-bg) / <alpha-value>)',
         'btn-disabled-text': 'rgb(var(--btn-disabled-text) / <alpha-value>)',
+        // Tooltip surface (组件-Tooltip文字提示.md §3) — solid, dark in BOTH
+        // color modes (see tokens.css for why it is not the gray ramp).
+        tooltip: 'rgb(var(--tooltip-bg) / <alpha-value>)',
+        // Switch semantic tokens (组件-Switch开关.md §4) — OFF track + its hover.
+        'switch-off': 'rgb(var(--switch-off-bg) / <alpha-value>)',
+        'switch-off-hover': 'rgb(var(--switch-off-bg-hover) / <alpha-value>)',
         // Arco semantic layer (基础-色彩规范.md §2/§3/§7) — primitives are
         // intentionally NOT wired so components can't bypass semantic names.
         'text-1': 'rgb(var(--text-1) / <alpha-value>)',
@@ -115,12 +127,95 @@ module.exports = {
           active: 'rgb(var(--danger-active) / <alpha-value>)',
           tint: 'rgb(var(--danger-tint) / <alpha-value>)',
         },
+        // Tag frozen exceptions (基础-色彩规范 §4) — `bg-tag-approving-tint
+        // text-tag-approving` and the skill pair. Same DEFAULT/tint shape as
+        // the functional colors above; these two never follow the brand theme.
+        'tag-approving': {
+          DEFAULT: 'rgb(var(--tag-approving) / <alpha-value>)',
+          tint: 'rgb(var(--tag-approving-tint) / <alpha-value>)',
+        },
+        'tag-skill': {
+          DEFAULT: 'rgb(var(--tag-skill) / <alpha-value>)',
+          tint: 'rgb(var(--tag-skill-tint) / <alpha-value>)',
+        },
+        // Citation badge, web source (组件-Badge徽标.md §2) — the same frozen
+        // purple under its own use-name; never follows the brand theme either.
+        'citation-web': {
+          DEFAULT: 'rgb(var(--citation-web) / <alpha-value>)',
+          tint: 'rgb(var(--citation-web-tint) / <alpha-value>)',
+        },
       },
       // Radius token scale (rounded-md/lg used by Button sizes: 6/8px).
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+      },
+      // Two shadow tiers only (基础-圆角与阴影规范.mdx §2.1): `shadow-popup` for
+      // click-away overlays (dropdown, popover, toast), `shadow-modal` for
+      // interrupting ones (dialog, drawer). Tailwind's shadow-sm/md/lg/xl
+      // presets are off-spec and must not be used.
+      boxShadow: {
+        popup: 'var(--shadow-popup)',
+        modal: 'var(--shadow-modal)',
+        // `shadow-focus` is the control focus RING (组件-Input输入框.md §5.1),
+        // not a third elevation tier — see the exception note in tokens.css.
+        // The geometry is spelled out here rather than carried in a var so the
+        // color resolves ON THE ELEMENT: a field in error / warning overrides
+        // `--shadow-focus-ring` and the ring follows.
+        focus: '0 0 0 2px rgb(var(--shadow-focus-ring))',
+      },
+      // Overlay stacking (组件-Modal弹窗.md §5 / design-token.cjs Z_INDEX) — the
+      // only four layers there are. `z-modal` < `z-popover` < `z-toast` <
+      // `z-tooltip`; anything else is a hand-rolled value and off-spec.
+      zIndex: {
+        modal: 'var(--z-modal)',
+        popover: 'var(--z-popover)',
+        toast: 'var(--z-toast)',
+        tooltip: 'var(--z-tooltip)',
+      },
+      keyframes: {
+        // Tooltip motion (组件-Tooltip文字提示.md 落地 §7): 150ms fade in,
+        // 100ms fade out. Fade only — a tooltip that also moves reads as a
+        // panel sliding in rather than a label appearing.
+        'tooltip-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'tooltip-out': {
+          from: { opacity: '1' },
+          to: { opacity: '0' },
+        },
+        'modal-overlay-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'modal-overlay-out': {
+          from: { opacity: '1' },
+          to: { opacity: '0' },
+        },
+        // `scale` (the standalone property), NOT `transform: scale()` — the card
+        // is centred with `translate(-50%, -50%)` on the desktop档 and with
+        // `inset: 0` on the phone档, so the animation must not own `transform`.
+        'modal-content-in': {
+          from: { opacity: '0', scale: '0.96' },
+          to: { opacity: '1', scale: '1' },
+        },
+        'modal-content-out': {
+          from: { opacity: '1' },
+          to: { opacity: '0' },
+        },
+      },
+      animation: {
+        'tooltip-in': 'tooltip-in 150ms cubic-bezier(0.2, 0, 0, 1)',
+        'tooltip-out': 'tooltip-out 100ms cubic-bezier(0.2, 0, 0, 1)',
+        // Modal / dialog motion (组件-Modal弹窗.md §6): 200ms in (fade + 96%→100%),
+        // 160ms out (fade ONLY — shrinking on exit reads as "it went back
+        // somewhere"). Same curve both ways.
+        'modal-overlay-in': 'modal-overlay-in 200ms cubic-bezier(0.2, 0, 0, 1)',
+        'modal-overlay-out': 'modal-overlay-out 160ms cubic-bezier(0.2, 0, 0, 1)',
+        'modal-content-in': 'modal-content-in 200ms cubic-bezier(0.2, 0, 0, 1)',
+        'modal-content-out': 'modal-content-out 160ms cubic-bezier(0.2, 0, 0, 1)',
       },
     },
   },

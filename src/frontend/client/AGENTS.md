@@ -30,6 +30,7 @@ Vite 6 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (shadcn/ui) + **Recoil
   - **Do NOT theme**: semantic colors (success `#00b42a` / danger `#f53f3f` / warning `#ff7d00`), type colors (skill-purple, assistant-orange), third-party logos. Need a muted-but-themed brand color → `rgb(var(--brand-muted))`.
   - Full guide: `BRAND-THEME-HANDOFF.md`.
 - **Design system (hard rules — full specs in `packages/ui/docs/`, site: `pnpm dev:ui`)**:
+  - The Tailwind theme (type scale, semantic colors, radius / shadow / z tiers, motion keyframes, `darkMode`, `hoverOnlyWhenSupported`, the pointer variants) comes from `@bisheng/ui/tailwind-preset`, not from `tailwind.config.cjs` — that file now holds client-only keys. A new key that both apps would want goes in the preset; re-declaring it here silently re-forks it. Token VALUES live once, in `packages/ui/src/styles/tokens.css`, imported by `main.jsx` before `style.css` — `style.css` now carries ONLY client-only vars (shadcn hsl, LibreChat surface-*/header-*), so never add a design token there.
   - Where a `@bisheng/ui` component exists, USE it — no hand-rolled equivalents. Buttons: `<Button>` dual-axis API (`color` × `variant` × `size`); never hand-write button heights/padding/radius; adjacent buttons same size; one primary-solid per action area.
   - Button `loading` prop only — never inject your own Spinner. `iconOnly` requires `aria-label` + Tooltip.
   - Typography (new code): semantic classes `text-caption/body-sm/body/h4…h1` (auto-remap ≤768px) — not raw `text-sm/base` (基础-字体规范.md).

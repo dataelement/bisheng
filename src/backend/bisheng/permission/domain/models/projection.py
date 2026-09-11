@@ -78,7 +78,11 @@ class PermissionProjectionOperation(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(BigInteger, nullable=False, index=True),
     )
-    idempotency_key: str = Field(sa_column=Column(String(64), nullable=False))
+    # 192, not 64: the key is built from the resource id, and a channel id is 32
+    # hex characters on its own — `channel-membership:<32>:<user>:<model>:<ver>`
+    # passes 64 as soon as the user id reaches six digits, which DM8 rejects with
+    # `String truncated` and MySQL strict mode with `Data too long`.
+    idempotency_key: str = Field(sa_column=Column(String(192), nullable=False))
     request_checksum: str = Field(sa_column=Column(CHAR(64), nullable=False))
     operation_type: str = Field(sa_column=Column(String(64), nullable=False))
     scope_type: str = Field(sa_column=Column(String(64), nullable=False))

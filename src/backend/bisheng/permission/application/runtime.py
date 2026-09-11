@@ -16,6 +16,7 @@ from bisheng.common.errcode.permission import (
     PermissionVersionConflictError,
 )
 from bisheng.core.openfga.client import FGAClient
+from bisheng.core.openfga.contextual import contextual_operation
 from bisheng.permission.application.control_state import (
     PermissionResourceSnapshot,
     RuntimeCatalogSnapshot,
@@ -129,6 +130,7 @@ class F048PermissionRuntime:
         self._modes = modes
         self._explain = explain
 
+    @contextual_operation
     async def check_action(
         self,
         actor: PermissionActor,
@@ -139,6 +141,7 @@ class F048PermissionRuntime:
             return await self._decision.check_visible(actor, target)
         return await self._decision.check_action(actor, target, action)
 
+    @contextual_operation
     async def batch_check_actions(
         self,
         actor: PermissionActor,
@@ -199,6 +202,7 @@ class F048PermissionRuntime:
 
         return await self._state.mode_for_target(target)
 
+    @contextual_operation
     async def list_action_objects(
         self,
         actor: PermissionActor,
@@ -214,6 +218,7 @@ class F048PermissionRuntime:
             max_results=max_results,
         )
 
+    @contextual_operation
     async def list_visible_objects(
         self,
         actor: PermissionActor,
@@ -281,6 +286,38 @@ class F048PermissionRuntime:
             source_service=self._sources,
             owner_model=owner_model,
         )
+        creation_grants: tuple[GrantSnapshot, ...] = ()
+        creation_deltas: tuple[ProjectionTupleDelta, ...] = ()
+        if actor.subject_type == "service_account" and mode.upper() == "CUSTOM":
+            manager_model = next(
+                (
+                    item.snapshot
+                    for item in catalog.models
+                    if item.snapshot.model_key == "manager" and item.snapshot.active
+                ),
+                None,
+            )
+            if manager_model is None:
+                raise PermissionPublishNotReadyError(msg="Manager permission model is unavailable")
+            manager_grant = self._empty_grant(target=target, model=manager_model)
+            provisional = self._sources.canonicalize_source(
+                source_id=1,
+                subject_type="service_account",
+                subject_id=str(actor.subject_id),
+                source_type="CREATOR_GRANT",
+                source_ref=f"{target.resource_type}:{target.resource_id}",
+                protected=False,
+            )
+            creator_source = replace(
+                provisional,
+                source_id=stable_assignee_id(
+                    grant_key=manager_grant.grant_id,
+                    source_fingerprint=provisional.source_fingerprint,
+                ),
+            )
+            creator_mutation = self._sources.add_source(manager_grant, creator_source)
+            creation_grants = (creator_mutation.grant,)
+            creation_deltas = creator_mutation.deltas
         return await self._owner.project_created(
             OwnerProjectionContext(
                 target=target,
@@ -301,6 +338,8 @@ class F048PermissionRuntime:
                     owner_user_id,
                 ),
                 permission_mode=mode.upper(),
+                creation_grants=creation_grants,
+                creation_deltas=creation_deltas,
             )
         )
 
@@ -992,6 +1031,61 @@ class F048PermissionRuntime:
             limit=limit,
         )
 
+    async def list_effective_direct_user_ids_by_model(
+        self,
+        *,
+        target: VerifiedPermissionTarget,
+        model_keys: tuple[str, ...],
+    ) -> dict[str, tuple[str, ...]]:
+        """Resolve effective direct-user assignees for trusted server-side routing.
+
+        The caller must first obtain ``target`` from the owning business adapter.
+        This intentionally reads the SQL Grant roster instead of legacy direct
+        OpenFGA relations, and never expands departments or user groups into users.
+        """
+
+        normalized_keys = tuple(dict.fromkeys(key.strip() for key in model_keys if key.strip()))
+        if not normalized_keys:
+            return {}
+
+        catalog = await self._runtime_catalog()
+        mode = await self._require_current_target(target)
+        requested = set(normalized_keys)
+        models = tuple(item.snapshot for item in catalog.models if item.snapshot.model_key in requested)
+        result: dict[str, list[str]] = {key: [] for key in normalized_keys}
+        seen: dict[str, set[str]] = {key: set() for key in normalized_keys}
+        if not models:
+            return dict.fromkeys(normalized_keys, ())
+
+        after_id = 0
+        while True:
+            rows, has_more = await self._state.load_source_page(
+                target=target,
+                mode=mode.mode,
+                models=models,
+                after_id=after_id,
+                limit=500,
+            )
+            for row in rows:
+                if (
+                    row.model_key in requested
+                    and row.subject_type == "user"
+                    and row.userset_relation is None
+                    and row.subject_id not in seen[row.model_key]
+                ):
+                    seen[row.model_key].add(row.subject_id)
+                    result[row.model_key].append(row.subject_id)
+            if not has_more:
+                break
+            if not rows:
+                raise PermissionPublishNotReadyError(msg="Permission source pagination did not advance")
+            next_after_id = max(row.source_id for row in rows)
+            if next_after_id <= after_id:
+                raise PermissionPublishNotReadyError(msg="Permission source pagination did not advance")
+            after_id = next_after_id
+
+        return {key: tuple(result[key]) for key in normalized_keys}
+
     async def _mode_context(
         self,
         *,
@@ -1022,6 +1116,7 @@ class F048PermissionRuntime:
             existing_visible_sources=visible_sources,
         )
 
+    @contextual_operation
     async def _grant_capabilities(
         self,
         actor: PermissionActor,
@@ -1036,7 +1131,7 @@ class F048PermissionRuntime:
         consistency = await self._consistency(target)
         checks = [
             {
-                "user": f"user:{actor.user_id}",
+                "user": actor.fga_subject,
                 "relation": f"can_grant_level_{level}",
                 "object": f"{target.resource_type}:{target.resource_id}",
             }

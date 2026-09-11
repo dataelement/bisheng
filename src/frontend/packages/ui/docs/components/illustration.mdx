@@ -1,6 +1,11 @@
+---
+status: done
+component: Illustration
+---
+
 # 插画 Illustration
 
-空状态 / 状态反馈用的主题化插画（`src/components/illustrations/`，内联 SVG），颜色走独立的插画调色板（比 UI 品牌色更亮），随蓝⇄绿主题自动切换，另有主题无关的灰稿模式。规范见「文档 → 设计规范 → 插画 Illustration」与「色彩 Color」§5。
+空状态 / 状态反馈用的主题化插画（`@bisheng/ui` → `src/components/Illustration/`，内联 SVG；client 经 `~/components/illustrations` re-export 同一实现），颜色走独立的插画调色板（比 UI 品牌色更亮），随蓝⇄绿主题自动切换，另有主题无关的灰稿模式。规范见「文档 → 设计规范 → 插画 Illustration」与「色彩 Color」§5。
 
 ## 调色板三态
 
@@ -24,8 +29,9 @@ import {
   ListWebLinkIllustration,
   NoPermissionIllustration,
   SuccessIllustration,
+  SystemErrorIllustration,
   SystemMaintenanceIllustration,
-} from '~/components/illustrations';
+} from '@bisheng/ui';
 
 const MODES = [
   { id: 'blue', label: '蓝主题', hint: '默认主题。' },
@@ -48,6 +54,7 @@ const ILLUSTRATIONS = [
   ['SuccessIllustration', '成功态 — 跟随品牌主题', SuccessIllustration],
   ['ArticleQAIllustration', '文章问答场景', ArticleQAIllustration],
   ['SystemMaintenanceIllustration', '系统维护 — 后端 500 全屏维护弹层', SystemMaintenanceIllustration],
+  ['SystemErrorIllustration', '系统错误 — 前端路由异常兜底页', SystemErrorIllustration],
 ] as const;
 
 export default () => {
@@ -106,4 +113,5 @@ export default () => {
 - 空状态 / 加载 / 无权限 / 成功等场景一律用这批插画组件，**不再用静态 PNG**。
 - 灰稿：给组件传 `grey` 属性，主题无关、整图降 80% 不透明度。
 - 插画调色板（`--illus-*`）只给插画用；UI 图标仍走品牌色。
+- `KnowledgeSpaceIcon` 不在上表内，也没进组件库：它是两张定制画稿按品牌主题整张替换的图标，不走 `--illus-*`、没有灰稿模式，且需要读 Recoil 主题状态（组件库契约禁止依赖状态管理），仍留在 client 的 `~/components/illustrations/`。
 - 业务代码**禁止写死插画颜色**——一律 `rgb(var(--illus-NNN))`；SVG 展示属性里 `var()` 不生效，用内联 `style` / className / CSS mask，并用 `useId()` 去重渐变 / clip 的 id。

@@ -86,6 +86,12 @@ class WorkbenchModelConfig(BaseModel):
         default=None,
         description="Linsight default execution model id (single-select from models)",
     )
+    # Daily-chat (日常模式) default model — sibling of linsight_default_model_id,
+    # must be one of the configured ``models`` entries.
+    chat_default_model_id: str | None = Field(
+        default=None,
+        description="Daily-chat default model id (single-select from models)",
+    )
     # RetrieveembeddingModels
     embedding_model: WSModel | None = Field(default=None, description="embeddingModels")
     # Speech-to-text model

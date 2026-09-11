@@ -19,6 +19,12 @@ class CitationType(str, Enum):
 
     RAG = "rag"
     WEB = "web"
+    # F054: a channel article read whole into the prompt. Deliberately its own
+    # type rather than a WEB citation reusing sourceUrl: article visibility is
+    # governed by the channel's own sensitive-content gate, the badge has to be
+    # distinguishable from a web-search hit, and the article doc id is what an
+    # in-app jump would need — folding it into WEB throws all three away.
+    ARTICLE = "article"
 
 
 class RagCitationItemSchema(CitationSchemaBase):
@@ -50,6 +56,34 @@ class RagCitationPayloadSchema(CitationSchemaBase):
     )
 
 
+class ArticleCitationItemSchema(CitationSchemaBase):
+    """Snippet-level payload inside a grouped article citation item."""
+
+    itemId: str = Field(..., description="Stable item identifier inside the citation")
+    snippet: str | None = Field(default=None, description="Quoted article excerpt")
+    title: str | None = Field(default=None, description="Section title override if needed")
+
+
+class ArticleCitationPayloadSchema(CitationSchemaBase):
+    """Payload for channel-article citation items.
+
+    The article is handed to the model whole (channel QA does not retrieve),
+    so one article is one citation with a single item — there is no chunk to
+    address. ``articleDocId`` is the real, stable locator; no knowledge-chunk
+    id is ever synthesised for it.
+    """
+
+    articleDocId: str = Field(..., description="Channel article document identifier")
+    title: str | None = Field(default=None, description="Article title")
+    snippet: str | None = Field(default=None, description="Quoted article excerpt")
+    sourceUrl: str | None = Field(default=None, description="Original article URL")
+    sourceType: int | None = Field(default=None, description="0-WeChat Official Account, 1-Website")
+    items: list[ArticleCitationItemSchema] = Field(
+        default_factory=list,
+        description="Grouped excerpt items for the same article",
+    )
+
+
 class WebCitationItemSchema(CitationSchemaBase):
     """Snippet-level payload inside a grouped web citation item."""
 
@@ -73,7 +107,7 @@ class WebCitationPayloadSchema(CitationSchemaBase):
     )
 
 
-CitationSourcePayload = Union[RagCitationPayloadSchema, WebCitationPayloadSchema]
+CitationSourcePayload = Union[RagCitationPayloadSchema, WebCitationPayloadSchema, ArticleCitationPayloadSchema]
 
 
 class CitationRegistryItemSchema(CitationSchemaBase):
@@ -101,10 +135,31 @@ class ResolveCitationRequest(CitationSchemaBase):
     citationIds: list[str] = Field(default_factory=list, description="Citation identifiers to resolve")
 
 
+class CitationUnresolvedReason(str, Enum):
+    """Why a requested citation came back without a payload."""
+
+    FORBIDDEN = "forbidden"
+    EXPIRED = "expired"
+
+
+class UnresolvedCitationSchema(CitationSchemaBase):
+    """One requested citation the server declined or could not find."""
+
+    citationId: str = Field(..., description="Citation identifier that was requested")
+    reason: CitationUnresolvedReason = Field(..., description="Why it was not resolved")
+
+
 class ResolveCitationResponse(CitationSchemaBase):
     """Batch resolve response for citation items."""
 
     items: list[CitationRegistryItemSchema] = Field(default_factory=list, description="Resolved citation items")
+    # F054: previously an unresolvable citation was simply omitted, so the
+    # reader could not tell "you may not see this" from "this source is gone"
+    # and got one vague failure for both. Additive — older clients ignore it.
+    unresolved: list[UnresolvedCitationSchema] = Field(
+        default_factory=list,
+        description="Requested citations that were declined or not found, with the reason",
+    )
 
 
 class CitationRegistrySSEPayload(CitationSchemaBase):

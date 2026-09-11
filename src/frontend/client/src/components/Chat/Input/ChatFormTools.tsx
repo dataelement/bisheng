@@ -71,7 +71,7 @@ export const ChatToolDown = ({
         {config?.webSearch.enabled && (
           <div className="flex justify-between items-center px-2 py-[5px]">
             <div className="flex gap-2 items-center">
-              <GlobeIcon className="text-[#999]" size="16" />
+              <GlobeIcon className="text-text-3" size="16" />
               <span className="text-sm font-normal">
                 {localize("com_tools_web_search")}
               </span>

@@ -46,7 +46,7 @@ const DETAIL_TEXT = 'whitespace-pre-wrap break-words text-xs leading-5';
  * hardcodes text-[#333]; this arbitrary descendant selector overrides the inner
  * svg color without editing StepRow.
  */
-const INK_GLYPH = '[&>svg]:text-[#1D2129]';
+const INK_GLYPH = '[&>svg]:text-text-1';
 
 /** Resolve the running / finished verb-phrase title for a tool step. */
 function resolveTitle(step: MergedStep, localize: ReturnType<typeof useLocalize>): string {

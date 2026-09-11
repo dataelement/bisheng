@@ -52,14 +52,14 @@ export function SectionHeader({
 }: SectionHeaderProps) {
     // Mobile right-side icon button: same color as the title (#212121), larger hit area.
     const mobileIconBtnClassName =
-        "flex size-6 items-center justify-center rounded text-[#212121] outline-none active:bg-[#f2f3f5]";
+        "flex size-6 items-center justify-center rounded text-text-1 outline-none active:bg-fill-2";
     // Right-side icon button (+ / square / sort). Compact dropdown uses dark icons (#212121),
     // the PC sidebar keeps grey (#999); mobile full-page uses its own larger button.
     const rightIconBtn = mobile
         ? mobileIconBtnClassName
         : compact
-            ? "flex size-5 items-center justify-center rounded text-[#212121] outline-none"
-            : "flex size-5 items-center justify-center rounded text-[#999] outline-none hover:bg-[#f2f3f5] hover:text-[#4e5969]";
+            ? "flex size-5 items-center justify-center rounded text-text-1 outline-none"
+            : "flex size-5 items-center justify-center rounded text-text-3 outline-none hover:bg-fill-2 hover:text-text-2";
     return (
         // group: enables hover-reveal for the collapse chevron.
         // h-7 (28px) + rounded-md + hover bg: matches the tree nodes below.
@@ -96,10 +96,10 @@ export function SectionHeader({
             <div
                 className={
                     mobile
-                        ? "flex items-center gap-1 text-[14px] leading-5 text-[#212121]"
+                        ? "flex items-center gap-1 text-[14px] leading-5 text-text-1"
                         : compact
-                            ? "flex h-full items-center gap-1 text-[14px] text-[#999]"
-                            : "flex h-full items-center gap-1 text-[12px] text-[#999] group-hover:text-[#4e5969]"
+                            ? "flex h-full items-center gap-1 text-[14px] text-text-3"
+                            : "flex h-full items-center gap-1 text-[12px] text-text-3 group-hover:text-text-2"
                 }
             >
                 <span>{title}</span>
@@ -147,7 +147,7 @@ export function SectionHeader({
                             onClick={(e) => e.stopPropagation()}
                             title={sortFieldLabel}
                             aria-label={sortFieldLabel}
-                            className={`${rightIconBtn} data-[state=open]:bg-[#f2f3f5]`}
+                            className={`${rightIconBtn} data-[state=open]:bg-fill-2`}
                         >
                             <Outlined.Sort className="size-4" />
                         </button>
@@ -157,7 +157,7 @@ export function SectionHeader({
                         className={`${knowledgeSpaceDropdownSurfaceClassName} z-[100]`}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{sortFieldLabel}</div>
+                        <div className="px-2 py-1.5 text-xs font-medium text-text-3">{sortFieldLabel}</div>
                         {sortOptions.map((opt) => {
                             const active = opt.value === sortValue;
                             return (

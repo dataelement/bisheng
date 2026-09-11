@@ -1,0 +1,149 @@
+---
+status: done
+component: Segmented
+---
+
+# 分段控制器 Segmented
+
+让**同一份内容换个看法**——列表还是卡片、按日还是按周,点完**立刻生效**。它本质是个即时生效的单选控件(`role="radiogroup"`,方向键在段间移动并即时选中)。切完「你在哪」变了的,是[标签页](/components/tabs);要随表单提交才生效的,用单选框。组件库 `@bisheng/ui` 导出 **`Segmented`**。规范全文见「文档 → 组件规范 → 分段控制器 Segmented」。
+
+**壳把规范写死的部分**:灰底槽(fill-2)+ 白色浮块,浮块不加投影、200ms 滑到选中段;**选中不用品牌色**——它只回答「当前在哪个看法」;三档高度 28/32/36,槽内边距 3px、浮块圆角嵌套同心;各段等宽取最长段;选中字重 500、未选中 400;总有一段被选中,不存在「都不选」;触屏热区 ≥44px。这些没有 prop。段数守住 **2～5 段**,超出就不是「几个看法」而是「一堆选项」了。
+
+## 基础用法
+
+`options` 传字符串数组即可;不传 `defaultValue` 默认选中第一段。文案 2～4 个字、各段等长最好——一段特别长会把整个控件撑得松垮。
+
+```tsx
+import { Segmented } from '@bisheng/ui';
+
+export default () => <Segmented options={['日', '周', '月']} aria-label="统计粒度" />;
+```
+
+## 三档尺寸
+
+默认 `medium`(32px),与旁边的按钮、输入框同高对齐;small / large 为 28 / 36,比控件阶梯收敛半档——整块灰底的视觉分量比按钮重,档差小一点更协调。
+
+```tsx
+import { Segmented } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 16, justifyItems: 'start' }}>
+    <Segmented size="small" options={['日', '周', '月']} aria-label="small 档" />
+    <Segmented options={['日', '周', '月']} aria-label="medium 档" />
+    <Segmented size="large" options={['日', '周', '月']} aria-label="large 档" />
+  </div>
+);
+```
+
+## block 撑满
+
+`block` 撑满父容器、各段平分。窄屏下优先用它——悬空的小控件在手机上难点中。
+
+```tsx
+import { Segmented } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ maxWidth: 360 }}>
+    <Segmented block options={['全部', '进行中', '已完成']} aria-label="任务筛选" />
+  </div>
+);
+```
+
+## icon + 文本
+
+文案短且 icon 能加速识别时可以加前缀 icon,随档 14/16/18px。**同一个控件里只用一种形态**——文本段和纯 icon 段混在一起,读的人要在两套语言间来回翻译。
+
+```tsx
+import { Segmented } from '@bisheng/ui';
+import { Outlined } from 'bisheng-icons';
+
+export default () => (
+  <Segmented
+    aria-label="视图切换"
+    options={[
+      { value: 'list', label: '列表', icon: <Outlined.List /> },
+      { value: 'card', label: '卡片', icon: <Outlined.ViewGridCard /> },
+    ]}
+  />
+);
+```
+
+## 纯 icon
+
+空间极窄且 icon 语义业内公认时才用;**每段必须配 `tooltip`** 说明含义(同时兜底为无障碍名称)——icon 语义再公认也有第一次见的人。
+
+```tsx
+import { Segmented } from '@bisheng/ui';
+import { Outlined } from 'bisheng-icons';
+
+export default () => (
+  <Segmented
+    aria-label="视图切换"
+    options={[
+      { value: 'list', icon: <Outlined.List />, tooltip: '列表视图' },
+      { value: 'card', icon: <Outlined.ViewGridCard />, tooltip: '卡片视图' },
+    ]}
+  />
+);
+```
+
+## 禁用
+
+单段禁用:该段灰字 + 禁止光标,其余段照常可点。整体禁用:全部灰字,浮块保持在当前段——禁用也要能看出停在哪个看法上。
+
+```tsx
+import { Segmented } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 16, justifyItems: 'start' }}>
+    <Segmented
+      aria-label="单段禁用"
+      options={[
+        { value: 'day', label: '日' },
+        { value: 'week', label: '周', disabled: true },
+        { value: 'month', label: '月' },
+      ]}
+    />
+    <Segmented disabled defaultValue="week" options={['日', '周', '月']} aria-label="整体禁用" />
+  </div>
+);
+```
+
+## 切换即生效
+
+选完立刻切换对应的展现,内容区即时替换、不加转场。`value` + `onChange` 受控。
+
+```tsx
+import React from 'react';
+import { Segmented } from '@bisheng/ui';
+
+export default () => {
+  const [view, setView] = React.useState('list');
+  return (
+    <div style={{ display: 'grid', gap: 12, justifyItems: 'start' }}>
+      <Segmented
+        aria-label="视图切换"
+        value={view}
+        onChange={setView}
+        options={[
+          { value: 'list', label: '列表' },
+          { value: 'card', label: '卡片' },
+        ]}
+      />
+      {view === 'list' ? (
+        <div style={{ display: 'grid', gap: 4, width: 240 }}>
+          {['知识库 A', '知识库 B', '知识库 C'].map((name) => (
+            <div key={name} className="rounded border border-border-base px-3 py-1.5 text-body text-text-2">{name}</div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 8 }}>
+          {['知识库 A', '知识库 B', '知识库 C'].map((name) => (
+            <div key={name} className="flex h-20 w-24 items-center justify-center rounded-md border border-border-base text-body text-text-2">{name}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+```

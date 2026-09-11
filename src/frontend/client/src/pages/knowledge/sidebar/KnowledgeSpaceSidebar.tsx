@@ -43,6 +43,10 @@ interface KnowledgeSpaceSidebarProps {
     compactMode?: boolean;
     /** H5 整页列表：占满父容器、卡片式行、无折叠把手/拖拽,且不自动选中首个空间 */
     mobilePageMode?: boolean;
+    /** The URL already names a space, so there is nothing to choose a default for.
+     *  Auto-select must stand down until the host's own route effect lands, or it
+     *  navigates to the first space in the list and takes the URL with it. */
+    suppressAutoSelect?: boolean;
     /** Fired when a tree row navigates the page (e.g. folder click in compactMode),
      *  so the host drawer can close itself. */
     onNavigateAway?: () => void;
@@ -61,6 +65,7 @@ export function KnowledgeSpaceSidebar({
     onDrawerClose,
     compactMode = false,
     mobilePageMode = false,
+    suppressAutoSelect = false,
     onNavigateAway,
 }: KnowledgeSpaceSidebarProps) {
     const localize = useLocalize();
@@ -238,6 +243,12 @@ export function KnowledgeSpaceSidebar({
     // page; selecting a space is an explicit tap that navigates to the file page.
     useEffect(() => {
         if (mobilePageMode) return;
+        // A space named in the URL is already a choice. Auto-select used to fire
+        // anyway on the render after a route change — the page component is
+        // remounted when the route pattern changes, so nothing was active yet —
+        // and navigated to the first space in the list, which is how a share
+        // link for one space landed on a different one entirely.
+        if (suppressAutoSelect) return;
         if (!activeSpaceId) {
             if (isCreatedLoading || isJoinedLoading || isDepartmentLoading) return;
 
@@ -249,7 +260,7 @@ export function KnowledgeSpaceSidebar({
                 onSpaceSelect(filteredJoinedSpaces[0]);
             }
         }
-    }, [activeSpaceId, departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces, isCreatedLoading, isJoinedLoading, isDepartmentLoading, onSpaceSelect]);
+    }, [activeSpaceId, suppressAutoSelect, departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces, isCreatedLoading, isJoinedLoading, isDepartmentLoading, onSpaceSelect]);
 
     // Set a section's sort field to a specific value (chosen from the sort dropdown).
     const setSort = (type: "created" | "joined" | "department", value: SpaceSortType) => {
@@ -352,7 +363,7 @@ export function KnowledgeSpaceSidebar({
 
     const renderEmptyState = (stretch: boolean) => (
         <div className={cn(
-            "flex items-center justify-center text-center text-sm text-[#999999]",
+            "flex items-center justify-center text-center text-sm text-text-3",
             !mobilePageMode && pinnedEmptyClassName,
             stretch ? "flex-1 py-6" : "h-24",
         )}>
@@ -374,7 +385,7 @@ export function KnowledgeSpaceSidebar({
         <div className={cn("relative h-full min-h-0 shrink-0", fullWidthMode && "w-full")}>
             <div
                 className={[
-                    `h-full ${mobilePageMode || compactMode ? "bg-white" : "bg-[#FBFBFB]"} flex flex-col overflow-hidden ${collapsed || fullWidthMode ? "" : "border-r-[0.5px] border-[#e5e6eb]"}`,
+                    `h-full ${mobilePageMode || compactMode ? "bg-white" : "bg-[#FBFBFB]"} flex flex-col overflow-hidden ${collapsed || fullWidthMode ? "" : "border-r-[0.5px] border-border-base"}`,
                     fullWidthMode ? "w-full" : collapsed ? "w-0" : "",
                 ].join(" ")}
                 style={fullWidthMode ? undefined : {
@@ -405,7 +416,7 @@ export function KnowledgeSpaceSidebar({
                             <Button
                                 variant="secondary"
                                 onClick={onCreateSpace}
-                                className="h-9 w-full gap-1 border border-[#EBECF0] bg-white text-[13px] text-[#666666] hover:bg-[#F7F8FA]"
+                                className="h-9 w-full gap-1 border border-border-base bg-white text-[13px] text-[#666666] hover:bg-fill-1"
                             >
                                 <Plus className="size-4" />
                                 {localize("com_knowledge.create")}
@@ -469,7 +480,7 @@ export function KnowledgeSpaceSidebar({
                                             <div className="space-y-1 px-3">
                                                 {departmentSpaces.map(s => renderCompactItem(s, "department"))}
                                                 {!departmentSpaces.length && (
-                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-[#999999]")}>{localize("com_knowledge.no_data")}</div>
+                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-text-3")}>{localize("com_knowledge.no_data")}</div>
                                                 )}
                                             </div>
                                         )}
@@ -491,7 +502,7 @@ export function KnowledgeSpaceSidebar({
                                             <div className="space-y-1 px-3">
                                                 {filteredCreatedSpaces.map(s => renderCompactItem(s, "created"))}
                                                 {!filteredCreatedSpaces.length && (
-                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-[#999999]")}>{localize("com_knowledge.no_data")}</div>
+                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-text-3")}>{localize("com_knowledge.no_data")}</div>
                                                 )}
                                             </div>
                                         )}
@@ -513,7 +524,7 @@ export function KnowledgeSpaceSidebar({
                                             <div className="space-y-1 px-3">
                                                 {filteredJoinedSpaces.map(s => renderCompactItem(s, "joined"))}
                                                 {!filteredJoinedSpaces.length && (
-                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-[#999999]")}>{localize("com_knowledge.no_data")}</div>
+                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-text-3")}>{localize("com_knowledge.no_data")}</div>
                                                 )}
                                             </div>
                                         )}
@@ -613,7 +624,7 @@ export function KnowledgeSpaceSidebar({
                     </div>
                 )}
                 {mobileDrawerMode && !compactMode ? (
-                    <div className="shrink-0 border-t border-[#ececec] px-2 pb-2 pt-1">
+                    <div className="shrink-0 border-t border-border-base px-2 pb-2 pt-1">
                         <UserPopMenu variant="drawer" />
                     </div>
                 ) : null}

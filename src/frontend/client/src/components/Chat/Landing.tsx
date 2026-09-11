@@ -39,7 +39,7 @@ export default function Landing({ Header, isNew, hideSubtitle = false }: {
               alt=""
             />
           )}
-          <h2 className="max-w-full md:max-w-[75vw] text-center text-xl md:text-2xl font-semibold md:font-medium leading-snug md:leading-8 text-[#1d2129] dark:text-white px-0">
+          <h2 className="max-w-full md:max-w-[75vw] text-center text-xl md:text-2xl font-semibold md:font-medium leading-snug md:leading-8 text-text-1 dark:text-white px-0">
             {bsConfig?.welcomeMessage}
           </h2>
         </div>

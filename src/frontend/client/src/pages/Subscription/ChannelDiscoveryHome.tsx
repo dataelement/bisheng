@@ -10,9 +10,10 @@ import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { cn } from "~/utils";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { ChannelSquareCard } from "../ChannelSquareCard";
+import { ChannelSquareTabs } from "./ChannelSquareTabs";
 import { SERIF_FONT_STACK } from "./ArticleList/ChannelSwitcher";
 
-type DiscoverStatus = "join" | "joined" | "pending" | "private" | "rejected";
+type DiscoverStatus = "join" | "joined" | "pending" | "private";
 
 interface DiscoverChannel {
     id: string;
@@ -56,11 +57,11 @@ const mapRecommendItem = (item: any): DiscoverChannel | null => {
     const sourceInfos: any[] = Array.isArray(item.source_infos) ? item.source_infos : [];
     const avatars = sourceInfos.map((s) => s.source_icon).filter(Boolean).slice(0, 3);
     const subStatus = String(item.subscription_status ?? "");
+    // `rejected` falls through to "join": a rejected application can be resubmitted.
     const status: DiscoverStatus =
         subStatus === "subscribed" ? "joined"
             : subStatus === "pending" ? "pending"
-                : subStatus === "rejected" ? "rejected"
-                    : "join";
+                : "join";
     return {
         id: String(rawId),
         title: String(item.name ?? item.title ?? ""),
@@ -233,7 +234,7 @@ export function ChannelDiscoveryHome({
                             type="button"
                             aria-label={localize("com_nav_open_sidebar")}
                             onClick={onOpenMobileNav}
-                            className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
+                            className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
                         >
                             <Outlined.SidebarMenu className="size-5" />
                         </button>
@@ -243,28 +244,53 @@ export function ChannelDiscoveryHome({
                 </div>
             );
         }
-        // Match the content-view header title (ChannelSwitcher): same px-10/pt-5 offset,
-        // 32px bold serif #212121.
+        // Match the content-view header (ChannelSwitcher): same px-10/pt-5 offsets,
+        // borderless action on the left, centered 32px bold serif title. With no
+        // channel to show, the title keeps the module name (资讯订阅) and only the
+        // 创建频道 action remains (nothing to switch to).
         return (
-            <h1
-                className="shrink-0 px-10 pt-5 pb-4 text-[32px] font-bold leading-[40px] text-[#212121]"
-                style={{ fontFamily: SERIF_FONT_STACK }}
-            >
-                {menuNames.channel}
-            </h1>
+            <div className="shrink-0 px-10 pt-5 pb-4">
+                <div className="relative flex h-10 w-full min-w-0 items-center gap-6">
+                    {/* -ml-2 cancels the button's own px-2 so the label sits optically
+                        flush with the 40px content edge (same as the channel page). */}
+                    <button
+                        type="button"
+                        onClick={onCreateChannel}
+                        className="-ml-2 flex shrink-0 items-center gap-1 rounded-md px-2 py-[5px] text-sm leading-[22px] text-text-2 outline-none transition-colors fine-pointer:hover:bg-fill-1 fine-pointer:hover:text-text-1"
+                    >
+                        <Outlined.Plus className="size-4 shrink-0" />
+                        <span>{localize("com_subscription.create_channel")}</span>
+                    </button>
+                    {/* Absolute pane-midpoint centering — the discovery page never opens a
+                        side detail pane, so the title always sits on the true center. */}
+                    <h1
+                        className="pointer-events-none absolute left-1/2 top-1/2 max-w-[clamp(96px,calc(100%-480px),600px)] -translate-x-1/2 -translate-y-1/2 truncate text-[32px] font-bold leading-[40px] text-text-1"
+                        style={{ fontFamily: SERIF_FONT_STACK }}
+                    >
+                        {menuNames.channel}
+                    </h1>
+                    <div className="min-w-0 flex-1" aria-hidden />
+                    {/* Invisible clone of the persistent 频道/广场 toggle (overlaid at the
+                        row's right edge by Subscription/index) — reserves its width so the
+                        centered title keeps a real 24px gap to it. */}
+                    <div className="invisible shrink-0" aria-hidden>
+                        <ChannelSquareTabs active="channel" />
+                    </div>
+                </div>
+            </div>
         );
     };
 
     const renderBottomActions = () => (
         <div className="flex flex-col items-center gap-5">
-            <p className="text-[14px] leading-6 text-[#999999]">
+            <p className="text-[14px] leading-6 text-text-3">
                 {localize("com_subscription.no_subscription_content_you_can")}
             </p>
             <div className="flex items-center gap-4">
                 <button
                     type="button"
                     onClick={onGoSquare}
-                    className="h-8 rounded-md border border-[#E5E6EB] bg-white px-4 text-[14px] leading-[22px] text-[#4E5969] transition-colors fine-pointer:hover:border-blue-500 fine-pointer:hover:text-blue-500"
+                    className="h-8 rounded-md border border-border-base bg-white px-4 text-[14px] leading-[22px] text-text-2 transition-colors fine-pointer:hover:border-blue-500 fine-pointer:hover:text-blue-500"
                 >
                     {localize("com_subscription.go_to_square")}
                 </button>

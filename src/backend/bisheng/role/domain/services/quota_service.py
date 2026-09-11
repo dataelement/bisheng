@@ -21,6 +21,7 @@ from bisheng.common.errcode.tenant_quota import (
     TenantRoleQuotaExceededError,
     TenantStorageQuotaExceededError,
 )
+from bisheng.database.constants import AdminRole
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tenant import TenantDao
 from bisheng.user.domain.models.user_role import UserRoleDao
@@ -33,6 +34,7 @@ DEFAULT_ROLE_QUOTA: dict[str, int] = {
     "knowledge_space_subscribe": 100,
     "channel": 10,
     "channel_subscribe": 20,
+    "info_source_subscribe": 200,
     "workflow": -1,
     "assistant": -1,
     "tool": -1,
@@ -117,6 +119,7 @@ class QuotaResourceType:
     KNOWLEDGE_SPACE_SUBSCRIBE = "knowledge_space_subscribe"
     CHANNEL = "channel"
     CHANNEL_SUBSCRIBE = "channel_subscribe"
+    INFO_SOURCE_SUBSCRIBE = "info_source_subscribe"
     WORKFLOW = "workflow"
     ASSISTANT = "assistant"
     TOOL = "tool"
@@ -587,6 +590,8 @@ class QuotaService:
             return await cls._count_tokens_monthly(col, val)
         if resource_type == "knowledge_space":
             return await cls._count_knowledge_space(col, val)
+        if resource_type == "info_source_subscribe":
+            return len(await cls._distinct_info_source_ids(col, val))
 
         from sqlalchemy import text
 
@@ -691,6 +696,79 @@ class QuotaService:
         if col == "tenant_id":
             return stmt.where(Knowledge.tenant_id == val)
         return None
+
+    @classmethod
+    async def _distinct_info_source_ids(cls, col: str, val) -> set[str]:
+        """Distinct info-source ids referenced by channels (creator / tenant scope).
+
+        A user "subscribes" info sources by attaching them to channels they
+        create, so usage = deduped union of ``channel.source_list``. That
+        column is a JSON array and DM8 has no JSON_TABLE equivalent, so the
+        dedup runs in Python over ORM rows (same escape hatch as
+        ``_count_user_count``).
+        """
+        if col not in ("user_id", "tenant_id"):
+            return set()
+        # sqlmodel's select, not sqlalchemy's: Session.exec() only unwraps the
+        # single selected column when the statement is a SelectOfScalar. Given a
+        # plain sqlalchemy Select it hands back Row tuples, so each "source_list"
+        # below would be a one-element Row and the comprehension would try to
+        # hash the JSON array itself — "unhashable type: 'list'" out of
+        # /quota/effective for any tenant whose channels carry sources.
+        from sqlmodel import select
+
+        from bisheng.channel.domain.models.channel import Channel
+        from bisheng.core.database import get_async_db_session
+
+        stmt = select(Channel.source_list).where(getattr(Channel, col) == val)
+        try:
+            async with get_async_db_session() as session:
+                rows = (await session.exec(stmt)).all()
+        except Exception as e:
+            logger.warning("Failed to count info_source_subscribe for %s=%s: %s", col, val, e)
+            return set()
+        return {sid for source_list in rows for sid in (source_list or [])}
+
+    @classmethod
+    async def check_info_source_subscribe_limit(
+        cls,
+        user_id: int,
+        tenant_id: int,
+        candidate_source_ids,
+        login_user=None,
+    ) -> None:
+        """Enforce the ``info_source_subscribe`` quota before adding sources.
+
+        Usage counts DEDUPED sources across the user's channels, so the
+        candidate list is merged with the current set before comparing —
+        reusing an already-counted source never consumes an extra slot.
+        ``0`` therefore blocks any addition; admins / ``-1`` pass through.
+        Raises ``TenantRoleQuotaExceededError(19402)`` when exceeded.
+        """
+        if not candidate_source_ids:
+            return
+        if login_user and login_user.is_admin():
+            return
+        # The quota owner is not necessarily the operator (managers/editors can add
+        # sources to someone else's channel), so get_effective_quota's login_user
+        # short-circuit never sees an admin OWNER. AdminRole carries no -1
+        # quota_config — without this check a manager editing an admin's channel
+        # would trip the owner's 200 default even though admins are quota-exempt.
+        owner_role_ids = [r.role_id for r in await UserRoleDao.aget_user_roles(user_id)]
+        if AdminRole in owner_role_ids:
+            return
+        effective = await cls.get_effective_quota(user_id, QuotaResourceType.INFO_SOURCE_SUBSCRIBE, tenant_id)
+        if effective == -1:
+            return
+        used_ids = await cls._distinct_info_source_ids("user_id", user_id)
+        total_after = len(used_ids | {sid for sid in candidate_source_ids if sid})
+        if total_after > effective:
+            raise TenantRoleQuotaExceededError(
+                msg=(
+                    f"Role quota exceeded for info_source_subscribe "
+                    f"(used={len(used_ids)}, total_after={total_after}, effective={effective})"
+                ),
+            )
 
     @classmethod
     async def _count_user_count(cls, col: str, val) -> int:
@@ -844,6 +922,12 @@ class QuotaService:
     # share the same value shape so the management UI can use one input control.
     _GB_FLOAT_QUOTA_KEYS = frozenset({"storage_gb", "knowledge_space_file"})
 
+    # Bounded integer quotas: inclusive [lo, hi]. Unlike open-ended int quotas,
+    # ``-1`` (unlimited) is NOT a legal value here — the product fixes the range.
+    _BOUNDED_INT_QUOTA_RANGES: dict[str, tuple[int, int]] = {
+        "info_source_subscribe": (0, 10000),
+    }
+
     @staticmethod
     def _validate_gb_float_quota(key: str, value) -> None:
         """GB float quota: -1 (unlimited) or 0.1~999 with at most 1 decimal."""
@@ -862,6 +946,19 @@ class QuotaService:
         if r < 0.1 or r > 99999:
             raise QuotaConfigInvalidError(
                 msg=f"quota_config[{key}] must be -1 or between 0.1 and 99999 (GB), got {value}",
+            )
+
+    @classmethod
+    def _validate_bounded_int_quota(cls, key: str, value, bounds: tuple[int, int]) -> None:
+        """Bounded integer quota: plain int within inclusive [lo, hi]."""
+        lo, hi = bounds
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise QuotaConfigInvalidError(
+                msg=f"quota_config[{key}] must be an integer, got {type(value).__name__}",
+            )
+        if value < lo or value > hi:
+            raise QuotaConfigInvalidError(
+                msg=f"quota_config[{key}] must be between {lo} and {hi}, got {value}",
             )
 
     @classmethod
@@ -890,6 +987,10 @@ class QuotaService:
                 )
             if key in cls._GB_FLOAT_QUOTA_KEYS:
                 cls._validate_gb_float_quota(key, value)
+                continue
+            bounded_range = cls._BOUNDED_INT_QUOTA_RANGES.get(key)
+            if bounded_range is not None:
+                cls._validate_bounded_int_quota(key, value, bounded_range)
                 continue
             if isinstance(value, bool) or not isinstance(value, int):
                 raise QuotaConfigInvalidError(

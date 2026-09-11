@@ -48,8 +48,12 @@ const FONT_FAMILY = {
   },
 };
 
-/** Semantic type scale — each entry is a Tailwind fontSize key AND its own weight. */
+/** Semantic type scale — each entry is a Tailwind fontSize key AND its own weight.
+ * Array order = primitive ladder order; PrimitiveTable derives `font-size-N`
+ * from the 0-based index (caption-sm sits BELOW the original 1–9 ladder as
+ * font-size-0, so existing numbered vars never renumber). */
 const TYPE_SCALE = [
+  { name: 'caption-sm', desktop: [10, 18], mobile: [10, 18], weight: 400, cssVar: '--text-caption-sm', leadingVar: '--leading-caption-sm', usage: '角标、徽标数字、极小标注（仅纯展示，禁用于可点击文字）' },
   { name: 'caption',  desktop: [12, 20], mobile: [12, 20], weight: 400, cssVar: '--text-caption',  leadingVar: '--leading-caption',  usage: '时间戳、标签、水印' },
   { name: 'body-sm',  desktop: [13, 21], mobile: [14, 22], weight: 400, cssVar: '--text-body-sm',  leadingVar: '--leading-body-sm',  usage: '密集表格、侧栏次要项' },
   { name: 'body',     desktop: [14, 22], mobile: [16, 24], weight: 400, cssVar: '--text-body',     leadingVar: '--leading-body',     usage: '正文基准，表单、表格默认' },
@@ -84,26 +88,71 @@ const BRAND = {
   },
   blue:  { '50': '#E8F3FF', '100': '#BEDAFF', '200': '#94BFFF', '300': '#6AA1FF', '400': '#4080FF', '500': '#165DFF', '600': '#024DE3', '700': '#0239AB', '800': '#042B80', '900': '#051D52', muted: '#5773B4' },
   green: { '50': '#E4F1E7', '100': '#CCE4D2', '200': '#A3D2B0', '300': '#6FBA85', '400': '#3D9B5C', '500': '#169C47', '600': '#098B35', '700': '#076929', '800': '#074E20', '900': '#063216', muted: '#5C8A77' },
+  /* Dark-mode ramps — official @arco-design/color dark algorithm (the same
+   * `getPresetColors(seed).dark` Arco ships), seeded on each theme's FIXED
+   * primary. Index semantics hold (500 = main, 50 = tint bg) while the
+   * lightness DIRECTION inverts (50 darkest → 900 lightest, like the gray
+   * ramp), so tokens.css overrides same-rung and every `blue-*` class keeps
+   * meaning. The dark main lightens WITHOUT bleaching (#165DFF → #3C7EFF,
+   * 5.0:1 on #121212): the light ramp lightens by blending toward white, so
+   * picking a light 3xx step in dark bought brightness with chroma — measured
+   * 2026-08-26, 组件-Tabs标签页.md §5. The designer's veto of the algorithmic
+   * light green ramp (neon at v=100) doesn't apply here: the dark side never
+   * reaches full value. `muted` has no dark value yet — it stays fixed until
+   * a real dark use case tunes it. */
+  blueDark:  { '50': '#000D4D', '100': '#041B79', '200': '#0E32A6', '300': '#1D4DD2', '400': '#306FFF', '500': '#3C7EFF', '600': '#689FFF', '700': '#93BEFF', '800': '#BEDAFF', '900': '#EAF4FF' },
+  greenDark: { '50': '#004D26', '100': '#066031', '200': '#0F743B', '300': '#1B8847', '400': '#2A9C54', '500': '#3CB062', '600': '#60C47E', '700': '#8AD79F', '800': '#BAEBC5', '900': '#F0FFF3' },
 };
 
 /* ------------------------------------------------------------------ *
- * Neutral primitive — Arco gray 1–10 (§2.1). Numbered = the lightness
+ * Illustration palette (§5) — a SEPARATE ramp from the brand one: the green
+ * theme renders the illustrations' own vivid greens rather than the darker UI
+ * brand green, so artwork keeps looking like the artwork. `grey` is the
+ * theme-independent draft mode (`.illus-grey`, whole drawing at 80% opacity).
+ * No Tailwind classes: SVG presentation attributes ignore var(), so components
+ * set `style={{ fill: 'rgb(var(--illus-500))' }}` instead.
+ * Runtime carriers: :root / .theme-green / .illus-grey in tokens.css.
+ * ------------------------------------------------------------------ */
+
+const ILLUS_STEPS = ['100', '300', '500'];
+
+const ILLUS = {
+  role: { '100': '浅底 / 大色块', '300': '中间调 / 点缀', '500': '主体' },
+  blue:  { '100': '#BEDAFF', '300': '#6AA1FF', '500': '#165DFF' },
+  green: { '100': '#DDF0E8', '300': '#A2D7B5', '500': '#169C47' },
+  // Grey collapses 300 onto 100 on purpose — pure white washed out on white
+  // backgrounds (e.g. CrawlingIllustration's magnifier halo).
+  grey:  { '100': '#E5E5E5', '300': '#E5E5E5', '500': '#BCBCBC' },
+  greyOpacity: 0.8,
+};
+
+/* ------------------------------------------------------------------ *
+ * Neutral primitive — gray 1–10 (§2.1). Numbered = the lightness
  * scale itself; components consume the semantic layer below, not this.
  * `channels` = "r g b" for rgb(var(--arco-gray-N)/α).
  * `darkHex` / `darkChannels` = official @arco-design/color gray.dark ramp
  * (lightness inverts). Runtime carrier: `.dark` override in src/style.css.
+ *
+ * The LIGHT ramp is Arco-derived but rebalanced for one coherent colour
+ * temperature; the var name keeps its `arco-` prefix for compatibility.
+ * Arco's hue wandered 252°–277° (OKLCH) step to step, which reads as the
+ * temperature drifting as you scan the ramp. Every step now sits on a single
+ * hue — 264°, taken from gray-10 — and chroma rises smoothly from 0 at gray-1,
+ * so the ramp warms into its cool tint instead of jumping. gray-1 / gray-5 /
+ * gray-10 are unchanged; every other step moved by ΔE ≤ 0.8 (OKLab).
+ * Each step's OKLab lightness is preserved, so contrast ratios are untouched.
  * ------------------------------------------------------------------ */
 
 const GRAY = [
-  { n: 1,  hex: '#F7F8FA', channels: '247 248 250', darkHex: '#17171A', darkChannels: '23 23 26',    role: 'hover 底' },
-  { n: 2,  hex: '#F2F3F5', channels: '242 243 245', darkHex: '#2E2E30', darkChannels: '46 46 48',    role: 'filled 底' },
-  { n: 3,  hex: '#E5E6EB', channels: '229 230 235', darkHex: '#484849', darkChannels: '72 72 73',    role: '边框' },
-  { n: 4,  hex: '#C9CDD4', channels: '201 205 212', darkHex: '#5F5F60', darkChannels: '95 95 96',    role: '禁用 / 占位' },
+  { n: 1,  hex: '#F8F8F8', channels: '248 248 248', darkHex: '#17171A', darkChannels: '23 23 26',    role: 'hover 底' },
+  { n: 2,  hex: '#F3F3F4', channels: '243 243 244', darkHex: '#2E2E30', darkChannels: '46 46 48',    role: 'filled 底' },
+  { n: 3,  hex: '#E5E6E9', channels: '229 230 233', darkHex: '#484849', darkChannels: '72 72 73',    role: '边框' },
+  { n: 4,  hex: '#CACDD4', channels: '202 205 212', darkHex: '#5F5F60', darkChannels: '95 95 96',    role: '禁用 / 占位' },
   { n: 5,  hex: '#A9AEB8', channels: '169 174 184', darkHex: '#78787A', darkChannels: '120 120 122', role: '过渡' },
-  { n: 6,  hex: '#86909C', channels: '134 144 156', darkHex: '#929293', darkChannels: '146 146 147', role: '辅助文字' },
-  { n: 7,  hex: '#6B7785', channels: '107 119 133', darkHex: '#ABABAC', darkChannels: '171 171 172', role: '过渡' },
-  { n: 8,  hex: '#4E5969', channels: '78 89 105',   darkHex: '#C5C5C5', darkChannels: '197 197 197', role: '次文字' },
-  { n: 9,  hex: '#272E3B', channels: '39 46 59',    darkHex: '#DFDFDF', darkChannels: '223 223 223', role: '过渡' },
+  { n: 6,  hex: '#898F9C', channels: '137 143 156', darkHex: '#929293', darkChannels: '146 146 147', role: '辅助文字' },
+  { n: 7,  hex: '#6F7683', channels: '111 118 131', darkHex: '#ABABAC', darkChannels: '171 171 172', role: '过渡' },
+  { n: 8,  hex: '#525865', channels: '82 88 101',   darkHex: '#C5C5C5', darkChannels: '197 197 197', role: '次文字' },
+  { n: 9,  hex: '#292E37', channels: '41 46 55',    darkHex: '#DFDFDF', darkChannels: '223 223 223', role: '过渡' },
   { n: 10, hex: '#1D2129', channels: '29 33 41',    darkHex: '#F6F6F6', darkChannels: '246 246 246', role: '主文字' },
 ];
 
@@ -117,21 +166,24 @@ const GRAY = [
 // `hex` = light value; `darkHex` = same gray ref resolved on the dark ramp.
 const TEXT = [
   { name: 'strong',    legacy: '1', cssVar: '--text-1', ref: 'gray-10', hex: '#1D2129', darkHex: '#F6F6F6', usage: '主文字：标题、正文主体' },
-  { name: 'muted',     legacy: '2', cssVar: '--text-2', ref: 'gray-8',  hex: '#4E5969', darkHex: '#C5C5C5', usage: '次要文字：次要说明、默认按钮文字' },
-  { name: 'hint',      legacy: '3', cssVar: '--text-3', ref: 'gray-6',  hex: '#86909C', darkHex: '#929293', usage: '辅助文字：弱提示、时间戳、占位符' },
-  { name: 'disabled',  legacy: '4', cssVar: '--text-4', ref: 'gray-4',  hex: '#C9CDD4', darkHex: '#5F5F60', usage: '禁用文字' },
+  // darkHex is gray-7 dark, NOT the same-rung gray-8 (#C5C5C5): the same-rung
+  // flip left secondary text almost as loud as primary in dark (ΔL* 17 vs the
+  // light mode 24) — tokens.css .dark re-points --text-2 accordingly (2026-08-26).
+  { name: 'muted',     legacy: '2', cssVar: '--text-2', ref: 'gray-8',  hex: '#525865', darkHex: '#ABABAC', usage: '次要文字：次要说明、默认按钮文字' },
+  { name: 'hint',      legacy: '3', cssVar: '--text-3', ref: 'gray-6',  hex: '#898F9C', darkHex: '#929293', usage: '辅助文字：弱提示、时间戳、占位符' },
+  { name: 'disabled',  legacy: '4', cssVar: '--text-4', ref: 'gray-4',  hex: '#CACDD4', darkHex: '#5F5F60', usage: '禁用文字' },
 ];
 
 const FILL = [
-  { name: 'subtle',  legacy: '1', cssVar: '--fill-1', ref: 'gray-1', hex: '#F7F8FA', darkHex: '#17171A', usage: '浅填充：hover 底、页面浅灰背景' },
-  { name: 'default', legacy: '2', cssVar: '--fill-2', ref: 'gray-2', hex: '#F2F3F5', darkHex: '#2E2E30', usage: '填充：active 底、filled 控件底' },
-  { name: 'hover',   legacy: '3', cssVar: '--fill-3', ref: 'gray-3', hex: '#E5E6EB', darkHex: '#484849', usage: '深填充：filled hover' },
-  { name: 'active',  legacy: '4', cssVar: '--fill-4', ref: 'gray-4', hex: '#C9CDD4', darkHex: '#5F5F60', usage: '重填充：filled active' },
+  { name: 'subtle',  legacy: '1', cssVar: '--fill-1', ref: 'gray-1', hex: '#F8F8F8', darkHex: '#17171A', usage: '浅填充：hover 底、页面浅灰背景' },
+  { name: 'default', legacy: '2', cssVar: '--fill-2', ref: 'gray-2', hex: '#F3F3F4', darkHex: '#2E2E30', usage: '填充：active 底、filled 控件底' },
+  { name: 'hover',   legacy: '3', cssVar: '--fill-3', ref: 'gray-3', hex: '#E5E6E9', darkHex: '#484849', usage: '深填充：filled hover' },
+  { name: 'active',  legacy: '4', cssVar: '--fill-4', ref: 'gray-4', hex: '#CACDD4', darkHex: '#5F5F60', usage: '重填充：filled active' },
 ];
 
 const BORDER = [
-  { name: 'base', cssVar: '--border-base', ref: 'gray-3', hex: '#E5E6EB', darkHex: '#484849', usage: '常规边框：输入框、卡片、分割线' },
-  { name: 'deep', cssVar: '--border-deep', ref: 'gray-4', hex: '#C9CDD4', darkHex: '#5F5F60', usage: '深边框：强调分割、hover 边框' },
+  { name: 'base', cssVar: '--border-base', ref: 'gray-3', hex: '#E5E6E9', darkHex: '#484849', usage: '常规边框：输入框、卡片、分割线' },
+  { name: 'deep', cssVar: '--border-deep', ref: 'gray-4', hex: '#CACDD4', darkHex: '#5F5F60', usage: '深边框：强调分割、hover 边框' },
 ];
 
 /* Background surfaces — the "white that darkens" family. The gray ramp starts
@@ -143,26 +195,39 @@ const BG = [
 ];
 
 /* ------------------------------------------------------------------ *
- * Functional colors (§3) — fixed hex, never theme-switched.
+ * Functional colors (§3) — fixed hex, never brand-theme-switched (they DO
+ * flip light⇄dark). `dark` values come from the same @arco-design/color dark
+ * algorithm as the brand ramps, seeded on each light main; the four roles map
+ * to Arco ramp indices main=6 / hover=5 / active=7 / tint=1 (light picks the
+ * same slots, except danger's hand-darkened hover/active). In dark that means
+ * hover darkens and active lightens — the direction flip is Arco's own dark
+ * semantics, same as the fill ramp. Tints go deep-and-saturated (#004D1C …),
+ * so tinted surfaces read as color washes on #121212 instead of light chips.
  * ------------------------------------------------------------------ */
 
 const FUNCTIONAL = [
-  { name: 'success', label: '成功 Success', cssVar: '--success', main: '#00B42A', hover: '#23C343', active: '#009A29', tint: '#E8FFEA' },
-  { name: 'warning', label: '警告 Warning', cssVar: '--warning', main: '#FF7D00', hover: '#FF9A2E', active: '#D25F00', tint: '#FFF7E8' },
-  { name: 'danger',  label: '危险 Danger',  cssVar: '--danger',  main: '#F53F3F', hover: '#D6373A', active: '#D02F33', tint: '#FFECE8' },
+  { name: 'success', label: '成功 Success', cssVar: '--success', main: '#00B42A', hover: '#23C343', active: '#009A29', tint: '#E8FFEA',
+    dark: { main: '#27C346', hover: '#1DB440', active: '#50D266', tint: '#004D1C' } },
+  { name: 'warning', label: '警告 Warning', cssVar: '--warning', main: '#FF7D00', hover: '#FF9A2E', active: '#D25F00', tint: '#FFF7E8',
+    dark: { main: '#FF9626', hover: '#FF8D1F', active: '#FFB357', tint: '#4D1B00' } },
+  { name: 'danger',  label: '危险 Danger',  cssVar: '--danger',  main: '#F53F3F', hover: '#D6373A', active: '#D02F33', tint: '#FFECE8',
+    dark: { main: '#F76965', hover: '#F54E4E', active: '#F98D86', tint: '#4D000A' } },
 ];
 
 /* ------------------------------------------------------------------ *
  * Tag pairs (§4) — light bg + strong text. Purple / approving-blue are
- * intentional fixed exceptions (not tokenized, never theme-switched).
+ * intentional fixed exceptions: they have their own tokens (--tag-skill*,
+ * --tag-approving*, light + dark) precisely so they can be pinned — nothing
+ * in .theme-green touches them.
  * ------------------------------------------------------------------ */
 
 const TAG = [
-  { label: '技能（紫 · 未 token 化）', bg: '#F5E8FF', fg: '#722ED1', note: '固定例外色' },
+  { label: '技能（紫 · 固定例外）', bg: '#F5E8FF', fg: '#722ED1', note: '--tag-skill-tint / --tag-skill，不换肤' },
   { label: '助手（橙 = warning 同值）', bg: '#FFF7E8', fg: '#FF7D00', note: 'warning tint' },
   { label: '已完成',                   bg: '#E8FFEA', fg: '#00B42A', note: 'success tint' },
   { label: '已驳回',                   bg: '#FFECE8', fg: '#F53F3F', note: 'danger tint' },
-  { label: '审批中（例外：永远蓝）',    bg: '#E8F3FF', fg: '#165DFF', note: '固定蓝，不换肤' },
+  { label: '审批中（例外：永远蓝）',    bg: '#E8F3FF', fg: '#165DFF', note: '--tag-approving-tint / --tag-approving，不换肤' },
+  { label: '网页来源角标（例外：永远紫）', bg: '#F5E8FF', fg: '#722ED1', note: '--citation-web-tint / --citation-web，与技能紫同值' },
 ];
 
 /* ------------------------------------------------------------------ *
@@ -183,6 +248,51 @@ const RADIUS = [
   { name: '3xl',  px: 24,   usage: '抽屉、超大容器' },
   { name: '4xl',  px: 32,   usage: '特大容器 / hero 区块' },
   { name: 'full', px: 9999, usage: '胶囊 / 圆形：头像、圆形图标按钮、pill 标签' },
+];
+
+/* Shadow: exactly two tiers (基础-圆角与阴影规范.mdx §2.1). Anything else —
+ * including Tailwind's shadow-sm/md/lg/xl presets and `shadow-[…]` arbitrary
+ * values — is off-spec. Carried as CSS vars (tokens.css) so dark mode can
+ * retune them centrally. */
+const SHADOW = [
+  {
+    name: 'popup',
+    cssVar: '--shadow-popup',
+    value: '0 2px 16px -2px rgba(0, 23, 66, 0.10)',
+    usage: '浮层：下拉菜单、选择器面板、气泡卡片、轻提示——点开即现、点外即走',
+  },
+  {
+    name: 'modal',
+    cssVar: '--shadow-modal',
+    value: '0 0 16px 0 rgba(3, 7, 117, 0.05)',
+    usage: '模态：弹窗、抽屉——要求用户处理完才关闭的打断式浮层',
+  },
+];
+
+/* Focus ring — deliberately NOT a member of SHADOW above. It is a focus
+ * INDICATOR (组件-Input输入框.md §5.1: 灰描边加深 + 一圈灰阴影), it expresses no
+ * elevation, and every value in it comes from existing tokens, which is the
+ * exception 圆角与阴影规范 §4 allows. The ring COLOR sits in its own var so a
+ * field in error / warning swaps it for the matching tint (danger-tint /
+ * warning-tint) without inventing a second shadow token. */
+const FOCUS_RING = {
+  name: 'focus',
+  colorVar: '--shadow-focus-ring',
+  colorDefault: '--fill-2',
+  value: '0 0 0 2px rgb(var(--shadow-focus-ring))',
+  usage: '控件聚焦指示环：输入框、文本域；错误 / 警告态由 --shadow-focus-ring 换成对应 tint',
+};
+
+/* Overlay stacking — exactly four tiers (组件-Modal弹窗.md §5 is the SSOT for
+ * layering). Every new overlay picks one of these; hand-rolled `z-[…]` values
+ * are what produced the old z-50 / z-[100] / z-[110] / z-[9999] zoo. Ordered so
+ * each tier can cover the one below: a dropdown opens inside a dialog, a toast
+ * shows over both, and a tooltip beats everything. */
+const Z_INDEX = [
+  { name: 'modal',   cssVar: '--z-modal',   value: 1000, usage: '弹窗、抽屉（含各自的遮罩）' },
+  { name: 'popover', cssVar: '--z-popover', value: 1100, usage: '气泡卡片、下拉菜单' },
+  { name: 'toast',   cssVar: '--z-toast',   value: 1200, usage: '轻提示 Toast' },
+  { name: 'tooltip', cssVar: '--z-tooltip', value: 1300, usage: '文字提示 Tooltip' },
 ];
 
 const ICON_SIZE = [
@@ -231,7 +341,18 @@ TYPE_SCALE.forEach((s) => {
   fontSize[s.name] = [`var(${s.cssVar})`, { lineHeight: `var(${s.leadingVar})`, fontWeight: String(s.weight) }];
 });
 
-const tailwindTheme = { colors, fontSize };
+const boxShadow = {};
+SHADOW.forEach((s) => {
+  boxShadow[s.name] = `var(${s.cssVar})`;
+});
+boxShadow[FOCUS_RING.name] = FOCUS_RING.value;
+
+const zIndex = {};
+Z_INDEX.forEach((z) => {
+  zIndex[z.name] = `var(${z.cssVar})`;
+});
+
+const tailwindTheme = { colors, fontSize, boxShadow, zIndex };
 
 /* ================================================================== *
  * Migration map — old numeric class → new role class, for the app's
@@ -250,6 +371,8 @@ module.exports = {
   FONT_WEIGHT,
   BRAND,
   BRAND_STEPS,
+  ILLUS,
+  ILLUS_STEPS,
   GRAY,
   TEXT,
   FILL,
@@ -258,6 +381,9 @@ module.exports = {
   FUNCTIONAL,
   TAG,
   RADIUS,
+  SHADOW,
+  FOCUS_RING,
+  Z_INDEX,
   ICON_SIZE,
   tailwindTheme,
   MIGRATION,

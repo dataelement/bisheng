@@ -5,7 +5,7 @@
  * Data sources mirror the daily input's ChatKnowledge: spaces from
  * /knowledge/space/{mine,joined}, org KBs from /api/v1/knowledge (getKnowledgeInfo).
  */
-import { Check, ChevronDown, Loader2, SearchIcon } from 'lucide-react';
+import { Check, ChevronDown, Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getDepartmentSpacesApi, getJoinedSpacesApi, getMineSpacesApi } from '~/api/knowledge';
@@ -14,8 +14,8 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
-    Input,
 } from '~/components/ui';
+import { SearchInput } from '@bisheng/ui';
 import { useGetBsConfig, useGetOrgToolList } from '~/hooks/queries/data-provider';
 import { useLocalize } from '~/hooks';
 import { useToastContext } from '~/Providers';
@@ -135,7 +135,7 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange, compac
                         'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs font-normal outline-none transition-colors hover:bg-black/5',
                         // Active highlight uses brand-600 to match the checked-checkbox
                         // color in the picker rows below (renderRow).
-                        active ? 'text-blue-600' : 'text-[#4E5969]',
+                        active ? 'text-blue-600' : 'text-text-2',
                         disabled && 'cursor-not-allowed opacity-50',
                     )}
                 >
@@ -165,15 +165,19 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange, compac
                 align="start"
                 className="flex max-h-[380px] w-[280px] flex-col gap-2 overflow-hidden rounded-2xl border-slate-100 p-3 shadow-xl"
             >
-                <div className="relative shrink-0">
-                    <SearchIcon className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                    <Input
-                        className="h-[28px] rounded-md border border-[#ECECEC] bg-white pl-8 text-xs focus-visible:ring-1 focus-visible:ring-blue-500/20"
+                {/* Spec SearchInput; stopPropagation on the wrapper keeps every
+                    click in the shell (magnifier, padding, clear) out of the
+                    dropdown's own handlers. */}
+                <div
+                    className="shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                >
+                    <SearchInput
                         placeholder={localize('com_chat_knowledge_placeholder_search_space')}
                         value={keyword}
                         onChange={(e) => setKeyword(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => e.stopPropagation()}
+                        clearLabel={localize('com_ui_clear')}
                     />
                 </div>
 

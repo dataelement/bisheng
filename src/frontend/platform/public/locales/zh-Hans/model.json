@@ -8,6 +8,7 @@
     "confirmCancelEdit": "您的修改尚未保存，确定要退出吗？",
     "promptSaved": "提示词已保存",
     "linsightDefaultModel": "$t(bs:linsight)默认模型",
+    "dailyDefaultModel": "日常模式默认模型",
     "linsightDefaultModelTooltip": "该模型为$t(bs:linsight)任务的默认执行模型，用户发起任务时可切换",
     "workbenchVoiceModel": "工作台及知识空间语音模型",
     "sessionTitleGenerationModel": "应用会话标题生成模型",

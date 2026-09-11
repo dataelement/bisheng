@@ -4,6 +4,7 @@ import { getMyResourcePermissionsApi } from "@/controllers/API/permission"
 import { DashboardDetail } from "@/pages/Dashboard/components/dashboard/DashboardDetail"
 import {
   useDashboardPermissions,
+  useLazyDashboardPermission,
   type DashboardPermissionMap,
 } from "@/pages/Dashboard/hook"
 import { DashboardListItem } from "@/pages/Dashboard/components/dashboard/DashboardListItem"
@@ -17,6 +18,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("@/controllers/API/permission", () => ({
   getMyResourcePermissionsApi: vi.fn(),
 }))
+
+vi.mock("@/pages/Dashboard/hook", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/pages/Dashboard/hook")>()
+  return {
+    ...actual,
+    useLazyDashboardPermission: vi.fn(),
+  }
+})
 
 vi.mock("@/pages/Dashboard/components/editor/EditorCanvas", () => ({
   EditorCanvas: () => <div>dashboard canvas</div>,
@@ -70,8 +79,15 @@ const dashboard = {
 
 function renderItem(
   permissionActions: string[],
-  { visible = true, privileged = false } = {},
+  { privileged = false } = {},
 ) {
+  vi.mocked(useLazyDashboardPermission).mockReturnValue({
+    actions: permissionActions,
+    loaded: true,
+    loading: false,
+    privileged,
+    ensureLoaded: vi.fn(),
+  })
   const callbacks = {
     onSelect: vi.fn(),
     onRename: vi.fn(),
@@ -88,9 +104,6 @@ function renderItem(
       <DashboardListItem
         dashboard={dashboard}
         selected={false}
-        permissionActions={permissionActions}
-        visible={visible}
-        privileged={privileged}
         {...callbacks}
       />
     </locationContext.Provider>,
@@ -131,13 +144,6 @@ describe("F048 dashboard permission UI", () => {
       sources: [{ type: "DIRECT", include_children: false }],
       roster_complete: false,
     })
-  })
-
-  it("fails closed and never renders a dashboard it was not told is visible", () => {
-    renderItem(["edit", "delete", "manage_permission"], { visible: false })
-
-    expect(screen.queryByText("Operations")).toBeNull()
-    expect(screen.queryByRole("button", { name: "dashboard.actions" })).toBeNull()
   })
 
   it("keeps share, default, and copy behind visibility without implying edit", () => {

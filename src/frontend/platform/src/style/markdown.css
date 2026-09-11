@@ -371,7 +371,12 @@
 }
 
 .bs-mkdown :where(table):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
-    width: 100%;
+    /* Wide tables scroll instead of being cut off — see the same rule in
+       src/frontend/client/src/markdown.css for the reasoning. */
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    overflow-x: auto;
     table-layout: auto;
     text-align: left;
     margin-top: 2em;

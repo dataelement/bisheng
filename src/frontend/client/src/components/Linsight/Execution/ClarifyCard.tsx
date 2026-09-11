@@ -191,13 +191,13 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
         >
             {/* Header: Guide text + Close button */}
             <div className="flex items-start justify-between pb-1">
-                <p className="text-[16px] font-semibold text-[#212121]">
+                <p className="text-[16px] font-semibold text-text-1">
                     {request.callReason || localize('com_linsight_clarify_title')}
                 </p>
                 <button
                     type="button"
                     onClick={handleClose}
-                    className="shrink-0 rounded-md p-1 text-[#8C8C8C] hover:bg-gray-100 transition-colors"
+                    className="shrink-0 rounded-md p-1 text-text-3 hover:bg-gray-100 transition-colors"
                     aria-label="close"
                 >
                     <X size={16} />
@@ -213,7 +213,7 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                             {/* Single/multi badge only makes sense when there are
                                 options; a free-text-only question is neither. */}
                             {q.options.length > 0 && (
-                                <span className="text-[14px] text-[#8C8C8C] select-none">
+                                <span className="text-[14px] text-text-3 select-none">
                                     {q.multiple
                                         ? localize('com_linsight_clarify_multi')
                                         : localize('com_linsight_clarify_single')}
@@ -221,7 +221,7 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                             )}
                         </div>
                         {questions.length > 1 && (
-                            <div className="flex items-center gap-2 text-sm text-[#8C8C8C] select-none">
+                            <div className="flex items-center gap-2 text-sm text-text-3 select-none">
                                 <button
                                     type="button"
                                     disabled={page === 0}
@@ -260,20 +260,20 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                                             // FIRST line of text, not the vertical center.
                                             'flex w-full items-start gap-2 rounded-lg px-4 py-2 text-left text-sm transition-all duration-200 select-none border-0',
                                             active
-                                                ? 'bg-[#EEE] text-[#212121] font-medium'
+                                                ? 'bg-[#EEE] text-text-1 font-medium'
                                                 : 'text-[#1A1A1A] hover:bg-gray-50/80',
                                         )}
                                     >
-                                        <span className="shrink-0 font-medium text-[#8C8C8C]">{i + 1}.</span>
+                                        <span className="shrink-0 font-medium text-text-3">{i + 1}.</span>
                                         <div className="flex-1 min-w-0">
-                                            <span className={cn(active ? 'text-[#212121]' : 'text-[#1A1A1A]')}>{optTitle}</span>
+                                            <span className={cn(active ? 'text-text-1' : 'text-[#1A1A1A]')}>{optTitle}</span>
                                             {optDesc && (
-                                                <span className="ml-1 text-[13px] font-normal text-[#8C8C8C]">
+                                                <span className="ml-1 text-[13px] font-normal text-text-3">
                                                     {optDesc}
                                                 </span>
                                             )}
                                         </div>
-                                        {active && <Check size={16} className="shrink-0 text-[#212121] self-center" />}
+                                        {active && <Check size={16} className="shrink-0 text-text-1 self-center" />}
                                     </button>
                                 </li>
                             );
@@ -293,7 +293,7 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                                     customSelected ? 'bg-[#EEE]' : 'hover:bg-gray-50/80',
                                 )}
                             >
-                                <span className="shrink-0 text-sm font-medium leading-5 text-[#8C8C8C]">
+                                <span className="shrink-0 text-sm font-medium leading-5 text-text-3">
                                     {q.options.length + 1}.
                                 </span>
                                 <textarea
@@ -335,7 +335,7 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                                             handleConfirm();
                                         }
                                     }}
-                                    className="flex-1 resize-none border-0 bg-transparent p-0 text-sm font-normal leading-5 text-[#1A1A1A] outline-none placeholder:text-[#8C8C8C]"
+                                    className="flex-1 resize-none border-0 bg-transparent p-0 text-sm font-normal leading-5 text-[#1A1A1A] outline-none placeholder:text-text-3"
                                 />
                                 {!q.multiple && customSelected && customText[q.id]?.trim() && (
                                     <button
@@ -344,7 +344,7 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                                         onClick={handleConfirm}
                                         // self-end pins 确定 to the bottom-right of the (possibly
                                         // grown) box, while the number stays top-left.
-                                        className="flex shrink-0 self-end items-center gap-1 text-sm font-medium text-[#8C8C8C] hover:text-[#212121] disabled:opacity-50 transition-colors"
+                                        className="flex shrink-0 self-end items-center gap-1 text-sm font-medium text-text-3 hover:text-text-1 disabled:opacity-50 transition-colors"
                                     >
                                         {localize('com_linsight_clarify_submit')}
                                         <Outlined.CornerDownLeft size={14} className="shrink-0" />
@@ -370,7 +370,7 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                             handleConfirm();
                         }
                     }}
-                    className="mt-4 resize-none text-sm rounded-xl border-none shadow-none bg-[#F5F7FA] placeholder:text-[#8C8C8C] focus-visible:ring-0 focus-visible:outline-none"
+                    className="mt-4 resize-none text-sm rounded-xl border-none shadow-none bg-[#F5F7FA] placeholder:text-text-3 focus-visible:ring-0 focus-visible:outline-none"
                 />
             )}
 
@@ -385,7 +385,7 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                         type="button"
                         disabled={disabled || submitted}
                         onClick={handleSkipCurrent}
-                        className="flex items-center gap-1 text-sm font-medium text-[#8C8C8C] hover:text-[#212121] disabled:opacity-50 transition-colors"
+                        className="flex items-center gap-1 text-sm font-medium text-text-3 hover:text-text-1 disabled:opacity-50 transition-colors"
                     >
                         {localize('com_linsight_clarify_skip')}
                         {/* Hide the arrow on multi-select pages (跳过 sits beside 下一题). */}
@@ -406,7 +406,7 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                             // Last question: highlight 确定 as the final submit CTA.
                             isLast
                                 ? 'text-[#3a3a3a] hover:text-black'
-                                : 'text-[#8C8C8C] hover:text-[#212121]',
+                                : 'text-text-3 hover:text-text-1',
                         )}
                     >
                         {isLast

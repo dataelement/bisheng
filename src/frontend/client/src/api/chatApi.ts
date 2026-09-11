@@ -365,6 +365,17 @@ export async function getCitationDetail(citationId: string): Promise<ChatCitatio
     return detail;
 }
 
+/** F054: why a requested citation came back without a payload. The batch
+ *  endpoint used to just omit it, so the reader saw one vague failure whether
+ *  they lacked permission or the source was gone. */
+export type CitationUnresolvedReason = "forbidden" | "expired";
+
+const citationReasonCache: Record<string, CitationUnresolvedReason> = {};
+
+export function getCitationUnresolvedReason(citationId: string): CitationUnresolvedReason | undefined {
+    return citationReasonCache[citationId];
+}
+
 export async function resolveCitationDetails(citationIds: string[]): Promise<ChatCitation[]> {
     const uniqueCitationIds = Array.from(new Set(
         citationIds.filter((citationId) => citationId && !citationId.startsWith("citation:")),
@@ -390,6 +401,13 @@ export async function resolveCitationDetails(citationIds: string[]): Promise<Cha
             items.forEach((detail) => {
                 if (detail?.citationId) {
                     citationDetailMemoryCache[detail.citationId] = detail;
+                    delete citationReasonCache[detail.citationId];
+                }
+            });
+            const unresolved = Array.isArray(payload?.unresolved) ? payload.unresolved : [];
+            unresolved.forEach((entry) => {
+                if (entry?.citationId && entry?.reason) {
+                    citationReasonCache[entry.citationId] = entry.reason;
                 }
             });
             return items;
@@ -693,8 +711,12 @@ export async function getAttachmentUrl(
     fileId: string,
 ): Promise<string | null> {
     try {
-        const res: any = await http.get(API.attachmentUrl(conversationId, fileId));
-        return (res?.data ?? res)?.url ?? null;
+        // The wrapper unwraps `data` for some callers and not others, so accept both.
+        const res = await http.get<{ url?: string } | { data?: { url?: string } }>(
+            API.attachmentUrl(conversationId, fileId),
+        );
+        const payload = (res as { data?: { url?: string } })?.data ?? (res as { url?: string });
+        return payload?.url ?? null;
     } catch {
         return null;
     }

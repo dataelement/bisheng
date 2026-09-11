@@ -1,14 +1,8 @@
-import { Button } from "@bisheng/ui";
+import { Button, Radio, RadioGroup } from "@bisheng/ui";
 import type { SubjectType } from "~/api/permission";
 import { useLocalize } from "~/hooks";
 import { PermissionEmptyState } from "./PermissionEmptyState";
 import { PermissionDraftEditor, type PermissionDraftEditorCapabilities } from "./PermissionDraftEditor";
-import {
-  SUBJECT_TAB_BUTTON_ACTIVE_CLASS,
-  SUBJECT_TAB_BUTTON_CLASS,
-  SUBJECT_TAB_BUTTON_INACTIVE_CLASS,
-  SUBJECT_TAB_LIST_CLASS,
-} from "./permissionDialogStyles";
 import { getPermissionDraftRowKey, type PermissionDraftRow } from "./usePermissionDraft";
 
 const SUBJECT_TYPES: SubjectType[] = ["user", "department", "user_group"];
@@ -49,22 +43,20 @@ export function PermissionDraftPanel({
         {localize("com_unified_permission.authorization")}
       </div>
       <div className="flex items-center justify-between gap-3">
-        <div className={`inline-flex items-center justify-center ${SUBJECT_TAB_LIST_CLASS}`}>
+        <RadioGroup
+          variant="button"
+          value={activeSubjectType}
+          aria-label={localize("com_unified_permission.authorization")}
+          onValueChange={(value) =>
+            onActiveSubjectTypeChange(value as SubjectType)
+          }
+        >
           {SUBJECT_TYPES.map((type) => (
-            <button
-              key={type}
-              type="button"
-              className={`${SUBJECT_TAB_BUTTON_CLASS} ${
-                activeSubjectType === type
-                  ? SUBJECT_TAB_BUTTON_ACTIVE_CLASS
-                  : SUBJECT_TAB_BUTTON_INACTIVE_CLASS
-              }`}
-              onClick={() => onActiveSubjectTypeChange(type)}
-            >
+            <Radio key={type} value={type}>
               {localize(`com_permission.subject_${type}`)}
-            </button>
+            </Radio>
           ))}
-        </div>
+        </RadioGroup>
         {canAddAuthorization && (
           <Button
             type="button"

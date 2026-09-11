@@ -5,7 +5,7 @@
  * subscription via AiMessageBubble; linsight task mode via ResultPanel; appChat
  * workflow/assistant via MessageButtons). The button visuals match the
  * AiMessageBubble action row (size-6 hit area, 14px bisheng-icons Outlined
- * glyph, #818181 idle / brand-500 active) so the whole action row reads as one
+ * glyph, text-3 idle / brand-500 active) so the whole action row reads as one
  * consistent set.
  *
  * Dislike is deferred: clicking thumbs-down only opens the reason dialog
@@ -32,7 +32,7 @@ import { cn } from "~/utils";
 type ThumbsState = 0 | 1 | 2;
 
 const ACTION_BTN =
-    "flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]";
+    "flex size-6 items-center justify-center rounded-md transition-colors hover:bg-fill-1";
 
 interface MessageFeedbackButtonsProps {
     /** Initial / persisted verdict: 0 none, 1 up, 2 down. */
@@ -107,7 +107,7 @@ export function MessageFeedbackButtons({
                 >
                     <Outlined.ThumbsUp
                         size={14}
-                        className={cn(state === 1 ? "text-blue-500" : "text-[#818181]")}
+                        className={cn(state === 1 ? "text-blue-500" : "text-text-3")}
                     />
                 </button>
                 <button
@@ -120,7 +120,7 @@ export function MessageFeedbackButtons({
                 >
                     <Outlined.ThumbsDown
                         size={14}
-                        className={cn(state === 2 ? "text-blue-500" : "text-[#818181]")}
+                        className={cn(state === 2 ? "text-blue-500" : "text-text-3")}
                     />
                 </button>
             </div>

@@ -152,15 +152,19 @@ class BaseFilePipeline(BasePipeline):
         return None
 
     def _excel_header_row_indices(self) -> list[int]:
-        """Convert 1-based Excel header rows from the UI/API to 0-based DataFrame indices."""
+        """Turn the rule's 1-based header rows (the UI says "第 1 行 到 第 1 行") into the
+        0-based DataFrame slice the markdown converter takes.
+
+        The pre-pipeline code subtracted one here; the pipeline rewrite dropped that, so the
+        default rule "1 到 1" selected DataFrame row 1 — the first data row became the table
+        header and the real column names were rendered as the first body row of every chunk.
+        """
         excel_rule = self.file_split_rule.excel_rule
         if not excel_rule:
             return [0, 0]
         start = max((excel_rule.header_start_row or 1) - 1, 0)
         end = max((excel_rule.header_end_row or 1) - 1, 0)
-        if end < start:
-            end = start
-        return [start, end]
+        return [start, max(end, start)]
 
     def _init_excel_loader(self) -> BaseBishengLoader:
         excel_rule = self.file_split_rule.excel_rule

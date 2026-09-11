@@ -4,6 +4,8 @@ import { forwardRef, useMemo } from 'react';
 import { cn } from '~/utils';
 
 interface TooltipAnchorProps extends Ariakit.TooltipAnchorProps {
+  /** Ariakit's props type omits children (it prefers `render`), but they are forwarded verbatim. */
+  children?: React.ReactNode;
   description?: string | React.ReactNode;
   side?: 'top' | 'bottom' | 'left' | 'right';
   className?: string;

@@ -113,7 +113,7 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
             return next;
         });
     };
-    const dragItemClassName = "flex h-8 min-h-8 w-full cursor-grab items-center gap-1.5 rounded-lg border border-[#E5E6EB] bg-white px-2 py-0 active:cursor-grabbing";
+    const dragItemClassName = "flex h-8 min-h-8 w-full cursor-grab items-center gap-1.5 rounded-lg border border-border-base bg-white px-2 py-0 active:cursor-grabbing";
 
     return (
         <Dialog
@@ -137,19 +137,19 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                     type="button"
                     onClick={handleCancel}
                     aria-label={localize('com_ui_close')}
-                    className="absolute right-3 top-3 z-20 hidden items-center justify-center rounded-md p-1 text-[#4E5969] hover:bg-[#F2F3F5] max-[768px]:inline-flex max-[768px]:top-[max(0.75rem,env(safe-area-inset-top))]"
+                    className="absolute right-3 top-3 z-20 hidden items-center justify-center rounded-md p-1 text-text-2 hover:bg-fill-2 max-[768px]:inline-flex max-[768px]:top-[max(0.75rem,env(safe-area-inset-top))]"
                 >
                     <X className="size-5" />
                 </button>
                 <DialogHeader className="shrink-0 space-y-2 px-5 pb-3 pt-5 text-left max-[768px]:pr-12">
                     <div className="flex flex-row flex-wrap items-baseline gap-x-2 gap-y-1 min-[769px]:gap-x-3">
-                        <DialogTitle className="text-base font-semibold leading-snug text-[#1D2129]">
+                        <DialogTitle className="text-base font-semibold leading-snug text-text-1">
                             {localize('com_label_settings_title')}
                         </DialogTitle>
-                        <span className="text-sm font-normal leading-snug text-[#86909C] min-[769px]:hidden">
+                        <span className="text-sm font-normal leading-snug text-text-3 min-[769px]:hidden">
                             {localize('com_label_settings_subtitle_mobile')}
                         </span>
-                        <span className="hidden text-sm font-normal leading-snug text-[#86909C] min-[769px]:inline">
+                        <span className="hidden text-sm font-normal leading-snug text-text-3 min-[769px]:inline">
                             {localize('com_label_settings_subtitle')}
                         </span>
                     </div>
@@ -157,7 +157,7 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
 
                 <div className="flex min-h-0 flex-1 flex-col min-[769px]:flex-row max-[768px]:grid max-[768px]:grid-rows-2">
                     <div className="flex min-h-0 min-w-0 flex-col min-[769px]:flex-1">
-                        <div className="shrink-0 px-4 pb-2 pt-3 text-sm font-medium text-[#1D2129]">
+                        <div className="shrink-0 px-4 pb-2 pt-3 text-sm font-medium text-text-1">
                             {localize('com_label_all_tags')}
                         </div>
                         <div
@@ -175,7 +175,7 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                                             'inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border px-3 py-0 text-sm leading-none transition-colors',
                                             l.selected
                                                 ? 'border-blue-500 bg-[#E8F0FF] text-blue-500'
-                                                : 'border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]',
+                                                : 'border-border-base bg-white text-text-2 hover:bg-fill-1',
                                         )}
                                     >
                                         <span className="truncate">{l.label}</span>
@@ -190,10 +190,10 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                         </div>
                     </div>
 
-                    <div className="flex min-h-0 min-w-0 flex-1 flex-col max-[768px]:border-t max-[768px]:border-[#F2F3F5]">
-                        <div className="shrink-0 px-4 pb-2 pt-3 text-sm font-medium text-[#1D2129] max-[768px]:pt-2">
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col max-[768px]:border-t max-[768px]:border-fill-2">
+                        <div className="shrink-0 px-4 pb-2 pt-3 text-sm font-medium text-text-1 max-[768px]:pt-2">
                             <span>{localize('com_label_display_tags')}</span>
-                            <span className="ml-2 font-normal text-[#86909C]">
+                            <span className="ml-2 font-normal text-text-3">
                                 {selected.length}/{MAX_HOME_LABELS}
                             </span>
                         </div>
@@ -224,13 +224,13 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                                                                 {...dragProvided.dragHandleProps}
                                                                 className={dragItemClassName}
                                                             >
-                                                                <GripVertical className="size-3.5 shrink-0 text-[#C9CDD4]" />
-                                                                <span className="min-w-0 flex-1 truncate text-sm font-medium leading-none text-[#1D2129]">
+                                                                <GripVertical className="size-3.5 shrink-0 text-text-4" />
+                                                                <span className="min-w-0 flex-1 truncate text-sm font-medium leading-none text-text-1">
                                                                     {b.label}
                                                                 </span>
                                                                 <button
                                                                     type="button"
-                                                                    className="inline-flex size-6 shrink-0 items-center justify-center rounded text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#4E5969]"
+                                                                    className="inline-flex size-6 shrink-0 items-center justify-center rounded text-text-3 hover:bg-fill-2 hover:text-text-2"
                                                                     aria-label={localize('com_label_remove_display')}
                                                                     onMouseDown={(e) => e.stopPropagation()}
                                                                     onTouchStart={(e) => e.stopPropagation()}
@@ -259,7 +259,7 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                 <DialogFooter className="shrink-0 gap-3 px-5 py-4 max-[768px]:!flex-row max-[768px]:!flex-nowrap max-[768px]:pb-[max(1rem,env(safe-area-inset-bottom))] min-[769px]:justify-end">
                     <Button
                         variant="outline"
-                        className="h-8 rounded-md border-[#E5E6EB] bg-white px-4 text-[14px] font-normal text-[#4E5969] hover:bg-[#F7F8FA] max-[768px]:h-8 max-[768px]:min-w-0 max-[768px]:flex-1"
+                        className="h-8 rounded-md border-border-base bg-white px-4 text-[14px] font-normal text-text-2 hover:bg-fill-1 max-[768px]:h-8 max-[768px]:min-w-0 max-[768px]:flex-1"
                         onClick={handleCancel}
                     >
                         {localize('com_label_cancel')}

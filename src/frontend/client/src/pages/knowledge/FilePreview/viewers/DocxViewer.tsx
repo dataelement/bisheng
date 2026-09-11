@@ -36,7 +36,7 @@ export function DocxViewer({ fileUrl, zoomLevel }: DocxViewerProps) {
 
     if (loading) {
         return (
-            <div className="flex-1 flex items-center justify-center text-[#86909c]">
+            <div className="flex-1 flex items-center justify-center text-text-3">
                 {localize("com_knowledge.doc_loading")}</div>
         );
     }
@@ -44,7 +44,7 @@ export function DocxViewer({ fileUrl, zoomLevel }: DocxViewerProps) {
     if (error) {
         return (
             <div className="flex-1 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-3 text-[#86909c]">
+                <div className="flex flex-col items-center gap-3 text-text-3">
                     <div className="text-4xl">📄</div>
                     <p>{error}</p>
                 </div>

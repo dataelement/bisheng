@@ -1,3 +1,4 @@
+import { Segmented } from "@bisheng/ui";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
@@ -107,7 +108,7 @@ export function ChannelSquareTabs({
                             <span
                                 className={cn(
                                     "text-base leading-6 whitespace-nowrap transition-colors duration-200",
-                                    isActive ? "font-medium text-[#212121]" : "font-normal text-[#C9CDD4]",
+                                    isActive ? "font-medium text-text-1" : "font-normal text-text-4",
                                 )}
                             >
                                 {seg.label}
@@ -133,37 +134,13 @@ export function ChannelSquareTabs({
     }
 
     return (
-        <div
-            className={cn(
-                "relative inline-grid grid-cols-2 shrink-0 items-center rounded-lg bg-[#EEEEEE] p-[3px]",
-                className,
-            )}
-        >
-            {/* Sliding white indicator — half the inner width, translated between the two segments. */}
-            <span
-                aria-hidden
-                className="pointer-events-none absolute left-[3px] top-[3px] h-[30px] w-[calc((100%-6px)/2)] rounded-md bg-white drop-shadow-[0px_4px_2px_rgba(0,0,0,0.05)] transition-transform duration-200 ease-out motion-reduce:transition-none"
-                style={{ transform: `translateX(${active === "square" ? "100%" : "0%"})` }}
-            />
-            {segments.map((seg) => {
-                const isActive = active === seg.key;
-                return (
-                    <button
-                        key={seg.key}
-                        type="button"
-                        // Clicking the already-active segment is a no-op.
-                        onClick={() => { if (!isActive) seg.onClick?.(); }}
-                        className={cn(
-                            "relative z-[1] flex h-[30px] w-full items-center justify-center rounded-md px-3 text-sm leading-[22px] whitespace-nowrap transition-colors",
-                            isActive
-                                ? "font-medium text-[#212121]"
-                                : "font-normal text-[#999999] fine-pointer:hover:text-[#212121]",
-                        )}
-                    >
-                        {seg.label}
-                    </button>
-                );
-            })}
-        </div>
+        <Segmented
+            size="large"
+            options={segments.map(({ key, label }) => ({ value: key, label }))}
+            value={active}
+            onChange={(next) => segments.find((seg) => seg.key === next)?.onClick?.()}
+            disabled={disabled}
+            className={className}
+        />
     );
 }

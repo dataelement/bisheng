@@ -25,3 +25,8 @@ class ServerAddError(BaseErrorCode):
 class WorkbenchEmbeddingError(BaseErrorCode):
     Code: int = 10810
     Msg: str = 'Please configure the workbench embedding model.'
+
+
+class WorkbenchChatDefaultModelError(BaseErrorCode):
+    Code: int = 10811
+    Msg: str = 'The daily-chat default model must be one of the configured workbench chat models.'

@@ -96,6 +96,8 @@ interface AiChatInputProps {
      */
     elevated?: boolean;
     onModelChange?: (val: string) => void;
+    /** Programmatic model-value repairs from AiModelSelect (not user picks). */
+    onModelAutoChange?: (val: string) => void;
     placeholder?: string;
     /** files: uploaded file list [{path, name}], null means still uploading */
     onSend: (text: string, files?: any[] | null) => void;
@@ -144,6 +146,7 @@ const AiChatInput = memo(
         hasMessages,
         elevated = false,
         onModelChange,
+        onModelAutoChange,
         onSend,
         onStop,
         onScrollToBottom,
@@ -406,7 +409,9 @@ const AiChatInput = memo(
             isComposingRef.current = false;
         }, []);
 
-        const hasSelectionTags = ((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0 || (taskMode && dailySkills.length > 0)) && !isLingsi;
+        const hasMountedKbs = !!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi;
+        const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0 || (taskMode && dailySkills.length > 0)) && !isLingsi;
+        const hasSelectionTags = hasMountedKbs || hasInlineAttachments;
 
         // Tell the landing page whether the attachment bar is present so it can
         // hide/show the welcome subtitle without shifting the title or input box.
@@ -435,18 +440,41 @@ const AiChatInput = memo(
                     </div>
                 </div>}
 
+                {/* Mounted knowledge spaces — a gray strip stacked ABOVE the input
+                    box (Figma 12841:47449). Attachments deliberately do not join
+                    it: files stay inline inside the box, where they read as part
+                    of what you are about to send rather than as mounted context. */}
+                {hasMountedKbs && (
+                    <AttachmentBar
+                        appearance="strip"
+                        uploadingFiles={[]}
+                        files={[]}
+                        kbs={selectedOrgKbs}
+                        skills={[]}
+                        onRemoveKb={onSelectedOrgKbsChange ? (kb) => {
+                            onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id));
+                        } : undefined}
+                    />
+                )}
+
                 <div
                     className={cn(
-                        // Figma 12669:66966 — white surface, 16px radius, hairline border.
-                        "relative flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-[#ECECEC] bg-white p-3",
+                        // Figma 12669:66966 — white surface, 16px radius, hairline
+                        // border (replaces the legacy gray fill). z-[1] keeps it
+                        // painted above the attachment strip it overlaps.
+                        "relative z-[1] flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-border-base bg-white p-3",
+                        // Soft drop shadow on the landing page (always) and on the
+                        // in-conversation input only while it has a mounted knowledge
+                        // space / file; otherwise in-conversation inputs stay flat
+                        // against the message list.
                         (elevated || hasSelectionTags) && "shadow-[0_0_8px_rgba(3,7,117,0.05)]",
                     )}
                 >
-                    {hasSelectionTags && (
+                    {hasInlineAttachments && (
                         <AttachmentBar
                             uploadingFiles={uploadingFiles}
                             files={chatFiles || []}
-                            kbs={selectedOrgKbs}
+                            kbs={[]}
                             skills={taskMode ? dailySkills : []}
                             onRemoveFile={(file) => {
                                 // clientId, not name: a folder upload can carry the
@@ -454,9 +482,6 @@ const AiChatInput = memo(
                                 inputFilesRef.current?.removeByClientId?.(file.clientId);
                                 setChatFiles((prev) => (prev || []).filter((i) => String(i.clientId) !== String(file.clientId)));
                             }}
-                            onRemoveKb={onSelectedOrgKbsChange ? (kb) => {
-                                onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id));
-                            } : undefined}
                             onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
                         />
                     )}
@@ -572,7 +597,7 @@ const AiChatInput = memo(
                         style={{ height: 52, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
                         className={cn(
                             "m-0 w-full resize-none bg-transparent text-sm mb-2.5 pb-0 pt-0",
-                            "placeholder:text-[#999999]",
+                            "placeholder:text-text-3",
                             "max-h-[240px] scrollbar-gutter-stable",
                             size === 'mini' ? 'min-h-0' : 'min-h-12',
                             removeFocusRings,
@@ -702,12 +727,13 @@ const AiChatInput = memo(
                                     value={modelValue}
                                     options={modelOptions}
                                     onChange={onModelChange!}
+                                    onAutoChange={onModelAutoChange}
                                 />
                             )}
                             {isStreaming || taskRunning ? (
                                 <button
                                     type="button"
-                                    className="btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100"
+                                    className="btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100"
                                     onClick={onStop}
                                     aria-label="Stop generating"
                                 >
@@ -753,7 +779,7 @@ const AiChatInput = memo(
                                         fileUploading ||
                                         filesParsing
                                     }
-                                    className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
+                                    className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-text-2"
                                     aria-label="Send message"
                                     data-testid="send-button"
                                 >

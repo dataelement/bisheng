@@ -1,6 +1,18 @@
 import { FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
 import i18next from "i18next";
 
+/**
+ * Which semantic color a file's status tag speaks in (组件-Tag标签.md §3.1),
+ * shared by the desktop list row, the card and the H5 row so the same state
+ * cannot come out grey in one view and red in another.
+ *
+ * `approving` is not `brand`: 审批中 is one of the two colors the design system
+ * freezes to blue in BOTH brand themes (色彩规范 §4). The hand-rolled pills this
+ * replaced used `bg-blue-50`, which turns green under the green theme — exactly
+ * what that exception exists to prevent.
+ */
+export type KnowledgeStatusTone = "default" | "danger" | "approving";
+
 /** List/card: only folders and successfully parsed files are clickable; violation files stay grayed out. */
 export function isKnowledgeItemPreviewable(file: KnowledgeFile): boolean {
     if (file.type === FileType.FOLDER) return true;
@@ -383,4 +395,47 @@ export function validateFileForUpload(
         return i18next.t("com_knowledge.unsupported_file_format", { 0: file.name });
     }
     return null;
+}
+
+/**
+ * Whether selecting a space should also rewrite the URL to that space's page.
+ *
+ * The sidebar auto-selects a first space as soon as its lists land, and that runs
+ * through the same handler as an explicit click. On a share route that navigation
+ * replaced `/knowledge/share/:id` with the recipient's own default space before the
+ * share preview could open, so the shared space was never shown. The auto-selected
+ * space may render behind the preview; the share URL has to survive.
+ */
+export function shouldNavigateOnSpaceSelect(params: {
+    isShareRoute: boolean;
+    urlFolderId?: string;
+    urlSpaceId?: string;
+    targetSpaceId: string;
+}): boolean {
+    const { isShareRoute, urlFolderId, urlSpaceId, targetSpaceId } = params;
+    if (isShareRoute) return false;
+    return Boolean(urlFolderId) || urlSpaceId !== targetSpaceId;
+}
+
+/**
+ * Does this viewer already have the space open to them?
+ *
+ * A share link is a way in. Only the creator was let straight through, so a
+ * member — or someone granted the space through their department — landed on
+ * the intro-and-apply preview for a space already listed in their own sidebar.
+ *
+ * `role` cannot decide it: `/info` leaves it unset for a non-member and the
+ * client maps unset to MEMBER, the same value a real member carries. The
+ * effective F048 actions do, and `visible` is the very decision the space's own
+ * pages enforce. The creator is admitted first, whatever the actions say.
+ */
+export function canOpenSharedSpace(info: {
+    actions?: readonly string[] | null;
+    role?: string;
+}): boolean {
+    // Creator first and unconditionally: this is their own space, and letting
+    // them in can never be the wrong answer — where an empty action list would
+    // otherwise lock the owner out of their own share link.
+    if (info?.role === "creator") return true;
+    return Array.isArray(info?.actions) && info.actions.includes("visible");
 }

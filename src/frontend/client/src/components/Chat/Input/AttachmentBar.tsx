@@ -71,13 +71,13 @@ const CardShell = ({
 }) => (
     <div
         className={cn(
-            "group flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs text-[#212121]",
+            "group flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs text-text-1",
             onClick && "cursor-pointer",
         )}
         style={{ width: CARD_WIDTH }}
         onClick={onClick}
     >
-        <span className="flex size-4 shrink-0 items-center justify-center text-[#999]">{icon}</span>
+        <span className="flex size-4 shrink-0 items-center justify-center text-text-3">{icon}</span>
         <span className="min-w-0 flex-1 truncate text-left" title={title ?? label}>
             {label}
         </span>
@@ -229,7 +229,7 @@ const ArrowButton = ({
             // 8px gap only on the outer side (strip edge); the side facing the cards
             // stays flush at 0.
             className={cn(
-                "flex size-4 shrink-0 items-center justify-center text-[#666] transition-colors hover:text-[#212121]",
+                "flex size-4 shrink-0 items-center justify-center text-[#666] transition-colors hover:text-text-1",
                 direction === "left" ? "ml-2" : "mr-2",
             )}
         >
@@ -254,6 +254,13 @@ interface AttachmentBarProps {
     files: any[];
     kbs: any[];
     skills: any[];
+    /**
+     * `strip` is the gray band stacked ABOVE the input box (Figma 12841:47449):
+     * it overlaps the box by its 16px corner radius so the white box appears to
+     * emerge from it. `inline` is the plain row that sits inside the box.
+     * Knowledge spaces use the strip; attachments stay inline.
+     */
+    appearance?: "inline" | "strip";
     onRemoveFile?: (file: any) => void;
     onRemoveKb?: (kb: any) => void;
     onRemoveSkill?: (skill: any) => void;
@@ -271,6 +278,7 @@ export const AttachmentBar = ({
     files,
     kbs,
     skills,
+    appearance = "inline",
     onRemoveFile,
     onRemoveKb,
     onRemoveSkill,
@@ -404,7 +412,16 @@ export const AttachmentBar = ({
     }, []);
 
     return (
-        <div className="w-full pb-2 mb-1">
+        <div
+            className={cn(
+                appearance === "strip"
+                    // The -mb-4 is the overlap: the box's rounded top corner
+                    // reaches the edge exactly at the strip's bottom, so the two
+                    // read as one continuous shape rather than stacked cards.
+                    ? "relative -mb-4 w-full overflow-hidden rounded-t-2xl bg-[rgba(244,244,244,0.55)] px-2 pb-6 pt-2"
+                    : "w-full pb-2 mb-1",
+            )}
+        >
             <div className="flex items-center">
                 {canLeft && <ArrowButton direction="left" onClick={() => pageScroll("left")} />}
                 <div className="relative min-w-0 flex-1">

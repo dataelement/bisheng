@@ -122,7 +122,14 @@ def apply_chinese_defaults(
     ``profile="modern"``.
 
     ``body_font`` / ``heading_font`` / ``body_pt`` stay supported as shorthand for
-    a one-off tweak on top of the chosen profile.
+    a one-off tweak on top of the chosen profile. Note ``heading_font`` rewrites
+    **all four levels**: under 公文 that costs the level-2 楷体 and with it the
+    "same size, different face" ladder the standard is built on. To change one
+    level, pass ``profile={"headings": {1: {"font": ...}}}`` instead.
+
+    Do not call this on a document opened from ``uploads/`` — it rewrites Normal,
+    Heading 1–4 and the margins, which erases the styling the user's own file
+    came with.
 
     Word's stock Heading styles are Calibri Light in a blue nobody asked for;
     left alone they make every generated document look identically foreign.

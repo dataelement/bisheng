@@ -186,12 +186,12 @@ export default function Conversation({
         "group relative w-full content-stretch flex gap-[8px] items-center mb-1 rounded-lg shrink-0 transition-colors",
         // Mobile rows: 8px left / 6px right, 8px vertical (desktop nav uses 12px/6px).
         isSmallScreen ? "pl-[8px] pr-[6px] py-[8px]" : "px-[12px] py-[6px]",
-        isActiveConvo ? "bg-[#EEE]" : "hover:bg-[#f7f7f7]",
+        isActiveConvo ? "bg-[#EEE]" : "hover:bg-fill-1",
         // Pin the hover fill while the row owns a transient UI — an open
         // options menu or the rename input — since the pointer leaves the row
         // (into the menu) long before the interaction is over. Never promoted
         // to the active row's fill: this row is not the open conversation.
-        !isActiveConvo && (renaming || isPopoverActive) && "bg-[#f7f7f7]",
+        !isActiveConvo && (renaming || isPopoverActive) && "bg-fill-1",
         // Renaming chrome matches the chat input surface (AiChatInput): 1px
         // #ECECEC hairline + soft drop shadow, both as shadows so the row
         // keeps its borderless box size.

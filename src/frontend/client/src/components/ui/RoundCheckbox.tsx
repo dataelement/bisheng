@@ -4,6 +4,9 @@ interface RoundCheckboxProps {
     checked: boolean;
     onCheckedChange: (checked: boolean) => void;
     className?: string;
+    /** Renders greyed-out and inert. Callers disable rather than unmount, so the
+     *  selection column keeps its alignment on unselectable rows. */
+    disabled?: boolean;
 }
 
 /**
@@ -12,20 +15,23 @@ interface RoundCheckboxProps {
  * - Checked: a #165DFF ring with a solid blue filled center dot (radio-like).
  * Click propagation is stopped so toggling selection never triggers the row's onClick.
  */
-export function RoundCheckbox({ checked, onCheckedChange, className }: RoundCheckboxProps) {
+export function RoundCheckbox({ checked, onCheckedChange, className, disabled = false }: RoundCheckboxProps) {
     return (
         <button
             type="button"
             role="checkbox"
             aria-checked={checked}
+            disabled={disabled}
             className={cn(
                 "flex size-5 shrink-0 items-center justify-center rounded-full outline-none",
+                disabled && "cursor-not-allowed opacity-50",
                 className,
             )}
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
                 e.stopPropagation();
+                if (disabled) return;
                 onCheckedChange(!checked);
             }}
         >

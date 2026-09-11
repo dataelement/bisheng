@@ -14,12 +14,44 @@ import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import type { ChatMessage } from "~/api/chatApi";
 import { getAgentMessages, getSessionName } from "~/api/chatApi";
-import useAiChatSSE, { type SSESubmission } from "~/hooks/useAiChatSSE";
+import { openChatStream, type SSESubmission } from "~/hooks/useAiChatSSE";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useLinsightManager } from "~/hooks/useLinsightManager";
 import { startLinsight, getLinsightSessionVersionList } from "~/api/linsight";
 import { SopStatus, taskModeSkillsState } from "~/store/linsight";
 import { isMediaAttachmentFile, type MediaParsingState } from "~/utils/mediaAttachmentUtils";
+
+/**
+ * Turns that are still generating, across every mounted chat surface.
+ *
+ * A turn belongs to its conversation, not to whatever is on screen. Keeping the
+ * handles module-level is what lets the user read another chat — or leave this
+ * one — without the answer being cancelled behind them: nothing here is torn
+ * down by a component effect.
+ *
+ * The key carries an owner id as well as the conversation, so the workstation
+ * view and the subscription AI dock cannot collide on "new" or close each
+ * other's turns when one of them unmounts.
+ */
+type LiveStream = { convoId: string; close: () => void };
+const liveStreams = new Map<string, LiveStream>();
+const streamKey = (ownerId: string, conversationId: string) => `${ownerId}::${conversationId}`;
+const EMPTY_MESSAGES: ChatMessage[] = [];
+
+/**
+ * Close every live turn for a conversation, whoever opened it.
+ *
+ * Switching conversations no longer closes anything, so deleting one has to say
+ * so explicitly — otherwise the backend goes on generating an answer that has
+ * nowhere left to be stored.
+ */
+export function closeChatStream(conversationId: string): void {
+    for (const [key, stream] of [...liveStreams]) {
+        if (stream.convoId !== conversationId) continue;
+        liveStreams.delete(key);
+        stream.close();
+    }
+}
 
 const NO_PARENT = "00000000-0000-0000-0000-000000000000";
 
@@ -67,14 +99,96 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     const localize = useLocalize();
     const { showToast } = useToastContext();
     // --- Local state ---
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    // Bucketed by conversation: switching only changes which bucket renders, so
+    // a turn the user walked away from keeps writing into its own.
+    const [messagesByConvo, setMessagesByConvo] = useState<Record<string, ChatMessage[]>>({});
+    const [titleByConvo, setTitleByConvo] = useState<Record<string, string>>({});
+    const [streamingByConvo, setStreamingByConvo] = useState<Record<string, boolean>>({});
+    const [loadingByConvo, setLoadingByConvo] = useState<Record<string, boolean>>({});
+    const [parsingMediaByConvo, setParsingMediaByConvo] = useState<Record<string, boolean>>({});
     const [conversationId, setConversationId] = useState(initialConversationId);
-    const [title, setTitle] = useState("");
-    const [isStreaming, setIsStreaming] = useState(false);
-    const [isParsingMedia, setIsParsingMedia] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
-    const [sseSubmission, setSseSubmission] = useState<SSESubmission | null>(
-        null
+
+    // What the caller sees: the active conversation's slice of the above.
+    const messages = messagesByConvo[conversationId] ?? EMPTY_MESSAGES;
+    const title = titleByConvo[conversationId] ?? "";
+    const isStreaming = !!streamingByConvo[conversationId];
+    const isLoading = !!loadingByConvo[conversationId];
+    const isParsingMedia = !!parsingMediaByConvo[conversationId];
+
+    // Identifies this hook instance inside the shared registry.
+    const ownerIdRef = useRef<string>("");
+    if (!ownerIdRef.current) ownerIdRef.current = v4();
+
+    // Every write names the conversation it targets, because a turn's callbacks
+    // may well fire while the user is reading a different chat.
+    const setMessagesFor = useCallback(
+        (cid: string, updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
+            setMessagesByConvo((prev) => {
+                const cur = prev[cid] ?? EMPTY_MESSAGES;
+                const next = typeof updater === "function" ? updater(cur) : updater;
+                return next === cur ? prev : { ...prev, [cid]: next };
+            });
+        },
+        [],
+    );
+    const setTitleFor = useCallback(
+        (cid: string, updater: string | ((prev: string) => string)) => {
+            setTitleByConvo((prev) => {
+                const cur = prev[cid] ?? "";
+                const next = typeof updater === "function" ? updater(cur) : updater;
+                return next === cur ? prev : { ...prev, [cid]: next };
+            });
+        },
+        [],
+    );
+    const setStreamingFor = useCallback((cid: string, value: boolean) => {
+        setStreamingByConvo((prev) => (!!prev[cid] === value ? prev : { ...prev, [cid]: value }));
+    }, []);
+    const setLoadingFor = useCallback((cid: string, value: boolean) => {
+        setLoadingByConvo((prev) => (!!prev[cid] === value ? prev : { ...prev, [cid]: value }));
+    }, []);
+    const setParsingMediaFor = useCallback((cid: string, value: boolean) => {
+        setParsingMediaByConvo((prev) => (!!prev[cid] === value ? prev : { ...prev, [cid]: value }));
+    }, []);
+
+    /** Move a turn's buckets when it learns its real conversation id, so the
+     *  answer the user is watching is still there once the URL catches up. */
+    const promoteBucket = useCallback((from: string, to: string) => {
+        if (!to || to === from) return;
+        const move = <T,>(prev: Record<string, T>): Record<string, T> => {
+            if (!(from in prev)) return prev;
+            const { [from]: carried, ...rest } = prev;
+            return { ...rest, [to]: carried };
+        };
+        setMessagesByConvo(move);
+        setTitleByConvo(move);
+        setStreamingByConvo(move);
+        setLoadingByConvo(move);
+        setParsingMediaByConvo(move);
+    }, []);
+
+    // The viewed conversation's writers, for everything outside a turn (loading
+    // history, clearing, the switch effect).
+    const setMessages = useCallback(
+        (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) =>
+            setMessagesFor(conversationId, updater),
+        [conversationId, setMessagesFor],
+    );
+    const setTitle = useCallback(
+        (updater: string | ((prev: string) => string)) => setTitleFor(conversationId, updater),
+        [conversationId, setTitleFor],
+    );
+    const setIsStreaming = useCallback(
+        (value: boolean) => setStreamingFor(conversationId, value),
+        [conversationId, setStreamingFor],
+    );
+    const setIsLoading = useCallback(
+        (value: boolean) => setLoadingFor(conversationId, value),
+        [conversationId, setLoadingFor],
+    );
+    const setIsParsingMedia = useCallback(
+        (value: boolean) => setParsingMediaFor(conversationId, value),
+        [conversationId, setParsingMediaFor],
     );
 
     // Refs for accessing latest state in callbacks
@@ -106,7 +220,58 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     const { createLinsight, updateLinsight } = useLinsightManager();
 
     // --- SSE hook ---
-    const { abort: abortSSE } = useAiChatSSE(sseSubmission);
+    /**
+     * Open a turn and register it under the conversation it belongs to.
+     *
+     * The returned closer is what `stopGenerating`, deleting a conversation and
+     * a real unmount reach for. Nothing else closes a turn — in particular,
+     * switching conversations does not.
+     */
+    const beginStream = useCallback(
+        (cid: string, submission: SSESubmission) => {
+            const ownerId = ownerIdRef.current;
+            const previous = liveStreams.get(streamKey(ownerId, cid));
+            previous?.close();
+            const handle = openChatStream(submission, localize);
+            liveStreams.set(streamKey(ownerId, cid), { convoId: cid, close: handle.close });
+        },
+        [localize],
+    );
+
+    /** Close a turn if one is live for this conversation, and forget it. */
+    const endStream = useCallback((cid: string) => {
+        const key = streamKey(ownerIdRef.current, cid);
+        const stream = liveStreams.get(key);
+        if (!stream) return;
+        stream.close();
+        liveStreams.delete(key);
+    }, []);
+
+    /** A turn opened on "new" gets its real id mid-stream; move its registration
+     *  across so the closer still reaches it. */
+    const promoteStream = useCallback((from: string, to: string) => {
+        if (!to || to === from) return;
+        const ownerId = ownerIdRef.current;
+        const stream = liveStreams.get(streamKey(ownerId, from));
+        if (!stream) return;
+        stream.convoId = to;
+        liveStreams.delete(streamKey(ownerId, from));
+        liveStreams.set(streamKey(ownerId, to), stream);
+    }, []);
+
+    // Every live turn belongs to the page, not to this component's lifetime —
+    // but when the page really does go away, they go with it.
+    useEffect(
+        () => () => {
+            const prefix = `${ownerIdRef.current}::`;
+            for (const [key, stream] of [...liveStreams]) {
+                if (!key.startsWith(prefix)) continue;
+                stream.close();
+                liveStreams.delete(key);
+            }
+        },
+        [],
+    );
 
     // F035 Track J (TJ-6): after a task handoff we bind the conversation to the
     // freshly-minted chat_id, which would normally trigger a history refetch.
@@ -125,18 +290,47 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     // Timer for the post-handoff attachment poll. `generation` fences a request
     // that is already in flight: clearing the timeout alone would still let its
     // `.then` re-arm a new one after we unmounted or switched conversations.
-    const ingestPollRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; generation: number }>({
-        timer: null,
-        generation: 0,
-    });
-    const cancelIngestPoll = useCallback(() => {
-        if (ingestPollRef.current.timer) {
-            clearTimeout(ingestPollRef.current.timer);
-            ingestPollRef.current.timer = null;
+    // One poll per conversation, not one for "the" conversation. It used to be a
+    // single timer cancelled on every switch, which was correct only while one
+    // chat could be live at a time. With buckets, a poll started in A must keep
+    // running while the user reads B and must write back into A — cancelling it
+    // on switch would strand A's attachments mid-parse, and letting it write to
+    // whatever is on screen would put A's files in B's messages.
+    const ingestPollsRef = useRef<
+        Map<string, { timer: ReturnType<typeof setTimeout> | null; generation: number }>
+    >(new Map());
+    const ingestPollFor = useCallback((cid: string) => {
+        let entry = ingestPollsRef.current.get(cid);
+        if (!entry) {
+            entry = { timer: null, generation: 0 };
+            ingestPollsRef.current.set(cid, entry);
         }
-        ingestPollRef.current.generation += 1;
+        return entry;
     }, []);
-    useEffect(() => () => cancelIngestPoll(), [cancelIngestPoll]);
+    const cancelIngestPoll = useCallback(
+        (cid: string) => {
+            const entry = ingestPollFor(cid);
+            if (entry.timer) {
+                clearTimeout(entry.timer);
+                entry.timer = null;
+            }
+            // Fences a request already in flight: clearing the timeout alone
+            // would still let its `.then` re-arm a new one.
+            entry.generation += 1;
+        },
+        [ingestPollFor],
+    );
+    // Only a real unmount stops every poll. Switching conversations does not.
+    useEffect(
+        () => () => {
+            for (const entry of ingestPollsRef.current.values()) {
+                if (entry.timer) clearTimeout(entry.timer);
+                entry.generation += 1;
+            }
+            ingestPollsRef.current.clear();
+        },
+        [],
+    );
 
     // --- Sync internal state when external conversationId prop changes ---
     // This is essential for sidebar navigation: clicking a different conversation
@@ -154,17 +348,15 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         // In this case don't reset, messages are still valid.
         if (initialConversationId === internalConvoIdRef.current) return;
 
-        // Genuine sidebar navigation — reset and load new conversation.
-        // Set isLoading=true up-front (not false) so the welcome page doesn't
-        // briefly flash before the load effect fires on the next tick.
-        abortSSE();
-        setSseSubmission(null);
-        setIsStreaming(false);
-        // The poll belongs to the conversation we are leaving.
-        cancelIngestPoll();
-        setIsLoading(initialConversationId !== "new");
-        setMessages([]);
-        setTitle("");
+        // Genuine sidebar navigation. Nothing of the conversation we are leaving
+        // is torn down: its stream keeps generating into its own bucket and its
+        // attachment poll keeps running, which is the whole point. We only say
+        // the conversation we are arriving at is loading — and only if it has
+        // nothing of its own yet, so stepping back into a live turn shows it
+        // rather than a spinner over content we already have.
+        const arriving = initialConversationId;
+        const arrivingIsLive = !!streamingByConvo[arriving] || !!liveStreams.get(streamKey(ownerIdRef.current, arriving));
+        setLoadingFor(arriving, arriving !== "new" && !arrivingIsLive);
         // Drop the post-handoff skip guard: it only protects the ONE in-place
         // refetch right after a task handoff. The handoff happens mid-stream, so
         // the load effect's `isStreaming` guard already suppresses that refetch
@@ -293,11 +485,26 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             }
             return next;
         });
-    }, []);
+    }, [setIsParsingMedia, setMessages]);
 
     const sendMessage = useCallback(
         (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
             if ((!text.trim() && !(files?.length)) || isStreaming) return;
+            // This turn belongs to the conversation it started in, and every
+            // write below must land there even if the user walks away mid-answer.
+            // Shadowing the viewed-conversation writers with turn-scoped ones is
+            // what makes that true for all of the callbacks at once: `turn.cid`
+            // is the single place the id lives, so a mid-stream promotion from
+            // "new" to a real id carries the whole turn with it.
+            const turn = { cid: conversationId };
+            const setMessages = (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) =>
+                setMessagesFor(turn.cid, updater);
+            const setTitle = (updater: string | ((prev: string) => string)) =>
+                setTitleFor(turn.cid, updater);
+            const setIsStreaming = (value: boolean) => setStreamingFor(turn.cid, value);
+            const setIsParsingMedia = (value: boolean) => setParsingMediaFor(turn.cid, value);
+
+
             const taskMode = !!opts?.taskMode;
 
             // An attachment whose upload never landed carries no storage path. It
@@ -435,6 +642,11 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     console.log('[AiChat] created:', newConvoId, mergedUser);
                     // Only update conversationId if we got a valid value
                     if (newConvoId && newConvoId !== "") {
+                        // The turn moves with the conversation: its bucket, its
+                        // registration, and the id its own writers resolve to.
+                        promoteBucket(turn.cid, newConvoId);
+                        promoteStream(turn.cid, newConvoId);
+                        turn.cid = newConvoId;
                         setConversationId(newConvoId);
 
                         // Only add placeholder for brand-new conversations to avoid
@@ -562,24 +774,28 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     // pathological batch degrades to "visible after refresh" rather
                     // than to an unbounded timer.
                     if (chat_id) {
-                        cancelIngestPoll();
-                        const pollGeneration = ingestPollRef.current.generation;
+                        // Keyed by the turn's conversation, so it survives the
+                        // user switching away and writes back where it started.
+                        const pollCid = turn.cid;
+                        cancelIngestPoll(pollCid);
+                        const pollEntry = ingestPollFor(pollCid);
+                        const pollGeneration = pollEntry.generation;
                         const pollDeadline = Date.now() + INGEST_POLL_DEADLINE_MS;
                         let attempts = 0;
                         const scheduleNextIngestPoll = () => {
-                            if (ingestPollRef.current.generation !== pollGeneration) return;
+                            if (pollEntry.generation !== pollGeneration) return;
                             if (Date.now() >= pollDeadline) return;
                             const delay =
                                 attempts < INGEST_POLL_FAST_ATTEMPTS
                                     ? INGEST_POLL_FAST_MS
                                     : INGEST_POLL_SLOW_MS;
-                            ingestPollRef.current.timer = setTimeout(pollIngestedFiles, delay);
+                            pollEntry.timer = setTimeout(pollIngestedFiles, delay);
                         };
                         const pollIngestedFiles = () => {
                             attempts += 1;
                             getLinsightSessionVersionList(chat_id, '')
                                 .then((versions: any[]) => {
-                                    if (ingestPollRef.current.generation !== pollGeneration) return;
+                                    if (pollEntry.generation !== pollGeneration) return;
                                     const item = (versions || []).find((v: any) => v.id === svid);
                                     if (item?.files?.length) {
                                         updateLinsight(svid, {
@@ -847,24 +1063,25 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 onEnd: () => {
                     finishMediaParsing(realUserMessageId);
                     setIsStreaming(false);
-                    setSseSubmission(null);
                 },
             };
 
             // Lock input immediately — don't wait for SSE open event
             setIsStreaming(true);
-            setSseSubmission(submission);
+            beginStream(turn.cid, submission);
         },
         [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing]
     );
 
     // --- Stop generating ---
     const stopGenerating = useCallback(() => {
-        abortSSE();
+        // Only the conversation being read. A turn generating in another one is
+        // none of this button's business.
+        endStream(conversationId);
+        cancelIngestPoll(conversationId);
         setIsStreaming(false);
         setIsParsingMedia(false);
-        setSseSubmission(null);
-    }, [abortSSE]);
+    }, [cancelIngestPoll, conversationId, endStream, setIsParsingMedia, setIsStreaming]);
 
     // --- Clear conversation ---
     const clearConversation = useCallback(() => {
@@ -872,12 +1089,24 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         setMessages([]);
         setConversationId("new");
         setTitle("");
-    }, [stopGenerating]);
+    }, [setMessages, setTitle, stopGenerating]);
 
     // --- Regenerate: add a new sibling response under the same parent ---
     const regenerate = useCallback(
         (parentMessageId: string) => {
             if (isStreaming) return;
+            // This turn belongs to the conversation it started in, and every
+            // write below must land there even if the user walks away mid-answer.
+            // Shadowing the viewed-conversation writers with turn-scoped ones is
+            // what makes that true for all of the callbacks at once: `turn.cid`
+            // is the single place the id lives, so a mid-stream promotion from
+            // "new" to a real id carries the whole turn with it.
+            const turn = { cid: conversationId };
+            const setMessages = (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) =>
+                setMessagesFor(turn.cid, updater);
+            const setIsStreaming = (value: boolean) => setStreamingFor(turn.cid, value);
+
+
 
             // Find the parent (user) message
             const parentMsg = messagesRef.current.find(
@@ -945,6 +1174,11 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 },
                 onCreated: (newConvoId) => {
                     if (newConvoId && newConvoId !== "") {
+                        // The turn moves with the conversation: its bucket, its
+                        // registration, and the id its own writers resolve to.
+                        promoteBucket(turn.cid, newConvoId);
+                        promoteStream(turn.cid, newConvoId);
+                        turn.cid = newConvoId;
                         setConversationId(newConvoId);
                     }
                 },
@@ -1022,12 +1256,11 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 },
                 onEnd: () => {
                     setIsStreaming(false);
-                    setSseSubmission(null);
                 },
             };
 
             setIsStreaming(true);
-            setSseSubmission(submission);
+            beginStream(turn.cid, submission);
         },
         [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, localize]
     );

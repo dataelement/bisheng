@@ -69,7 +69,7 @@ function TreeNodeRow({ node, depth, baseIndent, selectedFolderId, onExpand, onSe
         <>
             <div
                 className={cn(
-                    "group flex h-7 cursor-pointer select-none items-center rounded-md pr-1 text-[12px] leading-5 text-[#1d2129] transition-colors hover:bg-[#F4F4F4]",
+                    "group flex h-7 cursor-pointer select-none items-center rounded-md pr-1 text-[12px] leading-5 text-text-1 transition-colors hover:bg-[#F4F4F4]",
                     isSelected && "bg-[#EEEEEE] font-semibold hover:bg-[#EEEEEE]",
                 )}
                 style={{ paddingLeft: `${baseIndent + depth * 20}px` }}
@@ -100,15 +100,15 @@ function TreeNodeRow({ node, depth, baseIndent, selectedFolderId, onExpand, onSe
                 {/* Icon wrapper: 20×20 wrapper, 16×16 folder icon inside */}
                 <div className="flex size-5 shrink-0 items-center justify-center">
                     {hasExpandedChildren ? (
-                        <Outlined.FolderOpen className={cn("size-3.5 shrink-0", isSelected ? "text-[#1d2129]" : "text-[#8D93A0]")} />
+                        <Outlined.FolderOpen className={cn("size-3.5 shrink-0", isSelected ? "text-text-1" : "text-[#8D93A0]")} />
                     ) : (
-                        <Outlined.FolderClose className={cn("size-3.5 shrink-0", isSelected ? "text-[#1d2129]" : "text-[#8D93A0]")} />
+                        <Outlined.FolderClose className={cn("size-3.5 shrink-0", isSelected ? "text-text-1" : "text-[#8D93A0]")} />
                     )}
                 </div>
 
                 <DynamicEllipsisName
                     name={node.name}
-                    textClassName={cn("text-[12px] leading-5 text-[#1d2129]", isSelected && "font-semibold")}
+                    textClassName={cn("text-[12px] leading-5 text-text-1", isSelected && "font-semibold")}
                 />
             </div>
 

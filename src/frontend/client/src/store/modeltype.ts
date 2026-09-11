@@ -33,9 +33,15 @@ const isSearch = atom<boolean>({
   default: false,
 });
 
-// Persistence is handled by ChatView under `bs:{uid}:chatModel` so the value
-// is user-scoped and gets cleared on re-login alongside the rest of `bs:*`.
-const chatModel = atom<{ id: number; name: string }>({
+// Persistence is handled by ChatView under `bs:{uid}:chatModel` (daily mode)
+// and `bs:{uid}:taskModel` (task mode) so the value is user-scoped and gets
+// cleared on re-login alongside the rest of `bs:*`. `manual: true` marks an
+// explicit user pick — only those are persisted and only they override the
+// admin-configured per-mode default models; `mode` records which mode the
+// pick (or applied default) belongs to so the two memories stay separate.
+// Auto-applied defaults keep `manual` falsy and are never written to
+// localStorage.
+const chatModel = atom<{ id: number; name: string; manual?: boolean; mode?: 'daily' | 'task' }>({
   key: 'chatModel',
   default: { id: 0, name: '' },
 });

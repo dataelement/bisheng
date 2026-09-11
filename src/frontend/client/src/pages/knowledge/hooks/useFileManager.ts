@@ -3,8 +3,6 @@ import {
     FileStatus,
     KnowledgeFile,
     KnowledgeSpace,
-    SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED,
-    SpaceRole,
     SortDirection,
     SortType,
     fileStatusToNumber,
@@ -27,6 +25,19 @@ interface UseFileManagerOptions {
 }
 
 export const KNOWLEDGE_SPACE_FILES_REFRESH_EVENT = "knowledge-space-files:refresh";
+
+function mergeFilesById(existing: KnowledgeFile[], incoming: KnowledgeFile[]) {
+    const seenIds = new Set(existing.map((file) => String(file.id)));
+    return [
+        ...existing,
+        ...incoming.filter((file) => {
+            const id = String(file.id);
+            if (seenIds.has(id)) return false;
+            seenIds.add(id);
+            return true;
+        }),
+    ];
+}
 
 export interface KnowledgeSpaceFilesRefreshEventDetail {
     spaceId?: number | string;
@@ -65,6 +76,8 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     const filesRef = useRef<KnowledgeFile[]>([]);
     filesRef.current = files;
     const [loading, setLoading] = useState(false);
+    const [loadError, setLoadError] = useState(false);
+    const [loadMoreError, setLoadMoreError] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
     const [searchScope, setSearchScope] = useState<"current" | "all">("all");
@@ -110,14 +123,28 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             if (!enabled || !activeSpace?.id || !activeSpace.role) return [];
 
             const reqId = ++loadRequestIdRef.current;
+            const isAppending = page > 1;
             setLoading(true);
+            if (isAppending) {
+                setLoadMoreError(false);
+            } else {
+                setLoadError(false);
+                setLoadMoreError(false);
+                filesRef.current = [];
+                setFiles([]);
+                setHasMore(false);
+                setNextCursor(null);
+                setNextSearchPage(0);
+                setCurrentPage(1);
+            }
             try {
                 const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
-                const isAppending = page > 1;
-                const isMember = activeSpace.role === SpaceRole.MEMBER;
+                // No implicit status filter: the server hides other people's parse failures
+                // (uploader and space managers still see them), so the client asks for
+                // everything and lets that rule apply uniformly.
                 const fileStatusNums = statusFilter.length > 0
                     ? statusFilter.map(fileStatusToNumber)
-                    : isMember ? SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED : undefined;
+                    : undefined;
 
                 // Search path: backend still page-numbered; compute next page.
                 const searchPageToFetch = isSearching
@@ -155,35 +182,55 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
 
                 const incomingData = res.data;
 
-                // Update pagination tokens per envelope shape.
-                if (isSearching) {
-                    // F040: search now returns `has_more` directly (batch-scan, no
-                    // exact total) — drive next-page off it instead of total math.
-                    setHasMore(Boolean((res as any).has_more));
-                    setNextSearchPage(searchPageToFetch);
-                } else {
-                    setNextCursor((res as any).next_cursor ?? null);
-                    setHasMore(!!(res as any).has_more);
-                    if (!isAppending) setNextSearchPage(0); // reset on fresh default-path load
-                }
-
                 // Filter out rows that the user has optimistically deleted but
                 // whose backend deletion has not yet returned (ghosts).
                 const ignore = pendingDeletionIdsRef.current;
                 const filteredData = ignore.size > 0
                     ? incomingData.filter(f => !ignore.has(String(f.id)))
                     : incomingData;
+                const previous = isAppending ? filesRef.current : [];
+                const nextFiles = isAppending ? mergeFilesById(previous, filteredData) : filteredData;
+                const uniqueAddedCount = nextFiles.length - previous.length;
+                const responseHasMore = Boolean((res as any).has_more);
+                const responseNextCursor = (res as any).next_cursor ?? null;
+                const invalidCursor = !isSearching && responseHasMore && !responseNextCursor;
+                const invalidEmptyPage = responseHasMore && filteredData.length === 0;
+                const invalidDuplicatePage = isAppending && responseHasMore && uniqueAddedCount === 0;
 
-                // Append (LoadMore) vs replace (fresh load).
-                if (isAppending) {
-                    setFiles(prev => [...prev, ...filteredData]);
-                } else {
-                    setFiles(filteredData);
+                filesRef.current = nextFiles;
+                setFiles(nextFiles);
+
+                if (invalidCursor || invalidEmptyPage || invalidDuplicatePage) {
+                    if (nextFiles.length === 0) setLoadError(true);
+                    else setLoadMoreError(true);
+                    setHasMore(false);
+                    return nextFiles;
                 }
+
+                // Update pagination tokens per envelope shape.
+                if (isSearching) {
+                    // F040: search now returns `has_more` directly (batch-scan, no
+                    // exact total) — drive next-page off it instead of total math.
+                    setHasMore(responseHasMore);
+                    setNextSearchPage(searchPageToFetch);
+                } else {
+                    setNextCursor(responseNextCursor);
+                    setHasMore(responseHasMore);
+                    if (!isAppending) setNextSearchPage(0); // reset on fresh default-path load
+                }
+
                 setCurrentPage(page);
-                return filteredData;
-            } catch {
+                return nextFiles;
+            } catch (error) {
+                console.error("Failed to load knowledge space files:", error);
                 if (reqId === loadRequestIdRef.current) {
+                    if (isAppending) {
+                        setLoadMoreError(true);
+                    } else {
+                        setFiles([]);
+                        setLoadError(true);
+                    }
+                    setHasMore(false);
                     showToast({ message: localize("com_knowledge.load_file_list_failed"), severity: NotificationSeverity.ERROR });
                 }
                 return [];
@@ -282,10 +329,9 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         if (currentFiles.length === 0) return;
 
         try {
-            const isMember = activeSpace.role === SpaceRole.MEMBER;
             const fileStatusNums = statusFilter.length > 0
                 ? statusFilter.map(fileStatusToNumber)
-                : isMember ? SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED : undefined;
+                : undefined;
             // Cap the poll fetch at 100 to bound the request — pending files
             // (recent update_time) sit at the top under default sort anyway.
             const fetchSize = Math.min(currentFiles.length, 100);
@@ -318,7 +364,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         } catch {
             // Silent — polling failure must not toast.
         }
-    }, [enabled, activeSpace?.id, activeSpace?.role, searchQuery, searchTagIds, statusFilter, sortBy, sortDirection, currentFolderId]);
+    }, [enabled, activeSpace?.id, searchQuery, searchTagIds, statusFilter, sortBy, sortDirection, currentFolderId]);
 
     const refreshLoadedStatusesRef = useRef(refreshLoadedStatuses);
     refreshLoadedStatusesRef.current = refreshLoadedStatuses;
@@ -374,12 +420,10 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         [loadFiles]
     );
 
-    // Infinite-scroll "load next page": page>1 makes loadFiles append (keyset
-    // cursor on the default path, page-number on the search path). The scroll
-    // sentinel guards re-entry with `loading`/`hasMore`, so no guard needed here.
     const loadMore = useCallback(() => {
+        if (loading || !hasMore || loadMoreError) return;
         loadFiles(currentPage + 1);
-    }, [loadFiles, currentPage]);
+    }, [currentPage, hasMore, loadFiles, loadMoreError, loading]);
 
     // ─── Folder navigation ───────────────────────────────────────────────
     const handleNavigateFolder = useCallback(
@@ -429,6 +473,8 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         nextCursor,
         hasMore,
         loading,
+        loadError,
+        loadMoreError,
         searchQuery,
         searchTagIds,
         searchScope,

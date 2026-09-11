@@ -8,6 +8,7 @@
     "confirmCancelEdit": "変更はまだ保存されていません。本当に終了しますか？",
     "promptSaved": "プロンプトが保存されました",
     "linsightDefaultModel": "$t(bs:linsight)デフォルトモデル",
+    "dailyDefaultModel": "日常モードのデフォルトモデル",
     "linsightDefaultModelTooltip": "このモデルは$t(bs:linsight)タスクのデフォルト実行モデルです。ユーザーはタスク開始時に切り替えできます",
     "workbenchVoiceModel": "ワークベンチ音声モデル",
     "sessionTitleGenerationModel": "セッションタイトル生成モデル",

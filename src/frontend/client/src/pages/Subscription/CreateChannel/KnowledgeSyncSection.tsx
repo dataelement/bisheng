@@ -254,17 +254,17 @@ export default function KnowledgeSyncSection({
         <div className="mt-6">
             <div className="flex items-start justify-between gap-4">
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                    <span className="text-[14px] font-medium text-[#1D2129]">
+                    <span className="text-[14px] font-medium text-text-1">
                         {localize?.("com_subscription.sync_to_knowledge_space") ||
                             "同步至知识空间"}
                     </span>
-                    <span className="text-[14px] font-normal text-[#999999]">
+                    <span className="text-[14px] font-normal text-text-3">
                         {localize?.("com_subscription.sync_to_knowledge_space_hint") ||
                             "该频道下的内容会自动同步到知识空间"}
                     </span>
                 </div>
                 <Switch
-                    variant="tool"
+                    size="small"
                     checked={mainEnabled}
                     onCheckedChange={setMainEnabled}
                     className="shrink-0"
@@ -272,7 +272,7 @@ export default function KnowledgeSyncSection({
             </div>
 
             {mainEnabled && (
-                <div className="mt-3 rounded-md border border-[#E5E6EB] text-[#1D2129] bg-[#fbfbfb]">
+                <div className="mt-3 rounded-md border border-border-base text-text-1 bg-[#fbfbfb]">
                     <div className="px-4 py-3 text-[14px] font-medium">
                         {mainChannelName || localize?.("com_subscription.main_channel") || "频道名称"}
                     </div>
@@ -287,7 +287,7 @@ export default function KnowledgeSyncSection({
                         <button
                             type="button"
                             onClick={() => handleAdd({ type: "main" })}
-                            className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-[13px] text-[#4E5969] hover:bg-[#F7F8FA]"
+                            className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-[13px] text-text-2 hover:bg-fill-1"
                         >
                             <PlusSquare className="size-3.5 shrink-0 text-gray-700" />
                             <span>
@@ -305,7 +305,7 @@ export default function KnowledgeSyncSection({
                             <span
                                 className={
                                     "text-[14px] font-medium " +
-                                    (noSubChannels ? "text-[#C9CDD4]" : "text-[#1D2129]")
+                                    (noSubChannels ? "text-text-4" : "text-text-1")
                                 }
                             >
                                 {localize?.("com_subscription.per_sub_channel_sync") ||
@@ -314,7 +314,7 @@ export default function KnowledgeSyncSection({
                             <span
                                 className={
                                     "text-[14px] font-normal " +
-                                    (noSubChannels ? "text-[#C9CDD4]" : "text-[#999999]")
+                                    (noSubChannels ? "text-text-4" : "text-text-3")
                                 }
                             >
                                 {localize?.("com_subscription.per_sub_channel_sync_hint") ||
@@ -331,7 +331,7 @@ export default function KnowledgeSyncSection({
                                 className="shrink-0"
                             >
                                 <Switch
-                                    variant="tool"
+                                    size="small"
                                     checked={!noSubChannels && subModeActive}
                                     disabled={noSubChannels}
                                     onCheckedChange={setSubMode}
@@ -339,7 +339,7 @@ export default function KnowledgeSyncSection({
                             </TooltipAnchor>
                         ) : (
                             <Switch
-                                variant="tool"
+                                size="small"
                                 checked={!noSubChannels && subModeActive}
                                 disabled={noSubChannels}
                                 onCheckedChange={setSubMode}
@@ -355,20 +355,20 @@ export default function KnowledgeSyncSection({
                                 return (
                                     <div
                                         key={sub.sub_channel_name}
-                                        className="rounded-md border border-[#E5E6EB] bg-[#fbfbfb] transition-colors"
+                                        className="rounded-md border border-border-base bg-[#fbfbfb] transition-colors"
                                     >
                                         <button
                                             type="button"
                                             onClick={() => toggleExpand(sub.sub_channel_name)}
                                             className="flex w-full items-center justify-between px-4 py-3"
                                         >
-                                            <span className="text-[14px] font-medium text-[#1D2129]">
+                                            <span className="text-[14px] font-medium text-text-1">
                                                 {sub.sub_channel_name}
                                             </span>
                                             {isOpen ? (
-                                                <ChevronUp className="size-4 shrink-0 text-[#86909C]" />
+                                                <ChevronUp className="size-4 shrink-0 text-text-3" />
                                             ) : (
-                                                <ChevronDown className="size-4 shrink-0 text-[#86909C]" />
+                                                <ChevronDown className="size-4 shrink-0 text-text-3" />
                                             )}
                                         </button>
                                         {isOpen && (
@@ -393,7 +393,7 @@ export default function KnowledgeSyncSection({
                                                             subChannelName: sub.sub_channel_name,
                                                         })
                                                     }
-                                                    className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-[13px] text-[#4E5969] hover:bg-[#F7F8FA]"
+                                                    className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-[13px] text-text-2 hover:bg-fill-1"
                                                 >
                                                     <PlusSquare className="size-3.5 shrink-0 text-gray-700" />
                                                     <span>

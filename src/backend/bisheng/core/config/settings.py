@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from bisheng.core.config.llm import LLMConf
 from bisheng.core.config.multi_tenant import MultiTenantConf
+from bisheng.core.config.open_platform import OpenApiConf, OpenPlatformConf
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.config.reconcile import ReconcileConf
 from bisheng.core.config.sso_sync import SSOSyncConf
@@ -444,6 +445,11 @@ class LinsightConf(BaseModel):
         description="L2 truncation guard: max times to retry a model call whose tool-call arguments were "
         "cut off by finish_reason=length (with a 'write in smaller parts' corrective nudge) before giving up.",
     )
+    skill_upload_max_size_mb: int = Field(
+        default=10,
+        ge=1,
+        description="Upload cap for a skill bundle (.md/.zip/.skill), in MB. 系统配置 linsight.skill_upload_max_size_mb",
+    )
     retry_num: int = Field(
         default=3, description="Number of times the model call was retried during the execution of the Ideas task"
     )
@@ -814,6 +820,8 @@ class Settings(BaseModel):
     information_conf: IntelligenceCenterConf = IntelligenceCenterConf()
     mcp: McpConf = McpConf()
     multi_tenant: MultiTenantConf = MultiTenantConf()
+    open_platform: OpenPlatformConf = OpenPlatformConf()
+    open_api: OpenApiConf = OpenApiConf()
     openfga: OpenFGAConf = OpenFGAConf()
     user_tenant_sync: UserTenantSyncConf = UserTenantSyncConf()
     sso_sync: SSOSyncConf = SSOSyncConf()

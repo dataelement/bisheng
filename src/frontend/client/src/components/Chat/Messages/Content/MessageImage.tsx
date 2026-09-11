@@ -81,7 +81,7 @@ export function MessageImage({
     return (
       <div
         {...debugAttrs}
-        className="h-[100px] w-[100px] animate-pulse rounded-lg bg-[#F8F8F8]"
+        className="h-[100px] w-[100px] animate-pulse rounded-lg bg-fill-1"
       />
     );
   }
@@ -99,7 +99,7 @@ export function MessageImage({
           // Deliberately a fixed light gray rather than a neutral token: the
           // artwork inside the file doesn't invert with the theme, so a backdrop
           // that darkened alongside it would hide the very thing it's here for.
-          className="h-[100px] w-[100px] cursor-pointer rounded-lg bg-[#F8F8F8] object-cover"
+          className="h-[100px] w-[100px] cursor-pointer rounded-lg bg-fill-1 object-cover"
         />
       </Dialog.Trigger>
       <DialogImage src={url} />

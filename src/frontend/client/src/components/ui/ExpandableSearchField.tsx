@@ -31,7 +31,8 @@ export interface ExpandableSearchFieldProps
 }
 
 /**
- * 可展开搜索框：收起为 32×32 图标按钮，展开为蓝框 + 蓝色放大镜 + 输入区（消息提醒弹窗规范）。
+ * 可展开搜索框：收起为 32×32 图标按钮，展开为输入区（消息提醒弹窗规范）。
+ * 聚焦态走输入框规范 §5.1 的灰链：描边加深（border-deep）+ 2px 灰阴影环（shadow-focus）。
  * width / border / 图标色使用 transition，避免“瞬时弹出”感。
  */
 export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSearchFieldProps>(
@@ -86,7 +87,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
 
         const expanded = alwaysExpanded || showExpanded || !!value.trim();
 
-        /** 展开且聚焦：蓝框（编辑态）；展开有失焦但有内容：灰框（仅展示关键词） */
+        /** 展开且聚焦：深描边 + 灰阴影环（编辑态）；展开但失焦有内容：常态灰框（仅展示关键词） */
         const showActiveChrome = expanded && inputFocused;
 
         /** 收起 → 展开后立刻聚焦（父组件常不传 ref，原先 ref.current 恒为 null 导致无法聚焦） */
@@ -133,14 +134,14 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
             <div
                 data-expandable-search="true"
                 className={cn(
-                    "flex items-center h-8 rounded-lg border bg-white overflow-hidden shrink-0 select-none",
+                    "flex items-center h-8 rounded-md border bg-white overflow-hidden shrink-0 select-none",
                     "transition-[width,border-color,background-color] duration-300 ease-out motion-reduce:transition-none",
                     expanded
                         ? cn(
                             expandedWidthClassName,
-                            showActiveChrome ? "border-[#DDDDDD] shadow-[0_0_0_2px_#F1F5F9]" : "border-[#E5E6EB]"
+                            showActiveChrome ? "border-border-deep shadow-focus" : "border-border-base"
                         )
-                        : "w-8 border-[#E5E6EB] cursor-pointer hover:bg-[#F7F8FA]",
+                        : "w-8 border-border-base cursor-pointer hover:bg-fill-1",
                     disabled && "pointer-events-none opacity-50",
                     containerClassName
                 )}
@@ -155,7 +156,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                 <div
                     className={cn(
                         "flex items-center justify-center px-[7px] h-full shrink-0 transition-colors duration-300 ease-out",
-                        showActiveChrome ? "text-[#4E5969]" : "text-[#86909C]"
+                        showActiveChrome ? "text-text-2" : "text-text-3"
                     )}
                 >
                     <Search className="size-4 shrink-0" aria-hidden />
@@ -174,7 +175,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                     onBlur={handleBlur}
                     tabIndex={expanded || alwaysExpanded ? 0 : -1}
                     className={cn(
-                        "flex-1 min-w-0 h-full text-[14px] font-normal text-[#1d2129] bg-transparent outline-none placeholder:text-[#C9CDD4] placeholder:font-normal",
+                        "flex-1 min-w-0 h-full text-[14px] font-normal text-text-1 bg-transparent outline-none placeholder:text-text-4 placeholder:font-normal",
                         "transition-[opacity] duration-200 ease-out motion-reduce:transition-none",
                         showClearButton && value ? "pr-1" : "pr-3",
                         expanded ? "opacity-100" : "opacity-0 pointer-events-none",
@@ -185,7 +186,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                 {showClearButton && expanded && value ? (
                     <button
                         type="button"
-                        className="pr-2 text-[#86909C] hover:text-[#4E5969] shrink-0"
+                        className="pr-2 text-text-3 hover:text-text-2 shrink-0"
                         onClick={(e) => {
                             e.stopPropagation();
                             onChange("");

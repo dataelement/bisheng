@@ -1,3 +1,4 @@
+import { locationContext } from "@/contexts/locationContext"
 import { userContext } from "@/contexts/userContext"
 import { useContext } from "react"
 import { useTranslation } from "react-i18next"
@@ -14,9 +15,12 @@ import { RolesAndPermissions } from "./components/RolesAndPermissions"
 import Theme from "./theme"
 import UserGroups from "./components/UserGroup"
 import Users from "./components/Users"
+import { PersonalToken } from "./components/PersonalToken"
+import { ServiceAccount } from "./components/ServiceAccount"
 
-export default function index() {
+export default function SystemPage() {
   const { user } = useContext(userContext)
+  const { appConfig } = useContext(locationContext)
 
   const { t } = useTranslation()
   const isSuperAdmin = user?.role === "admin"
@@ -31,7 +35,7 @@ export default function index() {
    *  instance-level CSS vars/logo. Neither has per-Tenant semantics,
    *  so restrict to global super admin only. */
   const canAccessSystemConfig = isSuperAdmin
-  /** 组织同步仅超级管理员可见（网关掉对接口推送后，本页只读看记录与日志） */
+  /** Organization sync is read-only here and visible only to global administrators. */
   const showOrgSyncTab = isSuperAdmin
   /** PRD §4.5: Child Admin manages own tenant's user groups. Backend now
    *  flips can_manage_user_groups true for Child Admin too; the explicit
@@ -42,6 +46,11 @@ export default function index() {
     || !!user?.is_child_admin
   /** Legacy flat user table is for accounts without org-tab access. */
   const showLegacyUserTab = !showOrgTab
+  /** F053 service accounts + personal tokens. Admin rights are necessary but not
+   *  sufficient: the console stays hidden until the deployment opts in, so a
+   *  release can ship the backend while the surface is still being built. */
+  const showOpenApiManagement =
+    (isSuperAdmin || isChildAdmin) && !!appConfig?.openApiManagementEnabled
 
   const defaultTab = showOrgTab
     ? "organization"
@@ -52,33 +61,41 @@ export default function index() {
   return (
     <div className="flex h-full w-full flex-col px-2 pt-4">
       <Tabs defaultValue={defaultTab} className="flex min-h-0 w-full flex-1 flex-col">
-        <TabsList className="shrink-0 self-start">
-          {showOrgTab && (
-            <TabsTrigger value="organization">
-              {t("system.orgAndMembers")}
-            </TabsTrigger>
-          )}
-          {showLegacyUserTab && (
-            <TabsTrigger value="user" className="roundedrounded-xl">
-              {t("system.userManagement")}
-            </TabsTrigger>
-          )}
-          {showUserGroupTab && (
-            <TabsTrigger value="userGroup">{t("system.userGroupsM")}</TabsTrigger>
-          )}
-          {showRoleTab && (
-            <TabsTrigger value="role">{t("system.roleAndPermissions")}</TabsTrigger>
-          )}
-          {showOrgSyncTab && (
-            <TabsTrigger value="orgSync">{t("orgSync:title", "组织同步")}</TabsTrigger>
-          )}
-          {canAccessSystemConfig && (
-            <TabsTrigger value="system">{t("system.systemConfiguration")}</TabsTrigger>
-          )}
-          {canAccessSystemConfig && (
-            <TabsTrigger value="theme">{t("system.appearanceSettings")}</TabsTrigger>
-          )}
-        </TabsList>
+        <div className="max-w-full shrink-0 overflow-x-auto no-scrollbar">
+          <TabsList className="min-w-max">
+            {showOrgTab && (
+              <TabsTrigger value="organization">
+                {t("system.orgAndMembers")}
+              </TabsTrigger>
+            )}
+            {showLegacyUserTab && (
+              <TabsTrigger value="user" className="roundedrounded-xl">
+                {t("system.userManagement")}
+              </TabsTrigger>
+            )}
+            {showUserGroupTab && (
+              <TabsTrigger value="userGroup">{t("system.userGroupsM")}</TabsTrigger>
+            )}
+            {showRoleTab && (
+              <TabsTrigger value="role">{t("system.roleAndPermissions")}</TabsTrigger>
+            )}
+            {showOrgSyncTab && (
+              <TabsTrigger value="orgSync">{t("orgSync:title")}</TabsTrigger>
+            )}
+            {showOpenApiManagement && (
+              <TabsTrigger value="serviceAccount">{t("openApiManagement.serviceAccount.title")}</TabsTrigger>
+            )}
+            {showOpenApiManagement && (
+              <TabsTrigger value="personalToken">{t("openApiManagement.personalToken.title")}</TabsTrigger>
+            )}
+            {canAccessSystemConfig && (
+              <TabsTrigger value="system">{t("system.systemConfiguration")}</TabsTrigger>
+            )}
+            {canAccessSystemConfig && (
+              <TabsTrigger value="theme">{t("system.appearanceSettings")}</TabsTrigger>
+            )}
+          </TabsList>
+        </div>
         {showOrgTab && (
           <TabsContent value="organization" className="min-h-0 flex-1 overflow-hidden">
             <OrganizationAndMembers />
@@ -102,6 +119,16 @@ export default function index() {
         {showOrgSyncTab && (
           <TabsContent value="orgSync" className="min-h-0 flex-1 overflow-hidden">
             <OrgSync />
+          </TabsContent>
+        )}
+        {showOpenApiManagement && (
+          <TabsContent value="serviceAccount" className="min-h-0 flex-1 overflow-hidden">
+            <ServiceAccount />
+          </TabsContent>
+        )}
+        {showOpenApiManagement && (
+          <TabsContent value="personalToken" className="min-h-0 flex-1 overflow-hidden">
+            <PersonalToken />
           </TabsContent>
         )}
         {canAccessSystemConfig && (
