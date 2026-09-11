@@ -1,0 +1,8 @@
+a_user_id,b_user_id,employee_code,action,a_source,a_user_name,create_user_name,note
+# 同一员工在 A 上 local+sg 各一行时，两行 b_user_id 必须相同。
+# action=takeover 表示保留 B 主键并写入 source=sg + external_id。
+# action=create_on_b 时 b_user_id 填 0，SQL 按 employee_code 新建一行后再写映射。
+# 禁止只填姓名。空行和 # 开头会被跳过。
+# 5945,101,aijl0026,takeover,local,张三,张三,A local 行
+# 18320,101,aijl0026,takeover,sg,zhangsan,张三,A sg 行映到同一 B 用户
+# 9001,0,newcode01,create_on_b,sg,newuser,newuser,B 无此编码
