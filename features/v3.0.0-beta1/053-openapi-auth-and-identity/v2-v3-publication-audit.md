@@ -61,7 +61,7 @@
 
 因此，在没有登录态的新浏览器中，即便 v3 对话正常，模型配置查询仍会被登录依赖拒绝，语音按钮可能不显示；已有登录态或查询缓存可能掩盖问题。[请求拦截器](/home/highway/PycharmProjects/bisheng/src/frontend/client/src/api/request.ts:226) 已对 guest 链接停止 401 登录跳转，但这只避免跳转，并不让语音接口变为可用。
 
-`POST /api/v3/workflow/invoke`、`/stop`、`POST /api/v3/assistant/chat/completions` 主要出现在 platform “API 访问”示例；它们是发布能力的 HTTP 入口，不能认为每个免登录网页打开后都会请求这些接口。
+2026-09-11 用户纠正范围：platform“API 访问”是对接文档，已恢复 F053 修改前的完整 v2 说明。误增的 `POST /api/v3/workflow/invoke`、`POST /api/v3/workflow/stop`、`POST /api/v3/assistant/chat/completions` 已移除；免登录页面通过 v3 WebSocket 完成执行和交互，不需要这三个 HTTP 入口。
 
 ## 4. 页面辅助请求：哪些还需要纳入核对
 
@@ -180,18 +180,18 @@
 | `POST /api/v2/workstation/chat/completions` | `chat:invoke` | 保留 v2 密钥鉴权 | [workstation.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/open_endpoints/api/endpoints/workstation.py:27) |
 | `GET /api/v2/workstation/config` | `chat:invoke` | 保留 v2 密钥鉴权 | [workstation.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/open_endpoints/api/endpoints/workstation.py:18) |
 
-## 8. 全部 v3 路由清单（9 项）
+## 8. 全部 v3 路由清单（9 项，2026-09-11 更新）
 
 所有 v3 入口均不要求 API Key / JWT，依赖现有发布资源准入；“免登录”不等于取消资源上线、发布开关和会话归属校验。
 
 | 方法与路径 | 当前准入 | 处理 | 源码 |
 |---|---|---|---|
-| `WS /api/v3/assistant/chat/{assistant_id}` | 发布准入 | 保留免登录发布入口 | [assistant.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/public_endpoints/api/endpoints/assistant.py:118) |
-| `POST /api/v3/assistant/chat/completions` | 发布准入 | 保留免登录发布入口 | [assistant.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/public_endpoints/api/endpoints/assistant.py:59) |
-| `GET /api/v3/assistant/info/{assistant_id}` | 发布准入 | 保留免登录发布入口 | [assistant.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/public_endpoints/api/endpoints/assistant.py:109) |
+| `WS /api/v3/assistant/chat/{assistant_id}` | 发布准入 | 保留免登录发布入口 | [assistant.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/public_endpoints/api/endpoints/assistant.py) |
+| `GET /api/v3/assistant/info/{assistant_id}` | 发布准入 | 保留免登录发布入口 | [assistant.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/public_endpoints/api/endpoints/assistant.py) |
 | `POST /api/v3/chat/gen_title` | 发布准入 | 保留免登录发布入口 | [chat.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/public_endpoints/api/endpoints/chat.py:27) |
 | `GET /api/v3/chat/history` | 发布准入 | 保留免登录发布入口 | [chat.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/public_endpoints/api/endpoints/chat.py:14) |
 | `GET /api/v3/flows/{flow_id}` | 发布准入 | 保留免登录发布入口 | [flow.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/public_endpoints/api/endpoints/flow.py:15) |
-| `WS /api/v3/workflow/chat/{workflow_id}` | 发布准入 | 保留免登录发布入口 | [workflow.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/public_endpoints/api/endpoints/workflow.py:117) |
-| `POST /api/v3/workflow/invoke` | 发布准入 | 保留免登录发布入口 | [workflow.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/public_endpoints/api/endpoints/workflow.py:45) |
-| `POST /api/v3/workflow/stop` | 发布准入 | 保留免登录发布入口 | [workflow.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/public_endpoints/api/endpoints/workflow.py:101) |
+| `WS /api/v3/workflow/chat/{workflow_id}` | 发布准入 | 保留免登录发布入口 | [workflow.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/public_endpoints/api/endpoints/workflow.py) |
+| `GET /api/v3/llm/workbench` | 发布准入及 flow_id 绑定 | 保留发布页语音配置 | [llm.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/public_endpoints/api/endpoints/llm.py) |
+| `POST /api/v3/llm/workbench/asr` | 发布准入及 flow_id 绑定 | 保留录音转文字 | [llm.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/public_endpoints/api/endpoints/llm.py) |
+| `POST /api/v3/llm/workbench/tts` | 发布准入及 flow_id 绑定 | 保留文字朗读 | [llm.py](/home/highway/PycharmProjects/bisheng/src/backend/bisheng/public_endpoints/api/endpoints/llm.py) |
