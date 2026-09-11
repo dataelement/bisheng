@@ -2319,6 +2319,15 @@
   "com_settings_lang_ja": "日本語",
   "com_settings_lang_zh": "中文",
   "com_citation.no_download_url": "暂无可下载文件地址",
+  "com_citation.loading": "加载溯源详情...",
+  "com_citation.no_detail": "暂无溯源详情",
+  "com_citation.no_snippet": "暂无内容摘要",
+  "com_citation.source_web": "网页",
+  "com_citation.source_document": "文档",
+  "com_citation.source_article": "文章",
+  "com_citation.badge_aria": "{{source}}引用 {{index}}",
+  "com_citation.no_permission": "暂无权限查看该来源",
+  "com_citation.source_expired": "来源已失效",
   "com_message_approval_title": "消息与审批",
   "com_message_approval_notifications": "通知",
   "com_notifications_tab_unread": "未读",
@@ -2345,5 +2354,8 @@
   "com_personal_token_operation_success": "个人 API 令牌已更新",
   "com_personal_token_copy": "复制",
   "com_personal_token_done": "完成",
-  "com_personal_token_loading": "加载中..."
+  "com_personal_token_loading": "加载中...",
+  "com_voice": {
+    "playback_unavailable": "播放功能不可用，请联系管理员"
+  }
 }

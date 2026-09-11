@@ -21,6 +21,10 @@ class DelegateScopeInput(BaseModel):
     subject_id: int = Field(gt=0)
 
 
+class DelegateScopeItem(DelegateScopeInput):
+    subject_name: str | None = None
+
+
 class KeyIssueRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -63,7 +67,7 @@ class KeyItem(BaseModel):
     is_valid: bool
     created_by: int | None
     create_time: datetime | None
-    delegate_scopes: list[DelegateScopeInput] = Field(default_factory=list)
+    delegate_scopes: list[DelegateScopeItem] = Field(default_factory=list)
 
     @classmethod
     def from_row(cls, row: ApiCredential, *, now: datetime | None = None) -> KeyItem:
@@ -89,9 +93,18 @@ class KeyIssuedResponse(KeyItem):
     plaintext: str = Field(description="Shown once and never stored")
 
 
+class OpenApiScopeEndpoint(BaseModel):
+    method: str
+    path: str
+
+
 class OpenApiScopeItem(BaseModel):
     code: str
-    endpoints: list[str]
+    group: str
+    label_key: str
+    desc_key: str
+    endpoints: list[OpenApiScopeEndpoint]
+    hint_keys: list[str] = Field(default_factory=list)
 
 
 class OpenApiScopeCatalog(BaseModel):

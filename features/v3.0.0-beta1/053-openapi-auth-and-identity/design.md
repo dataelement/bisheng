@@ -2,13 +2,13 @@
 
 > **本文档定位 — 总体设计 + 分工边界（Why this How）**
 >
-> - 需求的 **What** 以上游 PRD（`docs/product/3.0 开放 API 鉴权与身份传递 PRD.md` v2.4）为基础；本文按 2026-09-04 的范围裁定覆盖其中已变更部分：R8 / P2 不做、现有分享链接链路不改、服务账号不进入 `user` 表、日常模式复用既有 v1 能力但收窄对外请求字段、免登录发布接口迁至 v3。
+> - 需求的 **What** 以上游 PRD（`docs/product/3.0 开放 API 鉴权与身份传递 PRD.md` v2.6）为基础；本文覆盖 R8 / P2 不做、现有分享链接链路不改、服务账号不进入 `user` 表、日常模式复用既有 v1 能力但收窄对外请求字段、免登录发布接口迁至 v3，以及 v2.6 的权限闭环、错误传输语义和 PAT 随持有人迁租户规则。
 > - 本文回答 **怎么做、为什么这么做、谁做哪块、接口在哪对齐**。6 个工作流（WS-A～F）通过 §6 的共享契约协作。
 > - `reference/vibe-049-design.md` 只作为凭据生命周期、管理界面和端点标记的实现参考；其“服务账号复用 User”“新增分享凭据通道”“P2 运营能力”均不继承。
 > - `文件:行号` 会漂移，落地前以符号名和路由清单重新定位。
 
 **关联**: [discovery.md](../000-openapi-auth-discovery/discovery.md) · [spec.md](./spec.md) · [tasks.md](./tasks.md) · [release-contract.md](../release-contract.md) · [reference/](./reference/README.md)
-**版本**: v3.0.0-beta1 · **Feature 编号**: F053 · **最后更新**: 2026-09-04（按范围新裁定重写，待 ★ 用户确认）
+**版本**: v3.0.0-beta1 · **Feature 编号**: F053 · **最后更新**: 2026-09-10（同步 PRD v2.6，补齐发布页语音）
 
 ---
 
@@ -61,7 +61,7 @@
 
 - WS-A 与 WS-C 必须同版发布：裸 `user_id` 与默认操作员回落必须在 v2 同时消失。
 - WS-A 的 F048 服务账号主体支持必须先于任何服务账号密钥启用。
-- WS-F 后端 v3 路由必须先上线，再把 client guest 页、platform 发布文档和商业网关从 v2 切到 v3，避免免登录发布页中断。
+- WS-F 后端 v3 路由必须先上线，再把 client guest 页的原 v2 请求和商业网关切到 v3；platform API 访问文档保留 v2，避免免登录发布页中断。
 
 ---
 
@@ -194,7 +194,7 @@ bisheng/workstation/          日常模式共享 domain service
 bisheng/chat_session/         会话列表 / 详情共享 domain service
 bisheng/knowledge/            临时文件上传共享 domain service
 
-platform: ServiceAccount / PersonalToken 管理页；发布 API 示例切 v3
+platform: ServiceAccount / PersonalToken 管理页；发布 API 访问文档保留 v2
 client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 ```
 
@@ -217,7 +217,7 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 | WS | 名称 | 交付物 | 前置 / 对接 |
 |---|---|---|---|
 | A | 底座 + 独立服务账号 + v2 接入 | 凭据表、独立 SA 表、F048 新主体、v2 统一依赖、端点标记、资源归属/回授、到期兜底 | 为 B/C/D/E 提供 Principal、scopes、管理 API |
-| B | 管理界面（platform） | SA 列表/详情/密钥/资源授权、委托配置、PAT 台账；移除网络配置组；发布 API 示例切 v3 | 依赖 A/C/D/F 契约 |
+| B | 管理界面（platform） | SA 列表/详情/密钥/资源授权、委托配置、PAT 台账；移除网络配置组；发布 API 访问文档保留 v2 | 依赖 A/C/D/F 契约 |
 | C | 身份传递 + 审计 | 新请求头、五道准入、委托范围、文件级过滤、裸参数收口、会话来源字段、复用 `audit_log` | 依赖 A；供 E 使用会话隔离 |
 | D | 个人访问令牌 | natural_person resolver、自助/管理端点、两层开关、级联失效、技能包、client 入口 | 依赖 A/C 文件级过滤 |
 | E | 日常模式 v2 | 五个 v2 端点、共享 service 提取、会话归属校验、模型/工具过滤、对外文档 | 依赖 A/C |
@@ -229,7 +229,7 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 
 - M1：独立服务账号可签发密钥，`GET /api/v2/auth/whoami` 可用，数据库没有对应 `user` 行。
 - M2：存量 v2 全部密钥化，模式 D 与审计可用。
-- M3：v3 发布面上线并完成 guest 页面 / 发布文档 / 网关切换。
+- M3：v3 发布面上线并完成 guest 页面 / 网关切换，API 访问文档恢复 v2。
 - M4：PAT 与五个日常模式 v2 端点完成。
 
 ---
@@ -252,13 +252,13 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 
 ### 5.B 管理界面（platform）
 
-**B1：页面结构。** 系统管理提供“服务账号”和“个人访问令牌”两个同级入口。服务账号详情含概览、API 密钥、资源授权；PAT 台账与开关不放进某个服务账号详情。实现前以 `src/frontend/packages/ui/docs/` 当前规范和 landed 组件为准；platform 沿用自己的 Zustand、request wrapper 与 bs-ui，不混用 client 技术栈。
+**B1：页面结构与交互。** 系统管理提供“服务账号”和“个人访问令牌”两个同级入口。服务账号详情含概览、API 密钥、资源授权；PAT 台账与开关不放进某个服务账号详情。列表按服务端分页，展示状态、有效密钥数、委托范围摘要、资源归属人、最后调用、创建人和创建时间；零密钥、长期未调用和归属人失效均就地提示。创建账号的资源归属人使用组织用户选择器，禁止要求管理员填写 user id。启用、停用、创建、删除、签发、编辑、吊销、授权和撤权都必须在请求期间锁定触发按钮，成功给出 Toast，失败交给统一 request wrapper 展示。删除、单把/全部吊销、单项/全部撤权使用确认弹窗，并明确即时失效范围。实现前以 `src/frontend/packages/ui/docs/` 当前规范和 landed 组件为准；platform 沿用自己的 Zustand、request wrapper 与 bs-ui，不混用 client 技术栈。
 
-**B2：密钥表单只有三组。** 基本信息、权限位、委托配置。原“网络”组及 IP 白名单 / 限流 / 日配额字段全部删除。委托范围为空不能保存；`delegate` 与未部署的扩展位保持互斥。
+**B2：密钥表单与列表。** 表单只有基本信息、权限位、委托配置三组，支持签发后编辑名称、有效期、权限位和委托范围并立即生效。委托用户和部门都支持多选、可混用，以可读名称回显；范围为空不能保存。原“网络”组及 IP 白名单 / 限流 / 日配额字段全部删除；`delegate` 与未部署的扩展位保持互斥。密钥列表展示掩码、权限位、委托范围、最后使用、有效期和有效/已过期/已吊销状态；明文仍只在签发后展示一次。
 
-**B3：资源授权。** 服务账号详情页调用主体侧授权接口，mutation 固定写 `subject_type='service_account' / subject_id=sa_id`；通用用户选择器不增加服务账号。来源列区分管理员授予与创建回授，“全部撤销”不删除保障当前集成继续访问父资源所需的回授行。
+**B3：主体侧资源授权。** 详情页直接列出该服务账号在全部资源上的授权，展示资源名称、类型、权限模型和来源。新增授权用弹窗：先选资源类型、按名称/ID 搜索并勾选一个或多个资源，再从该资源类型当前可授予模型中下拉选择；前端不暴露 `resource_type/resource_id` 文本输入。列表来源通过 `permission_grant_assignee(subject_type, subject_id, state)` 反向索引查询，再由业务资源目录批量补名称；写入固定为 `subject_type='service_account' / subject_id=sa_id` 且只走 F048 `grants:mutate`，通用用户选择器不增加服务账号。受保护授权只读；`CREATOR_GRANT` 可经风险确认后单条撤销，但不提供档位编辑，“全部撤销”只处理管理员显式授予的 `DIRECT`。
 
-**B4：发布文档。** `ApiAccess.tsx`、`ApiAccessFlow.tsx` 等“对外发布、无需密钥”的示例统一改 `/api/v3`。密钥开放 API 文档继续使用 `/api/v2`，示例必须携带 `Authorization: Bearer <key>`，两者不得出现在同一个无鉴权示例里。
+**B4：API 访问文档。** `ApiAccess.tsx`、`ApiAccessFlow.tsx` 展示对接说明，恢复 F053 修改前的完整 `/api/v2` 文档，工作流事件说明抽到 `ApiWorkflowEvents.tsx`。该页面不属于免登录聊天的请求链路，不迁至 v3；v2 密钥鉴权继续生效，密钥使用说明见开放 API 文档。
 
 ### 5.C 身份传递、文件过滤与审计
 
@@ -275,7 +275,7 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 - `action='open_api.call'`；`target_type='api_endpoint'`；`target_id` 使用路由模板（如 `POST /api/v2/filelib/retrieve`）；
 - `tenant_id / operator_tenant_id` 均为密钥租户；PAT 的 `operator_id=holder_user_id`，SA 的 `operator_id=0`、`operator_name=service_account.name`；
 - Python 字段 `audit_metadata`（数据库 JSON 列 `metadata`）保存 `credential_id / actor_kind / actor_id / identity_mode / authorization_subject_type / authorization_subject_id / on_behalf_of_user_id / end_user_id / scope / http_status / error_code / latency_ms / trace_id`；
-- `ip_address` 使用现有列；不写 Authorization、原始请求体、文件内容或其它请求头；
+- `ip_address` 使用现有列；不写 Authorization、原始请求体、文件内容或其它请求头；普通响应同时记录业务错误码与真实 HTTP 状态，SSE 额外记录 `sse_final_result=success|failed|unknown`，终态业务错误码写入同一 `error_code`；
 - `open_api.call` 不加入旧“系统操作”页面白名单，避免高频调用淹没管理操作；需要查询时走结构化 action 查询；
 - 不新增独立清理任务，保留期跟随项目统一审计数据策略。队列满或批量写失败时记录 `open_api.audit.write_failed` 结构化日志，不影响业务响应。
 
@@ -287,7 +287,7 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 
 **D1：主体与校验。** `subject_kind='natural_person'`、前缀 `bs-pat-`，`subject_id=user_id`。resolver 校验 User 存在、`delete=0`、活跃租户与凭据 tenant 一致，再加载角色与管理员事实；不读取 `user_type`。可见租户集合始终按密钥租户限制，不因持有人是超管而放开跨租户过滤。
 
-**D2：一人一把与权限白名单。** 获取新 PAT 时撤销旧 PAT；员工删除、管理员吊销、用户禁用/删除/换租户均主动失效。权限位本期固定 `knowledge:read`，不支持 delegate。管理员持有人按既有 PRD 规则警示并收紧 TTL。
+**D2：一人一把、迁租户与权限白名单。** 获取新 PAT 时撤销旧 PAT；员工删除、管理员吊销、用户禁用/删除仍主动失效。持有人更换活跃租户时不得吊销 PAT：在租户成员切换后把未撤销凭据及其委托范围元数据改写到新租户、清理 credential hash 缓存，并写 `open_api.pat.tenant_migrate` 审计（旧/新 tenant id）；重复同步也会修复上次中断产生的错位。PAT 权限判定动态继承持有人的普通资源授权及管理员事实，但可见租户集合仍锁定凭据租户。权限位本期固定 `knowledge:read`，不支持 delegate。管理员持有人按既有 PRD 规则警示并收紧 TTL。
 
 **D3：两层开关。** 部署级 `open_api.pat_enabled=false` 与租户级 `open_api_tenant_setting.pat_enabled=false` 均默认关闭；关闭只让校验拒绝，不改撤销位，重新开启可恢复未过期令牌。
 
@@ -319,23 +319,27 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 
 | v3 免登录端点 | 用途 | 对应 v2 密钥端点 |
 |---|---|---|
-| `POST /api/v3/workflow/invoke` | 发布工作流执行 | `/api/v2/workflow/invoke` |
-| `POST /api/v3/workflow/stop` | 停止本发布会话 | `/api/v2/workflow/stop` |
 | `WS /api/v3/workflow/chat/{workflow_id}` | 发布工作流对话 | `/api/v2/workflow/chat/{workflow_id}` |
-| `POST /api/v3/assistant/chat/completions` | 发布知识助手 Chat Completions | `/api/v2/assistant/chat/completions` |
 | `GET /api/v3/assistant/info/{assistant_id}` | 发布页助手详情 | `/api/v2/assistant/info/{assistant_id}` |
 | `WS /api/v3/assistant/chat/{assistant_id}` | 发布知识助手对话 | `/api/v2/assistant/chat/{assistant_id}` |
 | `GET /api/v3/flows/{flow_id}` | 发布页工作流详情 | `/api/v2/flows/{flow_id}` |
 | `GET /api/v3/chat/history` | 发布页当前会话历史 | v2 不开放此端点 |
 | `POST /api/v3/chat/gen_title` | 发布页会话标题 | v2 不开放此端点 |
+| `GET /api/v3/llm/workbench` | 发布页语音能力配置，仅返回 `asr_model.id` / `tts_model.id` | 无对应 v2 配置接口 |
+| `POST /api/v3/llm/workbench/asr` | 发布页录音转文字 | `/api/v2/llm/workbench/asr`（本轮保留） |
+| `POST /api/v3/llm/workbench/tts` | 发布页文字朗读 | `/api/v2/llm/workbench/tts`（本轮保留） |
 
 `GET /assistant/list` 不是单个已发布资源所需能力，不进入 v3；它只保留 v2 密钥版本。
 
 **F2：guest policy。** v3 不校验 JWT 和 API Key，统一校验 `default_operator.enable_guest_access=true`、默认操作员存在且启用、目标工作流/助手处于可发布状态。初次定位资源允许在受控 bypass 中按 ID 查询，随后必须设置资源所属 tenant ContextVar 再进入业务 Service。任一 `X-On-Behalf-Of` / `X-End-User` 头均拒绝，防止匿名调用方伪造身份。
 
-**F3：会话绑定。** v3 创建的会话标记 `api_subject_type='public_v3'`，并绑定资源 ID / 默认操作员；history、gen_title、stop、续聊都校验该来源与资源匹配。不得仅凭随机 chat_id 读取或停止其它 v1/v2 会话。
+**F3：会话绑定。** v3 创建的会话标记 `api_subject_type='public_v3'`，并绑定资源 ID / 默认操作员；history、gen_title、WebSocket 停止和续聊都校验该来源与资源匹配。不得仅凭随机 chat_id 读取或停止其它 v1/v2 会话。
 
-**F4：代码复用和切换。** v2/v3 endpoint 只做各自鉴权和 schema 适配，工作流/助手执行逻辑下沉到共享 domain service。client guest 模式 `apiVersion` 类型扩为 `v1 | v2 | v3` 且取 `v3`；platform 两个发布 API 页面改 v3；商业网关中显式代理/拦截的 assistant、workflow、chat 路径同步增加 v3。现有分享链接代码、URL 参数与 header 不在此工作流修改。
+**F4：代码复用和切换。** v2/v3 endpoint 只做各自鉴权和 schema 适配，工作流/助手执行逻辑下沉到共享 domain service。client guest 模式 `apiVersion` 类型扩为 `v1 | v2 | v3` 且取 `v3`；platform 两个发布 API 访问页面恢复 F053 修改前的完整 v2 文档；商业网关中显式代理/拦截的 assistant、workflow、chat 路径同步增加 v3。现有分享链接代码、URL 参数与 header 不在此工作流修改。
+
+**F5：发布页语音补齐（2026-09-10 用户确认补漏）。** ASR/TTS 在 F053 之前已有匿名 v2；语音配置没有对应 v2，现补齐三个 v3 入口。三者均要求 query `flow_id`（工作流或助手 UUID），先经 `public_application_execution` 解析已发布资源及租户，再复用 `LLMService`；ASR 沿用 multipart `file`，TTS 沿用 JSON `text`。配置只投影两个语音模型 ID，不开放整份工作台管理配置。client 共用语音组件通过 standalone guest context 选择 v3，配置查询按应用 ID 隔离缓存；配置在渲染时读取，ASR/TTS 在录音结束/点击朗读时调用。此次不删除、不取消鉴权任何 v2 入口；双版本最终是否保留待需求确认。已知漏项：仅将主对话 `apiVersion` 改为 v3 不会切换原来固定 v1 的共用语音组件，必须同时接通它们的请求。
+
+**F6：API 访问文档恢复（2026-09-11 用户纠正范围）。** platform“对外发布 → API访问”是对接文档，恢复 highway 提交 `284ea1188` 之前的完整 v2 说明（含工作流事件、交互和文件上传示例），不参与免登录页面请求版本迁移。删除误增的三个 v3 HTTP 端点：`POST /api/v3/assistant/chat/completions`、`POST /api/v3/workflow/invoke`、`POST /api/v3/workflow/stop`。免登录工作流和助手页面通过 WebSocket 执行、交互和停止，继续保留详情、history/gen_title、语音配置/ASR/TTS 的 v3 HTTP 及两个 v3 WebSocket。对应 v2 端点及密钥鉴权、原有 v1 行为均保持。
 
 ---
 
@@ -371,7 +375,7 @@ class OpenApiPrincipal(BaseModel, frozen=True):
 | v2 密钥面 | 现有 knowledge / filelib / citation / llm / flow / assistant / workflow 开放端点（排除旧 chat 六端点） | API Key + scope + S/D |
 | | `GET /api/v2/auth/whoami` | API Key，`scope=None` |
 | | §5.E 五个日常模式端点 | API Key + `chat:invoke` + S/D |
-| v3 发布面 | §5.F 九个 allowlist 端点 | 无 JWT / 无 API Key；guest policy |
+| v3 发布面 | §5.F 九个 allowlist 端点（七个 HTTP、两个 WebSocket） | 无 JWT / 无 API Key；guest policy |
 | v1 管理面 | `/service-accounts/**`、`/personal-tokens/**` | JWT + 租户管理员及以上 |
 | v1 员工面 | `/me/api-token/**` | JWT |
 | v1 站内与分享 | 所有既有接口 | **保持现状** |
@@ -417,7 +421,7 @@ v2 请求头只有：`Authorization: Bearer <key>`、`X-On-Behalf-Of: <user_id>`
 | `WorkStationService` / `stream_chat_completion` | E | v1 活跃功能，抽共享 service 后必须保证 v1 SSE 零变化 |
 | `ChatSessionService` / `MessageSessionDao` | C/E/F | 只按 `user_id` 校验会把 SA 或 public_v3 会话误归属给默认/归属用户 |
 | `default_operator` 配置 | F | 只允许 v3 使用；静态检查禁止 v2 endpoint import `get_default_operator*` |
-| client guest `apiVersion` 与 platform 发布示例 | F | 后端未先发 v3 即切前端会导致发布页白屏 |
+| client guest `apiVersion` | F | 后端未先发 v3 即切免登录页面请求会导致发布页白屏；platform API 访问文档仍为 v2 |
 | 商业网关路由 | F | 仍只代理 v2 时 v3 WS/HTTP 在商业版 404 或被登录网关拦截 |
 
 ---
@@ -438,7 +442,11 @@ v2 请求头只有：`Authorization: Bearer <key>`、`X-On-Behalf-Of: <user_id>`
 
 ### 7.2 OpenFGA 模型
 
-新增 `service_account` type，并将其加入各业务资源可直接授权关系的 `directly_related_user_types`。发布模型前运行 schema contract：registry 中每个支持直接授权的资源类型都允许 `service_account`，owner / tenant admin / super admin 关系均不允许。模型升级是向后兼容添加，不重写既有 user / department / group tuple。
+新增 `service_account` type，并将其加入各业务资源可直接授权关系的 `directly_related_user_types`。发布模型前运行 schema contract：registry 中每个支持直接授权的资源类型都允许 `service_account`，owner / tenant admin / super admin 关系均不允许。
+
+F048 的 Catalog active、模型 enabled、动作 active、grant level 以及资源 permission_enabled/custom_mode/inherit_mode 都是技术状态 tuple。所有这些 relation 必须同时投影到 `user:*` 与 `service_account:*`；仅 public/system/admin/owner 等自然人语义继续保持 user-only。Catalog 切版、模式切换、资源创建/移动/删除和迁移协调器必须在同一 operation 中写入两类技术标记，避免出现“业务授权已存在但动作模型对 service_account 不可判定”的 18040。
+
+存量升级使用 `scripts/reconcile_f048_visible_projection.py`：默认 dry-run；`--apply` 时先发布兼容模型，再按每条 CURRENT `ResourcePermissionMode` 补齐 service_account 的 permission_enabled 与当前模式标记，同时对账 visible tuple。报告分别输出可见性 tuple 和服务账号技术标记 tuple 数量，任何写入/校验失败均非零退出。
 
 ---
 
@@ -459,7 +467,9 @@ v2 请求头只有：`Authorization: Bearer <key>`、`X-On-Behalf-Of: <user_id>`
 | 11 | v3 history / gen_title 当前只靠 chat_id 容易越界 | 增加 `public_v3` 会话来源校验并绑定资源 |
 | 12 | client guest 页面除 WS 外还会请求 flow/info/history/title | v3 allowlist 必须覆盖完整调用图，端到端验证浏览器 Network |
 | 13 | commercial gateway 目前显式写有 v2 assistant/chat 规则 | v3 HTTP + WS 路由必须同步调整并做商业版回归 |
-| 14 | 平台全局 HTTP handler 会把部分异常压成 200 信封 | v2 新异常继承 `OpenApiAuthError` 并返回真实 401/403/500/503；v3 沿用发布面既有形状 |
+| 14 | 平台全局 HTTP handler 会把部分异常压成 200 信封 | v2 对全部 `BaseErrorCode` 统一映射：权限拒绝 403、防枚举 404、权限依赖故障 503、其余请求类业务错误 400；业务码保持原值；v1 信封不变 |
+| 15 | QA id 可以绕过知识库入口形成 IDOR | `detail_qa/update_qa/delete/add_relative/query_qa` 均先由 QA 定位所属知识库，再经 `KnowledgeService` 内的 `PermissionService` 校验 visible/edit；鉴权通过前禁止 DAO 写入、索引或异步任务 |
+| 16 | multipart 的废弃 `user_id` 不会进入 JSON 检查 | v2 全局依赖同时检查 query、JSON、multipart 和 urlencoded；出现即 400/26019，不能静默忽略 |
 
 ---
 
@@ -476,9 +486,10 @@ v2 请求头只有：`Authorization: Bearer <key>`、`X-On-Behalf-Of: <user_id>`
 | 身份传递 | 五道准入逐条；新头有效；旧品牌头拒绝；裸 user_id 拒绝；文件级过滤异常 503 且无数据 |
 | 审计 | `audit_log.action='open_api.call'`；metadata actor/subject 双归属完整；无密钥/请求体；SA operator_id=0；DM8 可批量写 |
 | PAT | 一人一把、两层开关、级联失效、只 knowledge:read、超管不跨 tenant、OBO 拒绝 |
+| 安全修复 | QA IDOR 读写拒绝且无副作用；知识空间列表 DTO 含 `user_name/actions`；v2 403/404/503 传输状态；multipart `user_id` 26019；SSE 终态进入审计 |
 | 日常模式 | 五个 v2 端点复用 v1 业务/信封/SSE；请求 schema 删除 `use_knowledge_base`、`task_mode` 但保留 `files`；内部固定 `task_mode=False`；config 只有 models/tools；SA/PAT/D 会话归属矩阵；跨主体 chat/file 统一 404 |
-| v3 发布面 | 九路由 allowlist；未发布/开关关拒绝；两个 WS 正常；history/title/stop 不能跨资源；`/api/v3/assistant/list` 真 404 |
-| 前端/网关 | guest 页面所有 v3 HTTP/WS 无 v2 遗留；发布示例为 v3；密钥文档为 v2；商业网关可转发 v3 WS |
+| v3 发布面 | 七个 HTTP 与两个 WebSocket 的路由 allowlist；未发布/开关关拒绝；两个 WS 正常；history/title 与 WebSocket 停止不能跨资源；`/api/v3/assistant/list` 真 404 |
+| 前端/网关 | guest 页面所有 v3 HTTP/WS 无 v2 遗留；API 访问文档恢复完整 v2；密钥文档为 v2；商业网关可转发 v3 WS |
 
 **手动验证**（`$BASE` 为实例地址）：
 
@@ -515,7 +526,7 @@ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/v2/assistant/info/$ASSISTANT
 
 1. 执行 §7 三个 Alembic revision；无需 `user`、审计表或分享表备份/变更。
 2. 先发布向后兼容的 OpenFGA `service_account` 模型，再部署后端；在模型就绪前保持服务账号签发入口关闭。
-3. 先上线 v3 后端九个路由并验证 HTTP / WS，再切 client guest、platform 发布示例和商业网关；旧 v2 发布 URL 在同一版本移除免登录语义，不能继续匿名调用。
+3. 先上线 v3 后端九个路由并验证 HTTP / WS，再切 client guest 和商业网关；platform API 访问文档保留 v2；旧 v2 发布 URL 在同一版本移除免登录语义，不能继续匿名调用。
 4. v2 发布后不再读取 `default_operator`；v3 继续依赖 `default_operator.enable_guest_access`。升级说明必须把两者写成不同通道。
 5. 对客文档分别成章：v2 密钥开放 API（含新身份头）与 v3 免登录发布 API。不得宣称“所有 `/api/v2/**` 都可匿名”，也不得要求 v3 携带 API Key。
 6. 最小可发版集为 A + C + F；B 缺失时不建议对外启用服务账号，E/D 可在同版后续里程碑启用。
@@ -542,3 +553,4 @@ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/v2/assistant/info/$ASSISTANT
 | 2026-08-31 | `/sdd-review design` 自查修订 | 初版评审 |
 | 2026-09-04 | 重写：移除 R8/P2 与分享链路改造；请求头去品牌；审计改复用 `audit_log.metadata`；服务账号改独立主体且不写 User；日常模式改为五个 v1 同路径 v2 接口；工作流/知识助手免登录发布接口迁至 v3，与 v2 密钥面彻底分离 | 用户新范围裁定 |
 | 2026-09-04 | 收窄日常对话请求：对外删除 `use_knowledge_base`、`task_mode`，内部固定 `task_mode=False`；`files` 与临时文件上传能力保持不变 | 用户补充裁定 |
+| 2026-09-08 | 同步 PRD v2.6：补齐服务账号 F048 技术标记与存量对账、主体侧资源选择弹窗、管理操作反馈、QA 所属知识库鉴权、知识空间列表 DTO、v2 HTTP/SSE 结果语义、multipart 废弃字段拒绝，以及 PAT 随持有人迁租户 | PRD 后续修订与验收问题 |

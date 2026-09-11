@@ -2313,6 +2313,15 @@
   "com_settings_lang_ja": "日本語",
   "com_settings_lang_zh": "中文",
   "com_citation.no_download_url": "ダウンロード可能なファイルアドレスがありません",
+  "com_citation.loading": "出典の詳細を読み込み中...",
+  "com_citation.no_detail": "出典の詳細がありません",
+  "com_citation.no_snippet": "抜粋がありません",
+  "com_citation.source_web": "ウェブページ",
+  "com_citation.source_document": "ドキュメント",
+  "com_citation.source_article": "記事",
+  "com_citation.badge_aria": "{{source}}の引用 {{index}}",
+  "com_citation.no_permission": "このソースを閲覧する権限がありません",
+  "com_citation.source_expired": "このソースは無効になりました",
   "com_message_approval_title": "メッセージと承認",
   "com_message_approval_notifications": "通知",
   "com_notifications_tab_unread": "未読",
@@ -2339,5 +2348,8 @@
   "com_personal_token_operation_success": "個人 API トークンを更新しました",
   "com_personal_token_copy": "コピー",
   "com_personal_token_done": "完了",
-  "com_personal_token_loading": "読み込み中..."
+  "com_personal_token_loading": "読み込み中...",
+  "com_voice": {
+    "playback_unavailable": "音声を再生できません。管理者にお問い合わせください。"
+  }
 }

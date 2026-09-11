@@ -1,6 +1,6 @@
 # Tasks: 开放 API 鉴权与身份传递（F053）
 
-> 本任务清单以 [design.md](./design.md) 2026-09-04 最终版为唯一技术基准。旧 `tasks.md` 中与最终设计冲突的 P2、share-token、服务账号写入 `user`、独立调用日志表和旧日常会话方案均已删除。
+> 本任务清单以 [design.md](./design.md) 2026-09-08 PRD v2.6 同步版为唯一技术基准。旧 `tasks.md` 中与最终设计冲突的 P2、share-token、服务账号写入 `user`、独立调用日志表和旧日常会话方案均已删除。
 
 **关联**: [design.md](./design.md) · [spec.md](./spec.md) · [release-contract.md](../release-contract.md) · [openapi-v2-key-auth-api.md](./openapi-v2-key-auth-api.md)
 **版本**: v3.0.0-beta1
@@ -12,10 +12,10 @@
 
 | 步骤 | 状态 | 备注 |
 |---|---|---|
-| spec.md | ⚠️ 历史需求稿 | 其中仍有旧范围描述；执行时以用户确认的最终 `design.md` 为准，不得据此恢复已删除范围 |
-| design.md | ✅ 最终设计 | 2026-09-04 用户确认作为最终技术方案 |
-| tasks.md | ✅ 已按最终设计重排 | 2026-09-04；共 58 个任务 |
-| 实现 | 🔲 未开始 | 0 / 58 |
+| spec.md | ✅ PRD v2.6 同步 | 2026-09-08 补齐 R1～R8 缺陷验收 |
+| design.md | ✅ PRD v2.6 同步 | 2026-09-08 补齐实现方案与发布约束 |
+| tasks.md | ✅ 已补充整改任务 | 58 个基线任务 + U01～U09 |
+| 实现 | ✅ 整改实现完成 | U01～U09 已完成；浏览器、商业入口许可证和 DM8/全量存储链路作为发布验收项继续跟踪 |
 
 ---
 
@@ -389,10 +389,10 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
 
 - [ ] **F03：注册 v3 七个 HTTP allowlist 路由**
   **设计依据**: design §5.F1
-  **文件**: `public_endpoints/api/endpoints/{workflow,assistant,flow,chat}.py`、router；测试 `test/public_endpoints/test_http_allowlist.py`
+  **文件**: `public_endpoints/api/endpoints/{workflow,assistant,flow,chat,llm}.py`、router；测试 `test/public_endpoints/test_http_allowlist.py`
   **执行顺序**:
   1. 先对 design §5.F1 七个 HTTP method+path 写精确集合测试。
-  2. 注册 workflow invoke/stop、assistant chat completions/info、flow detail、chat history/gen_title。
+  2. 注册 assistant info、flow detail、chat history/gen_title、语音配置/ASR/TTS；不注册 assistant chat completions、workflow invoke/stop。
   3. 不注册 assistant/list、知识库、日常会话或管理接口；额外 `/api/v3/**` 必须 404。
   4. 所有端点调用 F01 的共享 service，并经过 F02 guest policy。
   **完成条件**: HTTP 路由集合与 design §5.F1 完全一致
@@ -425,19 +425,19 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
   **文件**: `src/frontend/client/src/pages/standaloneChat/**`、`pages/appChat/useChatHelpers.ts`、`api/chat/api-endpoints.ts`、三语 locale；测试现有 `StandaloneChatPage.test.ts` 和 API URL 单元测试
   **执行顺序**:
   1. 开始前完整阅读 `src/frontend/packages/ui/docs/index.md` 和本任务涉及组件规范；不改视觉样式。
-  2. 先写 guest 调用图测试，覆盖详情、history、gen_title、invoke/stop 和两个 WS。
+  2. 先写 guest 调用图测试，覆盖详情、history、gen_title、语音配置/ASR/TTS 和两个 WS；执行和停止经 WS 完成。
   3. `apiVersion` 类型扩为 `v1|v2|v3`，guest 固定使用 v3；普通登录/分享链路保持原样。
   4. 删除 guest 分支中的 v2 URL，不增加 share_token 参数或身份头。
   5. 运行 client lint、typecheck、相关测试和 `lint:prune`。
-  **完成条件**: 浏览器 Network 中 guest 工作流/助手请求全部为 v3，且无 `/api/v2` 遗留
+  **完成条件**: 浏览器 Network 中 guest 工作流/助手原 v2 请求均迁至 v3，原 v1 请求保持不动，且无 guest `/api/v2` 遗留
   **依赖**: F05
 
-- [ ] **F07：platform 发布示例和商业网关切换**
+- [ ] **F07：platform API 文档恢复和商业网关切换**
   **设计依据**: design §5.B4、§5.F4、§8 坑 13
   **文件**: `src/frontend/platform/src/components/bs-comp/apiComponent/{ApiAccess,ApiAccessFlow}.tsx`、三语 locale；商业网关对应 route/filter 配置
   **执行顺序**:
   1. 开始前阅读 UI 规范；先写/更新 URL 生成测试。
-  2. “无需密钥发布”示例改为 v3；“密钥开放 API”示例继续使用 v2 并携带 Bearer Key。
+  2. “对外发布 → API访问”恢复 F053 修改前的完整 v2 文档；其对应接口保留密钥鉴权，免登录页面实际调用的接口仍使用 v3。
   3. 不改 `ChatLink` 的分享链接参数和现有 share_link 行为。
   4. 商业网关增加 v3 HTTP 与 WS 代理/拦截规则并验证升级顺序；不得把 v3 送入登录或 API Key 网关。
   5. 若商业网关源码不在本仓，必须在 PR 阻断项中给出对应仓库、负责人、完整路径清单和验证结果；未完成不能宣告 F07 完成。
@@ -506,15 +506,15 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
   **完成条件**: v1 管理信封与 v2 真 HTTP 状态不混用
   **依赖**: D03、A08
 
-- [ ] **D05：用户状态变化的级联失效**
+- [ ] **D05：用户状态变化与租户切换**
   **设计依据**: design §5.D2
   **文件**: 用户禁用/删除入口、`tenant/domain/services/user_tenant_sync_service.py`、credential cache invalidation；测试 `test/open_api/test_pat_cascade.py`
   **执行顺序**:
-  1. 先对用户禁用、删除、离开租户和遗漏主动 hook 的校验兜底写测试。
-  2. 三个主动触发点撤销该自然人 PAT 并失效缓存。
-  3. credential resolver 每次缓存刷新仍校验 User 与 UserTenant，作为漏 hook 的 fail-closed 兜底。
+  1. 先对用户禁用、删除、活跃租户切换和遗漏主动 hook 的校验兜底写测试。
+  2. 用户禁用/删除时撤销自然人 PAT；活跃租户切换时迁移未撤销凭据及 scope 元数据并失效缓存，不吊销原 token。
+  3. credential resolver 每次缓存刷新仍校验 User 与凭据当前租户的 UserTenant，作为漏 hook 的 fail-closed 兜底。
   4. 不增加服务账号登录守卫或 user_type 分支。
-  **完成条件**: 主体失效后 5 秒内 PAT 返回 401，不泄漏其它租户资源存在性
+  **完成条件**: 主体失效后 5 秒内 PAT 返回 401；迁租户后原 token 在新租户生效且不能访问旧租户
   **依赖**: D03
 
 - [ ] **D06：知识检索技能包和匿名分发**
@@ -714,10 +714,10 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
   **设计依据**: design §5.B4、§5.C5、§5.F4
   **文件**: `ApiAccess.tsx`、`ApiAccessFlow.tsx`、`controllers/API/log.ts`、locale；`ChatLink.tsx` 仅回归不修改协议
   **执行顺序**:
-  1. 合并 F07 的 v3 发布示例，并验证 v2 密钥示例仍带 Authorization。
+  1. 合并 F07 恢复的完整 v2 API 访问文档，并验证密钥使用文档仍说明 Authorization。
   2. 管理操作 action 可按现有审计页规则展示；不要把高频 `open_api.call` 加入系统操作白名单。
   3. 回归现有分享链接生成、打开和撤销流程，确认无新参数、字段或 share-token 通道。
-  **手动验证**: 无密钥发布示例全为 v3；密钥示例全为 v2；分享链接行为与改造前一致
+  **手动验证**: API 访问文档为完整 v2；免登录页面使用 v3；密钥示例为 v2；分享链接行为与改造前一致
   **完成条件**: 发布示例、管理审计和既有分享链路三项回归均通过
   **依赖**: B02、B03、B04、F07、C08
 
@@ -726,7 +726,7 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
   **文件**: platform/client 相关测试与手动清单
   **执行顺序**:
   1. 从 `src/frontend/` 运行 `pnpm lint`、`pnpm typecheck` 和相关 test；修复触碰文件的旧 i18n 违规并 `lint:prune`。
-  2. 手动验证 SA 创建/密钥/委托/授权、PAT 台账/开关、v3 发布示例。
+  2. 手动验证 SA 创建/密钥/委托/授权、PAT 台账/开关、v2 API 访问文档和 v3 免登录页面。
   3. 不做视觉决策；发现需改样式时提交设计师确认。
   4. 运行前端范围扫描，确认无品牌身份头、P2、share-token 新逻辑。
   **完成条件**: 两个前端质量门禁全绿，手动清单有截图/Network 证据
@@ -785,6 +785,55 @@ rg -n "X-Bisheng-On-Behalf-Of|X-Bisheng-End-User" src/backend src/frontend
 
 ---
 
+## 10.1 PRD v2.6 补充整改（2026-09-08）
+
+- [x] **U01：服务账号管理交互闭环**
+  **设计依据**: design §5.B1；spec AC-R1
+  **执行**: 复用 `origin/3.0-vibe` 的 request wrapper、Toast、确认弹窗和 loading 处理；创建时用组织用户选择器；启停、删除、签发、单把/全部吊销均防重复提交并反馈结果。
+  **完成条件**: 所有 mutation 有 loading、成功反馈和统一失败反馈；破坏性操作说明即时失效范围。
+
+- [x] **U02：主体侧资源授权与选择弹窗**
+  **设计依据**: design §5.B2；spec AC-R2
+  **执行**: permission 层新增按 service_account 反向索引查询和 CURRENT 顶层资源候选；平台详情直接展示聚合授权；新增授权使用资源类型下拉、搜索、勾选和权限模型下拉；撤权仍走 F048 mutation。
+  **完成条件**: 页面无资源类型/资源 ID 文本输入；DIRECT 与 CREATOR_GRANT 均可单条撤销、protected 授权只读、全部撤销排除 CREATOR_GRANT。
+
+- [x] **U03：F048 service_account 技术标记与存量对账**
+  **设计依据**: design §7.2；spec AC-R3
+  **执行**: OpenFGA 模型升级；Catalog、模式、资源生命周期和迁移协调器同时投影 `user:*` / `service_account:*` 技术 tuple；对账脚本从 CURRENT `ResourcePermissionMode` 补齐存量服务账号标记，保持默认 dry-run。
+  **完成条件**: schema/catalog/mode/projection/reconcile 测试覆盖双标记；服务账号直授后具体动作通过。
+
+- [x] **U04：QA 所属知识库鉴权**
+  **设计依据**: design §8#15；spec AC-R4
+  **执行**: add/detail/update/delete/add_relative/query_qa 在返回或变更前定位所属知识库并经 KnowledgeService 的 PermissionService 校验 visible/edit；去掉捕获后返回 200/500 信封的路径。
+  **完成条件**: 无权限读取不返回答案；无权限修改不触发 DAO update、索引或任务；不存在/错配按 404 防枚举。
+
+- [x] **U05：知识空间列表 DTO 契约**
+  **设计依据**: spec AC-R5
+  **执行**: `KnowledgeSpaceListItemResp` 明确声明 `user_name/actions`，保持列表 enrichment 与响应模型一致。
+  **完成条件**: PAT/代表用户访问非空 type=3 列表可序列化并包含权限字段。
+
+- [x] **U06：v2 HTTP 状态与 SSE 审计结果**
+  **设计依据**: design §5.C5、§8#14；spec AC-R6
+  **执行**: 为 v2 全部 BaseErrorCode 建统一传输状态映射；审计中间件保留业务错误码，并从有界 SSE 尾部识别 `[DONE]` 或 workflow close 终态。
+  **完成条件**: 权限 403、防枚举 404、权限依赖 503；v1 信封不变；SSE 审计含 final result，失败含业务码。
+
+- [x] **U07：multipart 裸 user_id 拒绝**
+  **设计依据**: design §8#16；spec AC-R7
+  **执行**: v2 全局身份依赖检查 query、JSON、multipart、urlencoded；在端点文件处理前返回 400/26019。
+  **完成条件**: 正常 multipart 不受影响；含 user_id 的上传不进入 handler。
+
+- [x] **U08：PAT 随持有人迁租户**
+  **设计依据**: design §5.D2；spec AC-R8
+  **执行**: 未撤销 PAT 与关联 scope 元数据迁到新 tenant，清理 hash cache，写 `open_api.pat.tenant_migrate` 审计；同租户同步也执行错位修复；PAT actor 恢复持有人管理员事实但仍锁定可见租户。
+  **完成条件**: 原 token 不撤销且在新租户可用；旧租户不可用；缓存与审计断言通过。
+
+- [x] **U09：整改验证与 E2E**
+  **设计依据**: design §9；spec §4
+  **依赖**: U01～U08
+  **执行**: 后端 ruff/定向测试、OpenFGA 契约测试、platform lint/typecheck/组件测试、i18n parity、arch-guard；运行 `/e2e-test` 并更新页面手动验证清单。
+  **完成条件**: 本地可运行项全绿；依赖中间件项保留为 CI 证据，不降低断言。
+  **当前证据**: Open API 110 passed；F048 定向 133 passed / 6 skipped；platform 定向测试通过；ruff、全前端 lint/typecheck、i18n、arch-guard、diff check 通过。2026-09-09 在 192.168.106.116 完成 f048-v4 模型/Catalog 切换及真实 MySQL、Redis、OpenFGA API E2E 11/11，QA 拒绝后数据哈希不变；浏览器交互、商业入口许可证续期、DM8 和全量存储链路仍待人工/专用环境验证。
+
 ## 11. 依赖图
 
 ```text
@@ -833,7 +882,23 @@ A08 → B01 → B02/B03；D08 → B04；F07/C08 → B05 → B06
 
 > 只记录一行指针；原因与新决策写回 `design.md`。若偏差推翻最终设计，必须先暂停并取得用户确认。
 
-- 暂无。
+- 2026-09-10：按用户确认补齐发布页三个 v3 语音入口及 client 调用，allowlist 从 9 项增为 12 项；参见 design §5.F F5、spec AC-R9。现有 v2 暂不删除，是否保留密钥版本另待需求确认；历史任务中的“九路由”数量由本次补漏更新。
+
+### AC-R9 补漏执行记录
+
+- [x] 核对历史：ASR/TTS 曾为匿名 v2；无对应 v2 配置端点。
+- [x] 新增 v3 配置、ASR、TTS，沿用发布应用/租户准入和原模型服务。
+- [x] 接通 guest 语音组件和应用维度配置缓存；原 v2 路由和 scope 保持不变。
+- [x] 补充后端 HTTP 契约与前端语音回归测试；真实模型 E2E 及浏览器步骤见 e2e-checklist.md。
+- [ ] 专用部署上执行真实模型和无痕浏览器验收。
+
+
+### AC-R10 范围纠正执行记录（2026-09-11）
+
+- [x] 按用户纠正恢复 highway 提交 `284ea1188` 之前的助手和工作流 v2 API 访问文档；工作流保留调用流程、事件字段、交互示例、上传示例和错误说明。
+- [x] 删除误增的三个 v3 HTTP 执行/停止路由，保留对应 v2 密钥鉴权及免登录页面的七个 HTTP、两个 WebSocket；见 design §5.F6。
+- [x] 后端 public_endpoints 与 v2 route matrix / OpenAPI contract 共 39 项通过；前端文档三语渲染、助手示例及密钥示例共 5 项通过；全前端 lint、typecheck、i18n 检查通过。
+- [ ] 部署后按 e2e-checklist.md 检查 API 访问页面和免登录聊天页面；本次未部署、未执行真实模型 E2E。
 
 ---
 
@@ -843,3 +908,4 @@ A08 → B01 → B02/B03；D08 → B04；F07/C08 → B05 → B06
 |---|---|
 | 2026-08-31 | 初版按旧设计拆为 A～G，包含 P2、share-token 和旧日常会话方案 |
 | 2026-09-04 | 按最终 design 全量重排为 58 个顺序任务：删除 R8/P2、share-token、`user_type`、独立调用日志表和三端点日常方案；增加独立服务账号/F048 主体、复用 `audit_log`、五个日常 v2 接口及九个 v3 免登录发布接口 |
+| 2026-09-08 | 同步 PRD v2.6，增加 U01～U09：管理交互、资源选择弹窗、FGA 双技术标记、QA 防越权、知识空间 DTO、v2 HTTP/SSE 结果、multipart 废弃字段拒绝、PAT 迁租户和整改 E2E |

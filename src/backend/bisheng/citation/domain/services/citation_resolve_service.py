@@ -4,9 +4,13 @@ from collections import defaultdict
 
 from bisheng.citation.domain.repositories.interfaces.message_citation_repository import MessageCitationRepository
 from bisheng.citation.domain.schemas.citation_schema import (
+    ArticleCitationPayloadSchema,
     CitationRegistryItemSchema,
     CitationType,
+    CitationUnresolvedReason,
     RagCitationPayloadSchema,
+    ResolveCitationResponse,
+    UnresolvedCitationSchema,
     WebCitationPayloadSchema,
 )
 from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
@@ -180,12 +184,7 @@ class CitationResolveService:
         grouped = await self._resolve_rag_space_pairs(items)
         space_ids = sorted(space_id for space_id in grouped if space_id > 0)
         resource_ids = sorted(
-            {
-                resource_id
-                for space_id, file_ids in grouped.items()
-                if space_id > 0
-                for resource_id in file_ids
-            }
+            {resource_id for space_id, file_ids in grouped.items() if space_id > 0 for resource_id in file_ids}
         )
         if not space_ids or not resource_ids:
             return set()
@@ -396,6 +395,33 @@ class CitationResolveService:
         return item.model_copy(update={"sourcePayload": payload})
 
     @staticmethod
+    def _is_anonymous_readable(item: CitationRegistryItemSchema) -> bool:
+        """Whether a caller with no logged-in user may receive this source.
+
+        F054 overrides F029 AC-20, which deliberately let anonymous callers
+        through unfiltered so share links kept working — that is exactly the
+        hole being closed: handing out a share link also handed out the
+        knowledge files behind it, signed preview URLs included. Knowledge and
+        article sources are refused outright, ``shared`` tier included: that
+        tier decides *which logged-in user* may open a file, so with no logged-in
+        user there is nobody for it to answer for. Web citations stay readable —
+        they are public URLs holding no tenant data, and blacking them out would
+        strip share-page badges for no security gain.
+        """
+        return item.type == CitationType.WEB
+
+    @staticmethod
+    def _enrich_article_item(item: CitationRegistryItemSchema) -> CitationRegistryItemSchema:
+        """Validate a persisted article payload before returning it.
+
+        Nothing to sign or look up: the article's own locator and URL are stored
+        on the citation, and channel-side visibility was enforced when the answer
+        was produced.
+        """
+        payload = ArticleCitationPayloadSchema.model_validate(item.sourcePayload)
+        return item.model_copy(update={"sourcePayload": payload})
+
+    @staticmethod
     def _enrich_web_item(item: CitationRegistryItemSchema) -> CitationRegistryItemSchema:
         """Normalize persisted web payload before returning it."""
         payload = WebCitationPayloadSchema.model_validate(item.sourcePayload)
@@ -411,7 +437,13 @@ class CitationResolveService:
         """Enrich a citation item based on its type."""
         if item.type == CitationType.RAG:
             return await self._enrich_rag_item(item, login_user, url_allowed=url_allowed)
-        return self._enrich_web_item(item)
+        if item.type == CitationType.ARTICLE:
+            return self._enrich_article_item(item)
+        if item.type == CitationType.WEB:
+            return self._enrich_web_item(item)
+        # Unknown type (a newer writer, an older reader): hand it back untouched
+        # rather than guessing at a payload shape and raising.
+        return item
 
     # ------------------------------------------------------------------
     # Public API
@@ -433,7 +465,20 @@ class CitationResolveService:
         if item is None:
             item = await self.registry_service.get_citation(citation_id)
         if item is None:
-            raise NotFoundError()
+            # Rule 1 before rule 2: for a caller with no logged-in user an
+            # unknown id must look exactly like a refused one, or the reason
+            # itself becomes a way to probe which ids ever existed.
+            raise NotFoundError(
+                reason=(
+                    CitationUnresolvedReason.FORBIDDEN.value
+                    if login_user is None
+                    else CitationUnresolvedReason.EXPIRED.value
+                )
+            )
+        if login_user is None and not self._is_anonymous_readable(item):
+            # F054 overrides F029 AC-20: knowledge and article sources are
+            # refused without a logged-in user.
+            raise NotFoundError(reason=CitationUnresolvedReason.FORBIDDEN.value)
         url_allowed = True
         if item.type == CitationType.RAG and login_user is not None:
             canonical_items = await self._canonicalize_rag_items([item], login_user)
@@ -448,36 +493,112 @@ class CitationResolveService:
             # per_user + no view_file → not found (AC-18); shared survives with
             # metadata but no full-file URL (AC-21).
             if not url_allowed and item.accessScope != "shared":
-                raise NotFoundError()
-        return await self._enrich_item(item, login_user, url_allowed=url_allowed)
+                raise NotFoundError(reason=CitationUnresolvedReason.FORBIDDEN.value)
+        try:
+            return await self._enrich_item(item, login_user, url_allowed=url_allowed)
+        except NotFoundError:
+            # Past the permission gate, so naming the source as gone is safe.
+            raise NotFoundError(reason=CitationUnresolvedReason.EXPIRED.value) from None
 
     async def resolve_citations(
         self,
         citation_ids: list[str],
         login_user: UserPayload | None = None,
     ) -> list[CitationRegistryItemSchema]:
-        """Resolve multiple citation items in one round trip.
+        """Resolve multiple citation items, returning only the ones that resolved.
 
-        For logged-in callers the items are first filtered through
-        ``_filter_visible_rag_items`` so any citation pointing at a file
-        the user cannot ``view_file`` is dropped entirely (AC-16 / AC-17)
-        before enrichment runs.
+        Kept for callers that do not need the reasons; the reasons live on
+        ``resolve_citations_with_reasons``.
         """
-        cached_items = await self.runtime_cache_service.get_citations_by_ids(citation_ids)
-        cached_by_id: dict[str, CitationRegistryItemSchema] = {item.citationId: item for item in cached_items}
-        missing_ids = [citation_id for citation_id in citation_ids if citation_id not in cached_by_id]
-        items = cached_items
-        if missing_ids:
-            items.extend(await self.registry_service.list_citations_by_ids(missing_ids))
+        return (await self.resolve_citations_with_reasons(citation_ids, login_user)).items
 
-        items = await self._canonicalize_rag_items(items, login_user)
-        items = await self._project_old_file_names(items, login_user)
-        permitted = await self._permitted_file_ids(items, login_user)
-        file_change_visible_ids = await self._file_change_visible_ids(items, login_user)
-        items = self._apply_file_change_filter(items, file_change_visible_ids)
-        items = self._apply_tier_filter(items, permitted)
-        enriched_items = await asyncio.gather(
-            *(self._enrich_item(item, login_user, url_allowed=self._rag_url_allowed(item, permitted)) for item in items)
+    async def resolve_citations_with_reasons(
+        self,
+        citation_ids: list[str],
+        login_user: UserPayload | None = None,
+    ) -> ResolveCitationResponse:
+        """Resolve citations and say why each unresolved one did not make it.
+
+        The reasons are decided in a fixed order, and the order is a safety
+        property rather than a preference (design §3 decision 5):
+
+        1. no logged-in user            -> forbidden
+        2. no record in cache or DB     -> expired
+        3. record exists, view_file no  -> forbidden
+        4. record exists, permitted, underlying source gone -> expired
+
+        Rule 1 outranks rule 2 on purpose. If an unknown id came back as
+        "expired" while a real one came back as "forbidden", an anonymous caller
+        could probe which citation ids ever existed just by watching the reason
+        flip.
+        """
+        unresolved: dict[str, CitationUnresolvedReason] = {}
+
+        cached_items = await self.runtime_cache_service.get_citations_by_ids(citation_ids)
+        item_by_id: dict[str, CitationRegistryItemSchema] = {item.citationId: item for item in cached_items}
+        missing_ids = [citation_id for citation_id in citation_ids if citation_id not in item_by_id]
+        if missing_ids:
+            for item in await self.registry_service.list_citations_by_ids(missing_ids):
+                item_by_id[item.citationId] = item
+
+        items = [item_by_id[citation_id] for citation_id in citation_ids if citation_id in item_by_id]
+
+        if login_user is None:
+            # Rule 1, applied before anything else so an unknown id is
+            # indistinguishable from a refused one.
+            for citation_id in citation_ids:
+                item = item_by_id.get(citation_id)
+                if item is None or not self._is_anonymous_readable(item):
+                    unresolved[citation_id] = CitationUnresolvedReason.FORBIDDEN
+            items = [item for item in items if self._is_anonymous_readable(item)]
+            permitted = None
+        else:
+            # Rule 2 — nothing known about it, so nothing can leak by saying so.
+            for citation_id in citation_ids:
+                if citation_id not in item_by_id:
+                    unresolved[citation_id] = CitationUnresolvedReason.EXPIRED
+            # A cited file may have been renamed or moved since the answer was
+            # written, so the stored location is refreshed before any decision
+            # reads it. A file whose row is gone drops out here; for a logged-in
+            # caller that is the same answer rule 2 already gives.
+            known_ids = [item.citationId for item in items]
+            items = await self._canonicalize_rag_items(items, login_user)
+            items = await self._project_old_file_names(items, login_user)
+            surviving_ids = {item.citationId for item in items}
+            for citation_id in known_ids:
+                if citation_id not in surviving_ids:
+                    unresolved[citation_id] = CitationUnresolvedReason.EXPIRED
+            # Rule 3 — INV-7 and its F041 tiering, untouched by this feature.
+            permitted = await self._permitted_file_ids(items, login_user)
+            # A file hidden by a pending file change is a hard deny and so is
+            # decided before tiering, exactly as the single-citation path does.
+            file_change_visible_ids = await self._file_change_visible_ids(items, login_user)
+            visible_items = self._apply_tier_filter(
+                self._apply_file_change_filter(items, file_change_visible_ids),
+                permitted,
+            )
+            visible_ids = {item.citationId for item in visible_items}
+            for item in items:
+                if item.citationId not in visible_ids:
+                    unresolved[item.citationId] = CitationUnresolvedReason.FORBIDDEN
+            items = visible_items
+
+        enriched_by_id: dict[str, CitationRegistryItemSchema] = {}
+        for item in items:
+            try:
+                enriched_by_id[item.citationId] = await self._enrich_item(
+                    item, login_user, url_allowed=self._rag_url_allowed(item, permitted)
+                )
+            except NotFoundError:
+                # Rule 4 — past the permission gate, so naming it as gone leaks
+                # nothing the caller was not already entitled to see.
+                unresolved[item.citationId] = CitationUnresolvedReason.EXPIRED
+
+        return ResolveCitationResponse(
+            items=[enriched_by_id[cid] for cid in citation_ids if cid in enriched_by_id],
+            unresolved=[
+                UnresolvedCitationSchema(citationId=cid, reason=unresolved[cid])
+                for cid in citation_ids
+                if cid in unresolved
+            ],
         )
-        item_map: dict[str, CitationRegistryItemSchema] = {item.citationId: item for item in enriched_items}
-        return [item_map[citation_id] for citation_id in citation_ids if citation_id in item_map]

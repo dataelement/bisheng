@@ -1,4 +1,3 @@
-// @ts-strict-ignore
 import { Badge } from '@/components/bs-ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/bs-ui/table';
@@ -6,13 +5,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/bs-ui/tab
 import { useToast } from '@/components/bs-ui/toast/use-toast';
 import { copyText } from '@/utils';
 import { Check, Clipboard } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type MouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
 
-export const JsonItem = ({ name, type, desc, required = false, example = '', remark = '', children = null, line = false }) => {
+interface JsonItemProps {
+    name: string;
+    type: string;
+    desc: string;
+    required?: boolean;
+    example?: string;
+    remark?: string;
+    children?: ReactNode;
+    line?: boolean;
+}
+
+export function JsonItem({ name, type, desc, required = false, example = '', remark = '', children = null, line = false }: JsonItemProps) {
     const { t } = useTranslation()
     return <div className='pl-6 mb-4'>
         <div className='relative flex justify-between mb-2'>
@@ -36,7 +46,7 @@ export function ApiAccess() {
     const { id: assisId } = useParams()
 
     const curl = () => {
-        return `curl -X POST "${window.location.protocol}//${window.location.host}/api/v3/assistant/chat/completions" \\
+        return `curl -X POST "${window.location.protocol}//${window.location.host}/api/v2/assistant/chat/completions" \\
 -H "User-Agent: Apifox/1.0.0 (https://apifox.com)" \\
 -H "Content-Type: application/json" \\
 -d '{
@@ -44,7 +54,7 @@ export function ApiAccess() {
   "messages": [
     {
       "role": "user",
-      "content": "Hello"
+      "content": "${t("api.assistantDoc.hello")}"
     }
   ],
   "temperature": 0,
@@ -55,11 +65,11 @@ export function ApiAccess() {
 
     const python = () => {
         return `from openai import OpenAI
-base_url = "${window.location.protocol}//${window.location.host}/api/v3/assistant"
+base_url = "${window.location.protocol}//${window.location.host}/api/v2/assistant"
 model = "${assisId}"
 client = OpenAI(base_url=base_url, api_key="empty")
 # Round 1
-messages = [{"role": "user", "content": "Which is larger, 9.11 or 9.8?"}]
+messages = [{"role": "user", "content": "${t("api.assistantDoc.question")}"}]
 response = client.chat.completions.create(
     model=model,
     messages=messages,
@@ -83,14 +93,14 @@ for chunk in response:
     }
 
     const { message } = useToast()
-    const handleCopyLink = (e) => {
-        copyText(e.target).then(() => {
+    const handleCopyLink = (event: MouseEvent<HTMLElement>) => {
+        copyText(event.currentTarget).then(() => {
             message({ variant: 'success', description: t('api.copySuccess') })
         })
     }
 
     const [isCopied, setIsCopied] = useState<boolean>(false);
-    const copyToClipboard = (code: string) => {
+    const handleCopyCode = (code: string) => {
         setIsCopied(true);
         copyText(code).then(() => {
             setTimeout(() => {
@@ -109,7 +119,7 @@ for chunk in response:
                 <CardContent>
                     <h3 className="mb-2 bg-secondary px-4 py-2 inline-flex items-center rounded-md gap-1">
                         <Badge>POST</Badge>
-                        <span className='hover:underline cursor-pointer' onClick={handleCopyLink}>/api/v3/assistant/chat/completions</span>
+                        <span className='hover:underline cursor-pointer' onClick={handleCopyLink}>/api/v2/assistant/chat/completions</span>
                     </h3>
                     <p className='mt-2'>
                         {t('api.sdkNote')}
@@ -123,7 +133,7 @@ for chunk in response:
                         <TabsContent value="curl" className='relative'>
                             <button
                                 className="absolute right-0 flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
-                                onClick={() => copyToClipboard(curl())}
+                                onClick={() => handleCopyCode(curl())}
                             >
                                 {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
                             </button>
@@ -138,7 +148,7 @@ for chunk in response:
                         <TabsContent value="python" className='relative'>
                             <button
                                 className="absolute right-0 flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
-                                onClick={() => copyToClipboard(python())}
+                                onClick={() => handleCopyCode(python())}
                             >
                                 {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
                             </button>
@@ -174,7 +184,7 @@ for chunk in response:
                                     <JsonItem name="model" type="string" desc={t('api.assistantId')} required example={assisId}></JsonItem>
                                     <JsonItem name="messages" type="array [object {2}] " desc={t('api.messageList')} required>
                                         <JsonItem name="role" type="string" desc="" required example="user" line></JsonItem>
-                                        <JsonItem name="content" type="string" desc="" required example="Hello" line></JsonItem>
+                                        <JsonItem name="content" type="string" desc="" required example={t("api.assistantDoc.hello")} line></JsonItem>
                                     </JsonItem>
                                     <JsonItem name="temperature" type="integer" desc={t('api.temperature')} ></JsonItem>
                                     <JsonItem name="stream" type="boolean" desc={t('api.stream')} ></JsonItem>
@@ -190,7 +200,7 @@ for chunk in response:
   "messages": [
     {
       "role": "user",
-      "content": "Hello"
+      "content": "${t("api.assistantDoc.hello")}"
     }
   ],
   "temperature": 0,
@@ -253,7 +263,7 @@ for chunk in response:
       "index": 0,
       "message": {
         "role": "assistant",
-        "content": "Hello, how can I help?"
+        "content": "${t("api.assistantDoc.answer")}"
       },
       "finish_reason": "stop"
     }

@@ -2389,6 +2389,15 @@
   "com_settings_lang_ja": "日本語",
   "com_settings_lang_zh": "中文",
   "com_citation.no_download_url": "No downloadable file address",
+  "com_citation.loading": "Loading source details...",
+  "com_citation.no_detail": "No source details",
+  "com_citation.no_snippet": "No excerpt available",
+  "com_citation.source_web": "Web page",
+  "com_citation.source_document": "Document",
+  "com_citation.source_article": "Article",
+  "com_citation.badge_aria": "{{source}} citation {{index}}",
+  "com_citation.no_permission": "You do not have permission to view this source",
+  "com_citation.source_expired": "This source is no longer available",
   "com_message_approval_title": "Messages & Approvals",
   "com_message_approval_notifications": "Notifications",
   "com_notifications_tab_unread": "Unread",
@@ -2415,5 +2424,8 @@
   "com_personal_token_operation_success": "Personal API token updated",
   "com_personal_token_copy": "Copy",
   "com_personal_token_done": "Done",
-  "com_personal_token_loading": "Loading..."
+  "com_personal_token_loading": "Loading...",
+  "com_voice": {
+    "playback_unavailable": "Playback is unavailable. Please contact your administrator."
+  }
 }

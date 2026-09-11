@@ -583,11 +583,6 @@
       "count": 1
     }
   },
-  "src/components/Chat/Messages/Content/CitationSourceIcon.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
   "src/components/Chat/Messages/Content/CodeAnalyze.tsx": {
     "no-restricted-imports": {
       "count": 1
@@ -633,9 +628,6 @@
     },
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 6
     },
     "no-useless-escape": {
       "count": 1
@@ -711,7 +703,7 @@
       "count": 4
     },
     "no-restricted-syntax": {
-      "count": 17
+      "count": 15
     }
   },
   "src/components/Chat/Messages/Content/useCitationReferencePanel.tsx": {
@@ -1636,15 +1628,7 @@
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
-      "count": 5
-    }
-  },
-  "src/components/Voice/TextToSpeechButton.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
+      "count": 4
     }
   },
   "src/components/Voice/textToSpeechStore.tsx": {

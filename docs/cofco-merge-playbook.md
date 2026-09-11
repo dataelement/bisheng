@@ -281,6 +281,59 @@ uv run pytest test/database/test_alembic_single_head.py test/permission/test_f04
 
 ---
 
+### 3.17 后端 · 溯源解析(主线重写了整个批量解析)
+
+**文件**:`citation/domain/services/citation_resolve_service.py`
+
+**根因**:主线 F054 把批量解析从「解析不了就静默丢掉」改成「每条说明为什么解析不了」,
+整个方法重写(匿名调用者一律拒绝、未知 ID 报「已过期」、无权限报「无权限」);
+909 在同一个方法里有三层自己的东西 —— 位置重读(`_canonicalize_rag_items`)、
+旧文件名投影(`_project_old_file_names`)、F046 隐藏行过滤(`_file_change_visible_ids`
++ `_apply_file_change_filter`)。两边改同一段,必冲突。
+
+**处理方式**:**取主线的结构,把 909 的三层插回已登录分支**。三个函数在
+`login_user is None` 时都是直通,所以匿名分支原样保留主线的写法。顺序照单条解析路径:
+位置重读 → 旧名投影 → 算 permitted → F046 过滤 → 分级过滤 → 逐条 enrich。
+
+**一个坑**:位置重读会**丢掉文件行已经不存在的条目**(`file_row is None` 时 continue)。
+主线的契约是每个请求 ID 都要么给条目、要么给理由,所以重读前后要对一次 ID 差集,
+丢掉的标成「已过期」——已登录调用者本来就能从规则 2 得到同样的答案,不泄露任何东西。
+
+### 3.18 ⚠️ 两条线各自把授权模型从 v3 升到「自己的 v4」
+
+**症状**:`core/openfga/authorization_model_f048.py` 的 `MODEL_VERSION` 冲突,
+`test/permission/fixtures/f048_bench_contract.synthetic.json` 与
+`test/permission/test_f048_performance_contract.py` 里的 checksum 跟着冲突。
+
+**根因**:主线 F053(服务账号主体)和主线 test 分支 F054(部门上下文成员)各自改了模型,
+各自把版本从 `f048-v3` 写成 v4。合并后的模型两个改动都有,**既不是 F053 的 v4 也不是
+F054 的 v4**。
+
+**处理方式**:
+
+1. 版本号**另起一个**(2026-09-11 是 `f048-v5`),不要挑任何一边的。
+2. checksum **重算,不要挑边**:
+   ```bash
+   cd src/backend && uv run python -c "
+   from bisheng.core.openfga.authorization_model_f048 import build_authorization_model_f048, authorization_model_checksum
+   print(authorization_model_checksum(build_authorization_model_f048()))"
+   ```
+   把结果写进 bench fixture 的 `authorization_model_checksum`,再重算 `contract_checksum`
+   (`scripts/benchmark_f048_permission_paths.contract_checksum`,它是对去掉该字段后的整个
+   contract 求哈希),最后同步到性能合同测试里的断言。
+   `dataset` / `source` / `visible` 三个 checksum 与模型无关,两边本来就一样,别动。
+3. **部署要重新发模型**。任何一边的 v4 已经发过的环境都要再跑一次迁移,见文末「部署提醒」。
+
+### 3.19 前端 · 主线把中文抽成 i18n,909 在同几行有信创修复
+
+**文件**:`components/Chat/Messages/Content/Markdown.tsx`
+
+**处理方式**:**取主线的结构**(`localize(...)` + 新增的「来源已失效」分支),
+**但把宽度换回 909 的 `calc(var(--bs-vw,100vw)-32px)`** —— 这是信创 webview 的修复,
+跟 §3.8 同一个理由,不能退回 `100vw`。
+
+---
+
 ## 4. 合并后验证清单
 
 按顺序跑,**一项都不能省**:
@@ -361,6 +414,9 @@ cd src/backend && uv run pytest test/celery/ -q
 | 2026-09-07 | `2.8-common` → `3.0.0-beta1` | `dae918025` | 零冲突;技能上传上限 + 知识空间深链两笔 |
 | 2026-09-07 | `3.0.0-beta1` → `909` | `b5b7e56e5` | 6 个冲突,全是新的(F053 开放 API 鉴权),见 §3.13 / §3.15 / §3.16 |
 | 2026-09-07 | `cofco-902` → `909` | `deed07980` | **零冲突**(①②③ 顺序生效);坑全在合并之后,见 §3.12 / §3.13 / §3.14 |
+| 2026-09-11 | `909-test` → `909` | `eb59d7bb8` | 5 个冲突,全是「同一个 bug 两条线各修一遍」;审批人解析取主线的 F048 Grant 读法,删掉 909 那版创建者兜底 |
+| 2026-09-11 | `3.0.0-beta1-test` → `3.0.0-beta1` | `07c1c3b3a` | 4 个冲突,全在授权模型与它的 checksum,见 §3.18;另有两个 Feature 撞 F054 编号 |
+| 2026-09-11 | `3.0.0-beta1` → `909` | 见本次合并 | 5 个冲突:溯源解析(§3.17)、开放 API filelib 并集、Markdown 文案(§3.19)、两处并集 |
 
 ---
 
@@ -373,6 +429,7 @@ cd src/backend && uv run pytest test/celery/ -q
 |---|---|---|
 | `d53524e69` | 把 `public_reader` 从模型里摘掉 | `98cc4927…` → `0bf16de2…` |
 | F053(2026-09-07) | 加了服务账号 / 凭据类型 | `0bf16de2…` → `6d4c1ee3…` |
+| 2026-09-11 合并 | F053 的服务账号 + F054 的部门上下文成员,合成 `f048-v5` | → `2ed5c834…` |
 
 **症状**:启动卡在
 `Context 'permission_runtime' is in error state: authorization_model_migration_required`,

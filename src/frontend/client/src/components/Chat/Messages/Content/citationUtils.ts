@@ -213,6 +213,12 @@ export function normalizeCitationType(type?: string) {
   if (normalizedType === 'web' || normalizedType === 'websearch') {
     return 'web';
   }
+  // F054: a channel article. Without this branch the fall-through below would
+  // call it a knowledge-base source, and clicking the badge would open the file
+  // preview drawer onto a file that does not exist.
+  if (normalizedType === 'article' || normalizedType === 'articlesearch') {
+    return 'article';
+  }
   return 'rag';
 }
 
@@ -220,8 +226,24 @@ export function isRagCitation(detail?: ChatCitation | null, type?: string) {
   return normalizeCitationType(detail?.type || type) === 'rag';
 }
 
-export function getCitationSourceLabel(type?: string) {
-  return normalizeCitationType(type) === 'web' ? '网页' : '文档';
+export function isArticleCitation(detail?: ChatCitation | null, type?: string) {
+  return normalizeCitationType(detail?.type || type) === 'article';
+}
+
+/** Where an article badge sends the reader: the original post, in a new tab.
+ *  The reader is already on the article page inside the app, so the value of
+ *  the badge is saying "this sentence came from the article", not the jump. */
+export function getCitationArticleUrl(detail?: ChatCitation | null) {
+  return detail?.sourcePayload?.sourceUrl || '';
+}
+
+/** i18n key for the source kind, resolved by the caller (this module has no
+ *  translation runtime of its own). */
+export function getCitationSourceLabelKey(type?: string) {
+  const normalizedType = normalizeCitationType(type);
+  if (normalizedType === 'web') return 'com_citation.source_web';
+  if (normalizedType === 'article') return 'com_citation.source_article';
+  return 'com_citation.source_document';
 }
 
 export function getCitationItem(detail: ChatCitation | null, itemId?: string) {
@@ -444,6 +466,17 @@ export function buildCitationPreview(detail: ChatCitation | null, data: Partial<
   const item = getCitationItem(detail, data.itemId);
   const type = normalizeCitationType(detail.type || data.type);
 
+  if (type === 'article') {
+    return {
+      title: payload.title || `${data.label ?? ''}`,
+      snippet: item?.snippet || payload.snippet || '',
+      sourceName: payload.title || payload.sourceUrl || '',
+      sourceMeta: '',
+      link: payload.sourceUrl,
+      type,
+    };
+  }
+
   if (type === 'web') {
     return {
       title: item?.title || payload.title || payload.url || `引用 ${data.label ?? ''}`,
@@ -472,6 +505,17 @@ export function buildCitationDocumentPreview(detail: ChatCitation | null, data: 
 
   const payload = detail.sourcePayload;
   const type = normalizeCitationType(detail.type || data.type);
+
+  if (type === 'article') {
+    return {
+      title: payload.title || `${data.label ?? ''}`,
+      snippet: payload.snippet || '',
+      sourceName: payload.title || payload.sourceUrl || '',
+      sourceMeta: '',
+      link: payload.sourceUrl,
+      type,
+    };
+  }
 
   if (type === 'web') {
     return {

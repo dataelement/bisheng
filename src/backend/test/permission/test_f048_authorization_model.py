@@ -122,17 +122,18 @@ def _active_model_tuples(
     model_key: str = "editor",
     actions: tuple[str, ...] = ("edit",),
     grant_levels: tuple[int, ...] = (),
+    marker_subject: str = "user:*",
 ) -> set[TupleKey]:
     release = f"permission_model_release:catalog-1~{model_key}"
     model = f"permission_model:{model_key}"
     tuples: set[TupleKey] = {
-        ("user:*", "active", "permission_catalog_release:catalog-1"),
+        (marker_subject, "active", "permission_catalog_release:catalog-1"),
         ("permission_catalog_release:catalog-1", "catalog", release),
-        ("user:*", "enabled_marker", release),
+        (marker_subject, "enabled_marker", release),
         (release, "release", model),
     }
-    tuples.update(("user:*", f"{action}_marker", release) for action in actions)
-    tuples.update(("user:*", f"grant_level_{level}_marker", release) for level in grant_levels)
+    tuples.update((marker_subject, f"{action}_marker", release) for action in actions)
+    tuples.update((marker_subject, f"grant_level_{level}_marker", release) for level in grant_levels)
     return tuples
 
 
@@ -145,16 +146,17 @@ def _resource_grant_tuples(
     protected: bool = False,
     custom: bool = True,
     flattened_visible: bool = True,
+    marker_subject: str = "user:*",
 ) -> set[TupleKey]:
     relation = "protected_assignee" if protected else "ordinary_assignee"
     tuples: set[TupleKey] = {
         (f"permission_model:{model_key}", "model", grant),
         (subject, relation, grant),
         (grant, "grant", resource),
-        ("user:*", "permission_enabled", resource),
+        (marker_subject, "permission_enabled", resource),
     }
     if custom:
-        tuples.add(("user:*", "custom_mode", resource))
+        tuples.add((marker_subject, "custom_mode", resource))
     if flattened_visible:
         tuples.add((subject, "visible", resource))
     return tuples
@@ -212,6 +214,43 @@ def test_catalog_model_and_permission_enabled_are_all_required() -> None:
         )
         assert not without_required.check("user:7", "can_edit", resource)
         assert without_required.check("user:7", "visible", resource)
+
+
+def test_service_account_direct_grant_passes_all_technical_gates() -> None:
+    resource = "knowledge_space:4255"
+    grant = "permission_grant:sa-editor"
+    subject = "service_account:5"
+    tuples = _active_model_tuples(
+        actions=("upload_file",),
+        marker_subject="service_account:*",
+    )
+    tuples |= _resource_grant_tuples(
+        resource=resource,
+        grant=grant,
+        model_key="editor",
+        subject=subject,
+        marker_subject="service_account:*",
+    )
+    evaluator = ModelEvaluator(build_authorization_model_f048(), tuples)
+
+    assert evaluator.check(subject, "visible", resource)
+    assert evaluator.check(subject, "can_upload_file", resource)
+
+    for required_tuple in (
+        ("service_account:*", "active", "permission_catalog_release:catalog-1"),
+        (
+            "service_account:*",
+            "upload_file_marker",
+            "permission_model_release:catalog-1~editor",
+        ),
+        ("service_account:*", "permission_enabled", resource),
+        ("service_account:*", "custom_mode", resource),
+    ):
+        without_required = ModelEvaluator(
+            build_authorization_model_f048(),
+            tuples - {required_tuple},
+        )
+        assert not without_required.check(subject, "can_upload_file", resource)
 
 
 def test_custom_gate_blocks_ordinary_but_not_protected_assignment() -> None:

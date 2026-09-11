@@ -1111,6 +1111,7 @@ class F048KnowledgeFilePermissionAdapter:
         actor: PermissionActor,
         action: str,
     ) -> VerifiedPermissionTarget:
+        del action  # Permission target identity must not depend on a requested action.
         record = await self._loader.load_permission_record(
             resource_type,
             resource_id,
@@ -1120,7 +1121,6 @@ class F048KnowledgeFilePermissionAdapter:
             actor,
             resource_type,
             resource_id,
-            action=action,
         )
 
     async def resolve_permission_targets_from_rows(
@@ -1133,6 +1133,7 @@ class F048KnowledgeFilePermissionAdapter:
     ) -> tuple[VerifiedPermissionTarget, ...]:
         """Verify an existing business batch without reloading each resource by id."""
 
+        del action  # Permission target identity must not depend on a requested action.
         records = await self._loader.load_permission_records_from_rows(
             rows,
             knowledge=knowledge,
@@ -1146,7 +1147,6 @@ class F048KnowledgeFilePermissionAdapter:
                         actor,
                         record.resource_type,
                         record.resource_id,
-                        action=action,
                     )
                 )
             except PermissionInvalidResourceError:
@@ -1287,21 +1287,14 @@ class F048KnowledgeFilePermissionAdapter:
         actor: PermissionActor,
         resource_type: str,
         resource_id: str,
-        *,
-        action: str,
     ) -> VerifiedPermissionTarget:
-        file_statuses = {status.name for status in KnowledgeFileStatus} if action == "delete" else {"SUCCESS"}
-        valid_statuses = {
-            "folder": {"ACTIVE", "SUCCESS"},
-            "knowledge_file": file_statuses,
-        }
+        valid_resource_types = {"folder", "knowledge_file"}
         valid_parents = {"knowledge_space", "knowledge_library", "folder"}
         if (
             record is None
             or record.resource_type != resource_type
             or record.resource_id != resource_id
-            or resource_type not in valid_statuses
-            or record.status not in valid_statuses[resource_type]
+            or resource_type not in valid_resource_types
             or record.parent_type not in valid_parents
             or not record.parent_id
             or record.parent_id == record.resource_id

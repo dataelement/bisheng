@@ -19,6 +19,7 @@
 | F048 | [rebac-permission-model-grants](./048-rebac-permission-model-grants/) | P0 | ✅ 功能与迁移脚本开发完成；本地 E2E 经用户确认不执行 | F004, F006, F007, F008, F018, F027, F036, F040 |
 | F049 | [knowledge-space-children-read-optimization](./049-knowledge-space-children-read-optimization/) | P1 | Spec 已存在 | F027, F040, F048 |
 | F050 | [unified-permission-settings](./050-unified-permission-settings/) | P0 | Spec、Design 已确认，Tasks 已拆解，实现中 | v2.6.0 F044, F048 |
+| F054 | [unified-citation-entries](./054-unified-citation-entries/) | P1 | Discovery + Spec + Design 已出，待确认 | F029, F041（F047 并行） |
 
 ---
 
