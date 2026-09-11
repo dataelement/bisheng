@@ -8,6 +8,7 @@ local run=string.match(redis.call('INFO','server'),'run_id:([^\r\n]+)')
 local complete=redis.call('TYPE',KEYS[1]).ok=='hash' and redis.call('HGET',KEYS[1],'write_in_progress')~='1'
 local same_primary=complete and run==ARGV[1] and string.match(redis.call('INFO','replication'),'role:master')~=nil
 if same_primary and current==ARGV[2] then return {'CONFIRMED'} end
+if redis.call('HGET',KEYS[1],'state')=='FROZEN' then return {'FROZEN'} end
 local status=rt=='hash' and redis.call('HGET',KEYS[3],'status') or nil
 if same_primary and (status=='SUCCEEDED' or status=='FAILED' or status=='CANCELLED') then return {'KNOWN_DIFFERENT'} end
 redis.call('SADD',KEYS[2],'STORAGE_UNCERTAIN:'..ARGV[4])

@@ -9,7 +9,6 @@ from celery.signals import worker_shutting_down
 from bisheng.dsh.domain.services.profile import profile_scope
 from bisheng.worker.dsh.operations import register_operation_tasks
 from bisheng.worker.dsh.profiles import register_profile_tasks
-from bisheng.worker.dsh.reconciliation import register_reconciliation_tasks
 from bisheng.worker.dsh.usage import register_usage_tasks
 
 
@@ -24,7 +23,6 @@ def register_dsh_tasks(app):
 
     register_profile_tasks(app, administration_worker_runtime)
     project = register_usage_tasks(app, projection_worker_runtime)
-    register_reconciliation_tasks(app, operations_worker_runtime)
     register_operation_tasks(
         app, administration_worker_runtime, active_tenant_ids, lambda: datetime.now(UTC).replace(tzinfo=None)
     )

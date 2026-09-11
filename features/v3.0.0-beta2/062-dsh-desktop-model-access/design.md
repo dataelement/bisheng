@@ -374,7 +374,7 @@ Python实体通用创建/修改时间物理列统一为 `create_time/update_time
 
 额度配置直接保存在 `dsh_user_policy`：每个 tenant_id＋user_id＋model_id 一条记录，字段为 enabled、monthly_token_limit、version、quota_sync_state、quota_epoch、pending_operation_id；取消原 model_configs JSON，不增加主表或明细表。保存仅更新指定模型，以该行 version/CAS 和 operation_id 防止覆盖及重复执行；取消授权保留该行和递增版本，防止旧请求重放造成重新授权。同一用户不同模型的 SQL 及 Redis 策略版本独立。按模型查询已授权用户走 (tenant_id, model_id, enabled, user_id) 索引。聚合列表仅是模型列表、只读用量和恢复清单的临时 DTO，不落库为用户 JSON；恢复用的聚合版本为各行版本之和，不能作为管理写入版本。详见 [表结构修订](./model-policy-row-revision.md)。
 
-类型适配器在持久化边界将对象转换为 JSON，在读取时还原并验证对象；通过既有 JsonType 兼容 MySQL/DM8，不在数据库中查询 JSON 成员。不新增按模型反查用户的需求。`allowed_model_ids` 与 `monthly_token_limit` 仅为内存派生的 ID 列表及展示总和，不持久化，不是准入权威；模型自身配额才是准入依据。总和不得超过现有 int64 展示边界。旧草案模型清单＋共享额度不自动迁移成每模型额度，测试库按所有权重建，已有试装环境必须关闭 DSH 后重新确认模型配置及恢复证据。
+类型适配器在持久化边界将对象转换为 JSON，在读取时还原并验证对象；通过既有 JsonType 兼容 MySQL/DM8，不在数据库中查询 JSON 成员。不新增按模型反查用户的需求。`allowed_model_ids` 与 `monthly_token_limit` 仅为内存派生的 ID 列表及展示总和，不持久化，不是准入权威；模型自身配额才是准入依据。总和不得超过现有 int64 展示边界。旧草案模型清单＋共享额度不自动迁移成每模型额度，测试库按所有权重建，已有试装环境必须关闭 DSH 后重新确认模型配置。
 
 配置不保存用量。Redis 实时记用户总量和模型分量，SQL 模型月行批量投影。每次请求完成后累加实际 usage，不提前扣减；更换模型、撤销席位不清历史，跨月入账仍归准入月。
 
@@ -506,36 +506,28 @@ Stream 事件包含完整请求状态：request_id、event_version、quota_epoch
 
 Worker 按 request_id 合并同批事件，锁定明细后仅接受更高 event_version；由新旧明细已入账实际用量的差额更新月汇总；RUNNING / USAGE_UNKNOWN 的 NULL 不作零用量结算，不增加汇总。明细和汇总同一 SQL 事务，提交后 XACK；重复投递、乱序终态和 ACK 丢失只重试投影，不能重复扣费。完整状态让终态先到也能正确投影，旧事件随后到达忽略。批次按固定主键顺序锁定，使用双库 Repository。
 
-每批每个命中月行只更新一次，减少事务、往返与热点行写入；审计仍有 O(请求数) 的明细，批量化不是没有 SQL 写入。增加 projected_at 标识落库时点。正常目标延迟 5 秒；积压超过 30 秒或容量高水位停止新准入并告警，为在途结算预留空间；这些参数必须压测确认。
+每批每个命中月行只更新一次，减少事务、往返与热点行写入；审计仍有 O(请求数) 的明细，批量化不是没有 SQL 写入。增加 projected_at 标识落库时点。默认每 5 秒扫描一次，实际延迟还包含 Worker 排队和 SQL 提交耗时，5 秒不是上界；积压超过 30 秒或容量高水位停止新准入并告警，为在途结算预留空间；这些参数必须压测确认。
 
 /usage 和模型策略视图读 Redis，返回 source=live、as_of。Redis 不可用时只允许明确展示 source=persisted 的 SQL 数值及投影时点，并标 unavailable；不能用于实时准入。席位页完全不查询模型/用量。
 
 #### 4.7.3 故障与策略变更
 
+2026-09-11 用户确认取消 MinIO 恢复证据、人工确认文件和自动重连禁止。实现见 [SQL 自动恢复修订](./sql-quota-recovery-revision.md)。
+
 | 场景 | 处理 |
 |---|---|
-| Worker/SQL 暂不可用 | Redis 按已入账实际用量判断，事件保留 PEL；积压达阈值停止新准入。SQL 恢复后重放，确认提交后再 ACK |
-| Redis 断连、OOM、key 丢失 | 失败关闭；禁止从旧 SQL 初始化为零或按旧余额继续放行 |
-| 重启/主从切换/恢复旧快照 | 关闭配额就绪门禁并隔离旧主；核对 AOF/Stream、SQL 明细和未完成请求，恢复并核验后提高 quota_epoch，再开放 |
-| 无法证明已确认事件完整 | 冻结受影响月份/分片、人工核账；无法确定用户范围则冻结整个分片，不宣称从旧 SQL 自动无损恢复 |
-| 修改模型范围或额度 | 按 §4.5.5 登记 UPDATE_POLICY 意图/所有者并冻结，策略与审计同提交，再安装版本和移除本操作冻结原因；失败原 ID 续跑 |
-| 降低上限或撤销资格 | 不清 used；新准入按新策略校验，达限或无资格时拒绝，在途按原请求归属结算；席位撤销继续走 Gateway 强校验 |
+| Worker/SQL 暂不可用 | 保留 Redis Stream；积压达到阈值暂停新调用；SQL 恢复后按版本重放，提交后 ACK |
+| Redis 暂不可用 | 返回额度不可用；连接可用后自动继续，不需要新配置或人工审批 |
+| 账本缺失或 Redis 重启后快照落后 | 按用户合并 SQL 明细及 Redis 尚存请求的最新版本，核对 SQL 月汇总；保留尚存计数，不将已用额度清零 |
+| SQL 尚未落库且 Redis 数据已丢失 | 接受这部分用量丢失，不推算、不补扣。MinIO 非实时证据也无法弥补这一窗口，因此不再依赖它 |
+| SQL 留有 RUNNING 而 Redis 请求丢失 | 转为 USAGE_UNKNOWN，保留请求身份与缺失原因，Token 为 NULL；不能伪造零用量结算 |
+| 多进程同时恢复 | 共享用户租约及逐批所有权校验；恢复中暂停该用户的调用/额度变更，过期所有者不能发布 READY 或删除新租约 |
+| 恢复时 SQL 策略变化 | 校验失败后重试，不覆盖较新配置；原 UPDATE_POLICY 的版本和执行阶段保留 |
+| 正常修改模型范围或额度 | 沿用持久化操作、独立模型版本与补偿重试，不重新定义授权语义 |
 
-当前容量与维护参数作为服务端配置固定：`quota_memory_budget_bytes=536870912`（512 MiB）、`quota_memory_headroom_bytes=67108864`（64 MiB）、`quota_backlog_high_watermark=10000`、`backlog_stop_seconds=30`、`quota_retention_seconds=2592000`（30 天）、`quota_projection_max_batches=10`、`quota_projection_max_seconds=1.0`。Redis 设置有限 maxmemory 时取其与配置预算的较小值；即使 maxmemory=0 也执行有限预算。高水位只关闭新准入，允许在途请求结算；这些默认值不是已通过生产压测的容量承诺。`usage` 与准入使用同一实时容量/积压检查。
+Redis 运行标识只用于自动识别快照变化，不是部署参数，也无需人工批准。SQL 明细每批 500 条读取，Redis 重建每批最多 100 个请求；保留每个用户的完整合并清单在内存，恢复内存与耗时随历史量增长，需要另行容量测试。恢复重放保留事件版本与原请求 identity，月汇总不重复累计；保留 Stream 的情况下重新统计 retained_stream_count，避免清理时提前删除请求。
 
-每用户维护 RUNNING 有序索引及数量校验，终态移除；索引丢失或不一致时拒绝新准入。超时检查每批最多 100 条，投影每批最多 500 条，单用户到批数或时间预算后让出队列；用户投影租约与全局扫描租约限制重复调度。SQL 提交后记录精确事件确认，只有可靠终态已被所有消费组送达并 ACK、超过保留期且请求确认完整时，才逐条删除 Stream 事件并在最后事件删除后删除请求缓存。UNKNOWN、RUNNING、SQL 审计和月用量不因此删除，旧数据缺少确认标记时保守保留。
-
-配额 Redis 采用独立配置的 noeviction 受管存储和 AOF/副本，不走普通缓存 pickle + 默认一小时 TTL 方法。当前月 key 不设普通失效时间；Stream 只清理已确认落库且过保留期的事件，不能 MAXLEN 强删未消费数据，不用 Pub/Sub 或进程内任务替代。
-
-首次开通用户或进入新月份由受控初始化流程一次性创建账本及 READY 标记：先确认该维度没有既有消费/未投影事件，再原子建用户总量和模型分量；普通缓存 miss 不能触发零值初始化。恢复已有月份必须走上述核对流程。用户身份投影版本也须由用户变更事务生成单调版本，不能使用客户端时间或随意覆盖。
-
-Lua 不被并发穿插，但运行错误不回滚：写前校验参数、类型和容量，任一异常/不确定均不放行并冻结排查。连接必须绑定已批准主节点身份和恢复代次；自动重连/主身份变化先关闭门禁，旧主需网络隔离，不能只靠复制的 READY key 或失效广播。复用现有 Redis 配置创建 DSH 受控连接，当前支持单实例/Sentinel，Cluster 尚未实现；保留独立恢复校验而不修改公共连接行为。
-
-AOF、副本和 WAIT 降低丢失概率但不提供任意故障下的零丢失强一致保证。方案以故障期间停止新调用避免按失真账本继续放行；已准入请求的超额仍按 §4.7.1 接受；若要求故障后无损且持续可用，需另评审同步持久化日志或数据库逐请求准入。恢复流程只有证明事件完整才能重开，无法证明则保守冻结，而不是“重建成功即放行”。参考 [Redis 复制说明](https://redis.io/docs/latest/operate/oss_and_stack/management/replication/)、[Redis Streams](https://redis.io/docs/latest/develop/data-types/streams/)。
-
-恢复使用不可变 MinIO 版本对象和 SHA256 审批；完整请求按 request_id 排序分片，每片最多 500 条且不超过 4 MiB。索引记录连续片序、条数与逐片及整体摘要，不设置一万请求的总上限；索引自身上限 32 MiB。SQL 按主键每批 500 条读取，Redis 每批恢复 500 条，全片校验及策略 quota_epoch CAS 成功前保持冻结。恢复先以 owner/manifest digest 写入 FROZEN 完整性回执，SQL quota_epoch CAS 提交后，才用同一 owner/digest/epoch/policy version 再次 CAS 发布 READY；任何旧所有者不得提前开放。结算结果不确定时，独立控制连接只能在原已批准主身份上精确确认原终态，或增加 STORAGE_UNCERTAIN 存储故障保护；它不能恢复准入，不采信新主上复制的终态。当前恢复构建仍需在内存保有请求清单，并非无限容量流式恢复；容量与生产恢复时长需部署压测。首次初始化须由原 UPDATE_POLICY 的 version=0 持久意图证明空历史，审批就绪后以同 operation_id 续跑，不能手工写 READY。具体命令与失败分支见 [quota-operations.md](./quota-operations.md)。
-
-策略同步/恢复是低频 SQL 写；额度变更不等事件消费者更新才生效。用户/租户/模型可用性仍按 §4.4 强校验，本次减少高频写入不等于取消必要的授权读取。
+首次授权从 SQL 已登记的 version 0 策略和操作自动创建空账本，不再停在等待证据审批的 PROCESSING。该修改不增加限流、部门同步、预扣或补扣。
 
 #### 4.7.4 未获取用量：保留明细，不冻结
 
@@ -545,7 +537,7 @@ AOF、副本和 WAIT 降低丢失概率但不提供任意故障下的零丢失�
 
 Redis 的 `unknown_usage` 集合仅统计缺失用量请求，不参与准入。它和 `blocks` 完全分离；`blocks` 仅保留策略变更 `POLICY_SYNC:<operation_id>`、账本写入不确定 `STORAGE_UNCERTAIN:<request_id>` 等独立保护。正常缺少 usage 不写入这些保护项。重建未知请求和跨月也不恢复任何 UNKNOWN 阻断。
 
-已有 `DshReconciliationService` / `python -m bisheng.dsh.cli.reconcile` 保留为可选的可靠补记工具，逐请求验证证据、管理员权限、原模型/月、expected_event_version 和 operation_id；重复提交不重复累计，补记不重新调用供应商，也不清除策略/存储故障保护。无法取得用量时明细持续保留未知状态，无需补记即可继续调用，不存在“等人工核账才能解冻”的运营要求。
+取消依赖 MinIO 证据的人工补记服务和 CLI；未知用量持续保留 NULL，不推算补扣，也不要求人工核账后才继续调用。历史补记审计字段保留，不清理已有记录。
 
 
 ### 4.8 模块职责与统一管理
@@ -609,7 +601,7 @@ gt_dsh_seat 只保存最小身份检索投影，不成为用户主数据。首�
 | 管理 API 沿用 HTTP 200 + status_code 业务错误 | 仅判断 HTTP 状态会把确定版本冲突一直展示为处理中 | 平台 request 的 preserveError 与 API/dsh.ts；只对明确拒绝结束，网络不确定保留原操作 |
 | 255 字符用户名在小写标准化后可能扩展 | Java UTF-16 长度或窄投影列会拒绝合法用户或截断 | DshContracts 按 Unicode code point 校验；检索列 MySQL 510 字符 / DM8 2040 字节，真实 MySQL Unicode 测试 |
 | 100 条资料可能超过内部 64 KiB body 限制 | 每次重试都失败，投影永远滞后 | Profile Service 以确切 UTF-8 JSON 字节数和条数同时拆批；单项过大持久化失败 |
-| 旧审批对应的 Redis 连接重新建立 | 复制的 READY/审批不能证明丢失事件完整 | QuotaRedis 拓扑绑定、ModelRuntime 单次激活锁、不可变 MinIO 审批与恢复 CAS |
+| Redis 重启或账本丢失 | SQL 异步落库存在尾部缺口 | 自动合并 SQL 与 Redis 尚存记录；接受无法找回的尾部用量，租约保护恢复写入 |
 | 恢复清单可能超过一万请求 | 固定总数上限阻止繁忙用户恢复 | RecoveryShard 每片最多 500 条/4 MiB，连续片序与逐片/整体摘要；Redis 分批恢复期间保持冻结 |
 | 仅闭源发证不能保护客户自有模型接口免于 fork | 把有限授权控制宣传成绝对不可绕过 | §2.1 与 §8 OQ-01 |
 

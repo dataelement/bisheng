@@ -4,7 +4,6 @@ import hashlib
 import json
 from datetime import UTC
 from pathlib import Path
-from uuid import uuid4
 
 from loguru import logger
 from redis.asyncio import ConnectionPool, Redis
@@ -41,8 +40,21 @@ class QuotaRedis:
         ):
             raise ValueError("Quota storage requires finite positive capacity and backlog bounds")
         self.redis, self.topology, self.prefix = redis, topology, prefix
+        self.recovery = None
         self.memory_budget_bytes, self.memory_headroom_bytes = memory_budget_bytes, memory_headroom_bytes
         self.backlog_high_watermark, self.backlog_stop_seconds = backlog_high_watermark, backlog_stop_seconds
+
+    async def prepare(self, tenant_id, user_id, month=None):
+        if self.recovery is not None:
+            await self.recovery.ensure(tenant_id, user_id, month)
+
+    async def ledger_epoch(self, tenant_id, user_id):
+        if not getattr(self.topology, "automatic", False):
+            return self.topology.epoch
+        epoch = await self.redis.hget(f"{self.prefix}:{{{tenant_id}:{user_id}}}:gate", "epoch")
+        if epoch is None:
+            raise QuotaRejected("missing_user_ledger")
+        return int(epoch)
 
     def pressure_args(self):
         return list(
@@ -74,10 +86,16 @@ class QuotaRedis:
         ]
 
     async def _execute(self, script: str, event: UsageEvent, args: list[str]):
+        if script == "admit.lua":
+            await self.prepare(event.tenant_id, event.user_id, event.usage_month)
         async with self.topology.lock:
             try:
                 await self.topology.check()
-                if script == "admit.lua" and event.quota_epoch != self.topology.epoch:
+                if (
+                    script == "admit.lua"
+                    and not getattr(self.topology, "automatic", False)
+                    and event.quota_epoch != self.topology.epoch
+                ):
                     raise QuotaRejected("event_epoch_mismatch")
                 source = self.script(script)
                 keys = self.keys(event)
@@ -131,6 +149,7 @@ class QuotaRedis:
 
     async def record_usage(self, event: UsageEvent, expected_version: int) -> UsageEvent:
         event = UsageEvent.model_validate(event.model_dump())
+        await self.prepare(event.tenant_id, event.user_id, event.usage_month)
         if event.event_version != expected_version + 1 or event.status == "RUNNING":
             raise ValueError("Settlement requires the next event version and a terminal or unknown state")
         try:
@@ -138,7 +157,7 @@ class QuotaRedis:
                 "settle.lua",
                 event,
                 [
-                    str(self.topology.epoch),
+                    str(await self.ledger_epoch(event.tenant_id, event.user_id)),
                     str(expected_version),
                     str(event.event_version),
                     str(event.model_id),
@@ -208,6 +227,7 @@ class QuotaRedis:
     async def _policy(self, tenant_id: int, user_id: int, args: list[str]):
         if min(tenant_id, user_id) < 1:
             raise ValueError("Policy identity must be positive")
+        await self.prepare(tenant_id, user_id)
         base = f"{self.prefix}:{{{tenant_id}:{user_id}}}"
         async with self.topology.lock:
             try:
@@ -340,139 +360,6 @@ class QuotaRedis:
         data["started_at"] = started.astimezone(UTC).isoformat()
         return hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
-    async def restore_manifest(self, manifest, inventory: dict[str, UsageEvent], verify_covered):
-        """Atomically restore one user after an external complete-tail audit and primary fencing."""
-        if manifest.shards:
-            from bisheng.dsh.infrastructure.quota_restore import restore_sharded
-
-            return await restore_sharded(self, manifest, inventory, verify_covered)
-        base = f"{self.prefix}:{{{manifest.tenant_id}:{manifest.user_id}}}"
-        owner = uuid4().hex
-        digest = hashlib.sha256(manifest.model_dump_json().encode()).hexdigest()
-        async with self.topology.lock:
-            self.topology.close()
-            # Close the shared gate before any reconstruction. Failure leaves it closed.
-            await self.redis.hset(base + ":gate", "state", "FROZEN")
-            try:
-                await self.topology.approve(
-                    manifest.run_id,
-                    manifest.epoch,
-                    old_primary_isolated=manifest.old_primary_isolated,
-                    ledger_proven=manifest.confirmed_tail_complete,
-                )
-                # Surviving Stream must also be covered by the audited event inventory.
-                cursor = "-"
-                while True:
-                    batch = await self.redis.xrange(base + ":events", min=cursor, max="+", count=500)
-                    if not batch:
-                        break
-                    for _, fields in batch:
-                        verify_covered(UsageEvent.model_validate_json(fields["event"]), inventory)
-                    cursor = "(" + batch[-1][0]
-                cursor = 0
-                while True:
-                    cursor, surviving = await self.redis.scan(cursor, match=base + ":request:*", count=100)
-                    for key in surviving:
-                        value = await self.redis.hget(key, "event")
-                        if value is None:
-                            raise QuotaRejected("missing_request_ledger")
-                        verify_covered(UsageEvent.model_validate_json(value), inventory)
-                    if cursor == 0:
-                        break
-                months = {manifest.current_month: {str(m): 0 for m in manifest.model_ids}}
-                events = []
-                for original in inventory.values():
-                    event = original
-                    if event.status == "RUNNING":
-                        event = event.model_copy(
-                            update={
-                                "status": "USAGE_UNKNOWN",
-                                "event_version": event.event_version + 1,
-                                "error_code": "interrupted_unknown",
-                            }
-                        )
-                    totals = months.setdefault(event.usage_month, {})
-                    totals[str(event.model_id)] = totals.get(str(event.model_id), 0) + (event.total_tokens or 0)
-                    events.append(event)
-                for totals in months.values():
-                    for model in manifest.model_ids:
-                        totals.setdefault(str(model), 0)
-                    if sum(totals.values()) > 9223372036854775807:
-                        raise ValueError("Recovered counter exceeds int64")
-                keys = [base + ":gate", base + ":unknown_usage", base + ":events"]
-                args = [
-                    str(manifest.previous_epoch),
-                    str(manifest.epoch),
-                    str(manifest.policy_version),
-                    str(manifest.monthly_limit),
-                    str(len(manifest.model_ids)),
-                    *[
-                        value
-                        for item in manifest.model_configs
-                        for value in (str(item.model_id), str(item.monthly_token_limit))
-                    ],
-                    str(len(manifest.model_versions)),
-                    *[
-                        value
-                        for model, version in sorted(manifest.model_versions.items())
-                        for value in (str(model), str(version))
-                    ],
-                    str(len(months)),
-                ]
-                for month, totals in sorted(months.items()):
-                    keys.extend([base + ":month:" + month, base + ":models:" + month])
-                    args.extend([str(sum(totals.values())), str(len(totals))])
-                    for model, total in sorted(totals.items()):
-                        args.extend([model, str(total)])
-                args.append(str(len(events)))
-                for event in events:
-                    keys.append(base + ":request:" + event.request_id)
-                    args.extend(
-                        [
-                            event.model_dump_json(),
-                            str(event.event_version),
-                            event.status,
-                            event.usage_month,
-                            str(event.model_id),
-                            str(event.quota_epoch),
-                            self._identity(event),
-                            event.request_id,
-                        ]
-                    )
-                args.extend([digest, owner])
-                result = await self.redis.eval(
-                    (Path(__file__).parent / "lua" / "recover.lua").read_text(), len(keys), *keys, *args
-                )
-                if result[0] != "OK":
-                    raise QuotaRejected(result[1])
-                from bisheng.dsh.infrastructure.quota_restore import rebuild_retained_counts
-
-                await rebuild_retained_counts(self, base, owner)
-                await self.redis.delete(base + ":running")
-                return {"owner": owner, "digest": digest}
-            except Exception:
-                self.topology.close()
-                raise
-
-    async def finish_recovery(self, manifest, receipt: dict):
-        digest = hashlib.sha256(manifest.model_dump_json().encode()).hexdigest()
-        if receipt.get("digest") != digest or not receipt.get("owner"):
-            raise QuotaRejected("invalid_recovery_receipt")
-        async with self.topology.lock:
-            await self.topology.check()
-            result = await self.redis.eval(
-                (Path(__file__).parent / "lua" / "finish_recovery.lua").read_text(),
-                2,
-                f"{self.prefix}:{{{manifest.tenant_id}:{manifest.user_id}}}:gate",
-                f"{self.prefix}:{{{manifest.tenant_id}:{manifest.user_id}}}:blocks",
-                receipt["owner"],
-                digest,
-                str(manifest.epoch),
-                str(manifest.policy_version),
-            )
-            if result[0] != "OK":
-                raise QuotaRejected(result[1])
-
     async def claim_reconciliation(self, event: UsageEvent, *, operation_id: str, payload_hash: str, generation: int):
         self._policy_arguments(operation_id, generation, self.topology.epoch, event.event_version)
         if len(payload_hash) != 64:
@@ -499,6 +386,7 @@ class QuotaRedis:
 
         if min(tenant_id, user_id) < 1 or re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", usage_month) is None:
             raise ValueError("Invalid usage dimension")
+        await self.prepare(tenant_id, user_id, usage_month)
         base = f"{self.prefix}:{{{tenant_id}:{user_id}}}"
         async with self.topology.lock:
             try:
@@ -513,7 +401,7 @@ class QuotaRedis:
                     base + ":events",
                     base + ":running",
                     base + ":unknown_usage",
-                    str(self.topology.epoch),
+                    str(await self.ledger_epoch(tenant_id, user_id)),
                     *self.pressure_args(),
                 )
             except (RedisError, RuntimeError) as exc:
@@ -550,6 +438,9 @@ class QuotaRedis:
         self, tenant_id: int, user_id: int, *, operation_id: str, lease_generation: int, epoch: int, proof: dict
     ):
         """Only the transaction-owned initial policy operation may provide this repository proof."""
+        if self.recovery is not None:
+            await self.prepare(tenant_id, user_id)
+            return
         expected = {
             "tenant_id": tenant_id,
             "user_id": user_id,

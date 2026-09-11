@@ -20,7 +20,6 @@ async def dispatch_operation(headers: dict, tenant_id: int, operation_id: str, r
             action = operation.action
         service_name = {
             "UPDATE_POLICY": "policy",
-            "RECONCILE_USAGE": "reconciliation",
             "REVOKE": "admin",
             "REASSIGN": "admin",
             "SYNC_PROFILE": "profiles",

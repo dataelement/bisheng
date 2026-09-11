@@ -61,7 +61,7 @@ def create_quota_redis(url: str | dict) -> Redis:
 
 
 class QuotaTopology:
-    def __init__(self, redis: Redis, *, shared: bool = False):
+    def __init__(self, redis: Redis, *, shared: bool = False, automatic: bool = False):
         if not redis.single_connection_client:
             raise ValueError("Quota requires one pinned connection with automatic retries disabled")
         if not issubclass(redis.connection_pool.connection_class, _PinnedConnectionMixin):
@@ -69,6 +69,7 @@ class QuotaTopology:
         redis.set_retry(Retry(NoBackoff(), 0))
         self.redis = redis
         self.shared = shared
+        self.automatic = automatic
         self.lock = asyncio.Lock()
         self.run_id: str | None = None
         self.connection_id: int | None = None
@@ -99,7 +100,34 @@ class QuotaTopology:
         self.redis.connection.recovery_connect_allowed = False
         self.ready = True
 
+    async def activate(self):
+        """Reconnect to the configured Redis; SQL recovery no longer needs operator approval."""
+        async with self.lock:
+            if self.redis.connection is not None:
+                self.redis.connection.recovery_connect_allowed = True
+            info = await self.redis.info()
+            if info.get("role") != "master":
+                self.close()
+                raise RuntimeError("Quota storage requires a writable Redis primary")
+            self.run_id, self.epoch = info["run_id"], 1
+            self.connection_id = await self.redis.client_id()
+            self.ready = True
+
     async def check(self):
+        if self.automatic:
+            if self.redis.connection is not None:
+                self.redis.connection.recovery_connect_allowed = True
+            try:
+                info = await self.redis.info()
+                if info.get("role") != "master":
+                    raise RuntimeError("Quota storage requires a writable Redis primary")
+                self.run_id, self.epoch = info["run_id"], 1
+                self.connection_id = await self.redis.client_id()
+                self.ready = True
+                return
+            except (RedisError, RuntimeError):
+                self.close()
+                raise
         if not self.ready:
             raise RuntimeError("Quota recovery gate is closed")
         try:

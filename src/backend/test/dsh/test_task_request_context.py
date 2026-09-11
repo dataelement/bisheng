@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bisheng.worker.dsh.operations import register_operation_tasks
-from bisheng.worker.dsh.reconciliation import register_reconciliation_tasks
 from bisheng.worker.dsh.usage import register_usage_tasks
 
 
@@ -40,7 +39,7 @@ def across_thread(factory):
         return executor.submit(lambda: asyncio.run(factory())).result()
 
 
-@pytest.mark.parametrize("kind", ["operation", "usage", "reconciliation", "inspection"])
+@pytest.mark.parametrize("kind", ["operation", "usage", "inspection"])
 @pytest.mark.parametrize("headers", [{"tenant_id": 1}, {}, {"tenant_id": 2}, {"tenant_id": "1"}, {"tenant_id": True}])
 def test_request_tenant_survives_async_thread_bridge(monkeypatch, kind, headers):
     from bisheng.dsh import operations_runtime
@@ -75,8 +74,6 @@ def test_request_tenant_survives_async_thread_bridge(monkeypatch, kind, headers)
         task, _ = register_operation_tasks(app, factory, AsyncMock(return_value=[1]), lambda: None)
     elif kind == "usage":
         task = register_usage_tasks(app, factory)
-    elif kind == "reconciliation":
-        task = register_reconciliation_tasks(app, factory)
     else:
         task = register_dsh_tasks(app)["inspect"]
     task.state.request = SimpleNamespace(headers=headers)

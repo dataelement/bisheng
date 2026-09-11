@@ -1079,3 +1079,11 @@ T115/T116：补充有意义的基础验证与C5注册，原114项任务ID不变�
 - [ ] 部署后执行两个独立环境和真实客户端重新登录联调。
 
 实施清单与验收见 [解绑修订](./installation-unbinding-revision.md) 与 [本地验证记录](./installation-unbinding-validation.md)；不得把本地测试记为环境部署或真实客户端联调完成。不打正式 tag。
+
+## 2026-09-11 SQL 自动恢复修订
+
+用户确认取消 MinIO 证据和人工确认，按已落库 SQL 自动恢复，接受不可找回的异步尾部用量丢失。设计与验收见 [sql-quota-recovery-revision.md](./sql-quota-recovery-revision.md)。
+
+- [x] 移除三个 MinIO 配置和依赖证据的恢复/补录入口。
+- [x] API/Worker 自动连接与按用户重建，保留实时幸存用量及 SQL 策略操作阶段。
+- [x] 完成 SQL/Redis 与 HTTP 回归：419 通过、12 跳过；静态检查通过，准确边界见修订文档。

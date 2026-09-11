@@ -27,21 +27,6 @@ class DshSettings(BaseModel):
         default=None,
         description="Internal HTTP(S) origin of the gateway used for authenticated service calls; no path.",
     )
-    quota_approval_object: str | None = Field(
-        default=None,
-        description="Immutable object reference containing the approval required to activate quota storage.",
-    )
-    quota_approval_sha256: str | None = Field(
-        default=None,
-        pattern=r"^[a-f0-9]{64}$",
-        description="Lowercase SHA-256 digest of the quota activation approval object; required with its reference.",
-    )
-    quota_evidence_bucket: str = Field(
-        default="dsh-evidence",
-        min_length=3,
-        max_length=63,
-        description="Object-storage bucket containing immutable quota approval and reconciliation evidence.",
-    )
     billing_timezone: str = Field(
         default="Asia/Shanghai", description="IANA timezone used to calculate monthly quota accounting boundaries."
     )
@@ -119,8 +104,6 @@ class DshSettings(BaseModel):
 
     @model_validator(mode="after")
     def validate_enabled_trust(self):
-        if bool(self.quota_approval_object) != bool(self.quota_approval_sha256):
-            raise ValueError("Quota approval requires both immutable object reference and SHA256")
         if self.quota_memory_headroom_bytes >= self.quota_memory_budget_bytes:
             raise ValueError("Quota capacity requires positive settlement headroom below its finite memory budget")
         if not self.enabled:

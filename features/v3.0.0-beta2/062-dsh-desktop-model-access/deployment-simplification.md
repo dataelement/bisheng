@@ -10,7 +10,8 @@
 | 毕昇 Redis | 已解密的应用 settings.redis_url | dsh.quota_redis_url |
 | 用户可用模型和逐模型月额度 | DSH 管理界面；候选模型复用原模型管理及租户共享规则 | dsh.verified_model_capabilities |
 | 月度边界 | Asia/Shanghai，北京时间每月 1 日零点 | 默认 UTC |
-| 对外地址 | dsh.platform_public_url 与 Gateway dsh.public-origin，等于客户端填写的 Nginx origin | 不与客户端 loopback 回调混淆 |
+| 对外地址 | dsh.platform_public_url 与 Gateway 从 bisheng.home-url 提取的 origin，等于客户端填写的 Nginx origin | Gateway dsh.public-origin；不与客户端 loopback 回调混淆 |
+| Gateway 请求 Python | bisheng.bisheng-api-url | dsh.python-origin |
 
 ## 身份协议
 
@@ -28,9 +29,9 @@ Ticket 保持随机、短期、Redis 原子一次性消费和 PKCE/授权事务�
 
 ## 共享 Redis 的运行边界
 
-不改其他业务的连接池、全局淘汰策略或持久化配置。DSH 使用相同应用连接配置创建受控连接，当前覆盖单实例与 Sentinel，Cluster 未实现，不能宣称兼容。复用后不要求单独配置 AOF/noeviction；仍通过外部恢复审批绑定 Redis run_id/epoch 和已核对的 evicted_keys。连接/主身份改变或发生新的淘汰必须停止 DSH 新准入，不能把丢失账本当零用量。该保护不等于缺失 usage 的用户冻结。
+不改其他业务的连接池、全局淘汰策略或持久化配置。DSH 复用应用 Redis 连接配置，支持 standalone/Sentinel，不声明 Cluster 支持。Redis 可自动重连；账本缺失时以 SQL 已落库数据和 Redis 尚存记录恢复。移除 quota_evidence_bucket、quota_approval_object、quota_approval_sha256，不再配置 MinIO 证据、运行标识审批或人工恢复文件。
 
-共享模式按服务器已有 maxmemory 判断余量，不将其他业务占用算入原 DSH 512 MiB 上限；未设置全局上限时保留 DSH Stream 积压数量/时间保护和异步清理，不擅自设置全局上限。既有受控恢复审批对象仍需配置，此次取消的是重复 Redis 地址，不是丢账恢复校验。
+用户已接受无法找回的异步尾部用量丢失，不推算补扣。共享模式继续保留 Stream 积压和已有容量保护，不擅自修改全局 Redis 配置。详见 [SQL 自动恢复修订](./sql-quota-recovery-revision.md)。
 
 ## 2026-09-09 历史切换记录（非本次升版要求）
 

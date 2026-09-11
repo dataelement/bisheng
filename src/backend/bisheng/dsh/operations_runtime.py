@@ -5,21 +5,14 @@ import os
 import socket
 from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager
-from datetime import UTC, datetime
 
 from bisheng.core.context import tenant as context
 from bisheng.dsh.config import DshSettings
 from bisheng.dsh.domain.repositories.operations_identity import OperationsIdentityRecords
-from bisheng.dsh.domain.repositories.reconciliation import DshReconciliationRepository
 from bisheng.dsh.domain.repositories.usage import DshUsageRepository
 from bisheng.dsh.domain.services.projection import DshProjectionService
-from bisheng.dsh.domain.services.quota_operations import DshQuotaOperationsService
-from bisheng.dsh.domain.services.quota_recovery import DshQuotaRecoveryService
-from bisheng.dsh.domain.services.reconciliation import DshReconciliationService
 from bisheng.dsh.domain.services.usage import DshUsageService
-from bisheng.dsh.infrastructure.evidence_store import MinioEvidenceStore
-from bisheng.dsh.infrastructure.quota_activation import MinioQuotaApprovalStore, activate_from_approval
-from bisheng.dsh.infrastructure.quota_redis import QuotaRedis, QuotaRejected
+from bisheng.dsh.infrastructure.quota_redis import QuotaRedis
 from bisheng.dsh.infrastructure.quota_topology import QuotaTopology, create_quota_redis
 from bisheng.dsh.infrastructure.shared_trust import OUTBOUND_KEY_ID, configured_key
 
@@ -132,7 +125,7 @@ class _ActivatedUsage(DshUsageService):
 
 
 class OperationsRuntime:
-    def __init__(self, config: DshSettings, minio_client):
+    def __init__(self, config: DshSettings):
         self.config = config
         self.settings = config
         self.http = None
@@ -147,37 +140,20 @@ class OperationsRuntime:
         redis = create_quota_redis(application_settings.redis_url)
         self.quota = QuotaRedis(
             redis,
-            QuotaTopology(redis, shared=True),
+            QuotaTopology(redis, shared=True, automatic=True),
             memory_budget_bytes=config.quota_memory_budget_bytes,
             memory_headroom_bytes=config.quota_memory_headroom_bytes,
             backlog_high_watermark=config.quota_backlog_high_watermark,
             backlog_stop_seconds=config.backlog_stop_seconds,
         )
-        self.approvals = MinioQuotaApprovalStore(minio_client, bucket=config.quota_evidence_bucket)
-        self.evidence = MinioEvidenceStore(minio_client, bucket=config.quota_evidence_bucket)
-        # Recovery inventories use a separate, explicitly bounded reader (not 1 MiB request evidence).
-        self.manifests = MinioRecoveryEvidenceStore(minio_client, bucket=config.quota_evidence_bucket)
-        self.activation_attempted = False
+        from bisheng.dsh.domain.services.automatic_quota_recovery import AutomaticQuotaRecovery
+
+        self.quota.recovery = AutomaticQuotaRecovery(
+            self.quota, lambda: repository_scope(DshUsageRepository), billing_timezone=config.billing_timezone
+        )
         self.activation_lock = asyncio.Lock()
         self.admin_lock = asyncio.Lock()
         self.usage = _ActivatedUsage(self.quota, self.activate)
-        self.reconciliation = DshReconciliationService(
-            repository_scope=lambda: repository_scope(DshReconciliationRepository),
-            usage=self.usage,
-            evidence=self.evidence,
-            authorize=self.authentication.authorize,
-            now=lambda: datetime.now(UTC).replace(tzinfo=None),
-        )
-        self.recovery = DshQuotaOperationsService(
-            recovery=DshQuotaRecoveryService(self.quota),
-            repository_scope=lambda: repository_scope(DshUsageRepository),
-            manifest_store=self.manifests,
-            evidence_store=self.manifests,
-            approval_store=self.approvals,
-            authorize=self.authentication.authorize,
-            billing_timezone=config.billing_timezone,
-            now=lambda: datetime.now(UTC),
-        )
         self.projection = DshProjectionService(
             self.quota,
             lambda: repository_scope(DshUsageRepository),
@@ -192,26 +168,9 @@ class OperationsRuntime:
     async def authenticate_admin(self, credential: str, *, tenant_id: int) -> int:
         return await self.authentication.authenticate_admin(credential, tenant_id=tenant_id)
 
-    async def recover_quota(self, **kwargs):
-        return await self.recovery.recover_quota(**kwargs)
-
     async def activate(self):
         async with self.activation_lock:
-            if self.quota.topology.ready:
-                return
-            if (
-                self.activation_attempted
-                or not self.config.quota_approval_object
-                or not self.config.quota_approval_sha256
-            ):
-                raise QuotaRejected("controlled_approval_required")
-            self.activation_attempted = True
-            await activate_from_approval(
-                self.quota.topology,
-                self.approvals,
-                reference=self.config.quota_approval_object,
-                sha256=self.config.quota_approval_sha256,
-            )
+            await self.quota.topology.activate()
 
     async def initialize_admin(self):
         async with self.admin_lock:
@@ -257,14 +216,6 @@ class OperationsRuntime:
             self.authentication.reset()
 
 
-class MinioRecoveryEvidenceStore(MinioEvidenceStore):
-    """Bounded root/index reader; individual event shards also enforce a 4 MiB service limit."""
-
-    def __init__(self, client, *, bucket: str):
-        super().__init__(client, bucket=bucket)
-        self.max_bytes = 32 * 1024 * 1024
-
-
 def _production_config():
     from bisheng.common.services.config_service import settings
 
@@ -274,27 +225,6 @@ def _production_config():
     return settings, config
 
 
-@asynccontextmanager
-async def reconciliation_cli_runtime():
-    from bisheng.core.context import close_app_context, initialize_app_context
-    from bisheng.core.storage.minio.minio_manager import get_minio_storage
-
-    settings, config = _production_config()
-    await initialize_app_context(settings, instance_role="dsh_cli")
-    runtime = None
-    try:
-        _register_cli_permission_contexts(settings)
-        storage = await get_minio_storage()
-        runtime = OperationsRuntime(config, storage.minio_client_sync)
-        yield runtime
-    finally:
-        try:
-            if runtime is not None:
-                await runtime.close()
-        finally:
-            await close_app_context()
-
-
 _worker_runtime: OperationsRuntime | None = None
 _worker_runtime_lock = asyncio.Lock()
 
@@ -302,15 +232,13 @@ _worker_runtime_lock = asyncio.Lock()
 @asynccontextmanager
 async def operations_worker_runtime():
     global _worker_runtime
-    from bisheng.core.storage.minio.minio_manager import get_minio_storage
 
     _, config = _production_config()
     async with _worker_runtime_lock:
         if _worker_runtime is None or _worker_runtime.config != config:
             if _worker_runtime is not None:
                 await _worker_runtime.close()
-            storage = await get_minio_storage()
-            _worker_runtime = OperationsRuntime(config, storage.minio_client_sync)
+            _worker_runtime = OperationsRuntime(config)
     yield _worker_runtime
 
 

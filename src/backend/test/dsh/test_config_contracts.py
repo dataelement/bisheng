@@ -42,7 +42,7 @@ async def _construct_enabled_factories():
         quota_projection_max_seconds=2.5,
     )
     # Construction is deliberately network-free; port 1 must never be contacted.
-    worker = OperationsRuntime(settings, object())
+    worker = OperationsRuntime(settings)
     api = await get_model_runtime(SimpleNamespace(settings=settings))
     try:
         for quota in (worker.quota, api.quota):

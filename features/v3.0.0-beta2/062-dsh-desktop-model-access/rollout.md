@@ -10,21 +10,23 @@
 
 | Python 配置 | Gateway 配置 | 约束 |
 |---|---|---|
-| dsh.platform_public_url | dsh.public-origin | 客户端可访问的 Nginx origin |
-| dsh.gateway_internal_url | dsh.python-origin | 分别指向对端内部 HTTP/HTTPS origin |
+| dsh.platform_public_url | bisheng.home-url | Gateway 提取 home-url 的协议、主机与端口，生成客户端可访问的授权页地址 |
+| dsh.gateway_internal_url | bisheng.bisheng-api-url | 分别指向 Gateway 与 Python 的内部 HTTP/HTTPS origin |
 | sso_sync.gateway_hmac_secret | bisheng.gateway-hmac-secret | 现有共享 Secret |
 | settings.redis_url | Gateway 原 Redis 配置 | 不新增 DSH Redis 地址 |
 | dsh.billing_timezone | — | 默认 Asia/Shanghai |
 | — | dsh.license-verification-keys | 既有 License 扩展验证，与 HMAC 分离 |
 
-quota_evidence_bucket、quota_approval_object/sha256 保留为受控账本恢复配置；不在客户端暴露。dsh.enabled 默认关闭。
+Gateway 升级前删除旧 `dsh.public-origin`、`dsh.python-origin`；DSH 配置采用严格绑定，遗留字段会导致启动失败。原 `bisheng.home-url` 的页面路径、查询参数与片段不进入 DSH 授权链接；SSO 原有使用方式不变。客户端接口无变化。
+
+移除旧 quota_evidence_bucket、quota_approval_object、quota_approval_sha256 配置；DSH 不再依赖 MinIO 恢复材料，严格配置绑定不接受旧字段。dsh.enabled 默认关闭。
 
 ## 数据与服务启动
 
 1. 备份两个业务库。Gateway 按方言执行 `docker/db/update_dsh_mysql.sql` 或 `update_dsh_dm.sql`，仅新增四张 DSH 表及索引；脚本遇到已有对象会失败，必须先核对已部署 schema，不能通过删表重跑解决。未发布的本次草案投影列由 128 扩为 MySQL 510 字符 / DM8 2040 字节；DM device_label 由 128 扩为 400 字节以容纳 100 Unicode 码点；如果先前手工执行过草案，先只读核对两个姓名字段与索引，再做保留数据的扩列迁移。
 2. Python 四张独立表进入既有模型发现/create_all 流程；原 User 表通过正式 `v3_0_0_f062_profile_version` revision 增加版本列。按现有 Alembic 发布流程执行，保留版本链；不重置已有资料版本或配额历史。
-3. 复用毕昇既有 Redis 连接配置。当前 DSH 受控连接支持单实例/Sentinel，不支持 Cluster。不要为 DSH 修改共享实例的淘汰策略；首次开通与恢复继续绑定 Redis run_id/epoch/evicted_keys，丢失账本不能按零初始化。
-4. 沿用现有 MinIO 和受控恢复审批对象，保留版本、摘要和访问权限；首次配置时核实共享 Redis 历史与待投影事件。
+3. 复用毕昇既有 Redis 连接配置。当前 DSH 受控连接支持单实例/Sentinel，不支持 Cluster。不要为 DSH 修改共享实例的淘汰策略；首次开通与丢账恢复自动读取 SQL，并合并尚存 Redis 记录。
+4. 保留现有 SQL/Redis 数据；不需要创建 DSH MinIO 桶或确认对象。历史对象可留存备份，应用不会删除。
 5. 在毕昇模型管理中配置供应商及模型，再通过 DSH 界面配置用户每模型授权和月额度。不再填写模型部署白名单。
 
 6. 部署 `dsh.enabled` 默认 false；部署者开启后，超级管理员进入 DSH 管理页启用业务开关，并保存本组织受控的无凭证 HTTP(S) 下载地址。业务开关默认关闭，旧部署开关为 true 不会自动开启业务。未配置时页面保留联系管理员和手动填写平台地址，不能交付虚构链接。下载包和自定义协议注册由 DSH Desktop 项目提供。
@@ -37,15 +39,15 @@ quota_evidence_bucket、quota_approval_object/sha256 保留为受控账本恢复
 
 指纹输入保留，但不匹配运行环境。公钥只用于验证发行签名，旧 SSO/trial/pro 逻辑保持。删除的旧共享激活 Redis key 不再读取，不需要通过手工修改 phase 来开放服务；历史 key 可在核实没有旧版本服务后按原命名空间清理。
 
-此次内部协议与表结构切换仍须遵守 [安装标识解绑修订](./installation-unbinding-revision.md) 的备份和配套更新步骤；这属于一次性测试版格式切换，不是以后每次更换 License 的要求。额度账本的 Redis 恢复审批仍保留，它与删除的 License 副本确认是两件独立的事。
+此次内部协议与表结构切换仍须遵守 [安装标识解绑修订](./installation-unbinding-revision.md) 的备份和配套更新步骤；这属于一次性测试版格式切换，不是以后每次更换 License 的要求。额度账本改为 SQL 自动恢复，不再配置 MinIO 审批。
 
 ## 配额首次初始化和持续运行
 
-首次无审批时，管理员正常保存一个真实用户的初始策略：系统先持久化操作及禁用的 version 0 占位，因账本未获批准保留 PROCESSING，尚不允许调用。随后按 [配额运维文档](./quota-operations.md) 的 initialize 流程提交该用户的空历史证据与 version 0 manifest，获得不可变审批。向 API 和 Worker 配置相同审批 object/sha256，重新启动后恢复同一操作 ID，使策略完成 0→1。无需手写 SQL，也不能换新操作 ID 绕过处理中状态。
+管理员正常保存初始模型额度策略，系统自动从 SQL 初始化账本并完成同一操作。无需手工执行 initialize、填写确认文件或手写 SQL。
 
 普通后续用户由同一已批准账本上的策略事务自动创建 version 0 gate，再安装目标策略；月份切换由 SQL 空历史和 Redis 永久月份记录共同证明，不会抹去跨月 UNKNOWN。Worker 实际注册 `dsh.project_usage`、`inspect_usage`、`reconcile_usage`、`resume_operation`、`scan_operations`、`scan_profiles`、`scan_usage`；启用时 Beat 派发投影、巡检、操作恢复和资料补偿。保持现有队列与单一 Beat 调度部署纪律。
 
-Redis 连接/主节点身份不再可信时，本进程关闭准入，不能以旧审批自动重连恢复。按证据恢复流程生成新审批并更新全部调用方。SQL 用量降级只用于显示：`persisted` 的 quota_state 固定 unavailable；不能用 SQL 延迟快照继续放行。UNKNOWN 记录缺失用量原因，不冻结用户；若后续补记用量，必须提供逐请求供应商证据，没有“强制解冻”入口。
+Redis 不可用期间返回额度不可用；连接恢复后自动核对/重建。重建以 SQL 已落库数据和 Redis 尚存记录为依据，无法找回的异步尾部用量接受丢失。SQL 降级展示仍标记 persisted/unavailable，不直接作为实时准入接口。详见 [SQL 自动恢复修订](./sql-quota-recovery-revision.md)。
 
 ## 联调与回退
 

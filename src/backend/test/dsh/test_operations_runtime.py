@@ -60,32 +60,6 @@ async def test_non_global_or_inactive_scope_rejected_without_context_change():
     assert context.current_tenant_id.get() == previous
 
 
-async def test_activation_failure_cannot_reuse_old_approval(monkeypatch):
-    import asyncio
-
-    from bisheng.dsh import operations_runtime
-    from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
-
-    calls = []
-
-    async def denied(*args, **kwargs):
-        calls.append(kwargs["reference"])
-        raise QuotaRejected("unapproved_primary")
-
-    monkeypatch.setattr(operations_runtime, "activate_from_approval", denied)
-    runtime = object.__new__(operations_runtime.OperationsRuntime)
-    runtime.activation_lock = asyncio.Lock()
-    runtime.activation_attempted = False
-    runtime.quota = SimpleNamespace(topology=SimpleNamespace(ready=False))
-    runtime.approvals = object()
-    runtime.config = SimpleNamespace(quota_approval_object="immutable@v1", quota_approval_sha256="a" * 64)
-    with pytest.raises(QuotaRejected, match="unapproved_primary"):
-        await runtime.activate()
-    with pytest.raises(QuotaRejected, match="controlled_approval_required"):
-        await runtime.activate()
-    assert calls == ["immutable@v1"]
-
-
 def test_real_celery_registration_and_existing_jwt_decoder(tmp_path):
     import os
     import subprocess
@@ -107,7 +81,7 @@ from bisheng.worker.main import bisheng_celery
 from bisheng.worker.config import beat_schedule
 from bisheng.user.domain.services.auth import AuthJwt
 from bisheng.dsh.operations_runtime import _decode_admin_token
-required = {'dsh.project_usage', 'dsh.reconcile_usage', 'dsh.scan_usage',
+required = {'dsh.project_usage', 'dsh.scan_usage',
             'dsh.inspect_usage', 'dsh.scan_operations', 'dsh.resume_operation', 'dsh.scan_profiles'}
 assert required <= set(bisheng_celery.tasks)
 assert {beat_schedule[k]['task'] for k in beat_schedule if k.startswith('dsh-')} == {

@@ -150,7 +150,7 @@ class DshUsageRepository:
 
         tenant = get_current_tenant_id()
         with strict_tenant_filter():
-            policy = DshPolicyRepository(self.session).get(user_id)
+            policy = DshPolicyRepository(self.session).get(user_id, lock=True)
             if policy is None:
                 raise ValueError("Recovery requires a current SQL user policy")
             calls = []
@@ -194,6 +194,20 @@ class DshUsageRepository:
             raise ValueError("SQL summary cannot be reconstructed from retained request evidence")
         return events, policy.recovery_payload()
 
+    def automatic_recovery_snapshot(self, user_id: int, *, billing_timezone: str):
+        from bisheng.dsh.domain.models.admin_operation import DshAdminOperation
+
+        events, policy = self.recovery_snapshot(user_id, billing_timezone=billing_timezone)
+        pending = {}
+        for row in policy["rows"]:
+            operation_id = row.get("pending_operation_id")
+            if operation_id:
+                operation = self.session.get(DshAdminOperation, operation_id)
+                if operation is None or operation.tenant_id != get_current_tenant_id() or operation.user_id != user_id:
+                    raise ValueError("Pending quota policy operation is unavailable")
+                pending[operation_id] = operation.model_dump()
+        return events, policy, pending
+
     def complete_recovery(self, user_id: int, *, expected_policy: dict, epoch: int):
         """Publish the recovered epoch only if policy authority has not changed during IO."""
         repository = DshPolicyRepository(self.session)
@@ -204,7 +218,8 @@ class DshUsageRepository:
             raise ValueError("Recovery cannot move the policy epoch backwards")
         for row in repository.rows(user_id):
             row.quota_epoch = epoch
-            row.quota_sync_state = "PENDING" if row.pending_operation_id else "READY"
+            if not row.pending_operation_id:
+                row.quota_sync_state = "READY"
         self.session.flush()
 
     def unknown_pending(self, user_id: int) -> int:

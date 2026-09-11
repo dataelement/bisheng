@@ -1,3 +1,6 @@
+-- A restorer owns the request inventory while the shared gate is frozen.
+local gate=string.gsub(KEYS[2],':request:[^:]+$',':gate')
+if redis.call('HGET',gate,'state')~='READY' then return 0 end
 -- Deletion is conservative: only the exact SQL-confirmed reliable state, retained long enough.
 if redis.call('TYPE',KEYS[1]).ok~='stream' or redis.call('TYPE',KEYS[2]).ok~='hash' then return 0 end
 local event=redis.call('HGET',KEYS[2],'event')

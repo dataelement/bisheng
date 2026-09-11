@@ -1,17 +1,11 @@
 """Actual per-model allowance regression; no reservation and no rate-limiting semantics."""
 
-import hashlib
-from contextlib import contextmanager
-from datetime import UTC, datetime
-
 import pytest
 from sqlmodel import Session, select
 
 from bisheng.dsh.domain.models.user_policy import DshUserPolicy
 from bisheng.dsh.domain.repositories.usage import DshUsageRepository
 from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig
-from bisheng.dsh.domain.services.quota_operations import DshQuotaOperationsService
-from bisheng.dsh.domain.services.quota_recovery import DshQuotaRecoveryService, RecoveryManifest
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
 from test.dsh.test_quota_admission import quota as quota
 from test.dsh.test_quota_admission import running
@@ -102,92 +96,6 @@ async def test_zero_lower_and_removed_model_do_not_erase_or_spend_other_model_hi
     await quota.check_and_start(running(5).model_copy(update={"policy_version": 3}))
     with pytest.raises(QuotaRejected, match="model_not_allowed"):
         await quota.check_and_start(running(4).model_copy(update={"policy_version": 3}))
-
-
-async def test_same_sum_swapped_model_limits_cannot_reuse_recovery_proof(quota, usage_db):
-    with Session(usage_db) as session, session.begin():
-        policy = session.scalar(select(DshUserPolicy).where(DshUserPolicy.user_id == 20))
-        policy.version, policy.monthly_token_limit = 1, 100
-        session.add(
-            DshUserPolicy(
-                tenant_id=2, user_id=20, model_id=5, enabled=1, version=1, monthly_token_limit=900, updated_by=1
-            )
-        )
-    manifest = RecoveryManifest(
-        run_id=quota.topology.run_id,
-        epoch=2,
-        previous_epoch=1,
-        evidence_object="empty@v1",
-        evidence_sha256=hashlib.sha256(b"[]").hexdigest(),
-        old_primary_isolated=True,
-        confirmed_tail_complete=True,
-        tenant_id=2,
-        user_id=20,
-        policy_version=2,
-        model_configs=configs(900, 100),
-        model_versions={4: 1, 5: 1},
-        current_month="2026-09",
-        request_count=0,
-    )
-    body = manifest.model_dump_json().encode()
-
-    class Evidence:
-        async def read(self, reference, tenant_id):
-            return body
-
-    async def authorize(*_):
-        return True
-
-    @contextmanager
-    def repository():
-        with Session(usage_db) as session, session.begin():
-            yield DshUsageRepository(session)
-
-    service = DshQuotaOperationsService(
-        recovery=DshQuotaRecoveryService(quota),
-        repository_scope=repository,
-        manifest_store=Evidence(),
-        evidence_store=Evidence(),
-        approval_store=object(),
-        authorize=authorize,
-        billing_timezone="UTC",
-        now=lambda: datetime.now(UTC),
-    )
-    with pytest.raises(ValueError, match="current committed SQL policy"):
-        await service.recover_quota(
-            command="recover",
-            manifest_object="manifest@v1",
-            manifest_sha256=hashlib.sha256(body).hexdigest(),
-            isolation_attestation="test",
-            actor_user_id=7,
-        )
-    assert await quota.redis.hget(quota.keys(running())[0], "epoch") == "1"
-    with repository() as repo:
-        _, before = repo.recovery_snapshot(20, billing_timezone="UTC")
-    with Session(usage_db) as session, session.begin():
-        set_policies(session, configs(900, 100), version=1)
-    with repository() as repo, pytest.raises(ValueError, match="SQL policy changed"):
-        repo.complete_recovery(20, expected_policy=before, epoch=2)
-
-
-def test_legacy_aggregate_only_recovery_proof_is_rejected():
-    with pytest.raises(ValueError):
-        RecoveryManifest(
-            run_id="test",
-            epoch=2,
-            previous_epoch=1,
-            evidence_object="old@v1",
-            evidence_sha256="a" * 64,
-            old_primary_isolated=True,
-            confirmed_tail_complete=True,
-            tenant_id=2,
-            user_id=20,
-            policy_version=1,
-            monthly_limit=1000,
-            model_ids=[4, 5],
-            current_month="2026-09",
-            request_count=0,
-        )
 
 
 def test_sql_estimate_remaining_is_per_model_and_preserves_removed_model_usage(usage_db):
