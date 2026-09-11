@@ -3,9 +3,9 @@
 set -euo pipefail
 STEP="p2.22-type2"
 # 测试机 B 10.168.24.121。确认清单后把 CONFIRM_TYPE2 改成 1。
-MYSQL_CONTAINER="bisheng-mysql"
-MYSQL_DB="bisheng"
-APPLY=1
+: "${MYSQL_CONTAINER:=bisheng-mysql}"
+: "${MYSQL_DB:=bisheng}"
+: "${APPLY:=0}"
 : "${CONFIRM_TYPE2:=0}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"

@@ -3,11 +3,11 @@
 set -euo pipefail
 STEP="p2.31-f006"
 # 测试机 B。看完 dry_run 把 CONFIRM_F006 改成 1。
-BACKEND_CONTAINER="bisheng-backend"
-MYSQL_CONTAINER="bisheng-mysql"
-MYSQL_DB="bisheng"
-APPLY=1
-CONFIRM_F006=0
+: "${BACKEND_CONTAINER:=bisheng-backend}"
+: "${MYSQL_CONTAINER:=bisheng-mysql}"
+: "${MYSQL_DB:=bisheng}"
+: "${APPLY:=0}"
+: "${CONFIRM_F006:=0}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env

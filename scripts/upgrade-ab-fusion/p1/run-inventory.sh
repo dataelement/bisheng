@@ -3,8 +3,8 @@
 set -euo pipefail
 STEP="p1.inventory"
 # 测试机 B 10.168.24.121
-MYSQL_CONTAINER="bisheng-mysql"
-MYSQL_DB="bisheng"
+: "${MYSQL_CONTAINER:=bisheng-mysql}"
+: "${MYSQL_DB:=bisheng}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env

@@ -3,9 +3,9 @@
 set -euo pipefail
 STEP="p2.40-verify"
 # 测试机 B。2.4 阶段还没有 alembic，不要跑本脚本。
-TARGET_ALEMBIC_HEAD="unused-until-2.5"
-MYSQL_CONTAINER="bisheng-mysql"
-MYSQL_DB="bisheng"
+TARGET_ALEMBIC_HEAD="f058_dashboard_dataset_flags"
+: "${MYSQL_CONTAINER:=bisheng-mysql}"
+: "${MYSQL_DB:=bisheng}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env

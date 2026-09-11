@@ -2,16 +2,20 @@
 # 停写入并备份。MinIO/Milvus/ES 命令按现场存储改 BACKUP_DIR 下的子脚本。
 set -euo pipefail
 STEP="p2.01-backup"
-# 测试机 B 10.168.24.121
-COMPOSE_FILE="/data/bisheng-main/docker/docker-compose.yml"
-BACKEND_CONTAINER="bisheng-backend"
-MYSQL_CONTAINER="bisheng-mysql"
-MYSQL_DB="bisheng"
-BACKUP_DIR="/data/upgrade-backups"
-APPLY=1
+# 默认值可被环境变量覆盖；compose 路径一律自动发现，不写死。
+: "${BACKEND_CONTAINER:=bisheng-backend}"
+: "${WORKER_CONTAINER:=bisheng-backend-worker}"
+: "${FRONTEND_CONTAINER:=bisheng-frontend}"
+: "${GATEWAY_CONTAINER:=bisheng-gateway}"
+: "${MYSQL_CONTAINER:=bisheng-mysql}"
+: "${MYSQL_DB:=bisheng}"
+: "${BACKUP_DIR:=/data/upgrade-backups}"
+: "${APPLY:=0}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
+discover_deployment
+preflight_report
 ledger "${STEP}" "START" ""
 
 stamp="$(date +%Y%m%d%H%M%S)"
@@ -20,7 +24,8 @@ mkdir -p "${dest}"
 
 log "1) 停 API 写入：停 frontend / gateway / backend / worker / beat（保留 mysql/minio/milvus/es）"
 if require_apply; then
-  docker stop bisheng-frontend bisheng-gateway bisheng-backend bisheng-backend-worker 2>/dev/null || true
+  docker stop "${FRONTEND_CONTAINER}" "${GATEWAY_CONTAINER}" \
+    "${BACKEND_CONTAINER}" "${WORKER_CONTAINER}" 2>/dev/null || true
   docker ps --format '{{.Names}} {{.Status}}' | tee "${dest}/containers-after-stop.txt"
 fi
 
@@ -34,9 +39,17 @@ fi
 
 log "3) 复制 compose 与 config"
 if require_apply; then
-  cp -a "${COMPOSE_FILE}" "${dest}/docker-compose.yml"
-  docker exec "${BACKEND_CONTAINER}" sh -c 'cat /app/bisheng/config/config.yaml' >"${dest}/config.yaml" 2>/dev/null || \
-    log "backend 已停，请从宿主机 volume 拷 config.yaml 到 ${dest}"
+  # 现场可能叠加了多个 -f，逐个备份，不能只存第一个。
+  for f in ${COMPOSE_CONFIG_FILES[@]+"${COMPOSE_CONFIG_FILES[@]}"}; do
+    cp -a "${f}" "${dest}/$(basename "${f}")"
+  done
+  # backend 此时已停，docker exec 用不了；直接从挂载反查到的宿主机路径拷。
+  resolve_host_file_optional "${BACKEND_CONTAINER}" cfg_host "${CONFIG_YAML_DESTS[@]}"
+  if [[ -n "${cfg_host}" ]]; then
+    cp -a "${cfg_host}" "${dest}/config.yaml"
+  else
+    log "config.yaml 非 bind mount 或未挂载，请手工拷到 ${dest}"
+  fi
 fi
 
 cat >"${dest}/TODO-storage.txt" <<EOF

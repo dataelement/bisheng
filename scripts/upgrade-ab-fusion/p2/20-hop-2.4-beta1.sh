@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 STEP="p2.20-2.4-beta1"
-# 测试机 B 10.168.24.121
-IMAGE_2_4_BETA1="dataelement/bisheng-backend:v2.4.0-beta1"
-IMAGE_FRONTEND_2_4_BETA1="dataelement/bisheng-frontend:v2.4.0-beta1"
-COMPOSE_FILE="/data/bisheng-main/docker/docker-compose.yml"
-MYSQL_CONTAINER="bisheng-mysql"
-MYSQL_DB="bisheng"
-APPLY=1
+# 默认值可被环境变量覆盖；compose 路径一律自动发现，不写死。
+: "${IMAGE_2_4_BETA1:=dataelement/bisheng-backend:v2.4.0-beta1}"
+: "${IMAGE_FRONTEND_2_4_BETA1:=dataelement/bisheng-frontend:v2.4.0-beta1}"
+: "${BACKEND_CONTAINER:=bisheng-backend}"
+: "${MYSQL_CONTAINER:=bisheng-mysql}"
+: "${MYSQL_DB:=bisheng}"
+: "${APPLY:=0}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
+discover_deployment
 ledger "${STEP}" "START" ""
 
 if require_apply; then

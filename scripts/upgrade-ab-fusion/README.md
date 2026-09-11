@@ -19,7 +19,9 @@
 
 ## 一步一步（不要跳）
 
-测试机不用生成 `env.sh`。然后：
+compose 路径、project 名、`config.yaml` / `entrypoint.sh` 的宿主机位置由 `lib/discover.sh` 从容器标签和挂载表自动发现，不写死路径，换机器无需改脚本。`env.sh` 可选，用于覆盖镜像、容器名和门禁，需手工 `source` 后再跑脚本。
+
+门禁默认全关（`APPLY` / `CONFIRM_LAYOUT` / `DRILL` / `CONFIRM_TYPE2` / `CONFIRM_F006` 均为 0），不 export 就只打印不落库。然后：
 
 | 序号 | 阶段 | 命令 | 完成判据 |
 |---:|---|---|---|

@@ -2,16 +2,17 @@
 # 2.4 正式版：知识空间相关列。新表 space_channel_member 由本 hop SQL 建, 不依赖 2.4 启动 create_all.
 set -euo pipefail
 STEP="p2.21-2.4"
-# 测试机 B 10.168.24.121
-IMAGE_2_4="dataelement/bisheng-backend:v2.4.0"
-IMAGE_FRONTEND_2_4="dataelement/bisheng-frontend:v2.4.0"
-COMPOSE_FILE="/data/bisheng-main/docker/docker-compose.yml"
-MYSQL_CONTAINER="bisheng-mysql"
-MYSQL_DB="bisheng"
-APPLY=1
+# 默认值可被环境变量覆盖；compose 路径一律自动发现，不写死。
+: "${IMAGE_2_4:=dataelement/bisheng-backend:v2.4.0}"
+: "${IMAGE_FRONTEND_2_4:=dataelement/bisheng-frontend:v2.4.0}"
+: "${BACKEND_CONTAINER:=bisheng-backend}"
+: "${MYSQL_CONTAINER:=bisheng-mysql}"
+: "${MYSQL_DB:=bisheng}"
+: "${APPLY:=0}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
+discover_deployment
 ledger "${STEP}" "START" ""
 
 if require_apply; then

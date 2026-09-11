@@ -3,9 +3,9 @@
 set -euo pipefail
 STEP="p4.takeover"
 # 测试机 B。有签字 CSV 并复核 SQL 后再把 APPLY 改成 1。
-MYSQL_CONTAINER="bisheng-mysql"
-MYSQL_DB="bisheng"
-APPLY=0
+: "${MYSQL_CONTAINER:=bisheng-mysql}"
+: "${MYSQL_DB:=bisheng}"
+: "${APPLY:=0}"
 BATCH_NO="${BATCH_NO:-p4-manual}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"

@@ -2,18 +2,19 @@
 # P2 预检：钉死目标构建；摸清 B 相对官方 2.2 的 schema；禁止用 Alembic 偷跳 2.3/2.4。
 set -euo pipefail
 STEP="p2.00-precheck"
-# 测试机 B 10.168.24.121
-DRILL=1
-TARGET_GIT_COMMIT="DRILL-SKIP"
-TARGET_BACKEND_IMAGE="dataelement/bisheng-backend:v2.4.0"
-TARGET_FRONTEND_IMAGE="dataelement/bisheng-frontend:v2.4.0"
-IMAGE_OPENFGA="unused-until-2.5"
-COMPOSE_FILE="/data/bisheng-main/docker/docker-compose.yml"
-MYSQL_CONTAINER="bisheng-mysql"
-MYSQL_DB="bisheng"
+# 默认值可被环境变量覆盖；compose 路径一律自动发现，不写死。
+: "${DRILL:=0}"
+: "${TARGET_GIT_COMMIT:=DRILL-SKIP}"
+: "${TARGET_BACKEND_IMAGE:=dataelement/bisheng-backend:v2.4.0}"
+: "${TARGET_FRONTEND_IMAGE:=dataelement/bisheng-frontend:v2.4.0}"
+: "${IMAGE_OPENFGA:=unused-until-2.5}"
+: "${BACKEND_CONTAINER:=bisheng-backend}"
+: "${MYSQL_CONTAINER:=bisheng-mysql}"
+: "${MYSQL_DB:=bisheng}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
+discover_deployment
 
 ledger "${STEP}" "START" ""
 if [[ "${DRILL:-0}" == "1" ]]; then
@@ -48,9 +49,8 @@ done
 log "=== type=2 个人知识库 ==="
 mysql_exec "SELECT id, name, type, user_id, (SELECT COUNT(*) FROM knowledgefile f WHERE f.knowledge_id=knowledge.id) file_cnt FROM knowledge WHERE type=2"
 
-log "=== compose ==="
-[[ -f "${COMPOSE_FILE}" ]] || die "找不到 COMPOSE_FILE=${COMPOSE_FILE}"
-log "compose=${COMPOSE_FILE}"
+log "=== 部署布局 ==="
+preflight_report
 
 ledger "${STEP}" "OK" "review schema diff before hop"
 log "预检通过（仅检查）。有 PRESENT 的 2.4 列时，说明 B 已部分升级，禁止重跑对应 ALTER。"

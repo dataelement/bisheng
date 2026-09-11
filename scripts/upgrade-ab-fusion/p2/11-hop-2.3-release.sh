@@ -2,17 +2,17 @@
 # 2.3 release：角色菜单 + 遥测重建。跳过无 SQL 的 beta2/3/4。
 set -euo pipefail
 STEP="p2.11-2.3-release"
-# 测试机 B 10.168.24.121
-IMAGE_2_3="dataelement/bisheng-backend:v2.3.0"
-IMAGE_FRONTEND_2_3="dataelement/bisheng-frontend:v2.3.0"
-COMPOSE_FILE="/data/bisheng-main/docker/docker-compose.yml"
-BACKEND_CONTAINER="bisheng-backend"
-MYSQL_CONTAINER="bisheng-mysql"
-MYSQL_DB="bisheng"
-APPLY=1
+# 默认值可被环境变量覆盖；compose 路径一律自动发现，不写死。
+: "${IMAGE_2_3:=dataelement/bisheng-backend:v2.3.0}"
+: "${IMAGE_FRONTEND_2_3:=dataelement/bisheng-frontend:v2.3.0}"
+: "${BACKEND_CONTAINER:=bisheng-backend}"
+: "${MYSQL_CONTAINER:=bisheng-mysql}"
+: "${MYSQL_DB:=bisheng}"
+: "${APPLY:=0}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
+discover_deployment
 ledger "${STEP}" "START" ""
 
 if require_apply; then
