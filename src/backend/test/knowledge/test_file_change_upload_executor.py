@@ -28,7 +28,6 @@ from bisheng.knowledge.domain.models.knowledge_space_file_change_execution_step 
     KnowledgeSpaceFileChangeExecutionStep,
     KnowledgeSpaceFileChangeExecutionStepState,
 )
-from bisheng.knowledge.domain.models.knowledge_space_file_change_policy import KnowledgeSpaceFileChangePolicy
 from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
     KnowledgeSpaceFileChangeAction,
     KnowledgeSpaceFileChangeExecutionState,
@@ -65,7 +64,6 @@ async def upload_engine():
         KnowledgeDocument.__table__,
         KnowledgeDocumentVersion.__table__,
         KnowledgeSpaceFileChangeExecutionStep.__table__,
-        KnowledgeSpaceFileChangePolicy.__table__,
     ]
     async with engine.begin() as connection:
         await connection.run_sync(lambda conn: SQLModel.metadata.create_all(conn, tables=tables))
@@ -266,7 +264,7 @@ async def test_formal_file_document_version_request_link_and_steps_commit_before
     ]
 
 
-async def test_upload_revalidation_finishes_before_shared_write_locks(upload_engine, monkeypatch):
+async def test_upload_revalidation_finishes_before_space_and_stage_locks(upload_engine, monkeypatch):
     set_current_tenant_id(42)
     request_id, _stage_id = await _seed_upload_bundle(upload_engine)
     side_effects = _SideEffects(upload_engine)
@@ -298,17 +296,8 @@ async def test_upload_revalidation_finishes_before_shared_write_locks(upload_eng
     async def validate(**_kwargs) -> None:
         events.append("validate")
 
-    ensure_policy_row = KnowledgeSpaceFileChangeRepository.ensure_policy_row
-
-    async def observed_ensure_policy_row(self, **kwargs):
-        events.append("lock_policy" if kwargs.get("for_update") else "read_policy")
-        return await ensure_policy_row(self, **kwargs)
-
-    monkeypatch.setattr(
-        KnowledgeSpaceFileChangeRepository,
-        "ensure_policy_row",
-        observed_ensure_policy_row,
-    )
+    policy_access = AsyncMock(side_effect=AssertionError("runtime upload must not access the tenant policy mutex"))
+    monkeypatch.setattr(KnowledgeSpaceFileChangeRepository, "ensure_policy_row", policy_access)
 
     result = await _executor(
         upload_engine,
@@ -322,13 +311,13 @@ async def test_upload_revalidation_finishes_before_shared_write_locks(upload_eng
         "read_stage",
         "read_space",
         "validate",
-        "lock_policy",
         "lock_space",
         "lock_stage",
     ]
+    policy_access.assert_not_awaited()
 
 
-async def test_prepared_upload_replay_skips_shared_space_and_stage_locks(upload_engine, monkeypatch):
+async def test_prepared_upload_replay_skips_shared_space_and_stage_locks(upload_engine):
     set_current_tenant_id(42)
     request_id, _stage_id = await _seed_upload_bundle(upload_engine)
     side_effects = _SideEffects(upload_engine)
@@ -359,18 +348,6 @@ async def test_prepared_upload_replay_skips_shared_space_and_stage_locks(upload_
 
     async def validate(**_kwargs) -> None:
         events.append("validate")
-
-    ensure_policy_row = KnowledgeSpaceFileChangeRepository.ensure_policy_row
-
-    async def observed_ensure_policy_row(self, **kwargs):
-        events.append("lock_policy" if kwargs.get("for_update") else "read_policy")
-        return await ensure_policy_row(self, **kwargs)
-
-    monkeypatch.setattr(
-        KnowledgeSpaceFileChangeRepository,
-        "ensure_policy_row",
-        observed_ensure_policy_row,
-    )
 
     executor = _executor(
         upload_engine,

@@ -356,8 +356,10 @@ manifest 和当前 generation steps；随后 coordinator 只加载已准备的�
 可修复已进入 applying 但准备上下文尚未完整提交的 generation，且不会提前执行 FGA、检索或解析派发副作用。
 
 upload 准备先在无 `FOR UPDATE` 的 preflight 中完成执行阶段权限、角色和配额重验，再进入短事务，固定按
-`request → tenant policy → space → stage/parent` 加锁并完成容量预占交接、正式文件图和 durable step 落库。
-已存在正式文件图的当前 generation 重投只锁 request/正式文件，不再重复争用空间、stage 或 policy 行。
+`request → space → stage/parent` 加锁并完成容量预占交接、正式文件图和 durable step 落库。容量检查采用
+best-effort 语义，允许并发窗口内短时超额；upload stage 创建、状态流转与 orphan cleanup 不得把租户 policy
+配置行作为全局互斥锁。已存在正式文件图的当前 generation 重投只锁 request/正式文件，不再重复争用空间或
+stage 行。
 
 - upload：正式文件图、FGA 权限和普通解析任务调度均成功接受后才 applied；后续解析失败是普通文件状态。
 - rename/move：durable transition footprint 保证 OLD_VIEW/NEW_VIEW 单一正式视图，owner read-after-verify 后推进。

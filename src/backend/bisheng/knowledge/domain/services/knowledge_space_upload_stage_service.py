@@ -23,9 +23,6 @@ from bisheng.knowledge.domain.models.knowledge_space_upload_stage import (
     KnowledgeSpaceUploadStage,
     KnowledgeSpaceUploadStageState,
 )
-from bisheng.knowledge.domain.repositories.knowledge_space_file_change_repository import (
-    KnowledgeSpaceFileChangeRepository,
-)
 from bisheng.knowledge.domain.repositories.knowledge_space_upload_stage_repository import (
     KnowledgeSpaceUploadStageRepository,
 )
@@ -187,8 +184,6 @@ class KnowledgeSpaceUploadStageService:
         candidate_upload_id = self._normalize_upload_id(upload_id) if upload_id else self._new_upload_id()
         async with self.session_factory() as session:
             async with session.begin():
-                policy_repository = KnowledgeSpaceFileChangeRepository(session)
-                await policy_repository.ensure_policy_row(tenant_id=tenant_id, for_update=True)
                 repository = KnowledgeSpaceUploadStageRepository(session)
                 existing = await repository.get_by_upload_id(
                     tenant_id=tenant_id,
@@ -358,10 +353,6 @@ class KnowledgeSpaceUploadStageService:
         normalized_upload_id = self._normalize_upload_id(upload_id)
         async with self.session_factory() as session:
             async with session.begin():
-                await KnowledgeSpaceFileChangeRepository(session).ensure_policy_row(
-                    tenant_id=tenant_id,
-                    for_update=True,
-                )
                 repository = KnowledgeSpaceUploadStageRepository(session)
                 stage = await self._require_stage(
                     repository=repository,
@@ -381,10 +372,6 @@ class KnowledgeSpaceUploadStageService:
         normalized_upload_id = self._normalize_upload_id(upload_id)
         async with self.session_factory() as session:
             async with session.begin():
-                await KnowledgeSpaceFileChangeRepository(session).ensure_policy_row(
-                    tenant_id=tenant_id,
-                    for_update=True,
-                )
                 repository = KnowledgeSpaceUploadStageRepository(session)
                 stage = await self._require_stage(
                     repository=repository,
@@ -421,10 +408,6 @@ class KnowledgeSpaceUploadStageService:
 
         async with self.session_factory() as session:
             async with session.begin():
-                await KnowledgeSpaceFileChangeRepository(session).ensure_policy_row(
-                    tenant_id=tenant_id,
-                    for_update=True,
-                )
                 repository = KnowledgeSpaceUploadStageRepository(session)
                 stage = await self._require_stage(
                     repository=repository,
@@ -455,10 +438,6 @@ class KnowledgeSpaceUploadStageService:
         normalized_upload_id = self._normalize_upload_id(upload_id)
         async with self.session_factory() as session:
             async with session.begin():
-                await KnowledgeSpaceFileChangeRepository(session).ensure_policy_row(
-                    tenant_id=tenant_id,
-                    for_update=True,
-                )
                 repository = KnowledgeSpaceUploadStageRepository(session)
                 stage = await self._require_stage(
                     repository=repository,
@@ -488,10 +467,6 @@ class KnowledgeSpaceUploadStageService:
 
         async with self.session_factory() as session:
             async with session.begin():
-                await KnowledgeSpaceFileChangeRepository(session).ensure_policy_row(
-                    tenant_id=tenant_id,
-                    for_update=True,
-                )
                 repository = KnowledgeSpaceUploadStageRepository(session)
                 stage = await self._require_stage(
                     repository=repository,

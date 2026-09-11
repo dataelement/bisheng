@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -17,9 +18,6 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFileSizeLimitError,
 )
 from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
-from bisheng.knowledge.domain.models.knowledge_space_file_change_policy import (
-    KnowledgeSpaceFileChangePolicy,
-)
 from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
     KnowledgeSpaceFileChangeAction,
     KnowledgeSpaceFileChangeRequest,
@@ -28,6 +26,9 @@ from bisheng.knowledge.domain.models.knowledge_space_file_change_request import 
 from bisheng.knowledge.domain.models.knowledge_space_upload_stage import (
     KnowledgeSpaceUploadStage,
     KnowledgeSpaceUploadStageState,
+)
+from bisheng.knowledge.domain.repositories.knowledge_space_file_change_repository import (
+    KnowledgeSpaceFileChangeRepository,
 )
 from bisheng.knowledge.domain.repositories.knowledge_space_upload_stage_repository import (
     KnowledgeSpaceUploadStageRepository,
@@ -89,7 +90,6 @@ async def stage_engine():
         poolclass=StaticPool,
     )
     tables = [
-        KnowledgeSpaceFileChangePolicy.__table__,
         KnowledgeSpaceUploadStage.__table__,
         KnowledgeSpaceFileChangeRequest.__table__,
     ]
@@ -251,7 +251,7 @@ async def test_same_upload_id_and_hash_is_idempotent_but_changed_content_creates
     assert len(await _rows(stage_engine, 17)) == 2
 
 
-async def test_capacity_counts_formal_and_reserved_bytes_under_tenant_lock_and_consume_releases_reservation(
+async def test_capacity_counts_formal_and_reserved_bytes_and_consume_releases_reservation(
     stage_engine,
 ):
     set_current_tenant_id(17)
@@ -290,13 +290,26 @@ async def test_capacity_counts_formal_and_reserved_bytes_under_tenant_lock_and_c
     )
     assert second.state == KnowledgeSpaceUploadStageState.UPLOADED
 
-    async with AsyncSession(bind=stage_engine) as session:
-        policy = (
-            await session.exec(
-                select(KnowledgeSpaceFileChangePolicy).where(KnowledgeSpaceFileChangePolicy.tenant_id == 17)
-            )
-        ).one()
-        assert policy.id is not None
+
+async def test_stage_lifecycle_never_uses_tenant_policy_as_a_runtime_mutex(stage_engine, monkeypatch):
+    set_current_tenant_id(17)
+    policy_access = AsyncMock(side_effect=AssertionError("stage lifecycle must not lock the tenant policy row"))
+    monkeypatch.setattr(KnowledgeSpaceFileChangeRepository, "ensure_policy_row", policy_access)
+    storage = _Storage()
+    service = _service(stage_engine, storage)
+
+    stage = await service.create_stage(
+        space_id=101,
+        uploader_user_id=7,
+        file_name="no-tenant-lock.bin",
+        content=b"payload",
+    )
+    await service.attach(stage.upload_id)
+    await service.consume(stage.upload_id)
+    await service.cleanup(stage.upload_id)
+
+    policy_access.assert_not_awaited()
+
 
 
 async def test_cleanup_releases_capacity_removes_object_and_is_retry_idempotent(stage_engine):
@@ -384,6 +397,8 @@ async def test_expired_orphan_reconcile_waits_for_minio_lifecycle_and_rechecks_b
                 action=KnowledgeSpaceFileChangeAction.UPLOAD,
                 resource_type=KnowledgeSpaceFileChangeResourceType.STAGED_UPLOAD,
                 applicant_user_id=7,
+                business_key="knowledge-space-change:bound-orphan",
+                request_fingerprint="bound-orphan-fingerprint",
                 upload_stage_id=bound.id,
             )
         )
