@@ -68,7 +68,9 @@ from bisheng.common.errcode.channel import (
     ChannelAdminLimitExceededError,
     ChannelCreateLimitExceededError,
     ChannelCreationRequestConflictError,
+    ChannelGrantedNotSubscribedError,
     ChannelNotFoundError,
+    ChannelNotSubscribedError,
     ChannelOrganizationGrantUnsubscribeDeniedError,
 )
 from bisheng.common.errcode.knowledge_space import SpaceFileNameDuplicateError, SpacePermissionDeniedError
@@ -2413,8 +2415,15 @@ class ChannelService:
         current_membership = await self.space_channel_member_repository.find_membership(
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
-        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
-            raise ValueError("You are not subscribed to this channel")
+        if not current_membership:
+            # No membership row at all, yet the caller reached this channel — the
+            # followed list is resolved from `visible`, so it also carries
+            # channels held through a Grant. There is nothing of theirs to
+            # remove; whoever granted it has to take it back.
+            raise ChannelGrantedNotSubscribedError()
+        if current_membership.status != MembershipStatusEnum.ACTIVE:
+            # An application still pending, or one that was rejected.
+            raise ChannelNotSubscribedError()
 
         sources = await self.space_channel_member_repository.find_channel_membership_sources(
             channel_id,

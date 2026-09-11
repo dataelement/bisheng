@@ -49,6 +49,9 @@
 | **ShareLink**（既有对象；本版增量 = `share_scope` 列 + 撤销写入 + 有效期强制生效 + share-token 会话执行主体） | **F053-openapi-auth-and-identity** | 两个免登录分享页改走 share_link 通道；只拥有本版对该对象的写行为增量，不拥有既有创建 / 读取 |
 | **MessageSession / ChatMessage**（既有对象；本版增量 = `external_user_id` 分区键列，只写不读） | **F053-openapi-auth-and-identity**（列）| 会话本体仍归既有会话模块；本 Feature 只拥有该列的写入语义（PRD §4.3.4 / §4.6.3 四） |
 | —（无新增领域对象；在 F029 拥有的 citation 链路上扩展第三种来源类型与其载荷） | **F054-unified-citation-entries** | 频道文章 AI 问答接入统一溯源：新增「文章」来源类型及其来源载荷（真实稳定定位标识 = 文章文档标识 / 原文链接，不伪造知识库片段标识）、「来源已失效」状态、来源详情对**无已登录用户**调用一律不返回、工作流输入节点临时文件停止登记来源。只读 / 调用现有 `MessageCitation` 与 citation 注册 / 解析服务；**不拥有** `message_citation` schema，不改 F041 已登记的 `accessScope` 两档语义，不改灵思任务模式（归 F047），不新增表 / Alembic / 对外 API / 错误码 |
+| —（无新增） | F054-contextual-department-membership | 复用组织域 canonical 成员/祖先事实作为请求时权限输入，消除 OpenFGA 部门子树递归；仅演进 F048 授权模型与运行时装配，不新增组织对象、永久成员闭包或业务接口 |
+
+> ⚠️ **F054 编号冲突未决**：上表两行都占用 F054。`unified-citation-entries` 在 `feat/3.0.0-beta1` 取号，`contextual-department-membership` 在 `feat/3.0.0-beta1-test` 上已从 F053 改号而来，合并后再次撞号。两行都保留，改哪一个由各自 Feature owner 决定。
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service

@@ -245,10 +245,18 @@ class DaMengImpl(DefaultImpl):
         if type_ is not None:
             from sqlalchemy.schema import Column
 
+            from bisheng.core.database.alembic_helpers.dm_ddl import build_modify_column_ddl
+
             tmp_col = Column(column_name, type_)
             compiled_type = type_.compile(dialect=self.dialect)
-            stmt = (
-                f"ALTER TABLE {table_name} MODIFY {self.dialect.identifier_preparer.quote(column_name)} {compiled_type}"
+            # Quote the table too, not just the column: `user` is reserved on
+            # DM8 and an unquoted one took the whole upgrade down.
+            stmt = build_modify_column_ddl(
+                self.dialect.identifier_preparer,
+                table_name,
+                column_name,
+                compiled_type,
+                schema,
             )
             self._exec(text(stmt))
             # Re-enter for remaining attribute changes (nullable/default/etc.)

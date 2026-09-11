@@ -37,6 +37,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderDuplicateError,
     SpaceFolderNotFoundError,
     SpaceFolderUploadCountExceededError,
+    SpaceGrantedNotJoinedError,
     SpaceLimitError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
@@ -1536,6 +1537,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         result.follower_num = follower_num
         result.file_num = total_file_num
+        # The share link has to tell "already has access" from "may only preview
+        # and apply", and `user_role` cannot: it is absent for a non-member, and
+        # the client maps an absent role to MEMBER — the same value a real member
+        # gets. Report the effective actions the way the space list and the
+        # channel detail already do, so `visible` answers it outright.
+        #
+        # Only for a caller who holds the space. The square preview deliberately
+        # answers without `visible` — asking the permission runtime for a viewer
+        # who has none would both cost a lookup and require a runtime the preview
+        # path does not depend on. No actions is the honest answer there.
+        result.actions = (
+            sorted(await self._get_effective_actions("knowledge_space", space_id))
+            if has_content_permission
+            else []
+        )
         await self._decorate_department_metadata([result])
         await self._decorate_auto_tag_for_info(result)
 
@@ -2162,10 +2178,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             creator_users = []
             success_file_map = await KnowledgeFileDao.async_count_success_files_batch(space_ids_int)
-        visible_map = await self._batch_actions(
-            "knowledge_space",
-            space_ids_int,
-            ("visible",),
+        # Square subscription state must match the personal ``/joined`` list.
+        # Do not use the generic action batch here: it expands every action for
+        # super admins, which would incorrectly label every square space joined.
+        visible_map = await batch_check_business_visible(
+            self.login_user,
+            resource_type="knowledge_space",
+            resource_ids=space_ids_int,
         )
         user_map = {u.user_id: u for u in (creator_users or [])}
         resolved_subscription_status = {
@@ -2190,7 +2209,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             if (
                 subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
-                and "visible" in visible_map.get(str(space.id), frozenset())
+                and visible_map.get(str(space.id), False)
             ):
                 subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
             result_list.append(
@@ -5025,6 +5044,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             current_membership and current_membership.user_role == UserRoleEnum.CREATOR
         ):
             raise SpacePermissionDeniedError()
+
+        if not current_membership:
+            # The joined list is resolved from the `visible` decision, so it also
+            # carries spaces held through a Grant rather than by joining. Exiting
+            # one of those revoked nothing, deleted no row and still reported
+            # success, so the space came back on the next refresh.
+            raise SpaceGrantedNotJoinedError()
 
         await self._revoke_direct_space_user_permissions(space_id, self.login_user.user_id)
         deleted = await SpaceChannelMemberDao.delete_space_member(space_id, self.login_user.user_id)

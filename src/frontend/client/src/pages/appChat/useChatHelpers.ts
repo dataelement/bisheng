@@ -22,6 +22,9 @@ type SentMessageFile = {
     name?: string
     filepath?: string
     file_path?: string
+    // Media metadata the chip renders: the poster frame and the length badge.
+    cover_filepath?: string
+    mediaDurationSec?: number
 }
 
 export default function useChatHelpers() {
@@ -222,6 +225,11 @@ export default function useChatHelpers() {
                                 // Keep the id: it's what an image attachment is
                                 // looked up by when its link is re-issued.
                                 file_id: el.file_id,
+                                // And what the media chip draws with. Narrowing
+                                // the row to the four fields above dropped them,
+                                // so a stored video reopened as a bare card.
+                                ...(el.cover_filepath ? { cover_filepath: el.cover_filepath } : {}),
+                                ...(el.mediaDurationSec != null ? { mediaDurationSec: el.mediaDurationSec } : {}),
                             })),
                             is_bot,
                             message: msg,

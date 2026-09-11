@@ -1105,7 +1105,7 @@
   "com_ui_upload_file_search": "上传文件搜索",
   "com_ui_upload_file_type_error": "该应用不支持上传此类型文件",
   "com_chat.media_parsing": "解析中…",
-  "com_chat.media_file_too_large": "上传文件大小不能超过1024M，请重新上传",
+  "com_chat.media_file_too_large": "上传文件大小不能超过{{0}}M，请重新上传",
   "com_chat.media_file_too_many": "上传文件个数不能超过5个",
   "com_ui_upload_files": "上传文件",
   "com_ui_upload_folder": "上传文件夹",

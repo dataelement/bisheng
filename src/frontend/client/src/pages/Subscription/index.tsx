@@ -21,6 +21,7 @@ import { ChannelLayout } from "./ChannelLayout";
 import { ChannelDiscoveryHome } from "./ChannelDiscoveryHome";
 import { ChannelSquareTabs } from "./ChannelSquareTabs";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
+import { canReadChannelContent } from "./channelContentAccess";
 import FullScreenArticle from "./Article/FullScreenArticle";
 import { ChannelSidebar } from "./Sidebar/ChannelSidebar";
 import { Outlined } from "bisheng-icons";
@@ -252,11 +253,16 @@ export default function Subscription() {
                 // Membership is decided here, at open time — not by whoever sent the link.
                 // A former member following an old notification, or anyone with the id,
                 // gets the same intro-and-apply preview the square shows; only an active
-                // subscriber (or someone granted view_channel) enters the channel itself.
-                // Mirrors the backend's article gate, so the page and the API agree.
-                const permissionIds: string[] = Array.isArray(detail?.permission_ids) ? detail.permission_ids : [];
+                // subscriber, or someone the F048 catalog makes the channel `visible` to,
+                // enters the channel itself. `visible` is the very decision the article
+                // endpoint re-checks, so the page and the API agree.
+                //
+                // This read `permission_ids` for a `view_channel` id, which F048 retired
+                // along with the field: the list was always empty, so everyone holding a
+                // Grant instead of a subscription — a department grant, say — was bounced
+                // to the preview of a channel they were entitled to open.
                 const subscribed = String(detail?.subscription_status ?? "").toLowerCase() === "subscribed";
-                if (!subscribed && !permissionIds.includes("view_channel")) {
+                if (!canReadChannelContent({ actions: detail?.actions, isSubscribed: subscribed })) {
                     // Nothing to show and nowhere to apply: the channel was never published to
                     // the square, so there is no intro page for a stranger to land on. Say so and
                     // leave them on the square, the way an invalid knowledge-space link behaves.

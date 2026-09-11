@@ -13,18 +13,24 @@ from __future__ import annotations
 from dataclasses import replace
 
 from loguru import logger
-from sqlalchemy import text
+from sqlalchemy import and_, literal, or_, select
+from sqlmodel import col
 
 from bisheng.common.errcode.permission import PermissionInvalidResourceError
 from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.context.tenant import (
-    current_tenant_id as _tenant_ctx_var,
-)
-from bisheng.core.context.tenant import (
+    bypass_tenant_filter,
     set_current_tenant_id,
 )
+from bisheng.core.context.tenant import (
+    current_tenant_id as _tenant_ctx_var,
+)
 from bisheng.core.database import get_async_db_session
+from bisheng.core.database.dialect_helpers import StrJoinKey
+from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.permission.application.access import get_f048_resource_adapter
+from bisheng.permission.domain.models.grant import ResourcePermissionMode
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
@@ -36,44 +42,62 @@ _SYSTEM_USER_ID = 0
 
 # ── SQL queries ──────────────────────────────────────────────────────────
 
-_ROOT_MISMATCH_SQL = """
-    SELECT rpm.id            AS rpm_id,
-           rpm.resource_type AS resource_type,
-           rpm.resource_id   AS resource_id,
-           rpm.parent_type   AS stored_parent_type,
-           rpm.parent_id     AS stored_parent_id,
-           kf.knowledge_id   AS knowledge_id,
-           kf.file_level_path,
-           kf.tenant_id      AS tenant_id
-      FROM resource_permission_mode rpm
-      JOIN knowledgefile kf ON CAST(kf.id AS CHAR) = rpm.resource_id
-                            AND ((kf.file_type = 0 AND rpm.resource_type = 'folder')
-                              OR (kf.file_type = 1 AND rpm.resource_type = 'knowledge_file'))
-      JOIN knowledge k ON k.id = kf.knowledge_id AND k.type = 3
-     WHERE (kf.file_level_path IS NULL OR kf.file_level_path = '')
-       AND (rpm.parent_type <> 'knowledge_space'
-            OR rpm.parent_id <> CAST(kf.knowledge_id AS CHAR))
-     LIMIT :batch_limit
-"""
 
-_NESTED_MISMATCH_SQL = """
-    SELECT rpm.id            AS rpm_id,
-           rpm.resource_type AS resource_type,
-           rpm.resource_id   AS resource_id,
-           rpm.parent_type   AS stored_parent_type,
-           rpm.parent_id     AS stored_parent_id,
-           kf.knowledge_id   AS knowledge_id,
-           kf.file_level_path,
-           kf.tenant_id      AS tenant_id
-      FROM resource_permission_mode rpm
-      JOIN knowledgefile kf ON CAST(kf.id AS CHAR) = rpm.resource_id
-                            AND ((kf.file_type = 0 AND rpm.resource_type = 'folder')
-                              OR (kf.file_type = 1 AND rpm.resource_type = 'knowledge_file'))
-     WHERE kf.file_level_path <> '' AND kf.file_level_path IS NOT NULL
-       AND (rpm.parent_type <> 'folder'
-            OR rpm.parent_id <> SUBSTRING_INDEX(kf.file_level_path, '/', -1))
-     LIMIT :batch_limit
-"""
+def _mismatch_query(*, batch_limit: int, nested: bool):
+    """Rows whose permission mirror disagrees with the file's own path.
+
+    Built through SQLAlchemy rather than as raw SQL because the raw version was
+    MySQL-only and had never run on DaMeng: ``CAST(kf.id AS CHAR)`` means
+    ``CHAR(1)`` there, so every multi-digit id was truncated and the whole
+    statement failed with ``[CODE:-6149] Data lose`` — the reconciler had been
+    dying on its first query every 10 minutes, leaving every drifted row
+    unrepaired. ``SUBSTRING_INDEX`` does not exist on DaMeng either; the last
+    path segment is matched with a portable LIKE instead (segments are digits,
+    so no wildcard can leak in).
+    """
+    file_key = StrJoinKey(col(KnowledgeFile.id))
+    type_matches = or_(
+        and_(KnowledgeFile.file_type == 0, ResourcePermissionMode.resource_type == "folder"),
+        and_(KnowledgeFile.file_type == 1, ResourcePermissionMode.resource_type == "knowledge_file"),
+    )
+    query = (
+        select(
+            ResourcePermissionMode.id.label("rpm_id"),
+            ResourcePermissionMode.resource_type.label("resource_type"),
+            ResourcePermissionMode.resource_id.label("resource_id"),
+            ResourcePermissionMode.parent_type.label("stored_parent_type"),
+            ResourcePermissionMode.parent_id.label("stored_parent_id"),
+            KnowledgeFile.knowledge_id.label("knowledge_id"),
+            KnowledgeFile.file_level_path.label("file_level_path"),
+            KnowledgeFile.tenant_id.label("tenant_id"),
+        )
+        .select_from(ResourcePermissionMode)
+        .join(KnowledgeFile, and_(file_key == ResourcePermissionMode.resource_id, type_matches))
+    )
+    has_path = and_(
+        KnowledgeFile.file_level_path.is_not(None),
+        KnowledgeFile.file_level_path != "",
+    )
+    if nested:
+        # The mirror's parent_id must be the last segment of the path.
+        last_segment = or_(
+            KnowledgeFile.file_level_path == ResourcePermissionMode.parent_id,
+            KnowledgeFile.file_level_path.like(literal("%/") + ResourcePermissionMode.parent_id),
+        )
+        query = query.where(
+            has_path,
+            or_(ResourcePermissionMode.parent_type != "folder", ~last_segment),
+        )
+    else:
+        # No path: the file sits at the space root, so the space is its parent.
+        query = query.join(Knowledge, and_(Knowledge.id == KnowledgeFile.knowledge_id, Knowledge.type == 3)).where(
+            ~has_path,
+            or_(
+                ResourcePermissionMode.parent_type != "knowledge_space",
+                ResourcePermissionMode.parent_id != StrJoinKey(col(KnowledgeFile.knowledge_id)),
+            ),
+        )
+    return query.limit(batch_limit)
 
 
 def _compute_correct_parent(file_level_path: str | None, knowledge_id: int) -> tuple[str, str]:
@@ -110,9 +134,25 @@ async def _repair_single(
             )
             return False
 
-        actual_parent = (target.parent_type, target.parent_id)
-        expected_parent = (correct_parent_type, correct_parent_id)
-        if actual_parent == expected_parent:
+        # The drift is between the mirror and the business truth, so that is the
+        # pair to compare. This compared the freshly loaded record against the
+        # expectation computed from the same `file_level_path` — two readings of
+        # the same truth, always equal — and skipped every candidate as "already
+        # consistent". The scan found the drift and the repair declined to act
+        # on it, for as long as both have existed.
+        business_parent = (target.parent_type, target.parent_id)
+        correct_parent = (correct_parent_type, correct_parent_id)
+        stored_parent = (stored_parent_type, stored_parent_id)
+        if business_parent != correct_parent:
+            # The file moved again between the scan and now; the next cycle
+            # re-reads it with fresh values rather than writing a stale one.
+            logger.info(
+                "stale_projection_reconciler: resource {}/{} moved since the scan, skipping",
+                resource_type,
+                resource_id,
+            )
+            return False
+        if stored_parent == correct_parent:
             logger.info(
                 "stale_projection_reconciler: resource {}/{} already consistent, skipping",
                 resource_type,
@@ -176,20 +216,14 @@ async def reconcile_stale_parent_projections(*, batch_limit: int = 200) -> int:
     """
     repaired = 0
 
-    async with get_async_db_session() as session:
-        # ── root-level mismatch (SPACE) ──
-        root_result = await session.execute(
-            text(_ROOT_MISMATCH_SQL),
-            {"batch_limit": batch_limit},
-        )
-        root_rows = root_result.mappings().all()
-
-        # ── nested mismatch ──
-        nested_result = await session.execute(
-            text(_NESTED_MISMATCH_SQL),
-            {"batch_limit": batch_limit},
-        )
-        nested_rows = nested_result.mappings().all()
+    # The scan spans every tenant, so it must run outside the tenant filter —
+    # the raw SQL it replaced was never intercepted by it.
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            root_rows = (await session.execute(_mismatch_query(batch_limit=batch_limit, nested=False))).mappings().all()
+            nested_rows = (
+                (await session.execute(_mismatch_query(batch_limit=batch_limit, nested=True))).mappings().all()
+            )
 
     all_rows = list(root_rows) + list(nested_rows)
     if not all_rows:
