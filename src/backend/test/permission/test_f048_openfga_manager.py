@@ -15,7 +15,6 @@ from bisheng.core.openfga.authorization_model_f048 import (
     authorization_model_checksum,
     build_authorization_model_f048,
 )
-from bisheng.core.openfga.contextual import dependent_relations
 from bisheng.core.openfga.discovery import (
     OpenFGARuntimePin,
     discover_openfga_runtime,
@@ -47,14 +46,13 @@ def _config(**updates) -> OpenFGAConf:
 
 def _with_openfga_response_defaults(model: dict) -> dict:
     response_model = deepcopy(model)
-    definitions = {item["type"]: item for item in response_model["type_definitions"]}
-    system_metadata = definitions["system"]["metadata"]
+    system_metadata = response_model["type_definitions"][1]["metadata"]
     system_metadata.update(module="", source_info=None)
     super_admin_metadata = system_metadata["relations"]["super_admin"]
     super_admin_metadata.update(module="", source_info=None)
     super_admin_metadata["directly_related_user_types"][0]["condition"] = ""
 
-    department_relations = definitions["department"]["relations"]
+    department_relations = response_model["type_definitions"][3]["relations"]
     parent_rewrite = department_relations["admin"]["union"]["child"][1]["tupleToUserset"]
     parent_rewrite["tupleset"]["object"] = ""
     parent_rewrite["computedUserset"]["object"] = ""
@@ -328,8 +326,6 @@ async def test_single_model_client_readiness_and_heartbeat() -> None:
         store_id="store-existing",
         model_id="model-f048",
         timeout=5,
-        require_contextual_provider=True,
-        affected_relations=dependent_relations(build_authorization_model_f048(), "department", "subtree_member"),
     )
     readiness = manager.readiness()
     assert readiness["ready"] is True

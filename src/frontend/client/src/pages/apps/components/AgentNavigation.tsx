@@ -16,13 +16,12 @@ interface Category {
 
 interface AgentNavigationProps {
     onCategoryChange: (categoryId: number | string) => void
-    onCategoryLoadError?: () => void
     onRefresh: () => void
 }
 
 const UNCATEGORIZED = 'uncategorized'
 
-export function AgentNavigation({ onCategoryChange, onCategoryLoadError, onRefresh }: AgentNavigationProps) {
+export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigationProps) {
     const { user } = useAuthContext();
     const localize = useLocalize();
 
@@ -43,29 +42,23 @@ export function AgentNavigation({ onCategoryChange, onCategoryLoadError, onRefre
     }, [onCategoryChange])
 
     const fetchCategoryTags = useCallback(async () => {
-        try {
-            const tags = await getHomeLabelApi()
-            const next: Category[] = tags.data.map(tag => ({
-                label: tag.name,
-                value: tag.id,
-                selected: true
-            }))
-            setCategories(next)
+        const tags = await getHomeLabelApi()
+        const next: Category[] = tags.data.map(tag => ({
+            label: tag.name,
+            value: tag.id,
+            selected: true
+        }))
+        setCategories(next)
 
-            // Keep the current tab if it survived (the tag list is editable from
-            // here), otherwise fall back to the first tag — or to Uncategorized,
-            // which is the only tab left when no tags are configured at all.
-            const current = activeCategoryRef.current
-            const stillListed = current === UNCATEGORIZED || next.some((category) => category.value === current)
-            if (current === null || !stillListed) {
-                selectCategory(next[0]?.value ?? UNCATEGORIZED)
-            }
-        } catch (error) {
-            console.error("Failed to load app categories:", error)
-            setCategories([])
-            if (activeCategoryRef.current === null) onCategoryLoadError?.()
+        // Keep the current tab if it survived (the tag list is editable from
+        // here), otherwise fall back to the first tag — or to Uncategorized,
+        // which is the only tab left when no tags are configured at all.
+        const current = activeCategoryRef.current
+        const stillListed = current === UNCATEGORIZED || next.some((category) => category.value === current)
+        if (current === null || !stillListed) {
+            selectCategory(next[0]?.value ?? UNCATEGORIZED)
         }
-    }, [onCategoryLoadError, selectCategory])
+    }, [selectCategory])
 
     // Initial data load
     useEffect(() => {
@@ -110,7 +103,7 @@ export function AgentNavigation({ onCategoryChange, onCategoryLoadError, onRefre
                     "flex shrink-0 items-center whitespace-nowrap border-b-2 px-2 py-[5px] font-['PingFang_SC'] text-[14px] leading-[22px] transition-colors",
                     isActive
                         ? "border-blue-500 text-blue-500"
-                        : "border-transparent text-text-1 fine-pointer:hover:text-blue-500",
+                        : "border-transparent text-[#212121] fine-pointer:hover:text-blue-500",
                 )}
             >
                 {label}

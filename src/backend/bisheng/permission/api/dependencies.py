@@ -60,29 +60,6 @@ class ResourcePermissionApiPort(Protocol):
         actor: PermissionActor,
     ) -> Any: ...
 
-    async def list_service_account_grants(
-        self,
-        *,
-        tenant_id: int,
-        service_account_id: int,
-    ) -> Any: ...
-
-    async def revoke_service_account_grants(
-        self,
-        *,
-        tenant_id: int,
-        service_account_id: int,
-        actor: PermissionActor,
-    ) -> Any: ...
-
-    async def list_grantable_resources(
-        self,
-        *,
-        tenant_id: int,
-        resource_type: str | None,
-        keyword: str | None,
-    ) -> Any: ...
-
     async def get_context(
         self,
         *,

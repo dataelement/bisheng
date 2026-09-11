@@ -1,53 +1,29 @@
-import { useCallback, useEffect, useState } from "react";
-import { getMyPendingApprovalCountApi } from "~/api/approval";
+import { useState, useEffect } from "react";
 import { getMessageUnreadCountApi } from "~/api/message";
 
-const REFRESH_INTERVAL_MS = 150000;
-
-/**
- * Badge counts for the 消息与审批 entry.
- *
- * The two numbers stay separate on purpose: "还有几件事要办" (pending approval tasks) and
- * "还有几条没看" (unread notifications) mean different things, so they are never summed into
- * one ambiguous total. The entry shows the pending count as a number and falls back to a plain
- * dot when there is nothing to handle but something unread.
- */
 export function useNotificationCount() {
     const [unreadCount, setUnreadCount] = useState(0);
-    const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
 
-    const fetchCounts = useCallback(async () => {
-        const [unread, pending] = await Promise.allSettled([
-            getMessageUnreadCountApi(),
-            getMyPendingApprovalCountApi(),
-        ]);
-        if (unread.status === "fulfilled") {
-            // `notify` already excludes approval to-dos, which live in 我的审批 instead.
-            setUnreadCount(unread.value.notify || 0);
-        } else {
-            console.error("Failed to fetch unread count:", unread.reason);
+    const fetchUnreadCount = async () => {
+        try {
+            const { total } = await getMessageUnreadCountApi();
+            setUnreadCount(total || 0);
+        } catch (error) {
+            console.error("Failed to fetch unread count:", error);
         }
-        if (pending.status === "fulfilled") {
-            setPendingApprovalCount(pending.value || 0);
-        } else {
-            console.error("Failed to fetch pending approval count:", pending.reason);
-        }
-    }, []);
+    };
 
     useEffect(() => {
-        void fetchCounts();
+        fetchUnreadCount();
 
-        const interval = setInterval(() => {
-            void fetchCounts();
-        }, REFRESH_INTERVAL_MS);
+        // 定时刷新未读数量
+        const interval = setInterval(fetchUnreadCount, 150000);
 
-        // Refresh as soon as the tab is looked at again, so the badge is never stale on return.
-        const onFocus = () => {
-            void fetchCounts();
-        };
+        // 页面重新可见/聚焦时立即刷新，避免红点延迟
+        const onFocus = () => { void fetchUnreadCount(); };
         const onVisibilityChange = () => {
             if (document.visibilityState === "visible") {
-                void fetchCounts();
+                void fetchUnreadCount();
             }
         };
         window.addEventListener("focus", onFocus);
@@ -58,7 +34,7 @@ export function useNotificationCount() {
             window.removeEventListener("focus", onFocus);
             document.removeEventListener("visibilitychange", onVisibilityChange);
         };
-    }, [fetchCounts]);
+    }, []);
 
-    return { unreadCount, pendingApprovalCount, refreshCount: fetchCounts };
+    return { unreadCount, refreshCount: fetchUnreadCount };
 }

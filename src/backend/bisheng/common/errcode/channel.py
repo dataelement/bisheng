@@ -68,23 +68,6 @@ class ChannelPermissionDeniedError(BaseErrorCode):
     Msg: str = "Permission denied for this channel operation"
 
 
-# Unsubscribe asked for a channel the caller never subscribed to. Reachable
-# without any mistake on the caller's part: the followed list resolves channels
-# the viewer can see, which includes ones reached through a Grant rather than a
-# subscription, and those carry no membership row to remove.
-class ChannelNotSubscribedError(BaseErrorCode):
-    Code: int = 19014
-    Msg: str = "You are not subscribed to this channel"
-
-
-# The caller holds the channel through a Grant rather than a subscription, so
-# there is no membership of theirs to remove. Distinct from 19014, which means
-# an application is still pending or was rejected.
-class ChannelGrantedNotSubscribedError(BaseErrorCode):
-    Code: int = 19015
-    Msg: str = "This channel is open to you through a permission grant and cannot be unsubscribed"
-
-
 # Channel module error codes, module code: 190
 # Article not found
 class ArticleNotFoundError(BaseErrorCode):

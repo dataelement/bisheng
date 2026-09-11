@@ -11,7 +11,6 @@ nothing here and cannot be acted on.
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 from bisheng.permission.application.resource_api import _split_resource_key
@@ -59,26 +58,8 @@ async def test_resource_display_names_resolves_spaces_and_folders(monkeypatch) -
         assert ids == [94661]
         return [SimpleNamespace(id=94661, file_name="Release Notes")]
 
-    rows_by_model = {
-        "Flow": [SimpleNamespace(id="wf-1", name="Release Workflow")],
-        "Assistant": [SimpleNamespace(id="as-1", name="Support Assistant")],
-        "Channel": [SimpleNamespace(id="ch-1", name="News Channel")],
-        "GptsToolsType": [SimpleNamespace(id=8, name="CRM Tool")],
-        "Dashboard": [SimpleNamespace(id=9, title="Sales Dashboard")],
-    }
-
-    class Session:
-        async def exec(self, statement):
-            entity = statement.column_descriptions[0]["entity"]
-            return SimpleNamespace(all=lambda: rows_by_model[entity.__name__])
-
-    @asynccontextmanager
-    async def db_session():
-        yield Session()
-
     monkeypatch.setattr(KnowledgeDao, "aget_list_by_ids", load_spaces)
     monkeypatch.setattr(KnowledgeFileDao, "aget_file_by_ids", load_folders)
-    monkeypatch.setattr("bisheng.core.database.get_async_db_session", lambda: db_session())
 
     labels = await TenantPermissionSubjectDirectory().resource_display_names(
         (
@@ -86,19 +67,10 @@ async def test_resource_display_names_resolves_spaces_and_folders(monkeypatch) -
             ("folder", "94661"),
             ("folder", "not-an-id"),
             ("workflow", "wf-1"),
-            ("assistant", "as-1"),
-            ("channel", "ch-1"),
-            ("tool", "8"),
-            ("dashboard", "9"),
         )
     )
 
     assert labels == {
         ("knowledge_space", "3377"): "Product Knowledge",
         ("folder", "94661"): "Release Notes",
-        ("workflow", "wf-1"): "Release Workflow",
-        ("assistant", "as-1"): "Support Assistant",
-        ("channel", "ch-1"): "News Channel",
-        ("tool", "8"): "CRM Tool",
-        ("dashboard", "9"): "Sales Dashboard",
     }

@@ -116,17 +116,10 @@ class KnowledgeRagTool(BaseTool):
     rrf_remove_zero_score: bool = Field(default=False)
 
     knowledge_retriever_tool: KnowledgeRetrieverTool = None
-    # F054: this retrieval source is a throwaway (a workflow input-node upload),
-    # not a knowledge-base file. Its chunks carry a UUID document id and the
-    # workflow id as knowledge id, so a citation built from them can never
-    # resolve back to a real file — the badge would render and open onto
-    # nothing. Callers that register citations skip a tool marked this way.
-    ephemeral_source: bool = False
 
     @classmethod
     def init_knowledge_rag_tool(cls, name: str, description: str, **kwargs) -> BaseTool:
         llm = kwargs.pop("llm")
-        ephemeral_source = kwargs.pop("ephemeral_source", False)
         chat_prompt = kwargs.pop("chat_prompt", CHAT_PROMPT)
         # The retriever is an internal step of this tool, not a tool call of its
         # own — it must stay invisible to the caller's callbacks. Dropping them
@@ -141,7 +134,6 @@ class KnowledgeRagTool(BaseTool):
             llm=llm,
             chat_prompt=chat_prompt,
             knowledge_retriever_tool=knowledge_retriever_tool,
-            ephemeral_source=ephemeral_source,
         )
 
     def _run(self, query: str) -> Any:

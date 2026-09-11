@@ -23,7 +23,7 @@ Behaviour:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Dict, Optional
 
 from bisheng.common.errcode.tenant_resolver import TenantRelocateBlockedError
 from bisheng.core.context.tenant import bypass_tenant_filter, strict_tenant_filter
@@ -91,10 +91,9 @@ class UserTenantSyncService:
         current = await UserTenantDao.aget_active_user_tenant(user_id)
 
         if current is not None and current.tenant_id == new_leaf.id:
-            await cls._migrate_relocated_personal_token(user_id, new_leaf.id)
             return new_leaf  # No change — cheap exit.
 
-        old_tenant_id: int | None = current.tenant_id if current is not None else None
+        old_tenant_id: Optional[int] = current.tenant_id if current is not None else None
 
         owned_count = 0
         if old_tenant_id is not None:
@@ -125,7 +124,6 @@ class UserTenantSyncService:
             new_leaf.id,
         )
         await cls._invalidate_redis_caches(user_id)
-        await cls._migrate_relocated_personal_token(user_id, new_leaf.id)
         # F019 AC-11: once ``token_version`` has been bumped the old JWT is
         # dead, so any admin-scope the user had set under that JWT must die
         # with it. Best-effort — a scope DEL failure does not block the
@@ -135,7 +133,7 @@ class UserTenantSyncService:
             from bisheng.admin.domain.services.tenant_scope import TenantScopeService
 
             await TenantScopeService.clear_on_token_version_bump(user_id)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.debug("admin_scope clear on relocate failed: %s", exc)
 
         relocate_reason = "no_primary_department" if old_tenant_id is None and new_leaf.id == ROOT_TENANT_ID else None
@@ -167,7 +165,7 @@ class UserTenantSyncService:
         dept_path: str,
         *,
         trigger: UserTenantSyncTrigger,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         """Re-sync every primary-dept user under a department subtree.
 
         Used by the mount / unmount / move event handlers to make the
@@ -205,7 +203,7 @@ class UserTenantSyncService:
             try:
                 await cls.sync_user(uid, trigger=trigger)
                 synced.append(uid)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 failed.append((uid, repr(exc)))
                 logger.warning(
                     "sync_subtree_primary_users: user=%s trigger=%s failed: %s",
@@ -271,7 +269,7 @@ class UserTenantSyncService:
                         row = result.first()
                         if row is not None:
                             total += int(row[0])
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001
                         logger.debug(
                             "owned-resource count skipped for %s: %s",
                             table_name,
@@ -283,7 +281,7 @@ class UserTenantSyncService:
     async def _rewrite_tenant_membership_permissions(
         cls,
         user_id: int,
-        old_tenant_id: int | None,
+        old_tenant_id: Optional[int],
         new_tenant_id: int,
     ) -> None:
         """Revoke the old tenant membership and grant the new membership.
@@ -321,7 +319,7 @@ class UserTenantSyncService:
         try:
             permissions = await get_permission_relation_api()
             await permissions.apply_changes(tuple(changes), crash_safe=True)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "Permission membership update for user %d relocate %s→%s failed: %s",
                 user_id,
@@ -337,7 +335,7 @@ class UserTenantSyncService:
             from bisheng.core.cache.redis_manager import get_redis_client
 
             redis = await get_redis_client()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.debug("Redis unavailable; cache invalidation skipped: %s", exc)
             return
         for key in (
@@ -347,14 +345,8 @@ class UserTenantSyncService:
         ):
             try:
                 await redis.adelete(key)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.debug("Redis delete %s failed: %s", key, exc)
-
-    @staticmethod
-    async def _migrate_relocated_personal_token(user_id: int, tenant_id: int) -> None:
-        from bisheng.open_api.domain.services.personal_token_service import PersonalTokenService
-
-        await PersonalTokenService.migrate_tenant(user_id=user_id, tenant_id=tenant_id)
 
     @classmethod
     async def _write_relocation_audit(
@@ -362,11 +354,11 @@ class UserTenantSyncService:
         user_id: int,
         action: TenantAuditAction,
         audit_tenant_id: int,
-        old_tenant_id: int | None,
+        old_tenant_id: Optional[int],
         new_tenant_id: int,
         owned_count: int,
         trigger: str,
-        reason: str | None = None,
+        reason: Optional[str] = None,
     ) -> None:
         try:
             await AuditLogDao.ainsert_v2(
@@ -384,14 +376,14 @@ class UserTenantSyncService:
                     "trigger": trigger,
                 },
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.error("audit %s write failed: %s", action.value, exc)
 
     @classmethod
     async def _notify_resource_owner_relocation(
         cls,
         user_id: int,
-        old_tenant_id: int | None,
+        old_tenant_id: Optional[int],
         new_tenant_id: int,
         owned_count: int,
     ) -> None:
@@ -400,8 +392,8 @@ class UserTenantSyncService:
 
         title = "租户归属已变更 (tenant relocated)"
         body = (
-            f"您的主部门发生变更, 已从 Tenant {old_tenant_id} 切换至 "
-            f"Tenant {new_tenant_id}。您名下仍有 {owned_count} 个资源保留在原 Tenant, "
+            f"您的主部门发生变更，已从 Tenant {old_tenant_id} 切换至 "
+            f"Tenant {new_tenant_id}。您名下仍有 {owned_count} 个资源保留在原 Tenant，"
             f"请联系管理员完成资源交接。"
         )
         await send_inbox_notice(title, body, recipients=[user_id])

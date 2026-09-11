@@ -111,9 +111,7 @@ const CreatePromptForm = ({
                   <Input
                     {...field}
                     type="text"
-                    size="large"
-                    className="mr-2 w-full"
-                    inputClassName="text-2xl"
+                    className="mr-2 w-full border border-border-medium p-2 text-2xl text-text-primary placeholder:text-text-tertiary dark:placeholder:text-text-secondary"
                     placeholder={`${localize('com_ui_prompt_name')}*`}
                     tabIndex={0}
                   />

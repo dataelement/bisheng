@@ -13,19 +13,11 @@ interface AiModelSelectProps {
     options?: BsConfig["models"];
     value: number;
     disabled: boolean;
-    /** User-initiated selection (Select onValueChange). */
     onChange: (value: string) => void;
-    /**
-     * Programmatic value repairs from the effect below (invalid/ mismatched
-     * current value). Falls back to onChange when not provided. Parents that
-     * track "manual vs default" selections should pass this so auto-repairs
-     * are not mistaken for a user pick.
-     */
-    onAutoChange?: (value: string) => void;
 }
 
 const AiModelSelect = memo(
-    ({ options, value, disabled, onChange, onAutoChange }: AiModelSelectProps) => {
+    ({ options, value, disabled, onChange }: AiModelSelectProps) => {
         // Dedup by model id — multiple LLM servers can expose the same model,
         // which otherwise produces duplicate entries in the dropdown.
         const uniqueOptions = useMemo(() => {
@@ -55,18 +47,15 @@ const AiModelSelect = memo(
         // Auto-select first option when current value is invalid
         useEffect(() => {
             if (uniqueOptions.length === 0) return;
-            const repair = onAutoChange ?? onChange;
             const hasCurrent = uniqueOptions.find(
                 (opt) => String(opt.id) === String(value)
             );
             if (!hasCurrent) {
                 // Spec: default falls back to the "latest" configured model,
                 // which is the last entry in the admin-ordered list.
-                repair(String(uniqueOptions[uniqueOptions.length - 1].id));
-            } else if (String(hasCurrent.id) !== String(value)) {
-                // Type/normalization fix only — never fire for an exact match,
-                // otherwise a mere mount would look like a user selection.
-                repair(String(hasCurrent.id));
+                onChange(String(uniqueOptions[uniqueOptions.length - 1].id));
+            } else {
+                onChange(hasCurrent.id);
             }
         }, [uniqueOptions, value]);
 
@@ -76,7 +65,7 @@ const AiModelSelect = memo(
                 disabled={disabled}
                 onValueChange={onChange}
             >
-                <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(50vw,288px)] touch-mobile:max-w-[min(60vw,200px)] touch-mobile:px-1.5 gap-1 overflow-hidden rounded-lg border-none bg-transparent px-2 text-text-2 shadow-none outline-none hover:bg-fill-1 focus:ring-0">
+                <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(50vw,288px)] touch-mobile:max-w-[min(60vw,200px)] touch-mobile:px-1.5 gap-1 overflow-hidden rounded-lg border-none bg-transparent px-2 text-[#4E5969] shadow-none outline-none hover:bg-[#f8f8f8] focus:ring-0">
                     <div className="min-w-0 flex-1 overflow-hidden">
                         <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-normal">
                             {label}
@@ -99,8 +88,8 @@ const AiModelSelect = memo(
                                 <span className="shrink-0">{opt.displayName}</span>
                                 {opt.description && (
                                     <>
-                                        <span className="mx-1.5 h-3 w-px shrink-0 bg-fill-3" />
-                                        <span className="min-w-0 truncate text-xs font-normal text-text-3">
+                                        <span className="mx-1.5 h-3 w-px shrink-0 bg-[#E5E6EB]" />
+                                        <span className="min-w-0 truncate text-xs font-normal text-[#999999]">
                                             {opt.description}
                                         </span>
                                     </>

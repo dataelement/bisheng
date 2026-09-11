@@ -9,35 +9,23 @@ import json from "../package.json";
 // strip any stale ja value out of localStorage so other paths don't re-apply.
 export const JA_DISABLED = !!(window.APP_CONFIG && window.APP_CONFIG.disableJa);
 
-// Map any tag onto a locale folder we actually ship. This has to cover values
-// we did not write ourselves: the client app shares localStorage['i18nextLng']
-// on the same origin but ships its English bundle as `en`, while ours is
-// `en-US`. With `load: 'currentOnly'` an unnormalized `en` requests
-// /locales/en/bs.json, gets a 404, and leaves every namespace empty — the page
-// renders raw keys while the language picker still shows English, and
-// getResourceBundle() returns undefined for anything reading a bundle directly.
-const normalizeLanguage = (tag) => {
-    const value = String(tag || '').toLowerCase();
-    // Traditional variants have no bundle of their own here; zh-Hans is the
-    // long-standing behaviour for every zh tag.
-    if (value.startsWith('zh')) return 'zh-Hans';
-    if (value.startsWith('ja')) return JA_DISABLED ? 'en-US' : 'ja';
-    return 'en-US';
-};
-
 // Obtain user language preferences, supporting full language codes (e.g., zh-Hans, en-US)
 const getBrowserLanguage = () => {
     const savedLanguage = localStorage.getItem('i18nextLng');
     if (savedLanguage) {
-        if (JA_DISABLED && savedLanguage.toLowerCase().startsWith('ja')) {
+        const normalized = savedLanguage === 'zh' ? 'zh-Hans' : savedLanguage;
+        if (JA_DISABLED && normalized === 'ja') {
             localStorage.removeItem('i18nextLng');
         } else {
-            return normalizeLanguage(savedLanguage);
+            return normalized;
         }
     }
 
     const browserLang = navigator.language || navigator.userLanguage || 'en-US';
-    return normalizeLanguage(browserLang);
+    // Map browser language codes to the languages we support
+    if (browserLang.startsWith('zh')) return 'zh-Hans';
+    if (browserLang.startsWith('ja') && !JA_DISABLED) return 'ja';
+    return 'en-US';
 };
 
 const userLanguage = getBrowserLanguage();

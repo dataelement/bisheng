@@ -153,12 +153,3 @@ class VersionLinkSourceFileMissingError(BaseErrorCode):
 class KnowledgeSpaceInvalidCursorError(BaseErrorCode):
     Code: int = 18070
     Msg: str = "Invalid pagination cursor"
-
-
-# The caller holds the space through a Grant rather than by joining it, so there
-# is no membership of theirs to remove. Exiting used to delete zero rows and
-# report success, and the space reappeared on the next refresh.
-# 18080, not the next free number: the COFCO line owns 18073-18077.
-class SpaceGrantedNotJoinedError(BaseErrorCode):
-    Code: int = 18080
-    Msg: str = "This space is open to you through a permission grant and cannot be exited"

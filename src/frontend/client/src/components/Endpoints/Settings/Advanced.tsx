@@ -11,7 +11,7 @@ import {
   InputNumber,
   HoverCardTrigger,
 } from '~/components/ui';
-import { cn, defaultTextProps, optionText } from '~/utils/';
+import { cn, defaultTextProps, optionText, removeFocusOutlines } from '~/utils/';
 import { useLocalize, useDebouncedInput } from '~/hooks';
 import OptionHover from './OptionHover';
 import { ESide } from '~/common';
@@ -89,7 +89,11 @@ export default function Settings({
             value={(chatGptLabelValue as string) || ''}
             onChange={setChatGptLabel}
             placeholder={localize('com_endpoint_openai_custom_name_placeholder')}
-            className="w-full"
+            className={cn(
+              defaultTextProps,
+              'flex h-10 max-h-10 w-full resize-none px-3 py-2',
+              removeFocusOutlines,
+            )}
           />
         </div>
         <div className="grid w-full items-center gap-2">
@@ -285,9 +289,12 @@ export default function Settings({
               id="image-detail-value"
               disabled={true}
               value={imageDetail ?? ImageDetail.auto}
-              size="small"
-              className="pointer-events-none h-5 w-12 border-0 bg-transparent"
-              inputClassName="text-xs"
+              className={cn(
+                defaultTextProps,
+                optionText,
+                'flex rounded-md bg-transparent py-2 text-xs focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 dark:border-gray-700',
+                'pointer-events-none max-h-5 w-12 border-0 group-hover/temp:border-gray-200',
+              )}
             />
           </div>
           <div className="flex w-full justify-between gap-2">

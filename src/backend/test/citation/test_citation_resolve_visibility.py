@@ -12,13 +12,8 @@ ACs covered:
 - AC-18: single ``resolve_citation`` for an inaccessible RAG citation
   raises NotFoundError.
 - AC-19: web citations bypass the view_file filter.
-- AC-20: **overridden by F054** (release-contract table 4). The low-level
-  helpers (``_filter_visible_rag_items`` / ``_apply_tier_filter``) still apply
-  no gating when handed ``permitted=None``, and the tests below still assert
-  that. What changed is the public entry: ``resolve_citation`` /
-  ``resolve_citations`` now refuse knowledge and article sources outright when
-  there is no logged-in user, because AC-20's anonymous pass-through was what
-  let a share link hand out the knowledge files behind it.
+- AC-20: anonymous caller (``login_user is None``) preserves the legacy
+  behaviour — no filtering applied.
 """
 
 from __future__ import annotations
@@ -171,11 +166,7 @@ async def test_filter_visible_rag_items_keeps_web_citations(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_filter_visible_rag_items_anonymous_caller_preserves_all(monkeypatch):
-    """login_user=None → this helper still applies no gating.
-
-    F054 refuses anonymous callers one level up (see
-    ``test_resolve_citation_anonymous_caller_is_refused``); the helper itself is
-    unchanged, so F041's shared/per_user tiering keeps its meaning."""
+    """login_user=None → no filtering, items unchanged (AC-20)."""
     svc = _make_service()
 
     async def fake_post(self, space_id, file_ids):
@@ -282,15 +273,8 @@ async def test_resolve_citation_single_web_skips_filter(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_resolve_citation_anonymous_caller_is_refused(monkeypatch):
-    """F054 overrides F029 AC-20 (release-contract table 4).
-
-    AC-20 originally let an anonymous caller through unfiltered so share links
-    kept working. That is the hole F054 closes: handing out a share link also
-    handed out the knowledge files behind it, signed preview URLs included. A
-    knowledge source now 404s for a caller with no logged-in user; a web source
-    still resolves (see the test below).
-    """
+async def test_resolve_citation_anonymous_caller_passthrough(monkeypatch):
+    """Anonymous caller (login_user=None) returns the enriched item without filtering."""
     svc = _make_service()
     _stub_enrich_passthrough(svc, monkeypatch)
 
@@ -307,24 +291,5 @@ async def test_resolve_citation_anonymous_caller_is_refused(monkeypatch):
     svc.registry_service.get_citation = AsyncMock(return_value=item)
     svc.runtime_cache_service.get_citation = AsyncMock(return_value=None)
 
-    with pytest.raises(NotFoundError):
-        await svc.resolve_citation(citation_id="rag1", login_user=None)
-
-
-@pytest.mark.asyncio
-async def test_resolve_citation_anonymous_caller_still_gets_web_sources(monkeypatch):
-    """Public URLs holding no tenant data stay readable without a login, so
-    share-page web badges keep working (F054)."""
-    svc = _make_service()
-    _stub_enrich_passthrough(svc, monkeypatch)
-
-    item = CitationRegistryItemSchema(
-        citationId="web1",
-        type=CitationType.WEB,
-        sourcePayload=WebCitationPayloadSchema(url="https://example.com/a"),
-    )
-    svc.registry_service.get_citation = AsyncMock(return_value=item)
-    svc.runtime_cache_service.get_citation = AsyncMock(return_value=None)
-
-    result = await svc.resolve_citation(citation_id="web1", login_user=None)
-    assert result.citationId == "web1"
+    result = await svc.resolve_citation(citation_id="rag1", login_user=None)
+    assert result.citationId == "rag1"

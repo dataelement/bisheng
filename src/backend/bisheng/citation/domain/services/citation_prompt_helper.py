@@ -114,24 +114,8 @@ def _build_rag_key_map(
 
 
 def _is_citable_rag_document(document: Document) -> bool:
-    """Whether a retrieved document may be handed a citation key.
-
-    A document with no metadata never could be. F054 adds a second refusal: a
-    document carrying a document id that is not an integer. Workflow temp files
-    are the case in point — the input node stores a random UUID as
-    ``document_id`` and the workflow id as ``knowledge_id``, so the RAG payload
-    (which types both as int) resolves neither, and the badge rendered but
-    opened onto nothing. Only a *present and unparseable* id is refused; a
-    document with no id at all keeps its previous treatment and falls back to
-    metadata grouping, so the four live entry points are untouched.
-    """
     metadata = document.metadata or {}
-    if not metadata:
-        return False
-    raw_document_id = metadata.get("document_id") or metadata.get("file_id")
-    if raw_document_id not in (None, "") and CitationRegistryService._parse_optional_int(raw_document_id) is None:
-        return False
-    return True
+    return bool(metadata)
 
 
 def annotate_rag_documents_with_citations(documents: list[Document]) -> list[Document]:
@@ -190,29 +174,6 @@ def annotate_web_results_with_citations(results: list[dict]) -> list[dict]:
             annotated_result["citation_key"] = citation_key
         annotated_results.append(annotated_result)
     return annotated_results
-
-
-def annotate_article_with_citation(
-    article_doc_id: str,
-    title: str | None = None,
-    snippet: str | None = None,
-    source_url: str | None = None,
-    source_type: int | None = None,
-) -> tuple[str, list[CitationRegistryItemSchema]]:
-    """Register one channel article as a citation source.
-
-    Returns the citation key the model must copy verbatim and the registry
-    items to cache. Mirrors the RAG/web annotate helpers, minus the chunking:
-    channel QA reads the article whole, so one article is one source.
-    """
-    items = CitationRegistryService.build_article_registry(
-        article_doc_id=article_doc_id,
-        title=title,
-        snippet=snippet,
-        source_url=source_url,
-        source_type=source_type,
-    )
-    return items[0].key or "", items
 
 
 def _split_citation_key(citation_key: Any) -> tuple[str | None, str | None]:

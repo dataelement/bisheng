@@ -25,7 +25,7 @@ from bisheng.core.openfga.authorization_model_f048 import (
     build_authorization_model_f048,
 )
 from bisheng.core.openfga.client import FGAClient
-from bisheng.core.openfga.exceptions import FGAWriteError
+from bisheng.core.openfga.exceptions import FGAClientError, FGAWriteError
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("F048_OPENFGA_INTEGRATION") != "1",
@@ -129,10 +129,10 @@ async def openfga_runtime():
             assert cleanup.status_code in {200, 204}
 
 
-def _release_tuples(*, marker_subject: str = "user:*") -> list[dict[str, str]]:
+def _release_tuples() -> list[dict[str, str]]:
     return [
         {
-            "user": marker_subject,
+            "user": "user:*",
             "relation": "active",
             "object": "permission_catalog_release:integration",
         },
@@ -142,17 +142,17 @@ def _release_tuples(*, marker_subject: str = "user:*") -> list[dict[str, str]]:
             "object": "permission_model_release:integration",
         },
         {
-            "user": marker_subject,
+            "user": "user:*",
             "relation": "enabled_marker",
             "object": "permission_model_release:integration",
         },
         {
-            "user": marker_subject,
+            "user": "user:*",
             "relation": "use_marker",
             "object": "permission_model_release:integration",
         },
         {
-            "user": marker_subject,
+            "user": "user:*",
             "relation": "download_marker",
             "object": "permission_model_release:integration",
         },
@@ -170,7 +170,6 @@ def _resource_grant(
     grant_id: str,
     assignee: str,
     custom: bool = True,
-    marker_subject: str = "user:*",
 ) -> list[dict[str, str]]:
     tuples = [
         {
@@ -189,7 +188,7 @@ def _resource_grant(
             "object": resource,
         },
         {
-            "user": marker_subject,
+            "user": "user:*",
             "relation": "permission_enabled",
             "object": resource,
         },
@@ -197,35 +196,12 @@ def _resource_grant(
     if custom:
         tuples.append(
             {
-                "user": marker_subject,
+                "user": "user:*",
                 "relation": "custom_mode",
                 "object": resource,
             }
         )
     return tuples
-
-
-async def test_service_account_direct_grant_passes_real_openfga_action_gates(
-    openfga_runtime: OpenFGARuntime,
-) -> None:
-    client = openfga_runtime.client
-    tuples = _release_tuples(marker_subject="service_account:*")
-    tuples.extend(
-        _resource_grant(
-            resource="workflow:service-account",
-            grant_id="service-account-editor",
-            assignee="service_account:5",
-            marker_subject="service_account:*",
-        )
-    )
-    await client.write_tuples(writes=tuples)
-
-    assert await client.check(
-        "service_account:5",
-        "can_use",
-        "workflow:service-account",
-        consistency="HIGHER_CONSISTENCY",
-    )
 
 
 async def test_same_store_single_new_model_and_model_checksum(
@@ -452,17 +428,14 @@ async def test_real_check_batch_list_and_higher_consistency_semantics(
         ],
         consistency="HIGHER_CONSISTENCY",
     ) == [True, True, False, True]
-    assert (
-        set(
-            await client.stream_list_objects(
-                "user:1",
-                "visible",
-                "workflow",
-                consistency="HIGHER_CONSISTENCY",
-            )
+    assert set(
+        await client.stream_list_objects(
+            "user:1",
+            "visible",
+            "workflow",
+            consistency="HIGHER_CONSISTENCY",
         )
-        == expected_visible
-    )
+    ) == expected_visible
 
 
 async def test_store_scoped_legacy_delete_with_new_model(
@@ -480,7 +453,10 @@ async def test_store_scoped_legacy_delete_with_new_model(
         object=legacy["object"],
         consistency="HIGHER_CONSISTENCY",
     )
-    assert [{key: row[key] for key in ("user", "relation", "object")} for row in stored] == [legacy]
+    assert [
+        {key: row[key] for key in ("user", "relation", "object")}
+        for row in stored
+    ] == [legacy]
     await openfga_runtime.client.delete_tuples_store_scoped([legacy])
     assert (
         await openfga_runtime.old_client.read_tuples(
@@ -538,19 +514,33 @@ async def _write_department_chain(
     return root, leaf
 
 
-async def test_contextual_department_membership_avoids_department_depth_expansion(
+async def test_pinned_max_resolve_depth_is_exercised(
     openfga_runtime: OpenFGARuntime,
 ) -> None:
     client = openfga_runtime.client
-    depth = openfga_runtime.resolve_node_limit + 2
-    root, _ = await _write_department_chain(client, prefix="deep", depth=depth)
-    assert not await client.check("user:88", "subtree_member", root)
+    safe_depth = max(2, openfga_runtime.resolve_node_limit // 3)
+    root, _ = await _write_department_chain(
+        client,
+        prefix="safe",
+        depth=safe_depth,
+    )
+    assert await client.check(
+        "user:88",
+        "subtree_member",
+        root,
+        consistency="HIGHER_CONSISTENCY",
+    )
 
-    async def inputs(user):
-        return tuple(
-            {"user": user, "relation": "subtree_member", "object": f"department:deep-{n}"} for n in range(depth + 1)
+    over_depth = openfga_runtime.resolve_node_limit + 2
+    too_deep_root, _ = await _write_department_chain(
+        client,
+        prefix="too-deep",
+        depth=over_depth,
+    )
+    with pytest.raises(FGAClientError):
+        await client.check(
+            "user:88",
+            "subtree_member",
+            too_deep_root,
+            consistency="HIGHER_CONSISTENCY",
         )
-
-    client.configure_contextual_tuple_provider(inputs)
-    assert await client.check("user:88", "subtree_member", root, consistency="HIGHER_CONSISTENCY")
-    assert not await client.check("user:88", "member", root, consistency="HIGHER_CONSISTENCY")

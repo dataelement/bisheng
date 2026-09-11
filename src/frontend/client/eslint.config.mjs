@@ -15,9 +15,6 @@ export default tseslint.config(
       'public/**',
       'coverage/**',
       'doc_build/**',
-      // Docs-site widgets: rspress content, not app code. The docs site has no
-      // i18n (rspress.config.ts) so its copy is Chinese by design.
-      'docs-site/**',
       'scripts/**',
       '*.config.{js,ts,mjs,mts}',
       'tailwind.config.js',

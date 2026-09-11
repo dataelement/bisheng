@@ -1,11 +1,11 @@
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import useMediaQuery from "~/hooks/useMediaQuery";
-import { ChevronDown, ChevronLeft, ChevronRight, FolderClosedIcon, Loader2, Plus, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, FolderClosedIcon, Loader2, Plus, Search, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { NotificationSeverity } from "~/common";
-import { SearchInput } from "@bisheng/ui";
+import { Input } from "~/components";
 import { Button } from "~/components/ui/Button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
 import { useToastContext } from "~/Providers";
@@ -206,7 +206,7 @@ function TreeNode({
     const { showToast } = useToastContext();
 
     return (
-        <div className="w-full min-w-0 max-w-full space-y-1">
+        <div className="w-full min-w-0 max-w-full">
             <div
                 className={`group relative flex w-full min-w-0 max-w-full box-border items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none overflow-hidden
                     ${isSelected ? "bg-blue-50 text-primary" : "fine-pointer:hover:bg-gray-50 coarse-pointer:hover:bg-transparent"}`}
@@ -220,7 +220,7 @@ function TreeNode({
             >
                 {/* Expand toggle */}
                 <span
-                    className="shrink-0 size-4 flex items-center justify-center text-text-3"
+                    className="shrink-0 size-4 flex items-center justify-center text-[#86909c]"
                     onClick={e => { e.stopPropagation(); onToggle(node.id); }}
                 >
                     {node.childrenLoading
@@ -234,7 +234,7 @@ function TreeNode({
                 {node.type === "space"
                     ?
                     <ChannelNotebookOneIcon className="size-[14px] shrink-0 object-contain opacity-90" />
-                    : <FolderClosedIcon className={`shrink-0 size-3.5 ${isSelected ? "text-primary" : "text-text-2"}`} />
+                    : <FolderClosedIcon className={`shrink-0 size-3.5 ${isSelected ? "text-primary" : "text-[#4e5969]"}`} />
                 }
 
                 {/* Name / Inline edit */}
@@ -261,7 +261,7 @@ function TreeNode({
                 {!isEditing && (
                     <button
                         type="button"
-                        className="absolute right-2 top-1/2 z-[1] flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-text-3 opacity-0 pointer-events-none transition-colors duration-150 fine-pointer:group-hover:pointer-events-auto fine-pointer:group-hover:opacity-100 fine-pointer:hover:text-primary coarse-pointer:pointer-events-auto coarse-pointer:opacity-100"
+                        className="absolute right-2 top-1/2 z-[1] flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-[#86909c] opacity-0 pointer-events-none transition-colors duration-150 fine-pointer:group-hover:pointer-events-auto fine-pointer:group-hover:opacity-100 fine-pointer:hover:text-primary coarse-pointer:pointer-events-auto coarse-pointer:opacity-100"
                         title={localize("com_subscription.new_subfolder")}
                         onClick={e => { e.stopPropagation(); onAddFolder(node.id, node.level, node.spaceId); }}
                     >
@@ -272,7 +272,7 @@ function TreeNode({
 
             {/* Children */}
             {isExpanded && node.children && node.children.length > 0 && (
-                <div className="w-full min-w-0 max-w-full space-y-1">
+                <div className="w-full min-w-0 max-w-full">
                     {node.children.map(child => (
                         <TreeNode
                             key={child.id}
@@ -747,24 +747,24 @@ export function AddToKnowledgeModal({
                     <button
                         type="button"
                         onClick={goBackToChannelForm}
-                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border-base text-text-2 fine-pointer:hover:bg-fill-1"
+                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA]"
                         aria-label={localize("com_ui_go_back")}
                     >
                         <ChevronLeft className="size-5" />
                     </button>
-                    <h2 className="min-w-0 flex-1 text-left text-[16px] font-medium leading-7 text-text-1">
+                    <h2 className="min-w-0 flex-1 text-left text-[16px] font-medium leading-7 text-[#212121]">
                         {titleLabel}
                     </h2>
                 </div>
             ) : (
-                <DialogHeader className="flex flex-row items-center justify-between gap-3 space-y-0 px-5 pb-0 pt-5 text-left touch-mobile:px-4 touch-mobile:pt-4">
-                    <DialogTitle className="min-w-0 flex-1 text-base font-medium leading-6 text-text-1">
+                <DialogHeader className="flex flex-row items-center justify-between gap-3 space-y-0 px-6 pb-4 pt-4 text-left touch-mobile:px-4">
+                    <DialogTitle className="min-w-0 flex-1 text-[16px] font-medium leading-7 text-[#212121]">
                         {titleLabel}
                     </DialogTitle>
                     <button
                         type="button"
                         onClick={() => handleOpenChange(false)}
-                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-text-2 hover:bg-fill-1"
+                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
                         aria-label={localize("com_ui_close")}
                     >
                         <X className="size-5" />
@@ -772,14 +772,25 @@ export function AddToKnowledgeModal({
                 </DialogHeader>
             )}
 
-            <div className={embedInChannelSheet ? "shrink-0 px-4 pt-4 sm:px-6" : "px-5 pt-4 touch-mobile:px-4"}>
-                {/* Spec SearchInput — built-in clear replaces the hand-rolled X. */}
-                <SearchInput
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
-                    clearLabel={localize("com_ui_clear")}
-                />
+            <div className={embedInChannelSheet ? "shrink-0 px-4 pt-4 sm:px-6" : "px-6 pt-4 touch-mobile:px-4"}>
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#818181] pointer-events-none" />
+                    <Input
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
+                        className="w-full h-8 pl-8 pr-8 text-[14px] rounded-md border border-[#ECECEC] focus:outline-none"
+                    />
+                    {search && (
+                        <button
+                            type="button"
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2"
+                            onClick={() => setSearch("")}
+                        >
+                            <X className="size-3.5 text-[#818181]" />
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div
@@ -787,39 +798,39 @@ export function AddToKnowledgeModal({
                     embedInChannelSheet
                         ? "flex min-h-0 flex-1 flex-col px-4 pt-4 sm:px-6"
                         : isChannelSyncCenteredMobile
-                            ? "mb-4 flex min-h-0 flex-1 flex-col px-5 pt-4 touch-mobile:px-4"
+                            ? "mb-4 flex min-h-0 flex-1 flex-col px-6 pt-4 touch-mobile:px-4"
                             : isArticleMobileFullScreen
-                                ? "flex min-h-0 flex-1 flex-col px-4 pt-4 pb-[64px]"
-                            : "flex min-h-0 flex-1 flex-col px-5 pt-4 touch-mobile:px-4"
+                                ? "flex min-h-0 flex-1 flex-col px-4 pt-4 pb-[84px]"
+                            : "flex min-h-0 flex-1 flex-col px-6 pt-4 touch-mobile:px-4"
                 }
             >
                 <div
                     ref={treeScrollRevealRef}
                     className={
                         useFlexTree
-                            ? "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-1 scrollbar-on-scroll"
+                            ? "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-3 scrollbar-on-scroll"
                             : cn(
-                                "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-1 scrollbar-on-scroll",
+                                "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-3 scrollbar-on-scroll",
                                 mode === "article" && isH5 && "touch-mobile:h-[calc(100dvh-260px)]",
                             )
                     }
                 >
                     {spacesLoading ? (
-                        <div className="flex items-center justify-center h-full min-h-[200px] text-text-3">
+                        <div className="flex items-center justify-center h-full min-h-[200px] text-[#86909c]">
                             <Loader2 className="size-5 animate-spin mr-2" />{localize("com_subscription.loading")}
                         </div>
                     ) : isEmpty ? (
                         <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
                             <EmptyStateIllustration className="size-[120px] mb-4" />
-                            <p className="text-[14px] font-normal text-text-3">{localize("com_subscription.no_selectable_knowledge_space")}</p>
+                            <p className="text-[14px] font-normal text-[#999999]">{localize("com_subscription.no_selectable_knowledge_space")}</p>
                         </div>
                     ) : displayTree.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
                             <EmptyStateIllustration className="size-[120px] mb-4" />
-                            <p className="text-[14px] font-normal text-text-3">{localize("com_subscription.no_matching_knowledge_space")}</p>
+                            <p className="text-[14px] font-normal text-[#999999]">{localize("com_subscription.no_matching_knowledge_space")}</p>
                         </div>
                     ) : (
-                        <div className="w-full min-w-0 max-w-full space-y-1 pb-1">
+                        <div className="w-full min-w-0 max-w-full py-1">
                             {displayTree.map(node => (
                                 <TreeNode
                                     key={node.id}
@@ -850,7 +861,7 @@ export function AddToKnowledgeModal({
                             ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-0"
                             : isArticleMobileFullScreen
                                 ? "fixed inset-x-0 bottom-0 z-[140] flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 py-3"
-                            : "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end bg-white px-5 pb-5 pt-4 touch-mobile:mt-auto touch-mobile:px-4 touch-mobile:py-3"
+                            : "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end bg-white px-4 py-3.5 touch-mobile:mt-auto touch-mobile:px-4 touch-mobile:py-3"
                 }
             >
                 <div
@@ -863,35 +874,30 @@ export function AddToKnowledgeModal({
                     )}
                 >
                     <Button
-                        color="default"
-                        variant="outlined"
-                        size="medium"
+                        variant="outline"
                         onClick={goBackToChannelForm}
                         className={cn(
-                            "min-w-[64px] shrink-0",
+                            "h-8 min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal",
                             isChannelSyncMobileFooter &&
-                            "rounded-lg border-border-base text-text-2 hover:bg-fill-1",
+                            "min-h-[32px] h-8 rounded-lg border-[#E5E6EB] text-[14px] text-[#4E5969] hover:bg-[#F7F8FA]",
                             isChannelSyncMobileFooter && "flex-1",
                             embedInChannelSheet && "flex-1",
                             mode === "article" && isH5 && "touch-mobile:flex-1",
                         )}
                     >{localize("com_subscription.cancel")}</Button>
                     <Button
-                        color="primary"
-                        variant="solid"
-                        size="medium"
                         onClick={() => void handleConfirm()}
                         disabled={!selectedId || isConfirming}
-                        loading={isConfirming}
                         className={cn(
-                            "min-w-[64px] shrink-0",
-                            isChannelSyncMobileFooter && "rounded-lg",
+                            "h-8 min-h-[32px] min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal btn-brand-primary",
+                            isChannelSyncMobileFooter &&
+                            "rounded-lg text-[14px] enabled:bg-blue-500 enabled:text-white enabled:hover:bg-blue-400 disabled:bg-[#E5E6EB] disabled:text-[#C9CDD4] disabled:hover:bg-[#E5E6EB]",
                             isChannelSyncMobileFooter && "flex-1",
                             embedInChannelSheet && "flex-1",
                             mode === "article" && isH5 && "touch-mobile:flex-1",
                         )}
                     >
-                        {localize("com_subscription.add")}
+                        {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}
                     </Button>
                 </div>
             </div>
@@ -946,8 +952,7 @@ export function AddToKnowledgeModal({
                 <Dialog open={open} onOpenChange={handleOpenChange}>
                     <DialogContent
                         close={false}
-                        overlayClassName="bg-gray-500/90 dark:bg-gray-800/90"
-                        className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-2xl border-[#ebebeb] p-0 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:rounded-2xl dark:border-gray-700"
+                        className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-xl p-0"
                     >
                         {pickerBody}
                     </DialogContent>
@@ -958,8 +963,7 @@ export function AddToKnowledgeModal({
                     <DialogContent
                         close={false}
                         ref={articleDialogContentRef}
-                        overlayClassName="bg-gray-500/90 dark:bg-gray-800/90"
-                        className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-2xl border-[#ebebeb] p-0 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:rounded-2xl dark:border-gray-700 max-[768px]:inset-0 max-[768px]:left-0 max-[768px]:top-0 max-[768px]:h-[100dvh] max-[768px]:w-screen max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none max-[768px]:animate-none"
+                        className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-xl p-0 max-[768px]:inset-0 max-[768px]:left-0 max-[768px]:top-0 max-[768px]:h-[100dvh] max-[768px]:w-screen max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none max-[768px]:animate-none"
                         style={
                             (isModalMobile768 || forceMobile768)
                                 ? {
@@ -985,16 +989,13 @@ export function AddToKnowledgeModal({
 
             {/* Duplicate File Confirmation Dialog */}
             <Dialog open={showDuplicate} onOpenChange={setShowDuplicate}>
-                <DialogContent
-                    overlayClassName="bg-gray-500/90 dark:bg-gray-800/90"
-                    className="w-[480px] max-w-[90vw] gap-0 overflow-hidden rounded-2xl border-[#ebebeb] p-0 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:rounded-2xl dark:border-gray-700"
-                >
-                    <DialogHeader className="px-5 pb-0 pt-5">
-                        <DialogTitle className="text-base font-medium leading-6 text-text-1">
+                <DialogContent className="w-[480px] max-w-[90vw] p-0 gap-0 overflow-hidden rounded-xl">
+                    <DialogHeader className="px-6 pt-5 pb-3">
+                        <DialogTitle className="font-semibold text-gray-800 leading-6 text-sm">
                             {localize("com_subscription.duplicate_files_title")}
                         </DialogTitle>
                     </DialogHeader>
-                    <div ref={duplicateListScrollRevealRef} className="max-h-[200px] overflow-y-auto px-5 pt-4 scrollbar-on-scroll">
+                    <div ref={duplicateListScrollRevealRef} className="px-6 pb-2 max-h-[200px] overflow-y-auto scrollbar-on-scroll">
                         {duplicateFiles.map((file, idx) => {
                             // Truncate file name > 10 chars with ellipsis
                             const displayName = file.name.length > 10
@@ -1006,7 +1007,7 @@ export function AddToKnowledgeModal({
                                         {displayName}
                                     </span>
                                     {file.path && (
-                                        <span className="text-text-3 text-xs truncate max-w-[180px]" title={file.path}>
+                                        <span className="text-[#86909c] text-xs truncate max-w-[180px]" title={file.path}>
                                             ({file.path})
                                         </span>
                                     )}
@@ -1014,25 +1015,24 @@ export function AddToKnowledgeModal({
                             );
                         })}
                     </div>
-                    <DialogFooter className="flex flex-row justify-end gap-2 px-5 pb-5 pt-4">
+                    <DialogFooter className="px-4 py-3.5 flex flex-row justify-end gap-1">
                         <Button
-                            color="default"
-                            variant="outlined"
-                            size="medium"
+                            variant="outline"
+                            size="sm"
                             onClick={() => {
                                 setShowDuplicate(false);
                                 setPendingConfirm(null);
                                 setDuplicateFiles([]);
                             }}
+                            className="h-8 px-4 text-sm rounded-md font-normal"
                         >{localize("com_subscription.cancel")}</Button>
                         <Button
-                            color="primary"
-                            variant="solid"
-                            size="medium"
+                            size="sm"
                             onClick={() => handleConfirm(true)}
                             disabled={isConfirming}
-                            loading={isConfirming}
+                            className="h-8 px-4 text-sm rounded-md font-normal"
                         >
+                            {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}
                             {localize("com_subscription.replace")}
                         </Button>
                     </DialogFooter>

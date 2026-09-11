@@ -138,13 +138,6 @@ async def chat_completions(
         max_chunk_size = subscription_config.max_chunk_size if subscription_config else 15000
         article_content = ChannelChatService._truncate_article_content(article_content, max_chunk_size)
 
-        # 4. F054: register the article as a citation source and attach its id to
-        # the text the model reads. Decorating the content (not the template)
-        # keeps the id present whatever wording an admin configures. Failure
-        # here degrades to no badge, never to a failed turn.
-        citation_key, citation_items = await ChannelChatService.register_article_citation(article)
-        article_content = ChannelChatService.decorate_article_content(article_content, citation_key)
-
     except (BaseErrorCode, ValueError) as e:
         error_response = e if isinstance(e, BaseErrorCode) else ServerError(msg=str(e))
         return EventSourceResponse(iter([error_response.to_sse_event_instance()]))
@@ -161,10 +154,6 @@ async def chat_completions(
                 if subscription_config and subscription_config.system_prompt
                 else "You are a professional AI assistant helping users analyze and discuss articles."
             )
-            # The default prompt above teaches no citation markers, so without
-            # this the model never emits one. Idempotent: a prompt that already
-            # carries the rules is left alone.
-            system_prompt = ChannelChatService.apply_citation_rules(system_prompt)
 
             # Build user prompt from template or default
             user_prompt_template = (
@@ -211,12 +200,6 @@ async def chat_completions(
                     )
                 ).to_string()
 
-            # Clean the answer BEFORE storing it: a marker the registry cannot
-            # back must never reach the row, or it renders as a badge whose
-            # lookup 404s and reads as a system fault. Only sources the answer
-            # actually cited are kept.
-            answer, cited_citations = ChannelChatService.scrub_article_answer(answer, citation_items)
-
             # Persist the answer BEFORE the end event so we can hand the client the
             # real ChatMessage id. The client renders the streamed answer under a
             # temporary placeholder id; without the real id, like/dislike clicked
@@ -231,14 +214,6 @@ async def chat_completions(
                     type="end",
                     is_bot=True,
                 )
-            )
-
-            # Bind the cited sources to the row that now exists.
-            await ChannelChatService.save_article_citations(
-                cited_citations,
-                message_id=answer_message.id,
-                chat_id=conversation.chat_id,
-                flow_id=data.article_doc_id,
             )
 
             yield SSEResponse(

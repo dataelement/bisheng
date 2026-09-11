@@ -90,9 +90,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           uploadMediaMaxSize: res.uploaded_media_maximum_size ?? 1024,
           enableMediaUpload: !!res.enable_media_upload,
           enableEtl4lm: res.enable_etl4lm,
-          multiTenantEnabled: !!res.multi_tenant_enabled,
-          personalTokenEnabled: !!res.personal_token_enabled,
-          openApiManagementEnabled: !!res.open_api_management_enabled
+          multiTenantEnabled: !!res.multi_tenant_enabled
         }));
 
         // backend version
@@ -127,7 +125,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
       });
   }
 
-  // Load instance configuration.
+  // 获取系统配置
   useEffect(() => {
     loadConfig()
   }, [])

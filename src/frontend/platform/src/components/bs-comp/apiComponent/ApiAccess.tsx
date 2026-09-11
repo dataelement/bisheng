@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Badge } from '@/components/bs-ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/bs-ui/table';
@@ -5,24 +6,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/bs-ui/tab
 import { useToast } from '@/components/bs-ui/toast/use-toast';
 import { copyText } from '@/utils';
 import { Check, Clipboard } from 'lucide-react';
-import { useState, type MouseEvent, type ReactNode } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
 
-interface JsonItemProps {
-    name: string;
-    type: string;
-    desc: string;
-    required?: boolean;
-    example?: string;
-    remark?: string;
-    children?: ReactNode;
-    line?: boolean;
-}
-
-export function JsonItem({ name, type, desc, required = false, example = '', remark = '', children = null, line = false }: JsonItemProps) {
+export const JsonItem = ({ name, type, desc, required = false, example = '', remark = '', children = null, line = false }) => {
     const { t } = useTranslation()
     return <div className='pl-6 mb-4'>
         <div className='relative flex justify-between mb-2'>
@@ -40,7 +30,7 @@ export function JsonItem({ name, type, desc, required = false, example = '', rem
     </div>
 }
 
-export function ApiAccess() {
+const ApiAccess = ({ }) => {
 
     const { t } = useTranslation()
     const { id: assisId } = useParams()
@@ -54,7 +44,7 @@ export function ApiAccess() {
   "messages": [
     {
       "role": "user",
-      "content": "${t("api.assistantDoc.hello")}"
+      "content": "你好"
     }
   ],
   "temperature": 0,
@@ -69,7 +59,7 @@ base_url = "${window.location.protocol}//${window.location.host}/api/v2/assistan
 model = "${assisId}"
 client = OpenAI(base_url=base_url, api_key="empty")
 # Round 1
-messages = [{"role": "user", "content": "${t("api.assistantDoc.question")}"}]
+messages = [{"role": "user", "content": "9.11 and 9.8, 谁更大?"}]
 response = client.chat.completions.create(
     model=model,
     messages=messages,
@@ -82,25 +72,25 @@ for chunk in response:
         if not reasoning_content:
             print("\\n\\n-----Reasoning Content-----\\n")
         reasoning_chunk = chunk.choices[0].delta.reasoning_content
-        print(reasoning_chunk, end='', flush=True)  # Stream reasoning
+        print(reasoning_chunk, end='', flush=True)  # 流式打印reasoning
         reasoning_content += reasoning_chunk
     elif chunk.choices[0].delta.content:
         if not content:
             print("\\n\\n-----Final content-----\\n")
         content_chunk = chunk.choices[0].delta.content
-        print(content_chunk, end='', flush=True)  # Stream the answer
+        print(content_chunk, end='', flush=True)  # 流式打印答案
         content += content_chunk`
     }
 
     const { message } = useToast()
-    const handleCopyLink = (event: MouseEvent<HTMLElement>) => {
-        copyText(event.currentTarget).then(() => {
+    const handleCopyLink = (e) => {
+        copyText(e.target).then(() => {
             message({ variant: 'success', description: t('api.copySuccess') })
         })
     }
 
     const [isCopied, setIsCopied] = useState<boolean>(false);
-    const handleCopyCode = (code: string) => {
+    const copyToClipboard = (code: string) => {
         setIsCopied(true);
         copyText(code).then(() => {
             setTimeout(() => {
@@ -133,7 +123,7 @@ for chunk in response:
                         <TabsContent value="curl" className='relative'>
                             <button
                                 className="absolute right-0 flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
-                                onClick={() => handleCopyCode(curl())}
+                                onClick={() => copyToClipboard(curl())}
                             >
                                 {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
                             </button>
@@ -148,7 +138,7 @@ for chunk in response:
                         <TabsContent value="python" className='relative'>
                             <button
                                 className="absolute right-0 flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
-                                onClick={() => handleCopyCode(python())}
+                                onClick={() => copyToClipboard(python())}
                             >
                                 {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
                             </button>
@@ -184,7 +174,7 @@ for chunk in response:
                                     <JsonItem name="model" type="string" desc={t('api.assistantId')} required example={assisId}></JsonItem>
                                     <JsonItem name="messages" type="array [object {2}] " desc={t('api.messageList')} required>
                                         <JsonItem name="role" type="string" desc="" required example="user" line></JsonItem>
-                                        <JsonItem name="content" type="string" desc="" required example={t("api.assistantDoc.hello")} line></JsonItem>
+                                        <JsonItem name="content" type="string" desc="" required example="你好" line></JsonItem>
                                     </JsonItem>
                                     <JsonItem name="temperature" type="integer" desc={t('api.temperature')} ></JsonItem>
                                     <JsonItem name="stream" type="boolean" desc={t('api.stream')} ></JsonItem>
@@ -200,7 +190,7 @@ for chunk in response:
   "messages": [
     {
       "role": "user",
-      "content": "${t("api.assistantDoc.hello")}"
+      "content": "你好"
     }
   ],
   "temperature": 0,
@@ -263,7 +253,7 @@ for chunk in response:
       "index": 0,
       "message": {
         "role": "assistant",
-        "content": "${t("api.assistantDoc.answer")}"
+        "content": "你好，有什么可以帮你的？"
       },
       "finish_reason": "stop"
     }
@@ -278,4 +268,6 @@ for chunk in response:
             </Card>
         </section>
     );
-}
+};
+
+export default ApiAccess;

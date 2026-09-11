@@ -3,6 +3,7 @@ import families from './families';
 import endpoints from './endpoints';
 import user from './user';
 import text from './text';
+import toast from './toast';
 import submission from './submission';
 import search from './search';
 import preset from './preset';
@@ -19,6 +20,7 @@ export default {
   ...endpoints,
   ...user,
   ...text,
+  ...toast,
   ...submission,
   ...search,
   ...prompts,

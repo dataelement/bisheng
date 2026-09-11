@@ -1,7 +1,9 @@
-import { Button, RadioCard, RadioGroup } from "@bisheng/ui";
-import { Outlined } from "bisheng-icons";
+import { Button } from "@bisheng/ui";
+import * as RadioGroup from "@radix-ui/react-radio-group";
+import { Layers3, Settings, ShieldCheck } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { Switch } from "~/components/ui/Switch";
+import { TruncatedTooltip } from "./TruncatedTooltip";
 
 export type SettingsSectionKind = "basic" | "advanced" | "permission";
 
@@ -14,9 +16,9 @@ const SECTION_ICONS: Record<
   SettingsSectionKind,
   ComponentType<{ className?: string }>
 > = {
-  basic: Outlined.Layer,
-  advanced: Outlined.Setting,
-  permission: Outlined.PeopleSafe,
+  basic: Layers3,
+  advanced: Settings,
+  permission: ShieldCheck,
 };
 
 export function SettingsSectionHeader({
@@ -64,26 +66,34 @@ export function AccessModeSelector({
     },
   ];
 
-  // Card shell + dot now come from the spec RadioCard (组件-Radio单选框.md §2,
-  // this very selector was the card-form reference). The overflow tooltip on
-  // the description is gone with the hand-rolled markup — the card truncates
-  // with a plain ellipsis for now.
   return (
-    <RadioGroup
+    <RadioGroup.Root
       value={value}
       disabled={disabled}
       onValueChange={(next) => onValueChange(next as "private" | "shared")}
       className="grid grid-cols-2 gap-2 max-[560px]:grid-cols-1"
     >
       {options.map((option) => (
-        <RadioCard
+        <label
           key={option.value}
-          value={option.value}
-          label={option.label}
-          description={option.description}
-        />
+          className="flex min-h-12 cursor-pointer items-center gap-2 rounded-xl border border-border-base px-3 text-body text-text-1 transition-colors hover:bg-fill-1 has-[[data-state=checked]]:bg-blue-500/[0.07] has-[[data-disabled]]:cursor-not-allowed has-[[data-disabled]]:opacity-60 has-[[data-disabled]]:hover:bg-transparent"
+        >
+          <RadioGroup.Item
+            value={option.value}
+            className="flex size-4 shrink-0 items-center justify-center rounded-full border-2 border-border-deep data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-500"
+          >
+            <RadioGroup.Indicator className="size-1 rounded-full bg-fill-1" />
+          </RadioGroup.Item>
+          <span className="shrink-0 whitespace-nowrap font-medium">{option.label}</span>
+          <TruncatedTooltip
+            content={option.description}
+            className="min-w-0 truncate text-[#999999]"
+          >
+            {option.description}
+          </TruncatedTooltip>
+        </label>
       ))}
-    </RadioGroup>
+    </RadioGroup.Root>
   );
 }
 
@@ -114,13 +124,12 @@ export function SettingsSwitchRow({
           {label}
         </span>
         {description && (
-          <span className="truncate text-text-3">{description}</span>
+          <span className="truncate text-[#999999]">{description}</span>
         )}
         {children}
       </div>
-      {/* Compact settings rows use the small档 (designer call, 2026-08-25). */}
       <Switch
-        size="small"
+        variant="tool"
         aria-label={label}
         checked={checked}
         disabled={disabled}
@@ -159,7 +168,6 @@ export function SettingsFooter({
         color="default"
         variant="outlined"
         size="medium"
-        className="max-[768px]:flex-1"
         onClick={onCancel}
       >
         {cancelLabel}
@@ -168,7 +176,6 @@ export function SettingsFooter({
         color="primary"
         variant="solid"
         size="medium"
-        className="max-[768px]:flex-1"
         loading={submitting}
         disabled={disabled}
         onClick={onSubmit}

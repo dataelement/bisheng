@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Outlined } from 'bisheng-icons';
 import type { FileType } from '~/components/ui/icon/File/FileIcon';
 import { cn } from '~/utils';
-import i18next from 'i18next';
 import type { ChatCitation } from '~/api/chatApi';
 import {
   buildCitationDocumentPreview,
@@ -72,16 +71,10 @@ function getReferenceIconKey({
   detail: ChatCitation | null;
   preview: CitationPreview | null;
   item: CitationReferenceItem;
-  type: 'web' | 'rag' | 'article';
+  type: 'web' | 'rag';
 }) {
   if (type === 'web') {
     return resolvePreviewUrl(detail, preview) || item.data.citationId;
-  }
-
-  // F054: an article is keyed by its own doc id — two badges pointing at the
-  // same article must collapse to one icon in the stack.
-  if (type === 'article') {
-    return detail?.sourcePayload?.articleDocId || preview?.title || item.data.citationId;
   }
 
   return (detail ? getCitationDocumentName(detail) : '') || preview?.title || item.data.groupKey || item.data.citationId;
@@ -100,23 +93,11 @@ export function buildCitationSourceIconData({
 }): CitationSourceIconData {
   const normalizedType = normalizeCitationType(preview?.type || detail?.type || type);
 
-  if (normalizedType === 'article') {
-    // F054: an article rides the same visual as a document — the shared Badge
-    // has two source colours and they belong to the designer, so no third one
-    // is invented here.
-    return {
-      key: `article:${detail?.sourcePayload?.articleDocId || preview?.title || fallbackKey}`,
-      type: 'rag',
-      title: preview?.title || detail?.sourcePayload?.title || i18next.t('com_citation.source_article'),
-      fileType: undefined,
-    };
-  }
-
   if (normalizedType === 'web') {
     return {
       key: `web:${resolvePreviewUrl(detail, preview) || fallbackKey}`,
       type: 'web',
-      title: preview?.title || detail?.sourcePayload?.title || i18next.t('com_citation.source_web'),
+      title: preview?.title || detail?.sourcePayload?.title || '网页',
       faviconUrl: getFaviconUrl(resolvePreviewUrl(detail, preview)),
     };
   }
@@ -124,7 +105,7 @@ export function buildCitationSourceIconData({
   return {
     key: `rag:${(detail ? getCitationDocumentName(detail) : '') || preview?.title || fallbackKey}`,
     type: 'rag',
-    title: preview?.title || (detail ? getCitationDocumentName(detail) : i18next.t('com_citation.source_document')),
+    title: preview?.title || (detail ? getCitationDocumentName(detail) : '文档'),
     fileType: normalizeFileType(getCitationDocumentFileType(detail) || preview?.sourceMeta),
   };
 }
@@ -265,7 +246,7 @@ export function CitationSourceIcon({
       {icon.type === 'web' ? (
         <WebSourceIcon icon={icon} iconClassName={iconClassName} />
       ) : ragIconVariant === 'knowledge' ? (
-        <Outlined.BookOpenText className={cn('size-4 text-text-3', iconClassName)} />
+        <Outlined.BookOpenText className={cn('size-4 text-[#86909C]', iconClassName)} />
       ) : (
         <CitationFileTypeIcon fileType={icon.fileType || 'txt'} className={iconClassName} />
       )}

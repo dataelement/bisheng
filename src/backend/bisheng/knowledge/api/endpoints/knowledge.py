@@ -89,11 +89,7 @@ async def upload_file(*, file: UploadFile = File(...)):
         if not isinstance(file_path, str):
             file_path = str(file_path)
 
-        from bisheng.workstation.domain.services.media_cover_service import WorkstationMediaCoverService
-
-        cover_filepath = await WorkstationMediaCoverService.cover_for_uploaded_video(file, file_name)
-
-        return resp_200(UploadFileResponse(file_path=file_path, cover_filepath=cover_filepath))
+        return resp_200(UploadFileResponse(file_path=file_path))
 
     except BaseErrorCode:
         raise

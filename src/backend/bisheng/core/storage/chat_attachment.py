@@ -92,12 +92,7 @@ def _plan_promotions(files: list[dict], user_id: int | str, tmp_bucket: str) -> 
     return plan
 
 
-async def promote_chat_attachments(
-    files: list[dict] | None,
-    user_id: int | str,
-    *,
-    storage_partition: str | None = None,
-) -> list[dict]:
+async def promote_chat_attachments(files: list[dict] | None, user_id: int | str) -> list[dict]:
     """Move a message's attachments out of the temp bucket, in place.
 
     Called when the message is sent, not when the file is uploaded: whatever is
@@ -122,8 +117,7 @@ async def promote_chat_attachments(
         logger.exception("cannot reach object storage to promote chat attachments for user {}", user_id)
         return files
 
-    partition = storage_partition or str(user_id)
-    for file, source_object, dest_object in _plan_promotions(files, partition, minio_client.tmp_bucket):
+    for file, source_object, dest_object in _plan_promotions(files, user_id, minio_client.tmp_bucket):
         try:
             await minio_client.copy_object(
                 source_bucket=minio_client.tmp_bucket,

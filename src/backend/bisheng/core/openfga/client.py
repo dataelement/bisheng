@@ -15,7 +15,6 @@ import httpx
 
 from bisheng.common.errcode.permission import PermissionMutationTooLargeError
 
-from .contextual import ContextualTupleProvider, contextual_tuple_scope, resolve_contextual_tuples
 from .exceptions import FGAClientError, FGAConnectionError, FGAModelError, FGAWriteError
 
 logger = logging.getLogger(__name__)
@@ -53,9 +52,6 @@ class FGAClient:
         store_id: str,
         model_id: str,
         timeout: int = 5,
-        *,
-        require_contextual_provider: bool = False,
-        affected_relations: frozenset[tuple[str, str]] | None = None,
     ):
         if not store_id:
             raise ValueError("OpenFGA store_id must be explicitly pinned")
@@ -65,10 +61,6 @@ class FGAClient:
         self._store_id = store_id
         self._model_id = model_id
         self._timeout = timeout
-        self.require_contextual_provider = require_contextual_provider
-        self._affected_relations = affected_relations
-        self._contextual_tuple_provider: ContextualTupleProvider | None = None
-        self._transient_relations: frozenset[tuple[str, str]] = frozenset()
         self._install_httpx_log_filter()
         self._http = httpx.AsyncClient(
             base_url=self._api_url,
@@ -83,34 +75,6 @@ class FGAClient:
     @property
     def model_id(self) -> str:
         return self._model_id
-
-    def configure_contextual_tuple_provider(
-        self,
-        provider: ContextualTupleProvider,
-        *,
-        transient_relations: frozenset[tuple[str, str]] = frozenset(),
-        affected_relations: frozenset[tuple[str, str]] | None = None,
-    ) -> None:
-        self._contextual_tuple_provider = provider
-        self.require_contextual_provider = True
-        self._transient_relations = transient_relations
-        self._affected_relations = affected_relations
-
-    async def _add_contextual_tuples(self, body: dict, user: str) -> None:
-        query = body.get("tuple_key", body)
-        object_type = query.get("type") or str(query.get("object", "")).split(":", 1)[0]
-        if (
-            self._affected_relations is not None
-            and (object_type, query.get("relation")) not in self._affected_relations
-        ):
-            return
-        keys = await resolve_contextual_tuples(
-            self._contextual_tuple_provider,
-            user,
-            required=self.require_contextual_provider,
-        )
-        if keys:
-            body["contextual_tuples"] = {"tuple_keys": list(keys)}
 
     # ── Core permission methods ──────────────────────────────────
 
@@ -131,7 +95,6 @@ class FGAClient:
         }
         if consistency:
             body["consistency"] = consistency
-        await self._add_contextual_tuples(body, user)
         data = await self._post(f"/stores/{self._store_id}/check", body)
         return data.get("allowed", False)
 
@@ -150,33 +113,30 @@ class FGAClient:
         if len(checks) > BUSINESS_BATCH_CHECK_LIMIT:
             raise FGAClientError(f"BatchCheck exceeds {BUSINESS_BATCH_CHECK_LIMIT} checks")
         resolved: list[bool] = []
-        with contextual_tuple_scope():
-            for offset in range(0, len(checks), OPENFGA_BATCH_CHECK_LIMIT):
-                batch = checks[offset : offset + OPENFGA_BATCH_CHECK_LIMIT]
-                body = {
-                    "authorization_model_id": self._model_id,
-                    "checks": [
-                        {
-                            "tuple_key": {
-                                "user": check["user"],
-                                "relation": check["relation"],
-                                "object": check["object"],
-                            },
-                            "correlation_id": str(index),
-                        }
-                        for index, check in enumerate(batch)
-                    ],
-                }
-                for item in body["checks"]:
-                    await self._add_contextual_tuples(item, item["tuple_key"]["user"])
-                if consistency:
-                    body["consistency"] = consistency
-                data = await self._post(
-                    f"/stores/{self._store_id}/batch-check",
-                    body,
-                )
-                results = data.get("result", {})
-                resolved.extend(results.get(str(index), {}).get("allowed", False) for index in range(len(batch)))
+        for offset in range(0, len(checks), OPENFGA_BATCH_CHECK_LIMIT):
+            batch = checks[offset : offset + OPENFGA_BATCH_CHECK_LIMIT]
+            body = {
+                "authorization_model_id": self._model_id,
+                "checks": [
+                    {
+                        "tuple_key": {
+                            "user": check["user"],
+                            "relation": check["relation"],
+                            "object": check["object"],
+                        },
+                        "correlation_id": str(index),
+                    }
+                    for index, check in enumerate(batch)
+                ],
+            }
+            if consistency:
+                body["consistency"] = consistency
+            data = await self._post(
+                f"/stores/{self._store_id}/batch-check",
+                body,
+            )
+            results = data.get("result", {})
+            resolved.extend(results.get(str(index), {}).get("allowed", False) for index in range(len(batch)))
         logger.debug(
             "OpenFGA BatchCheck completed: store_id=%s model_id=%s count=%s",
             self._store_id,
@@ -204,7 +164,6 @@ class FGAClient:
         }
         if consistency:
             body["consistency"] = consistency
-        await self._add_contextual_tuples(body, user)
         data = await self._post(f"/stores/{self._store_id}/list-objects", body)
         return data.get("objects", [])
 
@@ -225,7 +184,6 @@ class FGAClient:
         }
         if consistency:
             body["consistency"] = consistency
-        await self._add_contextual_tuples(body, user)
         objects: list[str] = []
         async for item in self._streamed_post(
             f"/stores/{self._store_id}/streamed-list-objects",
@@ -302,11 +260,6 @@ class FGAClient:
         ignore_duplicate_writes: bool = False,
     ) -> dict | None:
         """Assemble the OpenFGA write request body, or None when nothing to do."""
-        if any(
-            (str(item.get("object", "")).split(":", 1)[0], item.get("relation")) in self._transient_relations
-            for item in writes or ()
-        ):
-            raise FGAClientError("Request-only relationships cannot be persisted")
         operation_count = len(writes or ()) + len(deletes or ())
         if operation_count > OPENFGA_WRITE_TUPLE_LIMIT:
             raise FGAWriteError(f"OpenFGA Write exceeds {OPENFGA_WRITE_TUPLE_LIMIT} tuple operations")
@@ -365,16 +318,6 @@ class FGAClient:
         object: str | None = None,
         consistency: str | None = None,
     ) -> list[dict]:
-        """Read all matching tuple keys, preserving the existing list API."""
-        return [key async for key in self.iter_tuples(user, relation, object, consistency)]
-
-    async def iter_tuples(
-        self,
-        user: str | None = None,
-        relation: str | None = None,
-        object: str | None = None,
-        consistency: str | None = None,
-    ) -> AsyncIterator[dict]:
         """Read tuples matching the given filter.
 
         Pass no filter at all to walk the whole Store. Any other combination must
@@ -383,7 +326,7 @@ class FGAClient:
         the server answers a filter it dislikes with a generic validation_error,
         which surfaced as a 500 only after the surrounding work had already run.
 
-        Yields flat tuple keys one page at a time without retaining the Store.
+        Returns list of {"key": {"user": ..., "relation": ..., "object": ...}, "timestamp": ...}.
         """
         tuple_key: dict[str, str] = {}
         if user:
@@ -398,6 +341,7 @@ class FGAClient:
                 raise ValueError(f"OpenFGA read filter needs an object type, got object={object!r}")
             if not object_id and not user:
                 raise ValueError("OpenFGA read filter needs an object id or a user, got neither")
+        tuples: list[dict] = []
         continuation_token: str | None = None
         while True:
             body: dict[str, Any] = {"page_size": 100}
@@ -408,11 +352,11 @@ class FGAClient:
             if continuation_token:
                 body["continuation_token"] = continuation_token
             data = await self._post(f"/stores/{self._store_id}/read", body)
-            for item in data.get("tuples", []):
-                yield item["key"]
+            tuples.extend(t["key"] for t in data.get("tuples", []))
             continuation_token = data.get("continuation_token") or data.get("continuationToken")
             if not continuation_token:
                 break
+        return tuples
 
     # ── Store & model management ─────────────────────────────────
 

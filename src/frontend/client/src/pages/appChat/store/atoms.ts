@@ -1,7 +1,7 @@
 import { atom, selector } from "recoil"
 import type { BishengConfig, Chat, RunningStatus, SubmitData, WebSocketStatus } from "~/@types/chat"
 
-// Conversation data keyed by chatId.
+// 所有会话数据的Map存储  (key: chatId) 
 /**
  * map
  */
@@ -15,7 +15,7 @@ export const chatIdState = atom<string>({
     default: '',
 })
 
-// Resolve the current conversation.
+// 获取当前会话信息
 export const currentChatState = selector<Chat | null>({
     key: "currentChatState",
     get: ({ get }) => {
@@ -28,19 +28,19 @@ export const currentChatState = selector<Chat | null>({
 })
 
 
-// Files selected for upload in the current conversation.
+// 会话上传的文件
 export const chatUploadFileState = atom<File[]>({
     key: "chatUploadFileState",
     default: [],
 })
 
-// Per-conversation UI state.
+// UI状态管理
 export const runningState = atom<Record<string, RunningStatus>>({
     key: "runningState",
     default: {},
 })
 
-// Resolve the current conversation UI state.
+// 获取当前会话状态
 export const currentRunningState = selector<RunningStatus | null>({
     key: "currentRunningStateSelector",
     get: ({ get }) => {
@@ -53,25 +53,25 @@ export const currentRunningState = selector<RunningStatus | null>({
 })
 
 
-// Current submission payload.
+// 提交数据
 export const submitDataState = atom<SubmitData | null>({
     key: "submitDataState",
     default: null,
 })
 
-// Uploaded conversation files.
+// 会话文件
 export const chatFileState = atom<{ name: string, path: string }[]>({
     key: "chatFileState",
     default: [],
 })
 
-// API version for chat endpoints (v1 = authenticated, v2 = key-authenticated, v3 = public guest).
-export const chatApiVersionState = atom<'v1' | 'v2' | 'v3'>({
+// API version for chat endpoints (v1 = authenticated, v2 = guest/open)
+export const chatApiVersionState = atom<'v1' | 'v2'>({
     key: "chatApiVersionState",
     default: 'v1',
 })
 
-// Runtime application configuration.
+// 毕昇配置信息
 export const bishengConfState = atom<BishengConfig | null>({
     key: "bishengConfState",
     default: null,
@@ -98,7 +98,7 @@ export const tabsState = atom<any>({
         uploadFlow: () => { },
         setTweak: (tweak: any) => { },
         getTweak: [],
-        // Cross-component paste state.
+        // 跨组件粘贴
         lastCopiedSelection: null,
         setLastCopiedSelection: (selection: any) => { },
         downloadFlow: (flow) => { },

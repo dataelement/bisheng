@@ -113,40 +113,6 @@ class WorkstationMediaCoverService:
         return temp_path
 
     @classmethod
-    async def cover_for_uploaded_video(cls, upload_file, file_name: str) -> str | None:
-        """Poster frame for a freshly uploaded video; None for anything else.
-
-        Several chat surfaces upload through one shared endpoint, but only the
-        ones that parse attachments ever produced a cover. A video sent from a
-        workflow therefore had none and its bubble showed a bare MP4 card, while
-        the same file in daily chat showed a thumbnail. Extracting here gives
-        every caller of that endpoint the same poster, and costs nothing for a
-        file that is not a video.
-
-        Best effort by design: a missing poster costs a thumbnail, whereas
-        failing the request over one would cost the attachment itself.
-        """
-
-        if not cls.is_video_filename(file_name):
-            return None
-        from bisheng.core.storage.minio.minio_manager import get_minio_storage
-
-        temp_path = None
-        try:
-            temp_path = await cls.materialize_upload_to_temp(upload_file, file_name)
-            minio_client = await get_minio_storage()
-            return await cls.upload_video_cover(temp_path, minio_client)
-        except Exception as exc:  # best effort by design; see the docstring
-            logger.warning(
-                "video cover extraction on upload failed: file={} error={}",
-                file_name,
-                exc,
-            )
-            return None
-        finally:
-            cls.cleanup_temp(temp_path)
-
-    @classmethod
     def cleanup_temp(cls, *paths: str | None) -> None:
         for path in paths:
             if path and os.path.exists(path):

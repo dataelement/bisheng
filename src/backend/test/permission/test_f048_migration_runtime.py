@@ -545,12 +545,7 @@ class _EvidenceModelClient:
 async def test_evidence_provider_checks_canonical_remote_model() -> None:
     model = build_authorization_model_f048()
     response_model = deepcopy(model)
-    system_type = next(
-        definition
-        for definition in response_model["type_definitions"]
-        if definition["type"] == "system"
-    )
-    system_type["metadata"].update(
+    response_model["type_definitions"][1]["metadata"].update(
         module="",
         source_info=None,
     )

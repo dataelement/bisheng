@@ -1,9 +1,6 @@
 import request from "./request";
 
-export type MessageTab = "all" | "request" | "notify";
-
-/** Server-side read filter for the notification list — never emulate this client-side. */
-export type MessageReadState = "all" | "unread" | "read";
+export type MessageTab = "all" | "request";
 
 export interface MessageContentPart {
   type: string;
@@ -32,7 +29,7 @@ export interface MessageListResponse {
 
 export async function getMessageListApi(params?: {
   tab?: MessageTab;
-  read_state?: MessageReadState;
+  only_unread?: boolean;
   keyword?: string;
   page?: number;
   page_size?: number;
@@ -103,4 +100,9 @@ export async function approveMessageApi(body: { message_id: number; action: "agr
   return await request.post(`/api/v1/message/approve`, body);
 }
 
+export async function deleteMessageApi(message_id: number): Promise<boolean> {
+  const resp: any = await request.delete(`/api/v1/message/${message_id}`);
+  const root = resp?.data ?? resp ?? {};
+  return Boolean(root?.data ?? root);
+}
 

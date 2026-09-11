@@ -5,9 +5,8 @@ import { Outlined } from "bisheng-icons"
 import { LoaderCircle } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRecoilState } from "recoil"
-import { transcribeVoice } from "~/api/voice"
+import { getVoice2TextApi } from "~/api"
 import { useLocalize } from "~/hooks"
-import { useVoiceTarget } from "~/hooks/useVoice"
 import { useToastContext } from "~/Providers"
 import { Button } from ".."
 import VoiceRecordingIcon from "../ui/icon/Voice"
@@ -124,7 +123,6 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
     }, [_setIsRecording])
     const [isProcessing, setIsProcessing] = useState(false)
     const localize = useLocalize();
-    const voiceTarget = useVoiceTarget();
 
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -168,7 +166,7 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
             try {
                 const formData = new FormData()
                 formData.append("file", audioBlob, "recording.wav")
-                const res = await transcribeVoice(formData, voiceTarget)
+                const res = await getVoice2TextApi(formData)
                 const responseData = res.data
                 const transcript = responseData || ""
 
@@ -184,7 +182,7 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
                 setIsProcessing(false)
             }
         },
-        [onChange, showToast, localize, voiceTarget],
+        [onChange, showToast],
     )
 
     /**

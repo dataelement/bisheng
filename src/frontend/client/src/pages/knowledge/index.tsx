@@ -44,7 +44,7 @@ import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
-import { canOpenSharedSpace, resolveUploadSizeLimits, shouldNavigateOnSpaceSelect } from "./knowledgeUtils";
+import { resolveUploadSizeLimits } from "./knowledgeUtils";
 export default function Knowledge() {
     const localize = useLocalize();
     // 模块标题跟随后台配置的菜单显示名称
@@ -70,7 +70,7 @@ export default function Knowledge() {
     const [fileSelectionActive, setFileSelectionActive] = useState(false);
     // Mobile: full-page file search (opened from the file-page top-bar search icon).
     const [knowledgeSearchMode, setKnowledgeSearchMode] = useState(false);
-    const mobileHeadIconBtnClassName = "inline-flex size-5 shrink-0 items-center justify-center text-text-1";
+    const mobileHeadIconBtnClassName = "inline-flex size-5 shrink-0 items-center justify-center text-[#212121]";
     const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
 
     const { showToast } = useToastContext();
@@ -275,12 +275,6 @@ export default function Knowledge() {
             try {
                 const detail = await getSpaceInfoApi(detailSpaceId);
                 if (cancelled) return;
-                // No membership redirect here, deliberately. The space page is itself the
-                // non-member landing (header with 加入, and the server refuses the file
-                // list), and the desktop sidebar auto-selects the first department space
-                // whenever nothing is active. Diverting a non-follower to the share
-                // preview therefore looped: close the preview -> /knowledge -> auto-select
-                // the same department space -> redirect -> preview again, with no way out.
                 setActiveSpace({ ...detail, id: detailSpaceId });
             } catch {
                 if (cancelled) return;
@@ -390,14 +384,7 @@ export default function Knowledge() {
                 const info = await getSpaceInfoApi(previewSpaceId);
                 if (cancelled) return;
 
-                // Anyone who can already read the space goes straight into it —
-                // a share link is a way in, not an application form. Only the
-                // creator short-circuited here, so a member or a granted user
-                // landed on the intro-and-apply drawer for a space that was
-                // already sitting in their own sidebar. `visible` is the same
-                // decision the space's own pages enforce; `role` cannot answer it,
-                // because an absent role maps to MEMBER exactly like a real one.
-                if (canOpenSharedSpace(info)) {
+                if (info.role === SpaceRole.CREATOR) {
                     navigateRef.current(`/knowledge/space/${previewSpaceId}`, { replace: true });
                     return;
                 }
@@ -468,13 +455,7 @@ export default function Knowledge() {
         // Without this, clicking a space while the URL is on /folder/<id> leaves the
         // file list stuck on the folder's contents and the tree's folder highlight
         // pointing at the wrong space (Bug A + Bug B).
-        // Never on a share route — see shouldNavigateOnSpaceSelect.
-        if (shouldNavigateOnSpaceSelect({
-            isShareRoute,
-            urlFolderId,
-            urlSpaceId: spaceId,
-            targetSpaceId: space.id,
-        })) {
+        if (urlFolderId || spaceId !== space.id) {
             navigate(`/knowledge/space/${space.id}`);
         }
         // Set list-level data immediately for fast UI switch
@@ -681,10 +662,6 @@ export default function Knowledge() {
                         onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
                         collapsed={sidebarCollapsed}
                         onCollapsedChange={setSidebarCollapsed}
-                        // The URL names a space on both of these routes, so the
-                        // default-pick has nothing to decide and must not race
-                        // the route effect for the address bar.
-                        suppressAutoSelect={!!detailSpaceId || isShareRoute}
                         hideExpandToggleWhenCollapsed={isDesktop && !!activeSpace}
                     />
                 </div>
@@ -781,8 +758,6 @@ export default function Knowledge() {
                             onLoadMore={fileManager.loadMore}
                             hasMore={fileManager.hasMore}
                             loading={fileManager.loading}
-                            loadError={fileManager.loadError}
-                            loadMoreError={fileManager.loadMoreError}
                             onSearch={fileManager.handleSearch}
                             onFilterStatus={fileManager.setStatusFilter}
                             onSort={(sortBy, direction) => {
@@ -852,7 +827,7 @@ export default function Knowledge() {
                             >
                                 <Outlined.SidebarMenu className="size-5" />
                             </button>
-                            <span className="min-w-0 flex-1 truncate text-center text-[16px] font-medium leading-6 text-text-1">
+                            <span className="min-w-0 flex-1 truncate text-center text-[16px] font-medium leading-6 text-[#212121]">
                                 {menuNames.knowledge}
                             </span>
                             <span className="size-5 shrink-0" aria-hidden />
@@ -864,14 +839,14 @@ export default function Knowledge() {
                            (mirrors the subscription channel empty state). */
                         <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 pb-16">
                             <EmptyStateIllustration className="size-[120px]" />
-                            <p className="mt-6 text-[14px] leading-6 text-text-3">
+                            <p className="mt-6 text-[14px] leading-6 text-[#999999]">
                                 {localize("com_knowledge.no_related_content_you_can")}
                             </p>
                             <div className="mt-5 flex items-center gap-4">
                                 <button
                                     type="button"
                                     onClick={() => setShowKnowledgeSquare(true)}
-                                    className="h-8 rounded-md border border-border-base bg-white px-4 text-[14px] leading-[22px] text-text-2 transition-colors active:border-blue-500 active:text-blue-500"
+                                    className="h-8 rounded-md border border-[#E5E6EB] bg-white px-4 text-[14px] leading-[22px] text-[#4E5969] transition-colors active:border-blue-500 active:text-blue-500"
                                 >
                                     {localize("com_knowledge.go_to_square")}
                                 </button>
@@ -912,21 +887,21 @@ export default function Knowledge() {
             ) : spacesResolving ? (
                 /* PC loading state — keep the loading view up until the space lists
                    settle so the empty state never flashes before auto-select. */
-                <div className="flex flex-1 flex-col items-center justify-center py-10 text-center text-text-3">
+                <div className="flex flex-1 flex-col items-center justify-center py-10 text-center text-[#86909c]">
                     <LoadingIcon className="size-20 text-primary" />
                 </div>
             ) : (
                 /* PC empty state when no space is selected — illustration + two actions */
                 <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
                     <EmptyStateIllustration className="size-[120px]" />
-                    <p className="mt-6 text-[14px] font-normal leading-6 text-text-3">
+                    <p className="mt-6 text-[14px] font-normal leading-6 text-[#999999]">
                         {localize("com_knowledge.no_related_content_you_can")}
                     </p>
                     <div className="mt-5 flex items-center gap-4">
                         <button
                             type="button"
                             onClick={() => setShowKnowledgeSquare(true)}
-                            className="h-8 rounded-md border border-border-base bg-white px-4 text-[14px] leading-[22px] text-text-2 transition-colors hover:border-blue-500 hover:text-blue-500"
+                            className="h-8 rounded-md border border-[#E5E6EB] bg-white px-4 text-[14px] leading-[22px] text-[#4E5969] transition-colors hover:border-blue-500 hover:text-blue-500"
                         >
                             {localize("com_knowledge.go_to_square")}
                         </button>

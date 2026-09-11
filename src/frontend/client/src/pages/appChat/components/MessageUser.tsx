@@ -10,7 +10,6 @@ import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { MessageCheckbox } from "~/components/Chat/MessageSelection";
 import { MessageImage } from "~/components/Chat/Messages/Content/MessageImage";
 import { isImageFileName } from "~/components/ui/icon/File/FileIcon";
-import { AppChatFileList } from "./AppChatFileList";
 import { useMessageSelection } from "~/hooks/useMessageSelection";
 
 export default function MessageUser({ useName, data, showButton, disabledSearch = false, readOnly }) {
@@ -41,10 +40,6 @@ export default function MessageUser({ useName, data, showButton, disabledSearch 
 
     const images = useMemo(
         () => files.filter((f) => isImageFileName(f.file_name || f.name)),
-        [files],
-    )
-    const others = useMemo(
-        () => files.filter((f) => !isImageFileName(f.file_name || f.name)),
         [files],
     )
 
@@ -95,13 +90,8 @@ export default function MessageUser({ useName, data, showButton, disabledSearch 
                     <div className="">
                         <p className="select-none font-semibold text-base mb-1">{useName}</p>
                         <div className="text-[#0D1638] dark:text-[#CFD5E8] text-base break-all whitespace-break-spaces">{msg}</div>
-                        {/* Every attachment renders here, because the text above has
-                            already had all of their filenames stripped out. Pictures
-                            stay on MessageImage — the stored link expires and it
-                            re-issues one — while the rest get the same cards the
-                            workflow uses elsewhere. Rendering only the pictures made
-                            non-image files vanish outright: stripped from the text,
-                            drawn nowhere. */}
+                        {/* Pictures the user attached show as pictures; other
+                            files keep reading as their filename in the text. */}
                         {images.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-2">
                                 {images.map((file, i) => (
@@ -115,7 +105,6 @@ export default function MessageUser({ useName, data, showButton, disabledSearch 
                                 ))}
                             </div>
                         )}
-                        {others.length > 0 && <AppChatFileList files={others} className="mt-2" />}
                     </div>
                 </div>
             </div>

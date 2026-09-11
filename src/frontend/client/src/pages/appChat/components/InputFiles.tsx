@@ -207,9 +207,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 seenPaths.add(relativePath);
                 validFiles.push({ id: generateUUID(6), file, relativePath });
             } else {
-                // Carry the limit that actually rejected this file: media and
-                // documents have different ceilings, and both are configurable.
-                invalidFiles.push({ id: generateUUID(6), file, maxMB: Math.floor(maxBytes / 1024 / 1024) });
+                invalidFiles.push({ id: generateUUID(6), file });
             }
         });
 
@@ -230,11 +228,8 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             invalidFiles.map(file =>
                 showToast({
                     message: isMediaFileName(file.file.name)
-                        // The ceiling comes from uploaded_media_maximum_size, so the
-                        // message has to quote what was actually enforced — it read
-                        // "1024M" to everyone, whatever the deployment allowed.
-                        ? t('com_chat.media_file_too_large', { 0: file.maxMB })
-                        : t('com_inputfiles_exceed_limit', { 0: file.file.name, 1: file.maxMB ?? size }),
+                        ? t('com_chat.media_file_too_large')
+                        : t('com_inputfiles_exceed_limit', { 0: file.file.name, 1: size }),
                     status: 'info',
                 })
             )

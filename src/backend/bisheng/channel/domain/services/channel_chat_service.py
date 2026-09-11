@@ -27,17 +27,6 @@ from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.llm.domain import LLMService
 
 # Article context prompt template
-from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
-from bisheng.citation.domain.services.citation_prompt_helper import (
-    CITATION_PROMPT_RULES,
-    annotate_article_with_citation,
-    cache_citation_registry_items,
-    filter_registry_items_by_text,
-    prompt_has_citation_rules,
-    save_message_citations,
-    strip_unregistered_citation_markers,
-)
-
 ARTICLE_CONTEXT_PROMPT = (
     "You are a professional AI assistant, please answer user's questions based on the following article content.\n\n"
     "## Article Title\n{title}\n\n"
@@ -147,106 +136,8 @@ class ChannelChatService:
             raise ArticleNotFoundError()
         return article
 
-    ARTICLE_SNIPPET_LENGTH = 200
-
     @classmethod
-    async def register_article_citation(cls, article) -> tuple[str, list[CitationRegistryItemSchema]]:
-        """Register the article being discussed as a citation source.
-
-        One article is one source: channel QA hands the model the whole article
-        rather than retrieving chunks, so there is nothing finer to address and
-        the locator is the article's own doc id (never a synthesised chunk id).
-
-        Returns the citation key for the prompt and the items to persist later.
-        Tracing is an add-on to answering, so any failure here degrades to
-        ("", []) and the turn proceeds without a badge.
-        """
-        try:
-            content = getattr(article, "content", "") or ""
-            citation_key, items = annotate_article_with_citation(
-                article_doc_id=article.doc_id,
-                title=getattr(article, "title", None),
-                snippet=content[: cls.ARTICLE_SNIPPET_LENGTH] or None,
-                source_url=getattr(article, "source_url", None),
-                source_type=getattr(article, "source_type", None),
-            )
-            await cache_citation_registry_items(items)
-            return citation_key, items
-        except Exception as exc:
-            logger.warning(f"[channel_citation] register failed, answering without a source: {exc}")
-            return "", []
-
-    @classmethod
-    def apply_citation_rules(cls, system_prompt: str | None) -> str:
-        """Append the citation rules unless the prompt already teaches them.
-
-        The channel default system prompt is one English sentence with no rule
-        text, so without this the model never emits a marker and the feature is
-        inert. An admin prompt that already carries the markers is left as-is.
-        """
-        base = system_prompt or ""
-        if prompt_has_citation_rules(base):
-            return base
-        return f"{base}\n\n{CITATION_PROMPT_RULES}" if base else CITATION_PROMPT_RULES
-
-    @classmethod
-    def decorate_article_content(cls, content: str, citation_key: str) -> str:
-        """Attach the source id to the article text handed to the model.
-
-        Done on the content rather than the prompt template because the template
-        is admin-configurable — decorating the content means the id survives
-        whatever wording an admin chooses.
-        """
-        if not citation_key:
-            return content
-        return f"{content}\n\ncitation_key: {citation_key}"
-
-    @classmethod
-    def scrub_article_answer(
-        cls,
-        answer: str,
-        items: list[CitationRegistryItemSchema],
-    ) -> tuple[str, list[CitationRegistryItemSchema]]:
-        """Decide what to keep, and clean the answer, BEFORE it is stored.
-
-        Strict on purpose: unlike the retrieval entries, this path does not fall
-        back to storing every registered item when the answer cites nothing. An
-        article source is registered on every turn, so that fallback would leave
-        a stored source behind each uncited turn with no badge to click.
-
-        Markers the registry cannot back are removed here too — a hallucinated
-        id would otherwise render as a badge whose lookup 404s, which reads as a
-        system fault rather than the model inventing an id.
-        """
-        try:
-            cited = filter_registry_items_by_text(items, answer)
-            return strip_unregistered_citation_markers(answer, cited), cited
-        except Exception as exc:
-            logger.warning(f"[channel_citation] scrub failed, storing the answer unchanged: {exc}")
-            return answer, []
-
-    @classmethod
-    async def save_article_citations(
-        cls,
-        items: list[CitationRegistryItemSchema],
-        message_id: int | None,
-        chat_id: str | None = None,
-        flow_id: str | None = None,
-    ) -> None:
-        """Bind the cited sources to the stored answer. Never fails the turn.
-
-        Idempotent by way of the unique citation id on message_citation, so a
-        replayed turn does not duplicate rows.
-        """
-        if not items:
-            return
-        try:
-            await save_message_citations(message_id=message_id, items=items, chat_id=chat_id, flow_id=flow_id)
-        except Exception as exc:
-            logger.warning(f"[channel_citation] persist failed, answer already stored: {exc}")
-
-    @classmethod
-    def build_article_context_prompt(cls, title: str, content: str, question: str, citation_key: str = "") -> str:
+    def build_article_context_prompt(cls, title: str, content: str, question: str) -> str:
         """
         Build article context prompt
 
@@ -260,7 +151,7 @@ class ChannelChatService:
         """
         return ARTICLE_CONTEXT_PROMPT.format(
             title=title,
-            content=cls.decorate_article_content(content, citation_key),
+            content=content,
             question=question
         )
 

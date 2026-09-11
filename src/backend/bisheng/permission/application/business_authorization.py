@@ -11,7 +11,6 @@ from bisheng.common.errcode.permission import (
     PermissionInvalidResourceError,
     PermissionPublishNotReadyError,
 )
-from bisheng.core.openfga.contextual import contextual_operation
 from bisheng.permission.application.access import (
     get_f048_resource_registry,
     get_f048_runtime,
@@ -26,7 +25,6 @@ from bisheng.permission.domain.services.permission_action_service import Permiss
 _MAX_BATCH_CHECKS = 100
 
 
-@contextual_operation
 async def check_business_action(
     login_user: LoginPermissionIdentity,
     *,
@@ -74,30 +72,6 @@ async def require_business_action(
         raise UnAuthorizedError()
 
 
-async def list_business_effective_direct_user_ids_by_model(
-    *,
-    actor: PermissionActor,
-    resource_type: str,
-    resource_id: str | int,
-    model_keys: Iterable[str],
-) -> dict[str, tuple[str, ...]]:
-    """Resolve effective direct-user Grant assignees for internal workflows."""
-
-    registry = await get_f048_resource_registry()
-    target = await registry.resolve(
-        resource_type=resource_type,
-        resource_id=str(resource_id),
-        actor=actor,
-        action="visible",
-    )
-    runtime = await get_f048_runtime()
-    return await runtime.list_effective_direct_user_ids_by_model(
-        target=target,
-        model_keys=tuple(model_keys),
-    )
-
-
-@contextual_operation
 async def batch_check_business_actions(
     login_user: LoginPermissionIdentity,
     *,
@@ -174,7 +148,6 @@ async def batch_check_business_actions(
     return {resource_id: frozenset(action_codes) for resource_id, action_codes in result.items()}
 
 
-@contextual_operation
 async def batch_check_business_visible(
     login_user: LoginPermissionIdentity,
     *,
@@ -234,7 +207,6 @@ async def batch_check_business_visible(
     return result
 
 
-@contextual_operation
 async def batch_check_verified_business_visible(
     *,
     actor: PermissionActor,
@@ -242,13 +214,19 @@ async def batch_check_verified_business_visible(
 ) -> dict[tuple[str, str], bool]:
     """Decide business-verified targets without resolving their ids again."""
 
-    normalized_targets = tuple({(target.resource_type, target.resource_id): target for target in targets}.values())
+    normalized_targets = tuple(
+        {
+            (target.resource_type, target.resource_id): target
+            for target in targets
+        }.values()
+    )
     if not normalized_targets:
         return {}
 
     runtime = await get_f048_runtime()
     result: dict[tuple[str, str], bool] = {
-        (target.resource_type, target.resource_id): False for target in normalized_targets
+        (target.resource_type, target.resource_id): False
+        for target in normalized_targets
     }
     for offset in range(0, len(normalized_targets), _MAX_BATCH_CHECKS):
         batch_targets = normalized_targets[offset : offset + _MAX_BATCH_CHECKS]

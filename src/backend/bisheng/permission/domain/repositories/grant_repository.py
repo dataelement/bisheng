@@ -176,31 +176,6 @@ class GrantRepository(
         next_cursor = int(items[-1].id) if len(rows) > limit and items else None
         return items, next_cursor
 
-    async def alist_active_subject_grants(
-        self,
-        *,
-        tenant_id: int,
-        subject_type: str,
-        subject_id: str,
-    ) -> list[tuple[PermissionGrantAssignee, PermissionGrant]]:
-        """Reverse-query current local grants for one subject."""
-
-        async with self._session() as session:
-            statement = (
-                select(PermissionGrantAssignee, PermissionGrant)
-                .join(PermissionGrant, PermissionGrant.id == PermissionGrantAssignee.grant_id)
-                .where(
-                    PermissionGrantAssignee.tenant_id == tenant_id,
-                    PermissionGrant.tenant_id == tenant_id,
-                    PermissionGrantAssignee.subject_type == subject_type,
-                    PermissionGrantAssignee.subject_id == subject_id,
-                    PermissionGrantAssignee.state == "ACTIVE",
-                    PermissionGrant.state == "ACTIVE",
-                )
-                .order_by(PermissionGrant.resource_type, PermissionGrant.resource_id, PermissionGrantAssignee.id)
-            )
-            return [(assignee, grant) for assignee, grant in (await session.execute(statement)).all()]
-
     async def acount_projected_subject_sources(
         self,
         *,
@@ -247,26 +222,6 @@ class ResourcePermissionModeRepository(
             if for_update:
                 statement = statement.with_for_update()
             return (await session.execute(statement)).scalars().first()
-
-    async def alist_current_resources(
-        self,
-        *,
-        tenant_id: int,
-        resource_type: str | None = None,
-        limit: int = 500,
-    ) -> list[ResourcePermissionMode]:
-        async with self._session() as session:
-            statement = select(ResourcePermissionMode).where(
-                ResourcePermissionMode.tenant_id == tenant_id,
-                ResourcePermissionMode.projection_state == "CURRENT"
-            )
-            if resource_type is not None:
-                statement = statement.where(ResourcePermissionMode.resource_type == resource_type)
-            statement = statement.order_by(
-                ResourcePermissionMode.resource_type,
-                ResourcePermissionMode.resource_id,
-            ).limit(limit)
-            return list((await session.execute(statement)).scalars().all())
 
     async def acreate_mode(
         self,

@@ -309,12 +309,6 @@ class AgentNode(BaseNode):
 
     @staticmethod
     def _wrap_citation_tool(tool: BaseTool) -> BaseTool:
-        # F054: an ephemeral source (workflow input-node upload) is left
-        # unwrapped, so no citation is registered for it and no badge appears.
-        # Its chunks cannot resolve back to a real file, and a badge that opens
-        # onto nothing is worse than no badge (design §3 decision 6).
-        if getattr(tool, "ephemeral_source", False):
-            return tool
         if tool.name == "web_search" or hasattr(tool, "knowledge_retriever_tool"):
             return WorkflowCitationToolWrapper.wrap(tool)
         return tool

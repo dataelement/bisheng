@@ -18,7 +18,7 @@ from bisheng.channel.domain.services.f048_channel_permission import (
     ChannelDaoPermissionLoader,
     F048ChannelPermissionAdapter,
 )
-from bisheng.department.domain.services.permission_context import DepartmentPermissionContextProvider
+from bisheng.core.openfga.client import FGAClient
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     F048KnowledgeContainerPermissionAdapter,
     F048KnowledgeFilePermissionAdapter,
@@ -40,7 +40,6 @@ from bisheng.permission.application.catalog_api import (
     SqlCatalogImpact,
     SqlCatalogState,
 )
-from bisheng.permission.application.department_context import PermissionRuntimeClientPort, configure_department_context
 from bisheng.permission.application.process_runtime import (
     initialize_f048_background_runtime,
 )
@@ -198,7 +197,7 @@ def build_f048_resource_composition(
 
 
 async def initialize_f048_api_runtime(
-    client: PermissionRuntimeClientPort,
+    client: FGAClient,
     *,
     external_scopes: dict[str, ExternalProjectionScopePort] | None = None,
 ) -> F048ApiRuntime:
@@ -208,7 +207,6 @@ async def initialize_f048_api_runtime(
     background-process counterpart and shares the same resource registry build.
     """
 
-    configure_department_context(client, DepartmentPermissionContextProvider())
     components = await build_f048_permission_runtime(
         client,
         external_scopes=external_scopes,
@@ -255,7 +253,7 @@ async def initialize_f048_api_runtime(
 
 
 async def initialize_f048_worker_runtime(
-    client: PermissionRuntimeClientPort,
+    client: FGAClient,
     *,
     external_scopes: dict[str, ExternalProjectionScopePort] | None = None,
 ) -> F048RuntimeComponents:
@@ -276,7 +274,6 @@ async def initialize_f048_worker_runtime(
     APIs) stays API-only.
     """
 
-    configure_department_context(client, DepartmentPermissionContextProvider())
     components = await initialize_f048_background_runtime(
         client,
         external_scopes=external_scopes,

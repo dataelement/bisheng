@@ -291,42 +291,10 @@ class AssistantAgent(AssistantUtils):
             from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 
             type_by_id = {row.id: row.type for row in KnowledgeDao.get_list_by_ids(link_knowledge_ids)}
-
-            # 用户知识库权限校验 only ever reached the knowledge-space branch below.
-            # Ordinary knowledge bases went straight to a retriever built off the
-            # bound id, so a user granted the assistant and nothing else still
-            # searched knowledge bases they had no access to. Apply the same rule
-            # the workflow retrieval node applies: the runtime user's `use`
-            # action. Toggle off keeps the previous behaviour untouched.
-            allowed_kb_ids: set[int] | None = None
-            if self.assistant.knowledge_auth:
-                from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-                from bisheng.knowledge.domain.services.space_flow_retrieval import (
-                    abuild_scoped_login_user,
-                )
-
-                identity_user = await abuild_scoped_login_user(
-                    self.invoke_user_id,
-                    self.assistant.tenant_id,
-                )
-                allowed_kb_ids = await KnowledgeRag.afilter_usable_knowledge_ids(
-                    identity_user,
-                    [
-                        knowledge_id
-                        for knowledge_id in link_knowledge_ids
-                        if type_by_id.get(knowledge_id) != KnowledgeTypeEnum.SPACE.value
-                    ],
-                )
-
             for knowledge_id in link_knowledge_ids:
                 if type_by_id.get(knowledge_id) == KnowledgeTypeEnum.SPACE.value:
                     space_ids.append(knowledge_id)
                 else:
-                    # Dropped silently, as the workflow node drops them: the
-                    # knowledge base simply is not among the tools, so the model
-                    # answers from what it may actually read.
-                    if allowed_kb_ids is not None and knowledge_id not in allowed_kb_ids:
-                        continue
                     kb_ids.append(knowledge_id)
                     knowledge_tool = await ToolExecutor.init_knowledge_tool(
                         self.invoke_user_id, knowledge_id, llm=self.llm, callbacks=callbacks, **self.knowledge_retriever

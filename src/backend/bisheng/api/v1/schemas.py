@@ -228,9 +228,6 @@ class UploadFileResponse(BaseModel):
     repeat: bool = False  # Duplicate in Knowledge Base
     repeat_file_name: str | None = None  # Returns the file name of a duplicate file if it is a duplicate
     repeat_update_time: datetime | None = None  # Returns the update time of a duplicate file if it is a duplicate
-    # Poster frame for a video upload, so the chat bubble that shows the
-    # attachment has a thumbnail instead of a bare extension card.
-    cover_filepath: str | None = None
 
 
 class StreamData(BaseModel):

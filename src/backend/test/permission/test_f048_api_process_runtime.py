@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -195,14 +195,12 @@ async def test_api_runtime_injects_facade_into_business_loaders(
             lambda *args, **kwargs: None,
         )
 
-    client = SimpleNamespace(store_id="store-live", model_id="model-f048", configure_contextual_tuple_provider=Mock())
     initialized = await api_runtime_module.initialize_f048_api_runtime(
-        client,
+        SimpleNamespace(store_id="store-live", model_id="model-f048"),
         external_scopes={},
     )
 
     assert initialized.components is components
-    client.configure_contextual_tuple_provider.assert_called_once()
     for resource_type in (
         "workflow",
         "assistant",

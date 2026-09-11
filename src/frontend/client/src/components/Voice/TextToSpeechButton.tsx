@@ -1,10 +1,9 @@
+// @ts-strict-ignore
 "use client"
 
 import { Outlined } from "bisheng-icons"
-import { readVoiceAudioPath, synthesizeVoice } from "~/api/voice"
-import { NotificationSeverity } from "~/common"
-import { useLocalize } from "~/hooks"
-import { useVoiceModels, useVoiceTarget } from "~/hooks/useVoice"
+import { textToSpeech } from "~/api"
+import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider"
 import { useToastContext } from "~/Providers"
 import { cn } from "~/utils"
 import {
@@ -21,8 +20,6 @@ interface TextToSpeechButtonProps {
 export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechButtonProps) => {
     const { activeMessageId, isLoadingAudio, isPlaying, playAudio, pauseAudio, resumeAudio } = useAudioPlayer()
     const { showToast } = useToastContext()
-    const localize = useLocalize()
-    const voiceTarget = useVoiceTarget()
 
     // Check current message playback state
     const isCurrentMessage = activeMessageId === messageId
@@ -32,17 +29,22 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
     // Fetch audio URL from API
     const fetchAudioUrl = async (content: string): Promise<string> => {
         try {
-            const response = await synthesizeVoice(content, voiceTarget)
+            const response = await textToSpeech(content)
 
             // Parse API response to get audio path
-            const audioPath = readVoiceAudioPath(response)
+            let audioPath = ""
+            if (typeof response === "string") {
+                audioPath = response
+            } else if (response?.data) {
+                audioPath = typeof response.data === "string" ? response.data : response.data?.data || ""
+            }
 
             if (!audioPath) {
                 throw new Error("Failed to parse audio path from response")
             }
 
             // Construct full URL
-            return /^https?:\/\//i.test(audioPath) ? audioPath : `${__APP_ENV__.BASE_URL}${audioPath}`
+            return `${__APP_ENV__.BASE_URL}${audioPath}`
         } catch (error) {
             console.error("Failed to fetch audio URL:", error)
             // Re-throw as-is (not wrapped) so a backend business error (e.g. TTS
@@ -80,8 +82,8 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
             // errors that never reached that path (network failure, malformed
             // response, etc.), so the user doesn't see two toasts. State reset
             // on error is handled inside the store.
-            if (!(typeof error === 'object' && error !== null && 'status_code' in error && error.status_code)) {
-                showToast({ message: localize('com_voice.playback_unavailable'), severity: NotificationSeverity.ERROR })
+            if (!(error as any)?.status_code) {
+                showToast({ message: "播放功能不可用，请联系管理员", status: "error" })
             }
         }
     }
@@ -89,14 +91,14 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
     // Render icon based on state
     const renderIcon = () => {
         if (isCurrentLoading) {
-            return <Outlined.Loading size={14} className="animate-spin text-text-3" />
+            return <Outlined.Loading size={14} className="animate-spin text-[#818181]" />
         }
 
         if (isCurrentPlaying) {
             return (
                 <Outlined.PlayerPause
                     size={14}
-                    className="text-text-3"
+                    className="text-[#818181]"
                 />
             )
         }
@@ -104,13 +106,13 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
         return (
             <Outlined.VolumeNotice
                 size={14}
-                className="text-text-3"
+                className="text-[#818181]"
             />
         )
     }
 
     // Disabled when tts_model is not configured
-    const { data: modelData } = useVoiceModels()
+    const { data: modelData } = useGetWorkbenchModelsQuery()
     if (!modelData?.tts_model?.id) return null
 
     return (
@@ -124,3 +126,5 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
         </button>
     )
 }
+
+

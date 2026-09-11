@@ -4,7 +4,7 @@ import { useRecoilState, useRecoilValue } from "recoil";
 import { Button, SendIcon, Textarea } from "~/components";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useRecordingAudioLoading } from "~/components/Voice/textToSpeechStore";
-import { useVoiceModels } from "~/hooks/useVoice";
+import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import { useLocalize } from "~/hooks";
 import InputFiles from "./components/InputFiles";
 import { bishengConfState, currentRunningState } from "./store/atoms";
@@ -21,7 +21,7 @@ export default function ChatInput({ readOnly, v }) {
     const [fileUploading, setFileUploading] = useState(false);
     const [audioOpening] = useRecordingAudioLoading();
     const localize = useLocalize();
-    const { data: modelData } = useVoiceModels();
+    const { data: modelData } = useGetWorkbenchModelsQuery();
     const showVoice = modelData?.asr_model?.id;
 
     const inputFilesRef = useRef(null);
@@ -83,7 +83,7 @@ export default function ChatInput({ readOnly, v }) {
                         </div> :
                         <button
                             id="bs-send-btn"
-                            className="btn-brand-primary size-8 flex items-center justify-center rounded-full bg-primary text-white transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-text-2"
+                            className="btn-brand-primary size-8 flex items-center justify-center rounded-full bg-primary text-white transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
                             disabled={inputDisabled || fileUploading || readOnly || audioOpening}
                             onClick={() => { !inputDisabled && !fileUploading && handleSendClick() }}>
                             <SendIcon size={18} />

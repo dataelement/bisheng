@@ -5,6 +5,8 @@
  */
 import { Loader2, Paperclip, Sparkles, X } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
+import BookOpen from '~/components/ui/icon/BookOpen';
+import BooksIcon from '~/components/ui/icon/Books';
 import { useLocalize } from '~/hooks';
 import type { TaskModeKnowledgeItem, TaskModeSkill } from '~/store/linsight';
 
@@ -170,7 +172,7 @@ export function ContextChips({
                 {skills.map((skill) => (
                     <Chip
                         key={`skill-${skill.name}`}
-                        icon={<Sparkles className="mr-1 size-4 shrink-0 text-text-3" />}
+                        icon={<Sparkles className="mr-1 size-4 shrink-0 text-[#999]" />}
                         label={skill.display_name}
                         onRemove={() => onRemoveSkill(skill)}
                     />
@@ -180,9 +182,9 @@ export function ContextChips({
                         key={`${item.type}-${item.id}`}
                         icon={
                             item.type === 'space' ? (
-                                <Outlined.Book size={16} className="mr-1 shrink-0 text-text-3" />
+                                <BookOpen className="mr-1 size-4 shrink-0 text-[#999]" />
                             ) : (
-                                <Outlined.Books size={16} className="mr-1 shrink-0 text-text-3" />
+                                <BooksIcon className="mr-1 size-4 shrink-0 text-[#999]" />
                             )
                         }
                         label={item.name}

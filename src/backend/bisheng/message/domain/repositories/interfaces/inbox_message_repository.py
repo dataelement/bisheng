@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
+from typing import List, Optional
 
 from bisheng.common.repositories.interfaces.base_repository import BaseRepository
 from bisheng.message.domain.models.inbox_message import InboxMessage, MessageStatusEnum, MessageTypeEnum
-from bisheng.message.domain.schemas.message_schema import ReadStateEnum
 
 
 class InboxMessageRepository(BaseRepository[InboxMessage, int], ABC):
@@ -12,34 +12,28 @@ class InboxMessageRepository(BaseRepository[InboxMessage, int], ABC):
     async def find_messages_by_receiver(
         self,
         user_id: int,
-        message_type: MessageTypeEnum | None = None,
-        action_codes: list[str] | None = None,
-        exclude_action_codes: list[str] | None = None,
-        status: MessageStatusEnum | None = None,
-        keyword: str | None = None,
-        read_state: ReadStateEnum = ReadStateEnum.ALL,
-        read_message_ids: list[int] | None = None,
+        message_type: Optional[MessageTypeEnum] = None,
+        action_codes: Optional[List[str]] = None,
+        status: Optional[MessageStatusEnum] = None,
+        keyword: Optional[str] = None,
+        only_unread: bool = False,
+        read_message_ids: Optional[List[int]] = None,
         page: int = 1,
         page_size: int = 20,
-    ) -> list[InboxMessage]:
-        """Find messages by receiver user ID with optional filters and pagination.
-
-        ``read_state`` drives the read filter: ALL applies none, UNREAD excludes
-        ``read_message_ids``, READ keeps only ``read_message_ids`` (empty list => empty result).
-        """
+    ) -> List[InboxMessage]:
+        """Find messages by receiver user ID with optional filters and pagination."""
         pass
 
     @abstractmethod
     async def count_messages_by_receiver(
         self,
         user_id: int,
-        message_type: MessageTypeEnum | None = None,
-        action_codes: list[str] | None = None,
-        exclude_action_codes: list[str] | None = None,
-        status: MessageStatusEnum | None = None,
-        keyword: str | None = None,
-        read_state: ReadStateEnum = ReadStateEnum.ALL,
-        read_message_ids: list[int] | None = None,
+        message_type: Optional[MessageTypeEnum] = None,
+        action_codes: Optional[List[str]] = None,
+        status: Optional[MessageStatusEnum] = None,
+        keyword: Optional[str] = None,
+        only_unread: bool = False,
+        read_message_ids: Optional[List[int]] = None,
     ) -> int:
         """Count messages by receiver user ID with optional filters."""
         pass
@@ -48,10 +42,10 @@ class InboxMessageRepository(BaseRepository[InboxMessage, int], ABC):
     async def count_unread_by_receiver(
         self,
         user_id: int,
-        read_message_ids: list[int] | None = None,
-        message_type: MessageTypeEnum | None = None,
-        action_codes: list[str] | None = None,
-        exclude_action_codes: list[str] | None = None,
+        read_message_ids: Optional[List[int]] = None,
+        message_type: Optional[MessageTypeEnum] = None,
+        action_codes: Optional[List[str]] = None,
+        exclude_action_codes: Optional[List[str]] = None,
     ) -> int:
         """Count unread messages for a specific user."""
         pass
@@ -63,7 +57,7 @@ class InboxMessageRepository(BaseRepository[InboxMessage, int], ABC):
         status: MessageStatusEnum,
         content: list,
         operator_user_id: int,
-    ) -> InboxMessage | None:
+    ) -> Optional[InboxMessage]:
         """Atomically update message status, content, and operator after approval action."""
         pass
 
@@ -72,7 +66,7 @@ class InboxMessageRepository(BaseRepository[InboxMessage, int], ABC):
         self,
         message_id: int,
         content: list,
-    ) -> InboxMessage | None:
+    ) -> Optional[InboxMessage]:
         """Update message content (e.g., after approval_id backfill)."""
         pass
 
@@ -80,9 +74,8 @@ class InboxMessageRepository(BaseRepository[InboxMessage, int], ABC):
     async def get_all_message_ids_by_receiver(
         self,
         user_id: int,
-        exclude_action_codes: list[str] | None = None,
-    ) -> list[int]:
-        """Get all message IDs where the user is a receiver, minus any excluded action codes."""
+    ) -> List[int]:
+        """Get all message IDs where the user is a receiver."""
         pass
 
     @abstractmethod

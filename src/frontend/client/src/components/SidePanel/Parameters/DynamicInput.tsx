@@ -5,6 +5,7 @@ import { Label, Input, HoverCard, HoverCardTrigger } from '~/components/ui';
 import { useChatContext } from '~/Providers';
 import OptionHover from './OptionHover';
 import { ESide } from '~/common';
+import { cn } from '~/utils';
 
 function DynamicInput({
   label = '',
@@ -91,7 +92,9 @@ function DynamicInput({
                 ? localize(placeholder as TranslationKeys) || placeholder
                 : placeholder
             }
-            className="w-full border-none bg-surface-secondary"
+            className={cn(
+              'flex h-10 max-h-10 w-full resize-none border-none bg-surface-secondary px-3 py-2',
+            )}
           />
         </HoverCardTrigger>
         {description && (

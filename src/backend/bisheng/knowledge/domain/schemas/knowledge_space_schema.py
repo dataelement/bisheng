@@ -1,4 +1,4 @@
-from enum import StrEnum
+from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -27,7 +27,7 @@ class InitialPermissionApplyResult(BaseModel):
     message: str | None = None
 
 
-class SpaceSubscriptionStatusEnum(StrEnum):
+class SpaceSubscriptionStatusEnum(str, Enum):
     SUBSCRIBED = "subscribed"
     PENDING = "pending"
     REJECTED = "rejected"
@@ -38,11 +38,6 @@ class KnowledgeSpaceListItemResp(KnowledgeBase):
     """Lightweight knowledge-space list item without detail-only counters or metadata."""
 
     id: int = Field(..., description="Knowledge Space ID")
-    user_name: str = Field(default="", description="Knowledge Space creator name")
-    actions: list[str] | None = Field(
-        default=None,
-        description="Effective F048 actions the current identity holds on this space",
-    )
     is_pinned: bool = Field(default=False, description="Knowledge Space pinned by current user or not")
     is_followed: bool = Field(default=False, description="Knowledge Space followed by current user or not")
     subscription_status: SpaceSubscriptionStatusEnum = Field(

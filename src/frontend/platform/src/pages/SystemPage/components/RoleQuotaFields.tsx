@@ -110,15 +110,6 @@ export function RoleQuotaFields({ value, onChange }: RoleQuotaFieldsProps) {
         onUnlimitedChange={(v) => patch({ spaceSubscribeUnlimited: v })}
         onCountChange={(v) => patch({ spaceSubscribeCount: v })}
       />
-
-      <QuotaCountField
-        label={t("system.infoSourceSubscribeQuotaLimit")}
-        description={t("system.infoSourceSubscribeQuotaLimitDesc")}
-        unlimited={value.infoSourceUnlimited}
-        count={value.infoSourceCount}
-        onUnlimitedChange={(v) => patch({ infoSourceUnlimited: v })}
-        onCountChange={(v) => patch({ infoSourceCount: v })}
-      />
     </>
   )
 }

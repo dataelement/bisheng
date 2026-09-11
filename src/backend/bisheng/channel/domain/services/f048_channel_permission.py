@@ -150,23 +150,6 @@ class ChannelPermissionPort(Protocol):
     async def remove_ordinary_sources(self, **kwargs): ...
 
 
-def build_channel_membership_idempotency_key(
-    *,
-    resource_id: str,
-    subject_user_id: int | str,
-    model_key: str | None,
-    permission_version: int,
-) -> str:
-    """The projection key for one member's channel grant.
-
-    Named rather than inlined so its width can be asserted against the column
-    that stores it: a channel id is 32 hex characters, so this key passes 64 as
-    soon as the user id reaches six digits, and the insert used to fail — taking
-    an already-approved subscription to `execute_failed`.
-    """
-    return f"channel-membership:{resource_id}:{subject_user_id}:{model_key or 'remove'}:{permission_version}"
-
-
 class F048ChannelPermissionAdapter:
     """Validate channel and grant-subject facts before permission evaluation."""
 
@@ -273,11 +256,9 @@ class F048ChannelPermissionAdapter:
             target=target,
             source=source,
             model_key=model_key,
-            idempotency_key=build_channel_membership_idempotency_key(
-                resource_id=resource_id,
-                subject_user_id=subject_user_id,
-                model_key=model_key,
-                permission_version=record.permission_version,
+            idempotency_key=(
+                f"channel-membership:{resource_id}:{subject_user_id}:"
+                f"{model_key or 'remove'}:{record.permission_version}"
             ),
         )
 

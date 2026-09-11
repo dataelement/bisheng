@@ -68,9 +68,7 @@ from bisheng.common.errcode.channel import (
     ChannelAdminLimitExceededError,
     ChannelCreateLimitExceededError,
     ChannelCreationRequestConflictError,
-    ChannelGrantedNotSubscribedError,
     ChannelNotFoundError,
-    ChannelNotSubscribedError,
     ChannelOrganizationGrantUnsubscribeDeniedError,
 )
 from bisheng.common.errcode.knowledge_space import SpaceFileNameDuplicateError, SpacePermissionDeniedError
@@ -501,13 +499,6 @@ class ChannelService:
 
         bisheng_information_client = await get_bisheng_information_client()
         if channel_data.source_list:
-            # Role/tenant quota on deduped subscribed info sources (`info_source_subscribe`,
-            # default 200; 0 = adding sources prohibited). Checked before the external
-            # subscribe call so a limit error aborts creation without side effects,
-            # mirroring the channel-count gate above.
-            await QuotaService.check_info_source_subscribe_limit(
-                login_user.user_id, login_user.tenant_id, channel_data.source_list, login_user=login_user
-            )
             # A source already present in the local channel_info_source table has been
             # subscribed before. The row and the information-service subscription share a
             # lifecycle (both created on first subscribe, both removed together by the
@@ -813,7 +804,9 @@ class ChannelService:
                 statuses=[MembershipStatusEnum.ACTIVE],
             )
             channel_ids = [membership.business_id for membership in memberships]
-            existing_channels = await self.channel_repository.find_channels_by_ids(channel_ids) if channel_ids else []
+            existing_channels = (
+                await self.channel_repository.find_channels_by_ids(channel_ids) if channel_ids else []
+            )
             if len(existing_channels) >= effective:
                 raise ChannelCreateLimitExceededError(quota=effective)
         return (
@@ -853,7 +846,9 @@ class ChannelService:
         # Apply mixed sorting: pinned channels first, then sort by the selected criteria within each group
         return self._sort_channels(result, query_data.sort_by)
 
-    async def _get_created_channels(self, login_user: UserPayload, pinned_ids: set[str]) -> list[ChannelItemResponse]:
+    async def _get_created_channels(
+        self, login_user: UserPayload, pinned_ids: set[str]
+    ) -> list[ChannelItemResponse]:
         """Channels created by the current user, straight from the channel table."""
         channels = await self.channel_repository.find_channels_by_user_id(login_user.user_id)
         if not channels:
@@ -883,7 +878,9 @@ class ChannelService:
             )
         return result
 
-    async def _get_followed_channels(self, login_user: UserPayload, pinned_ids: set[str]) -> list[ChannelItemResponse]:
+    async def _get_followed_channels(
+        self, login_user: UserPayload, pinned_ids: set[str]
+    ) -> list[ChannelItemResponse]:
         """Channels the user can see but did not create.
 
         Uses the "visible-ids-first" pattern (F048 ``list_visible_objects``): one
@@ -981,7 +978,11 @@ class ChannelService:
             fga_elapsed_ms=fga_elapsed_ms,
             total_elapsed_ms=(perf_counter() - started) * 1000,
             returned_count=len(result),
-            alert=("capacity_80_percent" if len(visible_ids) >= _FOLLOWED_VISIBLE_MAX_RESULTS * 0.8 else None),
+            alert=(
+                "capacity_80_percent"
+                if len(visible_ids) >= _FOLLOWED_VISIBLE_MAX_RESULTS * 0.8
+                else None
+            ),
         )
         return result
 
@@ -1938,16 +1939,6 @@ class ChannelService:
                 source_list_changed = True
 
             if to_add_sources:
-                # Enforce the `info_source_subscribe` quota against the channel CREATOR's
-                # allowance — the spec's quota owner — not the operator's: managers and
-                # editors can add sources to someone else's channel, and those sources
-                # count toward the creator's deduped total in every later check.
-                await QuotaService.check_info_source_subscribe_limit(
-                    channel.user_id,
-                    channel.tenant_id or login_user.tenant_id,
-                    to_add_sources,
-                    login_user=login_user,
-                )
                 # Subscribe only sources not already subscribed (missing from
                 # channel_info_source). Already-subscribed sources are skipped.
                 existing_add = await self.channel_info_source_repository.find_by_ids(to_add_sources)
@@ -2415,15 +2406,8 @@ class ChannelService:
         current_membership = await self.space_channel_member_repository.find_membership(
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
-        if not current_membership:
-            # No membership row at all, yet the caller reached this channel — the
-            # followed list is resolved from `visible`, so it also carries
-            # channels held through a Grant. There is nothing of theirs to
-            # remove; whoever granted it has to take it back.
-            raise ChannelGrantedNotSubscribedError()
-        if current_membership.status != MembershipStatusEnum.ACTIVE:
-            # An application still pending, or one that was rejected.
-            raise ChannelNotSubscribedError()
+        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
+            raise ValueError("You are not subscribed to this channel")
 
         sources = await self.space_channel_member_repository.find_channel_membership_sources(
             channel_id,

@@ -1,1 +1,0 @@
-"""Open API tests."""

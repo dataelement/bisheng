@@ -7,24 +7,6 @@ from bisheng.common.models.space_channel_member import BusinessTypeEnum, Members
 logger = logging.getLogger(__name__)
 
 
-async def _resolve_channel_permission_roles(channel_id: str, req) -> tuple[list[int], list[int]]:
-    """Return effective direct owner and manager IDs through F048 Grants."""
-
-    try:
-        from bisheng.approval.domain.services.approver_resolver import (
-            resolve_resource_permission_role_users,
-        )
-
-        return await resolve_resource_permission_role_users(
-            req=req,
-            resource_type="channel",
-            resource_id=channel_id,
-        )
-    except Exception:
-        logger.exception("resolve_approvers: permission query failed for channel_id=%s", channel_id)
-        raise
-
-
 class ChannelSubscribeScenarioHandler:
     scenario_code = "channel_subscribe_request"
 
@@ -53,58 +35,42 @@ class ChannelSubscribeScenarioHandler:
             return [int(one) for one in approver_ids]
 
         from bisheng.approval.domain.services.approver_resolver import resolve_approvers_from_sources
+        from bisheng.common.models.space_channel_member import UserRoleEnum
 
         channel_source_types = {"channel_admin", "channel_owner", "channel_manager"}
         has_channel_source = any(s.get("type") in channel_source_types for s in sources)
 
-        channel_owner_ids: list[int] = []
-        channel_manager_ids: list[int] = []
+        channel_admin_ids: list[int] = []
         if has_channel_source:
             channel_id = req.payload_snapshot.get("channel_id") or req.business_resource_id
             if channel_id:
                 try:
-                    channel_owner_ids, channel_manager_ids = await _resolve_channel_permission_roles(
-                        str(channel_id), req
+                    creators = await self.space_channel_member_repository.find_members_by_role(
+                        channel_id=str(channel_id),
+                        role=UserRoleEnum.CREATOR,
                     )
+                    admins = await self.space_channel_member_repository.find_members_by_role(
+                        channel_id=str(channel_id),
+                        role=UserRoleEnum.ADMIN,
+                    )
+                    seen_admin: set[int] = set()
+                    for m in creators + admins:
+                        if m.user_id not in seen_admin:
+                            seen_admin.add(m.user_id)
+                            channel_admin_ids.append(m.user_id)
                 except Exception:
-                    from bisheng.common.models.space_channel_member import UserRoleEnum
-
-                    logger.warning(
-                        "resolve_approvers: falling back to channel membership roles for channel_id=%s",
-                        channel_id,
-                    )
-                    try:
-                        creators = await self.space_channel_member_repository.find_members_by_role(
-                            channel_id=str(channel_id),
-                            role=UserRoleEnum.CREATOR,
-                        )
-                        admins = await self.space_channel_member_repository.find_members_by_role(
-                            channel_id=str(channel_id),
-                            role=UserRoleEnum.ADMIN,
-                        )
-                        channel_owner_ids = [member.user_id for member in creators]
-                        channel_manager_ids = [member.user_id for member in admins]
-                    except Exception:
-                        logger.exception(
-                            "resolve_approvers: channel membership fallback failed for channel_id=%s",
-                            channel_id,
-                        )
+                    logger.exception("resolve_approvers: failed to load channel admins for channel_id=%s", channel_id)
 
         seen: set[int] = set()
         result: list[int] = []
 
         for source in sources:
             source_type = source.get("type", "")
-            if source_type == "channel_owner":
-                role_ids = channel_owner_ids
-            elif source_type in ("channel_manager", "channel_admin"):
-                role_ids = channel_manager_ids
-            else:
-                role_ids = []
-            for uid in role_ids:
-                if uid not in seen:
-                    seen.add(uid)
-                    result.append(uid)
+            if source_type in channel_source_types:
+                for uid in channel_admin_ids:
+                    if uid not in seen:
+                        seen.add(uid)
+                        result.append(uid)
 
         generic_sources = [s for s in sources if s.get("type") not in channel_source_types]
         if generic_sources:

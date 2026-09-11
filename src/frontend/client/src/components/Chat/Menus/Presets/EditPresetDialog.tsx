@@ -5,6 +5,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { QueryKeys, isAgentsEndpoint } from '~/types/chat';
 import type { TModelsConfig, TEndpointsConfig } from '~/types/chat';
 import {
+  cn,
+  defaultTextProps,
+  removeFocusOutlines,
   mapEndpoints,
   getConvoSwitchLogic,
 } from '~/utils';
@@ -151,7 +154,11 @@ const EditPresetDialog = ({
                     value={(title as string | undefined) ?? ''}
                     onChange={onTitleChange}
                     placeholder={localize('com_endpoint_set_custom_name')}
-                    className="w-full"
+                    className={cn(
+                      defaultTextProps,
+                      'flex h-10 max-h-10 w-full resize-none px-3 py-2',
+                      removeFocusOutlines,
+                    )}
                   />
                 </div>
                 <div className="flex w-full flex-col">

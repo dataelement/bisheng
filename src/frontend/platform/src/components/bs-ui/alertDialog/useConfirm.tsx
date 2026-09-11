@@ -88,14 +88,12 @@ let confirmRoot: ReturnType<typeof createRoot> | null = null;
 
 
 const bsConfirm = (params: ConfirmParams) => {
-    // t(), not getResourceBundle(): the bundle is undefined whenever the active
-    // language has no loaded resources — a namespace still in flight, or a tag
-    // with no bundle to load at all. Reading .prompt off it threw and killed
-    // every confirm dialog, so deletes and cancels silently did nothing.
+    const resource = i18next.getResourceBundle(i18next.language, 'bs')
+
     openFn({
-        title: i18next.t('prompt', { ns: 'bs', defaultValue: 'Confirmation' }),
-        canelTxt: i18next.t('cancel', { ns: 'bs', defaultValue: 'Cancel' }),
-        okTxt: i18next.t('confirmButton', { ns: 'bs', defaultValue: 'Confirm' }),
+        title: resource.prompt,
+        canelTxt: resource.cancel,
+        okTxt: resource.confirmButton,
         ...params,
     })
 }

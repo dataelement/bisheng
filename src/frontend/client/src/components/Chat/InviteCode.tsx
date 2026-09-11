@@ -69,6 +69,7 @@ export default function InvitationCodeForm({ showCode, setShowCode }) {
                                 onChange={(e) => setInvitationCode(e.target.value)}
                                 placeholder={localize('com_invite_placeholder')}
                                 maxLength={50}
+                                className=""
                                 disabled={isLoading}
                             />
                             {/* Submit Button */}

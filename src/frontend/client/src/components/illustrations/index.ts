@@ -1,22 +1,17 @@
 /**
- * Re-export shim — the illustrations themselves now live in `@bisheng/ui`
- * (`packages/ui/src/components/Illustration/`), so both apps draw the same
- * artwork from one place. Call sites keep importing `~/components/illustrations`.
+ * Brand-themed empty-state / status illustrations.
  *
- * KnowledgeSpaceIcon stays here on purpose: it swaps two bespoke drawings based
- * on the Recoil brand theme, and the library contract forbids state managers.
- * It is also not an --illus-* illustration (no palette, no grey draft).
+ * Each is an inline SVG React component whose brand greens re-point to the
+ * `--brand-*` palette, so they follow the blue ⇄ green theme switch
+ * (see BRAND-THEME-HANDOFF.md §5). Drop-in replacements for the legacy
+ * `assets/channel/empty.png`.
  */
-export {
-  ArticleQAIllustration,
-  CrawlingIllustration,
-  EmptyStateIllustration,
-  ListWebLinkIllustration,
-  NoPermissionIllustration,
-  SuccessIllustration,
-  SystemErrorIllustration,
-  SystemMaintenanceIllustration,
-} from '@bisheng/ui';
-export type { IllustrationProps } from '@bisheng/ui';
-
+export { ListWebLinkIllustration } from './ListWebLinkIllustration';
+export { SuccessIllustration } from './SuccessIllustration';
+export { ArticleQAIllustration } from './ArticleQAIllustration';
+export { NoPermissionIllustration } from './NoPermissionIllustration';
+export { CrawlingIllustration } from './CrawlingIllustration';
+export { EmptyStateIllustration } from './EmptyStateIllustration';
+export { SystemMaintenanceIllustration } from './SystemMaintenanceIllustration';
+export { SystemErrorIllustration } from './SystemErrorIllustration';
 export { KnowledgeSpaceIcon } from './KnowledgeSpaceIcon';

@@ -792,7 +792,11 @@ class KnowledgeFileDaoPermissionLoader:
         ancestors = tuple(part for part in (row.file_level_path or "").split("/") if part)
         if ancestors:
             return "folder", ancestors[-1], ancestors
-        root_type = "knowledge_space" if knowledge.type == KnowledgeTypeEnum.SPACE.value else "knowledge_library"
+        root_type = (
+            "knowledge_space"
+            if knowledge.type == KnowledgeTypeEnum.SPACE.value
+            else "knowledge_library"
+        )
         return root_type, str(knowledge.id), ancestors
 
     async def load_permission_records_from_rows(
@@ -850,7 +854,10 @@ class KnowledgeFileDaoPermissionLoader:
                 status = "ACTIVE"
             parent_type, parent_id, ancestors = self._parent_scope(row, knowledge)
             context_version = sha256(
-                (f"{snapshot.context_version}|{row.update_time.isoformat() if row.update_time else '0'}").encode()
+                (
+                    f"{snapshot.context_version}|"
+                    f"{row.update_time.isoformat() if row.update_time else '0'}"
+                ).encode()
             ).hexdigest()[:64]
             records.append(
                 KnowledgeFilePermissionRecord(
@@ -1075,7 +1082,6 @@ class F048KnowledgeFilePermissionAdapter:
         actor: PermissionActor,
         action: str,
     ) -> VerifiedPermissionTarget:
-        del action  # Permission target identity must not depend on a requested action.
         record = await self._loader.load_permission_record(
             resource_type,
             resource_id,
@@ -1085,6 +1091,7 @@ class F048KnowledgeFilePermissionAdapter:
             actor,
             resource_type,
             resource_id,
+            action=action,
         )
 
     async def resolve_permission_targets_from_rows(
@@ -1097,7 +1104,6 @@ class F048KnowledgeFilePermissionAdapter:
     ) -> tuple[VerifiedPermissionTarget, ...]:
         """Verify an existing business batch without reloading each resource by id."""
 
-        del action  # Permission target identity must not depend on a requested action.
         records = await self._loader.load_permission_records_from_rows(
             rows,
             knowledge=knowledge,
@@ -1111,6 +1117,7 @@ class F048KnowledgeFilePermissionAdapter:
                         actor,
                         record.resource_type,
                         record.resource_id,
+                        action=action,
                     )
                 )
             except PermissionInvalidResourceError:
@@ -1251,14 +1258,21 @@ class F048KnowledgeFilePermissionAdapter:
         actor: PermissionActor,
         resource_type: str,
         resource_id: str,
+        *,
+        action: str,
     ) -> VerifiedPermissionTarget:
-        valid_resource_types = {"folder", "knowledge_file"}
+        file_statuses = {status.name for status in KnowledgeFileStatus} if action == "delete" else {"SUCCESS"}
+        valid_statuses = {
+            "folder": {"ACTIVE", "SUCCESS"},
+            "knowledge_file": file_statuses,
+        }
         valid_parents = {"knowledge_space", "knowledge_library", "folder"}
         if (
             record is None
             or record.resource_type != resource_type
             or record.resource_id != resource_id
-            or resource_type not in valid_resource_types
+            or resource_type not in valid_statuses
+            or record.status not in valid_statuses[resource_type]
             or record.parent_type not in valid_parents
             or not record.parent_id
             or record.parent_id == record.resource_id
