@@ -7,6 +7,7 @@ import { useDshBrowserConfig } from '@/hooks/useDshBrowserConfig'
 import { rememberDesktopLoginReturnTo } from '@/utils/loginReturnTo'
 import { useContext, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { copyText } from '@/utils'
 import {
     callbackUrl,
     readAuthId,
@@ -17,7 +18,7 @@ export function DshLogin() {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
     const { config, failed } = useDshBrowserConfig()
-    const [copied, setCopied] = useState(false)
+    const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
     useEffect(() => {
         const previous = document.title
         document.title = t('dsh.title')
@@ -47,11 +48,12 @@ export function DshLogin() {
         location.assign(import.meta.env.BASE_URL)
     }
     async function handleCopy(value: string) {
+        setCopyStatus('idle')
         try {
-            await navigator.clipboard.writeText(value)
-            setCopied(true)
+            await copyText(value)
+            setCopyStatus('copied')
         } catch {
-            setCopied(false)
+            setCopyStatus('failed')
         }
     }
     const profile = useDshProfile(user?.user_id, !!config?.enabled)
@@ -188,7 +190,8 @@ export function DshLogin() {
                                 )}
                             </>
                         )}
-                        {copied && <p role="status">{t('dsh.copied')}</p>}
+                        {copyStatus === 'copied' && <p role="status">{t('dsh.copied')}</p>}
+                        {copyStatus === 'failed' && <p role="alert">{t('dsh.copyFailed')}</p>}
                     </>
                 )}
             </section>

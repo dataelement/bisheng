@@ -2086,6 +2086,7 @@
     "ticketHelp": "若客户端未自动收到授权码，请复制并粘贴到本次登录窗口。剩余 {{seconds}} 秒。",
     "ticket": "一次性授权码",
     "copyTicket": "复制一次性授权码",
+    "copyFailed": "复制失败，请允许浏览器访问剪贴板后重试。",
     "copied": "已复制",
     "download": "下载客户端",
     "previous": "上一页",

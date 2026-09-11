@@ -2141,6 +2141,7 @@
     "ticketHelp": "If the app did not receive the code, copy it into the current sign-in window. Expires in {{seconds}} seconds.",
     "ticket": "One-time authorization code",
     "copyTicket": "Copy one-time code",
+    "copyFailed": "Copy failed. Please allow clipboard access in your browser and try again.",
     "copied": "Copied",
     "download": "Download desktop app",
     "previous": "Previous",

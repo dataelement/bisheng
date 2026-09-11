@@ -6,6 +6,7 @@ import { DshLogin } from './index'
 import { consumeLoginReturnTo } from '@/utils/loginReturnTo'
 import { getDshBrowserConfig } from '@/controllers/API/dshSettings'
 import request from '@/controllers/request'
+import { authorizeDsh } from '@/controllers/API/dsh'
 vi.mock('@/controllers/request', () => ({ default: { get: vi.fn() } }))
 
 const identity = vi.hoisted(() => ({ user: null as null | {
@@ -93,5 +94,74 @@ describe('desktop consent identity', () => {
         await waitFor(() => expect(screen.getByText(/Authorize DSH Desktop as/).textContent).toContain(expected))
         expect(screen.queryByText(/Hidden Tenant/)).toBeNull()
         expect(screen.getByText(/Authorize DSH Desktop as/).textContent).not.toContain('()')
+    })
+})
+
+describe('desktop copy actions', () => {
+    const originalExecCommand = Object.getOwnPropertyDescriptor(document, 'execCommand')
+    afterEach(() => {
+        if (originalExecCommand) {
+            Object.defineProperty(document, 'execCommand', originalExecCommand)
+        } else {
+            Reflect.deleteProperty(document, 'execCommand')
+        }
+    })
+
+    async function renderIssuedTicket() {
+        identity.user = { user_id: 1, user_name: 'dshadmin' }
+        vi.stubGlobal('location', { origin, search: '?auth_id=fixture', assign })
+        vi.mocked(authorizeDsh).mockResolvedValue({
+            identity_ticket: 'fixture-one-time-ticket',
+            expires_in: 60,
+            redirect_uri: 'http://127.0.0.1:12345/callback',
+            state: 'fixture-state',
+        })
+        render(<DshLogin />)
+        fireEvent.click(await screen.findByRole('button', { name: english.dsh.authorize }))
+        return screen.findByRole('button', { name: english.dsh.copyTicket })
+    }
+
+    it('copies the actual ticket using the existing DOM fallback on HTTP', async () => {
+        vi.stubGlobal('navigator', { clipboard: undefined })
+        const execCommand = vi.fn(() => {
+            const textarea = document.querySelector('textarea')
+            expect(textarea?.value).toBe('fixture-one-time-ticket')
+            expect(window.getSelection()?.containsNode(textarea!, true)).toBe(true)
+            return true
+        })
+        Object.defineProperty(document, 'execCommand', { configurable: true, value: execCommand })
+        fireEvent.click(await renderIssuedTicket())
+        await screen.findByText(english.dsh.copied)
+        expect(execCommand).toHaveBeenCalledWith('copy')
+        expect(document.querySelector('textarea')).toBeNull()
+        expect(screen.getByLabelText(english.dsh.ticket)).toHaveAttribute('type', 'password')
+    })
+
+    it('uses the same HTTP fallback to copy the server address', async () => {
+        vi.stubGlobal('navigator', { clipboard: undefined })
+        vi.stubGlobal('location', { origin, search: '', assign })
+        Object.defineProperty(document, 'execCommand', { configurable: true, value: vi.fn(() => {
+            expect(document.querySelector('textarea')?.value).toBe(origin)
+            return true
+        }) })
+        render(<DshLogin />)
+        fireEvent.click(await screen.findByRole('button', { name: english.dsh.copyServer }))
+        await screen.findByText(english.dsh.copied)
+        expect(document.querySelector('textarea')).toBeNull()
+    })
+
+    it('shows success only after the Clipboard API completes', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined)
+        vi.stubGlobal('navigator', { clipboard: { writeText } })
+        fireEvent.click(await renderIssuedTicket())
+        await screen.findByText(english.dsh.copied)
+        expect(writeText).toHaveBeenCalledWith('fixture-one-time-ticket')
+    })
+
+    it('shows a visible error when clipboard access rejects instead of failing silently', async () => {
+        vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('Denied')) } })
+        fireEvent.click(await renderIssuedTicket())
+        expect(await screen.findByRole('alert')).toHaveTextContent(english.dsh.copyFailed)
+        expect(screen.queryByText(english.dsh.copied)).toBeNull()
     })
 })
