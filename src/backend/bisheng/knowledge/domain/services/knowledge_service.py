@@ -42,7 +42,9 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeTenantMismatchError,
 )
 from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
+from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.common.schemas.api import PageInfiniteCursorData
+from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.cache.utils import async_file_download, file_download
@@ -83,7 +85,6 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeFilePermissionRecord,
     KnowledgePermissionService,
 )
-from bisheng.common.services.metric_log import emit_metric
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.permission.application.access import (
     get_f048_resource_adapter,
@@ -94,7 +95,6 @@ from bisheng.permission.application.business_authorization import (
     require_business_action,
 )
 from bisheng.permission.application.identity import resolve_permission_actor
-from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_knowledge_index_name, generate_uuid
 from bisheng.utils.async_utils import run_async_safe
@@ -546,7 +546,7 @@ class KnowledgeService(KnowledgeUtils):
         # bypass skips this because every action is granted.
         needs_action_check = (not is_admin) and action != "visible"
 
-        empty_visible_set = (visible_ids is not None and not visible_ids)
+        empty_visible_set = visible_ids is not None and not visible_ids
         if empty_visible_set:
             # No visible resources → short-circuit to empty page without hitting
             # the DB. Keyset cursor is also meaningless in this branch.
@@ -574,9 +574,7 @@ class KnowledgeService(KnowledgeUtils):
                         [int(one.id) for one in batch],
                         [action],
                     )
-                    authorized.extend(
-                        one for one in batch if action in batch_action_map.get(int(one.id), set())
-                    )
+                    authorized.extend(one for one in batch if action in batch_action_map.get(int(one.id), set()))
                 else:
                     authorized.extend(batch)
                 if len(batch) < _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE:
@@ -684,11 +682,7 @@ class KnowledgeService(KnowledgeUtils):
                 fga_elapsed_ms=fga_elapsed_ms,
                 total_elapsed_ms=(perf_counter() - total_start) * 1000,
                 returned_count=len(result_data),
-                alert=(
-                    "capacity_80_percent"
-                    if visible_count >= _LIBRARY_VISIBLE_MAX_RESULTS * 0.8
-                    else None
-                ),
+                alert=("capacity_80_percent" if visible_count >= _LIBRARY_VISIBLE_MAX_RESULTS * 0.8 else None),
             )
 
         logger.info(
@@ -864,6 +858,12 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge.tenant_id = login_user.tenant_id
         db_knowledge = KnowledgeDao.insert_one(db_knowledge)
 
+        # The permission mirror is what makes the resource reachable, so it is
+        # built before any external store and the row is removed again if it
+        # cannot be built. See `_project_created_or_undo`.
+        if not skip_hook:
+            cls._project_created_or_undo_sync(login_user, db_knowledge)
+
         # qa knowledge builds its index lazily on first Q&A add (different schema)
         cls._init_knowledge_indices_sync(login_user.user_id, db_knowledge)
 
@@ -871,6 +871,28 @@ class KnowledgeService(KnowledgeUtils):
         if not skip_hook:
             cls.create_knowledge_hook(request, login_user, db_knowledge)
         return db_knowledge
+
+    @classmethod
+    def _project_created_or_undo_sync(cls, login_user: UserPayload, knowledge: Knowledge) -> None:
+        """Build the permission mirror, or take the knowledge row back out.
+
+        The business row and the permission mirror are written to different
+        places and cannot share a transaction, so the row used to survive a
+        failed mirror. What that leaves behind is a knowledge base that exists
+        in the list and answers every permission question with "projection is
+        not current" — it cannot be opened, and it cannot be deleted either,
+        because deleting also asks the permission layer first.
+
+        A live tenant collected seven of these in one afternoon while the
+        permission runtime was refusing to start after an authorization-model
+        change. Creating them looked like it failed; the rows stayed.
+        """
+        try:
+            run_async_safe(cls._project_library_created(login_user, knowledge), timeout=60)
+        except Exception:
+            logger.exception("knowledge permission projection failed, undoing knowledge_id={}", knowledge.id)
+            KnowledgeDao.delete_knowledge(int(knowledge.id))
+            raise
 
     @classmethod
     def _init_knowledge_indices_sync(cls, invoke_user_id: int, db_knowledge: Knowledge) -> None:
@@ -914,6 +936,11 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge.tenant_id = login_user.tenant_id
         db_knowledge = await KnowledgeDao.async_insert_one(db_knowledge)
 
+        # Same ordering as the sync path: the mirror decides whether the row
+        # survives, so it runs before any external store is touched.
+        if not skip_hook:
+            await cls._aproject_created_or_undo(login_user, db_knowledge)
+
         if db_knowledge.type != KnowledgeTypeEnum.QA.value:
             try:
                 vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(
@@ -936,7 +963,6 @@ class KnowledgeService(KnowledgeUtils):
                 logger.exception("create knowledge index name error")
 
         if not skip_hook:
-            await cls._project_library_created(login_user, db_knowledge)
             await run_in_threadpool(
                 cls.audit_telemetry_service.audit_create_knowledge,
                 login_user,
@@ -951,12 +977,21 @@ class KnowledgeService(KnowledgeUtils):
         return db_knowledge
 
     @classmethod
-    def create_knowledge_hook(cls, request: Request, login_user: UserPayload, knowledge: Knowledge):
-        run_async_safe(
-            cls._project_library_created(login_user, knowledge),
-            timeout=60,
-        )
+    async def _aproject_created_or_undo(cls, login_user: UserPayload, knowledge: Knowledge) -> None:
+        """Async twin of `_project_created_or_undo_sync`; same contract."""
 
+        try:
+            await cls._project_library_created(login_user, knowledge)
+        except Exception:
+            logger.exception("knowledge permission projection failed, undoing knowledge_id={}", knowledge.id)
+            await KnowledgeDao.async_delete_knowledge(int(knowledge.id))
+            raise
+
+    @classmethod
+    def create_knowledge_hook(cls, request: Request, login_user: UserPayload, knowledge: Knowledge):
+        # The permission mirror is no longer built here: it now runs right after
+        # the insert, so a failure can still take the row back out. What is left
+        # is the reporting, which must not decide whether the resource exists.
         cls.audit_telemetry_service.audit_create_knowledge(login_user, request, knowledge)
         cls.audit_telemetry_service.telemetry_new_knowledge(login_user, knowledge)
 
