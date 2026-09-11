@@ -1013,6 +1013,33 @@ class KnowledgeSpaceMutationRepository:
             statement = statement.with_for_update()
         return (await self.session.exec(statement)).first()
 
+    async def resolve_folder_display_path(
+        self,
+        *,
+        tenant_id: int,
+        space_id: int,
+        folder_ids: list[int],
+    ) -> str | None:
+        """Resolve an immutable folder-id chain to a human-readable path."""
+
+        normalized_ids = [int(folder_id) for folder_id in folder_ids]
+        if not normalized_ids:
+            return "/"
+        rows = (
+            await self.session.exec(
+                select(KnowledgeFile.id, KnowledgeFile.file_name).where(
+                    KnowledgeFile.tenant_id == int(tenant_id),
+                    KnowledgeFile.knowledge_id == int(space_id),
+                    KnowledgeFile.file_type == FileType.DIR.value,
+                    KnowledgeFile.id.in_(normalized_ids),
+                )
+            )
+        ).all()
+        names_by_id = {int(row[0]): str(row[1]) for row in rows}
+        if any(folder_id not in names_by_id for folder_id in normalized_ids):
+            return None
+        return f"/{'/'.join(names_by_id[folder_id] for folder_id in normalized_ids)}"
+
     async def resolve_file_change_footprints(self, *, tenant_id: int, command) -> list[FootprintEntry]:
         """Expand one mutation into normalized relational conflict locks."""
         if command.action == "upload":

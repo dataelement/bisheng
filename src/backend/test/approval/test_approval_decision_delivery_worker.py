@@ -213,7 +213,7 @@ async def test_single_delivery_reports_stable_event_id_not_broker_task_id(
 
     result = await _deliver_one_async(tenant_id=23)
 
-    service.deliver_next.assert_awaited_once_with(tenant_id=23)
+    service.deliver_next.assert_awaited_once_with(tenant_id=23, event_id=None)
     assert result == {"claimed": True, "event_id": 91}
     assert "task_id" not in result
     assert "delivered" not in result
@@ -305,8 +305,10 @@ async def test_coordinator_scans_one_bounded_lease_reclaim_page_with_headers(
         }
     ]
     assert deliver_approval_decision.apply_async.call_count == 2
-    for call in deliver_approval_decision.apply_async.call_args_list:
-        assert call.kwargs == {"headers": {"tenant_id": 23}}
+    assert [call.kwargs for call in deliver_approval_decision.apply_async.call_args_list] == [
+        {"args": [11], "headers": {"tenant_id": 23}},
+        {"args": [12], "headers": {"tenant_id": 23}},
+    ]
     coordinate_approval_decision_delivery.apply_async.assert_called_once_with(
         kwargs={"after_event_id": 12},
         headers={"tenant_id": 23},

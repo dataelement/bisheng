@@ -5358,7 +5358,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if not inherited and int(row.id) != root_resource_id:
                     continue
                 item["file_change_approval"] = {
-                    "status": str(request.execution_state),
+                    "status": self._file_change_approval_view_status(str(request.execution_state)),
                     "action": str(request.action),
                     "instance_id": int(request.approval_instance_id),
                     "request_id": int(request.id),
@@ -5368,6 +5368,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 }
                 break
         return items
+
+    @staticmethod
+    def _file_change_approval_view_status(execution_state: str) -> str:
+        """Map Knowledge execution state to the public list badge vocabulary."""
+
+        from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
+            KnowledgeSpaceFileChangeExecutionState,
+        )
+
+        return {
+            KnowledgeSpaceFileChangeExecutionState.NOT_STARTED: "pending",
+            KnowledgeSpaceFileChangeExecutionState.QUEUED: "executing",
+            KnowledgeSpaceFileChangeExecutionState.APPLYING: "executing",
+            KnowledgeSpaceFileChangeExecutionState.COMPENSATING: "executing",
+            KnowledgeSpaceFileChangeExecutionState.FAILED: "execute_failed",
+        }.get(str(execution_state), "exception")
 
     def _file_change_visibility_service(self):
         if not hasattr(self, "_knowledge_file_visibility_service"):
@@ -5501,33 +5517,85 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         resource = None
         stage = None
-        if action == "upload" and upload_id:
-            async with get_async_db_session() as session:
-                stage = await KnowledgeSpaceUploadStageRepository(session).get_by_upload_id(
-                    tenant_id=int(tenant_id),
-                    upload_id=upload_id,
-                )
-            internal_type = KnowledgeSpaceFileChangeResourceType.STAGED_UPLOAD
-        elif resource_id is not None:
+        source_space_name = ""
+        source_display_path = None
+        target_display_path = None
+        async with get_async_db_session() as session:
             from bisheng.knowledge.domain.repositories.knowledge_space_mutation_repository import (
                 KnowledgeSpaceMutationRepository,
             )
 
-            async with get_async_db_session() as session:
-                resource = await KnowledgeSpaceMutationRepository(session).get_formal_file(
+            mutation_repository = KnowledgeSpaceMutationRepository(session)
+            source_space = await mutation_repository.get_space(
+                tenant_id=int(tenant_id),
+                space_id=int(space_id),
+            )
+            if source_space is not None:
+                source_space_name = str(source_space.name or "")
+
+            if action == "upload" and upload_id:
+                stage = await KnowledgeSpaceUploadStageRepository(session).get_by_upload_id(
+                    tenant_id=int(tenant_id),
+                    upload_id=upload_id,
+                )
+                internal_type = KnowledgeSpaceFileChangeResourceType.STAGED_UPLOAD
+            elif resource_id is not None:
+                resource = await mutation_repository.get_formal_file(
                     tenant_id=int(tenant_id),
                     space_id=int(space_id),
                     file_id=int(resource_id),
                 )
 
+            source_folder_ids = [
+                int(part) for part in str(getattr(resource, "file_level_path", "") or "").split("/") if part
+            ]
+            if resource is None and parent_id is not None:
+                source_parent = await mutation_repository.get_folder(
+                    tenant_id=int(tenant_id),
+                    space_id=int(space_id),
+                    folder_id=int(parent_id),
+                )
+                if source_parent is not None:
+                    source_folder_ids = [
+                        *[int(part) for part in str(source_parent.file_level_path or "").split("/") if part],
+                        int(source_parent.id),
+                    ]
+            source_display_path = await mutation_repository.resolve_folder_display_path(
+                tenant_id=int(tenant_id),
+                space_id=int(space_id),
+                folder_ids=source_folder_ids,
+            )
+
+            if action == "move" and target_space_id is not None:
+                if target_folder_id is None:
+                    target_display_path = "/"
+                else:
+                    target_parent = await mutation_repository.get_folder(
+                        tenant_id=int(tenant_id),
+                        space_id=int(target_space_id),
+                        folder_id=int(target_folder_id),
+                    )
+                    if target_parent is not None:
+                        target_folder_ids = [
+                            *[int(part) for part in str(target_parent.file_level_path or "").split("/") if part],
+                            int(target_parent.id),
+                        ]
+                        target_display_path = await mutation_repository.resolve_folder_display_path(
+                            tenant_id=int(tenant_id),
+                            space_id=int(target_space_id),
+                            folder_ids=target_folder_ids,
+                        )
+
         old_name = str(getattr(resource, "file_name", "") or "")
         resource_name = old_name or str(getattr(stage, "file_name", "") or name or upload_id or resource_id or "")
         snapshot = {
-            "space_name": "",
+            "space_name": source_space_name,
             "old_name": old_name or None,
             "new_name": name,
             "source_path": getattr(resource, "file_level_path", None),
+            "source_display_path": source_display_path,
             "source_level": getattr(resource, "level", None),
+            "target_display_path": target_display_path,
             "relative_path": relative_path,
         }
         return FileChangeRequestCommand(

@@ -63,8 +63,13 @@ class ApprovalDecisionDeliveryService:
             raise ValueError("approval decision delivery requires the matching tenant context")
         return normalized_tenant_id
 
-    async def deliver_next(self, *, tenant_id: int) -> ApprovalDecisionEvent | None:
-        """Claim and deliver one due event for the active tenant."""
+    async def deliver_next(
+        self,
+        *,
+        tenant_id: int,
+        event_id: int | None = None,
+    ) -> ApprovalDecisionEvent | None:
+        """Claim and deliver the requested event, or the oldest due event."""
 
         resolved_tenant_id = self._require_tenant(tenant_id)
         attempt_now = self.now()
@@ -74,12 +79,20 @@ class ApprovalDecisionDeliveryService:
 
         try:
             async with self.session_factory() as session:
-                claimed = await self.repository_factory(session).claim_next(
-                    tenant_id=resolved_tenant_id,
-                    claim_token=claim_token,
-                    now=attempt_now,
-                    claim_deadline=attempt_now + self.lease_duration,
-                )
+                repository = self.repository_factory(session)
+                claim_kwargs = {
+                    "tenant_id": resolved_tenant_id,
+                    "claim_token": claim_token,
+                    "now": attempt_now,
+                    "claim_deadline": attempt_now + self.lease_duration,
+                }
+                if event_id is None:
+                    claimed = await repository.claim_next(**claim_kwargs)
+                else:
+                    claimed = await repository.claim_by_id(
+                        outbox_id=int(event_id),
+                        **claim_kwargs,
+                    )
                 if claimed is None:
                     return None
                 await session.commit()

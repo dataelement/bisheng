@@ -512,7 +512,7 @@ class ApprovalCenterService:
                         detail={"reason": reason},
                     )
                 )
-                await ApprovalInstanceRepository.create_terminal_decision_event_in_session(
+                decision_event = await ApprovalInstanceRepository.create_terminal_decision_event_in_session(
                     session,
                     instance=saved,
                     decision="withdrawn",
@@ -529,8 +529,13 @@ class ApprovalCenterService:
                 saved_business_name = saved.business_name
                 saved_payload_snapshot = dict(saved.payload_snapshot or {})
                 saved_is_decision_delivery = ApprovalInstanceRepository.is_decision_delivery_instance(saved)
+                saved_decision_event_id = (
+                    int(decision_event.id) if decision_event is not None and decision_event.id is not None else None
+                )
         if saved_is_decision_delivery:
-            cls._dispatch_decision_delivery(saved_tenant_id)
+            if saved_decision_event_id is None:
+                raise RuntimeError("committed approval decision event identity is missing")
+            cls._dispatch_decision_delivery(saved_tenant_id, saved_decision_event_id)
         await cls._write_audit_log(
             tenant_id=saved_tenant_id,
             operator_user_id=operator_user_id,
@@ -1030,15 +1035,21 @@ class ApprovalCenterService:
                     sibling.acted_at = now
                     session.add(sibling)
             instance.status = ApprovalInstanceStatus.REJECTED
-            await self.instance_repository.create_terminal_decision_event_in_session(
+            decision_event = await self.instance_repository.create_terminal_decision_event_in_session(
                 session,
                 instance=instance,
                 decision="rejected",
                 operator_user_id=operator_user_id,
             )
             if self.instance_repository.is_decision_delivery_instance(instance):
+                if decision_event is None or decision_event.id is None:
+                    raise RuntimeError("approval decision event identity is missing")
                 post_commit_effects.append_durable(
-                    (self.__class__._dispatch_decision_delivery, (int(instance.tenant_id),), {})
+                    (
+                        self.__class__._dispatch_decision_delivery,
+                        (int(instance.tenant_id), int(decision_event.id)),
+                        {},
+                    )
                 )
         else:
             task.status = ApprovalTaskStatus.APPROVED
@@ -1277,14 +1288,20 @@ class ApprovalCenterService:
         instance.status = ApprovalInstanceStatus.APPROVED
         instance.current_node_name = None
         if self.instance_repository.is_decision_delivery_instance(instance):
-            await self.instance_repository.create_terminal_decision_event_in_session(
+            decision_event = await self.instance_repository.create_terminal_decision_event_in_session(
                 session,
                 instance=instance,
                 decision="approved",
                 operator_user_id=operator_user_id,
             )
+            if decision_event is None or decision_event.id is None:
+                raise RuntimeError("approval decision event identity is missing")
             post_commit_effects.append_durable(
-                (self.__class__._dispatch_decision_delivery, (int(instance.tenant_id),), {})
+                (
+                    self.__class__._dispatch_decision_delivery,
+                    (int(instance.tenant_id), int(decision_event.id)),
+                    {},
+                )
             )
             post_commit_effects.append(
                 (
@@ -1767,21 +1784,22 @@ class ApprovalCenterService:
         execute_approval_outbox.apply_async(args=[outbox_id], headers={"tenant_id": tenant_id})
 
     @staticmethod
-    def _dispatch_decision_delivery(tenant_id: int) -> None:
+    def _dispatch_decision_delivery(tenant_id: int, event_id: int) -> None:
         """Wake the delivery worker after a terminal decision event was committed.
 
-        The outbox row stays authoritative — the worker claims the next pending event for
-        this tenant, so a duplicate dispatch is harmless and a lost one only delays
-        delivery. Without this the F045/F046 events sat in `approval_decision_outbox`
-        forever and the approved invite/file change never reached its business domain.
+        The outbox row stays authoritative. Passing its stable id prevents an older
+        recoverable event from consuming the wake-up meant for this decision.
         """
 
         from bisheng.worker.approval.decision_delivery_tasks import deliver_approval_decision
 
         tenant_id = int(tenant_id)
+        event_id = int(event_id)
         if tenant_id <= 0:
             raise ValueError("a positive tenant_id is required to dispatch a decision delivery")
-        deliver_approval_decision.apply_async(headers={"tenant_id": tenant_id})
+        if event_id <= 0:
+            raise ValueError("a positive event_id is required to dispatch a decision delivery")
+        deliver_approval_decision.apply_async(args=[event_id], headers={"tenant_id": tenant_id})
 
     @classmethod
     async def _write_audit_log(

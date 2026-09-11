@@ -117,6 +117,36 @@ class _FakeDecisionRepository:
             return row
         return None
 
+    async def claim_by_id(
+        self,
+        *,
+        tenant_id: int,
+        outbox_id: int,
+        claim_token: str,
+        now: datetime,
+        claim_deadline: datetime,
+    ) -> ApprovalDecisionOutbox | None:
+        row = self.store.rows.get(int(outbox_id))
+        if row is None or int(row.tenant_id) != int(tenant_id):
+            return None
+        pending_due = row.status == ApprovalDecisionOutboxStatus.PENDING and (
+            row.next_retry_at is None or row.next_retry_at <= now
+        )
+        lease_expired = (
+            row.status == ApprovalDecisionOutboxStatus.PROCESSING
+            and row.claim_deadline is not None
+            and row.claim_deadline <= now
+        )
+        if not pending_due and not lease_expired:
+            return None
+        row.status = ApprovalDecisionOutboxStatus.PROCESSING
+        row.claim_token = claim_token
+        row.claimed_at = now
+        row.claim_deadline = claim_deadline
+        row.next_retry_at = None
+        self.store.timeline.append(f"approval.claim:{row.id}")
+        return row
+
     async def mark_delivered(
         self,
         *,
@@ -322,6 +352,22 @@ async def test_success_builds_versioned_event_and_acks_after_subscriber_returns(
         "approval.commit",
     ]
     _assert_terminal_and_event_identity_unchanged(store)
+
+
+async def test_exact_delivery_does_not_let_an_older_event_consume_the_new_wakeup():
+    older = _outbox(row_id=1)
+    requested = _outbox(row_id=2)
+    store = _DecisionStore([older, requested])
+    subscriber = _Subscriber()
+    service, _ = _service(store=store, subscriber=subscriber)
+
+    event = await service.deliver_next(tenant_id=TENANT_ID, event_id=2)
+
+    assert event is not None
+    assert event.event_id == 2
+    assert [received.event_id for received in subscriber.received] == [2]
+    assert older.status == ApprovalDecisionOutboxStatus.PENDING
+    assert requested.status == ApprovalDecisionOutboxStatus.DELIVERED
 
 
 @pytest.mark.parametrize(

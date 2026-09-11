@@ -28,6 +28,7 @@ import {
     useFileChangeApproval,
 } from "../hooks/useFileChangeApproval";
 import { canCleanup, FileChangeApprovalDetail } from "./FileChangeApprovalDetail";
+import { isKnowledgeItemUnderReview } from "../knowledgeUtils";
 
 jest.mock("~/api/knowledge", () => ({
     ...jest.requireActual("~/api/knowledge"),
@@ -159,6 +160,14 @@ describe("F046 file change approval projection", () => {
         const hidden = mergeFileChangeApprovalEnrichment(visible, [file("1")]);
         expect(hidden[0].fileChangeApproval).toBeUndefined();
         expect(hidden[1]).toEqual(visible[1]);
+    });
+
+    it("keeps a formally persisted file in the pending-review filter", () => {
+        expect(isKnowledgeItemUnderReview({ ...file("1"), fileChangeApproval: rootApproval })).toBe(true);
+        expect(isKnowledgeItemUnderReview({
+            ...file("1"),
+            fileChangeApproval: { ...rootApproval, status: "executing" },
+        })).toBe(false);
     });
 
     it("keeps the public Knowledge API vocabulary separate from approval status", () => {

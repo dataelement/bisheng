@@ -38,6 +38,19 @@ function readableString(...values: unknown[]): string | undefined {
     ?.trim();
 }
 
+function readableLocation(
+  displayValues: unknown[],
+  legacyValues: unknown[],
+): string | undefined {
+  const displayValue = readableString(...displayValues);
+  if (displayValue) return displayValue;
+  const legacyValue = readableString(...legacyValues);
+  if (!legacyValue) return undefined;
+  // Older approval snapshots stored the internal folder-id chain. Do not leak
+  // that implementation detail when no immutable display path is available.
+  return /^\/?\d+(?:\/\d+)*\/?$/.test(legacyValue) ? undefined : legacyValue;
+}
+
 function resourceNameFromTitle(
   value: string | null | undefined,
 ): string | undefined {
@@ -71,10 +84,17 @@ export function buildFileChangeBusinessRows(
     change.relative_path,
     detailSnapshot.relative_path,
   );
-  const targetPath = readableString(
-    change.target_path,
-    detailSnapshot.target_path,
-    relativePath !== resourceName ? relativePath : undefined,
+  const sourcePath = readableLocation(
+    [change.source_display_path, detailSnapshot.source_display_path],
+    [change.source_path, detailSnapshot.source_path],
+  );
+  const targetPath = readableLocation(
+    [change.target_display_path, detailSnapshot.target_display_path],
+    [
+      change.target_path,
+      detailSnapshot.target_path,
+      relativePath !== resourceName ? relativePath : undefined,
+    ],
   );
 
   const rows: Array<BusinessContentRow | null> = [
@@ -113,13 +133,10 @@ export function buildFileChangeBusinessRows(
           ) as string,
         }
       : null,
-    readableString(change.source_path, detailSnapshot.source_path)
+    sourcePath
       ? {
           label: localize("com_knowledge.file_change_source_path"),
-          value: readableString(
-            change.source_path,
-            detailSnapshot.source_path,
-          ) as string,
+          value: sourcePath,
         }
       : null,
     targetPath

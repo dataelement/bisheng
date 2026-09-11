@@ -86,14 +86,14 @@ F045/F046 的 policy 禁止 `pass`，也不创建 `ApprovalOutbox`。F045 的知
 ```text
 Approval terminal UoW
   → ApprovalDecisionOutbox(pending, unique terminal event)
-  → 默认 celery 队列 deliver_approval_decision
+  → 提交后携稳定 event_id 投递默认 celery 队列 deliver_approval_decision
   → registry subscriber
   → subscriber 先提交业务 queued/closed + decision_event_id
   → approved 再派业务 worker；非 approved 再做业务清理
   → delivery 独立事务 ack delivered / retryable / permanent
 ```
 
-交付成功只代表业务域已接收审批事实；broker task ID、subscriber 返回或审批 `approved` 都不是业务成功证据。F045/F046 的业务 `failed`、重试、补偿与通知只写业务表，不把 Approval instance 改成 `executing/executed/execute_failed`，也不创建 `execute_failed` exception。
+新终态的唤醒必须按 `tenant_id + event_id` 定向 claim，不能退回“本租户最老 recoverable 事件”；否则积压事件会截走新决定的唤醒。recovery coordinator 也逐 event_id 派发，未携 event_id 的单事件入口只用于兼容旧消息/人工恢复。交付成功只代表业务域已接收审批事实；broker task ID、subscriber 返回或审批 `approved` 都不是业务成功证据。F045/F046 的业务 `failed`、重试、补偿与通知只写业务表，不把 Approval instance 改成 `executing/executed/execute_failed`，也不创建 `execute_failed` exception。
 
 **资源个人用户邀请是强制本人确认特例**：Permission 域先写
 `resource_user_invite_request(awaiting_approval)`，再在 caller-owned UoW 经 `ApprovalSubmissionPort` 创建审批 bundle。
@@ -142,15 +142,15 @@ resolver/OpenFGA 故障必须传播，绝不能伪造成空审批人集合，也
 | `approval/domain/services/approval_registry.py` | 五场景目录与两类 completion adapter 注册；启动期校验 protocol/event/completion mode 后 freeze | `with_default_presets()`、`register_handler()`、`register_policy()`、`register_subscriber()`、`freeze_decision_delivery()` |
 | `bootstrap/approval_scenarios.py` | 唯一 composition root；完成五场景 adapter 与 Knowledge/Channel grant executor 装配，完整性校验后 freeze | `bootstrap_approval_scenarios()`、`get_approval_scenario_registry()`、`get_resource_grant_executor_registry()` |
 | `approval/domain/services/approval_submission_service.py` | F047 decision-delivery 场景的 caller-owned 建单；并通过 public port 提供 tenant-bound 场景行锁 guard；F045 知识空间/频道授权编排捕获缺失/关闭结果后改走 direct，启用态继续持锁建单 | `submit_in_uow()`、`scenario_guard()` |
-| `approval/domain/services/approval_decision_delivery_service.py` | F047 终态决定的可靠交付；独立事务 claim 后调用 subscriber，再独立事务按 token ack；绑定/协议错误 permanent，临时故障 retryable，永不回退审批终态 | `deliver_next()` |
-| `worker/approval/decision_delivery_tasks.py` | F047 默认队列单事件交付与有界 recoverable coordinator；tenant 仅取显式 header 并 finally 恢复 ContextVar，broker task ID 只作派发证据 | `deliver_approval_decision`、`coordinate_approval_decision_delivery` |
+| `approval/domain/services/approval_decision_delivery_service.py` | F047 终态决定的可靠交付；新决定按 event_id 定向 claim，兼容/恢复可 claim oldest；独立事务调用 subscriber，再按 token ack；绑定/协议错误 permanent，临时故障 retryable，永不回退审批终态 | `deliver_next()` |
+| `worker/approval/decision_delivery_tasks.py` | F047 默认队列单事件交付与有界 recoverable coordinator；producer 与 coordinator 都携稳定 event_id，tenant 仅取显式 header 并 finally 恢复 ContextVar，broker task ID 只作派发证据 | `deliver_approval_decision`、`coordinate_approval_decision_delivery` |
 | `approval/domain/services/approval_runtime_handler_factory.py` | 只为菜单、频道订阅、知识空间加入三个 legacy outbox 构造 handler | `build_runtime_handler(scenario_code)` |
 | `approval/domain/services/approval_notification_service.py` | 站内信统一封装 | `notify_user()` / `notify_users()` / `notify_admins()` |
 | `approval/domain/ports/scenario_policy.py` | F047 决定交付场景的版本化 submission command/result、决定前 policy context 和 caller-owned submission port；submission 与 Center 终态决定都已接入 policy | `ApprovalScenarioPolicy`、`ApprovalSubmissionPort` |
 | `approval/domain/ports/decision_subscriber.py` | F047 版本化终态决定事件、业务 subscriber 协议及 permanent/retryable 消费失败契约；已接 registry 与 delivery service | `ApprovalDecisionEvent`、`ApprovalDecisionSubscriber`、`ApprovalDecisionPermanentError`、`ApprovalDecisionRetryableError` |
 | `approval/domain/ports/approval_status_reader.py` + `approval/domain/services/approval_status_read_service.py` | 只向业务域批量暴露不可变 `instance_id/status`，显式 tenant ContextVar 校验；不暴露 payload、任务或 Approval ORM | `ApprovalStatusReadPort`、`ApprovalStatusSnapshot`、`ApprovalStatusReadService.get_statuses()` |
 | `approval/domain/models/approval_decision_outbox.py` | F047 决定交付模型；Center 已在 F045/F046 终态 UoW 写唯一事件，delivery service 按 lease/token 投递 | `ApprovalDecisionOutboxStatus`、`ApprovalDecisionFailureKind` |
-| `approval/domain/repositories/approval_decision_outbox_repository.py` | caller-owned 决定事件 claim/ack/retry/fail 原语；强制 tenant ContextVar 一致，MySQL 用 skip-locked、DM8 用 portable row lock、全方言以 claim token + 条件更新兜底 | `claim_next()`、`mark_delivered()`、`mark_retryable_failure()`、`mark_permanent_failure()`、`list_recoverable()` |
+| `approval/domain/repositories/approval_decision_outbox_repository.py` | caller-owned 决定事件 claim/ack/retry/fail 原语；新决定用 tenant+event_id 条件更新定向 claim，恢复可 claim oldest；强制 tenant ContextVar 一致，MySQL 用 skip-locked、DM8 用 portable row lock、全方言以 claim token + 条件更新兜底 | `claim_by_id()`、`claim_next()`、`mark_delivered()`、`mark_retryable_failure()`、`mark_permanent_failure()`、`list_recoverable()` |
 | `permission/domain/ports/resource_grant_executor.py` | F047 F045 稳定授权命令、不可变快照、资源 owner executor 与权威读后校验结果；不 import Knowledge/Channel 实现 | `ResourceGrantCommand`、`ResourceGrantExecutor`、`ResourceGrantVerificationResult` |
 | `permission/domain/services/resource_grant_executor_registry.py` | F047 F045 按 resource type 注册和分派授权 owner；composition root 完整注册后 freeze，重复、缺失和未知类型均 fail-closed | `register()`、`freeze()`、`execute()`、`verify()` |
 | `permission/domain/models/resource_user_invite_request.py` | F047 F045 邀请业务事实模型；Application Service/Repository/policy/subscriber/授权 worker 均以此为事实源 | `ResourceUserInviteExecutionState` |
@@ -286,6 +286,8 @@ resolver/OpenFGA 故障必须传播，绝不能伪造成空审批人集合，也
   当前审批人可直接同意/拒绝，状态标签可进入完整详情及 Knowledge 业务重试/清理。`applied` 上传已经成为正式
   文件，Client 不再将其投影为虚拟待审行，也不在文件列表展示“已生效”标签；后续仅展示普通文件生命周期状态。
   `closed` 表示上传未成功，Client 同样不投影虚拟文件行，也不在文件列表展示“已关闭”标签。
+  正式文件/文件夹上的 rename/move/delete 投影必须把内部 `not_started` 映射为公共 `pending`，前端“待审核”
+  筛选只认公共状态；`file_level_path` 的数字 ID 链只用于执行校验，展示使用提交时冻结的名称路径快照。
 - **执行**：审批决定交付只把 Knowledge request 置 `queued`；之后由 Knowledge generation token、request/step/footprint
   独立推进，业务失败不回写 F025。upload 的完成判据固定为正式文件图已提交、OpenFGA 权限写入成功且普通文件
   解析调度已接收；之后的解析、索引、向量化成功或失败只属于文件生命周期，不回写或回退审批状态。
@@ -342,7 +344,7 @@ F045/F046 不查询、不创建、不重试这张表。
 
 ### 6.3 decision delivery 与 F045
 
-F025 终态 UoW 写唯一决定事件；delivery service 用 tenant + claim token 投递、ack 或分类 retryable/permanent，永不反向改变审批终态。
+F025 终态 UoW 写唯一决定事件；提交后 producer 携 `tenant_id + event_id` 定向派发，delivery service 用 tenant + claim token 投递、ack 或分类 retryable/permanent，永不反向改变审批终态。recovery coordinator 枚举 recoverable 行时同样逐 event_id 派发，不能用 N 个无目标任务竞争最老事件。
 
 F045 subscriber 把 approved 先提交为 `queued`，再派稳定 Permission request ID。`execute_resource_user_invite` 从显式正整数 tenant header 恢复 ContextVar，以 execution token claim，调用资源 owner executor 并权威验证 tuple/binding；`failed` 仍占唯一槽位，只能重试原业务 request。业务结果和通知都不写 Approval outbox/exception。
 

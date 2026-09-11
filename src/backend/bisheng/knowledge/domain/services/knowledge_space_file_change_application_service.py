@@ -339,8 +339,8 @@ class KnowledgeSpaceFileChangeApplicationService:
             action_detail=FileChangeActionDetail(
                 old_name=snapshot.get("old_name"),
                 new_name=snapshot.get("new_name"),
-                source_path=snapshot.get("source_path"),
-                target_path=snapshot.get("target_path"),
+                source_path=snapshot.get("source_display_path", snapshot.get("source_path")),
+                target_path=snapshot.get("target_display_path", snapshot.get("target_path")),
                 source_parent_id=request.source_parent_id,
                 target_space_id=request.target_space_id,
                 target_parent_id=request.target_parent_id,
