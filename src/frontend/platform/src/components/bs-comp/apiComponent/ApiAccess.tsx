@@ -1,15 +1,13 @@
 import { Badge } from '@/components/bs-ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/bs-ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/bs-ui/tabs';
-import { useToast } from '@/components/bs-ui/toast/use-toast';
-import { copyText } from '@/utils';
-import { Check, Clipboard } from 'lucide-react';
-import { useState, type MouseEvent, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
+
+import { ApiRequestExamples } from './ApiRequestExamples';
 
 interface JsonItemProps {
     name: string;
@@ -45,124 +43,9 @@ export function ApiAccess() {
     const { t } = useTranslation()
     const { id: assisId } = useParams()
 
-    const curl = () => {
-        return `curl -X POST "${window.location.protocol}//${window.location.host}/api/v2/assistant/chat/completions" \\
--H "User-Agent: Apifox/1.0.0 (https://apifox.com)" \\
--H "Content-Type: application/json" \\
--d '{
-  "model": "${assisId}",
-  "messages": [
-    {
-      "role": "user",
-      "content": "${t("api.assistantDoc.hello")}"
-    }
-  ],
-  "temperature": 0,
-  "stream": true
-}'
-`
-    }
-
-    const python = () => {
-        return `from openai import OpenAI
-base_url = "${window.location.protocol}//${window.location.host}/api/v2/assistant"
-model = "${assisId}"
-client = OpenAI(base_url=base_url, api_key="empty")
-# Round 1
-messages = [{"role": "user", "content": "${t("api.assistantDoc.question")}"}]
-response = client.chat.completions.create(
-    model=model,
-    messages=messages,
-    stream=True
-)
-reasoning_content = ""
-content = ""
-for chunk in response:
-    if chunk.choices[0].delta.model_extra.get("reasoning_content"):
-        if not reasoning_content:
-            print("\\n\\n-----Reasoning Content-----\\n")
-        reasoning_chunk = chunk.choices[0].delta.reasoning_content
-        print(reasoning_chunk, end='', flush=True)  # Stream reasoning
-        reasoning_content += reasoning_chunk
-    elif chunk.choices[0].delta.content:
-        if not content:
-            print("\\n\\n-----Final content-----\\n")
-        content_chunk = chunk.choices[0].delta.content
-        print(content_chunk, end='', flush=True)  # Stream the answer
-        content += content_chunk`
-    }
-
-    const { message } = useToast()
-    const handleCopyLink = (event: MouseEvent<HTMLElement>) => {
-        copyText(event.currentTarget).then(() => {
-            message({ variant: 'success', description: t('api.copySuccess') })
-        })
-    }
-
-    const [isCopied, setIsCopied] = useState<boolean>(false);
-    const handleCopyCode = (code: string) => {
-        setIsCopied(true);
-        copyText(code).then(() => {
-            setTimeout(() => {
-                setIsCopied(false);
-            }, 2000);
-        })
-    }
-
     return (
-
         <section className='max-w-[1600px] flex-grow'>
-            <Card className="mb-8">
-                <CardHeader>
-                    <CardTitle>{t('api.apiRequestExample')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <h3 className="mb-2 bg-secondary px-4 py-2 inline-flex items-center rounded-md gap-1">
-                        <Badge>POST</Badge>
-                        <span className='hover:underline cursor-pointer' onClick={handleCopyLink}>/api/v2/assistant/chat/completions</span>
-                    </h3>
-                    <p className='mt-2'>
-                        {t('api.sdkNote')}
-                    </p>
-                    <p className='my-2'>{t('api.exampleCode')}：</p>
-                    <Tabs defaultValue="curl" className="w-full mb-[40px]">
-                        <TabsList>
-                            <TabsTrigger value="curl">cURL</TabsTrigger>
-                            <TabsTrigger value="python">Python API</TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="curl" className='relative'>
-                            <button
-                                className="absolute right-0 flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
-                                onClick={() => handleCopyCode(curl())}
-                            >
-                                {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
-                            </button>
-                            <SyntaxHighlighter
-                                className="w-full overflow-auto custom-scroll"
-                                language={'bash'}
-                                style={oneDark}
-                            >
-                                {curl()}
-                            </SyntaxHighlighter>
-                        </TabsContent>
-                        <TabsContent value="python" className='relative'>
-                            <button
-                                className="absolute right-0 flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
-                                onClick={() => handleCopyCode(python())}
-                            >
-                                {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
-                            </button>
-                            <SyntaxHighlighter
-                                className="w-full overflow-auto custom-scroll"
-                                language={'python'}
-                                style={oneDark}
-                            >
-                                {python()}
-                            </SyntaxHighlighter>
-                        </TabsContent>
-                    </Tabs>
-                </CardContent>
-            </Card>
+            <ApiRequestExamples kind="assistant" applicationId={assisId ?? ''} />
 
             <Card className="mb-8">
                 <CardHeader>
@@ -186,7 +69,7 @@ for chunk in response:
                                         <JsonItem name="role" type="string" desc="" required example="user" line></JsonItem>
                                         <JsonItem name="content" type="string" desc="" required example={t("api.assistantDoc.hello")} line></JsonItem>
                                     </JsonItem>
-                                    <JsonItem name="temperature" type="integer" desc={t('api.temperature')} ></JsonItem>
+                                    <JsonItem name="temperature" type="number" desc={t('api.temperature')} ></JsonItem>
                                     <JsonItem name="stream" type="boolean" desc={t('api.stream')} ></JsonItem>
                                 </TableCell>
                                 <TableCell className='align-top'>

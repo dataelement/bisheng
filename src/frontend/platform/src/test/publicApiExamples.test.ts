@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { createInstance } from "i18next"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -8,6 +8,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { ApiAccess } from "@/components/bs-comp/apiComponent/ApiAccess"
 import { ApiAccessFlow } from "@/components/bs-comp/apiComponent/ApiAccessFlow"
+import { copyText } from "@/utils"
 
 vi.unmock("react-i18next")
 vi.mock("react-syntax-highlighter", () => ({
@@ -18,7 +19,10 @@ vi.mock("@/components/bs-ui/toast/use-toast", () => ({
   useToast: () => ({ message: vi.fn() }),
 }))
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.clearAllMocks()
+})
 
 const applicationId = "816acf819f254de68cf34779a7586621"
 
@@ -78,6 +82,50 @@ describe("published API documentation", () => {
     expect(container.textContent).toContain(`${location.origin}/api/v2/assistant`)
     expect(container.textContent).toContain(`model = "${applicationId}"`)
     expect(container.textContent).not.toContain("/api/v3/")
+    expect(container.textContent).not.toContain('api_key="empty"')
+  })
+
+  it.each(["zh-Hans", "en-US", "ja"])("copies authenticated examples for every identity and operation in %s", async (language) => {
+    const locale = JSON.parse(readFileSync(join(process.cwd(), "public", "locales", language, "bs.json"), "utf8"))
+    const guide = locale.api.openApiGuide
+    for (const component of [ApiAccess, ApiAccessFlow]) {
+      const { container, unmount } = await renderDocumentation(component, language)
+      expect(container.textContent).not.toContain("api.openApiGuide.")
+      expect(container.textContent).not.toContain("{{scope}}")
+      expect(container.textContent).not.toContain("{{workflowId}}")
+      expect(container.textContent).toContain(component === ApiAccess ? "assistant:invoke" : "workflow:invoke")
+
+      const operations = component === ApiAccess
+        ? ["cURL", "Python API"]
+        : [guide.example_curl_tab, guide.example_continue_tab, guide.example_stop_tab, "Python API"]
+      for (const identity of ["service", "delegate", "external"]) {
+        fireEvent.mouseDown(screen.getByRole("tab", { name: guide[`${identity}_title`] }), { button: 0, ctrlKey: false })
+        for (const operation of operations) {
+          fireEvent.mouseDown(screen.getByRole("tab", { name: operation }), { button: 0, ctrlKey: false })
+          const copyButton = screen.getByRole("button", { name: guide.copy_example })
+          const code = copyButton.closest('[role="tabpanel"]')?.querySelector("pre")?.textContent
+          expect(code).toBeTruthy()
+          expect(code).toContain(applicationId)
+          expect(code).toContain("BISHENG_API_KEY")
+          expect(code).not.toContain("/api/v3/")
+          if (identity === "delegate") {
+            expect(code).toContain("X-On-Behalf-Of")
+            expect(code).not.toContain("X-End-User")
+          } else if (identity === "external") {
+            expect(code).toContain("X-End-User")
+            expect(code).toContain("customer-001")
+            expect(code).not.toContain("X-On-Behalf-Of")
+          } else {
+            expect(code).not.toContain("X-On-Behalf-Of")
+            expect(code).not.toContain("X-End-User")
+          }
+          if (operation !== "Python API") expect(code).toContain("Authorization: Bearer $BISHENG_API_KEY")
+          fireEvent.click(copyButton)
+          await waitFor(() => expect(copyText).toHaveBeenLastCalledWith(code))
+        }
+      }
+      unmount()
+    }
   })
 
   it("keeps service-account key examples on authenticated v2", () => {
