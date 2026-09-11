@@ -1,6 +1,7 @@
 import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getPersonalTokenStatusApi } from "~/api/personalToken";
 import { PersonalTokenDialog } from "~/components/PersonalTokenDialog";
 import { AccountSection } from "~/components/Settings/sections/AccountSection";
@@ -18,7 +19,7 @@ export function AccountPane() {
   const { user, logout } = useAuthContext();
   const displayName = user?.username || "admin";
   const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatar || "");
-  const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const personalTokenDeploymentEnabled = usePersonalTokenEnabled();
   const { data: personalTokenStatus } = useQuery({
     queryKey: ["personal-token-status", user?.id],
@@ -30,6 +31,16 @@ export function AccountPane() {
     personalTokenDeploymentEnabled,
     personalTokenStatus?.enabled,
   );
+  const tokenDialogOpen = personalTokenEnabled && searchParams.get("api-token") === "1";
+
+  const handleTokenDialogOpenChange = (open: boolean) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (open) next.set("api-token", "1");
+      else next.delete("api-token");
+      return next;
+    }, { replace: true });
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -45,7 +56,7 @@ export function AccountPane() {
             <h3 className="text-sm font-medium text-text-1">{localize("com_personal_token_title")}</h3>
             <p className="mt-1 text-sm text-text-3">{localize("com_personal_token_account_hint")}</p>
           </div>
-          <Button variant="outline" onClick={() => setTokenDialogOpen(true)}>
+          <Button variant="outline" onClick={() => handleTokenDialogOpenChange(true)}>
             {localize("com_personal_token_manage")}
           </Button>
         </section>
@@ -57,7 +68,7 @@ export function AccountPane() {
           {localize("com_nav_log_out")}
         </Button>
       </section>
-      <PersonalTokenDialog open={tokenDialogOpen} onOpenChange={setTokenDialogOpen} />
+      <PersonalTokenDialog open={tokenDialogOpen} onOpenChange={handleTokenDialogOpenChange} />
     </div>
   );
 }

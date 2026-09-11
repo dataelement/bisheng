@@ -2299,5 +2299,36 @@
   "com_personal_token_loading": "Loading...",
   "com_voice": {
     "playback_unavailable": "Playback is unavailable. Please contact your administrator."
+  },
+  "com_personal_token": {
+    "action_failed": "The operation failed. Please try again.",
+    "copy_all": "Copy prompt",
+    "copy_example": "Copy example",
+    "copy_failed": "Copy failed. Please try again.",
+    "copy_key": "Copy API Key",
+    "created_label": "Created",
+    "delete": "Delete API Key",
+    "delete_confirmation": "Agents using this API Key will lose access to BiSheng after it is deleted.",
+    "developer_guide": "View the BiSheng skill developer guide",
+    "empty_description": "You do not have an API Key yet. Get one to continue.\nAn API Key lets your agent search BiSheng knowledge you have permission to access.",
+    "example_hint": "Set the BISHENG_API_KEY environment variable to your API Key. Replace 1 in knowledge_base_ids with the ID of a knowledge library or space you can access.",
+    "example_query": "How do I request annual leave?",
+    "expires_label": "Expires on",
+    "get_key": "Get API Key",
+    "guide_title": "Installation guide",
+    "install_prompt": "Install the BiSheng knowledge-search skill.\nSkill download URL: {{skillPackUrl}}\nAPI Key page: {{tokenPageUrl}}",
+    "install_step": "Step 1: Send the prompt to your agent to install the BiSheng skill",
+    "key_label": "API Key",
+    "key_step": "Step 2: Get an API Key and send it to your agent to finish setup",
+    "load_failed": "Could not load your API Key. Please try again.",
+    "masked_hint": "The full API Key is shown only when issued. Get a new key if you did not save it.",
+    "regenerate": "Get a new key",
+    "regenerate_confirmation": "The old API Key will stop working. Update your agents with the new API Key.",
+    "retry": "Reload",
+    "status_active": "Valid",
+    "status_disabled": "Disabled",
+    "status_expired": "Expired",
+    "status_label": "Status",
+    "status_revoked": "Revoked"
   }
 }
