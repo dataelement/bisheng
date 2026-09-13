@@ -40,6 +40,7 @@ def test_the_deployment_half_alone_issues_no_token() -> None:
         pat_enabled=False,
         effective_enabled=True and False,
         pat_ttl_days=30,
+        data_scope="all_visible",
     )
 
     assert response.effective_enabled is False

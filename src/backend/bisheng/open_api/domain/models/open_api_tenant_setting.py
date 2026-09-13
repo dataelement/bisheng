@@ -4,13 +4,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 
 DEFAULT_PAT_TTL_DAYS = 365
+
+# Vocabulary lives in bisheng.permission.domain.services.data_scope (F066);
+# the literals are repeated here only as column defaults.
+DEFAULT_PAT_DATA_SCOPE = "all_visible"
 
 
 class OpenApiTenantSetting(SQLModelSerializable, table=True):
@@ -24,6 +28,10 @@ class OpenApiTenantSetting(SQLModelSerializable, table=True):
     pat_ttl_days: int = Field(
         default=DEFAULT_PAT_TTL_DAYS,
         sa_column=Column(Integer, nullable=False, server_default=text(str(DEFAULT_PAT_TTL_DAYS))),
+    )
+    pat_data_scope: str = Field(
+        default=DEFAULT_PAT_DATA_SCOPE,
+        sa_column=Column(String(32), nullable=False, server_default=text("'all_visible'")),
     )
     update_time: datetime | None = Field(
         default=None,

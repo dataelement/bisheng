@@ -29,6 +29,7 @@ EXPECTED_CODES = {
     26041,
     26042,
     26043,
+    26044,
 }
 
 
@@ -45,5 +46,5 @@ def test_only_designated_open_api_error_codes_are_implemented():
 
 def test_reserved_and_removed_codes_are_not_reused():
     assert EXPECTED_CODES.isdisjoint(
-        {26008, 26009, 26011, 26012, 26013, 26014, 26028, *range(26032, 26040), *range(26044, 26050)}
+        {26008, 26009, 26011, 26012, 26013, 26014, 26028, *range(26032, 26040), *range(26045, 26050)}
     )

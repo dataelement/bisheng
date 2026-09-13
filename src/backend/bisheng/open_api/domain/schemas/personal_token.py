@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -14,6 +15,11 @@ class PersonalTokenSettingUpdate(BaseModel):
 
     pat_enabled: bool
     pat_ttl_days: int = Field(ge=1, le=365)
+    # Optional means "keep the stored value" (F066 design decision 4): a
+    # required field would 422 older admin consoles, while an optional field
+    # with a substituted default would let a stale PUT silently widen the
+    # tenant's data scope.
+    data_scope: Literal["all_visible", "personal_only"] | None = None
 
 
 class PersonalTokenSettingResponse(BaseModel):
@@ -21,12 +27,15 @@ class PersonalTokenSettingResponse(BaseModel):
     pat_enabled: bool
     effective_enabled: bool
     pat_ttl_days: int
+    data_scope: str
 
 
 class PersonalTokenStatus(BaseModel):
     enabled: bool
     token: KeyItem | None
     holder_is_admin: bool
+    data_scope: str
+    ttl_days: int
 
 
 class PersonalTokenIssued(KeyIssuedResponse):
