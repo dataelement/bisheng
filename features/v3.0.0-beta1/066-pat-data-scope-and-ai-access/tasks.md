@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-09-13 `/sdd-review spec`（1 CONFLICT 经契约修订处置、3 low 已修、补 AC-R7），用户已确认 |
 | design.md | ✅ 已评审 | 2026-09-13 `/sdd-review design`（自查修 C4 分层 high + C4 触碰登记），用户已确认 |
 | tasks.md | ✅ 已拆解 | 2026-09-13 `/sdd-review tasks` |
-| 实现 | 🟡 30 / 31 | T001–T026 迭代一闭环(105 e2e 全过);迭代二 T027–T030 完成(本地测试全绿),T031 部署验证待执行 |
+| 实现 | ✅ 31 / 31 | 迭代一 T001–T026 + 迭代二 T027–T031 全部闭环(105 两轮真实环境验证全过) |
 
 AC 编号来源：AC-P23～AC-P31 = PRD v2.9 §五 R10；AC-R1～AC-R7 = spec §3。
 
@@ -209,8 +209,11 @@ AC 编号来源：AC-P23～AC-P31 = PRD v2.9 §五 R10；AC-R1～AC-R7 = spec §
 - [x] **T030**: platform 环境变量名联动
   **文件**: `apiRequestExamples.ts`、`publicApiExamples.test.ts`、`bs.json` 三语 examples_setup
   **逻辑**: `BISHENG_API_KEY`→`KNOWLEDGE_API_KEY` 一致性替换(开放 API 文档页示例)
-- [ ] **T031**: 迭代二 105 部署验证
-  **逻辑**: 合 909→Drone→105;走查:技能包 zip 无品牌+`KNOWLEDGE_API_KEY` 实测检索、二次小弹窗全流程、WorkBuddy/入口文案、品牌名插值(外观设置配测试名后恢复);e2e-checklist 增补节回写
+- [x] **T032**: 技能包凭据文件回落（PRD §技能包必备件「环境变量优先、回落配置文件」补齐）
+  **文件**: `skill_packs/knowledge-search/{scripts/search.py,SKILL.md,SECURITY.md,references/api.md}`、`personal_token_self.py`、client `locales/*/translation.json`（copy_send_all_body）、`test/open_api/test_skill_pack.py`
+  **逻辑**: 桌面 Agent 沙箱 shell 不读 rc 文件，仅环境变量的通道让每个新会话都重新翻找密钥（WorkBuddy 实测 3 会话同症、单次 8m30s）。search.py 查找顺序 `KNOWLEDGE_API_KEY` → `~/.config/knowledge-search/credentials.json`（按规范化 base URL 分 profile，0600 原子写）；新增 `--configure --api-key` 在线校验后落盘（401/404/非 JSON 拒存，403 业务码与瞬时故障照存）；`--base-url` 改可选（`DEFAULT_BASE_URL` 由打包器渲染，哨兵用 startswith 避免自吞）；缺钥/401 报错指名来源与下一步命令；文案与安装提示词改为「用 --configure 保存，勿进 shell 配置文件」
+- [x] **T031**: 迭代二 105 部署验证(2026-09-13 完成,全过)
+  **逻辑**: 合 909→Drone(webhook 丢过一次,空提交重触发)→105;技能包 zip 零品牌+search.py 用 `KNOWLEDGE_API_KEY` 实测(200/26044)、二次小弹窗全流程、WorkBuddy/入口文案落地;105 实为中粮贴牌环境(brandName=知源),白标插值直接实证——无需另配测试名;顺带补验收窄档管理员降级(迭代一遗留);执行记录见 e2e-checklist.md §四
 
 ---
 
@@ -221,4 +224,5 @@ AC 编号来源：AC-P23～AC-P31 = PRD v2.9 §五 R10；AC-R1～AC-R7 = spec §
 - T007 偏离 → design 决策 2 补注：26044 异常类落位 `common/errcode/open_api`（错误码域规约），权限层直接抛，不在 permission.application 另造异常
 - T010 偏离（测试降级）→ design §7：本地矩阵 = 注册表分类断言 + 闸口→权限层→传输 e2e 接线；真实端点全行为矩阵需中间件，归 T026 `/e2e-test`
 - T026 完成（2026-09-13）→ 105 真实环境全量执行：API 9 项全过（异步执行面由单测保障）；浏览器员工/管理员生成流、深链与旧链重定向、platform 策略卡与台账全过；未做两项已在 checklist 注明理由（租户关停走查、真 Agent 闭环）
+- T032 补交付（2026-09-13）→ 技能包凭据通道从「仅环境变量」改为「环境变量优先、回落凭据文件」，对齐 PRD §技能包必备件；`--configure` 校验不是硬闸（密钥只显示一次，瞬时故障不能让用户丢钥匙）
 - T026 执行期抓获旁路 → design 坑 16 / 决策 5 收口 ④：应用层超管短路绕过 runtime 判定（105 实测），business_authorization 两处短路加 DATA_SCOPE_ALL 条件 + 回归用例 + 守卫断言
