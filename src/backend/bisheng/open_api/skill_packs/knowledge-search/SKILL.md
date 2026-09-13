@@ -5,12 +5,38 @@ description: Search the user's knowledge bases and knowledge spaces (企业知�
 
 # Knowledge search
 
-Base URL: `{{BASE_URL}}`
+Base URL: `{{BASE_URL}}` — already baked into `scripts/search.py`; pass
+`--base-url` only if the user says the platform moved. Full endpoint contract,
+response shapes, pagination and the error-code table: `references/api.md` —
+read it before composing requests.
 
-The personal access token comes from the environment variable `KNOWLEDGE_API_KEY`
-and always acts as its holder. Full endpoint contract, response shapes,
-pagination and the error-code table: `references/api.md` — read it before
-composing requests.
+## Credentials: configure once, then forget
+
+The script finds the user's personal access token by itself, in this order:
+
+1. the environment variable `KNOWLEDGE_API_KEY` (per-process override);
+2. this skill's own credentials file — `~/.config/knowledge-search/credentials.json`
+   (`%APPDATA%\knowledge-search\credentials.json` on Windows), one profile per
+   Base URL, written by `--configure` and readable only by the current user.
+
+One-time setup, run when the user hands you their key (they generate it on the
+platform's **AI 助手接入 / AI assistant access** settings page):
+
+```bash
+python3 scripts/search.py --configure --api-key <key>
+```
+
+(`python` instead of `python3` on Windows.) It checks the key against the
+platform, stores it and prints only a masked form. From then on every call in
+every new session just works. Rules:
+
+- If a call exits with `No API key for …`, do exactly what the message says:
+  ask the user for their key and run `--configure`. Do **not** search the file
+  system, shell profiles or environment for it.
+- Never write the key into shell profile files (`.zshenv`, `.bashrc`, …), agent
+  memory, notes or any other file. `--configure` is the only place it lives.
+- On `HTTP 401` the error names where the rejected key came from (environment
+  variable or credentials file) and the fix — follow it instead of retrying.
 
 ## Workflow: list first, then retrieve
 
@@ -20,8 +46,8 @@ user for an ID before trying to find it yourself:
 1. **List what the token can see** (both calls, they cover different types):
 
    ```bash
-   python scripts/search.py --base-url {{BASE_URL}} --list-knowledge-bases space
-   python scripts/search.py --base-url {{BASE_URL}} --list-knowledge-bases doc
+   python3 scripts/search.py --list-knowledge-bases space
+   python3 scripts/search.py --list-knowledge-bases doc
    ```
 
    Pick the IDs whose names match the user's topic. If more results exist
@@ -32,7 +58,7 @@ user for an ID before trying to find it yourself:
 2. **Retrieve** against the chosen IDs:
 
    ```bash
-   python scripts/search.py --base-url {{BASE_URL}} --query "release policy" --knowledge-base-id 12
+   python3 scripts/search.py --query "release policy" --knowledge-base-id 12
    ```
 
    `--knowledge-base-id` may repeat; `--top-k` defaults to 10 (max 200).
