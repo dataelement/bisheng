@@ -1689,7 +1689,7 @@
       "example_external": "外部网站 / 客服：密钥不勾选 delegate，传 API Key + X-End-User（如 customer-001）。会话按外部用户隔离；同租户、同服务账号其他密钥传相同标识可访问同一会话分区。资源权限仍属于服务账号，新资源归配置的归属人。",
       "example_service": "定时任务 / 系统集成：密钥不勾选 delegate，只传 API Key，按服务账号权限执行。新资源归配置的归属人；持久化会话在同租户、同服务账号的有效密钥间共享，与传了 X-End-User 的会话隔离。",
       "example_stop_tab": "停止工作流 · cURL",
-      "examples_setup": "每次请求必传 API Key，所需权限位：{{scope}}。先将环境变量 BISHENG_API_KEY 设置为实际密钥；两个身份头只能选一个，均放在 Headers 中。",
+      "examples_setup": "每次请求必传 API Key，所需权限位：{{scope}}。先将环境变量 KNOWLEDGE_API_KEY 设置为实际密钥；两个身份头只能选一个，均放在 Headers 中。",
       "external_title": "外部用户",
       "service_title": "系统调用",
       "workflow_note": "继续或停止时保持首次调用身份。session_id、message_id、node_id、字段 key 均使用前次返回值，input 按 input_schema 填写。",

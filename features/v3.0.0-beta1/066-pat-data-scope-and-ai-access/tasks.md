@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-09-13 `/sdd-review spec`（1 CONFLICT 经契约修订处置、3 low 已修、补 AC-R7），用户已确认 |
 | design.md | ✅ 已评审 | 2026-09-13 `/sdd-review design`（自查修 C4 分层 high + C4 触碰登记），用户已确认 |
 | tasks.md | ✅ 已拆解 | 2026-09-13 `/sdd-review tasks` |
-| 实现 | ✅ 26 / 26 | T001–T025 完成并分五笔提交;T026 已于 2026-09-13 在 105(DM8)全量执行完毕——API 9 项 + 浏览器主流程全过,执行记录见 e2e-checklist.md §三 |
+| 实现 | 🟡 30 / 31 | T001–T026 迭代一闭环(105 e2e 全过);迭代二 T027–T030 完成(本地测试全绿),T031 部署验证待执行 |
 
 AC 编号来源：AC-P23～AC-P31 = PRD v2.9 §五 R10；AC-R1～AC-R7 = spec §3。
 
@@ -194,6 +194,23 @@ AC 编号来源：AC-P23～AC-P31 = PRD v2.9 §五 R10；AC-R1～AC-R7 = spec §
   **逻辑**: 执行 `/e2e-test features/v3.0.0-beta1/066-pat-data-scope-and-ai-access`：API 侧矩阵结果 + 浏览器手动清单（双入口 / 四态 / 管理员确认 / 收紧生效 / 深链）落档
   **覆盖 AC**: AC-P23, AC-P24, AC-P26, AC-P30, AC-P31
   **依赖**: T012, T018, T022
+
+### 迭代二（2026-09-13,去品牌化 + 密钥二次弹窗;采访定稿见 design 修订历史）
+
+- [x] **T027**: 技能包去品牌与改名
+  **文件**: `src/backend/bisheng/open_api/skill_packs/knowledge-search/`（目录 git mv）、`skill_pack_service.py`、`personal_token_self.py`、`test/open_api/test_skill_pack.py`
+  **逻辑**: slug/name→`knowledge-search`;包内四文件 BiSheng→中性、`BISHENG_API_KEY`→`KNOWLEDGE_API_KEY`;打包器排除 `__pycache__`/`*.pyc`;测试补 white-label 守卫断言(zip 内无 BiSheng/BISHENG)
+- [x] **T028**: client 弹窗二次弹窗重构
+  **文件**: `PersonalTokenDialog.tsx`(+TokenRevealDialog 子组件)、`PersonalTokenDialog.test.tsx`
+  **逻辑**: 删 saved 门控;明文/一次性红条/一键复制/风险红条移入 z-110 叠加小弹窗,×/Esc 直接关,关后主栏即掩码态(不 refetch);删「开发者文档说明」折叠区与 curl 硬编码;测试 11 用例重排(明文断言入 within(reveal)、Esc 只关小弹窗、主栏永无明文)
+- [x] **T029**: i18n 三语去品牌 + WorkBuddy + 入口文案
+  **文件**: client `locales/{zh-Hans,en,ja}/translation.json`、`api/personalToken.ts`
+  **逻辑**: install_prompt/copy_send_all_body 接 `$t(bisheng)` 插值+新环境变量名;section_desc Claude Code→WorkBuddy;entry_hint→「让第三方 AI 助手检索知识空间」;删 saved_confirmation/developer_guide/example_hint/example_query/copy_example 五键,增 reveal_title;skillPackUrl 改新 slug、清理无引用 retrieveUrl
+- [x] **T030**: platform 环境变量名联动
+  **文件**: `apiRequestExamples.ts`、`publicApiExamples.test.ts`、`bs.json` 三语 examples_setup
+  **逻辑**: `BISHENG_API_KEY`→`KNOWLEDGE_API_KEY` 一致性替换(开放 API 文档页示例)
+- [ ] **T031**: 迭代二 105 部署验证
+  **逻辑**: 合 909→Drone→105;走查:技能包 zip 无品牌+`KNOWLEDGE_API_KEY` 实测检索、二次小弹窗全流程、WorkBuddy/入口文案、品牌名插值(外观设置配测试名后恢复);e2e-checklist 增补节回写
 
 ---
 

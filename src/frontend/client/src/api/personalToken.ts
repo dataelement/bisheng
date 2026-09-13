@@ -48,11 +48,10 @@ const rejectBusinessErrors: RequestErrorOptions = { skip403Redirect: true };
 export function getPersonalTokenGuideUrls(origin: string) {
   return {
     skillPackUrl: new URL(
-      "/api/v1/open-api/skill-packs/bisheng-knowledge-search",
+      "/api/v1/open-api/skill-packs/knowledge-search",
       origin,
     ).href,
     tokenPageUrl: new URL("/workspace/settings/ai-access?connect=1", origin).href,
-    retrieveUrl: new URL("/api/v2/filelib/retrieve", origin).href,
   };
 }
 

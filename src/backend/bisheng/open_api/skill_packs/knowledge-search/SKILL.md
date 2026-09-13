@@ -1,13 +1,13 @@
 ---
-name: bisheng-knowledge-search
-description: Search the user's BiSheng knowledge bases and knowledge spaces (企业知识库检索). Use this whenever the user wants to 查知识库 / 检索资料 / 搜一下有没有… / 查内部文档、规范、流程、发版说明, or asks any question their organisation's knowledge base may answer. Read-only retrieval with the user's own permissions.
+name: knowledge-search
+description: Search the user's knowledge bases and knowledge spaces (企业知识库检索). Use this whenever the user wants to 查知识库 / 检索资料 / 搜一下有没有… / 查内部文档、规范、流程、发版说明, or asks any question their organisation's knowledge base may answer. Read-only retrieval with the user's own permissions.
 ---
 
-# BiSheng knowledge search
+# Knowledge search
 
 Base URL: `{{BASE_URL}}`
 
-The personal access token comes from the environment variable `BISHENG_API_KEY`
+The personal access token comes from the environment variable `KNOWLEDGE_API_KEY`
 and always acts as its holder. Full endpoint contract, response shapes,
 pagination and the error-code table: `references/api.md` — read it before
 composing requests.
@@ -40,7 +40,7 @@ user for an ID before trying to find it yourself:
 3. **Cite what you used.** Each chunk carries `document_name`, `knowledge_id`,
    `document_id` and `chunk_index` — cite as
    `「document_name」(知识库 knowledge_id · 文档 document_id · 段 chunk_index)`
-   so the user can find the original in BiSheng.
+   so the user can find the original on the platform.
 
 ## When a call fails
 
