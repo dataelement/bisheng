@@ -18,7 +18,7 @@ function curlRequest(path: string, body: object, options: ExampleOptions) {
     const header = identityHeader(options.identity);
     return [
         `curl --no-buffer -X POST "${options.origin}${path}" \\`,
-        '  -H "Authorization: Bearer $BISHENG_API_KEY" \\',
+        '  -H "Authorization: Bearer $KNOWLEDGE_API_KEY" \\',
         '  -H "Content-Type: application/json" \\',
         ...(header ? [`  -H "${header[0]}: ${header[1]}" \\`] : []),
         "  --data-binary @- <<'JSON'",
@@ -39,7 +39,7 @@ from openai import OpenAI
 
 base_url = ${JSON.stringify(`${options.origin}/api/v2/assistant`)}
 model = ${JSON.stringify(options.applicationId)}
-client = OpenAI(base_url=base_url, api_key=os.environ["BISHENG_API_KEY"])
+client = OpenAI(base_url=base_url, api_key=os.environ["KNOWLEDGE_API_KEY"])
 identity_headers = ${JSON.stringify(header ? { [header[0]]: header[1] } : {})}
 messages = ${JSON.stringify(messages)}
 
@@ -91,7 +91,7 @@ import requests
 base_url = ${JSON.stringify(`${options.origin}/api/v2/workflow`)}
 workflow_id = ${JSON.stringify(options.applicationId)}
 headers = {
-    "Authorization": f"Bearer {os.environ['BISHENG_API_KEY']}",
+    "Authorization": f"Bearer {os.environ['KNOWLEDGE_API_KEY']}",
     "Content-Type": "application/json",${header ? `\n    "${header[0]}": "${header[1]}",` : ''}
 }
 

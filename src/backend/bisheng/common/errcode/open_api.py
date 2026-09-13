@@ -190,3 +190,21 @@ class PersonalTokenHolderInvalidError(OpenApiAuthError):
     Code = 26043
     Msg = "Personal access token holder is no longer active in this tenant"
     http_status = 401
+
+
+class PersonalTokenDataScopeError(OpenApiAuthError):
+    """F066: the tenant narrowed personal tokens to holder-created knowledge.
+
+    Deliberately separate from 26003 (missing scope): 26003 means "ask an
+    admin for the scope", 26044 means "tenant policy — retrying or adding
+    scopes will not help".  The payload never names the denied resource
+    (anti-enumeration).
+    """
+
+    Code = 26044
+    Msg = "Personal access token data scope is restricted to holder-created knowledge"
+    http_status = 403
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("scope", "personal_only")
+        super().__init__(**kwargs)

@@ -32,7 +32,7 @@ async def update_personal_token_settings(
     data: PersonalTokenSettingUpdate,
     admin: UserPayload = Depends(get_service_account_admin),
 ):
-    return resp_200(data=await TenantSettingService.update(_tenant_id(admin), data))
+    return resp_200(data=await TenantSettingService.update(_tenant_id(admin), data, operator=admin))
 
 
 @router.get("", response_model=UnifiedResponseModel[PersonalTokenLedgerPage])

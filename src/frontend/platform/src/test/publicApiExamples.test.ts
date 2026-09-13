@@ -106,7 +106,7 @@ describe("published API documentation", () => {
           const code = copyButton.closest('[role="tabpanel"]')?.querySelector("pre")?.textContent
           expect(code).toBeTruthy()
           expect(code).toContain(applicationId)
-          expect(code).toContain("BISHENG_API_KEY")
+          expect(code).toContain("KNOWLEDGE_API_KEY")
           expect(code).not.toContain("/api/v3/")
           if (identity === "delegate") {
             expect(code).toContain("X-On-Behalf-Of")
@@ -119,7 +119,7 @@ describe("published API documentation", () => {
             expect(code).not.toContain("X-On-Behalf-Of")
             expect(code).not.toContain("X-End-User")
           }
-          if (operation !== "Python API") expect(code).toContain("Authorization: Bearer $BISHENG_API_KEY")
+          if (operation !== "Python API") expect(code).toContain("Authorization: Bearer $KNOWLEDGE_API_KEY")
           fireEvent.click(copyButton)
           await waitFor(() => expect(copyText).toHaveBeenLastCalledWith(code))
         }
