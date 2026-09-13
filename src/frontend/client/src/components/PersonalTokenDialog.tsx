@@ -271,12 +271,9 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
                 <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-body text-text-3">
                   {installPrompt}
                 </p>
-                <div className="flex flex-col gap-2">
-                  <Button color="default" variant="solid" size="large" className="self-start" onClick={() => handleCopy(installPrompt)}>
-                    {localize("com_ai_access.copy_all")}
-                  </Button>
-                  <p className="text-body-sm text-text-3">{localize("com_ai_access.install_note")}</p>
-                </div>
+                <Button color="default" variant="solid" size="large" className="self-start" onClick={() => handleCopy(installPrompt)}>
+                  {localize("com_ai_access.copy_all")}
+                </Button>
               </div>
             </section>
 
@@ -330,7 +327,6 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
                     <div className="rounded-lg bg-fill-1 px-3 py-2 text-body-sm">
                       <p className="font-medium text-text-1">{localize("com_ai_access.scope_title")}</p>
                       <p className="mt-1">{scopeText}</p>
-                      <p className="mt-1 text-text-3">{localize("com_ai_access.scope_readonly_note")}</p>
                     </div>
                   ) : null}
                   {actionFailed ? <p role="alert" className="text-danger">{localize("com_ai_access.action_failed")}</p> : null}
