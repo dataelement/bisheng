@@ -2417,7 +2417,7 @@
     "copy_failed": "Copy failed. Please try again.",
     "copy_key": "Copy API Key",
     "copy_send_all": "Copy all and send to your AI assistant",
-    "copy_send_all_body": "Set this key as the KNOWLEDGE_API_KEY environment variable for the $t(bisheng) knowledge-search skill:\n{{key}}",
+    "copy_send_all_body": "Save this key with the $t(bisheng) knowledge-search skill: in the skill directory run\npython3 scripts/search.py --configure --api-key {{key}}\nDo not put the key in shell profile or environment files.",
     "copy_send_all_done": "Copied — paste it to your AI assistant to finish setup",
     "created_label": "Created",
     "delete": "Delete key",

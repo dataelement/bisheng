@@ -2347,7 +2347,7 @@
     "copy_failed": "复制失败，请重试。",
     "copy_key": "复制 API Key",
     "copy_send_all": "一键复制，发给 AI 助手",
-    "copy_send_all_body": "请把这把密钥配置为环境变量 KNOWLEDGE_API_KEY，供 $t(bisheng) 知识检索技能使用：\n{{key}}",
+    "copy_send_all_body": "请把这把密钥交给 $t(bisheng) 知识检索技能保存：进入技能目录运行\npython3 scripts/search.py --configure --api-key {{key}}\n不要把密钥写进 shell 配置文件或环境变量文件。",
     "copy_send_all_done": "已复制，粘贴发给你的 AI 助手即可完成配置",
     "created_label": "创建时间",
     "delete": "删除密钥",

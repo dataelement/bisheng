@@ -2341,7 +2341,7 @@
     "copy_failed": "コピーに失敗しました。もう一度お試しください。",
     "copy_key": "API Key をコピー",
     "copy_send_all": "まとめてコピーして AI アシスタントへ",
-    "copy_send_all_body": "このキーを環境変数 KNOWLEDGE_API_KEY に設定し、$t(bisheng) ナレッジ検索スキルで使用してください：\n{{key}}",
+    "copy_send_all_body": "このキーを $t(bisheng) ナレッジ検索スキルに保存してください。スキルのディレクトリで次を実行します：\npython3 scripts/search.py --configure --api-key {{key}}\nシェルの設定ファイルや環境変数ファイルにキーを書き込まないでください。",
     "copy_send_all_done": "コピーしました。AI アシスタントに貼り付ければ設定完了です",
     "created_label": "作成日",
     "delete": "キーを削除",

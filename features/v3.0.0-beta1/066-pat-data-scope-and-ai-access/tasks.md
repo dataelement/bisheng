@@ -211,7 +211,7 @@ AC 编号来源：AC-P23～AC-P31 = PRD v2.9 §五 R10；AC-R1～AC-R7 = spec §
   **逻辑**: `BISHENG_API_KEY`→`KNOWLEDGE_API_KEY` 一致性替换(开放 API 文档页示例)
 - [x] **T032**: 技能包凭据文件回落（PRD §技能包必备件「环境变量优先、回落配置文件」补齐）
   **文件**: `skill_packs/knowledge-search/{scripts/search.py,SKILL.md,SECURITY.md,references/api.md}`、`personal_token_self.py`、client `locales/*/translation.json`（copy_send_all_body）、`test/open_api/test_skill_pack.py`
-  **逻辑**: 桌面 Agent 沙箱 shell 不读 rc 文件，仅环境变量的通道让每个新会话都重新翻找密钥（WorkBuddy 实测 3 会话同症、单次 8m30s）。search.py 查找顺序 `KNOWLEDGE_API_KEY` → `~/.config/knowledge-search/credentials.json`（按规范化 base URL 分 profile，0600 原子写）；新增 `--configure --api-key` 在线校验后落盘（401/404/非 JSON 拒存，403 业务码与瞬时故障照存）；`--base-url` 改可选（`DEFAULT_BASE_URL` 由打包器渲染，哨兵用 startswith 避免自吞）；缺钥/401 报错指名来源与下一步命令；文案与安装提示词改为「用 --configure 保存，勿进 shell 配置文件」
+  **逻辑**: 桌面 Agent 沙箱 shell 不读 rc 文件，仅环境变量的通道让每个新会话都重新翻找密钥（WorkBuddy 实测 3 会话同症、单次 8m30s）。search.py 查找顺序 `KNOWLEDGE_API_KEY` → `~/.config/knowledge-search/credentials.json`（按规范化 base URL 分 profile，0600 原子写）；新增 `--configure --api-key` 在线校验后落盘（401/404/非 JSON 拒存，403 业务码与瞬时故障照存）；`--base-url` 改可选（`DEFAULT_BASE_URL` 由打包器渲染，哨兵用 startswith 避免自吞）；缺钥/401 报错指名来源与下一步命令；文案与安装提示词改为「用 --configure 保存，勿进 shell 配置文件」；105 真机 `env -i` 全链路 8 项已过
 - [x] **T031**: 迭代二 105 部署验证(2026-09-13 完成,全过)
   **逻辑**: 合 909→Drone(webhook 丢过一次,空提交重触发)→105;技能包 zip 零品牌+search.py 用 `KNOWLEDGE_API_KEY` 实测(200/26044)、二次小弹窗全流程、WorkBuddy/入口文案落地;105 实为中粮贴牌环境(brandName=知源),白标插值直接实证——无需另配测试名;顺带补验收窄档管理员降级(迭代一遗留);执行记录见 e2e-checklist.md §四
 
