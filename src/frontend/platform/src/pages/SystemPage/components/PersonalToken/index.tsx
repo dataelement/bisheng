@@ -23,7 +23,7 @@ import {
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type { PersonalTokenDataScope, PersonalTokenSetting } from "@/types/api/openApi"
 import type { PersonalTokenLedgerItem } from "@/types/api/openApi"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 const PAGE_SIZE = 20
@@ -43,25 +43,25 @@ export function PersonalToken() {
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
 
-  const loadLedger = async (nextPage: number) => {
+  const loadLedger = useCallback(async (nextPage: number) => {
     const ledger = await listPersonalTokensApi({ page: nextPage, page_size: PAGE_SIZE })
     setItems(ledger.data)
     setTotal(ledger.total)
     setPage(nextPage)
-  }
+  }, [])
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const nextSetting = await getPersonalTokenSettingApi()
     setSetting(nextSetting)
     setEnabled(nextSetting.pat_enabled)
     setTtlDays(nextSetting.pat_ttl_days)
     setDataScope(nextSetting.data_scope)
     await loadLedger(1)
-  }
+  }, [loadLedger])
 
   useEffect(() => {
     void load()
-  }, [])
+  }, [load])
 
   const applySetting = (next: PersonalTokenSetting) => {
     setSetting(next)
