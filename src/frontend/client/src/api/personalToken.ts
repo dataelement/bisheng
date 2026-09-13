@@ -17,10 +17,14 @@ export interface PersonalTokenItem {
   create_time: string | null;
 }
 
+export type PersonalTokenDataScope = "all_visible" | "personal_only";
+
 export interface PersonalTokenStatus {
   enabled: boolean;
   token: PersonalTokenItem | null;
   holder_is_admin: boolean;
+  data_scope: PersonalTokenDataScope;
+  ttl_days: number;
 }
 
 export interface PersonalTokenIssued extends PersonalTokenItem {
@@ -47,7 +51,7 @@ export function getPersonalTokenGuideUrls(origin: string) {
       "/api/v1/open-api/skill-packs/bisheng-knowledge-search",
       origin,
     ).href,
-    tokenPageUrl: new URL("/workspace/settings/account?api-token=1", origin).href,
+    tokenPageUrl: new URL("/workspace/settings/ai-access?connect=1", origin).href,
     retrieveUrl: new URL("/api/v2/filelib/retrieve", origin).href,
   };
 }
