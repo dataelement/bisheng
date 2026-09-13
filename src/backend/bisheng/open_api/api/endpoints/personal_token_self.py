@@ -51,8 +51,8 @@ async def get_install_prompt(
 ):
     pack_url = str(request.url_for("download_open_api_skill_pack", pack_name="knowledge-search"))
     prompt = (
-        "Install the knowledge-search skill from "
-        f"{pack_url} and configure its KNOWLEDGE_API_KEY environment variable with my personal access token."
+        f"Install the knowledge-search skill from {pack_url}. When I give you my personal access token, "
+        "save it with the skill's own command `python3 scripts/search.py --configure --api-key <key>` "
+        "(see its SKILL.md); do not put it in a shell profile or environment file."
     )
     return resp_200(data=PersonalTokenInstallPrompt(prompt=prompt, skill_pack_url=pack_url))
-

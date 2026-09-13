@@ -4,7 +4,7 @@ Everything a personal access token with `knowledge:read` can call. Base URL for
 this instance: `{{BASE_URL}}`. Send the token on every request:
 
 ```
-Authorization: Bearer <KNOWLEDGE_API_KEY>
+Authorization: Bearer <api key>   # scripts/search.py adds this header for you
 Content-Type: application/json
 ```
 
@@ -70,7 +70,7 @@ before choosing retrieval keywords.
 
 | status_code | meaning | action |
 |---|---|---|
-| 26001 / 26002 | key missing, malformed, revoked or expired | ask the user to re-generate the key on the platform's key page and update `KNOWLEDGE_API_KEY` |
+| 26001 / 26002 | key missing, malformed, revoked or expired | ask the user to re-generate the key on the platform's key page, then run `python3 scripts/search.py --configure --api-key <new key>`; if `KNOWLEDGE_API_KEY` is set in the environment it takes precedence — unset a stale one |
 | 26003 | key lacks the required scope | tell the user to contact their administrator; retrying will not help |
 | 26030 | permission backend temporarily unavailable | retry once later; if it persists, tell the user to contact their administrator |
 | 26040 | the administrator turned the capability off | the key is intact and resumes working when re-enabled — tell the user to contact their administrator, do not re-issue |
