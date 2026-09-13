@@ -2318,7 +2318,7 @@
     "risk_banner": "Anyone holding this key can read the knowledge above — no sign-in needed. Keep it out of group chats, code repositories and shared documents; if you suspect a leak, delete or regenerate here and the old key dies immediately.",
     "reveal_title": "Your personal key",
     "scope_admin_all": "You are an administrator: this key can reach all knowledge visible to you on the platform, including every department's knowledge spaces.",
-    "scope_all": "The same as what you can see on the platform: department knowledge spaces, knowledge bases you created, and knowledge shared with you. (Q&A knowledge bases are not searchable by AI yet.)",
+    "scope_all": "The same as what you can see on the platform: department knowledge spaces, knowledge bases you created, and knowledge spaces shared with you. (Q&A knowledge bases are not searchable by AI yet.)",
     "scope_own_only": "Your administrator limited the scope: only knowledge bases you created yourself, not including department knowledge spaces or knowledge spaces shared with you.",
     "scope_title": "What this key can reach",
     "section_desc": "Let AI assistants such as WorkBuddy search the knowledge you can see on the platform. Install one retrieval skill and configure one personal key.",
