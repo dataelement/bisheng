@@ -74,6 +74,7 @@
 1. **`get_knowledge` 管理员分支**（`knowledge_service.py:502` 注释自认 "Admin bypass: no F048 enumeration, DB filter left unbounded"，:547 连逐页 BatchCheck 也跳）：actor.data_scope 受限时强制走 visible-first 路径并与 owned 集取交（或直接以 owned 集为候选），恢复动作批检。
 2. **知识空间 `system_scope = login_user.is_global_super` 直读**（`knowledge_space_service.py:2841`、`:2990`）：v2 面上该判定改为咨询 ContextVar actor——data_scope 受限时不得进入 system_scope 分支。
 3. **立规 + 断言**：v2 请求路径上任何 `login_user.is_admin()/is_global_super` 消费点均为审计对象；新增测试断言 v2 链路 grep 不出新增消费（AC-R3 矩阵之外的静态防线）。
+4. **应用层 `actor.super_admin` ALLOW 短路**（105 e2e 实测抓获）：`business_authorization.py` 的 `check_business_action` 与 `batch_check_business_actions` 在进入 runtime **之前** `if actor.super_admin: return True/全通 map`——runtime 内的五个强制点全部够不着。修法：短路条件收紧为 `actor.super_admin and actor.data_scope == DATA_SCOPE_ALL`，收窄档超管落回 registry+runtime 正常路径吃 26044/False。静态守卫同步加第三道断言（短路数 == 带 DATA_SCOPE_ALL 守卫数）。
 
 QA 双端点不在清单内：beta1 已有 `_qa_with_knowledge_access` 闸（`open_endpoints/api/endpoints/filelib.py:62`，读走 visible）→ 判定点在 check_visible，data_scope 自动叠加。
 
@@ -163,6 +164,7 @@ v2 请求 → verify_open_api_access (open_api/api/dependencies.py)
 | 13 | `tenant_filter` 只拦 SELECT、粒度只有租户、raw SQL 绕过 | 有人想借它做收窄（决策 1-C 的诱惑） | 已否决，见决策 1 |
 | 14 | `26044` 不并入 `26003`：行动指引不同（加位 vs 范围策略） | Agent/用户拿到笼统 403 无从自救 | 决策 2 + api.md 错误码表 |
 | 15 | 闸口取 `get_policy` 现在只在 natural_person 分支调用（dependencies.py:69-73）——data_scope 装填要复用这一次调用，别再加第二次策略读取 | 每请求多一次 Redis/DB 读 | 决策 1 装填端实现注意 |
+| 16 | **beta1 在 runtime 之外还有应用层超管 ALLOW 短路**（`business_authorization.py` 单+批两处，beta2 基线审计时不存在、静态守卫只盯 `is_global_super` 字符串故双重漏网）——「判定先于短路」只对 runtime 内的短路天然成立 | 收窄档超管密钥单资源检索全放行（105 e2e N6 实测 200+内容） | 短路条件加 `data_scope == DATA_SCOPE_ALL`；守卫断言钉死 |
 
 ---
 
@@ -219,3 +221,4 @@ v2 请求 → verify_open_api_access (open_api/api/dependencies.py)
 |---|---|---|
 | 2026-09-13 | 初版（8 项决策 + 15 条坑） | F066 设计定稿 |
 | 2026-09-13 | 决策 2 补异常落位注；§7 矩阵改两层实现形态（T010 测试降级） | 实现期回写 |
+| 2026-09-13 | 决策 5 收口清单 3→4 处；§5 增坑 16（应用层超管短路） | 105 e2e N6 抓获真旁路 |
