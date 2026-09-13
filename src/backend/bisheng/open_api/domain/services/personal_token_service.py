@@ -35,10 +35,18 @@ class PersonalTokenService:
     async def status(cls, *, tenant_id: int, user_id: int) -> PersonalTokenStatus:
         setting = await TenantSettingService.get_response(tenant_id)
         token = await cls._current_item(tenant_id=tenant_id, user_id=user_id)
+        holder_is_admin = await cls._is_admin(user_id, tenant_id)
+        ttl_days = setting.pat_ttl_days
+        if holder_is_admin:
+            # The effective value after the admin cap — the client renders
+            # this number verbatim and never recomputes it from config.
+            ttl_days = min(ttl_days, settings.open_api.pat_admin_ttl_days)
         return PersonalTokenStatus(
             enabled=setting.effective_enabled,
             token=token,
-            holder_is_admin=await cls._is_admin(user_id, tenant_id),
+            holder_is_admin=holder_is_admin,
+            data_scope=setting.data_scope,
+            ttl_days=ttl_days,
         )
 
     @classmethod

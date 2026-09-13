@@ -94,6 +94,7 @@ from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     require_business_action,
 )
+from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_knowledge_index_name, generate_uuid
@@ -495,6 +496,11 @@ class KnowledgeService(KnowledgeUtils):
         # ---- 2. Decide strategy: admin bypass vs visible-first ----
         actor = await resolve_permission_actor(login_user)
         is_admin = actor.super_admin or actor.current_tenant_id in actor.tenant_admin_tenant_ids
+        if actor.data_scope != DATA_SCOPE_ALL:
+            # F066: a narrowed token must not take the admin bypass — the
+            # visible-first enumeration intersects with the holder-created set
+            # and the per-page action checks stay on.
+            is_admin = False
 
         visible_ids: list[int] | None
         fga_elapsed_ms = 0.0

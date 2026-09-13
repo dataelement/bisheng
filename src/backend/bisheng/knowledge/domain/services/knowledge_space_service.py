@@ -3041,7 +3041,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
         from bisheng.common.schemas.api import PageInfiniteCursorData
 
-        system_scope = bool(self.login_user.is_global_super)
+        system_scope = bool(self.login_user.is_global_super) and not _f066_data_scope_narrowed()
         request_started_at = perf_counter()
         stage = "authorize"
         stage_elapsed_ms = {
@@ -3189,7 +3189,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         order_field: str = "file_type",
         order_sort: str = "asc",
     ) -> dict:
-        system_scope = bool(self.login_user.is_global_super)
+        system_scope = bool(self.login_user.is_global_super) and not _f066_data_scope_narrowed()
         parent_folder = None
         if system_scope:
             space, parent_folder = await self._load_space_listing_scope(space_id, parent_id)
@@ -6088,3 +6088,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
 
     # ──────────────────────────── Listings ────────────────────────────────────
+
+def _f066_data_scope_narrowed() -> bool:
+    """F066: a narrowed open-platform token must not take super-admin reads.
+
+    Off the open-platform surface there is no contextual actor and this stays
+    False, so the v1 console behaviour is untouched.
+    """
+
+    from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
+    from bisheng.permission.application.identity import get_current_permission_actor
+
+    actor = get_current_permission_actor()
+    return actor is not None and actor.data_scope != DATA_SCOPE_ALL

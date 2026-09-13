@@ -75,6 +75,7 @@ def _actor(*, super_admin: bool = False, tenant_admin: bool = False) -> SimpleNa
         current_tenant_id=_User.tenant_id,
         super_admin=super_admin,
         tenant_admin_tenant_ids=admin_tenants,
+        data_scope="all_visible",
     )
 
 
