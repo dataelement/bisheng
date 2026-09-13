@@ -1,10 +1,10 @@
-# BiSheng Open API — knowledge retrieval contract
+# Open API — knowledge retrieval contract
 
 Everything a personal access token with `knowledge:read` can call. Base URL for
 this instance: `{{BASE_URL}}`. Send the token on every request:
 
 ```
-Authorization: Bearer <BISHENG_API_KEY>
+Authorization: Bearer <KNOWLEDGE_API_KEY>
 Content-Type: application/json
 ```
 
@@ -28,7 +28,7 @@ set. Each row carries `id` (use it as `knowledge_base_ids`) and `name`.
 Notes:
 - `type=3` returns spaces the holder **created or joined**. Department
   knowledge spaces are retrievable (when permitted) but are *not listed
-  here* — if the user names one, the user must supply its ID from the BiSheng
+  here* — if the user names one, the user must supply its ID from the platform
   UI.
 - QA knowledge bases (`type=1`) can be listed but are **not retrievable** via
   `/retrieve` — do not pass their IDs there.
@@ -57,7 +57,7 @@ silently dropped. Response `data`: `{"chunks": [...], "total": n}`; each chunk:
 | `chunk_index` | position inside the document |
 | `document_update_time` | last update of the source document |
 
-**Citation format** (so the user can trace the answer back in BiSheng):
+**Citation format** (so the user can trace the answer back on the platform):
 `「document_name」(知识库 knowledge_id · 文档 document_id · 段 chunk_index)`.
 
 ### GET /api/v2/filelib/file/list — list files inside one knowledge base
@@ -70,7 +70,7 @@ before choosing retrieval keywords.
 
 | status_code | meaning | action |
 |---|---|---|
-| 26001 / 26002 | key missing, malformed, revoked or expired | ask the user to re-generate the key on the BiSheng key page and update `BISHENG_API_KEY` |
+| 26001 / 26002 | key missing, malformed, revoked or expired | ask the user to re-generate the key on the platform's key page and update `KNOWLEDGE_API_KEY` |
 | 26003 | key lacks the required scope | tell the user to contact their administrator; retrying will not help |
 | 26030 | permission backend temporarily unavailable | retry once later; if it persists, tell the user to contact their administrator |
 | 26040 | the administrator turned the capability off | the key is intact and resumes working when re-enabled — tell the user to contact their administrator, do not re-issue |

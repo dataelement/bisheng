@@ -1656,7 +1656,7 @@
       "example_external": "顧客サイト・サポート：delegate のないキーで API キーと X-End-User（例：customer-001）を送ります。会話は外部ユーザー別に分離され、同一テナント・同一アカウントの別キーでも同じ識別子なら同一区分にアクセスできます。リソース権限はサービスアカウント、新規リソースの所有者は設定された個人のままです。",
       "example_service": "定期処理・システム連携：delegate のないキーで API キーだけを送ります。サービスアカウントの権限を使い、新規リソースは設定された所有者に帰属します。永続化会話は同一テナント・同一アカウントの有効なキー間で共有され、X-End-User 付きの会話とは分離されます。",
       "example_stop_tab": "ワークフロー停止 · cURL",
-      "examples_setup": "毎回 {{scope}} を持つ API キーが必須です。環境変数 BISHENG_API_KEY に実際のキーを設定してください。識別項目は Headers に設定し、2 つの識別ヘッダーを同時に送らないでください。",
+      "examples_setup": "毎回 {{scope}} を持つ API キーが必須です。環境変数 KNOWLEDGE_API_KEY に実際のキーを設定してください。識別項目は Headers に設定し、2 つの識別ヘッダーを同時に送らないでください。",
       "external_title": "外部ユーザー",
       "service_title": "システム連携",
       "workflow_note": "継続・停止時も最初と同じ実行主体を使います。session_id、message_id、node_id、フィールド key は前回の返却値を使い、input は input_schema に従って設定してください。",

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Query the read-only BiSheng knowledge endpoints (list + retrieve)."""
+"""Query the read-only knowledge endpoints (list + retrieve)."""
 
 from __future__ import annotations
 
@@ -59,9 +59,9 @@ def _call(url: str, token: str, body: bytes | None = None) -> int:
 
 def main() -> int:
     args = _arguments()
-    token = os.environ.get("BISHENG_API_KEY", "")
+    token = os.environ.get("KNOWLEDGE_API_KEY", "")
     if not token:
-        print("BISHENG_API_KEY is required", file=sys.stderr)
+        print("KNOWLEDGE_API_KEY is required", file=sys.stderr)
         return 2
     parsed = urlparse(args.base_url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:

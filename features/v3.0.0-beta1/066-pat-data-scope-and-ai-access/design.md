@@ -222,3 +222,5 @@ v2 请求 → verify_open_api_access (open_api/api/dependencies.py)
 | 2026-09-13 | 初版（8 项决策 + 15 条坑） | F066 设计定稿 |
 | 2026-09-13 | 决策 2 补异常落位注；§7 矩阵改两层实现形态（T010 测试降级） | 实现期回写 |
 | 2026-09-13 | 决策 5 收口清单 3→4 处；§5 增坑 16（应用层超管短路） | 105 e2e N6 抓获真旁路 |
+| 2026-09-13 | 迭代二·去品牌化（采访定稿 5 条）：环境变量 `BISHENG_API_KEY`→`KNOWLEDGE_API_KEY`、技能包 slug/name `bisheng-knowledge-search`→`knowledge-search`（不留旧别名）、界面文案接 `$t(bisheng)` 白标插值、技能包内英文文档一律中性、`bs-pat-` 前缀不改；顺带修打包器 `__pycache__` 泄入 zip | 贴牌客户不能透出品牌（用户采访确认） |
+| 2026-09-13 | 迭代二·交互修订（AC-P31 口径变更）：勾选门控取消，明文改在主弹窗之上的二次小弹窗（TokenRevealDialog，z-110 照 ConfirmContext 叠加先例）展示，×/Esc/遮罩直接关、关后主栏即掩码态；主栏永不渲染明文与红条；删「开发者文档说明」折叠区；驻地页副标题 Claude Code→WorkBuddy；入口副文案改「让第三方 AI 助手检索知识空间」 | 勾选才能关弹窗反直觉（对标 ima 二次弹窗）+ 第二步过长 |

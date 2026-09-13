@@ -1711,7 +1711,7 @@
       "example_external": "Customer site / support app: use a key without delegate and send the API key plus X-End-User (such as customer-001). Conversations are isolated by external user. Other keys of the same account and tenant can access the same partition with the same identifier. Resource permissions remain those of the service account; new resources belong to its configured owner.",
       "example_service": "Scheduled jobs / system integration: use a key without delegate and send only the API key. Uses service-account permissions; new resources belong to its configured owner. Persisted conversations are shared by valid keys of the same account and tenant, separately from conversations with X-End-User.",
       "example_stop_tab": "Stop workflow · cURL",
-      "examples_setup": "Every request requires an API key with {{scope}}. Set BISHENG_API_KEY to your key. Identity fields belong in Headers; the two identity headers cannot be sent together.",
+      "examples_setup": "Every request requires an API key with {{scope}}. Set KNOWLEDGE_API_KEY to your key. Identity fields belong in Headers; the two identity headers cannot be sent together.",
       "external_title": "External user",
       "service_title": "System integration",
       "workflow_note": "Keep the original identity when continuing or stopping. Use the returned session_id, message_id, node_id, and field keys; construct input from input_schema.",

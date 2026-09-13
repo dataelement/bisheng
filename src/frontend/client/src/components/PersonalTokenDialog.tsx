@@ -1,11 +1,12 @@
 import { Outlined } from "bisheng-icons";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   deletePersonalTokenApi,
   getPersonalTokenGuideUrls,
   getPersonalTokenStatusApi,
   issuePersonalTokenApi,
   type PersonalTokenIssued,
+  type PersonalTokenItem,
   type PersonalTokenStatus,
 } from "~/api/personalToken";
 import {
@@ -32,6 +33,66 @@ function formatDate(value: string | null): string {
   return value ? value.slice(0, 10) : "—";
 }
 
+interface TokenRevealDialogProps {
+  issued: PersonalTokenIssued | null;
+  onClose: () => void;
+  onCopy: (value: string, doneMessage?: string) => void;
+}
+
+/** One-time key reveal stacked above the main dialog, on the same z-tier as
+ * the confirm layer. Dismissing it (×/Esc/overlay) is always allowed: the key
+ * is already stored, closing only hides the plaintext for good. */
+function TokenRevealDialog({ issued, onClose, onCopy }: TokenRevealDialogProps) {
+  const localize = useLocalize();
+  const copyAllRef = useRef<HTMLButtonElement>(null);
+  return (
+    <Dialog open={issued !== null} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <DialogContent
+        overlayClassName="z-[110]"
+        className="z-[110] w-[calc(100vw-32px)] max-w-[480px] gap-0 rounded-2xl p-6 shadow-modal"
+        onOpenAutoFocus={(event) => { event.preventDefault(); copyAllRef.current?.focus(); }}
+      >
+        <DialogHeader className="space-y-0 pb-3 pr-8 text-left">
+          <DialogTitle className="text-h4 font-medium text-text-1">
+            {localize("com_ai_access.reveal_title")}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            {localize("com_ai_access.once_banner")}
+          </DialogDescription>
+        </DialogHeader>
+        {issued ? (
+          <div className="space-y-3 text-body text-text-3">
+            <p className="rounded-lg bg-danger-tint px-3 py-2 text-body-sm text-danger">
+              {localize("com_ai_access.once_banner")}
+            </p>
+            <div className="flex items-start gap-2">
+              <p className="min-w-0 flex-1 break-all">
+                <span>{localize("com_ai_access.key_label")}: </span>
+                <code>{issued.plaintext}</code>
+              </p>
+              <TooltipAnchor description={localize("com_ai_access.copy_key")}>
+                <Button color="default" variant="text" iconOnly aria-label={localize("com_ai_access.copy_key")} onClick={() => onCopy(issued.plaintext)}>
+                  <Outlined.Copy />
+                </Button>
+              </TooltipAnchor>
+            </div>
+            <Button
+              ref={copyAllRef}
+              color="default" variant="solid" size="large" className="w-full"
+              onClick={() => onCopy(localize("com_ai_access.copy_send_all_body", { key: issued.plaintext }), localize("com_ai_access.copy_send_all_done"))}
+            >
+              {localize("com_ai_access.copy_send_all")}
+            </Button>
+            <p className="rounded-lg bg-danger-tint px-3 py-2 text-body-sm text-danger">
+              {localize("com_ai_access.risk_banner")}
+            </p>
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** "AI assistant access" dialog: install-instruction step + personal key step. */
 export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogProps) {
   const localize = useLocalize();
@@ -39,7 +100,6 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
   const { showToast } = useToastContext();
   const [status, setStatus] = useState<PersonalTokenStatus | null>(null);
   const [issued, setIssued] = useState<PersonalTokenIssued | null>(null);
-  const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [action, setAction] = useState<"issue" | "delete" | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -55,7 +115,6 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
     let cancelled = false;
     setStatus(null);
     setIssued(null);
-    setSaved(false);
     setLoadFailed(false);
     setActionFailed(false);
     setAdminConfirm(false);
@@ -68,22 +127,11 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
     return () => { cancelled = true; };
   }, [open, reload]);
 
-  const token = issued ?? status?.token;
+  const token = status?.token;
   const unavailable = !status?.enabled;
   const busy = loading || action !== null;
-  const unsaved = issued !== null && !saved;
   const urls = getPersonalTokenGuideUrls(window.location.origin);
   const installPrompt = localize("com_ai_access.install_prompt", urls);
-  const requestBody = JSON.stringify({
-    query: localize("com_ai_access.example_query"),
-    knowledge_base_ids: [1],
-  });
-  const example = [
-    `curl -X POST '${urls.retrieveUrl}' \\`,
-    '  -H "Authorization: Bearer $BISHENG_API_KEY" \\',
-    "  -H 'Content-Type: application/json' \\",
-    `  -d '${requestBody}'`,
-  ].join("\n");
   // The narrowed tenant policy wins over administrator facts, so the heavier
   // admin ceremony only applies while the scope is still the wide default.
   const adminWideScope = Boolean(status?.holder_is_admin) && status?.data_scope !== "personal_only";
@@ -101,8 +149,11 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
     try {
       const next = await issuePersonalTokenApi();
       setIssued(next);
-      setSaved(false);
-      setStatus((previous) => previous ? { ...previous, token: next } : previous);
+      // Keep only the masked item in status so the plaintext never lingers
+      // outside the reveal dialog.
+      const item = { ...next } as PersonalTokenItem & { plaintext?: string };
+      delete item.plaintext;
+      setStatus((previous) => previous ? { ...previous, token: item } : previous);
     } catch {
       setActionFailed(true);
     } finally {
@@ -111,7 +162,7 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
   };
 
   const handleIssue = async () => {
-    if (busy || unavailable || unsaved) return;
+    if (busy || unavailable) return;
     if (token && !await confirm({
       title: localize("com_ai_access.regenerate"),
       description: localize("com_ai_access.regenerate_confirmation"),
@@ -126,7 +177,7 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
   };
 
   const handleDelete = async () => {
-    if (busy || unsaved) return;
+    if (busy) return;
     if (!await confirm({
       title: localize("com_ai_access.delete"),
       description: localize("com_ai_access.delete_confirmation"),
@@ -138,7 +189,6 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
     try {
       await deletePersonalTokenApi();
       setIssued(null);
-      setSaved(false);
       setStatus((previous) => previous ? { ...previous, token: null } : previous);
       showToast({ message: localize("com_ai_access.deleted_toast"), status: "success" });
     } catch {
@@ -158,7 +208,9 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen && (action !== null || unsaved)) return;
+    // While the reveal dialog is up, only it may close (defence in depth: the
+    // top DismissableLayer already swallows Esc/overlay for the main dialog).
+    if (!nextOpen && (action !== null || issued !== null)) return;
     if (!nextOpen) {
       setIssued(null);
       setStatus(null);
@@ -172,6 +224,7 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
       : token?.is_valid ? "active" : "expired";
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         close={false}
@@ -188,7 +241,7 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
             <Button
               color="default" variant="text" iconOnly
               aria-label={localize("com_ui_close")}
-              disabled={action !== null || unsaved}
+              disabled={action !== null}
               onClick={() => handleOpenChange(false)}
             >
               <Outlined.Close />
@@ -257,42 +310,18 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
                     <p>{localize("com_ai_access.load_failed")}</p>
                   ) : token ? (
                     <>
-                      {issued ? (
-                        <p className="rounded-lg bg-danger-tint px-3 py-2 text-body-sm text-danger">
-                          {localize("com_ai_access.once_banner")}
-                        </p>
-                      ) : null}
-                      <div className="flex items-start gap-2">
-                        <p className="min-w-0 flex-1 break-all">
-                          <span>{localize("com_ai_access.key_label")}: </span>
-                          <code>{issued?.plaintext ?? token.key_mask}</code>
-                        </p>
-                        {issued ? (
-                          <TooltipAnchor description={localize("com_ai_access.copy_key")}>
-                            <Button color="default" variant="text" iconOnly aria-label={localize("com_ai_access.copy_key")} onClick={() => handleCopy(issued.plaintext)}>
-                              <Outlined.Copy />
-                            </Button>
-                          </TooltipAnchor>
-                        ) : null}
-                      </div>
+                      <p className="min-w-0 break-all">
+                        <span>{localize("com_ai_access.key_label")}: </span>
+                        <code>{token.key_mask}</code>
+                      </p>
                       <p>{localize("com_ai_access.status_label")}: {localize(`com_ai_access.status_${statusKey}`)}</p>
                       <p>{localize("com_ai_access.expires_label")}: {formatDate(token.expires_at)}</p>
                       <p>{localize("com_ai_access.created_label")}: {formatDate(token.create_time)}</p>
                       <p>
                         {localize("com_ai_access.last_used_label")}: {token.last_used_at ? formatDate(token.last_used_at) : localize("com_ai_access.never_used")}
                       </p>
-                      {issued ? (
-                        <div className="space-y-3 text-body-sm text-text-2">
-                          <Button color="default" variant="solid" size="large" className="w-full" onClick={() => handleCopy(localize("com_ai_access.copy_send_all_body", { key: issued.plaintext }), localize("com_ai_access.copy_send_all_done"))}>
-                            {localize("com_ai_access.copy_send_all")}
-                          </Button>
-                          <label className="flex items-start gap-2">
-                            <Checkbox className="mt-1" checked={saved} onCheckedChange={(checked) => setSaved(checked === true)} />
-                            {localize("com_ai_access.saved_confirmation")}
-                          </label>
-                        </div>
-                      ) : <p className="text-body-sm">{localize("com_ai_access.masked_hint")}</p>}
-                      {!issued ? <p className="text-body-sm">{localize("com_ai_access.verify_hint")}</p> : null}
+                      <p className="text-body-sm">{localize("com_ai_access.masked_hint")}</p>
+                      <p className="text-body-sm">{localize("com_ai_access.verify_hint")}</p>
                     </>
                   ) : (
                     <p className="whitespace-pre-line">{localize("com_ai_access.empty_description")}</p>
@@ -304,11 +333,6 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
                       <p className="mt-1 text-text-3">{localize("com_ai_access.scope_readonly_note")}</p>
                     </div>
                   ) : null}
-                  {issued ? (
-                    <p className="rounded-lg bg-danger-tint px-3 py-2 text-body-sm text-danger">
-                      {localize("com_ai_access.risk_banner")}
-                    </p>
-                  ) : null}
                   {actionFailed ? <p role="alert" className="text-danger">{localize("com_ai_access.action_failed")}</p> : null}
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -319,11 +343,11 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
                   ) : (
                     <>
                       {token ? (
-                        <Button color="danger" variant="filled" size="large" loading={action === "delete"} disabled={busy || unsaved} onClick={handleDelete}>
+                        <Button color="danger" variant="filled" size="large" loading={action === "delete"} disabled={busy} onClick={handleDelete}>
                           {localize("com_ai_access.delete")}
                         </Button>
                       ) : null}
-                      <Button color="default" variant={token ? "filled" : "solid"} size="large" loading={action === "issue"} disabled={busy || unavailable || unsaved} onClick={handleIssue}>
+                      <Button color="default" variant={token ? "filled" : "solid"} size="large" loading={action === "issue"} disabled={busy || unavailable} onClick={handleIssue}>
                         {localize(token ? "com_ai_access.regenerate" : "com_ai_access.get_key")}
                       </Button>
                     </>
@@ -334,17 +358,10 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
               </div>
             </section>
           </div>
-
-          <details className="mt-5 text-body-sm text-text-3">
-            <summary className="cursor-pointer text-blue-500">{localize("com_ai_access.developer_guide")}</summary>
-            <p className="my-3">{localize("com_ai_access.example_hint")}</p>
-            <pre className="overflow-x-auto rounded-xl bg-fill-1 p-4 text-body-sm text-text-2"><code>{example}</code></pre>
-            <Button color="default" variant="outlined" className="mt-3" onClick={() => handleCopy(example)}>
-              {localize("com_ai_access.copy_example")}
-            </Button>
-          </details>
         </div>
       </DialogContent>
     </Dialog>
+    <TokenRevealDialog issued={issued} onClose={() => setIssued(null)} onCopy={handleCopy} />
+    </>
   );
 }

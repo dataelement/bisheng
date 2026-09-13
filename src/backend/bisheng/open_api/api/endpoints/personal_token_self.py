@@ -49,10 +49,10 @@ async def get_install_prompt(
     request: Request,
     _user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    pack_url = str(request.url_for("download_open_api_skill_pack", pack_name="bisheng-knowledge-search"))
+    pack_url = str(request.url_for("download_open_api_skill_pack", pack_name="knowledge-search"))
     prompt = (
-        "Install the BiSheng knowledge-search skill from "
-        f"{pack_url} and configure its BISHENG_API_KEY environment variable with my personal access token."
+        "Install the knowledge-search skill from "
+        f"{pack_url} and configure its KNOWLEDGE_API_KEY environment variable with my personal access token."
     )
     return resp_200(data=PersonalTokenInstallPrompt(prompt=prompt, skill_pack_url=pack_url))
 

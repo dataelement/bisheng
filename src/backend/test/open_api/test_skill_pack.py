@@ -8,23 +8,27 @@ from bisheng.open_api.domain.services.skill_pack_service import SkillPackService
 
 
 def test_pack_is_deterministic_safe_and_instance_rendered():
-    first = SkillPackService.build("bisheng-knowledge-search", base_url="https://example.test/base")
-    second = SkillPackService.build("bisheng-knowledge-search", base_url="https://example.test/base")
+    first = SkillPackService.build("knowledge-search", base_url="https://example.test/base")
+    second = SkillPackService.build("knowledge-search", base_url="https://example.test/base")
     assert first == second
 
     with ZipFile(BytesIO(first)) as archive:
         names = archive.namelist()
         assert names == sorted(names)
         assert all(not name.startswith("/") and ".." not in name.split("/") for name in names)
-        skill = archive.read("bisheng-knowledge-search/SKILL.md").decode()
-        security = archive.read("bisheng-knowledge-search/SECURITY.md").decode()
-        script = archive.read("bisheng-knowledge-search/scripts/search.py").decode()
+        skill = archive.read("knowledge-search/SKILL.md").decode()
+        security = archive.read("knowledge-search/SECURITY.md").decode()
+        script = archive.read("knowledge-search/scripts/search.py").decode()
 
     assert "https://example.test/base" in skill
     assert "https://example.test" in security
     assert "/api/v2/filelib/retrieve" in script
-    assert "BISHENG_API_KEY" in script
+    assert "KNOWLEDGE_API_KEY" in script
     assert "X-Bisheng" not in first.decode("latin-1")
+    # White-label guard: no brand strings may ship inside the pack (F066 iter 2).
+    whole = first.decode("latin-1")
+    assert "BiSheng" not in whole and "BISHENG" not in whole
+    assert "__pycache__" not in whole
 
 
 def test_pack_name_is_allowlisted():
@@ -37,12 +41,12 @@ def test_pack_name_is_allowlisted():
 
 
 def test_pack_ships_rendered_api_reference_and_list_first_flow():
-    payload = SkillPackService.build("bisheng-knowledge-search", base_url="https://example.test/base")
+    payload = SkillPackService.build("knowledge-search", base_url="https://example.test/base")
 
     with ZipFile(BytesIO(payload)) as archive:
-        skill = archive.read("bisheng-knowledge-search/SKILL.md").decode()
-        api = archive.read("bisheng-knowledge-search/references/api.md").decode()
-        script = archive.read("bisheng-knowledge-search/scripts/search.py").decode()
+        skill = archive.read("knowledge-search/SKILL.md").decode()
+        api = archive.read("knowledge-search/references/api.md").decode()
+        script = archive.read("knowledge-search/scripts/search.py").decode()
 
     # Chinese trigger words in the routing description (PRD §4.10.8 must-have 1).
     assert "知识库" in skill and "检索" in skill
@@ -63,7 +67,7 @@ def test_script_surfaces_business_error_bodies(monkeypatch, capsys, tmp_path):
 
     script_file = (
         Path(__file__).resolve().parents[2]
-        / "bisheng/open_api/skill_packs/bisheng-knowledge-search/scripts/search.py"
+        / "bisheng/open_api/skill_packs/knowledge-search/scripts/search.py"
     )
     spec = importlib.util.spec_from_file_location("bisheng_skill_search", script_file)
     module = importlib.util.module_from_spec(spec)
@@ -79,7 +83,7 @@ def test_script_surfaces_business_error_bodies(monkeypatch, capsys, tmp_path):
         )
 
     monkeypatch.setattr(module, "urlopen", deny)
-    monkeypatch.setenv("BISHENG_API_KEY", "bs-pat-test")
+    monkeypatch.setenv("KNOWLEDGE_API_KEY", "bs-pat-test")
     monkeypatch.setattr(
         sys,
         "argv",
