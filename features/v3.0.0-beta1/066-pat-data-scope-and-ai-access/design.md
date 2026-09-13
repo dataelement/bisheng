@@ -50,6 +50,7 @@
 - **选定**：B；**列表路径例外**——`list_visible_objects` 交集是静默收窄，不产生 26044。
 - **原因**：26044 存在的全部意义是行动分辨（26003=找管理员加权限位；26044=租户范围策略，加位与重试都无益）；A 会让它永远不出现。「检索面报错 / 清单面静默」的不对称已写入 PRD §4.10.7 与技能包 api.md。
 - **何时重新考虑**：若将来产品要求清单端点也显式提示受限（如响应头），再加带外信号，不改静默语义。
+- **落位注**（实现期确定）：异常类即 `common/errcode/open_api.PersonalTokenDataScopeError`（错误码类按域规约住 common/errcode，全层可 import），权限层直接抛它；`permission` 侧不再自定义中间异常。
 
 ### 决策 3：「本人创建」判定口径与查询
 
@@ -195,7 +196,7 @@ v2 请求 → verify_open_api_access (open_api/api/dependencies.py)
 
 ## 7. 测试与可观测
 
-- **覆盖矩阵**（AC-R3）：从 `open_api/domain/scopes.py` 注册表读出 `knowledge:read` 全端点，×（员工/租管/超管 PAT）×（all_visible/personal_only）参数化生成用例；注册表新增端点未入矩阵即 fail。放 `test/open_api/`。
+- **覆盖矩阵**（AC-R3，实现形态）：本地无中间件，矩阵拆两层——`test_data_scope_matrix.py` 的**注册表分类断言**（knowledge:read 每个端点必须有 raise/narrow/per-item/sa-only 分类，新增端点即 fail）+ **闸口→权限层→传输接线 e2e**（真策略/真闸口/桩 FGA：默认档不变、收窄次请求生效且可逆、管理员同收窄、403+26044 防枚举载荷）；真实端点全行为矩阵在 `/e2e-test`（e2e-checklist.md）对真实环境执行。
 - 单测：策略缓存七处一致性（含缺键/未知值/混版回填模拟）、schema preserve 语义、helper 判定口径（含部门空间剪除、file 归父）、审计写入条件。
 - 前端：client 弹窗状态机与四态文案组件测试；platform 策略卡交互测试（沿 `personalTokenSettingsInteraction.test.tsx` 范式）；`pnpm lint` / `typecheck` / `check-i18n`。
 - 手动验证：本地起前后端连 test 环境中间件（既定偏好，不改 test 部署；启动命令见 `src/backend/AGENTS.md` 与两前端 `AGENTS.md`——platform :3001、client :4001 基路径 `/workspace`、API :7860）。浏览器链路：client 知识库页入口 → 两步弹窗 → （切管理员账号）签发前确认 → 密钥展示（红条 + 四态范围卡）→ platform :3001 系统管理「AI 助手接入」收紧 → 复制的密钥调 `POST /api/v2/filelib/retrieve` 验 26044 → 改回验恢复。
@@ -217,3 +218,4 @@ v2 请求 → verify_open_api_access (open_api/api/dependencies.py)
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
 | 2026-09-13 | 初版（8 项决策 + 15 条坑） | F066 设计定稿 |
+| 2026-09-13 | 决策 2 补异常落位注；§7 矩阵改两层实现形态（T010 测试降级） | 实现期回写 |
