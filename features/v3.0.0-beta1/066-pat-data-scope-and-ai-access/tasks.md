@@ -204,3 +204,4 @@ AC 编号来源：AC-P23～AC-P31 = PRD v2.9 §五 R10；AC-R1～AC-R7 = spec §
 - T007 偏离 → design 决策 2 补注：26044 异常类落位 `common/errcode/open_api`（错误码域规约），权限层直接抛，不在 permission.application 另造异常
 - T010 偏离（测试降级）→ design §7：本地矩阵 = 注册表分类断言 + 闸口→权限层→传输 e2e 接线；真实端点全行为矩阵需中间件，归 T026 `/e2e-test`
 - T026 部分完成 → e2e-checklist.md 已建（API 侧自动化结果 + 浏览器手动清单），真实环境执行待部署
+- T026 执行期抓获旁路 → design 坑 16 / 决策 5 收口 ④：应用层超管短路绕过 runtime 判定（105 实测），business_authorization 两处短路加 DATA_SCOPE_ALL 条件 + 回归用例 + 守卫断言

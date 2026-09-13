@@ -210,3 +210,100 @@ async def test_default_scope_changes_nothing(no_resolver):
 
     assert allowed is True  # decided by the stubbed OpenFGA, not by the narrowing
     assert [name for name, _ in fga.calls] == ["check"]
+
+
+# ── F066 e2e regression: the application-layer super-admin shortcut ──────────
+# Caught live on 105: check_business_action returned True for a narrowed super
+# admin before the runtime (and its data-scope denial) was ever reached.
+
+
+class StubRegistry:
+    def __init__(self):
+        self.calls = 0
+
+    async def resolve(self, *, resource_type, resource_id, actor, action):
+        self.calls += 1
+        return VerifiedPermissionTarget.from_business_service(
+            tenant_id=1,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            resource_version=0,
+            context_version="ctx",
+        )
+
+
+def _wire_business_layer(monkeypatch, runtime):
+    import bisheng.permission.application.business_authorization as ba
+
+    registry = StubRegistry()
+
+    async def get_registry():
+        return registry
+
+    async def get_runtime():
+        return runtime
+
+    monkeypatch.setattr(ba, "get_f048_resource_registry", get_registry)
+    monkeypatch.setattr(ba, "get_f048_runtime", get_runtime)
+    return ba, registry
+
+
+async def test_business_action_shortcut_yields_to_narrowed_scope(resolver, monkeypatch):
+    from types import SimpleNamespace
+
+    from bisheng.permission.application.identity import (
+        reset_current_permission_actor,
+        set_current_permission_actor,
+    )
+
+    ba, registry = _wire_business_layer(monkeypatch, service(StubFGA()))
+    login = SimpleNamespace(user_id=5, tenant_id=1, is_global_super=True)
+    token = set_current_permission_actor(narrowed_super_admin())
+    try:
+        with pytest.raises(PersonalTokenDataScopeError):
+            await ba.check_business_action(
+                login, resource_type="knowledge_library", resource_id="8", action="use"
+            )
+        allowed = await ba.check_business_action(
+            login, resource_type="knowledge_library", resource_id="7", action="use"
+        )
+        assert allowed is True  # owned: reaches the runtime, then the shortcut
+        batch = await ba.batch_check_business_actions(
+            login,
+            resource_type="knowledge_library",
+            resource_ids=["7", "8"],
+            actions=["use"],
+        )
+        assert batch == {"7": frozenset({"use"}), "8": frozenset()}
+        assert registry.calls > 0  # the foregone-conclusion path was NOT taken
+    finally:
+        reset_current_permission_actor(token)
+
+
+async def test_business_action_shortcut_intact_for_wide_scope(monkeypatch, no_resolver):
+    from types import SimpleNamespace
+
+    from bisheng.permission.application.identity import (
+        reset_current_permission_actor,
+        set_current_permission_actor,
+    )
+
+    ba, registry = _wire_business_layer(monkeypatch, service(StubFGA()))
+    login = SimpleNamespace(user_id=5, tenant_id=1, is_global_super=True)
+    wide_super = PermissionActor(subject_type="user", subject_id=5, tenant_id=1, super_admin=True)
+    token = set_current_permission_actor(wide_super)
+    try:
+        allowed = await ba.check_business_action(
+            login, resource_type="knowledge_library", resource_id="8", action="use"
+        )
+        batch = await ba.batch_check_business_actions(
+            login,
+            resource_type="knowledge_library",
+            resource_ids=["8"],
+            actions=["use"],
+        )
+    finally:
+        reset_current_permission_actor(token)
+    assert allowed is True
+    assert batch == {"8": frozenset({"use"})}
+    assert registry.calls == 0  # untouched default-scope behaviour (AC-P23)

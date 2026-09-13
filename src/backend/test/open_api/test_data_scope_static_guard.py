@@ -51,3 +51,20 @@ def test_narrowed_guard_is_wired_to_both_system_scope_reads():
     assert text.count("bool(self.login_user.is_global_super) and not _f066_data_scope_narrowed()") == 2, (
         "a system_scope read lost its F066 guard"
     )
+
+
+def test_application_layer_super_admin_shortcuts_respect_data_scope():
+    """Every ALLOW shortcut on actor.super_admin outside the runtime must yield
+    to the narrowing — the 105 e2e run caught check_business_action returning
+    True before the runtime's denial could fire."""
+
+    text = (
+        BACKEND_ROOT / "bisheng" / "permission" / "application" / "business_authorization.py"
+    ).read_text(encoding="utf-8")
+    shortcuts = text.count("actor.super_admin")
+    guarded = text.count("actor.super_admin and actor.data_scope == DATA_SCOPE_ALL")
+    assert shortcuts == guarded == 2, (
+        f"business_authorization.py has {shortcuts} super-admin shortcut(s), "
+        f"{guarded} guarded by DATA_SCOPE_ALL. A new unguarded shortcut bypasses "
+        "the F066 narrowing before the permission runtime can deny."
+    )
