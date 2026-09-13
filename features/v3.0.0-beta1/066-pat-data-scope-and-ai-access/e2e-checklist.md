@@ -49,3 +49,16 @@
 - 途中抓获真缺陷一处:`permission/application/business_authorization.py` 两处 `if actor.super_admin: return True` 在 data_scope 判定之前放行(第四旁路,单+批)。已修为 `actor.super_admin and actor.data_scope == DATA_SCOPE_ALL`,补回归两例与静态守卫第三断言;修复已推 `feat/cofco-909-3.0.0-beta1` 并重新部署后复验通过。
 - UI 保存链路实证:platform 收紧→红色确认弹窗→toast「已保存。设置对所有已发放的密钥立即生效。」→DB `pat_data_scope='personal_only'`→审计 `open_api.pat.settings.update`(operator=150058,before/after 齐);放宽方向直接保存不弹确认,可逆。
 - 环境注意(非 F066):密码登录自 `94323e3ec` 起只查 `user.external_id`,裸 ORM 造的夹具用户必须补 `external_id=user_name` 才能登录;`f066e2e_adm` 首次登录跳 `/admin` 曾回落登录页一次,重试即成,未再复现。
+
+## 四、迭代二执行记录(2026-09-13,105/DM8,部署 a4dd95599)
+
+全部通过:
+
+- **技能包**:新 slug `GET /api/v1/open-api/skill-packs/knowledge-search` 200,旧 slug 返回业务错误 26026(v1 惯例 HTTP 200 包裹);zip 四文件**零品牌字样**、`KNOWLEDGE_API_KEY` 在位、无 `__pycache__`、中文触发词保留、BASE_URL 按实例渲染。
+- **search.py 实测**(容器内,`KNOWLEDGE_API_KEY` 环境变量):`--list-knowledge-bases doc` 收窄档只回自建 kb182;retrieve 自建库 200;retrieve 他人库 HTTP 403 + 26044 响应体完整透出 stderr。
+- **浏览器(105 为中粮贴牌环境,brandName=「知源」——白标插值直接实证)**:安装指令渲染「请安装 知源 知识检索技能」+ 新 slug URL;折叠区已消失;驻地页副标题「让 WorkBuddy 等 AI 助手检索…」;知识空间入口副文案「让第三方 AI 助手检索知识空间」。
+- **二次弹窗(员工流)**:生成 → 「你的专属密钥」小弹窗(一次性红条 + 全文 + 行内复制 + 一键复制 toast + 泄露红条,无勾选框);Esc 只关小弹窗,主弹窗右栏**立即**呈掩码已连接态且永无明文;主弹窗可自由关闭。
+- **收窄档管理员降级**(补验迭代一遗留半边):adm 在 personal_only 档下无加重条、生成**跳过签发前确认**直达二次弹窗、小弹窗无 amber 条——降级为普通流程实证。
+- **深链**:`?connect=1` 登录回跳后自动拉起弹窗。
+- 执行环境注意:期间发现策略被 operator=admin(用户侧)于 21:45 主动设为 `personal_only`(审计 before/after 完整)——按用户生产配置**保留不动**,收窄档反而让本轮验证覆盖了更多分支;驻地页状态行在弹窗内生成后不即时刷新(重进页面即正确),属显示滞后小瑕疵,挂账不阻塞。
+- 清理:150057/150058 两把新测试密钥已吊销;浏览器已登出关闭(用户 105 登录态会被登出,需重登)。
