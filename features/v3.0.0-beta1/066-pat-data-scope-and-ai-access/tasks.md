@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-09-13 `/sdd-review spec`（1 CONFLICT 经契约修订处置、3 low 已修、补 AC-R7），用户已确认 |
 | design.md | ✅ 已评审 | 2026-09-13 `/sdd-review design`（自查修 C4 分层 high + C4 触碰登记），用户已确认 |
 | tasks.md | ✅ 已拆解 | 2026-09-13 `/sdd-review tasks` |
-| 实现 | 🟡 25 / 26 | T001–T025 完成并分五笔提交;T026 e2e 清单已建、真实环境全量执行待部署(见 e2e-checklist.md) |
+| 实现 | ✅ 26 / 26 | T001–T025 完成并分五笔提交;T026 已于 2026-09-13 在 105(DM8)全量执行完毕——API 9 项 + 浏览器主流程全过,执行记录见 e2e-checklist.md §三 |
 
 AC 编号来源：AC-P23～AC-P31 = PRD v2.9 §五 R10；AC-R1～AC-R7 = spec §3。
 
@@ -189,7 +189,7 @@ AC 编号来源：AC-P23～AC-P31 = PRD v2.9 §五 R10；AC-R1～AC-R7 = spec §
   **逻辑**: C4 短路顺序处补一句「开放面自然人主体的 data_scope 拒绝（F066/D21）先于以上全部身份短路」——design §2 第 7 条登记的宪法触碰，走 PR review 治理
   **依赖**: T007
 
-- [ ] **T026**: e2e 与验收记录
+- [x] **T026**: e2e 与验收记录
   **文件**: `features/v3.0.0-beta1/066-pat-data-scope-and-ai-access/e2e-checklist.md`（新）
   **逻辑**: 执行 `/e2e-test features/v3.0.0-beta1/066-pat-data-scope-and-ai-access`：API 侧矩阵结果 + 浏览器手动清单（双入口 / 四态 / 管理员确认 / 收紧生效 / 深链）落档
   **覆盖 AC**: AC-P23, AC-P24, AC-P26, AC-P30, AC-P31
@@ -203,5 +203,5 @@ AC 编号来源：AC-P23～AC-P31 = PRD v2.9 §五 R10；AC-R1～AC-R7 = spec §
 
 - T007 偏离 → design 决策 2 补注：26044 异常类落位 `common/errcode/open_api`（错误码域规约），权限层直接抛，不在 permission.application 另造异常
 - T010 偏离（测试降级）→ design §7：本地矩阵 = 注册表分类断言 + 闸口→权限层→传输 e2e 接线；真实端点全行为矩阵需中间件，归 T026 `/e2e-test`
-- T026 部分完成 → e2e-checklist.md 已建（API 侧自动化结果 + 浏览器手动清单），真实环境执行待部署
+- T026 完成（2026-09-13）→ 105 真实环境全量执行：API 9 项全过（异步执行面由单测保障）；浏览器员工/管理员生成流、深链与旧链重定向、platform 策略卡与台账全过；未做两项已在 checklist 注明理由（租户关停走查、真 Agent 闭环）
 - T026 执行期抓获旁路 → design 坑 16 / 决策 5 收口 ④：应用层超管短路绕过 runtime 判定（105 实测），business_authorization 两处短路加 DATA_SCOPE_ALL 条件 + 回归用例 + 守卫断言
