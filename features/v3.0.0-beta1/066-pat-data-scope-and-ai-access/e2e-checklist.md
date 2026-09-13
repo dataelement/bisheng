@@ -54,7 +54,7 @@
 
 全部通过:
 
-- **技能包**:新 slug `GET /api/v1/open-api/skill-packs/knowledge-search` 200,旧 slug 返回业务错误 26026(v1 惯例 HTTP 200 包裹);zip 四文件**零品牌字样**、`KNOWLEDGE_API_KEY` 在位、无 `__pycache__`、中文触发词保留、BASE_URL 按实例渲染。
+- **技能包**:新 slug `GET /api/v1/open-api/skill-packs/knowledge-search` 200,旧 slug 返回业务错误 26026(v1 惯例 HTTP 200 包裹);zip 四文件**零品牌字样**、`KNOWLEDGE_API_KEY` 在位、无 `__pycache__`、中文触发词保留、BASE_URL 按实例渲染；**经反向代理/网关下载**时 BASE_URL 必须是浏览器视角的地址（`X-Forwarded-Proto/Host` 或 `open_api.public_base_url`），不能是 `backend:7860` 之类的内网地址。
 - **search.py 实测**(容器内,`KNOWLEDGE_API_KEY` 环境变量):`--list-knowledge-bases doc` 收窄档只回自建 kb182;retrieve 自建库 200;retrieve 他人库 HTTP 403 + 26044 响应体完整透出 stderr。
 - **浏览器(105 为中粮贴牌环境,brandName=「知源」——白标插值直接实证)**:安装指令渲染「请安装 知源 知识检索技能」+ 新 slug URL;折叠区已消失;驻地页副标题「让 WorkBuddy 等 AI 助手检索…」;知识空间入口副文案「让第三方 AI 助手检索知识空间」。
 - **二次弹窗(员工流)**:生成 → 「你的专属密钥」小弹窗(一次性红条 + 全文 + 行内复制 + 一键复制 toast + 泄露红条,无勾选框);Esc 只关小弹窗,主弹窗右栏**立即**呈掩码已连接态且永无明文;主弹窗可自由关闭。

@@ -105,6 +105,21 @@ bisheng-milvus-standalone
 | `system_login_method` | `SystemLoginMethod` | 登录方式（商业版标识、多端登录） |
 | `mcp` | `McpConf` | MCP 协议配置 |
 | `information_conf` | `IntelligenceCenterConf` | 情报中心配置 |
+| `open_api` | `OpenApiConf` | 开放 API：个人密钥开关、`public_base_url`（对外地址，见下节） |
+
+### 反向代理与对外地址
+
+后端只有在把**自己的地址写进对外文件**时才需要知道浏览器访问平台用的地址：技能包 zip（`GET /api/v1/open-api/skill-packs/{name}`，脚本会从用户机器回调平台）与安装提示词。推导顺序在 `bisheng/open_api/api/public_base_url.py`：
+
+1. `config.yaml` 的 `open_api.public_base_url`（`scheme://host[:port][/prefix]`，启动期校验）；
+2. 反向代理传来的 `X-Forwarded-Proto` / `X-Forwarded-Host`（取逗号链的首值），退而取 `Host`；
+3. 进程绑定的 socket。
+
+仓库自带的 nginx（`docker/nginx/conf.d/*.conf`、镜像内 `src/frontend/nginx.conf`）已通过 `map` 传这两个头：外层若还有终结 TLS 的代理且已带头则原样透传，否则用本机 `$scheme` 与含端口的 `$http_host`。因此：
+
+- 自建外层代理（LB、Ingress、开发机上的 `:8860` 转发）**必须**转发 `X-Forwarded-Proto` 与 `X-Forwarded-Host`，否则烘进技能包的会是 `http://` 与内网地址；
+- 商业版网关会改写 `Host`、追加而非覆盖转发头，**网关形态与路径前缀部署（`https://portal/bisheng`）只能靠 `open_api.public_base_url`**；
+- 该键是 `open_api` 段的子键，只对已认识该段的镜像（3.0.0-beta1+）安全；不要给老镜像的 `config.yaml` 加未注释的 `open_api:` 顶层键。
 
 ## 本地混合开发部署
 
