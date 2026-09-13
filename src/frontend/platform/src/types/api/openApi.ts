@@ -130,11 +130,14 @@ export interface OpenApiScopeCatalog {
   open_platform_enabled: boolean
 }
 
+export type PersonalTokenDataScope = "all_visible" | "personal_only"
+
 export interface PersonalTokenSetting {
   deployment_enabled: boolean
   pat_enabled: boolean
   effective_enabled: boolean
   pat_ttl_days: number
+  data_scope: PersonalTokenDataScope
 }
 
 export interface PersonalTokenLedgerItem {

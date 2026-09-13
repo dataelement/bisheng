@@ -1,6 +1,9 @@
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Badge } from "@/components/bs-ui/badge"
 import { Button, LoadButton } from "@/components/bs-ui/button"
 import { Input } from "@/components/bs-ui/input"
+import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
+import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio-group"
 import { Switch } from "@/components/bs-ui/switch"
 import { message } from "@/components/bs-ui/toast/use-toast"
 import {
@@ -15,13 +18,15 @@ import {
   getPersonalTokenSettingApi,
   listPersonalTokensApi,
   revokePersonalTokenApi,
-  revokePersonalTokensByHolderApi,
   updatePersonalTokenSettingApi,
 } from "@/controllers/API/personalToken"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import type { PersonalTokenLedgerItem, PersonalTokenSetting } from "@/types/api/openApi"
+import type { PersonalTokenDataScope, PersonalTokenSetting } from "@/types/api/openApi"
+import type { PersonalTokenLedgerItem } from "@/types/api/openApi"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+
+const PAGE_SIZE = 20
 
 function formatDate(value: string | null): string {
   return value ? new Date(value).toLocaleString() : "-"
@@ -33,36 +38,47 @@ export function PersonalToken() {
   const [items, setItems] = useState<PersonalTokenLedgerItem[]>([])
   const [enabled, setEnabled] = useState(false)
   const [ttlDays, setTtlDays] = useState(365)
+  const [dataScope, setDataScope] = useState<PersonalTokenDataScope>("all_visible")
   const [saving, setSaving] = useState(false)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+
+  const loadLedger = async (nextPage: number) => {
+    const ledger = await listPersonalTokensApi({ page: nextPage, page_size: PAGE_SIZE })
+    setItems(ledger.data)
+    setTotal(ledger.total)
+    setPage(nextPage)
+  }
 
   const load = async () => {
-    const [nextSetting, page] = await Promise.all([
-      getPersonalTokenSettingApi(),
-      listPersonalTokensApi({ page: 1, page_size: 200 }),
-    ])
+    const nextSetting = await getPersonalTokenSettingApi()
     setSetting(nextSetting)
     setEnabled(nextSetting.pat_enabled)
     setTtlDays(nextSetting.pat_ttl_days)
-    setItems(page.data)
+    setDataScope(nextSetting.data_scope)
+    await loadLedger(1)
   }
 
   useEffect(() => {
     void load()
   }, [])
 
-  const handleSave = async () => {
-    if (saving) return
+  const applySetting = (next: PersonalTokenSetting) => {
+    setSetting(next)
+    setEnabled(next.pat_enabled)
+    setTtlDays(next.pat_ttl_days)
+    setDataScope(next.data_scope)
+  }
 
+  const doSave = async () => {
     setSaving(true)
     try {
       const next = await captureAndAlertRequestErrorHoc(
-        updatePersonalTokenSettingApi({ pat_enabled: enabled, pat_ttl_days: ttlDays }),
+        updatePersonalTokenSettingApi({ pat_enabled: enabled, pat_ttl_days: ttlDays, data_scope: dataScope }),
       )
       if (!next) return
 
-      setSetting(next)
-      setEnabled(next.pat_enabled)
-      setTtlDays(next.pat_ttl_days)
+      applySetting(next)
       message({
         title: t("prompt"),
         variant: "success",
@@ -73,14 +89,35 @@ export function PersonalToken() {
     }
   }
 
-  const handleRevoke = async (id: number) => {
-    await revokePersonalTokenApi(id)
-    await load()
+  const handleSave = () => {
+    if (saving) return
+    // Narrowing hits every issued key immediately — confirm before tightening;
+    // widening back needs no ceremony.
+    if (dataScope === "personal_only" && setting?.data_scope !== "personal_only") {
+      bsConfirm({
+        title: t("openApiManagement.personalToken.tightenConfirmTitle"),
+        desc: t("openApiManagement.personalToken.tightenConfirmBody"),
+        okTxt: t("openApiManagement.personalToken.tightenConfirmOk"),
+        onOk: (close) => {
+          close()
+          void doSave()
+        },
+      })
+      return
+    }
+    void doSave()
   }
 
-  const handleRevokeHolder = async (userId: number) => {
-    await revokePersonalTokensByHolderApi(userId)
-    await load()
+  const handleRevoke = (item: PersonalTokenLedgerItem) => {
+    bsConfirm({
+      title: t("openApiManagement.personalToken.revokeConfirmTitle"),
+      desc: t("openApiManagement.personalToken.revokeConfirmBody"),
+      okTxt: t("openApiManagement.actions.revoke"),
+      onOk: (close) => {
+        close()
+        void captureAndAlertRequestErrorHoc(revokePersonalTokenApi(item.id)).then(() => loadLedger(page))
+      },
+    })
   }
 
   return (
@@ -101,6 +138,29 @@ export function PersonalToken() {
             <span>{t("openApiManagement.personalToken.ttlDays")}</span>
             <Input type="number" min={1} max={365} value={ttlDays} disabled={saving} onChange={(event) => setTtlDays(Number(event.target.value))} />
           </label>
+        </div>
+        <div className="mt-4 space-y-2 text-sm">
+          <p className="text-muted-foreground">{t("openApiManagement.personalToken.scopeModeLabel")}</p>
+          <RadioGroup
+            value={dataScope}
+            disabled={saving}
+            onValueChange={(value) => setDataScope(value as PersonalTokenDataScope)}
+            className="space-y-2"
+          >
+            <label className="flex items-start gap-2">
+              <RadioGroupItem value="all_visible" className="mt-0.5" />
+              <span>{t("openApiManagement.personalToken.scopeModeAll")}</span>
+            </label>
+            <label className="flex items-start gap-2">
+              <RadioGroupItem value="personal_only" className="mt-0.5" />
+              <span>
+                {t("openApiManagement.personalToken.scopeModeOwnOnly")}
+                <span className="block text-xs text-muted-foreground">{t("openApiManagement.personalToken.scopeModeOwnOnlyHint")}</span>
+              </span>
+            </label>
+          </RadioGroup>
+        </div>
+        <div className="mt-4">
           <LoadButton
             loading={saving}
             aria-busy={saving}
@@ -127,7 +187,15 @@ export function PersonalToken() {
             <TableRow key={item.id}>
               <TableCell>
                 {item.holder_name || item.holder_user_id}
-                {item.holder_is_admin ? <Badge className="ml-2" variant="secondary">{t("openApiManagement.personalToken.adminRisk")}</Badge> : null}
+                {item.holder_is_admin ? (
+                  <Badge
+                    className="ml-2"
+                    variant="secondary"
+                    title={t("openApiManagement.personalToken.adminHolderTip")}
+                  >
+                    {t("openApiManagement.personalToken.adminHolder")}
+                  </Badge>
+                ) : null}
               </TableCell>
               <TableCell><code>{item.key_mask}</code></TableCell>
               <TableCell>
@@ -150,14 +218,21 @@ export function PersonalToken() {
               <TableCell>{formatDate(item.expires_at)}</TableCell>
               <TableCell>{t(item.is_valid ? "openApiManagement.status.active" : "openApiManagement.status.revoked")}</TableCell>
               <TableCell className="whitespace-nowrap text-right">
-                <Button variant="link" disabled={!item.is_valid} onClick={() => handleRevoke(item.id)}>{t("openApiManagement.actions.revoke")}</Button>
-                <Button variant="link" disabled={!item.is_valid} onClick={() => handleRevokeHolder(item.holder_user_id)}>{t("openApiManagement.actions.revokeHolder")}</Button>
+                <Button variant="link" disabled={!item.is_valid} onClick={() => handleRevoke(item)}>{t("openApiManagement.actions.revoke")}</Button>
               </TableCell>
             </TableRow>
           ))}
           {!items.length ? <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">{t("openApiManagement.empty")}</TableCell></TableRow> : null}
         </TableBody>
       </Table>
+      {total > PAGE_SIZE ? (
+        <AutoPagination
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={total}
+          onChange={(nextPage) => void loadLedger(nextPage)}
+        />
+      ) : null}
     </div>
   )
 }
