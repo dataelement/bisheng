@@ -108,8 +108,13 @@ it("reveals the issued key in a stacked dialog and masks it once dismissed", asy
   await waitFor(() => expect(screen.queryByText(plaintext)).not.toBeInTheDocument());
   expect(onOpenChange).not.toHaveBeenCalled();
   expect(screen.getByText(token.key_mask)).toBeInTheDocument();
-  expect(screen.getByText("Status: Valid")).toBeInTheDocument();
-  expect(screen.getByText("Expires on: 2027-09-11")).toBeInTheDocument();
+  // The card keeps only what the holder acts on: expiry, last use, and — until
+  // the first call — how to verify. Created time and a "Valid" label are gone.
+  expect(screen.getByText("2027-09-11")).toBeInTheDocument();
+  expect(screen.getByText(mockI18n.t("com_ai_access.never_used"))).toBeInTheDocument();
+  expect(screen.getByText(mockI18n.t("com_ai_access.verify_hint"))).toBeInTheDocument();
+  expect(screen.queryByText("2026-09-11")).not.toBeInTheDocument();
+  expect(screen.queryByText(mockI18n.t("com_ai_access.status_active"))).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Copy API Key" })).not.toBeInTheDocument();
 
   // With the gate gone, the main dialog closes freely.
@@ -201,12 +206,23 @@ it("skips the admin ceremony and shows the narrowed scope once the tenant restri
 it("shows expired status and prevents issuance when disabled", async () => {
   jest.mocked(getPersonalTokenStatusApi).mockResolvedValue(statusOf({ token: { ...token, is_valid: false } }));
   const { rerender } = render(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
-  expect(await screen.findByText("Status: Expired")).toBeInTheDocument();
+  expect(await screen.findByText(mockI18n.t("com_ai_access.status_expired"))).toBeInTheDocument();
+  expect(screen.queryByText(mockI18n.t("com_ai_access.verify_hint"))).not.toBeInTheDocument();
   rerender(<PersonalTokenDialog open={false} onOpenChange={jest.fn()} />);
   jest.mocked(getPersonalTokenStatusApi).mockResolvedValue(statusOf({ enabled: false }));
   rerender(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
   await screen.findByText(en.com_ai_access.disabled_notice);
   expect(screen.getByRole("button", { name: "Generate my key" })).toBeDisabled();
+});
+
+it("drops the setup hint once an assistant has used the key", async () => {
+  jest.mocked(getPersonalTokenStatusApi).mockResolvedValue(
+    statusOf({ token: { ...token, last_used_at: "2026-09-12T08:00:00" } }),
+  );
+  render(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
+  expect(await screen.findByText("2026-09-12")).toBeInTheDocument();
+  expect(screen.queryByText(mockI18n.t("com_ai_access.verify_hint"))).not.toBeInTheDocument();
+  expect(screen.queryByText(mockI18n.t("com_ai_access.never_used"))).not.toBeInTheDocument();
 });
 
 it("retries a failed status request before allowing issuance", async () => {
