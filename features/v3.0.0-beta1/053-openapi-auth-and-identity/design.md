@@ -472,6 +472,7 @@ F048 的 Catalog active、模型 enabled、动作 active、grant level 以及资
 | 14 | 平台全局 HTTP handler 会把部分异常压成 200 信封 | v2 对全部 `BaseErrorCode` 统一映射：权限拒绝 403、防枚举 404、权限依赖故障 503、其余请求类业务错误 400；业务码保持原值；v1 信封不变 |
 | 15 | QA id 可以绕过知识库入口形成 IDOR | `detail_qa/update_qa/delete/add_relative/query_qa` 均先由 QA 定位所属知识库，再经 `KnowledgeService` 内的 `PermissionService` 校验 visible/edit；鉴权通过前禁止 DAO 写入、索引或异步任务 |
 | 16 | multipart 的废弃 `user_id` 不会进入 JSON 检查 | v2 全局依赖同时检查 query、JSON、multipart 和 urlencoded；出现即 400/26019，不能静默忽略 |
+| 17 | HTTP 内网地址不提供 `crypto.randomUUID()`；服务账号授权会在读取 `context` 后、发出写请求前抛错，弹窗无法保存关闭，修改与撤销同样受影响 | `resourceGrantUtils.createResourceGrantIdempotencyKey` 使用 HTTP 可用的 `crypto.getRandomValues()` 生成 128 位随机提交标识，新增、修改、撤销共用；此标识沿用 F048 授权变更契约，与本期排除的 v2 业务 API 幂等能力无关 |
 
 ---
 
@@ -556,3 +557,4 @@ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/v2/assistant/info/$ASSISTANT
 | 2026-09-04 | 重写：移除 R8/P2 与分享链路改造；请求头去品牌；审计改复用 `audit_log.metadata`；服务账号改独立主体且不写 User；日常模式改为五个 v1 同路径 v2 接口；工作流/知识助手免登录发布接口迁至 v3，与 v2 密钥面彻底分离 | 用户新范围裁定 |
 | 2026-09-04 | 收窄日常对话请求：对外删除 `use_knowledge_base`、`task_mode`，内部固定 `task_mode=False`；`files` 与临时文件上传能力保持不变 | 用户补充裁定 |
 | 2026-09-08 | 同步 PRD v2.6：补齐服务账号 F048 技术标记与存量对账、主体侧资源选择弹窗、管理操作反馈、QA 所属知识库鉴权、知识空间列表 DTO、v2 HTTP/SSE 结果语义、multipart 废弃字段拒绝，以及 PAT 随持有人迁租户 | PRD 后续修订与验收问题 |
+| 2026-09-14 | 统一服务账号资源授权提交标识的生成方式，兼容 HTTP 内网访问，并覆盖授权、修改、撤销回归 | 测试环境保存授权时只发出 `context` 请求，`crypto.randomUUID()` 不可用导致前端中断 |

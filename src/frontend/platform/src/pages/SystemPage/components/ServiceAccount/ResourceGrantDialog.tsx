@@ -35,6 +35,7 @@ import type {
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
+  createResourceGrantIdempotencyKey,
   SERVICE_ACCOUNT_PERMISSION_TIERS,
   SERVICE_ACCOUNT_RESOURCE_TYPES,
 } from "./resourceGrantUtils"
@@ -206,7 +207,7 @@ export function ResourceGrantDialog({
             selected.resource_type,
             selected.resource_id,
             {
-              idempotency_key: crypto.randomUUID(),
+              idempotency_key: createResourceGrantIdempotencyKey(),
               expected_resource_version: context.resource_version,
               expected_catalog_release_id: context.catalog_release_id,
               changes: editingGrant

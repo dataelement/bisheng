@@ -47,6 +47,7 @@ import { useTranslation } from "react-i18next"
 import { ResourceGrantDialog } from "./ResourceGrantDialog"
 import { ResourceGrantRevokeDialogs } from "./ResourceGrantRevokeDialogs"
 import {
+  createResourceGrantIdempotencyKey,
   getRequiredScope,
   formatServiceAccountGrantTime,
   isServiceAccountGrantEffective,
@@ -155,7 +156,7 @@ export function ResourceGrantsTab({
             resource.resource_type,
             resource.resource_id,
             {
-              idempotency_key: crypto.randomUUID(),
+              idempotency_key: createResourceGrantIdempotencyKey(),
               expected_resource_version: context.resource_version,
               expected_catalog_release_id: context.catalog_release_id,
               changes: group.map((grant) => ({
@@ -205,7 +206,7 @@ export function ResourceGrantsTab({
           grant.resource_type,
           grant.resource_id,
           {
-            idempotency_key: crypto.randomUUID(),
+            idempotency_key: createResourceGrantIdempotencyKey(),
             expected_resource_version: context.resource_version,
             expected_catalog_release_id: context.catalog_release_id,
             changes: [
