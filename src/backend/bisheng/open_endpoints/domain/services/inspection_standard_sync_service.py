@@ -225,21 +225,22 @@ class InspectionStandardSyncService:
         seq_seen: set[tuple[str, str]] = set()
 
         for record in standards:
-            create_dept_id = record.CREATE_DEPT_ID.strip()
+            create_dept_id = str(record.CREATE_DEPT_ID or "").strip()
             InspectionStandardSyncService._validate_create_dept_id(create_dept_id)
-            if record.CHECK_STANDARD_ID in standard_id_to_dept:
+            check_standard_id = str(record.CHECK_STANDARD_ID or "")
+            if check_standard_id in standard_id_to_dept:
                 raise InspectionStandardSyncRelationError(msg="CHECK_STANDARD_ID must be unique")
-            standard_id_to_dept[record.CHECK_STANDARD_ID] = create_dept_id
+            standard_id_to_dept[check_standard_id] = create_dept_id
             grouped_standards[create_dept_id].append(record)
 
         for item in items:
-            standard_id = item.CHECK_STANDARD_ID
+            standard_id = str(item.CHECK_STANDARD_ID or "")
             create_dept_id = standard_id_to_dept.get(standard_id)
             if create_dept_id is None:
                 raise InspectionStandardSyncRelationError(
                     msg="check_standard_items references unknown CHECK_STANDARD_ID",
                 )
-            seq_key = (standard_id, item.CHECK_STANDARD_SEQ_NO)
+            seq_key = (standard_id, str(item.CHECK_STANDARD_SEQ_NO or ""))
             if seq_key in seq_seen:
                 raise InspectionStandardSyncRelationError(
                     msg="CHECK_STANDARD_SEQ_NO must be unique within CHECK_STANDARD_ID",
