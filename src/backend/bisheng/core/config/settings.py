@@ -261,6 +261,11 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.knowledge.stale_projection_reconciler.reconcile_stale_parent_projections",
                 "schedule": crontab.from_string("*/10 * * * *"),  # every 10 minutes
             }
+        if "refresh_etl_license" not in self.beat_schedule:
+            self.beat_schedule["refresh_etl_license"] = {
+                "task": "bisheng.worker.commercial_license.tasks.refresh_etl_license",
+                "schedule": 3600.0,
+            }
 
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():

@@ -146,7 +146,7 @@ customAxios.interceptors.response.use(function (response) {
             toast({
                 title: `${i18next.t('prompt')}`,
                 variant: 'error',
-                description: i18next.t('license.expired'),
+                description: coerceErrorMessage(response.data?.status_message) || i18next.t('license.businessExpired.gateway'),
             })
         }
         return Promise.reject(null);

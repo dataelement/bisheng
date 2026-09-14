@@ -57,6 +57,7 @@
 | —（无新增领域对象；在 F036 拥有的 `SensitiveWordPolicy` 上增加枚举值 `workbench_chat`） | **F063-workbench-content-safety** | 商业版工作台日常模式（输入 + 最终回答）与任务模式（仅输入）关键词审查。只读 / 调用现有 `SensitiveWordPolicy` 与 `check_text`；**不拥有**策略表 schema，不改知识空间 / 频道 / 工作流 Gateway 审查，不新增表 / Alembic / 对外 API 路径 / 错误码 / 不变量 |
 | —（无新增） | F064-kb-list-file-abnormal | 文档知识库外层列表只读展示库级文件解析异常，并支持仅异常筛选；复用既有 `Knowledge` / `KnowledgeFile` 与 F027 游标、F048 可见性，不新增领域对象、表、错误码或不变量。Alembic 仅增加 `knowledgefile` 复合索引 |
 | —（无新增） | F065-model-name-trim | 模型管理写入时去掉 `models[].model_name` 首尾空白；复用既有 `LLMModel` / `POST/PUT /api/v1/llm`，不新增领域对象、表、错误码、不变量或 Alembic |
+| **LicenseInfo**（平台级当前授权状态：每个商业模块一行；无 `tenant_id`；不含密文 / 私钥 / 设备指纹） | **F066-commercial-license-expiry-reminder** | 拥有 `license_info` 的写入语义与聚合读取。`etl` 由 BISHENG 拉 ETL 授权接口后 upsert；`dashboard` 由商业看板服务定期更新对应行；`gateway` 由管理后台读取 Gateway 状态后再交给 BISHENG upsert。不拥有 Gateway / ETL / 看板各自的授权密文与解密 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -99,6 +100,7 @@
 | INV-32 | **开放面权限评估 fail-closed**（INV-19 在开放 API 上的加强）：权限引擎不可用、评估失败或结果不可判定时返回错误，**绝不返回未过滤或部分过滤的结果集**；不存在"缺身份即降级返回某个子集"的路径；P2 的限流 / 配额 / 幂等在 Redis 不可用时同样拒绝 | ApiCredential, PermissionGrant | F053 |
 | INV-33 | **身份模式只有两种、委托是纯替换且必须凭据先行**：权限基准 = 密钥主体（自身身份）或经五道准入的被代表用户（代表他人）；`delegate` 是唯一开关、持有即强制（漏传身份头报错、不落回自身身份）、范围必填且只有 `user` / `department` 两类；委托目标必须是自然人、非超管非租户管理员、同租户、在范围内，判定在调用期；模式 D 下资源与会话归被代表用户且不回授服务账号；三扩展位与 `delegate` 互斥硬阻断；`X-Bisheng-End-User` 不是身份模式、不参与任何权限判定 | ApiCredential | F053 |
 | INV-34 | **个人访问令牌的治理**：主体只能是自然人本人、权限动态继承持有人（不快照）、本期只可授予 `knowledge:read`，`identity:read` 与 `delegate` 永久禁令；随持有人停用 / 删除 / 离开租户 5 秒内级联失效；管理员短路照常生效但可见租户集合恒为密钥所属租户（超管不放开租户过滤）；两层能力开关默认关、关闭 = 停用不撤销、按主体类型独立（关 PAT 不得影响服务账号密钥）；管理员台账只返回元数据 | ApiCredential, OpenApiTenantSetting | F053 |
+| INV-35 | **商业授权状态是部署级当前值**：`license_info` 每个 `license_code` 至多一行，不带 `tenant_id`，不存授权密文 / 私钥 / 设备指纹。功能开关（ETL 地址、`BISHENG_DASHBOARD_PRO` 等）不得用来推断是否有效或何时到期。取源失败不得把已有成功记录改写成已过期；未取得不得展示为已过期 | LicenseInfo | F066 |
 
 （INV-1~7 为 v2.6.0 存量不变量，继续有效，见 `features/v2.6.0/release-contract.md`。）
 
@@ -132,6 +134,7 @@
 | F063-workbench-content-safety | 既有 `sensitive_word` 租户策略（F036）、工作台首页、F035 日常/任务统一 `chat/completions`、商业版 `BISHENG_PRO` | 接线型；新枚举值 `workbench_chat` 一份策略管两种模式。开源版不展示、不审查。不改工作流 Gateway 词表，不审文件/任务输出 |
 | F064-kb-list-file-abnormal | F027、F048、F051 | 文档知识库外层列表增加只读异常标记与 SQL 下推筛选；保持游标分页、可见-first 与行操作懒加载，不改 QA / 知识空间 / 解析写状态 |
 | F065-model-name-trim | 既有模型管理页、`POST/PUT /api/v1/llm` | 写入侧收紧 `model_name` 首尾空白；不改 19802、不回填存量、不新增错误码 |
+| F066-commercial-license-expiry-reminder | v2.6.0 F037（Gateway 状态接口与 Banner 入口）；ETL4LM 2.1.0-beta1 `GET /api/license_info`；商业看板服务写 `license_info` | 统一到期提醒；推翻 F037「Banner 只直连 Gateway」的展示路径，不改 Gateway 降级拦截范围 |
 
 ---
 
@@ -153,6 +156,7 @@
 | F031-channel-source-subscription-reconcile | F060 替代其“各租户 `channel_info_source` 行存在即代表已订阅、按租户分别对账”的运行语义。频道来源意图改为全部活跃租户并集，远端 `/information/subscriptions` 完整分页成为实际订阅真相；`channel_info_source` 改为平台公共展示目录。F031 已交付的频道创建/编辑能力继续保留，但不得再以本地元数据行推断远端订阅状态 |
 | 既有 `/api/v2` 开放 API（`open_endpoints/`）与两个免登录分享页 | F053：全部 43 HTTP + 2 WS 端点接入凭据校验，6 个 `/chat/*` 不暴露，裸 `user_id` 参数移除，`download_statistic` 入参 `file_path → file_name`；分享页改走 share-token；`user` 表加 `user_type`、`_filter_users_statement` 默认排除服务账号（8 处消费点无感）；F048 `authorize_created` 增 `autogrant_user_id` kwarg 与来源值 `SERVICE_ACCOUNT_AUTOGRANT`（非 protected、可撤销） |
 | F029-knowledge-qa-permission-filter（AC-20）· F041（匿名分档） | **F054 覆盖其匿名放行语义**。F029 AC-20 当初有意为分享链接 / 公开流程保留「匿名调用不过滤」，F041 的分档同样在匿名时全放行——这正是本期要堵的越权口子。F054 起：**无已登录用户的调用不再返回知识库与文章来源详情（含 `shared` 档），网页来源仍放行**；已登录用户的 `per_user` / `shared` 两档语义完全不变，INV-7 及其 F041 例外不受影响。F029 AC-20 与 F041 匿名断言的三个既有用例随 F054 T006 一并改写为新预期 |
+| v2.6.0 F037-gateway-license-expiry-reminder | **F066 覆盖其 Banner 数据源与文案合同**。`GET /api/license/status` 与「只拦网关付费接口」的降级范围保持不动；管理后台 Banner 改为先上报 Gateway 状态再读平台聚合接口，文案必须点名授权对象，不再单独按 Gateway `warning/critical` 分色渲染「软件授权」 |
 
 ---
 
@@ -167,6 +171,7 @@
 | 250 | ReBAC 权限 Catalog、Grant、投影、迁移与完整枚举 | F048；25001～25014，具体语义见 F048 Design §6.3 |
 | —（不新增） | 信息源订阅对账、公共文章同步与知识空间一次投递 | F060 仅调整内部任务与状态，不新增对外 API 或业务错误码 |
 | 260 | 开放 API 鉴权、身份传递、个人访问令牌、日常模式会话、限流 / 幂等 | F053；26001～26043 分段见 `053-openapi-auth-and-identity/design.md` §6.3（26013 / 26014 已废止不复用）；落码时按 C5 回写 `docs/constitution.md` |
+| 270 | 商业授权状态聚合与上报 | F066；实现时按 C5 回写 `docs/constitution.md`；不得占用 11x（灵思）或把 Gateway 11001 当成 BISHENG 模块号 |
 
 ---
 
@@ -198,3 +203,4 @@
 | 2026-09-09 | 登记 F063 日常/任务内容安全审查：表 1 标无新领域对象（扩展既有 `SensitiveWordPolicy` 的 `workbench_chat` 取值）；表 3 记依赖 F036 词表与工作台统一聊天入口；无新增错误码/对外路径/不变量/alembic | F063 |
 | 2026-09-10 | 登记 F064 文档知识库外层列表文件解析异常：表 1 标无新领域对象；表 3 记依赖 F027/F048/F051；Alembic 仅加 `knowledgefile` 复合索引，无新增错误码/不变量 | F064、F027、F048、F051 |
 | 2026-09-10 | 登记 F065 模型名称首尾空格兼容：表 1 标无新领域对象；表 3 记依赖既有模型管理写入；无新增错误码/不变量/Alembic；不回填存量脏名 | F065 |
+| 2026-09-14 | 登记 F066 商业授权统一到期提醒：新增 LicenseInfo 与 INV-35；分配错误码模块 270；Banner 数据源改为 `license_info` 聚合，覆盖 F037 的「只直连 Gateway + 软件授权」展示合同，不改 Gateway 降级范围 | F066、v2.6.0 F037 |

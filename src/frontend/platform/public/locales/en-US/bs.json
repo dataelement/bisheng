@@ -1,8 +1,19 @@
 {
   "license": {
-    "warning": "Your license will expire in {{days}} days. Please contact your administrator to renew.",
-    "critical": "Your license expires in {{days}} days. Please renew as soon as possible!",
-    "expired": "Your license has expired. Please contact your administrator to renew."
+    "name": {
+      "gateway": "Gateway license",
+      "etl": "ETL license",
+      "dashboard": "commercial dashboard license"
+    },
+    "expiring": "{{name}} expires on {{date}}, {{days}} day(s) remaining",
+    "expired": "{{name}} expired on {{date}}",
+    "renewHint": "Please contact your license provider to renew.",
+    "bannerLabel": "License expiry Banner",
+    "businessExpired": {
+      "gateway": "The Gateway license has expired. This capability is currently unavailable.",
+      "etl": "The ETL license has expired. This file cannot be parsed.",
+      "dashboard": "The commercial dashboard license has expired. This dashboard is currently unavailable."
+    }
   },
   "title": "BISHENG",
   "bisheng": "{{bisheng}}",

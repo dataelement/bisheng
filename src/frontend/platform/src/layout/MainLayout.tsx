@@ -73,6 +73,7 @@ export default function MainLayout() {
     // Global super admins and Child Admins bypass business-menu checks.
     // Department admins receive only the system entry by identity.
     const isSuperAdmin = useMemo(() => user.role === "admin", [user])
+    const isGlobalSuper = Boolean(user.is_global_super)
     const isDeptAdmin = Boolean(user.is_department_admin)
     const isChildAdmin = Boolean(user.is_child_admin)
     const canManageWorkbenchConfig = isSuperAdmin || isChildAdmin
@@ -121,7 +122,7 @@ export default function MainLayout() {
 
     return <div className="flex">
         <div className="bg-background-main w-full h-screen flex flex-col">
-            {isSuperAdmin && <LicenseBanner />}
+            {isGlobalSuper && <LicenseBanner />}
             <div className="flex justify-between h-[64px] shrink-0 bg-background-main relative z-[21]">
                 <div className="flex h-9 my-[14px]">
                     <div className="inline-block" >
