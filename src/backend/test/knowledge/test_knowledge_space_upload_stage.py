@@ -346,7 +346,7 @@ async def test_cleanup_releases_capacity_removes_object_and_is_retry_idempotent(
     assert replacement.id != stage.id
 
 
-async def test_expired_orphan_reconcile_waits_for_minio_lifecycle_and_rechecks_binding(stage_engine):
+async def test_expired_orphan_reconcile_deletes_object_and_rechecks_binding(stage_engine):
     set_current_tenant_id(17)
     storage = _Storage()
     service = _service(stage_engine, storage)
@@ -405,17 +405,15 @@ async def test_expired_orphan_reconcile_waits_for_minio_lifecycle_and_rechecks_b
         await session.commit()
 
     storage.existing_objects.add((storage.tmp_bucket, orphan.object_name))
-    assert not await service.reconcile_expired_orphan(orphan.upload_id)
-    assert storage.remove_calls == []
-
-    # MinIO lifecycle owns physical deletion. The application only releases
-    # metadata/capacity after authoritative absence is observed.
-    storage.existing_objects.remove((storage.tmp_bucket, orphan.object_name))
     assert await service.reconcile_expired_orphan(orphan.upload_id)
     assert await service.reconcile_expired_orphan(orphan.upload_id)
     assert not await service.reconcile_expired_orphan(attached.upload_id)
     assert not await service.reconcile_expired_orphan(bound.upload_id)
-    assert storage.remove_calls == []
+    assert storage.remove_calls == [
+        (storage.tmp_bucket, orphan.object_name),
+        (storage.bucket, f"knowledge-space-upload-stage/17/{orphan.upload_id}.bin"),
+        (storage.bucket, f"knowledge-space-upload-stage/17/{orphan.upload_id}"),
+    ]
 
 
 async def test_retain_bound_stage_copies_temporary_object_before_attached_state(stage_engine):

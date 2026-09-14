@@ -423,12 +423,7 @@ class KnowledgeSpaceUploadStageService:
                 return await repository.save(stage)
 
     async def reconcile_expired_orphan(self, upload_id: str) -> bool:
-        """Release metadata only after MinIO lifecycle removed an orphan.
-
-        The application deliberately does not delete the object here. Physical
-        expiration belongs to MinIO; this method only reconciles the database
-        row and reserved capacity after an authoritative absence check.
-        """
+        """Claim and delete one expired upload stage that was never bound."""
 
         from bisheng.knowledge.domain.repositories.knowledge_space_file_change_request_repository import (
             KnowledgeSpaceFileChangeRequestRepository,
@@ -461,39 +456,14 @@ class KnowledgeSpaceUploadStageService:
                 )
                 if bound is not None:
                     return False
-                object_name = stage.object_name
-        if await self.storage.object_exists(self.storage.tmp_bucket, object_name):
-            return False
-
-        async with self.session_factory() as session:
-            async with session.begin():
-                repository = KnowledgeSpaceUploadStageRepository(session)
-                stage = await self._require_stage(
-                    repository=repository,
-                    tenant_id=tenant_id,
-                    upload_id=normalized_upload_id,
-                    for_update=True,
-                )
-                if stage.state == KnowledgeSpaceUploadStageState.CLEANED:
-                    return True
-                if stage.state not in {
-                    KnowledgeSpaceUploadStageState.UPLOADED,
-                    KnowledgeSpaceUploadStageState.CLEANUP_PENDING,
-                }:
-                    return False
-                bound = await KnowledgeSpaceFileChangeRequestRepository(session).get_by_upload_stage_id(
-                    tenant_id=tenant_id,
-                    upload_stage_id=int(stage.id),
-                    for_update=True,
-                )
-                if bound is not None:
-                    return False
-                stage.state = KnowledgeSpaceUploadStageState.CLEANED
+                stage.state = KnowledgeSpaceUploadStageState.CLEANUP_PENDING
                 await repository.save(stage)
-                return True
+
+        await self.cleanup(normalized_upload_id)
+        return True
 
     async def reconcile_lifecycle(self, upload_id: str) -> bool:
-        """Repair one bounded lifecycle candidate without deleting objects."""
+        """Repair one bounded lifecycle candidate."""
 
         tenant_id = self._tenant_id()
         normalized_upload_id = self._normalize_upload_id(upload_id)

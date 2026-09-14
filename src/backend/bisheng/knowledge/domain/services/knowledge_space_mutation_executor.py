@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from inspect import isawaitable
 from typing import Any
@@ -1055,18 +1055,32 @@ class KnowledgeSpaceMutationExecutor:
             # to enumerate every tuple, delete them one by one and read back to
             # confirm; 3.0 projects the delete per resource, and a failure raises
             # so Celery retries the step.
+            from bisheng.knowledge.domain.services.knowledge_permission_service import (
+                KnowledgeFilePermissionRecord,
+            )
             from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
-            resources = [
-                (str(resource["resource_type"]), int(resource["resource_id"]))
-                for resource in manifest.get("fga_resources", [])
-            ]
-            if resources:
+            snapshots = manifest.get("fga_permission_records")
+            if not isinstance(snapshots, list):
+                raise RuntimeError("F046 delete manifest has no FGA permission snapshot")
+            try:
+                records = [
+                    KnowledgeFilePermissionRecord(
+                        **{
+                            **snapshot,
+                            "ancestor_ids": tuple(snapshot.get("ancestor_ids") or ()),
+                        }
+                    )
+                    for snapshot in snapshots
+                ]
+            except (AttributeError, TypeError, ValueError) as error:
+                raise RuntimeError("F046 delete manifest has an invalid FGA permission snapshot") from error
+            if records:
                 await KnowledgeSpaceService(
                     request=None,
                     login_user=build_context_actor(context),
-                )._cleanup_resource_tuples(resources)
-            return VerifiedMutationStepResult(result_digest=f"fga:projected:{len(resources)}")
+                )._project_resource_deletes(records)
+            return VerifiedMutationStepResult(result_digest=f"fga:projected:{len(records)}")
 
         if context.step_code == DeleteExecutionStepCode.MINIO:
             from bisheng.core.storage.minio.minio_manager import get_minio_storage
@@ -2334,6 +2348,12 @@ class KnowledgeSpaceMutationExecutor:
                 tenant_id=tenant_id,
                 manifest=manifest,
             )
+            resources = [
+                (str(resource["resource_type"]), int(resource["resource_id"]))
+                for resource in manifest.get("fga_resources", [])
+            ]
+            records = await service._load_resource_permission_records(resources)
+            manifest["fga_permission_records"] = [asdict(record) for record in records]
         else:
             await mutation_repository.validate_manifest_current(
                 tenant_id=tenant_id,
