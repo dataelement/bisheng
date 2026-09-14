@@ -56,6 +56,10 @@ _asr_client_type = {
 }
 
 
+def is_asr_provider_supported(server_type: str) -> bool:
+    return server_type in _asr_client_type
+
+
 class BishengASR(BishengBase):
     asr: BaseASRClient = Field(..., description="asrInstances")
 

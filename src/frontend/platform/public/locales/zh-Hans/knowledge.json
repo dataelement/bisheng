@@ -195,7 +195,7 @@
   "mediaAsrApiKeyMissing": "ASR API Key 未配置",
   "mediaFfmpegMissing": "服务器未安装 ffmpeg",
   "mediaAudioExtractionFailed": "音视频音轨提取失败",
-  "mediaAsrProviderUnsupported": "知识库音视频解析仅支持阿里云/Qwen ASR",
+  "mediaAsrProviderUnsupported": "所选语音识别模型的服务商暂不支持音视频解析，请换用阿里云、OpenAI 或 Azure OpenAI 类型的模型",
   "mediaAsrRequestFailed": "ASR 请求失败",
   "overwrite": "覆盖",
   "import": "导入",

@@ -1188,7 +1188,7 @@
     "media_asr_api_key_missing": "ASR API Key が未設定です",
     "media_ffmpeg_missing": "サーバーに ffmpeg がインストールされていません",
     "media_audio_extraction_failed": "メディアの音声抽出に失敗しました",
-    "media_asr_provider_unsupported": "ナレッジのメディア文字起こしは Aliyun/Qwen ASR のみ対応しています",
+    "media_asr_provider_unsupported": "選択した音声認識モデルのプロバイダーは音声・動画の文字起こしに対応していません。Aliyun、OpenAI、Azure OpenAI のモデルをご利用ください。",
     "media_asr_request_failed": "ASR リクエストに失敗しました",
     "overwrite": "上書き",
     "import": "インポート",

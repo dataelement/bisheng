@@ -1264,7 +1264,7 @@
     "media_asr_api_key_missing": "ASR API key is missing",
     "media_ffmpeg_missing": "ffmpeg is not installed on the server",
     "media_audio_extraction_failed": "Media audio extraction failed",
-    "media_asr_provider_unsupported": "Knowledge media transcription only supports Aliyun/Qwen ASR",
+    "media_asr_provider_unsupported": "The provider of the selected speech recognition model does not support audio/video transcription. Use an Aliyun, OpenAI or Azure OpenAI model instead.",
     "media_asr_request_failed": "ASR request failed",
     "overwrite": "Overwrite",
     "import": "Import",
