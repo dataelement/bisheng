@@ -2203,6 +2203,7 @@
   },
   "com_ai_access": {
     "action_failed": "操作に失敗しました。もう一度お試しください。",
+    "address_mismatch_admin": "スキルパックに書き込まれるプラットフォームのアドレス（{{packOrigin}}）が、現在アクセスしているアドレス（{{browserOrigin}}）と一致しません。ここでコピーした設定コマンドを実行する従業員には影響ありません。パック内のアドレスも正しくするには、バックエンドで open_api.public_base_url を設定するか、リバースプロキシで X-Forwarded-Proto と X-Forwarded-Host を転送してください。",
     "admin_banner": "管理者キー：プラットフォームで閲覧可能なすべてのナレッジに届きます。自分のデバイスにのみ設定してください。有効期間は最長 {{days}} 日です。",
     "admin_confirm_body": "このキーの可視範囲はあなた本人と同じで、プラットフォームで閲覧可能なすべてのナレッジに届きます。漏えいの影響は自分の資料にとどまりません。リスクを抑えるため、有効期間は最長 {{days}} 日です。",
     "admin_confirm_check": "このキーが閲覧可能なすべてのナレッジに届くことを理解し、厳重に保管します",
@@ -2212,7 +2213,7 @@
     "copy_failed": "コピーに失敗しました。もう一度お試しください。",
     "copy_key": "API Key をコピー",
     "copy_send_all": "まとめてコピーして AI アシスタントへ",
-    "copy_send_all_body": "このキーを $t(bisheng) ナレッジ検索スキルに保存してください。スキルのディレクトリで次を実行します：\npython3 scripts/search.py --configure --api-key {{key}}\nシェルの設定ファイルや環境変数ファイルにキーを書き込まないでください。",
+    "copy_send_all_body": "このキーを $t(bisheng) ナレッジ検索スキルに保存してください。スキルのディレクトリで次を実行します：\npython3 scripts/search.py --configure --base-url {{baseUrl}} --api-key {{key}}\nシェルの設定ファイルや環境変数ファイルにキーを書き込まないでください。",
     "copy_send_all_done": "コピーしました。AI アシスタントに貼り付ければ設定完了です",
     "created_label": "作成日",
     "delete": "キーを削除",

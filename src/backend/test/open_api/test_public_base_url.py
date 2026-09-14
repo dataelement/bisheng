@@ -13,15 +13,32 @@ from starlette.requests import Request
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.services.config_service import settings
 from bisheng.core.config.open_platform import OpenApiConf
+from bisheng.open_api.api import public_base_url as resolver_module
 from bisheng.open_api.api.endpoints import personal_token_self, skill_pack
 from bisheng.open_api.api.public_base_url import resolve_public_base_url
 
 PACK_PATH = "/api/v1/open-api/skill-packs/knowledge-search"
 
 
+class _Warnings:
+    def __init__(self):
+        self.messages: list[str] = []
+
+    def warning(self, message, *args, **_kwargs):
+        self.messages.append(message.format(*args))
+
+
 @pytest.fixture(autouse=True)
 def _no_configured_url(monkeypatch):
     monkeypatch.setattr(settings.open_api, "public_base_url", "")
+    resolver_module._WARNED.clear()
+
+
+@pytest.fixture
+def warnings(monkeypatch):
+    sink = _Warnings()
+    monkeypatch.setattr(resolver_module, "logger", sink)
+    return sink
 
 
 def _request(headers=None, *, scheme="http", server=("10.0.0.5", 7860), root_path=""):
@@ -170,3 +187,28 @@ async def test_install_prompt_points_at_the_same_public_address():
     data = response.json()["data"]
     assert data["skill_pack_url"] == f"https://kb.example.com:8443{PACK_PATH}"
     assert data["skill_pack_url"] in data["prompt"]
+
+
+# ── operators get a signal when the address was guessed from the last hop ────
+
+
+def test_host_header_fallback_warns_once_per_process(warnings):
+    resolve_public_base_url(_request({"Host": "backend:7860"}))
+    resolve_public_base_url(_request({"Host": "backend:7860"}))
+    assert len(warnings.messages) == 1
+    assert "http://backend:7860" in warnings.messages[0] and "Host header" in warnings.messages[0]
+    assert "open_api.public_base_url" in warnings.messages[0]
+
+
+def test_socket_fallback_warns_separately(warnings):
+    resolve_public_base_url(_request({"Host": "backend:7860"}))
+    resolve_public_base_url(_request({"Host": "bad host"}))
+    assert len(warnings.messages) == 2
+    assert "http://10.0.0.5:7860" in warnings.messages[1] and "server socket" in warnings.messages[1]
+
+
+def test_forwarded_or_configured_addresses_do_not_warn(warnings, monkeypatch):
+    resolve_public_base_url(_request({"Host": "backend:7860", "X-Forwarded-Host": "kb.example.com"}))
+    monkeypatch.setattr(settings.open_api, "public_base_url", "https://kb.example.com")
+    resolve_public_base_url(_request({"Host": "backend:7860"}))
+    assert warnings.messages == []

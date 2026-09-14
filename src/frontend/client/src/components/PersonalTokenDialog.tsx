@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   deletePersonalTokenApi,
   getPersonalTokenGuideUrls,
+  getPersonalTokenInstallPromptApi,
   getPersonalTokenStatusApi,
   issuePersonalTokenApi,
   type PersonalTokenIssued,
@@ -35,6 +36,8 @@ function formatDate(value: string | null): string {
 
 interface TokenRevealDialogProps {
   issued: PersonalTokenIssued | null;
+  /** Browser origin: the address the user's machine can reach, baked into the setup command. */
+  baseUrl: string;
   onClose: () => void;
   onCopy: (value: string, doneMessage?: string) => void;
 }
@@ -42,7 +45,7 @@ interface TokenRevealDialogProps {
 /** One-time key reveal stacked above the main dialog, on the same z-tier as
  * the confirm layer. Dismissing it (×/Esc/overlay) is always allowed: the key
  * is already stored, closing only hides the plaintext for good. */
-function TokenRevealDialog({ issued, onClose, onCopy }: TokenRevealDialogProps) {
+function TokenRevealDialog({ issued, baseUrl, onClose, onCopy }: TokenRevealDialogProps) {
   const localize = useLocalize();
   const copyAllRef = useRef<HTMLButtonElement>(null);
   return (
@@ -79,7 +82,7 @@ function TokenRevealDialog({ issued, onClose, onCopy }: TokenRevealDialogProps) 
             <Button
               ref={copyAllRef}
               color="default" variant="solid" size="large" className="w-full"
-              onClick={() => onCopy(localize("com_ai_access.copy_send_all_body", { key: issued.plaintext }), localize("com_ai_access.copy_send_all_done"))}
+              onClick={() => onCopy(localize("com_ai_access.copy_send_all_body", { key: issued.plaintext, baseUrl }), localize("com_ai_access.copy_send_all_done"))}
             >
               {localize("com_ai_access.copy_send_all")}
             </Button>
@@ -109,6 +112,9 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
   // acknowledge checkbox gates the actual issuance.
   const [adminConfirm, setAdminConfirm] = useState(false);
   const [adminAcknowledged, setAdminAcknowledged] = useState(false);
+  // Origin the backend bakes into skill packs, kept only when it differs from
+  // the browser's (admin-only diagnostic of a proxy chain hiding the address).
+  const [packOrigin, setPackOrigin] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -119,6 +125,7 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
     setActionFailed(false);
     setAdminConfirm(false);
     setAdminAcknowledged(false);
+    setPackOrigin(null);
     setLoading(true);
     getPersonalTokenStatusApi()
       .then((next) => { if (!cancelled) setStatus(next); })
@@ -126,6 +133,21 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [open, reload]);
+
+  const holderIsAdmin = Boolean(status?.holder_is_admin);
+  useEffect(() => {
+    if (!open || !holderIsAdmin) return;
+    let cancelled = false;
+    getPersonalTokenInstallPromptApi()
+      .then((result) => {
+        if (cancelled) return;
+        const origin = new URL(result.skill_pack_url).origin;
+        setPackOrigin(origin === window.location.origin ? null : origin);
+      })
+      // Diagnostics only: a failure must never disturb the dialog.
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [open, holderIsAdmin]);
 
   const token = status?.token;
   const unavailable = !status?.enabled;
@@ -255,6 +277,11 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
               {localize("com_ai_access.admin_banner", { days: String(status.ttl_days) })}
             </p>
           ) : null}
+          {packOrigin ? (
+            <p className="mb-4 rounded-lg bg-warning-tint px-3 py-2 text-body-sm text-warning">
+              {localize("com_ai_access.address_mismatch_admin", { packOrigin, browserOrigin: window.location.origin })}
+            </p>
+          ) : null}
           {status && unavailable ? (
             <p className="mb-4 rounded-lg bg-fill-1 px-3 py-2 text-body-sm text-text-2">
               {localize("com_ai_access.disabled_notice")}
@@ -357,7 +384,7 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
         </div>
       </DialogContent>
     </Dialog>
-    <TokenRevealDialog issued={issued} onClose={() => setIssued(null)} onCopy={handleCopy} />
+    <TokenRevealDialog issued={issued} baseUrl={window.location.origin} onClose={() => setIssued(null)} onCopy={handleCopy} />
     </>
   );
 }

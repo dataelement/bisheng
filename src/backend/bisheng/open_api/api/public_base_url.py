@@ -17,6 +17,10 @@ Resolution order:
    container port there).
 3. The socket the server bound to.
 
+Steps 2's Host fallback and step 3 usually mean the proxy chain hid the browser's
+address, so each logs one warning per process. The pack's setup command also
+carries the browser origin, so a wrong baked address is only a fallback.
+
 Trust note: any client can send these headers, but the derived URL only appears
 in that client's own response — the pack is built per request and served with
 ``Cache-Control: no-store`` — so a spoofed value never reaches anyone else.
@@ -26,6 +30,7 @@ from __future__ import annotations
 
 import re
 
+from loguru import logger
 from starlette.requests import Request
 
 from bisheng.common.services.config_service import settings
@@ -37,6 +42,7 @@ _HOST_RE = re.compile(
     r")(?::\d{1,5})?$"
 )
 _SCHEMES = frozenset({"http", "https"})
+_WARNED: set[str] = set()
 
 
 def _first(value: str | None) -> str:
@@ -55,6 +61,19 @@ def _bound_socket(request: Request) -> str:
     return f"{host}:{port}" if port else host
 
 
+def _warn_once(source: str, derived: str) -> None:
+    if source in _WARNED:
+        return
+    _WARNED.add(source)
+    logger.warning(
+        "Skill packs will carry {} (taken from the {}) because neither open_api.public_base_url "
+        "nor X-Forwarded-Host is set. If users open the platform at another address, set "
+        "open_api.public_base_url or forward X-Forwarded-Proto and X-Forwarded-Host from the reverse proxy.",
+        derived,
+        "Host header" if source == "host" else "server socket",
+    )
+
+
 def resolve_public_base_url(request: Request) -> str:
     """Return ``scheme://host[:port][/root_path]`` without a trailing slash."""
     configured = (settings.open_api.public_base_url or "").strip().rstrip("/")
@@ -65,11 +84,13 @@ def resolve_public_base_url(request: Request) -> str:
     if scheme not in _SCHEMES:
         scheme = request.url.scheme if request.url.scheme in _SCHEMES else "http"
 
+    root_path = (request.scope.get("root_path") or "").rstrip("/")
     host = _first(request.headers.get("x-forwarded-host"))
     if not _is_valid_host(host):
         host = (request.headers.get("host") or "").strip()
-    if not _is_valid_host(host):
-        host = _bound_socket(request)
-
-    root_path = (request.scope.get("root_path") or "").rstrip("/")
+        if _is_valid_host(host):
+            _warn_once("host", f"{scheme}://{host}{root_path}")
+        else:
+            host = _bound_socket(request)
+            _warn_once("socket", f"{scheme}://{host}{root_path}")
     return f"{scheme}://{host}{root_path}"
