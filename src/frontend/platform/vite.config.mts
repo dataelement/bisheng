@@ -99,7 +99,7 @@ export default defineConfig(({ command, mode }) => {
   // 导致 /api/department-limit/*（仅 Gateway 提供）打到 bisheng 出现 404。
   const env = loadEnv(mode, path.resolve(__dirname), "");
   const target = env.VITE_PROXY_TARGET || "http://127.0.0.1:7860/";
-  // Gateway-owned `/api/license/*` (F037/F066 status). Must not fall through to
+  // Gateway-owned `/api/license/*` (F037/F067 status). Must not fall through to
   // FastAPI. Override with VITE_GATEWAY_PROXY_TARGET when 115 is not the lab GW.
   const gatewayTarget = env.VITE_GATEWAY_PROXY_TARGET || "http://127.0.0.1:8098";
   const fileServiceTarget = resolveMinioProxyTarget(env);

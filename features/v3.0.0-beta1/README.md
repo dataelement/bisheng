@@ -25,7 +25,7 @@
 | F063 | [workbench-content-safety](./063-workbench-content-safety/) | P1 | Spec + Design 已确认；tasks 已拆解（16 项 / 6 Wave） | 既有 sensitive_word、工作台聊天入口 |
 | F064 | [kb-list-file-abnormal](./064-kb-list-file-abnormal/) | P1 | Spec / Design / Tasks 已出，实现完成 | F027, F048, F051 |
 | F065 | [model-name-trim](./065-model-name-trim/) | P1 | Spec / Design 已确认；实现完成 | 既有模型管理页、`POST/PUT /api/v1/llm` |
-| F066 | [commercial-license-expiry-reminder](./066-commercial-license-expiry-reminder/) | P1 | 已实现（21 / 21）；Banner 改聚合，错误码 270，11001 点名 Gateway | v2.6.0 F037、ETL4LM 2.1.0-beta1、商业看板写表 |
+| F067 | [commercial-license-expiry-reminder](./067-commercial-license-expiry-reminder/) | P1 | 已实现（21 / 21）；Banner 改聚合，错误码 270，11001 点名 Gateway | v2.6.0 F037、ETL4LM 2.1.0-beta1、商业看板写表 |
 
 ---
 
@@ -81,6 +81,6 @@
 | 2026-09-10 | 登记 F064 文档知识库外层列表文件解析异常。 |
 | 2026-09-10 | 登记 F065 模型名称首尾空格兼容；Design 为《3.0 beta2》§5.7 修改方案。等待 spec + design ★ 确认；tasks 未写。 |
 | 2026-09-10 | 用户确认 F065 spec + design；tasks.md 完成 4 项拆解并落地前后端写入清洗。 |
-| 2026-09-14 | 登记 F066 商业授权统一到期提醒；Spec / Design 按《3.0 beta2》§5.3 与用户裁定的 `license_info` 三路写入写成。等待 spec + design ★ 确认；tasks 未写。 |
-| 2026-09-14 | 用户确认 F066 spec + design；tasks.md 完成 20 项拆解（6 个 Wave）。 |
-| 2026-09-14 | F066 实现完成：`license_info` + 聚合/上报 API + ETL Beat + Banner 改聚合 + 11001 点名 Gateway。 |
+| 2026-09-14 | 登记 F067 商业授权统一到期提醒；Spec / Design 按《3.0 beta2》§5.3 与用户裁定的 `license_info` 三路写入写成。等待 spec + design ★ 确认；tasks 未写。 |
+| 2026-09-14 | 用户确认 F067 spec + design；tasks.md 完成 20 项拆解（6 个 Wave）。 |
+| 2026-09-14 | F067 实现完成：`license_info` + 聚合/上报 API + ETL Beat + Banner 改聚合 + 11001 点名 Gateway。 |

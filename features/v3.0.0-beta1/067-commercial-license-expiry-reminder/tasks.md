@@ -124,7 +124,7 @@
   **依赖**: 无
 
 - [x] **T015**: Banner 文案纯函数测试
-  **文件**: `src/frontend/platform/src/test/f066LicenseBannerCopy.test.ts`
+  **文件**: `src/frontend/platform/src/test/f067LicenseBannerCopy.test.ts`
   **逻辑**: 只测，不写 `licenseBannerCopy.ts`。输入聚合 `licenses[]`，过滤 `expiring`/`expired`，单项完整句（含业务名、日期、天数），多项 `；` 拼接且无「共 N 项」，末尾续期句。`unknown`/`normal` 不进结果。名称用 `gateway`/`etl`/`dashboard` 对应业务词，不得出现「软件授权」。
   **覆盖 AC**: AC-02, AC-03, AC-04, AC-05, AC-10, AC-11, AC-12
   **依赖**: T014
