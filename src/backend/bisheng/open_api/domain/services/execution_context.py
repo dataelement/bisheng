@@ -83,13 +83,17 @@ def restore_execution_context(snapshot_data: dict | None):
         data_scope = TenantSettingService.get_policy_sync(snapshot.tenant_id).data_scope
     tenant_token = current_tenant_id.set(snapshot.tenant_id)
     visible_token = visible_tenant_ids.set(frozenset({DEFAULT_TENANT_ID, snapshot.tenant_id}))
+    # Service accounts never inherit privilege. ``PermissionActor`` already
+    # force-clears both fields for them; gating here as well keeps that
+    # invariant provable from this file instead of a distant constructor.
+    is_user = snapshot.authorization_subject_type == "user"
     actor_token = set_current_permission_actor(
         PermissionActor(
             subject_type=snapshot.authorization_subject_type,
             subject_id=snapshot.authorization_subject_id,
             tenant_id=snapshot.tenant_id,
-            super_admin=False,
-            tenant_admin_tenant_ids=frozenset(),
+            super_admin=snapshot.super_admin and is_user,
+            tenant_admin_tenant_ids=snapshot.tenant_admin_tenant_ids if is_user else frozenset(),
             data_scope=data_scope,
         )
     )

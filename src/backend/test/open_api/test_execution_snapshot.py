@@ -54,3 +54,83 @@ def test_worker_context_is_restored_and_reset(monkeypatch):
         assert actor.super_admin is False
     assert get_current_permission_actor() is None
     assert get_current_tenant_id() is None
+
+
+def guest_snapshot(**overrides) -> OpenApiExecutionSnapshot:
+    """A public v3 snapshot: a natural person carrying resolved privilege."""
+
+    values = {
+        "tenant_id": 3,
+        "actor_kind": "natural_person",
+        "actor_id": 41,
+        "authorization_subject_type": "user",
+        "authorization_subject_id": 41,
+        "resource_owner_user_id": 41,
+        "effective_user_id": 41,
+        "mode": "S",
+        "credential_id": None,
+        "trace_id": "public-v3",
+        "channel": "public_v3",
+        "super_admin": True,
+        "tenant_admin_tenant_ids": frozenset({3}),
+    }
+    values.update(overrides)
+    return OpenApiExecutionSnapshot(**values)
+
+
+def test_public_v3_snapshot_carries_operator_privileges(monkeypatch):
+    """The async leg must authorize against the same facts as the handshake."""
+
+    monkeypatch.setattr(
+        "bisheng.open_api.domain.services.execution_context.validate_execution_snapshot",
+        lambda _snapshot: None,
+    )
+    payload = guest_snapshot().model_dump(mode="json")
+    with restore_execution_context(payload):
+        actor = get_current_permission_actor()
+        assert actor.fga_subject == "user:41"
+        assert actor.super_admin is True
+        assert actor.tenant_admin_tenant_ids == frozenset({3})
+
+
+def test_service_account_snapshot_cannot_gain_super_admin(monkeypatch):
+    """A forged snapshot must not buy privilege on the service-account path."""
+
+    monkeypatch.setattr(
+        "bisheng.open_api.domain.services.execution_context.validate_execution_snapshot",
+        lambda _snapshot: None,
+    )
+    payload = guest_snapshot(
+        actor_kind="service_account",
+        authorization_subject_type="service_account",
+        authorization_subject_id=7,
+    ).model_dump(mode="json")
+    with restore_execution_context(payload):
+        actor = get_current_permission_actor()
+        assert actor.super_admin is False
+        assert actor.tenant_admin_tenant_ids == frozenset()
+
+
+def test_legacy_snapshot_without_privilege_fields_still_validates(monkeypatch):
+    """Covers messages already queued when the new fields shipped."""
+
+    monkeypatch.setattr(
+        "bisheng.open_api.domain.services.execution_context.validate_execution_snapshot",
+        lambda _snapshot: None,
+    )
+    payload = guest_snapshot().model_dump(mode="json")
+    payload.pop("super_admin")
+    payload.pop("tenant_admin_tenant_ids")
+    restored = OpenApiExecutionSnapshot.model_validate(payload)
+    assert restored.super_admin is False
+    assert restored.tenant_admin_tenant_ids == frozenset()
+    with restore_execution_context(payload):
+        assert get_current_permission_actor().super_admin is False
+
+
+def test_v2_snapshot_shape_is_unchanged_by_the_new_fields():
+    """``from_principal`` must keep producing a non-privileged v2 snapshot."""
+
+    snapshot = OpenApiExecutionSnapshot.from_principal(principal(), trace_id="trace-1")
+    assert snapshot.super_admin is False
+    assert snapshot.tenant_admin_tenant_ids == frozenset()

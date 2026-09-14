@@ -12,8 +12,9 @@ from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao
 from bisheng.open_api.domain.services.execution_context import restore_execution_context
 from bisheng.permission.application.business_authorization import require_business_action
-from bisheng.utils.async_utils import run_async_safe
+from bisheng.permission.application.identity import get_current_permission_actor
 from bisheng.utils.exceptions import IgnoreException
+from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.main import bisheng_celery
 from bisheng.worker.utils.stateful_worker import StatefulWorker
 from bisheng.worker.workflow.redis_callback import RedisCallback
@@ -112,14 +113,22 @@ def execute_workflow(
     trace_id_var.set(unique_id)
     start_time = time.time()
     try:
-        with restore_execution_context(execution_snapshot):
-            if execution_snapshot is not None:
-                run_async_safe(
-                    require_business_action(
-                        UserPayload(user_id=user_id, user_role=[], tenant_id=execution_snapshot["tenant_id"]),
+        with restore_execution_context(execution_snapshot) as snapshot:
+            if snapshot is not None:
+                # Read the actor on this thread and hand it over explicitly.
+                # ``restore_execution_context`` is a synchronous context manager,
+                # so its ContextVars live on the Celery task thread; the worker
+                # loop runs elsewhere. ``run_async_task`` copies the context
+                # across (which ``run_async_safe`` does not), and passing
+                # ``actor`` makes the authorization identity independent of that
+                # propagation either way.
+                run_async_task(
+                    lambda: require_business_action(
+                        UserPayload(user_id=user_id, user_role=[], tenant_id=snapshot.tenant_id),
                         resource_type="workflow",
                         resource_id=workflow_id,
                         action="use",
+                        actor=get_current_permission_actor(),
                     )
                 )
             _execute_workflow(unique_id, workflow_id, chat_id, user_id, source)
@@ -180,14 +189,22 @@ def continue_workflow(
     trace_id_var.set(unique_id)
     start_time = time.time()
     try:
-        with restore_execution_context(execution_snapshot):
-            if execution_snapshot is not None:
-                run_async_safe(
-                    require_business_action(
-                        UserPayload(user_id=user_id, user_role=[], tenant_id=execution_snapshot["tenant_id"]),
+        with restore_execution_context(execution_snapshot) as snapshot:
+            if snapshot is not None:
+                # Read the actor on this thread and hand it over explicitly.
+                # ``restore_execution_context`` is a synchronous context manager,
+                # so its ContextVars live on the Celery task thread; the worker
+                # loop runs elsewhere. ``run_async_task`` copies the context
+                # across (which ``run_async_safe`` does not), and passing
+                # ``actor`` makes the authorization identity independent of that
+                # propagation either way.
+                run_async_task(
+                    lambda: require_business_action(
+                        UserPayload(user_id=user_id, user_role=[], tenant_id=snapshot.tenant_id),
                         resource_type="workflow",
                         resource_id=workflow_id,
                         action="use",
+                        actor=get_current_permission_actor(),
                     )
                 )
             _continue_workflow(unique_id, workflow_id, chat_id, user_id, source)

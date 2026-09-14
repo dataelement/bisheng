@@ -17,4 +17,9 @@ async def get_flow(request: Request, flow_id: UUID):
     del request
     normalized_id = flow_id.hex
     async with public_execution("workflow", normalized_id) as execution:
-        return await FlowService.get_one_flow(execution.operator, normalized_id)
+        response = await FlowService.get_one_flow(execution.operator, normalized_id)
+        # See the note in the assistant adapter: no share endpoint exists here,
+        # and a super-admin operator would otherwise report can_share=True.
+        if isinstance(response.data, dict):
+            response.data["can_share"] = False
+        return response
