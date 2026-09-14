@@ -125,8 +125,8 @@ bisheng-milvus-standalone
 | 单机 compose，浏览器直连 nginx | 对 | 无需配置 |
 | TLS 在 nginx 之前终结（云负载均衡、外层反代） | 外层不传 `X-Forwarded-Proto` 时会变成 `http://` | 外层转发 `X-Forwarded-Proto/Host`，或配 `open_api.public_base_url` |
 | k8s ingress | ingress-nginx 默认 `use-forwarded-headers: false`，会用自己看到的协议覆盖外层头 | 前面还有 TLS 终结时开启 `use-forwarded-headers`，或配配置项 |
-| 商业版网关，前面有仓库 nginx | 网关追加而非覆盖转发头，首值仍是 nginx 给的浏览器地址 | 无需配置 |
-| 商业版网关直接对外 | 网关改写 `Host`，得到内网地址 | 必须配 `open_api.public_base_url` |
+| 商业版网关，前面有仓库 nginx | 对：网关追加而非覆盖转发头，首值仍是 nginx 给的浏览器地址（105 实测） | 无需配置 |
+| 商业版网关直接对外 | 对：网关虽改写 `Host`，但会补上 `X-Forwarded-Host`（用户访问网关用的地址）与协议（105 实测） | 网关之前若还有 TLS 终结，需转发 `X-Forwarded-Proto` 或配配置项 |
 | compose 多节点 | 每台机器各读自己的 `config.yaml` | 配置项要在所有节点一致 |
 | 路径前缀部署 | 只能靠配置项 | 配 `open_api.public_base_url` |
 
