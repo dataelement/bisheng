@@ -334,26 +334,37 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
                     <p>{localize("com_ai_access.load_failed")}</p>
                   ) : token ? (
                     <>
-                      <p className="min-w-0 break-all">
-                        <span>{localize("com_ai_access.key_label")}: </span>
-                        <code>{token.key_mask}</code>
-                      </p>
-                      <p>{localize("com_ai_access.status_label")}: {localize(`com_ai_access.status_${statusKey}`)}</p>
-                      <p>{localize("com_ai_access.expires_label")}: {formatDate(token.expires_at)}</p>
-                      <p>{localize("com_ai_access.created_label")}: {formatDate(token.create_time)}</p>
-                      <p>
-                        {localize("com_ai_access.last_used_label")}: {token.last_used_at ? formatDate(token.last_used_at) : localize("com_ai_access.never_used")}
-                      </p>
-                      <p className="text-body-sm">{localize("com_ai_access.masked_hint")}</p>
-                      <p className="text-body-sm">{localize("com_ai_access.verify_hint")}</p>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <code className="min-w-0 break-all text-text-1" aria-label={localize("com_ai_access.key_label")}>
+                          {token.key_mask}
+                        </code>
+                        {/* Valid is the normal state; only a key that stopped working earns a status. */}
+                        {statusKey === "expired" || statusKey === "revoked" ? (
+                          <span className="shrink-0 rounded-md bg-danger-tint px-2 py-0.5 text-body-sm text-danger">
+                            {localize(`com_ai_access.status_${statusKey}`)}
+                          </span>
+                        ) : null}
+                      </div>
+                      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-body-sm">
+                        <dt>{localize("com_ai_access.expires_label")}</dt>
+                        <dd className="text-text-1">{formatDate(token.expires_at)}</dd>
+                        <dt>{localize("com_ai_access.last_used_label")}</dt>
+                        <dd className="text-text-1">
+                          {token.last_used_at ? formatDate(token.last_used_at) : localize("com_ai_access.never_used")}
+                        </dd>
+                      </dl>
+                      {/* Only useful until the first call proves the connection. */}
+                      {!token.last_used_at && statusKey === "active" ? (
+                        <p className="text-body-sm">{localize("com_ai_access.verify_hint")}</p>
+                      ) : null}
                     </>
                   ) : (
                     <p className="whitespace-pre-line">{localize("com_ai_access.empty_description")}</p>
                   )}
                   {status && !loading && !loadFailed ? (
                     <div className="rounded-lg bg-fill-1 px-3 py-2 text-body-sm">
-                      <p className="font-medium text-text-1">{localize("com_ai_access.scope_title")}</p>
-                      <p className="mt-1">{scopeText}</p>
+                      <p>{localize("com_ai_access.scope_title")}</p>
+                      <p className="mt-0.5 text-text-1">{scopeText}</p>
                     </div>
                   ) : null}
                   {actionFailed ? <p role="alert" className="text-danger">{localize("com_ai_access.action_failed")}</p> : null}
@@ -365,14 +376,15 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
                     </Button>
                   ) : (
                     <>
+                      {/* A key that stopped working makes "get a new one" the next step. */}
+                      <Button color="default" variant={token && statusKey === "active" ? "filled" : "solid"} size="large" loading={action === "issue"} disabled={busy || unavailable} onClick={handleIssue}>
+                        {localize(token ? "com_ai_access.regenerate" : "com_ai_access.get_key")}
+                      </Button>
                       {token ? (
-                        <Button color="danger" variant="filled" size="large" loading={action === "delete"} disabled={busy} onClick={handleDelete}>
+                        <Button color="danger" variant="text" size="large" loading={action === "delete"} disabled={busy} onClick={handleDelete}>
                           {localize("com_ai_access.delete")}
                         </Button>
                       ) : null}
-                      <Button color="default" variant={token ? "filled" : "solid"} size="large" loading={action === "issue"} disabled={busy || unavailable} onClick={handleIssue}>
-                        {localize(token ? "com_ai_access.regenerate" : "com_ai_access.get_key")}
-                      </Button>
                     </>
                   )}
                 </div>

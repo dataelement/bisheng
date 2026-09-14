@@ -2292,7 +2292,6 @@
     "copy_send_all": "Copy all and send to your AI assistant",
     "copy_send_all_body": "Save this key with the $t(bisheng) knowledge-search skill: in the skill directory run\npython3 scripts/search.py --configure --base-url {{baseUrl}} --api-key {{key}}\nDo not put the key in shell profile or environment files.",
     "copy_send_all_done": "Copied — paste it to your AI assistant to finish setup",
-    "created_label": "Created",
     "delete": "Delete key",
     "delete_confirmation": "Your AI assistant will no longer reach platform knowledge. You can generate a new key at any time.",
     "deleted_toast": "Deleted. The old key no longer grants your AI assistant access.",
@@ -2310,7 +2309,6 @@
     "load_failed": "Could not load your key. Please try again.",
     "loading": "Loading...",
     "manage": "Manage",
-    "masked_hint": "The full key is shown only when issued. Get a new key if you did not save it.",
     "never_used": "Never used",
     "once_banner": "For security, the key is shown only once. It cannot be viewed again after closing — copy and save it now.",
     "regenerate": "Get a new key",
@@ -2330,6 +2328,6 @@
     "status_none": "Not connected",
     "status_revoked": "Revoked",
     "title": "AI assistant access",
-    "verify_hint": "After setup, ask your AI assistant to search your knowledge base. When \"Last used\" here updates, the connection works."
+    "verify_hint": "No AI assistant has used this key yet. Once it is set up, ask it to “search my knowledge base for…” and the time appears here. Didn’t save the key? Get a new one."
   }
 }

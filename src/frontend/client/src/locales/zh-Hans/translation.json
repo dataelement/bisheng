@@ -2221,7 +2221,6 @@
     "copy_send_all": "一键复制，发给 AI 助手",
     "copy_send_all_body": "请把这把密钥交给 $t(bisheng) 知识检索技能保存：进入技能目录运行\npython3 scripts/search.py --configure --base-url {{baseUrl}} --api-key {{key}}\n不要把密钥写进 shell 配置文件或环境变量文件。",
     "copy_send_all_done": "已复制，粘贴发给你的 AI 助手即可完成配置",
-    "created_label": "创建时间",
     "delete": "删除密钥",
     "delete_confirmation": "删除后，你的 AI 助手将无法再访问平台知识。之后可以随时重新生成。",
     "deleted_toast": "已删除。你的 AI 助手不能再用旧密钥访问平台知识。",
@@ -2239,7 +2238,6 @@
     "load_failed": "密钥信息加载失败，请重试。",
     "loading": "加载中...",
     "manage": "管理",
-    "masked_hint": "密钥全文仅在生成时显示。如未保存，请重新获取。",
     "never_used": "从未使用",
     "once_banner": "出于安全考虑，密钥只显示这一次，关闭后无法再次查看，请立即复制保存。",
     "regenerate": "重新获取",
@@ -2259,6 +2257,6 @@
     "status_none": "未连接",
     "status_revoked": "已吊销",
     "title": "AI 助手接入",
-    "verify_hint": "配置好后，试着问 AI 助手：「帮我在知识库里查…」。这里的「最后使用」时间更新，就说明连接成功了。"
+    "verify_hint": "还没有 AI 助手用过这把密钥。配置好后问它「帮我在知识库里查…」，这里会显示使用时间。没保存密钥的话，重新获取一把。"
   }
 }
