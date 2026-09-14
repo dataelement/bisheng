@@ -450,6 +450,8 @@ F048 的 Catalog active、模型 enabled、动作 active、grant level 以及资
 
 存量升级使用 `scripts/reconcile_f048_visible_projection.py`：默认 dry-run；`--apply` 时先发布兼容模型，再按每条 CURRENT `ResourcePermissionMode` 补齐 service_account 的 permission_enabled 与当前模式标记，同时对账 visible tuple。报告分别输出可见性 tuple 和服务账号技术标记 tuple 数量，任何写入/校验失败均非零退出。
 
+仅发布模型、无需重建 Grant visible 投影时，`scripts/publish_authorization_model_change.py` 复用对账脚本的资源标记加载、幂等写入及 higher-consistency 校验逻辑。模型 checksum 已一致也必须执行该步骤，不能在 `already_current` 分支跳过；模型升级时先在目标模型下完成资源标记校验，再切换 Catalog。两种入口均为维护窗口中的显式部署作业，不挂到 Alembic、API 或 Worker 启动流程。
+
 ---
 
 ## 8. 已知坑 / 反直觉事实
@@ -473,6 +475,7 @@ F048 的 Catalog active、模型 enabled、动作 active、grant level 以及资
 | 15 | QA id 可以绕过知识库入口形成 IDOR | `detail_qa/update_qa/delete/add_relative/query_qa` 均先由 QA 定位所属知识库，再经 `KnowledgeService` 内的 `PermissionService` 校验 visible/edit；鉴权通过前禁止 DAO 写入、索引或异步任务 |
 | 16 | multipart 的废弃 `user_id` 不会进入 JSON 检查 | v2 全局依赖同时检查 query、JSON、multipart 和 urlencoded；出现即 400/26019，不能静默忽略 |
 | 17 | HTTP 内网地址不提供 `crypto.randomUUID()`；服务账号授权会在读取 `context` 后、发出写请求前抛错，弹窗无法保存关闭，修改与撤销同样受影响 | `resourceGrantUtils.createResourceGrantIdempotencyKey` 使用 HTTP 可用的 `crypto.getRandomValues()` 生成 128 位随机提交标识，新增、修改、撤销共用；此标识沿用 F048 授权变更契约，与本期排除的 v2 业务 API 幂等能力无关 |
+| 18 | 模型发布成功或 checksum 已一致，不代表旧资源已有 `service_account:*` 的模式和启用标记 | 模型发布脚本和完整对账脚本共用补齐逻辑；`already_current` 也必须写入并校验标记，失败不返回成功，不切换 Catalog；首次迁移覆盖两种主体的逐层标记 |
 
 ---
 
@@ -558,3 +561,4 @@ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/v2/assistant/info/$ASSISTANT
 | 2026-09-04 | 收窄日常对话请求：对外删除 `use_knowledge_base`、`task_mode`，内部固定 `task_mode=False`；`files` 与临时文件上传能力保持不变 | 用户补充裁定 |
 | 2026-09-08 | 同步 PRD v2.6：补齐服务账号 F048 技术标记与存量对账、主体侧资源选择弹窗、管理操作反馈、QA 所属知识库鉴权、知识空间列表 DTO、v2 HTTP/SSE 结果语义、multipart 废弃字段拒绝，以及 PAT 随持有人迁租户 | PRD 后续修订与验收问题 |
 | 2026-09-14 | 统一服务账号资源授权提交标识的生成方式，兼容 HTTP 内网访问，并覆盖授权、修改、撤销回归 | 测试环境保存授权时只发出 `context` 请求，`crypto.randomUUID()` 不可用导致前端中断 |
+| 2026-09-14 | 模型发布部署脚本复用服务账号存量资源标记补齐，覆盖模型不变和升级两条路径，并补充首次迁移逐层标记回归与显式维护部署说明 | 模型已更新而旧资源标记缺失，服务账号有空间授权但子目录文件列表为空 |
