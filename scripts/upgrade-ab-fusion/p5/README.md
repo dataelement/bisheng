@@ -20,8 +20,8 @@
 
 ## 本批明确跳过
 
-A 传统库 type=0、工作流、会话、收藏/订阅、共享存储 migrate、打开首钢同步。部门树不搬；部门授权映不上进 `fusion_exception`，不阻断用户成员。
+A 传统库 type=0、工作流、会话、共享存储 migrate、打开首钢同步。部门树走 P4 `02/03/04`，按 `external_id` bind/create；部门作用域映不上 **阻断该空间**，禁止降级 personal。
 
-积分（D11b）：**要迁账户+流水**，但不在本目录 P5。P4 映射冻结后另脚本；`point_rule` 另定。盘点用 `p1/inventory-points.sql`。
+收藏/置顶/订阅：`p5/50-export-a-relations.sh` + `51-apply-relations.sh`（映不上跳过）。积分：`p4/10-export-a-points.sh` + `11-apply-points.sh`（`point_rule` 用 A 覆盖）。全量编排：`bash ../full-migrate.sh`（默认 APPLY=0）。
 
-VIOLATION 文件进例外清单、不入解析队列。SUCCESS/FAILED/TIMEOUT 拷原文件后在 B 重新解析。
+VIOLATION 文件进例外清单、不入解析队列。SUCCESS/FAILED/TIMEOUT 拷原文件后在 B 重新解析。MinIO 拉取失败或入队脚本缺失即停。

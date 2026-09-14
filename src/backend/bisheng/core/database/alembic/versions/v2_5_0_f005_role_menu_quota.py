@@ -122,9 +122,11 @@ def upgrade() -> None:
 
     # 6. Migrate knowledge_space_file_limit into quota_config
     # Only for roles that have a positive limit set.
-    # Use Python-level JSON processing so the query works on MySQL and DaMeng.
+    # 写 dict, 经 JsonType 绑定: MySQL 原生 JSON 存 OBJECT; DM8/SQLite 再 dumps.
+    # 禁止 json.dumps 后再写入 MySQL JSON 列, 会存成 JSON STRING, 角色列表 Pydantic 会 500.
     if column_exists(conn, 'role', 'knowledge_space_file_limit'):
         import json as _json
+        json_type = JsonType()
         role_tbl = sa.Table('role', sa.MetaData(), autoload_with=conn)
         rows = conn.execute(
             sa.select(role_tbl.c.id, role_tbl.c.knowledge_space_file_limit, role_tbl.c.quota_config)
@@ -135,10 +137,11 @@ def upgrade() -> None:
             current = _json.loads(raw) if isinstance(raw, str) else raw
             if current:  # already has config — skip
                 continue
+            payload = {'knowledge_space_file': row.knowledge_space_file_limit}
             conn.execute(
                 sa.update(role_tbl)
                 .where(role_tbl.c.id == row.id)
-                .values(quota_config=_json.dumps({'knowledge_space_file': row.knowledge_space_file_limit}))
+                .values(quota_config=json_type.process_bind_param(payload, conn.dialect))
             )
 
 def downgrade() -> None:

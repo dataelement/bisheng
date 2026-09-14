@@ -6,12 +6,13 @@
 
 1. **P2/P3（B 2.2→2.5.0-sg hop）** 是本包可逐步执行的核心。每步有检查、账本、失败即停。
 2. **P4 身份接管** 必须先有冻结的用户映射 CSV，禁止按姓名自动合并。脚本只应用已签字的映射。
-3. **P5 知识空间融合** 按 [`p5/README.md`](p5/README.md) 执行：export → inventory → dry-run → `APPLY=0` apply → 单空间 `APPLY=1`。默认不落库。禁止拷 A 的向量库 / OpenFGA。
-4. 官方 hop 文档里的 `*json_unquote*` 等是飞书转 Markdown 的损坏写法。本包 SQL 已改成合法 MySQL。
-5. 本 hop **只针对 MySQL 8**。禁止在 DM8 上跑。
-6. 当前摸到的演练机 B 是 `v2.2sgv260402-JiTuan`，不是官方 `v2.2.0`。**第一步必须跑 p2/00-precheck.sh**，把 JiTuan 相对官方 2.2 的表差记进账本；有未知列/缺列要先改 SQL 再继续。
-7. 目标 2.5.0-sg 必须写死 **镜像 digest + Git commit + Alembic head**（评审 D02）。测试机路径/镜像写在各 hop 脚本开头。浮动 tag 会被 precheck 拒绝。
-8. 容器 `alembic upgrade head || echo WARNING` **不算成功**。本包单独跑 Alembic，对不上 `TARGET_ALEMBIC_HEAD` 就停。
+3. **P5 知识空间融合** 按 [`p5/README.md`](p5/README.md) 执行：export → inventory → dry-run → `APPLY=0` apply → 单空间 `APPLY=1`。默认不落库。禁止拷 A 的向量库 / OpenFGA。部门作用域未映射则阻断该空间，禁止降级 personal。
+4. **全迁入口** [`full-migrate.sh`](./full-migrate.sh)：串起用户/部门/空间/关系/积分，默认 `APPLY=0`。真落库需要 `APPLY=1 CONFIRM_FULL_MIGRATE=1` 且已签字 CSV。
+5. 官方 hop 文档里的 `*json_unquote*` 等是飞书转 Markdown 的损坏写法。本包 SQL 已改成合法 MySQL。
+6. 本 hop **只针对 MySQL 8**。禁止在 DM8 上跑。
+7. 当前摸到的演练机 B 是 `v2.2sgv260402-JiTuan`，不是官方 `v2.2.0`。**第一步必须跑 p2/00-precheck.sh**，把 JiTuan 相对官方 2.2 的表差记进账本；有未知列/缺列要先改 SQL 再继续。
+8. 目标 2.5.0-sg 必须写死 **镜像 digest + Git commit + Alembic head**（评审 D02）。测试机路径/镜像写在各 hop 脚本开头。浮动 tag 会被 precheck 拒绝。
+9. 容器 `alembic upgrade head || echo WARNING` **不算成功**。本包单独跑 Alembic，对不上 `TARGET_ALEMBIC_HEAD` 就停。
 
 ## 谁执行
 
@@ -21,7 +22,7 @@
 
 compose 路径、project 名、`config.yaml` / `entrypoint.sh` 的宿主机位置由 `lib/discover.sh` 从容器标签和挂载表自动发现，不写死路径，换机器无需改脚本。`env.sh` 可选，用于覆盖镜像、容器名和门禁，需手工 `source` 后再跑脚本。
 
-门禁默认全关（`APPLY` / `CONFIRM_LAYOUT` / `DRILL` / `CONFIRM_TYPE2` / `CONFIRM_F006` 均为 0），不 export 就只打印不落库。然后：
+P2 hop 跑起来就升级。`DRILL=1` 仅演练机（跳过 digest）。`CONFIRM_TYPE2` / `CONFIRM_F006` 仍要显式打开。P4/P5 默认 `APPLY=0` 不落库。然后：
 
 | 序号 | 阶段 | 命令 | 完成判据 |
 |---:|---|---|---|
@@ -39,9 +40,11 @@ compose 路径、project 名、`config.yaml` / `entrypoint.sh` 的宿主机位�
 | 11 | 回归 | `bash p2/40-verify.sh` + 业务 UAT | 评审 §10.1 |
 | 12 | P3 | 用**同一包、同一 digest** 在生产 B 重做 3–11 | 不要改脚本现场发挥 |
 | 13 | P4 | `bash p4/00-export-a-users.sh` → propose-map → 签字 CSV → `APPLY=0` 再 `APPLY=1 bash p4/apply-takeover.sh` | 员工编码唯一；双行同一 B id；**仍关闭 SG 同步** |
-| 14 | P5 | 见 `p5/README.md` 与 `复制即跑.md` §13 | 每批隐藏空间；verify 后再发布 |
-| 15 | P6 | 见 `p6/cutover-runbook.md` | 单写；Go/No-Go |
-| 16 | P7 | 见 `p7/observe.md` | A 只读 2–4 周 |
+| 14 | P4 部门 | `bash p4/02-export-a-depts.sh` → propose-dept-map → 签字 `p4/dept-map.csv` → `APPLY=0` 再 `04-apply-depts.sh` | 按 `external_id` bind/create；层级冲突要 `CONFIRM_DEPT_HIERARCHY=1` |
+| 15 | P5 | 见 `p5/README.md` 与 `复制即跑.md` §13–14 | 每批隐藏空间；部门作用域映不上则阻断，禁止降 personal |
+| 16 | 关系/积分 | `p5/50-export-a-relations.sh` + `p4/10-export-a-points.sh`；或 `bash full-migrate.sh` | 收藏/置顶映不上跳过；`point_rule` 用 A 覆盖 |
+| 17 | P6 | 见 `p6/cutover-runbook.md` | 单写；Go/No-Go |
+| 18 | P7 | 见 `p7/observe.md` | A 只读 2–4 周 |
 
 中间版本 **不必对外提供 API**。需要的是对应版本的**工具容器**（尤其 2.3 的 `convert_all`）。
 

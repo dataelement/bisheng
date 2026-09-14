@@ -24,6 +24,7 @@ if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
 from apply_ingest import ingest_files  # noqa: E402
+from apply_tags import apply_tags  # noqa: E402
 
 
 class _FusionRequest:
@@ -105,6 +106,7 @@ async def _write_maps(
     b_space_id: int,
     note: str,
     file_rows: list[dict],
+    doc_rows: list[dict],
     exceptions: list[dict],
 ) -> None:
     from sqlalchemy import text
@@ -145,6 +147,14 @@ async def _write_maps(
                     "sz": row.get("size_bytes"),
                     "sha": row.get("content_sha256"),
                 },
+            )
+        for row in doc_rows:
+            await session.execute(
+                text(
+                    "INSERT INTO fusion_document_map (batch_no,a_doc_id,b_doc_id) "
+                    "VALUES (:b,:a,:s) ON DUPLICATE KEY UPDATE b_doc_id=VALUES(b_doc_id)"
+                ),
+                {"b": batch_no, "a": row["a_doc_id"], "s": row["b_doc_id"]},
             )
         for exc in exceptions:
             await session.execute(
@@ -194,7 +204,11 @@ async def apply_space(
     )
     from bisheng.core.context.tenant import bypass_tenant_filter
     from bisheng.core.database import get_async_db_session
-    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState
+    from bisheng.knowledge.domain.models.knowledge import (
+        AuthTypeEnum,
+        KnowledgeDao,
+        KnowledgeState,
+    )
     from bisheng.knowledge.domain.models.knowledge_space_scope import (
         KnowledgeSpaceLevelEnum,
     )
@@ -245,16 +259,18 @@ async def apply_space(
     if scope.get("owner_type") == "department" and scope.get("owner_id"):
         dept_id = dept_map.get(int(scope["owner_id"]))
         if dept_id is None:
-            level = KnowledgeSpaceLevelEnum.PERSONAL
-            plan.setdefault("exceptions", []).append(
-                {
-                    "kind": "dept_unmapped",
-                    "a_space_id": a_space_id,
-                    "detail": "空间部门作用域映不上, 降级为 personal",
-                }
+            raise SystemExit(
+                f"空间部门作用域映不上, 禁止降级 personal a_space_id={a_space_id} "
+                f"a_dept={scope.get('owner_id')}"
             )
 
-    b_space_id = existing_space
+    try:
+        auth_type = AuthTypeEnum(export["space"].get("auth_type") or "public")
+    except ValueError:
+        auth_type = AuthTypeEnum.PUBLIC
+
+    merge_favorite = plan.get("merge_favorite_b_space_id")
+    b_space_id = existing_space or (int(merge_favorite) if merge_favorite else None)
     if b_space_id is None:
         svc = KnowledgeSpaceService(_FusionRequest(), login_user)
         with bypass_tenant_filter():
@@ -262,6 +278,7 @@ async def apply_space(
                 name=target_name,
                 description=export["space"].get("description"),
                 icon=export["space"].get("icon") or None,
+                auth_type=auth_type,
                 is_released=False,
                 space_level=level,
                 department_id=dept_id,
@@ -271,6 +288,15 @@ async def apply_space(
             )
         b_space_id = int(space.id)
         await KnowledgeDao.async_update_state(b_space_id, KnowledgeState.UNPUBLISHED)
+        if export["space"].get("is_favorite"):
+            from sqlalchemy import text as sql_text
+
+            async with get_async_db_session() as session:
+                await session.execute(
+                    sql_text("UPDATE knowledge SET is_favorite=1 WHERE id=:i"),
+                    {"i": b_space_id},
+                )
+                await session.commit()
 
     result["b_space_id"] = b_space_id
     async with get_async_db_session() as session:
@@ -286,6 +312,16 @@ async def apply_space(
             existing_file_map=existing_files,
             put_object=_put_object,
         )
+        tag_result = await apply_tags(
+            session,
+            export=export,
+            b_space_id=b_space_id,
+            owner_b=owner_b,
+            batch_no=batch_no,
+            user_map=user_map,
+        )
+        ingest.setdefault("exceptions", []).extend(tag_result.get("exceptions") or [])
+        await session.commit()
 
     for member in plan.get("members_ok") or []:
         grant_type = (member.get("grant_subject_type") or "user").lower()
@@ -332,8 +368,11 @@ async def apply_space(
                     user_role=user_role,
                     status=MembershipStatusEnum.ACTIVE,
                     membership_source="manual",
+                    is_pinned=bool(member.get("is_pinned")),
                 )
             )
+        elif member.get("is_pinned"):
+            await SpaceChannelMemberDao.pin_space_id(b_space_id, b_uid, True)
         rel = ROLE_TO_RELATION.get(role, "viewer")
         if rel == "owner":
             continue
@@ -360,6 +399,7 @@ async def apply_space(
         b_space_id=b_space_id,
         note=target_name,
         file_rows=ingest.get("file_map_rows") or [],
+        doc_rows=ingest.get("doc_map_rows") or [],
         exceptions=exceptions,
     )
 
@@ -386,6 +426,11 @@ async def apply_space(
     result["enqueue_stdout"] = (enqueue.stdout or "")[-2000:]
     if enqueue.returncode != 0:
         result["enqueue_stderr"] = (enqueue.stderr or "")[-2000:]
+        print(json.dumps({"applied": True, **result}, ensure_ascii=False, indent=2))
+        raise SystemExit(
+            f"入队重解析失败 rc={enqueue.returncode} a_space_id={a_space_id} "
+            f"b_space_id={b_space_id}: {(enqueue.stderr or '')[-500:]}"
+        )
 
     manifest = {
         "batch_no": batch_no,

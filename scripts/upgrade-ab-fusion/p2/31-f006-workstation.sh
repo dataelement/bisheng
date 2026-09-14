@@ -6,7 +6,6 @@ STEP="p2.31-f006"
 : "${BACKEND_CONTAINER:=bisheng-backend}"
 : "${MYSQL_CONTAINER:=bisheng-mysql}"
 : "${MYSQL_DB:=bisheng}"
-: "${APPLY:=0}"
 : "${CONFIRM_F006:=0}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
@@ -23,21 +22,17 @@ f006 dry_run
 
 if [[ "${CONFIRM_F006}" != "1" ]]; then
   ledger "${STEP}" "BLOCK" "CONFIRM_F006!=1"
-  die "阅读 dry_run 输出后 export CONFIRM_F006=1 APPLY=1 再执行"
+  die "阅读 dry_run 输出后 export CONFIRM_F006=1 再执行"
 fi
 
-if require_apply; then
-  f006 execute
-  f006 verify
-  docker exec -e PYTHONPATH=./ -w /app "${BACKEND_CONTAINER}" bash -lc \
-    'bash scripts/migrate_workstation_models_to_workbench.sh apply'
+f006 execute
+f006 verify
+docker exec -e PYTHONPATH=./ -w /app "${BACKEND_CONTAINER}" bash -lc \
+  'bash scripts/migrate_workstation_models_to_workbench.sh apply'
 
-  pending="$(mysql_scalar "SELECT COUNT(*) FROM failed_tuple WHERE status NOT IN ('succeeded','success')")"
-  log "failed_tuple 非成功行=${pending}"
-  [[ "${pending}" == "0" ]] || die "failed_tuple 仍有未成功记录，禁止当升级完成"
+pending="$(mysql_scalar "SELECT COUNT(*) FROM failed_tuple WHERE status NOT IN ('succeeded','success')")"
+log "failed_tuple 非成功行=${pending}"
+[[ "${pending}" == "0" ]] || die "failed_tuple 仍有未成功记录，禁止当升级完成"
 
-  ledger "${STEP}" "OK" "f006+workstation"
-else
-  ledger "${STEP}" "DRY" "APPLY=0"
-fi
+ledger "${STEP}" "OK" "f006+workstation"
 log "下一步 40-verify.sh。此后不要全局重跑 F006。"

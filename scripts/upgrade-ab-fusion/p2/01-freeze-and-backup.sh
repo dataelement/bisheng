@@ -10,7 +10,6 @@ STEP="p2.01-backup"
 : "${MYSQL_CONTAINER:=bisheng-mysql}"
 : "${MYSQL_DB:=bisheng}"
 : "${BACKUP_DIR:=/data/upgrade-backups}"
-: "${APPLY:=0}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
@@ -23,33 +22,27 @@ dest="${BACKUP_DIR}/${stamp}"
 mkdir -p "${dest}"
 
 log "1) 停 API 写入：停 frontend / gateway / backend / worker / beat（保留 mysql/minio/milvus/es）"
-if require_apply; then
-  docker stop "${FRONTEND_CONTAINER}" "${GATEWAY_CONTAINER}" \
-    "${BACKEND_CONTAINER}" "${WORKER_CONTAINER}" 2>/dev/null || true
-  docker ps --format '{{.Names}} {{.Status}}' | tee "${dest}/containers-after-stop.txt"
-fi
+docker stop "${FRONTEND_CONTAINER}" "${GATEWAY_CONTAINER}" \
+  "${BACKEND_CONTAINER}" "${WORKER_CONTAINER}" 2>/dev/null || true
+docker ps --format '{{.Names}} {{.Status}}' | tee "${dest}/containers-after-stop.txt"
 
 log "2) mysqldump"
-if require_apply; then
-  docker exec "${MYSQL_CONTAINER}" sh -c \
-    'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines --triggers --databases '"${MYSQL_DB}" \
-    >"${dest}/mysql-${MYSQL_DB}.sql"
-  sha256_file "${dest}/mysql-${MYSQL_DB}.sql" >"${dest}/mysql-${MYSQL_DB}.sql.sha256"
-fi
+docker exec "${MYSQL_CONTAINER}" sh -c \
+  'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines --triggers --databases '"${MYSQL_DB}" \
+  >"${dest}/mysql-${MYSQL_DB}.sql"
+sha256_file "${dest}/mysql-${MYSQL_DB}.sql" >"${dest}/mysql-${MYSQL_DB}.sql.sha256"
 
 log "3) 复制 compose 与 config"
-if require_apply; then
-  # 现场可能叠加了多个 -f，逐个备份，不能只存第一个。
-  for f in ${COMPOSE_CONFIG_FILES[@]+"${COMPOSE_CONFIG_FILES[@]}"}; do
-    cp -a "${f}" "${dest}/$(basename "${f}")"
-  done
-  # backend 此时已停，docker exec 用不了；直接从挂载反查到的宿主机路径拷。
-  resolve_host_file_optional "${BACKEND_CONTAINER}" cfg_host "${CONFIG_YAML_DESTS[@]}"
-  if [[ -n "${cfg_host}" ]]; then
-    cp -a "${cfg_host}" "${dest}/config.yaml"
-  else
-    log "config.yaml 非 bind mount 或未挂载，请手工拷到 ${dest}"
-  fi
+# 现场可能叠加了多个 -f，逐个备份，不能只存第一个。
+for f in ${COMPOSE_CONFIG_FILES[@]+"${COMPOSE_CONFIG_FILES[@]}"}; do
+  cp -a "${f}" "${dest}/$(basename "${f}")"
+done
+# backend 此时已停，docker exec 用不了；直接从挂载反查到的宿主机路径拷。
+resolve_host_file_optional "${BACKEND_CONTAINER}" cfg_host "${CONFIG_YAML_DESTS[@]}"
+if [[ -n "${cfg_host}" ]]; then
+  cp -a "${cfg_host}" "${dest}/config.yaml"
+else
+  log "config.yaml 非 bind mount 或未挂载，请手工拷到 ${dest}"
 fi
 
 cat >"${dest}/TODO-storage.txt" <<EOF

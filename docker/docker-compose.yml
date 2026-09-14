@@ -1,7 +1,7 @@
 services:
   mysql:
     container_name: bisheng-mysql
-    image: mysql:8.0
+    image: cr.dataelem.com/mysql:8.0
 
     ports:
       - "3306:3306"
@@ -63,7 +63,7 @@ services:
 
   redis:
     container_name: bisheng-redis
-    image: redis:7.0.4
+    image: cr.dataelem.com/redis:7.0.4
     ports:
       - "6379:6379"
     environment:
@@ -227,7 +227,7 @@ services:
 
   milvus:
     container_name: bisheng-milvus-standalone
-    image: milvusdb/milvus:v2.5.10
+    image: cr.dataelem.com/milvusdb/milvus:v2.5.10
     command: ["milvus", "run", "standalone"]
     security_opt:
     - seccomp:unconfined
@@ -245,6 +245,7 @@ services:
       timeout: 20s
       retries: 3
     ports:
+      # 宿主机 8080 留给 OpenFGA. 旧容器若仍绑 8080, 必须 recreate 才会释放.
       - "19530:19530"
       - "9091:9091"
     depends_on:

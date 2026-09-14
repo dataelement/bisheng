@@ -78,10 +78,20 @@ else
 fi
 
 if table_exists fusion_dept_map; then
+  dept_n="$(mysql_scalar "SELECT COUNT(*) FROM fusion_dept_map" || echo 0)"
+  if [[ "${dept_n}" != "0" ]]; then
+    {
+      printf 'a_dept_pk,b_dept_pk,external_id,action\n'
+      mysql_scalar "SELECT CONCAT_WS(',', a_dept_pk, IFNULL(b_dept_pk,''), IFNULL(external_id,''), action) FROM fusion_dept_map" || true
+    } >"${LOG_DIR}/p5/fusion_dept_map.csv"
+  fi
+fi
+
+if table_exists knowledge && column_exists knowledge is_favorite; then
   {
-    printf 'a_dept_pk,b_dept_pk,external_id,action\n'
-    mysql_scalar "SELECT CONCAT_WS(',', a_dept_pk, IFNULL(b_dept_pk,''), IFNULL(external_id,''), action) FROM fusion_dept_map" || true
-  } >"${LOG_DIR}/p5/fusion_dept_map.csv"
+    printf 'user_id,id\n'
+    mysql_scalar "SELECT CONCAT_WS(',', user_id, id) FROM knowledge WHERE type=3 AND is_favorite=1" || true
+  } >"${LOG_DIR}/p5/b-favorites.csv"
 fi
 
 ledger "${STEP}" "OK" "${inv}"

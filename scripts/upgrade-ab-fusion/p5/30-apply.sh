@@ -63,6 +63,17 @@ if [[ "${APPLY}" == "1" ]]; then
   assert_b_org_sync_off
   mysql_file "${PACK_ROOT}/p4/sql/mapping-tables.sql"
   mysql_file "${PACK_ROOT}/p5/sql/space-map.sql"
+  repo_root="$(cd "${PACK_ROOT}/../.." && pwd)"
+  enqueue_src="${repo_root}/src/backend/scripts"
+  [[ -f "${enqueue_src}/enqueue_reparse_knowledge_space_files.py" ]] \
+    || die "缺少 ${enqueue_src}/enqueue_reparse_knowledge_space_files.py, 无法入队重解析"
+  [[ -f "${enqueue_src}/reparse_knowledge_space_files.py" ]] \
+    || die "缺少 ${enqueue_src}/reparse_knowledge_space_files.py"
+  docker exec "${BACKEND_CONTAINER}" mkdir -p /app/scripts
+  docker cp "${enqueue_src}/enqueue_reparse_knowledge_space_files.py" \
+    "${BACKEND_CONTAINER}:/app/scripts/enqueue_reparse_knowledge_space_files.py"
+  docker cp "${enqueue_src}/reparse_knowledge_space_files.py" \
+    "${BACKEND_CONTAINER}:/app/scripts/reparse_knowledge_space_files.py"
 fi
 
 install_py() {
@@ -71,6 +82,7 @@ install_py() {
     docker exec "${container}" mkdir -p /tmp/fusion-ab
     docker cp "${PACK_ROOT}/p5/minio_xfer.py" "${container}:/tmp/fusion-ab/minio_xfer.py"
     docker cp "${PACK_ROOT}/p5/apply_ingest.py" "${container}:/tmp/fusion-ab/apply_ingest.py"
+    docker cp "${PACK_ROOT}/p5/apply_tags.py" "${container}:/tmp/fusion-ab/apply_tags.py"
     docker cp "${PACK_ROOT}/p5/apply_space.py" "${container}:/tmp/fusion-ab/apply_space.py"
   else
     fusion_ssh_a docker exec "${container}" mkdir -p /tmp/fusion-ab
@@ -91,19 +103,7 @@ pull_objects() {
   local json="${LOG_DIR}/p5/a-space-${sid}.json"
   local dest_dir="${LOG_DIR}/p5/objects/${sid}"
   mkdir -p "${dest_dir}"
-  mapfile -t objs < <(python3 - "${json}" <<'PY'
-import json, sys
-from pathlib import Path
-data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-for f in data.get("files") or []:
-    if int(f.get("file_type") or 1) != 1:
-        continue
-    key = f.get("object_name") or ""
-    if not key:
-        continue
-    print(f"{f['id']}\t{key}")
-PY
-)
+  mapfile -t objs < <(python3 "${PACK_ROOT}/p5/list_minio_keys.py" "${json}")
   if [[ ${#objs[@]} -eq 0 ]]; then
     return 0
   fi
@@ -113,22 +113,24 @@ PY
   fi
   install_py remote "${A_BACKEND_CONTAINER}"
   for item in "${objs[@]}"; do
-    local fid="${item%%$'\t'*}"
-    local key="${item#*$'\t'}"
-    local local_file="${dest_dir}/${fid}"
+    local fid local_name key
+    fid="${item%%$'\t'*}"
+    rest="${item#*$'\t'}"
+    local_name="${rest%%$'\t'*}"
+    key="${rest#*$'\t'}"
+    local local_file="${dest_dir}/${local_name}"
     if [[ -f "${local_file}" ]]; then
-      log "skip existing object a_file_id=${fid}"
+      log "skip existing object a_file_id=${fid} name=${local_name}"
       continue
     fi
-    log "pull A object a_file_id=${fid}"
+    log "pull A object a_file_id=${fid} name=${local_name}"
     if ! fusion_ssh_a docker exec -w "${BACKEND_WORKDIR}" -e PYTHONPATH="${BACKEND_WORKDIR}" \
-      "${A_BACKEND_CONTAINER}" python /tmp/fusion-ab/minio_xfer.py get "${key}" "/tmp/fusion-obj-${fid}"; then
-      log "WARN 拉对象失败 a_file_id=${fid} key=${key}"
-      continue
+      "${A_BACKEND_CONTAINER}" python /tmp/fusion-ab/minio_xfer.py get "${key}" "/tmp/fusion-obj-${local_name}"; then
+      die "拉对象失败 a_file_id=${fid} key=${key}"
     fi
-    fusion_ssh_a docker cp "${A_BACKEND_CONTAINER}:/tmp/fusion-obj-${fid}" "/tmp/fusion-obj-${fid}"
-    fusion_scp_from_a "/tmp/fusion-obj-${fid}" "${local_file}"
-    fusion_ssh_a rm -f "/tmp/fusion-obj-${fid}" || true
+    fusion_ssh_a docker cp "${A_BACKEND_CONTAINER}:/tmp/fusion-obj-${local_name}" "/tmp/fusion-obj-${local_name}"
+    fusion_scp_from_a "/tmp/fusion-obj-${local_name}" "${local_file}"
+    fusion_ssh_a rm -f "/tmp/fusion-obj-${local_name}" || true
   done
 }
 

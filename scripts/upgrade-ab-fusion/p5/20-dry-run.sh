@@ -24,14 +24,21 @@ args=(
 )
 [[ -f "${LOG_DIR}/p5/fusion_dept_map.csv" ]] && args+=(--dept-map "${LOG_DIR}/p5/fusion_dept_map.csv")
 [[ -f "${LOG_DIR}/p5/b-space-names.tsv" ]] && args+=(--b-names "${LOG_DIR}/p5/b-space-names.tsv")
+[[ -f "${LOG_DIR}/p5/b-favorites.csv" ]] && args+=(--b-favorites "${LOG_DIR}/p5/b-favorites.csv")
 set +e
 python3 "${PACK_ROOT}/p5/20-dry-run.py" "${args[@]}"
 rc=$?
 set -e
 if [[ "${rc}" == "2" ]]; then
   ledger "${STEP}" "BLOCK" "${out}"
-  die "有空间所有者映不上, 见 ${out}"
+  if [[ "${P5_ALLOW_PARTIAL:-0}" == "1" ]]; then
+    log "有空间所有者/部门作用域映不上, P5_ALLOW_PARTIAL=1 继续。见 ${out}"
+  else
+    die "有空间所有者映不上, 见 ${out}"
+  fi
+elif [[ "${rc}" != "0" ]]; then
+  die "dry-run 失败 rc=${rc}"
+else
+  ledger "${STEP}" "OK" "${out}"
+  log "dry-run 通过: ${out}"
 fi
-[[ "${rc}" == "0" ]] || die "dry-run 失败 rc=${rc}"
-ledger "${STEP}" "OK" "${out}"
-log "dry-run 通过: ${out}"

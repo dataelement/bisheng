@@ -53,6 +53,8 @@ def _files(rows: list[list[str | None]]) -> list[dict]:
                 "predecessor_logic_file_id": int(r[19]) if r[19] else None,
                 "entry_type": r[20],
                 "entry_status": r[21] if len(r) > 21 else None,
+                "preview_file_object_name": r[22] if len(r) > 22 else None,
+                "thumbnails": r[23] if len(r) > 23 else None,
             }
         )
     return out
@@ -100,6 +102,9 @@ def assemble(dump_text: str) -> dict:
                 "grant_subject_type": r[3] if len(r) > 3 else None,
                 "grant_subject_id": int(r[4]) if len(r) > 4 and r[4] else None,
                 "grant_relation": r[5] if len(r) > 5 else None,
+                "is_pinned": str(r[6]) in {"1", "true", "True"}
+                if len(r) > 6
+                else False,
             }
         )
     docs = []
@@ -131,6 +136,32 @@ def assemble(dump_text: str) -> dict:
                 "is_primary": str(r[4]) in {"1", "true", "True"},
             }
         )
+    tag_libraries = []
+    for r in _parse_section(parts.get("TAGS", "")):
+        if len(r) < 2:
+            continue
+        tag_libraries.append(
+            {
+                "id": int(r[0]),
+                "name": r[1],
+                "description": r[2] if len(r) > 2 else None,
+                "tags": r[3] if len(r) > 3 else "[]",
+                "is_builtin": r[4] if len(r) > 4 else "0",
+                "owner_knowledge_id": int(r[5]) if len(r) > 5 and r[5] else None,
+                "user_id": int(r[6]) if len(r) > 6 and r[6] else None,
+            }
+        )
+    tag_links = []
+    for r in _parse_section(parts.get("TAG_LINKS", "")):
+        if len(r) < 2:
+            continue
+        tag_links.append(
+            {
+                "knowledge_id": int(r[0]) if r[0] else None,
+                "tag_library_id": int(r[1]),
+                "sort_order": int(r[2] or 0) if len(r) > 2 else 0,
+            }
+        )
     return {
         "space": {
             "id": int(s[0]),
@@ -142,12 +173,15 @@ def assemble(dump_text: str) -> dict:
             "is_released": str(s[6]) in {"1", "true", "True"} if len(s) > 6 else False,
             "auth_type": s[7] if len(s) > 7 else "public",
             "icon": s[8] if len(s) > 8 else None,
+            "is_favorite": str(s[9]) in {"1", "true", "True"} if len(s) > 9 else False,
         },
         "scope": scope,
         "files": _files(_parse_section(parts.get("FILES", ""))),
         "documents": docs,
         "versions": versions,
         "members": members,
+        "tag_libraries": tag_libraries,
+        "tag_links": tag_links,
     }
 
 

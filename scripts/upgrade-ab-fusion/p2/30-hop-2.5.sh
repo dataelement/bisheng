@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 2.4.0 -> 2.5.0-sg：OpenFGA + 换镜像 + 两段 Alembic + create_all。
 # 禁止 stamp head。禁止把 entrypoint 的 WARNING-continue 当成功。
+# 重跑可幂等: 已是 TARGET_ALEMBIC_HEAD 且部门表在则跳过 Alembic; milvus 已不占 8080 则不重建。
 # 不含 F006 / 工作台，下一步 31-f006-workstation.sh。
 set -euo pipefail
 STEP="p2.30-2.5"
@@ -18,7 +19,8 @@ STEP="p2.30-2.5"
 : "${FRONTEND_CONTAINER:=bisheng-frontend}"
 : "${MYSQL_CONTAINER:=bisheng-mysql}"
 : "${MYSQL_DB:=bisheng}"
-: "${APPLY:=0}"
+: "${MILVUS_CONTAINER:=bisheng-milvus-standalone}"
+: "${MILVUS_SERVICE:=milvus}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
@@ -68,6 +70,42 @@ wait_health() {
   die "/health 超时"
 }
 
+# milvus healthcheck 有 90s start_period, 重建后要等 healthy, 不能只看 Running.
+wait_container_healthy() {
+  local name="$1" n=0 st=""
+  while [[ "${n}" -lt 120 ]]; do
+    st="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${name}" 2>/dev/null || true)"
+    if [[ "${st}" == "healthy" ]]; then
+      return 0
+    fi
+    if [[ "${st}" == "running" ]]; then
+      return 0
+    fi
+    sleep 2
+    n=$((n + 1))
+  done
+  die "容器未就绪: ${name} (${st:-unknown})"
+}
+
+# 新 compose 里 milvus 不再映射宿主机 8080, 但旧容器仍占着, OpenFGA 起不来.
+# 必须按新文件 recreate; 镜像用现场正在跑的那张, 禁止去拉 Hub.
+# 已经不占 8080 时不要重建 (重跑 hop 会反复打断检索).
+release_host_8080_for_openfga() {
+  docker inspect "${MILVUS_CONTAINER}" >/dev/null 2>&1 \
+    || die "没有 ${MILVUS_CONTAINER}, 无法释放 8080"
+  if ! docker inspect -f '{{json .HostConfig.PortBindings}}' "${MILVUS_CONTAINER}" | grep -q '"8080/tcp"'; then
+    log "${MILVUS_CONTAINER} 未映射宿主机 8080, 跳过重建"
+    return 0
+  fi
+  graft_running_image_to_service "${MILVUS_CONTAINER}" "${MILVUS_SERVICE}"
+  log "按新 compose 重建 ${MILVUS_SERVICE}, 释放宿主机 8080 给 OpenFGA"
+  compose up -d --no-deps --force-recreate "${MILVUS_SERVICE}"
+  wait_container_healthy "${MILVUS_CONTAINER}"
+  if docker inspect -f '{{json .HostConfig.PortBindings}}' "${MILVUS_CONTAINER}" | grep -q '"8080/tcp"'; then
+    die "${MILVUS_CONTAINER} 重建后仍映射宿主机 8080"
+  fi
+}
+
 ledger "${STEP}" "START" "head=${TARGET_ALEMBIC_HEAD}"
 if [[ "${TARGET_BACKEND_IMAGE}" == *"@sha256:"* ]]; then
   assert_pinned_image "${TARGET_BACKEND_IMAGE}"
@@ -84,12 +122,6 @@ assert_data_dir_nonempty "${MYSQL_CONTAINER}" /var/lib/mysql
 if [[ "${DRILL:-0}" != "1" ]]; then
   log "非演练机，确认 TARGET_* 已改成生产制品"
 fi
-
-if ! require_apply; then
-  ledger "${STEP}" "DRY" "APPLY=0"
-  exit 0
-fi
-require_layout_confirmed
 
 column_exists knowledge auth_type || die "knowledge.auth_type 不存在，先做完 2.4 hop"
 column_exists knowledgefile file_level_path || die "knowledgefile.file_level_path 不存在，先做完 2.4 hop"
@@ -120,14 +152,30 @@ log "3) 停 API/worker，先起 mysql/redis/openfga"
 docker stop "${FRONTEND_CONTAINER}" "${BACKEND_CONTAINER}" "${WORKER_CONTAINER}" 2>/dev/null || true
 compose up -d mysql redis
 wait_container "${MYSQL_CONTAINER}"
+release_host_8080_for_openfga
 compose up -d openfga-migrate
 log "等待 openfga-migrate"
 docker wait bisheng-openfga-migrate || true
 compose up -d openfga
 wait_container bisheng-openfga
 
-log "4) 用 sleep infinity 起 backend，拦住 entrypoint 抢跑 alembic upgrade head"
-cat >"${HOP_OVERRIDE}" <<'YAML'
+# 以 alembic_version 为准决定跳过哪段. 已是 head 时禁止 upgrade f011 (不会回退, 旧脚本会误判失败).
+# 禁止 stamp.
+dbv="$(mysql_scalar "SELECT version_num FROM alembic_version LIMIT 1")"
+log "alembic_version=${dbv:-<空>}"
+[[ -n "${dbv}" ]] || die "alembic_version 为空, 禁止 stamp, 先确认这是 2.4 升上来的库"
+
+need_schema_exec=0
+if [[ "${dbv}" != "${TARGET_ALEMBIC_HEAD}" ]]; then
+  need_schema_exec=1
+fi
+if ! table_exists department || ! table_exists user_department; then
+  need_schema_exec=1
+fi
+
+start_hop_backend() {
+  log "4) 用 sleep infinity 起 backend, 拦住 entrypoint 抢跑 alembic upgrade head"
+  cat >"${HOP_OVERRIDE}" <<'YAML'
 services:
   backend:
     entrypoint: ["/bin/sleep"]
@@ -136,19 +184,18 @@ services:
     entrypoint: ["/bin/sleep"]
     command: ["infinity"]
 YAML
-compose_hop up -d --no-deps backend
-wait_container "${BACKEND_CONTAINER}"
+  compose_hop up -d --no-deps backend
+  wait_container "${BACKEND_CONTAINER}"
+}
 
-log "5) Alembic 第一段 -> ${ALEMBIC_BEFORE_DEPT}"
-docker exec -e PYTHONPATH=./ -w /app "${BACKEND_CONTAINER}" \
-  bash -lc "alembic upgrade ${ALEMBIC_BEFORE_DEPT}"
-cur="$(alembic_current)"
-log "alembic current=${cur}"
-[[ "${cur}" == "${ALEMBIC_BEFORE_DEPT}" ]] || die "第一段失败 current=${cur}"
-
-log "6) create_all 补 department 等表（不要跑 init_default_data，会查尚未迁完的 role 列）"
-docker exec -e PYTHONPATH=./ -w /app "${BACKEND_CONTAINER}" \
-  bash -lc 'python - <<"PY"
+ensure_department_tables() {
+  if table_exists department && table_exists user_department; then
+    log "department / user_department 已在, 跳过 create_all"
+    return 0
+  fi
+  log "6) create_all 补 department 等表 (不要跑 init_default_data, 会查尚未迁完的 role 列)"
+  docker exec -e PYTHONPATH=./ -w /app "${BACKEND_CONTAINER}" \
+    bash -lc 'python - <<"PY"
 import asyncio
 from bisheng.core.database.tenant_filter import register_tenant_filter_events
 from bisheng.core.database import get_database_connection
@@ -162,26 +209,64 @@ async def main():
 
 asyncio.run(main())
 PY'
-table_exists department || die "create_all 后仍无 department"
-table_exists user_department || die "create_all 后仍无 user_department"
-log "department / user_department 已在"
+  table_exists department || die "create_all 后仍无 department"
+  table_exists user_department || die "create_all 后仍无 user_department"
+  log "department / user_department 已在"
+}
 
-log "7) 2.4 的 tag.business_type ENUM 装不下 tag_library，先改成 varchar"
-if column_exists tag business_type; then
-  mysql_exec "ALTER TABLE tag MODIFY business_type VARCHAR(64) NOT NULL DEFAULT 'APPLICATION'"
+if [[ "${need_schema_exec}" == "0" ]]; then
+  log "5-8) 已是 ${TARGET_ALEMBIC_HEAD} 且部门表已在, 跳过两段 Alembic / create_all"
+else
+  start_hop_backend
+
+  if [[ "${dbv}" == "${TARGET_ALEMBIC_HEAD}" ]]; then
+    log "5) 已是 head, 跳过第一段 Alembic"
+  elif [[ "${dbv}" == "${ALEMBIC_BEFORE_DEPT}" ]]; then
+    log "5) 已在 ${ALEMBIC_BEFORE_DEPT}, 跳过第一段 Alembic"
+  else
+    log "5) Alembic 第一段 -> ${ALEMBIC_BEFORE_DEPT}"
+    docker exec -e PYTHONPATH=./ -w /app "${BACKEND_CONTAINER}" \
+      bash -lc "alembic upgrade ${ALEMBIC_BEFORE_DEPT}"
+    cur="$(alembic_current)"
+    dbv="$(mysql_scalar "SELECT version_num FROM alembic_version LIMIT 1")"
+    log "alembic current=${cur} db=${dbv}"
+    # 停在 f011 是正常路径; 已超过 f011 (重跑/上次跑完) 不回退, 也不当失败.
+    if [[ "${dbv}" != "${ALEMBIC_BEFORE_DEPT}" && "${dbv}" != "${TARGET_ALEMBIC_HEAD}" ]]; then
+      log "第一段后 current=${dbv}, 视为已过 ${ALEMBIC_BEFORE_DEPT}, 继续 create_all + upgrade head"
+    fi
+  fi
+
+  ensure_department_tables
+
+  log "7) 2.4 的 tag.business_type ENUM 装不下 tag_library, 先改成 varchar"
+  if column_exists tag business_type; then
+    mysql_exec "ALTER TABLE tag MODIFY business_type VARCHAR(64) NOT NULL DEFAULT 'APPLICATION'"
+  fi
+
+  dbv="$(mysql_scalar "SELECT version_num FROM alembic_version LIMIT 1")"
+  if [[ "${dbv}" == "${TARGET_ALEMBIC_HEAD}" ]]; then
+    log "8) 已是 ${TARGET_ALEMBIC_HEAD}, 跳过第二段 Alembic"
+  else
+    log "8) Alembic 第二段 -> ${TARGET_ALEMBIC_HEAD}"
+    docker exec -e PYTHONPATH=./ -w /app "${BACKEND_CONTAINER}" \
+      bash -lc 'alembic upgrade head'
+    cur="$(alembic_current)"
+    dbv="$(mysql_scalar "SELECT version_num FROM alembic_version LIMIT 1")"
+    log "alembic current=${cur} db=${dbv}"
+  fi
+  [[ "${dbv}" == "${TARGET_ALEMBIC_HEAD}" ]] || die "head 不是 ${TARGET_ALEMBIC_HEAD}, 当前 ${dbv}. 禁止 stamp"
 fi
 
-log "8) Alembic 第二段 -> ${TARGET_ALEMBIC_HEAD}"
-docker exec -e PYTHONPATH=./ -w /app "${BACKEND_CONTAINER}" \
-  bash -lc 'alembic upgrade head'
-cur="$(alembic_current)"
-log "alembic current=${cur}"
-[[ "${cur}" == "${TARGET_ALEMBIC_HEAD}" ]] || die "head 不是 ${TARGET_ALEMBIC_HEAD}，当前 ${cur}。禁止 stamp"
-dbv="$(mysql_scalar "SELECT version_num FROM alembic_version")"
-[[ "${dbv}" == "${TARGET_ALEMBIC_HEAD}" ]] || die "alembic_version=${dbv} 不匹配"
-
-log "9) 去掉 hop override，按正常 entrypoint 拉起"
+log "9) 去掉 hop override，按正常入口拉起"
 rm -f "${HOP_OVERRIDE}"
+# 发现阶段可能把已删除的 hop override 留在 -f 列表里, 必须拿掉再 up.
+_kept=()
+for file in ${COMPOSE_CONFIG_FILES[@]+"${COMPOSE_CONFIG_FILES[@]}"}; do
+  [[ "${file}" == "${HOP_OVERRIDE}" ]] && continue
+  _kept+=("${file}")
+done
+COMPOSE_CONFIG_FILES=("${_kept[@]}")
+unset _kept
 compose up -d backend backend_worker frontend
 wait_container "${BACKEND_CONTAINER}"
 wait_health

@@ -46,6 +46,16 @@ def load_dept_map(path: Path | None) -> dict[int, dict[str, str]]:
     return out
 
 
+def load_b_favorites(path: Path | None) -> dict[int, int]:
+    out: dict[int, int] = {}
+    if path is None or not path.exists():
+        return out
+    for row in _read_csv(path):
+        if row.get("user_id") and row.get("id"):
+            out[int(row["user_id"])] = int(row["id"])
+    return out
+
+
 def load_b_names(path: Path | None) -> set[str]:
     names: set[str] = set()
     if path is None or not path.exists():
@@ -62,6 +72,7 @@ def dry_run_space(
     user_map: dict[int, dict[str, str]],
     dept_map: dict[int, dict[str, str]],
     b_names: set[str],
+    b_favorites: dict[int, int] | None = None,
 ) -> dict:
     space = data["space"]
     a_space_id = int(space["id"])
@@ -72,6 +83,7 @@ def dry_run_space(
 
     owner_row = user_map.get(int(owner_a)) if owner_a is not None else None
     owner_b = None
+    b_favorites = b_favorites or {}
     if (
         owner_row is None
         or not owner_row.get("b_user_id")
@@ -160,6 +172,60 @@ def dry_run_space(
             reparse.append(int(f["id"]))
         if f.get("object_name"):
             copy_objects.append(f["object_name"])
+        if f.get("preview_file_object_name"):
+            copy_objects.append(f["preview_file_object_name"])
+        if f.get("thumbnails"):
+            copy_objects.append(f["thumbnails"])
+
+    scope = data.get("scope") or {}
+    level = scope.get("level") or "personal"
+    if scope.get("owner_type") == "department" and scope.get("owner_id"):
+        dept_id = int(scope["owner_id"])
+        mapped = dept_map.get(dept_id)
+        if mapped is None:
+            blocked = True
+            reasons.append(
+                f"部门作用域 a_dept={dept_id} 不在 fusion_dept_map, 禁止降级 personal"
+            )
+            exceptions.append(
+                {
+                    "kind": "dept_unmapped",
+                    "a_space_id": a_space_id,
+                    "detail": reasons[-1],
+                }
+            )
+        elif not mapped.get("b_dept_pk") and mapped.get("action") != "create":
+            blocked = True
+            reasons.append(f"部门作用域 a_dept={dept_id} 无 b_dept_pk")
+            exceptions.append(
+                {
+                    "kind": "dept_unmapped",
+                    "a_space_id": a_space_id,
+                    "detail": reasons[-1],
+                }
+            )
+        elif mapped.get("action") == "create" and not mapped.get("b_dept_pk"):
+            exceptions.append(
+                {
+                    "kind": "dept_pending_create",
+                    "a_space_id": a_space_id,
+                    "detail": f"部门 a_dept={dept_id} 将新建, APPLY 空间前须先 APPLY 部门",
+                }
+            )
+
+    merge_favorite_b_space_id = None
+    if data.get("space", {}).get("is_favorite") and owner_b:
+        fav_b = b_favorites.get(int(owner_b))
+        if fav_b:
+            merge_favorite_b_space_id = fav_b
+            target_name = name
+            exceptions.append(
+                {
+                    "kind": "favorite_merge",
+                    "a_space_id": a_space_id,
+                    "detail": f"B 用户 {owner_b} 已有收藏库 {fav_b}, 文件并入不新建",
+                }
+            )
 
     return {
         "a_space_id": a_space_id,
@@ -170,7 +236,8 @@ def dry_run_space(
         "target_name": target_name,
         "owner_a_user_id": owner_a,
         "owner_b_user_id": owner_b,
-        "level": (data.get("scope") or {}).get("level") or "personal",
+        "level": level,
+        "merge_favorite_b_space_id": merge_favorite_b_space_id,
         "members_ok": members_ok,
         "members_skip": members_skip,
         "file_total": len(files),
@@ -187,6 +254,7 @@ def main() -> None:
     parser.add_argument("--user-map", type=Path, required=True)
     parser.add_argument("--dept-map", type=Path, default=None)
     parser.add_argument("--b-names", type=Path, default=None)
+    parser.add_argument("--b-favorites", type=Path, default=None)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
@@ -195,11 +263,12 @@ def main() -> None:
         raise SystemExit(f"用户映射为空: {args.user_map}")
     dept_map = load_dept_map(args.dept_map)
     b_names = load_b_names(args.b_names)
+    b_favorites = load_b_favorites(args.b_favorites)
 
     reports = []
     for path in sorted(args.json_dir.glob("a-space-*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
-        reports.append(dry_run_space(data, user_map, dept_map, b_names))
+        reports.append(dry_run_space(data, user_map, dept_map, b_names, b_favorites))
 
     blocked = [r for r in reports if r["blocked"]]
     ok = [r for r in reports if r["ok"]]

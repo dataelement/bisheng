@@ -61,6 +61,23 @@ def dst_object_key(batch_no: str, b_space_id: int, a_file_id: int, src_key: str)
     return f"fusion/{batch_no}/{b_space_id}/{a_file_id}/{name}"
 
 
+def _put_side_object(
+    src_key: str | None,
+    local: Path,
+    dst_key: str,
+    put_object,
+    new_object_keys: list[str],
+) -> str | None:
+    """预览/缩略图: 本地有文件才上传并返回新 key, 否则保持空。"""
+    if not (src_key or "").strip():
+        return None
+    if not local.is_file():
+        return None
+    put_object(dst_key, local)
+    new_object_keys.append(dst_key)
+    return dst_key
+
+
 def file_sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -215,6 +232,29 @@ async def ingest_files(
             if item.get("original_uploader_id")
             else uid,
             original_knowledge_id=b_space_id,
+            entry_type=item.get("entry_type") or None,
+            entry_status=item.get("entry_status") or None,
+            preview_file_object_name=_put_side_object(
+                item.get("preview_file_object_name"),
+                object_dir / f"{a_id}.preview",
+                dst_object_key(
+                    batch_no,
+                    b_space_id,
+                    a_id,
+                    item.get("preview_file_object_name") or "preview",
+                ),
+                put_object,
+                new_object_keys,
+            ),
+            thumbnails=_put_side_object(
+                item.get("thumbnails"),
+                object_dir / f"{a_id}.thumb",
+                dst_object_key(
+                    batch_no, b_space_id, a_id, item.get("thumbnails") or "thumb"
+                ),
+                put_object,
+                new_object_keys,
+            ),
         )
         saved = await file_repo.save(row)
         id_map[a_id] = int(saved.id)
@@ -313,6 +353,9 @@ async def ingest_files(
     return {
         "file_id_map": id_map,
         "file_map_rows": file_map_rows,
+        "doc_map_rows": [
+            {"a_doc_id": a_id, "b_doc_id": b_id} for a_id, b_id in doc_id_map.items()
+        ],
         "exceptions": exceptions,
         "new_object_keys": new_object_keys,
         "violation_b_ids": [
