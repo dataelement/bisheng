@@ -74,8 +74,12 @@ class ChatSessionService:
         return res
 
     @staticmethod
-    async def get_subject_session(chat_id: str, subject: SessionSubject) -> MessageSession:
+    async def get_subject_session(
+        chat_id: str, subject: SessionSubject, *, forbidden_on_mismatch: bool = False
+    ) -> MessageSession:
         session = await MessageSessionDao.async_get_one(chat_id)
+        if session is not None and not subject.matches(session) and forbidden_on_mismatch:
+            raise UnAuthorizedError()
         if session is None or not subject.matches(session):
             raise NotFoundError.http_exception()
         return session

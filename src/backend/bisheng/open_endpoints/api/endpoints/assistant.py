@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketException
 from fastapi import status as http_status
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from loguru import logger
 
 from bisheng.api.services.assistant import AssistantService
@@ -20,9 +20,9 @@ from bisheng.common.schemas.api import PageData, resp_200
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData, ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.core.logger import trace_id_var
-from bisheng.open_api.api.dependencies import watch_websocket_credential
 from bisheng.open_api.domain.context import get_current_open_api_principal
 from bisheng.open_api.domain.scopes import open_api_scope
+from bisheng.open_api.domain.services.credential_validator import watch_websocket_credential
 from bisheng.open_api.domain.services.session_subject_service import session_subject_from_principal
 from bisheng.open_endpoints.domain.utils import get_open_api_operator
 from bisheng.utils import get_request_ip
@@ -54,9 +54,6 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
         if completion.stream is not None:
             return StreamingResponse(completion.stream, media_type="text/event-stream")
         return completion.payload
-    except Exception as exc:
-        logger.opt(exception=True).error("assistant completion failed")
-        return JSONResponse(status_code=500, content=str(exc), media_type="application/json")
     finally:
         if "operator" in locals() and "assistant_info" in locals():
             ended = time.time()

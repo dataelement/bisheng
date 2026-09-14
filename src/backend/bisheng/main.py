@@ -2,6 +2,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,6 +10,7 @@ from loguru import logger
 
 from bisheng.api.router import router, router_rpc
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.base import BusinessHTTPException
 from bisheng.common.exceptions.auth import AuthJWTException
 from bisheng.common.init_data import init_default_data
 from bisheng.common.middleware.admin_scope import AdminScopeMiddleware
@@ -34,7 +36,10 @@ def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
             "status_message": exc.detail["error"] if isinstance(exc.detail, dict) else exc.detail,
         }
         if is_v2:
-            http_status = exc.status_code
+            from bisheng.open_api.api.exception_handlers import open_api_http_status
+
+            http_status = open_api_http_status(exc) if isinstance(exc, BusinessHTTPException) else exc.status_code
+            req.scope["open_api_error_code"] = exc.status_code
     elif isinstance(exc, BaseErrorCode):
         data = {"exception": str(exc), **exc.kwargs} if exc.kwargs else {"exception": str(exc)}
         msg = {"status_code": exc.code, "status_message": exc.message, "data": data}
@@ -53,25 +58,9 @@ def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
 
 def handle_request_validation_error(req: Request, exc: RequestValidationError) -> JSONResponse:
     if req.url.path.startswith("/api/v2"):
-        body = exc.body if isinstance(exc.body, dict) else {}
-        from bisheng.common.errcode.open_api import (
-            OpenApiAsyncUnsupportedError,
-            OpenApiTaskModeUnsupportedError,
-        )
-
-        if body.get("task_mode") is True or (
-            "run_mode" in body and body.get("run_mode") != "daily"
-        ):
-            error = OpenApiTaskModeUnsupportedError(msg="Task mode is not available: run_mode/task_mode")
-            req.scope["open_api_error_code"] = error.code
-            return JSONResponse(status_code=400, content=error.to_dict())
-        if body.get("execution") not in (None, "sync") or body.get("background") is True:
-            error = OpenApiAsyncUnsupportedError(msg="Asynchronous execution is not available: execution")
-            req.scope["open_api_error_code"] = error.code
-            return JSONResponse(status_code=400, content=error.to_dict())
         msg = {
             "status_code": status.HTTP_400_BAD_REQUEST,
-            "status_message": exc.errors(),
+            "status_message": jsonable_encoder(exc.errors(), custom_encoder={ValueError: str}),
         }
         return JSONResponse(status_code=400, content=msg)
     msg = {"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "status_message": exc.errors()}

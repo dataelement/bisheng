@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
+from bisheng.common.errcode.open_api import OpenApiAsyncUnsupportedError, OpenApiTaskModeUnsupportedError
 from bisheng.workstation.domain.schemas.chat import APIChatCompletion
 
 
@@ -37,6 +38,16 @@ class OpenDailyChatCompletionReq(BaseModel):
     parentMessageId: str | None = None
     overrideParentMessageId: str | None = None
     responseMessageId: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_unavailable_modes(cls, value):
+        if isinstance(value, dict):
+            if value.get("task_mode") is True or ("run_mode" in value and value["run_mode"] != "daily"):
+                raise OpenApiTaskModeUnsupportedError()
+            if value.get("execution") not in (None, "sync") or value.get("background") is True:
+                raise OpenApiAsyncUnsupportedError()
+        return value
 
     @field_validator("parentMessageId", "overrideParentMessageId", "responseMessageId", mode="before")
     @classmethod
