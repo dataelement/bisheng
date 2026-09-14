@@ -1,6 +1,7 @@
 # Security boundary
 
-This skill may make outbound requests only to `{{OUTBOUND_ORIGIN}}`.
+This skill may make outbound requests only to `{{OUTBOUND_ORIGIN}}` or to the
+platform address the user saved with `scripts/search.py --configure --base-url`.
 
 - Read the token only from `KNOWLEDGE_API_KEY` or from this skill's own
   credentials file (`~/.config/knowledge-search/credentials.json`, or

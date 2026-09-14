@@ -160,6 +160,7 @@ def test_rendered_script_bakes_the_instance_base_url(monkeypatch, tmp_path, caps
         rendered = archive.read("knowledge-search/scripts/search.py").decode()
     assert 'DEFAULT_BASE_URL = "https://example.test/base"' in rendered
 
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     target = tmp_path / "rendered_search.py"
     target.write_text(rendered, encoding="utf-8")
     module = _load_script(target, name="bisheng_skill_search_rendered")
@@ -202,7 +203,7 @@ def test_missing_key_message_gives_the_next_command_not_a_hunt(script, monkeypat
     assert _run(script, monkeypatch, "--base-url", "https://kb.test", "--list-knowledge-bases", "space") == 2
     err = capsys.readouterr().err
     assert "No API key for https://kb.test" in err
-    assert "--configure --api-key <key>" in err
+    assert "--configure --base-url <platform address> --api-key <key>" in err
     assert str(_store_path(script)) in err
     assert "KNOWLEDGE_API_KEY" in err
 
@@ -253,6 +254,7 @@ def test_configure_saves_a_verified_key_owner_only(script, monkeypatch, capsys):
     profile = store["profiles"]["https://kb.test"]
     assert profile["api_key"] == KEY and profile["key_mask"] == "bs-pat-********1234"
     assert profile["base_url"] == "https://kb.test" and profile["saved_at"]
+    assert store["default_base_url"] == "https://kb.test"
     if os.name != "nt":
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
         assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
@@ -339,3 +341,76 @@ def test_configure_warns_when_a_different_environment_key_shadows_the_file(scrip
     assert _run(script, monkeypatch, "--configure", "--api-key", KEY, "--base-url", "https://kb.test") == 0
     err = capsys.readouterr().err
     assert "takes precedence" in err and "stalekey" not in err
+
+
+# ── platform address: the browser origin saved by --configure beats the baked one ──
+
+
+def _rendered_module(monkeypatch, tmp_path, baked: str):
+    """Pack script as downloaded behind a proxy that hid the browser address."""
+    monkeypatch.delenv("KNOWLEDGE_API_KEY", raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    payload = SkillPackService.build("knowledge-search", base_url=baked)
+    with ZipFile(BytesIO(payload)) as archive:
+        rendered = archive.read("knowledge-search/scripts/search.py").decode()
+    target = tmp_path / "rendered_behind_proxy.py"
+    target.write_text(rendered, encoding="utf-8")
+    return _load_script(target, name="bisheng_skill_search_behind_proxy")
+
+
+def test_saved_browser_address_heals_a_wrongly_baked_pack(monkeypatch, tmp_path, capsys):
+    module = _rendered_module(monkeypatch, tmp_path, "http://backend:7860")
+    seen = _capture(module, monkeypatch)
+
+    # The setup command copied from the platform page carries the browser origin.
+    assert _run(module, monkeypatch, "--configure", "--base-url", "https://KB.example.com/", "--api-key", KEY) == 0
+    assert seen[-1].full_url == "https://kb.example.com/api/v2/filelib/?page_size=1"
+    assert "Later calls use https://kb.example.com by default" in capsys.readouterr().out
+
+    # A new session without --base-url goes to the saved address, not the baked one.
+    seen.clear()
+    assert _run(module, monkeypatch, "--query", "q", "--knowledge-base-id", "7") == 0
+    assert seen[0].full_url == "https://kb.example.com/api/v2/filelib/retrieve"
+    assert seen[0].get_header("Authorization") == f"Bearer {KEY}"
+
+
+def test_explicit_base_url_still_beats_the_saved_default(monkeypatch, tmp_path):
+    module = _rendered_module(monkeypatch, tmp_path, "http://backend:7860")
+    _write_store(
+        module,
+        {
+            "https://kb.example.com": {"base_url": "https://kb.example.com", "api_key": KEY},
+            "https://other.example.com": {"base_url": "https://other.example.com", "api_key": KEY},
+        },
+    )
+    path = _store_path(module)
+    store = json.loads(path.read_text(encoding="utf-8"))
+    store["default_base_url"] = "https://kb.example.com"
+    path.write_text(json.dumps(store), encoding="utf-8")
+    seen = _capture(module, monkeypatch)
+
+    assert _run(module, monkeypatch, "--base-url", "https://other.example.com", "--list-knowledge-bases", "doc") == 0
+    assert seen[0].full_url.startswith("https://other.example.com/api/v2/filelib/?")
+
+
+def test_a_bad_saved_default_falls_back_to_the_baked_address(monkeypatch, tmp_path):
+    module = _rendered_module(monkeypatch, tmp_path, "https://baked.example.com")
+    _write_store(module, {"https://baked.example.com": {"base_url": "https://baked.example.com", "api_key": KEY}})
+    path = _store_path(module)
+    store = json.loads(path.read_text(encoding="utf-8"))
+    store["default_base_url"] = "not a url"
+    path.write_text(json.dumps(store), encoding="utf-8")
+    seen = _capture(module, monkeypatch)
+
+    assert _run(module, monkeypatch, "--list-knowledge-bases", "space") == 0
+    assert seen[0].full_url.startswith("https://baked.example.com/api/v2/filelib/?")
+
+
+def test_corrupt_store_without_base_url_still_reports_the_file(monkeypatch, tmp_path, capsys):
+    module = _rendered_module(monkeypatch, tmp_path, "https://baked.example.com")
+    path = _store_path(module)
+    path.parent.mkdir(parents=True)
+    path.write_text("{not json", encoding="utf-8")
+    assert _run(module, monkeypatch, "--list-knowledge-bases", "space") == 2
+    assert str(path) in capsys.readouterr().err

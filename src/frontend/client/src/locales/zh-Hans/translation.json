@@ -2338,6 +2338,7 @@
   },
   "com_ai_access": {
     "action_failed": "操作未完成，请重试。",
+    "address_mismatch_admin": "技能包里写入的平台地址（{{packOrigin}}）与你当前访问的地址（{{browserOrigin}}）不一致。员工运行这里复制的配置命令不受影响；如需包内地址也正确，请在后端配置 open_api.public_base_url，或让反向代理转发 X-Forwarded-Proto 和 X-Forwarded-Host。",
     "admin_banner": "管理员密钥：能查到你在平台内可见的全部知识，请只配置在自己的设备上。有效期最长 {{days}} 天。",
     "admin_confirm_body": "这把密钥的可见范围与你本人一致——能查到平台内你可见的全部知识。一旦泄露，影响的不只是你自己的资料。为控制风险，它的有效期最长 {{days}} 天。",
     "admin_confirm_check": "我了解这把密钥能查到我可见的全部知识，并会妥善保管",
@@ -2347,7 +2348,7 @@
     "copy_failed": "复制失败，请重试。",
     "copy_key": "复制 API Key",
     "copy_send_all": "一键复制，发给 AI 助手",
-    "copy_send_all_body": "请把这把密钥交给 $t(bisheng) 知识检索技能保存：进入技能目录运行\npython3 scripts/search.py --configure --api-key {{key}}\n不要把密钥写进 shell 配置文件或环境变量文件。",
+    "copy_send_all_body": "请把这把密钥交给 $t(bisheng) 知识检索技能保存：进入技能目录运行\npython3 scripts/search.py --configure --base-url {{baseUrl}} --api-key {{key}}\n不要把密钥写进 shell 配置文件或环境变量文件。",
     "copy_send_all_done": "已复制，粘贴发给你的 AI 助手即可完成配置",
     "created_label": "创建时间",
     "delete": "删除密钥",

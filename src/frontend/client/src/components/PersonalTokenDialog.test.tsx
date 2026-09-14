@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { createInstance } from "i18next";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import {
-  deletePersonalTokenApi, getPersonalTokenStatusApi, issuePersonalTokenApi,
+  deletePersonalTokenApi, getPersonalTokenInstallPromptApi, getPersonalTokenStatusApi, issuePersonalTokenApi,
   type PersonalTokenItem, type PersonalTokenStatus,
 } from "~/api/personalToken";
 import en from "~/locales/en/translation.json";
@@ -23,6 +23,7 @@ jest.mock("bisheng-icons", () => ({ Outlined: { Send: () => null, Close: () => n
 jest.mock("~/api/personalToken", () => ({
   ...jest.requireActual("~/api/personalToken"),
   getPersonalTokenStatusApi: jest.fn(), issuePersonalTokenApi: jest.fn(), deletePersonalTokenApi: jest.fn(),
+  getPersonalTokenInstallPromptApi: jest.fn(),
 }));
 jest.mock("~/api/request", () => ({ __esModule: true, default: {} }));
 jest.mock("~/components/ui", () => ({
@@ -69,6 +70,9 @@ beforeEach(async () => {
   jest.mocked(issuePersonalTokenApi).mockResolvedValue({ ...token, plaintext, holder_is_admin: false });
   jest.mocked(deletePersonalTokenApi).mockResolvedValue({ revoked: 1 });
   jest.mocked(copyText).mockResolvedValue();
+  jest.mocked(getPersonalTokenInstallPromptApi).mockResolvedValue({
+    prompt: "", skill_pack_url: `${window.location.origin}/api/v1/open-api/skill-packs/knowledge-search`,
+  });
   mockConfirm.mockResolvedValue(true);
 });
 
@@ -113,12 +117,41 @@ it("reveals the issued key in a stacked dialog and masks it once dismissed", asy
   expect(onOpenChange).toHaveBeenCalledWith(false);
 });
 
-it("bundles the key into the send-to-assistant copy action", async () => {
+it.each(["en", "zh-Hans", "ja"])("bundles the key and the browser address into the setup command in %s", async (language) => {
+  await mockI18n.changeLanguage(language);
   render(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
-  await userEvent.click(await screen.findByRole("button", { name: "Generate my key" }));
+  await userEvent.click(await screen.findByRole("button", { name: mockI18n.t("com_ai_access.get_key") }));
   const reveal = await findRevealDialog();
   await userEvent.click(within(reveal).getByRole("button", { name: mockI18n.t("com_ai_access.copy_send_all") }));
-  expect(copyText).toHaveBeenCalledWith(mockI18n.t("com_ai_access.copy_send_all_body", { key: plaintext }));
+  const expected = mockI18n.t("com_ai_access.copy_send_all_body", { key: plaintext, baseUrl: window.location.origin });
+  expect(copyText).toHaveBeenCalledWith(expected);
+  // Every locale must actually interpolate both values into the command.
+  expect(expected).toContain(`--configure --base-url ${window.location.origin} --api-key ${plaintext}`);
+});
+
+it("warns administrators when skill packs would carry a different address than the browser uses", async () => {
+  jest.mocked(getPersonalTokenStatusApi).mockResolvedValue(statusOf({ holder_is_admin: true }));
+  jest.mocked(getPersonalTokenInstallPromptApi).mockResolvedValue({
+    prompt: "", skill_pack_url: "http://backend:7860/api/v1/open-api/skill-packs/knowledge-search",
+  });
+  render(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
+  expect(await screen.findByText(mockI18n.t("com_ai_access.address_mismatch_admin", {
+    packOrigin: "http://backend:7860", browserOrigin: window.location.origin,
+  }))).toBeInTheDocument();
+});
+
+it("shows no address warning to administrators when the origins match, and never checks for employees", async () => {
+  jest.mocked(getPersonalTokenStatusApi).mockResolvedValue(statusOf({ holder_is_admin: true }));
+  const { unmount } = render(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
+  await waitFor(() => expect(getPersonalTokenInstallPromptApi).toHaveBeenCalled());
+  expect(screen.queryByText(/X-Forwarded-Host/)).not.toBeInTheDocument();
+  unmount();
+
+  jest.mocked(getPersonalTokenInstallPromptApi).mockClear();
+  jest.mocked(getPersonalTokenStatusApi).mockResolvedValue(statusOf());
+  render(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Generate my key" })).toBeEnabled());
+  expect(getPersonalTokenInstallPromptApi).not.toHaveBeenCalled();
 });
 
 it("can regenerate a key and return to the empty card after deletion", async () => {

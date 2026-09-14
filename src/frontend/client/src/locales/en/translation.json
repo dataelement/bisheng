@@ -2408,6 +2408,7 @@
   },
   "com_ai_access": {
     "action_failed": "The operation failed. Please try again.",
+    "address_mismatch_admin": "The platform address written into skill packs ({{packOrigin}}) differs from the address you are using ({{browserOrigin}}). Employees who run the setup command copied here are not affected. To correct the address inside the pack as well, set open_api.public_base_url on the backend, or have the reverse proxy forward X-Forwarded-Proto and X-Forwarded-Host.",
     "admin_banner": "Administrator key: it reaches all knowledge visible to you on the platform. Configure it only on your own devices. Lifetime capped at {{days}} days.",
     "admin_confirm_body": "This key sees exactly what you see — all knowledge visible to you on the platform. A leak affects far more than your own material. To limit the risk its lifetime is capped at {{days}} days.",
     "admin_confirm_check": "I understand this key reaches everything I can see, and I will keep it safe",
@@ -2417,7 +2418,7 @@
     "copy_failed": "Copy failed. Please try again.",
     "copy_key": "Copy API Key",
     "copy_send_all": "Copy all and send to your AI assistant",
-    "copy_send_all_body": "Save this key with the $t(bisheng) knowledge-search skill: in the skill directory run\npython3 scripts/search.py --configure --api-key {{key}}\nDo not put the key in shell profile or environment files.",
+    "copy_send_all_body": "Save this key with the $t(bisheng) knowledge-search skill: in the skill directory run\npython3 scripts/search.py --configure --base-url {{baseUrl}} --api-key {{key}}\nDo not put the key in shell profile or environment files.",
     "copy_send_all_done": "Copied — paste it to your AI assistant to finish setup",
     "created_label": "Created",
     "delete": "Delete key",

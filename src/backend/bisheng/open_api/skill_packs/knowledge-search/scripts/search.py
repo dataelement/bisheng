@@ -47,6 +47,23 @@ def _default_base_url() -> str:
     return "" if DEFAULT_BASE_URL.startswith("{{") else DEFAULT_BASE_URL
 
 
+def _saved_default_base_url() -> str:
+    """Platform address the user saved with --configure: the origin their browser uses.
+
+    Preferred over the baked address, which the server can only infer from proxy
+    headers. Never read from retrieved content; only --configure writes it.
+    """
+    try:
+        store = _read_store(_credentials_path())
+    except CredentialError:
+        return ""  # key resolution reports the corrupt file with its path
+    value = str(store.get("default_base_url") or "")
+    try:
+        return _normalize_base_url(value) if value else ""
+    except ValueError:
+        return ""
+
+
 def _normalize_base_url(raw: str) -> str:
     parts = urlsplit((raw or "").strip())
     if parts.scheme.lower() not in {"http", "https"} or not parts.netloc:
@@ -130,7 +147,9 @@ def _resolve_key(base_url: str) -> tuple[str, str]:
     lines = [
         f"No API key for {base_url}.",
         "Save the user's personal access token once (it then works in every new session):",
-        "  python3 scripts/search.py --configure --api-key <key>",
+        "  python3 scripts/search.py --configure --base-url <platform address> --api-key <key>",
+        "The platform address is the one the user opens in the browser; the setup command",
+        "copied from the platform's AI assistant access page already contains both values.",
         f"It is stored in {path}, readable only by the current user.",
         f"Alternatively set {ENV_KEY} for this process only.",
     ]
@@ -272,8 +291,10 @@ def _configure(base_url: str, explicit_key: str | None) -> int:
         "key_mask": _mask(key),
         "saved_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),  # noqa: UP017 - datetime.UTC needs 3.11
     }
+    store["default_base_url"] = base_url
     _write_store(path, store)
     print(f"Saved API key {_mask(key)} for {base_url} to {path}")
+    print(f"Later calls use {base_url} by default; pass --base-url only for another platform.")
     if decision == "unverified":
         print(
             f"Warning: saved but not verified ({reason}). Run: python3 scripts/search.py --list-knowledge-bases space",
@@ -304,7 +325,10 @@ def _arguments() -> argparse.Namespace | None:
             "--configure (~/.config/knowledge-search/credentials.json; %APPDATA%\\knowledge-search on Windows)."
         ),
     )
-    parser.add_argument("--base-url", help="platform address; defaults to the address baked into this pack")
+    parser.add_argument(
+        "--base-url",
+        help="platform address; defaults to the one saved by --configure, then the one baked into this pack",
+    )
     parser.add_argument("--configure", action="store_true", help="save the key for --base-url, then exit")
     parser.add_argument("--api-key", help="the key to save with --configure (or pipe it on stdin)")
     parser.add_argument(
@@ -329,9 +353,13 @@ def main() -> int:
     args = _arguments()
     if args is None:
         return 2
-    raw_base = args.base_url or _default_base_url()
+    raw_base = args.base_url or _saved_default_base_url() or _default_base_url()
     if not raw_base:
-        print("--base-url is required: this copy of the script has no platform address baked in", file=sys.stderr)
+        print(
+            "--base-url is required: no platform address was saved by --configure "
+            "and this copy of the script has none baked in",
+            file=sys.stderr,
+        )
         return 2
     try:
         base = _normalize_base_url(raw_base)
