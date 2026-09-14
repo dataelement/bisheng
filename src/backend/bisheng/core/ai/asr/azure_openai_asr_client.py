@@ -1,36 +1,28 @@
-from typing import Optional
-
 import openai
 
-from ..base import BaseASRClient
+from ..base import ASRTranscript, BaseASRClient
+from .openai_asr_client import transcribe_with_openai_sdk
 
 
 class AzureOpenAIASRClient(BaseASRClient):
-    """MicrosoftAzure OpenAI ASRClient"""
+    """Microsoft Azure OpenAI ASR client"""
 
     def __init__(self, api_key: str, **kwargs):
         self.model = kwargs.pop("model", "whisper-1")
         self.client = openai.AsyncAzureOpenAI(api_key=api_key, **kwargs)
 
-    async def _transcribe(
-            self,
-            audio: str,
-            language: str = "auto",
-            model: Optional[str] = None,
-            **kwargs
-    ) -> str:
-        """
-        UseAzure OpenAI Whisper APISpeech Recognition
-        :param audio:
-        :param language:
-        :param model:
-        :return:
-        """
-        with open(audio, "rb") as f:
-            response = await self.client.audio.transcriptions.create(
-                file=f,
-                model=model or self.model,
-                language=language if language != "auto" else None,
-                **kwargs
-            )
-            return response.text
+    async def transcribe_file(
+        self,
+        wav_path: str,
+        language: str | None = None,
+        model: str | None = None,
+    ) -> ASRTranscript:
+        return await transcribe_with_openai_sdk(
+            self.client,
+            wav_path,
+            model=model or self.model,
+            language=language,
+        )
+
+    async def aclose(self) -> None:
+        await self.client.close()

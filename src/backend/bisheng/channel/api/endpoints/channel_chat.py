@@ -14,7 +14,6 @@ from datetime import datetime
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from langchain_core.documents import Document
-from langchain_core.messages import HumanMessage, SystemMessage
 from sse_starlette import EventSourceResponse
 
 from bisheng.api.services.workstation import WorkstationConversation, WorkstationMessage
@@ -23,6 +22,7 @@ from bisheng.channel.domain.schemas.channel_chat_schema import ChannelArticleCha
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.channel.domain.services.channel_chat_service import ChannelChatService
 from bisheng.channel.domain.services.channel_service import ChannelService
+from bisheng.citation.domain.services.citation_prompt_helper import ensure_citation_rules
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.channel import ChannelChatConversationNotFoundError
@@ -133,10 +133,7 @@ async def chat_completions(
             data, login_user, article_title
         )
         conversationId = conversation.chat_id
-
-        # 3. Truncate article content if needed
         max_chunk_size = subscription_config.max_chunk_size if subscription_config else 15000
-        article_content = ChannelChatService._truncate_article_content(article_content, max_chunk_size)
 
         # 4. F054: register the article as a citation source and attach its id to
         # the text the model reads. Decorating the content (not the template)
@@ -161,10 +158,9 @@ async def chat_completions(
                 if subscription_config and subscription_config.system_prompt
                 else "You are a professional AI assistant helping users analyze and discuss articles."
             )
-            # The default prompt above teaches no citation markers, so without
-            # this the model never emits one. Idempotent: a prompt that already
-            # carries the rules is left alone.
-            system_prompt = ChannelChatService.apply_citation_rules(system_prompt)
+            # The default prompt above teaches no citation markers; the shared
+            # backstop appends them unless the admin prompt already carries them.
+            system_prompt = ensure_citation_rules(system_prompt)
 
             # Build user prompt from template or default
             user_prompt_template = (
@@ -172,7 +168,6 @@ async def chat_completions(
                 if subscription_config and subscription_config.user_prompt
                 else ("# 参考资料\n```\n{article_content}\n```\n# 用户问题\n{question}")
             )
-            user_prompt = user_prompt_template.format(article_content=article_content, question=data.text)
             await ChatMessageDao.ainsert_one(
                 ChatMessage(
                     user_id=login_user.user_id,
@@ -189,13 +184,19 @@ async def chat_completions(
             # Get chat history (excluding the latest one)
             history_messages = (await ChannelChatService.get_chat_history(conversationId, 8))[:-1]
 
-            # Build LLM input
-            inputs = [SystemMessage(content=system_prompt), *history_messages, HumanMessage(content=user_prompt)]
-
             answer = ""
             reasoning_answer = ""
-            # Streaming call to LLM
-            async for chunk in bishengllm.astream(inputs):
+            async for chunk in ChannelChatService.stream_article_reply(
+                llm=bishengllm,
+                article_content=article_content,
+                question=data.text,
+                system_prompt=system_prompt,
+                user_prompt_template=user_prompt_template,
+                history_messages=history_messages,
+                model_id=data.model_id,
+                max_chunk_size=max_chunk_size,
+                tenant_id=getattr(login_user, "tenant_id", None),
+            ):
                 content = chunk.content
                 reasoning_content = extract_reasoning_content(chunk)
                 answer += content

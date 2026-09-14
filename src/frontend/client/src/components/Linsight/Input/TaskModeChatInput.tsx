@@ -22,13 +22,18 @@
  * children), so we wire the user's actual selection straight into the linsight
  * submission (see handleSend) instead of the seeded `context.tools`.
  */
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import AiChatInput from '~/components/Chat/AiChatInput';
 import { useLocalize } from '~/hooks';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useGetWorkbenchModelsQuery } from '~/hooks/queries/queries';
+import {
+    readAdminDefaultModelId,
+    useChatModelResolution,
+    type ChatModelOption,
+} from '~/hooks/useChatModelResolution';
 import { useLinsightSessionManager } from '~/hooks/useLinsightManager';
 import store from '~/store';
 import {
@@ -49,47 +54,41 @@ export function TaskModeChatInput({ conversationId = 'new' }: TaskModeChatInputP
     const sessionKey = conversationId || 'new';
     const [context, setContext] = useRecoilState(taskModeContextState(sessionKey));
     const [skills] = useRecoilState(taskModeSkillsState(sessionKey));
-    // Shared with daily mode: a manual pick (manual: true) wins everywhere;
-    // otherwise task mode follows the admin's linsight_default_model_id.
     const [chatModel, setChatModel] = useRecoilState(store.chatModel);
     const model = String(chatModel.id || '');
 
-    // Task-mode model resolution: the mode's own manual memory
-    // (`bs:{uid}:taskModel`, separate from the daily record) wins; without a
-    // valid record the admin-configured linsight_default_model_id applies,
-    // falling back to the first option.
+    // Task-mode model resolution, same chain as ChatView (per-conversation
+    // record → user-level task record → admin linsight_default_model_id → first
+    // option). There is no server value to consult here: this page only ever
+    // renders a conversation that has not run a turn yet.
     const { user } = useAuthContext();
     const { data: workbenchCfg } = useGetWorkbenchModelsQuery();
-    useEffect(() => {
-        const models = bsConfig?.models || [];
-        if (!models.length || !user?.id) return;
-        const key = `bs:${user.id}:taskModel`;
-        const savedId = localStorage.getItem(key);
-        let manual = true;
-        let target = savedId ? models.find((m) => String(m.id) === savedId) : undefined;
-        if (!target) {
-            manual = false;
-            // Stale record (model removed/disabled) — drop it for good.
-            if (savedId) localStorage.removeItem(key);
-            const raw = (workbenchCfg as Record<string, unknown> | undefined)?.linsight_default_model_id;
-            const adminDefaultId =
-                typeof raw === 'string' || typeof raw === 'number' ? String(raw) : null;
-            target =
-                (adminDefaultId ? models.find((m) => String(m.id) === adminDefaultId) : undefined) ??
-                models[0];
-        }
-        if (
-            target &&
-            (String(target.id) !== String(chatModel.id) || !!chatModel.manual !== manual || chatModel.mode !== 'task')
-        ) {
+    const adminDefaultModelId = useMemo(
+        () => readAdminDefaultModelId(workbenchCfg, 'task'),
+        [workbenchCfg],
+    );
+
+    const handleModelResolved = useCallback(
+        (target: ChatModelOption, deliberate: boolean) => {
             setChatModel({
                 id: Number(target.id),
                 name: target.displayName || target.name || '',
-                manual,
+                manual: deliberate,
                 mode: 'task',
             });
-        }
-    }, [chatModel.id, chatModel.manual, chatModel.mode, bsConfig, workbenchCfg, user?.id, setChatModel]);
+        },
+        [setChatModel],
+    );
+
+    const { persistPick: persistModelPick } = useChatModelResolution({
+        userId: user?.id,
+        conversationId: sessionKey,
+        mode: 'task',
+        models: (bsConfig?.models || []) as ChatModelOption[],
+        adminDefaultId: adminDefaultModelId,
+        ready: !!bsConfig?.models?.length && !!user?.id,
+        onResolved: handleModelResolved,
+    });
 
     // Daily tools picker selection — same shared atom AgentToolSelector writes to.
     const selectedAgentTools = useRecoilValue(store.selectedAgentTools);
@@ -212,15 +211,15 @@ export function TaskModeChatInput({ conversationId = 'new' }: TaskModeChatInputP
             modelValue={chatModel.id}
             onModelChange={(val) => {
                 const picked = bsConfig?.models?.find((m) => String(m.id) === String(val));
+                // Records this conversation's pick AND the user-level task
+                // default the next new task inherits.
+                persistModelPick(val);
                 setChatModel({
                     id: Number(val),
                     name: picked?.displayName || '',
                     manual: true,
                     mode: 'task',
                 });
-                // This page doesn't mount useChatModelMemo — persist the
-                // task-mode pick directly.
-                if (user?.id) localStorage.setItem(`bs:${user.id}:taskModel`, String(val));
             }}
             onModelAutoChange={(val) => {
                 const picked = bsConfig?.models?.find((m) => String(m.id) === String(val));

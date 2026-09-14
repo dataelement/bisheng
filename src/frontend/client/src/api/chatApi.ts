@@ -342,38 +342,61 @@ export async function deleteConversation(
     await http.delete(API.deleteConversation(conversationId));
 }
 
-export async function getCitationDetail(citationId: string): Promise<ChatCitation> {
-    if (canUseCachedCitationDetail(citationDetailMemoryCache[citationId])) {
-        return citationDetailMemoryCache[citationId];
-    }
-
-    const res = await http.get<any>(API.citationDetail(citationId));
-    // 404 = the citation is not found OR the viewer lacks view_file permission for
-    // the underlying RAG document (admins/owners see it, others don't). Surface it
-    // as a typed error so the marker shows "no permission" and stays un-clickable
-    // instead of the generic "no source detail".
-    if (res?.status_code === 404 || res?.data?.status_code === 404) {
-        const err: any = new Error('citation forbidden');
-        err.citationForbidden = true;
-        throw err;
-    }
-    const detail = res?.data ?? res;
-    if (detail?.citationId) {
-        citationDetailMemoryCache[detail.citationId] = detail;
-    }
-    citationDetailMemoryCache[citationId] = detail;
-    return detail;
-}
-
-/** F054: why a requested citation came back without a payload. The batch
- *  endpoint used to just omit it, so the reader saw one vague failure whether
- *  they lacked permission or the source was gone. */
+/** F054/F062: why a requested citation came back without a payload. */
 export type CitationUnresolvedReason = "forbidden" | "expired";
 
 const citationReasonCache: Record<string, CitationUnresolvedReason> = {};
 
 export function getCitationUnresolvedReason(citationId: string): CitationUnresolvedReason | undefined {
     return citationReasonCache[citationId];
+}
+
+function citationReasonFromPayload(payload: any): CitationUnresolvedReason {
+    const reason = payload?.data?.reason ?? payload?.reason;
+    if (reason === "expired") {
+        return "expired";
+    }
+    return "forbidden";
+}
+
+function throwCitationResolveError(citationId: string, payload: any): never {
+    const reason = citationReasonFromPayload(payload);
+    citationReasonCache[citationId] = reason;
+    const err: any = new Error(reason === "expired" ? "citation expired" : "citation forbidden");
+    err.citationForbidden = reason !== "expired";
+    err.citationExpired = reason === "expired";
+    throw err;
+}
+
+export async function getCitationDetail(citationId: string): Promise<ChatCitation> {
+    if (canUseCachedCitationDetail(citationDetailMemoryCache[citationId])) {
+        return citationDetailMemoryCache[citationId];
+    }
+
+    try {
+        const res = await http.get<any>(API.citationDetail(citationId));
+        // 404 = not found, no permission, or the temp object is gone. Read `reason`
+        // so expired and forbidden stay distinct (F054/F062).
+        if (res?.status_code === 404 || res?.data?.status_code === 404) {
+            throwCitationResolveError(citationId, res);
+        }
+        const detail = res?.data ?? res;
+        if (detail?.citationId) {
+            citationDetailMemoryCache[detail.citationId] = detail;
+            delete citationReasonCache[detail.citationId];
+        }
+        citationDetailMemoryCache[citationId] = detail;
+        return detail;
+    } catch (error: any) {
+        if (error?.citationForbidden || error?.citationExpired) {
+            throw error;
+        }
+        const status = error?.status_code || error?.response?.data?.status_code;
+        if (status === 404) {
+            throwCitationResolveError(citationId, error?.response?.data ?? error);
+        }
+        throw error;
+    }
 }
 
 export async function resolveCitationDetails(citationIds: string[]): Promise<ChatCitation[]> {

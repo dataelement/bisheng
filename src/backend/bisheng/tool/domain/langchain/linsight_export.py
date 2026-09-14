@@ -36,6 +36,7 @@ from langchain_core.tools import BaseTool
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from bisheng.citation.domain.services.citation_prompt_helper import strip_citation_markers
 from bisheng.utils import util
 
 
@@ -128,6 +129,9 @@ class ExportDocxTool(_ExportToolBase):
         if md is None:
             return f"导出失败: 源文件 {source_path} 不存在或不可读, 请先用 write_file 写好 markdown。"
         try:
+            # Deliverables lose the citation spans: the wrapper chars are invisible
+            # in Word while the ids are plain ASCII and would leak verbatim.
+            md = strip_citation_markers(md)
             docx_bytes = await util.sync_func_to_async(_md_to_docx_bytes)(md)
         except Exception as e:
             logger.exception("export_docx convert failed")
@@ -151,6 +155,8 @@ class ExportPdfTool(_ExportToolBase):
         if md is None:
             return f"导出失败: 源文件 {source_path} 不存在或不可读, 请先用 write_file 写好 markdown。"
         try:
+            # Same as export_docx: no citation span may reach the PDF.
+            md = strip_citation_markers(md)
             pdf_bytes = await util.sync_func_to_async(_md_to_pdf_bytes_via_libreoffice)(md)
         except Exception as e:
             logger.exception("export_pdf convert failed")

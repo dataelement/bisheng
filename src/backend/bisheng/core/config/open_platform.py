@@ -1,5 +1,7 @@
 """Deployment settings for the Open API surfaces."""
 
+from urllib.parse import urlsplit
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -31,7 +33,32 @@ class OpenApiConf(BaseModel):
         ),
     )
 
+    public_base_url: str = Field(
+        default="",
+        description=(
+            "Browser-facing address of this platform, scheme://host[:port][/prefix], "
+            "baked into downloaded skill packs and install prompts. Leave empty to "
+            "derive it from the reverse proxy's X-Forwarded-Proto / X-Forwarded-Host "
+            "headers; set it when the backend sits behind the commercial gateway, a "
+            "path prefix, or any proxy that does not forward those headers."
+        ),
+    )
+
     @field_validator("credential_cache_ttl_seconds")
     @classmethod
     def cap_credential_cache_ttl(cls, value: int) -> int:
         return min(value, 5)
+
+    @field_validator("public_base_url")
+    @classmethod
+    def normalise_public_base_url(cls, value: str) -> str:
+        text = (value or "").strip().rstrip("/")
+        if not text:
+            return ""
+        parts = urlsplit(text)
+        if parts.scheme not in {"http", "https"} or not parts.netloc or parts.query or parts.fragment:
+            raise ValueError(
+                "open_api.public_base_url must be an absolute http(s) URL such as "
+                "https://kb.example.com or https://portal.example.com/bisheng"
+            )
+        return text

@@ -21,6 +21,7 @@ from bisheng.permission.application.identity import (
     resolve_permission_actor,
 )
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.permission.domain.services.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 
 _MAX_BATCH_CHECKS = 100
@@ -38,7 +39,7 @@ async def check_business_action(
     """Check one business-verified resource through the sole F048 facade."""
 
     actor = actor or await resolve_permission_actor(login_user)
-    if actor.super_admin:
+    if actor.super_admin and actor.data_scope == DATA_SCOPE_ALL:
         # The decision layer allows a super admin unconditionally, but only after
         # the target is resolved. Resolution runs business data-validity guards
         # (e.g. owner/tenant/status checks in the F048 resource adapter) that do
@@ -46,6 +47,8 @@ async def check_business_action(
         # raise before the decision is ever reached. The batch path already
         # short-circuits super admins for the same reason; mirror it here so the
         # single-resource path (detail, delete, etc.) stays consistent.
+        # F066: a data-scope-narrowed token never takes this shortcut — the
+        # narrowing is enforced inside the runtime, so the call must reach it.
         return True
     registry = await get_f048_resource_registry()
     target = await registry.resolve(
@@ -113,11 +116,13 @@ async def batch_check_business_actions(
         return {}
 
     actor = await resolve_permission_actor(login_user)
-    if actor.super_admin:
+    if actor.super_admin and actor.data_scope == DATA_SCOPE_ALL:
         # The decision layer already allows a super admin unconditionally, but it
         # only says so after every candidate has been resolved — several queries
         # each, per action. Listing a page of 100 candidates against 5 actions
         # therefore paid 500 resolutions to reach a foregone conclusion.
+        # F066: a narrowed token pays the full path instead — the runtime is
+        # where the data-scope denial lives, and it must not be skipped.
         return {resource_id: frozenset(normalized_actions) for resource_id in normalized_ids}
 
     registry = await get_f048_resource_registry()

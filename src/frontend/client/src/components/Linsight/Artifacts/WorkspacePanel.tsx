@@ -9,6 +9,7 @@
  * State lives in useWorkspacePanel; the parent (ChatView) owns the layout.
  */
 import { Outlined } from 'bisheng-icons';
+import type { ChatCitation } from '~/api/chatApi';
 import FileIcon from '~/components/ui/icon/File';
 import { useLocalize } from '~/hooks';
 import { EmptyStateIllustration } from '~/components/illustrations';
@@ -21,6 +22,8 @@ import { SaveAsButton } from './SaveAsButton';
 interface WorkspacePanelProps {
     files: ArtifactFile[];
     versionId: string;
+    citations?: ChatCitation[] | null;
+    messageId?: string;
     /** null → file-list view; set → in-place preview of this file */
     previewFile: ArtifactFile | null;
     fullscreen: boolean;
@@ -39,6 +42,8 @@ const iconBtn =
 export function WorkspacePanel({
     files,
     versionId,
+    citations,
+    messageId,
     previewFile,
     fullscreen,
     hideFullscreenToggle,
@@ -125,6 +130,8 @@ export function WorkspacePanel({
                             file={previewFile}
                             versionId={versionId}
                             fileList={files}
+                            citations={citations}
+                            messageId={messageId}
                             onArtifactPreview={onPreview}
                         />
                     </div>

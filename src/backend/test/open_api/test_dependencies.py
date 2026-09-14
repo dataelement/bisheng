@@ -162,7 +162,7 @@ async def test_pat_permission_actor_inherits_holder_tenant_admin_fact(monkeypatc
         return natural_person_principal()
 
     async def tenant_policy(_tenant_id):
-        return SimpleNamespace(enabled=True)
+        return SimpleNamespace(enabled=True, data_scope="all_visible")
 
     async def is_global_super(_user_id):
         return False

@@ -94,6 +94,16 @@ def stream_env(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(chat_service.ChatMessageDao, "insert_one", MagicMock(side_effect=_record))
     monkeypatch.setattr(chat_service.ChatMessageDao, "ainsert_one", AsyncMock(side_effect=_record))
+    monkeypatch.setattr(
+        chat_service.SensitiveWordPolicyService,
+        "evaluate_workbench_user_text",
+        staticmethod(lambda *_a, **_k: None),
+    )
+    monkeypatch.setattr(
+        chat_service.SensitiveWordPolicyService,
+        "is_workbench_content_safety_active",
+        staticmethod(lambda *_a, **_k: False),
+    )
 
     return SimpleNamespace(inserted=inserted, state=state)
 

@@ -149,3 +149,11 @@ logger_conf:
       rotation: "00:00"
       retention: "3 Days"
       enqueue: ture
+
+# Open API (personal tokens / skill packs). Uncomment only on images that already
+# know this section (3.0.0-beta1 and later): older images refuse unknown keys at boot.
+# open_api:
+#   # Browser-facing address of this platform, baked into downloaded skill packs.
+#   # Set it when the backend sits behind the commercial gateway, a path prefix,
+#   # or any proxy that does not forward X-Forwarded-Proto / X-Forwarded-Host.
+#   public_base_url: https://kb.example.com

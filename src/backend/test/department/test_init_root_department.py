@@ -15,16 +15,17 @@ from bisheng.database.models.department import Department
 from bisheng.database.models.tenant import Tenant
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture(scope="module")
 def init_engine():
     """SQLite engine with tenant + department tables."""
     engine = create_engine(
-        'sqlite://',
-        connect_args={'check_same_thread': False},
+        "sqlite://",
+        connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
     with engine.begin() as conn:
-        conn.execute(text("""
+        conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS tenant (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 tenant_code VARCHAR(64) NOT NULL UNIQUE,
@@ -43,8 +44,10 @@ def init_engine():
                 create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                 update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
             )
-        """))
-        conn.execute(text("""
+        """)
+        )
+        conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS department (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 dept_id VARCHAR(64) NOT NULL UNIQUE,
@@ -70,7 +73,8 @@ def init_engine():
                 update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                 UNIQUE(source, external_id)
             )
-        """))
+        """)
+        )
     yield engine
     engine.dispose()
 
@@ -89,15 +93,14 @@ def session(init_engine):
 
 
 class TestInitDefaultRootDepartment:
-
     def test_init_creates_root_department(self, session):
         """AC-17: Default tenant (id=1) gets a root department on startup."""
         # Setup: create default tenant with no root_dept_id
         tenant = Tenant(
             id=1,
-            tenant_code='default',
-            tenant_name='Default Tenant',
-            status='active',
+            tenant_code="default",
+            tenant_name="Default Tenant",
+            status="active",
         )
         session.add(tenant)
         session.commit()
@@ -106,19 +109,20 @@ class TestInitDefaultRootDepartment:
 
         # Simulate what _init_default_root_department does (sync version)
         dept = Department(
-            dept_id='BS@root',
-            name='默认组织',
+            dept_id="BS@root",
+            name="默认组织",
             parent_id=None,
             tenant_id=1,
-            path='',
-            source='local',
-            status='active',
+            path="",
+            source="local",
+            external_id="BS@root",
+            status="active",
         )
         session.add(dept)
         session.flush()
         session.refresh(dept)
 
-        dept.path = f'/{dept.id}/'
+        dept.path = f"/{dept.id}/"
         tenant.root_dept_id = dept.id
         session.commit()
         session.refresh(tenant)
@@ -127,8 +131,9 @@ class TestInitDefaultRootDepartment:
         # Verify
         assert dept.id is not None
         assert dept.parent_id is None
-        assert dept.path == f'/{dept.id}/'
-        assert dept.name == '默认组织'
+        assert dept.path == f"/{dept.id}/"
+        assert dept.name == "默认组织"
+        assert dept.external_id == "BS@root"
         assert tenant.root_dept_id == dept.id
 
     def test_init_idempotent(self, session):
@@ -136,26 +141,27 @@ class TestInitDefaultRootDepartment:
         # Setup: create tenant + root department
         tenant = Tenant(
             id=1,
-            tenant_code='default',
-            tenant_name='Default Tenant',
-            status='active',
+            tenant_code="default",
+            tenant_name="Default Tenant",
+            status="active",
         )
         session.add(tenant)
         session.commit()
 
         dept = Department(
-            dept_id='BS@root',
-            name='默认组织',
+            dept_id="BS@root",
+            name="默认组织",
             parent_id=None,
             tenant_id=1,
-            path='',
-            source='local',
-            status='active',
+            path="",
+            source="local",
+            external_id="BS@root",
+            status="active",
         )
         session.add(dept)
         session.flush()
         session.refresh(dept)
-        dept.path = f'/{dept.id}/'
+        dept.path = f"/{dept.id}/"
         tenant.root_dept_id = dept.id
         session.commit()
         session.refresh(tenant)
@@ -170,8 +176,131 @@ class TestInitDefaultRootDepartment:
             select(Department).where(
                 Department.parent_id.is_(None),
                 Department.tenant_id == 1,
-                Department.status == 'active',
+                Department.status == "active",
             )
         ).all()
         assert len(roots) == 1
         assert roots[0].id == first_dept_id
+
+
+class _FirstResult:
+    def __init__(self, value):
+        self._value = value
+
+    def first(self):
+        return self._value
+
+
+class _FakeAsyncSession:
+    def __init__(self, responses):
+        self._responses = iter(responses)
+        self.added = []
+        self.commit_snapshots = []
+        self._next_department_id = 100
+
+    async def exec(self, _statement):
+        return _FirstResult(next(self._responses))
+
+    def add(self, value):
+        self.added.append(value)
+
+    async def flush(self):
+        for value in self.added:
+            if isinstance(value, Department) and value.id is None:
+                value.id = self._next_department_id
+                self._next_department_id += 1
+
+    async def refresh(self, _value):
+        return None
+
+    async def commit(self):
+        snapshot = {value.dept_id: value.external_id for value in self.added if isinstance(value, Department)}
+        self.commit_snapshots.append(snapshot)
+
+
+async def test_default_departments_use_distinct_external_ids():
+    from bisheng.common.init_data import _init_default_root_department
+
+    tenant = Tenant(
+        id=1,
+        tenant_code="default",
+        tenant_name="Default Tenant",
+        status="active",
+    )
+    session = _FakeAsyncSession([tenant, None])
+
+    await _init_default_root_department(session)
+
+    departments = {value.dept_id: value for value in session.added if isinstance(value, Department)}
+    assert departments["BS@root"].external_id == "BS@root"
+    assert departments["BS@guest"].external_id == "BS@guest"
+
+
+async def test_existing_null_root_identity_is_committed_before_guest_insert():
+    from bisheng.common.init_data import _init_default_root_department
+
+    tenant = Tenant(
+        id=1,
+        tenant_code="default",
+        tenant_name="Default Tenant",
+        root_dept_id=24,
+        status="active",
+    )
+    root = Department(
+        id=24,
+        dept_id="BS@root",
+        name="默认组织",
+        parent_id=None,
+        tenant_id=1,
+        path="/24/",
+        source="local",
+        external_id=None,
+        status="active",
+    )
+    session = _FakeAsyncSession([tenant, root, None])
+
+    await _init_default_root_department(session)
+
+    assert session.commit_snapshots[0] == {"BS@root": "BS@root"}
+    guest = next(value for value in session.added if isinstance(value, Department) and value.dept_id == "BS@guest")
+    assert guest.external_id == "BS@guest"
+
+
+async def test_existing_null_guest_identity_is_repaired():
+    from bisheng.common.init_data import _init_default_root_department
+
+    tenant = Tenant(
+        id=1,
+        tenant_code="default",
+        tenant_name="Default Tenant",
+        root_dept_id=24,
+        status="active",
+    )
+    root = Department(
+        id=24,
+        dept_id="BS@root",
+        name="默认组织",
+        parent_id=None,
+        tenant_id=1,
+        path="/24/",
+        source="local",
+        external_id="BS@root",
+        status="active",
+    )
+    guest = Department(
+        id=25,
+        dept_id="BS@guest",
+        name="临时访客",
+        parent_id=24,
+        tenant_id=1,
+        path="/24/25/",
+        source="local",
+        external_id=None,
+        status="active",
+    )
+    session = _FakeAsyncSession([tenant, root, guest])
+
+    await _init_default_root_department(session)
+
+    assert guest.external_id == "BS@guest"
+    assert session.commit_snapshots[-1] == {"BS@guest": "BS@guest"}

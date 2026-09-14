@@ -3,9 +3,8 @@
 One row per (channel, sub-channel?, knowledge_space, folder?) binding. NULL
 `sub_channel_name` means the row is the main-channel's sync target.
 
-The Celery worker (`worker/information/article.py::sync_information_article`)
-reads enabled rows for each channel after its articles are indexed, then calls
-`ChannelService.add_articles_to_knowledge_space` for the new article ids.
+The Information knowledge-delivery worker reads enabled rows after new public
+articles are indexed, then reuses `ChannelService.add_articles_to_knowledge_space`.
 """
 import uuid
 from datetime import datetime

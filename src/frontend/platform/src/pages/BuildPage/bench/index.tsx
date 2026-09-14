@@ -24,6 +24,7 @@ import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
 import ToolsConfig, { ToolConfig as ToolConfigType } from "./ToolsConfig";
 import RecommendedAppsConfig from "./RecommendedAppsConfig";
+import { WorkbenchSensitivePolicy, type WorkbenchSensitivePolicyHandle } from "./WorkbenchSensitivePolicy";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 import { clampMenuName } from "./menuDisplayName";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
@@ -113,6 +114,8 @@ export default function DailyChatConfig({ scopeVersion = 0 }: { scopeVersion?: n
     const modelManagementContainerRef = useRef<HTMLDivElement>(null);
 
     const { t } = useTranslation()
+    const { appConfig } = useContext(locationContext)
+    const sensitivePolicyRef = useRef<WorkbenchSensitivePolicyHandle>(null);
     const {
         formData,
         errors,
@@ -133,7 +136,10 @@ export default function DailyChatConfig({ scopeVersion = 0 }: { scopeVersion?: n
         modelRefs,
         systemPromptRef,
         modelManagementContainerRef, // Pass in the new ref
-    }, scopeVersion);
+    }, scopeVersion, async () => {
+        if (!appConfig?.isPro) return true;
+        return (await sensitivePolicyRef.current?.save()) !== false;
+    });
 
     useEffect(() => {
         modelRefs.current = modelRefs.current.slice(0, formData.models.length);
@@ -353,6 +359,9 @@ export default function DailyChatConfig({ scopeVersion = 0 }: { scopeVersion?: n
                                 setFormData((prev) => ({ ...prev, recommendedApps: ids }))
                             }
                         />
+                        {appConfig?.isPro ? (
+                            <WorkbenchSensitivePolicy ref={sensitivePolicyRef} />
+                        ) : null}
                     </div>
                     {/* Action Buttons */}
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
@@ -378,7 +387,11 @@ interface UseChatConfigProps {
     modelManagementContainerRef: React.RefObject<HTMLDivElement>; // New
 }
 
-const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
+const useChatConfig = (
+    refs: UseChatConfigProps,
+    scopeVersion: number,
+    onBeforePersist?: () => Promise<boolean>,
+) => {
     const { t } = useTranslation()
 
     const [formData, setFormData] = useState<ChatConfigForm>({
@@ -753,6 +766,11 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
         if (!configMeta || configMeta.is_fallback) {
             const proceed = await confirmBlindOverwrite();
             if (!proceed) return false;
+        }
+
+        if (onBeforePersist) {
+            const ok = await onBeforePersist();
+            if (!ok) return false;
         }
 
         const dataToSave = {

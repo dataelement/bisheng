@@ -8,6 +8,7 @@ export type SettingsPageSection =
   | "my-requests"
   | "notifications"
   | "account"
+  | "ai-access"
   | "general";
 
 export interface SettingsNavItem {
@@ -27,6 +28,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
     labelKey: "com_settings_group_personal",
     items: [
       { key: "account", labelKey: "com_account_info_title", icon: Outlined.PeopleEdit },
+      { key: "ai-access", labelKey: "com_ai_access.title", icon: Outlined.Send },
       { key: "general", labelKey: "com_settings_general", icon: Outlined.Setting },
     ],
   },

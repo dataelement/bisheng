@@ -105,6 +105,37 @@ bisheng-milvus-standalone
 | `system_login_method` | `SystemLoginMethod` | 登录方式（商业版标识、多端登录） |
 | `mcp` | `McpConf` | MCP 协议配置 |
 | `information_conf` | `IntelligenceCenterConf` | 情报中心配置 |
+| `open_api` | `OpenApiConf` | 开放 API：个人密钥开关、`public_base_url`（对外地址，见下节） |
+
+### 反向代理与对外地址
+
+技能包脚本从**用户自己的电脑**回调平台，所以它需要「用户浏览器访问平台用的地址」。这个地址有两个来源：
+
+1. **配置命令里的浏览器地址（优先）**：「AI 助手接入」弹窗的一键复制命令是 `search.py --configure --base-url <浏览器地址> --api-key <密钥>`，地址取自浏览器的 `window.location.origin`，写入用户本机凭据文件后成为默认地址。浏览器看到的就是正确的协议、域名和端口，也天然适配「内网 IP / 域名 / VPN 多入口」。
+2. **包内烘焙地址（兜底）**：下载 zip 时后端现场渲染，推导顺序在 `bisheng/open_api/api/public_base_url.py`：
+   1. `config.yaml` 的 `open_api.public_base_url`（`scheme://host[:port][/prefix]`，启动期校验）；
+   2. 反向代理传来的 `X-Forwarded-Proto` / `X-Forwarded-Host`（取逗号链首值），退而取 `Host`；
+   3. 进程绑定的 socket。
+   落到第 2 步的 `Host` 或第 3 步时，后端按进程记一次 warning；管理员打开「AI 助手接入」弹窗时，若包内地址与浏览器地址不一致会看到提示。
+
+仓库自带的 nginx（`docker/nginx/conf.d/*.conf`、镜像内 `src/frontend/nginx.conf`）已通过 `map` 传这两个转发头：外层代理已带头则透传，否则用本机 `$scheme` 与含端口的 `$http_host`。部署时按形态核对：
+
+| 形态 | 包内地址会不会对 | 建议 |
+|---|---|---|
+| 单机 compose，浏览器直连 nginx | 对 | 无需配置 |
+| TLS 在 nginx 之前终结（云负载均衡、外层反代） | 外层不传 `X-Forwarded-Proto` 时会变成 `http://` | 外层转发 `X-Forwarded-Proto/Host`，或配 `open_api.public_base_url` |
+| k8s ingress | ingress-nginx 默认 `use-forwarded-headers: false`，会用自己看到的协议覆盖外层头 | 前面还有 TLS 终结时开启 `use-forwarded-headers`，或配配置项 |
+| 商业版网关，前面有仓库 nginx | 对：网关追加而非覆盖转发头，首值仍是 nginx 给的浏览器地址（105 实测） | 无需配置 |
+| 商业版网关直接对外 | 对：网关虽改写 `Host`，但会补上 `X-Forwarded-Host`（用户访问网关用的地址）与协议（105 实测） | 网关之前若还有 TLS 终结，需转发 `X-Forwarded-Proto` 或配配置项 |
+| compose 多节点 | 每台机器各读自己的 `config.yaml` | 配置项要在所有节点一致 |
+| 路径前缀部署 | 只能靠配置项 | 配 `open_api.public_base_url` |
+
+两点取舍：
+
+- 配置项会让**所有人**的包内地址都是同一个值；多入口访问的平台若配了它，某些网络下包内地址反而连不上。这时依赖第 1 个来源即可，包内地址只是兜底。
+- 仓库 nginx 未配 `server_name`，接受任意 `Host`。公网暴露的实例建议配置 `open_api.public_base_url` 或限定 `server_name`，避免包内地址与出站白名单被伪造的 `Host` 带偏。
+
+`open_api.public_base_url` 是 `open_api` 段的子键，只对已认识该段的镜像（3.0.0-beta1+）安全；不要给老镜像的 `config.yaml` 加未注释的 `open_api:` 顶层键。
 
 ## 本地混合开发部署
 

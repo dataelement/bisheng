@@ -54,7 +54,7 @@ def _member(
 
 
 @pytest.mark.asyncio
-async def test_square_query_uses_numeric_join_key_for_member_business_id(monkeypatch):
+async def test_square_query_pins_an_explicit_collation_on_the_member_join_key(monkeypatch):
     from sqlalchemy.dialects import mysql
 
     captured = {}
@@ -80,10 +80,14 @@ async def test_square_query_uses_numeric_join_key_for_member_business_id(monkeyp
     )
 
     sql = str(captured["statement"].compile(dialect=mysql.dialect()))
-    assert "CAST(knowledge.id AS CHAR" not in sql
-    assert "COLLATE" not in sql
-    assert "CAST(space_channel_member.business_id AS SIGNED INTEGER)" in sql
-    assert "CAST(anon_1.business_id AS SIGNED INTEGER)" in sql
+    # The join key is built on the knowledge side (int -> CHAR) with an EXPLICIT
+    # collation, which outranks the member column's IMPLICIT one and so cannot
+    # raise MySQL 1267. Casting the member column to a number instead would defeat
+    # its index and force every channel row's UUID business_id through a numeric
+    # cast, so that shape is deliberately not used.
+    assert "CAST(knowledge.id AS CHAR) COLLATE utf8mb4_unicode_ci = space_channel_member.business_id" in sql
+    assert "CAST(knowledge.id AS CHAR) COLLATE utf8mb4_unicode_ci = anon_1.business_id" in sql
+    assert "CAST(space_channel_member.business_id AS SIGNED INTEGER)" not in sql
 
 
 @pytest.mark.asyncio

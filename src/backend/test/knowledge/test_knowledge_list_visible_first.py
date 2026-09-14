@@ -75,6 +75,7 @@ def _actor(*, super_admin: bool = False, tenant_admin: bool = False) -> SimpleNa
         current_tenant_id=_User.tenant_id,
         super_admin=super_admin,
         tenant_admin_tenant_ids=admin_tenants,
+        data_scope="all_visible",
     )
 
 
@@ -87,6 +88,11 @@ def _stub_enrichment(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda _ids: [SimpleNamespace(user_id=_User.user_id, user_name="alice")],
     )
     monkeypatch.setattr(ks_mod, "emit_metric", lambda *a, **k: None)
+
+    async def _no_abnormal(_ids):
+        return set()
+
+    monkeypatch.setattr(ks_mod.KnowledgeFileDao, "async_exists_abnormal_files_batch", _no_abnormal)
 
 
 @pytest.mark.asyncio

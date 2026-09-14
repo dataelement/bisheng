@@ -1,8 +1,19 @@
 {
   "license": {
-    "warning": "ライセンスは {{days}} 日後に期限切れになります。管理者に更新を依頼してください。",
-    "critical": "ライセンスの有効期限まで残り {{days}} 日です。早急に更新してください！",
-    "expired": "ライセンスの有効期限が切れています。管理者に更新を依頼してください。"
+    "name": {
+      "gateway": "Gateway ライセンス",
+      "etl": "ETL ライセンス",
+      "dashboard": "商用ダッシュボードライセンス"
+    },
+    "expiring": "{{name}}は {{date}} に期限切れになります。残り {{days}} 日です",
+    "expired": "{{name}}は {{date}} に期限切れになりました",
+    "renewHint": "ライセンス提供元に更新を依頼してください。",
+    "bannerLabel": "ライセンス期限 Banner",
+    "businessExpired": {
+      "gateway": "Gateway ライセンスの有効期限が切れています。現在この機能は利用できません",
+      "etl": "ETL ライセンスの有効期限が切れています。現在このファイルを解析できません",
+      "dashboard": "商用ダッシュボードライセンスの有効期限が切れています。現在このダッシュボードにアクセスできません"
+    }
   },
   "title": "BISHENG",
   "bisheng": "{{bisheng}}",
@@ -889,7 +900,7 @@
     "character": "字",
     "feedbackPrompt": "フィードバックのお願い",
     "manualCrawlRequestTooltip": "ユーザーが手動でのWebサイトクローリングリクエストを送信するためのガイドとして使用します",
-    "aiPrompt": "# Role\nYou are a rigorous AI assistant. Your task is to answer user questions based on the user's question and the provided reference materials.\nWhen answering, please note the following:\n1. Please respond in the language used by the user.\n2. Only answer when there is clear information related to the question in the [Reference Materials]. Keep answers rigorous and professional, do not speculate on your own, and cite the source of the reference materials in your answers. If different reference sources have differences or even conflicts, list them all.\n3. If the [Reference Materials] are not related to the user's question, reply with \"没有找到相关内容\" or \"no content found\".\n4. If the article content contains image references (e.g., ![image](path/IMAGE_1.png)), please still render the images using Markdown format, do not modify or delete them.\n5. The current time is {cur_date}.",
+    "aiPrompt": "# Role\nYou are a rigorous AI assistant. Your task is to answer user questions based on the user's question and the provided reference materials.\nWhen answering, please note the following:\n1. Please respond in the language used by the user.\n2. Only answer when there is clear information related to the question in the [Reference Materials]. Keep answers rigorous and professional, do not speculate on your own, and cite the source of the reference materials in your answers. If different reference sources have differences or even conflicts, list them all.\n3. If the [Reference Materials] are not related to the user's question, reply with \"没有找到相关内容\" or \"no content found\".\n4. If the article content contains image references (e.g., ![image](path/IMAGE_1.png)), please still render the images using Markdown format, do not modify or delete them.\n5. The current time is {cur_date}.\n\n# Citation Rules\nWhen using knowledge base or web search results, append references at the end of the paragraph.\n\n## Source ID\nEach retrieval result carries a unique source ID: knowledge results in the `<chunk_id>` tag (e.g. `knowledgesearch_18f5868b:0`); web results in the `citation_key` field (e.g. `websearch_3a1c9f22:0`). Copy the ID verbatim including the colon and trailing number; never fabricate, alter, translate, concatenate or omit it.\n\n## Format\n- `\\ue200`: start\n- `\\ue201`: separator\n- `\\ue202`: end\n\n## Requirements\n1. Place at end of paragraph\n2. Single: `text.\\ue200id\\ue202`\n3. Multiple: `text.\\ue200id1\\ue201id2\\ue202`\n4. IDs must come from tools\n5. No fabrication\n6. Do not add if unused",
     "referenceAndQuestion": "# Reference Materials\n```\n{article_content}\n```\n# User Question\n{question}",
     "knowledgeSpaceMaxChars": "ナレッジスペースの検索結果の最大文字数",
     "retrievedAndQuestion": "# Reference Materials\n```\n{retrieved_file_content}\n```\n# User Question\n{question}",
@@ -1027,7 +1038,10 @@
     "contentSecurityR": "コンテンツセキュリティ審査",
     "errors": {
       "selectAtLeastOneWordType": "単語リストは少なくとも1種類選択してください",
-      "autoReplyNotEmpty": "自動返信内容は空にできません"
+      "autoReplyNotEmpty": "自動返信内容は空にできません",
+      "workbenchSelectAtLeastOneWordType": "少なくとも1つのセンシティブワードリストを選択してください",
+      "workbenchAutoReplyNotEmpty": "自動返信内容は空にできません",
+      "workbenchAutoReplyMaxLength": "自動返信内容は500文字以内にしてください"
     },
     "saveSuccess": "保存に成功しました",
     "contentSecurityDesc": "センシティブワードリストまたは API によって会話内容のセキュリティ審査を行います",
@@ -1084,6 +1098,9 @@
     "daily": "日常",
     "subscribe": "購読",
     "subscriptionContentSecurityDesc": "購読記事のセンシティブワードを審査し、ヒット時は一般ユーザーが詳細を閲覧できません。",
+    "workbenchContentSecurityDesc": "センシティブワードリストによって会話内容のセキュリティ審査を行います",
+    "workbenchCustomWordsPlaceholder": "改行で区切り、1行に1つ入力してください",
+    "workbenchAutoReplyPlaceholder": "セキュリティ審査にヒットしたときの自動返信を入力してください。例：「現在の会話内容は関連規定に違反しています。修正してから再入力してください」",
     "customWordsNewlinePlaceholder": "改行文字で区切り、1行に1つ入力してください",
     "knowledgeSpace": "知識空間",
     "model": "モデル",
@@ -1656,7 +1673,7 @@
       "example_external": "顧客サイト・サポート：delegate のないキーで API キーと X-End-User（例：customer-001）を送ります。会話は外部ユーザー別に分離され、同一テナント・同一アカウントの別キーでも同じ識別子なら同一区分にアクセスできます。リソース権限はサービスアカウント、新規リソースの所有者は設定された個人のままです。",
       "example_service": "定期処理・システム連携：delegate のないキーで API キーだけを送ります。サービスアカウントの権限を使い、新規リソースは設定された所有者に帰属します。永続化会話は同一テナント・同一アカウントの有効なキー間で共有され、X-End-User 付きの会話とは分離されます。",
       "example_stop_tab": "ワークフロー停止 · cURL",
-      "examples_setup": "毎回 {{scope}} を持つ API キーが必須です。環境変数 BISHENG_API_KEY に実際のキーを設定してください。識別項目は Headers に設定し、2 つの識別ヘッダーを同時に送らないでください。",
+      "examples_setup": "毎回 {{scope}} を持つ API キーが必須です。環境変数 KNOWLEDGE_API_KEY に実際のキーを設定してください。識別項目は Headers に設定し、2 つの識別ヘッダーを同時に送らないでください。",
       "external_title": "外部ユーザー",
       "service_title": "システム連携",
       "workflow_note": "継続・停止時も最初と同じ実行主体を使います。session_id、message_id、node_id、フィールド key は前回の返却値を使い、input は input_schema に従って設定してください。",
@@ -2233,35 +2250,267 @@
     "references": "参考資料",
     "closeReferences": "参考資料を閉じる",
     "backToReferences": "参考資料一覧に戻る",
-    "noDownloadUrl": "ダウンロード可能なファイルアドレスがありません"
+    "noDownloadUrl": "ダウンロード可能なファイルアドレスがありません",
+    "tempKb": "一時ナレッジベース",
+    "noPermission": "このソースを閲覧する権限がありません",
+    "sourceExpired": "このソースは無効になりました"
   },
   "openApiManagement": {
     "empty": "レコードがありません",
-    "fields": { "name": "名前", "description": "説明", "ownerUserId": "リソース所有者のユーザー ID", "owner": "リソース所有者", "status": "状態", "tenant": "テナント", "activeKeys": "有効なキー", "delegate": "委任範囲", "lastUsed": "最終使用", "creator": "作成者 / 作成日時", "createdAt": "作成日時", "expiresAt": "有効期限" },
-    "status": { "active": "有効", "enabled": "有効化済み", "disabled": "無効", "revoked": "失効済み", "expired": "期限切れ" },
-    "actions": { "back": "戻る", "details": "詳細", "enable": "有効化", "disable": "無効化", "revoke": "失効", "revokeHolder": "所有者単位で失効", "copy": "コピー", "load": "リソースを読み込む", "revokeAll": "すべて失効" },
-    "serviceAccount": { "title": "サービスアカウント", "create": "サービスアカウントを作成", "createHint": "このテナントの有効なユーザーをリソース所有者として選択してください。連携が作成したリソースはこのユーザーに帰属し、プラットフォーム内で管理されます。", "namePlaceholder": "例：データ同期連携", "descriptionPlaceholder": "この連携の用途を入力してください", "search": "サービスアカウントを検索", "overview": "概要", "keys": "API キー", "grants": "リソース権限", "ownerPlaceholder": "リソース所有者を選択", "ownerSearch": "ユーザーを検索", "ownerTip": "この連携が作成するナレッジベースなどのリソースはこのユーザーに帰属し、プラットフォーム内で管理されます。", "ownerNotRetroactive": "所有者を変更しても既存リソースには影響しません。以後に作成するリソースは新しい所有者に帰属します。", "deleteConfirmTitle": "このサービスアカウントを削除しますか？", "deleteConfirm": "削除すると、すべてのキーが直ちに無効になり、{{count}} 件のリソース権限が取り消されます。このアカウントに依存する連携は直ちに失敗します。続行しますか？", "deleteGrantListTitle": "無効になるリソース権限", "deleteNoGrants": "このアカウントには現在リソース権限がありません。", "noKeyWarning": "有効なキーがないため、すべてのリクエストが拒否されます。", "ownerDisabled": "リソース所有者は無効です。アカウントとキーは有効なため、廃止するにはアカウントを無効化または削除してください。", "neverUsed": "未使用", "idleWarning": "{{days}} 日以上呼び出しがありません。無効化を検討してください。", "departmentScope": "{{name}} とその配下", "moreScopes": " ほか {{count}} 件" },
-    "keys": { "issue": "API キーを発行", "edit": "API キーを編集", "revokeConfirmTitle": "この API キーを失効しますか？", "revokeAllConfirmTitle": "すべての API キーを失効しますか？", "issueHint": "キー名、有効期限、権限、委任範囲を設定します。", "namePlaceholder": "例：本番同期", "expiresAtPlaceholder": "空欄の場合は無期限", "clearExpiry": "クリア", "permissionsHint": "既定では権限は付与されません。連携に必要なものだけを選択してください。", "endpointsTitle": "対象となるエンドポイント：", "revealTitle": "キーを生成しました", "once": "完全なキーが表示されるのは今回だけです。今すぐコピーして安全に保存してください。", "saved": "キーを安全に保存しました", "mask": "キー", "permissions": "権限", "noPermissions": "権限なし", "neverExpires": "無期限", "delegateScopes": "委任範囲", "delegatePlaceholder": "ユーザーまたは部門を選択", "delegateConfig": "委任設定", "delegateRequired": "委任にはユーザーまたは部門が少なくとも 1 つ必要です。", "delegateUsers": "委任ユーザー", "delegateUserPlaceholder": "1 人以上のユーザーを選択", "delegateDepartment": "委任部門", "delegateDepartmentPlaceholder": "部門を追加（複数選択可）", "revokeConfirm": "失効すると、このキーを使う呼び出しは直ちに失敗します。続行しますか？", "revokeAllConfirm": "このサービスアカウントの有効なキーがすべて直ちに無効になります。続行しますか？" },
-    "scopeGroups": { "workflow": "ワークフロー", "assistant": "アシスタントとチャット", "knowledge": "ナレッジ", "delegation": "ID 委任", "local_dev_toolkit": "ローカル開発ツールキット" },
-    "scopes": {
-      "workflow_invoke": { "label": "ワークフローを実行", "desc": "ワークフローの実行・停止と、ワークフローセッションの接続を行います。" },
-      "workflow_read": { "label": "ワークフローを参照", "desc": "ワークフローの定義情報を読み取ります。" },
-      "assistant_invoke": { "label": "アシスタントを実行", "desc": "アシスタントとの対話、および音声認識・音声合成を利用します。" },
-      "assistant_read": { "label": "アシスタントを参照", "desc": "アシスタントの一覧と詳細を参照します。" },
-      "chat_invoke": { "label": "日常チャットを実行", "desc": "日常モードのチャット、設定の参照、添付ファイルのアップロードを行います。" },
-      "knowledge_read": { "label": "ナレッジを参照", "desc": "ナレッジベースとファイルの一覧、検索、Q&A、出典を参照します。" },
-      "knowledge_write": { "label": "ナレッジを更新", "desc": "ナレッジベース、ファイル、チャンク、Q&A、メタデータを作成・変更・削除します。" },
-      "delegate": { "label": "ユーザーの代理で実行", "desc": "選択したユーザーまたは部門の範囲で、代理対象ユーザーの権限を使用します。", "warning": "有効化後は、すべてのリクエストで代理対象ユーザーの指定が必要です。サービスアカウント自身として呼び出す場合は、別のキーを発行してください。" },
-      "model_invoke": { "label": "プラットフォームモデルを実行", "desc": "プラットフォームに設定されたモデルを呼び出します。" },
-      "identity_read": { "label": "組織情報を参照", "desc": "組織のユーザーと部門を参照します。", "warning": "選択すると組織構造全体を参照できます。" },
-      "app_manage": { "label": "ホスト型アプリを管理", "desc": "ホスト型アプリを作成、デプロイ、管理します。", "hint": "アプリのデプロイに必要な権限です。" }
+    "fields": {
+      "name": "名前",
+      "description": "説明",
+      "ownerUserId": "リソース所有者のユーザー ID",
+      "owner": "リソース所有者",
+      "status": "状態",
+      "tenant": "テナント",
+      "activeKeys": "有効なキー",
+      "delegate": "委任範囲",
+      "lastUsed": "最終使用",
+      "creator": "作成者 / 作成日時",
+      "createdAt": "作成日時",
+      "expiresAt": "有効期限"
     },
-    "grants": { "accessHint": "両方を満たす必要があります。キーに該当操作の権限があり、かつこのリソースがここで付与されていること", "accessTitle": "アクセスできるリソース", "add": "リソースを付与", "addHint": "リソースタイプを選び、検索して 1 件以上のリソースをチェックし、権限レベルを選択します。リソースタイプや ID の入力は不要です。", "allSources": "すべての付与元", "allTypes": "すべてのタイプ", "change": "リソース権限を変更", "changeTierFor": "「{{name}}」の権限レベルを変更", "confirmGrant": "付与", "copyResource": "「{{name}}」のリソース識別子をコピー", "creatorRevokeConfirm": "取り消すと、この連携はこのリソースに書き込めなくなります。\n「{{name}}」はこのサービスアカウントが作成したため、作成時にプラットフォームから自動付与されました。取り消すと、定期同期の書き込みに失敗します。", "creatorRevokeTitle": "この作成時の自動付与を取り消しますか？", "delegateWarning": "委任キーがあります。委任呼び出しは代理対象ユーザーのリソース権限のみで判定され、このページの権限は適用されません。", "directSourceDetail": "管理者による付与", "effective": "有効性", "effectiveActive": "有効", "empty": "リソース権限はありません", "fixedSubjectHint": "付与先は現在のサービスアカウント「{{name}}」に固定され、変更できません。ここがサービスアカウントにリソースを付与する唯一の入口です。", "grantModel": "{{model}} を付与", "granted": "付与済み", "grantedAt": "付与日時", "ineffective": "無効", "keyScopeSummary": "有効なキーは {{count}} 件です。呼び出しにはキー権限とリソース権限の両方が必要です。", "loadingResources": "リソースを読み込み中", "missingScope": "「{{scope}}」を持つキーがないため、この権限は現在有効ではありません", "model": "権限レベル", "modelPlaceholder": "権限レベルを選択", "noKeyScopes": "キー権限なし", "noResources": "付与可能なリソースはありません", "resource": "リソース", "resourceId": "リソース ID", "resourceSearch": "リソース名を検索", "resourceType": "リソースタイプ", "revokeAll": "すべて取り消す", "revokeAllConfirm": "このサービスアカウントは、以下のリソースにアクセスできなくなります。依存する連携は直ちにエラーになります。", "revokeAllRetainedHint": "これらはサービスアカウント自身が作成したリソースです。一括で取り消すと、管理しているナレッジベースに書き込めなくなります。必要な場合は個別に取り消してください。", "revokeAllRetainedTitle": "作成時の自動付与 {{count}} 件は保持されます。", "revokeAllTitle": "管理者による付与をすべて取り消しますか？", "revokeAnyway": "それでも取り消す", "revokeConfirm": "取り消すと、このサービスアカウントのキーで「{{name}}」にアクセスした際にリソース権限エラーが返されます。再度付与すれば復旧できます。", "revokeCount": "{{count}} 件を取り消す", "revokeResource": "「{{name}}」の権限を取り消す", "revokeTitle": "この権限を取り消しますか？", "scope": "範囲", "scopeCodes": { "assistant_invoke": "アシスタント:実行", "assistant_read": "アシスタント:参照", "knowledge_read": "ナレッジ:参照", "knowledge_write": "ナレッジ:更新", "workflow_invoke": "ワークフロー:実行", "workflow_read": "ワークフロー:参照" }, "search": "リソース名または ID を検索", "source": "付与元", "sourceFilter": "付与元フィルター", "total": "全 {{count}} 件", "typeFilter": "リソースタイプフィルター" },
-    "permissionTiers": { "editor": "編集者", "manager": "管理者", "viewer": "閲覧者" },
-    "resourceTypes": { "knowledge_space": "ナレッジスペース", "knowledge_library": "ナレッジベース", "workflow": "ワークフロー", "assistant": "アシスタント", "tool": "ツール", "channel": "チャンネル", "dashboard": "ダッシュボード" },
-    "grantSources": { "DIRECT": "管理者による付与", "CREATOR_GRANT": "作成時の自動付与" },
-    "feedback": { "created": "サービスアカウントを作成しました", "updated": "サービスアカウントを保存しました", "enabled": "サービスアカウントを有効化しました", "disabled": "サービスアカウントを無効化しました", "deleted": "サービスアカウントを削除しました", "keyIssued": "API キーを発行しました", "keyUpdated": "API キーを更新し、直ちに反映しました", "keyRevoked": "API キーを失効しました", "keysRevoked": "API キーを {{count}} 件失効しました", "grantAdded": "リソース権限を追加しました", "grantUpdated": "リソース権限を変更しました", "grantRevoked": "リソース権限を取り消しました", "copied": "コピーしました", "resourceCopied": "{{resource}} をコピーしました" },
-    "personalToken": { "title": "個人アクセストークン", "settings": "テナントポリシー", "settingsSaved": "テナントポリシーを保存しました", "deploymentDisabled": "個人アクセストークンはデプロイ設定で無効化されています。", "tenantEnabled": "従業員トークンを許可", "ttlDays": "最大有効期間（日）", "holder": "所有者", "adminRisk": "管理者リスク" }
+    "status": {
+      "active": "有効",
+      "enabled": "有効化済み",
+      "disabled": "無効",
+      "revoked": "失効済み",
+      "expired": "期限切れ"
+    },
+    "actions": {
+      "back": "戻る",
+      "details": "詳細",
+      "enable": "有効化",
+      "disable": "無効化",
+      "revoke": "失効",
+      "copy": "コピー",
+      "load": "リソースを読み込む",
+      "revokeAll": "すべて失効"
+    },
+    "serviceAccount": {
+      "title": "サービスアカウント",
+      "create": "サービスアカウントを作成",
+      "createHint": "このテナントの有効なユーザーをリソース所有者として選択してください。連携が作成したリソースはこのユーザーに帰属し、プラットフォーム内で管理されます。",
+      "namePlaceholder": "例：データ同期連携",
+      "descriptionPlaceholder": "この連携の用途を入力してください",
+      "search": "サービスアカウントを検索",
+      "overview": "概要",
+      "keys": "API キー",
+      "grants": "リソース権限",
+      "ownerPlaceholder": "リソース所有者を選択",
+      "ownerSearch": "ユーザーを検索",
+      "ownerTip": "この連携が作成するナレッジベースなどのリソースはこのユーザーに帰属し、プラットフォーム内で管理されます。",
+      "ownerNotRetroactive": "所有者を変更しても既存リソースには影響しません。以後に作成するリソースは新しい所有者に帰属します。",
+      "deleteConfirmTitle": "このサービスアカウントを削除しますか？",
+      "deleteConfirm": "削除すると、すべてのキーが直ちに無効になり、{{count}} 件のリソース権限が取り消されます。このアカウントに依存する連携は直ちに失敗します。続行しますか？",
+      "deleteGrantListTitle": "無効になるリソース権限",
+      "deleteNoGrants": "このアカウントには現在リソース権限がありません。",
+      "noKeyWarning": "有効なキーがないため、すべてのリクエストが拒否されます。",
+      "ownerDisabled": "リソース所有者は無効です。アカウントとキーは有効なため、廃止するにはアカウントを無効化または削除してください。",
+      "neverUsed": "未使用",
+      "idleWarning": "{{days}} 日以上呼び出しがありません。無効化を検討してください。",
+      "departmentScope": "{{name}} とその配下",
+      "moreScopes": " ほか {{count}} 件"
+    },
+    "keys": {
+      "issue": "API キーを発行",
+      "edit": "API キーを編集",
+      "revokeConfirmTitle": "この API キーを失効しますか？",
+      "revokeAllConfirmTitle": "すべての API キーを失効しますか？",
+      "issueHint": "キー名、有効期限、権限、委任範囲を設定します。",
+      "namePlaceholder": "例：本番同期",
+      "expiresAtPlaceholder": "空欄の場合は無期限",
+      "clearExpiry": "クリア",
+      "permissionsHint": "既定では権限は付与されません。連携に必要なものだけを選択してください。",
+      "endpointsTitle": "対象となるエンドポイント：",
+      "revealTitle": "キーを生成しました",
+      "once": "完全なキーが表示されるのは今回だけです。今すぐコピーして安全に保存してください。",
+      "saved": "キーを安全に保存しました",
+      "mask": "キー",
+      "permissions": "権限",
+      "noPermissions": "権限なし",
+      "neverExpires": "無期限",
+      "delegateScopes": "委任範囲",
+      "delegatePlaceholder": "ユーザーまたは部門を選択",
+      "delegateConfig": "委任設定",
+      "delegateRequired": "委任にはユーザーまたは部門が少なくとも 1 つ必要です。",
+      "delegateUsers": "委任ユーザー",
+      "delegateUserPlaceholder": "1 人以上のユーザーを選択",
+      "delegateDepartment": "委任部門",
+      "delegateDepartmentPlaceholder": "部門を追加（複数選択可）",
+      "revokeConfirm": "失効すると、このキーを使う呼び出しは直ちに失敗します。続行しますか？",
+      "revokeAllConfirm": "このサービスアカウントの有効なキーがすべて直ちに無効になります。続行しますか？"
+    },
+    "scopeGroups": {
+      "workflow": "ワークフロー",
+      "assistant": "アシスタントとチャット",
+      "knowledge": "ナレッジ",
+      "delegation": "ID 委任",
+      "local_dev_toolkit": "ローカル開発ツールキット"
+    },
+    "scopes": {
+      "workflow_invoke": {
+        "label": "ワークフローを実行",
+        "desc": "ワークフローの実行・停止と、ワークフローセッションの接続を行います。"
+      },
+      "workflow_read": {
+        "label": "ワークフローを参照",
+        "desc": "ワークフローの定義情報を読み取ります。"
+      },
+      "assistant_invoke": {
+        "label": "アシスタントを実行",
+        "desc": "アシスタントとの対話、および音声認識・音声合成を利用します。"
+      },
+      "assistant_read": {
+        "label": "アシスタントを参照",
+        "desc": "アシスタントの一覧と詳細を参照します。"
+      },
+      "chat_invoke": {
+        "label": "日常チャットを実行",
+        "desc": "日常モードのチャット、設定の参照、添付ファイルのアップロードを行います。"
+      },
+      "knowledge_read": {
+        "label": "ナレッジを参照",
+        "desc": "ナレッジベースとファイルの一覧、検索、Q&A、出典を参照します。"
+      },
+      "knowledge_write": {
+        "label": "ナレッジを更新",
+        "desc": "ナレッジベース、ファイル、チャンク、Q&A、メタデータを作成・変更・削除します。"
+      },
+      "delegate": {
+        "label": "ユーザーの代理で実行",
+        "desc": "選択したユーザーまたは部門の範囲で、代理対象ユーザーの権限を使用します。",
+        "warning": "有効化後は、すべてのリクエストで代理対象ユーザーの指定が必要です。サービスアカウント自身として呼び出す場合は、別のキーを発行してください。"
+      },
+      "model_invoke": {
+        "label": "プラットフォームモデルを実行",
+        "desc": "プラットフォームに設定されたモデルを呼び出します。"
+      },
+      "identity_read": {
+        "label": "組織情報を参照",
+        "desc": "組織のユーザーと部門を参照します。",
+        "warning": "選択すると組織構造全体を参照できます。"
+      },
+      "app_manage": {
+        "label": "ホスト型アプリを管理",
+        "desc": "ホスト型アプリを作成、デプロイ、管理します。",
+        "hint": "アプリのデプロイに必要な権限です。"
+      }
+    },
+    "grants": {
+      "accessHint": "両方を満たす必要があります。キーに該当操作の権限があり、かつこのリソースがここで付与されていること",
+      "accessTitle": "アクセスできるリソース",
+      "add": "リソースを付与",
+      "addHint": "リソースタイプを選び、検索して 1 件以上のリソースをチェックし、権限レベルを選択します。リソースタイプや ID の入力は不要です。",
+      "allSources": "すべての付与元",
+      "allTypes": "すべてのタイプ",
+      "change": "リソース権限を変更",
+      "changeTierFor": "「{{name}}」の権限レベルを変更",
+      "confirmGrant": "付与",
+      "copyResource": "「{{name}}」のリソース識別子をコピー",
+      "creatorRevokeConfirm": "取り消すと、この連携はこのリソースに書き込めなくなります。\n「{{name}}」はこのサービスアカウントが作成したため、作成時にプラットフォームから自動付与されました。取り消すと、定期同期の書き込みに失敗します。",
+      "creatorRevokeTitle": "この作成時の自動付与を取り消しますか？",
+      "delegateWarning": "委任キーがあります。委任呼び出しは代理対象ユーザーのリソース権限のみで判定され、このページの権限は適用されません。",
+      "directSourceDetail": "管理者による付与",
+      "effective": "有効性",
+      "effectiveActive": "有効",
+      "empty": "リソース権限はありません",
+      "fixedSubjectHint": "付与先は現在のサービスアカウント「{{name}}」に固定され、変更できません。ここがサービスアカウントにリソースを付与する唯一の入口です。",
+      "grantModel": "{{model}} を付与",
+      "granted": "付与済み",
+      "grantedAt": "付与日時",
+      "ineffective": "無効",
+      "keyScopeSummary": "有効なキーは {{count}} 件です。呼び出しにはキー権限とリソース権限の両方が必要です。",
+      "loadingResources": "リソースを読み込み中",
+      "missingScope": "「{{scope}}」を持つキーがないため、この権限は現在有効ではありません",
+      "model": "権限レベル",
+      "modelPlaceholder": "権限レベルを選択",
+      "noKeyScopes": "キー権限なし",
+      "noResources": "付与可能なリソースはありません",
+      "resource": "リソース",
+      "resourceId": "リソース ID",
+      "resourceSearch": "リソース名を検索",
+      "resourceType": "リソースタイプ",
+      "revokeAll": "すべて取り消す",
+      "revokeAllConfirm": "このサービスアカウントは、以下のリソースにアクセスできなくなります。依存する連携は直ちにエラーになります。",
+      "revokeAllRetainedHint": "これらはサービスアカウント自身が作成したリソースです。一括で取り消すと、管理しているナレッジベースに書き込めなくなります。必要な場合は個別に取り消してください。",
+      "revokeAllRetainedTitle": "作成時の自動付与 {{count}} 件は保持されます。",
+      "revokeAllTitle": "管理者による付与をすべて取り消しますか？",
+      "revokeAnyway": "それでも取り消す",
+      "revokeConfirm": "取り消すと、このサービスアカウントのキーで「{{name}}」にアクセスした際にリソース権限エラーが返されます。再度付与すれば復旧できます。",
+      "revokeCount": "{{count}} 件を取り消す",
+      "revokeResource": "「{{name}}」の権限を取り消す",
+      "revokeTitle": "この権限を取り消しますか？",
+      "scope": "範囲",
+      "scopeCodes": {
+        "assistant_invoke": "アシスタント:実行",
+        "assistant_read": "アシスタント:参照",
+        "knowledge_read": "ナレッジ:参照",
+        "knowledge_write": "ナレッジ:更新",
+        "workflow_invoke": "ワークフロー:実行",
+        "workflow_read": "ワークフロー:参照"
+      },
+      "search": "リソース名または ID を検索",
+      "source": "付与元",
+      "sourceFilter": "付与元フィルター",
+      "total": "全 {{count}} 件",
+      "typeFilter": "リソースタイプフィルター"
+    },
+    "permissionTiers": {
+      "editor": "編集者",
+      "manager": "管理者",
+      "viewer": "閲覧者"
+    },
+    "resourceTypes": {
+      "knowledge_space": "ナレッジスペース",
+      "knowledge_library": "ナレッジベース",
+      "workflow": "ワークフロー",
+      "assistant": "アシスタント",
+      "tool": "ツール",
+      "channel": "チャンネル",
+      "dashboard": "ダッシュボード"
+    },
+    "grantSources": {
+      "DIRECT": "管理者による付与",
+      "CREATOR_GRANT": "作成時の自動付与"
+    },
+    "feedback": {
+      "created": "サービスアカウントを作成しました",
+      "updated": "サービスアカウントを保存しました",
+      "enabled": "サービスアカウントを有効化しました",
+      "disabled": "サービスアカウントを無効化しました",
+      "deleted": "サービスアカウントを削除しました",
+      "keyIssued": "API キーを発行しました",
+      "keyUpdated": "API キーを更新し、直ちに反映しました",
+      "keyRevoked": "API キーを失効しました",
+      "keysRevoked": "API キーを {{count}} 件失効しました",
+      "grantAdded": "リソース権限を追加しました",
+      "grantUpdated": "リソース権限を変更しました",
+      "grantRevoked": "リソース権限を取り消しました",
+      "copied": "コピーしました",
+      "resourceCopied": "{{resource}} をコピーしました"
+    },
+    "personalToken": {
+      "title": "AI アシスタント連携",
+      "settings": "利用ポリシー",
+      "settingsSaved": "保存しました。設定は発行済みのすべてのキーに即時反映されます。",
+      "deploymentDisabled": "この機能はデプロイ設定で無効です。サーバー設定での有効化を運用担当に依頼してください。",
+      "tenantEnabled": "従業員のキー利用を許可",
+      "ttlDays": "最大有効期間（日）",
+      "holder": "所有者",
+      "adminHolder": "管理者が保有",
+      "adminHolderTip": "キーの可視範囲は所有者本人と同じです。所有者が管理者の場合は範囲が広くなります。",
+      "scopeModeLabel": "AI アシスタントが検索できる範囲",
+      "scopeModeAll": "従業員がプラットフォームで閲覧できるすべてのナレッジ（デフォルト）",
+      "scopeModeOwnOnly": "従業員本人が作成したナレッジベースのみ",
+      "scopeModeOwnOnlyHint": "部門ナレッジスペースや共有されたナレッジは含まれません",
+      "tightenConfirmTitle": "検索範囲を制限しますか？",
+      "tightenConfirmBody": "保存すると即時反映されます。発行済みのすべてのキーは本人が作成したナレッジベースのみ検索でき、部門・共有ナレッジは直ちに参照できなくなります。制限しますか？",
+      "tightenConfirmOk": "制限する",
+      "revokeConfirmTitle": "このキーを失効させますか？",
+      "revokeConfirmBody": "キーは直ちに使えなくなり、所有者の AI アシスタントはアクセスできなくなります。所有者はいつでも再生成できます。"
+    }
   },
   "mediaPreview": {
     "recognizedText": "認識テキスト",

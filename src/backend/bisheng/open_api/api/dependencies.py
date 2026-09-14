@@ -37,6 +37,7 @@ from bisheng.open_api.domain.services.identity_service import (
     resolve_request_identity,
 )
 from bisheng.open_api.domain.services.tenant_setting_service import TenantSettingService
+from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.application.identity import (
     reset_current_permission_actor,
     set_current_permission_actor,
@@ -65,6 +66,7 @@ async def verify_open_api_access(conn: HTTPConnection) -> AsyncIterator[OpenApiP
     principal_token = None
     permission_token = None
     conn.scope[_SCOPE_PRINCIPAL_KEY] = principal
+    pat_data_scope = DATA_SCOPE_ALL
     try:
         if principal.actor_kind == "natural_person":
             if not settings.open_api.pat_enabled:
@@ -77,6 +79,8 @@ async def verify_open_api_access(conn: HTTPConnection) -> AsyncIterator[OpenApiP
                 raise OpenApiAuthDependencyUnavailableError() from exc
             if not tenant_policy.enabled:
                 raise PersonalTokenDisabledError()
+            # F066: reuse this policy read — no second lookup on the hot path.
+            pat_data_scope = tenant_policy.data_scope
 
         marker = get_open_api_scope_marker(conn.scope.get("endpoint"))
         if marker is None:
@@ -116,6 +120,7 @@ async def verify_open_api_access(conn: HTTPConnection) -> AsyncIterator[OpenApiP
             tenant_id=principal.tenant_id,
             super_admin=super_admin,
             tenant_admin_tenant_ids=tenant_admin_tenant_ids,
+            data_scope=pat_data_scope,
         )
         principal_token = set_current_open_api_principal(principal)
         permission_token = set_current_permission_actor(actor)

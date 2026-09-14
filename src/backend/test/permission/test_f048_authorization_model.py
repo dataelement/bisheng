@@ -9,11 +9,19 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+import pytest
+
 from bisheng.core.openfga.authorization_model_f048 import (
     DEFAULT_ACTION_CODES,
     authorization_model_checksum,
     build_authorization_model_f048,
 )
+from bisheng.permission.domain.models import ResourcePermissionMode
+from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.permission.domain.services.model_policy import derive_permission_models
+from bisheng.permission.domain.services.resource_lifecycle_policy import build_create_plan
+from bisheng.permission.migration.f048_model_mapper import build_initial_action_release
+from scripts.reconcile_f048_visible_projection import _compile_service_account_resource_markers
 
 TupleKey = tuple[str, str, str]
 
@@ -251,6 +259,106 @@ def test_service_account_direct_grant_passes_all_technical_gates() -> None:
             tuples - {required_tuple},
         )
         assert not without_required.check(subject, "can_upload_file", resource)
+
+
+@pytest.mark.parametrize("grant_resource", ["knowledge_space:137", "folder:742"])
+@pytest.mark.parametrize("model_key", ["editor", "owner"])
+def test_service_account_inherits_multilevel_actions_without_descendant_grants(grant_resource, model_key):
+    subject = "service_account:2"
+    model = next(
+        model
+        for model in derive_permission_models(build_initial_action_release()).models
+        if model.model_key == model_key
+    )
+    tuples = _active_model_tuples(model_key=model_key, actions=model.action_codes, marker_subject="service_account:*")
+    nodes = (
+        ("knowledge_space:137", None, "CUSTOM"),
+        ("folder:742", "knowledge_space:137", "CUSTOM" if grant_resource == "folder:742" else "INHERIT"),
+        ("folder:745", "folder:742", "INHERIT"),
+        ("knowledge_file:783", "folder:745", "INHERIT"),
+        ("folder:900", "folder:742", "CUSTOM"),
+        ("knowledge_file:901", "folder:900", "INHERIT"),
+        ("knowledge_file:902", "folder:742", "CUSTOM"),
+        ("folder:903", "knowledge_space:137", "INHERIT"),
+    )
+    for resource, parent, mode in nodes:
+        resource_type, resource_id = resource.split(":")
+        parent_type, parent_id = parent.split(":") if parent else (None, None)
+        plan = build_create_plan(
+            VerifiedPermissionTarget.from_business_service(
+                tenant_id=1,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                resource_version=0,
+                context_version=f"{resource}:0",
+                parent_type=parent_type,
+                parent_id=parent_id,
+            ),
+            store_id="store-1",
+            model_id="model-1",
+            operator_id=1,
+            idempotency_key=f"create:{resource}",
+            protected_deltas=(),
+            permission_mode=mode,
+        )
+        tuples.update((delta.user, delta.relation, delta.object) for delta in plan.deltas)
+    grant = "permission_grant:space-or-folder-editor"
+    # Only the selected ancestor has a grant; no descendant gets a direct grant.
+    tuples |= _resource_grant_tuples(
+        resource=grant_resource,
+        grant=grant,
+        model_key=model_key,
+        subject=subject,
+        marker_subject="service_account:*",
+    )
+    evaluator = ModelEvaluator(build_authorization_model_f048(), tuples)
+    for resource in (grant_resource, "folder:742", "folder:745", "knowledge_file:783"):
+        for relation in ("visible", "can_edit", "can_rename", "can_download", "can_move"):
+            assert evaluator.check(subject, relation, resource), (relation, resource)
+        assert evaluator.check(subject, "can_delete", resource) == (model_key == "owner")
+        assert not evaluator.check("service_account:3", "visible", resource)
+    for resource in ("folder:742", "folder:745"):
+        assert evaluator.check(subject, "can_upload_file", resource)
+        assert evaluator.check(subject, "can_create_folder", resource)
+    for resource in ("folder:900", "knowledge_file:901", "knowledge_file:902"):
+        for relation in ("visible", "can_edit", "can_rename", "can_delete"):
+            assert not evaluator.check(subject, relation, resource), (relation, resource)
+    for resource in ("knowledge_space:137", "folder:903"):
+        assert evaluator.check(subject, "visible", resource) == (grant_resource == "knowledge_space:137")
+
+    # Revoking the ancestor must remove inherited access without per-child writes.
+    revoked = ModelEvaluator(
+        build_authorization_model_f048(),
+        tuples - {(subject, "ordinary_assignee", grant), (subject, "visible", grant_resource)},
+    )
+    assert not revoked.check(subject, "visible", "knowledge_file:783")
+    assert not revoked.check(subject, "can_rename", "knowledge_file:783")
+
+    # Older data with user-only mode markers reproduces the empty SA listing.
+    resource_keys = {resource for resource, _, _ in nodes}
+    legacy_tuples = {row for row in tuples if not (row[0] == "service_account:*" and row[2] in resource_keys)}
+    legacy = ModelEvaluator(build_authorization_model_f048(), legacy_tuples)
+    assert legacy.check(subject, "visible", grant_resource)
+    assert not legacy.check(subject, "visible", "knowledge_file:783")
+    repaired_markers = _compile_service_account_resource_markers(
+        tuple(
+            ResourcePermissionMode(
+                tenant_id=1,
+                resource_type=resource.split(":")[0],
+                resource_id=resource.split(":")[1],
+                mode=mode,
+                projection_state="CURRENT",
+            )
+            for resource, _, mode in nodes
+        )
+    )
+    repaired = ModelEvaluator(build_authorization_model_f048(), legacy_tuples | repaired_markers)
+    assert repaired.check(subject, "visible", "knowledge_file:783")
+    assert repaired.check(subject, "can_rename", "knowledge_file:783")
+    assert repaired.check(subject, "can_upload_file", "folder:745")
+    assert repaired.check(subject, "can_delete", "knowledge_file:783") == (model_key == "owner")
+    assert not repaired.check(subject, "visible", "knowledge_file:901")
+    assert not repaired.check(subject, "can_rename", "knowledge_file:902")
 
 
 def test_custom_gate_blocks_ordinary_but_not_protected_assignment() -> None:

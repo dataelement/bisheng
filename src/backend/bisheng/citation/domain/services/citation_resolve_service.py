@@ -2,6 +2,8 @@ import asyncio
 import json
 from collections import defaultdict
 
+from loguru import logger
+
 from bisheng.citation.domain.repositories.interfaces.message_citation_repository import MessageCitationRepository
 from bisheng.citation.domain.schemas.citation_schema import (
     ArticleCitationPayloadSchema,
@@ -10,6 +12,7 @@ from bisheng.citation.domain.schemas.citation_schema import (
     CitationUnresolvedReason,
     RagCitationPayloadSchema,
     ResolveCitationResponse,
+    TempCitationPayloadSchema,
     UnresolvedCitationSchema,
     WebCitationPayloadSchema,
 )
@@ -251,6 +254,59 @@ class CitationResolveService:
         payload.url = CitationRegistryService.normalize_url(payload.url)
         return item.model_copy(update={"sourcePayload": payload})
 
+    async def _temp_chat_id(self, item: CitationRegistryItemSchema) -> str | None:
+        """Chat the temp citation was persisted with; cache-only items have none."""
+        try:
+            row = await self.registry_service.repository.find_by_citation_id(item.citationId)
+        except Exception:
+            logger.exception("failed to look up chat_id for temp citation {}", item.citationId)
+            return None
+        return getattr(row, "chat_id", None) if row is not None else None
+
+    async def _can_read_temp(
+        self,
+        item: CitationRegistryItemSchema,
+        login_user: UserPayload | None,
+    ) -> bool:
+        """Session-owner gate. Anonymous callers never pass (AC-15)."""
+        if login_user is None:
+            return False
+        chat_id = await self._temp_chat_id(item)
+        if not chat_id:
+            # Cache-only / debug run: only the currently logged-in executor.
+            return True
+        from bisheng.database.models.session import MessageSessionDao
+
+        session = await MessageSessionDao.async_get_one(chat_id)
+        if session is None:
+            return False
+        return str(session.user_id) == str(login_user.user_id)
+
+    async def _enrich_temp_item(self, item: CitationRegistryItemSchema) -> CitationRegistryItemSchema:
+        """Sign a fresh URL. Main-bucket first; still-live temp objects for debug."""
+        payload = TempCitationPayloadSchema.model_validate(item.sourcePayload)
+        from bisheng.core.storage.chat_attachment import CHAT_OBJECT_PREFIX, temp_object_name_from_url
+        from bisheng.core.storage.minio.minio_manager import get_minio_storage
+
+        minio = await get_minio_storage()
+        object_name = payload.objectName
+        if object_name and str(object_name).startswith(CHAT_OBJECT_PREFIX):
+            exists = await minio.object_exists(object_name=object_name)
+            if exists:
+                url = await minio.get_share_link(object_name)
+                payload = payload.model_copy(update={"previewUrl": url, "downloadUrl": url})
+                return item.model_copy(update={"sourcePayload": payload})
+        tmp_name = temp_object_name_from_url(payload.sourceUrl or "", minio.tmp_bucket)
+        if tmp_name:
+            exists = await minio.object_exists(bucket_name=minio.tmp_bucket, object_name=tmp_name)
+            if exists:
+                # Debug / pre-promote: sign the temp object for this response
+                # only. Do not write the signature back into the cache.
+                url = await minio.get_share_link(tmp_name, bucket=minio.tmp_bucket)
+                payload = payload.model_copy(update={"previewUrl": url, "downloadUrl": url})
+                return item.model_copy(update={"sourcePayload": payload})
+        raise NotFoundError(reason=CitationUnresolvedReason.EXPIRED.value)
+
     async def _enrich_item(
         self,
         item: CitationRegistryItemSchema,
@@ -264,6 +320,8 @@ class CitationResolveService:
             return self._enrich_article_item(item)
         if item.type == CitationType.WEB:
             return self._enrich_web_item(item)
+        if item.type == CitationType.TEMP:
+            return await self._enrich_temp_item(item)
         # Unknown type (a newer writer, an older reader): hand it back untouched
         # rather than guessing at a payload shape and raising.
         return item
@@ -300,8 +358,15 @@ class CitationResolveService:
             )
         if login_user is None and not self._is_anonymous_readable(item):
             # F054 overrides F029 AC-20: knowledge and article sources are
-            # refused without a logged-in user.
+            # refused without a logged-in user. Temp is not anonymous-readable.
             raise NotFoundError(reason=CitationUnresolvedReason.FORBIDDEN.value)
+        if item.type == CitationType.TEMP:
+            if not await self._can_read_temp(item, login_user):
+                raise NotFoundError(reason=CitationUnresolvedReason.FORBIDDEN.value)
+            try:
+                return await self._enrich_item(item, login_user)
+            except NotFoundError:
+                raise NotFoundError(reason=CitationUnresolvedReason.EXPIRED.value) from None
         url_allowed = True
         if item.type == CitationType.RAG and login_user is not None:
             permitted = await self._permitted_file_ids([item], login_user)
@@ -374,13 +439,20 @@ class CitationResolveService:
                 if citation_id not in item_by_id:
                     unresolved[citation_id] = CitationUnresolvedReason.EXPIRED
             # Rule 3 — INV-7 and its F041 tiering, untouched by this feature.
+            # Temp skips view_file and is gated by session ownership instead.
             permitted = await self._permitted_file_ids(items, login_user)
             visible_items = self._apply_tier_filter(items, permitted)
-            visible_ids = {item.citationId for item in visible_items}
-            for item in items:
-                if item.citationId not in visible_ids:
+            gated_items: list[CitationRegistryItemSchema] = []
+            for item in visible_items:
+                if item.type == CitationType.TEMP and not await self._can_read_temp(item, login_user):
                     unresolved[item.citationId] = CitationUnresolvedReason.FORBIDDEN
-            items = visible_items
+                    continue
+                gated_items.append(item)
+            visible_ids = {item.citationId for item in gated_items}
+            for item in items:
+                if item.citationId not in visible_ids and item.citationId not in unresolved:
+                    unresolved[item.citationId] = CitationUnresolvedReason.FORBIDDEN
+            items = gated_items
 
         enriched_by_id: dict[str, CitationRegistryItemSchema] = {}
         for item in items:

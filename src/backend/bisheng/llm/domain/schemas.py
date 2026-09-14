@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from bisheng.api.v1.schemas import WSModel
 from bisheng.llm.domain.models import LLMModelBase, LLMServerBase
@@ -104,10 +104,19 @@ class LLMModelCreateReq(BaseModel):
     id: int | None = Field(default=None, description="Model UniqueID, Need to pass when updating")
     name: str = Field(..., description="Model Display Name")
     description: str | None = Field(default="", description="Model Description")
-    model_name: str = Field(..., description="Model Name")
+    model_name: str = Field(..., min_length=1, description="Model Name")
     model_type: str = Field(..., description="model type")
     online: bool = Field(default=True, description="Online")
     config: dict | None = Field(default=None, description="model config")
+
+    @field_validator("model_name", mode="before")
+    @classmethod
+    def strip_model_name(cls, value: object) -> object:
+        # Persist the vendor model id without leading/trailing whitespace so
+        # probe calls send params['model'] that the provider can resolve.
+        if isinstance(value, str):
+            return value.strip()
+        return value
 
 
 class LLMServerCreateReq(BaseModel):

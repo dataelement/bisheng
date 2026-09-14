@@ -386,7 +386,7 @@ class TenantDao:
         """Sync counterpart of :meth:`aget_children_ids_active`.
 
         Used by Celery Beat tasks that run in a synchronous worker context and
-        cannot await the async DAO (e.g. ``sync_information_article``).
+        cannot await the async DAO.
         """
         with bypass_tenant_filter():
             with get_sync_db_session() as session:

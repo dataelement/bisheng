@@ -6,6 +6,7 @@
 import { useCallback } from 'react';
 import { Outlined } from 'bisheng-icons';
 import { Badge } from '@bisheng/ui';
+import type { ChatCitation } from '~/api/chatApi';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import { useLocalize } from '~/hooks';
 import '~/markdown.css';
@@ -20,9 +21,13 @@ interface ResultSectionProps {
     files: ArtifactFile[];
     versionId: string;
     onPreview: (file: ArtifactFile) => void;
+    /** output_result.citations — sources actually cited in this run */
+    citations?: ChatCitation[] | null;
+    /** Task ChatMessage id, used by /citations/resolve */
+    messageId?: string;
 }
 
-export function ResultSection({ answer, files, versionId, onPreview }: ResultSectionProps) {
+export function ResultSection({ answer, files, versionId, onPreview, citations, messageId }: ResultSectionProps) {
     const localize = useLocalize();
     const resolveArtifactLink = useCallback(
         (href: string) => resolveDeliverableLink(files, href),
@@ -90,6 +95,8 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                         content={stripWorkspacePaths(answer)}
                         isLatestMessage={true}
                         webContent={false}
+                        citations={citations}
+                        messageId={messageId}
                         resolveArtifactLink={resolveArtifactLink}
                         // Markdown types the callback as (file: unknown) — the resolver
                         // it pairs with only ever yields ArtifactFile values here.

@@ -123,14 +123,14 @@ def get_all_langchain_types_legacy():
     return resp_200({})
 
 
-@router.get("/config")
+@router.get("/settings")
 def get_config(admin_user: UserPayload = Depends(UserPayload.get_admin_user)):
     db_config = ConfigDao.get_config(ConfigKeyEnum.INIT_DB)
     config_str = db_config.value if db_config else ""
     return resp_200(config_str)
 
 
-@router.post("/config/save")
+@router.post("/settings/save")
 def save_config(data: dict, admin_user: UserPayload = Depends(UserPayload.get_admin_user)):
     if not data.get("data", "").strip():
         raise SystemConfigEmptyError()

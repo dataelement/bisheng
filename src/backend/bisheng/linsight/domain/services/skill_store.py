@@ -179,6 +179,38 @@ def compose_skill_md(
     return render_skill_md(meta, body)
 
 
+def _decode_zip_name(info: zipfile.ZipInfo) -> str:
+    """Recover an entry's real filename from an archive that mislabels its encoding.
+
+    ZIP general-purpose bit 11 (0x800) marks the name as UTF-8; without it the
+    spec says CP437, and ``zipfile`` obeys. But macOS Finder's "Compress" writes
+    UTF-8 bytes *without* setting the bit, so a skill packed on a Mac arrives with
+    every Chinese filename mojibake'd ("外评检索指引.md" -> "σñûΦ»äµúÇτ┤óµîçσ╝Ò.md").
+    That is not merely ugly: SKILL.md points at ``references/外评检索指引.md``, and
+    the agent's read of that path then misses a file stored under the garbled name,
+    so the skill silently runs without its reference material.
+
+    CP437 maps all 256 byte values, so re-encoding is a lossless way back to the
+    original bytes. Try UTF-8 first, then GBK (what Chinese Windows' built-in
+    "send to compressed folder" emits), and keep the CP437 reading only when
+    neither decodes — i.e. an archive that really is CP437-named.
+    """
+    if info.flag_bits & 0x800:
+        return info.orig_filename
+    try:
+        raw = info.orig_filename.encode("cp437")
+    except UnicodeEncodeError:  # not a cp437 decode after all — trust zipfile
+        return info.orig_filename
+    if raw.isascii():
+        return info.orig_filename
+    for encoding in ("utf-8", "gbk"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return info.orig_filename
+
+
 def unpack_zip_bytes(data: bytes) -> dict[str, bytes]:
     """Extract a .zip/.skill archive into {relative_posix_path: bytes}.
 
@@ -195,7 +227,7 @@ def unpack_zip_bytes(data: bytes) -> dict[str, bytes]:
         for info in zf.infolist():
             if info.is_dir():
                 continue
-            path = info.filename.replace("\\", "/").lstrip("/")
+            path = _decode_zip_name(info).replace("\\", "/").lstrip("/")
             if not path or path.startswith("__MACOSX/") or PurePosixPath(path).name == ".DS_Store":
                 continue
             files[path] = zf.read(info)

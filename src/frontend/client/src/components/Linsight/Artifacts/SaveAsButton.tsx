@@ -160,7 +160,7 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className }
         busy || saving ? (
             <Outlined.Loading className={cn(glyphSize, 'animate-spin')} />
         ) : hasMenu ? (
-            <Outlined.FileSaveAs className={glyphSize} />
+            <Outlined.FileExport className={glyphSize} />
         ) : (
             <Outlined.Download className={glyphSize} />
         );

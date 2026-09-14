@@ -82,8 +82,11 @@ await require_business_action(
   succeeds; retry/forward repair uses the same idempotency key and frozen plan.
 - Concrete resource decisions short-circuit in this order:
   `super_admin` → tenant mismatch deny → tenant admin → Catalog/action gate →
-  OpenFGA. RBAC menu access remains a separate navigation/API-capability
-  concern and is never a fallback ALLOW for resource actions.
+  OpenFGA. An open-platform natural-person actor narrowed by the tenant data
+  scope (F066/D21) is denied **before** every shortcut above — the narrowing
+  is a data-export control and outranks identity. RBAC menu access remains a
+  separate navigation/API-capability concern and is never a fallback ALLOW
+  for resource actions.
 - Business modules depend only on application protocols exported by
   `permission.application`. They must never import an OpenFGA client/manager,
   construct transport tuples, or branch on OpenFGA-specific errors. Identity
@@ -106,7 +109,7 @@ await require_business_action(
 
 - 5-digit `MMMEE` (3-digit module + 2-digit error), defined in `common/errcode/`.
 
-**Module registry** (34 in use as of 2026-08-06). The authoritative source is always the `Code: int = NNNNN` literals themselves; this table mirrors them and *will* drift. **Before claiming a new module number, re-derive the list:**
+**Module registry** (35 in use as of 2026-09-14). The authoritative source is always the `Code: int = NNNNN` literals themselves; this table mirrors them and *will* drift. **Before claiming a new module number, re-derive the list:**
 
 ```bash
 grep -rhoE "Code:\s*int\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.py \
@@ -120,10 +123,12 @@ grep -rhoE "Code:\s*int\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.py 
 | 12x–18x | 120 workstation · 140 message · 150 tool · 160 dataset · 170 telemetry · 180 knowledge_space · 181 approval |
 | 19x (tenant / permission) | 190 channel **and** permission ⚠️ · 191 tenant_resolver · 192 tenant_fga · 193 sso_sync · 194 tenant_quota · 195 tenant_sharing · 196 resource_owner_transfer · 197 admin_scope · 198 llm_tenant |
 | 20x–25x (org) | 200 tenant · 210 department · 220 org_sync **and** tenant_tree ⚠️ · 230 user_group · 240 role · 250 permission |
+| 26x–27x | 260 open_api · 270 commercial_license |
 
 - ⚠️ **190 and 220 are each shared by two modules** — pre-existing collisions, not a precedent. Never reuse an occupied number.
 - **130 was registered as `chat` but is not used by any error code.** Do not treat it as free without checking; do not cite it as an example.
 - **260 is assigned** to Open API authentication and identity (`/api/v2`). Do not reuse it.
+- **270 is assigned** to commercial license status aggregation and reporting (`commercial_license`). Do not reuse it. Do not treat Gateway business code 11001 as a BISHENG module number.
 - When you claim a number, add it here in the same change.
 
 ## C6. No Hardcoded Secrets (RULE-7)

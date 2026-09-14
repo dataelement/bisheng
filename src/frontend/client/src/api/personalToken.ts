@@ -17,10 +17,14 @@ export interface PersonalTokenItem {
   create_time: string | null;
 }
 
+export type PersonalTokenDataScope = "all_visible" | "personal_only";
+
 export interface PersonalTokenStatus {
   enabled: boolean;
   token: PersonalTokenItem | null;
   holder_is_admin: boolean;
+  data_scope: PersonalTokenDataScope;
+  ttl_days: number;
 }
 
 export interface PersonalTokenIssued extends PersonalTokenItem {
@@ -44,11 +48,10 @@ const rejectBusinessErrors: RequestErrorOptions = { skip403Redirect: true };
 export function getPersonalTokenGuideUrls(origin: string) {
   return {
     skillPackUrl: new URL(
-      "/api/v1/open-api/skill-packs/bisheng-knowledge-search",
+      "/api/v1/open-api/skill-packs/knowledge-search",
       origin,
     ).href,
-    tokenPageUrl: new URL("/workspace/settings/account?api-token=1", origin).href,
-    retrieveUrl: new URL("/api/v2/filelib/retrieve", origin).href,
+    tokenPageUrl: new URL("/workspace/settings/ai-access?connect=1", origin).href,
   };
 }
 

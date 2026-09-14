@@ -9,7 +9,7 @@ from zipfile import ZIP_STORED, ZipFile, ZipInfo
 
 from bisheng.common.errcode.open_api import ApiCredentialNotFoundError
 
-SKILL_PACK_NAMES = frozenset({"bisheng-knowledge-search"})
+SKILL_PACK_NAMES = frozenset({"knowledge-search"})
 _PACK_ROOT = Path(__file__).resolve().parents[2] / "skill_packs"
 _FIXED_ZIP_TIME = (1980, 1, 1, 0, 0, 0)
 
@@ -25,7 +25,11 @@ class SkillPackService:
             raise ApiCredentialNotFoundError(msg="Skill pack not found")
 
         rendered: list[tuple[str, bytes]] = []
-        for path in sorted(item for item in pack_dir.rglob("*") if item.is_file()):
+        for path in sorted(
+            item
+            for item in pack_dir.rglob("*")
+            if item.is_file() and "__pycache__" not in item.parts and item.suffix != ".pyc"
+        ):
             relative = path.relative_to(pack_dir).as_posix()
             cls._assert_safe_relative_path(relative)
             payload = path.read_bytes()

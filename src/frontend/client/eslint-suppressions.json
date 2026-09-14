@@ -285,7 +285,7 @@
   },
   "src/components/Chat/ChatView.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 27
+      "count": 26
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -2230,11 +2230,6 @@
       "count": 1
     }
   },
-  "src/hooks/useChatModelMemo.ts": {
-    "no-restricted-imports": {
-      "count": 1
-    }
-  },
   "src/hooks/useFileChat.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
@@ -2396,7 +2391,7 @@
   },
   "src/pages/Subscription/AiChat/AiAssistantPanel.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
+      "count": 1
     },
     "no-restricted-imports": {
       "count": 1
@@ -2404,23 +2399,17 @@
   },
   "src/pages/Subscription/AiChat/ArticleAiDock.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 2
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-restricted-imports": {
       "count": 1
     }
   },
   "src/pages/Subscription/AiChat/FileAiDock.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 2
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-restricted-imports": {
       "count": 1
     }
   },
@@ -3107,9 +3096,6 @@
   },
   "src/pages/knowledge/SpaceDetail/AiChat/KnowledgeAiInput.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-restricted-imports": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {

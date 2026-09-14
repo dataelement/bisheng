@@ -22,6 +22,14 @@ export const SERVICE_ACCOUNT_PERMISSION_TIERS = [
 export type ServiceAccountPermissionTier =
   (typeof SERVICE_ACCOUNT_PERMISSION_TIERS)[number]
 
+export function createResourceGrantIdempotencyKey(): string {
+  // Unlike randomUUID, getRandomValues is available on HTTP intranet origins.
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return `service-account-grant-${Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("")}`
+}
+
 export function isServiceAccountPermissionTier(
   value: string,
 ): value is ServiceAccountPermissionTier {

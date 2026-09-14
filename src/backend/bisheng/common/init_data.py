@@ -269,6 +269,7 @@ async def _init_default_root_department(session):
     from bisheng.database.models.department import Department
     from bisheng.database.models.tenant import Tenant
 
+    root_dept_id = "BS@root"
     guest_dept_id = "BS@guest"
     guest_name = "临时访客"
     guest_sort_order = 2147483647
@@ -285,12 +286,13 @@ async def _init_default_root_department(session):
 
         if root_dept is None:
             root_dept = Department(
-                dept_id="BS@root",
+                dept_id=root_dept_id,
                 name="默认组织",
                 parent_id=None,
                 tenant_id=DEFAULT_TENANT_ID,
                 path="",
                 source="local",
+                external_id=root_dept_id,
                 status="active",
             )
             session.add(root_dept)
@@ -298,6 +300,12 @@ async def _init_default_root_department(session):
             await session.refresh(root_dept)
             root_dept.path = f"/{root_dept.id}/"
             tenant.root_dept_id = root_dept.id
+            session.add(root_dept)
+            await session.commit()
+        elif root_dept.external_id != root_dept_id:
+            # DM8 treats repeated NULL values as duplicates for this composite
+            # unique key. Persist the internal identity before inserting guest.
+            root_dept.external_id = root_dept_id
             session.add(root_dept)
             await session.commit()
 
@@ -310,6 +318,7 @@ async def _init_default_root_department(session):
                 tenant_id=DEFAULT_TENANT_ID,
                 path=f"{root_dept.path}",
                 source="local",
+                external_id=guest_dept_id,
                 status="active",
                 sort_order=guest_sort_order,
             )
@@ -326,6 +335,9 @@ async def _init_default_root_department(session):
                 changed = True
             if guest.sort_order != guest_sort_order:
                 guest.sort_order = guest_sort_order
+                changed = True
+            if guest.external_id != guest_dept_id:
+                guest.external_id = guest_dept_id
                 changed = True
             expected_path_prefix = root_dept.path or ""
             if not (guest.path or "").startswith(expected_path_prefix):

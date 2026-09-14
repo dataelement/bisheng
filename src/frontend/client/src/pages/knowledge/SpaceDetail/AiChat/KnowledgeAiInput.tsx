@@ -16,7 +16,6 @@
  * The component renders no outer padding; the parent owns positioning and spacing.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useRecoilState } from "recoil";
 import { SendIcon } from "~/components/svg";
 import AiModelSelect from "~/components/Chat/AiModelSelect";
 import type { BsConfig } from "~/api/chatApi";
@@ -26,12 +25,16 @@ import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import { cn } from "~/utils";
-import store from "~/store";
 
 interface KnowledgeAiInputProps {
     availableTags: { id: number; name: string }[];
     modelOptions?: BsConfig["models"];
     modelValue?: number;
+    /** User picked a model — the dock owns the selection, this input never
+     *  writes it (it used to write the global atom shared with /c). */
+    onModelChange?: (val: string) => void;
+    /** Value repair by AiModelSelect — applied but never remembered. */
+    onModelAutoChange?: (val: string) => void;
     isStreaming: boolean;
     disabled?: boolean;
     onSend: (text: string, files?: any[] | null, tag?: FolderChatTag) => void;
@@ -53,6 +56,8 @@ export function KnowledgeAiInput({
     availableTags,
     modelOptions,
     modelValue = 0,
+    onModelChange,
+    onModelAutoChange,
     isStreaming,
     disabled,
     onSend,
@@ -62,7 +67,6 @@ export function KnowledgeAiInput({
 }: KnowledgeAiInputProps) {
     const outerScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const localize = useLocalize();
-    const [, setChatModel] = useRecoilState(store.chatModel);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const badgeRef = useRef<HTMLSpanElement>(null);
     const [badgeIndentPx, setBadgeIndentPx] = useState<number | undefined>(undefined);
@@ -260,15 +264,8 @@ export function KnowledgeAiInput({
             options={modelOptions}
             value={modelValue}
             disabled={disabled || isStreaming || !modelOptions?.length}
-            onChange={(val) => {
-                const model = modelOptions?.find((item) => String(item.id) === String(val));
-                setChatModel({
-                    id: Number(val),
-                    name: model?.displayName || "",
-                    manual: true,
-                    mode: 'daily',
-                });
-            }}
+            onChange={(val) => onModelChange?.(val)}
+            onAutoChange={onModelAutoChange}
         />
     );
 

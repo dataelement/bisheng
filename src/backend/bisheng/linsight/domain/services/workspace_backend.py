@@ -599,13 +599,33 @@ class WorkspaceBackend(FilesystemBackend):
             return bytes(content)
         return str(content).encode("utf-8")
 
+    @staticmethod
+    def _normalize_markdown_citation_bytes(rel: str, data: bytes) -> bytes:
+        """Rewrite escaped \\ue200 sequences in markdown to real PUA chars.
+
+        write_file JSON often stores the six-character escape; the preview and
+        extract_citation_ids_from_text only recognize U+E200/E201/E202.
+        """
+        if not rel.lower().endswith((".md", ".markdown")):
+            return data
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            return data
+        from bisheng.citation.domain.services.citation_prompt_helper import unescape_citation_markers
+
+        fixed = unescape_citation_markers(text)
+        if fixed == text:
+            return data
+        return fixed.encode("utf-8")
+
     # -- write --------------------------------------------------------------
     def write(self, file_path: str, content) -> WriteResult:
         rel = self._ws_rel(file_path)
         if _is_skills_path(rel):
             logger.warning("[linsight-skills-readonly] svid={} refused write to {}", self.svid, rel)
             return WriteResult(error=_skills_readonly_error(file_path))
-        data = self._to_bytes(content)
+        data = self._normalize_markdown_citation_bytes(rel, self._to_bytes(content))
         # cache first (fast local), then write-through to MinIO (truth).
         self._cache_write(rel, data)
         self._minio_put_sync(rel, data)
@@ -698,7 +718,7 @@ class WorkspaceBackend(FilesystemBackend):
                 )
             occurrences = 1
             new_text = text.replace(old_string, new_string, 1)
-        new_data = new_text.encode("utf-8")
+        new_data = self._normalize_markdown_citation_bytes(rel, new_text.encode("utf-8"))
         self._cache_write(rel, new_data)
         self._minio_put_sync(rel, new_data)
         return EditResult(path="/" + rel, occurrences=occurrences)
@@ -836,7 +856,7 @@ class WorkspaceBackend(FilesystemBackend):
         if _is_skills_path(rel):
             logger.warning("[linsight-skills-readonly] svid={} refused write to {}", self.svid, rel)
             return WriteResult(error=_skills_readonly_error(file_path))
-        data = self._to_bytes(content)
+        data = self._normalize_markdown_citation_bytes(rel, self._to_bytes(content))
         await asyncio.to_thread(self._cache_write, rel, data)
         await self.minio.put_object(
             bucket_name=self._bucket(),

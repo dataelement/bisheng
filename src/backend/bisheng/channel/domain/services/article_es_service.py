@@ -34,6 +34,12 @@ class ArticleQueryParts:
     runtime_mappings: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class ArticleBulkWriteResult:
+    success_ids: set[str]
+    failed_ids: dict[str, str]
+
+
 class ArticleEsService:
     """Article ES Service, encapsulates all operations on channel_articles index"""
 
@@ -174,6 +180,36 @@ emit(false);
             logger.warning(f"Bulk index completed with {len(errors)} errors: {errors[:3]}")
         return success
 
+    async def bulk_index_articles_detailed(self, articles_by_id: dict[str, ArticleDocument]) -> ArticleBulkWriteResult:
+        """Bulk index with an explicit result for every upstream article id."""
+        if not articles_by_id:
+            return ArticleBulkWriteResult(success_ids=set(), failed_ids={})
+        client = await self._get_client()
+        actions = [
+            {
+                "_index": ARTICLE_INDEX_NAME,
+                "_id": article_id,
+                "_source": self._build_article_body(article),
+            }
+            for article_id, article in articles_by_id.items()
+        ]
+        _, errors = await es_helpers.async_bulk(client, actions, raise_on_error=False)
+        failed: dict[str, str] = {}
+        for error in errors:
+            operation = next(iter(error.values()), {}) if isinstance(error, dict) else {}
+            article_id = str(operation.get("_id", ""))
+            if not article_id:
+                continue
+            reason = operation.get("error", operation.get("status", "unknown"))
+            failed[article_id] = str(reason)[:500]
+        unknown = set(failed) - set(articles_by_id)
+        if unknown:
+            raise RuntimeError("Elasticsearch bulk response contained unknown article ids")
+        success = set(articles_by_id) - set(failed)
+        if failed:
+            logger.warning("Bulk index failed article ids: %s", sorted(failed)[:10])
+        return ArticleBulkWriteResult(success_ids=success, failed_ids=failed)
+
     @staticmethod
     def bulk_index_articles_sync(articles: list[ArticleDocument], doc_ids: list[str] | None = None) -> int:
         """Synchronous version: Bulk index articles."""
@@ -216,6 +252,19 @@ emit(false);
         except Exception:
             logger.debug(f"Article not found: {doc_id}")
             return None
+
+    async def mget_existing_ids(self, article_ids: list[str]) -> set[str]:
+        """Return ids visible through Elasticsearch realtime GET semantics."""
+        if not article_ids:
+            return set()
+        client = await self._get_client()
+        result = await client.mget(index=ARTICLE_INDEX_NAME, body={"ids": article_ids})
+        return {str(doc.get("_id")) for doc in result.get("docs", []) if doc.get("found")}
+
+    async def refresh_index(self) -> None:
+        """Strict refresh used before routing freshly written articles."""
+        client = await self._get_client()
+        await client.indices.refresh(index=ARTICLE_INDEX_NAME)
 
     # ──────────────────────────────────────────
     #  Update
