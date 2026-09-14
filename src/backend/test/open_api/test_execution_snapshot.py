@@ -4,6 +4,8 @@ from pydantic import ValidationError
 from bisheng.core.context.tenant import get_current_tenant_id, get_visible_tenant_ids
 from bisheng.open_api.domain.context import OpenApiExecutionSnapshot, OpenApiPrincipal
 from bisheng.open_api.domain.services.execution_context import restore_execution_context
+from bisheng.open_api.domain.services.tenant_setting_service import TenantPatPolicy, TenantSettingService
+from bisheng.permission.application.data_scope import DATA_SCOPE_ALL, DATA_SCOPE_PERSONAL
 from bisheng.permission.application.identity import get_current_permission_actor
 
 
@@ -134,3 +136,38 @@ def test_v2_snapshot_shape_is_unchanged_by_the_new_fields():
     snapshot = OpenApiExecutionSnapshot.from_principal(principal(), trace_id="trace-1")
     assert snapshot.super_admin is False
     assert snapshot.tenant_admin_tenant_ids == frozenset()
+
+
+def narrowed_pat_policy(_tenant_id: int) -> TenantPatPolicy:
+    return TenantPatPolicy(enabled=True, ttl_days=30, data_scope=DATA_SCOPE_PERSONAL)
+
+
+def test_public_v3_snapshot_ignores_the_pat_data_scope(monkeypatch):
+    """The PAT narrowing must not reach a guest run the handshake admitted."""
+
+    monkeypatch.setattr(
+        "bisheng.open_api.domain.services.execution_context.validate_execution_snapshot",
+        lambda _snapshot: None,
+    )
+    monkeypatch.setattr(TenantSettingService, "get_policy_sync", staticmethod(narrowed_pat_policy))
+    payload = guest_snapshot().model_dump(mode="json")
+    with restore_execution_context(payload):
+        assert get_current_permission_actor().data_scope == DATA_SCOPE_ALL
+
+
+def test_v2_pat_snapshot_rereads_the_data_scope(monkeypatch):
+    """F066: a narrowing applied after enqueue still binds the queued v2 run."""
+
+    monkeypatch.setattr(
+        "bisheng.open_api.domain.services.execution_context.validate_execution_snapshot",
+        lambda _snapshot: None,
+    )
+    monkeypatch.setattr(TenantSettingService, "get_policy_sync", staticmethod(narrowed_pat_policy))
+    payload = guest_snapshot(
+        channel="open_api_v2",
+        credential_id=18,
+        super_admin=False,
+        tenant_admin_tenant_ids=frozenset(),
+    ).model_dump(mode="json")
+    with restore_execution_context(payload):
+        assert get_current_permission_actor().data_scope == DATA_SCOPE_PERSONAL
