@@ -102,6 +102,7 @@ bisheng-milvus-standalone
 | `logger_conf` | `LoggerConf` | 日志级别与处理器 |
 | `password_conf` | `PasswordConf` | 密码策略（有效期、错误锁定） |
 | `cookie_conf` | `CookieConf` | JWT Cookie 配置（默认过期 86400s） |
+| `jwt_secret` | `str` | 登录态 JWT 签名密钥。**代码无默认值**（F068）：yaml 配了就用；未配置 / 为空 / 等于历史内置默认值时，首次需要的进程随机生成并写入 `config` 表（键 `jwt_secret`），全部进程共用。轮换：改 yaml 或删该记录后重启，全员重登 |
 | `system_login_method` | `SystemLoginMethod` | 登录方式（商业版标识、多端登录） |
 | `mcp` | `McpConf` | MCP 协议配置 |
 | `information_conf` | `IntelligenceCenterConf` | 情报中心配置 |
@@ -286,6 +287,18 @@ compose 下 `backend` 与 `backend_worker` 恰好 bind-mount 同一个 `/app/dat
 - 配置项 `linsight.skills_root` 已降级为「迁移脚本读取本地遗留 bundle 的来源」，运行期不再使用；
   本地缓存目录由 `linsight.skills_cache_dir` 指定（留空 = 进程缓存目录下的 `linsight_skills`）。
   **不要**把缓存目录指向共享卷。
+
+### v3.0 · 登录态 JWT 签名密钥不再内置（F068）
+
+< v3.0.0-beta2 的代码里带有一个公开的 `jwt_secret` 默认值，默认部署从未覆盖它，任何人都能用它伪造超管登录态（NVDB 报告）。升级后：
+
+| 情况 | 升级后行为 | 用户影响 |
+|------|-----------|---------|
+| `config.yaml` 从未配置 `jwt_secret`（绝大多数） | 首次启动自动生成随机密钥写入 `config.jwt_secret`，所有 api / worker 进程共用 | 全员重新登录一次 |
+| `config.yaml` 配了自己的私有值 | 继续使用 | 无感 |
+| `config.yaml` 抄了老代码里的默认值 | 命中黑名单，等同未配置 | 全员重新登录一次 |
+
+无需手动步骤。个人访问令牌与开放 API 凭据不走这把密钥，不受影响。要主动轮换：改 yaml 的值，或 `DELETE FROM config WHERE key='jwt_secret'` 后重启全部后端进程。
 
 ## 多节点部署
 

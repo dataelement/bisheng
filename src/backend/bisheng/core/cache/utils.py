@@ -30,6 +30,21 @@ CACHE: dict[str, Any] = {}
 
 CACHE_DIR = user_cache_dir("bisheng", "bisheng")
 
+# F068: a bare local path is only honoured inside the directories this process
+# writes downloads to. ``file_download`` / ``async_file_download`` are reachable
+# from user-controlled strings (finetune preset files, chat attachments), so
+# "the file exists" alone turned them into an arbitrary-file read.
+_LOCAL_FILE_ROOTS = (Path(CACHE_DIR), Path(tempfile.gettempdir()))
+
+
+def _ensure_allowed_local_file(path: str) -> None:
+    try:
+        resolved = Path(path).resolve()
+    except OSError as e:
+        raise ValueError(f"File path {path} is not accessible") from e
+    if not any(resolved.is_relative_to(root.resolve()) for root in _LOCAL_FILE_ROOTS):
+        raise ValueError(f"File path {path} is outside the allowed local directories")
+
 
 def create_cache_folder(func):
     def wrapper(*args, **kwargs):
@@ -382,6 +397,7 @@ def file_download(file_path: str):
     # If the system mounts a storage volume, remove ? The signature parameters behind it are read directly
     local_candidate = file_path.split("?")[0]
     if os.path.isfile(local_candidate):
+        _ensure_allowed_local_file(local_candidate)
         file_name = os.path.basename(local_candidate)
         # Compatible with legacy logic: handles what might be included in the filename md5 Prefix
         file_name = file_name.split("_", 1)[-1] if "_" in file_name else file_name
@@ -453,6 +469,7 @@ def file_download(file_path: str):
         raise ValueError("File path %s is not a valid file or url" % file_path)
 
     # This is the one that handles purely local file paths (the one with no parameters) and is usually handled by the topmost logic 1 Interception
+    _ensure_allowed_local_file(file_path)
     file_name = os.path.basename(file_path)
     file_name = file_name.split("_", 1)[-1] if "_" in file_name else file_name
     return file_path, file_name
@@ -465,6 +482,7 @@ async def async_file_download(file_path: str):
     # If the system mounts the storage volume, this will solve the problem directly
     local_candidate = file_path.split("?")[0]
     if os.path.isfile(local_candidate):
+        _ensure_allowed_local_file(local_candidate)
         file_name = os.path.basename(local_candidate)
         # Is it included under processing?md5Logic of (Keep original logic)
         file_name = file_name.split("_", 1)[-1] if "_" in file_name else file_name

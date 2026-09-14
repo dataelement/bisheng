@@ -60,6 +60,7 @@
 | —（无新增） | F064-kb-list-file-abnormal | 文档知识库外层列表只读展示库级文件解析异常，并支持仅异常筛选；复用既有 `Knowledge` / `KnowledgeFile` 与 F027 游标、F048 可见性，不新增领域对象、表、错误码或不变量。Alembic 仅增加 `knowledgefile` 复合索引 |
 | —（无新增） | F065-model-name-trim | 模型管理写入时去掉 `models[].model_name` 首尾空白；复用既有 `LLMModel` / `POST/PUT /api/v1/llm`，不新增领域对象、表、错误码、不变量或 Alembic |
 | **LicenseInfo**（平台级当前授权状态：每个商业模块一行；无 `tenant_id`；不含密文 / 私钥 / 设备指纹） | **F067-commercial-license-expiry-reminder** | 拥有 `license_info` 的写入语义与聚合读取。`etl` 由 BISHENG 拉 ETL 授权接口后 upsert；`dashboard` 由商业看板服务定期更新对应行；`gateway` 由管理后台读取 Gateway 状态后再交给 BISHENG upsert。不拥有 Gateway / ETL / 看板各自的授权密文与解密 |
+| —（无新增） | F068-nvdb-security-fixes | NVDB 2026-09-02 批次 5 个漏洞的修复：JWT 密钥去代码默认值（未配置时生成一次存 `config` 表，键 `jwt_secret`）、知识空间排序参数白名单、HTML 本地媒体目录围栏、文件下载工具本地路径围栏、创建工作流 / 助手接口校验 `create_app` 菜单权限。复用既有 `Config` 表与 `RoleAccess` WEB_MENU，不新增领域对象、错误码、对外 API 或 Alembic。工作流代码节点沙箱不在本 Feature |
 
 > ⚠️ **F054 编号冲突未决**：上表两行都占用 F054。`unified-citation-entries` 在 `feat/3.0.0-beta1` 取号，`contextual-department-membership` 在 `feat/3.0.0-beta1-test` 上已从 F053 改号而来，合并后再次撞号。两行都保留，改哪一个由各自 Feature owner 决定。
 
@@ -105,6 +106,7 @@
 | INV-33 | **身份模式只有两种、委托是纯替换且必须凭据先行**：权限基准 = 密钥主体（自身身份）或经五道准入的被代表用户（代表他人）；`delegate` 是唯一开关、持有即强制（漏传身份头报错、不落回自身身份）、范围必填且只有 `user` / `department` 两类；委托目标必须是自然人、非超管非租户管理员、同租户、在范围内，判定在调用期；模式 D 下资源与会话归被代表用户且不回授服务账号；三扩展位与 `delegate` 互斥硬阻断；`X-Bisheng-End-User` 不是身份模式、不参与任何权限判定 | ApiCredential | F053 |
 | INV-34 | **个人访问令牌的治理**：主体只能是自然人本人、权限动态继承持有人（不快照）、本期只可授予 `knowledge:read`，`identity:read` 与 `delegate` 永久禁令；随持有人停用 / 删除 5 秒内级联失效（**换租户不失效、随人迁移**——PRD v2.6 D19，原「离开租户级联失效」表述作废）；管理员短路照常生效但可见租户集合恒为密钥所属租户（超管不放开租户过滤），**且「短路照常」仅在默认数据范围（all_visible）下成立——租户级数据范围收窄（PRD v2.9 D21）优先于管理员短路，对含管理员在内的全体持有人一致生效**；两层能力开关默认关、关闭 = 停用不撤销、按主体类型独立（关 PAT 不得影响服务账号密钥）；数据范围同为调用期准入检查、不写凭据行、可逆；管理员台账只返回元数据 | ApiCredential, OpenApiTenantSetting | F053、F066 |
 | INV-35 | **商业授权状态是部署级当前值**：`license_info` 每个 `license_code` 至多一行，不带 `tenant_id`，不存授权密文 / 私钥 / 设备指纹。功能开关（ETL 地址、`BISHENG_DASHBOARD_PRO` 等）不得用来推断是否有效或何时到期。取源失败不得把已有成功记录改写成已过期；未取得不得展示为已过期 | LicenseInfo | F067 |
+| INV-36 | **登录态签名密钥不得来自代码**：`Settings.jwt_secret` 无可用默认值；历史内置默认值（`secret`、`secret_cF2k…`）即使写入 `config.yaml` 也视为未配置。未配置时由首次需要的进程随机生成并持久化到 `config.jwt_secret`，同一部署所有进程共用；轮换只经改 yaml 或删该记录后重启。任何直接拼接 `ORDER BY` / 读取调用方给定本地路径的代码必须先按固定集合 / 固定根目录校验 | Config, KnowledgeFile | F068 |
 
 （INV-1~7 为 v2.6.0 存量不变量，继续有效，见 `features/v2.6.0/release-contract.md`。）
 
@@ -139,6 +141,7 @@
 | F064-kb-list-file-abnormal | F027、F048、F051 | 文档知识库外层列表增加只读异常标记与 SQL 下推筛选；保持游标分页、可见-first 与行操作懒加载，不改 QA / 知识空间 / 解析写状态 |
 | F065-model-name-trim | 既有模型管理页、`POST/PUT /api/v1/llm` | 写入侧收紧 `model_name` 首尾空白；不改 19802、不回填存量、不新增错误码 |
 | F067-commercial-license-expiry-reminder | v2.6.0 F037（Gateway 状态接口与 Banner 入口）；ETL4LM 2.1.0-beta1 `GET /api/license_info`；商业看板服务写 `license_info` | 统一到期提醒；推翻 F037「Banner 只直连 Gateway」的展示路径，不改 Gateway 降级拦截范围 |
+| F068-nvdb-security-fixes | 既有 `Config` 表、`RoleAccess` WEB_MENU（`create_app`）、F027 目录 / 搜索排序参数、知识库 HTML 解析管线、`core/cache/utils` 下载工具 | 安全修复；每处只修根因所在层并加一道数据层再校验；不改前端、不加错误码。升级后全员重新登录 |
 
 ---
 
@@ -176,6 +179,7 @@
 | —（不新增） | 信息源订阅对账、公共文章同步与知识空间一次投递 | F060 仅调整内部任务与状态，不新增对外 API 或业务错误码 |
 | 260 | 开放 API 鉴权、身份传递、个人访问令牌、日常模式会话、限流 / 幂等 | F053；26001～26043 分段见 `053-openapi-auth-and-identity/design.md` §6.3（26013 / 26014 已废止不复用）；`26044`（PAT 数据范围受限，403）随 F066 增补（PRD v2.9 附录 C）；落码时按 C5 回写 `docs/constitution.md` |
 | 270 | 商业授权状态聚合与上报 | F067；实现时按 C5 回写 `docs/constitution.md`；不得占用 11x（灵思）或把 Gateway 11001 当成 BISHENG 模块号 |
+| —（不新增） | NVDB 漏洞修复 | F068 复用 403 / 422 与既有 `ValueError` 路径，不占模块号 |
 
 ---
 
@@ -210,3 +214,4 @@
 | 2026-09-13 | 登记 F066 PAT 数据范围收窄与「AI 助手接入」界面（PRD v2.9 D21 / D22）：表 1 新增 OpenApiTenantSetting 增量归属行（`pat_data_scope` 列 + 策略变更审计归 F066）；**修订 INV-34**——数据范围收窄优先于管理员短路、「短路照常」仅默认档成立，并同步订正其与 D19 相抵的「离开租户级联失效」残句为「换租户随人迁移」；错误码 260 段补 `26044` | F066、F053 |
 | 2026-09-14 | 登记 F067 商业授权统一到期提醒：新增 LicenseInfo 与 INV-35；分配错误码模块 270；Banner 数据源改为 `license_info` 聚合，覆盖 F037 的「只直连 Gateway + 软件授权」展示合同，不改 Gateway 降级范围 | F067、v2.6.0 F037 |
 | 2026-09-14 | 编号冲突改号：`feat/3.0.0-beta1` 合入 beta2 后，beta2 的商业授权统一到期提醒与 beta1 的 PAT 数据范围收窄同占 F066；商业授权一侧改号 **F067**（目录、表 1 归属行、INV-35、表 3 依赖、F037 影响行、错误码 270 归属同步），F066 专指 `pat-data-scope-and-ai-access` | F067、F066 |
+| 2026-09-14 | 登记 F068 NVDB 漏洞修复：表 1 标无新领域对象；新增 INV-36（登录态签名密钥不得来自代码）；表 3 记依赖既有 Config / WEB_MENU / 排序参数 / HTML 解析 / 下载工具；无新增错误码、对外 API、Alembic；代码节点沙箱另立 Feature | F068 |
