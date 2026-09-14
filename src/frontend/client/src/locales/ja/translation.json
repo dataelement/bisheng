@@ -51,6 +51,14 @@
   "com_app_explore_end_of_list": "—— ここまでです ——",
   "com_app_explore_loading_more": "エージェントを読み込み中...",
   "com_app_explore_no_agents": "該当するエージェントがありません",
+  "com_guest_app_unavailable": {
+    "offline_title": "このアプリは現在公開停止中です",
+    "offline_desc": "リンクを共有した方にご確認いただくか、しばらくしてからもう一度お試しください。",
+    "invalid_title": "リンクが利用できません",
+    "invalid_desc": "リンクが途中で切れていないかご確認のうえ、共有者に再度お問い合わせください。",
+    "closed_title": "ログイン不要の公開は停止されています",
+    "closed_desc": "現在はログインが必要です。リンクを共有した方にお問い合わせください。"
+  },
   "com_list_loading": "読み込み中…",
   "com_list_loading_more": "さらに読み込み中…",
   "com_list_load_failed": "読み込みに失敗しました",
