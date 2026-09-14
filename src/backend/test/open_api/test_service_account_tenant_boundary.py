@@ -30,6 +30,7 @@ from bisheng.open_api.domain.repositories.service_account_repository import (
 from bisheng.open_api.domain.schemas.credential import KeyIssueRequest, KeyUpdateRequest
 from bisheng.open_api.domain.schemas.service_account import ServiceAccountCreate, ServiceAccountUpdate
 from bisheng.open_api.domain.services.service_account_service import ServiceAccountService
+from bisheng.permission.domain.schemas import GrantMutationRequest
 from bisheng.user.domain.models.user import User
 
 ROOT_TENANT = 1
@@ -131,10 +132,18 @@ async def test_child_tenant_admin_cannot_grant_resources_to_a_root_account(open_
     admin = actor(user_id=99, tenant_id=CHILD_TENANT)
     token = current_tenant_id.set(CHILD_TENANT)
     try:
-        # The account lookup runs first, so the permission port is never called.
+        # Each endpoint looks the account up first, so the permission port is never called.
         with pytest.raises(ServiceAccountNotFoundError):
-            await account_endpoints.list_service_account_resource_grants(
+            await account_endpoints.list_service_account_resource_grants(root.id, _admin=admin, api=None)
+        with pytest.raises(ServiceAccountNotFoundError):
+            await account_endpoints.list_service_account_grantable_resources(
+                root.id, resource_type=None, keyword=None, _admin=admin, api=None
+            )
+        with pytest.raises(ServiceAccountNotFoundError):
+            await account_endpoints.mutate_service_account_resource_grants(
                 root.id,
+                # Never inspected: the lookup rejects the account before the body is read.
+                GrantMutationRequest.model_construct(),
                 resource_type="knowledge",
                 resource_id="1",
                 admin=admin,
