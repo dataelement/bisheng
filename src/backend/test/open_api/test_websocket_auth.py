@@ -77,7 +77,7 @@ async def test_connected_websocket_is_closed_when_credential_becomes_invalid(mon
         close=AsyncMock(),
     )
     monkeypatch.setattr(
-        "bisheng.open_api.api.dependencies.validate_bearer",
+        "bisheng.open_api.domain.services.credential_validator.validate_bearer",
         AsyncMock(side_effect=OpenApiCredentialInvalidError()),
     )
     token = set_current_open_api_principal(_principal())
@@ -99,7 +99,7 @@ async def test_connected_websocket_rejects_a_different_credential(monkeypatch) -
         close=AsyncMock(),
     )
     monkeypatch.setattr(
-        "bisheng.open_api.api.dependencies.validate_bearer",
+        "bisheng.open_api.domain.services.credential_validator.validate_bearer",
         AsyncMock(return_value=_principal(credential_id=6)),
     )
     token = set_current_open_api_principal(_principal(credential_id=5))

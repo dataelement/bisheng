@@ -3,8 +3,7 @@
 from fastapi import APIRouter, Depends, Request
 
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.open_api.api.dependencies import get_open_api_execution
-from bisheng.open_api.domain.context import OpenApiPrincipal
+from bisheng.open_api.domain.context import OpenApiPrincipal, require_current_open_api_principal
 from bisheng.open_api.domain.schemas.workstation import OpenDailyChatCompletionReq
 from bisheng.open_api.domain.scopes import open_api_scope
 from bisheng.open_api.domain.services.daily_chat_service import OpenDailyChatService
@@ -18,7 +17,7 @@ router = APIRouter(prefix="/workstation", tags=["OpenAPI", "WorkStation"])
 @router.get("/config", response_model=UnifiedResponseModel)
 @open_api_scope("chat:invoke")
 async def get_daily_config(
-    _principal: OpenApiPrincipal = Depends(get_open_api_execution),
+    _principal: OpenApiPrincipal = Depends(require_current_open_api_principal),
 ):
     operator = await get_open_api_operator_async()
     return resp_200(data=await WorkStationService.get_open_api_daily_config(operator))
@@ -29,7 +28,7 @@ async def get_daily_config(
 async def daily_chat_completions(
     request: Request,
     data: OpenDailyChatCompletionReq,
-    principal: OpenApiPrincipal = Depends(get_open_api_execution),
+    principal: OpenApiPrincipal = Depends(require_current_open_api_principal),
 ):
     operator = await get_open_api_operator_async()
     internal, subject = await OpenDailyChatService.prepare_request(
@@ -42,5 +41,5 @@ async def daily_chat_completions(
         internal,
         operator,
         session_subject=subject,
+        raise_setup_errors=True,
     )
-

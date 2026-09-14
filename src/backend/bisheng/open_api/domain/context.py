@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from bisheng.common.errcode.open_api import OpenApiEndpointUnregisteredError
+
 
 class OpenApiPrincipal(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -66,6 +68,13 @@ current_open_api_principal: ContextVar[OpenApiPrincipal | None] = ContextVar("cu
 
 def get_current_open_api_principal() -> OpenApiPrincipal | None:
     return current_open_api_principal.get()
+
+
+def require_current_open_api_principal() -> OpenApiPrincipal:
+    principal = get_current_open_api_principal()
+    if principal is None:
+        raise OpenApiEndpointUnregisteredError()
+    return principal
 
 
 def set_current_open_api_principal(principal: OpenApiPrincipal | None) -> Token:

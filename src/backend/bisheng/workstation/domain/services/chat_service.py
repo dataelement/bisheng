@@ -1632,6 +1632,7 @@ async def _agent_stream_chat_completion(
     *,
     recovery_attempt: ClaimedAttempt | None = None,
     recovery_message: ChatMessage | None = None,
+    raise_setup_errors: bool = False,
 ):
     """v2.5 LangGraph ReAct Agent chat completion.
 
@@ -1691,6 +1692,8 @@ async def _agent_stream_chat_completion(
         conversation_id = conversation.chat_id
     except (BaseErrorCode, ValueError) as exc:
         logger.warning("Agent chat setup rejected: {}", exc)
+        if raise_setup_errors:
+            raise
         error_response = exc if isinstance(exc, BaseErrorCode) else ServerError(message=str(exc))
         return StreamingResponse(
             iter([error_response.to_sse_event_instance_str()]),
@@ -1700,6 +1703,8 @@ async def _agent_stream_chat_completion(
         raise
     except Exception as exc:
         logger.exception(f"Error in agent chat completions setup: {exc}")
+        if raise_setup_errors:
+            raise
         return StreamingResponse(
             iter([ServerError(exception=exc).to_sse_event_instance_str()]),
             media_type="text/event-stream",
@@ -2437,6 +2442,7 @@ async def stream_chat_completion(
     login_user: UserPayload,
     *,
     session_subject: SessionSubject | None = None,
+    raise_setup_errors: bool = False,
 ):
     """v2.5 unified entry — every workstation chat request goes through the
     LangGraph ReAct Agent flow. When `data.tools` is empty/None the agent
@@ -2449,7 +2455,9 @@ async def stream_chat_completion(
     """
     if data.task_mode:
         return await _task_mode_stream_completion(request, data, login_user)
-    return await _agent_stream_chat_completion(request, data, login_user, session_subject)
+    return await _agent_stream_chat_completion(
+        request, data, login_user, session_subject, raise_setup_errors=raise_setup_errors
+    )
 
 
 # Upper bound for in-stream title generation (task mode). Matches the gen_title

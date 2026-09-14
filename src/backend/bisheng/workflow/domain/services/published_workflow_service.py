@@ -135,7 +135,7 @@ class PublishedWorkflowService:
         session_subject: SessionSubject,
     ) -> None:
         chat_id = session_id.split("_", 1)[0]
-        session = await ChatSessionService.get_subject_session(chat_id, session_subject)
+        session = await ChatSessionService.get_subject_session(chat_id, session_subject, forbidden_on_mismatch=True)
         if session.flow_id != workflow_id:
             raise NotFoundError.http_exception()
         callback = RedisCallback(session_id, workflow_id, chat_id, operator_user_id, source="api")
