@@ -310,7 +310,18 @@ def test_department_subtree_and_user_group_usersets_are_not_expanded() -> None:
         ("user_group:team#member", "ordinary_assignee", grant),
     }
     evaluator = ModelEvaluator(build_authorization_model_f048(), tuples)
-    assert evaluator.check("user:7", "can_edit", resource)
+    assert not evaluator.check("user:7", "can_edit", resource)
+    # ModelEvaluator receives the union of stored and request-local tuples.
+    with_context = ModelEvaluator(
+        build_authorization_model_f048(),
+        tuples
+        | {
+            ("user:7", "subtree_member", "department:root"),
+            ("user:7", "subtree_member", "department:child"),
+        },
+    )
+    assert with_context.check("user:7", "can_edit", resource)
+    assert not with_context.check("user:7", "member", "department:root")
     assert evaluator.check("user:8", "can_edit", resource)
 
 

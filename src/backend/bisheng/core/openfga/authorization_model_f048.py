@@ -12,7 +12,7 @@ import json
 from hashlib import sha256
 from typing import Any
 
-MODEL_VERSION = "f048-v2"
+MODEL_VERSION = "f048-v3-contextual-departments"
 
 DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "manage_permission",
@@ -184,10 +184,9 @@ def _base_type_definitions() -> list[dict]:
                 "child": _this(),
                 "admin": _union(_this(), _from("parent", "admin")),
                 "member": _this(),
-                "subtree_member": _union(
-                    _computed("member"),
-                    _from("child", "subtree_member"),
-                ),
+                # Membership is supplied by the trusted organization adapter
+                # as request-local tuples; never expand the child hierarchy.
+                "subtree_member": _this(),
             },
             "metadata": {
                 "relations": {
@@ -195,6 +194,7 @@ def _base_type_definitions() -> list[dict]:
                     "child": {"directly_related_user_types": [{"type": "department"}]},
                     "admin": {"directly_related_user_types": [{"type": "user"}]},
                     "member": {"directly_related_user_types": [{"type": "user"}]},
+                    "subtree_member": {"directly_related_user_types": [{"type": "user"}]},
                 }
             },
         },

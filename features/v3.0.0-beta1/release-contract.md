@@ -42,6 +42,7 @@
 | —（无新增） | F050-unified-permission-settings | 统一知识空间/频道新建与设置页面；复用既有 Knowledge、Channel、F048 Grant/Assignee 与 protected owner，不建立第二套权限领域对象 |
 | —（无新增） | F051-knowledge-list-action-lazy-load | 只调整文档/QA 知识库列表的动作权限读取时机与单行操作菜单体验；复用既有 Knowledge 与 F048 单资源权限读取，不新增领域对象、表、错误码、Grant、权限模式或 OpenFGA relation |
 | —（无新增） | F052-workflow-session-auto-rerun | 只增加系统级统一开关和工作流独立会话打开时的一次性自动重新运行行为；复用既有工作流会话与手动重新运行能力，不新增领域对象、表或错误码 |
+| —（无新增） | F053-contextual-department-membership | 复用组织域 canonical 成员/祖先事实作为请求时权限输入，消除 OpenFGA 部门子树递归；仅演进 F048 授权模型与运行时装配，不新增组织对象、永久成员闭包或业务接口 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
