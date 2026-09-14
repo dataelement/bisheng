@@ -21,6 +21,9 @@ TENANT_CHECK_EXEMPT_PATHS = (
     "/api/v1/user/public_key",
     # 登录页拉验证码；若仍带失效 Bearer，不应走 token_version 否则永远 19103、前端拿不到 user_capthca
     "/api/v1/user/get_captcha",
+    # Kicked-off sessions still need logout to unset the HttpOnly cookie;
+    # otherwise the login page's /user/info keeps 10604-looping the dialog.
+    "/api/v1/user/logout",
     "/api/v1/user/switch-tenant",
     "/api/v1/user/tenants",
     "/api/v1/env",
@@ -143,6 +146,42 @@ async def _validate_token_version(
     return int(current) == int(payload_token_version)
 
 
+async def _validate_current_session_token(user_id: int, token: str) -> bool:
+    """Return True when this JWT is the user's current Redis session.
+
+    ``allow_multi_login=true`` skips the check (every issued JWT stays valid).
+    On config/Redis failure, or when Redis has no session key, we **fail-open**
+    — block only on a confirmed mismatch with a stored token.
+    """
+    if not user_id or not token:
+        return True
+    try:
+        from bisheng.common.services.config_service import settings
+
+        login_method = await settings.aget_system_login_method()
+        if login_method.allow_multi_login:
+            return True
+    except Exception as exc:
+        # Config lookup is best-effort: a miss must not lock users out.
+        logger.debug("allow_multi_login lookup failed for user {}: {}", user_id, exc)
+        return True
+
+    try:
+        from bisheng.core.cache.redis_manager import get_redis_client
+        from bisheng.user.domain.const import USER_CURRENT_SESSION
+
+        redis_client = await get_redis_client()
+        current_token = await redis_client.aget(USER_CURRENT_SESSION.format(user_id))
+    except Exception as exc:
+        # Redis hiccup is best-effort: a miss must not lock users out.
+        logger.debug("current session lookup failed for user {}: {}", user_id, exc)
+        return True
+
+    if not current_token:
+        return True
+    return str(current_token) == token
+
+
 async def _check_is_global_super(
     user_id: int,
     *,
@@ -237,11 +276,12 @@ async def _apply_token_version_and_visible(
     *,
     decoded_subject: dict | None = None,
 ) -> JSONResponse | None:
-    """Enforce token_version + set visible_tenant_ids from a decoded JWT.
+    """Enforce token_version + current-session + set visible_tenant_ids.
 
-    Returns a JSONResponse (401) when the token_version mismatches; None
-    otherwise. ``decoded_subject`` lets the caller share a JWT decode across
-    middleware steps so the same token isn't decoded twice.
+    Returns a JSONResponse (401) when the token_version mismatches or, with
+    ``allow_multi_login=false``, when the JWT is not the Redis current session;
+    None otherwise. ``decoded_subject`` lets the caller share a JWT decode
+    across middleware steps so the same token isn't decoded twice.
     """
     subject = decoded_subject if decoded_subject is not None else _decode_jwt_subject(token)
     if subject is None:
@@ -255,6 +295,17 @@ async def _apply_token_version_and_visible(
             content={
                 "status_code": 19103,
                 "status_message": "token_version mismatch — please re-login",
+                "data": None,
+            },
+        )
+    if user_id and not await _validate_current_session_token(user_id, token):
+        from bisheng.common.errcode.user import UserLoginOfflineError
+
+        return JSONResponse(
+            status_code=401,
+            content={
+                "status_code": UserLoginOfflineError.Code,
+                "status_message": UserLoginOfflineError.Msg,
                 "data": None,
             },
         )

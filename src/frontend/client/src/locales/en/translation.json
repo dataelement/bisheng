@@ -1219,6 +1219,10 @@
   "subscribe_success": "Subscribed successfully",
   "subscribed": "Joined",
   "website": "Website",
+  "com_auth": {
+    "got_it": "Got it",
+    "session_kicked_title": "Signed out"
+  },
   "com_app": {
     "center_title": "App Center",
     "empty_go_explore": "No apps used yet. Head to the app marketplace",

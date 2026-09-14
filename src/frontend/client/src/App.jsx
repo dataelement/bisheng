@@ -8,6 +8,7 @@ import Toast from './components/ui/Toast';
 import { SystemMaintenanceOverlay } from './components/SystemMaintenanceOverlay';
 import { ScreenshotProvider, ThemeProvider, useApiErrorBoundary } from './hooks';
 import { ToastProvider, ConfirmProvider } from './Providers';
+import { SessionKickListener } from './components/Auth/SessionKickListener';
 import { router } from './routes';
 
 const App = () => {
@@ -34,6 +35,7 @@ const App = () => {
         <LiveAnnouncer>
           <ThemeProvider>
             <ConfirmProvider>
+              <SessionKickListener />
               <ToastProvider>
                 <DndProvider backend={HTML5Backend}>
                   <RouterProvider router={router} />

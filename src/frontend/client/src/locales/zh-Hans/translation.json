@@ -1146,6 +1146,10 @@
   "subscribe_success": "订阅成功",
   "subscribed": "已加入",
   "website": "网站",
+  "com_auth": {
+    "got_it": "知道了",
+    "session_kicked_title": "会话已注销"
+  },
   "com_app": {
     "center_title": "应用中心",
     "empty_go_explore": "暂无使用过的应用，可以前往应用广场",
