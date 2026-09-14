@@ -503,7 +503,7 @@ class LinsightConf(BaseModel):
 class DailyChatConf(BaseModel):
     """Daily-chat (日常模式) Agent runtime configuration.
 
-    Stored in DB config (written by POST /api/v1/config/save) under key `daily_chat`.
+    Stored in DB config (written by POST /api/v1/settings/save) under key `daily_chat`.
     Read at request time via ConfigService.aget_daily_chat_conf().
     """
 

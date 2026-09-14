@@ -22,6 +22,8 @@ return resp_500(code, msg)   # business error
 ```
 Error codes (MMMEE) & module numbers → constitution **C5**. Pagination: `PageData[T]` (new code, fields `data` + `total`); `PageList[T]` legacy-compat only.
 
+**Route paths never contain `config`** (any case or form — `configs`, `runtime-config` included); use `settings`. Customer WAFs block URLs containing `config` as sensitive-file probes, so the request dies before reaching the backend: no access-log line, and the page just fails. Path parameter names (`{config_id}`) don't reach the URL and are fine. Pre-rule routes are frozen in `test/api/test_route_path_naming.py`, shrink-only — rename one only on customer demand, updating its frontend callers in the same change.
+
 **Logging**: project logger is loguru (`from loguru import logger`), which formats with **str.format `{}`**, *not* printf. So:
 
 - Use `{}` / `{!r}` placeholders with each value passed as a separate arg — `logger.info("parsed {} files for kb={}", n, kb_id)`, `logger.debug("payload={!r}", obj)`. This is lazy (skipped when the level is off) and the loguru-native form.
