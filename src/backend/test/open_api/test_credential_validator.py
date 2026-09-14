@@ -6,7 +6,6 @@ from bisheng.common.errcode.open_api import (
     OpenApiAuthDependencyUnavailableError,
     OpenApiCredentialInvalidError,
     OpenApiCredentialMissingError,
-    ServiceAccountInactiveError,
 )
 from bisheng.open_api.domain.models.api_credential import SUBJECT_KIND_SERVICE_ACCOUNT
 from bisheng.open_api.domain.models.service_account import ServiceAccount
@@ -60,7 +59,7 @@ async def test_revoked_expired_disabled_and_prefix_mismatch_fail_closed(open_api
         request=KeyIssueRequest(name="key", expires_at=datetime.now() + timedelta(days=1)),
         created_by=3,
     )
-    with pytest.raises(ServiceAccountInactiveError):
+    with pytest.raises(OpenApiCredentialInvalidError):
         await validate_bearer(f"Bearer {issued.plaintext}")
 
     digest = hash_token(issued.plaintext)

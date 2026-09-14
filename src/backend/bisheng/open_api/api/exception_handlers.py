@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
-from bisheng.common.errcode.base import BaseErrorCode, BusinessHTTPException
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.errcode.open_api import OpenApiAuthError
@@ -28,23 +28,21 @@ def _response(exc: BaseErrorCode, status_code: int) -> JSONResponse:
     return JSONResponse(status_code=status_code, content=jsonable_encoder(exc.to_dict()))
 
 
-def open_api_http_status(exc: BaseErrorCode | BusinessHTTPException) -> int:
+def open_api_http_status(exc: BaseErrorCode) -> int:
     """Map a v2 business error to its transport status without changing its code."""
 
-    error_type = exc.error_type if isinstance(exc, BusinessHTTPException) else type(exc)
-    code = exc.status_code if isinstance(exc, BusinessHTTPException) else exc.code
-    if issubclass(error_type, OpenApiAuthError):
-        return getattr(exc, "http_status", error_type.http_status)
-    if issubclass(error_type, (PermissionServiceUnavailableError, PermissionBackendUnavailableError)):
+    if isinstance(exc, OpenApiAuthError):
+        return exc.http_status
+    if isinstance(exc, (PermissionServiceUnavailableError, PermissionBackendUnavailableError)):
         return 503
-    if issubclass(error_type, (UnAuthorizedError, PermissionDeniedError, SpacePermissionDeniedError)):
+    if isinstance(exc, (UnAuthorizedError, PermissionDeniedError, SpacePermissionDeniedError)):
         return 403
-    if issubclass(error_type, (NotFoundError, PermissionInvalidResourceError)):
+    if isinstance(exc, (NotFoundError, PermissionInvalidResourceError)):
         return 404
-    if error_type.__name__.endswith("NotFoundError") or "NotExist" in error_type.__name__:
+    if type(exc).__name__.endswith("NotFoundError") or "NotExist" in type(exc).__name__:
         return 404
-    if code in {401, 403, 404, 409, 429, 500, 503}:
-        return int(code)
+    if exc.code in {401, 403, 404, 409, 429, 500, 503}:
+        return int(exc.code)
     return 400
 
 

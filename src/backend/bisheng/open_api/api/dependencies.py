@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import Depends, Request, WebSocket, WebSocketException
 from starlette.requests import HTTPConnection
@@ -29,11 +31,7 @@ from bisheng.open_api.domain.context import (
     set_current_open_api_principal,
 )
 from bisheng.open_api.domain.scopes import get_open_api_scope_marker
-from bisheng.open_api.domain.services.credential_validator import (
-    WS_POLICY_VIOLATION,
-    validate_bearer,
-    watch_websocket_credential,
-)
+from bisheng.open_api.domain.services.credential_validator import validate_bearer
 from bisheng.open_api.domain.services.identity_service import (
     assert_no_removed_identity_headers,
     resolve_request_identity,
@@ -47,17 +45,12 @@ from bisheng.permission.application.identity import (
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.user.domain.services.auth import AuthJwt
 
+WS_POLICY_VIOLATION = 1008
 _SCOPE_PRINCIPAL_KEY = "open_api_principal"
 
 
 async def verify_open_api_access(conn: HTTPConnection) -> AsyncIterator[OpenApiPrincipal]:
     """Authenticate a v2 connection and install its typed execution identity."""
-
-    installed = get_current_open_api_principal()
-    if installed is not None and conn.scope.get(_SCOPE_PRINCIPAL_KEY) is installed:
-        # The HTTP route wrapper already authenticated before body parsing.
-        yield installed
-        return
 
     try:
         principal = await validate_bearer(conn.headers.get("Authorization"))
@@ -159,6 +152,37 @@ async def get_service_account_admin(auth_jwt: AuthJwt = Depends()) -> UserPayloa
         return await UserPayload.get_tenant_admin_user(auth_jwt)
     except LLMModelSharedReadonlyError as exc:
         raise UnAuthorizedError() from exc
+
+
+@asynccontextmanager
+async def watch_websocket_credential(
+    websocket: WebSocket,
+    *,
+    interval_seconds: float = 3.0,
+) -> AsyncIterator[None]:
+    """Close a connected v2 socket when its credential becomes invalid."""
+
+    expected = get_current_open_api_principal()
+
+    async def monitor() -> None:
+        while True:
+            await asyncio.sleep(interval_seconds)
+            try:
+                current = await validate_bearer(websocket.headers.get("Authorization"))
+                if expected is None or current.credential_id != expected.credential_id:
+                    raise OpenApiEndpointUnregisteredError()
+            except OpenApiAuthError as exc:
+                with suppress(RuntimeError):
+                    await websocket.close(code=WS_POLICY_VIOLATION, reason=str(exc.code))
+                return
+
+    task = asyncio.create_task(monitor(), name="open-api-websocket-credential-watch")
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
 
 def _raise_for_connection(conn: HTTPConnection, exc: OpenApiAuthError) -> None:

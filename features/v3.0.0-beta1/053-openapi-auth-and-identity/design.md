@@ -117,8 +117,6 @@
 
 ### 3.2 v2 密钥请求处理管线（HTTP / WebSocket 共用）
 
-HTTP 的 `OpenApiRouter` 将所有子路由统一装配为 `OpenApiRoute`，在 FastAPI 解析请求体前运行本管线；原有全局依赖复用已安装的身份，不重复校验。登录中间件对 v2 不解析 Cookie/JWT，避免登录状态抢先返回非 260 段错误。WebSocket 继续在握手依赖中校验。
-
 ```text
 Authorization: Bearer bs-sak-… / bs-pat-…
         │
@@ -473,16 +471,11 @@ F048 的 Catalog active、模型 enabled、动作 active、grant level 以及资
 | 11 | v3 history / gen_title 当前只靠 chat_id 容易越界 | 增加 `public_v3` 会话来源校验并绑定资源 |
 | 12 | client guest 页面除 WS 外还会请求 flow/info/history/title | v3 allowlist 必须覆盖完整调用图，端到端验证浏览器 Network |
 | 13 | commercial gateway 目前显式写有 v2 assistant/chat 规则 | v3 HTTP + WS 路由必须同步调整并做商业版回归 |
-| 14 | 平台全局 HTTP handler 会把部分异常压成 200 信封；旧 `.http_exception()` 又把五位业务码放进 HTTP status | `.http_exception()` 保留原错误类型，v2 与直接抛 `BaseErrorCode` 共用映射：权限拒绝 403、防枚举 404、权限依赖故障 503、其余请求类业务错误 400；业务码保持原值；v1 信封不变。助手调用和日常对话的前置错误交由该映射处理，不能吞成 500 或先开启 SSE |
+| 14 | 平台全局 HTTP handler 会把部分异常压成 200 信封 | v2 对全部 `BaseErrorCode` 统一映射：权限拒绝 403、防枚举 404、权限依赖故障 503、其余请求类业务错误 400；业务码保持原值；v1 信封不变 |
 | 15 | QA id 可以绕过知识库入口形成 IDOR | `detail_qa/update_qa/delete/add_relative/query_qa` 均先由 QA 定位所属知识库，再经 `KnowledgeService` 内的 `PermissionService` 校验 visible/edit；鉴权通过前禁止 DAO 写入、索引或异步任务 |
 | 16 | multipart 的废弃 `user_id` 不会进入 JSON 检查 | v2 全局依赖同时检查 query、JSON、multipart 和 urlencoded；出现即 400/26019，不能静默忽略 |
 | 17 | HTTP 内网地址不提供 `crypto.randomUUID()`；服务账号授权会在读取 `context` 后、发出写请求前抛错，弹窗无法保存关闭，修改与撤销同样受影响 | `resourceGrantUtils.createResourceGrantIdempotencyKey` 使用 HTTP 可用的 `crypto.getRandomValues()` 生成 128 位随机提交标识，新增、修改、撤销共用；此标识沿用 F048 授权变更契约，与本期排除的 v2 业务 API 幂等能力无关 |
 | 18 | 模型发布成功或 checksum 已一致，不代表旧资源已有 `service_account:*` 的模式和启用标记 | 模型发布脚本和完整对账脚本共用补齐逻辑；`already_current` 也必须写入并校验标记，失败不返回成功，不切换 Catalog；首次迁移覆盖两种主体的逐层标记 |
-| 19 | 主体停用/删除会级联撤销密钥，先统一检查 revoked 会丢失主体失效原因 | 验明密钥 hash 和主体前缀后，按 `subject_disabled/subject_deleted` 返回 PAT `401/26043` 或服务账号 `401/26027`；普通撤销和过期仍为 `401/26002`。`26027` 复用既有码，PRD 附录 C 要求此原因可区分 |
-| 20 | 委托目标的超长数字可能在 Python 转整数或数据库绑定时异常 | 先校验委托能力，再按 User 的 INTEGER 范围校验目标；无能力 `403/26004`，非法目标 `403/26005`。两个身份头并存仍优先返回 `400/26010` |
-| 21 | 停止与读取会话不能共用同一个失败状态 | v2 停止异主会话按 PRD AC-20 返回 403；查询、续接仍按 §4.6.3 返回 404；停止不存在的会话仍为 404 |
-
-2026-09-14 错误契约校准的逐项依据、覆盖范围与验证结果见 [error-contract-review.md](error-contract-review.md)。
 
 ---
 
