@@ -405,7 +405,7 @@ spring.cloud.gateway.routes:
 
 **注意**: 默认 WebSocket Routing Filter 已禁用（`global-filter.websocket-routing.enabled: false`），由自定义的 `SelfWebsocketRoutingFilter` 接管，实现在线计数和限流检查。
 
-**对外地址与转发头**：Spring Cloud Gateway 转发时会把 `Host` 改写成上游地址（`backend:7860`），默认的 `XForwardedHeadersFilter` 只会在 `X-Forwarded-Host/Proto` 上**追加**网关自己看到的值。后端把自身地址写进对外文件（技能包 zip、安装提示词）时按 `X-Forwarded-Proto/Host` 首值推导，而网关形态下这两个值反映的仍是网关前面那一跳；`PreserveHostHeader` 也只能救 Host 救不了 scheme。**网关形态一律在后端 `config.yaml` 配置 `open_api.public_base_url`（浏览器访问平台的地址，如 `https://kb.example.com`）**，配置项优先级最高。
+**对外地址与转发头**：Spring Cloud Gateway 转发时把 `Host` 改写成上游地址（`backend:7860`），默认的 `XForwardedHeadersFilter` 在 `X-Forwarded-Host/Proto` 上**追加**自己看到的值而不覆盖。后端写进技能包的地址取这两个头的**首值**，所以网关前面有仓库自带 nginx（它会传浏览器视角的转发头）时可以自动推导；网关直接对外时首值是网关自己看到的内网地址，必须在后端 `config.yaml` 配置 `open_api.public_base_url`。无论哪种形态，员工运行「AI 助手接入」弹窗复制的配置命令时都会带上浏览器地址，包内地址只是兜底。详见 [08-deployment 反向代理与对外地址](08-deployment.md#反向代理与对外地址)。
 
 ### 10.2 bisheng 集成
 
