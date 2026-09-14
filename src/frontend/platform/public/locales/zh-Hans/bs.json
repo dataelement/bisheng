@@ -8,7 +8,6 @@
     "expiring": "{{name}}将于 {{date}} 到期，剩余 {{days}} 天",
     "expired": "{{name}}已于 {{date}} 过期",
     "renewHint": "请联系授权提供方续期。",
-    "bannerLabel": "授权到期提醒 Banner",
     "businessExpired": {
       "gateway": "Gateway 授权已过期，当前无法使用该能力",
       "etl": "ETL 授权已过期，当前无法解析该文件",

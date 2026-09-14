@@ -4,7 +4,6 @@ import {
     reportGatewayLicense,
     type CommercialLicenseItem,
 } from "@/controllers/API/license";
-import i18next from "i18next";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -14,9 +13,7 @@ import { shouldFetchGatewayLicenseStatus } from "./licenseBannerGateway";
 // Sampled from the design PNG (not the warning token #FF7D00 / #FFF7E8):
 // border+accent #E69739, fill #FFF8E6, body text #7A4B19.
 const BANNER_CARD =
-    "relative flex items-center justify-center gap-2 overflow-visible rounded-t-2xl rounded-b-none border-2 border-[#E69739] bg-[#FFF8E6] px-4 py-2.5 text-center text-sm text-[#7A4B19] dark:border-[#FF9626] dark:bg-[#4D1B00] dark:text-amber-100";
-const BANNER_LABEL =
-    "absolute -top-2.5 right-8 z-10 rounded-full border-2 border-[#E69739] bg-[#FFF8E6] px-2.5 py-[3px] text-xs font-medium leading-none text-[#E69739] dark:border-[#FF9626] dark:bg-[#4D1B00] dark:text-[#FF9626]";
+    "flex items-center justify-center gap-2 rounded-t-2xl rounded-b-none border-2 border-[#E69739] bg-[#FFF8E6] px-4 py-2.5 text-center text-sm text-[#7A4B19] dark:border-[#FF9626] dark:bg-[#4D1B00] dark:text-amber-100";
 
 /**
  * Persistent top banner for commercial license expiry.
@@ -35,10 +32,6 @@ export function LicenseBanner() {
     useEffect(() => {
         let active = true;
         const load = async () => {
-            // Public locale JSON is not in the Vite module graph; HMR of this
-            // component would otherwise keep a stale `bs` bundle and fall back
-            // to en-US ("License expiry Banner") while the body stays Chinese.
-            await i18next.reloadResources(i18next.language, "bs");
             let aggregated = await getCommercialLicenseStatus();
             if (shouldFetchGatewayLicenseStatus(aggregated?.licenses)) {
                 const gateway = await getLicenseStatus();
@@ -73,9 +66,8 @@ export function LicenseBanner() {
     if (!visible) return null;
 
     return (
-        <div ref={ref} className="shrink-0 overflow-visible bg-background-main px-4 pt-5">
+        <div ref={ref} className="shrink-0 bg-background-main px-4 pt-3">
             <div role="alert" className={BANNER_CARD}>
-                <span className={BANNER_LABEL}>{t("license.bannerLabel")}</span>
                 <span
                     aria-hidden="true"
                     className="flex size-5 shrink-0 items-center justify-center rounded bg-[#E69739] text-[12px] font-semibold leading-none text-white dark:bg-[#FF9626]"

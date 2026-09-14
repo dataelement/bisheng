@@ -8,7 +8,6 @@
     "expiring": "{{name}} expires on {{date}}, {{days}} day(s) remaining",
     "expired": "{{name}} expired on {{date}}",
     "renewHint": "Please contact your license provider to renew.",
-    "bannerLabel": "License expiry Banner",
     "businessExpired": {
       "gateway": "The Gateway license has expired. This capability is currently unavailable.",
       "etl": "The ETL license has expired. This file cannot be parsed.",

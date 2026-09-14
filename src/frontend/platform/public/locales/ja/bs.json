@@ -8,7 +8,6 @@
     "expiring": "{{name}}は {{date}} に期限切れになります。残り {{days}} 日です",
     "expired": "{{name}}は {{date}} に期限切れになりました",
     "renewHint": "ライセンス提供元に更新を依頼してください。",
-    "bannerLabel": "ライセンス期限 Banner",
     "businessExpired": {
       "gateway": "Gateway ライセンスの有効期限が切れています。現在この機能は利用できません",
       "etl": "ETL ライセンスの有効期限が切れています。現在このファイルを解析できません",
