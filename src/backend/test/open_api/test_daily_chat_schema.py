@@ -14,7 +14,7 @@ def test_daily_schema_is_internal_schema_minus_exactly_two_fields():
     assert OpenDailyChatCompletionReq.model_fields["clientTimestamp"].is_required()
 
 
-@pytest.mark.parametrize("field", ["task_mode", "use_knowledge_base", "turn_id"])
+@pytest.mark.parametrize("field", ["task_mode", "use_knowledge_base", "execution", "run_mode", "turn_id"])
 def test_daily_schema_forbids_removed_and_unknown_fields(field):
     payload = {"clientTimestamp": "1", "model": "m", field: False}
     with pytest.raises(ValidationError):

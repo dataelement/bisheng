@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import hmac
 import re
-from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager, suppress
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 
 from loguru import logger
@@ -16,18 +14,14 @@ from bisheng.common.errcode.open_api import (
     OpenApiAuthError,
     OpenApiCredentialInvalidError,
     OpenApiCredentialMissingError,
-    OpenApiEndpointUnregisteredError,
     PersonalTokenHolderInvalidError,
-    ServiceAccountInactiveError,
 )
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.open_api.domain.context import OpenApiPrincipal, get_current_open_api_principal
+from bisheng.open_api.domain.context import OpenApiPrincipal
 from bisheng.open_api.domain.models.api_credential import (
     KEY_SECRET_LENGTH,
     PERSONAL_TOKEN_PREFIX,
-    REVOKE_REASON_SUBJECT_DELETED,
-    REVOKE_REASON_SUBJECT_DISABLED,
     SERVICE_ACCOUNT_KEY_PREFIX,
     SUBJECT_KIND_NATURAL_PERSON,
     SUBJECT_KIND_SERVICE_ACCOUNT,
@@ -43,7 +37,6 @@ _TOKEN_RE = re.compile(
 )
 
 SubjectResolver = Callable[[ApiCredential], Awaitable[OpenApiPrincipal]]
-WS_POLICY_VIOLATION = 1008
 
 
 def extract_bearer_token(authorization: str | None) -> str:
@@ -57,9 +50,7 @@ def extract_bearer_token(authorization: str | None) -> str:
 
 async def resolve_service_account(row: ApiCredential) -> OpenApiPrincipal:
     account = await ServiceAccountRepository.get(row.subject_id)
-    if account is None or not account.is_enabled:
-        raise ServiceAccountInactiveError()
-    if account.tenant_id != row.tenant_id:
+    if account is None or not account.is_enabled or account.tenant_id != row.tenant_id:
         raise OpenApiCredentialInvalidError()
     return OpenApiPrincipal(
         credential_id=row.id,
@@ -153,16 +144,7 @@ async def _resolve_from_database(plaintext: str, digest: str) -> OpenApiPrincipa
     now = datetime.now()
     if row is None or not hmac.compare_digest(row.token_hash, digest):
         raise OpenApiCredentialInvalidError()
-    if not _prefix_matches_subject(plaintext, row.subject_kind):
-        raise OpenApiCredentialInvalidError()
-    if row.revoked_at is not None and row.revoke_reason in {
-        REVOKE_REASON_SUBJECT_DISABLED,
-        REVOKE_REASON_SUBJECT_DELETED,
-    }:
-        if row.subject_kind == SUBJECT_KIND_NATURAL_PERSON:
-            raise PersonalTokenHolderInvalidError()
-        raise ServiceAccountInactiveError()
-    if not row.is_valid_at(now):
+    if not _prefix_matches_subject(plaintext, row.subject_kind) or not row.is_valid_at(now):
         raise OpenApiCredentialInvalidError()
     resolver = SUBJECT_RESOLVERS.get(row.subject_kind)
     if resolver is None:
@@ -177,39 +159,10 @@ async def _assert_tenant_active(tenant_id: int, redis) -> None:
         raise OpenApiCredentialInvalidError()
 
 
-@asynccontextmanager
-async def watch_websocket_credential(websocket, *, interval_seconds: float = 3.0) -> AsyncIterator[None]:
-    """Close a connected v2 socket when its credential becomes invalid."""
-
-    expected = get_current_open_api_principal()
-
-    async def monitor() -> None:
-        while True:
-            await asyncio.sleep(interval_seconds)
-            try:
-                current = await validate_bearer(websocket.headers.get("Authorization"))
-                if expected is None or current.credential_id != expected.credential_id:
-                    raise OpenApiEndpointUnregisteredError()
-            except OpenApiAuthError as exc:
-                with suppress(RuntimeError):
-                    await websocket.close(code=WS_POLICY_VIOLATION, reason=str(exc.code))
-                return
-
-    task = asyncio.create_task(monitor(), name="open-api-websocket-credential-watch")
-    try:
-        yield
-    finally:
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
-
-
 __all__ = [
     "SUBJECT_RESOLVERS",
-    "WS_POLICY_VIOLATION",
     "extract_bearer_token",
     "resolve_natural_person",
     "resolve_service_account",
     "validate_bearer",
-    "watch_websocket_credential",
 ]

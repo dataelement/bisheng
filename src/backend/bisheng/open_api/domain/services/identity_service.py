@@ -26,7 +26,9 @@ def assert_no_removed_identity_headers(headers: Iterable[tuple[str, str]]) -> No
     allowed = {ON_BEHALF_OF_HEADER.lower(), END_USER_HEADER.lower()}
     for name, _value in headers:
         normalized = name.lower()
-        if normalized not in allowed and (normalized.endswith("-on-behalf-of") or normalized.endswith("-end-user")):
+        if normalized not in allowed and (
+            normalized.endswith("-on-behalf-of") or normalized.endswith("-end-user")
+        ):
             raise OpenApiRemovedIdentityInputError()
 
 
@@ -39,18 +41,9 @@ def parse_identity_headers(
         raise OpenApiIdentityHeaderConflictError()
     target_id = None
     if on_behalf_of is not None:
-        normalized = on_behalf_of.lstrip("0")
-        # User IDs are SQL INTEGERs. Reject out-of-range input before int()/DB
-        # conversion can turn an invalid target into a 500/503 response.
-        if (
-            not on_behalf_of.isascii()
-            or not on_behalf_of.isdecimal()
-            or not normalized
-            or len(normalized) > 10
-            or int(normalized) > 2**31 - 1
-        ):
+        if not on_behalf_of.isascii() or not on_behalf_of.isdecimal() or int(on_behalf_of) <= 0:
             raise OpenApiDelegationTargetInvalidError()
-        target_id = int(normalized)
+        target_id = int(on_behalf_of)
     if end_user is not None:
         encoded = end_user.encode("utf-8")
         if not end_user or len(encoded) > 128 or any(byte < 0x20 or byte > 0x7E for byte in encoded):
@@ -64,23 +57,18 @@ async def resolve_request_identity(
     on_behalf_of: str | None,
     end_user: str | None,
 ) -> OpenApiPrincipal:
-    has_delegate = principal.has_scope("delegate")
-    if (
-        on_behalf_of is not None
-        and end_user is None
-        and (principal.actor_kind != "service_account" or not has_delegate)
-    ):
-        # Check delegation capability before interpreting a target, while
-        # retaining the explicit conflict error when both headers are present.
-        raise OpenApiDelegationNotAllowedError()
     target_id, external_user_id = parse_identity_headers(
         on_behalf_of=on_behalf_of,
         end_user=end_user,
     )
+    has_delegate = principal.has_scope("delegate")
     if target_id is None:
         if has_delegate:
             raise OpenApiDelegationHeaderRequiredError()
         return principal.model_copy(update={"end_user_id": external_user_id})
+
+    if principal.actor_kind != "service_account" or not has_delegate:
+        raise OpenApiDelegationNotAllowedError()
 
     try:
         target = await OwnerRepository.get_active_natural_person(target_id)
