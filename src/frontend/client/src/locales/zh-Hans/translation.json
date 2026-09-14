@@ -51,6 +51,14 @@
   "com_app_explore_end_of_list": "—— 已经到底啦 ——",
   "com_app_explore_loading_more": "正在加载更多智能体...",
   "com_app_explore_no_agents": "暂无找到相关的智能体",
+  "com_guest_app_unavailable": {
+    "offline_title": "该应用已下线，暂时无法使用",
+    "offline_desc": "可以联系分享链接给你的人确认一下，或者过段时间再来看看。",
+    "invalid_title": "链接无效或已失效",
+    "invalid_desc": "请检查链接是否复制完整，或向分享者重新索取。",
+    "closed_title": "免登录访问已关闭",
+    "closed_desc": "现在需要登录后才能使用，请联系分享链接给你的人。"
+  },
   "com_list_loading": "正在加载…",
   "com_list_loading_more": "正在加载更多…",
   "com_list_load_failed": "加载失败",

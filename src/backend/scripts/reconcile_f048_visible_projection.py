@@ -438,7 +438,7 @@ async def _load_persisted_sources() -> tuple[PermissionVisibleSourceProjection, 
             )
 
 
-async def _load_service_account_resource_markers() -> frozenset[tuple[str, str, str]]:
+async def load_service_account_resource_markers() -> frozenset[tuple[str, str, str]]:
     """Compile SA state gates from the authoritative CURRENT resource modes."""
 
     with bypass_tenant_filter():
@@ -831,6 +831,20 @@ async def _verify_expected_tuples(
         )
 
 
+async def ensure_service_account_resource_markers(
+    client: FGAClient,
+    expected: frozenset[tuple[str, str, str]],
+) -> None:
+    """Repair resource-state gates after the caller establishes maintenance.
+
+    Both the model publisher and the full reconciler use CURRENT SQL modes as
+    their source. Never turn CUSTOM resources into INHERIT or create per-account
+    descendant Grants. Duplicate-ignore writes make unchanged-model runs safe.
+    """
+    await _ensure_expected_tuples(client, expected, batch_size=80)
+    await _verify_expected_tuples(client, expected)
+
+
 async def _authorization_release_id(store_id: str, model_id: str) -> int:
     with bypass_tenant_filter():
         async with get_async_db_session() as session:
@@ -1006,7 +1020,7 @@ async def execute(args: argparse.Namespace, *, live_settings: Any = settings) ->
         target_client = source_client
 
         grants, assignee_count = await _load_canonical_grants()
-        resource_marker_tuples = await _load_service_account_resource_markers()
+        resource_marker_tuples = await load_service_account_resource_markers()
         canonical_sources = _compile_sources(grants)
         persisted = await _load_persisted_sources()
         report, upserts, retires, expected = _build_report(
