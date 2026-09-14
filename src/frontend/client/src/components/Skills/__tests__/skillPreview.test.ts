@@ -46,10 +46,28 @@ describe('skill package validation', () => {
     const input = file(await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' }), 'report.zip');
     await expect(parseSkillFile(input)).rejects.toMatchObject({ code: 'manifest_size' });
   });
+  it('accepts a valid archive at the 50 MiB upload boundary', async () => {
+    const limit = 50 * 1024 * 1024;
+    const zip = new JSZip().file('SKILL.md', markdown()).file('resource.bin', '');
+    const overhead = (await zip.generateAsync({ type: 'uint8array' })).byteLength;
+    zip.file('resource.bin', new Uint8Array(limit - overhead));
+    const input = file(await zip.generateAsync({ type: 'uint8array' }), 'report.zip');
+    expect(input.size).toBe(limit);
+    await expect(parseSkillFile(input)).resolves.toMatchObject({ name: 'weekly-report' });
+  });
+  it.each([0, 1])('checks the 200 MiB expanded boundary with %i extra bytes', async (extra) => {
+    const manifest = markdown();
+    const resource = new Uint8Array(200 * 1024 * 1024 - Buffer.byteLength(manifest) + extra);
+    const zip = new JSZip().file('SKILL.md', manifest).file('resource.bin', resource);
+    const input = file(await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', compressionOptions: { level: 1 } }), 'report.zip');
+    expect(input.size).toBeLessThan(50 * 1024 * 1024);
+    if (extra) await expect(parseSkillFile(input)).rejects.toMatchObject({ code: 'archive_size' });
+    else await expect(parseSkillFile(input)).resolves.toMatchObject({ name: 'weekly-report' });
+  }, 30000);
   it('rejects unsupported, empty and oversized input', async () => {
     await expect(parseSkillFile(file('content', 'report.pdf'))).rejects.toMatchObject({ code: 'format' });
     await expect(parseSkillFile(file(''))).rejects.toMatchObject({ code: 'size' });
-    await expect(parseSkillFile(file(new Uint8Array(10 * 1024 * 1024 + 1)))).rejects.toMatchObject({ code: 'size' });
+    await expect(parseSkillFile(file(new Uint8Array(50 * 1024 * 1024 + 1)))).rejects.toMatchObject({ code: 'size' });
   });
 });
 

@@ -2,8 +2,8 @@ import JSZip from 'jszip';
 import { load, JSON_SCHEMA } from 'js-yaml';
 import { SkillError, type SkillManifest } from './types';
 
-const MAX_UPLOAD = 10 * 1024 * 1024;
-const MAX_EXPANDED = 100 * 1024 * 1024;
+const MAX_UPLOAD = 50 * 1024 * 1024;
+const MAX_EXPANDED = 200 * 1024 * 1024;
 const MAX_MANIFEST = 1024 * 1024;
 
 function parseManifest(text: string): Pick<SkillManifest, 'name' | 'displayName' | 'description' | 'instructions'> {

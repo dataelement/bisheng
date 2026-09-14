@@ -97,7 +97,7 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
                 <p className="mt-1 break-words text-body-sm text-text-3">{candidate.manifest.description}</p>
               </div>
             </div>
-            <p className="break-all text-caption text-text-3">{candidate.file.name} · {(candidate.file.size / 1024).toFixed(1)} KB</p>
+            <p className="break-all text-caption text-text-3">{candidate.file.name} · {(candidate.file.size / (1024 * 1024)).toFixed(2)} MiB</p>
             <details className="text-caption text-text-3">
               <summary className="cursor-pointer py-1">{localize('com_skill_center_files', { count: candidate.manifest.files.length })}</summary>
               <ul className="mt-2 max-h-28 overflow-y-auto font-mono">{candidate.manifest.files.map((file) => <li key={file} className="break-all py-0.5">{file}</li>)}</ul>

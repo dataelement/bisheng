@@ -475,7 +475,6 @@ export default function MainLayout() {
     // chat tree under that key, and coming back rebuilds the chat from scratch —
     // losing the attachments the user had staged but not yet sent.
     if (pathname.startsWith('/c/media-playback')) return 'media_playback_tab';
-    if (pathname === '/c/skills') return 'skill_center_tab';
     if (/^\/c(\/|$)/.test(pathname)) return 'chat_tab';
     if (/^\/(apps|app)(\/|$)/.test(pathname)) return 'apps_tab';
     if (/^\/channel(\/|$)/.test(pathname)) return 'channel_tab';
@@ -546,9 +545,9 @@ export default function MainLayout() {
             className="absolute inset-0 z-[60] cursor-default bg-transparent"
           />
         ) : null}
-        {pathname.startsWith('/menu-unavailable') ? (
-          // Bypass KeepAlive for menu-unavailable: always mount fresh so
-          // useEffect fires on every navigation and re-checks pending status.
+        {pathname.startsWith('/menu-unavailable') || pathname === '/c/skills' ? (
+          // Route-driven management pages keep the live router context so
+          // detail selection stays current after returning from a cached chat.
           <div
             className={cn(
               'flex flex-col bg-white shadow-[0px_0px_20px_0px_#07225808]',
