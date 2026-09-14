@@ -210,7 +210,8 @@ _JOINED_DB_ID_BATCH_SIZE = 500
 _SEARCH_SCAN_BATCH_SIZE = 100
 # MySQL caps how many SELECTs a UNION can hold; chunk the per-folder count queries.
 _FOLDER_COUNT_UNION_CHUNK_SIZE = 100
-_WEB_LINK_SEPARATORS = ["\n\n", "\n", "。", "\\.", "，", ",", "；", ";", "、", "\\s+", ""]
+# Chinese punctuation is intentionally distinct from ASCII punctuation.
+_WEB_LINK_SEPARATORS = ["\n\n", "\n", "。", "\\.", "，", ",", "；", ";", "、", "\\s+", ""]  # noqa: RUF001
 _WEB_LINK_SEPARATOR_RULES = ["after"] * len(_WEB_LINK_SEPARATORS)
 _AUDIO_FILE_EXTENSIONS = {"mp3", "wav", "m4a", "aac", "flac", "ogg"}
 _VIDEO_FILE_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm"}
@@ -1036,12 +1037,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_id: int,
         parent_id: int | None,
     ) -> tuple[Knowledge, KnowledgeFile | None]:
-        """Load the business scope for a super-admin file listing.
+        """Validate a listing's space and parent without deciding authorization.
 
-        This helper intentionally performs no permission decision. The caller
-        must restrict it to the platform-super-admin system path. Tenant
-        filtering remains active on both business queries, and a parent folder
-        must still belong to the requested knowledge space.
+        Tenant filtering remains active on both business queries. Ordinary
+        callers must also authorize the requested container before scanning.
         """
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
@@ -1050,6 +1049,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if parent_id:
             parent_folder = await self._get_folder_for_action(space_id, parent_id)
         return space, parent_folder
+
+    async def _require_container_read_permission(
+        self,
+        space_id: int,
+        parent_id: int | None,
+    ) -> tuple[Knowledge, KnowledgeFile | None]:
+        """Authorize the requested container, including a directly granted subtree."""
+        if not parent_id:
+            return await self._require_read_permission(space_id), None
+        space, folder = await self._load_space_listing_scope(space_id, parent_id)
+        if folder is None:
+            raise SpaceFolderNotFoundError()
+        # A folder grant does not imply access to the space root or siblings.
+        # The unified runtime resolves inheritance and CUSTOM boundaries.
+        await self._require_action("folder", folder.id, "visible")
+        return space, folder
 
     @staticmethod
     def _is_square_preview_space(space: Knowledge) -> bool:
@@ -2260,7 +2275,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await KnowledgeSpaceUserPinDao.unpin(user_id=self.login_user.user_id, space_id=space_id)
         return True
 
-    async def get_knowledge_square(self, keyword: str = None, page: int = 1, page_size: int = 20) -> dict:
+    async def get_knowledge_square(self, keyword: str | None = None, page: int = 1, page_size: int = 20) -> dict:
         from bisheng.user.domain.services.user import UserService
 
         """
@@ -3084,18 +3099,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if system_scope:
                 verified_space, _ = await self._load_space_listing_scope(space_id, parent_id)
             else:
-                # _require_read_permission already performs the space-visible
-                # decision. For a folder, only add the folder business-scope
-                # validation and final visible decision; do not repeat the
-                # knowledge-space check through _require_folder_action.
-                verified_space = await self._require_read_permission(space_id)
-                if parent_id:
-                    parent_folder = await self._get_folder_for_action(space_id, parent_id)
-                    await self._require_resource_action(
-                        "visible",
-                        "folder",
-                        parent_folder.id,
-                    )
+                verified_space, _ = await self._require_container_read_permission(space_id, parent_id)
             stage_elapsed_ms["auth_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
             stage = "decode_cursor"
@@ -3181,11 +3185,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         space_id: int,
         parent_id: int | None = None,
-        tag_ids: list[int] = None,
-        keyword: str = None,
+        tag_ids: list[int] | None = None,
+        keyword: str | None = None,
         page: int = 1,
         page_size: int = 20,
-        file_status: list[int] = None,
+        file_status: list[int] | None = None,
         order_field: str = "file_type",
         order_sort: str = "asc",
     ) -> dict:
@@ -3194,20 +3198,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if system_scope:
             space, parent_folder = await self._load_space_listing_scope(space_id, parent_id)
         else:
-            space = await self._require_read_permission(space_id)
-            if not parent_id:
-                await self._require_action("knowledge_space", space_id, "visible")
+            space, parent_folder = await self._require_container_read_permission(space_id, parent_id)
 
         file_level_path = None
         filter_files = []
 
         if parent_id:
-            if not system_scope:
-                parent_folder = await self._require_folder_action(
-                    space_id,
-                    parent_id,
-                    "visible",
-                )
             if parent_folder is None:
                 raise SpaceFolderNotFoundError()
             file_level_path = f"{parent_folder.file_level_path}/{parent_folder.id}"
@@ -3221,7 +3217,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if not resources:
                 return {"page": page, "page_size": page_size, "data": [], "has_more": False}
             if filter_files:
-                filter_files = list(set(filter_files) & set([int(one.resource_id) for one in resources]))
+                filter_files = list(set(filter_files) & {int(one.resource_id) for one in resources})
             else:
                 filter_files = [int(one.resource_id) for one in resources]
             if not filter_files:
@@ -4672,7 +4668,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
     async def update_file_tags(self, space_id: int, file_id: int, tag_ids: list[int]):
-        """2：支持对单文件的标签管理: Overwrite tags for a single file."""
+        """Overwrite tags for a single file."""
         await self._get_file_for_action(file_id, space_id=space_id)
         await self._require_action("knowledge_file", file_id, "rename")
 
@@ -4682,7 +4678,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
 
     async def batch_add_file_tags(self, space_id: int, file_ids: list[int], tag_ids: list[int]):
-        """1：支持对文件批量添加标签: Batch add tags to files."""
+        """Batch add tags to files."""
         await self._require_read_permission(space_id)
         if not file_ids or not tag_ids:
             return
@@ -4730,7 +4726,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 db_file.id,
             )
 
-        tmp, file_level_path = await self.process_retry_files(db_files, id2input, self.login_user)
+        _tmp, file_level_path = await self.process_retry_files(db_files, id2input, self.login_user)
 
         for folder_path in file_level_path:
             await self.update_folder_update_time(folder_path)
@@ -4971,7 +4967,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     name, _ = os.path.splitext(rec.file_name)
                     local_path = os.path.join(local_dir, f"{name}.html")
 
-                if not target_object_name:  # no stored object – skip
+                if not target_object_name:  # No stored object to download.
                     continue
 
                 try:
@@ -6088,6 +6084,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
 
     # ──────────────────────────── Listings ────────────────────────────────────
+
 
 def _f066_data_scope_narrowed() -> bool:
     """F066: a narrowed open-platform token must not take super-admin reads.

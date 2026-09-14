@@ -1184,6 +1184,8 @@ domain 对业务 model/repository 的 import 必须由架构测试禁止。正�
 | 29 | 模型 active 被误当成运行时撤权开关会制造资源规模 fan-out | 停用一个广泛使用的模型时产生不必要的大批 tuple 清理和复杂原子切换 | active 只在 Grant command 中控制可分配性；已有 Grant 不变，删除前逐绑定清零并由引用门禁阻断最终删除 |
 | 30 | 管理员管理范围与个人内容可见范围不是同一业务语义 | super_admin 身份把“我加入的”扩成平台全量 | visible 专用 facade 禁止 identity shortcut；具体 action 保持 C4 顺序 |
 | 31 | 列表路径成本取决于候选规模、可见率、业务过滤和继承比例 | 把 joined 的 ID-first 或文件的 candidate-first 机械推广到所有列表 | §3 决策14入口登记 + BENCH-01 业务链路阶段 |
+| 32 | 文件夹本级授权不意味着整个知识空间可见；读取指定文件夹时只要求该容器可见，子项仍逐项执行包含继承的最终判断 | 先校验空间 visible 会使只有某层文件夹权限的账号无法列出或搜索其下级；直接放行全部子项又会越过 CUSTOM 边界 | `KnowledgeSpaceService._require_container_read_permission`，由普通列表与搜索共用；根目录仍校验空间 visible |
+| 33 | 服务账号继承需要每层资源的 `service_account:*` mode/permission_enabled 技术标记；这些标记不授予任何账号资源权限 | 旧数据只有 `user:*` 时会出现空间 visible 成功而子项不可见、上传失败；新增 Grant 不会补齐存量后代的技术标记 | 创建与迁移编译器写入两类主体标记；存量用 `scripts/reconcile_f048_visible_projection.py` 在维护窗口按 CURRENT 模式补齐，保留 CUSTOM 边界 |
 
 ---
 
@@ -1949,6 +1951,7 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-09-14 | 修正指定文件夹列表/搜索的容器鉴权，补充服务账号多级继承、编辑者/所有者动作、CUSTOM 隔断、撤权与历史标记修复回归 | v2 服务账号访问知识空间与独立授权文件夹的排查 |
 | 2026-08-13 | 对单槽浅层 visible、inactive 既有授权保持、删除零引用门禁、旧系统单次迁移、列表路径、契约/依赖/测试/可观测执行 24 项 Design 接手测试与 Constitution Check；复审 LGTM，停在 Design ★ | `/sdd-review ... design` |
 | 2026-08-13 | 将模型 `active` 收窄为“是否可用于新增/变更授权”：停用不影响已有 Grant；删除必须先撤销或替换全部绑定，并在引用/source projection/live tuple 清零后完成。可见执行关系改为单槽浅层 `visible`，移除 A/B 槽、switch、双写和 Catalog 4-tuple 切换；保留来源引用计数、ledger、reconcile 与旧系统单次迁移 | 用户确认界面语义“关闭后不能再用它授权，已有授权不受影响；删除必须先清理绑定关系” |
 | 2026-08-20 | 将资源权限投影状态从普通鉴权停服条件中解耦：非 CURRENT 期间继续执行 higher-consistency OpenFGA action/visible 决策，只冻结同资源新的权限配置写；`my-permissions` 降级为 OpenFGA 逐动作结果且不展示 staged SQL 来源 | 用户确认增加查看者等权限修改不得影响已有授权的正常鉴权 |
