@@ -51,13 +51,19 @@
 | **OpenApiTenantSetting**（租户级 PAT 开关与默认有效期） | **F053-openapi-auth-and-identity** | PRD §4.10.7 闸门一的租户级半边；部署级半边在进程 Settings |
 | **ShareLink**（既有对象；本版增量 = `share_scope` 列 + 撤销写入 + 有效期强制生效 + share-token 会话执行主体） | **F053-openapi-auth-and-identity** | 两个免登录分享页改走 share_link 通道；只拥有本版对该对象的写行为增量，不拥有既有创建 / 读取 |
 | **MessageSession / ChatMessage**（既有对象；本版增量 = `external_user_id` 分区键列，只写不读） | **F053-openapi-auth-and-identity**（列）| 会话本体仍归既有会话模块；本 Feature 只拥有该列的写入语义（PRD §4.3.4 / §4.6.3 四） |
+| **OpenApiTenantSetting**（既有对象，本体归 F053；**本增量 = `pat_data_scope` 数据范围列 + 租户策略变更操作审计写入**） | **F066-pat-data-scope-and-ai-access** | PRD v2.9 §4.10.7 闸门一之二（D21）。只拥有该列与策略审计的写行为增量；开关 + 默认有效期的既有写行为仍归 F053 |
 | —（无新增领域对象；在 F029 拥有的 citation 链路上扩展第三种来源类型与其载荷） | **F054-unified-citation-entries** | 频道文章 AI 问答接入统一溯源：新增「文章」来源类型及其来源载荷（真实稳定定位标识 = 文章文档标识 / 原文链接，不伪造知识库片段标识）、「来源已失效」状态、来源详情对**无已登录用户**调用一律不返回。只读 / 调用现有 `MessageCitation` 与 citation 注册 / 解析服务；**不拥有** `message_citation` schema，不改 F041 已登记的 `accessScope` 两档语义，不改灵思任务模式（归 F047），不新增表 / Alembic / 对外 API / 错误码。**不再拥有**「工作流临时来源是否出角标」的写语义——该条由 F062 取代（仅 `ingest_to_temp_kb` 召回） |
+| —（无新增） | F054-contextual-department-membership | 复用组织域 canonical 成员/祖先事实作为请求时权限输入，消除 OpenFGA 部门子树递归；仅演进 F048 授权模型与运行时装配，不新增组织对象、永久成员闭包或业务接口 |
 | —（无新增领域对象；在 F029 拥有的 citation 链路上扩展第四种来源类型与其载荷） | **F062-workflow-temp-kb-citation** | 工作流输入节点「解析并存入临时知识库」召回可点击溯源：新增 `citation_type=temp`（前缀 `tempsearch_`，原件定位 = UUID + F043 `objectName`，不伪造知识库整数 id）。只读 / 调用现有 `MessageCitation` 与 citation 注册 / 解析服务；**不拥有** `message_citation` schema，不改 INV-7 / `view_file`，不把临时来源纳入知识空间 OpenFGA，不新增表 / Alembic / 对外 API / 错误码 |
 | —（无新增） | F061-qa-active-image-read | 日常模式 / 知识空间 / 频道订阅三条问答链路按需查看检索结果或文章正文中的 markdown 图片；复用既有工作台模型视觉开关、检索入口与 `view_file` / 敏感文过滤，不新增领域对象、表、对外 API、错误码或不变量 |
 | —（无新增领域对象；在 F036 拥有的 `SensitiveWordPolicy` 上增加枚举值 `workbench_chat`） | **F063-workbench-content-safety** | 商业版工作台日常模式（输入 + 最终回答）与任务模式（仅输入）关键词审查。只读 / 调用现有 `SensitiveWordPolicy` 与 `check_text`；**不拥有**策略表 schema，不改知识空间 / 频道 / 工作流 Gateway 审查，不新增表 / Alembic / 对外 API 路径 / 错误码 / 不变量 |
 | —（无新增） | F064-kb-list-file-abnormal | 文档知识库外层列表只读展示库级文件解析异常，并支持仅异常筛选；复用既有 `Knowledge` / `KnowledgeFile` 与 F027 游标、F048 可见性，不新增领域对象、表、错误码或不变量。Alembic 仅增加 `knowledgefile` 复合索引 |
 | —（无新增） | F065-model-name-trim | 模型管理写入时去掉 `models[].model_name` 首尾空白；复用既有 `LLMModel` / `POST/PUT /api/v1/llm`，不新增领域对象、表、错误码、不变量或 Alembic |
 | **LicenseInfo**（平台级当前授权状态：每个商业模块一行；无 `tenant_id`；不含密文 / 私钥 / 设备指纹） | **F066-commercial-license-expiry-reminder** | 拥有 `license_info` 的写入语义与聚合读取。`etl` 由 BISHENG 拉 ETL 授权接口后 upsert；`dashboard` 由商业看板服务定期更新对应行；`gateway` 由管理后台读取 Gateway 状态后再交给 BISHENG upsert。不拥有 Gateway / ETL / 看板各自的授权密文与解密 |
+
+> ⚠️ **F054 编号冲突未决**：上表两行都占用 F054。`unified-citation-entries` 在 `feat/3.0.0-beta1` 取号，`contextual-department-membership` 在 `feat/3.0.0-beta1-test` 上已从 F053 改号而来，合并后再次撞号。两行都保留，改哪一个由各自 Feature owner 决定。
+
+> ⚠️ **F066 编号冲突未决**：上表两行都占用 F066。`pat-data-scope-and-ai-access` 在 `feat/3.0.0-beta1` 取号，`commercial-license-expiry-reminder` 在 `feat/3.0.0-beta2` 取号，beta1 合入 beta2 后撞号。两行都保留，改哪一个由各自 Feature owner 决定；下文 INV-34（F066 = PAT 数据范围）与 INV-35、错误码 270（F066 = 商业授权）同样按各自 Feature 理解。
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -99,7 +105,7 @@
 | INV-31 | **服务账号主体不可登录、不进任何选人场景、授权只走主体侧**：租户归属声明式写入、任何以部门树为真相的对账结构性跳过它；不计入用户数配额；不出现在任何面向人的选人场景（含资源侧授权选人框，「已授权对象列表」仅可显示），排除做在数据访问层、失败方向是"看不到"而非"泄漏"；资源授权唯一入口在其详情页主体侧；不得被授予管理员身份 / 角色、不得加入用户组 / 部门 | ServiceAccount | F053 |
 | INV-32 | **开放面权限评估 fail-closed**（INV-19 在开放 API 上的加强）：权限引擎不可用、评估失败或结果不可判定时返回错误，**绝不返回未过滤或部分过滤的结果集**；不存在"缺身份即降级返回某个子集"的路径；P2 的限流 / 配额 / 幂等在 Redis 不可用时同样拒绝 | ApiCredential, PermissionGrant | F053 |
 | INV-33 | **身份模式只有两种、委托是纯替换且必须凭据先行**：权限基准 = 密钥主体（自身身份）或经五道准入的被代表用户（代表他人）；`delegate` 是唯一开关、持有即强制（漏传身份头报错、不落回自身身份）、范围必填且只有 `user` / `department` 两类；委托目标必须是自然人、非超管非租户管理员、同租户、在范围内，判定在调用期；模式 D 下资源与会话归被代表用户且不回授服务账号；三扩展位与 `delegate` 互斥硬阻断；`X-Bisheng-End-User` 不是身份模式、不参与任何权限判定 | ApiCredential | F053 |
-| INV-34 | **个人访问令牌的治理**：主体只能是自然人本人、权限动态继承持有人（不快照）、本期只可授予 `knowledge:read`，`identity:read` 与 `delegate` 永久禁令；随持有人停用 / 删除 / 离开租户 5 秒内级联失效；管理员短路照常生效但可见租户集合恒为密钥所属租户（超管不放开租户过滤）；两层能力开关默认关、关闭 = 停用不撤销、按主体类型独立（关 PAT 不得影响服务账号密钥）；管理员台账只返回元数据 | ApiCredential, OpenApiTenantSetting | F053 |
+| INV-34 | **个人访问令牌的治理**：主体只能是自然人本人、权限动态继承持有人（不快照）、本期只可授予 `knowledge:read`，`identity:read` 与 `delegate` 永久禁令；随持有人停用 / 删除 5 秒内级联失效（**换租户不失效、随人迁移**——PRD v2.6 D19，原「离开租户级联失效」表述作废）；管理员短路照常生效但可见租户集合恒为密钥所属租户（超管不放开租户过滤），**且「短路照常」仅在默认数据范围（all_visible）下成立——租户级数据范围收窄（PRD v2.9 D21）优先于管理员短路，对含管理员在内的全体持有人一致生效**；两层能力开关默认关、关闭 = 停用不撤销、按主体类型独立（关 PAT 不得影响服务账号密钥）；数据范围同为调用期准入检查、不写凭据行、可逆；管理员台账只返回元数据 | ApiCredential, OpenApiTenantSetting | F053、F066 |
 | INV-35 | **商业授权状态是部署级当前值**：`license_info` 每个 `license_code` 至多一行，不带 `tenant_id`，不存授权密文 / 私钥 / 设备指纹。功能开关（ETL 地址、`BISHENG_DASHBOARD_PRO` 等）不得用来推断是否有效或何时到期。取源失败不得把已有成功记录改写成已过期；未取得不得展示为已过期 | LicenseInfo | F066 |
 
 （INV-1~7 为 v2.6.0 存量不变量，继续有效，见 `features/v2.6.0/release-contract.md`。）
@@ -170,7 +176,7 @@
 | —（不新增） | 工作流会话打开时自动重新运行 | F052 复用既有系统配置、工作流状态与重新运行错误响应 |
 | 250 | ReBAC 权限 Catalog、Grant、投影、迁移与完整枚举 | F048；25001～25014，具体语义见 F048 Design §6.3 |
 | —（不新增） | 信息源订阅对账、公共文章同步与知识空间一次投递 | F060 仅调整内部任务与状态，不新增对外 API 或业务错误码 |
-| 260 | 开放 API 鉴权、身份传递、个人访问令牌、日常模式会话、限流 / 幂等 | F053；26001～26043 分段见 `053-openapi-auth-and-identity/design.md` §6.3（26013 / 26014 已废止不复用）；落码时按 C5 回写 `docs/constitution.md` |
+| 260 | 开放 API 鉴权、身份传递、个人访问令牌、日常模式会话、限流 / 幂等 | F053；26001～26043 分段见 `053-openapi-auth-and-identity/design.md` §6.3（26013 / 26014 已废止不复用）；`26044`（PAT 数据范围受限，403）随 F066 增补（PRD v2.9 附录 C）；落码时按 C5 回写 `docs/constitution.md` |
 | 270 | 商业授权状态聚合与上报 | F066；实现时按 C5 回写 `docs/constitution.md`；不得占用 11x（灵思）或把 Gateway 11001 当成 BISHENG 模块号 |
 
 ---
@@ -203,4 +209,5 @@
 | 2026-09-09 | 登记 F063 日常/任务内容安全审查：表 1 标无新领域对象（扩展既有 `SensitiveWordPolicy` 的 `workbench_chat` 取值）；表 3 记依赖 F036 词表与工作台统一聊天入口；无新增错误码/对外路径/不变量/alembic | F063 |
 | 2026-09-10 | 登记 F064 文档知识库外层列表文件解析异常：表 1 标无新领域对象；表 3 记依赖 F027/F048/F051；Alembic 仅加 `knowledgefile` 复合索引，无新增错误码/不变量 | F064、F027、F048、F051 |
 | 2026-09-10 | 登记 F065 模型名称首尾空格兼容：表 1 标无新领域对象；表 3 记依赖既有模型管理写入；无新增错误码/不变量/Alembic；不回填存量脏名 | F065 |
+| 2026-09-13 | 登记 F066 PAT 数据范围收窄与「AI 助手接入」界面（PRD v2.9 D21 / D22）：表 1 新增 OpenApiTenantSetting 增量归属行（`pat_data_scope` 列 + 策略变更审计归 F066）；**修订 INV-34**——数据范围收窄优先于管理员短路、「短路照常」仅默认档成立，并同步订正其与 D19 相抵的「离开租户级联失效」残句为「换租户随人迁移」；错误码 260 段补 `26044` | F066、F053 |
 | 2026-09-14 | 登记 F066 商业授权统一到期提醒：新增 LicenseInfo 与 INV-35；分配错误码模块 270；Banner 数据源改为 `license_info` 聚合，覆盖 F037 的「只直连 Gateway + 软件授权」展示合同，不改 Gateway 降级范围 | F066、v2.6.0 F037 |

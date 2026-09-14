@@ -22,6 +22,13 @@ export function canReadChannelContent(params: {
     isCreatorView?: boolean;
 }): boolean {
     const { actions, isSubscribed, isCreatorView } = params;
-    if (isSubscribed || isCreatorView) return true;
-    return Array.isArray(actions) && actions.includes("visible");
+    // `actions` present — even empty — is the server's answer, so believe it.
+    // A subscription row and a Grant are written by two different steps, and a
+    // failure between them leaves a channel the square calls 已订阅 that the
+    // viewer cannot actually read. Treating "subscribed" as access there meant
+    // asking for the articles anyway, taking the 403, and losing the whole page
+    // to the global redirect. Falling back only when the field is missing keeps
+    // an older response shape working.
+    if (Array.isArray(actions)) return actions.includes("visible");
+    return Boolean(isSubscribed || isCreatorView);
 }

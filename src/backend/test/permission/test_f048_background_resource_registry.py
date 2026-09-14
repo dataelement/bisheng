@@ -25,6 +25,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -68,12 +69,14 @@ async def test_worker_runtime_installs_the_resource_registry(monkeypatch):
     monkeypatch.setattr(runtime_module, "configure_f048_runtime", _configure)
     monkeypatch.setattr(runtime_module, "configure_linsight_skill_owner_projection", lambda *a, **k: None)
 
+    client = SimpleNamespace(configure_contextual_tuple_provider=Mock())
     out = await runtime_module.initialize_f048_worker_runtime(
-        object(),
+        client,
         external_scopes={"department": "scope"},
     )
 
     assert out is components
+    client.configure_contextual_tuple_provider.assert_called_once()
     assert captured["runtime"] is facade
     assert isinstance(captured["registry"], ResourceAuthorizationRegistry)
     # "tool" is the resource type ToolExecutor checks before binding a tool — the

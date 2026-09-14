@@ -1,8 +1,17 @@
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
+from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError
-from bisheng.open_api.api.exception_handlers import register_open_api_exception_handlers
+from bisheng.common.errcode.permission import (
+    PermissionInvalidResourceError,
+    PermissionServiceUnavailableError,
+)
+from bisheng.open_api.api.exception_handlers import (
+    open_api_http_status,
+    register_open_api_exception_handlers,
+)
 
 
 async def test_open_api_errors_keep_v1_envelope_and_use_v2_http_status():
@@ -25,3 +34,11 @@ async def test_open_api_errors_keep_v1_envelope_and_use_v2_http_status():
     assert v1_response.json()["status_code"] == 26002
     assert v2_response.status_code == 401
     assert v2_response.json()["status_code"] == 26002
+
+
+def test_v2_business_error_transport_mapping():
+    assert open_api_http_status(UnAuthorizedError()) == 403
+    assert open_api_http_status(SpacePermissionDeniedError()) == 403
+    assert open_api_http_status(NotFoundError()) == 404
+    assert open_api_http_status(PermissionInvalidResourceError()) == 404
+    assert open_api_http_status(PermissionServiceUnavailableError()) == 503

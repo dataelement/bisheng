@@ -257,4 +257,81 @@ class TenantPermissionSubjectDirectory:
                 if resource_type == "folder" and resource_id.isdigit() and int(resource_id) in folder_by_id
             }
         )
+        labels.update(await self._application_resource_display_names(resources))
+        return labels
+
+    @staticmethod
+    async def _application_resource_display_names(
+        resources: tuple[tuple[str, str], ...],
+    ) -> dict[tuple[str, str], str]:
+        """Resolve labels for non-knowledge top-level resources in bounded queries."""
+
+        from sqlmodel import col, select
+
+        from bisheng.channel.domain.models.channel import Channel
+        from bisheng.core.database import get_async_db_session
+        from bisheng.database.models.assistant import Assistant
+        from bisheng.database.models.flow import Flow
+        from bisheng.telemetry_search.domain.models.dashboard import Dashboard
+        from bisheng.tool.domain.models.gpts_tools import GptsToolsType
+
+        ids_by_type = {
+            resource_type: tuple(
+                resource_id
+                for item_type, resource_id in resources
+                if item_type == resource_type
+            )
+            for resource_type in ("workflow", "assistant", "channel", "tool", "dashboard")
+        }
+        if not any(ids_by_type.values()):
+            return {}
+        labels: dict[tuple[str, str], str] = {}
+        async with get_async_db_session() as session:
+            if ids_by_type["workflow"]:
+                rows = (
+                    await session.exec(
+                        select(Flow).where(col(Flow.id).in_(ids_by_type["workflow"]))
+                    )
+                ).all()
+                labels.update({("workflow", str(row.id)): row.name for row in rows})
+            if ids_by_type["assistant"]:
+                rows = (
+                    await session.exec(
+                        select(Assistant).where(
+                            col(Assistant.id).in_(ids_by_type["assistant"]),
+                            Assistant.is_delete == 0,
+                        )
+                    )
+                ).all()
+                labels.update({("assistant", str(row.id)): row.name for row in rows})
+            if ids_by_type["channel"]:
+                rows = (
+                    await session.exec(
+                        select(Channel).where(col(Channel.id).in_(ids_by_type["channel"]))
+                    )
+                ).all()
+                labels.update({("channel", str(row.id)): row.name for row in rows})
+
+            tool_ids = tuple(int(value) for value in ids_by_type["tool"] if value.isdigit())
+            if tool_ids:
+                rows = (
+                    await session.exec(
+                        select(GptsToolsType).where(
+                            col(GptsToolsType.id).in_(tool_ids),
+                            GptsToolsType.is_delete == 0,
+                        )
+                    )
+                ).all()
+                labels.update({("tool", str(row.id)): row.name for row in rows})
+
+            dashboard_ids = tuple(
+                int(value) for value in ids_by_type["dashboard"] if value.isdigit()
+            )
+            if dashboard_ids:
+                rows = (
+                    await session.exec(
+                        select(Dashboard).where(col(Dashboard.id).in_(dashboard_ids))
+                    )
+                ).all()
+                labels.update({("dashboard", str(row.id)): row.title for row in rows})
         return labels

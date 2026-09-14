@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import delete, func
+from sqlalchemy import delete, func, update
 from sqlmodel import col, select
 
 from bisheng.core.context.tenant import bypass_tenant_filter
@@ -130,6 +130,40 @@ class CredentialRepository:
                     session.add(row)
                 await session.commit()
         return rows
+
+    @classmethod
+    async def migrate_natural_person_tenant(
+        cls,
+        *,
+        user_id: int,
+        tenant_id: int,
+    ) -> list[tuple[ApiCredential, int]]:
+        """Move active PAT metadata and dependent scope rows to the holder's tenant."""
+
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                async with session.begin():
+                    statement = select(ApiCredential).where(
+                        ApiCredential.subject_kind == "natural_person",
+                        ApiCredential.subject_id == user_id,
+                        ApiCredential.tenant_id != tenant_id,
+                        col(ApiCredential.revoked_at).is_(None),
+                    ).with_for_update()
+                    rows = list((await session.exec(statement)).all())
+                    migrated: list[tuple[ApiCredential, int]] = []
+                    now = datetime.now()
+                    for row in rows:
+                        old_tenant_id = int(row.tenant_id)
+                        row.tenant_id = tenant_id
+                        row.update_time = now
+                        session.add(row)
+                        await session.exec(
+                            update(ApiCredentialDelegateScope)
+                            .where(ApiCredentialDelegateScope.credential_id == row.id)
+                            .values(tenant_id=tenant_id)
+                        )
+                        migrated.append((row, old_tenant_id))
+                return migrated
 
     @classmethod
     async def save(cls, row: ApiCredential) -> ApiCredential:

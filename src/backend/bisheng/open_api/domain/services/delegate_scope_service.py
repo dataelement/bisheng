@@ -7,7 +7,7 @@ from bisheng.open_api.domain.models.credential_delegate_scope import (
 )
 from bisheng.open_api.domain.repositories.delegate_scope_repository import DelegateScopeRepository
 from bisheng.open_api.domain.repositories.owner_repository import OwnerRepository
-from bisheng.open_api.domain.schemas.credential import DelegateScopeInput
+from bisheng.open_api.domain.schemas.credential import DelegateScopeInput, DelegateScopeItem
 
 
 class DelegateScopeService:
@@ -48,12 +48,23 @@ class DelegateScopeService:
         return await DelegateScopeRepository.target_in_departments(user_id, department_ids)
 
     @classmethod
-    async def response_entries(cls, credential_id: int) -> list[DelegateScopeInput]:
+    async def response_entries(cls, credential_id: int) -> list[DelegateScopeItem]:
         rows = await DelegateScopeRepository.list_for_credential(credential_id)
-        return [
-            DelegateScopeInput(subject_type=row.subject_type, subject_id=row.subject_id)
-            for row in rows
-        ]
+        entries = []
+        for row in rows:
+            if row.subject_type == DELEGATE_SUBJECT_USER:
+                subject_name = await OwnerRepository.get_user_name(row.subject_id)
+            else:
+                department = await DelegateScopeRepository.get_department(row.subject_id)
+                subject_name = department.name if department else None
+            entries.append(
+                DelegateScopeItem(
+                    subject_type=row.subject_type,
+                    subject_id=row.subject_id,
+                    subject_name=subject_name,
+                )
+            )
+        return entries
 
 
 __all__ = ["DelegateScopeService"]

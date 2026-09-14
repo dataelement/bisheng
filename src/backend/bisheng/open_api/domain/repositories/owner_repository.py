@@ -21,6 +21,15 @@ class NaturalPersonRecord:
 
 class OwnerRepository:
     @classmethod
+    async def get_user_name(cls, user_id: int | None) -> str | None:
+        if user_id is None:
+            return None
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                user = (await session.exec(select(User).where(User.user_id == user_id))).first()
+        return user.user_name if user else None
+
+    @classmethod
     async def get_active_natural_person(cls, user_id: int) -> NaturalPersonRecord | None:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:

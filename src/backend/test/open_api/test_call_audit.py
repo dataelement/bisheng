@@ -164,6 +164,28 @@ async def test_unhandled_exception_is_audited_and_propagated(monkeypatch):
     assert entries[0].audit_metadata["http_status"] == 500
 
 
+async def test_sse_final_result_and_business_error_are_audited(monkeypatch):
+    async def app(connection_scope, _receive, send):
+        connection_scope["open_api_principal"] = principal()
+        await send({
+            "type": "http.response.start",
+            "status": 200,
+            "headers": [(b"content-type", b"text/event-stream; charset=utf-8")],
+        })
+        await send({
+            "type": "http.response.body",
+            "body": b'data: {"data":{"event":"close","output_schema":{"message":{"status_code":18040}}}}\n\n',
+            "more_body": True,
+        })
+        await send({"type": "http.response.body", "body": b"data: [DONE]\n\n"})
+
+    entries = await run_middleware(monkeypatch, app, scope())
+
+    assert entries[0].audit_metadata["http_status"] == 200
+    assert entries[0].audit_metadata["error_code"] == 18040
+    assert entries[0].audit_metadata["sse_final_result"] == "failed"
+
+
 async def test_websocket_is_audited_after_disconnect(monkeypatch):
     async def app(connection_scope, _receive, send):
         connection_scope["open_api_principal"] = principal()

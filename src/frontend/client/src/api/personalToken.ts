@@ -17,10 +17,14 @@ export interface PersonalTokenItem {
   create_time: string | null;
 }
 
+export type PersonalTokenDataScope = "all_visible" | "personal_only";
+
 export interface PersonalTokenStatus {
   enabled: boolean;
   token: PersonalTokenItem | null;
   holder_is_admin: boolean;
+  data_scope: PersonalTokenDataScope;
+  ttl_days: number;
 }
 
 export interface PersonalTokenIssued extends PersonalTokenItem {
@@ -40,6 +44,16 @@ function dataOf<T>(response: ApiEnvelope<T>): T {
 type RequestErrorOptions = NonNullable<Parameters<typeof request.get>[1]>;
 
 const rejectBusinessErrors: RequestErrorOptions = { skip403Redirect: true };
+
+export function getPersonalTokenGuideUrls(origin: string) {
+  return {
+    skillPackUrl: new URL(
+      "/api/v1/open-api/skill-packs/knowledge-search",
+      origin,
+    ).href,
+    tokenPageUrl: new URL("/workspace/settings/ai-access?connect=1", origin).href,
+  };
+}
 
 export async function getPersonalTokenStatusApi(): Promise<PersonalTokenStatus> {
   return dataOf(

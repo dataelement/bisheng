@@ -354,17 +354,24 @@ async def test_move_plan_verifies_final_state_when_enabled_is_restored() -> None
     outcome = await service.execute(plan)
 
     enabled = ("user:*", "permission_enabled", "knowledge_file:42")
+    service_account_enabled = (
+        "service_account:*",
+        "permission_enabled",
+        "knowledge_file:42",
+    )
     old_parent = ("knowledge_space:10", "parent", "knowledge_file:42")
     new_parent = ("folder:20", "parent", "knowledge_file:42")
     before = projection_state_expectations(plan.deltas, after=False)
     after = projection_state_expectations(plan.deltas, after=True)
     assert before[enabled] is True
     assert after[enabled] is True
+    assert before[service_account_enabled] is True
+    assert after[service_account_enabled] is True
     assert before[old_parent] is True
     assert after[old_parent] is False
     assert before[new_parent] is False
     assert after[new_parent] is True
-    assert fga.present == {enabled, new_parent}
+    assert fga.present == {enabled, service_account_enabled, new_parent}
     assert outcome.status == ProjectionOperationStatus.FINALIZED
     assert repository.operation.status == ProjectionOperationStatus.FINALIZED
     assert finalizer.calls == 1
@@ -487,14 +494,14 @@ async def test_move_commit_timeout_after_write_observes_terminal_state() -> None
     plan = _move_plan()
     service, repository, _, scope, fga, finalizer, _ = _service(plan)
     fga.timeout_mode = "after"
-    fga.timeout_call = 2
+    fga.timeout_call = 3
 
     outcome = await service.execute(plan)
 
     assert outcome.reconciled is True
     assert repository.operation.status == ProjectionOperationStatus.FINALIZED
     assert finalizer.calls == 1
-    assert len(fga.calls) == 2
+    assert len(fga.calls) == 3
     assert scope.fenced is False
 
 
@@ -522,14 +529,14 @@ async def test_move_commit_timeout_before_write_retries_from_staged_state() -> N
     plan = _move_plan()
     service, repository, marker, scope, fga, finalizer, _ = _service(plan)
     fga.timeout_mode = "before"
-    fga.timeout_call = 2
+    fga.timeout_call = 3
 
     outcome = await service.execute(plan)
 
     assert outcome.reconciled is True
     assert repository.operation.status == ProjectionOperationStatus.FINALIZED
     assert finalizer.calls == 1
-    assert len(fga.calls) == 3
+    assert len(fga.calls) == 4
     assert marker.log == ["recent", "recent"]
     assert scope.fenced is False
 

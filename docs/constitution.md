@@ -82,8 +82,11 @@ await require_business_action(
   succeeds; retry/forward repair uses the same idempotency key and frozen plan.
 - Concrete resource decisions short-circuit in this order:
   `super_admin` → tenant mismatch deny → tenant admin → Catalog/action gate →
-  OpenFGA. RBAC menu access remains a separate navigation/API-capability
-  concern and is never a fallback ALLOW for resource actions.
+  OpenFGA. An open-platform natural-person actor narrowed by the tenant data
+  scope (F066/D21) is denied **before** every shortcut above — the narrowing
+  is a data-export control and outranks identity. RBAC menu access remains a
+  separate navigation/API-capability concern and is never a fallback ALLOW
+  for resource actions.
 - Business modules depend only on application protocols exported by
   `permission.application`. They must never import an OpenFGA client/manager,
   construct transport tuples, or branch on OpenFGA-specific errors. Identity

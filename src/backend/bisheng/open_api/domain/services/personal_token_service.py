@@ -35,10 +35,18 @@ class PersonalTokenService:
     async def status(cls, *, tenant_id: int, user_id: int) -> PersonalTokenStatus:
         setting = await TenantSettingService.get_response(tenant_id)
         token = await cls._current_item(tenant_id=tenant_id, user_id=user_id)
+        holder_is_admin = await cls._is_admin(user_id, tenant_id)
+        ttl_days = setting.pat_ttl_days
+        if holder_is_admin:
+            # The effective value after the admin cap — the client renders
+            # this number verbatim and never recomputes it from config.
+            ttl_days = min(ttl_days, settings.open_api.pat_admin_ttl_days)
         return PersonalTokenStatus(
             enabled=setting.effective_enabled,
             token=token,
-            holder_is_admin=await cls._is_admin(user_id, tenant_id),
+            holder_is_admin=holder_is_admin,
+            data_scope=setting.data_scope,
+            ttl_days=ttl_days,
         )
 
     @classmethod
@@ -159,6 +167,34 @@ class PersonalTokenService:
         return len(rows)
 
     @classmethod
+    async def migrate_tenant(cls, *, user_id: int, tenant_id: int) -> int:
+        """Keep an active PAT usable when its holder moves to another tenant."""
+
+        migrated = await CredentialRepository.migrate_natural_person_tenant(
+            user_id=user_id,
+            tenant_id=tenant_id,
+        )
+        await CredentialService.invalidate_cache(row.token_hash for row, _old in migrated)
+        for row, old_tenant_id in migrated:
+            await AuditLogDao.ainsert_v2(
+                tenant_id=tenant_id,
+                operator_id=user_id,
+                operator_tenant_id=tenant_id,
+                action="open_api.pat.tenant_migrate",
+                target_type="api_credential",
+                target_id=str(row.id),
+                metadata={
+                    "credential_id": row.id,
+                    "subject_kind": SUBJECT_KIND_NATURAL_PERSON,
+                    "subject_id": user_id,
+                    "old_tenant_id": old_tenant_id,
+                    "new_tenant_id": tenant_id,
+                    "key_mask": row.key_mask,
+                },
+            )
+        return len(migrated)
+
+    @classmethod
     async def _revoke_active(
         cls,
         *,
@@ -258,4 +294,3 @@ class PersonalTokenService:
                 "key_mask": key_mask,
             },
         )
-

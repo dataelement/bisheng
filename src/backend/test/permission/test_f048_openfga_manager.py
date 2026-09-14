@@ -15,6 +15,7 @@ from bisheng.core.openfga.authorization_model_f048 import (
     authorization_model_checksum,
     build_authorization_model_f048,
 )
+from bisheng.core.openfga.contextual import dependent_relations
 from bisheng.core.openfga.discovery import (
     OpenFGARuntimePin,
     discover_openfga_runtime,
@@ -327,6 +328,8 @@ async def test_single_model_client_readiness_and_heartbeat() -> None:
         store_id="store-existing",
         model_id="model-f048",
         timeout=5,
+        require_contextual_provider=True,
+        affected_relations=dependent_relations(build_authorization_model_f048(), "department", "subtree_member"),
     )
     readiness = manager.readiness()
     assert readiness["ready"] is True
