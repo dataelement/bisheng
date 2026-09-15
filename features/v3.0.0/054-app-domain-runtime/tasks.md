@@ -755,12 +755,13 @@
   **覆盖 AC**: AC-37
   **依赖**: T090a
 
-- [ ] **T091**: 入口二维码
+- [x] **T091**: 入口二维码
   **文件**: `src/frontend/platform/src/pages/BuildPage/hostedApp/tabs/PublishTab.tsx`, `src/frontend/platform/package.json`
   **逻辑**: `qrcode.react` 走 pnpm catalog 加进 platform（`pnpm-workspace.yaml:22` 已登记 `^4.2.0`，**monorepo 不引入新库**）；二维码内容 = **后端返回的完整入口地址**（不用 `location.origin` 拼——dev 下 origin 是 :3001 且 `/apps` 不在 vite 代理内，拼出来的码扫了打不开）。
   **手动验证**（Playwright 未落地）: 发布 tab 出现二维码；**用手机扫码**（或用二维码识别工具解出文本）得到的地址与「复制入口链接」按钮复制到的地址**逐字符一致**、且能直达 `/apps/{slug}`；应用未上线 / 已下线时二维码与入口链接的显隐口径一致；`pnpm lint` + `pnpm typecheck`（从 `src/frontend/`）通过。
   **覆盖 AC**: AC-54
   **依赖**: T067
+  **完成记录（2026-09-16，分支 `wt/owner-notify-and-qr`）**: `platform/package.json` 加 `"qrcode.react": "catalog:"`（`pnpm-lock.yaml` platform importer 同步手写一条 `4.2.0(react@18.3.1)`，与 client / packages/ui 已解析的同一版本，未跑 `pnpm install`——merge 后请在 `src/frontend/` 跑一次 `pnpm install --frozen-lockfile` 确认 lock 一致）；`PublishTab.tsx` 访问入口区加 `<QRCodeSVG value={app.entry_url} size={96}>`，与链接同一显隐口径（有 `entry_url` 即显示，未运行时 `entryInactive` 提示覆盖两者，`entry_url` 为空不渲染）；i18n `hostedApp.publish.qrLabel` / `qrHint` 三语。单测 `PublishTab.test.tsx` 3 例（mock `qrcode.react` 读出编码值 === 「复制链接」拷贝的字符串 / 已下线态同显 / 无地址不渲染）；platform vitest 全量 10 failed | 378 passed（10 例为基线既有失败：approvalPage×8 / auditSingleTenantFilter×1 / departmentKnowledgeSpaceDialogs×1），`tsc-strict` + eslint 通过。**手机扫码 / 直达 `/apps/{slug}` 的人工验证未做**（本地无部署）。
 
 - [ ] **T092**: `node20` / `static` Dockerfile 模板
   **文件**: `src/runtime-manager/runtime_manager/templates/node20/Dockerfile.j2`（新）, `src/runtime-manager/runtime_manager/templates/static/Dockerfile.j2`（新）
