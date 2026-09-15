@@ -542,6 +542,9 @@ T001–T007（Wave 1，可并行）
   **文件**: `client/src/components/approval/AppReviewView.tsx`, **`client/src/pages/settings/SettingsPage.tsx` + `client/src/components/approval/ApprovalPane.tsx`**（2026-09-10 改接 beta2 后审批中心由设置页承载、原 `ApprovalCenterDialog.tsx` 已删；「弹窗 `viewMode:'review'` 放宽至 1200px」的前提随之失效，尺寸按页面重估）, `client/src/locales/{zh-Hans,en,ja}/translation.json`, `src/backend/bisheng/app_publish/api/endpoints/snapshot.py`
   **测试载体**: `src/backend/test/app_publish/test_snapshot_api.py`（快照只读端点：归属 / 审批人放行 / 二进制与超大文件降级）+ 前端手动验证清单（文件树可展开、代码只读不可编辑、4 tab 切换、1200px 下不横向滚动、无「查看待上线版本」死链）
   **覆盖 AC**: AC-24, AC-25
+  - [x] **后端半（2026-09-16 完成，切片 publish-diff-review-backend）**：`api/endpoints/snapshot.py`（`GET …/versions/{version_id}/snapshot/tree` + `…/snapshot/file?path=`）+ `domain/services/snapshot_browse_service.py`（`ReviewAccess` 访问规则 + 流式读归档、不落盘）；`test_snapshot_api.py` 18 个用例全绿（归属 / 审批人持任务放行 / 其它版本审批人与陌生人 16257 / 二进制与超大降级 / 密钥 mask / 非法路径 16258 / 快照缺失或损坏 16256 / 单顶层目录去前缀 / 无整包下载路由）。契约见 design §4.2 ⑨。
+    **实际偏差记录**：① 审批人放行判据取"持有**该版本**发布申请的审批任务"（任意状态），不是"持有任一任务"——被驳回后回看自己审过的版本仍可，但审批版本 3 不开版本 1；② 除 owner / 审批人外，**租户管理员与平台超管也放行**（与 `publish-status` 的 `_require_viewer` 同口径，审批人来源本就含 `tenant_admin`）；③ 树 / 单文件**不落盘**，只有差异接口走 `safe_extract`；④ "不可预览"走数据级降级（`previewable:false` + `reason`）而不是错误码，错误码只给"文件不存在 / 路径非法"（16258）；⑤ 三个新码 16256/16257/16258 落在发布流程段，16259 预留未用。
+  - [ ] **前端半**（`AppReviewView.tsx` / 「查看待上线版本」入口 / i18n / 手动清单）——未做，由后续前端切片承接；D14「MVP 期整块不渲染以免死链」前提不变。
 
 - [ ] **T053**: 审批期临时预览实例后端（快照拉起 / 临时空库 / 审批人身份注入 + owner 权限放行〔NFR-1.2 审批例外，INV-36〕/ 终态与超时回收 / 不占实例名额）
   **文件**: `src/backend/bisheng/app_publish/domain/services/preview_instance_service.py`, `src/backend/bisheng/app_publish/api/endpoints/preview.py`, `src/backend/test/app_publish/test_preview_instance.py`
@@ -592,9 +595,11 @@ T001–T007（Wave 1，可并行）
   **文件**: `src/backend/bisheng/app_publish/domain/services/schema_evolution_service.py`（增量）, `src/backend/test/app_publish/test_schema_migration_snapshot.py`
   **覆盖 AC**: AC-42
 
-- [ ] **T063**: 版本差异服务端 diff（`GET /api/v1/apps/{app_id}/versions/{a}/diff/{b}` → `{files:[{path,change,additions,deletions}], patches:[…]}`；**服务端算 diff、不下发两份 tar**）
+- [x] **T063**: 版本差异服务端 diff（`GET /api/v1/apps/{app_id}/versions/{a}/diff/{b}` → `{files:[{path,change,additions,deletions}], patches:[…]}`；**服务端算 diff、不下发两份 tar**）
   **文件**: `src/backend/bisheng/app_publish/domain/services/version_diff_service.py`, `src/backend/bisheng/app_publish/api/endpoints/version_diff.py`, `src/backend/test/app_publish/test_version_diff.py`
   **覆盖 AC**: AC-41
+  **完成证据（2026-09-16，切片 publish-diff-review-backend）**：三个文件如上落码，`test_version_diff.py` 15 个用例全绿（形态与三种 change / 响应不含归档 / 二进制与超大不比较 / 相同版本空 diff / 密钥先 mask 后 diff / 单文件行数闸 / 总 patch 字节闸 / 文件数闸 / 审批人持待上线版本任务可比对已发布版本 / 陌生人 16257 / 版本不存在 16253 与快照缺失或损坏 16256 / 路由为登录态无 open_api marker / 租户管理员判定用应用租户）；`test/app_publish` 全套 397 passed（主检出基线 364 passed，+33 全为新增）。精确契约见 design §4.2 ⑨。
+  **实际偏差记录**：① 响应在 design 字面 `{files, patches}` 之上加了 `base` / `target` / `role` / `summary`，`files` 项多 `comparable` / `reason`，`patches` 项多 `truncated` / `masked_secrets`——超集，未改字面字段；② `a` = 旧侧 `b` = 新侧由路径顺序决定，"上一已发布版本"由前端从 `publish-status` 的 `current_version` / `pending_version` 取，后端不另提供 `diff/previous` 语法糖；③ 体积闸三道（单文件 2000 行 / 总 2 MiB / 5000 文件）为常量非配置——先有真实超限样本再考虑进 `settings.app_runtime`；④ 差异接口复用 `safe_extract` 落临时目录（与树 / 单文件的流式读不同），因为要对整棵树做逐字节比较，落盘比全量读进内存更可控。
 
 - [ ] **T064**: 版本差异前端（版本 tab 与审读视图**同一呈现组件**）
   **文件**: `platform/src/pages/BuildPage/hostedApp/publish/VersionDiff.tsx`, `client/src/components/approval/AppReviewView.tsx`（增量接入）, `platform/public/locales/{zh-Hans,en,ja}/bs.json`

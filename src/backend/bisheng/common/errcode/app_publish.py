@@ -305,6 +305,47 @@ class AppPublishStateConflictError(AppPublishError):
     Msg: str = "The current application state does not allow this action"
 
 
+class AppVersionSnapshotUnavailableError(AppPublishError):
+    """The version row exists but its frozen package cannot be read (AC-25 / AC-41).
+
+    Distinct from 16253: the *record* is there, the *bytes* are not — the
+    object was swept, the bucket is unreachable, or the archive no longer
+    parses. ``data.reason`` says which; the remedy is an administrator looking
+    at object storage, never a resubmission.
+    """
+
+    Code: int = 16256
+    Msg: str = "The code snapshot of this version is unavailable"
+
+
+class AppVersionReviewForbiddenError(AppPublishError):
+    """The caller may not read this version's source (AC-25 / AC-30).
+
+    Owner, the app's tenant administrator, a platform super admin, or an
+    approver who holds a task on the publish request of **that version** —
+    nobody else. A dedicated code rather than 16254 because the copy of 16254
+    ("owner only") is untrue for a page approvers are meant to open.
+
+    Rides in the 200 envelope for the same reason every other read here does
+    (design K11 ②).
+    """
+
+    Code: int = 16257
+    Msg: str = "You do not have permission to view the source of this version"
+
+
+class AppSnapshotFileNotFoundError(AppPublishError):
+    """``path`` is not a regular file inside the snapshot.
+
+    Covers a directory, a missing entry and an illegal path (absolute /
+    traversal) alike — ``data.reason`` distinguishes them; the client only
+    needs to know the file cannot be shown.
+    """
+
+    Code: int = 16258
+    Msg: str = "The file does not exist in this version's snapshot"
+
+
 # ---------------------------------------------------------------------------
 # 16270-16289 — capability bus (deferred wave; registered once, see docstring)
 # ---------------------------------------------------------------------------

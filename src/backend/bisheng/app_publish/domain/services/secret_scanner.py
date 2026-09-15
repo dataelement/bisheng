@@ -183,14 +183,67 @@ def scan_package(root: Path) -> ScanResult:
 
 def _skip_reason(path: Path) -> str | None:
     try:
-        if path.stat().st_size > MAX_SCAN_FILE_BYTES:
-            return "too_large"
+        size = path.stat().st_size
         with open(path, "rb") as handle:
-            if b"\x00" in handle.read(_SNIFF_BYTES):
-                return "binary"
+            head = handle.read(_SNIFF_BYTES)
     except OSError:
         return "unreadable"
+    return skip_reason(size, head)
+
+
+def skip_reason(size: int, head: bytes) -> str | None:
+    """Why a file is not scanned — and, for the same reasons, not previewed.
+
+    ``"too_large"`` above :data:`MAX_SCAN_FILE_BYTES`, ``"binary"`` when the
+    first :data:`_SNIFF_BYTES` carry a NUL, ``None`` otherwise. Public because
+    the review view (snapshot browsing, version diff) has to degrade exactly
+    the files the scanner skipped: a file the scan never read is a file whose
+    contents the platform has never vetted, so it is not handed to a browser
+    either.
+    """
+    if size > MAX_SCAN_FILE_BYTES:
+        return "too_large"
+    if b"\x00" in head[:_SNIFF_BYTES]:
+        return "binary"
     return None
+
+
+#: What a matched credential is replaced with when text leaves the platform
+#: through a read-only view. Fixed width on purpose — the mask must not leak
+#: the length of what it hides.
+SECRET_MASK = "***"
+
+
+def mask_secrets(text: str) -> tuple[str, int]:
+    """Replace every credential the rule set recognises; return ``(masked, count)``.
+
+    The scan gate (16241) means a *version* snapshot is clean by construction
+    — only attempts that passed the scan get a version row. This is the second
+    net for the review view: the rule set grows over time, and a snapshot
+    frozen under yesterday's rules is read under today's. Rules with a
+    ``value_group`` keep their key (``password = "***"`` still reads as a
+    finding); the others mask the whole match.
+    """
+    masked = 0
+    out: list[str] = []
+    for line in text.splitlines(keepends=True):
+        for rule in SECRET_SCAN_RULES:
+
+            def _replace(match: re.Match[str], rule: SecretRule = rule) -> str:
+                nonlocal masked
+                if rule.value_group is None:
+                    masked += 1
+                    return SECRET_MASK
+                value = match.group(rule.value_group) or ""
+                if _PLACEHOLDER_RE.match(value):
+                    return match.group(0)
+                masked += 1
+                start, end = match.span(rule.value_group)
+                return match.group(0)[: start - match.start()] + SECRET_MASK + match.group(0)[end - match.start() :]
+
+            line = rule.pattern.sub(_replace, line)
+        out.append(line)
+    return "".join(out), masked
 
 
 def _scan_file(path: Path, name: str) -> list[dict[str, Any]]:

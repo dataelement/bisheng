@@ -113,7 +113,10 @@ def check_upload_size(size_bytes: int) -> None:
         raise AppPackageTooLargeError(
             msg=f"应用包 {size_bytes / 1024 / 1024:.1f} MB 超过本部署上限 {limit_mb} MB",
             details={"gate": "package_mb", "limit": limit_mb, "actual_mb": round(size_bytes / 1024 / 1024, 2)},
-            hints=["检查 .gitignore 是否漏掉了虚拟环境 / 数据文件 / 构建产物", "上限由部署配置 app_runtime.max_package_mb 决定"],
+            hints=[
+                "检查 .gitignore 是否漏掉了虚拟环境 / 数据文件 / 构建产物",
+                "上限由部署配置 app_runtime.max_package_mb 决定",
+            ],
         )
 
 
@@ -178,7 +181,7 @@ def safe_extract(tar_path: Path, dest: Path) -> ExtractResult:
                         details={"gate": "entries", "limit": max_entries},
                         hints=["检查是否把 node_modules / .git / 缓存目录打进了包"],
                     )
-                relative = _safe_member_path(member)
+                relative = safe_member_path(member)
                 total += max(0, member.size)
                 if total > max_unpacked:
                     raise AppPackageTooLargeError(
@@ -197,12 +200,17 @@ def safe_extract(tar_path: Path, dest: Path) -> ExtractResult:
     return ExtractResult(root=_resolve_root(dest), entries=entries, unpacked_bytes=total)
 
 
-def _safe_member_path(member: tarfile.TarInfo) -> PurePosixPath:
+def safe_member_path(member: tarfile.TarInfo) -> PurePosixPath:
     """Reject the six entry kinds that must never be extracted; return the safe relative path.
 
     ``details.reason`` names the kind rather than saying "illegal entry": a
     developer whose build tool emitted a symlink needs to know it was the
     symlink, and a developer who was attacked needs the audit trail to say so.
+
+    Public because the review view walks a frozen snapshot *without*
+    extracting it and has to apply the very same rule — a listing that showed
+    an entry the extractor would have refused is a listing of something that
+    never ran.
     """
     raw = member.name.replace("\\", "/")
     path = PurePosixPath(raw)
@@ -263,6 +271,26 @@ def _resolve_root(dest: Path) -> Path:
     if len(children) == 1 and children[0].is_dir() and (children[0] / MANIFEST_FILENAME).is_file():
         return children[0]
     return dest
+
+
+def snapshot_root_prefix(file_paths: list[str]) -> str:
+    """:func:`_resolve_root`'s rule applied to member names instead of a directory.
+
+    Returns ``""`` when the manifest sits at the archive root, ``"<dir>/"``
+    when the archive has exactly one top-level directory and the manifest is
+    in it, and ``""`` otherwise. The review view reads snapshots as a stream
+    and never materialises them, so it needs the same unwrap decision the
+    extractor makes — expressed over paths — or the file tree an approver sees
+    would be one directory deeper than the tree the runtime built.
+    """
+    if MANIFEST_FILENAME in file_paths:
+        return ""
+    tops = {path.split("/", 1)[0] for path in file_paths}
+    if len(tops) == 1:
+        top = next(iter(tops))
+        if f"{top}/{MANIFEST_FILENAME}" in file_paths:
+            return f"{top}/"
+    return ""
 
 
 def read_manifest_bytes(root: Path) -> bytes:
