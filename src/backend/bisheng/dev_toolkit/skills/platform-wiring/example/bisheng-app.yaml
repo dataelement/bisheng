@@ -1,0 +1,12 @@
+# 平台能力接线样例的应用清单。字段定义见平台的 AppManifest schema;未知字段会被拒绝。
+manifest_version: 1
+
+name: 你是谁
+description: 读平台注入的访问者身份、按人把便签存进应用数据库的最小样例。没有登录页。
+slug: who-am-i
+
+runtime: python3.11
+port: 8080
+
+# 不写 tier 即「轻量」档。
+# database.tables 只是声明,平台本轮不替你建表——建表在 main.py 的 init_schema() 里。
