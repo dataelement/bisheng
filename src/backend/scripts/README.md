@@ -4,6 +4,37 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ## General Database Scripts
 
+### `unset_admin.py`
+
+指定已有用户 ID, 撤销平台超级管理员: 删除 `AdminRole=1` 和 OpenFGA
+`system:global#super_admin` 关系, 保留其他业务角色、部门/租户管理员权限, 缺少时补充
+`DefaultRole=2`。不修改账号禁用状态、密码、部门归属或资源所有权。
+
+从后端根目录执行, 默认只读预览, 输出 JSON 审计行:
+
+```bash
+.venv/bin/python scripts/unset_admin.py 123
+.venv/bin/python scripts/unset_admin.py 123 --apply
+# 指定配置文件, 参数含义与 execute_sql.py 相同
+.venv/bin/python scripts/unset_admin.py 123 --config config_3002.yaml
+```
+
+- `--apply` 才写入。正式执行前需保留至少一个其他未禁用的数据库超级管理员。
+- OpenFGA、Redis 必须可用。脚本只使用已有的存储和模型, 不自动创建; 存储名重复时需配置
+  `openfga.store_id`。OpenFGA 关闭时会拒绝执行, 避免遗漏残留关系。
+- 使用权限补偿 Worker 的 Redis 锁并续期; 锁占用时直接退出。请在维护窗口运行,
+  停止对目标账号的并发授权和手工队列重放。既有 Worker 锁租期为 60 秒, 若发现超时仍在执行的
+  旧补偿任务, 应先停止该任务再运行脚本; 不要强行删除正在使用的锁。
+- 仅将目标超级管理员关系的待处理 `write` 补偿记录标记为 `dead`, 保留审计记录,
+  并在角色变更同一事务中保存 `delete` 补偿。其他用户和其他关系不受影响。
+- 数据库与 OpenFGA 不具有跨系统事务。出现 `database_committed` 后失败, 说明数据库变更已提交,
+  OpenFGA 或缓存可能尚未处理完; 脚本返回非零, 不自动恢复超级管理员, 可用同一命令重试。
+  不要手动复活本脚本取消的授权重试记录。
+- 成功以退出码 0 且出现 `phase=verified` 为准; 默认预览退出 0 不代表已撤权。
+  撤权会提升 `token_version` 并清除该用户所有租户的权限缓存, 用户需要重新登录。
+  已经开始执行的请求不会被中途终止。
+- 如需恢复超级管理员, 必须另行明确授权并同时恢复数据库角色和 OpenFGA 关系。
+
 ### `execute_sql.py`
 
 连接 BiSheng 当前配置文件中的关系数据库并执行一条 SQL。脚本复用项目的
