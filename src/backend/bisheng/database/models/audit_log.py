@@ -240,9 +240,8 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     "open_api.share_link.expire",
     "open_api.ws.connect",
     # F054 app factory (design D14 / pit 24). The hosted-application state
-    # machine, meta updates and the deferred data-tab row edit are registered
-    # in one go so this whitelist is touched exactly once for the feature —
-    # `app.data_row_edit` starts being written in a later wave.
+    # machine, meta updates and the data-tab row edit / export (AC-56, written
+    # by AppDataService).
     # Also lockstep with bisheng/app_runtime/domain/constants.py AppAuditAction
     # (backend-side twin, not covered by the frontend gate).
     "app.publish",
@@ -254,6 +253,7 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     "app.delete_hook_failed",
     "app.meta_update",
     "app.data_row_edit",
+    "app.data_export",
     # F056 governance (design D6 / K3). Written by the visibility-change audit
     # hook that `app_runtime` registers on the F048 grant mutation path — the
     # permission module itself never learns the `app.` namespace.

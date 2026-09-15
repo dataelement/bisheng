@@ -186,6 +186,82 @@ class TestPassthrough:
         assert json.loads(handler.request.content)["purpose"] == "build"
 
 
+class TestDataPlane:
+    """T087 — the five ``db_*`` calls: paths, verbs, raw export, own error codes."""
+
+    async def test_data_plane_paths_and_signatures(self):
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            if request.url.path.endswith("/export"):
+                return httpx.Response(200, content=b"id,name\r\n1,a\r\n", headers={"content-type": "text/csv"})
+            return httpx.Response(200, json={"ok": True})
+
+        client = _client(handler)
+        await client.db_tables(app_id="app-1")
+        await client.db_schema(app_id="app-1", table="users")
+        await client.db_rows(app_id="app-1", table="users", page=2, size=25, order="-id")
+        await client.db_update_row(app_id="app-1", table="users", key="7", values={"name": "b"})
+        exported = await client.db_export(app_id="app-1", table="users")
+
+        assert [(r.method, r.url.path) for r in seen] == [
+            ("GET", "/v1/apps/app-1/db/tables"),
+            ("GET", "/v1/apps/app-1/db/tables/users/schema"),
+            ("GET", "/v1/apps/app-1/db/tables/users/rows"),
+            ("PATCH", "/v1/apps/app-1/db/tables/users/rows/7"),
+            ("GET", "/v1/apps/app-1/db/export"),
+        ]
+        assert dict(seen[2].url.params) == {"page": "2", "size": "25", "order": "-id"}
+        assert json.loads(seen[3].content) == {"values": {"name": "b"}}
+        assert seen[4].url.params["table"] == "users"
+        assert exported == b"id,name\r\n1,a\r\n", "export hands back the bytes, not a parsed body"
+        # The PATCH is signed over its raw bytes like every other intent.
+        expected = hmac.new(
+            SECRET.encode(), b"PATCH\n/v1/apps/app-1/db/tables/users/rows/7\n" + seen[3].content, hashlib.sha256
+        ).hexdigest()
+        assert seen[3].headers["X-Signature"] == expected
+
+    async def test_row_update_is_not_replayed_on_read_timeout(self):
+        """A PATCH whose answer we never saw may have been applied; replaying it would apply it twice."""
+        attempts = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            attempts.append(request)
+            raise httpx.ReadTimeout("timed out", request=request)
+
+        client = _client(handler)
+        with pytest.raises(AppOrchestratorUnavailableError):
+            await client.db_update_row(app_id="a", table="t", key="1", values={"x": 1})
+        assert len(attempts) == 1
+
+    @pytest.mark.parametrize(
+        ("manager_code", "status_code", "expected_code"),
+        [
+            ("db_not_found", 404, 16163),
+            ("table_not_found", 404, 16164),
+            ("row_not_found", 404, 16165),
+            ("data_invalid", 400, 16166),
+            ("data_busy", 409, 16167),
+        ],
+    )
+    async def test_data_plane_codes_are_their_own(self, manager_code, status_code, expected_code):
+        """A missing table must never read as "the orchestrator is unavailable" (16121)."""
+        from bisheng.common.errcode.app_factory import AppFactoryError
+
+        client = _client(_error(manager_code, status_code=status_code))
+        with pytest.raises(AppFactoryError) as excinfo:
+            await client.db_schema(app_id="a", table="ghost")
+        assert excinfo.value.code == expected_code
+
+    async def test_failed_export_is_an_error_not_a_csv(self):
+        client = _client(_error("table_not_found", status_code=404))
+        from bisheng.common.errcode.app_factory import AppDataTableNotFoundError
+
+        with pytest.raises(AppDataTableNotFoundError):
+            await client.db_export(app_id="a", table="ghost")
+
+
 class TestFormAgnostic:
     async def test_interface_semantics_are_form_agnostic(self):
         """INV-33: no container / compose / pod vocabulary anywhere on the facade.
@@ -210,6 +286,12 @@ class TestFormAgnostic:
             "status",
             "logs",
             "runtime_status",
+            # data plane (T087): typed table / row operations, never a statement
+            "db_tables",
+            "db_schema",
+            "db_rows",
+            "db_update_row",
+            "db_export",
         }
         for name in methods:
             assert not banned.search(name), name

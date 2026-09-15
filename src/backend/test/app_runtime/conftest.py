@@ -19,7 +19,7 @@ Four things this file exists to prevent:
   name. HTTP headers are latin-1; the injected ``X-BiSheng-User-Name`` /
   ``Dept-Name`` / ``Dept-Path`` must be percent-encoded, and with the usual
   English test account that bug is invisible (design pit 9).
-* **A half-stubbed orchestrator.** ``fake_orchestrator`` replaces **all ten**
+* **A half-stubbed orchestrator.** ``fake_orchestrator`` replaces **all fifteen**
   ``orchestrator_client`` methods. Miss one and it silently falls through to
   real HTTP against 127.0.0.1:8091 — which only surfaces as a connection error
   in CI, far from the test that caused it. The fixture asserts the stub set
@@ -79,6 +79,7 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.app_runtime.domain.services.app_state_service",
     "bisheng.app_runtime.domain.services.app_meta_service",
     "bisheng.app_runtime.domain.services.app_query_service",
+    "bisheng.app_runtime.domain.services.app_data_service",
     "bisheng.app_runtime.domain.services.entry_authz_service",
     "bisheng.app_runtime.domain.services.f048_app_permission",
     "bisheng.app_runtime.domain.services.visibility_audit",
@@ -116,6 +117,12 @@ ORCHESTRATOR_METHODS = (
     "status",
     "logs",
     "runtime_status",
+    # data plane (F054 T087) — the app's SQLite through the manager, never a file
+    "db_tables",
+    "db_schema",
+    "db_rows",
+    "db_update_row",
+    "db_export",
 )
 
 
@@ -415,7 +422,7 @@ async def app_factory(app_db, app_owner):
 
 @pytest.fixture()
 def fake_orchestrator(monkeypatch):
-    """Replace **all ten** ``orchestrator_client`` methods with programmable stubs.
+    """Replace **all fifteen** ``orchestrator_client`` methods with programmable stubs.
 
     Returns a namespace with ``calls`` (an ordered list of ``(method, kwargs)``)
     and ``responses`` (a per-method dict the test may overwrite before acting).
@@ -478,6 +485,25 @@ def fake_orchestrator(monkeypatch):
             "capacity": {"mem_available_mb": 8192, "committed_mb": 1024, "total_mb": 32768, "cpu": 8},
             "preflight": [],
         },
+        "db_tables": {"tables": [{"name": "users", "column_count": 2}]},
+        "db_schema": {
+            "table": "users",
+            "columns": [
+                {"name": "id", "type": "INTEGER", "notnull": False, "default": None, "pk": 1, "editable": True},
+                {"name": "name", "type": "TEXT", "notnull": True, "default": None, "pk": 0, "editable": True},
+            ],
+            "key": {"column": "id", "kind": "primary_key"},
+            "editable": True,
+        },
+        "db_rows": {
+            "rows": [{"key": 1, "values": {"id": 1, "name": "alice"}}],
+            "total": 1,
+            "page": 1,
+            "size": 50,
+            "order": "",
+        },
+        "db_update_row": {"table": "users", "key": 1, "before": {"name": "alice"}, "after": {"name": "bob"}},
+        "db_export": b"id,name\r\n1,alice\r\n",
     }
     calls: list[tuple[str, dict[str, Any]]] = []
 

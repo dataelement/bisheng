@@ -194,7 +194,7 @@ export const V2_ACTIONS: string[] = [
     'open_api.share_link.expire',
     'open_api.ws.connect',
     // F054 hosted applications — the state machine, meta updates and the
-    // deferred data-tab row edit.
+    // data-tab row edit / export.
     'app.publish',
     'app.publish_pending',
     'app.manual_publish',
@@ -204,6 +204,7 @@ export const V2_ACTIONS: string[] = [
     'app.delete_hook_failed',
     'app.meta_update',
     'app.data_row_edit',
+    'app.data_export',
     // F056 governance.
     'app.visibility_change',
     // F055 publish pipeline. Its own family, deliberately NOT nested under

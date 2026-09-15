@@ -1346,6 +1346,7 @@
       "appDeleteHookFailed": "ホスト型アプリ削除後処理の失敗",
       "appMetaUpdate": "ホスト型アプリのメタ情報を更新",
       "appDataRowEdit": "ホスト型アプリのデータを編集",
+      "appDataExport": "ホスト型アプリのデータをエクスポート",
       "appVisibilityChange": "公開範囲の変更",
       "appReleaseSubmit": "公開申請を提出",
       "appReleasePrecheckFailed": "ホスティング事前チェック失敗",

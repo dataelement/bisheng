@@ -1363,6 +1363,7 @@
       "appDeleteHookFailed": "Hosted app post-delete hook failed",
       "appMetaUpdate": "Hosted app metadata updated",
       "appDataRowEdit": "Hosted app data edited",
+      "appDataExport": "Hosted app data exported",
       "appVisibilityChange": "Visibility scope changed",
       "appReleaseSubmit": "Publish submitted",
       "appReleasePrecheckFailed": "Hosting precheck failed",

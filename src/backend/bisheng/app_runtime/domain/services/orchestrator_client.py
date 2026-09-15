@@ -49,6 +49,11 @@ from loguru import logger
 from bisheng.common.errcode.app_factory import (
     AppBuildFailedError,
     AppCapacityInsufficientError,
+    AppDataBusyError,
+    AppDataInvalidError,
+    AppDataNotReadyError,
+    AppDataRowNotFoundError,
+    AppDataTableNotFoundError,
     AppNotFoundError,
     AppOrchestratorUnavailableError,
     AppProbeFailedError,
@@ -58,7 +63,9 @@ from bisheng.common.services.config_service import settings
 
 #: Manager ``detail.code`` → platform error class (contract §3). ``unauthorized``
 #: and ``invalid_request`` fold into the orchestrator-unavailable answer on
-#: purpose — see the module docstring.
+#: purpose — see the module docstring. The five ``db_*`` / ``data_*`` codes are
+#: the data plane's own (contract §2 data-plane rows): a table that does not
+#: exist must not read as "the orchestrator is unavailable".
 _ERROR_BY_MANAGER_CODE: dict[str, type] = {
     "backend_unavailable": AppOrchestratorUnavailableError,
     "unauthorized": AppOrchestratorUnavailableError,
@@ -67,17 +74,24 @@ _ERROR_BY_MANAGER_CODE: dict[str, type] = {
     "capacity_exhausted": AppCapacityInsufficientError,
     "probe_failed": AppProbeFailedError,
     "not_found": AppNotFoundError,
+    "db_not_found": AppDataNotReadyError,
+    "table_not_found": AppDataTableNotFoundError,
+    "row_not_found": AppDataRowNotFoundError,
+    "data_invalid": AppDataInvalidError,
+    "data_busy": AppDataBusyError,
 }
 
 #: Per-call read budgets in seconds. ``deploy`` and ``probe`` block on the
 #: manager's readiness gate (D4: rebuild + probe ≤ 90 s), so a shared 15 s
 #: timeout would turn every cold start into a false "orchestrator unavailable".
+#: ``db_export`` streams a whole table, which is bounded by disk, not by us.
 _TIMEOUTS: dict[str, float] = {
     "deploy": 300.0,
     "probe": 300.0,
     "stop": 120.0,
     "destroy": 120.0,
     "build": 60.0,
+    "db_export": 120.0,
 }
 _DEFAULT_TIMEOUT = 15.0
 
@@ -95,7 +109,7 @@ def build_failure_error(payload: dict[str, Any]) -> AppBuildFailedError:
     """16122 from a ``build_status`` payload whose ``status`` is ``failed``.
 
     A free function rather than a client method: the facade's public surface is
-    exactly the ten intent methods (the test fixtures assert that set), and this
+    exactly the fifteen RPC methods (the test fixtures assert that set), and this
     is a translation of an already-fetched answer, not another RPC.
     """
     return AppBuildFailedError(
@@ -201,6 +215,50 @@ class OrchestratorClient:
         down (``backend_available=false``) — that is its most useful answer."""
         return await self._request("GET", "/v1/runtime/status", op="runtime_status")
 
+    # -- data plane (AC-56, design D10-C) -------------------------------
+    #
+    # The app's SQLite lives on the manager's host; backend never opens it.
+    # These five are the whole vocabulary — table list, table shape, keyed
+    # rows, one-row update, CSV export. No method carries SQL, so there is no
+    # DDL to refuse. The sole caller is ``AppDataService`` (owner narrowing +
+    # audit live there); the F052 MCP data tools go through that service too.
+
+    async def db_tables(self, *, app_id: str) -> dict[str, Any]:
+        """``{tables: [{name, column_count}]}``. 16163 while the app has not created its database."""
+        return await self._request("GET", f"/v1/apps/{app_id}/db/tables", op="db_tables")
+
+    async def db_schema(self, *, app_id: str, table: str) -> dict[str, Any]:
+        """``{table, columns[], key{column, kind}, editable}``."""
+        return await self._request("GET", f"/v1/apps/{app_id}/db/tables/{table}/schema", op="db_schema")
+
+    async def db_rows(
+        self,
+        *,
+        app_id: str,
+        table: str,
+        page: int | None = None,
+        size: int | None = None,
+        order: str | None = None,
+    ) -> dict[str, Any]:
+        """One page — ``{rows: [{key, values}], total, page, size, order}`` — in a stable order."""
+        params = {key: value for key, value in (("page", page), ("size", size), ("order", order)) if value}
+        return await self._request("GET", f"/v1/apps/{app_id}/db/tables/{table}/rows", params=params, op="db_rows")
+
+    async def db_update_row(self, *, app_id: str, table: str, key: str, values: dict[str, Any]) -> dict[str, Any]:
+        """Change exactly one row → ``{table, key, before, after}`` for the audit trail."""
+        return await self._request(
+            "PATCH",
+            f"/v1/apps/{app_id}/db/tables/{table}/rows/{key}",
+            json={"values": values},
+            op="db_update_row",
+        )
+
+    async def db_export(self, *, app_id: str, table: str) -> bytes:
+        """The whole table as CSV bytes; the platform streams them on as a download."""
+        return await self._request(
+            "GET", f"/v1/apps/{app_id}/db/export", params={"table": table}, op="db_export", as_bytes=True
+        )
+
     # -- transport ------------------------------------------------------
 
     def _config(self) -> tuple[str, str]:
@@ -217,7 +275,8 @@ class OrchestratorClient:
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
         op: str,
-    ) -> dict[str, Any]:
+        as_bytes: bool = False,
+    ) -> Any:
         base_url, secret = self._config()
         if not secret:
             logger.error("app_runtime.orchestrator op={} rejected: manager_hmac_secret is empty (fail-closed)", op)
@@ -243,7 +302,7 @@ class OrchestratorClient:
                         params=params or None,
                         headers=headers,
                     )
-                return self._unwrap(response, op=op)
+                return self._unwrap(response, op=op, as_bytes=as_bytes)
             except httpx.ConnectError as exc:
                 last_error = exc  # peer never saw it — safe to replay whatever the verb
             except httpx.HTTPError as exc:
@@ -267,7 +326,15 @@ class OrchestratorClient:
         return json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
     @staticmethod
-    def _unwrap(response: httpx.Response, *, op: str) -> dict[str, Any]:
+    def _unwrap(response: httpx.Response, *, op: str, as_bytes: bool = False) -> Any:
+        """JSON body on success, 161xx on failure; ``as_bytes=True`` hands back the bytes.
+
+        The error envelope is JSON either way — a failed export is a
+        ``{"detail": {...}}`` document, never a partial CSV — so the failure
+        branch does not depend on ``as_bytes``.
+        """
+        if as_bytes and response.status_code < 400:
+            return response.content
         try:
             body = response.json()
         except ValueError:
@@ -285,7 +352,8 @@ class OrchestratorClient:
         raise error_cls(msg=message, manager_code=code or "unknown", **extras)
 
 
-#: Process-wide facade. Ten public methods, no more: the F054/F055 test
+#: Process-wide facade. Fifteen public methods (ten orchestration + five data
+#: plane), no more: the F054/F055 test
 #: fixtures assert this set so that a newly added method cannot silently fall
 #: through to real HTTP against runtime-manager in a unit test.
 orchestrator_client = OrchestratorClient()

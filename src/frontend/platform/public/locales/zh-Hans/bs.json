@@ -1346,6 +1346,7 @@
       "appDeleteHookFailed": "托管应用删除后置处理失败",
       "appMetaUpdate": "托管应用元信息更新",
       "appDataRowEdit": "托管应用数据编辑",
+      "appDataExport": "托管应用数据导出",
       "appVisibilityChange": "可见范围变更",
       "appReleaseSubmit": "提交发布",
       "appReleasePrecheckFailed": "托管预检失败",
