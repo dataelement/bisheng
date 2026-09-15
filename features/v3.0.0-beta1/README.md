@@ -20,6 +20,8 @@
 | F049 | [knowledge-space-children-read-optimization](./049-knowledge-space-children-read-optimization/) | P1 | Spec 已存在 | F027, F040, F048 |
 | F050 | [unified-permission-settings](./050-unified-permission-settings/) | P0 | Spec、Design 已确认，Tasks 已拆解，实现中 | v2.6.0 F044, F048 |
 | F054 | [unified-citation-entries](./054-unified-citation-entries/) | P1 | Discovery + Spec + Design 已出，待确认 | F029, F041（F047 并行） |
+| F067 | [unified-remote-mcp-service](./067-unified-remote-mcp-service/) | P1 | Discovery、Spec、Design 已确认，Tasks 未生成 | F053, F066 |
+| F068 | [knowledge-space-chat-history-retention](./068-knowledge-space-chat-history-retention/) | P1 | Discovery、Spec、修订 Design 已确认，Tasks 未生成 | v2.6.0 F034, F048, 既有知识空间问答 |
 
 ---
 
@@ -63,3 +65,7 @@
 | 2026-07-30 | 用户明确确认 Tasks ★；完成 T001～T139 的实现、逐波回归和代码审查；随后明确本地不执行真实环境 E2E，T140 以范围决策和未执行证据报告收口，功能与迁移脚本开发完成。 |
 | 2026-08-14 | 登记 F049 知识空间目录与搜索读取优化，以及 F050 统一权限设置入口的 F048 适配。 |
 | 2026-08-17 | F050 Design 经用户确认；以 feat/2.6.0 实际 UI 为基线、F048 为唯一权限运行时，进入 Tasks 拆解。 |
+| 2026-09-15 | 登记 F067 统一远程 MCP 服务与 F068 知识空间历史会话保留；Discovery 已确认，Spec 待确认。 |
+| 2026-09-15 | F067/F068 Spec 已确认；形成两项 Design 草案，停在 Design ★ 门禁。 |
+| 2026-09-15 | F068 Design 经讨论取消独立入口投影表，改为 `MessageSession.entry_flow_id` nullable 覆盖字段；修订稿重新停在 Design ★ 门禁。 |
+| 2026-09-15 | 用户确认 F067/F068 Design ★；两项文档就绪，尚未生成 tasks.md 或进入编码。 |
