@@ -189,6 +189,8 @@ async def test_patch_with_no_effective_change_writes_no_audit(
         ({"cpu_millicores": 0}, "cpu_millicores"),
         ({"cpu_millicores": -500}, "cpu_millicores"),
         ({"memory_mb": 0}, "memory_mb"),
+        # Above the signed 32-bit ``Integer`` column: a 16262 naming the field, not a driver overflow.
+        ({"memory_mb": 2**31}, "memory_mb"),
         ({"name": "   "}, "name"),
         ({"name": "x" * 65}, "name"),
         ({"description": "x" * 501}, "description"),
@@ -207,6 +209,23 @@ async def test_patch_rejects_invalid_spec_16262_naming_the_field(
     async with publish_db() as session:
         stored = await ResourceTierDao.aget_by_code(session, "standard")
     assert (stored.cpu_millicores, stored.memory_mb, stored.name) == (2000, 4096, "标准"), "nothing was written"
+    assert audit_sink == []
+
+
+@pytest.mark.parametrize("field", ["cpu_millicores", "memory_mb"])
+async def test_patch_rejects_bool_as_integer_at_the_schema(
+    publish_db, api_app, tier_seed, super_admin_user, audit_sink, field
+):
+    """JSON ``true`` must not land as ``1`` — pydantic's lax ``int`` would take it, ``StrictInt`` refuses (422)."""
+    from bisheng.database.models.resource_tier import ResourceTierDao
+
+    async with api_app(payload=super_admin_user.payload) as client:
+        response = await client.patch(f"{LIST_URL}/standard", json={field: True})
+    assert response.status_code == 422, response.text
+
+    async with publish_db() as session:
+        stored = await ResourceTierDao.aget_by_code(session, "standard")
+    assert (stored.cpu_millicores, stored.memory_mb) == (2000, 4096), "nothing was written"
     assert audit_sink == []
 
 

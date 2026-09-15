@@ -24,7 +24,7 @@ real 403 on a GET into a full-page navigation to ``/403`` (design 坑 22).
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
 
 from bisheng.app_publish.api.endpoints.deploy import require_app_runtime_enabled
 from bisheng.app_publish.domain.services.resource_tier_service import ResourceTierService
@@ -60,11 +60,16 @@ class ResourceTierPatch(BaseModel):
     ``app_version.tier_id`` references) and neither is ``sort_order`` (the tab
     does not expose it). Range and blank checks live in the service so the
     failure is a 16262 naming the field, not a 422 the tab cannot localise.
+
+    The two specs are ``StrictInt`` because pydantic's lax ``int`` accepts
+    JSON ``true`` and hands the service ``1`` — one millicore, silently, and
+    the service's own ``bool`` guard never sees the original. The tab only
+    ever sends integers, so the 422 this produces is for hand-written calls.
     """
 
     name: str | None = Field(default=None, description="Display name")
-    cpu_millicores: int | None = Field(default=None, description="CPU limit in millicores (positive integer)")
-    memory_mb: int | None = Field(default=None, description="Memory limit in MB (positive integer)")
+    cpu_millicores: StrictInt | None = Field(default=None, description="CPU limit in millicores (positive integer)")
+    memory_mb: StrictInt | None = Field(default=None, description="Memory limit in MB (positive integer)")
     description: str | None = Field(default=None, description="Plain-language guidance shown to publishers")
     enabled: bool | None = Field(default=None, description="False retires the tier for NEW publishes only")
 

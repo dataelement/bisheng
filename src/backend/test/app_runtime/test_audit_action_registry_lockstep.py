@@ -39,9 +39,7 @@ _LOCALES = ("zh-Hans", "en-US", "ja")
 #: 2026-08-18 and all sixteen XPASSed, which is exactly what the strict marker
 #: is for: it forced the pending entry to be deleted rather than quietly
 #: outliving the gap it described.
-_RELEASE_ACTIONS = frozenset(
-    action for action in _UI_VISIBLE_V2_ACTIONS if action.startswith("app.release.")
-)
+_RELEASE_ACTIONS = frozenset(action for action in _UI_VISIBLE_V2_ACTIONS if action.startswith("app.release."))
 
 
 def _i18n_key(action: str) -> str:
@@ -84,14 +82,21 @@ def test_visibility_change_key_is_derived_not_invented():
     assert _i18n_key(AppAuditAction.VISIBILITY_CHANGE.value) == "appVisibilityChange"
 
 
+#: Every ``target_type`` the ``app.*`` actions write, each needing an
+#: ``objectTypeEnum`` entry. ``resource_tier`` is what ``app.tier_update``
+#: (F055 T065) writes; the rest of the family targets ``app``.
+_APP_TARGET_TYPES = ("app", "resource_tier")
+
+
 @pytest.mark.parametrize("language", _LOCALES)
-def test_object_type_app_has_copy(language):
-    """The audit list's object column renders ``app`` as a word, not as ``app``.
+@pytest.mark.parametrize("target_type", _APP_TARGET_TYPES)
+def test_object_type_has_copy(language, target_type):
+    """The audit list's object column renders the target type as a word, not as its raw name.
 
     Without this key ``renderObjectType`` falls back to the raw ``target_type``
     — readable enough to survive review, and wrong in all three languages.
     """
     payload = json.loads((_FRONTEND / "public" / "locales" / language / "bs.json").read_text(encoding="utf-8"))
     object_types = payload["log"]["objectTypeEnum"]
-    assert "app" in object_types
-    assert object_types["app"].strip()
+    assert target_type in object_types
+    assert object_types[target_type].strip()

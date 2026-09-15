@@ -62,6 +62,10 @@ TIER_AUDIT_TARGET_TYPE = "resource_tier"
 #: 16262 naming the field rather than a driver error naming a column.
 _NAME_MAX_LEN = 64
 _DESCRIPTION_MAX_LEN = 500
+#: ``cpu_millicores`` / ``memory_mb`` are plain ``Integer`` columns (signed
+#: 32-bit on both MySQL and DM8); anything above this would be a driver
+#: overflow error, not a spec.
+_INT_COLUMN_MAX = 2**31 - 1
 
 
 def _specs_from_constant() -> dict[str, dict[str, Any]]:
@@ -197,14 +201,6 @@ class ResourceTierService:
         return tier
 
     @classmethod
-    async def update_tier(cls, tier_code: str, **patch: Any) -> bool:
-        """Retune one tier (super-admin surface, deferred wave). ``code`` itself is not editable."""
-        async with get_async_db_session() as session:
-            changed = await ResourceTierDao.aupdate_row(session, tier_code, **patch)
-            await session.commit()
-        return changed
-
-    @classmethod
     async def count_apps_using(cls, tier_code: str) -> int:
         """Distinct apps whose **online** version froze this tier.
 
@@ -309,6 +305,8 @@ class ResourceTierService:
                 raise _reject(field, raw, "must_be_integer")
             if raw <= 0:
                 raise _reject(field, raw, "must_be_positive")
+            if raw > _INT_COLUMN_MAX:
+                raise _reject(field, raw, f"max_value_{_INT_COLUMN_MAX}")
             values[field] = raw
         if "name" in patch:
             name = patch["name"].strip() if isinstance(patch["name"], str) else ""
