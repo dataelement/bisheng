@@ -37,7 +37,6 @@ interface FileListViewProps {
     permissionEntryIds?: Set<string>;
     renameEntryIds?: Set<string>;
     deleteEntryIds?: Set<string>;
-    downloadEntryIds?: Set<string>;
     onManagePermission?: (id: string) => void;
     /** F034: open the move dialog for a file/folder. Shown when provided. */
     onMove?: (file: KnowledgeFile) => void;
@@ -86,7 +85,6 @@ export function FileListView({
     permissionEntryIds,
     renameEntryIds,
     deleteEntryIds,
-    downloadEntryIds,
     onManagePermission,
     onMove,
     canMoveFile = false,
@@ -195,7 +193,8 @@ export function FileListView({
                         canManageMembers={canManageMembers}
                         canRename={Boolean(renameEntryIds?.has(file.id))}
                         canDelete={Boolean(deleteEntryIds?.has(file.id))}
-                        canDownload={Boolean(downloadEntryIds?.has(file.id))}
+                        // COFCO: offered on every reviewed file; the server decides on click.
+                        canDownload
                         shougangEnabled={shougangEnabled}
                         canEditEncoding={canEditEncoding}
                         onEditEncoding={canEditEncoding ? setEditingEncodingFile : undefined}
