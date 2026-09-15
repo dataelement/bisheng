@@ -15,6 +15,11 @@ manager code               backend error code
 ``not_found``              16101 应用 / 实例不存在
 ``unauthorized``           16121 编排器不可用（见下）
 ``invalid_request``        16121 编排器不可用（见下）
+``db_not_found``           16163 应用尚未创建数据库（数据面）
+``table_not_found``        16164 数据表不存在（数据面）
+``row_not_found``          16165 数据行不存在（数据面）
+``data_invalid``           16166 数据面请求不合法（列 / 值 / 标识符）
+``data_busy``              16167 应用数据库繁忙，请稍后重试
 =========================  ==========================================
 
 The last two rows are deliberate. ``unauthorized`` means the manager rejected
@@ -85,4 +90,47 @@ class BackendUnavailableError(RuntimeManagerError):
 
 class ProbeFailedError(RuntimeManagerError):
     code = "probe_failed"
+    status = 409
+
+
+# ---------------------------------------------------------------------------
+# data plane (``runtime_manager/appdb.py``, D10-C)
+# ---------------------------------------------------------------------------
+#
+# Deliberately *not* ``not_found`` / ``invalid_request``: those two already mean
+# "instance missing" and "backend↔manager contract breakage" on the platform
+# side (16101 / 16121). A data-tab user who typed a table that does not exist
+# must get an answer about the table, not "the orchestrator is unavailable".
+
+
+class DatabaseNotFoundError(RuntimeManagerError):
+    """The app has not created ``app.db`` yet — nothing to read, nothing to invent."""
+
+    code = "db_not_found"
+    status = 404
+
+
+class TableNotFoundError(RuntimeManagerError):
+    code = "table_not_found"
+    status = 404
+
+
+class RowNotFoundError(RuntimeManagerError):
+    """No row with that key — or the update would have touched ≠ 1 rows and was rolled back."""
+
+    code = "row_not_found"
+    status = 404
+
+
+class DataInvalidError(RuntimeManagerError):
+    """Bad identifier, unknown column, binary column, non-scalar value, key change."""
+
+    code = "data_invalid"
+    status = 400
+
+
+class DataBusyError(RuntimeManagerError):
+    """The app holds the write lock past ``busy_timeout``; retryable."""
+
+    code = "data_busy"
     status = 409

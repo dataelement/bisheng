@@ -28,7 +28,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from runtime_manager import __version__
-from runtime_manager.api import intents, readonly, routes
+from runtime_manager.api import appdb, intents, readonly, routes
 from runtime_manager.config import get_config
 from runtime_manager.reconciler import ReconcileLoop, recovery_budget_seconds
 
@@ -79,6 +79,7 @@ app = FastAPI(
 app.include_router(intents.router)
 app.include_router(routes.router)
 app.include_router(readonly.router)
+app.include_router(appdb.router)
 
 
 @app.get("/healthz")

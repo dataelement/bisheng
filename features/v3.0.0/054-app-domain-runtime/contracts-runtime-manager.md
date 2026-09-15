@@ -24,6 +24,13 @@
 | `GET /v1/apps/{app_id}/status` | `{instance_id, phase, health, current_version_id, started_at, restart_count, last_probe_at}`；`phase ∈ pending\|building\|starting\|running\|unhealthy\|stopped\|failed`；**404 = 无实例**（`detail.code=not_found`） | F054 详情页 / `app_instance` 对账 · **F052** MCP 应用状态工具 |
 | `GET /v1/apps/{app_id}/logs?tail=&since=&keyword=` | `{lines: [...]}`（无日志即 `[]`） | 详情页运行日志 tab · **F053** CLI `logs` · **F052** MCP 日志工具 |
 | `GET /v1/runtime/status` | `{backend_available, supported_runtimes[], capacity{...}, preflight[{name, ok, detail}]}` | 超管运行环境状态（AC-23）· F055 预检前置自检 |
+| `GET /v1/apps/{app_id}/db/tables` | `{tables: [{name, column_count}]}`（只列用户表，`sqlite_*` 不出；库文件不存在 → **404 `db_not_found`**） | **backend `AppDataService`**（数据 tab · F052 MCP 数据工具，**均经它、不得直连**） |
+| `GET /v1/apps/{app_id}/db/tables/{table}/schema` | `{table, columns: [{name, type, notnull, default, pk, editable}], key: {column, kind: primary_key\|rowid}, editable}` | 同上 |
+| `GET /v1/apps/{app_id}/db/tables/{table}/rows?page=&size=&order=` | `{rows: [{key, values{}}], total, page, size, order}`；`size` 1–200（默认 50）；`order` = `col` / `-col`，**行键恒为次级排序键**（分页不重不漏）；BLOB 值以 `<blob N bytes>` 占位 | 同上 |
+| `PATCH /v1/apps/{app_id}/db/tables/{table}/rows/{key}` | 入参 `{values: {col: scalar}}` → `{table, key, before{}, after{}}`；**只改一行**（`BEGIN IMMEDIATE` 短事务，受影响行数 ≠ 1 回滚）；行键列 / BLOB 列 / 非标量值 / 未知列 → 400 `data_invalid` | 同上（backend 用 `before/after` 写 `app.data_row_edit` 审计） |
+| `GET /v1/apps/{app_id}/db/export?table=` | `text/csv` 文件（`Content-Disposition: attachment; filename="{table}.csv"`），临时文件发送后即删 | 同上 |
+
+**数据面细则（T086）**：**无 DDL、无任何承载 SQL 的入参**——表名 / 列名 / 排序列一律先对 `sqlite_master` / `PRAGMA table_info` 白名单核对再引号拼接，`CREATE / ALTER / DROP / PRAGMA` 不是"被拒绝"而是"说不出口"（结构演进归 F055）。读路径 `mode=ro`、写路径 `mode=rw`（**永不 `rwc`**——应用自己建库，manager 不替它造空库）；每次调用独立连接 + `busy_timeout=3000ms`，调用结束即关，不持长事务（WAL 单写者，长事务会卡住应用自己的写）。写锁等待超时 → **409 `data_busy`**（可重试）；表不存在 → 404 `table_not_found`；行不存在 / 受影响行数 ≠ 1 → 404 `row_not_found`。行键：单列主键用该列，否则用 `rowid`；`WITHOUT ROWID` 复合主键表 `editable=false`（可读可导、不可编辑）。
 
 **入参约定**：`tier{cpu: vCPU float, mem: MiB int}`；build 必带 **`code_url`（MinIO 预签 URL）** + `code_object_key`（溯源）+ `slug` + `version_no`；deploy 带 `env{}`、`health{path,interval,timeout,retries,start_period}`、`platform_api_base`、`base_path`（缺省 `/apps/{slug}`）。
 
@@ -46,6 +53,8 @@ manager 的 body 恒为 `{"detail": {"code","message",...}}`，backend 按此映
 | `409 probe_failed` | **16124** |
 | `GET /v1/builds/{id}` 的 `status=failed`（带 `stage`/`message`/`tail`） | **16122** |
 | `404 not_found` | 路由 / 实例不存在（app-proxy 直接出停用页） |
+| `404 db_not_found` / `404 table_not_found` / `404 row_not_found` | **16163** / **16164** / **16165**（数据面，T087） |
+| `400 data_invalid` / `409 data_busy` | **16166** / **16167**（数据面，T087） |
 
 ## 4. 环境变量
 
@@ -92,4 +101,4 @@ reconciler 每 **15s** 一轮，`RTM_RECONCILE_ENABLED` 关不掉的产品语义
 
 ## 9. 尚未实现（留给后续批次）
 
-`GET /v1/apps/{app_id}/db/*`（数据 tab / MCP 数据工具，D10，后置 Wave）；出站白名单双层与 docker-socket-proxy（D12 / D2-B，Wave 4，后者**零代码改动**——只改 `RTM_DOCKER_HOST`）。
+出站白名单双层与 docker-socket-proxy（D12 / D2-B，Wave 4，后者**零代码改动**——只改 `RTM_DOCKER_HOST`）。（`GET /v1/apps/{app_id}/db/*` 数据面已于 T086 落地，见 §2 表末五行。）
