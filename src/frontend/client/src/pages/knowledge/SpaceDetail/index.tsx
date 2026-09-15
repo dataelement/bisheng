@@ -2,6 +2,7 @@ import { Fragment, useState, useRef, useEffect, useLayoutEffect, useCallback, ty
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useRecoilValue, useRecoilState } from "recoil";
 import { knowledgeSelectedFilesState } from "../selectionStore";
+import { resolveDownloadErrorMessage } from "./downloadErrorMessage";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Link2 } from "lucide-react";
@@ -460,7 +461,22 @@ export function KnowledgeSpaceContent({
     const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(new Set());
     const [renameEntryIds, setRenameEntryIds] = useState<Set<string>>(new Set());
     const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
-    const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
+    /** COFCO: the download button is offered on every reviewed file, and the
+     *  server decides.
+     *
+     *  Before 3.0 the listing carried each file's effective permission ids, so
+     *  the button could be shown only to those who had it, for free. 3.0's
+     *  listing dropped that field and the client fell back to asking per file,
+     *  but only when a row's "⋯" menu opens — so the button appeared after the
+     *  user poked the row and vanished again on the next page. Asking up front
+     *  is not free either: measured on the customer's own environment, the
+     *  permission decision for one page costs 43-124ms against 5-9ms to build
+     *  the targets, and every listing, folder change and page turn would pay it
+     *  for a permission nearly everyone holds.
+     *
+     *  So the affordance is unconditional and a denial arrives as a toast from
+     *  the download call itself, which checks the same permission anyway. */
+    const OFFER_DOWNLOAD_TO_EVERYONE = true;
     const permissionEntryProbeKey = displayFiles
         .filter((file) => !file.pendingUploadApproval && !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
@@ -544,7 +560,6 @@ export function KnowledgeSpaceContent({
         checkedFileIdsRef.current = new Set();
         setPermissionEntryIds(new Set());
         setRenameEntryIds(new Set());
-        setDownloadEntryIds(new Set());
         setDeleteEntryIds(new Set());
     }, [permissionEntryProbeKey]);
 
@@ -576,7 +591,6 @@ export function KnowledgeSpaceContent({
                 };
                 grant("manage_permission", setPermissionEntryIds);
                 grant("rename", setRenameEntryIds);
-                grant("download", setDownloadEntryIds);
                 grant("delete", setDeleteEntryIds);
             } catch {
                 checkedFileIdsRef.current.delete(id);
@@ -840,10 +854,7 @@ export function KnowledgeSpaceContent({
 
     const handleBatchDownload = async () => {
         const selectedList = getReviewedSelection();
-        const canDownloadSelected = selectedList.length > 0 && selectedList.every((file) =>
-            downloadEntryIds.has(file.id)
-        );
-        if (!canDownloadSelected) {
+        if (selectedList.length === 0) {
             showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
             return;
         }
@@ -862,8 +873,11 @@ export function KnowledgeSpaceContent({
                 String(now.getDate()).padStart(2, '0');
             const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
             triggerUrlDownload(url, `${dateStr}_${randomStr}.zip`);
-        } catch {
-            showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
+        } catch (error) {
+            showToast({
+                message: resolveDownloadErrorMessage(error, localize("com_knowledge.download_failed")),
+                status: "error",
+            });
         }
     };
 
@@ -1094,10 +1108,6 @@ export function KnowledgeSpaceContent({
     const handleSingleDownload = async (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
         const isFolder = file?.type === FileType.FOLDER;
-        if (!downloadEntryIds.has(fileId)) {
-            showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
-            return;
-        }
         try {
             if (isFolder) {
                 // Folders must use batch download (returns zip)
@@ -1115,8 +1125,14 @@ export function KnowledgeSpaceContent({
                 if (!downloadUrl) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
                 triggerUrlDownload(downloadUrl, file?.name);
             }
-        } catch {
-            showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
+        } catch (error) {
+            // The button is offered to everyone, so "you may not download this"
+            // arrives here rather than being prevented. Say which it was: the
+            // server's own wording for a refusal, the generic failure otherwise.
+            showToast({
+                message: resolveDownloadErrorMessage(error, localize("com_knowledge.download_failed")),
+                status: "error",
+            });
         }
     };
 
@@ -1348,9 +1364,7 @@ export function KnowledgeSpaceContent({
     const canBatchDelete = reviewedSelectedList.length > 0 && reviewedSelectedList.every((file) =>
         deleteEntryIds.has(file.id) && !getFileChangeLockState(file).locked
     );
-    const canBatchDownload = reviewedSelectedList.length > 0 && reviewedSelectedList.every((file) =>
-        downloadEntryIds.has(file.id)
-    );
+    const canBatchDownload = reviewedSelectedList.length > 0 && OFFER_DOWNLOAD_TO_EVERYONE;
     // "处理相似文档" uses union semantics (like batch retry's hasFailedFiles): the entry
     // appears whenever ANY selected file is a pending similar document. The dialog is then
     // scoped to exactly the selected files (see handleProcessSimilar).
@@ -1816,7 +1830,7 @@ export function KnowledgeSpaceContent({
                                             canManageMembers={canManageMembers}
                                             canRename={renameEntryIds.has(file.id)}
                                             canDelete={deleteEntryIds.has(file.id)}
-                                            canDownload={downloadEntryIds.has(file.id)}
+                                            canDownload={OFFER_DOWNLOAD_TO_EVERYONE}
                                             mobileListMode={isH5}
                                             highlightedTagIds={searchTagIds}
                                             highlightKeyword={searchQuery}
@@ -1866,7 +1880,6 @@ export function KnowledgeSpaceContent({
                                     permissionEntryIds={permissionEntryIds}
                                     renameEntryIds={renameEntryIds}
                                     deleteEntryIds={deleteEntryIds}
-                                    downloadEntryIds={downloadEntryIds}
                                     onManagePermission={handleManagePermission}
                                     versionManagementEnabled={versionManagementEnabled}
                                     onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
