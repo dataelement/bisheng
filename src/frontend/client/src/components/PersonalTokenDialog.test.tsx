@@ -85,6 +85,10 @@ it.each(["en", "zh-Hans", "ja"])("copies the visible prompt in %s with the curre
     tokenPageUrl: "http://localhost:3080/workspace/settings/ai-access?connect=1",
   });
   expect(screen.getByText(prompt, { normalizer: (value) => value })).toBeInTheDocument();
+  // The note says which assistant to paste into; the prompt's fourth line lets an
+  // assistant that cannot reach this instance say so instead of improvising.
+  expect(screen.getByText(mockI18n.t("com_ai_access.supported_note"))).toBeInTheDocument();
+  expect(prompt.split("\n")).toHaveLength(4);
   await userEvent.click(screen.getByRole("button", { name: mockI18n.t("com_ai_access.copy_all") }));
   expect(copyText).toHaveBeenCalledWith(prompt);
 });
