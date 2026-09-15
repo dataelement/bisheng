@@ -26,6 +26,7 @@ from bisheng_cli.errors import (
     EXIT_NOT_LOGGED_IN,
     EXIT_OK,
     EXIT_PUBLISH_CONFLICT,
+    EXIT_USAGE,
 )
 from bisheng_cli.main import run as main_run
 from tests.helpers.platform_mock import (
@@ -284,6 +285,117 @@ def test_16229_schema_change_requires_confirm_flag(
     # Terminated at the synchronous response: no approval request was created,
     # and no polling happened.
     assert mock.paths_called().count(DEPLOY) == 1
+
+
+# ---- 16229: the one refusal that becomes a question (F055 AC-09) -----------
+
+SCHEMA_ITEMS = [
+    {"table": "orders", "column": "amount", "op": "modify_column"},
+    {"table": "orders", "column": "note", "op": "drop_column"},
+    {"table": "settings", "column": None, "op": "add_table"},
+]
+
+
+def _schema_refusal() -> object:
+    """What the platform's `precheck_schema` gate answers on the upload itself."""
+    return deploy_sync_err(
+        16229,
+        "本次发布包含未确认的应用数据表结构变更(改列 / 删列)",
+        http_status=409,
+        details={
+            "reason": "schema_change_unconfirmed",
+            "has_breaking": True,
+            "items": SCHEMA_ITEMS,
+            "breaking": SCHEMA_ITEMS[:2],
+        },
+        hints=["改列 / 删列会影响线上已有数据, 请逐项确认后带上 --confirm-schema-change 重新发布"],
+    )
+
+
+def _deploy_bodies(mock: PlatformMock) -> list[bytes]:
+    return [call.content for call in mock.calls if call.url.path == DEPLOY]
+
+
+def test_16229_without_tty_prints_the_diff_and_refuses_without_asking(
+    monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path
+) -> None:
+    """No terminal, no question: an unattended run must never confirm a data-losing change by itself."""
+
+    def _explode(_prompt: str) -> str:  # pragma: no cover - must never run
+        raise AssertionError("prompted without a TTY")
+
+    monkeypatch.setattr("builtins.input", _explode)
+    mock = _mock().post(DEPLOY, _schema_refusal())
+    code, _, err = _run(["deploy", str(sample_project)], monkeypatch=monkeypatch, mock=mock)
+    assert code == EXIT_PUBLISH_CONFLICT
+    # The whole diff is on screen — breaking items flagged, the additive one listed too.
+    assert "改列  表 orders 列 amount" in err and "破坏性" in err
+    assert "删列  表 orders 列 note" in err
+    assert "加表  表 settings" in err
+    assert "--confirm-schema-change" in err
+    assert mock.paths_called().count(DEPLOY) == 1
+
+
+def test_16229_at_a_tty_yes_resends_the_same_package_with_the_flag(
+    monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path
+) -> None:
+    prompts: list[str] = []
+
+    def _answer_yes(prompt: str) -> str:
+        prompts.append(prompt)
+        return "y"
+
+    monkeypatch.setattr("builtins.input", _answer_yes)
+    mock = (
+        _mock().post(DEPLOY, [_schema_refusal(), deploy_accept()]).get("/api/v2/apps/deployments/dep-1", _waiting_seq())
+    )
+    code, _, err = _run(["deploy", str(sample_project)], monkeypatch=monkeypatch, mock=mock, tty=True)
+
+    assert code == EXIT_OK
+    assert len(prompts) == 1 and "确认变更" in prompts[0]
+    first, second = _deploy_bodies(mock)
+    assert b'name="confirm_schema_change"' in first and b"false" in first
+    assert b'name="confirm_schema_change"' in second and b"true" in second
+    assert "重新上传" in err
+
+
+def test_16229_at_a_tty_no_cancels_without_a_second_upload(
+    monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path
+) -> None:
+    monkeypatch.setattr("builtins.input", lambda _prompt: "n")
+    mock = _mock().post(DEPLOY, _schema_refusal())
+    code, _, err = _run(["deploy", str(sample_project)], monkeypatch=monkeypatch, mock=mock, tty=True)
+
+    assert code == EXIT_USAGE
+    assert "取消" in err and "--confirm-schema-change" in err
+    assert mock.paths_called().count(DEPLOY) == 1
+
+
+def test_16229_with_the_flag_already_sent_is_never_asked_again(
+    monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path
+) -> None:
+    """A platform that refuses a confirmed upload is broken; looping on the question would hide that."""
+
+    def _explode(_prompt: str) -> str:  # pragma: no cover - must never run
+        raise AssertionError("asked again despite --confirm-schema-change")
+
+    monkeypatch.setattr("builtins.input", _explode)
+    mock = _mock().post(DEPLOY, _schema_refusal())
+    code, _, _ = _run(
+        ["deploy", str(sample_project), "--confirm-schema-change"], monkeypatch=monkeypatch, mock=mock, tty=True
+    )
+    assert code == EXIT_PUBLISH_CONFLICT
+    assert mock.paths_called().count(DEPLOY) == 1
+
+
+def test_schema_change_items_reads_both_envelope_shapes() -> None:
+    from bisheng_cli.commands.deploy import schema_change_items
+
+    envelope = {"exception": "x", "details": {"items": SCHEMA_ITEMS, "breaking": []}, "hints": []}
+    assert schema_change_items(envelope) == SCHEMA_ITEMS
+    assert schema_change_items({"items": SCHEMA_ITEMS}) == SCHEMA_ITEMS
+    assert schema_change_items({"details": {"items": "nonsense"}}) == []
+    assert schema_change_items(None) == []
 
 
 def test_confirm_schema_change_flag_forwarded_as_form_field(
