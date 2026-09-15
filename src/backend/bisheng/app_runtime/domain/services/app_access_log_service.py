@@ -22,8 +22,9 @@ silent gap — while a failed insert is logged with its traceback and dropped.
 **Why the task set.** ``asyncio.create_task`` keeps only a weak reference to
 the task; without a strong one the loop may collect it mid-flight and the row
 never lands, with nothing in the log. Same idiom as ``notification.forwarder``.
-``flush_pending_access_records`` exists so tests (and a graceful shutdown) can
-wait for the in-flight writes.
+``flush_pending_access_records`` is what the tests drain through, and what
+``main.lifespan`` awaits (bounded) before it closes the database — a deploy
+restart in the middle of a visit must not turn into a missing record.
 """
 
 from __future__ import annotations
@@ -128,8 +129,20 @@ async def _first_entry_in_window(*, app_id: str, user_id: int) -> bool:
     return bool(created)
 
 
-async def flush_pending_access_records() -> None:
-    """Await every scheduled write. Failures were already handled inside each task."""
+async def flush_pending_access_records(*, timeout: float | None = None) -> int:
+    """Await every scheduled write; return how many were still unfinished.
+
+    Failures were already handled inside each task. With ``timeout`` (the
+    lifespan shutdown passes one) a write that has not landed by then is
+    cancelled and counted, so a stuck database never holds the process open —
+    and the count in the log is the honest answer to "did we lose records on
+    that restart".
+    """
     if not _pending_tasks:
-        return
-    await asyncio.gather(*list(_pending_tasks), return_exceptions=True)
+        return 0
+    _done, pending = await asyncio.wait(list(_pending_tasks), timeout=timeout)
+    for task in pending:
+        task.cancel()
+    if pending:
+        logger.warning("app_runtime.access_log shutdown dropped {} unfinished access record(s)", len(pending))
+    return len(pending)

@@ -216,7 +216,7 @@
     - 被驳回 / 撤回**不写** `pending_version_id`（只标 `terminal_state`），故 AC-05「迭代被驳回不改变已上线态、当前版本继续运行」天然成立。
     - `pending_version_id` **不是应用态**，但它的写入同样只在 `AppStateService` 内（决议-8 的精神一致：F055 只调不直写）。
   - `app_instance`：`id` / `app_id` / `tenant_id` / `version_id` / `phase` / `health` / `exec_ref`（执行体引用，compose 形态是容器名——**这是唯一允许出现形态特有值的字段，且只对内**）/ `started_at` / `restart_count` / `last_probe_at`。
-  - `app_access_log`（AC-38，**后置 Wave**）：`tenant_id` / `user_id` / `app_id` / `created_at`，索引 `(app_id, created_at)`。
+  - `app_access_log`（AC-38，**T089 已落地 2026-09-16**）：`id`（自增，秒级时间列分页的并列键）/ `tenant_id`（应用的租户，写入方显式落）/ `app_id` / `user_id` / `user_name`（进入时显示名，冗余）/ `entry_time` / `request_id`，索引 `(app_id, entry_time)` + `(user_id, entry_time)`——初稿写的 `created_at` 单索引按落地实况订正：查询面（F056 AC-24）既按应用也按访问用户查。
 - **状态机落库与并发**：`app.state` 单列 + 五个状态动作集中在 `AppStateService`（**应用态唯一写入方**，决议-8；F055 只调不直写）。每个动作的落库是**带前态断言的单行 UPDATE**（`WHERE id=:id AND state IN (:允许前态)`），受影响行数为 0 → 抛 `AppStateConflictError`（16102）。这样并发的「下线」与「上线终检」不会互相覆盖，也不需要行锁。**不建独立状态机 / 状态历史表**——每次动作已计审计（`app.*` 命名空间，D14），审计就是历史。
 - **UNION 第三支**：`database/models/flow.py:660-702 _build_apps_subquery` 加第三支 `SELECT`，把 `app` 表投影成同一列集 `(id, name, description, flow_type, logo, user_id, status, create_time, update_time)`——其中 `flow_type` 投影为**常量 35**（`FlowType` 新枚举值，避开已占的 5/10/15/20/25/30，`flow.py:33-39`），`user_id` 投影 `owner_user_id`，`status` 投影为 **2（已上线）/ 1（其余四态）** 供既有 `status` 过滤与卡片开关复用；**应用态五值另经新查询参数 `app_state` 过滤**（不塞 `status` 列，见坑 12）。第三支的 `tenant_id` 条款**手工** `build_tenant_filter_clause(App.tenant_id)`——照 `flow_clause`（:695）/ `assistant_clause`（:698）两支的写法自己加，**今天没有第三支范例**（K5 ③）。
 - **但 UNION 第三支只是"第三类型接入"的一半——后端另有 6 组硬闸**（E1 §3.2 / E4 §0-7 已逐条列出；行号会漂，按符号名定位。**只加 UNION 第三支的话，前端选「托管应用」得到的是恒空列表，AC-51 / AC-57 直接不成立**）：
@@ -662,7 +662,7 @@ runtime-manager reconcile 循环（15s）
 - app-proxy：`app_proxy.request`（结构化：`request_id / slug / user_id / decision / reason / cache_hit / upstream_status / latency_ms`）· `app_proxy.header_strip`（剥离到的伪造头名，**异常值应告警**）· `app_proxy.fallback`（兜底页类型分布）。
 - runtime-manager：`rtm.intent`（`kind / app_id / result / latency_ms`）· `rtm.reconcile`（每轮的 `desired/actual/actions`）· `rtm.rebuild`（unhealthy 重建，**频次异常 = 应用本身有问题**）· `rtm.admission_reject`（含容量快照）。
 - backend：`app.state_transition`（`from → to / reason / actor`）· 审计页 `app.*`。
-- Redis 键：`app_access:{app_id}:{user_id}`（访问去重窗口，后置）。
+- Redis 键：`app_access:{app_id}:{user_id}`（访问去重窗口，`SET NX EX`，TTL = `app_runtime.access_log_merge_window_seconds`，T089 已落地）。
 
 ---
 

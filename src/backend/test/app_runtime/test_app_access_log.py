@@ -359,6 +359,60 @@ class TestFailureIsolation:
 
 
 # ---------------------------------------------------------------------------
+# shutdown: in-flight writes get a bounded chance to land
+# ---------------------------------------------------------------------------
+
+
+class TestShutdownFlush:
+    async def test_flush_waits_for_a_write_that_lands_in_time(
+        self, app_db, app_factory, app_owner, runtime_enabled, no_tenant_blacklist, visible, fake_redis
+    ):
+        """A bounded flush is what the lifespan calls: a write that finishes
+        inside the budget lands, and the count of dropped records is zero."""
+        from bisheng.app_runtime.domain.services.app_access_log_service import flush_pending_access_records
+
+        _app, _ = await app_factory(slug="flush-app", state=AppState.ONLINE.value)
+        await _verdict("flush-app", _token(app_owner.user_id))
+
+        assert await flush_pending_access_records(timeout=5.0) == 0
+        assert len(await _rows(app_db)) == 1
+
+    async def test_flush_timeout_cancels_a_stuck_write_and_reports_it(self, monkeypatch):
+        """A database that never answers must not hold the process open: the
+        stuck task is cancelled, counted, and the task set ends up empty."""
+        import asyncio
+
+        from bisheng.app_runtime.domain.services import app_access_log_service
+
+        stalled = asyncio.Event()
+
+        async def _never_returns(**kwargs):
+            await stalled.wait()
+            return True
+
+        monkeypatch.setattr(app_access_log_service, "record_access", _never_returns)
+        task = app_access_log_service.schedule_access_record(app_id="stuck", tenant_id=1, user_id=1, user_name="u")
+
+        dropped = await app_access_log_service.flush_pending_access_records(timeout=0.05)
+
+        assert dropped == 1
+        for _ in range(3):  # let the loop deliver the cancellation
+            await asyncio.sleep(0)
+        assert task.cancelled()
+        assert not app_access_log_service._pending_tasks
+
+    def test_lifespan_flushes_before_closing_the_database(self):
+        """``main.lifespan`` awaits the flush on the way down, and does so
+        *before* ``close_app_context`` — after it there is no session to write
+        with, and the flush would only be draining failures."""
+        source = (Path(__file__).resolve().parents[2] / "bisheng" / "main.py").read_text(encoding="utf-8")
+        flush_at = source.find("await flush_pending_access_records(")
+        close_at = source.find("await close_app_context()")
+        assert flush_at != -1, "main.lifespan must flush pending access records on shutdown"
+        assert close_at != -1 and flush_at < close_at, "the flush must run before the app context is closed"
+
+
+# ---------------------------------------------------------------------------
 # tenant isolation + query face
 # ---------------------------------------------------------------------------
 
