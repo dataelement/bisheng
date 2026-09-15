@@ -97,7 +97,7 @@ metadata:
   - `node20`:`BISHENG_APP_START` → `Procfile` 的 `web:` 行 → `package.json` 的 `scripts.start` → `package.json` 的 `main` →
     `server.js` / `index.js` / `app.js` / `main.js`。`scripts.start` 里的命令会被直接执行(`node_modules/.bin` 已在 PATH 上),
     **不经过 `npm start`**;`BASE_PATH` 与 `BISHENG_APP_BASE_PATH` 同值,给框架用。有 `scripts.build` 时平台在构建镜像时先跑一次 `npm run build`
-    (装齐 devDependencies 再裁掉),没有就只装 `dependencies`;有 `package-lock.json` 用 `npm ci`,没有用 `npm install`。
+    (装齐 devDependencies 再裁掉),没有就只装 `dependencies`;有 `package-lock.json`(或 `npm-shrinkwrap.json`)用 `npm ci`,没有用 `npm install`。
   - `static`:没有进程可启动,以上都不看。平台找 `index.html`:先看包根目录,再看 `dist/`、`build/`、`public/`,取第一个命中的目录整个托管;
     未知路径回落到 `index.html`(前端路由可用),带扩展名的资源找不到就是 404。
 - **依赖**:能只用标准库就别加依赖。`requirements.txt` 留空(node20 则 `package.json` 没有 `dependencies`)是合法且推荐的——

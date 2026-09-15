@@ -471,7 +471,7 @@ curl -s -b "access_token_cookie=<token>" http://<host>:3001/api/v1/apps/runtime-
 | `runtime` | 基础镜像 | 构建时做什么 | 启动命令 |
 |-----------|---------|-------------|---------|
 | `python3.11` | `python:3.11-slim` | `requirements.txt` 非空才 `pip install`（走 `RTM_BUILD_INDEX_URL`） | `BISHENG_APP_START` → `Procfile` `web:` → `main.py` → `app.py` |
-| `node20` | `node:20-slim` | `package.json` 有依赖才装：有 `package-lock.json` 用 `npm ci`，否则 `npm install`（走 `RTM_BUILD_NPM_REGISTRY`）；有 `scripts.build` 先 `npm run build` 再裁掉 devDependencies | `BISHENG_APP_START` → `Procfile` `web:` → `package.json` `scripts.start` → `main` → `server.js` / `index.js` / `app.js` / `main.js` |
+| `node20` | `node:20-slim` | `package.json` 有依赖才装：有 `package-lock.json` / `npm-shrinkwrap.json` 用 `npm ci`，否则 `npm install`（走 `RTM_BUILD_NPM_REGISTRY`）；有 `scripts.build` 先 `npm run build` 再裁掉 devDependencies | `BISHENG_APP_START` → `Procfile` `web:` → `package.json` `scripts.start` → `main` → `server.js` / `index.js` / `app.js` / `main.js` |
 | `static` | `nginx:1.27-alpine` | 不装任何包。找 `index.html`：包根目录 → `dist/` → `build/` → `public/`，取第一个命中的目录 | 无应用进程；nginx 以非 root 跑，配置、pid、临时文件全在 `/tmp` |
 
 这些决定在**渲染 Dockerfile 时**就从源码树里读定（`source_facts`），渲染出的 Dockerfile 写明做了什么；

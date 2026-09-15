@@ -164,12 +164,12 @@ def test_node_without_dependencies_never_runs_npm(tmp_path):
     tree = _tree(tmp_path / "app", {"server.js": "require('http')\n"})
     facts = source_facts("node20", tree)
 
-    assert facts == {"node": {"install": NODE_INSTALL_NONE, "build": False}}
+    assert facts == {"node": {"install": NODE_INSTALL_NONE, "build": False, "lockfiles": []}}
     assert (tree / "package.json").read_text(encoding="utf-8") == NODE_PACKAGE_STUB
     dockerfile = render_build_context("node20", {"port": PORT, **facts})["Dockerfile"]
     instructions = _dockerfile_instructions(dockerfile)
     assert not any("npm " in line for line in instructions), instructions
-    assert "COPY package*.json /app/" in instructions  # the wildcard now always matches
+    assert "COPY package.json /app/" in instructions  # the stub is there, so this always matches
 
 
 def test_node_with_lockfile_uses_npm_ci_omit_dev(tmp_path):
@@ -182,9 +182,12 @@ def test_node_with_lockfile_uses_npm_ci_omit_dev(tmp_path):
         },
     )
     facts = source_facts("node20", tree)
-    assert facts["node"] == {"install": NODE_INSTALL_CI, "build": False}
+    assert facts["node"] == {"install": NODE_INSTALL_CI, "build": False, "lockfiles": ["package-lock.json"]}
 
     dockerfile = render_build_context("node20", {"port": PORT, **facts})["Dockerfile"]
+    instructions = _dockerfile_instructions(dockerfile)
+    # The lockfile `npm ci` was chosen for reaches the dependency layer.
+    assert "COPY package.json package-lock.json /app/" in instructions
     assert "npm ci --omit=dev --no-audit --no-fund" in dockerfile
     assert "npm install" not in dockerfile
     assert "npm run build" not in dockerfile
@@ -200,9 +203,35 @@ def test_node_without_lockfile_falls_back_to_npm_install(tmp_path):
     tree = _tree(tmp_path / "app", {"package.json": json.dumps({"dependencies": {"koa": "^2"}})})
     facts = source_facts("node20", tree)
     assert facts["node"]["install"] == NODE_INSTALL_INSTALL
+    assert facts["node"]["lockfiles"] == []
 
     dockerfile = render_build_context("node20", {"port": PORT, **facts})["Dockerfile"]
     assert "npm install --omit=dev --no-audit --no-fund" in dockerfile
+    assert "COPY package.json /app/" in _dockerfile_instructions(dockerfile)
+
+
+@pytest.mark.parametrize(
+    ("present", "expected_copy"),
+    [
+        (["npm-shrinkwrap.json"], "COPY package.json npm-shrinkwrap.json /app/"),
+        (["package-lock.json", "npm-shrinkwrap.json"], "COPY package.json package-lock.json npm-shrinkwrap.json /app/"),
+    ],
+)
+def test_node_every_lockfile_that_selects_npm_ci_is_copied(tmp_path, present, expected_copy):
+    """A shrinkwrap alone selects ``npm ci`` — so it must be in the layer too.
+
+    A ``package*.json`` wildcard would have picked ``npm ci`` from the facts and
+    then run it in a directory without the lockfile, which npm refuses.
+    """
+    files = {"package.json": json.dumps({"dependencies": {"koa": "^2"}})}
+    files.update(dict.fromkeys(present, "{}"))
+    facts = source_facts("node20", _tree(tmp_path / "app", files))
+    assert facts["node"]["install"] == NODE_INSTALL_CI
+    assert facts["node"]["lockfiles"] == present
+
+    instructions = _dockerfile_instructions(render_build_context("node20", {"port": PORT, **facts})["Dockerfile"])
+    assert expected_copy in instructions
+    assert any(line.startswith("RUN") and "npm ci " in line for line in instructions)
 
 
 def test_node_build_script_installs_dev_deps_then_prunes(tmp_path):
@@ -221,7 +250,7 @@ def test_node_build_script_installs_dev_deps_then_prunes(tmp_path):
         },
     )
     facts = source_facts("node20", tree)
-    assert facts["node"] == {"install": NODE_INSTALL_CI, "build": True}
+    assert facts["node"] == {"install": NODE_INSTALL_CI, "build": True, "lockfiles": ["package-lock.json"]}
 
     dockerfile = render_build_context("node20", {"port": PORT, **facts})["Dockerfile"]
     instructions = _dockerfile_instructions(dockerfile)
@@ -239,7 +268,7 @@ def test_node_dev_only_dependencies_still_install_for_a_build(tmp_path):
         tmp_path / "app",
         {"package.json": json.dumps({"devDependencies": {"vite": "^5"}, "scripts": {"build": "vite build"}})},
     )
-    assert source_facts("node20", tree)["node"] == {"install": NODE_INSTALL_INSTALL, "build": True}
+    assert source_facts("node20", tree)["node"] == {"install": NODE_INSTALL_INSTALL, "build": True, "lockfiles": []}
 
 
 def test_node_invalid_package_json_is_a_render_error(tmp_path):

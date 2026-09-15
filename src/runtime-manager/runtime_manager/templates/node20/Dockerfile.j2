@@ -39,10 +39,11 @@ RUN set -eux; \
 WORKDIR /app
 
 # Dependencies first: a code-only change reuses this layer. The builder always
-# materialises package.json (a private stub when the app has none) so the
-# wildcard COPY can never match nothing, which the classic builder treats as an
-# error.
-COPY package*.json /app/
+# materialises package.json (a private stub when the app has none), and the
+# lockfiles listed here are exactly the ones the source tree carries — decided
+# at render time, so `npm ci` below never runs without the lockfile it was
+# chosen for (a wildcard would silently miss npm-shrinkwrap.json).
+COPY package.json{% for lockfile in node.lockfiles %} {{ lockfile }}{% endfor %} /app/
 {% if node.install != "none" %}
 RUN set -eux; \
     npm {{ "ci" if node.install == "ci" else "install" }} {{ "--include=dev" if node.build else "--omit=dev" }} --no-audit --no-fund \

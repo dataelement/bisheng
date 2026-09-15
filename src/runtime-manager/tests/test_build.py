@@ -300,11 +300,13 @@ def test_unknown_build_id_is_404(rtm_client):
 
 @pytest.mark.docker
 def test_real_image_builds_and_runs():
-    """Real ``docker build`` of the python3.11 template + a start smoke.
+    """Real ``docker build`` of every template + a start smoke.
 
     Only a real daemon can answer: does the base image exist in this registry,
-    does pip resolve against the configured index, does the non-root user own
-    what it needs, does the entrypoint actually exec the app. Runs in the CI
-    middleware stage and in the 114 verification (T075 step 1).
+    does pip / npm resolve against the configured source, does the non-root
+    user own what it needs, does the entrypoint actually exec the app (nginx
+    for ``static``). Runs in the CI middleware stage and in the 114 verification
+    (T075 step 1; the per-runtime commands for T092 are in
+    ``docs/architecture/14-app-factory-deployment.md`` 「运行时模板与基础镜像」).
     """
     pytest.skip("executed in the CI docker stage / on 114, not in the unit suite")

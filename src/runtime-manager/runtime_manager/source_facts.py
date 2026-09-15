@@ -26,6 +26,9 @@ from pathlib import Path
 from typing import Any
 
 #: Lockfiles that make ``npm ci`` (reproducible, refuses drift) the right verb.
+#: The ones present are listed in the facts so the Dockerfile COPYs exactly
+#: them into the dependency layer — ``npm ci`` fails outright when the lockfile
+#: it was chosen for is not there.
 NODE_LOCKFILES = ("package-lock.json", "npm-shrinkwrap.json")
 
 #: Where a static package keeps its entry page, most explicit first. ``dist/``
@@ -59,9 +62,10 @@ def _python_facts(context_dir: Path) -> dict[str, Any]:
 
 def _node_facts(context_dir: Path) -> dict[str, Any]:
     package_json = context_dir / "package.json"
+    lockfiles = [name for name in NODE_LOCKFILES if (context_dir / name).is_file()]
     if not package_json.is_file():
         package_json.write_text(NODE_PACKAGE_STUB, encoding="utf-8")
-        return {"node": {"install": NODE_INSTALL_NONE, "build": False}}
+        return {"node": {"install": NODE_INSTALL_NONE, "build": False, "lockfiles": lockfiles}}
 
     try:
         package = json.loads(package_json.read_text(encoding="utf-8"))
@@ -77,13 +81,13 @@ def _node_facts(context_dir: Path) -> dict[str, Any]:
 
     if not dependencies and not dev_dependencies:
         install = NODE_INSTALL_NONE
-    elif any((context_dir / name).is_file() for name in NODE_LOCKFILES):
+    elif lockfiles:
         install = NODE_INSTALL_CI
     else:
         install = NODE_INSTALL_INSTALL
     # A build script with nothing installed is still a build: `tsc` may come
     # from devDependencies, but `node scripts/build.js` needs nothing.
-    return {"node": {"install": install, "build": has_build}}
+    return {"node": {"install": install, "build": has_build, "lockfiles": lockfiles}}
 
 
 def _static_facts(context_dir: Path) -> dict[str, Any]:
