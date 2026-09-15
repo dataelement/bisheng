@@ -110,6 +110,13 @@ class AppAuditAction(StrEnum):
     #: an action defined elsewhere would never be checked against the whitelist
     #: and the frontend filter, which is the exact failure this enum prevents.
     VISIBILITY_CHANGE = "app.visibility_change"
+    #: F055 (AC-45): a platform super admin retuned, described, disabled or
+    #: re-enabled a resource tier. Same reasoning as ``VISIBILITY_CHANGE`` for
+    #: living here — this enum is what the lockstep test walks. Metadata carries
+    #: ``{code, changes: {field: {from, to}}}``; ``reason`` is ``disabled`` /
+    #: ``enabled`` / ``retuned`` so the audit page can tell a retirement from a
+    #: spec change without opening the row.
+    TIER_UPDATE = "app.tier_update"
 
 
 #: Factory resource tiers (GOV-03). ``cpu`` is in vCPU, ``memory_mb`` in MiB.

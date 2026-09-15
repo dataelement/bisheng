@@ -258,6 +258,10 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     # hook that `app_runtime` registers on the F048 grant mutation path — the
     # permission module itself never learns the `app.` namespace.
     "app.visibility_change",
+    # F055 resource-tier admin surface (AC-45): a super admin retuned /
+    # disabled / re-enabled a tier. Under the `app.` namespace like the rest of
+    # the app factory; `target_type='resource_tier'`, `target_id=<tier code>`.
+    "app.tier_update",
     # F055 publish pipeline (design §4.2 ⑥ / pit 21). Own action family
     # `app.release.*`, deliberately NOT nested under F054's `app.publish` —
     # that name is already the *state action* "the app went online", and

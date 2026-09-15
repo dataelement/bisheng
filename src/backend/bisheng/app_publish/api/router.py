@@ -18,11 +18,15 @@ from fastapi import APIRouter
 
 from bisheng.app_publish.api.endpoints.deploy import router as deploy_router
 from bisheng.app_publish.api.endpoints.publish_status import router as publish_status_router
+from bisheng.app_publish.api.endpoints.resource_tier import router as resource_tier_router
 
 #: Mounted under ``/api/v2`` → ``/api/v2/apps/**``.
 v2_router = APIRouter()
 v2_router.include_router(deploy_router)
 
-#: Mounted under ``/api/v1`` → ``/api/v1/apps/**``.
+#: Mounted under ``/api/v1`` → ``/api/v1/apps/**`` (publish face) and
+#: ``/api/v1/resource-tiers/**`` (super-admin tier tab — not under ``/apps``
+#: because F054's ``GET /apps/{app_id}`` is mounted first and would swallow it).
 v1_router = APIRouter()
 v1_router.include_router(publish_status_router)
+v1_router.include_router(resource_tier_router)
