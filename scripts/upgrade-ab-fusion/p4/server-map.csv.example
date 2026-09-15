@@ -1,0 +1,2 @@
+b_server_id,a_server_id,action,note
+# type+name 一致才 bind; 密钥不从 B 复制

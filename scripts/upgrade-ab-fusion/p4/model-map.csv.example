@@ -1,0 +1,2 @@
+b_model_id,a_model_id,action,note
+# provider+model_name 一致才 bind; 否则人工在 A 配好再填

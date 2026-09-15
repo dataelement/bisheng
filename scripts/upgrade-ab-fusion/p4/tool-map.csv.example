@@ -1,0 +1,2 @@
+b_tool_id,a_tool_id,action,note
+# 不按名合并; 依赖工作流的工具必须人工 bind 或确认已在 A 重建

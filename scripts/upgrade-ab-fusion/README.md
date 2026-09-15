@@ -1,59 +1,61 @@
-# 毕昇 A→B 升级与融合：运维执行包
+# 毕昇 B→A 升级与融合：运维执行包
 
-**要动手：只打开 [`复制即跑.md`](./复制即跑.md)，从上到下整段粘贴。** 下面是给复核人看的边界说明，执行时不用看。
+**升级 B：** 只看 [`复制即跑.md`](./复制即跑.md) 的 P2 hop.  
+**数据融合：** B 已是 2.5.0-sg 之后, 看 [`复制即跑.md`](./复制即跑.md) 第 12 节起, 或本文件.
 
-## 你要先接受的边界
+## 方向 (已调整)
 
-1. **P2/P3（B 2.2→2.5.0-sg hop）** 是本包可逐步执行的核心。每步有检查、账本、失败即停。
-2. **P4 身份接管** 必须先有冻结的用户映射 CSV，禁止按姓名自动合并。脚本只应用已签字的映射。
-3. **P5 知识空间融合** 按 [`p5/README.md`](p5/README.md) 执行：export → inventory → dry-run → `APPLY=0` apply → 单空间 `APPLY=1`。默认不落库。禁止拷 A 的向量库 / OpenFGA。部门作用域未映射则阻断该空间，禁止降级 personal。
-4. **全迁入口** [`full-migrate.sh`](./full-migrate.sh)：串起用户/部门/空间/关系/积分，默认 `APPLY=0`。真落库需要 `APPLY=1 CONFIRM_FULL_MIGRATE=1` 且已签字 CSV。
-5. 官方 hop 文档里的 `*json_unquote*` 等是飞书转 Markdown 的损坏写法。本包 SQL 已改成合法 MySQL。
-6. 本 hop **只针对 MySQL 8**。禁止在 DM8 上跑。
-7. 当前摸到的演练机 B 是 `v2.2sgv260402-JiTuan`，不是官方 `v2.2.0`。**第一步必须跑 p2/00-precheck.sh**，把 JiTuan 相对官方 2.2 的表差记进账本；有未知列/缺列要先改 SQL 再继续。
-8. 目标 2.5.0-sg 必须写死 **镜像 digest + Git commit + Alembic head**（评审 D02）。测试机路径/镜像写在各 hop 脚本开头。浮动 tag 会被 precheck 拒绝。
-9. 容器 `alembic upgrade head || echo WARNING` **不算成功**。本包单独跑 Alembic，对不上 `TARGET_ALEMBIC_HEAD` 就停。
+最终环境是 **A**. B 先升到与 A 一致的 2.5.0-sg, 再把 B 的业务 **INSERT** 进 A.
 
-## 谁执行
+- A 原 `knowledge.type=3` 知识空间: 不导出、不 UPDATE、不重解析.
+- B 的知识空间 (type=3, 含 hop 后由 type=2 转来的个人空间) **不迁**; 只迁传统库 type=0/1.
+- 用户以 A 员工编码为准; B 资源改写到 A `user_id`.
+- 禁止按姓名/用户名/部门名自动合并; 同名工作流/知识库加 `[B迁移]`.
+- 默认 `APPLY=0` 只生成 SQL. `APPLY=1` 写入 A.
+- 只针对 **MySQL 8**. 禁止整库 dump 合库.
 
-双人：一人跑命令，一人核对环境、镜像、影响范围和账本输出（评审稿 §13）。
+## 阶段
 
-## 一步一步（不要跳）
+| 序号 | 阶段 | 命令 |
+|---:|---|---|
+| 0-11 | P2 hop | 见 `复制即跑.md` §0–11. B 已升完可跳过 |
+| 12 | 控制表 + A 基线 | `p4/00-install-control.sh` `p5/00-protect-a-baseline.sh` |
+| 13 | 身份导出/映射 | `p4/01-export-identity.sh` `p4/02-propose-maps.sh` 签字 csv |
+| 14 | 身份写入 A | `APPLY=0` 再 `APPLY=1 p4/10-apply-identity.sh` |
+| 15 | 业务导出/dry-run/SQL | `p5/10-export-b-business.sh` `p5/30-apply.sh` |
+| 16 | MinIO | `p5/20-copy-minio.sh` 按 `minio-jobs.tsv` 拷对象, 禁止覆盖 A 键 |
+| 16a | Milvus/ES | `p5/22-copy-vectors.sh` 兼容则物理迁入, 不兼容进 `vector-exceptions.tsv`, 不自动重解析 |
+| 16b | OpenFGA | `p5/35-apply-openfga.sh` 写迁入资源 owner / 组 manager / 角色与部门授权 |
+| 17 | 核对 | `p5/40-verify.sh` (A 空间不降 + B 基线条数) |
+| 17a | 检索金标 | `p5/50-retrieve-gold.sh` 同向量对打, overlap@5 默认 ≥0.8 |
+| 17b | 工作流上线 | `CONFIRM_PUBLISH_FLOWS=1 APPLY=1 p5/36-publish-flows.sh` (SQL 仍先下线) |
+| 18 | 回滚本批 | `BATCH_NO=... APPLY=0 p5/90-rollback.sh` |
+| 19 | 切流量 | 冻结水位 + `p6/30-apply-incr.sh`, 见 `p6/cutover-runbook.md` |
 
-compose 路径、project 名、`config.yaml` / `entrypoint.sh` 的宿主机位置由 `lib/discover.sh` 从容器标签和挂载表自动发现，不写死路径，换机器无需改脚本。`env.sh` 可选，用于覆盖镜像、容器名和门禁，需手工 `source` 后再跑脚本。
+编排: `bash full-migrate.sh` (默认 APPLY=0).
 
-P2 hop 跑起来就升级。`DRILL=1` 仅演练机（跳过 digest）。`CONFIRM_TYPE2` / `CONFIRM_F006` 仍要显式打开。P4/P5 默认 `APPLY=0` 不落库。然后：
+## 涉及数据表 (无业务 DDL)
 
-| 序号 | 阶段 | 命令 | 完成判据 |
-|---:|---|---|---|
-| 0 | P0 | 填 `p0/BASELINE.md`，D01–D19 有结论；`env.sh` 的 digest/commit/head 与签字一致 | 评审 §14 关闭或书面豁免 |
-| 1 | P1 | `bash p1/run-inventory.sh` | 四份清单在 `logs/p1/` |
-| 2 | P2 预检 | `bash p2/00-precheck.sh` | JiTuan schema diff 已阅；目标 digest 已钉 |
-| 3 | P2 备份 | `bash p2/01-freeze-and-backup.sh` | 备份校验文件存在；至少一次恢复演练另做 |
-| 4 | hop 2.3-beta1 | `bash p2/10-hop-2.3-beta1.sh` | 字段在；`convert_all` 完成 |
-| 5 | hop 2.3 | `bash p2/11-hop-2.3-release.sh` | 角色菜单插入；遥测脚本跑完 |
-| 6 | hop 2.4-beta1 | `bash p2/20-hop-2.4-beta1.sh` | `message_session.group_ids` 回填完 |
-| 7 | hop 2.4 | `bash p2/21-hop-2.4.sh` | 知识空间列存在；再跑 `22` |
-| 8 | type=2 | `bash p2/22-hop-2.4-type2.sh` | 与 D07 一致；空库不删 |
-| 9 | hop 2.5.0-sg | `bash p2/30-hop-2.5.sh` | `alembic current` = `TARGET_ALEMBIC_HEAD` |
-| 10 | F006+工作台 | `bash p2/31-f006-workstation.sh` | dry-run → execute → verify；failed_tuple 待处理=0 |
-| 11 | 回归 | `bash p2/40-verify.sh` + 业务 UAT | 评审 §10.1 |
-| 12 | P3 | 用**同一包、同一 digest** 在生产 B 重做 3–11 | 不要改脚本现场发挥 |
-| 13 | P4 | `bash p4/00-export-a-users.sh` → propose-map → 签字 CSV → `APPLY=0` 再 `APPLY=1 bash p4/apply-takeover.sh` | 员工编码唯一；双行同一 B id；**仍关闭 SG 同步** |
-| 14 | P4 部门 | `bash p4/02-export-a-depts.sh` → propose-dept-map → 签字 `p4/dept-map.csv` → `APPLY=0` 再 `04-apply-depts.sh` | 按 `external_id` bind/create；层级冲突要 `CONFIRM_DEPT_HIERARCHY=1` |
-| 15 | P5 | 见 `p5/README.md` 与 `复制即跑.md` §13–14 | 每批隐藏空间；部门作用域映不上则阻断，禁止降 personal |
-| 16 | 关系/积分 | `p5/50-export-a-relations.sh` + `p4/10-export-a-points.sh`；或 `bash full-migrate.sh` | 收藏/置顶映不上跳过；`point_rule` 用 A 覆盖 |
-| 17 | P6 | 见 `p6/cutover-runbook.md` | 单写；Go/No-Go |
-| 18 | P7 | 见 `p7/observe.md` | A 只读 2–4 周 |
+控制表 (仅 A): `fusion_batch` `fusion_map` `fusion_exception` `fusion_a_baseline`.
 
-中间版本 **不必对外提供 API**。需要的是对应版本的**工具容器**（尤其 2.3 的 `convert_all`）。
+读取 B / 写入 A: `user` `user_tenant` `department` `user_department` `group` `usergroup` `role` `userrole` `roleaccess` `tenant` `llm_model` `t_gpts_tools` `t_gpts_tools_type` `system_dictionary` `knowledge` `knowledgefile` `qaknowledge` `review_tag` `review_tag_link` `groupresource` `flow` `flowversion` `t_variable_value` `t_report` `assistant` `assistantlink` `message_session` `chatmessage` `message_citation` `message_citation_relation` `marktask` `markrecord` `markappuser` `user_link` `share_link`.
 
-可跳过（官方仅换镜像、无 SQL）：2.3-beta2/3/4、2.4-beta1-fix。不可跳过带 SQL/脚本的 hop。
+OpenFGA (A store `bisheng`): 迁入资源 `owner` / 组 `manager` / 角色 viewer|editor / 部门或 as_group 用户组授权. A 原 Tuple 不改. 工具/看板不扩权.
 
-## 失败策略
+MinIO: `p5/20-copy-minio.sh` 按新键拷原文件/预览/BBox/缩略图/logo/对话附件/报表对象, 目标键已存在则失败.
 
-任一步非 0 退出：**停下**。禁止接着起 API。回滚见 `p2/90-rollback.md`。
+Milvus / ES: `p5/22-copy-vectors.sh` 只迁本批新建 type=0/1. 兼容则保留向量/正文并重写 ID/对象路径, 写入 `b{src}_` 新 Collection/Index. 不兼容进 `fusion_exception` / `vector-exceptions.tsv`, **不自动重解析**. A 原 type=3 的 Collection/Index 只读, 命中则拒绝.
 
-## 账本
+A 原 `knowledge.type=3` 及相关文件/索引/OpenFGA: **只读核对, 不写**.
 
-所有 `*.sh` 往 `logs/ledger.tsv` 追加一行。不要改历史行。
+默认不迁: 积分/审计/遥测/Redis/JWT/密钥明文 (方案 D16).
+
+## 本包未做 (不要假装已迁完)
+
+- 工作流/助手端到端运行 (脚本只做静态门禁 + 改 status; 须在 A UI 验收)
+- B 独有模型/工具不自动建行, 见 `logs/p5/gaps-model-tool.tsv`; 工具分类 `api_key` 不拷, 见 `logs/p5/gaps-tool-type-secrets.tsv`
+- 不兼容知识库的重新解析 (须客户逐项批准, 见 `logs/p5/vector-exceptions.tsv`)
+
+## 运行位置
+
+默认在 **B 演练机** 跑脚本: 本地 mysql 容器是 B, A 通过 `A_SSH_HOST` (默认 `10.171.0.50`).

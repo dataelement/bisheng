@@ -1,0 +1,3 @@
+b_role_id,a_role_id,action,note
+1,1,bind,系统管理员以 A 为准
+2,2,bind,默认角色以 A 为准

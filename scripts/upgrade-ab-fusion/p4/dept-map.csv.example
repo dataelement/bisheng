@@ -1,0 +1,2 @@
+b_dept_pk,a_dept_pk,a_group_id,external_id,action,b_name,note
+# bind=映射到 A 部门; as_group=不改 A 组织树, 建 [B迁移] 用户组

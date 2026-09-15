@@ -1,31 +1,29 @@
-"""收藏/置顶 SQL: 映不上跳过, 映得上才写 user_link。"""
+"""分享链接在 A 重新生成 token, 不复制密钥."""
 
-from __future__ import annotations
+from test.upgrade_ab_fusion._packutil import ensure_pack_path
 
-from test.upgrade_ab_fusion._packutil import P5, load_module
+ensure_pack_path()
+from fusion.relations_sql import generate_relations_sql
 
-rel = load_module("fusion_relations_sql", P5 / "relations_to_sql.py")
 
-
-def test_pin_remap_and_skip_unmapped():
-    sql, skipped = rel.generate_sql(
-        {
-            "pins": [
-                {"user_id": 1, "type_detail": "10"},
-                {"user_id": 2, "type_detail": "10"},
-            ],
-            "member_pins": [{"user_id": 1, "business_id": "10"}],
-            "favorite_refs": [{"id": 8, "reference_document_id": 9}],
-        },
-        user_map={1: 100},
-        space_map={10: 500},
-        file_map={8: 80},
-        doc_map={9: 90},
-        batch_no="r1",
+def test_share_link_has_token_and_mode():
+    sql, _smaps = generate_relations_sql(
+        batch="b1",
+        user_links=[],
+        share_links=[
+            {
+                "id": "old",
+                "resource_id": "ffff",
+                "resource_type": "workflow",
+                "create_user_id": "7",
+                "share_mode": "read_only",
+            }
+        ],
+        maps={"user": {"7": "100"}, "flow": {"ffff": "aabb"}, "tenant": {"1": "1"}},
+        a_tenant_default="1",
     )
-    assert "knowledge_space_pin" in sql
-    assert "500" in sql
-    assert "user_id=100" in sql or "100," in sql
-    assert "is_pinned=1" in sql
-    assert "reference_document_id=90" in sql
-    assert any("a_user=2" in item["detail"] for item in skipped)
+    assert "share_token" in sql
+    assert "share_mode" in sql
+    assert "INSERT INTO share_link" in sql
+    assert "old" in sql
+    assert "aabb" in sql
