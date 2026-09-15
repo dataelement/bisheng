@@ -25,7 +25,8 @@ from fastapi.testclient import TestClient
 from runtime_manager.auth import compute_signature
 from runtime_manager.config import Config, set_config
 from runtime_manager.docker_backend import set_docker_backend
-from tests.fakes import FakeDockerBackend, FakeHostProbe
+from runtime_manager.storage import set_object_store
+from tests.fakes import FakeDockerBackend, FakeHostProbe, FakeObjectStore
 
 TEST_SECRET = "rtm-test-secret"
 
@@ -96,6 +97,15 @@ def fake_docker(rtm_config: Config) -> FakeDockerBackend:
     set_docker_backend(backend)
     yield backend
     set_docker_backend(None)
+
+
+@pytest.fixture
+def fake_object_store(rtm_config: Config) -> FakeObjectStore:
+    """Process-wide attachment store double (T084a); the bucket starts absent."""
+    store = FakeObjectStore()
+    set_object_store(store)
+    yield store
+    set_object_store(None)
 
 
 @pytest.fixture
