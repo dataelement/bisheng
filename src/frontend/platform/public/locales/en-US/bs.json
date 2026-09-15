@@ -1546,7 +1546,19 @@
       "jumpTo": "Go to",
       "page": "page"
     },
-    "workbench_daily": "Workbench (Daily Mode)"
+    "workbench_daily": "Workbench (Daily Mode)",
+    "selectApp": "Select application",
+    "searchApp": "Search by name or identifier",
+    "selectTenant": "Select tenant",
+    "tenant": "Tenant",
+    "appSlug": "Application identifier",
+    "reason": "Reason",
+    "versionLabel": "Version {{no}}",
+    "deletedSuffix": "Deleted",
+    "serviceAccount": "Service account",
+    "appOwner": "Application owner",
+    "exportEmpty": "No records match the current filters",
+    "exportTruncated": "{{total}} records match, above the per-export limit; only the latest {{max}} were exported — narrow the filters"
   },
   "tag": {
     "labelMaxLength": "Label name cannot exceed 10 characters",

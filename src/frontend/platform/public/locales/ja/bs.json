@@ -1491,7 +1491,19 @@
       "jumpTo": "移動",
       "page": "ページ"
     },
-    "workbench_daily": "ワークベンチ（通常モード）"
+    "workbench_daily": "ワークベンチ（通常モード）",
+    "selectApp": "対象アプリを選択",
+    "searchApp": "アプリ名または識別子で検索",
+    "selectTenant": "テナントを選択",
+    "tenant": "テナント",
+    "appSlug": "アプリ識別子",
+    "reason": "理由",
+    "versionLabel": "バージョン {{no}}",
+    "deletedSuffix": "削除済み",
+    "serviceAccount": "サービスアカウント",
+    "appOwner": "アプリ所有者",
+    "exportEmpty": "現在の条件に一致する記録はありません",
+    "exportTruncated": "該当 {{total}} 件が 1 回のエクスポート上限を超えています。最新 {{max}} 件のみ出力しました。条件を絞り込んでください"
   },
   "tag": {
     "labelMaxLength": "タグ名は 10 文字以内で入力してください",

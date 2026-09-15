@@ -1,30 +1,75 @@
 // @ts-strict-ignore
 import { paramsSerializer } from ".";
 import axios from "../request";
+import type { AuditAppOption, AuditRow } from "@/types/api/audit";
 
 // 获取操作过组下资源的所有用户
 export async function getOperatorsApi(): Promise<[]> {
     return await axios.get('/api/v1/audit/operators')
 }
 
+/**
+ * Filters of the system-audit page. The list and the export take the same
+ * set — F056 AC-32 says the export is "the query under a different pagination
+ * driver", so there is one param builder and no second filter vocabulary.
+ */
+export interface AuditLogFilters {
+    userIds?: number[]
+    groupId?: string
+    start?: string
+    end?: string
+    moduleId?: string
+    action?: string
+    /** F056 AC-28: only rows about this hosted application (deleted ones included). */
+    targetAppId?: string
+    /** F056 AC-30: global super narrowing to one tenant; anyone else may only name their own. */
+    tenantId?: number | null
+}
+
+// Empty strings / empty arrays are "no filter", not a filter for the empty
+// value — dropping them keeps the query string readable and the export URL
+// identical to the list's for the same selection.
+const buildAuditParams = (filters: AuditLogFilters): Record<string, unknown> => {
+    const raw: Record<string, unknown> = {
+        group_ids: filters.groupId,
+        operator_ids: filters.userIds,
+        start_time: filters.start,
+        end_time: filters.end,
+        system_id: filters.moduleId,
+        event_type: filters.action,
+        target_app_id: filters.targetAppId,
+        tenant_id: filters.tenantId,
+    }
+    return Object.fromEntries(
+        Object.entries(raw).filter(([, value]) =>
+            value !== undefined && value !== null && value !== '' && !(Array.isArray(value) && value.length === 0)),
+    )
+}
+
 // 分页获取审计列表
-export async function getLogsApi({ page, pageSize, userIds, groupId = '', start, end, moduleId = '', action = '' }: {
+export async function getLogsApi({ page, pageSize, ...filters }: AuditLogFilters & {
     page: number,
     pageSize: number,
-    userIds?: number[],
-    groupId?: string,
-    start?: string,
-    end?: string,
-    moduleId?: string,
-    action?: string
-}): Promise<{ data: any[], total: number }> {
-    const uids = userIds?.reduce((pre, val) => `${pre}&operator_ids=${val}`, '') || ''
-    const startStr = start ? `&start_time=${start}` : ''
-    const endStr = end ? `&end_time=${end}` : ''
-    return await axios.get(
-        `/api/v1/audit?page=${page}&limit=${pageSize}&group_ids=${groupId}${uids}` +
-        `&system_id=${moduleId}&event_type=${action}` + startStr + endStr
-    )
+}): Promise<{ data: AuditRow[], total: number }> {
+    return await axios.get('/api/v1/audit', {
+        params: { page, limit: pageSize, ...buildAuditParams(filters) },
+        paramsSerializer,
+    })
+}
+
+// F056 AC-32: every row the same filters would list, capped server-side;
+// `total` is the uncapped count so the page can say the file is incomplete.
+export async function exportSystemLogDataApi(filters: AuditLogFilters): Promise<{ data: AuditRow[], total: number }> {
+    return await axios.get('/api/v1/audit/export/data', {
+        params: buildAuditParams(filters),
+        paramsSerializer,
+    })
+}
+
+// F056 AC-28: options for the object-application selector — name / slug
+// substring, deleted applications included so their events stay reachable.
+export async function getAuditAppsApi(keyword: string, limit = 20): Promise<AuditAppOption[]> {
+    return await axios.get('/api/v1/audit/apps', { params: { keyword, limit } })
 }
 
 /**

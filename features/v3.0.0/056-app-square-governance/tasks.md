@@ -318,26 +318,33 @@
 
 > 顺延依据 `mvp-114-path.md` §6 F056 行「审计查询面扩展、导出、超管租户筛选」；**属本 Feature 范围、不得被裁掉**。做的顺序是「对象应用筛选 → 租户筛选 → 导出」——没有第一件，「按应用追溯」这句产品语言不成立（design §8）。落点方向：`api/v1/audit.py:13-27` 与 `AuditLogDao.get_audit_logs`（`database/models/audit_log.py:288-374`）**今天完全没有 `target_type` / `target_id` 维度**，是从零新增而非改配置。
 
-- [ ] **T022**: 审计查询「对象应用」筛选（后端查询参数 + DAO 过滤 + 已删除应用的名称快照）
+- [x] **T022**: 审计查询「对象应用」筛选（后端查询参数 + DAO 过滤 + 已删除应用的名称快照）
   **文件**: `src/backend/bisheng/api/v1/audit.py`, `src/backend/bisheng/database/models/audit_log.py`, `src/backend/bisheng/api/services/audit_log.py`
   **覆盖 AC**: AC-21, AC-28
+  **证据**（分支 `wt/audit-query`）：`GET /api/v1/audit?target_app_id=` → `AuditLogDao._object_app_predicate`（`target_type='app'+target_id` **或** `metadata.app_id`，两种写入形态都命中；新增 `dialect_helpers.json_object_field_equals` 兼容 MySQL / DM8）；名称快照 = 行自身 `object_name`，应用行已删也不丢。测试 `test/audit/test_audit_log_object_app_filter.py`。
+  **偏差**：顺手修了 design 坑 15——v2 行 `group_ids` 恒 NULL，用户组筛选按「所选组当前成员 = operator_id」补配（`group_member_ids`），仅在传了组筛选时多一次成员查询；列表排序补 `id DESC` 次级键（backend AGENTS.md）。
 
-- [ ] **T023**: 按应用名 / 标识检索的选择器端点 + Platform 审计页筛选控件（含已删除应用可选中）
+- [x] **T023**: 按应用名 / 标识检索的选择器端点 + Platform 审计页筛选控件（含已删除应用可选中）
   **文件**: `src/backend/bisheng/api/v1/audit.py`, `src/frontend/platform/src/pages/LogPage/systemLog/index.tsx`, `src/frontend/platform/src/controllers/API/log.ts`
   **覆盖 AC**: AC-28
+  **证据**：`GET /api/v1/audit/apps?keyword=&limit=`（`AppDao.asearch_for_audit`，含 `state='deleted'`，租户管理员只搜本租户）；页面「选择对象应用」控件走后端检索（`getAuditAppsApi`），已删除应用带「已删除」标记。测试 `test/audit/test_audit_app_search.py`、`platform/src/test/auditRowRendering.test.ts`。
 
-- [ ] **T024**: 审计列表列扩展（对象列显示应用名 + 标识 / 名称快照；操作人列对服务账号显示账号名 + 密钥掩码并附 owner）
+- [x] **T024**: 审计列表列扩展（对象列显示应用名 + 标识 / 名称快照；操作人列对服务账号显示账号名 + 密钥掩码并附 owner）
   ⚠️ **2026-09-10 现状（改接 beta2 底座后，本任务的输入条件已变）**：CLI 发布的 `app.release.*` 事件里，只有 SUBMIT 那条带 `operator_name`（=服务账号名），其余三条（审批通过 / 上线 / 失败）只有 `operator_id=0` 且无名字，审计页会渲染成「system」。原因是 `app_deployment` 没有能承载服务账号身份的列（`submitted_by_user_id` 是自然人 id 空间，服务账号已不在 `user` 表），而后三条事件在 Celery 腿里写、拿不到调用期的 principal。**本任务落地前需先定两件事**：① 产品口径——这些事件的操作人应显示服务账号名还是 system；② 若要显示账号名，需给 `app_deployment` 加一列承载「发起主体（kind + id + name）」并回填给 `write_release_audit`。
   **文件**: `src/frontend/platform/src/pages/LogPage/systemLog/index.tsx`, `src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/bs.json`
   **覆盖 AC**: AC-17, AC-29
+  **证据**：后端 `AuditLogService._enrich_audit_rows` 只吐派生字段（`app_id/app_name/app_slug/app_state/app_owner_name/version_no/tenant_name/operator_kind/operator_key_mask`），**不吐原始 `metadata`**（AC-26）；服务账号识别两种形态（`metadata.operator.kind='service_account'`，或 beta2 约定 `operator_id=0` + 有名字），掩码只转发写入方已产出的 `metadata.operator.key_mask`。前端渲染规则集中在 `systemLog/auditRow.ts`（表格与 CSV 共用），三语 key 在 `bs.json` `log.*`。测试 `platform/src/test/auditRowRendering.test.ts`。
+  **偏差（保留上方 ⚠️ 的两件事，本任务不解）**：审批通过 / 上线 / 失败三条无名 `operator_id=0` 行仍显示「system」——那是写入侧缺列，不在本任务造假补名。
 
-- [ ] **T025**: 系统操作审计导出端点 + Platform 导出按钮（导出当前筛选条件下的全部记录，受与查询完全相同的租户与角色边界；内容不含密钥明文）
+- [x] **T025**: 系统操作审计导出端点 + Platform 导出按钮（导出当前筛选条件下的全部记录，受与查询完全相同的租户与角色边界；内容不含密钥明文）
   **文件**: `src/backend/bisheng/api/v1/audit.py`, `src/frontend/platform/src/controllers/API/log.ts`, `src/frontend/platform/src/pages/LogPage/systemLog/index.tsx`
   **覆盖 AC**: AC-26, AC-32
+  **证据**：`GET /api/v1/audit/export/data`（与列表同一组查询参数，走同一个 `_prepare_audit_query` 门与投影，单次上限 `AUDIT_EXPORT_MAX_ROWS=10000`，响应带未截断 `total`）；前端「导出」按钮按**当前已应用**的筛选导出 CSV（`buildAuditCsv`，列与表格一致；超上限 toast 提示缩小范围）。测试 `test/audit/test_audit_export.py`（含「密钥明文绝不出现在导出」用例）。
 
-- [ ] **T026**: 平台超管租户筛选与租户列 + 租户管理员边界拒绝（「对象应用」筛选不得穿透到其它租户）
+- [x] **T026**: 平台超管租户筛选与租户列 + 租户管理员边界拒绝（「对象应用」筛选不得穿透到其它租户）
   **文件**: `src/backend/bisheng/database/models/audit_log.py`（`_visible_for_tenant`）, `src/backend/bisheng/api/services/audit_log.py`（`_get_audit_tenant_scope`）, `src/frontend/platform/src/pages/LogPage/systemLog/index.tsx`
   **覆盖 AC**: AC-30, AC-31
+  **证据**：查询 / 导出 / 应用检索共用 `tenant_id` 参数：全局超管（且无 F019 admin-scope）可指定；其他人指定非本租户 → `UnAuthorizedError`（不是静默缩窄）；`target_app_id` 指向他租户应用同样拒绝（`_assert_app_in_scope`，绕过自动租户过滤查应用行，否则会退化成空列表而非拒绝）。前端租户筛选与租户列仅在 `multiTenantEnabled && is_global_super && 无 admin-scope` 时出现。测试 `test/audit/test_audit_log_object_app_filter.py::TestServiceTenantBoundary`、`test_audit_log_tenant_scope.py`（新增三条 tenant_id 用例）、`test_audit_export.py::TestExportBoundary`。
 
 - [ ] **T027**: 审计查询面角色边界与「单一查询入口」回归（仅租户管理员及以上；owner / 普通用户调查询与导出接口被拒；高频三类事件与低频事件同面经事件类型筛选可达）
   **文件**: `src/backend/test/audit/test_audit_scope_and_roles.py`（新）, `src/backend/bisheng/api/services/audit_log.py`
