@@ -89,12 +89,21 @@ metadata:
   **一开始就用 SSE(`text/event-stream`)或轮询实现**,别等上线才发现要重写。SSE 走普通 HTTP、入口原样透传流式响应;
   长连接**每几分钟发一次心跳**(入口上游读超时 600s,静默超过就会被断开)。
   清单里也不要写 `websocket:` / `ws_path:` 这类键——预检会以 **16232** 当场拒绝,换个键名不会让它变得可用。
-- **运行环境固定 `python3.11`**(目前平台唯一支持的 runtime)。用 Python 写;需要别的语言时先确认平台是否已支持。
+- **运行环境三选一**:`python3.11`(Python 服务)/ `node20`(Node.js 服务)/ `static`(纯静态页面,平台用 nginx 托管)。
+  不确定目标平台装了哪几个时,以 `bisheng deploy` 预检回的 16222 提示为准——它会列出本环境实际支持的取值。
 - **健康检查探 `/`**:确保应用在 `/`(或 `BISHENG_APP_HEALTH_PATH`)返回 2xx,否则一直判不健康。
-- **启动命令解析顺序**(最显式优先):环境变量 `BISHENG_APP_START` → 项目根 `Procfile` 里的 `web:` 行 →
-  `main.py` → `app.py`。多数情况把入口写成 `main.py` 即可,无需在清单里配启动命令(清单里也**没有**这个字段)。
-- **依赖**:能只用标准库就别加依赖。`requirements.txt` 留空是合法且推荐的——构建就不需要联网拉包;
-  在内网/信创环境「构建卡在 pip 拉不到包」是最常见、也最容易被误判成平台故障的失败。真要装,确认构建环境能联网。
+- **启动命令解析顺序**(最显式优先;清单里**没有**启动命令字段):
+  - `python3.11`:环境变量 `BISHENG_APP_START` → 项目根 `Procfile` 里的 `web:` 行 → `main.py` → `app.py`。多数情况把入口写成 `main.py` 即可。
+  - `node20`:`BISHENG_APP_START` → `Procfile` 的 `web:` 行 → `package.json` 的 `scripts.start` → `package.json` 的 `main` →
+    `server.js` / `index.js` / `app.js` / `main.js`。`scripts.start` 里的命令会被直接执行(`node_modules/.bin` 已在 PATH 上),
+    **不经过 `npm start`**;`BASE_PATH` 与 `BISHENG_APP_BASE_PATH` 同值,给框架用。有 `scripts.build` 时平台在构建镜像时先跑一次 `npm run build`
+    (装齐 devDependencies 再裁掉),没有就只装 `dependencies`;有 `package-lock.json` 用 `npm ci`,没有用 `npm install`。
+  - `static`:没有进程可启动,以上都不看。平台找 `index.html`:先看包根目录,再看 `dist/`、`build/`、`public/`,取第一个命中的目录整个托管;
+    未知路径回落到 `index.html`(前端路由可用),带扩展名的资源找不到就是 404。
+- **依赖**:能只用标准库就别加依赖。`requirements.txt` 留空(node20 则 `package.json` 没有 `dependencies`)是合法且推荐的——
+  构建就不需要联网拉包;在内网/信创环境「构建卡在拉不到包」是最常见、也最容易被误判成平台故障的失败。真要装,确认构建环境能联网。
+  `node_modules/` 永远不会被打进包里;`dist/`、`build/` **默认也不打包**——`static` 应用要发构建产物时在 `.bishengignore` 里加一行 `!dist/`
+  (或直接把 `index.html` 放在包根目录)。
 
 ---
 
@@ -106,7 +115,7 @@ metadata:
 ```yaml
 manifest_version: 1          # 兼容性版本,填 1
 name: 我的应用                # 必填,1-64 字
-runtime: python3.11          # 必填,目前只支持 python3.11
+runtime: python3.11          # 必填,python3.11 / node20 / static 三选一
 port: 8080                   # 必填,应用监听的端口
 # 下面都是可选:
 # description: 一句话说明      # ≤500 字
@@ -167,7 +176,7 @@ bisheng logs
 | 码 | 含义 | 怎么修 |
 |---|---|---|
 | 16221 | 清单格式非法 | 按报错的字段名改;注意未知字段/缺必填 |
-| 16222 | runtime 不支持 | 用 `python3.11` |
+| 16222 | runtime 不支持 | 改成报错里列出的取值之一(`python3.11` / `node20` / `static`,以该环境实际装了哪些为准) |
 | 16228 | 启动探活失败 | 十有八九是铁律 ①②:没读 `PORT`、或绑了 `127.0.0.1`;也可能应用 `/` 不返回 2xx |
 | 16230 / 16241 | 清单里有密钥 / 源码里扫到密钥 | 移除明文密钥,改环境变量引用 |
 | 16231 | capabilities 非空 | 本轮删掉 `capabilities:` |
@@ -186,9 +195,10 @@ bisheng logs
 - [ ] 对外链接/表单 action/跳转/静态资源都带了 `BISHENG_APP_BASE_PATH`,或用框架相对路径;没有手写 `/开头` 的根绝对路径。
 - [ ] 应用在 `/` 返回 2xx(健康检查过得去)。
 - [ ] **没有用 WebSocket**(本版握手会被关闭);需要服务端推送的地方用的是 SSE 或轮询。
-- [ ] `bisheng-app.yaml` 有 `name`/`runtime: python3.11`/`port`;没有 `health`/`command` 等未知字段;`capabilities` 为空。
+- [ ] `bisheng-app.yaml` 有 `name`/`runtime`(`python3.11` / `node20` / `static` 之一)/`port`;没有 `health`/`command` 等未知字段;`capabilities` 为空。
 - [ ] 没有硬编码密钥/连接串/自建登录页。
-- [ ] 依赖尽量少;`requirements.txt` 里没有的包不要 import;纯标准库时留空。
+- [ ] 依赖尽量少;`requirements.txt`(或 `package.json` 的 `dependencies`)里没有的包不要 import;纯标准库时留空。
+- [ ] `static` 应用:`index.html` 在包根目录,或已在 `.bishengignore` 里 `!dist/` 取回构建产物。
 
 跑一次连通自检脚本确认环境就绪:`python selfcheck.py`(未 login / 平台不可达 时会给出可读原因)。
 

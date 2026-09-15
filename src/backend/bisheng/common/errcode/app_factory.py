@@ -130,7 +130,8 @@ class AppRuntimeNotSupportedError(AppFactoryError):
     """``runtime`` is not among the templates this deployment actually ships.
 
     The supported set is reported by runtime-manager (``GET /v1/runtime/status``),
-    not hardcoded here — MVP ships ``python3.11`` only.
+    not hardcoded here — it is whatever template directories that install ships
+    (``python3.11`` / ``node20`` / ``static`` in a full install).
     """
 
     Code: int = 16123

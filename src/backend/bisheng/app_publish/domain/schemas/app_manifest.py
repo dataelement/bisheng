@@ -43,7 +43,10 @@ from pydantic import BaseModel, ConfigDict, Field
 #: ⚠️ **F054 must change this constant in the same commit that adds a runtime
 #: template** — otherwise a newly supported runtime is rejected 16222 in the
 #: synchronous leg and never reaches the manager that would have accepted it.
-SUPPORTED_RUNTIMES: tuple[str, ...] = ("python3.11",)
+#: Mirrors ``src/runtime-manager/runtime_manager/templates/`` (one entry per
+#: template directory); an install that ships fewer templates is narrowed by
+#: the asynchronous re-check, never widened.
+SUPPORTED_RUNTIMES: tuple[str, ...] = ("python3.11", "node20", "static")
 
 #: Highest ``manifest_version`` this platform understands.
 SUPPORTED_MANIFEST_VERSION = 1

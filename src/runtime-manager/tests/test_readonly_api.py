@@ -237,7 +237,7 @@ def test_runtime_status_shape(rtm_client, rtm_config, fake_docker):
 
     assert set(body) == {"backend_available", "supported_runtimes", "capacity", "preflight"}
     assert body["backend_available"] is True
-    assert body["supported_runtimes"] == ["python3.11"]
+    assert body["supported_runtimes"] == ["node20", "python3.11", "static"]
     capacity = body["capacity"]
     assert capacity["readable"] is True
     assert capacity["total_mb"] == 32768
@@ -269,6 +269,36 @@ def test_runtime_status_flags_a_missing_application_network(rtm_client, fake_doc
     check = next(item for item in body["preflight"] if item["name"] == "application_network")
     assert check["ok"] is False
     assert "bisheng-apps" in check["detail"]
+
+
+def test_runtime_status_base_images_names_every_runtime_to_pull(rtm_client, fake_docker):
+    """One row per shipped runtime: the air-gapped pre-pull list is this detail.
+
+    Three templates mean three base images; the pre-flight has to name each
+    one that is missing, and go green only once all of them are local — a
+    python-only pull would otherwise pass the check and fail the first node build.
+    """
+    from runtime_manager.builder import BASE_IMAGES
+
+    check = next(
+        item for item in rtm_client.get("/v1/runtime/status").json()["preflight"] if item["name"] == "base_images"
+    )
+    assert check["ok"] is False
+    for image in ("python:3.11-slim", "node:20-slim", "nginx:1.27-alpine"):
+        assert image in check["detail"]
+
+    fake_docker.images.extend([BASE_IMAGES["python3.11"], BASE_IMAGES["node20"]])
+    check = next(
+        item for item in rtm_client.get("/v1/runtime/status").json()["preflight"] if item["name"] == "base_images"
+    )
+    assert check["ok"] is False
+    assert check["detail"].endswith("nginx:1.27-alpine")
+
+    fake_docker.images.append(BASE_IMAGES["static"])
+    check = next(
+        item for item in rtm_client.get("/v1/runtime/status").json()["preflight"] if item["name"] == "base_images"
+    )
+    assert check["ok"] is True
 
 
 def test_runtime_status_flags_a_relative_host_data_root(rtm_client, rtm_config):

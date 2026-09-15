@@ -1,0 +1,73 @@
+#!/bin/sh
+# BiSheng hosted-app entrypoint (D5.2) — node20 runtime.
+#
+# The platform serves every app under /apps/{slug} while the same code runs at
+# the root path locally. INV-32 makes the *variable name* identical in both
+# places (BISHENG_APP_BASE_PATH); this wrapper is what connects that variable
+# to whichever framework the app happens to use, so an app that follows the
+# DEV-04 contract needs no per-environment branching of its own.
+set -eu
+
+BISHENG_APP_BASE_PATH="${BISHENG_APP_BASE_PATH:-}"
+PORT="${PORT:-${BISHENG_APP_PORT:-{{ port }}}}"
+BISHENG_APP_PORT="$PORT"
+export PORT BISHENG_APP_PORT BISHENG_APP_BASE_PATH
+
+# Node has no framework-wide root-path variable the way uvicorn / streamlit do;
+# BASE_PATH is the spelling most server templates and build tools read. Set
+# unconditionally (empty is the correct value at the root path) so behaviour is
+# identical in dev and prod.
+export BASE_PATH="$BISHENG_APP_BASE_PATH"
+export NODE_ENV="${NODE_ENV:-production}"
+# What `npm start` would have put on PATH — resolved here so the start script
+# can be exec'd directly (see below) and still find its local binaries.
+export PATH="/app/node_modules/.bin:$PATH"
+# The root filesystem is read-only; anything npm insists on writing (cache,
+# logs) goes to the /tmp tmpfs.
+export NPM_CONFIG_CACHE="${NPM_CONFIG_CACHE:-/tmp/.npm}"
+
+if [ "$#" -gt 0 ]; then
+    exec "$@"
+fi
+
+# Reads one dotted field of /app/package.json; empty when absent or not a string.
+pkg_field() {
+    node -e 'const p = require("/app/package.json"); const v = process.argv[1].split(".").reduce((o, k) => (o && o[k] !== undefined) ? o[k] : "", p); process.stdout.write(typeof v === "string" ? v : "");' "$1" 2>/dev/null || true
+}
+
+# Start command resolution, most explicit first. Whatever wins is `exec`d so the
+# app becomes pid 1's process: docker stop, the restart policy and the reconcile
+# loop all assume SIGTERM reaches the application itself. `npm start` is on
+# purpose *not* in the chain: it would sit between pid 1 and the app, and it
+# writes logs under $HOME, which is read-only here.
+if [ -n "${BISHENG_APP_START:-}" ]; then
+    exec /bin/sh -c "$BISHENG_APP_START"
+fi
+
+if [ -f /app/Procfile ]; then
+    web_cmd="$(sed -n 's/^web:[[:space:]]*//p' /app/Procfile | head -n 1)"
+    if [ -n "$web_cmd" ]; then
+        exec /bin/sh -c "$web_cmd"
+    fi
+fi
+
+if [ -f /app/package.json ]; then
+    start_script="$(pkg_field scripts.start)"
+    if [ -n "$start_script" ]; then
+        exec /bin/sh -c "$start_script"
+    fi
+    main_file="$(pkg_field main)"
+    if [ -n "$main_file" ] && [ -f "/app/$main_file" ]; then
+        exec node "/app/$main_file"
+    fi
+fi
+
+for candidate in server.js index.js app.js main.js; do
+    if [ -f "/app/$candidate" ]; then
+        exec node "/app/$candidate"
+    fi
+done
+
+echo "bisheng: no start command found." >&2
+echo "Provide one of: BISHENG_APP_START, a Procfile 'web:' line, package.json scripts.start or main, server.js, index.js, app.js or main.js." >&2
+exit 78

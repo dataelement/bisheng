@@ -1,0 +1,81 @@
+# BiSheng hosted-app image — runtime: node20
+#
+# Platform-owned (D3 / PRD-1 DEV-04): the developer never writes a Dockerfile,
+# which is exactly why the security baseline below cannot be opted out of.
+#   * runs as a non-root user
+#   * writes nothing under / at runtime → survives ReadonlyRootfs (AC-17);
+#     npm's cache and log directory are pinned under the /tmp tmpfs
+#   * exec-form ENTRYPOINT → the app is pid 1's process and receives SIGTERM
+#   * packages resolved from the deployment's configured registry only
+#
+# Only classic-builder-compatible syntax is used (no `COPY --chmod`, no
+# heredocs): 114 and the 信创 baselines build through the plain daemon builder,
+# and a BuildKit-only Dockerfile would fail there with a syntax error that looks
+# nothing like "your Docker is too old".
+#
+# The install / build steps below are decided at *render* time from the source
+# tree (``source_facts``), not by shell tests inside the image: an app with no
+# dependencies never runs npm at all, so an air-gapped host can build it with no
+# registry in reach, and the rendered Dockerfile states exactly what it does.
+FROM {{ base_image }}
+
+ENV NODE_ENV=production \
+    NPM_CONFIG_UPDATE_NOTIFIER=false \
+    NPM_CONFIG_FUND=false \
+    NPM_CONFIG_AUDIT=false \
+    NPM_CONFIG_CACHE=/tmp/.npm
+
+# Deliberately not named NPM_CONFIG_REGISTRY: npm reads that name straight from
+# the environment, and an empty build arg would then be "registry is empty"
+# rather than "use the default".
+ARG BISHENG_NPM_REGISTRY=""
+
+RUN set -eux; \
+    groupadd --system --gid {{ app_gid }} {{ app_user }}; \
+    useradd --system --uid {{ app_uid }} --gid {{ app_gid }} --home-dir /app --no-create-home {{ app_user }}; \
+    mkdir -p /app /data; \
+    chown {{ app_user }}:{{ app_user }} /data
+
+WORKDIR /app
+
+# Dependencies first: a code-only change reuses this layer. The builder always
+# materialises package.json (a private stub when the app has none) so the
+# wildcard COPY can never match nothing, which the classic builder treats as an
+# error.
+COPY package*.json /app/
+{% if node.install != "none" %}
+RUN set -eux; \
+    npm {{ "ci" if node.install == "ci" else "install" }} {{ "--include=dev" if node.build else "--omit=dev" }} --no-audit --no-fund \
+        ${BISHENG_NPM_REGISTRY:+--registry "$BISHENG_NPM_REGISTRY"}; \
+    rm -rf /tmp/.npm
+{% endif %}
+
+COPY --chown={{ app_user }}:{{ app_user }} . /app
+{% if node.build %}
+
+# package.json declares a build script (Vite / Next / TypeScript …): run it with
+# the dev toolchain present, then drop the toolchain so the image ships only
+# what the start command needs.
+RUN set -eux; \
+    npm run build; \
+    npm prune --omit=dev --no-audit --no-fund; \
+    rm -rf /tmp/.npm
+{% endif %}
+
+COPY entrypoint.sh /usr/local/bin/bisheng-app-entrypoint
+COPY healthcheck.js /usr/local/bin/bisheng-healthcheck
+RUN chmod 0755 /usr/local/bin/bisheng-app-entrypoint /usr/local/bin/bisheng-healthcheck
+
+ENV BISHENG_APP_PORT={{ port }} \
+    PORT={{ port }} \
+    BISHENG_APP_DB_PATH=/data/app.db \
+    BISHENG_APP_DB_URL=sqlite:////data/app.db
+
+EXPOSE {{ port }}
+USER {{ app_user }}
+
+# Durations are overridden at create time from the tier (D4); the command lives
+# in the image so every runtime template owns the probe that suits it.
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 CMD ["/usr/local/bin/bisheng-healthcheck"]
+
+ENTRYPOINT ["/usr/local/bin/bisheng-app-entrypoint"]

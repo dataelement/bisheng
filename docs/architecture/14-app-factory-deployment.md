@@ -148,7 +148,8 @@ docker compose --profile app-runtime up -d runtime-manager app-proxy
 | `RTM_HOST_DATA_ROOT` | compose 必填 | — | **宿主 dockerd 看到的**同一个目录。容器化跑时两者不同（容器内 `/app-data`，宿主 `/opt/bisheng/app-data`），不设会让应用数据落到一个没人看的地方且**不报错** |
 | `RTM_NETWORK` | | — | 默认 `bisheng-apps` |
 | `RTM_RESERVE_MB` / `RTM_OVERCOMMIT_RATIO` / `RTM_BUILD_RESERVE_MB` | | — | 容量准入，见下。**改这里，不是改 config.yaml** |
-| `RTM_BUILD_INDEX_URL` | | — | 内网 pip 源。不设 = 走镜像内默认源（公网 PyPI） |
+| `RTM_BUILD_INDEX_URL` | | — | 内网 pip 源（`python3.11` 模板）。不设 = 走镜像内默认源（公网 PyPI） |
+| `RTM_BUILD_NPM_REGISTRY` | | — | 内网 npm 源（`node20` 模板）。不设 = 走镜像内默认源（公网 registry）；`static` 模板不拉任何包 |
 | `RTM_DOCKER_HOST` | | — | 留空 = 本机 `/var/run/docker.sock` |
 
 **app-proxy**：
@@ -443,7 +444,8 @@ curl -s -b "access_token_cookie=<token>" http://<host>:3001/api/v1/apps/runtime-
 `runtime-status` 返回四类信息，逐条看：
 
 - `backend_available` — 编排后端（dockerd）是否可达；
-- `supported_runtimes` — 本部署实际装了哪些运行时模板，v3.0 首发为 `["python3.11"]`；
+- `supported_runtimes` — 本部署实际装了哪些运行时模板。完整安装是 `["node20", "python3.11", "static"]`
+  （v3.0 首发镜像只有 `python3.11`）；清单里的 `runtime` 必须取其中之一，见下文「运行时模板与基础镜像」；
 - `capacity` — 当前容量快照：`total_mb` / `mem_available_mb` / `committed_mb` / `cpu` /
   `committed_cpu` / `reserve_mb` / `overcommit_ratio` / `instances`。`readable=false` 表示
   这台机器的 `/proc/meminfo` 读不到——那本身就是要修的事，不会被折叠成 500；
@@ -455,10 +457,55 @@ curl -s -b "access_token_cookie=<token>" http://<host>:3001/api/v1/apps/runtime-
 | `application_network` | `bisheng-apps` 网络不存在 → `docker network create bisheng-apps` |
 | `data_root_writable` | 数据目录不可写 → 检查 `data_root` / `RTM_DATA_ROOT` 与目录权限 |
 | `runtime_templates` | 一个运行时模板都没装（镜像不完整） |
-| `base_images` | 基础镜像不在本地。离线环境要**先手动 pull**，否则第一次构建会挂很久然后失败 |
+| `base_images` | 基础镜像不在本地，`detail` 里逐个列出缺哪些。离线环境要**先手动 pull**（三个模板各一个，见下节），否则第一次构建会挂很久然后失败 |
 
 再走一遍端到端：用**非管理员账号**访问一个已上线应用的 `/apps/{slug}`
 （管理员会短路权限判定，用管理员验等于没验）。
+
+### 运行时模板与基础镜像
+
+清单 `runtime` 的每个取值对应 runtime-manager 里一个平台维护的 Dockerfile 模板
+（`src/runtime-manager/runtime_manager/templates/<runtime>/`）；开发者不写 Dockerfile，
+非 root、只读根文件系统、exec 形式入口这套安全基线三个模板一致：
+
+| `runtime` | 基础镜像 | 构建时做什么 | 启动命令 |
+|-----------|---------|-------------|---------|
+| `python3.11` | `python:3.11-slim` | `requirements.txt` 非空才 `pip install`（走 `RTM_BUILD_INDEX_URL`） | `BISHENG_APP_START` → `Procfile` `web:` → `main.py` → `app.py` |
+| `node20` | `node:20-slim` | `package.json` 有依赖才装：有 `package-lock.json` 用 `npm ci`，否则 `npm install`（走 `RTM_BUILD_NPM_REGISTRY`）；有 `scripts.build` 先 `npm run build` 再裁掉 devDependencies | `BISHENG_APP_START` → `Procfile` `web:` → `package.json` `scripts.start` → `main` → `server.js` / `index.js` / `app.js` / `main.js` |
+| `static` | `nginx:1.27-alpine` | 不装任何包。找 `index.html`：包根目录 → `dist/` → `build/` → `public/`，取第一个命中的目录 | 无应用进程；nginx 以非 root 跑，配置、pid、临时文件全在 `/tmp` |
+
+这些决定在**渲染 Dockerfile 时**就从源码树里读定（`source_facts`），渲染出的 Dockerfile 写明做了什么；
+源码树不满足（`static` 没有 `index.html`、`package.json` 不是合法 JSON）会在 `render_dockerfile` 阶段
+以一句话失败，不会到 `docker build` 才报 `COPY failed`。没有依赖的应用**完全不碰包管理器**，离线机器只要有基础镜像就能构建。
+
+离线 / 信创环境预拉（与 `base_images` 检查项一一对应）：
+
+```bash
+docker pull python:3.11-slim node:20-slim nginx:1.27-alpine
+```
+
+只想支持部分运行时，删掉对应模板目录即可：`supported_runtimes` 按目录动态给出，预检会拒绝清单里用了未装模板的应用并列出可用取值。
+
+**装完新模板后的一次性验证**（单元测试只覆盖渲染结果，镜像能不能起来只有真 dockerd 能回答）。在部署机上，
+分别拿一个最小 `node20` 项目（`server.js` 监听 `PORT`，无 `package.json`）和一个最小 `static` 项目（一个 `index.html`）
+走一遍 `bisheng deploy`，然后：
+
+```bash
+# 1. 三个镜像都在本地、预检全绿
+curl -s -b "access_token_cookie=<token>" http://<host>:3001/api/v1/apps/runtime-status | python3 -m json.tool | grep -A2 base_images
+
+# 2. 构建成功、容器以 uid 10001 跑、根文件系统只读
+docker ps --filter name=bisheng-app- --format '{{.Names}} {{.Image}} {{.Status}}'
+docker inspect <容器名> --format '{{.Config.User}} {{.HostConfig.ReadonlyRootfs}} {{.State.Health.Status}}'   # 期望：bisheng true healthy
+
+# 3. 入口能开、静态包的子路径与前端路由都回落到 index.html
+curl -s -o /dev/null -w '%{http_code}\n' http://<host>:3001/apps/<slug>/
+curl -s -o /dev/null -w '%{http_code}\n' http://<host>:3001/apps/<slug>/some/route     # static：200
+curl -s -o /dev/null -w '%{http_code}\n' http://<host>:3001/apps/<slug>/missing.js     # static：404，不是 200
+
+# 4. node20 的 SIGTERM 到得了应用（停止应在 10s 优雅窗口内结束，而不是被 KILL）
+time docker stop <容器名>
+```
 
 ## 排障对照表
 
@@ -471,7 +518,9 @@ curl -s -b "access_token_cookie=<token>" http://<host>:3001/api/v1/apps/runtime-
 | 裸访问 `/apps/{slug}`（不带结尾斜杠）白屏 | 缺 308 跳转，相对路径资源解析到了别的应用。确认 app-proxy 是当前版本 |
 | 所有上线 / 下线动作返回 16121「应用运行时不可用」 | `manager_hmac_secret` 与 `RTM_HMAC_SECRET` 不一致（**不是** dockerd 挂了，先查这个） |
 | 上线卡在「待上线（资源不足）」 | 容量准入没过。看 `runtime-status` 的 `capacity`：先比 `committed_cpu` 与 `cpu × overcommit_ratio`（CPU 常常先于内存撞顶），再看内存。调 runtime-manager 的 `RTM_RESERVE_MB` / `RTM_OVERCOMMIT_RATIO`（**不是 config.yaml**，改完重启该进程），或改用更小的档位 |
-| 构建一直失败在拉包 | 内网无外网出口 → 配 `build_index_url` 指向私有 pip 源 |
+| 构建一直失败在拉包 | 内网无外网出口 → `RTM_BUILD_INDEX_URL` 指向私有 pip 源（`python3.11`）/ `RTM_BUILD_NPM_REGISTRY` 指向私有 npm 源（`node20`）。没有依赖的应用不会拉包，先确认它是不是真的需要 |
+| `static` 应用预检失败在 `render_dockerfile`，提示找不到 `index.html` | 构建产物在 `dist/` / `build/` 下，而 CLI 打包默认不带这两个目录 → 项目里加 `.bishengignore` 写一行 `!dist/`，或把 `index.html` 放到包根目录 |
+| `node20` 应用起来了但一直不健康 | 应用没监听 `PORT` / 绑了 `127.0.0.1`（与 python 一样），或 `scripts.start` 里的命令依赖 `npm start` 才有的行为——启动命令是直接执行的，不经过 npm |
 | 应用能跑，但重启后数据没了 | compose 形态漏配 `RTM_HOST_DATA_ROOT`，数据落在了容器内路径对应的宿主目录之外 |
 | CLI `bisheng deploy` 报 16207 | 该环境没装运行时层（或 `enabled` 是 false） |
 | CLI 拿不到 `app:manage` 能力位 | `open_platform.enabled` 是 `false` |
@@ -491,16 +540,68 @@ tail -f /tmp/bisheng-app-proxy.log            # systemd 形态（单元模板里
 托管应用自身的日志经平台界面（应用详情 → 日志）与 CLI 查看，保留窗口 =
 容器日志轮转窗口（每应用 30MB），产品口径是"最近的运行日志"，不承诺永久留存。
 
-## 备份
+## 备份与恢复
 
-除平台本体的备份外，运行时层多这几处（**只有第一行真正需要备份**）：
+托管应用的存档分两处：**代码在对象存储里、数据在 runtime-manager 那台机器的本机磁盘上**。
+平台本体的备份（MySQL / MinIO，见 [`08-deployment.md`](08-deployment.md)「备份」）覆盖前者，
+**覆盖不到后者**——这是装了运行时层之后备份清单里唯一多出来的东西。
 
-| 内容 | 位置 | 说明 |
-|------|------|------|
-| 应用数据 | `{data_root}/apps/{app_id}/db/` | 每个应用的持久化数据，**要备份** |
+| 内容 | 位置 | 要不要备份 |
+|------|------|-----------|
+| 应用数据（SQLite） | `{data_root}/apps/{app_id}/db/app.db`（默认 `data_root` 为 `/opt/bisheng/app-data`；compose 形态是宿主侧 `BISHENG_APP_DATA_ROOT`） | **要**，且不能裸拷，见下 |
+| 代码快照 | MinIO 独立 bucket **`bisheng-apps`**，键 `apps/{app_id}/versions/{version_id}/code.tar.gz`（只增不改，每个已发布版本一份） | 随 MinIO 备份，**整桶备**——后续落地的附件等同桶前缀（`apps/{app_id}/…`）自然被覆盖 |
+| 应用元数据（应用、版本、实例、审批单） | 平台 MySQL / DM8 的 `app*` 表 | 随平台库备份 |
 | 期望态文件 | `{data_root}/state/desired-state.json` | 可丢：进程启动时会从容器标签重建 |
-| 构建上下文 | `{data_root}/builds/` | 可丢，纯临时产物 |
-| 应用代码包 | MinIO | 随平台对象存储一起备份 |
+| 构建上下文 / 镜像 | `{data_root}/builds/`、dockerd 里的 `bisheng-app/*` 镜像 | 可丢：重新上线会从代码快照重建 |
+
+`bisheng-apps` 桶**不挂 nginx location、不设匿名策略**，与公共 `bisheng` 桶隔离；备份时用 MinIO 自己的
+工具（`mc mirror` / 站点复制）而不是走 HTTP 入口。
+
+### SQLite 快照：绝不裸 tar 一个 WAL 库
+
+托管应用的库开着 WAL 模式，`app.db` 旁边跟着 `app.db-wal` / `app.db-shm`。**直接 `tar` / `cp` 这三个文件
+得到的是不一致副本**：备份看起来成功，恢复时要么丢最近的写、要么直接 corrupt，而且只在应用正在写的时候复现。
+必须先用 SQLite 的在线备份 API 生成一致快照，再归档快照文件——应用**不用停**，备份过程不阻塞它的读写：
+
+```bash
+DATA_ROOT=/opt/bisheng/app-data          # RTM_DATA_ROOT（systemd）/ BISHENG_APP_DATA_ROOT（compose）
+STAMP=$(date +%Y%m%dT%H%M%S)
+mkdir -p /var/backups/bisheng-apps/$STAMP
+
+for db in "$DATA_ROOT"/apps/*/db/app.db; do
+    app_id=$(basename "$(dirname "$(dirname "$db")")")
+    # 有 sqlite3 命令行就用它；没有就用 python3 标准库（平台机器上一定有）
+    sqlite3 "$db" ".backup '/var/backups/bisheng-apps/$STAMP/$app_id.db'" \
+    || python3 -c "import sqlite3,sys; s=sqlite3.connect(sys.argv[1]); d=sqlite3.connect(sys.argv[2]); s.backup(d); d.close(); s.close()" \
+         "$db" "/var/backups/bisheng-apps/$STAMP/$app_id.db"
+done
+tar -C /var/backups/bisheng-apps -czf "/var/backups/bisheng-apps/$STAMP.tar.gz" "$STAMP"
+```
+
+得到的 `{app_id}.db` 是自包含的单文件（不带 `-wal` / `-shm`），可以放心归档、异地存放。
+`VACUUM INTO '/path/out.db'` 与 `.backup` 等价，只是产物更紧凑。
+平台**当前没有**自动做这件事的作业——把上面的循环接进平台本体的备份计划（与 MySQL dump 同一周期即可）。
+
+### 恢复
+
+按这个顺序，每一步都可以独立核对：
+
+1. **先恢复平台库与 MinIO**（`app*` 表 + `bisheng-apps` 桶）。应用的存在、版本号、审批状态都在库里，
+   代码在桶里；两者对不上时，上线会失败在「取不到代码快照」。
+2. **停掉要恢复数据的应用**：在应用详情页「下线」，或让它保持未上线状态。容器还在跑时替换库文件，
+   跑着的连接会写回旧页，恢复等于没做。
+3. **放回库文件**：把快照复制成 `{data_root}/apps/{app_id}/db/app.db`，**删掉残留的 `app.db-wal` / `app.db-shm`**
+   （它们属于旧库，留着会把旧的写重放到新库上），然后 `chown -R 10001:10001 {data_root}/apps/{app_id}/db`
+   ——这是容器内应用用户的固定 uid/gid。runtime-manager 上线时只 chown `db/` 目录本身、不递归，
+   手工放回的 `app.db` 若仍属 root，应用能读不能写，症状是上线成功、一写就报 `readonly database`。
+4. **重新上线**：应用详情页「上线」。runtime-manager 会从代码快照重建镜像（本地镜像丢了也无妨）、
+   挂上 `db/`、探活通过后切流量。
+5. **核对**：用非管理员账号打开 `/apps/{slug}`，看数据是否是快照时刻的；`GET /api/v1/apps/runtime-status`
+   的 `preflight` 应全绿。
+
+`desired-state.json` 与 `builds/` 不用恢复。但要知道对账的边界：runtime-manager 重启后只会从**还在的容器标签**
+里认回实例；整机重装、容器全没了的情况下它一无所知，不会自己把库里标着「已上线」的应用拉起来——
+每个应用都要按步骤 4 在平台里重新上线一次。
 
 ## 相关文档
 

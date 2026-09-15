@@ -2,11 +2,17 @@
 
 The developer ships source; the platform owns the recipe. ``runtime`` selects a
 directory under ``templates/`` and every ``*.j2`` in it is rendered into the
-build context, so adding ``node20`` / ``static`` (T092) is adding a directory —
-no constant anywhere else has to learn about it. That is why
-:func:`discover_runtimes` reads the filesystem instead of returning a literal:
-an air-gapped install that only carries the python base image advertises exactly
-what it can actually build (AC-15).
+build context, so adding a runtime is adding a directory (``node20`` and
+``static`` arrived that way, T092) plus its row in :data:`BASE_IMAGES` — no
+other constant has to learn about it. That is why :func:`discover_runtimes`
+reads the filesystem instead of returning a literal: an air-gapped install that
+only carries the python base image advertises exactly what it can actually
+build (AC-15).
+
+What a template needs to know about the source it wraps (does the node app have
+a lockfile, which directory of the static package holds ``index.html``) is read
+at render time by :mod:`runtime_manager.source_facts`, never guessed by shell
+inside the image.
 
 Pipeline stages, and why the stage matters as much as the message (AC-15): a
 capacity refusal, a dead pre-signed URL and an unresolvable dependency need
@@ -45,6 +51,7 @@ from runtime_manager.api.schemas import BuildRequest
 from runtime_manager.config import Config
 from runtime_manager.docker_backend import DockerBackend, get_docker_backend
 from runtime_manager.errors import NotFoundError, UnsupportedRuntimeError
+from runtime_manager.source_facts import source_facts
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +69,14 @@ STATUS_FAILED = "failed"
 
 #: Base image per runtime. Pinned by digest-less tag on purpose: private
 #: registries mirror by tag, and an air-gapped install pre-pulls exactly these.
-BASE_IMAGES = {"python3.11": "python:3.11-slim"}
+#: ``static`` uses the official nginx image rather than ``nginx-unprivileged``:
+#: the template ships its own nginx.conf anyway (pid / temp paths under /tmp),
+#: and the official tag is the one 信创 mirrors reliably carry.
+BASE_IMAGES = {
+    "python3.11": "python:3.11-slim",
+    "node20": "node:20-slim",
+    "static": "nginx:1.27-alpine",
+}
 
 DEFAULT_APP_USER = "bisheng"
 DEFAULT_APP_UID = 10001
@@ -92,9 +106,7 @@ def require_runtime(runtime: str, templates_dir: Path | None = None) -> None:
         )
 
 
-def render_build_context(
-    runtime: str, context: dict[str, Any], templates_dir: Path | None = None
-) -> dict[str, str]:
+def render_build_context(runtime: str, context: dict[str, Any], templates_dir: Path | None = None) -> dict[str, str]:
     """Render every ``*.j2`` of a runtime template into ``{filename: content}``.
 
     ``StrictUndefined`` on purpose: a typo in a context key must fail loudly at
@@ -107,10 +119,22 @@ def render_build_context(
         loader=FileSystemLoader(str(root)),
         undefined=StrictUndefined,
         keep_trailing_newline=True,
+        # Block tags (`{% if %}`) own their line: without this every branch a
+        # template takes or skips leaves a blank line behind in the Dockerfile.
+        trim_blocks=True,
+        lstrip_blocks=True,
         autoescape=False,
     )
+    base_image = BASE_IMAGES.get(runtime)
+    if not base_image:
+        # A template directory without a base image row is a packaging bug;
+        # an empty FROM would otherwise surface as a daemon parse error.
+        raise UnsupportedRuntimeError(
+            f"runtime {runtime!r} has a template but no base image registered",
+            supported_runtimes=[name for name in discover_runtimes(templates_dir) if name in BASE_IMAGES],
+        )
     merged = {
-        "base_image": BASE_IMAGES.get(runtime, "python:3.11-slim"),
+        "base_image": base_image,
         "app_user": DEFAULT_APP_USER,
         "app_uid": DEFAULT_APP_UID,
         "app_gid": DEFAULT_APP_GID,
@@ -122,6 +146,24 @@ def render_build_context(
         name = template_path.name[: -len(".j2")]
         rendered[name] = env.get_template(template_path.name).render(**merged)
     return rendered
+
+
+def build_args_for(config: Config, runtime: str) -> dict[str, str]:
+    """Package-source build args for one runtime, from deployment config only.
+
+    Per runtime, not a union: the daemon warns about every build arg a
+    Dockerfile does not declare, and that warning would sit in the log tail a
+    developer reads when their build fails. ``static`` resolves nothing and gets
+    nothing.
+    """
+    if runtime == "python3.11":
+        return {
+            "PIP_INDEX_URL": config.build_index_url,
+            "PIP_TRUSTED_HOST": config.build_trusted_host,
+        }
+    if runtime == "node20":
+        return {"BISHENG_NPM_REGISTRY": config.build_npm_registry}
+    return {}
 
 
 def image_tag(config: Config, slug: str, version_no: int, version_id: str) -> str:
@@ -349,25 +391,20 @@ class BuildService:
     def _stage_render(self, request: BuildRequest, record: BuildRecord, context_dir: Path) -> None:
         record.stage = STAGE_RENDER_DOCKERFILE
         try:
-            files = render_build_context(request.runtime, {"port": request.port})
+            # Read (and, where the Dockerfile COPYs unconditionally, materialise)
+            # what the template branches on — before rendering, so a tree the
+            # template cannot serve fails here with a sentence.
+            facts = source_facts(request.runtime, context_dir)
+            files = render_build_context(request.runtime, {"port": request.port, **facts})
             for name, content in files.items():
                 (context_dir / name).write_text(content, encoding="utf-8")
-            requirements = context_dir / "requirements.txt"
-            if not requirements.exists():
-                # Materialise it so the Dockerfile needs no optional-COPY trick,
-                # which BuildKit and the classic builder disagree about.
-                requirements.write_text("", encoding="utf-8")
         except Exception as exc:
             self._fail(record, STAGE_RENDER_DOCKERFILE, str(exc))
 
     def _stage_build(self, request: BuildRequest, record: BuildRecord, context_dir: Path) -> None:
         record.stage = STAGE_DOCKER_BUILD
         tag = image_tag(self._config, request.slug or request.app_id, request.version_no, request.version_id)
-        buildargs = {
-            "PIP_INDEX_URL": self._config.build_index_url,
-            "PIP_TRUSTED_HOST": self._config.build_trusted_host,
-            **request.build_args,
-        }
+        buildargs = {**build_args_for(self._config, request.runtime), **request.build_args}
         lines: list[str] = []
         error: str | None = None
         try:

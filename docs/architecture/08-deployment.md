@@ -304,6 +304,17 @@ ownership）。横向扩容时按下表核对。
 [C8](../constitution.md#c8-no-shared-state-on-the-local-filesystem)。单机 compose 下 `backend` 与
 `backend_worker` 共享同一个 `/app/data`，会让「跨进程传文件」看起来能用——这是巧合，不是保证。
 
+## 备份
+
+权威存储只有三处，备份也只看这三处：**MySQL / DM8**（全部业务元数据）、**MinIO**（知识库文件、
+灵思技能 bundle、托管应用代码包等对象）、**Redis**（缓存与队列，可丢，重启后自愈）。节点本地磁盘
+（`/app/data`、进程缓存目录）不在备份范围内——它们是缓存，见上文「多节点部署」。
+
+装了应用工场运行时层的环境**多一处**：托管应用的 SQLite 库放在 runtime-manager 所在机器的本机磁盘
+（`{data_root}/apps/{app_id}/db/`），既不在 MySQL 也不在 MinIO 里，平台本体的备份**覆盖不到它**。
+它的快照方法（WAL 库不能裸 tar）、对象存储里哪些前缀属于托管应用、以及恢复顺序，见
+[`14-app-factory-deployment.md`](14-app-factory-deployment.md) 的「备份与恢复」一节。
+
 ## 相关文档
 
 - 系统架构总览 -- `docs/architecture/01-architecture-overview.md`

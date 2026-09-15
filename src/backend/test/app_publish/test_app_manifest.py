@@ -81,10 +81,22 @@ async def test_runtime_not_in_local_enum_rejected_16222(tier_seed):
     from bisheng.common.errcode.app_publish import AppRuntimeUnsupportedError
 
     with pytest.raises(AppRuntimeUnsupportedError) as excinfo:
-        await _validate(_yaml(runtime="node20"))
+        await _validate(_yaml(runtime="go1.22"))
     assert excinfo.value.code == 16222
     assert excinfo.value.kwargs["details"]["field"] == "runtime"
-    assert "python3.11" in " ".join(excinfo.value.kwargs["hints"])
+    hints = " ".join(excinfo.value.kwargs["hints"])
+    assert "python3.11" in hints and "node20" in hints and "static" in hints
+
+
+@pytest.mark.parametrize("runtime", ["node20", "static"])
+async def test_every_shipped_template_passes_the_local_runtime_check(tier_seed, runtime):
+    """The local enum mirrors the manager's template directories (T092).
+
+    A runtime the manager can build but this constant does not list would be
+    rejected 16222 in the synchronous leg and never reach the manager.
+    """
+    outcome = await _validate(_yaml(runtime=runtime))
+    assert outcome.manifest.runtime == runtime
 
 
 @pytest.mark.parametrize("port", [0, 65536, -1])
