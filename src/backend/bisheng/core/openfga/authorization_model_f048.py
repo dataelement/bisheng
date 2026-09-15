@@ -12,38 +12,38 @@ import json
 from hashlib import sha256
 from typing import Any
 
-# Version history — two release folders each own a feature numbered F054:
-# `features/v3.0.0-beta1/054-contextual-department-membership` and
-# `features/v3.0.0/054-app-domain-runtime` (hosted applications). Comments here
-# name the folder, never the bare number.
+# Naming rule on this branch (2026-09-16): the release line owns the model
+# version numbers; `3.0-vibe` never takes one. The name here is the release-line
+# version this model is built on plus `-app`, the only thing this branch adds
+# (the hosted-app `app` resource type). When a release-line model change is
+# merged in, replace the number in front and keep the suffix. The name is only a
+# readable label written into `authorization_model_release.model_version`; the
+# runtime decides by checksum and never compares names, so a rename alone needs
+# no re-publish.
 #
-# - `3.0-vibe` v3 (2026-08-18): beta1's visibility-projection upgrade
-#   (`FLAT_VISIBLE_RESOURCE_TYPES`, `_visible_subject_types`, `published`)
-#   merged with the hosted-app `app` resource type.
-# - `feat/3.0.0-beta2` v3 (2026-09-04): F053's `service_account` subject type
-#   — its own type definition, accepted as an ordinary assignee and as a
-#   visibility subject, never as a protected assignee or any admin relation.
-#   It sits on top of beta2's v2, which had already dropped `public_reader`
-#   from the computed `system_*` branches (2026-09-03, no bump of its own).
-# - `feat/3.0.0-beta1` v4 (2026-09-09, f6bf9f51f): beta2's v3 plus
-#   `TECHNICAL_MARKER_SUBJECTS` — every Catalog / resource-state marker
-#   relation accepts `service_account:*` next to `user:*`.
-# - v5 was then cut twice in parallel: beta2's v5 = v4 plus contextual
-#   department membership (`department#subtree_member` is `_this()`, supplied
-#   per request by the trusted organization adapter instead of expanding the
-#   child hierarchy); `3.0-vibe`'s v5 (2026-09-10) = v4 plus `app`.
+# Why the rule exists — the numbers collided three times while two lines both
+# bumped them:
+# - v3: `3.0-vibe` (2026-08-18, visibility projection + `app`) and
+#   `feat/3.0.0-beta2` (2026-09-04, F053's `service_account` subject) each named
+#   their own shape v3.
+# - v4: on the beta line, F053's technical markers (f6bf9f51f, beta1,
+#   2026-09-09) and the contextual department membership each claimed a v4.
+#   Two release folders own a feature numbered F054 —
+#   `features/v3.0.0-beta1/054-contextual-department-membership` and
+#   `features/v3.0.0/054-app-domain-runtime` (hosted apps); comments here name
+#   the folder, never the bare number.
+# - v5: `feat/3.0.0-beta1` cut v5 = v4 plus contextual department membership
+#   (07c1c3b3a, 2026-09-11; `department#subtree_member` is `_this()`, supplied
+#   per request by the trusted organization adapter), while `3.0-vibe` had
+#   already called "v4 plus `app`" v5. The merge on 2026-09-15 was named v6.
 #
-# v6 (2026-09-15) is both v5s together: contextual department membership plus
-# `app`. `app` is modelled like the other flat, never-system-shared types
-# (`channel`, `dashboard`), so it inherits the service-account subjects, the
-# technical markers and contextual department membership without special cases.
-#
-# The name is bumped rather than reused because it is written into
-# `authorization_model_release.model_version` next to the checksum. Correctness
-# is carried by the checksum; the version string only has to be readable, and a
-# readable name must not name two different models. Wherever either v5 was
-# published, v6 has to be published again.
-MODEL_VERSION = "f048-v6"
+# Current shape: release-line `f048-v5` plus `app`. `app` is modelled like the
+# other flat, never-system-shared types (`channel`, `dashboard`), so it inherits
+# the service-account subjects, the technical markers and contextual department
+# membership without special cases. Environments that published it as `f048-v6`
+# (114, 2026-09-15) hold the same model — checksum 3266b35a…, unchanged by the
+# rename — and need no action.
+MODEL_VERSION = "f048-v5-app"
 
 DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "manage_permission",

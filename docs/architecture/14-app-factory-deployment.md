@@ -412,7 +412,7 @@ docker compose --profile app-runtime up -d runtime-manager app-proxy
 （典型是 114），**不能直接 `alembic upgrade head`**：两个分支的这两张表同名不同构，新迁移的建表
 守卫看到表已存在就跳过，后端启动即崩。必须停服 → 备份 → 删掉这两张旧表 → 再升级 → 重建服务账号与密钥，
 步骤见 `features/v3.0.0/beta2-openapi-base-migration.md` §4。托管应用的 `app*` 表不受影响。
-这个过程还要发布 OpenFGA 模型 `f048-v6`：模型 checksum 变了而不发布，进程发现与 SQL 里的 ACTIVE release 对不上，所有权限判定一律返回 503。
+这个过程还要发布当前代码生成的 OpenFGA 模型（以发布脚本 dry-run 输出的 checksum 为准）：模型 checksum 变了而不发布，进程发现与 SQL 里的 ACTIVE release 对不上，所有权限判定一律返回 503。版本名只是可读标签：本分支不占用发版线的模型编号，命名为「所基于的发版线版本号 + `-app`」（当前 `f048-v5-app`）；判定只看 checksum，改名不需要重新发布。
 
 ## 整层不装
 
