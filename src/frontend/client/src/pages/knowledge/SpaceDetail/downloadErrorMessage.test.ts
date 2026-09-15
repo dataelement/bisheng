@@ -8,14 +8,17 @@
  * connection problem they do not have.
  */
 
+/** Stand-ins for the real copy: this is about which message is chosen, not what it says. */
+const mockRefusalCopy = "translated-refusal";
+const FALLBACK = "generic-download-failed";
+
 jest.mock("~/api/request", () => ({
     translateApiErrorMessage: (data: { status_code?: number }) =>
-        data?.status_code === 19000 ? "无权限。" : "",
+        data?.status_code === 19000 ? mockRefusalCopy : "",
 }));
 
 import { resolveDownloadErrorMessage } from "./downloadErrorMessage";
 
-const FALLBACK = "下载失败";
 
 test("a refusal shows the server's wording", () => {
     const error = Object.assign(new Error("request failed"), {
@@ -23,7 +26,7 @@ test("a refusal shows the server's wording", () => {
         status_message: "Permission denied",
     });
 
-    expect(resolveDownloadErrorMessage(error, FALLBACK)).toBe("无权限。");
+    expect(resolveDownloadErrorMessage(error, FALLBACK)).toBe(mockRefusalCopy);
 });
 
 test("a refusal carried on the response is read too", () => {
@@ -31,7 +34,7 @@ test("a refusal carried on the response is read too", () => {
         response: { data: { status_code: 19000, status_message: "Permission denied" } },
     });
 
-    expect(resolveDownloadErrorMessage(error, FALLBACK)).toBe("无权限。");
+    expect(resolveDownloadErrorMessage(error, FALLBACK)).toBe(mockRefusalCopy);
 });
 
 test("a network failure keeps the generic wording", () => {
