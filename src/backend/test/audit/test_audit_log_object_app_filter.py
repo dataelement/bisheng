@@ -99,6 +99,32 @@ class TestObjectAppPredicate:
         assert {r.id for r in page1}.isdisjoint({r.id for r in page2})
 
 
+class TestObjectAppPredicateDialects:
+    """The SQLite runs above exercise the LIKE fallback only; pin what the
+    MySQL branch compiles to so the JSON-native path cannot silently rot."""
+
+    def test_mysql_branch_uses_json_extract(self):
+        from sqlalchemy.dialects import mysql
+
+        from bisheng.core.database.dialect_helpers import json_object_field_equals
+        from bisheng.database.models.audit_log import AuditLog
+
+        expr = json_object_field_equals(AuditLog.audit_metadata, "app_id", APP_A, "mysql")
+        sql = str(expr.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
+        assert "json_unquote(json_extract(auditlog.metadata, '$.app_id'))" in sql
+        assert sql.endswith(f"= '{APP_A}'")
+
+    def test_dm_branch_matches_the_quoted_pair_only(self):
+        from sqlalchemy.dialects import sqlite
+
+        from bisheng.core.database.dialect_helpers import json_object_field_equals
+        from bisheng.database.models.audit_log import AuditLog
+
+        expr = json_object_field_equals(AuditLog.audit_metadata, "app_id", APP_A, "dm")
+        sql = str(expr.compile(dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}))
+        assert sql.endswith(f"""LIKE '%"app_id": "{APP_A}"%'""")
+
+
 class TestGroupMemberFallback:
     """Design pit 15: v2 rows never carry ``group_ids``."""
 

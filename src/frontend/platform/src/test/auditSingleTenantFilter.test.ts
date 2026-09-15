@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { getActionsApi, getModulesApi } from "@/controllers/API/log";
+import { getActionsApi, getModulesApi, V2_ACTIONS } from "@/controllers/API/log";
 import { actionToI18nKey } from "@/pages/LogPage/systemLog";
 
 const LOCALES = ["zh-Hans", "en-US", "ja"] as const;
@@ -82,7 +82,12 @@ describe("audit i18n — hosted application release family", () => {
 
   it("has an eventTypeEnum entry for every app.release.* action", async () => {
     const releaseActions = (await getActionsApi()).filter((a) => a.value.startsWith("app.release."));
-    expect(releaseActions.length).toBe(16);
+    // The family is registered in `V2_ACTIONS`; the dropdown must carry every
+    // member of it (a hard-coded count here went stale the first time the
+    // family grew, and hid the i18n check below behind an unrelated failure).
+    const registered = V2_ACTIONS.filter((v) => v.startsWith("app.release."));
+    expect(registered.length).toBeGreaterThan(0);
+    expect(releaseActions.map((a) => a.value)).toEqual(registered);
     for (const locale of LOCALES) {
       const bs = readLocale(locale);
       for (const action of releaseActions) {

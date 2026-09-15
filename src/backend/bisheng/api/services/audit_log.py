@@ -41,6 +41,7 @@ from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.database.models.tenant import TenantDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.open_api.domain.repositories.credential_repository import CredentialRepository
 from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.services.auth import LoginUser
@@ -168,21 +169,42 @@ class AuditLogService:
         return groups, member_ids, tenant_scope
 
     @classmethod
+    def _row_metadata(cls, row: AuditLog) -> dict[str, Any]:
+        return row.audit_metadata if isinstance(row.audit_metadata, dict) else {}
+
+    @classmethod
     def _operator_kind(cls, row: AuditLog) -> str | None:
         """``service_account`` for rows a service account produced, else ``None``.
 
-        Two shapes are recognised: an explicit ``metadata.operator.kind`` (the
-        contract writers adopt going forward), and the beta2 convention used
-        by ``OpenApiAuditMiddleware`` / ``write_release_audit`` — operator 0
-        with the account's name (``operator_id=0`` *without* a name is a
-        system trigger and renders as ``system``).
+        Three shapes are recognised, in order of how explicit they are:
+        ``metadata.actor_kind`` (what ``OpenApiAuditMiddleware`` and the F055
+        ``app.release.submit`` writer stamp today), ``metadata.operator.kind``
+        (the contract writers adopt going forward), and the beta2 convention
+        both of the above also follow — operator 0 with the account's name
+        (``operator_id=0`` *without* a name is a system trigger and renders as
+        ``system``).
         """
-        metadata = row.audit_metadata if isinstance(row.audit_metadata, dict) else {}
+        metadata = cls._row_metadata(row)
+        if metadata.get("actor_kind") == "service_account":
+            return "service_account"
         operator = metadata.get("operator") if isinstance(metadata.get("operator"), dict) else {}
         if operator.get("kind") == "service_account":
             return "service_account"
         if row.operator_id == 0 and row.operator_name and row.operator_name != "system":
             return "service_account"
+        return None
+
+    @classmethod
+    def _row_credential_id(cls, row: AuditLog) -> int | None:
+        """``metadata.credential_id`` as the writers stamp it (int, or its
+        string form) — the key the audit row was produced with."""
+        raw = cls._row_metadata(row).get("credential_id")
+        if isinstance(raw, bool):
+            return None
+        if isinstance(raw, int):
+            return raw
+        if isinstance(raw, str) and raw.isdigit():
+            return int(raw)
         return None
 
     @classmethod
@@ -209,6 +231,13 @@ class AuditLogService:
             return []
         app_ids = {app_id for row in rows if (app_id := cls._row_app_id(row))}
         tenant_ids = {row.tenant_id for row in rows if row.tenant_id is not None}
+        # Only service-account rows get a mask (AC-17); a natural person's
+        # personal token is not surfaced on the audit page.
+        credential_ids = {
+            cred_id
+            for row in rows
+            if cls._operator_kind(row) == "service_account" and (cred_id := cls._row_credential_id(row))
+        }
 
         apps_by_id: dict[str, Any] = {}
         if app_ids:
@@ -216,6 +245,14 @@ class AuditLogService:
                 async with get_async_db_session() as session:
                     apps_by_id = {app.id: app for app in await AppDao.alist_by_ids(session, sorted(app_ids))}
         tenants_by_id = {t.id: t for t in await TenantDao.aget_by_ids(sorted(tenant_ids))} if tenant_ids else {}
+        # ``key_mask`` is built from the stored prefix + last four characters;
+        # the plaintext key is never persisted, so nothing longer exists to
+        # leak from here (AC-26).
+        masks_by_credential: dict[int, str] = {}
+        if credential_ids:
+            masks_by_credential = {
+                c.id: c.key_mask for c in await CredentialRepository.get_by_ids(sorted(credential_ids))
+            }
 
         owner_ids = {app.owner_user_id for app in apps_by_id.values() if app.owner_user_id}
         owners_by_id: dict[int, str] = {}
@@ -225,7 +262,7 @@ class AuditLogService:
         result: list[dict[str, Any]] = []
         for row in rows:
             item = row.model_dump(exclude={"audit_metadata"})
-            metadata = row.audit_metadata if isinstance(row.audit_metadata, dict) else {}
+            metadata = cls._row_metadata(row)
             app_id = cls._row_app_id(row)
             app = apps_by_id.get(app_id) if app_id else None
             item["app_id"] = app_id
@@ -242,10 +279,14 @@ class AuditLogService:
             item["tenant_name"] = tenant.tenant_name if tenant is not None else None
             operator = metadata.get("operator") if isinstance(metadata.get("operator"), dict) else {}
             item["operator_kind"] = cls._operator_kind(row)
-            # Only the mask a writer already produced is forwarded; nothing
-            # here reconstructs one from a longer value (AC-26).
+            # A mask the writer already produced wins; otherwise the credential
+            # row named by ``metadata.credential_id`` supplies its stored one.
+            # Nothing here reconstructs a mask from a longer value (AC-26).
             key_mask = operator.get("key_mask")
-            item["operator_key_mask"] = key_mask if item["operator_kind"] and isinstance(key_mask, str) else None
+            if not isinstance(key_mask, str):
+                cred_id = cls._row_credential_id(row)
+                key_mask = masks_by_credential.get(cred_id) if cred_id is not None else None
+            item["operator_key_mask"] = key_mask if item["operator_kind"] and key_mask else None
             result.append(item)
         return result
 

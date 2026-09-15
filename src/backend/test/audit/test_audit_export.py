@@ -14,7 +14,7 @@ import pytest
 from bisheng.api.services import audit_log as service_module
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.common.errcode.http_error import UnAuthorizedError
-from test.audit.conftest import insert_audit, make_app, make_user_payload
+from test.audit.conftest import insert_audit, make_app, make_credential, make_user_payload
 
 SECRET = "sk-live-THIS-MUST-NEVER-LEAVE"
 
@@ -133,6 +133,89 @@ class TestExportContent:
         kinds = {r["operator_name"]: r["operator_kind"] for r in rows}
         assert kinds == {"ci-bot": "service_account", "system": None, "olga": None}
         assert all(r["operator_key_mask"] is None for r in rows)
+
+    async def test_mask_resolved_from_credential_id_for_writer_shape(
+        self, patch_audit_dao, audit_lookups, audit_session, global_super
+    ):
+        # What the writers actually stamp today (``OpenApiAuditMiddleware``
+        # and the F055 ``app.release.submit`` writer): ``actor_kind`` +
+        # ``credential_id``, no ``operator`` dict. The mask comes from the
+        # credential row's stored prefix + last4. Actions are UI-visible ones
+        # (``open_api.call`` itself is high-frequency and never listed).
+        audit_lookups.credentials = [
+            make_credential(5, key_prefix="bs-sak-", last4="zz99"),
+            make_credential(6, key_prefix="bs-pat-", last4="pp11", subject_kind="natural_person"),
+        ]
+        insert_audit(
+            audit_session,
+            action="app.release.submit",
+            operator_id=0,
+            operator_name="ci-bot",
+            target_type="app_version",
+            target_id="ver-sa",
+            tenant_id=2,
+            audit_metadata={
+                "app_id": "app-1",
+                "credential_id": 5,
+                "actor_kind": "service_account",
+                "actor_id": 11,
+                "actor_name": "ci-bot",
+            },
+        )
+        # A natural person's personal token: not a service account, no mask.
+        insert_audit(
+            audit_session,
+            action="open_api.api_key.issue",
+            operator_id=9,
+            operator_name="olga",
+            target_type="api_credential",
+            target_id="cred-pat",
+            tenant_id=2,
+            audit_metadata={"credential_id": 6, "actor_kind": "natural_person", "actor_id": 9},
+        )
+        # Explicit actor_kind wins even when the operator name is missing;
+        # a string-typed credential id resolves the same way.
+        insert_audit(
+            audit_session,
+            action="app.release.submit",
+            operator_id=0,
+            operator_name=None,
+            target_type="app_version",
+            target_id="ver-nameless",
+            tenant_id=2,
+            audit_metadata={"credential_id": "5", "actor_kind": "service_account"},
+        )
+
+        rows, total = await _export(global_super, current_tenant=1)
+
+        assert total == 3
+        by_target = {r["target_id"]: r for r in rows}
+        sa = by_target["ver-sa"]
+        assert sa["operator_kind"] == "service_account"
+        assert sa["operator_key_mask"] == "bs-sak-********zz99"
+        pat = by_target["cred-pat"]
+        assert pat["operator_kind"] is None and pat["operator_key_mask"] is None
+        nameless = by_target["ver-nameless"]
+        assert nameless["operator_kind"] == "service_account"
+        assert nameless["operator_key_mask"] == "bs-sak-********zz99"
+        assert all("credential_id" not in r and "actor_kind" not in r for r in rows)
+
+    async def test_unknown_credential_id_yields_no_mask(
+        self, patch_audit_dao, audit_lookups, audit_session, global_super
+    ):
+        insert_audit(
+            audit_session,
+            action="app.release.submit",
+            operator_id=0,
+            operator_name="ci-bot",
+            tenant_id=2,
+            audit_metadata={"credential_id": 404, "actor_kind": "service_account"},
+        )
+
+        rows, _ = await _export(global_super, current_tenant=1)
+
+        assert rows[0]["operator_kind"] == "service_account"
+        assert rows[0]["operator_key_mask"] is None
 
     async def test_tenant_name_is_resolved(self, patch_audit_dao, audit_lookups, audit_session, global_super):
         audit_lookups.tenants = [type("T", (), {"id": 2, "tenant_name": "Acme"})()]

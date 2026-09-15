@@ -123,10 +123,13 @@ def patch_audit_dao(monkeypatch, audit_session):
 def audit_lookups(monkeypatch):
     """Replace the enrichment lookups with mocks; returns a namespace the
     test fills (``apps`` / ``tenants`` / ``users`` / ``group_users``)."""
-    state = SimpleNamespace(apps=[], tenants=[], users=[], group_users=[])
+    state = SimpleNamespace(apps=[], tenants=[], users=[], group_users=[], credentials=[])
 
     async def _apps_by_ids(session, app_ids):
         return [app for app in state.apps if app.id in set(app_ids)]
+
+    async def _credentials(credential_ids):
+        return [c for c in state.credentials if c.id in set(credential_ids)]
 
     async def _app_get(session, app_id):
         return next((app for app in state.apps if app.id == app_id), None)
@@ -147,12 +150,29 @@ def audit_lookups(monkeypatch):
     monkeypatch.setattr(
         "bisheng.api.services.audit_log.UserGroupDao.aget_group_users", AsyncMock(side_effect=_group_users)
     )
+    monkeypatch.setattr(
+        "bisheng.api.services.audit_log.CredentialRepository.get_by_ids", AsyncMock(side_effect=_credentials)
+    )
     return state
 
 
 def make_app(app_id, *, name, slug, tenant_id, state="online", owner_user_id=7):
     return SimpleNamespace(
         id=app_id, name=name, slug=slug, tenant_id=tenant_id, state=state, owner_user_id=owner_user_id
+    )
+
+
+def make_credential(credential_id, *, key_prefix="bs-sak-", last4="ab12", subject_kind="service_account"):
+    """A stand-in for ``ApiCredential`` — only the fields the mask needs; no
+    plaintext exists on the real row either."""
+    from bisheng.open_api.domain.models.api_credential import mask_key
+
+    return SimpleNamespace(
+        id=credential_id,
+        key_prefix=key_prefix,
+        last4=last4,
+        subject_kind=subject_kind,
+        key_mask=mask_key(last4, key_prefix),
     )
 
 
