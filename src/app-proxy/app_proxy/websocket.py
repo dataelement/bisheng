@@ -135,11 +135,12 @@ def get_upstream_connector() -> Connector:
 def obo_expiry(payload_or_verdict: Any, *, obo_token: str | None) -> float | None:
     """When the visitor's on-behalf-of token stops being valid, as epoch seconds.
 
-    The backend states it outright (``obo_expires_at``) since T080; an older
-    backend only sends the token, whose ``exp`` claim is readable without the
-    key — and *only* read, never trusted for anything but shortening a
-    lifetime. Without a token at all (``obo_secret`` unconfigured) the cap is
-    the only bound.
+    The backend states it outright (``obo_expires_at``, alongside
+    ``ws_max_lifetime_seconds``) since the T081 change to ``authorize_entry``;
+    an older backend only sends the token, whose ``exp`` claim is readable
+    without the key — and *only* read, never trusted for anything but
+    shortening a lifetime. Without a token at all (``obo_secret``
+    unconfigured) the cap is the only bound.
     """
     explicit = getattr(payload_or_verdict, "obo_expires_at", None)
     if explicit is None and isinstance(payload_or_verdict, dict):

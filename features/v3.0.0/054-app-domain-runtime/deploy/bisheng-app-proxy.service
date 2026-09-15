@@ -30,6 +30,8 @@ Environment=APP_PROXY_PORT=8090
 #   APP_PROXY_BACKEND_SECRET  app_runtime.proxy_hmac_secret
 #   APP_PROXY_MANAGER_SECRET  app_runtime.manager_hmac_secret
 #   APP_PROXY_ENTRY_BASE_URL  app_runtime.entry_base_url
+#   APP_PROXY_WS_MAX_LIFETIME_SECONDS  app_runtime.ws_max_lifetime_seconds（兜底，可不设；
+#                             判定里带的后端值优先。WS 其余开关见 config.py）
 EnvironmentFile=/etc/bisheng/app-proxy.env
 Restart=on-failure
 RestartSec=5

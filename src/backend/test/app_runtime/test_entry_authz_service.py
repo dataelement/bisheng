@@ -315,6 +315,23 @@ class TestInjectionMaterial:
         with pytest.raises(jwt.InvalidSignatureError):
             jwt.decode(token, settings.jwt_secret, algorithms=["HS256"], audience=OBO_AUDIENCE)
 
+    async def test_allow_verdict_states_the_websocket_lifetime_inputs(
+        self, app_db, app_factory, app_owner, runtime_enabled, no_tenant_blacklist, visible, monkeypatch
+    ):
+        """T081 / D6 ① — app-proxy fixes a socket's lifetime at the handshake as
+        ``min(OBO remaining, ws_max_lifetime_seconds)``. Both inputs are stated
+        by the backend, so the cap is this process's config rather than a second
+        copy in the proxy's environment, and the expiry needs no token decoding."""
+        from bisheng.app_runtime.domain.services.entry_authz_service import OBO_AUDIENCE
+
+        monkeypatch.setattr(runtime_enabled.app_runtime, "ws_max_lifetime_seconds", 7200, raising=False)
+        await app_factory(slug="ws-lifetime-app", state=AppState.ONLINE.value)
+        verdict = await _verdict("ws-lifetime-app", _token(app_owner.user_id))
+
+        claims = jwt.decode(verdict["obo_token"], OBO_SECRET, algorithms=["HS256"], audience=OBO_AUDIENCE)
+        assert verdict["obo_expires_at"] == claims["exp"]
+        assert verdict["ws_max_lifetime_seconds"] == 7200
+
     async def test_no_obo_token_when_secret_equals_session_secret(
         self, app_db, app_factory, app_owner, runtime_enabled, no_tenant_blacklist, visible, monkeypatch
     ):
@@ -328,4 +345,5 @@ class TestInjectionMaterial:
         verdict = await _verdict("shared-secret-app", _token(app_owner.user_id))
         assert verdict["decision"] == "allow"
         assert verdict["obo_token"] is None
+        assert verdict["obo_expires_at"] is None, "no token, no expiry — the cap alone bounds a socket"
         assert "X-BiSheng-Access-Token" not in verdict["headers"]

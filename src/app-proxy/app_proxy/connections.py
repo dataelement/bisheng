@@ -9,13 +9,15 @@ handshake, and would otherwise stay open for hours after the answer changed.
 
 Two things it is **not**:
 
-* **Not shared across processes.** It is a dict in this worker. The backend
-  pushes a close to every proxy it knows (``app_runtime.proxy_base_urls``),
-  and a proxy that push did not reach — a second node, a second worker, a
-  restart in between — is covered by the per-connection re-authorisation loop
-  in :mod:`app_proxy.websocket`, which is the safety net, not the mechanism.
-  Run app-proxy with one worker per host, or accept that the push is
-  best-effort and the re-check interval is the real bound.
+* **Not shared across processes.** It is a dict in this worker. The backend's
+  stop / delete / revoke path is expected to POST ``/internal/connections/close``
+  to every app-proxy it fronts (the backend half of T081 — not wired yet; the
+  proxy address list is a backend setting still to be added), and a proxy that
+  push did not reach — a second node, a second worker, a restart in between —
+  is covered by the per-connection re-authorisation loop in
+  :mod:`app_proxy.websocket`, which is the safety net, not the mechanism. Run
+  app-proxy with one worker per host, or accept that the push is best-effort
+  and the re-check interval is the real bound.
 * **Not a permission store.** It knows *who* holds *what* socket; whether they
   still may is always the backend's answer.
 """

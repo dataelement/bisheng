@@ -46,8 +46,11 @@ DEFAULT_HEADER_MATERIAL = {
 DEFAULT_APP_ID = "app-0001"
 DEFAULT_UPSTREAM = "http://172.20.0.7:8080"
 
-#: What the manager answers while a deploy is in flight and nothing serves yet
-#: (contract §2: 409 ``deploying``). Programmed into :class:`FakeManager` as a
+#: What the manager would answer while a deploy is in flight and nothing serves
+#: yet — the 409 ``deploying`` envelope reserved in contracts-runtime-manager.md
+#: §9. The manager does not emit it today (its deploy is synchronous, so no
+#: such window exists); the proxy consumes it so the day it appears the page is
+#: 「发布中」 and not 「恢复中」. Programmed into :class:`FakeManager` as a
 #: route value without an ``upstream`` so a script can say "starting, starting,
 #: then ready" the same way it says "refused, then ready".
 DEPLOYING_ROUTE: dict[str, Any] = {"phase": "starting"}
@@ -198,8 +201,8 @@ class FakeManager:
         if route is None:
             response = JSONResponse({"code": "not_found", "message": "no live instance"}, status_code=404)
         elif not route.get("upstream"):
-            # The manager's real shape for an in-flight deploy: an error envelope,
-            # not a route (contracts-runtime-manager.md §2 / §3).
+            # The reserved shape for an in-flight deploy: an error envelope, not
+            # a route (contracts-runtime-manager.md §9 — see DEPLOYING_ROUTE).
             response = JSONResponse(
                 {"detail": {"code": "deploying", "message": "a deploy is in flight", "phase": "starting"}},
                 status_code=409,

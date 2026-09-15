@@ -265,6 +265,18 @@ class TestInvariantOneLifetime:
                 ws.receive_text()
         assert excinfo.value.code == 4001
 
+    def test_backend_supplied_cap_beats_the_process_config(self, logged_in, fake_backend, ws_upstream):
+        """``ws_max_lifetime_seconds`` in the verdict is the backend's config
+        (``app_runtime.ws_max_lifetime_seconds``); the process env value is
+        only the fallback for a backend that does not send it."""
+        fake_backend.response = {**allow_response(), "ws_max_lifetime_seconds": 0.3}
+        started = time.monotonic()
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            with logged_in.websocket_connect(WS_PATH) as ws:
+                ws.receive_text()
+        assert excinfo.value.code == 4001
+        assert time.monotonic() - started < 3
+
 
 def _sign_close(body: dict, secret: str = BACKEND_SECRET) -> tuple[bytes, dict]:
     raw = json.dumps(body).encode()
@@ -316,6 +328,28 @@ class TestInvariantTwoRevocation:
         set_config(wired.with_overrides(backend_secret=""))
         raw, headers = _sign_close({"app_id": DEFAULT_APP_ID}, secret="")
         assert logged_in.post("/internal/connections/close", content=raw, headers=headers).status_code == 401
+
+    @pytest.mark.parametrize(
+        "raw",
+        [b"not json", b"{}", b'{"app_id": ""}', b'{"app_id": "app-0001", "user_ids": "42"}'],
+        ids=["not-json", "no-app-id", "empty-app-id", "user-ids-not-a-list"],
+    )
+    def test_close_endpoint_rejects_a_malformed_body_after_the_signature(self, logged_in, raw):
+        """Signed but incoherent → 400; the signature is checked first, so an
+        unsigned malformed body is still a 401 and reveals nothing."""
+        headers = {"X-Signature": sign("POST", "/internal/connections/close", raw, BACKEND_SECRET)}
+        assert logged_in.post("/internal/connections/close", content=raw, headers=headers).status_code == 400
+        assert logged_in.post("/internal/connections/close", content=raw).status_code == 401
+
+    def test_close_endpoint_unknown_reason_falls_back_to_4503(self, logged_in, ws_upstream):
+        """A reason word the proxy does not know still ends the socket — with
+        the "nothing answering, reconnect" code rather than a permission one."""
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            with logged_in.websocket_connect(WS_PATH) as ws:
+                raw, headers = _sign_close({"app_id": DEFAULT_APP_ID, "reason": "some-new-word"})
+                assert logged_in.post("/internal/connections/close", content=raw, headers=headers).json()["closed"] == 1
+                ws.receive_text()
+        assert excinfo.value.code == 4503
 
     def test_registry_forgets_a_closed_connection(self, logged_in):
         from app_proxy import connections

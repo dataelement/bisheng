@@ -245,6 +245,8 @@
   "16144": "This application does not exist or is not online",
   "16145": "The app factory is not enabled in this environment",
   "16146": "The permission service is unavailable, so access was denied",
+  "16147": "The application is being published, please retry shortly",
+  "16148": "The application is restarting, please retry shortly",
   "16161": "You do not have permission to view this application's runtime logs",
   "16181": "The app factory runtime layer is not deployed in this environment",
   "16200": "App publish error",

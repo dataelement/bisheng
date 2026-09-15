@@ -161,8 +161,11 @@ docker compose --profile app-runtime up -d runtime-manager app-proxy
 | `APP_PROXY_BACKEND_SECRET` | ✅ | `app_runtime.proxy_hmac_secret` |
 | `APP_PROXY_MANAGER_SECRET` | ✅ | `app_runtime.manager_hmac_secret` |
 | `APP_PROXY_ENTRY_BASE_URL` | | `app_runtime.entry_base_url` |
+| `APP_PROXY_WS_PROXY_ENABLED` | | —（默认 `true`；设 `false` 时允许的 WebSocket 升级以 4501 关闭而不反代） |
+| `APP_PROXY_WS_MAX_LIFETIME_SECONDS` | | `app_runtime.ws_max_lifetime_seconds`（**仅兜底**：入口判定里带的后端值优先） |
+| `APP_PROXY_WS_LIFETIME_JITTER_SECONDS` / `APP_PROXY_WS_REAUTHORIZE_INTERVAL_SECONDS` | | —（默认 30 / 30：连接寿命抖动上限；长连接周期性重问判定的间隔） |
 
-⚠️ **这六项的默认值全是单机回环便利值**（`127.0.0.1` + 空密钥）。在容器里
+⚠️ **前六项的默认值全是单机回环便利值**（`127.0.0.1` + 空密钥）。在容器里
 `127.0.0.1` 指的是容器自己，空密钥是 fail-closed——进程照样启动、健康检查照样通过、
 每一个请求都渲染兜底页。所以它们**必须显式设置**，不能靠默认值。
 
