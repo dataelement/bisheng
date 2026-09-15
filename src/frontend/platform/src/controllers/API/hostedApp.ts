@@ -123,7 +123,8 @@ export interface HostedAppLogQuery {
   keyword?: string
 }
 
-const APPS_BASE = "/api/v1/apps"
+/** Shared with `hostedAppData.ts`, which carries the data-plane calls of the same resource. */
+export const APPS_BASE = "/api/v1/apps"
 
 // ---------------------------------------------------------------------------
 // reads
@@ -437,6 +438,14 @@ export const HOSTED_APP_ERROR = {
   ORCHESTRATOR_UNAVAILABLE: 16121,
   CAPACITY_INSUFFICIENT: 16125,
   LOG_FORBIDDEN: 16161,
+  // 16162–16167 — the data tab (AC-56). 16163 is an *empty state*, not a
+  // failure: the app simply has not created its database yet.
+  DATA_FORBIDDEN: 16162,
+  DATA_NOT_READY: 16163,
+  DATA_TABLE_NOT_FOUND: 16164,
+  DATA_ROW_NOT_FOUND: 16165,
+  DATA_INVALID: 16166,
+  DATA_BUSY: 16167,
   LAYER_NOT_DEPLOYED: 16181,
   // 162xx — publish pipeline (F055).
   PUBLISH_LAYER_DISABLED: 16207,

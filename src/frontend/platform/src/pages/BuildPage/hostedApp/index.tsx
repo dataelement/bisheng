@@ -25,20 +25,17 @@ import { useParams, useSearchParams } from "react-router-dom"
 import { HostedAppHeader } from "./Header"
 import { useHostedApp } from "./hooks/useHostedApp"
 import { usePublishStatus } from "./hooks/usePublishStatus"
-import { LogsTab } from "./tabs/LogsTab"
 import { ApprovalStatusCard } from "./publish/ApprovalStatusCard"
 import { DangerZoneCard } from "./publish/DangerZoneCard"
 import { VersionListCard } from "./publish/VersionListCard"
 import { VisibilityScopeSection } from "./publish/VisibilityScopeSection"
+import { DataTab } from "./tabs/DataTab"
+import { LogsTab } from "./tabs/LogsTab"
 import { PublishTab } from "./tabs/PublishTab"
 import { VersionsTab } from "./tabs/VersionsTab"
 
-/**
- * `data` is deliberately absent — see `tabs/DataTab.tsx`. The component and its
- * slot stay in the tree so bringing the tab back is one entry here plus one
- * trigger, not a layout rebuild.
- */
-const TABS = ["publish", "logs", "versions"] as const
+/** Four tabs (design D13-B): publish · data · run logs · versions. */
+const TABS = ["publish", "data", "logs", "versions"] as const
 
 export function HostedAppDetail() {
   const { t } = useTranslation()
@@ -112,6 +109,7 @@ export function HostedAppDetail() {
           <TabsTrigger value="publish">
             {t("hostedApp.detail.tabs.publish")}
           </TabsTrigger>
+          <TabsTrigger value="data">{t("hostedApp.detail.tabs.data")}</TabsTrigger>
           <TabsTrigger value="logs">{t("hostedApp.detail.tabs.logs")}</TabsTrigger>
           <TabsTrigger value="versions">
             {t("hostedApp.detail.tabs.versions")}
@@ -155,6 +153,9 @@ export function HostedAppDetail() {
             visibilitySlot={<VisibilityScopeSection app={app} />}
             dangerZoneSlot={<DangerZoneCard app={app} />}
           />
+        </TabsContent>
+        <TabsContent value="data" className="min-h-0 flex-1 overflow-hidden">
+          <DataTab appId={app.app_id} appName={app.slug || app.name} />
         </TabsContent>
         <TabsContent value="logs" className="min-h-0 flex-1 overflow-hidden">
           <LogsTab appId={app.app_id} />

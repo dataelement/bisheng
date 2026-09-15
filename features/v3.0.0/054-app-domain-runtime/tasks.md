@@ -693,33 +693,42 @@
   **覆盖 AC**: AC-45
   **依赖**: T084, **T006**（本任务要改 `app_runtime/domain/constants.py`，该文件由 T006 产出）
 
-- [ ] **T086a**: 数据面 manager RPC 测试（Test-First，先于 T086）
+- [x] **T086a**: 数据面 manager RPC 测试（Test-First，先于 T086）
+  ✅ 2026-09-16 落地（commit 6c0fdf007）：`src/runtime-manager/tests/test_appdb.py` 35 条，覆盖本任务列出的 7 组用例；runtime-manager 套件 137 passed / 5 skipped。
   **文件**: `src/runtime-manager/tests/test_appdb.py`（新）
   **逻辑**: `test_list_tables_and_schema`（表清单 + 列结构）→ AC-56 / `test_row_read_paginated_with_stable_order` → AC-56 / `test_row_update_single_row_only`（一次只改一行，带主键断言；受影响行数 ≠ 1 → 拒绝）→ AC-56 / `test_ddl_statements_rejected`（`CREATE` / `ALTER` / `DROP` / `PRAGMA` 一律拒——**数据面无 DDL**，结构演进归 F055）→ AC-56 / `test_export_produces_file_handle` → AC-56 / `test_short_transaction_and_busy_timeout`（短事务 + `busy_timeout`；断言不开长事务扫全表——WAL 单写者下长事务会把应用自己的写阻塞住）→ AC-56 / `test_backend_never_opens_host_db_file`（RPC 是唯一通路，K1 / 多节点，D10-C）→ AC-56。
   **覆盖 AC**: AC-56
   **依赖**: T031, T019
 
-- [ ] **T086**: 数据面 manager RPC 实现（表清单 / 结构 / 行读写 / 导出，**无 DDL**）
+- [x] **T086**: 数据面 manager RPC 实现（表清单 / 结构 / 行读写 / 导出，**无 DDL**）
+  ✅ 2026-09-16 落地（commit 6c0fdf007）：`runtime_manager/appdb.py` + `api/appdb.py`，五个 typed 端点 `/v1/apps/{app_id}/db/{tables | tables/{t}/schema | tables/{t}/rows | tables/{t}/rows/{key} | export}`；新 manager 错误码 `db_not_found / table_not_found / row_not_found / data_invalid / data_busy`（契约文档 `contracts-runtime-manager.md` 已补）。
+  **实际偏差记录**: 「无 DDL」不是拒绝语句而是**说不出口**——没有任何承载 SQL 的入参，表名 / 列名 / 排序列一律先按 `sqlite_master` / `PRAGMA table_info` 白名单核对再引号拼接；`WITHOUT ROWID` 且复合主键的表标 `editable=false`（可读可导、不可编辑），BLOB 列以占位文本呈现且不可编辑。
   **文件**: `src/runtime-manager/runtime_manager/appdb.py`（新）
   **逻辑**: D10-C（backend 直读宿主库文件违反 K1 且多节点必错）；短事务 + `busy_timeout`，别开长事务扫全表。
   **测试**: T086a 全部通过。
   **覆盖 AC**: AC-56
   **依赖**: T086a
 
-- [ ] **T087a**: backend `AppDataService` 测试（Test-First，先于 T087）
+- [x] **T087a**: backend `AppDataService` 测试（Test-First，先于 T087）
+  ✅ 2026-09-16 落地（commit c593537ef）：`src/backend/test/app_runtime/test_app_data_service.py` 覆盖本任务列出的 6 组用例，另加端点信封（16162 走 200）与导出返回文件的断言；`test_orchestrator_client.py` 补 `TestDataPlane`（路径 / 签名 / 导出按字节 / PATCH 读超时不重放 / 五个错误码各归各）。`test/app_runtime/` 343 passed / 13 skipped，`test/app_publish/` 396 passed。
   **文件**: `src/backend/test/app_runtime/test_app_data_service.py`（新）
   **逻辑**: `test_owner_only_business_rule_precheck`（仅 owner；租户管理员与平台超管同样被拒——**业务规则前置拦截**，不能依赖权限运行时，管理员在那里会被短路放行）→ AC-56 / `test_non_owner_gets_16162_not_403`（业务码 `16162`「无权访问应用数据」，坑 25）→ AC-56 / `test_row_edit_audited_with_before_after`（审计 `app.data_row_edit`，记表名 / 主键 / 变更前后）→ AC-56, AC-65 / `test_ddl_rejected_at_backend_layer_too`（backend 侧同样拒 DDL，不把判断全交给 manager）→ AC-56 / `test_forwards_to_manager_only_never_opens_db_file`（用 `fake_orchestrator` 断言只走 RPC）→ AC-56 / `test_mcp_face_reuses_same_service_method`（F052 MCP 数据工具复用同一方法、**不得直连 manager**——断言 Service 是唯一实现）→ AC-56。
   **覆盖 AC**: AC-56
   **依赖**: T086, T009
 
-- [ ] **T087**: backend `AppDataService` 实现（owner 收窄 + 审计 + 转发）
+- [x] **T087**: backend `AppDataService` 实现（owner 收窄 + 审计 + 转发）
+  ✅ 2026-09-16 落地（commit c593537ef）：`app_runtime/domain/services/app_data_service.py`；端点 `GET/PATCH /api/v1/apps/{id}/data/*`（`apps.py`）；`orchestrator_client` 加 `db_tables / db_schema / db_rows / db_update_row / db_export`，两套 `fake_orchestrator` lockstep 集扩到 15；错误码 16162–16167 启用并三语落 `packages/locales` api_errors。
+  **实际偏差记录**: ①「单行编辑二次确认」是前端交互（T088 的 `bsConfirm`），后端不做确认态。②除 `app.data_row_edit` 外**新增** `app.data_export` 审计动作——整表离开平台是事件，即使没改任何东西；四处 lockstep（`AppAuditAction` / `_UI_VISIBLE_V2_ACTIONS` / platform `log.ts` / `bs.json` ×3 `log.eventTypeEnum.appDataExport`）同步。③F052 MCP 数据工具复用同一 Service 由静态测试 `test_mcp_face_reuses_same_service_method` 守住：`bisheng/` 下 `orchestrator_client.db_*` 的调用方只能是本 Service。
   **文件**: `src/backend/bisheng/app_runtime/domain/services/app_data_service.py`（新）
   **逻辑**: 仅 owner（业务规则前置拦截）；单行编辑二次确认 + 审计 `app.data_row_edit`；**F052 MCP 数据工具复用同一方法、不得直连 manager**。启用 T004 预留的 `16162`。
   **测试**: T087a 全部通过。
   **覆盖 AC**: AC-56
   **依赖**: T087a
 
-- [ ] **T088**: Platform 数据 tab（表清单 → 分页查看 → 单行编辑 → 导出）
+- [x] **T088**: Platform 数据 tab（表清单 → 分页查看 → 单行编辑 → 导出）
+  ✅ 2026-09-16 落地：`tabs/DataTab.tsx`（重写，原占位壳作废）+ `tabs/data/{dataTabModel.ts, RowEditDialog.tsx}` + `controllers/API/hostedAppData.ts`（新）；`index.tsx` 的 `TABS` 恢复 `data`；`bs.json` ×3 `hostedApp.data.*` 30 键（原 `placeholder` 键随占位壳删除）。vitest：`tabs/data/dataTabModel.test.ts` 12 条 + `src/test/hostedAppDataTab.test.tsx` 11 条（列表→分页→排序→编辑→导出→16162/16163 内联提示）；平台全量 10 failed / 400 passed，失败集与基线（approvalPage ×8 / auditSingleTenantFilter ×1 / departmentKnowledgeSpaceDialogs ×1）完全一致。
+  **实际偏差记录**: ①导出**不用** `util/utils.ts#downloadFile`——它裸 `import axios`（违反 C7）且拿到拒绝信封会原样存成 `.csv`；改为经封装 request 以 `responseType: "blob"` 取字节、JSON 类型的 blob 解码为信封抛出，再用同样的 anchor 手法保存（`dataTabModel.saveBlob`）。②数据面 API 拆到独立模块 `hostedAppData.ts`：并入 `hostedApp.ts` 会到 639 行，超 600 行上限。③`useTable` 没用（它绑定 `{data,total}` 信封与 `page_size` 参数名，与 rows 契约 `{rows,total,page,size,order}` 不合），用 `useState + useEffect`；loader 的依赖里**故意不放 `t`**，否则在 `t` 身份不稳定时（vitest 的 i18n mock）会无限重进 loading。④16163「尚未创建数据库」按空态而非错误呈现；16164 表已被应用删除 → 自动刷新表清单。⑤空串与 NULL 在编辑弹窗里是两个值：可空列另给「置为空值」勾选，只发送有变化的列。
+  **手动验证**: 待 114 联调（Playwright 未落地）。
   **文件**: `src/frontend/platform/src/pages/BuildPage/hostedApp/tabs/DataTab.tsx`（新）
   **逻辑**: `bs-ui/table` + `useResizableColumns` + `AutoPagination` + `Dialog` 行编辑（保存前 `bsConfirm`）；导出**走后端产文件 + `downloadFile`**（别新用已被 lint 冻结的 `xlsx`）。react-query **禁用**（lint 冻结），用 `useTable` 或 `useState + useEffect`；权限失败按业务码 `16162` 渲染提示，**不得触发 403 整页跳转**（坑 25）。
   **手动验证**（Playwright 未落地）: 详情页数据 tab → 表清单列出应用建的表；点表 → 分页翻页正常、列宽可拖；单行编辑弹窗保存前有二次确认、保存后表格即时刷新且「系统操作」页能查到 `app.data_row_edit`；导出下载得到文件且内容与表格一致；**非 owner 账号（含租户管理员）看到"无权访问应用数据"提示而不是被甩到 `/403` 页**；应用无表时显示空态。
