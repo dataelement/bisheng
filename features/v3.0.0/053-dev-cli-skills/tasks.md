@@ -15,7 +15,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 13 项就地修订，55 条有效 AC 定稿（决议 1–12） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日评审 12 条修订（D1–D14 / 21 坑）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；**50 任务 / 5 Wave / 35 条 `[MVP-核心]`**；55 条 AC 全覆盖（AC-39 为墓碑、AC-48 / AC-50 为跨 Feature 旅程引用，见追溯表）；**+ 同日 `/sdd-review tasks` 14 条修订**（2 high：F054 `logs` 链路事实回正〔runtime-manager 端点已落码〕· 依赖上界与 wheel 安装冒烟〔app-proxy 生产事故同型敞口〕；9 medium：161 段错误码登记 · 未登记码按 HTTP 状态兜底 · `26002` 三成因不可分 · `data.required` 是字符串 · base_url 归一化 · T022/T026 伪依赖 · T002 拆 T002a · 产物缺失时端点行为 · F055 扫描顺序偏离进依赖表；3 low：偏离计数补第三处 · CI 改 `--frozen` · T031 落点改独立 workflow 文件） |
-| 实现 | 🚧 进行中 | **41 / 52 完成**（2026-08-18 缺陷修订：**T054 / T055 已实现**——`sync` 现把技能包接入本机 AI 编程工具并如实报告、技能包按平台分目录、`deploy` 在项目 `AGENTS.md` 留位置指针；起因是「同步成功但 AI 读不到」的现场失败，详见 design.md 顶部 2026-08-18 缺陷修订块与 spec §2.10。CLI 全量 **247 passed / 0 failed**、`ruff check` + `ruff format --check` 全绿，并在 114 真机验证 `login` / `skills sync` 输出与软链重指向）。**39 / 50 完成**（2026-08-18 增补：**Wave 3「部署纳管」技能包切片 T035/T036/T037/T039/T040/T049 已实现并在 114 端到端验证**——CLI 全量 219 passed、`skills sync` 在 114 上装 wheel→sync→写入 `~/.bisheng/skills/deploy-hosting/`→selfcheck 通过、端点 `GET /skills/deploy-hosting` 返 200 gzip、未知/越界 slug 404、教程新内容 nginx 200；T038「平台能力接线」仍随 F057 顺延；决策增补见 design.md 顶部 2026-08-18 块）。**33 / 50 完成**（前序）。Wave 1 全部（T001–T018 含 T002a）+ **Wave 2 的 CLI 侧全部**（T019–T026 三条命令、T030 打包脚本、T031 CI、T032 README）+ **Wave 2 的平台侧全部**（T027–T029 分发端点、集成测试、租户豁免）。CLI：`cd src/bisheng-cli && uv run pytest` **203 passed / 0 failed**、`ruff check` + `ruff format --check` 全绿、`uv lock --check` 无漂移、wheel 构建 + 干净 venv 安装冒烟（`import bisheng_cli.main` / `bisheng --version` / 三条命令 `--help`）通过。平台侧（2026-08-18）：`cd src/backend && uv run pytest test/dev_toolkit test/open_api -q` **111 passed / 0 failed**（其中 dev_toolkit 8 条）、`ruff check` + `ruff format --check` 全绿、`arch-guard.sh` 六个文件零输出、`from bisheng.main import app` 可起（624 路由）。**未完成**：T033（114 手验，依赖平台侧上线）。~~T034（上游回写）~~ → **2026-08-19 收口批完成**：四项回写的代码早在 `874bd688b` / `95c0ed98e` 交付，本次把条目登记进 F049 / F055 两份 tasks.md 的「跨 Feature 回写受理」表，并接受 F055 T050 ③ 的 `deploy-limits` 口径回写进本 spec AC-32；唯一没做的是「顺延项落点核对」半项，见该任务偏差记录。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | **47 / 52 完成**（2026-09-16 Wave 3–5 顺延项落地：**T038 / T042 / T043 / T044 / T047 / T048 已实现**——`bisheng dev` 迷你代理 + 本地 SQLite + 同名接线 env、`platforms list/use` + 全局 `--platform`、版本不兼容阻断 exit 2、「平台能力接线」技能包；CLI 全量 **327 passed**（基线 268）、backend `test/dev_toolkit` **38 passed**、ruff 全绿、wheel 重打并提交；剩 T033 / T041 / T045 / T046 / T050。偏差见「实际偏差记录」29–34）。**41 / 52 完成**（2026-08-18 缺陷修订：**T054 / T055 已实现**——`sync` 现把技能包接入本机 AI 编程工具并如实报告、技能包按平台分目录、`deploy` 在项目 `AGENTS.md` 留位置指针；起因是「同步成功但 AI 读不到」的现场失败，详见 design.md 顶部 2026-08-18 缺陷修订块与 spec §2.10。CLI 全量 **247 passed / 0 failed**、`ruff check` + `ruff format --check` 全绿，并在 114 真机验证 `login` / `skills sync` 输出与软链重指向）。**39 / 50 完成**（2026-08-18 增补：**Wave 3「部署纳管」技能包切片 T035/T036/T037/T039/T040/T049 已实现并在 114 端到端验证**——CLI 全量 219 passed、`skills sync` 在 114 上装 wheel→sync→写入 `~/.bisheng/skills/deploy-hosting/`→selfcheck 通过、端点 `GET /skills/deploy-hosting` 返 200 gzip、未知/越界 slug 404、教程新内容 nginx 200；T038「平台能力接线」仍随 F057 顺延；决策增补见 design.md 顶部 2026-08-18 块）。**33 / 50 完成**（前序）。Wave 1 全部（T001–T018 含 T002a）+ **Wave 2 的 CLI 侧全部**（T019–T026 三条命令、T030 打包脚本、T031 CI、T032 README）+ **Wave 2 的平台侧全部**（T027–T029 分发端点、集成测试、租户豁免）。CLI：`cd src/bisheng-cli && uv run pytest` **203 passed / 0 failed**、`ruff check` + `ruff format --check` 全绿、`uv lock --check` 无漂移、wheel 构建 + 干净 venv 安装冒烟（`import bisheng_cli.main` / `bisheng --version` / 三条命令 `--help`）通过。平台侧（2026-08-18）：`cd src/backend && uv run pytest test/dev_toolkit test/open_api -q` **111 passed / 0 failed**（其中 dev_toolkit 8 条）、`ruff check` + `ruff format --check` 全绿、`arch-guard.sh` 六个文件零输出、`from bisheng.main import app` 可起（624 路由）。**未完成**：T033（114 手验，依赖平台侧上线）。~~T034（上游回写）~~ → **2026-08-19 收口批完成**：四项回写的代码早在 `874bd688b` / `95c0ed98e` 交付，本次把条目登记进 F049 / F055 两份 tasks.md 的「跨 Feature 回写受理」表，并接受 F055 T050 ③ 的 `deploy-limits` 口径回写进本 spec AC-32；唯一没做的是「顺延项落点核对」半项，见该任务偏差记录。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -383,10 +383,11 @@
   **测试载体**: `src/backend/test/dev_toolkit/test_skill_packs.py`（结构完整性 + 样例无真实密钥 + 自检脚本缺配置时输出可读原因而非堆栈）
   **覆盖 AC**: AC-16, AC-18, AC-19
 
-- [ ] **T038**: 「平台能力接线」包结构 + 两条不走 SDK 的标准库接法（模型 / 应用数据库）；**SDK 三件套章节与其自检脚本随 F057 补齐、其验收随 F057**
+- [x] **T038**: 「平台能力接线」包结构 + 两条不走 SDK 的标准库接法（模型 / 应用数据库）；**SDK 三件套章节与其自检脚本随 F057 补齐、其验收随 F057**
   **文件**: `src/backend/bisheng/dev_toolkit/skills/platform-wiring/`
   **测试载体**: `src/backend/test/dev_toolkit/test_skill_packs.py`（增量）
   **覆盖 AC**: AC-17, AC-18
+  **2026-09-16 完成证据**: commit `9ce5b77d8`（`skills/platform-wiring/{SKILL.md,example/,selfcheck.py}` + README 两包分工）；`test_skill_packs.py` 对两包参数化并加 4 条 AC-17 专项断言（auth 章居首且以警示开头 / 身份头名与 app-proxy `INJECTED_HEADER_NAMES` 零漂移 / 模型章「暂未提供」且无 URL / 样例无登录逻辑），backend `test/dev_toolkit` 38 passed。SDK 三件套章节按任务说明留桩指向 F057，模型章等 F051。
 
 - [x] **T039**: `login` 成功后自动执行一次 `skills sync`（失败不影响登录成功、输出原因并提示可手动重跑）
   **文件**: `src/bisheng-cli/bisheng_cli/commands/login.py`（增量）
@@ -404,24 +405,27 @@
 
 ---
 
-### Wave 4 · 顺延：`bisheng dev` 本地运行与身份注入（release 必做，本轮不做）
+### Wave 4 · 顺延：`bisheng dev` 本地运行与身份注入（release 必做；T042–T044 于 2026-09-16 实施，T045 待 F051 / F052）
 
 > 依赖 F054 app-proxy 的注入头形态与 F057 SDK，两者本轮都不在纵切上。**注入的环境变量清单不得自造**，唯一来源 = [`contracts-runtime-manager.md` §5](../054-app-domain-runtime/contracts-runtime-manager.md)（design §6.2 表末行已原样登记：`BISHENG_APP_DB_URL` · `BISHENG_APP_DB_PATH` · `BISHENG_APP_ID` · `BISHENG_APP_SLUG` · `BISHENG_APP_VERSION` · `BISHENG_APP_VERSION_ID` · `BISHENG_PLATFORM_API_BASE` · `PORT` 与 `BISHENG_APP_PORT`（恒等）· `BISHENG_APP_BASE_PATH`（dev 期为空串）· `BISHENG_APP_HEALTH_PATH`；平台保留 env 名**覆盖**调用方同名值）。
 
-- [ ] **T042**: `dev` 迷你代理：注入与 F054 app-proxy **结构一致**的身份头 + 每请求短时访问凭据句柄；**剥离客户端伪造的平台身份注入头**（剥离规则与 F054 一致：按下划线 / 连字符 / 大小写归一化等价类匹配）；无 `--as`
+- [x] **T042**: `dev` 迷你代理：注入与 F054 app-proxy **结构一致**的身份头 + 每请求短时访问凭据句柄；**剥离客户端伪造的平台身份注入头**（剥离规则与 F054 一致：按下划线 / 连字符 / 大小写归一化等价类匹配）；无 `--as`
   **文件**: `src/bisheng-cli/bisheng_cli/commands/dev.py`, `src/bisheng-cli/bisheng_cli/devproxy.py`
   **测试载体**: `src/bisheng-cli/tests/test_dev_proxy.py`
   **覆盖 AC**: AC-03, AC-23, AC-25
+  **2026-09-16 完成证据**: commit `c2b56c686`（`devproxy.py` 508 行）；`tests/test_dev_proxy.py` 25 条 + `tests/test_platform_contract.py`（用 `ast` 读 `app-proxy/app_proxy/headers.py`，断言十个注入头名、顺序、剥离前缀与 hop-by-hop 集合零漂移）；短时凭据句柄本地签发，见偏差记录 29。
 
-- [ ] **T043**: `dev` 本地 SQLite + 与托管运行期**同名**的连接环境变量注入；数据跨重启保留、位于项目本地且不进上传包；同名平台接线环境变量注入（清单来源见上）
+- [x] **T043**: `dev` 本地 SQLite + 与托管运行期**同名**的连接环境变量注入；数据跨重启保留、位于项目本地且不进上传包；同名平台接线环境变量注入（清单来源见上）
   **文件**: `src/bisheng-cli/bisheng_cli/devdb.py`, `src/bisheng-cli/bisheng_cli/commands/dev.py`（增量）
   **测试载体**: `src/bisheng-cli/tests/test_dev_env.py`
   **覆盖 AC**: AC-26, AC-27
+  **2026-09-16 完成证据**: commit `c2b56c686`（`devdb.py`）；`tests/test_dev_env.py` + `test_platform_contract.py` 用 `ast` 读 `runtime-manager/runtime_manager/lifecycle.py` 的 `build_env`，断言 11 个注入变量名与 `RESERVED_ENV_PREFIXES` 与本地一致；库落 `<项目>/.bisheng/dev/app.db`，`.bisheng/` 是打包硬排除（T015）。
 
-- [ ] **T044**: `dev` 启动前置校验与输出（未 `login` / 凭据无效 / 平台不可达 → 拒绝并提示；缺 manifest 或必填项 → 拒绝并列缺失项；输出注入身份来源与账号、本地访问地址；`dev` 本身不验权限位）
+- [x] **T044**: `dev` 启动前置校验与输出（未 `login` / 凭据无效 / 平台不可达 → 拒绝并提示；缺 manifest 或必填项 → 拒绝并列缺失项；输出注入身份来源与账号、本地访问地址；`dev` 本身不验权限位）
   **文件**: `src/bisheng-cli/bisheng_cli/commands/dev.py`（增量）, `src/bisheng-cli/bisheng_cli/cli.py`（注册第五条命令）
   **测试载体**: `src/bisheng-cli/tests/test_command_dev.py`
   **覆盖 AC**: AC-03, AC-24, AC-29, AC-53
+  **2026-09-16 完成证据**: commit `c2b56c686`（`commands/dev.py`、`cli.py` 注册第五条 `dev` 与第六条 `platforms`）；`tests/test_command_dev.py` 覆盖 凭据缺失 exit 3 零请求 / manifest 缺项 exit 6 列字段 / probe 三态 / whoami 401 exit 4 / 无权限位照常启动 / 输出含身份来源、平台与本地地址且永不含密钥；`test_cli.py::test_no_as_flag_anywhere`。
 
 - [ ] **T045**: `dev` 期平台能力调用按服务账号**被显式授予**的范围放行（经 F051 / F052 面执行，过滤强度与 fail-closed 与线上一致；迷你代理只注入身份与环境、不代理这些调用）+ 「本地与线上同构」端到端（同一份代码 `dev` 跑通后 `deploy` 上线，托管环境取到的是**当前访问用户**身份）
   **文件**: `features/v3.0.0/053-dev-cli-skills/tasks.md`（回填执行结果）
@@ -437,15 +441,17 @@
   **测试载体**: 手动验证（Playwright 未落地）+ `src/backend/test/dev_toolkit/test_distribution_api.py` 已覆盖端点侧
   **覆盖 AC**: AC-44, AC-45
 
-- [ ] **T047**: 多平台凭据的**交互层**（`--platform` 参数注册 · profile 列出与切换默认平台）——数据结构已由 T012 落好，本任务零迁移
+- [x] **T047**: 多平台凭据的**交互层**（`--platform` 参数注册 · profile 列出与切换默认平台）——数据结构已由 T012 落好，本任务零迁移
   **文件**: `src/bisheng-cli/bisheng_cli/cli.py`, `src/bisheng-cli/bisheng_cli/credentials.py`（增量）
   **测试载体**: `src/bisheng-cli/tests/test_credentials.py`（增量）
   **覆盖 AC**: AC-12
+  **2026-09-16 完成证据**: commit `c2b56c686`（`commands/platforms.py` 新建、`credentials.py` 增 `load_selected` / `list_profiles` / `set_current`、`cli.py` 全局 `--platform`）；`tests/test_command_platforms.py` + `test_credentials.py` 增量：列出恒掩码、`use` 未登录地址 exit 3、`--platform` 与 `use` 读同一 store、零迁移。
 
-- [ ] **T048**: 版本兼容**阻断**（不兼容即拒绝执行并给出从当前平台重新下载的链接；兼容但落后仅提示）——开启方式 = 把 T008 前置探测里的 warning 升为 `CliError(exit=2)`
+- [x] **T048**: 版本兼容**阻断**（不兼容即拒绝执行并给出从当前平台重新下载的链接；兼容但落后仅提示）——开启方式 = 把 T008 前置探测里的 warning 升为 `CliError(exit=2)`
   **文件**: `src/bisheng-cli/bisheng_cli/http.py`（增量）
   **测试载体**: `src/bisheng-cli/tests/test_http.py`（增量）
   **覆盖 AC**: AC-02
+  **2026-09-16 完成证据**: commit `c2b56c686`（`http.py::probe`）；`tests/test_http.py` 增量：`min_compatible` 高于本地 → `CliError` exit 2 且 `next_step` 含当前平台下载链接、零后续请求；仅 `cli.version` 更新则 warn 不阻断。
 
 - [x] **T049**: 非 Claude Code 引擎经 AGENTS.md 引用同一技能目录的指引（sync 完成后输出引用方式）
   **文件**: `src/bisheng-cli/bisheng_cli/commands/skills.py`（增量）, `src/backend/bisheng/dev_toolkit/skills/README.md`
@@ -474,8 +480,8 @@
 | AC | 覆盖任务 | 本轮 |
 |---|---|---|
 | AC-01 | T027, T028, T029, T030, T033 | ✅ |
-| AC-02 | T007, T008, T009, T010, T027, T028；阻断随 T048 | ✅（只提示不阻断） |
-| AC-03 | T009, T010（本轮三条 + 无 `--as` / `init` 断言）, T032（README 明说顺延命令）；五条齐备随 T035, T042, T044 | ✅（显式偏离登记，见开发模式） |
+| AC-02 | T007, T008, T009, T010, T027, T028, T048 | ✅（2026-09-16 起阻断） |
+| AC-03 | T009, T010（无 `--as` / `init` 断言）, T032, T035, T042, T044 | ✅（五条命令 2026-09-16 齐备） |
 | AC-04 | T003, T004, T005, T006, T007, T008, T009, T010, T019, T020, T021, T032, T033 | ✅ |
 | AC-05 | T007, T008, T027, T028, T029；措辞回写 T034 ④ | ✅（login 校验入口一半以前置探测等价兑现） |
 | AC-06 | T011, T012, T019, T020；资源归属人字段回写 T034 ① | ✅（降级：`[受阻于 F049 回写]`） |
@@ -484,24 +490,24 @@
 | AC-09 | T019, T020 | ✅（只能单测，坑 15） |
 | AC-10 | T003, T004, T007, T008, T019, T020 | ✅ |
 | AC-11 | T003, T004, T007, T008, T019, T020 | ✅ |
-| AC-12 | T011, T012, T019, T020（数据结构与覆盖语义）；交互层 T047 | ✅（数据结构） |
+| AC-12 | T011, T012, T019, T020（数据结构与覆盖语义）, T047（交互层） | ✅ |
 | AC-13 | T003, T004, T019, T020 | ✅ |
 | AC-14 | T035, T036 | ⏭ |
 | AC-15 | T036 | ⏭ |
 | AC-16 | T037 | ⏭ |
-| AC-17 | T038 | ⏭ |
-| AC-18 | T037, T038 | ⏭ |
+| AC-17 | T038 | ✅ |
+| AC-18 | T037, T038 | ✅ |
 | AC-19 | T035, T037 | ⏭ |
 | AC-20 | T035, T049 | ⏭ |
 | AC-21 | T035 | ⏭ |
 | AC-22 | T040 | ⏭ |
-| AC-23 | T042 | ⏭ |
-| AC-24 | T044 | ⏭ |
-| AC-25 | T042 | ⏭ |
-| AC-26 | T043 | ⏭ |
-| AC-27 | T043 | ⏭ |
+| AC-23 | T042 | ✅ |
+| AC-24 | T044 | ✅ |
+| AC-25 | T042 | ✅ |
+| AC-26 | T043 | ✅ |
+| AC-27 | T043 | ✅ |
 | AC-28 | T045 | ⏭ |
-| AC-29 | T044 | ⏭ |
+| AC-29 | T044 | ✅ |
 | AC-30 | T003, T004, T013, T014, T021, T022 | ✅ |
 | AC-31 | T007, T008, T017, T018, T021, T022, T033 | ✅ |
 | AC-31a | T021, T023, T024, T033 | ✅ |
@@ -528,7 +534,7 @@
 | AC-50 | **经 F055 验证**（每次发布必审 / 扫描同规则集 / 元信息与档位取自 `bisheng-app.yaml`）；T033 剧本连带跑过 | ↗ |
 | AC-51 | T011, T012, T021, T022, T025, T026 | ✅ |
 | AC-52 | T007, T008, T011, T012, T033（等 5 秒余量） | ✅ |
-| AC-53 | T044 | ⏭ |
+| AC-53 | T044 | ✅ |
 
 **统计**：spec 的 55 条有效 AC（AC-01–AC-53 连号 + AC-31a/b/c 三条，AC-39 为墓碑不计入覆盖）→ **未覆盖 0 条**。其中本轮 `[MVP-核心]` 闭环 **30** 条（✅）、随顺延波次 **23** 条（⏭）、跨 Feature 旅程引用 **2** 条（↗ AC-48 / AC-50）。
 
@@ -576,3 +582,12 @@
 26. **T027 的 app 构建走「reload `bisheng.api.router` + monkeypatch `bisheng.main.router`」** —— 开关是**导入期**求值的（`if settings.open_platform.enabled:` 在 `bisheng/api/router.py` 模块体里），而 `bisheng.main` 在首次导入时就把 router 对象绑死了。要在同一个进程里同时验「开=有路由」与「关=404」，只能按目标开关重新导入聚合 router 再交给 `create_app`。**没有退化成自建一个 mini app**：那样测的是测试自己的接线，middleware 栈不在场，第 25 条的租户断言就无从谈起。fixture 在 teardown 里先还原开关再 reload，避免把测试值烤进模块级 router。
 27. **⚠️ 承接第 18 条：`src/backend/bisheng/dev_toolkit/artifacts/` 本轮仍然是空的（目录都不存在）** —— T028/T029 的实施方按作业边界只交付端点、测试与豁免，**没有代跑 `scripts/pack_cli_wheel.sh`**（那是 T030 的第 4/5 步，且会产出需要提交的二进制）。**当前检出与 114 的即时表现**：`GET /api/v1/dev-toolkit/versions` 返 200、`cli` 为 `null`、`notice` 为「CLI 安装件未随本次部署发布，请联系平台管理员」；`GET /api/v1/dev-toolkit/cli/download` 返 404 + 同一句。这是设计好的降级分支（T027 有专门用例），**但 T033 的 114 手验必须先跑一次打包脚本并提交产物**，否则步 1「装 CLI 两条路径」无从验证。
 28. **`ARTIFACT_MISSING_MESSAGE` 带 `# noqa: RUF001`** —— 仓库 ruff 选了 `RUF` 全家，全角逗号 `，` 命中 RUF001（与 ASCII `,` 形近）。这是面向用户的中文文案，换成半角是错别字。`http_middleware.py` 里既有的三条 RUF00x/RUF013 是本次改动之前就存在的，未动。
+
+### Wave 3–5 · `dev` / `platforms` / 版本阻断 / 「平台能力接线」（2026-09-16 实施；T038 / T042–T044 / T047 / T048）
+
+29. **`X-BiSheng-Access-Token` 短时凭据句柄在 `dev` 期由 CLI 本地签发，没有新增后端端点、没有占用 26060–26064** —— 线上句柄是 backend 签的 OBO token（F054 AC-34，900 s），本地既没有签发方、本轮也没有任何消费方（SDK 三件套随 F057）。按 design 「本地派生」口径：`devproxy.HandleMinter` 以 `dev` 会话随机密钥做 HMAC，每请求签一枚 15 分钟 `bsdev.` 前缀的不透明句柄，形状与线上一致（每请求、同头名、短时）；`tests/test_dev_proxy.py` 守住一条不变量——**login 密钥不进任何请求头、不进应用进程环境**（`devdb.LOGIN_KEY_ENV` 显式剔除）。F057 落地 SDK 时若要本地句柄可被平台验签，再补端点。技能包因此把该头标为「不要依赖」。
+30. **`dev` 与 app-proxy / runtime-manager 的两份清单用 `ast` 读对方源文件做契约测试，而不是 import** —— CLI 不能 import 另外两个工程（CON-1，依赖预算两条）。`tests/test_platform_contract.py` 解析 `app-proxy/app_proxy/headers.py` 的 `INJECTED_HEADER_NAMES` / `DROPPED_HEADERS` / 前缀常量，和 `runtime-manager/runtime_manager/lifecycle.py` 的 `build_env` 键与 `RESERVED_ENV_PREFIXES`，逐项对比本地常量。任一边改名，CLI 用例当场红——这是「结构一致」唯一机器可验的形态。
+31. **`dev` 多了 `--port` / `--app-port` 两个旋钮，`BISHENG_APP_VERSION` / `_VERSION_ID` 本地取 `dev`** —— 入口端口默认取 manifest `port`（开发者打开的是它），应用进程另挑空闲端口注入为 `PORT` / `BISHENG_APP_PORT`；两端口相同拒绝 exit 2。本地没有版本号可给，两个版本变量取常量 `dev`，只保证「名字在、非空」。`BISHENG_APP_BASE_PATH` 按 tasks 头注为空串，`BISHENG_APP_HEALTH_PATH` 取 `/healthz`。
+32. **`cli.DEFERRED_COMMANDS` 清空但保留**，`SUBCOMMANDS` 六条（含 `platforms`，tasks 未单列命令名）—— 「announced ≠ registered」的守卫用例保形，下一轮再顺延什么直接填回去。`platforms` 是 T047 交互层的落点：`list` 只打印 login 时平台回的 `key_mask`，`use` 对未登录地址 exit 3 并指回 `bisheng login`，不会凭空造 profile。
+33. **`skills sync` 改为两包，老平台缺 `platform-wiring` 时跳过并 warn、不整体失败** —— 新 CLI 对着还没发布第二包的平台（`GET /skills/platform-wiring` 404）应当仍能把「部署纳管」同步下来；整体失败会把「平台老」伪装成「同步坏了」。`deploy` 写进项目 `AGENTS.md` 的指针随 `DEFAULT_PACKS` 变成两行。
+34. **技能包契约测试把 `Dept-*` 三个头在 SKILL.md 表里逐行写全，样例文案避开 "login" 字样** —— 前者是让「教的头名 == app-proxy 注入的头名」能按反引号全名机器比对（缩写形态 `-Dept-Name` 匹配不上，写全也符合「标识写全、可 grep」的仓库规则）；后者是 `test_example_reads_identity_from_headers_and_has_no_login` 对样例做 `login/password/jwt/set-cookie` 子串扫描，样例正文一句「你 login 的服务账号」误中，改成「你在命令行里登记的那个服务账号」。
