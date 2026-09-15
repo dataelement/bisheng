@@ -703,6 +703,7 @@
 - [x] **T086**: 数据面 manager RPC 实现（表清单 / 结构 / 行读写 / 导出，**无 DDL**）
   ✅ 2026-09-16 落地（commit 6c0fdf007）：`runtime_manager/appdb.py` + `api/appdb.py`，五个 typed 端点 `/v1/apps/{app_id}/db/{tables | tables/{t}/schema | tables/{t}/rows | tables/{t}/rows/{key} | export}`；新 manager 错误码 `db_not_found / table_not_found / row_not_found / data_invalid / data_busy`（契约文档 `contracts-runtime-manager.md` 已补）。
   **实际偏差记录**: 「无 DDL」不是拒绝语句而是**说不出口**——没有任何承载 SQL 的入参，表名 / 列名 / 排序列一律先按 `sqlite_master` / `PRAGMA table_info` 白名单核对再引号拼接；`WITHOUT ROWID` 且复合主键的表标 `editable=false`（可读可导、不可编辑），BLOB 列以占位文本呈现且不可编辑。
+  **评审修正（2026-09-16）**: ①`auth.verify_hmac` 改按 ASGI `scope["path"]` 验签——`request.url.path` 会把行键里的 `?` / `#` 当分隔符截断，TEXT 主键含保留字符的行永远验签失败（`tests/test_appdb.py::test_text_key_with_reserved_characters_is_addressed_encoded`）；②复合主键表的分页把全部主键列作次级排序键（原来没有 ORDER BY，分页不稳）；③读路径的 `sqlite3.Error` 映射为 `data_busy` / `data_invalid` 而不是 500（否则 backend 报成 16121「编排器不可用」）；导出中途失败删半成品文件。套件 145 passed / 5 skipped。
   **文件**: `src/runtime-manager/runtime_manager/appdb.py`（新）
   **逻辑**: D10-C（backend 直读宿主库文件违反 K1 且多节点必错）；短事务 + `busy_timeout`，别开长事务扫全表。
   **测试**: T086a 全部通过。
@@ -719,6 +720,7 @@
 - [x] **T087**: backend `AppDataService` 实现（owner 收窄 + 审计 + 转发）
   ✅ 2026-09-16 落地（commit c593537ef）：`app_runtime/domain/services/app_data_service.py`；端点 `GET/PATCH /api/v1/apps/{id}/data/*`（`apps.py`）；`orchestrator_client` 加 `db_tables / db_schema / db_rows / db_update_row / db_export`，两套 `fake_orchestrator` lockstep 集扩到 15；错误码 16162–16167 启用并三语落 `packages/locales` api_errors。
   **实际偏差记录**: ①「单行编辑二次确认」是前端交互（T088 的 `bsConfirm`），后端不做确认态。②除 `app.data_row_edit` 外**新增** `app.data_export` 审计动作——整表离开平台是事件，即使没改任何东西；四处 lockstep（`AppAuditAction` / `_UI_VISIBLE_V2_ACTIONS` / platform `log.ts` / `bs.json` ×3 `log.eventTypeEnum.appDataExport`）同步。③F052 MCP 数据工具复用同一 Service 由静态测试 `test_mcp_face_reuses_same_service_method` 守住：`bisheng/` 下 `orchestrator_client.db_*` 的调用方只能是本 Service。
+  **评审修正（2026-09-16）**: `orchestrator_client.db_update_row` 的行键改 `quote(key, safe="")` 上线、`_request` 按解码路径签名——原来裸拼路径，`a?b` 会把键的后半截当 query、`a%20b` 会被 manager 解成另一把键（靠验签不匹配 fail-closed，但报成 16121）。`test_orchestrator_client.py::test_text_row_key_is_encoded_on_the_wire_and_signed_decoded` ×6；`test/app_runtime/` 349 passed / 13 skipped。
   **文件**: `src/backend/bisheng/app_runtime/domain/services/app_data_service.py`（新）
   **逻辑**: 仅 owner（业务规则前置拦截）；单行编辑二次确认 + 审计 `app.data_row_edit`；**F052 MCP 数据工具复用同一方法、不得直连 manager**。启用 T004 预留的 `16162`。
   **测试**: T087a 全部通过。
@@ -728,6 +730,7 @@
 - [x] **T088**: Platform 数据 tab（表清单 → 分页查看 → 单行编辑 → 导出）
   ✅ 2026-09-16 落地：`tabs/DataTab.tsx`（重写，原占位壳作废）+ `tabs/data/{dataTabModel.ts, RowEditDialog.tsx}` + `controllers/API/hostedAppData.ts`（新）；`index.tsx` 的 `TABS` 恢复 `data`；`bs.json` ×3 `hostedApp.data.*` 30 键（原 `placeholder` 键随占位壳删除）。vitest：`tabs/data/dataTabModel.test.ts` 12 条 + `src/test/hostedAppDataTab.test.tsx` 11 条（列表→分页→排序→编辑→导出→16162/16163 内联提示）；平台全量 10 failed / 400 passed，失败集与基线（approvalPage ×8 / auditSingleTenantFilter ×1 / departmentKnowledgeSpaceDialogs ×1）完全一致。
   **实际偏差记录**: ①导出**不用** `util/utils.ts#downloadFile`——它裸 `import axios`（违反 C7）且拿到拒绝信封会原样存成 `.csv`；改为经封装 request 以 `responseType: "blob"` 取字节、JSON 类型的 blob 解码为信封抛出，再用同样的 anchor 手法保存（`dataTabModel.saveBlob`）。②数据面 API 拆到独立模块 `hostedAppData.ts`：并入 `hostedApp.ts` 会到 639 行，超 600 行上限。③`useTable` 没用（它绑定 `{data,total}` 信封与 `page_size` 参数名，与 rows 契约 `{rows,total,page,size,order}` 不合），用 `useState + useEffect`；loader 的依赖里**故意不放 `t`**，否则在 `t` 身份不稳定时（vitest 的 i18n mock）会无限重进 loading。④16163「尚未创建数据库」按空态而非错误呈现；16164 表已被应用删除 → 自动刷新表清单。⑤空串与 NULL 在编辑弹窗里是两个值：可空列另给「置为空值」勾选，只发送有变化的列。
+  **评审修正（2026-09-16）**: 切表由 `selectTable` 一次性重置页码 / 排序（原来靠 `useEffect([selected])` 重置，带着旧页码先发一次请求再发第二次），rows 请求带序号票据、迟到的旧表答复丢弃（原来慢的「上一张表第 3 页」会盖掉「当前表第 1 页」）。vitest 新增两条；平台全量 10 failed / 401 passed，失败集与基线一致。
   **手动验证**: 待 114 联调（Playwright 未落地）。
   **文件**: `src/frontend/platform/src/pages/BuildPage/hostedApp/tabs/DataTab.tsx`（新）
   **逻辑**: `bs-ui/table` + `useResizableColumns` + `AutoPagination` + `Dialog` 行编辑（保存前 `bsConfirm`）；导出**走后端产文件 + `downloadFile`**（别新用已被 lint 冻结的 `xlsx`）。react-query **禁用**（lint 冻结），用 `useTable` 或 `useState + useEffect`；权限失败按业务码 `16162` 渲染提示，**不得触发 403 整页跳转**（坑 25）。

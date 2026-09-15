@@ -46,7 +46,7 @@ import {
   type HostedAppTableSchema,
 } from "@/controllers/API/hostedAppData"
 import { ArrowDown, ArrowUp, Download, Pencil, RefreshCw } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   DATA_PAGE_SIZE,
@@ -81,37 +81,10 @@ export function DataTab({ appId, appName }: DataTabProps) {
   const [listFailure, setListFailure] = useState("")
   const [tables, setTables] = useState<HostedAppTable[]>([])
   const [selected, setSelected] = useState<string | null>(null)
-
-  const loadTables = useCallback(() => {
-    setListState("loading")
-    getHostedAppTablesApi(appId)
-      .then((data) => {
-        const list = data?.tables || []
-        setTables(list)
-        setListState("ready")
-        setListFailure("")
-        setSelected((current) =>
-          current && list.some((table) => table.name === current) ? current : list[0]?.name ?? null,
-        )
-      })
-      .catch((error) => {
-        setTables([])
-        setSelected(null)
-        const code = getHostedAppErrorCode(error)
-        if (code === HOSTED_APP_ERROR.DATA_FORBIDDEN) {
-          setListState("forbidden")
-        } else if (code === HOSTED_APP_ERROR.DATA_NOT_READY) {
-          setListState("not_ready")
-        } else {
-          setListState("failed")
-          setListFailure(getHostedAppErrorMessage(error))
-        }
-      })
-  }, [appId])
-
-  useEffect(() => {
-    loadTables()
-  }, [loadTables])
+  // Mirror of `selected` for callbacks that run after an await and must not
+  // close over a stale value.
+  const selectedRef = useRef<string | null>(null)
+  selectedRef.current = selected
 
   // -- one table -----------------------------------------------------------
   const [schema, setSchema] = useState<HostedAppTableSchema | null>(null)
@@ -125,19 +98,58 @@ export function DataTab({ appId, appName }: DataTabProps) {
   )
   const [editing, setEditing] = useState<HostedAppRow | null>(null)
   const [exporting, setExporting] = useState(false)
+  // Every rows request takes a ticket; an answer whose ticket is no longer the
+  // latest is dropped, so a slow page 3 of the previous table cannot land on
+  // top of page 1 of the one the owner just opened.
+  const rowsTicket = useRef(0)
 
-  // A new table starts at page 1 with no order; the previous table's cursor
-  // means nothing here.
-  useEffect(() => {
+  // Selecting a table (by click, or because the list was re-read) starts it at
+  // page 1 with no order — the previous table's cursor means nothing here. One
+  // batched update, so the rows loader fires once, not once per reset state.
+  const selectTable = useCallback((name: string | null) => {
+    setSelected(name)
     setPage(1)
     setOrder("")
     setSchema(null)
     setPageData(null)
     setRowsFailure(null)
-  }, [selected])
+  }, [])
+
+  const loadTables = useCallback(() => {
+    setListState("loading")
+    getHostedAppTablesApi(appId)
+      .then((data) => {
+        const list = data?.tables || []
+        setTables(list)
+        setListState("ready")
+        setListFailure("")
+        const current = selectedRef.current
+        const next = current && list.some((table) => table.name === current) ? current : list[0]?.name ?? null
+        if (next !== current) selectTable(next)
+      })
+      .catch((error) => {
+        setTables([])
+        selectTable(null)
+        const code = getHostedAppErrorCode(error)
+        if (code === HOSTED_APP_ERROR.DATA_FORBIDDEN) {
+          setListState("forbidden")
+        } else if (code === HOSTED_APP_ERROR.DATA_NOT_READY) {
+          setListState("not_ready")
+        } else {
+          setListState("failed")
+          setListFailure(getHostedAppErrorMessage(error))
+        }
+      })
+  }, [appId, selectTable])
+
+  useEffect(() => {
+    loadTables()
+  }, [loadTables])
 
   const loadRows = useCallback(() => {
     if (!selected) return
+    const ticket = ++rowsTicket.current
+    const isCurrent = () => ticket === rowsTicket.current
     setRowsLoading(true)
     Promise.all([
       getHostedAppTableSchemaApi(appId, selected),
@@ -148,11 +160,13 @@ export function DataTab({ appId, appName }: DataTabProps) {
       }),
     ])
       .then(([shape, rows]) => {
+        if (!isCurrent()) return
         setSchema(shape)
         setPageData(rows)
         setRowsFailure(null)
       })
       .catch((error) => {
+        if (!isCurrent()) return
         setPageData(null)
         const code = getHostedAppErrorCode(error)
         if (code === HOSTED_APP_ERROR.DATA_TABLE_NOT_FOUND) {
@@ -164,7 +178,9 @@ export function DataTab({ appId, appName }: DataTabProps) {
           setRowsFailure({ kind: "failed", message: getHostedAppErrorMessage(error) })
         }
       })
-      .finally(() => setRowsLoading(false))
+      .finally(() => {
+        if (isCurrent()) setRowsLoading(false)
+      })
   }, [appId, selected, page, order, loadTables])
 
   useEffect(() => {
@@ -245,7 +261,7 @@ export function DataTab({ appId, appName }: DataTabProps) {
               "flex items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted",
               table.name === selected && "bg-muted font-medium",
             )}
-            onClick={() => setSelected(table.name)}
+            onClick={() => table.name !== selected && selectTable(table.name)}
           >
             <span className="truncate">{table.name}</span>
             <span className="ml-2 shrink-0 text-xs text-muted-foreground">

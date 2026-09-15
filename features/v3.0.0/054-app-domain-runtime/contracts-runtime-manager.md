@@ -5,7 +5,7 @@
 ## 1. 地址与鉴权
 
 - 监听 `http://127.0.0.1:8091`（backend 配置项 `app_runtime.manager_base_url` 默认值即此）
-- HMAC：签名串 `METHOD\nPATH\nraw_body`，请求头 `X-Signature`，小写 hex，恒时比较；**PATH 不含 query string**；空密钥 fail-closed
+- HMAC：签名串 `METHOD\nPATH\nraw_body`，请求头 `X-Signature`，小写 hex，恒时比较；**PATH 不含 query string**，且是**百分号解码后**的路径（manager 侧取 ASGI `scope["path"]`，不取 `request.url.path`——后者会把段内的 `?` / `#` 当分隔符截断）；含保留字符的路径段（数据面行键 `a?b`、`100%`）由 backend `quote(key, safe="")` 上线、签名仍按解码形；空密钥 fail-closed
 - ⚠️ backend 的 `orchestrator_client` 必须对**自己实际发出的字节**签名（不要让 httpx 重新序列化 json，否则签名对不上）
 - 三方共用一把密钥：`RTM_HMAC_SECRET` == backend `app_runtime.manager_hmac_secret` == app-proxy 侧 manager secret
 - `GET /healthz` 免签（systemd / smoke 用）

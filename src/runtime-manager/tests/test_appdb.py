@@ -20,6 +20,7 @@ What the assertions pin:
 from __future__ import annotations
 
 import inspect
+import json
 import re
 import sqlite3
 from pathlib import Path
@@ -169,6 +170,23 @@ class TestRows:
         assert [row["key"] for row in body["rows"]] == [1, 2, 3]
         assert body["rows"][0]["values"] == {"kind": "a", "at": 1}
 
+    def test_composite_key_table_pages_in_key_order(self, app_db, service):
+        """A WITHOUT ROWID composite-key table has no single row key, but its key tuple is
+        still unique — every key column is appended, so its pages are stable too."""
+        conn = sqlite3.connect(app_db)
+        conn.row_factory = sqlite3.Row
+        shape = AppDbService._shape(conn, "pairs")
+        conn.close()
+        assert shape.editable is False
+        assert shape.pk_columns == ["a", "b"]
+        assert AppDbService._order_clause(shape, None) == 'ORDER BY "a" ASC, "b" ASC'
+        assert AppDbService._order_clause(shape, "-v") == 'ORDER BY "v" DESC, "a" ASC, "b" ASC'
+        assert AppDbService._order_clause(shape, "b") == 'ORDER BY "b" ASC, "a" ASC'
+
+        page = service.rows(APP_ID, "pairs", order="-v")
+        assert [row["values"]["v"] for row in page["rows"]] == [2, 1]
+        assert all(row["key"] is None for row in page["rows"]), "not addressable, so no key"
+
     def test_unknown_order_column_is_rejected(self, app_db, rtm_client):
         response = rtm_client.get(f"{DB_BASE}/tables/users/rows", params={"order": "ghost"})
         assert response.status_code == 400
@@ -255,6 +273,42 @@ class TestUpdate:
     def test_composite_key_table_is_not_editable(self, app_db, service):
         with pytest.raises(DataInvalidError, match="single-column key"):
             service.update_row(APP_ID, "pairs", "x", {"v": 3})
+
+    # ``a%20b`` (a key that *contains* a percent-escape, wired as ``a%2520b``)
+    # is covered on the backend side only: Starlette's TestClient unquotes the
+    # already-decoded httpx path a second time, which a real ASGI server does
+    # not, so it cannot be exercised through this client.
+    @pytest.mark.parametrize("key", ["a?b c", "100%", "x#1", "中文", "a+b@x.io"])
+    def test_text_key_with_reserved_characters_is_addressed_encoded(self, app_db, rtm_client, key):
+        """A TEXT primary key may hold ``?`` / ``#`` / ``%`` / a space / non-ASCII.
+
+        The backend sends the segment percent-encoded and signs the *decoded*
+        path; the manager verifies against the ASGI ``scope["path"]`` (see
+        ``auth.verify_hmac``). Sent raw, ``a?b`` would address row ``a`` with
+        query ``b`` — and the signature mismatch would surface as
+        "orchestrator unavailable".
+        """
+        from urllib.parse import quote
+
+        conn = sqlite3.connect(app_db)
+        conn.execute("CREATE TABLE tags (slug TEXT PRIMARY KEY, label TEXT)")
+        conn.executemany("INSERT INTO tags VALUES (?, ?)", [(key, "one"), ("a", "decoy"), ("a b", "decoy")])
+        conn.commit()
+        conn.close()
+
+        decoded_path = f"{DB_BASE}/tables/tags/rows/{key}"
+        wire_path = f"{DB_BASE}/tables/tags/rows/{quote(key, safe='')}"
+        body = json.dumps({"values": {"label": "two"}}).encode()
+        headers = rtm_client._headers("PATCH", decoded_path, body, None)
+        response = rtm_client.client.patch(wire_path, content=body, headers=headers)
+        assert response.status_code == 200, response.text
+        assert response.json()["key"] == key
+        assert response.json()["after"] == {"label": "two"}
+
+        conn = sqlite3.connect(app_db)
+        assert conn.execute("SELECT label FROM tags WHERE slug = ?", (key,)).fetchone() == ("two",)
+        assert conn.execute("SELECT COUNT(*) FROM tags WHERE label = 'decoy'").fetchone() == (2,), "decoys untouched"
+        conn.close()
 
     def test_constraint_violation_is_data_invalid_not_500(self, app_db, rtm_client):
         response = rtm_client.patch(f"{DB_BASE}/tables/users/rows/1", {"values": {"name": None}})
@@ -418,6 +472,27 @@ class TestShortTransactionAndBusyTimeout:
         service.update_row(APP_ID, "users", "1", {"note": "w"})
         assert [uri.rsplit("?", 1)[1] for uri in uris] == ["mode=ro", "mode=ro", "mode=ro", "mode=rw"]
         assert not any("rwc" in uri for uri in uris), "never create the file on the app's behalf"
+
+    def test_read_lock_is_data_busy_not_500(self, app_db, rtm_client, monkeypatch):
+        """A reader locked out (the app is mid-VACUUM, say) is retryable ``data_busy``, not a 500 —
+        which the backend would otherwise report as "orchestrator unavailable" (16121)."""
+
+        def _locked(conn):
+            raise sqlite3.OperationalError("database is locked")
+
+        monkeypatch.setattr(AppDbService, "_table_names", staticmethod(_locked))
+        response = rtm_client.get(f"{DB_BASE}/tables")
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "data_busy"
+
+    def test_corrupt_file_is_data_invalid_not_500(self, rtm_config, rtm_client):
+        """``app.db`` that is not a database: SQLite's refusal is a data-plane answer, not a crash."""
+        path = rtm_config.app_data_dir(APP_ID) / "app.db"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"this is not a sqlite file, it just sits where one should\n" * 64)
+        response = rtm_client.get(f"{DB_BASE}/tables")
+        assert response.status_code == 400, response.text
+        assert response.json()["detail"]["code"] == "data_invalid"
 
     def test_write_waits_then_reports_busy(self, app_db, service, monkeypatch):
         """A writer holding the lock past busy_timeout is a retryable ``data_busy``, not a 500."""

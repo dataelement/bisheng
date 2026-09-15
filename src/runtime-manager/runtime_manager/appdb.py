@@ -46,6 +46,7 @@ from runtime_manager.errors import (
     DataBusyError,
     DataInvalidError,
     RowNotFoundError,
+    RuntimeManagerError,
     TableNotFoundError,
 )
 
@@ -126,13 +127,23 @@ class TableShape:
     #: identifies one row, so it can be read and exported but not edited.
     editable: bool = True
     column_names: set[str] = field(default_factory=set)
+    #: Declared primary-key columns in key order (empty for a keyless table).
+    pk_columns: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.column_names = {column.name for column in self.columns}
+        self.pk_columns = [column.name for column in sorted(self.columns, key=lambda c: c.pk) if column.pk]
 
     @property
     def key_is_rowid(self) -> bool:
         return self.key == ROWID
+
+    @property
+    def tiebreakers(self) -> list[str]:
+        """Columns that make an ORDER BY total: the row key, or every key column
+        of a composite-key table (which has no single row address but still
+        has a unique tuple)."""
+        return [self.key] if self.editable else self.pk_columns
 
     def to_response(self) -> dict[str, Any]:
         return {
@@ -185,6 +196,24 @@ class AppDbService:
         conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
         return conn
 
+    @staticmethod
+    def _translate(app_id: str, exc: sqlite3.Error) -> RuntimeManagerError:
+        """SQLite's own failures as data-plane answers, not a 500.
+
+        A WAL reader is only ever locked out by an exclusive operation of the
+        app's (VACUUM, a truncating checkpoint) — retryable, so ``data_busy``.
+        Anything else SQLite refuses (a file that is not a database, a
+        constraint) is ``data_invalid``: the request cannot be served as
+        stated, and the platform must not read it as "the orchestrator is
+        unavailable".
+        """
+        text = str(exc).lower()
+        if isinstance(exc, sqlite3.OperationalError) and ("locked" in text or "busy" in text):
+            return DataBusyError(f"the database of app {app_id} is busy: {exc}")
+        if isinstance(exc, sqlite3.IntegrityError):
+            return DataInvalidError(f"update violates a constraint: {exc}")
+        return DataInvalidError(f"rejected by SQLite: {exc}")
+
     # ------------------------------------------------------------------
     # shape
     # ------------------------------------------------------------------
@@ -195,6 +224,8 @@ class AppDbService:
         try:
             names = self._table_names(conn)
             return [{"name": name, "column_count": len(self._shape(conn, name).columns)} for name in names]
+        except sqlite3.Error as exc:
+            raise self._translate(app_id, exc) from exc
         finally:
             conn.close()
 
@@ -202,6 +233,8 @@ class AppDbService:
         conn = self._connect(app_id)
         try:
             return self._resolve(conn, table).to_response()
+        except sqlite3.Error as exc:
+            raise self._translate(app_id, exc) from exc
         finally:
             conn.close()
 
@@ -234,6 +267,8 @@ class AppDbService:
         pk_columns = [column.name for column in sorted(columns, key=lambda c: c.pk) if column.pk]
         if len(pk_columns) == 1:
             return TableShape(name=table, columns=columns, key=pk_columns[0])
+        # No single key column: a rowid table is addressed by rowid; a WITHOUT
+        # ROWID table with a composite key has no single row address at all.
         without_rowid = bool(
             conn.execute(
                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? AND sql LIKE '%WITHOUT ROWID%'",
@@ -276,6 +311,8 @@ class AppDbService:
                 (size, (page - 1) * size),
             )
             rows = [self._row_payload(shape, row) for row in cursor.fetchall()]
+        except sqlite3.Error as exc:
+            raise self._translate(app_id, exc) from exc
         finally:
             conn.close()
         return {"rows": rows, "total": int(total), "page": page, "size": size, "order": order or ""}
@@ -300,8 +337,8 @@ class AppDbService:
             if column not in shape.column_names and column != ROWID:
                 raise DataInvalidError(f"order column {column!r} does not exist in table {shape.name!r}")
             parts.append(f"{_quote(column)} {'DESC' if descending else 'ASC'}")
-        if shape.editable and (not order or order.lstrip("-") != shape.key):
-            parts.append(f"{_quote(shape.key)} ASC")
+        ordered = order.lstrip("-") if order else None
+        parts.extend(f"{_quote(column)} ASC" for column in shape.tiebreakers if column != ordered)
         return ("ORDER BY " + ", ".join(parts)) if parts else ""
 
     def update_row(self, app_id: str, table: str, key: str, values: dict[str, Any]) -> dict[str, Any]:
@@ -344,16 +381,10 @@ class AppDbService:
                     f"SELECT {columns_sql} FROM {_quote(table)} WHERE {key_sql} = ?", (key_value,)
                 ).fetchone()
                 conn.execute("COMMIT")
-            except sqlite3.OperationalError as exc:
+            except sqlite3.Error as exc:
                 if conn.in_transaction:
                     conn.execute("ROLLBACK")
-                if "locked" in str(exc).lower() or "busy" in str(exc).lower():
-                    raise DataBusyError(f"the database of app {app_id} is busy: {exc}")
-                raise DataInvalidError(f"update rejected by SQLite: {exc}")
-            except sqlite3.IntegrityError as exc:
-                if conn.in_transaction:
-                    conn.execute("ROLLBACK")
-                raise DataInvalidError(f"update violates a constraint: {exc}")
+                raise self._translate(app_id, exc) from exc
         finally:
             conn.close()
         names = list(assignments)
@@ -409,6 +440,7 @@ class AppDbService:
         the file once it has been sent.
         """
         conn = self._connect(app_id)
+        target: Path | None = None
         try:
             shape = self._resolve(conn, table)
             target_dir = self._config.data_root / "exports" / app_id
@@ -421,6 +453,10 @@ class AppDbService:
                 cursor = conn.execute(f"SELECT * FROM {_quote(table)} {order_sql}")
                 for row in cursor:
                     writer.writerow([_json_value(row[column.name]) for column in shape.columns])
+        except sqlite3.Error as exc:
+            if target is not None:
+                target.unlink(missing_ok=True)  # a half-written export must not be served
+            raise self._translate(app_id, exc) from exc
         finally:
             conn.close()
         logger.info("app_db export app_id=%s table=%s file=%s", app_id, table, target)

@@ -222,6 +222,39 @@ class TestDataPlane:
         ).hexdigest()
         assert seen[3].headers["X-Signature"] == expected
 
+    @pytest.mark.parametrize("key", ["a?b c", "100%", "a%20b", "x#1", "中文", "a+b@x.io"])
+    async def test_text_row_key_is_encoded_on_the_wire_and_signed_decoded(self, key):
+        """A TEXT primary key can hold ``?`` / ``#`` / ``%`` / a space.
+
+        Raw in the path, ``?`` would turn the rest of the key into a query
+        string and ``a%20b`` would be decoded to a *different* key by the
+        manager. The wire carries the key percent-encoded; the manager verifies
+        the signature over the decoded path (Starlette's ``url.path``), so the
+        signature is computed over the decoded form.
+        """
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            return httpx.Response(200, json={"ok": True})
+
+        client = _client(handler)
+        await client.db_update_row(app_id="app-1", table="tags", key=key, values={"label": "b"})
+
+        request = seen[0]
+        assert request.url.query == b"", "no part of the key leaked into the query string"
+        assert request.url.fragment == ""
+        from urllib.parse import unquote
+
+        wire_segment = request.url.raw_path.decode().rsplit("/", 1)[1]
+        assert unquote(wire_segment) == key
+        expected = hmac.new(
+            SECRET.encode(),
+            f"PATCH\n/v1/apps/app-1/db/tables/tags/rows/{key}\n".encode() + request.content,
+            hashlib.sha256,
+        ).hexdigest()
+        assert request.headers["X-Signature"] == expected
+
     async def test_row_update_is_not_replayed_on_read_timeout(self):
         """A PATCH whose answer we never saw may have been applied; replaying it would apply it twice."""
         attempts = []

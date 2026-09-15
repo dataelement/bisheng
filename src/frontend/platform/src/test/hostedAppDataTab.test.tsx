@@ -112,13 +112,22 @@ describe("DataTab — table list → rows", () => {
     expect(screen.getAllByText("hostedApp.data.nullLabel").length).toBeGreaterThan(0)
   })
 
-  it("switches table on click and restarts at page 1 with no order", async () => {
+  it("switches table on click and restarts at page 1 with no order, in one request", async () => {
     ;(getHostedAppTableSchemaApi as Mock).mockImplementation((_app: string, table: string) =>
       Promise.resolve({ ...usersSchema, table }),
     )
     renderTab()
     const user = userEvent.setup()
-    await user.click(await screen.findByRole("button", { name: /orders/ }))
+    // Leave `users` sorted so the switch has a cursor to discard.
+    await user.click(await screen.findByRole("button", { name: "name" }))
+    await waitFor(() =>
+      expect(getHostedAppTableRowsApi).toHaveBeenLastCalledWith(
+        "app-1",
+        "users",
+        expect.objectContaining({ order: "name" }),
+      ),
+    )
+    await user.click(screen.getByRole("button", { name: /orders/ }))
     await waitFor(() =>
       expect(getHostedAppTableRowsApi).toHaveBeenLastCalledWith("app-1", "orders", {
         page: 1,
@@ -126,6 +135,41 @@ describe("DataTab — table list → rows", () => {
         order: undefined,
       }),
     )
+    // Exactly one request for the new table — not one with the stale order
+    // followed by one with the reset.
+    const ordersCalls = (getHostedAppTableRowsApi as Mock).mock.calls.filter((call) => call[1] === "orders")
+    expect(ordersCalls).toHaveLength(1)
+  })
+
+  it("drops a slow answer for the previous table instead of painting it over the current one", async () => {
+    const ordersPage: HostedAppRowPage = {
+      rows: [{ key: 9, values: { id: 9, name: "order-nine", note: null } }],
+      total: 1,
+      page: 1,
+      size: 50,
+      order: "",
+    }
+    let releaseUsers: (value: HostedAppRowPage) => void = () => undefined
+    ;(getHostedAppTableRowsApi as Mock).mockImplementation((_app: string, table: string) =>
+      table === "users"
+        ? new Promise<HostedAppRowPage>((resolve) => {
+            releaseUsers = resolve
+          })
+        : Promise.resolve(ordersPage),
+    )
+    ;(getHostedAppTableSchemaApi as Mock).mockImplementation((_app: string, table: string) =>
+      Promise.resolve({ ...usersSchema, table }),
+    )
+    renderTab()
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole("button", { name: /orders/ }))
+    expect(await screen.findByText("order-nine")).toBeTruthy()
+
+    // The first table's answer arrives late; it must not replace the grid.
+    releaseUsers(usersPage)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(screen.getByText("order-nine")).toBeTruthy()
+    expect(screen.queryByText("alice")).toBeNull()
   })
 
   it("sorts by a column header and cycles asc → desc → none", async () => {

@@ -42,6 +42,7 @@ import hashlib
 import hmac
 import json
 from typing import Any
+from urllib.parse import quote, unquote
 
 import httpx
 from loguru import logger
@@ -245,10 +246,17 @@ class OrchestratorClient:
         return await self._request("GET", f"/v1/apps/{app_id}/db/tables/{table}/rows", params=params, op="db_rows")
 
     async def db_update_row(self, *, app_id: str, table: str, key: str, values: dict[str, Any]) -> dict[str, Any]:
-        """Change exactly one row → ``{table, key, before, after}`` for the audit trail."""
+        """Change exactly one row → ``{table, key, before, after}`` for the audit trail.
+
+        ``key`` is whatever the app stored in a TEXT primary key — ``a?b``,
+        ``100%``, a space — so it is percent-encoded for the wire; left raw, a
+        ``?`` would turn the rest of the key into a query string and address a
+        different row. The signature still covers the decoded path (see
+        ``_request``).
+        """
         return await self._request(
             "PATCH",
-            f"/v1/apps/{app_id}/db/tables/{table}/rows/{key}",
+            f"/v1/apps/{app_id}/db/tables/{table}/rows/{quote(key, safe='')}",
             json={"values": values},
             op="db_update_row",
         )
@@ -283,7 +291,10 @@ class OrchestratorClient:
             raise AppOrchestratorUnavailableError(msg="运行环境管理器未配置共享密钥", reason="hmac_secret_missing")
 
         raw = self._encode(json)
-        headers = {self._signature_header: compute_signature(method, path, raw, secret)}
+        # The manager verifies against the *decoded* request path (Starlette's
+        # ``request.url.path``), so the signature covers the decoded form even
+        # when the wire carries a percent-encoded segment (a row key).
+        headers = {self._signature_header: compute_signature(method, unquote(path), raw, secret)}
         if json is not None:
             headers["Content-Type"] = "application/json"
 

@@ -56,12 +56,19 @@ async def verify_hmac(request: Request) -> None:
         )
         raise UnauthorizedError("hmac secret not configured")
 
+    # The signed PATH is the percent-*decoded* path, which is exactly the ASGI
+    # ``scope["path"]``. Not ``request.url.path``: Starlette rebuilds that by
+    # re-parsing the decoded path as a URL, so a data-plane row key holding
+    # ``?`` or ``#`` (``/db/tables/t/rows/a?b``, sent as ``a%3Fb``) would be
+    # truncated at the delimiter and every such request would fail to verify.
+    path = request.scope["path"]
+
     provided = (request.headers.get(config.signature_header, "") or "").lower().strip()
     if not provided:
         logger.warning(
             "runtime-manager HMAC verification failed: missing %s header on %s",
             config.signature_header,
-            request.url.path,
+            path,
         )
         raise UnauthorizedError("missing signature header")
 
@@ -72,10 +79,10 @@ async def verify_hmac(request: Request) -> None:
 
     request._receive = _receive_replay
 
-    expected = compute_signature(request.method, request.url.path, raw, secret)
+    expected = compute_signature(request.method, path, raw, secret)
     if not hmac.compare_digest(expected, provided):
         logger.warning(
             "runtime-manager HMAC verification failed: signature mismatch on %s",
-            request.url.path,
+            path,
         )
         raise UnauthorizedError("invalid signature")
