@@ -24,12 +24,12 @@
 但发布不了托管应用；只开 `app_runtime` 时已有的托管应用能跑、能访问，
 但没人能用 CLI 发新的。**要跑通完整闭环，两个都要开。**
 
-另有两个只管**管理面 / 功能面**的键，同样默认关、与上面两个开关正交：
+另有两个只管**管理面 / 功能面**的键，与上面两个开关正交，**默认开**（beta2 自 `75455c572` 起）：
 
 | 键 | 关掉的后果 |
 |----|-----------|
-| `open_api.management_ui_enabled` | 管理后台「系统管理」里没有「服务账号 / 个人令牌」两个 tab。**关着时没有任何界面能新建服务账号、签发密钥**，CLI 就拿不到第一把 key——演示与首次接入前必须打开 |
-| `open_api.pat_enabled` | 员工个人访问令牌整个功能关闭：工作台「设置 → 账号」不出现申请入口，已签发的令牌调用即被拒 |
+| `open_api.management_ui_enabled` | 管理后台「系统管理」里没有「服务账号 / 个人令牌」两个 tab。**关着时没有任何界面能新建服务账号、签发密钥**，CLI 就拿不到第一把 key——除非本部署不对外开放 API，否则不要关 |
+| `open_api.pat_enabled` | 员工个人访问令牌整个功能关闭：工作台「设置 → 账号」不出现申请入口，已签发的令牌调用即被拒（部署级开着时，租户级开关仍默认关，要租户管理员另开） |
 
 ## 组件与端口
 
@@ -272,9 +272,10 @@ config.yaml 里；要避免明文密钥，用 `!env ${VAR}` 语法从环境变�
 | 键 | 默认值 | 含义 |
 |----|-------|------|
 | `open_platform.enabled` | `false` | 见上文开关表 |
-| `open_api.management_ui_enabled` | `false` | 管理后台是否显示「服务账号 / 个人令牌」tab。只管界面显隐，不影响已签发密钥的校验；**演示与首次接入前置** |
-| `open_api.pat_enabled` | `false` | 员工个人访问令牌功能开关（部署级；租户级另有一层开关，两者都开才生效） |
+| `open_api.management_ui_enabled` | `true` | 管理后台是否显示「服务账号 / 个人令牌」tab。只管界面显隐，不影响已签发密钥的校验；关掉后界面上无法新建服务账号、签发 CLI 部署用的密钥 |
+| `open_api.pat_enabled` | `true` | 员工个人访问令牌功能开关（部署级；租户级另有一层开关、默认关，两者都开才生效） |
 | `open_api.pat_admin_ttl_days` | `7` | 管理员持有的个人令牌有效期上限（天），比租户默认值短时取短者 |
+| `open_api.public_base_url` | 空 | 平台对浏览器的地址，写进下载的技能包与安装提示；留空按反代的 `X-Forwarded-Proto` / `X-Forwarded-Host` 推导。后端在商业网关之后、带路径前缀或反代不转发这两个头时要显式配；**不是绝对 http(s) URL 时启动即失败** |
 | `open_api.service_account_idle_days` | `90` | 多少天无调用后在密钥列表里标记"闲置" |
 | `open_api.credential_cache_ttl_seconds` | `3` | 凭据校验的正缓存秒数。**硬上限 5**，配更大不会报错，按 5 生效 |
 
@@ -387,7 +388,7 @@ cd docker/ && ./deploy.sh update
 # 2. 确认后端已经是新版本再改配置
 docker compose logs backend | tail -20        # 起来了、健康检查过了
 
-# 3. 加键（app_runtime / open_platform / open_api.management_ui_enabled）
+# 3. 加键（app_runtime / open_platform；open_api 各键已默认开，按需覆盖）
 vi bisheng/config/config.yaml
 
 # 4. 全量重启：API、三个 celery worker、beat、灵思 worker 一个都不能漏
@@ -411,6 +412,7 @@ docker compose --profile app-runtime up -d runtime-manager app-proxy
 （典型是 114），**不能直接 `alembic upgrade head`**：两个分支的这两张表同名不同构，新迁移的建表
 守卫看到表已存在就跳过，后端启动即崩。必须停服 → 备份 → 删掉这两张旧表 → 再升级 → 重建服务账号与密钥，
 步骤见 `features/v3.0.0/beta2-openapi-base-migration.md` §4。托管应用的 `app*` 表不受影响。
+这个过程还要发布 OpenFGA 模型 `f048-v6`：模型 checksum 变了而不发布，进程发现与 SQL 里的 ACTIVE release 对不上，所有权限判定一律返回 503。
 
 ## 整层不装
 
@@ -473,7 +475,7 @@ curl -s -b "access_token_cookie=<token>" http://<host>:3001/api/v1/apps/runtime-
 | 应用能跑，但重启后数据没了 | compose 形态漏配 `RTM_HOST_DATA_ROOT`，数据落在了容器内路径对应的宿主目录之外 |
 | CLI `bisheng deploy` 报 16207 | 该环境没装运行时层（或 `enabled` 是 false） |
 | CLI 拿不到 `app:manage` 能力位 | `open_platform.enabled` 是 `false` |
-| 管理后台「系统管理」里没有「服务账号」tab | `open_api.management_ui_enabled` 是 `false`（默认值），或后端没重启 |
+| 管理后台「系统管理」里没有「服务账号」tab | `open_api.management_ui_enabled` 被显式配成了 `false`，或后端没重启 |
 | 升级后后端起不来，迁移日志提示 `service_account` / `api_credential` 表已存在或列不匹配 | 这台机器跑过 vibe 版 open_api，不能原地升级——见上文「已跑过 vibe 版 open_api 的库不能原地升级」 |
 | 点上线 / 下线"没反应"约 10 秒 | 停容器有固定的 10 秒优雅停机窗口，属正常；不要在这期间重复点 |
 

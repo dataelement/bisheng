@@ -60,6 +60,7 @@ from bisheng.permission.application.business_authorization import check_business
 from bisheng.utils.http_middleware import (
     _check_is_global_super,
     _decode_jwt_subject,
+    _validate_current_session_token,
     _validate_token_version,
 )
 
@@ -103,7 +104,7 @@ async def authorize_entry(
     if not user_id:
         return {"decision": DECISION_LOGIN, "reason": "no_session"}
 
-    session_reason = await _session_invalid_reason(user_id, tenant_id, subject)
+    session_reason = await _session_invalid_reason(user_id, tenant_id, subject, access_token)
     if session_reason:
         # Answered as "sign in again" rather than "forbidden": the visitor has
         # no usable session, and at this point we have not even looked the app
@@ -189,10 +190,18 @@ async def authorize_entry(
 # ---------------------------------------------------------------------------
 
 
-async def _session_invalid_reason(user_id: int, tenant_id: int, subject: dict) -> str | None:
-    """The three checks the HTTP middleware performs and a local JWT decode does not."""
+async def _session_invalid_reason(user_id: int, tenant_id: int, subject: dict, access_token: str) -> str | None:
+    """The session checks the HTTP middleware performs and a local JWT decode does not.
+
+    Same order and same helpers as ``CustomMiddleware``, so a session the platform
+    has already signed out cannot keep opening hosted apps — in particular the
+    single-login policy: with ``allow_multi_login`` off, a JWT that is no longer the
+    user's current session is refused here exactly as it is on ``/api/v1``.
+    """
     if not await _validate_token_version(user_id, int(subject.get("token_version", 0) or 0)):
         return "token_version_mismatch"
+    if not await _validate_current_session_token(user_id, access_token):
+        return "session_superseded"
     if await _account_disabled(user_id):
         return "account_disabled"
     if tenant_id and await _tenant_disabled(tenant_id):

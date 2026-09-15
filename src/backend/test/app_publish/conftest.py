@@ -275,8 +275,13 @@ def _isolate_request_contextvars():
     context is *torn down*, which a leaked tenant id makes untrue. Each package
     passed on its own; only the combination showed it, which is exactly the
     shape of failure a per-directory CI run hides.
+
+    ``knowledge_data_scope_memo`` (F066) joined after the 2026-09-15 beta2 sync:
+    the resolver sets a fresh dict lazily and never resets it, so a test that
+    reaches knowledge data scope would hand its memo to the next one.
     """
     from bisheng.core.context.tenant import _bypass_tenant_filter, current_tenant_id
+    from bisheng.knowledge.domain.services.data_scope_resolver import _memo as knowledge_data_scope_memo
     from bisheng.open_api.domain.context import current_open_api_principal
     from bisheng.permission.application.identity import current_permission_actor
 
@@ -285,6 +290,7 @@ def _isolate_request_contextvars():
         (_bypass_tenant_filter, _bypass_tenant_filter.set(False)),
         (current_permission_actor, current_permission_actor.set(None)),
         (current_open_api_principal, current_open_api_principal.set(None)),
+        (knowledge_data_scope_memo, knowledge_data_scope_memo.set(None)),
     ]
     try:
         yield

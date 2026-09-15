@@ -64,6 +64,35 @@ def no_tenant_blacklist(monkeypatch):
     return disabled
 
 
+@pytest.fixture()
+def single_login(monkeypatch):
+    """``allow_multi_login`` off, with a controllable current-session record.
+
+    Patches the two collaborators ``_validate_current_session_token`` reads, not
+    the helper itself, so the real single-login rule is what runs.
+    """
+    from types import SimpleNamespace
+
+    from bisheng.common.services.config_service import settings
+    from bisheng.core.cache import redis_manager
+
+    state = {"current": None}
+
+    async def _login_method(self):
+        return SimpleNamespace(allow_multi_login=False)
+
+    class _Redis:
+        async def aget(self, key):
+            return state["current"]
+
+    async def _client():
+        return _Redis()
+
+    monkeypatch.setattr(type(settings), "aget_system_login_method", _login_method)
+    monkeypatch.setattr(redis_manager, "get_redis_client", _client)
+    return state
+
+
 def _token(user_id: int, user_name: str = "u", tenant_id: int = 1, token_version: int = 0) -> str:
     from bisheng.user.domain.services.auth import AuthJwt
 
@@ -127,6 +156,29 @@ class TestStepOrder:
         no_tenant_blacklist.add(1)
 
         assert (await _verdict("disabled-tenant-app", _token(app_owner.user_id)))["decision"] == "login"
+
+    async def test_superseded_session_denied_when_multi_login_off(
+        self, app_db, app_factory, app_owner, runtime_enabled, no_tenant_blacklist, single_login
+    ):
+        """With ``allow_multi_login`` off the platform signs the older session out
+        (``CustomMiddleware._validate_current_session_token``). The entry path
+        consults the same current-session record, so that session cannot keep
+        opening hosted apps after ``/api/v1`` already refuses it."""
+        _app, _ = await app_factory(slug="kicked-app", state=AppState.ONLINE.value)
+        older = _token(app_owner.user_id)
+        single_login["current"] = "a-newer-login-elsewhere"
+
+        verdict = await _verdict("kicked-app", older)
+        assert verdict == {"decision": "login", "reason": "session_superseded"}
+
+    async def test_current_session_passes_when_multi_login_off(
+        self, app_db, app_factory, app_owner, runtime_enabled, visible, no_tenant_blacklist, single_login
+    ):
+        _app, _ = await app_factory(slug="current-session-app", state=AppState.ONLINE.value)
+        token = _token(app_owner.user_id)
+        single_login["current"] = token
+
+        assert (await _verdict("current-session-app", token))["decision"] == "allow"
 
     @pytest.mark.parametrize("state", (AppState.DRAFT.value, AppState.PENDING_CAPACITY.value, AppState.DELETED.value))
     async def test_draft_pending_deleted_and_nonexistent_return_same_page(

@@ -23,9 +23,9 @@
 | M10 | 托管应用运行期凭据主体 `hosted_app`（F055 T055）**本轮不做**；届时新增迁移放宽 `ck_api_credential_subject_kind` 并注册解析器；vibe 的 `SUBJECT_KIND_HOSTED_APP` / `SUBJECT_KIND_SHARE_LINK` 随 vibe 模型作废 | MVP-核心顺延项；不改 highway 的迁移文件 |
 | M11 | 密钥泄漏扫描新增 `bs_pat` 规则（`PERSONAL_TOKEN_PREFIX`），正负样本各一 | 伴生 PRD §4.2.6「两个前缀都要注册」；beta 线没有扫描器，此项只能在应用工场侧做 |
 | M12 | 错误码：`common/errcode/open_api.py` 取 beta2；vibe 独有 26012 / 26028 若合并后仍有消费者，按 beta2 段内空号补回；26029 语义按 beta2（不能当归属人）；前端 `api_errors` SSOT 冲突块取 beta2、vibe 独有 16xxx / 26xxx 文案保留、六份产物一律重跑 `build.mjs` | `project_beta1_to_vibe_sync_playbook`：`git checkout --theirs` 会丢 65 条文案 |
-| M13 | OpenFGA 模型取并集（beta2 `service_account` 主体类型 + vibe `app` 资源类型），`MODEL_VERSION` 升 `f048-v5` | 两侧都把各自的形状叫 `f048-v3`，并集是第三个形状；版本串只为可读，不能一名二物。**不能用 `f048-v4`**：beta1 tip f6bf9f51f 已把 D17 / D19 修订后的形状命名为 `f048-v4` 并于 2026-09-09 在 116 发布（`features/v3.0.0-beta1/053-openapi-auth-and-identity/release-and-deployment.md`），并集只能顺延为 v5 |
-| M14 | platform 管理面：服务账号 / 个人令牌 tab 取 beta2 的 `open_api.management_ui_enabled` 门控（默认关）；`/api/v1/env` 四个开关并存：`open_platform_enabled`（三扩展位 + 接入信息区）、`app_runtime_enabled`（工场运行时层）、`personal_token_enabled`、`open_api_management_enabled` | 各自 gate 不同面，互不合并；⚠️ 应用工场演示剧本步 1 依赖管理面可见，部署清单必须开 `open_api.management_ui_enabled` |
-| M15 | 114 **不能原地升级**：两侧 `service_account` / `api_credential` 同名不同构，beta2 迁移的 `table_exists` 守卫会跳过建表、启动即崩。部署前须停服 → 备份 → DROP 两张 vibe 结构表**与 vibe 的服务账号 `user` 行** → `alembic upgrade head` → 发布 FGA 模型 **v5** → 重建服务账号与密钥。**本轮不部署 114**（破坏性操作，等用户确认） | 审计四；2026-09-09 拍板暂不部署 |
+| M13 | OpenFGA 模型取并集（beta2 `service_account` 主体类型 + vibe `app` 资源类型），`MODEL_VERSION` 升 `f048-v5`；**2026-09-15 二次同步后改为 `f048-v6`** | 两侧都把各自的形状叫 `f048-v3`，并集是第三个形状；版本串只为可读，不能一名二物。**v6 的由来**：本分支 9-10 把「beta1 v4 + `app`」命名为 v5，同期 beta2 也把「v4 + contextual 部门成员（`subtree_member` 改 `_this()`、按请求注入）」命名为 v5，二次合并后又是第三个形状。**不能用 `f048-v4`**：beta1 tip f6bf9f51f 已把 D17 / D19 修订后的形状命名为 `f048-v4` 并于 2026-09-09 在 116 发布（`features/v3.0.0-beta1/053-openapi-auth-and-identity/release-and-deployment.md`），并集只能顺延为 v5 |
+| M14 | platform 管理面：服务账号 / 个人令牌 tab 取 beta2 的 `open_api.management_ui_enabled` 门控（原默认关；**beta2 `75455c572` 起 `management_ui_enabled` / `pat_enabled` 默认开**，另增 `public_base_url`）；`/api/v1/env` 四个开关并存：`open_platform_enabled`（三扩展位 + 接入信息区）、`app_runtime_enabled`（工场运行时层）、`personal_token_enabled`、`open_api_management_enabled` | 各自 gate 不同面，互不合并；应用工场演示剧本步 1 依赖管理面可见；默认已开，存量 `config.yaml` 仍建议显式写 `management_ui_enabled: true` |
+| M15 | 114 **不能原地升级**：两侧 `service_account` / `api_credential` 同名不同构，beta2 迁移的 `table_exists` 守卫会跳过建表、启动即崩。部署前须停服 → 备份 → DROP 两张 vibe 结构表**与 vibe 的服务账号 `user` 行** → `alembic upgrade head` → 发布 FGA 模型 **v6**（原写 v5，见 M13）→ 重建服务账号与密钥。步骤见 §4 | 审计四；2026-09-09 拍板暂不部署；2026-09-15 用户确认执行（服务账号按原样全部重建） |
 | M17 | **整体取 beta2 时丢掉了 vibe 的一道租户防线，必须补回**：vibe 的 `ServiceAccountService.get_row` 带 `tenant_id` 参数并显式比较（其 docstring 逐字点名这条攻击），beta2 没有——子租户管理员因此可读取、改名、停用根租户服务账号并对它签发 / 吊销密钥。已在 `fix/3.0.0-beta2/service-account-tenant-boundary` 修好并 cherry-pick 回本分支 | 相对合并基线是回归（vibe 有、beta2 无），两名反驳者各自用运行期探针复现；伴生 PRD §4.2.5 / AC-5 |
 | M16 | 验证口径：后端分区测试零回归（基线 = 纯 beta2 同范围，在独立 worktree 跑）、ruff、arch-guard、alembic 单头、platform lint + typecheck、client typecheck、`check-i18n`、`docker/verify-app-runtime-compose.sh`、v2 OpenAPI 契约 JSON 重生成（`/api/v2/apps/*` 加入后 beta2 的契约测试必须跟着更新） | `project_beta1_to_vibe_sync_playbook`：差集里的新增失败必须回源分支跑相同组合复核 |
 
@@ -78,16 +78,26 @@
 
 ---
 
-## 4. 114 重建 runbook（本轮不执行）
+## 4. 114 重建 runbook（2026-09-15 按 114 实查订正）
 
-1. `systemctl stop` 后端 / celery / runtime-manager / app-proxy；`mysqldump` 备份。
-2. 清 vibe 期的服务账号主体：`DROP TABLE api_credential, service_account;`（vibe 结构，演示数据可弃，托管应用表 `app*` 不动）**并删掉 vibe 建在 `user` 表里的服务账号行**（`DELETE FROM \`user\` WHERE user_type = 'service';`，必须在 upgrade 之前——drop 列迁移一跑，这些行就再也认不出来，会变成普通自然人用户）。
-3. `bash /opt/bisheng-ops/deploy.sh`（分支改本分支）→ `alembic upgrade head`（建 beta2 结构 + `open_api_tenant_setting` + 委托范围 + merge + drop `user_type`）。
-4. 代码到位后再写 `config.yaml`：`open_api.management_ui_enabled: true`、`open_platform.enabled: true`（保留既有 `app_runtime`）。**两个都是进程级键、改完要重启**（见步 6）；`load_settings_from_yaml` 拒绝未知顶级键，所以永远是先发代码、再写键。前者决定管理后台是否显示「服务账号 / 个人访问令牌」tab（beta2 默认关，是剧本步 1 的前置），后者决定 `app:manage` 位能否签发。
-5. 发布 FGA 模型 `f048-v5`（`--allow-model-upgrade`），跑 schema contract。⚠️ 是 v5 不是 v4：v4 是 beta1 tip 已在 116 用掉的形状，它**不含 `app` 资源类型**，发错版本会让托管应用的全部 ReBAC 判定失效。
-6. 重启全部进程：后端 / celery（审批 outbox 在 celery-default）/ **runtime-manager 与 app-proxy**（`deploy.sh` 不管这两个 systemd 单元，步 1 停了就得自己拉起来）。
-7. **重建 platform 静态 build**：版本列表接口本轮改成 `{data,total}` 信封，旧 build 的卡片版本下拉会拿到对象再 `.filter` 而崩；`deploy.sh` 不建前端。
-8. 管理面重建服务账号（归属人 = 开发者）→ 签 `app:manage` 密钥 → 重跑 mvp-114-path 剧本步 1–7（步 6 用非管理员账号）。
+起点：114 在 `969897df5`、alembic 在 `merge_update_time_default_heads`、OpenFGA ACTIVE 为 `f048-v3`（从未发布过 v4 / v5）。`/opt/bisheng-ops/deploy.sh` 只从 GitHub 拉 `origin/$BRANCH`（默认 `3.0-vibe`），所以合并结果必须先推送。
+
+1. **前置**：`free -m`（available > 2G，否则重启 worker 会让整机 OOM）；灵思没有 `IN_PROGRESS` 任务；导出服务账号快照（账号的名称 / 描述 / 归属人 / 租户，密钥的名称 / scopes / 到期时间，不含 hash），供第 9 步按原样重建。
+2. **停服与备份**：停 8 个服务（api、celery-workflow / default / knowledge、beat、linsight-worker、runtime-manager、app-proxy；minio 与托管应用容器不停）；`mysqldump` 备份 **`bisheng` 与 `openfga` 两个库**。
+3. **清 vibe 结构**（顺序由外键决定）：`DROP TABLE api_credential, service_account;` → `DELETE FROM user_tenant WHERE user_id IN (<服务账号 id>);` → ``DELETE FROM `user` WHERE user_type = 'service';``。必须在 upgrade 之前——drop 列迁移一跑，这些行就再也认不出来，会变成普通自然人。`app_deployment.submitted_by_user_id` / `auditlog.operator_id` 里的历史引用保留（无外键）。
+4. **手工发代码**（不直接跑 deploy.sh：它先重启再冒烟，此时模型还没发布；且它的 alembic 那行在迁移失败时也打印 `(already at head)`）：`git fetch origin 3.0-vibe && git reset --hard FETCH_HEAD`；`uv.lock` 有依赖变化则 `uv sync --frozen`；`LC_ALL=C .venv/bin/alembic upgrade head` 并**人工看完整输出**，确认到达 `merge_app_factory_beta2_heads`。
+5. **写 `config.yaml`**（先发代码再写键）：加 `open_api:` 块并显式写 `management_ui_enabled: true`；保留 `open_platform.enabled: true` 与 `app_runtime`；删掉 `app_runtime` 里已退役的五个容量键（只告警不拒启，但会误导排障）。
+6. **发布 OpenFGA `f048-v6`**（服务全停、等 45s 心跳过期）：
+   - 两个 dry-run 的目标 checksum 必须一致：`scripts/upgrade_f048_authorization_model.sh plan` 与 `PYTHONPATH=. python scripts/publish_authorization_model_change.py`（后者同时扫描持久 `department:*#subtree_member`，必须为空）；不一致或扫描有命中就停下。
+   - `upgrade_f048_authorization_model.sh apply` → `verify`（发布模型、切 release、回填 `app` 的 action scope；verify 只核 SQL 侧，不依赖部门上下文）。
+   - `publish_authorization_model_change.py --apply --confirm-store-id <id> --confirm-target-model-checksum <sum> --operator-id <id>`，补 `service_account:*` 资源标记（预期 already_current 或完成补齐）。
+   - ⚠️ 不是 `--allow-model-upgrade`（那是 `reconcile_f048_visible_projection.py` 的参数）。v4 与两个 v5 各缺一块：缺 `app` 则托管应用 ReBAC 全部失效，缺 contextual 部门成员则注入的临时 tuple 被拒、依赖部门的判定全部 19002。
+7. **前端**：`pnpm install --frozen-lockfile` → `bash /opt/bisheng-ops/rebuild-web-13000.sh`（client 与 platform 都建，先建 `build.new` 再原子 mv）→ 重启手工起的 vite dev（4102 / 4103，pgrep pattern 写进脚本文件）。
+8. **起服务**：`bash /opt/bisheng-ops/deploy.sh`——fetch 与 alembic 都是 no-op，重启 8 个服务（**已包含 runtime-manager 与 app-proxy**）并跑 smoke；smoke 跑早了就等 API active 后单独重跑。
+9. **重建服务账号**：按快照在管理面逐个重建并签发密钥；当前不可签发的 `model:invoke` / `identity:read` 位去掉并记录；原持有人重新 `bisheng login`。
+10. **验收**：`/api/v1/env` 三个开关为 true、`runtime-status` 正常、在线容器仍 healthy；**非管理员**经部门授权打开托管应用（验 v6 部门成员语义），无权限者被拒；CLI `login → deploy → client 审批 → 非管理员访问新版本 → logs`。
+
+**回滚**：停服 → `upgrade_f048_authorization_model.sh rollback` → 用两份 dump 恢复两个库 → 代码回 `969897df5` 并恢复原 `config.yaml` → 恢复前端 `build` 备份 → 重启。
 
 ---
 
@@ -130,3 +140,4 @@
 | 2026-09-10 | CLI 侧改按 beta2 实际契约取值：`whoami` 读 `actor_kind` / `actor_id` / `actor_name` / `resource_owner.user_id`（F049 的 `subject_kind` / `service_account{id,name}` / 归属人姓名皆已不存在，归属人如实只印 ID、无归属人时直说不能 deploy）、凭据快照同名收口；`26002` 文案补「服务账号被停用」（beta2 运行期不再抛 `26027`）、`26004` 改按「委托被拒」措辞、补登记 PAT 的 `26040` / `26043`、掩码兼收 `bs-pat-`；`selfcheck.py` 的 `owner["name"]` 两版都取不到已修；新增 `tests/test_platform_contract.py` 用 `ast` 读服务端 `WhoamiResponse` / 错误码类与测试桩对账（不 import 后端，CLI 只有 2 个运行期依赖）——原先 254 用例全绿却在断言一个不存在的服务端 |
 | 2026-09-10 | **五视角对抗评审**（鉴权链 / 合并丢改动 / CLI 与部署链 / 契约文档 / 测试质量），每条发现两名反驳者独立复现。确认并已修：租户防线丢失（M17，`cc156df1a` cherry-pick 自发版线分支）· INV-31 运行期兜底（`26051`）· CLI 契约漂移与测试桩造假 · CLI 通道租户口径三处 · 签发表单互斥 · 一批文档矛盾。**证伪**：密钥扫描 `\b` 收尾漏检——`secrets.token_urlsafe(32)` 第 43 位只承载 4 bit，末位字符结构性地只可能是 `048AEIMQUYcgkosw` 之一，`-` 不可达，命中概率为 0 |
 | 2026-09-10 | **验证口径与结论**：基线取两侧（纯 `3.0-vibe` 与纯 `origin/feat/3.0.0-beta2` 各建 worktree 跑同一批目录）。后端分区失败**全部在某一侧基线上同样失败 = 零回归**，另有 21 条基线失败在本分支转绿；`import bisheng.main` 通过、alembic 单头、compose 契约守卫全过、v2 OpenAPI 契约重生成后无漂移、`check-i18n` 无新增漂移；platform / client typecheck 与 lint 全绿，前端测试失败逐条在两侧基线复现（platform 10 条来自 vibe、client 7 套件 = vibe 4 + beta2 3）。**新发现并修掉一处只在组合下暴露的顺序污染**：`test/app_publish` 不复位租户 ContextVar，先跑它再跑 `test/open_api` 会让「执行上下文已拆干净」的断言失败——按目录分进程的 CI 看不到，判回归至少要跑一次同进程组合（⚠️ 但 `test/tenant` 与 `test/user` 是例外，同进程必红，原因见 §7-8） |
+| 2026-09-15 | **二次同步发版线**：合入 `origin/feat/3.0.0-beta2` 03106e053（98 提交：F066 PAT 数据范围 / contextual 部门成员 / v2 错误码与状态对齐 / 单点登录 / 商业授权 / v3 匿名面；beta1 tip 已全含），merge `8496897b0`，23 个冲突文件按 §2 规则解（locale JSON 用三方键级合并，无叶子冲突，六份产物重跑 `build.mjs`）。**适配**：FGA 升 `f048-v6`（M13）+ 性能契约 checksum 重算；alembic 再次双头 → `merge_app_factory_beta2_heads`；托管应用入口补单点登录校验（复用 `_validate_current_session_token`，被踢会话答 `login / session_superseded`）；`test/app_publish` 隔离夹具补 `knowledge_data_scope_memo`。**核实无需改**：INV-31 运行期拒绝随 beta2 的 `open_api_access_context` 重构原样保留；`open_platform.py` / `endpoints.py` 自动合并无重复；upgrade 脚本 verify 只核 SQL 侧、reconcile 核验的是直接 tuple，都不依赖部门上下文。§4 runbook 按 114 实查订正 |
