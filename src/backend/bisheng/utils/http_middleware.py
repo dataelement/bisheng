@@ -19,7 +19,7 @@ TENANT_CHECK_EXEMPT_PATHS = (
     "/api/v1/user/sso",
     "/api/v1/user/ldap",
     "/api/v1/user/public_key",
-    # 登录页拉验证码；若仍带失效 Bearer，不应走 token_version 否则永远 19103、前端拿不到 user_capthca
+    # A stale login token must not block the captcha request with 19103.
     "/api/v1/user/get_captcha",
     "/api/v1/user/switch-tenant",
     "/api/v1/user/tenants",
@@ -86,7 +86,7 @@ def _tenant_id_from_subject(subject: dict | None) -> int:
 
 
 def _set_tenant_context(
-    token: str = None,
+    token: str | None = None,
     *,
     decoded_subject: dict | None = None,
 ) -> int:
@@ -304,7 +304,10 @@ class CustomMiddleware(BaseHTTPMiddleware):
         # Tenant context injection from JWT cookie. Decode the JWT once and
         # share it with the F012 token_version + visible_tenant_ids step so
         # the same token isn't decoded twice on the hot path.
-        token = _extract_http_access_token(request)
+        # v2 admission belongs exclusively to its API credential. A browser
+        # cookie or login JWT must not replace its errors with 191xx/200xx.
+        is_open_api = request.url.path == "/api/v2" or request.url.path.startswith("/api/v2/")
+        token = None if is_open_api else _extract_http_access_token(request)
         decoded_subject = _decode_jwt_subject(token) if token else None
         tenant_id = _set_tenant_context(token, decoded_subject=decoded_subject)
 

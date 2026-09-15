@@ -15,13 +15,18 @@ from bisheng.common.errcode.open_api import (
     OpenApiCredentialInvalidError,
     OpenApiCredentialMissingError,
     PersonalTokenHolderInvalidError,
+    ServiceAccountInactiveError,
 )
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.open_api.domain.context import OpenApiPrincipal
 from bisheng.open_api.domain.models.api_credential import (
     KEY_SECRET_LENGTH,
     PERSONAL_TOKEN_PREFIX,
+    REVOKE_REASON_SUBJECT_DELETED,
+    REVOKE_REASON_SUBJECT_DISABLED,
+    REVOKE_REASON_TENANT_CHANGED,
     SERVICE_ACCOUNT_KEY_PREFIX,
     SUBJECT_KIND_NATURAL_PERSON,
     SUBJECT_KIND_SERVICE_ACCOUNT,
@@ -49,9 +54,14 @@ def extract_bearer_token(authorization: str | None) -> str:
 
 
 async def resolve_service_account(row: ApiCredential) -> OpenApiPrincipal:
-    account = await ServiceAccountRepository.get(row.subject_id)
-    if account is None or not account.is_enabled or account.tenant_id != row.tenant_id:
+    # Middleware may have installed the default tenant before key admission.
+    # Resolve by the authenticated credential, then enforce its tenant below.
+    with bypass_tenant_filter():
+        account = await ServiceAccountRepository.get(row.subject_id)
+    if account is not None and account.tenant_id != row.tenant_id:
         raise OpenApiCredentialInvalidError()
+    if account is None or not account.is_enabled:
+        raise ServiceAccountInactiveError()
     return OpenApiPrincipal(
         credential_id=row.id,
         actor_kind="service_account",
@@ -144,7 +154,18 @@ async def _resolve_from_database(plaintext: str, digest: str) -> OpenApiPrincipa
     now = datetime.now()
     if row is None or not hmac.compare_digest(row.token_hash, digest):
         raise OpenApiCredentialInvalidError()
-    if not _prefix_matches_subject(plaintext, row.subject_kind) or not row.is_valid_at(now):
+    if not _prefix_matches_subject(plaintext, row.subject_kind):
+        raise OpenApiCredentialInvalidError()
+    if row.revoked_at is not None:
+        # Preserve the actionable cause of lifecycle revocation after the
+        # holder/account row has been disabled or deleted.
+        if row.revoke_reason in {REVOKE_REASON_SUBJECT_DISABLED, REVOKE_REASON_SUBJECT_DELETED}:
+            if row.subject_kind == SUBJECT_KIND_NATURAL_PERSON:
+                raise PersonalTokenHolderInvalidError()
+            raise ServiceAccountInactiveError()
+        if row.subject_kind == SUBJECT_KIND_NATURAL_PERSON and row.revoke_reason == REVOKE_REASON_TENANT_CHANGED:
+            raise PersonalTokenHolderInvalidError()
+    if not row.is_valid_at(now):
         raise OpenApiCredentialInvalidError()
     resolver = SUBJECT_RESOLVERS.get(row.subject_kind)
     if resolver is None:
