@@ -50,7 +50,10 @@ def test_group_files_by_payee_original_uploader_priority():
         original_uploader_id=10,
         user_id=20,
     )
-    result = group_files_by_payee([f1], ignore_user_ids=set(), summary=summary)
+    result = group_files_by_payee(
+        [f1], system_admin_user_ids=set(), space_owner_user_ids={},
+        space_admin_user_ids={}, custom_ignore_user_ids=set(), summary=summary,
+    )
     assert 10 in result
     assert result[10][0].id == 101
 
@@ -66,7 +69,10 @@ def test_group_files_by_payee_fallback_to_uploader():
         original_uploader_id=None,
         user_id=20,
     )
-    result = group_files_by_payee([f2], ignore_user_ids=set(), summary=summary)
+    result = group_files_by_payee(
+        [f2], system_admin_user_ids=set(), space_owner_user_ids={},
+        space_admin_user_ids={}, custom_ignore_user_ids=set(), summary=summary,
+    )
     assert 20 in result
     assert result[20][0].id == 102
 
@@ -107,7 +113,10 @@ def test_group_files_by_payee_ignore_accounts():
 
     result = group_files_by_payee(
         [f1, f2, f3],
-        ignore_user_ids={admin_id},
+        system_admin_user_ids=set(),
+        space_owner_user_ids={},
+        space_admin_user_ids={},
+        custom_ignore_user_ids={admin_id},
         summary=summary,
     )
 
@@ -142,9 +151,7 @@ async def test_execute_backfill_accumulation_and_idempotency():
             self.lifetime_earned = 0
             self.logs = {}
 
-        async def award(self, *, tenant_id, user_id, delta, title, rule_code, idempotency_key, daily_cap, **kwargs):
-            # 验证显式传了 daily_cap=None 以跳过上限截断
-            assert daily_cap is None
+        async def award(self, *, tenant_id, user_id, delta, title, rule_code, idempotency_key, **kwargs):
             if idempotency_key in self.logs:
                 return SimpleNamespace(replayed=True, applied_delta=0)
             self.balance += delta
@@ -157,7 +164,7 @@ async def test_execute_backfill_accumulation_and_idempotency():
 
     with (
         patch.object(bsp, "load_user_names", AsyncMock(return_value={uid: "test_user"})),
-        patch.object(bsp, "PointsLedgerService", return_value=fake_ledger),
+        patch.object(bsp, "BackfillPointsLedger", return_value=fake_ledger),
         patch.object(bsp, "PointsRepository"),
     ):
         # 第一次执行：应全额发放 10 * 3 = 30 分
@@ -209,7 +216,7 @@ async def test_execute_backfill_dry_run():
     mock_session = AsyncMock()
     with (
         patch.object(bsp, "load_user_names", AsyncMock(return_value={uid: "dry_user"})),
-        patch.object(bsp, "PointsLedgerService") as mock_ledger_cls,
+        patch.object(bsp, "BackfillPointsLedger") as mock_ledger_cls,
     ):
         await execute_backfill(
             mock_session,

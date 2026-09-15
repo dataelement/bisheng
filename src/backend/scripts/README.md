@@ -35,6 +35,33 @@ This directory contains manual maintenance and migration scripts for the backend
   已经开始执行的请求不会被中途终止。
 - 如需恢复超级管理员, 必须另行明确授权并同时恢复数据库角色和 OpenFGA 关系。
 
+### `clear_user_points.py`
+
+清空指定用户在指定租户下的积分, 默认账号 `wenruli`、租户 `1`。默认只读预览;
+`--apply` 会将待删除的完整记录保存至 `./points-backups/*.json` (权限 0600),
+再在同一事务内删除积分同步记录、补扣记录、排行榜快照、流水及积分账户。
+账号按 `user_name / external_id / external_code` 精确匹配, 无匹配或不唯一时中止。
+增加 `--all-users` 可清空指定租户下全部用户积分, 并同时清空该租户的收藏奖励档位。
+`--all-users` 与 `--account` 互斥; 所有模式都保留其他租户数据。
+
+```bash
+# 在 src/backend 目录执行
+.venv/bin/python scripts/clear_user_points.py
+.venv/bin/python scripts/clear_user_points.py --apply
+# 预览 / 清空租户 1 的全部用户积分
+.venv/bin/python scripts/clear_user_points.py --tenant-id 1 --all-users
+.venv/bin/python scripts/clear_user_points.py --tenant-id 1 --all-users --apply
+# 指定其他配置; 配置加载方式与 execute_sql.py 一致
+.venv/bin/python scripts/clear_user_points.py --config config_3002.yaml --apply
+```
+
+执行前暂停相关积分写入、发奖、补扣、同步和刷榜任务; 本脚本不清理 Celery 队列。
+保留登录账号、积分规则、文案和站内信; 文件收藏奖励档位仅在单账号模式下保留。
+流水删除会移除对应幂等记录, 重放历史任务可能重新发分; 榜单其他用户名次待刷新重算,
+管理概览缓存最长 300 秒。备份是删除前快照, 不代表删除已提交; 提交后恢复需用备份单独处理。
+以退出码 0 且 JSON 中 `status` 为 `已提交` 或 `无需清理` 判断写入命令成功。
+不要把备份提交到 Git。
+
 ### `execute_sql.py`
 
 连接 BiSheng 当前配置文件中的关系数据库并执行一条 SQL。脚本复用项目的
@@ -1676,9 +1703,12 @@ PYTHONPATH=./ .venv/bin/python scripts/report_original_knowledge_file_counts.py 
 - 目标库类型：支持 `public` / `department` / `team` / `team_ks` 以及中文别名（如“公共知识库”、“部门库”、“科室库”）。
 - 主文件判定：排除目录 (`file_type=0`)、回收站已删除文件 (`deleted_at is not null`)、跨库分享引用 (`entry_type='share'`) 以及多版本文档中的历史非主版本物理文件。
 - 受让人判定：优先使用文件记录的原始上传人 `original_uploader_id`，若为空则回退到 `user_id`。
-- 忽略账号：支持通过 `--ignore-accounts` 过滤系统管理员账号（如默认 `admin`），命中账号的文件不发放积分。
+- 用户存在性：受让人 ID 在用户表中不存在时，演练统计和正式补分均跳过，并报告“不存在用户文件”数量。原始上传人 ID 非空但用户已不存在时，不转发给当前上传人；用户名为空或为数字不作为排除依据。已产生的历史积分不在本脚本中清理。
+- 默认排除系统管理员，以及文件所在知识库的所有者和有效管理员；同一用户在其他库作为普通上传人时仍可得分。所有者取知识库创建人及有效 `creator` 成员，管理员取有效 `admin` 成员；不再仅凭部门管理员身份排除。
+- 忽略账号：额外支持通过 `--ignore-accounts` 过滤指定账号（默认 `admin`），命中账号的文件不发放积分。
+- 积分业务时间：按北京时间，早于 `2026-08-01 00:00:00` 上传的文件统一记录为该时刻；从该时刻起上传的文件保留上传时间。缺少上传时间时沿用当前时间兜底。该规则影响新流水的 `occurred_at` 和账户最近获分时间，不修改文件上传时间或已入账流水。
 - 积分规则：显式绕过单日积分上限限制进行全额累加，并生成按文件 ID 强绑定的幂等键（`backfill:<level>:<file_id>`），保证重复执行不重复发分。
-- 演练预览：支持 `--dry-run` 模式，仅输出统计分析报告，不进行任何数据库写入。
+- 演练预览：`--dry-run` 保留全局汇总，并按积分记账年月（`YYYY-MM`）升序输出每月文件数、用户数、预计积分及用户明细。八月之前上传的文件归入 `2026-08`；同一用户跨月分别列出，总用户数仍按用户 ID 去重。不进行任何数据库写入，预计积分仍未扣除已补发流水。
 
 Usage:
 
