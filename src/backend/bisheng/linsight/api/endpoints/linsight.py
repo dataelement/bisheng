@@ -33,7 +33,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveE
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.context.tenant import bypass_tenant_filter_if
+from bisheng.core.context.tenant import bypass_tenant_filter_if, get_current_tenant_id
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.session import MessageSessionDao
@@ -56,6 +56,7 @@ from bisheng.linsight.domain.services.state_message_manager import (
     MessageEventType,
 )
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
+from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import util
@@ -183,6 +184,24 @@ async def submit_linsight_workbench(
     """
 
     logger.info(f"Users {login_user.user_id} Submit an Idea Question: {submit_obj.question}")
+
+    tenant_id = get_current_tenant_id() or getattr(login_user, "tenant_id", None) or 0
+    blocked = SensitiveWordPolicyService.evaluate_workbench_user_text(tenant_id, submit_obj.question or "")
+    if blocked:
+        logger.warning(
+            "workbench content safety hit tenant_id={} mode=input chat_id={}",
+            tenant_id,
+            submit_obj.session_id or "",
+        )
+
+        async def blocked_generator():
+            auto_reply = blocked.auto_reply or ""
+            yield {
+                "event": "content_safety_blocked",
+                "data": json.dumps({"auto_reply": auto_reply, "message": auto_reply}, ensure_ascii=False),
+            }
+
+        return EventSourceResponse(blocked_generator())
 
     async def event_generator():
         """

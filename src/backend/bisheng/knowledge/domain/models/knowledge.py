@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Optional, Union
 
 from pydantic import BaseModel, field_validator
-from sqlalchemy import Boolean, Index, Integer, String
+from sqlalchemy import Boolean, Index, Integer, String, exists
 from sqlmodel import Column, DateTime, Field, case, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
@@ -17,7 +17,12 @@ from bisheng.core.database.dialect_helpers import (
     name_sort_clauses,
 )
 from bisheng.core.database.manager import get_database_connection
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
+from bisheng.knowledge.domain.models.knowledge_file import (
+    ABNORMAL_FILE_STATUSES,
+    FileType,
+    KnowledgeFile,
+    KnowledgeFileDao,
+)
 
 
 class KnowledgeTypeEnum(Enum):
@@ -150,6 +155,7 @@ class KnowledgeRead(KnowledgeBase):
     copiable: bool | None = None
     is_pinned: bool | None = False
     actions: list[str] | None = None
+    has_abnormal_files: bool = False
 
 
 class KnowledgeUpdate(BaseModel):
@@ -517,6 +523,7 @@ class KnowledgeDao(KnowledgeBase):
         name: str = None,
         knowledge_type: KnowledgeTypeEnum = None,
         id_in: list[int] | None = None,
+        has_abnormal: bool | None = None,
     ):
         if knowledge_type is not None:
             statement = statement.where(Knowledge.type == knowledge_type.value)
@@ -541,6 +548,17 @@ class KnowledgeDao(KnowledgeBase):
 
             if conditions:
                 statement = statement.where(or_(*conditions))
+
+        # F064: only document KBs have parse-status files. Push EXISTS into
+        # the keyset query so cursor pages are not emptied in memory.
+        if has_abnormal:
+            statement = statement.where(
+                exists().where(
+                    KnowledgeFile.knowledge_id == Knowledge.id,
+                    KnowledgeFile.file_type == FileType.FILE.value,
+                    KnowledgeFile.status.in_(sorted(ABNORMAL_FILE_STATUSES)),
+                )
+            )
 
         return statement
 
@@ -568,6 +586,7 @@ class KnowledgeDao(KnowledgeBase):
         preferred_ids: list[int] | None = None,
         cursor: Sequence | None = None,
         id_in: list[int] | None = None,
+        has_abnormal: bool | None = None,
     ) -> list[Knowledge]:
         """Admin/scoped-super-admin path; same cursor semantics as
         ``aget_user_knowledge`` (F027 AD-15).
@@ -583,6 +602,7 @@ class KnowledgeDao(KnowledgeBase):
             name=name,
             knowledge_type=knowledge_type,
             id_in=id_in,
+            has_abnormal=has_abnormal,
         )
 
         if cursor is not None:

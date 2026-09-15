@@ -423,6 +423,12 @@ export const useWebSocket = (helpers) => {
                         file_id: f.file_id ?? f.id,
                         file_name: f.name ?? f.file_name,
                         file_url: f.filepath ?? f.file_path ?? f.path,
+                        // What the media chip draws with. Mapping down to the
+                        // three fields above dropped these, so a video sent from
+                        // a workflow rendered as a bare extension card while the
+                        // same file in daily chat showed its poster and length.
+                        ...(f.cover_filepath ? { cover_filepath: f.cover_filepath } : {}),
+                        ...(f.mediaDurationSec != null ? { mediaDurationSec: f.mediaDurationSec } : {}),
                     }))
 
                     sendWsMsg({

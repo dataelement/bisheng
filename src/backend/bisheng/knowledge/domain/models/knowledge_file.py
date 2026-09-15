@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, Integer, String, Text, or_, text
+from sqlalchemy import Column, DateTime, Index, Integer, String, Text, or_, text
 from sqlmodel import Field, col, delete, func, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -71,6 +71,18 @@ PORTAL_USER_UPLOAD_FILE_SOURCES = (
 class FileType(int, Enum):
     DIR = 0
     FILE = 1
+
+
+# Library-level "abnormal" for the document-KB outer list (F064) and the
+# knowledge-space folder rollup: parse failed, timed out, or content violation.
+# Queuing / processing / rebuilding are in-flight, not abnormal.
+ABNORMAL_FILE_STATUSES = frozenset(
+    {
+        KnowledgeFileStatus.FAILED.value,
+        KnowledgeFileStatus.TIMEOUT.value,
+        KnowledgeFileStatus.VIOLATION.value,
+    }
+)
 
 
 class KnowledgeFileBase(SQLModelSerializable):
@@ -178,6 +190,8 @@ class QAKnowledgeBase(SQLModelSerializable):
 
 
 class KnowledgeFile(KnowledgeFileBase, table=True):
+    __table_args__ = (Index("ix_knowledgefile_kb_status_type", "knowledge_id", "status", "file_type"),)
+
     id: int | None = Field(default=None, primary_key=True)
 
 
@@ -285,6 +299,32 @@ class KnowledgeFileDao(KnowledgeFileBase):
         async with get_async_db_session() as session:
             rows = (await session.exec(statement)).all()
         return {row[0]: row[1] for row in rows}
+
+    @classmethod
+    async def async_exists_abnormal_files_batch(cls, knowledge_ids: list[int]) -> set[int]:
+        """Return knowledge_ids that have at least one abnormal FILE row.
+
+        Abnormal = status in FAILED / TIMEOUT / VIOLATION. Folders are ignored.
+        An empty input short-circuits without hitting the DB.
+        """
+        if not knowledge_ids:
+            return set()
+        statement = (
+            select(col(KnowledgeFile.knowledge_id))
+            .where(
+                KnowledgeFile.knowledge_id.in_(knowledge_ids),
+                KnowledgeFile.file_type == FileType.FILE.value,
+                KnowledgeFile.status.in_(sorted(ABNORMAL_FILE_STATUSES)),
+            )
+            .distinct()
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        found: set[int] = set()
+        for row in rows:
+            value = row[0] if isinstance(row, (tuple, list)) else getattr(row, "knowledge_id", row)
+            found.add(int(value))
+        return found
 
     @classmethod
     async def async_count_root_files_batch(cls, knowledge_ids: list[int]) -> dict:

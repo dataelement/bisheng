@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from bisheng.api.v1.schemas import WSModel
 from bisheng.llm.domain.models import LLMModelBase, LLMServerBase
@@ -104,10 +104,19 @@ class LLMModelCreateReq(BaseModel):
     id: int | None = Field(default=None, description="Model UniqueID, Need to pass when updating")
     name: str = Field(..., description="Model Display Name")
     description: str | None = Field(default="", description="Model Description")
-    model_name: str = Field(..., description="Model Name")
+    model_name: str = Field(..., min_length=1, description="Model Name")
     model_type: str = Field(..., description="model type")
     online: bool = Field(default=True, description="Online")
     config: dict | None = Field(default=None, description="model config")
+
+    @field_validator("model_name", mode="before")
+    @classmethod
+    def strip_model_name(cls, value: object) -> object:
+        # Persist the vendor model id without leading/trailing whitespace so
+        # probe calls send params['model'] that the provider can resolve.
+        if isinstance(value, str):
+            return value.strip()
+        return value
 
 
 class LLMServerCreateReq(BaseModel):
@@ -148,7 +157,7 @@ class KnowledgeLLMConfig(BaseModel):
 
 class AssistantLLMItem(BaseModel):
     model_id: int | None = Field(None, description="Model'sID")
-    agent_executor_type: str | None = Field(default="ReAct", description="Execution modefunction call or ReAct")
+    agent_executor_type: str | None = Field(default="function call", description="Execution modefunction call or ReAct")
     knowledge_max_content: int | None = Field(
         default=15000, description="Maximum number of strings for knowledge base retrieval"
     )
@@ -157,6 +166,13 @@ class AssistantLLMItem(BaseModel):
     )
     streaming: bool | None = Field(default=True, description="Whether to turn on streaming")
     default: bool | None = Field(default=False, description="Is default model")
+
+    @field_validator("agent_executor_type", mode="before")
+    @classmethod
+    def normalize_agent_executor_type(cls, value):
+        # Only an explicit "ReAct" runs the ReAct executor; blanks (e.g. rows saved by the
+        # old UI) and unknown values already run as function call, so store what actually runs.
+        return value if value in ("ReAct", "function call") else "function call"
 
 
 class AssistantLLMConfig(BaseModel):

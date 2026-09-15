@@ -17,3 +17,11 @@ describe("personal-token entry visibility", () => {
     },
   );
 });
+
+describe("ai-access settings section visibility", () => {
+  it("follows the deployment gate only — tenant off keeps the section for its explanation", async () => {
+    const { shouldShowAiAccessSection } = await import("./personalTokenEntry");
+    expect(shouldShowAiAccessSection(true)).toBe(true);
+    expect(shouldShowAiAccessSection(false)).toBe(false);
+  });
+});

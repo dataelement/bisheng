@@ -28,6 +28,7 @@ from bisheng.brand.api.router import router as brand_router
 from bisheng.channel.api.router import router as channel_router
 from bisheng.chat_session.api.router import router as session_router
 from bisheng.citation.api.router import router as citation_router
+from bisheng.commercial_license.api.router import router as commercial_license_router
 from bisheng.common.services.config_service import settings
 from bisheng.department.api.router import router as department_router
 from bisheng.dev_toolkit.api.router import router as dev_toolkit_router
@@ -114,6 +115,7 @@ router.include_router(sso_sync_router)
 router.include_router(relink_router)
 router.include_router(tenant_router)
 router.include_router(citation_router)
+router.include_router(commercial_license_router)
 router.include_router(admin_router)
 router.include_router(approval_router)
 router.include_router(brand_router)

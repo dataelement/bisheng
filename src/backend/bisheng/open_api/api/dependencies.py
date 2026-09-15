@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, Request, WebSocket, WebSocketException
 from starlette.requests import HTTPConnection
@@ -37,11 +36,13 @@ from bisheng.open_api.domain.scopes import (
     get_open_api_scope_marker,
 )
 from bisheng.open_api.domain.services.credential_validator import validate_bearer
+from bisheng.open_api.domain.services.credential_watcher import watch_websocket_credential
 from bisheng.open_api.domain.services.identity_service import (
     assert_no_removed_identity_headers,
     resolve_request_identity,
 )
 from bisheng.open_api.domain.services.tenant_setting_service import TenantSettingService
+from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.application.identity import (
     reset_current_permission_actor,
     set_current_permission_actor,
@@ -55,6 +56,16 @@ _SCOPE_PRINCIPAL_KEY = "open_api_principal"
 
 async def verify_open_api_access(conn: HTTPConnection) -> AsyncIterator[OpenApiPrincipal]:
     """Authenticate a v2 connection and install its typed execution identity."""
+
+    async with open_api_access_context(conn) as principal:
+        yield principal
+
+
+@asynccontextmanager
+async def open_api_access_context(
+    conn: HTTPConnection, *, inspect_body: bool = True
+) -> AsyncIterator[OpenApiPrincipal]:
+    """Share admission checks with failures raised before dependency execution."""
 
     try:
         principal = await validate_bearer(conn.headers.get("Authorization"))
@@ -70,6 +81,7 @@ async def verify_open_api_access(conn: HTTPConnection) -> AsyncIterator[OpenApiP
     principal_token = None
     permission_token = None
     conn.scope[_SCOPE_PRINCIPAL_KEY] = principal
+    pat_data_scope = DATA_SCOPE_ALL
     try:
         if principal.actor_kind == "natural_person":
             if not settings.open_api.pat_enabled:
@@ -82,6 +94,8 @@ async def verify_open_api_access(conn: HTTPConnection) -> AsyncIterator[OpenApiP
                 raise OpenApiAuthDependencyUnavailableError() from exc
             if not tenant_policy.enabled:
                 raise PersonalTokenDisabledError()
+            # F066: reuse this policy read — no second lookup on the hot path.
+            pat_data_scope = tenant_policy.data_scope
 
         marker = get_open_api_scope_marker(conn.scope.get("endpoint"))
         if marker is None:
@@ -102,7 +116,7 @@ async def verify_open_api_access(conn: HTTPConnection) -> AsyncIterator[OpenApiP
             raise OpenApiScopeMissingError(required=marker.scope)
 
         assert_no_removed_identity_headers(conn.headers.items())
-        await _assert_no_removed_identity_input(conn)
+        await _assert_no_removed_identity_input(conn, inspect_body=inspect_body)
         principal = await resolve_request_identity(
             principal,
             on_behalf_of=conn.headers.get("X-On-Behalf-Of"),
@@ -133,6 +147,7 @@ async def verify_open_api_access(conn: HTTPConnection) -> AsyncIterator[OpenApiP
             tenant_id=principal.tenant_id,
             super_admin=super_admin,
             tenant_admin_tenant_ids=tenant_admin_tenant_ids,
+            data_scope=pat_data_scope,
         )
         principal_token = set_current_open_api_principal(principal)
         permission_token = set_current_permission_actor(actor)
@@ -166,37 +181,6 @@ async def get_service_account_admin(auth_jwt: AuthJwt = Depends()) -> UserPayloa
         raise UnAuthorizedError() from exc
 
 
-@asynccontextmanager
-async def watch_websocket_credential(
-    websocket: WebSocket,
-    *,
-    interval_seconds: float = 3.0,
-) -> AsyncIterator[None]:
-    """Close a connected v2 socket when its credential becomes invalid."""
-
-    expected = get_current_open_api_principal()
-
-    async def monitor() -> None:
-        while True:
-            await asyncio.sleep(interval_seconds)
-            try:
-                current = await validate_bearer(websocket.headers.get("Authorization"))
-                if expected is None or current.credential_id != expected.credential_id:
-                    raise OpenApiEndpointUnregisteredError()
-            except OpenApiAuthError as exc:
-                with suppress(RuntimeError):
-                    await websocket.close(code=WS_POLICY_VIOLATION, reason=str(exc.code))
-                return
-
-    task = asyncio.create_task(monitor(), name="open-api-websocket-credential-watch")
-    try:
-        yield
-    finally:
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
-
-
 def _raise_for_connection(conn: HTTPConnection, exc: OpenApiAuthError) -> None:
     conn.scope["open_api_error_code"] = exc.code
     if isinstance(conn, WebSocket):
@@ -204,25 +188,27 @@ def _raise_for_connection(conn: HTTPConnection, exc: OpenApiAuthError) -> None:
     raise exc
 
 
-async def _assert_no_removed_identity_input(conn: HTTPConnection) -> None:
+async def _assert_no_removed_identity_input(conn: HTTPConnection, *, inspect_body: bool = True) -> None:
     if "user_id" in conn.query_params:
         raise OpenApiRemovedIdentityInputError()
-    if not isinstance(conn, Request):
+    if not isinstance(conn, Request) or not inspect_body:
         return
-    content_type = conn.headers.get("content-type") or ""
+    content_type = (conn.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
     if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
         form = await conn.form()
         if "user_id" in form:
             raise OpenApiRemovedIdentityInputError()
         return
-    if "application/json" not in content_type:
+    if content_type and content_type != "application/json" and not (
+        content_type.startswith("application/") and content_type.endswith("+json")
+    ):
         return
     body = await conn.body()
     if not body:
         return
     try:
         payload = json.loads(body)
-    except (UnicodeDecodeError, json.JSONDecodeError):
+    except (UnicodeDecodeError, ValueError):
         return
     if isinstance(payload, dict) and "user_id" in payload:
         raise OpenApiRemovedIdentityInputError()

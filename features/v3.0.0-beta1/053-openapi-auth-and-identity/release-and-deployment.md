@@ -12,9 +12,32 @@
 5. 更新并验证商业网关的 v3 HTTP/WS 代理后，才完成调用方切换验收。
 6. PAT 默认保持部署级和租户级关闭；确认租户策略与管理员 TTL 后再按租户启用。
 
-### 已运行 F048 环境的模型升级
+### 已运行 F048 环境的模型升级与存量标记补齐
 
-现有环境不能只替换后端进程。旧 OpenFGA 模型与存量资源只有 `user:*` 技术状态标记，必须使用新版本中的对账脚本完成不可变模型发布、存量标记补齐和 Catalog 切换：
+此步骤由运维在发布维护窗口显式执行；容器启动、`alembic upgrade head` 和 `docker/deploy.sh update` 不会自动运行权限数据修复。旧资源可能只有 `user:*` 技术状态标记，不能以“模型已是最新版”或“后端重启成功”作为存量数据完整的依据。
+
+已完成 F048 迁移、业务 Grant 不需重建的环境，执行模型发布脚本。它在切换 Catalog 或返回 `already_current` 之前都会补齐并校验服务账号资源标记：
+
+```bash
+cd src/backend
+export config=<与线上 API/Worker 完全相同的配置文件>
+export PYTHONPATH=./
+.venv/bin/python scripts/publish_authorization_model_change.py
+```
+
+审核输出的 `store_id`、`target_model_checksum` 和 `service_account_marker_tuple_count`。资源标记数量是按 CURRENT 资源模式计算的应有数量，不是实际缺失数量。停止入口流量及 API、Celery、Linsight 进程，等待运行时心跳过期后，使用同配置的独立维护进程/容器执行：
+
+```bash
+.venv/bin/python scripts/publish_authorization_model_change.py \
+  --apply \
+  --confirm-store-id <dry-run 输出的 store_id> \
+  --confirm-target-model-checksum <dry-run 输出的 target_model_checksum> \
+  --operator-id <执行发布的管理员用户 ID>
+```
+
+脚本按每个 CURRENT 资源的已有模式补齐 `service_account:*` 的 `permission_enabled` 和 `custom_mode`/`inherit_mode`，覆盖空间及所有层级的目录、文件，保留自定义权限边界和现有父子关系，不给后代复制服务账号 Grant。写入与 higher-consistency 校验全部成功后才返回成功，并输出 `service_account_marker_tuples_verified`；模型已是最新版时也不会跳过。失败时保持维护状态并按错误修复后重跑，不能继续启服。
+
+如果还需要重建 Grant 的直接可见投影，则使用完整对账脚本；该路径也会补齐相同的服务账号资源标记：
 
 ```bash
 cd src/backend
@@ -33,7 +56,9 @@ export PYTHONPATH=./
   --allow-model-upgrade
 ```
 
-脚本先发布/复用新模型，再补齐 `service_account:*` 的目录、动作、授权级别、`permission_enabled` 和权限模式标记，以 higher consistency 验证后原子切换 Catalog。脚本成功后再启动新版本后端。它不修改 `user`、`service_account` 或业务授权记录，也不需要新增 Alembic revision。
+模型不变时可省略 `--allow-model-upgrade`，但不能省略 apply 的数据补齐步骤。脚本先发布/复用模型，再对账直接可见投影和服务账号资源标记，以 higher consistency 验证后按需切换 Catalog。脚本成功后再启动新版本后端。它不修改 `user`、`service_account` 或业务授权记录，也不需要新增 Alembic revision。
+
+从旧 RBAC 首次迁入 F048 的环境仍使用 `migrate_f048_permission_data.py`：首次迁移协调器已在每层资源同时写入 `user:*` 与 `service_account:*` 的模式和启用标记。已经完成首次迁移的环境不要通过重新迁移来补缺。
 
 上线冒烟以测试服务账号 `e2e-f053-fresh-sa-review` 和知识空间 `4255` 为基准：先确认 editor 可上传，再降为 viewer 验证上传拒绝，最后恢复 editor 并验证撤销后拒绝。代表用户模式必须按被代表用户的权限判定，不能叠加服务账号权限。
 

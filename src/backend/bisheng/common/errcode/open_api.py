@@ -192,13 +192,31 @@ class PersonalTokenHolderInvalidError(OpenApiAuthError):
     http_status = 401
 
 
+class PersonalTokenDataScopeError(OpenApiAuthError):
+    """F066: the tenant narrowed personal tokens to holder-created knowledge.
+
+    Deliberately separate from 26003 (missing scope): 26003 means "ask an
+    admin for the scope", 26044 means "tenant policy — retrying or adding
+    scopes will not help".  The payload never names the denied resource
+    (anti-enumeration).
+    """
+
+    Code = 26044
+    Msg = "Personal access token data scope is restricted to holder-created knowledge"
+    http_status = 403
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("scope", "personal_only")
+        super().__init__(**kwargs)
+
+
 # 26050+: the `delegate` ⊗ local development toolkit scope policy (伴生 PRD
 # §4.2.4), one code per gate — 26050 at issue / edit time (a form the admin can
 # fix), 26051 at the channel entrance (a call the developer cannot fix, only
 # re-key). They are deliberately not one code: the two gates have different
 # audiences, different transports (400 vs 403) and different next actions, and
 # `constitution.md` binds one HTTP status per code.
-# 26032-26039 and 26044-26049 stay reserved (test/open_api/test_error_codes.py).
+# 26032-26039 and 26045-26049 stay reserved (test/open_api/test_error_codes.py).
 
 
 class OpenApiDelegateExclusiveScopeError(OpenApiAuthError):

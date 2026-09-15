@@ -6,7 +6,7 @@
 > - `scripts/arch-guard.sh` is the **machine-enforcement arm** of this document: each RULE maps to a clause below (see the anchor table).
 > - Violations are reported as **BLOCKER** during `/sdd-review design`.
 > - **Change governance**: editing this file requires PR review (a law change affects every feature). If a RULE is involved, sync the "→ Cx" note in `arch-guard.sh`.
-> - Last revised: 2026-09-10 (C5: 260 open_api band assigned to F053, sub-bands recorded; 26050+ `delegate` ⊗ local-dev-toolkit sub-band registered — 26050 issue-time, 26051 call-time).
+> - Last revised: 2026-09-15 (C5: registry re-derived to 40 modules — 261 public_endpoints and 270 commercial_license added; 26044 F066 data scope joins the personal-token sub-band; 26050 / 26051 `delegate` ⊗ local-dev-toolkit codes kept).
 
 ## Anchor Table (clause ↔ arch-guard RULE)
 
@@ -84,8 +84,11 @@ await require_business_action(
   succeeds; retry/forward repair uses the same idempotency key and frozen plan.
 - Concrete resource decisions short-circuit in this order:
   `super_admin` → tenant mismatch deny → tenant admin → Catalog/action gate →
-  OpenFGA. RBAC menu access remains a separate navigation/API-capability
-  concern and is never a fallback ALLOW for resource actions.
+  OpenFGA. An open-platform natural-person actor narrowed by the tenant data
+  scope (F066/D21) is denied **before** every shortcut above — the narrowing
+  is a data-export control and outranks identity. RBAC menu access remains a
+  separate navigation/API-capability concern and is never a fallback ALLOW
+  for resource actions.
 - Business modules depend only on application protocols exported by
   `permission.application`. They must never import an OpenFGA client/manager,
   construct transport tuples, or branch on OpenFGA-specific errors. Identity
@@ -108,7 +111,7 @@ await require_business_action(
 
 - 5-digit `MMMEE` (3-digit module + 2-digit error), defined in `common/errcode/`.
 
-**Module registry** (38 in use as of 2026-09-10). The authoritative source is always the `Code: int = NNNNN` / `Code = NNNNN` literals themselves; this table mirrors them and *will* drift. **Before claiming a new module number, re-derive the list:**
+**Module registry** (40 in use as of 2026-09-15). The authoritative source is always the `Code: int = NNNNN` / `Code = NNNNN` literals themselves; this table mirrors them and *will* drift. **Before claiming a new module number, re-derive the list:**
 
 ```bash
 grep -rhoE "Code(:\s*int)?\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.py \
@@ -121,13 +124,16 @@ grep -rhoE "Code(:\s*int)?\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.
 | 11x | 110 linsight · 111 linsight (second block) |
 | 12x–18x | 120 workstation · 130 chat · 140 message · 150 tool · 160 dataset · **161 app_factory (F054) · 162 app_factory (F055)** · 170 telemetry · 180 knowledge_space · 181 approval |
 | 19x (tenant / permission) | 190 channel **and** permission ⚠️ · 191 tenant_resolver · 192 tenant_fga · 193 sso_sync · 194 tenant_quota · 195 tenant_sharing · 196 resource_owner_transfer · 197 admin_scope · 198 llm_tenant |
-| 20x–26x (org / open API) | 200 tenant · 210 department · 220 org_sync **and** tenant_tree ⚠️ · 230 user_group · 240 role · 250 permission · 260 open_api |
+| 20x–25x (org) | 200 tenant · 210 department · 220 org_sync **and** tenant_tree ⚠️ · 230 user_group · 240 role · 250 permission |
+| 26x–27x (open / public API · license) | 260 open_api · 261 public_endpoints · 270 commercial_license |
 
 - ⚠️ **190 and 220 are each shared by two modules** — pre-existing collisions, not a precedent. Never reuse an occupied number.
 - **130 = chat** (`common/errcode/chat.py`, 13004–13010). Earlier revisions of this table called it "registered but unused" because its codes are declared `Code = NNNNN` without the `: int` annotation and the old derive command skipped that style. It is occupied — do not treat it as free; do not cite it as an example.
-- **260 is assigned** to Open API authentication and identity (`/api/v2`; F053, `common/errcode/open_api.py`). Do not reuse it. Sub-bands as of 2026-09-10: 26001–26019 open face (`/api/v2` credential / scope / delegation / identity headers) · 26020–26031 service-account management face (`/api/v1/service-accounts/**`) · 26040–26043 personal tokens (`/api/v1/personal-tokens/**`) · 26050 onward the `delegate` ⊗ local development toolkit scope policy, one code per gate (26050 `OpenApiDelegateExclusiveScopeError`: the combination refused at issue / edit time, service-account keys and personal tokens alike, HTTP 400 · 26051 `OpenApiDelegateLocalDevRefusedError`: a key that already carries it refused at the `/api/v2` channel entrance, HTTP 403 — INV-31 运行期兜底); 26032–26039 and 26044–26049 stay reserved. Holes inside those ranges are not free by default (26013 / 26014 were retired and are never reused) — read the file before claiming a number. Every 260xx carries a real `http_status`, which `open_api/api/exception_handlers.py` returns on `/api/v2` paths (200 elsewhere); copy for each code must land in `packages/locales/src/api_errors/*.json` (all three languages) in the same change. Codes in this file are declared `Code = NNNNN` without the `: int` annotation — the derive command above matches both styles for that reason.
+- **260 is assigned** to Open API authentication and identity (`/api/v2`; F053, `common/errcode/open_api.py`). Do not reuse it. Sub-bands as of 2026-09-15: 26001–26019 open face (`/api/v2` credential / scope / delegation / identity headers) · 26020–26031 service-account management face (`/api/v1/service-accounts/**`) · 26040–26044 personal tokens (`/api/v1/personal-tokens/**`; 26044 = F066 tenant data-scope narrowing) · 26050 onward the `delegate` ⊗ local development toolkit scope policy, one code per gate (26050 `OpenApiDelegateExclusiveScopeError`: the combination refused at issue / edit time, service-account keys and personal tokens alike, HTTP 400 · 26051 `OpenApiDelegateLocalDevRefusedError`: a key that already carries it refused at the `/api/v2` channel entrance, HTTP 403 — INV-31 运行期兜底); 26032–26039 and 26045–26049 stay reserved. Holes inside those ranges are not free by default (26013 / 26014 were retired and are never reused) — read the file before claiming a number. Every 260xx carries a real `http_status`, which `open_api/api/exception_handlers.py` returns on `/api/v2` paths (200 elsewhere); copy for each code must land in `packages/locales/src/api_errors/*.json` (all three languages) in the same change. Codes in this file are declared `Code = NNNNN` without the `: int` annotation — the derive command above matches both styles for that reason.
 - **181 = approval** (F025 审批中心, `common/errcode/approval.py`): 18100–18118 in use. Note that 181 is the band for the approval **engine**, which every scenario shares — `withdraw` / `decide` guards live here (e.g. **18118** `ApprovalInstanceNotPendingError`, F055 T051), *not* in a scenario owner's band such as 162. A code added here tightens behaviour for menu access, channel subscription, knowledge-space join and app publish at once, so it needs regression coverage in every live scenario, and its copy must land in `packages/locales/src/api_errors/*.json` (all three languages) in the same change.
 - **161–164 = app_factory** (v3.0.0 应用工场). One band, four owners — split so each feature can claim codes without touching another's file: **161 = F054** (hosted-app domain + runtime, `common/errcode/app_factory.py`) · **162 = F055** (publish pipeline, `common/errcode/app_publish.py`) · **163 = F056** (app square / governance) · **164 = F059** (k8s runtime backend). 161 sub-ranges: `16100-16119` domain/state machine · `16120-16139` runtime/orchestration · `16140-16159` entry & identity injection · `16160-16179` data plane/logs · `16180-16199` deployment switch/ops. The same assignment is mirrored in `features/v3.0.0/release-contract.md` ("已分配模块编码"), which is where F055 / F056 / F059 look it up — update both together.
+- **261 is assigned** to the anonymous public channel (`/api/v3`, `common/errcode/public_endpoints.py`, 26101–26104). Its codes carry a real transport status for the v3 handler. Do not reuse it.
+- **270 is assigned** to commercial license status aggregation and reporting (`commercial_license`). Do not reuse it. Do not treat Gateway business code 11001 as a BISHENG module number.
 - When you claim a number, add it here in the same change.
 
 ## C6. No Hardcoded Secrets (RULE-7)

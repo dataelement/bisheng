@@ -409,7 +409,9 @@ const AiChatInput = memo(
             isComposingRef.current = false;
         }, []);
 
-        const hasSelectionTags = ((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0 || (taskMode && dailySkills.length > 0)) && !isLingsi;
+        const hasMountedKbs = !!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi;
+        const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0 || (taskMode && dailySkills.length > 0)) && !isLingsi;
+        const hasSelectionTags = hasMountedKbs || hasInlineAttachments;
 
         // Tell the landing page whether the attachment bar is present so it can
         // hide/show the welcome subtitle without shifting the title or input box.
@@ -438,6 +440,23 @@ const AiChatInput = memo(
                     </div>
                 </div>}
 
+                {/* Mounted knowledge spaces — a gray strip stacked ABOVE the input
+                    box (Figma 12841:47449). Attachments deliberately do not join
+                    it: files stay inline inside the box, where they read as part
+                    of what you are about to send rather than as mounted context. */}
+                {hasMountedKbs && (
+                    <AttachmentBar
+                        appearance="strip"
+                        uploadingFiles={[]}
+                        files={[]}
+                        kbs={selectedOrgKbs}
+                        skills={[]}
+                        onRemoveKb={onSelectedOrgKbsChange ? (kb) => {
+                            onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id));
+                        } : undefined}
+                    />
+                )}
+
                 <div
                     className={cn(
                         // Figma 12669:66966 — white surface, 16px radius, hairline
@@ -451,11 +470,11 @@ const AiChatInput = memo(
                         (elevated || hasSelectionTags) && "shadow-[0_0_8px_rgba(3,7,117,0.05)]",
                     )}
                 >
-                    {hasSelectionTags && (
+                    {hasInlineAttachments && (
                         <AttachmentBar
                             uploadingFiles={uploadingFiles}
                             files={chatFiles || []}
-                            kbs={selectedOrgKbs}
+                            kbs={[]}
                             skills={taskMode ? dailySkills : []}
                             onRemoveFile={(file) => {
                                 // clientId, not name: a folder upload can carry the
@@ -463,9 +482,6 @@ const AiChatInput = memo(
                                 inputFilesRef.current?.removeByClientId?.(file.clientId);
                                 setChatFiles((prev) => (prev || []).filter((i) => String(i.clientId) !== String(file.clientId)));
                             }}
-                            onRemoveKb={onSelectedOrgKbsChange ? (kb) => {
-                                onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id));
-                            } : undefined}
                             onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
                         />
                     )}

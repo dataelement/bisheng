@@ -12,37 +12,38 @@ import json
 from hashlib import sha256
 from typing import Any
 
-# v5 is the union of two lines that had diverged since v2 (2026-09-10), the
-# same way v3 on `3.0-vibe` was the union of two independent v2s.
+# Version history — two release folders each own a feature numbered F054:
+# `features/v3.0.0-beta1/054-contextual-department-membership` and
+# `features/v3.0.0/054-app-domain-runtime` (hosted applications). Comments here
+# name the folder, never the bare number.
 #
 # - `3.0-vibe` v3 (2026-08-18): beta1's visibility-projection upgrade
 #   (`FLAT_VISIBLE_RESOURCE_TYPES`, `_visible_subject_types`, `published`)
-#   merged with F054's `app` resource type.
+#   merged with the hosted-app `app` resource type.
 # - `feat/3.0.0-beta2` v3 (2026-09-04): F053's `service_account` subject type
 #   — its own type definition, accepted as an ordinary assignee and as a
 #   visibility subject, never as a protected assignee or any admin relation.
 #   It sits on top of beta2's v2, which had already dropped `public_reader`
-#   from the computed `system_*` branches (2026-09-03, no bump of its own):
-#   the relation stays declared so existing tuples still write, but it no
-#   longer feeds `visible` or `system_can_*`.
+#   from the computed `system_*` branches (2026-09-03, no bump of its own).
 # - `feat/3.0.0-beta1` v4 (2026-09-09, f6bf9f51f): beta2's v3 plus
 #   `TECHNICAL_MARKER_SUBJECTS` — every Catalog / resource-state marker
-#   relation accepts `service_account:*` next to `user:*`, so a service
-#   account's direct grant can pass the same technical gates a user's does.
-#   That shape is already published (release history calls it `f048-v4`).
+#   relation accepts `service_account:*` next to `user:*`.
+# - v5 was then cut twice in parallel: beta2's v5 = v4 plus contextual
+#   department membership (`department#subtree_member` is `_this()`, supplied
+#   per request by the trusted organization adapter instead of expanding the
+#   child hierarchy); `3.0-vibe`'s v5 (2026-09-10) = v4 plus `app`.
 #
-# This file is beta1's v4 plus vibe's `app` resource type — nothing else.
-# `app` is modelled exactly like the other flat, never-system-shared types
-# (`channel`, `dashboard`), so it picks up the `service_account` subjects and
-# technical markers for free.
+# v6 (2026-09-15) is both v5s together: contextual department membership plus
+# `app`. `app` is modelled like the other flat, never-system-shared types
+# (`channel`, `dashboard`), so it inherits the service-account subjects, the
+# technical markers and contextual department membership without special cases.
 #
 # The name is bumped rather than reused because it is written into
 # `authorization_model_release.model_version` next to the checksum. Correctness
-# is carried by the checksum, so nothing breaks either way; but an operator
-# reading the release history would see two `f048-v4` rows with different
-# checksums and no way to tell which model each one is. A version string whose
-# only job is to be readable must not name two different things.
-MODEL_VERSION = "f048-v5"
+# is carried by the checksum; the version string only has to be readable, and a
+# readable name must not name two different models. Wherever either v5 was
+# published, v6 has to be published again.
+MODEL_VERSION = "f048-v6"
 
 DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "manage_permission",
@@ -231,10 +232,9 @@ def _base_type_definitions() -> list[dict]:
                 "child": _this(),
                 "admin": _union(_this(), _from("parent", "admin")),
                 "member": _this(),
-                "subtree_member": _union(
-                    _computed("member"),
-                    _from("child", "subtree_member"),
-                ),
+                # Membership is supplied by the trusted organization adapter
+                # as request-local tuples; never expand the child hierarchy.
+                "subtree_member": _this(),
             },
             "metadata": {
                 "relations": {
@@ -242,6 +242,7 @@ def _base_type_definitions() -> list[dict]:
                     "child": {"directly_related_user_types": [{"type": "department"}]},
                     "admin": {"directly_related_user_types": [{"type": "user"}]},
                     "member": {"directly_related_user_types": [{"type": "user"}]},
+                    "subtree_member": {"directly_related_user_types": [{"type": "user"}]},
                 }
             },
         },

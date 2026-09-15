@@ -13,9 +13,12 @@ from bisheng.citation.domain.schemas.citation_schema import (
     ArticleCitationItemSchema,
     ArticleCitationPayloadSchema,
     CitationRegistryItemSchema,
+    CitationSourcePayload,
     CitationType,
     RagCitationItemSchema,
     RagCitationPayloadSchema,
+    TempCitationItemSchema,
+    TempCitationPayloadSchema,
     WebCitationItemSchema,
     WebCitationPayloadSchema,
 )
@@ -28,6 +31,7 @@ class CitationRegistryService:
     RAG_PREFIX = "knowledgesearch_"
     WEB_PREFIX = "websearch_"
     ARTICLE_PREFIX = "articlesearch_"
+    TEMP_PREFIX = "tempsearch_"
     ID_SUFFIX_LENGTH = 8
 
     def __init__(self, repository: MessageCitationRepository):
@@ -47,6 +51,11 @@ class CitationRegistryService:
     def generate_article_citation_id(cls) -> str:
         """Generate a stable-format channel-article citation identifier."""
         return f"{cls.ARTICLE_PREFIX}{uuid.uuid4().hex[: cls.ID_SUFFIX_LENGTH]}"
+
+    @classmethod
+    def generate_temp_citation_id(cls) -> str:
+        """Generate a stable-format temporary-knowledge-base citation identifier."""
+        return f"{cls.TEMP_PREFIX}{uuid.uuid4().hex[: cls.ID_SUFFIX_LENGTH]}"
 
     @staticmethod
     def normalize_url(url: str) -> str:
@@ -80,12 +89,12 @@ class CitationRegistryService:
         return str(value)
 
     @staticmethod
-    def _dump_source_payload(payload: RagCitationPayloadSchema | WebCitationPayloadSchema) -> dict[str, Any]:
+    def _dump_source_payload(payload: CitationSourcePayload) -> dict[str, Any]:
         """Serialize source payload for persistence."""
         return payload.model_dump(exclude_none=False)
 
     @classmethod
-    def dump_source_payload(cls, payload: RagCitationPayloadSchema | WebCitationPayloadSchema) -> dict[str, Any]:
+    def dump_source_payload(cls, payload: CitationSourcePayload) -> dict[str, Any]:
         """Serialize source payload for external persistence callers."""
         return cls._dump_source_payload(payload)
 
@@ -101,6 +110,8 @@ class CitationRegistryService:
             return RagCitationPayloadSchema.model_validate(source_payload).model_dump(exclude_none=False)
         if citation_type == CitationType.ARTICLE.value:
             return ArticleCitationPayloadSchema.model_validate(source_payload).model_dump(exclude_none=False)
+        if citation_type == CitationType.TEMP.value:
+            return TempCitationPayloadSchema.model_validate(source_payload).model_dump(exclude_none=False)
         return WebCitationPayloadSchema.model_validate(source_payload).model_dump(exclude_none=False)
 
     @classmethod
@@ -537,6 +548,135 @@ class CitationRegistryService:
         )
 
     @classmethod
+    def _extract_temp_document_id(cls, metadata: dict[str, Any]) -> str | None:
+        """UUID string document id; refuse values that parse as int (those are RAG)."""
+        raw = metadata.get("document_id") or metadata.get("file_id")
+        text = cls._parse_optional_text(raw)
+        if not text:
+            return None
+        if cls._parse_optional_int(text) is not None:
+            return None
+        return text
+
+    @classmethod
+    def _build_temp_chunk_item(cls, document: Document) -> TempCitationItemSchema:
+        """Build a chunk payload item from a temporary-knowledge-base document."""
+        metadata = cls._parse_metadata(document)
+        chunk_id = cls._extract_rag_chunk_id(metadata)
+        chunk_index = cls._parse_optional_int(metadata.get("chunk_index"))
+        if chunk_index is not None:
+            item_id = str(chunk_index)
+        elif chunk_id:
+            item_id = chunk_id
+        else:
+            item_id = str(uuid.uuid4())
+        return TempCitationItemSchema(
+            itemId=item_id,
+            chunkId=chunk_id,
+            chunkIndex=chunk_index,
+            content=document.page_content or None,
+            bbox=cls._extract_rag_bbox(metadata),
+            page=cls._parse_optional_int(metadata.get("page")),
+        )
+
+    @classmethod
+    def _build_temp_payload(cls, documents: list[Document]) -> TempCitationPayloadSchema:
+        """Build a grouped temp payload for all chunks of one uploaded file."""
+        first_metadata = cls._parse_metadata(documents[0]) if documents else {}
+        document_id = cls._extract_temp_document_id(first_metadata) or str(uuid.uuid4())
+        document_name = cls._extract_rag_document_name(first_metadata)
+        file_type = cls._extract_rag_file_type(first_metadata)
+        items = [cls._build_temp_chunk_item(document) for document in documents]
+        first_item = items[0] if items else None
+        return TempCitationPayloadSchema(
+            documentId=document_id,
+            documentName=document_name,
+            fileType=file_type,
+            objectName=cls._parse_optional_text(first_metadata.get("object_name") or first_metadata.get("objectName")),
+            snippet=first_item.content if first_item else None,
+            sourceUrl=cls._parse_optional_text(
+                first_metadata.get("source_url") or first_metadata.get("file_path") or first_metadata.get("sourceUrl")
+            ),
+            items=items,
+        )
+
+    @classmethod
+    def _flatten_temp_payload(
+        cls,
+        citation_id: str,
+        payload: TempCitationPayloadSchema,
+    ) -> list[CitationRegistryItemSchema]:
+        """Flatten a grouped temp payload into item-level registry entries."""
+        registry_items: list[CitationRegistryItemSchema] = []
+        for item in payload.items:
+            item_payload = payload.model_copy(
+                update={
+                    "snippet": item.content,
+                    "items": [item],
+                }
+            )
+            registry_items.append(
+                CitationRegistryItemSchema(
+                    key=cls.build_item_key(citation_id, item.itemId),
+                    citationId=citation_id,
+                    type=CitationType.TEMP,
+                    itemId=item.itemId,
+                    sourcePayload=item_payload,
+                )
+            )
+        return registry_items
+
+    @classmethod
+    def _group_temp_flat_items(
+        cls,
+        items: list[CitationRegistryItemSchema],
+    ) -> CitationRegistryItemSchema:
+        """Rebuild one grouped temp registry item from flattened records."""
+        first_item = items[0]
+        payloads = [TempCitationPayloadSchema.model_validate(item.sourcePayload) for item in items]
+        chunk_items: list[TempCitationItemSchema] = []
+        for payload in payloads:
+            chunk_items.extend(payload.items)
+        grouped_payload = payloads[0].model_copy(
+            update={
+                "snippet": chunk_items[0].content if chunk_items else payloads[0].snippet,
+                "items": chunk_items,
+            }
+        )
+        return CitationRegistryItemSchema(
+            citationId=first_item.citationId,
+            type=CitationType.TEMP,
+            accessScope=first_item.accessScope,
+            sourcePayload=grouped_payload,
+        )
+
+    @classmethod
+    def build_temp_registry(
+        cls,
+        documents: list[Document],
+    ) -> list[CitationRegistryItemSchema]:
+        """Build flattened registry items from temporary-knowledge-base documents.
+
+        One uploaded file (one UUID ``document_id``) is one citation. Integers
+        are never invented for documentId / knowledgeId.
+        """
+        if not documents:
+            return []
+
+        grouped_documents: OrderedDict[str, list[Document]] = OrderedDict()
+        for index, document in enumerate(documents):
+            document_id = cls._extract_temp_document_id(cls._parse_metadata(document))
+            grouping_id = f"document:{document_id}" if document_id else f"fallback:{index}"
+            grouped_documents.setdefault(grouping_id, []).append(document)
+
+        registry_items: list[CitationRegistryItemSchema] = []
+        for grouped_docs in grouped_documents.values():
+            citation_id = cls.generate_temp_citation_id()
+            payload = cls._build_temp_payload(grouped_docs)
+            registry_items.extend(cls._flatten_temp_payload(citation_id, payload))
+        return registry_items
+
+    @classmethod
     def _group_registry_items(
         cls,
         items: list[CitationRegistryItemSchema],
@@ -553,6 +693,8 @@ class CitationRegistryService:
                 registry_items.append(cls._group_rag_flat_items(grouped_flat_items))
             elif first_item.type == CitationType.ARTICLE:
                 registry_items.append(cls._group_article_flat_items(grouped_flat_items))
+            elif first_item.type == CitationType.TEMP:
+                registry_items.append(cls._group_temp_flat_items(grouped_flat_items))
             else:
                 registry_items.append(cls._group_web_flat_items(grouped_flat_items))
         return registry_items

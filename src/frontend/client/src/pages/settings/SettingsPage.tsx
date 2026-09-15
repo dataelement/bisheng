@@ -12,6 +12,9 @@ import { useNotificationCount } from "~/hooks/useNotificationCount";
 import store from "~/store";
 import { cn } from "~/utils";
 import { AccountPane } from "./sections/AccountPane";
+import { AiAccessPane } from "./sections/AiAccessPane";
+import { shouldShowAiAccessSection } from "./sections/personalTokenEntry";
+import { usePersonalTokenEnabled } from "~/hooks/useVersionManagementEnabled";
 import { GeneralSection } from "~/components/Settings/sections/GeneralSection";
 import {
   readSettingsRouteState,
@@ -44,6 +47,15 @@ import {
  * decrements the pending count except a real decision.
  */
 export default function SettingsPage() {
+  const aiAccessDeploymentEnabled = usePersonalTokenEnabled();
+  // The ai-access section exists only when the deployment offers personal
+  // tokens; tenant-level off keeps it (the pane explains the pause, AC-P30).
+  const navGroups = SETTINGS_NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter(
+      (item) => item.key !== "ai-access" || shouldShowAiAccessSection(aiAccessDeploymentEnabled),
+    ),
+  }));
   const localize = useLocalize();
   const navigate = useNavigate();
   const location = useLocation();
@@ -153,7 +165,7 @@ export default function SettingsPage() {
           </div>
         </div>
         <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto px-3 pb-6 pt-1">
-          {SETTINGS_NAV_GROUPS.map((group, groupIdx) => (
+          {navGroups.map((group, groupIdx) => (
             <div key={group.labelKey} className="flex flex-col gap-0.5">
               <div
                 className={cn(
@@ -246,6 +258,7 @@ export default function SettingsPage() {
       <div className="mx-auto w-full max-w-[720px]">
         <h2 className={cn("hidden pb-3 md:block", paneTitleClass)}>{sectionTitle}</h2>
         {section === "account" && <AccountPane />}
+        {section === "ai-access" && <AiAccessPane />}
         {section === "general" && <GeneralSection />}
       </div>
     </div>
@@ -295,7 +308,7 @@ export default function SettingsPage() {
             </h1>
           </div>
           <div className="flex flex-col pt-3">
-            {SETTINGS_NAV_GROUPS.map((group, groupIdx) => (
+            {navGroups.map((group, groupIdx) => (
               <div key={group.labelKey} className="flex flex-col gap-1">
                 <div
                   className={cn(

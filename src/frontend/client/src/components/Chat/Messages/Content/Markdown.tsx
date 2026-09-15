@@ -44,7 +44,9 @@ import {
   getCitationArticleUrl,
   isArticleCitation,
   getLegacyCitationPreview,
+  isFilePreviewCitation,
   isRagCitation,
+  isTempCitation,
   normalizeCitationType,
   transformPrivateCitations,
   type CitationDetailLoader,
@@ -591,7 +593,9 @@ const Citation = ({
       setDetail(nextDetail);
       return nextDetail;
     } catch (err: any) {
-      if (err?.citationForbidden) {
+      if (err?.citationExpired) {
+        setExpired(true);
+      } else if (err?.citationForbidden) {
         setNotPermitted(true);
       } else {
         console.error('Failed to load citation detail:', err);
@@ -687,7 +691,7 @@ const Citation = ({
     }
     pendingWebWindow?.close();
 
-    if (!nextDetail || !isRagCitation(nextDetail, data.type)) {
+    if (!nextDetail || !isFilePreviewCitation(nextDetail, data.type)) {
       return;
     }
 
@@ -1012,7 +1016,7 @@ const Markdown = memo(({
     if (!detail) {
       return true;
     }
-    return isRagCitation(detail) && !getCitationDocumentUrl(detail);
+    return (isRagCitation(detail) || isTempCitation(detail)) && !getCitationDocumentUrl(detail);
   }, []);
 
   useEffect(() => {

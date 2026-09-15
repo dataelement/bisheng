@@ -99,6 +99,9 @@ export default defineConfig(({ command, mode }) => {
   // 导致 /api/department-limit/*（仅 Gateway 提供）打到 bisheng 出现 404。
   const env = loadEnv(mode, path.resolve(__dirname), "");
   const target = env.VITE_PROXY_TARGET || "http://127.0.0.1:7860/";
+  // Gateway-owned `/api/license/*` (F037/F067 status). Must not fall through to
+  // FastAPI. Override with VITE_GATEWAY_PROXY_TARGET when 115 is not the lab GW.
+  const gatewayTarget = env.VITE_GATEWAY_PROXY_TARGET || "http://127.0.0.1:8098";
   const fileServiceTarget = resolveMinioProxyTarget(env);
   // MinIO presigned URLs sign the Host header; this proxy's host MUST equal the
   // backend config.yaml object_storage.minio.sharepoint or every object 403s.
@@ -107,6 +110,7 @@ export default defineConfig(({ command, mode }) => {
       `[bisheng:minio-proxy] dev object proxy -> ${fileServiceTarget} ` +
       `(host must equal backend sharepoint; 127.0.0.1 ≠ localhost)`,
     );
+    console.log(`[bisheng:gateway-proxy] /api/license -> ${gatewayTarget}`);
   }
   const app_env_define = {
     ...app_env,
@@ -120,8 +124,12 @@ export default defineConfig(({ command, mode }) => {
 
   const proxyLog = env.VITE_PROXY_LOG === '1';
   const apiProxyConfig = createProxyConfig(target, true, false, proxyLog);
+  const gatewayProxyConfig = createProxyConfig(gatewayTarget, true, false, proxyLog);
   const fileServiceProxyConfig = createProxyConfig(fileServiceTarget, true, true, proxyLog);
   const proxyTargets: Record<string, ReturnType<typeof createProxyConfig>> = {};
+  // More specific than `/api/` and must be registered first, otherwise Vite's
+  // prefix match sends `/api/license/status` to FastAPI (404 in open-source).
+  proxyTargets[`${app_env.BASE_URL}/api/license`] = gatewayProxyConfig;
   apiRoutes.forEach(route => {
     proxyTargets[`${app_env.BASE_URL}${route}`] = apiProxyConfig;
   });

@@ -1,31 +1,31 @@
 """Tests for F012 CustomMiddleware enhancements.
 
-Focuses on the two new responsibilities layered into CustomMiddleware:
+Focuses on the responsibilities layered into CustomMiddleware:
 
 1. ``token_version`` validation (AC-09) — JWT payload vs DB; 401 on
    mismatch.
 2. ``visible_tenant_ids`` computation — frozenset shaped by tenant_id +
    is_global_super.
+3. ``allow_multi_login`` / Redis current-session check — 401 + 10604 on
+   mismatch when multi-login is disabled.
 
 The full middleware stack (trace_id, request logging) is out of scope
 here; we test the pure functions (`_validate_token_version`,
-`_compute_visible_tenant_ids`, `_apply_token_version_and_visible`).
+`_validate_current_session_token`, `_compute_visible_tenant_ids`,
+`_apply_token_version_and_visible`).
 """
 
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from bisheng.utils import http_middleware as hm
-
 
 # -------------------------------------------------------------------------
 # _compute_visible_tenant_ids
 # -------------------------------------------------------------------------
 
-class TestComputeVisibleTenantIds:
 
+class TestComputeVisibleTenantIds:
     def test_super_admin_returns_none(self):
         assert hm._compute_visible_tenant_ids(5, is_global_super=True) is None
 
@@ -47,6 +47,7 @@ class TestComputeVisibleTenantIds:
 # _validate_token_version
 # -------------------------------------------------------------------------
 
+
 def _swap_user_dao(aget_token_version_mock):
     """Install a stub UserDao with an AsyncMock ``aget_token_version``.
 
@@ -55,10 +56,11 @@ def _swap_user_dao(aget_token_version_mock):
     it (which would trigger a real import and fail).
     """
     import sys
-    user_mod = sys.modules.get('bisheng.user.domain.models.user')
+
+    user_mod = sys.modules.get("bisheng.user.domain.models.user")
     if user_mod is None:
         user_mod = MagicMock()
-        sys.modules['bisheng.user.domain.models.user'] = user_mod
+        sys.modules["bisheng.user.domain.models.user"] = user_mod
     stub_dao = MagicMock()
     stub_dao.aget_token_version = aget_token_version_mock
     user_mod.UserDao = stub_dao
@@ -66,7 +68,6 @@ def _swap_user_dao(aget_token_version_mock):
 
 
 class TestValidateTokenVersion:
-
     def test_match_returns_true(self):
         _swap_user_dao(AsyncMock(return_value=5))
         result = asyncio.run(hm._validate_token_version(100, 5))
@@ -79,7 +80,7 @@ class TestValidateTokenVersion:
 
     def test_dao_error_fails_open(self):
         """Don't lock out users on infra failures — fail open."""
-        _swap_user_dao(AsyncMock(side_effect=RuntimeError('db down')))
+        _swap_user_dao(AsyncMock(side_effect=RuntimeError("db down")))
         result = asyncio.run(hm._validate_token_version(100, 5))
         assert result is True
 
@@ -90,35 +91,132 @@ class TestValidateTokenVersion:
 
 
 # -------------------------------------------------------------------------
+# _validate_current_session_token
+# -------------------------------------------------------------------------
+
+
+def _patch_login_method(allow_multi_login=True, *, side_effect=None):
+    """Install a stub ``settings.aget_system_login_method`` on the premocked module."""
+    import sys
+
+    cfg_mod = sys.modules.get("bisheng.common.services.config_service")
+    if cfg_mod is None:
+        cfg_mod = MagicMock()
+        sys.modules["bisheng.common.services.config_service"] = cfg_mod
+    settings_mock = MagicMock()
+    if side_effect is not None:
+        settings_mock.aget_system_login_method = AsyncMock(side_effect=side_effect)
+    else:
+        login_method = MagicMock()
+        login_method.allow_multi_login = allow_multi_login
+        settings_mock.aget_system_login_method = AsyncMock(return_value=login_method)
+    cfg_mod.settings = settings_mock
+    return settings_mock
+
+
+def _patch_session_redis(current_token, *, side_effect=None):
+    """Install a stub Redis client that returns ``current_token`` for session GET."""
+    import sys
+
+    redis_mod = sys.modules.get("bisheng.core.cache.redis_manager")
+    if redis_mod is None:
+        redis_mod = MagicMock()
+        sys.modules["bisheng.core.cache.redis_manager"] = redis_mod
+    redis = MagicMock()
+    if side_effect is not None:
+        redis.aget = AsyncMock(side_effect=side_effect)
+    else:
+        redis.aget = AsyncMock(return_value=current_token)
+    redis_mod.get_redis_client = AsyncMock(return_value=redis)
+    return redis
+
+
+class TestValidateCurrentSessionToken:
+    def test_allow_multi_login_skips_redis(self):
+        _patch_login_method(allow_multi_login=True)
+        redis = _patch_session_redis("other-token")
+        result = asyncio.run(hm._validate_current_session_token(100, "this-token"))
+        assert result is True
+        redis.aget.assert_not_called()
+
+    def test_matching_token_returns_true(self):
+        _patch_login_method(allow_multi_login=False)
+        _patch_session_redis("same-token")
+        result = asyncio.run(hm._validate_current_session_token(100, "same-token"))
+        assert result is True
+
+    def test_mismatch_returns_false(self):
+        _patch_login_method(allow_multi_login=False)
+        _patch_session_redis("newer-login-token")
+        result = asyncio.run(hm._validate_current_session_token(100, "stale-token"))
+        assert result is False
+
+    def test_missing_redis_key_fails_open(self):
+        _patch_login_method(allow_multi_login=False)
+        _patch_session_redis(None)
+        result = asyncio.run(hm._validate_current_session_token(100, "any-token"))
+        assert result is True
+
+    def test_settings_error_fails_open(self):
+        _patch_login_method(side_effect=RuntimeError("config down"))
+        result = asyncio.run(hm._validate_current_session_token(100, "any-token"))
+        assert result is True
+
+    def test_redis_error_fails_open(self):
+        _patch_login_method(allow_multi_login=False)
+        _patch_session_redis(None, side_effect=RuntimeError("redis down"))
+        result = asyncio.run(hm._validate_current_session_token(100, "any-token"))
+        assert result is True
+
+    def test_no_user_id_returns_true(self):
+        result = asyncio.run(hm._validate_current_session_token(0, "tok"))
+        assert result is True
+
+
+# -------------------------------------------------------------------------
 # _apply_token_version_and_visible (integration-style, using a fake token)
 # -------------------------------------------------------------------------
 
-class TestApplyTokenVersionAndVisible:
 
+class TestApplyTokenVersionAndVisible:
     def _build_request(self):
         """Build a minimal FastAPI-style Request stub."""
         from starlette.requests import Request
+
         scope = {
-            'type': 'http', 'method': 'GET', 'path': '/foo',
-            'headers': [], 'query_string': b'',
+            "type": "http",
+            "method": "GET",
+            "path": "/foo",
+            "headers": [],
+            "query_string": b"",
         }
         return Request(scope)
 
     def _patch_subject(self, monkeypatch, subject):
-        monkeypatch.setattr(hm, '_decode_jwt_subject', lambda token: subject)
+        monkeypatch.setattr(hm, "_decode_jwt_subject", lambda token: subject)
 
     def test_mismatch_returns_401(self, monkeypatch):
-        self._patch_subject(monkeypatch, {
-            'user_id': 100, 'user_name': 'a', 'tenant_id': 5, 'token_version': 1,
-        })
+        self._patch_subject(
+            monkeypatch,
+            {
+                "user_id": 100,
+                "user_name": "a",
+                "tenant_id": 5,
+                "token_version": 1,
+            },
+        )
+
         async def _fake_validate(uid, tv):
             return False
-        monkeypatch.setattr(hm, '_validate_token_version', _fake_validate)
+
+        monkeypatch.setattr(hm, "_validate_token_version", _fake_validate)
 
         async def _run():
             return await hm._apply_token_version_and_visible(
-                self._build_request(), 'fake-token',
+                self._build_request(),
+                "fake-token",
             )
+
         result = asyncio.run(_run())
         assert result is not None
         assert result.status_code == 401
@@ -128,21 +226,37 @@ class TestApplyTokenVersionAndVisible:
         event loop context, so we read get_visible_tenant_ids() INSIDE the
         coroutine to observe the ContextVar before the loop tears down.
         """
-        self._patch_subject(monkeypatch, {
-            'user_id': 100, 'user_name': 'a', 'tenant_id': 5, 'token_version': 3,
-        })
+        self._patch_subject(
+            monkeypatch,
+            {
+                "user_id": 100,
+                "user_name": "a",
+                "tenant_id": 5,
+                "token_version": 3,
+            },
+        )
+
         async def _fake_validate(uid, tv):
             return True
+
         async def _fake_is_super(uid):
             return False
-        monkeypatch.setattr(hm, '_validate_token_version', _fake_validate)
-        monkeypatch.setattr(hm, '_check_is_global_super', _fake_is_super)
+
+        monkeypatch.setattr(hm, "_validate_token_version", _fake_validate)
+        monkeypatch.setattr(hm, "_check_is_global_super", _fake_is_super)
+
+        async def _fake_session(uid, tok):
+            return True
+
+        monkeypatch.setattr(hm, "_validate_current_session_token", _fake_session)
 
         async def _run():
             result = await hm._apply_token_version_and_visible(
-                self._build_request(), 'fake-token',
+                self._build_request(),
+                "fake-token",
             )
             from bisheng.core.context.tenant import get_visible_tenant_ids
+
             return result, get_visible_tenant_ids()
 
         result, visible = asyncio.run(_run())
@@ -150,21 +264,37 @@ class TestApplyTokenVersionAndVisible:
         assert visible == frozenset({5, 1})
 
     def test_match_sets_visible_none_for_super(self, monkeypatch):
-        self._patch_subject(monkeypatch, {
-            'user_id': 100, 'user_name': 'a', 'tenant_id': 1, 'token_version': 0,
-        })
+        self._patch_subject(
+            monkeypatch,
+            {
+                "user_id": 100,
+                "user_name": "a",
+                "tenant_id": 1,
+                "token_version": 0,
+            },
+        )
+
         async def _fake_validate(uid, tv):
             return True
+
         async def _fake_is_super(uid):
             return True
-        monkeypatch.setattr(hm, '_validate_token_version', _fake_validate)
-        monkeypatch.setattr(hm, '_check_is_global_super', _fake_is_super)
+
+        monkeypatch.setattr(hm, "_validate_token_version", _fake_validate)
+        monkeypatch.setattr(hm, "_check_is_global_super", _fake_is_super)
+
+        async def _fake_session(uid, tok):
+            return True
+
+        monkeypatch.setattr(hm, "_validate_current_session_token", _fake_session)
 
         async def _run():
             result = await hm._apply_token_version_and_visible(
-                self._build_request(), 'fake-token',
+                self._build_request(),
+                "fake-token",
             )
             from bisheng.core.context.tenant import get_visible_tenant_ids
+
             return result, get_visible_tenant_ids()
 
         result, visible = asyncio.run(_run())
@@ -173,9 +303,46 @@ class TestApplyTokenVersionAndVisible:
 
     def test_undecodable_token_noops(self, monkeypatch):
         """Bad JWT — return None (fall through to legacy logic)."""
-        monkeypatch.setattr(hm, '_decode_jwt_subject', lambda t: None)
+        monkeypatch.setattr(hm, "_decode_jwt_subject", lambda t: None)
+
         async def _run():
             return await hm._apply_token_version_and_visible(
-                self._build_request(), 'bad-token',
+                self._build_request(),
+                "bad-token",
             )
+
         assert asyncio.run(_run()) is None
+
+    def test_session_mismatch_returns_401_with_10604(self, monkeypatch):
+        self._patch_subject(
+            monkeypatch,
+            {
+                "user_id": 100,
+                "user_name": "a",
+                "tenant_id": 5,
+                "token_version": 3,
+            },
+        )
+
+        async def _fake_validate(uid, tv):
+            return True
+
+        async def _fake_session(uid, tok):
+            return False
+
+        monkeypatch.setattr(hm, "_validate_token_version", _fake_validate)
+        monkeypatch.setattr(hm, "_validate_current_session_token", _fake_session)
+
+        async def _run():
+            return await hm._apply_token_version_and_visible(
+                self._build_request(),
+                "stale-token",
+            )
+
+        result = asyncio.run(_run())
+        assert result is not None
+        assert result.status_code == 401
+        import json
+
+        body = json.loads(result.body)
+        assert body["status_code"] == 10604

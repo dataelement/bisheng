@@ -16,6 +16,26 @@ from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_
 from bisheng.core.logger import trace_id_var
 from bisheng.llm.domain.const import LLM_CACHE, LLMModelStatus
 
+# httpx / langchain reject values without a scheme (``URL('admin')``).
+_PROXY_URL_SCHEMES = ("http://", "https://", "socks://", "socks4://", "socks5://", "socks5h://")
+
+
+def usable_proxy_url(value: object) -> str | None:
+    """Return a proxy URL the HTTP client will accept, else None.
+
+    The OpenAI Proxy text field sits above the API Key password input, so
+    browser password managers often fill it with a username such as ``admin``.
+    """
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    if not stripped:
+        return None
+    lowered = stripped.lower()
+    if any(lowered.startswith(scheme) for scheme in _PROXY_URL_SCHEMES):
+        return stripped
+    return None
+
 
 def _stringify_reasoning_value(value: Any) -> str:
     if value is None:

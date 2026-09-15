@@ -44,11 +44,25 @@
 ## Client：v3 匿名发布面
 
 - [ ] 使用无痕窗口打开已发布工作流和知识助手 guest 页面，不携带 JWT、API Key 或分享参数。
-- [ ] Network 中详情、invoke/stop、history/gen_title 全部使用 `/api/v3/**`，两个 WebSocket 也使用 `/api/v3/**`；不得出现 guest `/api/v2/**`。
+- [ ] Network 中详情、history/gen_title、语音配置/ASR/TTS 使用 `/api/v3/**`，执行、输入和停止经两个 v3 WebSocket 完成；不请求三个已移除的 v3 HTTP 执行/停止接口；原 v1 请求保持，原 v2 请求迁至 v3。
 - [ ] 页面能够建立新会话、续聊、读取历史并生成标题；工作流等待输入字段对外为 `input`。
 - [ ] 猜测另一个资源、租户或来源的 `chat_id` 执行 history/title/stop/续聊，均得到同形 404。
 - [ ] guest 请求携带 `X-On-Behalf-Of` 或 `X-End-User` 时被拒绝；`/api/v3/assistant/list` 为真 404。
 - [ ] 关闭 guest access 或下线资源后，HTTP 与 WebSocket 均无法继续建立新调用。
+
+## Client：AC-R9 发布页语音补漏（2026-09-10）
+
+- [ ] 清空浏览器 cookie、localStorage 和查询缓存，分别打开工作流、助手免登录链接。
+- [ ] 输入框挂载只请求 `GET /api/v3/llm/workbench?flow_id=<当前应用>`；响应仅含 `asr_model.id` / `tts_model.id`；不请求 v1/v2 的语音配置或转换接口。
+- [ ] 配置了 ASR 后录音按钮可用，录音结束才发送 `POST /api/v3/llm/workbench/asr?flow_id=<当前应用>`（multipart `file`），识别文字回填输入框。
+- [ ] 配置了 TTS 后回答出现朗读按钮，点击才发送 `POST /api/v3/llm/workbench/tts?flow_id=<当前应用>`（JSON `text`），返回音频可播放、暂停；绝对音频 URL 不被错误添加页面路径前缀。
+- [ ] 同一浏览器先登录、再打开 guest；或在两个应用间切换，语音配置不串用登录态缓存或其他应用的缓存。
+- [ ] 关闭 guest / 下线应用后，三类请求分别按既有发布规则拒绝；不携带应用 ID 返回 422；身份传递头仍被拒绝。
+- [ ] 站内原语音入口仍可使用；v2 ASR/TTS 仍保持原密钥鉴权，本轮不删除。
+
+本轮自动化：`test/public_endpoints/test_voice.py` 覆盖真实路由、发布策略与租户上下文（替身模型服务）；client 测试覆盖通道、缓存隔离及朗读按钮调用。真实模型 E2E 入口为 `test/e2e/test_e2e_f053_public_voice.py`，需设置 `F053_VOICE_E2E=1`、`E2E_API_BASE`、两个应用 ID，以及 ASR 测试录音路径；未提供专用环境时跳过，不记为通过。
+
+2026-09-10 本地结果：后端 public_endpoints + v2 路由矩阵 35 项通过；client 相关 4 个测试文件共 20 项通过；工作区 `pnpm lint`、`pnpm typecheck`、`pnpm check-i18n`、backend Ruff 与架构守卫通过。后端单元测试使用临时空配置和既有外部服务替身，无需连接真实中间件；Jest 本地缺少可选 native canvas 构建产物，通过临时 preload 将其标记为不可用后执行，未修改仓库测试环境。真实模型 E2E 9 项因未提供专用部署参数而跳过，上述浏览器清单尚未实测。
 
 ## v2 日常会话与身份传递
 
@@ -68,8 +82,17 @@
 - [ ] 已连接后撤销密钥或停用主体，5 秒内关闭连接；两个不同租户连续执行后 ContextVar 不串。
 - [ ] `audit_log` 中管理操作 action 可见；逐调用 action 固定为 `open_api.call`，metadata 有 actor/subject 双归属、HTTP 状态、业务错误码和 SSE 最终结果，且无 Authorization、明文密钥、请求体或文件内容。
 - [ ] 配对验证 v2 错误状态：权限拒绝 HTTP 403、防枚举 HTTP 404、权限依赖故障 HTTP 503；业务错误码保留。SSE 失败终态在审计中为 `failed`，不能按初始 HTTP 200 记成功。
-- [ ] v3 发布示例全部匿名且为 v3；v2 密钥示例全部带 Bearer；既有 ChatLink 创建、打开、撤销流程及参数保持不变。
+- [ ] 助手和工作流“对外发布 → API访问”展示完整 v2 文档（含工作流事件、交互、文件上传和错误示例）；文档不出现三个 v3 HTTP 执行/停止地址。对应 v2 接口仍要求 Bearer Key；既有 ChatLink 创建、打开、撤销流程及参数保持不变。
 - [ ] 商业版网关分别验证 v3 HTTP 与 WS 可达，且 v3 不被登录或 API Key 网关拦截。
+- [ ] 把 `default_operator.user` 配成一个只被授予了一两个知识库的普通账号，打开免登录链接对话，确认只能检索到被授权的内容。
+- [ ] 改配成超级管理员，重启后端并等配置缓存过期（Redis 键 `config:initdb_config`，TTL 100 秒），确认管理员短路生效、能力范围随之扩大 —— 这正是「权限边界由配置决定」的验收点。
+- [ ] 把应用下线后打开链接，确认显示「该应用已下线」状态页而非 404 或空白聊天框；链接改成不存在的 id，确认显示「链接无效」。
+- [ ] 对话进行中把应用下线，确认 WebSocket 侧弹出对应提示（浏览器能读到拒绝原因，不是空 reason 的 1006）。
+- [ ] `enable_guest_access` 置 false，确认七个 v3 HTTP 与两个 WebSocket 全部拒绝，链接打不开。
+- [ ] 用升级前生成的免登录链接原样打开，确认可用且 URL 未变。
+- [ ] 以被配置为默认操作员的那个自然人登录工作台，打开同一应用，确认会话列表里看不到任何访客对话。
+- [ ] 多租户环境：用默认操作员不属于的租户下的应用生成链接，确认行为符合预期（该账号非该租户 active 成员时按 `26103` 拒绝）。
+- [ ] 工作流免登录对话跑完整一轮，确认 Celery 执行段没有因权限判定中断（握手放行、执行段拒绝的错位不应出现）。
 
 ## 清理
 

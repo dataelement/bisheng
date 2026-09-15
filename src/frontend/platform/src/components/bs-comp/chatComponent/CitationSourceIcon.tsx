@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Globe2 } from "lucide-react";
+import i18next from "i18next";
 import { BookOpenIcon } from "@/components/bs-icons/bookOpen";
 import { type FileType } from "@/components/bs-icons/file";
 import { cname } from "@/components/bs-ui/utils";
@@ -75,7 +76,7 @@ function getReferenceIconKey({
   detail: ChatCitation | null;
   preview: CitationPreview | null;
   item: CitationReferenceItem;
-  type: "web" | "rag";
+  type: "web" | "rag" | "article" | "temp";
 }) {
   if (type === "web") {
     return resolvePreviewUrl(detail, preview) || item.data.citationId;
@@ -101,15 +102,24 @@ export function buildCitationSourceIconData({
     return {
       key: `web:${resolvePreviewUrl(detail, preview) || fallbackKey}`,
       type: "web",
-      title: preview?.title || detail?.sourcePayload?.title || "网页",
+      title: preview?.title || detail?.sourcePayload?.title || i18next.t("citation.web"),
       faviconUrl: getFaviconUrl(resolvePreviewUrl(detail, preview)),
+    };
+  }
+
+  if (normalizedType === "temp") {
+    return {
+      key: `temp:${(detail ? getCitationDocumentName(detail) : "") || preview?.title || fallbackKey}`,
+      type: "rag",
+      title: preview?.title || (detail ? getCitationDocumentName(detail) : i18next.t("citation.tempKb")),
+      fileType: normalizeFileType(getCitationDocumentFileType(detail) || preview?.sourceMeta),
     };
   }
 
   return {
     key: `rag:${(detail ? getCitationDocumentName(detail) : "") || preview?.title || fallbackKey}`,
     type: "rag",
-    title: preview?.title || (detail ? getCitationDocumentName(detail) : "文档"),
+    title: preview?.title || (detail ? getCitationDocumentName(detail) : i18next.t("citation.document")),
     fileType: normalizeFileType(getCitationDocumentFileType(detail) || preview?.sourceMeta),
   };
 }

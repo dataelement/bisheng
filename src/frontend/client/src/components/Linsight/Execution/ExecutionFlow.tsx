@@ -275,7 +275,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                 {/* Design (Figma 12221-40080/40081): card inset 24px each side
                     relative to the input, 12px gap above it. */}
                 <div className="px-6 pb-3">
-                    <TaskPanel tasks={tasks} completed={completed} />
+                    <TaskPanel tasks={tasks} completed={completed} running={running} />
                 </div>
                 {/* Share pages AND historical sessions are read-only — no input.
                     Continuation now happens in the daily /c chat; the standalone

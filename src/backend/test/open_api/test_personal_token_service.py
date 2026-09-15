@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 from bisheng.database.models.tenant import UserTenant
@@ -16,7 +16,7 @@ async def _seed(open_api_db):
         session.add(user)
         await session.flush()
         session.add(UserTenant(user_id=user.user_id, tenant_id=1, status="active", is_active=1))
-        session.add(OpenApiTenantSetting(tenant_id=1, pat_enabled=True, pat_ttl_days=30))
+        session.add(OpenApiTenantSetting(tenant_id=1, pat_enabled=True))
         await session.commit()
         return user
 
@@ -46,11 +46,14 @@ async def test_issue_is_one_time_plaintext_and_regeneration_revokes_old(
         True,
     )
 
+    before = datetime.now()
     first = await PersonalTokenService.issue(tenant_id=1, user_id=holder.user_id, operator=operator)
+    after = datetime.now()
     second = await PersonalTokenService.issue(tenant_id=1, user_id=holder.user_id, operator=operator)
     rows = await CredentialRepository.list_by_subject("natural_person", holder.user_id)
 
     assert first.plaintext.startswith("bs-pat-")
+    assert before + timedelta(days=365) <= first.expires_at <= after + timedelta(days=365)
     assert second.plaintext != first.plaintext
     assert rows[1].revoke_reason == REVOKE_REASON_REGENERATED
     assert rows[0].revoked_at is None

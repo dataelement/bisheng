@@ -10,8 +10,9 @@ from loguru import logger
 
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatResponse
-from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema, CitationType
 from bisheng.citation.domain.services.citation_prompt_helper import (
+    attach_temp_object_names,
     collect_rag_citation_registry_items,
     save_message_citations_sync,
     select_registry_items_for_persistence,
@@ -509,9 +510,8 @@ class RedisCallback(BaseCallback):
         return message id
         """
         if not self.chat_id:
-            answer_text = self._extract_message_text(chat_response.message)
-            items = self._resolve_citation_items(
-                answer_text=answer_text,
+            items = self._finalize_citation_items(
+                chat_response,
                 source_documents=source_documents,
                 citation_registry_items=citation_registry_items,
             )
@@ -545,13 +545,11 @@ class RedisCallback(BaseCallback):
         # Resolve citations BEFORE the insert: the stored answer must not keep a
         # marker the registry cannot back, so the same item set decides both what
         # is persisted and what survives in the text.
-        answer_text = self._extract_message_text(chat_response.message)
-        items = self._resolve_citation_items(
-            answer_text=answer_text,
+        items = self._finalize_citation_items(
+            chat_response,
             source_documents=source_documents,
             citation_registry_items=citation_registry_items,
         )
-        chat_response.message = self._scrub_fabricated_citations(chat_response.message, items)
 
         message = ChatMessageDao.insert_one(
             ChatMessage(
@@ -602,9 +600,7 @@ class RedisCallback(BaseCallback):
                         user_id=self.user_id,
                     )
                 )
-                thread_pool.submit(
-                    f"workflow_generate_title_{self.chat_id}", self.generate_session_title
-                )
+                thread_pool.submit(f"workflow_generate_title_{self.chat_id}", self.generate_session_title)
 
                 # RecordTelemetryJournal
                 telemetry_service.log_event_sync(
@@ -645,6 +641,34 @@ class RedisCallback(BaseCallback):
                 return {**message, "msg": scrubbed}
         return message
 
+    def _finalize_citation_items(
+        self,
+        chat_response: ChatResponse,
+        source_documents=None,
+        citation_registry_items: list[CitationRegistryItemSchema] | None = None,
+    ) -> list[CitationRegistryItemSchema]:
+        """Scrub invented markers, then persist only what the (scrubbed) answer cites.
+
+        Canvas debug has no chat_id and used to skip the scrub, so a model that
+        copied the prompt example ``knowledgesearch_18f5868b:0`` rendered a
+        dead superscript. Scrub against the full registry first: unknown ids
+        that sit next to a real citation are dropped; an answer that cited
+        nothing registered is rewritten onto this round's ``tempsearch_`` /
+        ``knowledgesearch_`` keys so the superscript still opens the file.
+        """
+        raw_items = list(citation_registry_items or [])
+        if not raw_items and source_documents:
+            documents = source_documents if isinstance(source_documents, list) else [source_documents]
+            raw_items = collect_rag_citation_registry_items(documents)
+        chat_response.message = self._scrub_fabricated_citations(chat_response.message, raw_items)
+        items = select_registry_items_for_persistence(raw_items, self._extract_message_text(chat_response.message))
+        items = self._attach_temp_object_names(items)
+        if hasattr(chat_response, "citation_registry_items"):
+            chat_response.citation_registry_items = items
+        if hasattr(chat_response, "citations"):
+            chat_response.citations = items
+        return items
+
     @staticmethod
     def _resolve_citation_items(
         answer_text: str,
@@ -656,6 +680,35 @@ class RedisCallback(BaseCallback):
             documents = source_documents if isinstance(source_documents, list) else [source_documents]
             items = collect_rag_citation_registry_items(documents)
         return select_registry_items_for_persistence(items, answer_text)
+
+    def _load_question_attachment_files(self) -> list[dict]:
+        """Question-message files already promoted by F043, used to fill objectName."""
+        files: list[dict] = []
+        if not self.chat_id:
+            return files
+        try:
+            messages = ChatMessageDao.get_messages_by_chat_id(self.chat_id, category_list=["question"], limit=20)
+            for message in messages:
+                raw = message.files
+                parsed = json.loads(raw) if isinstance(raw, str) else (raw or [])
+                if isinstance(parsed, list):
+                    files.extend(file for file in parsed if isinstance(file, dict))
+        except Exception:
+            logger.exception("failed to load question attachments for temp citations")
+        return files
+
+    def _attach_temp_object_names(
+        self,
+        items: list[CitationRegistryItemSchema],
+    ) -> list[CitationRegistryItemSchema]:
+        """Write F043 object keys onto cited temp items before they are persisted."""
+        if not items:
+            return items
+        try:
+            return attach_temp_object_names(items, self._load_question_attachment_files(), self.user_id)
+        except Exception:
+            logger.exception("failed to attach temp object names; dropping temp citations")
+            return [item for item in items if item.type != CitationType.TEMP]
 
     @staticmethod
     def _extract_message_text(message: str | dict | list | None) -> str:
