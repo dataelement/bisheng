@@ -26,6 +26,7 @@ from bisheng_cli.errors import (
     EXIT_NOT_ENABLED,
     EXIT_PLATFORM_TOO_OLD,
     EXIT_UNREACHABLE,
+    EXIT_USAGE,
     CliError,
     error_from_platform,
 )
@@ -41,6 +42,8 @@ NGINX_PROXY_READ_TIMEOUT = 300.0
 
 VERSIONS_PATH = "/api/v1/dev-toolkit/versions"
 ENV_PATH = "/api/v1/env"
+# Where the platform serves its own CLI wheel when `versions` does not say.
+DEFAULT_CLI_DOWNLOAD_PATH = "/api/v1/dev-toolkit/cli/download"
 
 _PROXY_ENV_NAMES = ("ALL_PROXY", "HTTPS_PROXY", "HTTP_PROXY", "all_proxy", "https_proxy", "http_proxy")
 
@@ -188,28 +191,40 @@ class PlatformClient:
 def probe(client: PlatformClient) -> ProbeResult:
     """Pre-flight: is this platform one this CLI can talk to at all?
 
-    Three distinguishable outcomes, each with its own exit code, because the
+    Four distinguishable outcomes, each with its own exit code, because the
     remedies have nothing in common: turn on a switch and restart (8), upgrade
-    the platform or downgrade the CLI (9), fix the network (7).
+    the platform or downgrade the CLI (9), fix the network (7), download the
+    platform's own newer CLI (2, AC-02 / T048).
 
     Once the probe decides the open-capability layer is absent it **returns by
     raising** — no credential is sent afterwards. That is how AC-05's "login is
     unusable in this environment" is honoured while `whoami` itself stays
     permanently registered on the server side.
+
+    The version check has two tiers on purpose (AC-02): below the platform's
+    `min_compatible` the run is **refused** with the download link, because a
+    CLI the platform declared incompatible would fail somewhere later with an
+    error that says nothing about versions; merely behind `cli.version` while
+    still compatible is a warning, since the run will work and blocking it
+    would only train people to ignore the message.
     """
     resp = client.request("GET", VERSIONS_PATH)
     if resp.status_code != 404:
         versions = parse_envelope(resp)
-        min_compatible = ((versions or {}).get("cli") or {}).get("min_compatible")
+        cli_info = (versions or {}).get("cli") or {}
+        min_compatible = cli_info.get("min_compatible")
+        download_url = f"{client.base_url}{cli_info.get('download_path') or DEFAULT_CLI_DOWNLOAD_PATH}"
         warning = None
-        if isinstance(min_compatible, str) and _version_tuple(min_compatible) > _version_tuple(__version__):
-            download = ((versions or {}).get("cli") or {}).get("download_path") or "/api/v1/dev-toolkit/cli/download"
-            warning = (
-                f"平台要求的最低 CLI 版本是 {min_compatible}，本地是 {__version__}；"
-                f"建议从 {client.base_url}{download} 下载新版。"
+        local = _version_tuple(__version__)
+        if isinstance(min_compatible, str) and _version_tuple(min_compatible) > local:
+            raise CliError(
+                f"本地 CLI 版本 {__version__} 低于平台要求的最低兼容版本 {min_compatible}，无法与该平台交互",
+                exit_code=EXIT_USAGE,
+                next_step=f"从当前平台重新下载并安装：curl -OJ {download_url} && pip install ./bisheng_cli-*.whl",
             )
-            # Only a warning this round (design D11): blocking needs real
-            # cross-version samples before it can be anything but noise.
+        latest = cli_info.get("version")
+        if isinstance(latest, str) and _version_tuple(latest) > local:
+            warning = f"平台提供的 CLI 版本是 {latest}，本地是 {__version__}（仍兼容）；可从 {download_url} 更新。"
             if client.emitter is not None:
                 client.emitter.warn(warning)
         return ProbeResult(versions=versions or {}, cli_min_compatible=min_compatible, warning=warning)

@@ -22,10 +22,19 @@ from bisheng_cli.commands import skills as skills_mod
 from bisheng_cli.errors import EXIT_LOCAL_INVALID, EXIT_NOT_ENABLED, EXIT_NOT_LOGGED_IN, EXIT_OK, EXIT_USAGE
 from bisheng_cli.main import run as main_run
 from bisheng_cli.output import Emitter
-from tests.helpers.platform_mock import FAKE_KEY, FAKE_KEY_MASK, PlatformMock, use_mock_transport
+from tests.helpers.platform_mock import (
+    DEFAULT_PACKS,
+    FAKE_KEY,
+    FAKE_KEY_MASK,
+    PlatformMock,
+    serve_default_packs,
+    skills_path,
+    use_mock_transport,
+)
 
 BASE = "http://platform.test"
 PACK = "deploy-hosting"
+SECOND_PACK = "platform-wiring"
 SKILLS_PATH = f"/api/v1/dev-toolkit/skills/{PACK}"
 
 
@@ -66,6 +75,10 @@ SAMPLE = {"SKILL.md": "# deploy-hosting\n铁律……\n", "example/main.py": "pr
 
 
 def _run(argv: list[str], *, monkeypatch: pytest.MonkeyPatch, mock: PlatformMock) -> tuple[int, str, str]:
+    # A test that routes the first pack gets the other shipped packs served too;
+    # a test with an empty mock keeps asserting "no request at all".
+    if mock.has("GET", SKILLS_PATH):
+        serve_default_packs(mock)
     use_mock_transport(monkeypatch, skills_mod, mock)
     out, err = io.StringIO(), io.StringIO()
     code = main_run(argv, stdout=out, stderr=err)
@@ -260,6 +273,61 @@ def test_sync_clears_the_pre_profile_layout(monkeypatch: pytest.MonkeyPatch, log
     assert code == EXIT_OK
     assert not stale.exists()
     assert (_skills_dir(home_dir) / PACK / "SKILL.md").is_file()
+
+
+def test_two_packs_ship_and_both_are_synced(monkeypatch: pytest.MonkeyPatch, logged_in, home_dir) -> None:
+    # T038: 「平台能力接线」 rides beside 「部署纳管」. Both land, both are reported.
+    assert DEFAULT_PACKS == ("deploy-hosting", "platform-wiring")
+    mock = PlatformMock().get(SKILLS_PATH, _pack_response(SAMPLE))
+    code, out, err = _run(["skills", "sync", "--json"], monkeypatch=monkeypatch, mock=mock)
+    assert code == EXIT_OK
+    assert mock.paths_called() == [skills_path(PACK), skills_path(SECOND_PACK)]
+    for pack in DEFAULT_PACKS:
+        assert (_skills_dir(home_dir) / pack / "SKILL.md").is_file()
+    assert "platform-wiring" in err
+    assert '"pack": "platform-wiring"' in out
+
+
+def test_second_pack_missing_on_an_older_platform_is_skipped_not_fatal(
+    monkeypatch: pytest.MonkeyPatch, logged_in, home_dir
+) -> None:
+    """A platform that predates a pack still syncs the packs it has.
+
+    The first pack's 404 means the layer is off (exit 8); a later pack's 404 on a
+    platform that just served the first one is a version gap, reported as a
+    warning so the developer knows what to expect after the platform upgrades.
+    """
+    mock = PlatformMock().get(SKILLS_PATH, _pack_response(SAMPLE))
+    mock.get(skills_path(SECOND_PACK), httpx.Response(404, json={"detail": "Not Found"}))
+    code, out, err = _run(["skills", "sync", "--json"], monkeypatch=monkeypatch, mock=mock)
+    assert code == EXIT_OK
+    assert (_skills_dir(home_dir) / PACK / "SKILL.md").is_file()
+    assert not (_skills_dir(home_dir) / SECOND_PACK).exists()
+    assert "警告" in err and SECOND_PACK in err and "跳过" in err
+    assert '"skipped": true' in out
+
+
+def test_platform_flag_syncs_into_that_platforms_slug(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:
+    # T047: `--platform` picks a stored profile; the pack lands under *its* slug,
+    # and `current` is left as it was.
+    credentials.save_profile(BASE, {"api_key": FAKE_KEY})
+    credentials.save_profile(OTHER, {"api_key": FAKE_KEY})  # OTHER is now current
+    mock = PlatformMock().get(SKILLS_PATH, _pack_response(SAMPLE))
+    code, _, _ = _run(["--platform", BASE, "skills", "sync"], monkeypatch=monkeypatch, mock=mock)
+    assert code == EXIT_OK
+    assert (_skills_dir(home_dir, BASE) / PACK / "SKILL.md").is_file()
+    assert not (_skills_dir(home_dir, OTHER) / PACK).exists()
+    assert credentials.load_current().base_url == OTHER
+
+
+def test_platform_flag_for_an_unknown_platform_is_exit_3_without_request(
+    monkeypatch: pytest.MonkeyPatch, logged_in
+) -> None:
+    mock = PlatformMock()
+    code, _, err = _run(["skills", "sync", "--platform", "http://never.test"], monkeypatch=monkeypatch, mock=mock)
+    assert code == EXIT_NOT_LOGGED_IN
+    assert "http://never.test" in err and "bisheng login" in err
+    assert mock.paths_called() == []
 
 
 def test_profile_slug_separates_schemes_and_is_stable() -> None:

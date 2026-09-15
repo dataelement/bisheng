@@ -27,16 +27,24 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from bisheng_cli import devdb, devproxy
 from bisheng_cli.commands.login import resource_owner_user_id
 from tests.helpers.platform_mock import OPEN_API_HTTP_STATUS, WHOAMI_FIELDS, whoami_ok
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WHOAMI_SCHEMA = REPO_ROOT / "src/backend/bisheng/open_api/domain/schemas/credential.py"
 OPEN_API_ERRCODES = REPO_ROOT / "src/backend/bisheng/common/errcode/open_api.py"
+# `bisheng dev` mirrors these two; INV-32 says the names must be identical.
+APP_PROXY_HEADERS = REPO_ROOT / "src/app-proxy/app_proxy/headers.py"
+APP_PROXY_CONFIG = REPO_ROOT / "src/app-proxy/app_proxy/config.py"
+RUNTIME_LIFECYCLE = REPO_ROOT / "src/runtime-manager/runtime_manager/lifecycle.py"
+RUNTIME_ENTRYPOINT = REPO_ROOT / "src/runtime-manager/runtime_manager/templates/python3.11/entrypoint.sh.j2"
 
 
 def _module(path: Path) -> ast.Module:
@@ -84,6 +92,44 @@ def _error_codes(path: Path) -> dict[int, int]:
     return codes
 
 
+def _module_constant(path: Path, name: str) -> Any:
+    """The literal value assigned to a module-level `NAME = <literal>` (or annotated)."""
+    for node in _module(path).body:
+        target = None
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            target, value = node.target.id, node.value
+        elif isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            target, value = node.targets[0].id, node.value
+        if target == name and value is not None:
+            return ast.literal_eval(_unwrap_call(value))
+    pytest.fail(f"{path.name} 里没有模块级常量 {name}——服务端契约被改名或移走，CLI 侧必须跟着改")
+    raise AssertionError("unreachable")
+
+
+def _unwrap_call(value: ast.expr) -> ast.expr:
+    """`frozenset({...})` → the set literal inside, so `literal_eval` can read it."""
+    if isinstance(value, ast.Call) and value.args and isinstance(value.func, ast.Name):
+        return value.args[0]
+    return value
+
+
+def _build_env_keys(path: Path) -> list[str]:
+    """The string keys `build_env` sets in its `env.update({...})` call, in order."""
+    for node in _module(path).body:
+        if isinstance(node, ast.FunctionDef) and node.name == "build_env":
+            for sub in ast.walk(node):
+                if (
+                    isinstance(sub, ast.Call)
+                    and isinstance(sub.func, ast.Attribute)
+                    and sub.func.attr == "update"
+                    and sub.args
+                    and isinstance(sub.args[0], ast.Dict)
+                ):
+                    return [key.value for key in sub.args[0].keys if isinstance(key, ast.Constant)]
+    pytest.fail(f"{path.name} 里没有 build_env 的 env.update({{...}})——运行期环境契约被改写，CLI 侧必须跟着改")
+    raise AssertionError("unreachable")
+
+
 def test_whoami_stub_has_exactly_the_fields_the_server_sends() -> None:
     """The mock's payload == `WhoamiResponse`'s fields. No extras, none missing.
 
@@ -124,3 +170,47 @@ def test_open_api_error_codes_the_stub_declares_still_exist_with_that_http_statu
         code: (declared, server[code]) for code, declared in OPEN_API_HTTP_STATUS.items() if server[code] != declared
     }
     assert not drifted, f"HTTP 状态与服务端不一致（桩值, 服务端值）：{drifted}"
+
+
+# ---- `bisheng dev` mirrors of app-proxy and runtime-manager (INV-32) ----------
+
+
+def test_dev_proxy_injects_exactly_app_proxys_ten_headers_in_order() -> None:
+    """`devproxy.INJECTED_HEADER_NAMES` == `app_proxy.headers.INJECTED_HEADER_NAMES`.
+
+    The application reads these names; if the hosted proxy adds an eleventh or
+    renames one, the local run must follow in the same change, or "works with
+    `bisheng dev`, broken hosted" becomes possible again (AC-23).
+    """
+    assert tuple(devproxy.INJECTED_HEADER_NAMES) == tuple(_module_constant(APP_PROXY_HEADERS, "INJECTED_HEADER_NAMES"))
+    assert devproxy.PLATFORM_HEADER_PREFIX == _module_constant(APP_PROXY_HEADERS, "PLATFORM_HEADER_PREFIX")
+
+
+def test_dev_proxy_strips_the_same_equivalence_class_and_hop_by_hop_set() -> None:
+    assert devproxy.DROPPED_HEADERS == frozenset(_module_constant(APP_PROXY_HEADERS, "DROPPED_HEADERS"))
+    assert devproxy.PLATFORM_SESSION_COOKIE == _module_constant(APP_PROXY_CONFIG, "ACCESS_TOKEN_COOKIE")
+
+
+def test_dev_env_names_equal_the_runtime_managers_build_env() -> None:
+    """`devdb.PLATFORM_ENV_NAMES` == the keys `lifecycle.build_env` injects.
+
+    The contract list lives in F054 `contracts-runtime-manager.md` §5 and is
+    implemented once, in `build_env`; this is the check that the CLI never grows
+    a second definition of it (design §6.2: "不得在 CLI 侧另抄一份定义").
+    """
+    assert list(devdb.PLATFORM_ENV_NAMES) == _build_env_keys(RUNTIME_LIFECYCLE)
+    assert tuple(devdb.RESERVED_ENV_PREFIXES) == tuple(_module_constant(RUNTIME_LIFECYCLE, "RESERVED_ENV_PREFIXES"))
+
+
+def test_dev_framework_exports_match_the_hosted_entrypoint() -> None:
+    # The entrypoint script exports the framework spellings of the base path;
+    # `dev` sets the same names so an app needs no per-environment branch.
+    if not RUNTIME_ENTRYPOINT.is_file():
+        pytest.fail(f"找不到托管入口脚本 {RUNTIME_ENTRYPOINT}；若模板被移动，请改这里的路径。")
+    script = RUNTIME_ENTRYPOINT.read_text(encoding="utf-8")
+    exported = set(re.findall(r"^export ([A-Z_]+)=", script, re.MULTILINE))
+    assert set(devdb.FRAMEWORK_ENV_NAMES) <= exported
+    # And the same resolution order for the start command.
+    assert (
+        script.index("BISHENG_APP_START") < script.index("Procfile") < script.index("main.py") < script.index("app.py")
+    )

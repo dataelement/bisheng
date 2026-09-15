@@ -35,23 +35,56 @@ def _all_option_strings(parser) -> set[str]:
 def test_help_lists_registered_commands() -> None:
     parser = build_parser()
     names = {name for name, _ in _subparser_actions(parser)}
-    assert names == {"login", "deploy", "logs", "skills"} == set(SUBCOMMANDS)
+    assert names == {"login", "deploy", "logs", "skills", "dev", "platforms"} == set(SUBCOMMANDS)
 
 
 def test_help_footer_declares_deferred_commands() -> None:
     # Deferred commands are announced, not hidden: an agent that reads --help
-    # should learn that `dev` exists later rather than infer it never will.
+    # should learn that a command exists later rather than infer it never will.
+    # Nothing is deferred any more (`dev` shipped with T042–T044); the footer
+    # lists every registered command instead.
     text = build_parser().format_help()
     for name in DEFERRED_COMMANDS:
         assert name in text
+    assert "dev" in text and "platforms" in text
+    assert "随后续版本提供" not in text
 
 
 def test_deferred_commands_are_not_registered() -> None:
     names = {name for name, _ in _subparser_actions(build_parser())}
-    # `skills` is now a real command (its `sync` verb shipped this round); only
-    # `dev` remains deferred, so nothing in DEFERRED_COMMANDS may be registered.
+    # A name is either registered or announced-as-deferred, never both — a
+    # stub that answers "not in this version" is a non-standard failure.
     assert set(DEFERRED_COMMANDS).isdisjoint(names)
-    assert "dev" not in names
+    assert "dev" in names  # T044: the fifth command is real now
+
+
+def test_dev_parses_path_and_ports_and_nothing_identity_shaped() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["dev", "./app", "--port", "9000", "--app-port", "9001", "--json"])
+    assert (args.command, args.path, args.port, args.app_port, args.json_mode) == ("dev", "./app", 9000, 9001, True)
+    bare = parser.parse_args(["dev"])
+    assert bare.path == "." and bare.port is None and bare.app_port is None
+    dev_options = {s for a in dict(_subparser_actions(parser))["dev"]._actions for s in a.option_strings}
+    assert dev_options <= {
+        "-h",
+        "--help",
+        "--port",
+        "--app-port",
+        "--verbose",
+        "--quiet",
+        "--json",
+        "--timeout",
+        "--no-proxy",
+        "--platform",
+    }
+
+
+def test_platforms_list_and_use_parse() -> None:
+    parser = build_parser()
+    assert parser.parse_args(["platforms", "list"]).platforms_command == "list"
+    use = parser.parse_args(["platforms", "use", "http://p.test", "--json"])
+    assert use.platforms_command == "use" and use.base_url == "http://p.test" and use.json_mode is True
+    assert parser.parse_args(["platforms"]).platforms_command is None
 
 
 def test_skills_sync_registered_and_parses() -> None:
@@ -73,8 +106,14 @@ def test_no_as_flag_anywhere() -> None:
     assert not [o for o in options if "on-behalf" in o or "end-user" in o or "impersonat" in o]
 
 
-def test_no_platform_flag_this_round() -> None:
-    assert "--platform" not in _all_option_strings(build_parser())
+def test_platform_flag_is_global_and_mirrored() -> None:
+    # T047 (AC-12): `--platform` selects among logged-in platforms and, like the
+    # other global flags, works before and after the subcommand.
+    parser = build_parser()
+    for argv in (["--platform", "http://p.test", "logs"], ["logs", "--platform", "http://p.test"]):
+        assert parser.parse_args(argv).platform == "http://p.test"
+    assert parser.parse_args(["logs"]).platform is None
+    assert parser.parse_args(["skills", "sync", "--platform", "http://p.test"]).platform == "http://p.test"
 
 
 def test_no_init_subcommand() -> None:

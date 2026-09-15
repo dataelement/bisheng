@@ -14,6 +14,7 @@ from bisheng_cli.errors import (
     EXIT_NOT_ENABLED,
     EXIT_PLATFORM_TOO_OLD,
     EXIT_UNREACHABLE,
+    EXIT_USAGE,
     CliError,
 )
 from bisheng_cli.http import (
@@ -122,13 +123,35 @@ def test_probe_stops_before_whoami_when_layer_absent() -> None:
     assert "/api/v2/auth/whoami" not in mock.paths_called()
 
 
-def test_min_compatible_greater_than_local_warns_but_does_not_block() -> None:
+def test_min_compatible_greater_than_local_blocks_with_download_link() -> None:
+    """T048 (AC-02): incompatible → refused, with the platform's own download URL.
+
+    Exit 2 per design D11 / T048. The link is the full URL on *this* platform,
+    because "download a newer CLI" without saying from where sends the developer
+    to a registry that does not exist on the intranet.
+    """
     mock = PlatformMock().get("/api/v1/dev-toolkit/versions", versions_ok(cli_version="9.9.9", min_compatible="9.9.9"))
     err = io.StringIO()
     emitter = Emitter(stdout=io.StringIO(), stderr=err, is_tty=False)
+    with pytest.raises(CliError) as excinfo:
+        probe(_client(mock, emitter=emitter))
+    assert excinfo.value.exit_code == EXIT_USAGE
+    assert "9.9.9" in excinfo.value.message and __version__ in excinfo.value.message
+    assert f"{BASE}/api/v1/dev-toolkit/cli/download" in excinfo.value.next_step
+    # No credential-bearing call happens after the refusal.
+    assert mock.paths_called() == ["/api/v1/dev-toolkit/versions"]
+
+
+def test_behind_but_compatible_only_warns() -> None:
+    # The platform ships a newer CLI but still accepts this one: the run goes
+    # ahead, and the warning names where the update lives.
+    mock = PlatformMock().get(
+        "/api/v1/dev-toolkit/versions", versions_ok(cli_version="9.9.9", min_compatible=__version__)
+    )
+    err = io.StringIO()
+    emitter = Emitter(stdout=io.StringIO(), stderr=err, is_tty=False)
     result = probe(_client(mock, emitter=emitter))
-    assert result.versions is not None
-    assert result.warning and "9.9.9" in result.warning
+    assert result.warning and "9.9.9" in result.warning and "/api/v1/dev-toolkit/cli/download" in result.warning
     assert "警告" in err.getvalue()
 
 

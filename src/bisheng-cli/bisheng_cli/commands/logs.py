@@ -54,7 +54,7 @@ def _digest(line: str) -> str:
 
 
 def run(args: Any, emitter: Emitter) -> int:
-    profile = credentials.load_current()
+    profile = credentials.load_selected(args)
     base_url = profile.base_url
     root = project.find_project_root(".")
     app_id = project.require_app_id(root, base_url, args.app_id)

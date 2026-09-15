@@ -51,10 +51,13 @@ from bisheng_cli.output import Emitter
 
 COMMAND = "skills"
 
-#: Packs the platform ships. Only「部署纳管」this round;「平台能力接线」lands with
-#: F057. A pack the platform does not carry answers 404 and is reported as such,
-#: so listing it here early is harmless — but it is not, until it exists.
-DEFAULT_PACKS: tuple[str, ...] = ("deploy-hosting",)
+#: Packs the platform ships, in sync order.「部署纳管」first: it is the pack whose
+#: absence means the whole distribution layer is off, so its 404 is the
+#: "environment not enabled" verdict (exit 8). A later pack that 404s on a
+#: platform which does serve the first one is a *version* gap (the platform
+#: predates that pack) and is reported as skipped, not as a failed sync — see
+#: `sync_packs`.
+DEFAULT_PACKS: tuple[str, ...] = ("deploy-hosting", "platform-wiring")
 
 SKILLS_ENDPOINT = "/api/v1/dev-toolkit/skills/{pack}"
 # Header the endpoint stamps with the platform version the pack shipped with.
@@ -120,7 +123,7 @@ def run(args: Any, emitter: Emitter) -> int:
         emitter.error("将平台当前版本的开发者技能包同步到本地用户目录（~/.bisheng/skills/）。")
         return EXIT_USAGE
 
-    profile = credentials.load_current()
+    profile = credentials.load_selected(args)
     client = PlatformClient(
         profile.base_url,
         api_key=profile.api_key,
@@ -178,8 +181,19 @@ def sync_packs(client: PlatformClient, base_url: str, emitter: Emitter) -> list[
     root = _skills_root(base_url)
     targets = agent_skills.detect()
     results: list[dict[str, Any]] = []
-    for pack in DEFAULT_PACKS:
-        result = _sync_one(client, pack, root, emitter)
+    for index, pack in enumerate(DEFAULT_PACKS):
+        try:
+            result = _sync_one(client, pack, root, emitter)
+        except CliError as exc:
+            # The first pack decides whether the layer exists at all. Once one
+            # pack has been served, a 404 on another can only mean this platform
+            # version does not ship it yet — a fact to report, not a reason to
+            # discard the pack that did arrive.
+            if index == 0 or exc.exit_code != EXIT_NOT_ENABLED:
+                raise
+            emitter.warn(f"平台当前版本未提供技能包 {pack}，已跳过（平台升级后重跑 skills sync 即可获得）")
+            results.append({"pack": pack, "version": None, "files": [], "overwritten": [], "skipped": True})
+            continue
         # Wiring runs per pack and after its files are on disk, so a pack that
         # failed to download never gets linked to a half-written directory.
         result["agents"] = agent_skills.install(root / pack, pack, targets)
@@ -331,6 +345,9 @@ def _print_reference_guide(base_url: str, packs: list[dict[str, Any]], emitter: 
     linked = sorted({r["label"] for pack in packs for r in (pack.get("agents") or []) if r.get("status") == "linked"})
     emitter.info("")
     emitter.info(f"技能包落点：{root}（按平台分目录，切换平台不会互相覆盖）")
+    synced = [pack["pack"] for pack in packs if not pack.get("skipped")]
+    if synced:
+        emitter.info(f"  · 已同步：{'、'.join(synced)}")
     if linked:
         emitter.info(f"  · 已自动接入：{'、'.join(linked)}——新开一个会话即可生效。")
     else:

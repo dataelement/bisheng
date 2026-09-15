@@ -100,6 +100,16 @@ def resolve_api_key(
 
 def run(args: Any, emitter: Emitter) -> int:
     base_url = credentials.normalise_base_url(args.base_url)
+    # `login` names its platform positionally; `--platform` selects among
+    # platforms that are *already* logged in. Accepting both and silently
+    # preferring one would leave the developer unsure which address the key was
+    # just verified against.
+    if getattr(args, "platform", None):
+        raise CliError(
+            "login 用位置参数指定平台地址，不接受 --platform",
+            exit_code=EXIT_USAGE,
+            next_step=f"改为 bisheng login {credentials.normalise_base_url(args.platform)}。",
+        )
     api_key = resolve_api_key(args)
 
     client = PlatformClient(
