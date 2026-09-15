@@ -26,9 +26,7 @@ def assert_no_removed_identity_headers(headers: Iterable[tuple[str, str]]) -> No
     allowed = {ON_BEHALF_OF_HEADER.lower(), END_USER_HEADER.lower()}
     for name, _value in headers:
         normalized = name.lower()
-        if normalized not in allowed and (
-            normalized.endswith("-on-behalf-of") or normalized.endswith("-end-user")
-        ):
+        if normalized not in allowed and (normalized.endswith("-on-behalf-of") or normalized.endswith("-end-user")):
             raise OpenApiRemovedIdentityInputError()
 
 
@@ -41,9 +39,18 @@ def parse_identity_headers(
         raise OpenApiIdentityHeaderConflictError()
     target_id = None
     if on_behalf_of is not None:
-        if not on_behalf_of.isascii() or not on_behalf_of.isdecimal() or int(on_behalf_of) <= 0:
+        normalized_id = on_behalf_of.lstrip("0")
+        # IDs outside a signed BIGINT cannot exist. Reject them before int()
+        # or the database driver can turn invalid identity input into a 5xx.
+        if (
+            not on_behalf_of.isascii()
+            or not on_behalf_of.isdecimal()
+            or not normalized_id
+            or len(normalized_id) > 19
+            or int(normalized_id) > 2**63 - 1
+        ):
             raise OpenApiDelegationTargetInvalidError()
-        target_id = int(on_behalf_of)
+        target_id = int(normalized_id)
     if end_user is not None:
         encoded = end_user.encode("utf-8")
         if not end_user or len(encoded) > 128 or any(byte < 0x20 or byte > 0x7E for byte in encoded):
