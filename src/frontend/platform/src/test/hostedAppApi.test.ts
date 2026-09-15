@@ -8,11 +8,13 @@ import {
   getHostedAppRuntimeStatusApi,
   getHostedAppVersionsApi,
   HOSTED_APP_ERROR,
+  listResourceTiersApi,
   manualPublishHostedAppApi,
   publishHostedAppApi,
   resumeHostedAppApi,
   stopHostedAppApi,
   updateHostedAppMetaApi,
+  updateResourceTierApi,
 } from "@/controllers/API/hostedApp"
 import { getAppsApi } from "@/controllers/API/flow"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -67,6 +69,22 @@ describe("F054 hosted application API", () => {
       "/api/v1/apps/app-1/actions/stop",
       "/api/v1/apps/app-1/actions/resume",
     ])
+  })
+
+  it("keeps the resource-tier admin contract off the /apps prefix (F055 T065)", async () => {
+    // F054's `GET /apps/{app_id}` is mounted first on the backend and would
+    // swallow `/apps/resource-tiers` as an application id.
+    await listResourceTiersApi()
+    await updateResourceTierApi("standard", { cpu_millicores: 1500, enabled: false })
+    expect(requestMocks.get).toHaveBeenCalledWith("/api/v1/resource-tiers")
+    expect(requestMocks.patch).toHaveBeenCalledWith("/api/v1/resource-tiers/standard", {
+      cpu_millicores: 1500,
+      enabled: false,
+    })
+    // Retirement is a PATCH; there is no delete call to make.
+    expect(requestMocks.delete).not.toHaveBeenCalled()
+    expect(HOSTED_APP_ERROR.TIER_ADMIN_FORBIDDEN).toBe(16260)
+    expect(HOSTED_APP_ERROR.TIER_DEFAULT_CANNOT_DISABLE).toBe(16263)
   })
 
   it("asks for the envelope on reads a non-owner can legitimately hit", async () => {

@@ -1364,6 +1364,7 @@
       "appMetaUpdate": "Hosted app metadata updated",
       "appDataRowEdit": "Hosted app data edited",
       "appVisibilityChange": "Visibility scope changed",
+      "appTierUpdate": "Resource tier adjusted",
       "appReleaseSubmit": "Publish submitted",
       "appReleasePrecheckFailed": "Hosting precheck failed",
       "appReleaseScanBlocked": "Blocked by secret scan",
@@ -1385,6 +1386,7 @@
     "objectTypeEnum": {
       "app": "Application",
       "app_version": "Application Version",
+      "resource_tier": "Resource Tier",
       "none": "None",
       "work_flow": "Workflow",
       "flow": "Skill",
@@ -2820,6 +2822,49 @@
       "delete": "Delete application",
       "deleteDesc": "Deleting removes the application's code, conversation history and production data, and cannot be undone. Only the owner can do this.",
       "blockedByOnline": "Take the application offline before deleting it."
+    },
+    "tierAdmin": {
+      "title": "Resource tiers",
+      "hint": "A retuned tier takes effect the next time an application is published or brought back online; running applications are not affected. Tiers can be disabled but never deleted: earlier versions still resolve their limits from them.",
+      "columns": {
+        "name": "Name",
+        "cpu": "CPU (millicores, 1000 = 1 core)",
+        "memory": "Memory (MB)",
+        "description": "Intended use",
+        "status": "Status",
+        "inUse": "Applications using it"
+      },
+      "status": {
+        "enabled": "Enabled",
+        "disabled": "Disabled"
+      },
+      "defaultTag": "Default tier",
+      "defaultHint": "Applications whose bisheng-app.yaml declares no tier land on the default tier, so it cannot be disabled.",
+      "actions": {
+        "edit": "Edit",
+        "save": "Save",
+        "cancel": "Cancel",
+        "disable": "Disable",
+        "enable": "Enable"
+      },
+      "saveConfirmTitle": "Save tier specification",
+      "saveConfirmDesc": "{{count}} application(s) currently use \"{{name}}\". The new limits apply the next time each of them is published or brought back online; running instances are not affected.",
+      "disableConfirmTitle": "Disable tier",
+      "disableConfirmDesc": "Once \"{{name}}\" is disabled it can no longer be chosen when publishing; the {{count}} application(s) already on it keep running and keep the tier on iteration publishes. You can re-enable it at any time.",
+      "enableConfirmTitle": "Enable tier",
+      "enableConfirmDesc": "Once \"{{name}}\" is enabled it can be chosen again when publishing.",
+      "validation": {
+        "name": "The name cannot be empty",
+        "cpu": "CPU must be a whole number greater than 0 (millicores)",
+        "memory": "Memory must be a whole number greater than 0 (MB)"
+      },
+      "feedback": {
+        "saved": "Tier specification saved",
+        "disabled": "Tier disabled; it can no longer be chosen when publishing",
+        "enabled": "Tier enabled"
+      },
+      "empty": "No resource tiers yet. The backend seeds three tiers on its first start; check its startup log.",
+      "loading": "Loading…"
     }
   }
 }

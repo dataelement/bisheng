@@ -1347,6 +1347,7 @@
       "appMetaUpdate": "托管应用元信息更新",
       "appDataRowEdit": "托管应用数据编辑",
       "appVisibilityChange": "可见范围变更",
+      "appTierUpdate": "资源档位调整",
       "appReleaseSubmit": "提交发布",
       "appReleasePrecheckFailed": "托管预检失败",
       "appReleaseScanBlocked": "密钥扫描阻断",
@@ -1368,6 +1369,7 @@
     "objectTypeEnum": {
       "app": "应用",
       "app_version": "应用版本",
+      "resource_tier": "资源档位",
       "none": "无",
       "work_flow": "工作流",
       "flow": "技能",
@@ -2765,6 +2767,49 @@
       "delete": "删除应用",
       "deleteDesc": "删除后将一并移除应用代码、对话历史与应用生产数据，且无法恢复。仅应用负责人可以执行。",
       "blockedByOnline": "请先下线应用后再删除。"
+    },
+    "tierAdmin": {
+      "title": "资源档位",
+      "hint": "档位规格的调整自应用下一次发布或重新上线起生效，正在运行的应用不受影响。档位只能停用、不能删除：历史版本仍需要按它解析规格。",
+      "columns": {
+        "name": "名称",
+        "cpu": "CPU（毫核，1000 = 1 核）",
+        "memory": "内存（MB）",
+        "description": "适用说明",
+        "status": "状态",
+        "inUse": "使用中应用数"
+      },
+      "status": {
+        "enabled": "启用中",
+        "disabled": "已停用"
+      },
+      "defaultTag": "默认档位",
+      "defaultHint": "未在 bisheng-app.yaml 里声明档位的应用会落到默认档位，因此它不能停用。",
+      "actions": {
+        "edit": "编辑",
+        "save": "保存",
+        "cancel": "取消",
+        "disable": "停用",
+        "enable": "启用"
+      },
+      "saveConfirmTitle": "确认保存档位规格",
+      "saveConfirmDesc": "「{{name}}」当前有 {{count}} 个应用在使用。新规格自这些应用下一次发布或重新上线起生效，正在运行的实例不受影响。",
+      "disableConfirmTitle": "确认停用档位",
+      "disableConfirmDesc": "停用「{{name}}」后，发布时不能再选择该档位；已在使用它的 {{count}} 个应用照常运行，迭代发布也沿用原档位。之后可以随时重新启用。",
+      "enableConfirmTitle": "确认启用档位",
+      "enableConfirmDesc": "启用「{{name}}」后，发布时可以重新选择该档位。",
+      "validation": {
+        "name": "名称不能为空",
+        "cpu": "CPU 必须是大于 0 的整数（毫核）",
+        "memory": "内存必须是大于 0 的整数（MB）"
+      },
+      "feedback": {
+        "saved": "档位规格已保存",
+        "disabled": "档位已停用，发布时不可再选",
+        "enabled": "档位已启用"
+      },
+      "empty": "还没有资源档位。后端首次启动时会自动预置三档，请检查启动日志。",
+      "loading": "加载中…"
     }
   }
 }
