@@ -470,7 +470,9 @@ async def test_publish_status_shows_the_pending_change_and_hides_it_once_settled
 ):
     from bisheng.app_publish.domain.models.app_deployment import (
         STAGE_APPROVAL_CREATED,
+        STAGE_ONLINE,
         STATUS_FAILED,
+        STATUS_SUCCEEDED,
         STATUS_WAITING_APPROVAL,
     )
     from bisheng.app_publish.domain.services.publish_status_service import PublishStatusService
@@ -510,4 +512,19 @@ async def test_publish_status_shows_the_pending_change_and_hides_it_once_settled
         manifest={**manifest, "name": other.name},
     )
     status = await PublishStatusService.get_publish_status(other.id, actor=actor)
+    assert status["schema_change"] is None
+
+    # Once the release is online the reference *is* that release: a
+    # ``succeeded`` attempt whose version is the current one announces nothing,
+    # even though its manifest still differs from what was online before it.
+    settled = await _online_app(publish_db, app_factory)
+    await deployment_factory(
+        app_id=settled.id,
+        stage=STAGE_ONLINE,
+        status=STATUS_SUCCEEDED,
+        version_id=str(settled.current_version_id),
+        tier_code="light",
+        manifest={**manifest, "name": settled.name},
+    )
+    status = await PublishStatusService.get_publish_status(settled.id, actor=actor)
     assert status["schema_change"] is None

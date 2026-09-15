@@ -496,9 +496,13 @@ class PublishPipelineService:
         derive the same summary from the same two manifests, so the approval
         request built a few stages later carries it (``payload_snapshot`` →
         ``detail_snapshot``, design §4.2 ④) without a second implementation of
-        the diff. The reference cannot have moved underneath: the in-flight
-        gate (16251) keeps a second release off this application until this
-        one settles.
+        the diff. The in-flight gate (16251) keeps a second *running* release
+        off this application, so in the common case the reference is the one
+        the gate saw. It is re-derived rather than copied from the audit row
+        on purpose: a parked attempt is ``succeeded`` and does not block a
+        new upload, and if it is brought online while this one is still in
+        the worker, the card must describe the change against what is online
+        *now* — that is what the approver decides on.
         """
         change = await schema_evolution_service.evaluate(deployment.app_id, context["manifest"])
         context["schema_change"] = change.to_payload() if change is not None else None
