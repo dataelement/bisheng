@@ -40,6 +40,19 @@ def _body(response):
     return response.json()
 
 
+def _refusal(response):
+    """A business refusal on ``/api/v2`` carries a real non-2xx status.
+
+    Since beta2 13646200d every ``/api/v2`` ``BaseErrorCode`` goes through
+    ``open_api_http_status``; app-factory codes (16xxx) have no transport status
+    of their own and answer 400, with the platform envelope unchanged in the
+    body. The CLI reads the envelope's ``status_code`` first, so its behaviour
+    does not depend on which 4xx this is.
+    """
+    assert response.status_code == 400, response.text
+    return response.json()
+
+
 async def _upload(client, tarball, *, app_id: str | None = None, confirm: bool = False):
     files = {"package": ("app.tar.gz", tarball.read_bytes(), "application/gzip")}
     data = {"confirm_schema_change": str(confirm).lower()}
@@ -154,7 +167,7 @@ async def test_iteration_deploy_of_another_owners_app_is_rejected_16205(
     app, _ = await app_factory(owner_user_id=OWNER_USER_ID + 500, with_version=False)
 
     async with api_app(principal=service_account_principal()) as client:
-        payload = _body(await _upload(client, tarball_factory(), app_id=app.id))
+        payload = _refusal(await _upload(client, tarball_factory(), app_id=app.id))
 
     assert payload["status_code"] == 16205
 
@@ -162,7 +175,7 @@ async def test_iteration_deploy_of_another_owners_app_is_rejected_16205(
 async def test_app_runtime_disabled_returns_16207(publish_db, api_app, service_account_principal, tarball_factory):
     """A plain BiSheng answers "this feature is not installed", not a socket timeout."""
     async with api_app(principal=service_account_principal(), app_runtime_enabled=False) as client:
-        payload = _body(await _upload(client, tarball_factory()))
+        payload = _refusal(await _upload(client, tarball_factory()))
 
     assert payload["status_code"] == 16207
 
@@ -170,7 +183,7 @@ async def test_app_runtime_disabled_returns_16207(publish_db, api_app, service_a
 async def test_deploy_limits_also_gated_by_16207(publish_db, api_app, service_account_principal):
     """The gate is on every endpoint, not only the expensive one."""
     async with api_app(principal=service_account_principal(), app_runtime_enabled=False) as client:
-        payload = _body(await client.get("/api/v2/apps/deploy-limits"))
+        payload = _refusal(await client.get("/api/v2/apps/deploy-limits"))
 
     assert payload["status_code"] == 16207
 
@@ -195,7 +208,7 @@ async def test_active_release_blocks_second_deploy_16251(
     await deployment_factory(app_id=app.id, stage="precheck_build", status="running")
 
     async with api_app(principal=service_account_principal()) as client:
-        payload = _body(await _upload(client, tarball_factory(), app_id=app.id))
+        payload = _refusal(await _upload(client, tarball_factory(), app_id=app.id))
 
     assert payload["status_code"] == 16251
 
@@ -211,7 +224,7 @@ async def test_pending_online_blocks_deploy_16252(
     app, _ = await app_factory(state="pending_capacity", with_version=False)
 
     async with api_app(principal=service_account_principal()) as client:
-        payload = _body(await _upload(client, tarball_factory(), app_id=app.id))
+        payload = _refusal(await _upload(client, tarball_factory(), app_id=app.id))
 
     assert payload["status_code"] == 16252
 
@@ -256,14 +269,14 @@ async def test_polling_another_owners_deployment_is_rejected(
     deployment = await deployment_factory(app_id=app.id, owner_user_id=OWNER_USER_ID + 777)
 
     async with api_app(principal=service_account_principal()) as client:
-        payload = _body(await client.get(f"/api/v2/apps/deployments/{deployment.id}"))
+        payload = _refusal(await client.get(f"/api/v2/apps/deployments/{deployment.id}"))
 
     assert payload["status_code"] == 16205
 
 
 async def test_unknown_deployment_id_answers_the_same_as_not_owned(publish_db, api_app, service_account_principal):
     async with api_app(principal=service_account_principal()) as client:
-        payload = _body(await client.get("/api/v2/apps/deployments/no-such-id"))
+        payload = _refusal(await client.get("/api/v2/apps/deployments/no-such-id"))
 
     assert payload["status_code"] == 16205
 
@@ -287,7 +300,7 @@ async def test_polling_a_root_tenant_deployment_from_a_leaf_tenant_key_is_reject
     assert deployment.tenant_id == ROOT_TENANT_ID and deployment.owner_user_id == OWNER_USER_ID
 
     async with api_app(principal=service_account_principal(tenant_id=SUB_TENANT_ID)) as client:
-        payload = _body(await client.get(f"/api/v2/apps/deployments/{deployment.id}"))
+        payload = _refusal(await client.get(f"/api/v2/apps/deployments/{deployment.id}"))
 
     # Indistinguishable from "no such deployment" and from "not yours".
     assert payload["status_code"] == 16205
@@ -467,7 +480,7 @@ async def test_key_without_resource_owner_cannot_deploy(
     answer "nobody's".
     """
     async with api_app(principal=service_account_principal(resource_owner_user_id=None)) as client:
-        payload = _body(await _upload(client, tarball_factory()))
+        payload = _refusal(await _upload(client, tarball_factory()))
 
     assert payload["status_code"] == 16205
     assert payload["data"]["details"]["reason"] == "resource_owner_missing"
@@ -482,7 +495,7 @@ async def test_key_without_resource_owner_cannot_poll_an_ownerless_deployment(
     deployment = await deployment_factory(app_id=app.id, owner_user_id=0)
 
     async with api_app(principal=service_account_principal(resource_owner_user_id=None)) as client:
-        payload = _body(await client.get(f"/api/v2/apps/deployments/{deployment.id}"))
+        payload = _refusal(await client.get(f"/api/v2/apps/deployments/{deployment.id}"))
 
     assert payload["status_code"] == 16205
     assert payload["data"]["details"]["reason"] == "resource_owner_missing"

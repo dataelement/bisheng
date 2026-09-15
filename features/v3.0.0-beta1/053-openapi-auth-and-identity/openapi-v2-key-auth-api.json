@@ -4286,6 +4286,17 @@
               }
             ],
             "title": "Repeat Update Time"
+          },
+          "cover_filepath": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Filepath"
           }
         },
         "type": "object",

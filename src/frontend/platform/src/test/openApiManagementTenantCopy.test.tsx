@@ -78,6 +78,7 @@ const setting: PersonalTokenSetting = {
   pat_enabled: false,
   effective_enabled: false,
   pat_ttl_days: 30,
+  data_scope: "all_visible",
 }
 
 describe("CreateServiceAccountDialog tenant copy", () => {
