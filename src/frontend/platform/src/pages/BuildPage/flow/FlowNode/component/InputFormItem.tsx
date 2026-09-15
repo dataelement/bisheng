@@ -748,7 +748,11 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
     </div>;
 
     return (
-        <form onSubmit={handleFormSubmit} className="space-y-4">
+        // Only the field area scrolls; the action row stays put. The file form
+        // alone has eight fields, which does not fit a 570px-tall screen, and
+        // without this the submit button was pushed off the bottom.
+        <form onSubmit={handleFormSubmit} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-0.5">
             <div>
                 <Label className="bisheng-label">{t("formType")}</Label>
                 <div className="flex gap-4 justify-between mx-6 mt-2">
@@ -785,8 +789,9 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             {formData.formType === FormType.Text && (InputForm)}
             {formData.formType === FormType.Select && (SelectForm)}
             {formData.formType === FormType.File && (FileForm)}
+            </div>
 
-            <div className="flex space-x-4 justify-end">
+            <div className="flex shrink-0 space-x-4 justify-end pt-4">
                 <Button className="px-8" type="button" variant="outline" onClick={onCancel}>
                     {t("cancel")}
                 </Button>
@@ -1023,7 +1028,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
             {error && <p className="text-red-500 text-sm">{t("atLeastOneFormItem")}</p>}
 
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                <DialogContent className="max-h-[var(--bs-vh,100vh)]">
+                <DialogContent className="flex max-h-[calc(var(--bs-vh,100vh)-64px)] flex-col">
                     <DialogHeader>
                         <DialogTitle>
                             {editKey ? t("editFormItem") : t("addFormItem")}

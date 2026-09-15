@@ -11,14 +11,12 @@ from pydantic import BaseModel, Field, SkipValidation, field_validator
 
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
-    CITATION_PROMPT_RULES,
     annotate_rag_documents_with_citations,
     annotate_web_results_with_citations,
     cache_citation_registry_items,
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
-    prompt_has_citation_rules,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
@@ -233,7 +231,7 @@ class AgentNode(BaseNode):
             self._sql_address = self._init_sql_address()
 
         # agent
-        self._agent_executor_type = "React"
+        self._agent_executor_type = "function call"
         self._agent = None
         self._citation_tools: list[WorkflowCitationToolWrapper] = []
 
