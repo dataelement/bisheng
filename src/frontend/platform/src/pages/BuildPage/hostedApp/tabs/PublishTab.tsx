@@ -216,11 +216,6 @@ export function PublishTab({
                 </a>
               </Button>
             </div>
-            {app.entry_url && (
-              <p className="text-xs text-muted-foreground">
-                {t("hostedApp.publish.qrHint")}
-              </p>
-            )}
             {!online && (
               <p className="text-xs text-muted-foreground">
                 {t("hostedApp.publish.entryInactive")}

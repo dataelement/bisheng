@@ -168,6 +168,93 @@ class TestSendFailureIsSideEffectFree:
         assert await _state(app_db, app.id) == AppState.ONLINE.value
 
 
+@pytest.fixture()
+def message_sink(app_db, monkeypatch):
+    """Let the real ``notify_users → send_generic_notify → send_message`` chain run.
+
+    Only ``InboxMessageRepository.save`` is replaced (precedent:
+    ``test/app_publish/test_publish_notification.py``), so ``message_type``,
+    ``status`` and the content blocks are produced by production code — the
+    ``sent`` fixture above proves *when* a message goes, this proves *what*
+    lands in the inbox. ``notify_users`` swallows every exception it meets, so
+    each test asserts the sink is non-empty before reading it.
+    """
+    from bisheng.approval.domain.services import approval_notification_service
+    from bisheng.message.api import dependencies as message_dependencies
+    from bisheng.message.domain.services.message_service import MessageService
+
+    saved: list = []
+
+    class _RecordingRepository:
+        async def save(self, message):
+            message.id = len(saved) + 1
+            saved.append(message)
+            return message
+
+    service = MessageService(message_repository=_RecordingRepository(), message_read_repository=None)
+
+    async def _get_message_service(session=None):
+        return service
+
+    # The approval service binds ``get_async_db_session`` by name at import
+    # time and is not in the app_runtime conftest's patch list.
+    monkeypatch.setattr(approval_notification_service, "get_async_db_session", app_db)
+    monkeypatch.setattr(message_dependencies, "get_message_service", _get_message_service)
+    return saved
+
+
+class TestMessageShape:
+    """What the owner's inbox row is: a NOTIFY statement, never something to approve.
+
+    The client shows an 同意/驳回 pair whenever ``message_type`` is ``request``
+    or ``approve`` regardless of action code, so the guarantee has to hold on
+    the sending side and on the real path, not on the mocked one.
+    """
+
+    @pytest.mark.parametrize(
+        ("source_state", "method", "expected_code"),
+        [
+            (AppState.ONLINE.value, "stop", ACTION_STOPPED_BY_ADMIN),
+            (AppState.STOPPED.value, "resume", ACTION_RESUMED_BY_ADMIN),
+        ],
+    )
+    async def test_lands_as_a_neutral_notify_statement(
+        self, app_db, app_factory, app_owner, tenant_admins, message_sink, source_state, method, expected_code
+    ):
+        from bisheng.app_runtime.domain.services.app_state_service import AppStateService
+        from bisheng.message.domain.models.inbox_message import MessageStatusEnum, MessageTypeEnum
+
+        app, _ = await app_factory(state=source_state)
+        actor = _tenant_admin_payload()
+        tenant_admins.grant(actor.user_id, app.tenant_id)
+
+        result = await getattr(AppStateService, method)(app.id, actor=actor)
+
+        assert result.ok is True
+        assert len(message_sink) == 1, "the notification never reached the message service"
+        message = message_sink[0]
+        assert message.message_type == MessageTypeEnum.NOTIFY
+        assert message.message_type != MessageTypeEnum.APPROVE
+        assert message.status == MessageStatusEnum.APPROVED
+        assert message.action_code == expected_code
+        assert message.sender == actor.user_id
+        assert list(message.receiver) == [app_owner.user_id]
+
+        content = message.content
+        assert content
+        types = [str(block.get("type")) for block in content]
+        # The action code rides in ``system_text`` (that is what the client maps
+        # to copy) and the app name is the ``{{target}}`` it interpolates.
+        assert "system_text" in types
+        assert next(b for b in content if b.get("type") == "system_text")["content"] == expected_code
+        assert any(str(b.get("content") or "").lstrip("-—").strip() == app.name for b in content)
+        assert "agree_reject_button" not in types
+        for block in content:
+            metadata = block.get("metadata") or {}
+            assert "button_action_code" not in metadata
+            assert "action_code" not in metadata, "an action code inside metadata is what renders a button"
+
+
 class TestHookContract:
     async def test_unknown_action_is_refused_without_sending(self, sent):
         app = SimpleNamespace(id="app-x", name="X", owner_user_id=1)

@@ -2707,7 +2707,6 @@
       "open": "Open",
       "entryInactive": "The application is not running, so the entry shows the matching notice page.",
       "qrLabel": "Scan to open",
-      "qrHint": "The QR code points to the same address as the entry link",
       "stop": "Take offline",
       "resume": "Bring online",
       "manualPublish": "Bring online",
