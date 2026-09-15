@@ -3,12 +3,17 @@ from enum import Enum
 from typing import Any
 
 from sqlalchemy import Integer, String
-from sqlmodel import Column, DateTime, Field, Text, col, func, or_, select, text
+from sqlmodel import Column, DateTime, Field, Text, and_, col, func, or_, select, text
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session, get_sync_db_session
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, json_array_contains
+from bisheng.core.database.dialect_helpers import (
+    UPDATE_TIME_SERVER_DEFAULT,
+    JsonType,
+    json_array_contains,
+    json_object_field_equals,
+)
 from bisheng.utils import generate_uuid
 
 
@@ -322,6 +327,30 @@ class AuditLogDao(AuditLogBase):
         )
 
     @classmethod
+    def _object_app_predicate(cls, app_id: str):
+        """Rows that are *about* one hosted application (F056 AC-21 / AC-28).
+
+        Two shapes exist and both must match, otherwise "filter by app" shows
+        the state machine but not the release pipeline (or vice versa):
+
+        - ``target_type='app'`` + ``target_id=<app id>`` — F054 state actions
+          and the F056 visibility-change hook write this;
+        - ``metadata.app_id=<app id>`` — F055 ``app.release.*`` rows target
+          the *version* (``target_type='app_version'``) and carry the app in
+          metadata; the approval terminal states are expected to adopt the
+          same key (spec 决议-1), so the predicate is keyed on the metadata
+          field rather than on ``target_type='app_version'``.
+
+        A deleted application still has its rows: deletion is a state
+        transition, never a row purge, and every row keeps ``object_name`` as
+        the name snapshot — nothing here needs the ``app`` table.
+        """
+        return or_(
+            and_(AuditLog.target_type == "app", AuditLog.target_id == app_id),
+            json_object_field_equals(AuditLog.audit_metadata, "app_id", app_id, _db_dialect()),
+        )
+
+    @classmethod
     async def get_audit_logs(
         cls,
         group_ids: list[int],
@@ -333,6 +362,8 @@ class AuditLogDao(AuditLogBase):
         page: int = 0,
         limit: int = 0,
         tenant_scope: int | None = None,
+        target_app_id: str | None = None,
+        group_member_ids: list[int] | None = None,
     ) -> (list[AuditLog], int):
         """
         Filter logs by user group.
@@ -343,6 +374,20 @@ class AuditLogDao(AuditLogBase):
         - ``X``     → tenant-scoped view (Child Admin / dept admin / log-menu
           role / super with admin-scope=X) — only rows visible to X per
           ``_visible_for_tenant``.
+
+        ``target_app_id`` (F056 AC-28): only rows about that hosted
+        application, see ``_object_app_predicate``. Tenant boundary checks
+        for the app itself are the service's job (AC-31); this layer only
+        ANDs the predicate onto whatever scope it was given.
+
+        ``group_member_ids`` (F056 design pit 15): legacy rows snapshot the
+        operator's groups into ``group_ids``; structured v2 rows
+        (``ainsert_v2``) never fill that column, so a plain
+        ``json_array_contains`` filter hides every v2 event from group
+        admins. When the caller passes the current members of the selected
+        groups, v2 rows whose operator is one of them match too — the same
+        rule ("what members of this group did"), read from membership
+        instead of the snapshot.
 
         Always wraps the session in ``bypass_tenant_filter()``: the DAO is
         the sole source of tenant scoping here. Without bypass, the F013
@@ -365,9 +410,17 @@ class AuditLogDao(AuditLogBase):
             group_filters = []
             for one in group_ids:
                 group_filters.append(json_array_contains(AuditLog.group_ids, str(one), _db_dialect()))
+            if group_member_ids:
+                group_filters.append(
+                    and_(AuditLog.action.is_not(None), col(AuditLog.operator_id).in_(group_member_ids))
+                )
 
             statement = statement.where(or_(*group_filters))
             count_statement = count_statement.where(or_(*group_filters))
+        if target_app_id:
+            app_predicate = cls._object_app_predicate(target_app_id)
+            statement = statement.where(app_predicate)
+            count_statement = count_statement.where(app_predicate)
         if operator_ids:
             statement = statement.where(AuditLog.operator_id.in_(operator_ids))
             count_statement = count_statement.where(AuditLog.operator_id.in_(operator_ids))
@@ -400,8 +453,11 @@ class AuditLogDao(AuditLogBase):
             tenant_predicate = cls._visible_for_tenant(tenant_scope)
             statement = statement.where(tenant_predicate)
             count_statement = count_statement.where(tenant_predicate)
+        # ``create_time`` is second-precision; the id tiebreaker keeps OFFSET
+        # pages disjoint and the export deterministic (backend AGENTS.md).
+        statement = statement.order_by(AuditLog.create_time.desc(), AuditLog.id.desc())
         if page and limit:
-            statement = statement.offset((page - 1) * limit).limit(limit).order_by(AuditLog.create_time.desc())
+            statement = statement.offset((page - 1) * limit).limit(limit)
         with bypass_tenant_filter(), get_sync_db_session() as session:
             return session.exec(statement).all(), session.scalar(count_statement)
 
