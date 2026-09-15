@@ -53,6 +53,14 @@
   "com_app_explore_end_of_list": "— You've reached the end —",
   "com_app_explore_loading_more": "Loading more agents...",
   "com_app_explore_no_agents": "No agents found",
+  "com_guest_app_unavailable": {
+    "offline_title": "This app has been taken offline",
+    "offline_desc": "It isn't available right now. Check with whoever shared the link, or try again later.",
+    "invalid_title": "This link doesn't work",
+    "invalid_desc": "It may be incomplete or no longer exist. Ask whoever shared it for a new one.",
+    "closed_title": "Open access has been turned off",
+    "closed_desc": "Signing in is now required. Please contact whoever shared the link with you."
+  },
   "com_list_loading": "Loading…",
   "com_list_loading_more": "Loading more…",
   "com_list_load_failed": "Failed to load",

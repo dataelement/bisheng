@@ -76,20 +76,28 @@ def restore_execution_context(snapshot_data: dict | None):
     snapshot = OpenApiExecutionSnapshot.model_validate(snapshot_data)
     validate_execution_snapshot(snapshot)
     data_scope = DATA_SCOPE_ALL
-    if snapshot.actor_kind == SUBJECT_KIND_NATURAL_PERSON:
+    if snapshot.channel == "open_api_v2" and snapshot.actor_kind == SUBJECT_KIND_NATURAL_PERSON:
         # F066: re-read at execution time — a narrowing applied after enqueue
         # must bind the queued task too (immediate-effect semantics), so the
         # snapshot never carries a stale scope.
+        # The narrowing is a PAT policy, applied only by the v2 gate. A public
+        # v3 snapshot is also a natural person (the default operator), but its
+        # handshake resolves no narrowing; applying one here would let the
+        # handshake admit a run that the Celery leg then rejects.
         data_scope = TenantSettingService.get_policy_sync(snapshot.tenant_id).data_scope
     tenant_token = current_tenant_id.set(snapshot.tenant_id)
     visible_token = visible_tenant_ids.set(frozenset({DEFAULT_TENANT_ID, snapshot.tenant_id}))
+    # Service accounts never inherit privilege. ``PermissionActor`` already
+    # force-clears both fields for them; gating here as well keeps that
+    # invariant provable from this file instead of a distant constructor.
+    is_user = snapshot.authorization_subject_type == "user"
     actor_token = set_current_permission_actor(
         PermissionActor(
             subject_type=snapshot.authorization_subject_type,
             subject_id=snapshot.authorization_subject_id,
             tenant_id=snapshot.tenant_id,
-            super_admin=False,
-            tenant_admin_tenant_ids=frozenset(),
+            super_admin=snapshot.super_admin and is_user,
+            tenant_admin_tenant_ids=snapshot.tenant_admin_tenant_ids if is_user else frozenset(),
             data_scope=data_scope,
         )
     )

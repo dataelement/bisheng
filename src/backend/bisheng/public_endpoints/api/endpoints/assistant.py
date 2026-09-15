@@ -11,8 +11,10 @@ from loguru import logger
 from bisheng.api.v1.chat import chat_manager
 from bisheng.assistant.domain.services.published_assistant_service import PublishedAssistantService
 from bisheng.common.chat.types import WorkType
+from bisheng.common.errcode.public_endpoints import PublicAccessError
 from bisheng.common.schemas.api import resp_200
-from bisheng.public_endpoints.domain.services.guest_policy import PublicAccessError, public_execution
+from bisheng.public_endpoints.api.exception_handlers import deny_public_websocket
+from bisheng.public_endpoints.domain.services.guest_policy import public_execution
 
 router = APIRouter(prefix="/assistant", tags=["PublicAPI", "Assistant"])
 
@@ -23,7 +25,10 @@ async def get_assistant_info(request: Request, assistant_id: UUID):
     normalized_id = assistant_id.hex
     async with public_execution("assistant", normalized_id) as execution:
         data = await PublishedAssistantService.get_info(normalized_id, execution.operator)
-        return resp_200(data=data)
+        # The anonymous channel exposes no way to create a share link, and a
+        # super-admin operator would short-circuit the check to True. Reporting
+        # that to a visitor is misleading and leaks whether the app is shareable.
+        return resp_200(data=data.model_copy(update={"can_share": False}))
 
 
 @router.websocket("/chat/{assistant_id}")
@@ -46,7 +51,7 @@ async def assistant_ws(*, websocket: WebSocket, assistant_id: str, chat_id: str 
                 session_subject=execution.session_subject,
             )
     except PublicAccessError as exc:
-        await websocket.close(code=http_status.WS_1008_POLICY_VIOLATION, reason=exc.message)
+        await deny_public_websocket(websocket, exc)
     except Exception as exc:
         logger.opt(exception=True).error("public assistant websocket failed")
         await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(exc))

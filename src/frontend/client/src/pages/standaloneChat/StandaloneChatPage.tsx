@@ -15,6 +15,7 @@ import type { StandaloneChatContextValue } from './StandaloneChatContext';
 import { StandaloneSideNav } from './StandaloneSideNav';
 import { useStandaloneSidebar } from './hooks/useStandaloneSidebar';
 import { loadStandaloneAutoRerunOnOpen } from './standaloneAutoRerunConfig';
+import { GuestAppUnavailable } from './components/GuestAppUnavailable';
 
 interface StandaloneChatPageProps {
   mode: 'guest' | 'auth';
@@ -121,7 +122,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
   // Lifted to page level so both sidebar and chat panel share one instance
   // (single init, single draft registry, shared createNewChat for CTA).
   const sidebar = useStandaloneSidebar(contextValue);
-  const { activeChatId, historyLoaded, createNewChat } = sidebar;
+  const { activeChatId, historyLoaded, createNewChat, accessState } = sidebar;
 
   const toggleSidebar = () => setSidebarVisible((prev) => !prev);
 
@@ -131,6 +132,22 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
   const guestOuterShell = isGuestMode
     ? 'flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden rounded-2xl bg-white shadow-[0_4px_32px_rgba(0,0,0,0.08)]'
     : 'contents';
+
+  // A share link that no longer resolves gets the shell and nothing else.
+  // Keeping AppChat unmounted is the point: it would otherwise open a socket
+  // that can only fail, and a locally remembered conversation would race the
+  // detail request and mount the chat before the denial arrives.
+  if (isGuestMode && accessState !== 'ok' && accessState !== 'loading') {
+    return (
+      <div className="flex bg-[#DCDDDF]" style={{ height: '100dvh' }}>
+        <div className="relative z-0 flex h-full w-full overflow-hidden bg-[#DCDDDF] p-2">
+          <div className={guestOuterShell}>
+            <GuestAppUnavailable state={accessState} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <StandaloneChatContext.Provider value={contextValue}>

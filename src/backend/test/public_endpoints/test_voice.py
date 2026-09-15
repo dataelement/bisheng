@@ -27,7 +27,17 @@ OPERATIONS = ("config", "asr", "tts")
 def publication(monkeypatch):
     workflow = SimpleNamespace(tenant_id=3, flow_type=FlowType.WORKFLOW.value, status=FlowStatus.ONLINE.value)
     assistant = SimpleNamespace(tenant_id=9, is_delete=False, status=AssistantStatus.ONLINE.value)
-    state = SimpleNamespace(enabled=True, workflow=workflow, assistant=assistant, calls=[])
+    state = SimpleNamespace(
+        enabled=True,
+        workflow=workflow,
+        assistant=assistant,
+        calls=[],
+        # Guests execute as the configured operator's real identity, so these
+        # lookups now run on every request. Defaults describe a plain account.
+        role_ids=[],
+        is_global_super=False,
+        is_tenant_admin=False,
+    )
     monkeypatch.setattr(
         guest_policy.FlowDao,
         "aget_flow_by_id",
@@ -69,11 +79,25 @@ def publication(monkeypatch):
         ),
     )
 
+    monkeypatch.setattr(
+        "bisheng.user.domain.services.auth.UserRoleDao.aget_user_roles",
+        AsyncMock(side_effect=lambda _uid: [SimpleNamespace(role_id=r) for r in state.role_ids]),
+    )
+    monkeypatch.setattr(
+        "bisheng.utils.http_middleware._check_is_global_super",
+        AsyncMock(side_effect=lambda _uid, role_ids=None: state.is_global_super),
+    )
+    monkeypatch.setattr(
+        "bisheng.permission.application.relation_api.is_tenant_admin",
+        AsyncMock(side_effect=lambda _uid, _tid: state.is_tenant_admin),
+    )
+
     def record(operation, operator=None):
         tenant_id = get_current_tenant_id()
         principal = get_current_public_api_principal()
         assert principal.tenant_id == tenant_id
         assert get_current_permission_actor().subject_id == 100 + tenant_id
+        assert get_current_permission_actor().super_admin is state.is_global_super
         if operator is not None:
             assert operator.user_id == 100 + tenant_id
             assert operator.tenant_id == tenant_id
@@ -152,16 +176,24 @@ async def test_published_voice_without_credentials_keeps_resource_tenant(client,
 
 
 @pytest.mark.parametrize("operation", OPERATIONS)
-@pytest.mark.parametrize("failure,status", [("disabled", 403), ("offline", 404)])
-async def test_publication_denial_prevents_voice_model_access(client, publication, operation, failure, status):
-    """AC-R9: Closed guest access and unpublished apps never reach a model."""
+@pytest.mark.parametrize("failure,status,code", [("disabled", 403, 26103), ("offline", 404, 26102)])
+async def test_publication_denial_prevents_voice_model_access(
+    client, publication, operation, failure, status, code
+):
+    """AC-R9: Closed guest access and unpublished apps never reach a model.
+
+    The transport status stays coarse; the envelope carries the code the guest
+    page uses to tell "taken offline" from "this link does not work".
+    """
     if failure == "disabled":
         publication.enabled = False
     else:
         publication.workflow.status = -1
     response = await request_voice(client, operation, WORKFLOW_ID)
     assert response.status_code == status
-    assert response.json()["status_code"] == status
+    body = response.json()
+    assert body["status_code"] == code
+    assert body["data"] == {}
     assert publication.calls == []
 
 
@@ -179,7 +211,7 @@ async def test_application_id_is_required(client, publication, operation, flow_i
 async def test_public_voice_rejects_identity_headers(client, publication, operation, header):
     response = await request_voice(client, operation, WORKFLOW_ID, headers={header: "123"})
     assert response.status_code == 403
-    assert response.json()["status_code"] == 403
+    assert response.json()["status_code"] == 26104
     assert publication.calls == []
 
 
@@ -193,3 +225,13 @@ async def test_missing_voice_models_return_disabled_controls(client, publication
     )
     response = await request_voice(client, "config", WORKFLOW_ID)
     assert response.json()["data"] == {"asr_model": {"id": None}, "tts_model": {"id": None}}
+
+
+@pytest.mark.parametrize("is_super", [True, False])
+async def test_guest_actor_tracks_default_operator_privilege(client, publication, is_super):
+    """The visitor's reach follows whoever is configured as default operator."""
+    publication.is_global_super = is_super
+    response = await request_voice(client, "config", WORKFLOW_ID)
+    assert response.status_code == 200
+    # record() asserts actor.super_admin is state.is_global_super on the way through.
+    assert publication.calls[-1] == ("config", 3, WORKFLOW_ID)
