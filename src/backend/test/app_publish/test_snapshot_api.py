@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import pytest
 
-from .conftest import OWNER_USER_ID, ROOT_TENANT_ID, _file_member, _tar_bytes_from_members
+from .conftest import DEPT_ADMIN_USER_ID, OWNER_USER_ID, ROOT_TENANT_ID, _file_member, _tar_bytes_from_members
 
 pytestmark = pytest.mark.asyncio
 
@@ -159,6 +159,24 @@ async def test_tree_flags_binary_and_oversized_as_not_previewable(publish_db, ap
     assert by_path["main.py"]["previewable"] is True
 
 
+async def test_tree_marks_truncated_when_entries_exceed_the_deploy_limit(
+    publish_db, api_app, stored_app, owner_user, monkeypatch
+):
+    """The walk stops at ``max_package_entries`` and says so, rather than listing a partial tree as complete."""
+    from bisheng.app_publish.domain.services import package_service
+
+    limits = dict(package_service.deploy_limits())
+    limits["max_package_entries"] = 2
+    monkeypatch.setattr(package_service, "deploy_limits", lambda: limits)
+    app, version = await stored_app(extra_files={"a.py": "a = 1\n", "b.py": "b = 1\n", "c.py": "c = 1\n"})
+
+    async with api_app(payload=owner_user.payload) as client:
+        data = _body(await client.get(f"/api/v1/apps/{app.id}/versions/{version.id}/snapshot/tree"))["data"]
+
+    assert data["truncated"] is True
+    assert data["total_files"] == 2
+
+
 async def test_tree_unwraps_single_top_level_directory(publish_db, api_app, app_factory, fake_minio, owner_user):
     """``tar czf pkg.tar.gz myapp/`` — the tree the approver sees has no ``myapp/`` prefix, like the runtime's."""
     app, version = await app_factory(with_version=True)
@@ -279,6 +297,55 @@ async def test_approver_holding_a_task_on_this_version_is_admitted(publish_db, a
 
     assert tree["status_code"] == 200 and tree["data"]["role"] == "approver"
     assert file["status_code"] == 200 and file["data"]["content"]
+
+
+async def test_approver_resolved_by_the_real_publish_request_is_admitted(
+    publish_db,
+    api_app,
+    app_factory,
+    deployment_factory,
+    fake_minio,
+    tarball_factory,
+    approval_env,
+    audit_sink,
+    approval_notifications,
+    dept_admin_user,
+):
+    """The access rule reads what ``publish_approval_service.submit`` actually writes.
+
+    ``_seed_task`` above hand-builds an instance; this one goes through the
+    real gate so a renamed ``payload_snapshot.version_id`` or a changed
+    ``business_resource_type`` breaks here instead of silently locking every
+    approver out of the review view in production.
+    """
+    from bisheng.app_publish.domain.models.app_deployment import STAGE_PRECHECK_PROBE, STATUS_RUNNING
+    from bisheng.app_publish.domain.services import publish_approval_service
+    from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+    from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision
+
+    app, version = await app_factory(with_version=True)
+    await _store(publish_db, app, version, tarball_factory().read_bytes())
+    deployment = await deployment_factory(
+        app_id=app.id,
+        stage=STAGE_PRECHECK_PROBE,
+        status=STATUS_RUNNING,
+        version_id=version.id,
+        tier_code="light",
+        manifest={"name": app.name, "runtime": "python3.11", "port": 8080, "tier": "light"},
+    )
+
+    result = await publish_approval_service.submit(deployment)
+    assert result.decision == ApprovalGateDecision.PENDING
+    tasks = await ApprovalInstanceRepository.list_tasks(result.instance_id)
+    assert DEPT_ADMIN_USER_ID in {int(task.approver_user_id) for task in tasks}
+
+    async with api_app(payload=_payload(DEPT_ADMIN_USER_ID)) as client:
+        tree = _body(await client.get(f"/api/v1/apps/{app.id}/versions/{version.id}/snapshot/tree"))
+    async with api_app(payload=_payload(OWNER_USER_ID + 4242)) as client:
+        stranger = _body(await client.get(f"/api/v1/apps/{app.id}/versions/{version.id}/snapshot/tree"))
+
+    assert tree["status_code"] == 200 and tree["data"]["role"] == "approver"
+    assert stranger["status_code"] == 16257
 
 
 async def test_approver_of_another_version_is_refused_16257(publish_db, api_app, stored_app):
