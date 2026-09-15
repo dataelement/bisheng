@@ -18,8 +18,10 @@ happens to send ``Authorization`` for some unrelated reason still verifies.
 
 Bodies are raw bytes, not multipart: the signature covers the exact bytes and
 the SDK has nothing to encode. The size cap is checked on ``Content-Length``
-*before* the body is read and again on the bytes actually received, so a
-client that lies about its length cannot get past the first check.
+*before* the body is read, then on the bytes as they arrive — the read stops
+at the first chunk that takes the total over the cap — and once more on the
+assembled body. A client that lies about its length, or sends chunked with no
+length at all, therefore never gets more than ``cap`` bytes into memory here.
 """
 
 from __future__ import annotations
@@ -60,7 +62,10 @@ async def verify_storage_caller(request: Request, app_id: str) -> str:
         token = token.strip()
         record = get_store(get_config()).get(app_id)
         expected = storage_token_of(record.env if record else None)
-        if not token or not expected or not hmac.compare_digest(expected, token):
+        # Compare as bytes: ``compare_digest`` on ``str`` raises TypeError for
+        # non-ASCII input, and the header is attacker supplied — that would be
+        # a 500 where a 401 is due.
+        if not token or not expected or not hmac.compare_digest(expected.encode(), token.encode()):
             raise UnauthorizedError("invalid storage token for this application")
         return CALLER_APP
     await verify_hmac(request)
@@ -103,9 +108,28 @@ async def upload_object(app_id: str, key: str, request: Request) -> dict:
     declared = request.headers.get("content-length")
     if declared and declared.isdigit():
         service.check_size(int(declared))
-    body = await request.body()
+    body = await _read_capped(request, service)
     content_type = (request.headers.get("content-type") or "").split(";")[0].strip() or DEFAULT_CONTENT_TYPE
     return _as_dict(service.upload(app_id, key, body, content_type))
+
+
+async def _read_capped(request: Request, service: AppStorageService) -> bytes:
+    """Read the body, stopping at the first chunk that takes it over the cap.
+
+    Without this a chunked upload (no ``Content-Length``) would be buffered in
+    full before ``upload`` could refuse it — the cap must bound memory, not
+    just what reaches the store. Under the HMAC path the body was already
+    consumed by the signature check; Starlette then replays it as one chunk.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        if not chunk:
+            continue
+        total += len(chunk)
+        service.check_size(total)
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 @router.get("/objects/{key:path}")

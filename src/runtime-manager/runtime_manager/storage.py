@@ -226,6 +226,11 @@ class MinioObjectStore:
 
 _store: ObjectStore | None = None
 
+#: Buckets already verified (or created) on the current store. Process-wide,
+#: because :class:`AppStorageService` is built per request and the "does the
+#: bucket exist" round trip is due once per process, not once per call.
+_ready_buckets: set[str] = set()
+
 
 def get_object_store() -> ObjectStore:
     """The process-wide store, created from config on first use.
@@ -250,6 +255,7 @@ def set_object_store(store: ObjectStore | None) -> None:
     """Injection seam used by tests and by the composition root."""
     global _store
     _store = store
+    _ready_buckets.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -314,8 +320,16 @@ def validate_prefix(prefix: str) -> str:
 
 
 def scoped_key(app_id: str, key: str) -> str:
-    """The store key for an app-relative key, after validation."""
-    return attachment_prefix(app_id) + validate_key(key)
+    """The store key for an app-relative key, after validation.
+
+    S3's 1024-byte limit applies to the *full* key, prefix included; a key
+    that fits on its own but not with the prefix is a 400 here, not a 503
+    from the store after the round trip.
+    """
+    store_key = attachment_prefix(app_id) + validate_key(key)
+    if len(store_key.encode("utf-8")) > MAX_KEY_BYTES:
+        raise _reject(key[:64] + "…", f"longer than {MAX_KEY_BYTES} bytes once scoped to the application")
+    return store_key
 
 
 def unscoped_key(app_id: str, store_key: str) -> str:
@@ -357,7 +371,6 @@ class AppStorageService:
     def __init__(self, config: Config, store: ObjectStore | None = None) -> None:
         self._config = config
         self._store_override = store
-        self._bucket_ready = False
 
     @property
     def bucket(self) -> str:
@@ -367,7 +380,7 @@ class AppStorageService:
         return self._store_override if self._store_override is not None else get_object_store()
 
     def _ensure_bucket(self, store: ObjectStore) -> None:
-        if self._bucket_ready:
+        if self.bucket in _ready_buckets:
             return
         if self.bucket == PUBLIC_PLATFORM_BUCKET:
             # Refuse to operate at all rather than put attachments where nginx
@@ -382,7 +395,7 @@ class AppStorageService:
             raise
         except Exception as exc:
             raise StorageUnavailableError(f"attachment storage is not reachable: {exc}")
-        self._bucket_ready = True
+        _ready_buckets.add(self.bucket)
 
     def _ready(self) -> ObjectStore:
         store = self._store()

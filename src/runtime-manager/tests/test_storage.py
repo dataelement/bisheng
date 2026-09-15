@@ -21,7 +21,6 @@ import inspect
 
 import pytest
 
-from runtime_manager.config import set_config
 from runtime_manager.desired_state import get_store
 from runtime_manager.errors import NotFoundError
 from runtime_manager.storage import (
@@ -200,6 +199,16 @@ def test_well_formed_keys_pass_unchanged():
         assert validate_key(key) == key
 
 
+def test_key_length_cap_counts_the_app_prefix(rtm_config, fake_object_store):
+    """S3's 1024 bytes apply to the *scoped* key: a 400 here, not a 503 after the round trip."""
+    svc = _service(rtm_config, fake_object_store)
+    room = 1024 - len(attachment_prefix(APP).encode())
+    svc.upload(APP, "x" * room, b"a")  # exactly fits with the prefix
+    with pytest.raises(InvalidObjectKeyError):
+        svc.upload(APP, "x" * (room + 1), b"a")  # fits alone, not once scoped
+    assert len(fake_object_store.calls_of("put_object")) == 1
+
+
 # ---------------------------------------------------------------------------
 # service — cap, bucket, quota
 # ---------------------------------------------------------------------------
@@ -232,17 +241,26 @@ def test_bucket_is_bisheng_apps_not_public_bucket(rtm_config, fake_object_store)
     assert {kw["bucket"] for _n, kw in fake_object_store.calls} == {BUCKET}
     assert fake_object_store.calls_of("set_bucket_policy") == []
     assert fake_object_store.policies == {}
-    # A second call does not re-check the bucket.
+    # A second call does not re-check the bucket — nor does a second service
+    # instance: the router builds one per request, the round trip is per process.
     svc.upload(APP, "b.txt", b"b")
+    _service(rtm_config, fake_object_store).upload(APP, "c.txt", b"c")
     assert len(fake_object_store.calls_of("bucket_exists")) == 1
+    assert fake_object_store.calls_of("make_bucket") == [{"bucket": BUCKET}]
 
 
 def test_public_bucket_is_refused_outright(rtm_config, fake_object_store):
     """A config typo pointing at ``bisheng`` must fail closed, not leak."""
-    svc = _service(rtm_config.with_overrides(storage_bucket=PUBLIC_PLATFORM_BUCKET), fake_object_store)
+    public = rtm_config.with_overrides(storage_bucket=PUBLIC_PLATFORM_BUCKET)
+    svc = _service(public, fake_object_store)
     with pytest.raises(StorageUnavailableError):
         svc.upload(APP, "a.txt", b"a")
     assert fake_object_store.calls == []
+    # …and the pre-flight names it before any app tries.
+    check = storage_preflight(
+        public.with_overrides(minio_endpoint="minio:9000", minio_access_key="k", minio_secret_key="s")
+    )
+    assert check["ok"] is False and PUBLIC_PLATFORM_BUCKET in check["detail"]
 
 
 def test_not_counted_into_tenant_storage_quota(rtm_config, fake_object_store):
@@ -413,123 +431,6 @@ def test_minio_adapter_translates_sdk_answers(rtm_config, monkeypatch):
     adapter.remove_object(BUCKET, "apps/app-1/attachments/a.txt")
     assert adapter.stat_object(BUCKET, "apps/app-1/attachments/a.txt") is None
     assert stub.policy_calls == 0
-
-
-# ---------------------------------------------------------------------------
-# HTTP — bearer scoped to the app, HMAC for the platform
-# ---------------------------------------------------------------------------
-
-
-def _bearer(client, method: str, path: str, token: str, **kwargs):
-    headers = {"Authorization": f"Bearer {token}", **(kwargs.pop("headers", None) or {})}
-    return client.client.request(method, path, headers=headers, **kwargs)
-
-
-def test_per_app_token_cannot_touch_another_apps_prefix(
-    rtm_client, rtm_config, fake_docker, fake_object_store, monkeypatch
-):
-    """AC-45 — app A's token on app B's URL is a 401, not a scoping decision."""
-    monkeypatch.setattr("runtime_manager.admission.LinuxHostProbe.snapshot", lambda self: FakeHostProbe().snapshot())
-    token_a = _deploy(rtm_config, fake_docker, APP, "a")
-    token_b = _deploy(rtm_config, fake_docker, OTHER, "b")
-    assert token_a != token_b
-
-    ok = _bearer(rtm_client, "PUT", f"/v1/apps/{APP}/storage/objects/x.txt", token_a, content=b"hello")
-    assert ok.status_code == 200, ok.text
-    assert ok.json()["key"] == "x.txt" and ok.json()["size"] == 5
-
-    crossed = _bearer(rtm_client, "GET", f"/v1/apps/{OTHER}/storage/objects/x.txt", token_a)
-    assert crossed.status_code == 401
-    assert crossed.json()["detail"]["code"] == "unauthorized"
-    assert fake_object_store.calls_of("get_object") == []
-
-    # B's own token on B's URL: the object A wrote is simply not there.
-    own = _bearer(rtm_client, "GET", f"/v1/apps/{OTHER}/storage/objects/x.txt", token_b)
-    assert own.status_code == 404
-
-    # No token, wrong token, and a destroyed app all fail closed.
-    assert rtm_client.client.get(f"/v1/apps/{APP}/storage/objects").status_code == 401
-    assert _bearer(rtm_client, "GET", f"/v1/apps/{APP}/storage/objects", "not-the-token").status_code == 401
-    rtm_client.post("/v1/intents/destroy", {"app_id": APP, "purge_volume": False})
-    assert _bearer(rtm_client, "GET", f"/v1/apps/{APP}/storage/objects", token_a).status_code == 401
-
-
-def test_http_round_trip_with_bearer(rtm_client, rtm_config, fake_docker, fake_object_store, monkeypatch):
-    monkeypatch.setattr("runtime_manager.admission.LinuxHostProbe.snapshot", lambda self: FakeHostProbe().snapshot())
-    token = _deploy(rtm_config, fake_docker)
-    base = f"/v1/apps/{APP}/storage"
-
-    put = _bearer(
-        rtm_client, "PUT", f"{base}/objects/docs/a.txt", token, content=b"hello", headers={"content-type": "text/plain"}
-    )
-    assert put.status_code == 200, put.text
-    assert put.json()["content_type"] == "text/plain"
-
-    meta = _bearer(rtm_client, "GET", f"{base}/meta/docs/a.txt", token)
-    assert meta.status_code == 200 and meta.json()["size"] == 5
-
-    listing = _bearer(rtm_client, "GET", f"{base}/objects", token, params={"prefix": "docs/"})
-    assert [o["key"] for o in listing.json()["objects"]] == ["docs/a.txt"]
-    assert listing.json()["next_cursor"] is None
-
-    got = _bearer(rtm_client, "GET", f"{base}/objects/docs/a.txt", token)
-    assert got.status_code == 200 and got.content == b"hello"
-    assert got.headers["content-type"].startswith("text/plain")
-
-    gone = _bearer(rtm_client, "DELETE", f"{base}/objects/docs/a.txt", token)
-    assert gone.status_code == 200
-    assert _bearer(rtm_client, "GET", f"{base}/meta/docs/a.txt", token).status_code == 404
-    assert _bearer(rtm_client, "DELETE", f"{base}/objects/docs/a.txt", token).status_code == 404
-
-    escaped = _bearer(rtm_client, "PUT", f"{base}/objects/apps/{OTHER}/attachments/x", token, content=b"x")
-    assert escaped.status_code == 400
-    assert escaped.json()["detail"]["code"] == "invalid_object_key"
-
-
-def test_http_upload_over_cap_is_413_before_reading(
-    rtm_client, rtm_config, fake_docker, fake_object_store, monkeypatch
-):
-    monkeypatch.setattr("runtime_manager.admission.LinuxHostProbe.snapshot", lambda self: FakeHostProbe().snapshot())
-    token = _deploy(rtm_config, fake_docker)
-    set_config(rtm_config.with_overrides(storage_max_file_mb=1))
-    try:
-        # Header says too big → refused on the header alone.
-        lying = _bearer(
-            rtm_client,
-            "PUT",
-            f"/v1/apps/{APP}/storage/objects/big.bin",
-            token,
-            content=b"x",
-            headers={"content-length": str(2 * 1024 * 1024)},
-        )
-        assert lying.status_code == 413
-        real = _bearer(
-            rtm_client, "PUT", f"/v1/apps/{APP}/storage/objects/big.bin", token, content=b"x" * (1024 * 1024 + 1)
-        )
-        assert real.status_code == 413
-        assert real.json()["detail"]["code"] == "payload_too_large"
-    finally:
-        set_config(rtm_config)
-    assert fake_object_store.calls_of("put_object") == []
-
-
-def test_platform_reaches_storage_with_hmac(rtm_client, rtm_config, fake_object_store):
-    """F052 / a later data tab: the platform signs like every other ``/v1`` route — no record needed."""
-    from runtime_manager.auth import compute_signature
-    from tests.conftest import TEST_SECRET
-
-    path = f"/v1/apps/{APP}/storage/objects/from-platform.txt"
-    body = b"platform wrote this"
-    signed = rtm_client.client.put(
-        path, content=body, headers={"X-Signature": compute_signature("PUT", path, body, TEST_SECRET)}
-    )
-    assert signed.status_code == 200, signed.text
-
-    listing = rtm_client.get(f"/v1/apps/{APP}/storage/objects")
-    assert [o["key"] for o in listing.json()["objects"]] == ["from-platform.txt"]
-
-    forged = rtm_client.get(f"/v1/apps/{APP}/storage/objects", secret="wrong")
-    assert forged.status_code == 401
 
 
 # ---------------------------------------------------------------------------

@@ -36,7 +36,7 @@
 
 - `status`：`restart_count` = **daemon 重启数 + manager 重建数之和**（重建后新容器的 `RestartCount` 归零，只取 daemon 的会让长期不健康的应用显示"从未重启"）；`instance_id` 与 `phase` 之外无形态字段（INV-33）。**路径名是 `/v1/runtime/status`**（本文旧版 §8 曾误写 `/v1/runtime-status`，以本行为准）。
 - `logs`：`tail`（1–5000，默认 500）与 `since`（**epoch 秒 或 `30m`/`2h`/`7d` 相对窗口**，不可解析 → 400 `invalid_request`）下发给 daemon；`keyword`（大小写不敏感子串）在 manager 内过滤——**所以带 keyword 时返回行数可能 < tail，这是设计不是 bug**。保留期 = docker 轮转窗口（10m × 3 / 应用），产品口径「最近的运行日志」。脱敏**只**对平台注入的敏感 env 值（名字含 `SECRET|TOKEN|PASSWORD|CREDENTIAL|SIGNATURE|API_KEY|PRIVATE_KEY`、长度 ≥6）做字面量替换为 `***`；**不做通用脱敏**（D14，密钥靠 F055 发布期扫描兜）——backend 不要在自己那层再加正则，会把应用正常输出打烂。
-- `runtime/status`：**恒 200**，dockerd 宕机时 `backend_available=false` 而不是抛错（这正是它最有用的一句话）。`capacity` = admission 同源快照 + `instances`（在跑实例数）+ `readable`（`/proc/meminfo` 可读否）+ `reason`。`preflight` 五项：`orchestration_backend` / `application_network` / `data_root_writable` / `runtime_templates` / `base_images`，`detail` 直接写修法（缺网络就给 `docker network create bisheng-apps`）。**manager 只读不建网络**——自动建会把"新机器每次发布都失败"的唯一线索藏掉。
+- `runtime/status`：**恒 200**，dockerd 宕机时 `backend_available=false` 而不是抛错（这正是它最有用的一句话）。`capacity` = admission 同源快照 + `instances`（在跑实例数）+ `readable`（`/proc/meminfo` 可读否）+ `reason`。`preflight` 七项：`orchestration_backend` / `application_network` / `data_root_writable` / `host_data_root_mapping` / `runtime_templates` / `base_images` / `attachment_storage`（T084，见下方细则），`detail` 直接写修法（缺网络就给 `docker network create bisheng-apps`）。**manager 只读不建网络**——自动建会把"新机器每次发布都失败"的唯一线索藏掉。
 - **后端不可用 ≠ 实例不存在**：`status` / `logs` 在 dockerd 不可达时返 **503 `backend_unavailable`**（→ 16121），实例真的没有才 404。backend 与前端不要把两者合并，否则 dockerd 一重启详情页就显示"已删除"。
 
 **附件存储句柄细则（T084 / T085，2026-09-16）**：
