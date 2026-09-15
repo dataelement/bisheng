@@ -35,6 +35,7 @@ import {
     getFileInputAccept,
     getMaxFileSizeBytesForFile,
     getMaxFileSizeMBForFile,
+    isKnowledgeItemRetryable,
     isKnowledgeItemUploading,
     resolveUploadSizeLimits,
     triggerUrlDownload,
@@ -918,13 +919,9 @@ export function KnowledgeSpaceContent({
     };
 
     const handleBatchRetry = async () => {
-        // Find selected files/folders that have FAILED status or partial failures
+        // Find selected files/folders that have an abnormal status or descendant.
         const retryIds = displayFiles
-            .filter(f => selectedFiles.has(f.id) && (
-                f.status === FileStatus.FAILED ||
-                f.status === FileStatus.VIOLATION ||
-                (f.type === FileType.FOLDER && f.hasFailedFiles === true)
-            ))
+            .filter(f => selectedFiles.has(f.id) && isKnowledgeItemRetryable(f))
             .map(f => Number(f.id));
 
         if (retryIds.length === 0) return;
@@ -974,12 +971,8 @@ export function KnowledgeSpaceContent({
         selectableFiles.length > 0 && selectableFiles.every((f) => selectedFiles.has(f.id));
     const isSelectionIndeterminate =
         !isAllSelectedOnPage && selectableFiles.some((f) => selectedFiles.has(f.id));
-    const hasFailedFiles = displayFiles.some(f =>
-        selectedFiles.has(f.id) && (
-            f.status === FileStatus.FAILED ||
-            f.status === FileStatus.VIOLATION ||
-            (f.type === FileType.FOLDER && f.hasFailedFiles === true)
-        )
+    const hasFailedFiles = displayFiles.some(
+        f => selectedFiles.has(f.id) && isKnowledgeItemRetryable(f)
     );
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
     const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
