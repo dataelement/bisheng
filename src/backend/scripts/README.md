@@ -73,6 +73,26 @@ its resource projection already writes both `user:*` and `service_account:*`
 markers at every hierarchy level. Do not repeat the first migration to repair
 an existing F048 installation.
 
+### `repair_deleted_app_grants.py`
+
+Close the permission gate of hosted apps deleted before the 2026-09-16 delete
+fix (`AppStateService.delete` used to re-read the permission record after
+flipping the app to `deleted`, got 19003, and skipped the delete projection, the
+delete audit and the lifecycle hooks). F048's delete plan removes only the
+`permission_enabled` markers on the object; grant links, `custom_mode` and
+visible-projection tuples stay, as after deleting any F048 resource. The script
+lists deleted apps that still carry `permission_enabled` and, with `--apply`,
+projects the removal using the pre-deletion record. Dry-run is the default.
+
+```bash
+cd src/backend
+PYTHONPATH=./ .venv/bin/python scripts/repair_deleted_app_grants.py                  # list only
+PYTHONPATH=./ .venv/bin/python scripts/repair_deleted_app_grants.py --apply          # repair all
+PYTHONPATH=./ .venv/bin/python scripts/repair_deleted_app_grants.py --apply --app-id <app_id>
+```
+
+Exit code 1 means at least one app still has a `permission_enabled` marker after `--apply`.
+
 ### `cleanup_f048_user_group_admin_grants.py`
 
 Audit and revoke resource Grant sources assigned to one user group's
