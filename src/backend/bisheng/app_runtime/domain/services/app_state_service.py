@@ -200,6 +200,16 @@ class AppStateService:
         if not is_transition_allowed(app.state, AppState.DELETED.value):
             raise AppStateConflictError(msg="当前状态不支持删除", app_id=app_id, state=app.state)
 
+        # Read the permission record while the row still carries a live state, and
+        # before anything destructive runs. The app adapter refuses to build a
+        # target for a deleted app (one error for absent / foreign / deleted,
+        # AC-29), so loading it after the transition failed every delete with 19003
+        # once the state had already flipped — and skipped the audit, the grant
+        # cleanup and the lifecycle hooks. The permission mirror compares versions,
+        # not app state, so the pre-transition record still projects the removal.
+        adapter = await get_f048_resource_adapter("app")
+        permission_record = await adapter.load_permission_record(app.id)
+
         # Assets first: a row that says "deleted" while the volume survives is
         # invisible garbage; a purged volume with the row still present is a
         # visible, retryable failure.
@@ -209,15 +219,29 @@ class AppStateService:
         if not won:
             raise AppStateConflictError(msg="应用状态已变化, 请刷新后重试", app_id=app_id, action="delete")
 
-        await cls._project_delete(app, actor)
+        # The deletion is a fact from here on: audit it before any follow-up step
+        # that can fail, so the record never depends on the cleanup succeeding.
         await cls._audit(
             AppAuditAction.DELETE, app, actor, version_id=app.current_version_id, reason="deleted by owner"
         )
 
-        failures = await lifecycle_hooks.on_app_deleted(
-            app_id=app_id,
-            actor_user_id=int(getattr(actor, "user_id", 0) or 0),
-            tenant_id=int(app.tenant_id or 0),
+        failures: list[str | Exception] = []
+        try:
+            await cls._project_delete(adapter, permission_record, app, actor)
+        except Exception as exc:
+            # Same contract as the lifecycle hooks below: the assets and the row are
+            # already gone, so raising would report a completed delete as failed and
+            # skip the hooks. The failure is logged and audited, and the leftover
+            # grants are an operator repair, not a user retry.
+            logger.exception("app delete: permission projection failed app_id={}", app_id)
+            failures.append(f"permission projection failed: {exc}")
+
+        failures.extend(
+            await lifecycle_hooks.on_app_deleted(
+                app_id=app_id,
+                actor_user_id=int(getattr(actor, "user_id", 0) or 0),
+                tenant_id=int(app.tenant_id or 0),
+            )
         )
         for failure in failures:
             await cls._audit(
@@ -529,9 +553,7 @@ class AppStateService:
         raise AppManageForbiddenError(app_id=app.id)
 
     @staticmethod
-    async def _project_delete(app: App, actor) -> None:
-        adapter = await get_f048_resource_adapter("app")
-        record = await adapter.load_permission_record(app.id)
+    async def _project_delete(adapter, record, app: App, actor) -> None:
         if record is None:
             return
         await adapter.project_delete(

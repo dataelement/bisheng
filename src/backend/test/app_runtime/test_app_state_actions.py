@@ -472,6 +472,89 @@ class TestDelete:
         assert AppAuditAction.DELETE.value in actions
         assert AppAuditAction.DELETE_HOOK_FAILED.value in actions
 
+    async def test_grants_are_projected_with_the_record_read_before_the_transition(
+        self, app_db, app_factory, app_owner, fake_permission_projection, audit_sink
+    ):
+        """The real app adapter refuses a deleted app with 19003 (AC-29's single
+        error). Reading the record after the state flipped turned every delete into
+        a 19003 that left the grants in OpenFGA and skipped the audit and hooks —
+        found on 114 on 2026-09-15. The adapter here enforces that same gate."""
+        from types import SimpleNamespace
+
+        from bisheng.app_runtime.domain.services import lifecycle_hooks
+        from bisheng.app_runtime.domain.services.app_state_service import AppStateService
+        from bisheng.common.errcode.permission import PermissionInvalidResourceError
+
+        adapter = fake_permission_projection.adapter
+        projected_states: list[str] = []
+
+        async def _load(resource_id: str):
+            fake_permission_projection.calls.append(("load_permission_record", {"resource_id": resource_id}))
+            return SimpleNamespace(resource_id=resource_id, state=await _state(app_db, resource_id))
+
+        async def _project_delete(*, record, actor):
+            if record.state == AppState.DELETED.value:
+                raise PermissionInvalidResourceError()
+            projected_states.append(record.state)
+            fake_permission_projection.calls.append(("project_delete", {"record": record, "actor": actor}))
+
+        adapter.load_permission_record = _load
+        adapter.project_delete = _project_delete
+        seen = []
+
+        async def _hook(**kwargs):
+            seen.append(kwargs)
+
+        lifecycle_hooks.clear_app_deleted_hooks()
+        lifecycle_hooks.register_app_deleted_hook(_hook)
+        try:
+            app, _ = await app_factory(state=AppState.STOPPED.value)
+            result = await AppStateService.delete(app.id, actor=app_owner.payload)
+        finally:
+            lifecycle_hooks.clear_app_deleted_hooks()
+
+        assert result.state == AppState.DELETED.value
+        assert await _state(app_db, app.id) == AppState.DELETED.value
+        assert projected_states == [AppState.STOPPED.value]
+        actions = [row["action"] for row in audit_sink]
+        assert AppAuditAction.DELETE.value in actions
+        assert AppAuditAction.DELETE_HOOK_FAILED.value not in actions
+        assert len(seen) == 1
+
+    async def test_projection_failure_is_audited_and_does_not_skip_hooks(
+        self, app_db, app_factory, app_owner, fake_permission_projection, audit_sink
+    ):
+        """Once the assets and the row are gone, a failed grant cleanup must not
+        report the delete as failed nor skip the hooks (F055 cancels the in-flight
+        approval there); it is logged and audited for an operator repair."""
+        from bisheng.app_runtime.domain.services import lifecycle_hooks
+        from bisheng.app_runtime.domain.services.app_state_service import AppStateService
+
+        async def _broken_projection(**kwargs):
+            raise RuntimeError("openfga unreachable")
+
+        fake_permission_projection.adapter.project_delete = _broken_projection
+        seen = []
+
+        async def _hook(**kwargs):
+            seen.append(kwargs)
+
+        lifecycle_hooks.clear_app_deleted_hooks()
+        lifecycle_hooks.register_app_deleted_hook(_hook)
+        try:
+            app, _ = await app_factory(state=AppState.STOPPED.value)
+            result = await AppStateService.delete(app.id, actor=app_owner.payload)
+        finally:
+            lifecycle_hooks.clear_app_deleted_hooks()
+
+        assert result.state == AppState.DELETED.value
+        assert await _state(app_db, app.id) == AppState.DELETED.value
+        assert len(seen) == 1
+        failed = [row for row in audit_sink if row["action"] == AppAuditAction.DELETE_HOOK_FAILED.value]
+        assert failed and "permission projection failed" in failed[0]["metadata"]["reason"]
+        actions = [row["action"] for row in audit_sink]
+        assert actions.index(AppAuditAction.DELETE.value) < actions.index(AppAuditAction.DELETE_HOOK_FAILED.value)
+
 
 class TestAudit:
     async def test_every_action_audited_with_version_and_reason(self, app_db, app_factory, app_owner, audit_sink):
