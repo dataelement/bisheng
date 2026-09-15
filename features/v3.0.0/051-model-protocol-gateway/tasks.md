@@ -1,0 +1,296 @@
+# Tasks: 模型协议直连面（OpenAI 兼容子集 + `model:invoke` + 逐条调用审计）
+
+**关联规格**: [spec.md](./spec.md)（36 条 AC，What 的唯一真相）· [design.md](./design.md)（How 的唯一真相，K1–K13 / D1–D14 / 坑 1–16 / §4.2 契约）
+**版本**: v3.0.0
+**纵切**: 不在 [mvp-114-path.md](../mvp-114-path.md) 上；Wave 1–5 可在本地全部完成，Wave 6 依赖 F055 / F054，Wave 7 需 114
+**代码事实口径**: 本文所有 `文件:行号` 沿用 design.md（`3.0-vibe` HEAD `fe10f75ea`，2026-09-16 核实，路径以 `src/backend/bisheng/` 为根；`locales/` = `src/frontend/packages/locales/src/`）。行号会漂移，符号名不会——落地前以符号名重定位。
+
+---
+
+## 状态
+
+| 步骤 | 状态 | 备注 |
+|------|------|------|
+| spec.md | ✅ 已评审 | 2026-08-17 定稿（决议 1–8 全自动模式定案，同日审查 16 条修订） |
+| design.md | ✅ 已拆解（全自动模式） | 2026-09-16 初版；用户豁免 ★，D1–D14 标「全自动模式定案」；接手时的第一入口 |
+| tasks.md | ✅ 已拆解（2026-09-16） | 本文；`/sdd-review tasks` 待跑 |
+| 实现 | 🔲 未开始 | 0 / 29 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+
+---
+
+## 开发模式
+
+**按 Wave 组织任务**：Wave 1 基础设施（无测试配对）→ Wave 2 目录与解析（`llm` 域）→ Wave 3 协议面（路由 / 错误体 / 流式）→ Wave 4 逐条记录 → Wave 5 base URL 契约与官方客户端契约测试 → **Wave 6 托管应用路径（阻塞于 F055 T055 / T056、F054 OBO 验签）** → Wave 7 114 E2E 与引擎适配。每个任务标 `依赖:`，无依赖的可并行。
+
+**后端 Test-First**：测试任务先于配对实现任务；`覆盖 AC` 逐条写全 id（禁范围写法）。单测放 `src/backend/test/open_api/` 与 `src/backend/test/llm/`（不放 `test/` 根），`asyncio_mode=auto`。fake `BishengLLM` 与 fake catalog 在 T005 一次建好，其后测试不再各造。集成用例连 CI 中间件；DM8 用例在 105 回归。
+
+**HTTP 状态断言口径**（design K2 / D4）：本面路径断言**真 HTTP 状态 + OpenAI 错误体** `{"error":{...,"bisheng_code":N}}`；其它 `/api/v2` 路径仍断言信封（T012 含一条"邻居不受影响"用例）。
+
+**前端**：本 Feature 无界面任务；三语 `api_errors` 文案（K13）与 `whoami` 字段是唯一前端侧改动。
+
+**自包含任务**：每个任务内联文件、逻辑、AC 覆盖；设计论证指向 design §X 不复制。
+
+**执行顺序 ≠ 编号**：T005（fake 夹具）应在 T006 / T007 之前跑通；T009（catalog 实现）会同时改 `llm.py` 与 `llm_server.py`，与 T006（typed 异常，同在 `llm/domain/utils.py`）合成一个 PR 提交以减少 `llm` 域两次 review。
+
+**工时口径**：括号内为估算人时；合计 ≈ 100h（其中 Wave 6 ≈ 12h 要等上游；Wave 7 ≈ 6h 需 114）。
+
+**跨 Feature 副作用登记**（release-contract 表 1 / 检查项 17）：
+- **T006**（`llm/domain/utils.py:126/136` 裸 `Exception` → `LlmProviderDailyLimitExceededError(Exception)`；`common/constants/enums/telemetry.py` `ApplicationTypeEnum` 加 `MODEL_GATEWAY`）—— `llm` 域共享 util 与遥测枚举；同基类同 message，既有 `except Exception` 与统计页零感知；统计页按类型筛选会多出一项。
+- **T009**（`llm/domain/services/llm.py:419-449` 抽 `acollect_visible_server_ids`；`llm/domain/models/llm_server.py:492` `aget_shared_server_ids_for_leaf(raise_on_error=False)`）—— `get_all_llm` 行为不变（T008 含回归断言）；新 kw 默认值保持旧行为。
+- **T007**（`open_api/domain/scopes.py:139-147` `model:invoke` 翻 issuable + 端点登记）—— 签发表单在 `open_platform.enabled` 下开始展示该位（F049 AC-13 语义）；四个既有测试同批改（design D12）。
+- **T004**（`open_api/domain/services/call_audit_service.py` 重构为 `BatchedRecordWriter` 子类；`main.py:108/154` lifespan 增一对起停）—— 公开名 / 常量 / 行为不变，`test/open_api/test_call_audit*.py` 既有用例必须原样通过。
+- **T013**（`open_api/api/exception_handlers.py` 增本面前缀分支两处；`api/router.py:149-166` 条件挂载）—— 其它 v2 路径体形状不变（T012 断言）。
+- **T001**（`docs/constitution.md` C5 表 + `release-contract.md` 已分配模块编码）—— 登记 262。
+- **T020**（回写 F054 `contracts-runtime-manager.md §5`、F053 design §6.2 表、F055 design D13 环境变量名）—— 只加名不改既有名。
+- **依赖上游任务 ID**：F055 **T055**（`hosted_app` 主体解析器 + CHECK 放宽迁移）· **T056**（注册 `HostedAppDeclarationPort`、凭据 `scopes` 含 `model:invoke`、`BISHENG_APP_TOKEN`）· F054（OBO 验签实现 + runtime-manager 注入三名，无任务号，见 F054 tasks 追加项）· F056（查询面接线）· F052 / F055 T060（消费 `model_catalog`）。
+
+---
+
+## Tasks
+
+### Wave 1 · 基础设施（无测试配对，排最前）
+
+- [ ] **T001**: 错误码 262 段 + C5 / release-contract 登记 + 三语文案（3h）
+  **文件**: `src/backend/bisheng/common/errcode/model_face.py`（新）, `docs/constitution.md`（C5 表 `26x–27x` 行加 `262 model_face`，并加一段「262 is assigned」子段说明，同 260 段体例）, `features/v3.0.0/release-contract.md`（「已分配模块编码」加 262 行，Owner F051）, `src/frontend/packages/locales/src/api_errors/{zh-Hans,en,ja}.json`（三语视为一组）
+  **逻辑**: 按 design D11 定义 `ModelFaceError(OpenApiAuthError)`（类属性 `http_status / openai_type / openai_code`，**`Code: int = 262xx` 写法**，K13）与本期码：26201 / 26202 / 26203 / 26204 · 26211 / 26212 / 26213 / 26214（`candidates` kwarg）/ 26215 / 26216 / 26217 · 26231 / 26232（实例级 `http_status`）/ 26233 / 26234。三语 message 面向 agent 可读（26202 原文「本版仅提供 OpenAI 兼容面」；26214 提示「请使用限定名 服务商名/模型名」）。跑 `pnpm check-i18n`（`src/frontend/`）确认新码全部有文案、生成物不手改。
+  **依赖**: 无
+
+- [ ] **T002**: 请求 / 响应 schemas（3h）
+  **文件**: `src/backend/bisheng/open_api/domain/schemas/model_gateway.py`（新）
+  **逻辑**: pydantic v2：`ChatCompletionRequest`（design D8 字段清单，`extra="allow"`，`messages` `min_length=1`，`n` 只允许 1，`stream_options.include_usage`）/ `ChatCompletionMessage` / `ToolCall` / `ChatCompletionChoice` / `Usage` / `ChatCompletionResponse(object="chat.completion")` / `ChatCompletionChunk(object="chat.completion.chunk")` / `ModelObject(id, object="model", created, owned_by, bisheng_model_type, bisheng_qualified_name)` / `ModelList(object="list", data)` / `OpenAIErrorBody(error: {message,type,code,param,bisheng_code, candidates?})`。响应模型序列化用 `exclude_none=False`（OpenAI 客户端接受 null 字段），`reasoning_content` 为 `None` 时**不输出**（单独 `exclude_none` 的字段级处理）。
+  **依赖**: 无
+
+- [ ] **T003**: `model_call_record` ORM + Repository（4h）
+  **文件**: `src/backend/bisheng/open_api/domain/models/model_call_record.py`（新）, `src/backend/bisheng/open_api/domain/repositories/model_call_record_repository.py`（新）
+  **逻辑**: 表按 design §4.2 ④（`SQLModelSerializable`，`BigInteger` 主键，`VARCHAR` 不用 `CHAR`，`create_time` `server_default=func.now()`，三条索引 D9）；模块已在 `_TENANT_AWARE_MODEL_MODULES`（`core/database/tenant_filter.py:107`）无需登记。Repository：`ainsert_batch(rows)`（一个 session `add_all` + 单次 commit；行显式带 `tenant_id`）/ `alist(tenant_id, *, credential_id, app_id, time_from, time_to, cursor, limit)`（排序 `(create_time DESC, id DESC)`，游标 `(create_time, id)` 编码为 base64 字符串）/ `aiter_export(...)`（同条件按游标翻页的 async 生成器）。**禁**批量 UPDATE / DELETE。
+  **回滚**: 新表无 Alembic；回滚 = 删表（本 Feature 前无数据）。
+  **依赖**: 无
+
+- [ ] **T004**: `BatchedRecordWriter` 泛化 + `ModelCallRecordWriter` + lifespan（4h）
+  **文件**: `src/backend/bisheng/open_api/domain/services/batched_writer.py`（新：`BatchedRecordWriter[T]`，构造参数 `max_queue_size / batch_size / flush_interval_seconds / name / write_batch: Callable[[list[T]], Awaitable[None]]`，方法 `enqueue / start / stop / flush_now`，逻辑逐行搬自 `call_audit_service.py:18-108`）, `src/backend/bisheng/open_api/domain/services/call_audit_service.py`（改为子类；`AUDIT_*` 常量与 `open_api_call_audit_service` 单例名不变）, `src/backend/bisheng/open_api/domain/services/model_call_record_writer.py`（新：队列 5000 / 批 200 / 1s，`write_batch=ModelCallRecordRepository.ainsert_batch`；失败 `logger.error("open_api.model_call_record.write_failed | reason=…")` + `emit_metric("model_call_record", status="dropped", …)`）, `src/backend/bisheng/main.py`（`:108` 旁 `model_call_record_writer.start()`，`:154` 旁 `await model_call_record_writer.stop()`）
+  **逻辑**: design D9。既有 `test/open_api/` 中审计写入器用例必须原样通过（重构不改行为）。
+  **依赖**: T003
+
+- [ ] **T005**: 测试夹具：fake `BishengLLM` / fake catalog / ASGI `openai` 客户端（4h）
+  **文件**: `src/backend/test/open_api/model_gateway_fixtures.py`（新）, `src/backend/test/open_api/conftest.py`（追加 fixture 引用；顶层不 import 尚未存在的实现模块，fixture 体内惰性 import）
+  **逻辑**: `fake_llm_factory(script)`：返回对象，`astream` 按脚本 yield `AIMessageChunk`（支持 content / `reasoning_content` / `tool_call_chunks(index=None)` / 末块 `usage_metadata` / 中途抛异常 / 抛 `LlmProviderDailyLimitExceededError`），`ainvoke` 返回 `AIMessage`，`bind` 记录 `tools / tool_choice` 并返回自身；`monkeypatch LLMService.get_bisheng_llm`。`catalog_rows`：构造 `LLMServer` / `LLMModel` 行（含跨服务商同名、下线、embedding 类型、他租户、服务器已删）写入 `open_api_db`（沿用 `conftest.py:28`）。`credential_with_scopes(scopes)`：经 `CredentialService.issue` 签发返回明文。`openai_client(app, api_key)`：`openai.AsyncOpenAI(base_url="http://test/api/v2/model/v1", api_key=..., http_client=httpx.AsyncClient(transport=httpx.ASGITransport(app=app)))`。`open_platform_enabled` fixture 复用既有（`test_scope_issuability.py` 用法）。代理 env 清理沿用既有 autouse。
+  **依赖**: 无
+
+- [ ] **T006**: typed 日上限异常 + `ApplicationTypeEnum.MODEL_GATEWAY`（1h）
+  **文件**: `src/backend/bisheng/llm/domain/utils.py`（`:126 / :136`：`raise LlmProviderDailyLimitExceededError(f"...")`，新类定义于同文件顶部、继承 `Exception`）, `src/backend/bisheng/common/constants/enums/telemetry.py`（`ApplicationTypeEnum.MODEL_GATEWAY = "model_gateway"`）
+  **逻辑**: design D13 / 坑 4。`grep -rn "Quota used up" src/backend` 确认无字符串匹配的调用方。
+  **依赖**: 无
+
+- [ ] **T007**: `model:invoke` 翻 issuable + 端点登记 + 既有四测试同批改（2h）
+  **文件**: `src/backend/bisheng/open_api/domain/scopes.py`（`:139-147`：`endpoints` 填 `("POST", "/api/v2/model/v1/chat/completions")`、`("GET", "/api/v2/model/v1/models")`、五个方法 × `"/api/v2/model/v1/{rest}"`；删 `issuable=False` 行）, `src/backend/test/open_api/test_scope_issuability.py`（`:66-69` 参数化只留 `identity:read`，新增 `test_model_invoke_issuable_once_open_platform_on`；`:176` 改 `assert "identity:read" not in codes and "model:invoke" in codes`）, `src/backend/test/open_api/test_scopes.py`（`:49` 同）, `src/backend/test/open_api/test_open_api_route_matrix.py`（在 `open_platform_enabled` 下构建 / reload app；见坑 13）
+  **逻辑**: design D12。路由矩阵测试在本任务会因路由尚不存在而红——**允许**，T013 落地后转绿（本任务 PR 与 T013 同批合入，或先标 `xfail(strict=True)`）。
+  **依赖**: T005
+
+### Wave 2 · 目录与名称解析（`llm` 域，Test-First）
+
+- [ ] **T008**: `model_catalog` 单元测试（4h）
+  **文件**: `src/backend/test/llm/test_model_catalog.py`（新）
+  **逻辑**: `test_list_callable_only_llm_and_online`（embedding / rerank / 下线不出现）→ AC-09；`test_root_shared_server_visible_to_child`（子租户目录含 FGA `shared_with` 的 Root 服务器模型；Root 租户只见自有）→ AC-09；`test_other_tenant_model_invisible` → AC-13；`test_exact_name_unique_resolves` / `test_exact_name_with_slash_prefers_bare_match`（`model_name` 本身含 `/`）→ AC-11；`test_ambiguous_bare_name_26214_lists_qualified`（跨服务商同名 → `candidates == {"A/x","B/x"}`）→ AC-12；`test_qualified_name_resolves_when_unique_and_when_ambiguous` → AC-12；`test_offline_26212_vs_missing_26211_vs_provider_deleted_26213` → AC-13；`test_non_llm_type_is_26211`（不透露类型）→ AC-13；`test_list_ids_qualified_only_for_ambiguous_rows` → AC-10 / AC-12；`test_cache_ttl_bounded_60s`（`monkeypatch settings.open_api.model_catalog_ttl_seconds=61` → 校验器夹到 60；缓存命中后下线模型仍可解析、`ttl` 过后 26212）→ AC-14；`test_fga_failure_raises_26216_not_narrower_set`（`monkeypatch get_permission_relation_api` 抛 → 26216；断言**未**返回仅自有服务器的集合）→ AC-35；`test_get_all_llm_unchanged_after_helper_extraction`（同一数据下 `get_all_llm` 返回集合与抽取前快照一致）→ 回归；`test_hosted_range_intersection`（`range=ModelRange(declared={"x"})` 时 `y` → 26215、`x` 下线 → 26212）→ AC-34。
+  **覆盖 AC**: AC-09, AC-10, AC-11, AC-12, AC-13, AC-14, AC-34, AC-35
+  **依赖**: T001, T005, T006
+
+- [ ] **T009**: `model_catalog` 实现 + `get_all_llm` helper 抽取 + fail-closed 参数（6h）
+  **文件**: `src/backend/bisheng/llm/domain/services/model_catalog.py`（新：`CallableModel` / `ModelRange(kind: Literal["tenant","declared"], declared: frozenset[str] | None)` / `ResolvedModel(model_id, server_id, model_name, server_name, server_type, qualified_name)` / `list_callable_chat_models(tenant_id)` / `resolve_model_name(tenant_id, requested, *, range=None)` / `invalidate_catalog(tenant_id)`；进程内 `TTLCache(maxsize=256, ttl=settings.open_api.model_catalog_ttl_seconds)`，只缓存成功；`emit_metric("model_catalog", status=hit|miss|unavailable)`）, `src/backend/bisheng/llm/domain/services/llm.py`（`:419-449` 抽 `acollect_visible_server_ids(tenant_id, *, raise_on_error=False) -> list[int]`；`get_all_llm` 改调、行为不变）, `src/backend/bisheng/llm/domain/models/llm_server.py`（`:492` `aget_shared_server_ids_for_leaf(leaf_id, *, raise_on_error: bool = False)`，`True` 时重抛）, `src/backend/bisheng/core/config/open_platform.py`（`OpenApiConf.model_catalog_ttl_seconds: int = 30`，校验器夹到 `[1, 60]`）
+  **逻辑**: design D5 解析四步 + D6 集合与缓存；`range.kind == "declared"` 时先按租户集合解析（得到唯一模型）再判 `qualified_name ∈ declared or model_name ∈ declared`，否则 26215——保证「已收回」与「未声明」的判序：下线先于未声明（spec §3 末段）。
+  **测试**: T008 全部通过
+  **覆盖 AC**: AC-09, AC-10, AC-11, AC-12, AC-13, AC-14, AC-34, AC-35
+  **依赖**: T008
+
+- [ ] **T010**: `ModelRangePolicy` + 两个 Port 单元测试（2h）
+  **文件**: `src/backend/test/open_api/test_model_range_policy.py`（新）
+  **逻辑**: `test_service_account_tenant_range_subject_self` → AC-04 / AC-09；`test_service_account_with_access_token_header_26204`（头存在即拒，值任意）→ AC-22；`test_natural_person_tenant_range`（结构上可达即可，PAT 无 `model:invoke` 由 T012 覆盖）；`test_hosted_app_without_declaration_port_26216`（默认 Port fail-closed）→ AC-35；`test_hosted_app_declared_range_and_subject_user_when_token_valid`（fake 两个 Port）→ AC-21 / AC-34；`test_hosted_app_no_token_subject_app_self` → AC-21；`test_hosted_app_invalid_token_26204` → AC-21；`test_registration_replaces_default_port`。hosted_app 用例以 `OpenApiPrincipal.model_construct(actor_kind="hosted_app", …)` 绕过 Literal（F055 T055 落地后改为正常构造，见 T022）。
+  **覆盖 AC**: AC-04, AC-09, AC-21, AC-22, AC-34, AC-35
+  **依赖**: T005
+
+- [ ] **T011**: `ModelRangePolicy` + Port 定义与默认实现（3h）
+  **文件**: `src/backend/bisheng/open_api/domain/services/model_range_policy.py`（新：`HostedAppDeclarationPort` / `AccessSubjectVerifierPort` Protocol、`AccessSubject`、`ResolvedSubject(subject_kind, subject_id)`、`register_hosted_app_declaration_port` / `register_access_subject_verifier`、`resolve_range_and_subject(principal, headers) -> tuple[ModelRange, ResolvedSubject]`；常量 `ACCESS_TOKEN_HEADER = "X-BiSheng-Access-Token"`）
+  **逻辑**: design D7。默认 Port：声明读取抛 → 26216；验签恒 `None`。
+  **测试**: T010 全部通过
+  **覆盖 AC**: AC-04, AC-09, AC-21, AC-22, AC-34, AC-35
+  **依赖**: T010, T009
+
+### Wave 3 · 协议面：路由、错误体、开关、流式（Test-First）
+
+- [ ] **T012**: 鉴权穿透 / 错误体 / 承诺面外 / 开关 集成测试（5h）
+  **文件**: `src/backend/test/open_api/test_model_gateway_auth.py`（新）, `src/backend/test/open_api/test_model_gateway_errors.py`（新）, `src/backend/test/open_api/test_model_gateway_switch.py`（新）
+  **逻辑**: **auth**：无凭据 → 401 `error.type=="authentication_error"` `bisheng_code==26001`；改一位 → 401 26002；只持 `chat:invoke` → 403 26003 且 `message` 含 `model:invoke`（`/models` 与 `/chat/completions` 都断）→ AC-06；持 `model:invoke` 的密钥打 `/api/v2/workstation/chat/completions` → 403 26003（互不蕴含反向）→ AC-06；编辑密钥补位后同一明文立即通过 → AC-07；撤销后 ≤ 3s 401 且 `/models` 无数据 → AC-05；持 `delegate` → 403 26051 `code=="delegate_only_credential"`（承诺面与 catch-all 都断，坑 7）→ AC-26；`X-On-Behalf-Of` / `X-End-User` / 体内 `user_id` → 4xx 26004 / 26019 且 fake LLM 未被调用 → AC-27；PAT（`knowledge:read`）→ 403 26003。**errors**：`RequestValidationError`（`messages=[]`）→ 400 26203 `param=="messages"`；`n=2` → 26203；`/embeddings` POST / `/responses` / `/images/generations` / `/audio/speech` / `/files` GET → 404 26201 `code=="endpoint_not_supported"` → AC-02；`/messages` POST → 404 26202 → AC-03 / AC-32；上述均无凭据时先 401 → AC-05；**邻居不变**：`/api/v2/auth/whoami` 无凭据仍返回信封 `{status_code:26001,...}`；被拒路径 `audit_log` 有 `open_api.call` 行、`model_call_record` 无行 → AC-20。**switch**：`open_platform.enabled=False` 下用独立 app 工厂 / `importlib.reload(bisheng.api.router)` 构建 → `/api/v2/model/v1/models` 与 `/chat/completions` 均 404 `{"detail":"Not Found"}`（有无凭据同）→ AC-28；`True` 下不依赖任何 runtime-manager / app-proxy 配置即可 200 → AC-29。
+  **覆盖 AC**: AC-02, AC-03, AC-05, AC-06, AC-07, AC-08, AC-20, AC-26, AC-27, AC-28, AC-29, AC-32
+  **依赖**: T005, T007, T001
+
+- [ ] **T013**: 路由 / catch-all / 条件挂载 / OpenAI 错误体分支（5h）
+  **文件**: `src/backend/bisheng/open_api/api/endpoints/model_gateway.py`（新：`router = APIRouter(prefix="/model/v1", tags=["OpenAPI","Model"])`；`POST /chat/completions`、`GET /models`、`api_route("/{rest:path}", methods=[...])` 三者均 `@open_api_scope("model:invoke", modes=("S",))` + `Depends(get_open_api_execution)`；`/models` 与 `/chat/completions` 挂 `response_model`），`src/backend/bisheng/open_api/api/router.py`（新 `model_gateway_router` 导出）, `src/backend/bisheng/api/router.py`（`:166` 后 `if settings.open_platform.enabled: router_rpc.include_router(model_gateway_router)`）, `src/backend/bisheng/open_api/api/exception_handlers.py`（新 `MODEL_GATEWAY_PATH_PREFIX = "/api/v2/model/v1"`、`_is_model_gateway_path(conn)`、`render_openai_error(exc) -> JSONResponse`（D4 映射表：`ModelFaceError` 直接读 `openai_type/openai_code`；`OpenApiAuthError` 其它码与权限族按表；`RequestValidationError` → 26203）；在 `_register_v2_handler.dispatch` 与 `open_api_auth_exception_handler` **两处**前置该判断，坑 8）
+  **逻辑**: design D3 / D4。catch-all 端点体只做 `rest == "messages"` 判断后 raise。`chat_completions` 端点本任务先返回 26231 占位（T015 填实）。
+  **测试**: T012 auth / errors / switch 通过（`chat/completions` 成功路径留 T014）
+  **覆盖 AC**: AC-02, AC-03, AC-05, AC-06, AC-07, AC-08, AC-26, AC-27, AC-28, AC-29, AC-32
+  **依赖**: T012, T011
+
+- [ ] **T014**: 对话补全翻译与流式 单元测试（6h）
+  **文件**: `src/backend/test/open_api/test_model_gateway_stream.py`（新）, `src/backend/test/open_api/test_openai_codec.py`（新）
+  **逻辑**: **codec**：`messages` 含 system / user / assistant(tool_calls) / tool(tool_call_id) / 多模态数组 → `convert_to_messages` 结果类型与字段逐一断言 → AC-18；`tools` / `tool_choice` 原样进 `bind`、采样参数原样进 `kwargs`、未知字段（`extra`）透传 → AC-17 / AC-18；非流式响应形状（`chat.completion`、`tool_calls` 的 `arguments` 为 JSON 字符串、`finish_reason=="tool_calls"`、`usage` 三数）；流式 chunk 序列（首块 `role`、文本 delta、`reasoning_content` 只在非空时出现、`tool_calls` 的 `index` 在 fake 给 `None` 时被按顺序分配且同一调用稳定——双工具夹具，坑 6、`finish_reason` 独立 chunk、`include_usage` 为真时 `choices=[]` 的 usage chunk、`[DONE]`）→ AC-16 / AC-18；usage 未知（末块无 `usage_metadata`）→ 非流式 `usage` 三 null、流式不发 usage chunk → AC-23。**stream 端点**：SSE 头 `text/event-stream` + `X-Accel-Buffering: no`；中途异常 → `data: {"error":{...26234/26231}}` 后 `[DONE]` 且连接关闭（`httpx` 读到结尾不超时）→ AC-16；预取首块阶段抛 `LlmProviderDailyLimitExceededError` → **非 SSE** 429 26217 → AC-15；首块阶段上游 `APIStatusError(400/413/422)` → 同状态 26232 `message` 含上游原文、上游 429 → 26233、连接错 → 502 26231 → AC-08 / AC-18；不建会话（`message_session` 表零新增行）、不写消息表 → AC-17 / AC-19；`BishengLLM` 实例化参数断言（`app_type==MODEL_GATEWAY`、`user_id==resource_owner_user_id`、`streaming==req.stream`）→ AC-23 前提；客户端中途断开 → 记录 `result=="client_disconnected"`（与 T017 合并断言）。
+  **覆盖 AC**: AC-08, AC-15, AC-16, AC-17, AC-18, AC-19, AC-23
+  **依赖**: T005, T002, T006
+
+- [ ] **T015**: `openai_codec` + `ModelGatewayService.complete` 实现（10h）
+  **文件**: `src/backend/bisheng/open_api/domain/services/openai_codec.py`（新：`to_langchain_messages(messages)`、`build_completion(ai_message, model, request_id) -> ChatCompletionResponse`、`ChunkAssembler`（状态：`request_id / created / model / tool_index_map / last_chunk / sent_role`；方法 `first(chunk) / next(chunk) / finish(finish_reason) / usage(last_chunk, include_usage) / error(exc)` 各返回 SSE 行）、`usage_from(result) -> Usage | None`（经 `parse_token_usage` / `get_token_from_usage`，全零 → `None`）、`classify_upstream_error(exc) -> ModelFaceError`、`redact_secrets(text)`）, `src/backend/bisheng/open_api/domain/services/model_gateway_service.py`（新：`complete(principal, request, req)`：范围 → 解析 → `get_bisheng_llm` → `bind` → 非流式 `ainvoke` / 流式预取首块（坑 3）→ 返回 `ChatCompletionResponse` 或 `StreamingResponse`；`list_models(principal, headers)`；每条路径末尾调 `ModelCallRecordWriter.enqueue`（T018 填字段）+ `logger.bind(event="model_gateway.call")`）, `src/backend/bisheng/open_api/api/endpoints/model_gateway.py`（`chat_completions` 接 service；`StreamingResponse(..., headers={"Cache-Control":"no-cache","X-Accel-Buffering":"no"})`）
+  **逻辑**: design D8 / D13 / D14。`request.is_disconnected()` 在每块 yield 前检查一次（开销可忽略）；`asyncio.CancelledError` 记 `client_disconnected` 后重抛。10009 / 10010 → 26213，10012 → 26212，10011 → 26211，10013 → 26231（K6 错误族映射）。
+  **测试**: T014 全部通过；T012 全部通过
+  **覆盖 AC**: AC-08, AC-15, AC-16, AC-17, AC-18, AC-19, AC-23
+  **依赖**: T014, T013
+
+- [ ] **T016**: 路由矩阵 / OpenAPI 契约再生成 / 契约文档补章（2h）
+  **文件**: `features/v3.0.0-beta1/053-openapi-auth-and-identity/openapi-v2-key-auth-api.json`（跑 `python features/v3.0.0-beta1/053-openapi-auth-and-identity/generate_openapi_contract.py` 再生成）, 同目录 `openapi-v2-key-auth-api.md` / `openapi-v2-key-auth-api-by-category.md`（补「模型协议面」章：三条操作、错误体、base URL）, `src/backend/test/open_api/test_open_api_route_matrix.py`（T007 的 xfail 去掉）, `src/backend/bisheng/open_api/api/openapi_schema.py`（如需：本面 `StreamingResponse` 的 `text/event-stream` 描述）
+  **逻辑**: design D12 / 坑 11。断言 `test_openapi_schema_contract.py` 三条全绿。
+  **依赖**: T013, T015
+
+### Wave 4 · 逐条调用记录（Test-First）
+
+- [ ] **T017**: ModelCallRecord 写入与查询 单元 + 集成测试（4h）
+  **文件**: `src/backend/test/open_api/test_model_call_record.py`（新）
+  **逻辑**: `test_success_row_fields`（成功调用 → 一行：`credential_id / credential_mask` 掩码格式、`actor_kind/actor_id/actor_name`、`resource_owner_user_id`、`subject_kind=="service_account"`、`requested_model / model_id / server_id / model_name / server_name / server_type`、`is_stream`、三 token 数与 `parse_token_usage(last_chunk)` 相等、`result=="success"`、`latency_ms>0`、`ttft_ms` 非空（流式）、`request_id` 与响应 `id` 相等、`trace_id`）→ AC-20 / AC-23；`test_unknown_usage_is_null_not_zero` → AC-23；`test_upstream_failure_row`（`result=="upstream_failed"`、`error_code==26231`、tokens NULL）→ AC-20；`test_model_unavailable_row`（26211 / 26212 / 26214 各一行 `result=="model_unavailable"`、`model_id` 空、`requested_model` 保留）→ AC-20；`test_limit_exceeded_row` → AC-15 / AC-20；`test_rejected_before_resolution_writes_no_row_but_audit_row`（401 / 403 / 26051：本表零行、`audit_log.open_api.call` 一行含 `credential_id` 与 `error_code`）→ AC-20；`test_models_endpoint_writes_no_row`；`test_no_message_body_no_secret_in_row_or_logs`（行内任何列与 `caplog` 均不含 `Authorization` 明文、`bs-sak-` 全串、`messages` 文本、`LLMServer.config` 值）→ AC-36；`test_batch_writer_flushes_within_interval_and_on_stop`；`test_queue_full_logs_error_and_metric`（C8 不静默）；`test_alist_filters_and_cursor_order`（按 `credential_id` / `app_id` / 时间范围筛；同秒 20 行两页拼接 == 全序，坑 9）→ AC-24；`test_tenant_isolation_on_list`（子租户查不到 Root 行）→ AC-24；`test_telemetry_event_same_tokens`（`monkeypatch telemetry_service.log_event_sync` 捕获 `ModelInvokeEventData`，`app_type=="model_gateway"`、三 token 数与本表相等）→ AC-23。
+  **覆盖 AC**: AC-15, AC-20, AC-23, AC-24, AC-36
+  **依赖**: T003, T004, T005, T015
+
+- [ ] **T018**: 记录接线 + token 同源 + 脱敏（4h）
+  **文件**: `src/backend/bisheng/open_api/domain/services/model_gateway_service.py`（`_start_record(principal, subject, req)` / `_finish_record(record, result, error, usage, ttft)`；`credential_mask` **不在请求路径查**（`OpenApiPrincipal` 无掩码字段、不动 beta2 契约）：行入队时 `credential_mask=None`，由 `ModelCallRecordWriter` 在 `write_batch` 前按 `credential_id` 批量水合 `ApiCredential.key_mask`（一次 `IN` 查询 / 批，design D14））, `src/backend/bisheng/open_api/domain/services/model_call_record_writer.py`（批内水合）, `src/backend/bisheng/open_api/domain/services/openai_codec.py`（`redact_secrets` 接入所有 message 出口）
+  **逻辑**: design D9 / D10 / D14；坑 5（0 → NULL）。中途错误同时 `conn.scope["open_api_error_code"] = code`（坑 10）。
+  **测试**: T017 全部通过
+  **覆盖 AC**: AC-15, AC-20, AC-23, AC-24, AC-36
+  **依赖**: T017
+
+### Wave 5 · base URL 契约与官方客户端契约测试
+
+- [ ] **T019**: 官方 `openai` 客户端 ASGI 契约测试（3h）
+  **文件**: `src/backend/test/open_api/test_model_gateway_openai_sdk.py`（新）
+  **逻辑**: 用 T005 `openai_client`：`client.models.list()` 能解析且 `id` 集合符合 D5（歧义只有限定名）→ AC-01 / AC-10；`client.chat.completions.create(model=..., messages=..., stream=False)` 得 `ChatCompletion` 且 `usage` 可读 → AC-01；`stream=True` 迭代 `ChatCompletionChunk`，含 `tool_calls` 增量可被 SDK 累加、`stream_options={"include_usage":True}` 末块 `usage` → AC-16 / AC-18；错误：401 → `openai.AuthenticationError`、403 → `openai.PermissionDeniedError`（`body["error"]["bisheng_code"]` 可读）、404 模型 → `openai.NotFoundError`、429 → `openai.RateLimitError`、400 歧义 → `openai.BadRequestError` 且 `body.error.candidates` 列出限定名 → AC-08 / AC-12；`client.embeddings.create(...)` → `NotFoundError` 26201 → AC-02；限定名 `A/x` 调用成功 → AC-12。
+  **覆盖 AC**: AC-01, AC-02, AC-08, AC-10, AC-12, AC-16, AC-18
+  **依赖**: T015, T016
+
+- [ ] **T020**: base URL helper + `whoami.model_base_url` + 环境变量名回写三处（3h）
+  **文件**: `src/backend/bisheng/open_api/api/public_base_url.py`（`model_gateway_base_url(request) -> str` = `resolve_public_base_url(request) + "/api/v2/model/v1"`；`_warn_once` 文案泛化，坑 14）, `src/backend/bisheng/open_api/domain/schemas/credential.py`（`WhoamiResponse.model_base_url: str`）, `src/backend/bisheng/open_api/api/endpoints/auth.py`（`whoami` 填值；`open_platform.enabled=False` 时为空串）, `src/backend/test/open_api/test_model_gateway_base_url.py`（新：配置 `public_base_url` / `X-Forwarded-*` / Host 三来源各一例；两把不同密钥、两个租户得到同一 base → AC-30；关开关时空串）, `features/v3.0.0/054-app-domain-runtime/contracts-runtime-manager.md`（§5 清单追加 `OPENAI_BASE_URL` · `OPENAI_API_KEY` · `BISHENG_MODEL_BASE_URL`，来源标 F051 design D2）, `features/v3.0.0/053-dev-cli-skills/design.md`（§6.2 表末行同步）, `features/v3.0.0/055-app-publish-pipeline/design.md`（D13「模型注入」段：`BISHENG_PLATFORM_API_BASE` → 改引 `OPENAI_BASE_URL` / `BISHENG_MODEL_BASE_URL`；凭据仍 `BISHENG_APP_TOKEN`，且同时以 `OPENAI_API_KEY` 注入）
+  **逻辑**: design D2。三处回写只加名不改既有名。
+  **覆盖 AC**: AC-30, AC-33
+  **依赖**: T013
+
+- [ ] **T021**: 技能包 / 文档配合项登记（1h）
+  **文件**: `features/v3.0.0/053-dev-cli-skills/tasks.md`（追加一行「平台能力接线包·模型一节按 F051 §4.2 ①③ 与 D5 限定名规则编写；附 `X-BiSheng-Access-Token` 转发说明」，指向本文）, `features/v3.0.0/057-bisheng-sdk/spec.md` 或 tasks（如存在：登记「SDK 不封 chat；示例用 `openai` 客户端读 `OPENAI_BASE_URL`；应用侧转发访问凭据头」）
+  **逻辑**: design §6.1 / 坑 16。本 Feature 不写技能包正文。
+  **覆盖 AC**: AC-31, AC-33
+  **依赖**: T020
+
+### Wave 6 · 托管应用运行期路径（**依赖 F055 T055 / T056、F054 OBO 验签**）
+
+> 在上游落地前，本 Wave 的测试用 fake Port + `model_construct` 构造 `hosted_app` principal 通过（T010 已含），代码可先合；下列任务是**接线与真实断言**，须待上游。
+
+- [ ] **T022**: `hosted_app` principal 正式构造 + 范围收窄真实断言（3h）**依赖 F055 T055**
+  **文件**: `src/backend/test/open_api/test_model_gateway_hosted_app.py`（新）, `src/backend/bisheng/open_api/domain/services/model_range_policy.py`（若 F055 把 `actor_kind` Literal 扩为含 `"hosted_app"`，去掉 `model_construct` 变通；T055 的解析器返回的 principal 字段（`actor_id = app 内部 id`、`actor_name = slug`、`resource_owner_user_id = owner`）按 F055 实际回填本文 §4.2 ④ 的 `actor_*` 语义）
+  **逻辑**: 经真实 `CredentialService.issue(subject_kind="hosted_app", ...)` 签发 → `/models` 只返回 `declared ∩ C` → AC-34；`declared` 外模型 → 26215；`declared` 内已下线 → 26212 → AC-13 / AC-34；声明 Port 未注册 → 26216 → AC-35。
+  **覆盖 AC**: AC-13, AC-34, AC-35
+  **依赖**: T011, T015, F055 T055
+
+- [ ] **T023**: 访问凭据验签 Port 接线（F054 提供实现）+ subject 落记录（3h）**依赖 F054 OBO 验签**
+  **文件**: `src/backend/bisheng/app_runtime/domain/services/obo_token.py`（**F054 归属**：从 `entry_authz_service.py:379-426` 抽 `OBO_AUDIENCE` / secret 读取 / `issue` 与新 `verify_obo_token(token, *, app_id, tenant_id) -> AccessSubject | None`；本任务只登记需求，实现 PR 由 F054 出或本 Feature 代出后由 F054 review）, `src/backend/bisheng/main.py`（lifespan 注册 `register_access_subject_verifier(verify_obo_token)`——**放 `app_runtime` 组合根**，不在 `open_api` 内 import `app_runtime`）, `src/backend/test/open_api/test_model_gateway_hosted_app.py`（增：有效头 → 行 `subject_kind=="user"`、`subject_id==user`；无头 → `app_self`；过期 / 错 `app_id` / 错签名 → 26204；任何情况下范围不随 subject 变）
+  **逻辑**: design D7；spec 决议-5。`app_id` 维度：行 `app_id = principal.actor_name`（slug）或 F055 定义的应用标识——以 T055 回填为准。
+  **覆盖 AC**: AC-21, AC-22, AC-34
+  **依赖**: T022, T018
+
+- [ ] **T024**: F055 声明 Port 注册验证 + 能力收回错误对齐（2h）**依赖 F055 T056 / T058**
+  **文件**: `src/backend/test/app_publish/test_capability_model.py`（F055 归属，增：经本面 26215 / 26212 与 F055 `16273` 的对应关系——本面**不**改码，F055 在发布面读接口按 `declared ∖ 当前可解析` 计算「已失效」）, `features/v3.0.0/055-app-publish-pipeline/design.md`（D13 补一句：模型收回的运行期错误由 F051 26212 / 26213 承担，`16273` 只用于知识库能力）
+  **逻辑**: 消除两个错误码族对同一事件的重复；F055 AC-53 在模型面的表现 = 26212 / 26213（spec AC-13）。
+  **覆盖 AC**: AC-13, AC-34
+  **依赖**: T022
+
+- [ ] **T025**: 114 托管应用端到端（2h）**依赖 F055 T056 部署到 114**
+  **文件**: 本文「114 部署记录」小节
+  **逻辑**: 发布一个声明了模型 `x` 的示例应用 → 容器内 `env | grep OPENAI_` 三名齐 → 应用内 `openai` 客户端调 `x` 成功、调 `y` 26215 → 管理员下线 `x` → ≤ 60s 26212、发布面标「已失效」→ `model_call_record` 行 `app_id` 与 `subject_kind` 正确（浏览器访问 → `user`，`curl` 容器内后台调用 → `app_self`）。
+  **覆盖 AC**: AC-21, AC-33, AC-34
+  **依赖**: T023, T024
+
+### Wave 7 · 114 E2E 与引擎适配（需 114）
+
+- [ ] **T026**: 114 部署 + `/e2e-test` 脚本（pytest + httpx 打 114）（3h）
+  **文件**: `src/backend/test/e2e/test_model_gateway_114.py`（新，`-m e2e`，读 `BISHENG_E2E_BASE / BISHENG_E2E_SAK` 环境变量）, 本文「114 部署记录」小节
+  **逻辑**: 部署顺序：`bash /opt/bisheng-ops/deploy.sh`（`create_all` 建 `model_call_record`）→ `config.yaml` 确认 `open_platform.enabled: true`、`open_api.public_base_url`（114 用 `http://192.168.106.114:3001`）→ 重启 8 unit → 平台签一把 `model:invoke` 密钥。脚本覆盖：AC-01 / AC-05 / AC-06 / AC-12 / AC-13 / AC-14（下线 → 轮询 ≤ 60s；在途流式在下线后仍完整读到 `[DONE]`）/ AC-16（经 nginx 首字延迟 < 3s 且分块到达，证明 `X-Accel-Buffering` 生效）/ AC-18（tools 往返）/ AC-26 / AC-28（可选：改开关重启一次）。
+  **覆盖 AC**: AC-01, AC-05, AC-06, AC-12, AC-13, AC-14, AC-16, AC-18, AC-26, AC-28
+  **依赖**: T016, T018, T020
+
+- [ ] **T027**: 本地引擎手动验证（Qwen Code / Codex CLI 对话补全模式 / Kimi Code / Claude Code 反例）（3h）
+  **文件**: 本文「114 部署记录」小节（记录每个引擎的配置片段与结果；配置里密钥用占位符）
+  **逻辑**: `export OPENAI_BASE_URL=http://192.168.106.114:3001/api/v2/model/v1 OPENAI_API_KEY=bs-sak-…`：Qwen Code 跑一个需要 `read_file` 工具调用的任务 → 流式 + 工具往返成功 → AC-31；Codex CLI 切 chat completions provider → 成功；Kimi Code 同；Claude Code `ANTHROPIC_BASE_URL` 指向 base → 得到 26202 可读提示 → AC-32；`/api/v1/env` 关开关后（AC-28）Qwen Code 报 404。任一引擎失败 → 记入「实际偏差记录」并回 design 坑表。
+  **覆盖 AC**: AC-03, AC-31, AC-32, AC-33
+  **依赖**: T026
+
+- [ ] **T028**: 审计与账本核对（1h）
+  **文件**: 本文「114 部署记录」小节
+  **逻辑**: 114 MySQL：`SELECT credential_mask, model_name, server_name, prompt_tokens, completion_tokens, result FROM model_call_record ORDER BY id DESC LIMIT 10`；`audit_log` 中 `action='open_api.call' AND target_id LIKE 'POST /api/v2/model/v1/%'` 行数 ≥ 本表行数（含被拒）；ES 遥测 `MODEL_INVOKE` 事件 `app_type=model_gateway` 的 token 数与本表同一 `trace_id` 行一致 → AC-23；grep 后端日志无 `bs-sak-` 全串与 `Authorization` → AC-36。
+  **覆盖 AC**: AC-20, AC-23, AC-24, AC-36
+  **依赖**: T026
+
+- [ ] **T029**: 发布说明 + docs 补章（1h）
+  **文件**: `docs/api/`（如有 v2 文档目录：新增「模型协议面」页，内容 = design §4.2 ①②③ + 引擎配置片段）, `features/v3.0.0/release-contract.md`（变更历史加一行：F051 design / tasks 定稿、262 登记、`model:invoke` 可签发）
+  **覆盖 AC**: AC-30
+  **依赖**: T027, T028
+
+---
+
+## AC 追溯表（36 / 36 全覆盖）
+
+| AC | 任务 | 阶段 |
+|---|---|---|
+| AC-01 | T019, T026 | 本地 / 114 |
+| AC-02 | T012, T013, T019 | 本地 |
+| AC-03 | T012, T013, T027 | 本地 / 114 |
+| AC-04 | T010, T011 | 本地 |
+| AC-05 | T012, T013, T026 | 本地 / 114 |
+| AC-06 | T012, T013, T026 | 本地 / 114 |
+| AC-07 | T012, T013 | 本地 |
+| AC-08 | T012, T013, T014, T015, T019 | 本地 |
+| AC-09 | T008, T009, T010, T011 | 本地 |
+| AC-10 | T008, T009, T019 | 本地 |
+| AC-11 | T008, T009 | 本地 |
+| AC-12 | T008, T009, T019, T026 | 本地 / 114 |
+| AC-13 | T008, T009, T022, T024, T026 | 本地 / [后] |
+| AC-14 | T008, T009, T026 | 本地 / 114 |
+| AC-15 | T014, T015, T017, T018 | 本地 |
+| AC-16 | T014, T015, T019, T026 | 本地 / 114 |
+| AC-17 | T014, T015 | 本地 |
+| AC-18 | T014, T015, T019, T026 | 本地 / 114 |
+| AC-19 | T014, T015 | 本地 |
+| AC-20 | T012, T017, T018, T028 | 本地 / 114 |
+| AC-21 | T010, T011, T023, T025 | [后] |
+| AC-22 | T010, T011, T023 | 本地 / [后] |
+| AC-23 | T014, T015, T017, T018, T028 | 本地 / 114 |
+| AC-24 | T017, T018, T028 | 本地 / 114（查询面 UI 归 F056） |
+| AC-25 | —（不做项，design §8 登记；T017 `test_no_aggregation_endpoint_exists` 可选反向断言） | — |
+| AC-26 | T012, T013, T026 | 本地 / 114 |
+| AC-27 | T012, T013 | 本地 |
+| AC-28 | T012, T013, T026 | 本地 / 114 |
+| AC-29 | T012, T013 | 本地 |
+| AC-30 | T020, T029 | 本地 |
+| AC-31 | T021, T027 | 114 |
+| AC-32 | T012, T013, T027 | 本地 / 114 |
+| AC-33 | T020, T021, T025, T027 | 114 / [后] |
+| AC-34 | T008, T009, T010, T011, T022, T023, T024, T025 | 本地 / [后] |
+| AC-35 | T008, T009, T010, T011, T022 | 本地 / [后] |
+| AC-36 | T017, T018, T028 | 本地 / 114 |
+
+`[后]` = 依赖 F055 T055 / T056 或 F054 OBO 验签，上游未落地前只有 fake Port 用例通过。
+
+---
+
+## 114 部署记录
+
+> 未开工。T026 起在此追加：部署命令 / 配置片段（密钥占位）/ 每个引擎的结果 / SQL 核对结果。
+
+---
+
+## 实际偏差记录
+
+> **只留一行指针**，论证在 design.md（决策 / 坑），这里不重复（见 `docs/SDD-Guide.md` §4）。
+> 推翻已定案的决策时，先停下与用户重新确认（§3 第四个 ★），再记录。
+
+- （尚无）
