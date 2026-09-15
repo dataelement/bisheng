@@ -54,8 +54,14 @@ def _no_celery(monkeypatch):
 
 @pytest.fixture()
 async def accepted(
-    publish_db, tier_seed, tarball_factory, fake_minio, app_factory, service_account_principal,
-    fake_f054_services, fake_publish_approval,
+    publish_db,
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    app_factory,
+    service_account_principal,
+    fake_f054_services,
+    fake_publish_approval,
 ):
     """``accept()`` already ran; return a factory so a test can vary the package."""
     from bisheng.app_publish.domain.services.publish_pipeline_service import PublishPipelineService
@@ -128,9 +134,15 @@ async def test_pipeline_stage_order_is_build_probe_scan(publish_db, accepted, fa
     """spec AC-01 / F053 AC-31a spell this order out verbatim (design D5's open question)."""
     from bisheng.app_publish.domain.services.publish_pipeline_service import PIPELINE_STAGES
 
-    assert [stage for stage, _ in PIPELINE_STAGES] == ["secret_scan", "precheck_build", "precheck_probe"], (
+    assert [stage for stage, _ in PIPELINE_STAGES] == [
+        "secret_scan",
+        "precheck_schema",
+        "precheck_build",
+        "precheck_probe",
+    ], (
         "the scan runs first (design D5, ruled 2026-08-17): a hit ends the attempt, so building first "
-        "burns a build and a capacity slot for every hit"
+        "burns a build and a capacity slot for every hit; precheck_schema (T061) is one DB read that "
+        "cannot fail and must precede the build only so its summary exists before the approval request"
     )
 
 
@@ -232,7 +244,9 @@ async def test_meta_updated_after_precheck_and_scan_pass_not_awaiting_approval(
     assert meta["name"] == "minimal-app"
 
 
-async def test_meta_not_updated_when_scan_blocks(publish_db, accepted, fake_orchestrator, audit_sink, fake_f054_services):
+async def test_meta_not_updated_when_scan_blocks(
+    publish_db, accepted, fake_orchestrator, audit_sink, fake_f054_services
+):
     """A package that never passes must not be able to rename a running application."""
     _, result = await accepted(extra_files={"leak.py": 'AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"\n'})
     await _run(result.deployment_id)
@@ -314,8 +328,16 @@ async def test_capability_declaration_change_audited_each_release(publish_db, ac
 
 
 async def test_worker_tenant_context_restored_from_celery_header(
-    publish_db, tier_seed, tarball_factory, fake_minio, app_factory, service_account_principal,
-    fake_f054_services, fake_publish_approval, fake_orchestrator, audit_sink,
+    publish_db,
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    app_factory,
+    service_account_principal,
+    fake_f054_services,
+    fake_publish_approval,
+    fake_orchestrator,
+    audit_sink,
 ):
     """A child tenant's publish must not be able to land in Root because a header went missing."""
     from bisheng.app_publish.domain.services.publish_pipeline_service import PublishPipelineService

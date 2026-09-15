@@ -49,6 +49,11 @@ from bisheng.utils import generate_uuid
 # ---------------------------------------------------------------------------
 STAGE_RECEIVED = "received"
 STAGE_PRECHECK_MANIFEST = "precheck_manifest"
+#: Structure-evolution precheck (AC-09). The *gate* runs in the synchronous
+#: leg next to ``precheck_manifest`` (16229 answers the upload itself); the
+#: worker revisits the stage only to record the confirmed change for the
+#: approval card — it never asks a second time.
+STAGE_PRECHECK_SCHEMA = "precheck_schema"
 STAGE_PRECHECK_BUILD = "precheck_build"
 STAGE_PRECHECK_PROBE = "precheck_probe"
 STAGE_SECRET_SCAN = "secret_scan"
@@ -63,6 +68,7 @@ DEPLOYMENT_STAGES: frozenset[str] = frozenset(
     {
         STAGE_RECEIVED,
         STAGE_PRECHECK_MANIFEST,
+        STAGE_PRECHECK_SCHEMA,
         STAGE_PRECHECK_BUILD,
         STAGE_PRECHECK_PROBE,
         STAGE_SECRET_SCAN,
