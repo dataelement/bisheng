@@ -93,16 +93,22 @@ def run(args: Any, emitter: Emitter) -> int:
         listen_port=proxy_port,
         emitter=emitter,
     )
-    process = spawn_app(start, root, env)
+    # Bind the entry port before spawning anything: a busy port (8080 usually
+    # is) must be a clean refusal, not a child process started and then killed.
     try:
         proxy.start()
     except OSError as exc:
-        _terminate(process)
+        proxy.stop()
         raise CliError(
             f"本地访问入口无法监听 127.0.0.1:{proxy_port}：{exc.strerror or exc.__class__.__name__}",
             exit_code=EXIT_USAGE,
             next_step="用 --port 换一个未被占用的端口。",
         )
+    try:
+        process = spawn_app(start, root, env)
+    except CliError:
+        proxy.stop()
+        raise
 
     _report(emitter, profile, whoami, identity, proxy.url, app_port, db, start)
     # A long-running command: the machine-readable "it is up, here is where" is

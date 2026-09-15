@@ -387,7 +387,7 @@
   **文件**: `src/backend/bisheng/dev_toolkit/skills/platform-wiring/`
   **测试载体**: `src/backend/test/dev_toolkit/test_skill_packs.py`（增量）
   **覆盖 AC**: AC-17, AC-18
-  **2026-09-16 完成证据**: commit `9ce5b77d8`（`skills/platform-wiring/{SKILL.md,example/,selfcheck.py}` + README 两包分工）；`test_skill_packs.py` 对两包参数化并加 4 条 AC-17 专项断言（auth 章居首且以警示开头 / 身份头名与 app-proxy `INJECTED_HEADER_NAMES` 零漂移 / 模型章「暂未提供」且无 URL / 样例无登录逻辑），backend `test/dev_toolkit` 38 passed。SDK 三件套章节按任务说明留桩指向 F057，模型章等 F051。
+  **2026-09-16 完成证据**: commit `6d7497c31`（`skills/platform-wiring/{SKILL.md,example/,selfcheck.py}` + README 两包分工）；`test_skill_packs.py` 对两包参数化并加 4 条 AC-17 专项断言（auth 章居首且以警示开头 / 身份头名与 app-proxy `INJECTED_HEADER_NAMES` 零漂移 / 模型章「暂未提供」且无 URL / 样例无登录逻辑），`test_distribution_api.py::test_skill_pack_is_a_tarball_carrying_skill_md` 对两包参数化（分发端点真的能按 slug 取到第二包），backend `test/dev_toolkit` 39 passed。SDK 三件套章节按任务说明留桩指向 F057，模型章等 F051。
 
 - [x] **T039**: `login` 成功后自动执行一次 `skills sync`（失败不影响登录成功、输出原因并提示可手动重跑）
   **文件**: `src/bisheng-cli/bisheng_cli/commands/login.py`（增量）
@@ -481,7 +481,7 @@
 |---|---|---|
 | AC-01 | T027, T028, T029, T030, T033 | ✅ |
 | AC-02 | T007, T008, T009, T010, T027, T028, T048 | ✅（2026-09-16 起阻断） |
-| AC-03 | T009, T010（无 `--as` / `init` 断言）, T032, T035, T042, T044 | ✅（五条命令 2026-09-16 齐备） |
+| AC-03 | T009, T010（无 `--as` / `init` 断言）, T032, T035, T042, T044 | ✅（五条命令 2026-09-16 齐备；另有第六条 `platforms` 承载 T047 交互层——与「且仅提供五个」字面偏离，见偏差 32） |
 | AC-04 | T003, T004, T005, T006, T007, T008, T009, T010, T019, T020, T021, T032, T033 | ✅ |
 | AC-05 | T007, T008, T027, T028, T029；措辞回写 T034 ④ | ✅（login 校验入口一半以前置探测等价兑现） |
 | AC-06 | T011, T012, T019, T020；资源归属人字段回写 T034 ① | ✅（降级：`[受阻于 F049 回写]`） |
@@ -587,7 +587,7 @@
 
 29. **`X-BiSheng-Access-Token` 短时凭据句柄在 `dev` 期由 CLI 本地签发，没有新增后端端点、没有占用 26060–26064** —— 线上句柄是 backend 签的 OBO token（F054 AC-34，900 s），本地既没有签发方、本轮也没有任何消费方（SDK 三件套随 F057）。按 design 「本地派生」口径：`devproxy.HandleMinter` 以 `dev` 会话随机密钥做 HMAC，每请求签一枚 15 分钟 `bsdev.` 前缀的不透明句柄，形状与线上一致（每请求、同头名、短时）；`tests/test_dev_proxy.py` 守住一条不变量——**login 密钥不进任何请求头、不进应用进程环境**（`devdb.LOGIN_KEY_ENV` 显式剔除）。F057 落地 SDK 时若要本地句柄可被平台验签，再补端点。技能包因此把该头标为「不要依赖」。
 30. **`dev` 与 app-proxy / runtime-manager 的两份清单用 `ast` 读对方源文件做契约测试，而不是 import** —— CLI 不能 import 另外两个工程（CON-1，依赖预算两条）。`tests/test_platform_contract.py` 解析 `app-proxy/app_proxy/headers.py` 的 `INJECTED_HEADER_NAMES` / `DROPPED_HEADERS` / 前缀常量，和 `runtime-manager/runtime_manager/lifecycle.py` 的 `build_env` 键与 `RESERVED_ENV_PREFIXES`，逐项对比本地常量。任一边改名，CLI 用例当场红——这是「结构一致」唯一机器可验的形态。
-31. **`dev` 多了 `--port` / `--app-port` 两个旋钮，`BISHENG_APP_VERSION` / `_VERSION_ID` 本地取 `dev`** —— 入口端口默认取 manifest `port`（开发者打开的是它），应用进程另挑空闲端口注入为 `PORT` / `BISHENG_APP_PORT`；两端口相同拒绝 exit 2。本地没有版本号可给，两个版本变量取常量 `dev`，只保证「名字在、非空」。`BISHENG_APP_BASE_PATH` 按 tasks 头注为空串，`BISHENG_APP_HEALTH_PATH` 取 `/healthz`。
+31. **`dev` 多了 `--port` / `--app-port` 两个旋钮，`BISHENG_APP_VERSION` / `_VERSION_ID` 本地取 `dev`** —— 入口端口默认取 manifest `port`（开发者打开的是它），应用进程另挑空闲端口注入为 `PORT` / `BISHENG_APP_PORT`；两端口相同拒绝 exit 2。本地没有版本号可给，两个版本变量取常量 `dev`，只保证「名字在、非空」。`BISHENG_APP_BASE_PATH` 按 tasks 头注为空串，`BISHENG_APP_HEALTH_PATH` 取 `/`（与 runtime-manager `desired_state.py` 缺 label 时的默认值一致；manifest 本轮没有 health 字段可读）。入口端口在拉起应用进程**之前**绑定，端口被占是干净的 exit 2、不会先起一个子进程再杀掉。
 32. **`cli.DEFERRED_COMMANDS` 清空但保留**，`SUBCOMMANDS` 六条（含 `platforms`，tasks 未单列命令名）—— 「announced ≠ registered」的守卫用例保形，下一轮再顺延什么直接填回去。`platforms` 是 T047 交互层的落点：`list` 只打印 login 时平台回的 `key_mask`，`use` 对未登录地址 exit 3 并指回 `bisheng login`，不会凭空造 profile。
-33. **`skills sync` 改为两包，老平台缺 `platform-wiring` 时跳过并 warn、不整体失败** —— 新 CLI 对着还没发布第二包的平台（`GET /skills/platform-wiring` 404）应当仍能把「部署纳管」同步下来；整体失败会把「平台老」伪装成「同步坏了」。`deploy` 写进项目 `AGENTS.md` 的指针随 `DEFAULT_PACKS` 变成两行。
+33. **`skills sync` 改为两包，老平台缺 `platform-wiring` 时跳过并 warn、不整体失败** —— 新 CLI 对着还没发布第二包的平台（`GET /skills/platform-wiring` 404）应当仍能把「部署纳管」同步下来；整体失败会把「平台老」伪装成「同步坏了」。跳过**只认 404**（`CliError.details.http_status`）：第二包 5xx 是平台在失败，照常 exit 8，不会被当成「平台老」。`deploy` 写进项目 `AGENTS.md` 的指针随 `DEFAULT_PACKS` 变成两行。
 34. **技能包契约测试把 `Dept-*` 三个头在 SKILL.md 表里逐行写全，样例文案避开 "login" 字样** —— 前者是让「教的头名 == app-proxy 注入的头名」能按反引号全名机器比对（缩写形态 `-Dept-Name` 匹配不上，写全也符合「标识写全、可 grep」的仓库规则）；后者是 `test_example_reads_identity_from_headers_and_has_no_login` 对样例做 `login/password/jwt/set-cookie` 子串扫描，样例正文一句「你 login 的服务账号」误中，改成「你在命令行里登记的那个服务账号」。

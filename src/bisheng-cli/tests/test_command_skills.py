@@ -307,6 +307,18 @@ def test_second_pack_missing_on_an_older_platform_is_skipped_not_fatal(
     assert '"skipped": true' in out
 
 
+def test_second_pack_server_error_stays_fatal(monkeypatch: pytest.MonkeyPatch, logged_in, home_dir) -> None:
+    # Only a 404 means "this platform predates the pack". A 5xx on the second
+    # pack is the platform failing mid-sync and must not be reported as a
+    # version gap the developer can wait out.
+    mock = PlatformMock().get(SKILLS_PATH, _pack_response(SAMPLE))
+    mock.get(skills_path(SECOND_PACK), httpx.Response(503, text="upstream down"))
+    code, out, err = _run(["skills", "sync", "--json"], monkeypatch=monkeypatch, mock=mock)
+    assert code == EXIT_NOT_ENABLED
+    assert "503" in err and "跳过" not in err
+    assert '"skipped": true' not in out
+
+
 def test_platform_flag_syncs_into_that_platforms_slug(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:
     # T047: `--platform` picks a stored profile; the pack lands under *its* slug,
     # and `current` is left as it was.

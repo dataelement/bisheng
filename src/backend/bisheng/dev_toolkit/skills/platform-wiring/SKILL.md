@@ -51,7 +51,7 @@ metadata:
 | `X-BiSheng-Dept-Id` | 主部门的业务键 | **没有部门时 Dept 三个头都不存在**（不是空串） |
 | `X-BiSheng-Dept-Name` | 主部门名称 | 百分号编码，显示前 `unquote` |
 | `X-BiSheng-Dept-Path` | 主部门路径（自顶向下） | 百分号编码，显示前 `unquote` |
-| `X-BiSheng-Subject-Kind` | 主体类型：`human`（真人）或 `service_account`（服务账号） | 本地 `bisheng dev` 期恒为 `service_account` |
+| `X-BiSheng-Subject-Kind` | 主体类型：`human`（真人）或 `service_account`（服务账号） | 线上恒为 `human`；本地 `bisheng dev` 期取决于你 login 用的密钥：服务账号密钥 → `service_account`，个人访问令牌 → `human` |
 | `X-BiSheng-App-Id` | 本应用在平台上的标识 | — |
 | `X-BiSheng-Access-Token` | 每请求的短时访问凭据句柄 | **本轮没有消费方，不要依赖它做任何判断**；SDK 用法随后续版本补齐 |
 | `X-BiSheng-Request-Id` | 请求关联 ID | 打日志时带上，平台侧能对上 |
@@ -190,7 +190,7 @@ bisheng dev --port 3000
 
 | 线上 | 本地 `bisheng dev` |
 |---|---|
-| 入口代理注入 `X-BiSheng-*` 身份头、剥离伪造头 | 内置迷你代理做同样的事；**身份恒为你 login 的那个服务账号**，`Subject-Kind=service_account` |
+| 入口代理注入 `X-BiSheng-*` 身份头、剥离伪造头 | 内置迷你代理做同样的事；**身份恒为你 login 用的那把密钥对应的账号**（服务账号密钥 → `Subject-Kind=service_account`；个人访问令牌 → `human`） |
 | `/data/app.db`，环境变量 `BISHENG_APP_DB_*` | `<项目>/.bisheng/dev/app.db`，**同名**环境变量；跨重启保留、不进上传包 |
 | `PORT` / `BISHENG_APP_PORT` / `BISHENG_APP_BASE_PATH=/apps/<slug>` 等 | 同名注入；`BASE_PATH` 为空串（根路径） |
 | 启动命令：`BISHENG_APP_START` → `Procfile web:` → `main.py` → `app.py` | 同一顺序 |

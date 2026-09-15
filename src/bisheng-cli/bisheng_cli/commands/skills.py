@@ -188,8 +188,9 @@ def sync_packs(client: PlatformClient, base_url: str, emitter: Emitter) -> list[
             # The first pack decides whether the layer exists at all. Once one
             # pack has been served, a 404 on another can only mean this platform
             # version does not ship it yet — a fact to report, not a reason to
-            # discard the pack that did arrive.
-            if index == 0 or exc.exit_code != EXIT_NOT_ENABLED:
+            # discard the pack that did arrive. Only a 404 says that: a 5xx on
+            # the second pack is the platform failing, and stays fatal.
+            if index == 0 or (exc.details or {}).get("http_status") != 404:
                 raise
             emitter.warn(f"平台当前版本未提供技能包 {pack}，已跳过（平台升级后重跑 skills sync 即可获得）")
             results.append({"pack": pack, "version": None, "files": [], "overwritten": [], "skipped": True})
@@ -228,12 +229,14 @@ def _sync_one(client: PlatformClient, pack: str, root: Path, emitter: Emitter) -
             f"平台未提供技能包 {pack}",
             exit_code=EXIT_NOT_ENABLED,
             next_step="确认平台已启用开放能力层（open_platform）并升级到含技能包的版本，再重试。",
+            details={"pack": pack, "http_status": resp.status_code},
         )
     if resp.status_code >= 400:
         raise CliError(
             f"拉取技能包 {pack} 失败（HTTP {resp.status_code}）",
             exit_code=EXIT_NOT_ENABLED,
             next_step="稍后重试；持续失败请联系平台管理员。",
+            details={"pack": pack, "http_status": resp.status_code},
         )
 
     version = resp.headers.get(PACK_VERSION_HEADER)

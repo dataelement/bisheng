@@ -190,6 +190,28 @@ def test_no_scope_check_at_all(monkeypatch: pytest.MonkeyPatch, logged_in, echo_
     assert code == EXIT_OK
 
 
+def test_busy_entry_port_is_exit_2_and_spawns_nothing(
+    monkeypatch: pytest.MonkeyPatch, logged_in, echo_project: Path
+) -> None:
+    # The entry port is bound before the app is spawned: a port already in use
+    # (8080 usually is) must not cost a child process started and then killed.
+    import socket
+
+    captured = _fake_launch(monkeypatch)
+    holder = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    holder.bind(("127.0.0.1", 0))
+    holder.listen(1)
+    busy = holder.getsockname()[1]
+    try:
+        mock = PlatformMock().get(VERSIONS, versions_ok()).get(WHOAMI, whoami_ok())
+        code, _, err = _run(["dev", str(echo_project), "--port", str(busy)], monkeypatch=monkeypatch, mock=mock)
+    finally:
+        holder.close()
+    assert code == EXIT_USAGE
+    assert str(busy) in err and "--port" in err
+    assert "process" not in captured
+
+
 def test_same_port_for_proxy_and_app_is_a_usage_error(
     monkeypatch: pytest.MonkeyPatch, logged_in, echo_project: Path
 ) -> None:
