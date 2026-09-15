@@ -232,6 +232,10 @@ logger_conf:
   # 单条被反代的 WebSocket 连接的授权寿命上限（秒），最小 60（能力后置，先占位）
 #   ws_max_lifetime_seconds: 28800
 
+  # 托管应用访问记录的合并窗口（秒）：同一用户在窗口内反复进入同一应用只记一条
+  # （Redis 键 app_access:{app_id}:{user_id} 的 TTL）。默认 30 分钟，对齐会话粒度。
+#   access_log_merge_window_seconds: 1800
+
   # ── 存储、容量准入与构建源：不在这里配 ──────────────────────────────────
   # 这几项只有 runtime-manager 读得到，它一律走自己的环境变量，不看本文件：
   #   data_root        → RTM_DATA_ROOT          每应用数据目录所在的宿主机目录

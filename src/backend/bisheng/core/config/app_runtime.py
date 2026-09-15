@@ -102,6 +102,15 @@ class AppRuntimeConf(BaseModel):
         ge=60,
         description="Hard cap on one proxied WebSocket connection's authorized lifetime (deferred wave)",
     )
+    # AC-38 access records: repeat entries by the same visitor into the same
+    # app inside this window are one record. 30 minutes is F056 design D7's
+    # value (spec 决议-2: aligned with a session, so a refresh is not a visit);
+    # the first F054 draft said 300 s — that number is superseded, not a typo.
+    access_log_merge_window_seconds: int = Field(
+        default=1800,
+        ge=1,
+        description="Merge window of hosted-app access records in seconds (Redis app_access:{app_id}:{user_id} TTL)",
+    )
 
     # --- capacity admission, storage and build source ---------------------
     # Deliberately absent. ``reserve_mb`` / ``overcommit_ratio`` /

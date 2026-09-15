@@ -46,6 +46,7 @@ import jwt
 from loguru import logger
 
 from bisheng.app_runtime.domain.constants import ENTRY_VISIBLE_STATES, AppState
+from bisheng.app_runtime.domain.services.app_access_log_service import schedule_access_record
 from bisheng.common.errcode.app_factory import AppPermissionEngineUnavailableError
 from bisheng.common.errcode.permission import (
     PermissionInvalidResourceError,
@@ -164,7 +165,10 @@ async def authorize_entry(
             "app_state": app.state,
         }
 
-    material = await _identity_material(app=app, user_id=user_id, subject=subject, request_id=request_id)
+    user_name, subject_kind = await _user_facts(user_id, subject)
+    material = await _identity_material(
+        app=app, user_id=user_id, user_name=user_name, subject_kind=subject_kind, request_id=request_id
+    )
     obo_token = _issue_obo_token(
         app_id=app.id,
         user_id=user_id,
@@ -174,6 +178,17 @@ async def authorize_entry(
     if obo_token:
         material["X-BiSheng-Access-Token"] = obo_token
     logger.debug("app_runtime.entry allow slug={} user={} ip={}", slug, user_id, client_ip)
+    # AC-38: the access record is a side effect of *this* verdict and of no
+    # other code path — app-proxy has no database, and only ``allow`` is an
+    # entry. Scheduled, not awaited: the write must never delay or fail the
+    # answer (design D14-B); the merge window inside collapses repeats.
+    schedule_access_record(
+        app_id=app.id,
+        tenant_id=int(app.tenant_id or 0),
+        user_id=user_id,
+        user_name=user_name,
+        request_id=request_id,
+    )
     return {
         "decision": DECISION_ALLOW,
         "app_id": app.id,
@@ -281,14 +296,20 @@ async def _owner_name(app: App) -> str | None:
     return row.user_name if row is not None else None
 
 
-async def _identity_material(*, app: App, user_id: int, subject: dict, request_id: str) -> dict[str, str]:
+async def _identity_material(
+    *, app: App, user_id: int, user_name: str, subject_kind: str, request_id: str
+) -> dict[str, str]:
     """The header values app-proxy will inject (AC-31).
 
     ``Dept-Id`` is the **business key** (``BS@xxx``), not the autoincrement id:
     the autoincrement one is meaningless outside the platform database and would
     make every hosted app's authorisation logic depend on a surrogate key.
+
+    ``user_name`` / ``subject_kind`` come from :func:`_user_facts`, resolved by
+    the caller once — the access record (AC-38) needs the plain name too, and
+    reading it back out of the percent-encoded header would be a round trip
+    that mangles an ASCII name containing a literal ``%``.
     """
-    user_name, subject_kind = await _user_facts(user_id, subject)
     dept_id, dept_name, dept_path = await _primary_department(user_id)
 
     material: dict[str, str] = {

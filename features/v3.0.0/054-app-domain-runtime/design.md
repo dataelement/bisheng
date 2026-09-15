@@ -339,7 +339,7 @@
 - **备选（访问记录 AC-38）**：
   - A. 写 `audit_log` — 缺点：审计表有 UI 白名单与 `operator_name` 查询开销，且访问是高频事件
   - B. **独立表 `app_access_log` + `asyncio.create_task` 异步写 + 失败吞掉 + Redis 去重窗口**（选定）
-- **选定（访问记录）**：**B**（照 `llm_call_log` 的独立业务日志表范式 + `BaseTelemetryService.log_event` 的 fire-and-forget 范式）。去重：Redis `SETNX app_access:{app_id}:{user_id}` TTL = 合并窗口（默认 300s，**窗口值由 F056 定**）；**一次进入一条、不记请求级明细**。写入方是 **backend 的内部授权端点**（判定通过时顺带），不是 app-proxy 直连库。**后置 Wave**。
+- **选定（访问记录）**：**B**（照 `llm_call_log` 的独立业务日志表范式 + `BaseTelemetryService.log_event` 的 fire-and-forget 范式）。去重：Redis `SETNX app_access:{app_id}:{user_id}` TTL = 合并窗口（~~默认 300s~~ **默认 1800s = 30 分钟，值由 F056 design D7 / spec 决议-2 定义，2026-09-16 随 T089 落地回写勘误**；部署配置项 `app_runtime.access_log_merge_window_seconds`）；**一次进入一条、不记请求级明细**。写入方是 **backend 的内部授权端点**（判定通过时顺带），不是 app-proxy 直连库。**后置 Wave**。
 - **审计（AC-65 五个状态动作 + AC-06 元信息 + AC-56 数据行编辑）**：`app.*` 命名空间常量 Enum 放 `bisheng/app_runtime/domain/constants.py`（先例 `tenant/domain/constants.py:14-46`），经 `AuditLogDao.ainsert_v2`；动作清单 `app.publish` / `app.publish_pending` / `app.manual_publish` / `app.stop` / `app.resume` / `app.delete` / `app.meta_update` / `app.data_row_edit`（可见范围变更由 F056 写）。**要出现在「系统操作」页必须三处同改**：`_UI_VISIBLE_V2_ACTIONS`（`database/models/audit_log.py:178-203`）+ `_V2_NAMESPACE_TO_ACTION_PREFIX`（`:209-213`）+ platform `controllers/API/log.ts` 三处（模块下拉 / actions 数组 / `getActionsByModuleApi` switch）+ 三语 i18n。
 - **原因**：B（日志）让平台侧零采集器、零存储成本，且形态无关；B（访问记录）避免把高频事件塞进操作审计表。
 - **何时该重新考虑**：客户要求日志长期留存与全文检索 → 引入日志采集（Fluent Bit → ES），那时保留期承诺要重写；访问记录需要请求级明细（合规诉求）→ 那是另一个数据量级，要先做采样与分区。

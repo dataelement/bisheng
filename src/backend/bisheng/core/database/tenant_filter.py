@@ -117,8 +117,11 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.database.models.app",
     "bisheng.database.models.app_version",
     "bisheng.database.models.app_instance",
-    # app_access_log (AC-38) lands with its table in F054 T089 — register it
-    # here in the same change, or the access-log rows bypass tenant filtering.
+    # `app_access_log` (AC-38) carries the *application's* tenant_id, written
+    # explicitly by entry_authz_service (the internal authorize endpoint runs
+    # under bypass, so before_flush does not fill it); registering it here is
+    # what makes the F056 query face's reads auto-filtered.
+    "bisheng.database.models.app_access_log",
     # F055 publish pipeline. `app_deployment` carries tenant_id and is filtered.
     "bisheng.app_publish.domain.models",
     # `resource_tier` has NO tenant_id column: resource tiers are platform-level

@@ -71,10 +71,12 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.database.models.app",
     "bisheng.database.models.app_version",
     "bisheng.database.models.app_instance",
+    "bisheng.database.models.app_access_log",
     "bisheng.database.models.audit_log",
     "bisheng.database.models.department",
     "bisheng.database.models.tenant",
     "bisheng.user.domain.models.user",
+    "bisheng.app_runtime.domain.services.app_access_log_service",
     "bisheng.app_runtime.domain.services.app_provision_service",
     "bisheng.app_runtime.domain.services.app_state_service",
     "bisheng.app_runtime.domain.services.app_meta_service",
@@ -96,6 +98,7 @@ _TABLES = (
     "app",
     "app_version",
     "app_instance",
+    "app_access_log",
     # F055's table. Present but empty on purpose: that is the MVP reality (the
     # seed runs on first boot) and it exercises F054's DEFAULT_TIERS fallback
     # through its intended branch instead of through a missing-table error.
@@ -176,6 +179,7 @@ async def app_engine():
         "bisheng.database.models.app",
         "bisheng.database.models.app_version",
         "bisheng.database.models.app_instance",
+        "bisheng.database.models.app_access_log",
         "bisheng.database.models.resource_tier",
     ):
         importlib.import_module(module)
