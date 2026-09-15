@@ -286,16 +286,6 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload, auto
         }
     }, []);
 
-    const toggleFullscreen = useCallback(() => {
-        const container = containerRef.current;
-        if (!container) return;
-        if (document.fullscreenElement === container) {
-            void document.exitFullscreen();
-        } else {
-            void container.requestFullscreen();
-        }
-    }, []);
-
     const togglePictureInPicture = useCallback(() => {
         const media = mediaRef.current;
         if (!media || !(media instanceof HTMLVideoElement)) return;
@@ -492,24 +482,23 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload, auto
                         <Outlined.PlaySpeed className="size-4" />
                     </button>,
                 )}
-                {/* Fullscreen and picture-in-picture only make sense for video. */}
-                {isVideo && (
-                    <ControlButton
-                        label={
-                            fullscreen
-                                ? localize("com_knowledge.exit_fullscreen")
-                                : localize("com_knowledge.fullscreen")
-                        }
-                        onClick={toggleFullscreen}
-                        className={hoverClass}
-                    >
-                        {fullscreen ? (
-                            <Outlined.ExitFullScreen className="size-4" />
-                        ) : (
-                            <Outlined.FullScreen className="size-4" />
-                        )}
-                    </ControlButton>
-                )}
+                {/* COFCO: no fullscreen button.
+                 *
+                 *  Asking for fullscreen kills the host outright. In 中粮E+ (a
+                 *  rebranded WeCom desktop client, 3.3.0, macOS 26.5.1) the
+                 *  request reaches the client's own native window handling,
+                 *  which then messages a released object: EXC_BAD_ACCESS in
+                 *  objc_msgSend, whole app gone. The crash report carries no
+                 *  frame of ours — the page only pulls the trigger — so there
+                 *  is nothing to catch and nothing to fix on this side. The
+                 *  fix belongs to Tencent and has been reported.
+                 *
+                 *  Picture-in-picture asks the host for a native window too and
+                 *  may well do the same thing; it is left alone until someone
+                 *  reproduces it.
+                 *
+                 *  The state and the fullscreen layout below stay so this is one
+                 *  block to restore once the host is fixed. */}
                 {showMoreMenu && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
