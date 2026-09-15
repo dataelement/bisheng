@@ -70,6 +70,11 @@ class Verdict:
     app_state: str | None = None
     cache_hit: bool = False
     reason: str = ""
+    #: WebSocket lifetime inputs (D6 invariant ①). Both optional: an older
+    #: backend sends neither, and :mod:`app_proxy.websocket` then reads the OBO
+    #: claim itself and falls back to the process config for the cap.
+    obo_expires_at: float | None = None
+    ws_max_lifetime_seconds: float | None = None
 
     @property
     def allowed(self) -> bool:
@@ -146,4 +151,16 @@ async def authorize(
         owner_name=payload.get("owner_name"),
         app_state=payload.get("app_state"),
         cache_hit=bool(payload.get("cache_hit")),
+        obo_expires_at=_optional_number(payload.get("obo_expires_at")),
+        ws_max_lifetime_seconds=_optional_number(payload.get("ws_max_lifetime_seconds")),
     )
+
+
+def _optional_number(value: Any) -> float | None:
+    """A number the backend may or may not send; anything else is "not sent"."""
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None

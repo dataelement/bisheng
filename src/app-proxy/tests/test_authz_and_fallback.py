@@ -189,17 +189,14 @@ class TestFailClosed:
 
 
 class TestRecovering:
-    def test_recovering_static_page_on_upstream_unreachable(self, logged_in, upstream_transport):
-        """AC-36 MVP shape: the crash / switch window is a page, not a 502.
-
-        Static in this wave — no auto-retry (that is T082). Asserting the
-        *absence* of the refresh meta keeps the two waves honest.
-        """
+    def test_recovering_page_on_upstream_unreachable_auto_retries(self, logged_in, upstream_transport):
+        """AC-36: the crash / switch window is a page, not a 502 — and since T082
+        the page retries by itself (the static version was the MVP shape)."""
         upstream_transport.refuse.add(DEFAULT_UPSTREAM)
         response = logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS)
         assert response.status_code == 200
         assert "恢复中" in response.text
-        assert "http-equiv" not in response.text.lower()
+        assert 'http-equiv="refresh"' in response.text.lower()
 
     def test_no_live_instance_renders_recovering_not_an_error(self, logged_in, fake_manager):
         """The manager's 404 ("no instance right now") is an expected answer."""

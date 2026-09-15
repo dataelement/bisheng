@@ -4,7 +4,11 @@ Route surface is deliberately tiny:
 
 * ``/healthz`` — liveness for systemd / compose. Answers without touching a
   peer, so a backend outage does not get the proxy restarted.
-* ``/apps/{slug}`` and ``/apps/{slug}/{tail}`` — everything else.
+* ``/apps/{slug}`` and ``/apps/{slug}/{tail}`` — everything else, HTTP and
+  WebSocket alike.
+* ``POST /internal/connections/close`` — the backend's HMAC-signed push that
+  ends open sockets on a revoke / stop / delete (D6 invariant ②). Inbound
+  control plane, not a user surface; nginx does not route it.
 
 Nothing else is served. This process must never become a place where platform
 functionality accretes (D5-C).
@@ -17,6 +21,8 @@ rejected, and the ordering *is* the security property (spec §3).
 
 from __future__ import annotations
 
+import hmac
+import json
 import logging
 import time
 import uuid
@@ -30,6 +36,7 @@ from starlette.websockets import WebSocket
 from app_proxy import clients
 from app_proxy.authz import (
     DECISION_ALLOW,
+    DECISION_FORBIDDEN,
     DECISION_LOGIN,
     DECISION_NOT_FOUND,
     Verdict,
@@ -174,15 +181,14 @@ async def handle_entry(request: Request) -> Response:
 
 
 async def handle_entry_ws(websocket: WebSocket) -> None:
-    """Refuse an upgrade with a close code — never with a page.
+    """The same verdict as HTTP; a refusal is a close code, never a page.
 
-    WS reverse proxying is Wave 4 (T079/T080). Until it lands, an allowed
-    connection is closed with its own code rather than half-proxied, and the
-    refusals reuse the same verdict so a revoked user cannot open a socket that
-    the HTTP path would have blocked.
-
-    Closed **without** accepting: the handshake never completes, so no
-    unauthorised peer is ever briefly connected.
+    Refused **without** accepting: the handshake never completes, so no
+    unauthorised peer is ever briefly connected. An allowed upgrade is handed
+    to :mod:`app_proxy.websocket`, which connects to the app first and only
+    then accepts — a browser is never left holding an open socket that has
+    nothing behind it. With ``ws_proxy_enabled`` off the allowed case closes
+    with ``4501`` instead, the pre-Wave-4 behaviour.
     """
     slug = websocket.path_params.get("slug", "")
     request_id = uuid.uuid4().hex
@@ -190,21 +196,86 @@ async def handle_entry_ws(websocket: WebSocket) -> None:
         await websocket.close(code=ws_close_code(DECISION_NOT_FOUND))
         return
 
+    access_token = extract_access_token(websocket)
     verdict = await authorize(
         slug=slug,
-        access_token=extract_access_token(websocket),
+        access_token=access_token,
         request_id=request_id,
         client_ip=websocket.client.host if websocket.client else None,
     )
+    if verdict.decision == DECISION_ALLOW and get_config().ws_proxy_enabled:
+        # Lazy for the same reason as ``forward`` above: an import error in the
+        # socket machinery must not take the refusal path down with it.
+        from app_proxy.websocket import proxy_websocket
+
+        await proxy_websocket(websocket, slug=slug, verdict=verdict, access_token=access_token, request_id=request_id)
+        return
+
     code = WS_CLOSE_NOT_IMPLEMENTED if verdict.decision == DECISION_ALLOW else ws_close_code(verdict.decision)
     logger.info(
-        "app_proxy.request request_id=%s slug=%s protocol=ws decision=%s close_code=%s",
+        "app_proxy.request request_id=%s slug=%s protocol=ws decision=%s reason=%s close_code=%s",
         request_id,
         slug,
         verdict.decision,
+        verdict.reason,
         code,
     )
     await websocket.close(code=code)
+
+
+async def handle_close_connections(request: Request) -> Response:
+    """``POST /internal/connections/close`` — the backend's revoke / stop push (D6 ②).
+
+    Body: ``{"app_id": str, "user_ids": [..] | null, "reason": str}``; ``reason``
+    is a verdict word (``forbidden`` / ``stopped`` / ``not_found``) and picks
+    the close code the affected sockets receive. Signed with the same HMAC and
+    the same secret as the authorize call, just in the other direction; an
+    empty secret fails closed, exactly like the outbound calls.
+
+    Answers ``{"closed": n}`` for *this process*. It is not an acknowledgement
+    that every proxy in the deployment closed anything — see
+    :mod:`app_proxy.connections` for why the periodic re-authorisation is the
+    bound a caller may rely on.
+    """
+    from app_proxy import connections
+    from app_proxy.clients import compute_signature
+
+    config = get_config()
+    raw = await request.body()
+    provided = (request.headers.get(config.signature_header) or "").strip().lower()
+    if not config.backend_secret or not provided:
+        return JSONResponse({"detail": "unauthorized"}, status_code=401)
+    expected = compute_signature(request.method, request.url.path, raw, config.backend_secret)
+    if not hmac.compare_digest(expected, provided):
+        logger.warning("app_proxy.internal close rejected: signature mismatch")
+        return JSONResponse({"detail": "unauthorized"}, status_code=401)
+
+    try:
+        body = json.loads(raw or b"{}")
+    except ValueError:
+        return JSONResponse({"detail": "invalid_request"}, status_code=400)
+    app_id = str(body.get("app_id") or "")
+    if not app_id:
+        return JSONResponse({"detail": "invalid_request"}, status_code=400)
+    user_ids = body.get("user_ids")
+    if user_ids is not None and not isinstance(user_ids, list):
+        return JSONResponse({"detail": "invalid_request"}, status_code=400)
+    reason = str(body.get("reason") or DECISION_FORBIDDEN)
+
+    closed = connections.registry.close_for(
+        app_id,
+        user_ids=None if user_ids is None else [str(u) for u in user_ids],
+        code=ws_close_code(reason),
+        reason=reason,
+    )
+    logger.info(
+        "app_proxy.ws_close app_id=%s user_ids=%s reason=%s closed=%s",
+        app_id,
+        "*" if user_ids is None else len(user_ids),
+        reason,
+        closed,
+    )
+    return JSONResponse({"closed": closed})
 
 
 def create_app() -> FastAPI:
@@ -235,6 +306,10 @@ def create_app() -> FastAPI:
     # module failed to import there.
     application.router.add_websocket_route(f"{prefix}/{{slug}}", handle_entry_ws)
     application.router.add_websocket_route(f"{prefix}/{{slug}}/{{tail:path}}", handle_entry_ws)
+    # Inbound control plane, HMAC-signed by the backend (D6 invariant ②). Not
+    # under ``/apps`` — nginx never routes it, so it is reachable only from
+    # inside the deployment, like the manager's endpoints.
+    application.add_route("/internal/connections/close", handle_close_connections, methods=["POST"])
     return application
 
 

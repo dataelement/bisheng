@@ -47,11 +47,24 @@ from app_proxy.authz import (
 )
 
 #: Transitional, not a verdict: the app exists and you may enter, but nothing
-#: is answering right now (crash window / version switch). AC-36.
+#: is answering right now. Two kinds, told apart by the manager's answer rather
+#: than guessed from the failure (T083): ``deploying`` = a deploy is in flight
+#: and nothing serves yet (AC-48); ``recovering`` = a route existed and refused
+#: us, or none is declared (crash window, AC-36).
+PAGE_DEPLOYING = "deploying"
 PAGE_RECOVERING = "recovering"
+TRANSITIONAL_KINDS = frozenset({PAGE_DEPLOYING, PAGE_RECOVERING})
 
 #: Every page renders 200 for navigations. See the module docstring.
 PAGE_HTTP_STATUS = 200
+
+#: Auto-retry cadence of the transitional pages (AC-48). The script reloads
+#: first and backs off from ``RETRY_FIRST_SECONDS`` up to ``RETRY_MAX_SECONDS``;
+#: the ``meta refresh`` at ``RETRY_MAX_SECONDS`` is the floor for a browser with
+#: scripting off. Both are longer than the 3 s route cache, so every reload
+#: genuinely re-asks the manager instead of replaying a cached "starting".
+RETRY_FIRST_SECONDS = 3
+RETRY_MAX_SECONDS = 10
 
 #: The three bundles the platform ships everywhere else (``packages/locales``).
 LOCALE_ZH = "zh-Hans"
@@ -71,12 +84,16 @@ JSON_STATUS = {
     DECISION_NOT_FOUND: 404,
     DECISION_NOT_ENABLED: 503,
     DECISION_UNAVAILABLE: 503,
+    PAGE_DEPLOYING: 503,
     PAGE_RECOVERING: 503,
 }
 
-#: Platform error codes (design §4.2 ⑥, section 161). ``recovering`` has no code
-#: of its own — 16121 (编排器不可用) is the closest true statement and avoids
-#: minting a code the backend has not registered.
+#: Platform error codes (design §4.2 ⑥, section 161). The two transitional
+#: kinds have codes of their own — 16147 / 16148 in the entry band — registered
+#: in ``common/errcode/app_factory.py`` and the three ``api_errors`` bundles.
+#: ``recovering`` used to borrow 16121 (编排器不可用), which was the closest true
+#: statement at the time but made "the app is restarting" and "the manager is
+#: down" indistinguishable to an in-app ``fetch()``.
 ERROR_CODES = {
     DECISION_LOGIN: 16141,
     DECISION_FORBIDDEN: 16142,
@@ -84,7 +101,8 @@ ERROR_CODES = {
     DECISION_NOT_FOUND: 16144,
     DECISION_NOT_ENABLED: 16145,
     DECISION_UNAVAILABLE: 16146,
-    PAGE_RECOVERING: 16121,
+    PAGE_DEPLOYING: 16147,
+    PAGE_RECOVERING: 16148,
 }
 
 _STYLE = """
@@ -167,6 +185,7 @@ _LAYOUT: dict[str, _Layout] = {
     DECISION_NOT_FOUND: _Layout(mark="🔍"),
     DECISION_NOT_ENABLED: _Layout(mark="🧩", show_square=False),
     DECISION_UNAVAILABLE: _Layout(mark="⚠️", show_square=False),
+    PAGE_DEPLOYING: _Layout(mark="🚀", show_square=False),
     PAGE_RECOVERING: _Layout(mark="🔄", show_square=False),
 }
 
@@ -227,9 +246,13 @@ _COPY: dict[str, dict[str, _Copy]] = {
             title="暂时无法访问",
             lines=("平台暂时无法确认你的访问权限，请稍后重试。", "若持续出现，请联系平台管理员。"),
         ),
+        PAGE_DEPLOYING: _Copy(
+            title="应用发布中",
+            lines=("{app}正在发布新版本，页面会自动重试，就绪后自动进入应用。",),
+        ),
         PAGE_RECOVERING: _Copy(
             title="应用恢复中",
-            lines=("{app}正在恢复，请稍后刷新页面重试。",),
+            lines=("{app}正在恢复，页面会自动重试，恢复后自动进入应用。",),
         ),
     },
     LOCALE_EN: {
@@ -269,9 +292,19 @@ _COPY: dict[str, dict[str, _Copy]] = {
                 "If this keeps happening, contact a platform administrator.",
             ),
         ),
+        PAGE_DEPLOYING: _Copy(
+            title="Application is being published",
+            lines=(
+                "A new version of {app} is being published. "
+                "This page retries on its own and opens the application once it is ready.",
+            ),
+        ),
         PAGE_RECOVERING: _Copy(
             title="Application is restarting",
-            lines=("Please wait, {app} is restarting. Refresh the page in a moment.",),
+            lines=(
+                "Please wait, {app} is restarting. "
+                "This page retries on its own and opens the application once it is back.",
+            ),
         ),
     },
     LOCALE_JA: {
@@ -310,9 +343,15 @@ _COPY: dict[str, dict[str, _Copy]] = {
                 "繰り返し発生する場合は、プラットフォーム管理者にご連絡ください。",
             ),
         ),
+        PAGE_DEPLOYING: _Copy(
+            title="アプリを公開しています",
+            lines=(
+                "{app}の新しいバージョンを公開しています。このページは自動的に再試行し、準備ができ次第アプリを開きます。",
+            ),
+        ),
         PAGE_RECOVERING: _Copy(
             title="アプリを復旧しています",
-            lines=("{app}を復旧しています。しばらくしてからページを再読み込みしてください。",),
+            lines=("{app}を復旧しています。このページは自動的に再試行し、復旧次第アプリを開きます。",),
         ),
     },
 }
@@ -388,11 +427,17 @@ def render_page(
     request_id: str = "",
     accept_language: str | None = None,
 ) -> str:
-    """Full self-contained HTML document. No script, no external request.
+    """Full self-contained HTML document. No external request.
 
     These render when the platform may already be half-broken, so a CDN font or
     a logo fetched over the network is exactly the dependency that turns a
     tidy explanation into a blank page.
+
+    The four verdict pages carry no script at all. The two transitional kinds
+    carry the retry markup from :func:`_retry_markup` and nothing else — a
+    verdict is settled and must not reload itself, a transition closes on its
+    own and must (AC-48). Whether a kind retries is decided by
+    :data:`TRANSITIONAL_KINDS`, not by the caller.
     """
     locale = negotiate_locale(accept_language)
     layout = _LAYOUT.get(kind) or _LAYOUT[DECISION_UNAVAILABLE]
@@ -408,11 +453,13 @@ def render_page(
         )
 
     hint = ""
-    # Only on the two "something broke" pages: a request id printed on the
+    # Only on the "something broke" pages: a request id printed on the
     # not-found page would make four supposedly identical renders differ, which
     # is exactly the enumeration oracle AC-29 closes.
-    if request_id and kind in (DECISION_UNAVAILABLE, PAGE_RECOVERING):
+    if request_id and (kind == DECISION_UNAVAILABLE or kind in TRANSITIONAL_KINDS):
         hint = f'    <p class="hint">{html.escape(chrome.request_id.format(id=request_id))}</p>'
+
+    refresh_meta, retry_script = _retry_markup(kind)
 
     return f"""<!doctype html>
 <html lang="{_HTML_LANG[locale]}">
@@ -420,7 +467,7 @@ def render_page(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>{html.escape(copy.title)}</title>
+{refresh_meta}<title>{html.escape(copy.title)}</title>
 <style>{_STYLE}</style>
 </head>
 <body>
@@ -431,9 +478,43 @@ def render_page(
 {actions}
 {hint}
   </div>
-</body>
+{retry_script}</body>
 </html>
 """
+
+
+def _retry_markup(kind: str) -> tuple[str, str]:
+    """``(meta refresh, inline script)`` for a transitional kind; empty otherwise.
+
+    Two mechanisms, deliberately: the ``meta`` tag needs no script and is the
+    floor, the script backs the interval off — first reload after
+    ``RETRY_FIRST_SECONDS``, then growing to ``RETRY_MAX_SECONDS`` — so a slow
+    build does not get a request every three seconds from every open tab. The
+    attempt counter lives in ``sessionStorage`` when there is one; with storage
+    blocked (private mode, some 信创 builds) the page still reloads at the
+    first interval — it just does not back off. Both timers reload the *same*
+    URL: the page is served at the app's own address, so the reload that finds
+    the route live lands inside the app (AC-48).
+    """
+    if kind not in TRANSITIONAL_KINDS:
+        return "", ""
+    meta = f'<meta http-equiv="refresh" content="{RETRY_MAX_SECONDS}">\n'
+    script = f"""<script>
+(function () {{
+  var first = {RETRY_FIRST_SECONDS}, cap = {RETRY_MAX_SECONDS}, key = 'bisheng.app-proxy.retry.' + location.pathname;
+  var attempt = 0, now = Date.now();
+  try {{
+    var saved = (sessionStorage.getItem(key) || '0:0').split(':');
+    // A counter older than a minute belongs to an earlier window: start over.
+    if (now - (parseInt(saved[1], 10) || 0) < 60000) {{ attempt = parseInt(saved[0], 10) || 0; }}
+  }} catch (err) {{}}
+  var wait = Math.min(cap, first + attempt * 2);
+  try {{ sessionStorage.setItem(key, (attempt + 1) + ':' + now); }} catch (err) {{}}
+  setTimeout(function () {{ location.reload(); }}, wait * 1000);
+}})();
+</script>
+"""
+    return meta, script
 
 
 def error_payload(kind: str, request_id: str = "", accept_language: str | None = None) -> dict:

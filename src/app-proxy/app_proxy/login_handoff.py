@@ -29,7 +29,7 @@ from app_proxy.authz import (
     DECISION_STOPPED,
     DECISION_UNAVAILABLE,
 )
-from app_proxy.pages import PAGE_RECOVERING
+from app_proxy.pages import PAGE_DEPLOYING, PAGE_RECOVERING
 
 #: Cross-SPA contract with ``platform/src/utils/loginReturnTo.ts``. The consumer
 #: is one-shot, same-origin checked and expires the value after 10 minutes; it
@@ -37,10 +37,21 @@ from app_proxy.pages import PAGE_RECOVERING
 LOGIN_PATHNAME_KEY = "LOGIN_PATHNAME"
 LOGIN_PATHNAME_AT_KEY = "LOGIN_PATHNAME_AT"
 
-#: WebSocket close codes in the private 4000–4999 range.
-#: ``4501`` is deliberately distinct from the refusals: it means "you were
-#: allowed, WS proxying just is not built yet" (Wave 4, T079/T080), which is
-#: otherwise indistinguishable from a permission problem during 114 testing.
+#: WebSocket close codes in the private 4000–4999 range. These are the contract
+#: a hosted app's frontend handles (D6 invariant ③): every one of them means
+#: "re-handshake", and the code says whether that will succeed.
+#:
+#: * ``4001`` — the connection's authorised lifetime ran out (invariant ①).
+#:   Reconnect at once; the new handshake gets a fresh lifetime.
+#: * ``4401`` / ``4403`` / ``4404`` — the verdict: sign in / not allowed (also
+#:   "the app was stopped or your access was revoked" for a connection that was
+#:   open, invariant ②) / no such app.
+#: * ``4503`` — nothing is answering right now (deploying, recovering, the
+#:   platform cannot decide). Reconnect with backoff.
+#: * ``4501`` — allowed, but this deployment has ``ws_proxy_enabled`` off.
+#:   Deliberately distinct from the refusals so a walkthrough can tell "you may
+#:   not" from "sockets are switched off here" without reading logs.
+WS_CLOSE_EXPIRED = 4001
 WS_CLOSE_NOT_IMPLEMENTED = 4501
 WS_CLOSE_CODES = {
     DECISION_LOGIN: 4401,
@@ -49,6 +60,7 @@ WS_CLOSE_CODES = {
     DECISION_NOT_FOUND: 4404,
     DECISION_NOT_ENABLED: 4503,
     DECISION_UNAVAILABLE: 4503,
+    PAGE_DEPLOYING: 4503,
     PAGE_RECOVERING: 4503,
 }
 

@@ -12,6 +12,9 @@ env var                        backend-side counterpart
 ``APP_PROXY_BACKEND_SECRET``   ``settings.app_runtime.proxy_hmac_secret``
 ``APP_PROXY_MANAGER_SECRET``   ``settings.app_runtime.manager_hmac_secret``
 ``APP_PROXY_ENTRY_BASE_URL``   ``settings.app_runtime.entry_base_url``
+``APP_PROXY_WS_MAX_LIFETIME_SECONDS`` ``settings.app_runtime.ws_max_lifetime_seconds``
+                               (fallback only — the verdict carries the
+                               backend's value when it is recent enough)
 ============================== ==============================================
 
 Both secrets fail **closed**: an empty secret makes every RPC raise before it
@@ -134,10 +137,22 @@ class Config:
     #: carries nothing trustworthy; normally nginx-facing values win.
     entry_base_url: str = ""
 
-    # --- staged capability ------------------------------------------------
-    #: WebSocket reverse proxying is Wave 4 (T079/T080). Until then an upgrade
-    #: request is refused with a close code rather than half-proxied.
-    ws_proxy_enabled: bool = False
+    # --- websocket (D6 invariants ① / ②) ----------------------------------
+    #: Kill switch. Off, an allowed upgrade is refused with ``4501`` instead of
+    #: proxied — the pre-Wave-4 behaviour, kept for a deployment that must not
+    #: carry long-lived sockets (or that fronts the proxy with something that
+    #: cannot).
+    ws_proxy_enabled: bool = True
+    #: Hard cap on one connection's authorised lifetime (invariant ①). Mirrors
+    #: ``app_runtime.ws_max_lifetime_seconds``; the backend's value, when it is
+    #: carried in the verdict, wins over this one.
+    ws_max_lifetime_seconds: float = 28800.0
+    #: Upper bound of the random jitter added to the lifetime, so that a burst of
+    #: connections opened together does not expire together.
+    ws_lifetime_jitter_seconds: float = 30.0
+    #: How often an open connection re-asks the verdict (invariant ② safety net
+    #: for a node the backend's close push did not reach). Deny → close.
+    ws_reauthorize_interval_seconds: float = 30.0
 
     def with_overrides(self, **kwargs) -> Config:
         return replace(self, **kwargs)
@@ -162,7 +177,10 @@ def load_config() -> Config:
         login_path=_env_str("APP_PROXY_LOGIN_PATH", DEFAULT_LOGIN_PATH) or DEFAULT_LOGIN_PATH,
         square_url=_env_str("APP_PROXY_SQUARE_URL", DEFAULT_SQUARE_URL) or DEFAULT_SQUARE_URL,
         entry_base_url=_env_str("APP_PROXY_ENTRY_BASE_URL"),
-        ws_proxy_enabled=_env_bool("APP_PROXY_WS_PROXY_ENABLED", False),
+        ws_proxy_enabled=_env_bool("APP_PROXY_WS_PROXY_ENABLED", True),
+        ws_max_lifetime_seconds=_env_float("APP_PROXY_WS_MAX_LIFETIME_SECONDS", 28800.0),
+        ws_lifetime_jitter_seconds=_env_float("APP_PROXY_WS_LIFETIME_JITTER_SECONDS", 30.0),
+        ws_reauthorize_interval_seconds=_env_float("APP_PROXY_WS_REAUTHORIZE_INTERVAL_SECONDS", 30.0),
     )
 
 

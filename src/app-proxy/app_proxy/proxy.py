@@ -11,6 +11,12 @@ means the address is stale — the container was replaced or died — so asking 
 manager again is the fix. A 500 from the app is the app's own answer and is
 passed through untouched; retrying it would silently duplicate non-idempotent
 requests.
+
+The helpers that describe the visitor to the app (:func:`external_proto_and_host`,
+:func:`forwarded_for`, :func:`log_forged_headers`) take an ``HTTPConnection``
+rather than a ``Request`` because the WebSocket upgrade path
+(:mod:`app_proxy.websocket`) describes the same visitor to the same app and
+must not grow a second copy of the rules.
 """
 
 from __future__ import annotations
@@ -20,13 +26,21 @@ import time
 
 import httpx
 from starlette.background import BackgroundTask
-from starlette.requests import Request
+from starlette.requests import HTTPConnection, Request
 from starlette.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
 from app_proxy.authz import Verdict
 from app_proxy.config import get_config
 from app_proxy.headers import build_upstream_headers, is_platform_header
-from app_proxy.pages import PAGE_HTTP_STATUS, PAGE_RECOVERING, error_payload, json_status, render_page
+from app_proxy.pages import (
+    PAGE_DEPLOYING,
+    PAGE_HTTP_STATUS,
+    PAGE_RECOVERING,
+    RETRY_FIRST_SECONDS,
+    error_payload,
+    json_status,
+    render_page,
+)
 from app_proxy.routing import entry_prefix_for, resolve_upstream, strip_entry_prefix
 
 logger = logging.getLogger(__name__)
@@ -77,7 +91,7 @@ def get_upstream_client() -> httpx.AsyncClient:
     return _client
 
 
-def _external_proto_and_host(request: Request) -> tuple[str, str]:
+def external_proto_and_host(connection: HTTPConnection) -> tuple[str, str]:
     """What the visitor typed, as best we can know it (D5.2).
 
     ``APP_PROXY_ENTRY_BASE_URL`` wins when configured — that is the only fully
@@ -92,28 +106,30 @@ def _external_proto_and_host(request: Request) -> tuple[str, str]:
     loopback, so ``X-Forwarded-Proto`` from the immediate peer is the only
     carrier of "the visitor came over TLS". The documented nginx location
     overwrites it with ``$scheme``; set ``entry_base_url`` where that guarantee
-    does not hold.
+    does not hold. A WebSocket upgrade's own scheme is ``ws``/``wss``, which the
+    app must read as the HTTP scheme it derives links from.
     """
     config = get_config()
     if config.entry_base_url:
         parsed = httpx.URL(config.entry_base_url)
         return parsed.scheme, parsed.netloc.decode("ascii")
 
-    host = request.headers.get("Host", "")
-    proto = request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip() or request.url.scheme
+    host = connection.headers.get("Host", "")
+    own = {"ws": "http", "wss": "https"}.get(connection.url.scheme, connection.url.scheme)
+    proto = connection.headers.get("X-Forwarded-Proto", "").split(",")[0].strip() or own
     return proto, host
 
 
-def _forwarded_for(request: Request) -> str | None:
-    existing = request.headers.get("X-Forwarded-For", "").strip()
-    peer = request.client.host if request.client else None
+def forwarded_for(connection: HTTPConnection) -> str | None:
+    existing = connection.headers.get("X-Forwarded-For", "").strip()
+    peer = connection.client.host if connection.client else None
     if not peer:
         return existing or None
     return f"{existing}, {peer}" if existing else peer
 
 
-def _log_forged_headers(request: Request, request_id: str, slug: str) -> None:
-    forged = [name for name in request.headers if is_platform_header(name)]
+def log_forged_headers(connection: HTTPConnection, request_id: str, slug: str) -> None:
+    forged = [name for name in connection.headers if is_platform_header(name)]
     if forged:
         # §7 asks for this signal by name: a client that sends identity headers
         # is either a misconfigured integration or someone probing AC-32, and
@@ -126,29 +142,57 @@ def _log_forged_headers(request: Request, request_id: str, slug: str) -> None:
         )
 
 
-def _recovering_response(request: Request, request_id: str, app_name: str | None) -> Response:
-    """AC-36: the crash / switch window is a page, never a 502.
+def upstream_headers_for(connection: HTTPConnection, verdict: Verdict, *, slug: str, request_id: str) -> list:
+    """The one header list both the HTTP and the WS path send upstream (AC-31 / AC-32)."""
+    config = get_config()
+    proto, host = external_proto_and_host(connection)
+    headers = build_upstream_headers(
+        connection.headers.items(),
+        verdict.material,
+        slug=slug,
+        request_id=request_id,
+        obo_token=verdict.obo_token,
+        proto=proto,
+        host=host,
+        app_id=verdict.app_id,
+        entry_prefix=config.entry_prefix,
+    )
+    chain = forwarded_for(connection)
+    if chain:
+        headers = [(name, value) for name, value in headers if name.lower() != "x-forwarded-for"]
+        headers.append(("X-Forwarded-For", chain))
+    return headers
 
-    Static in this wave — the auto-retrying version is T082. Imported lazily to
-    keep :mod:`app_proxy.login_handoff` out of this module's import cycle.
+
+def transition_response(request: Request, kind: str, request_id: str, app_name: str | None) -> Response:
+    """AC-36 / AC-48: a transitional window is a retrying page, never a 502.
+
+    ``kind`` is :data:`PAGE_DEPLOYING` or :data:`PAGE_RECOVERING`; which one
+    is the manager's call (T083), not a guess from the failure mode. Both
+    renderings carry ``Retry-After`` — the page for its own reload, the JSON
+    for an in-app client that wants to back off. Imported lazily to keep
+    :mod:`app_proxy.login_handoff` out of this module's import cycle.
     """
     from app_proxy.login_handoff import is_navigation
 
     accept_language = request.headers.get("Accept-Language")
+    retry_after = {"Retry-After": str(RETRY_FIRST_SECONDS)}
     if not is_navigation(request):
         return JSONResponse(
-            error_payload(PAGE_RECOVERING, request_id, accept_language=accept_language),
-            status_code=json_status(PAGE_RECOVERING),
+            error_payload(kind, request_id, accept_language=accept_language),
+            status_code=json_status(kind),
+            headers=retry_after,
         )
     return HTMLResponse(
         render_page(
-            PAGE_RECOVERING,
+            kind,
             app_name=app_name,
             square_url=get_config().square_url,
             request_id=request_id,
             accept_language=accept_language,
         ),
         status_code=PAGE_HTTP_STATUS,
+        headers=retry_after,
     )
 
 
@@ -169,34 +213,25 @@ async def forward(
         # The backend allowed a request but told us nothing to forward to. Not
         # a user-visible fault of theirs — render the transient page, log loudly.
         logger.error("app_proxy.request request_id=%s slug=%s allow without app_id", request_id, slug)
-        return _recovering_response(request, request_id, verdict.app_name)
+        return transition_response(request, PAGE_RECOVERING, request_id, verdict.app_name)
 
-    _log_forged_headers(request, request_id, slug)
+    log_forged_headers(request, request_id, slug)
 
     upstream_path = strip_entry_prefix(request.url.path, slug, config.entry_prefix)
-    proto, host = _external_proto_and_host(request)
-    headers = build_upstream_headers(
-        request.headers.items(),
-        verdict.material,
-        slug=slug,
-        request_id=request_id,
-        obo_token=verdict.obo_token,
-        proto=proto,
-        host=host,
-        app_id=app_id,
-        entry_prefix=config.entry_prefix,
-    )
-    forwarded_for = _forwarded_for(request)
-    if forwarded_for:
-        headers = [(name, value) for name, value in headers if name.lower() != "x-forwarded-for"]
-        headers.append(("X-Forwarded-For", forwarded_for))
+    headers = upstream_headers_for(request, verdict, slug=slug, request_id=request_id)
 
     client = get_upstream_client()
     query = request.url.query
+    kind = PAGE_RECOVERING
 
     for attempt in (0, 1):
         upstream = await resolve_upstream(app_id, refresh=attempt == 1)
         if upstream is None:
+            break
+        if upstream.starting:
+            # A deploy is in flight and nothing serves yet: the honest page is
+            # 「发布中」, and there is no address to retry against.
+            kind = PAGE_DEPLOYING
             break
 
         url = httpx.URL(f"{upstream.base_url}{upstream_path}")
@@ -278,9 +313,10 @@ async def forward(
         return proxied
 
     logger.warning(
-        "app_proxy.fallback request_id=%s slug=%s kind=recovering prefix=%s",
+        "app_proxy.fallback request_id=%s slug=%s kind=%s prefix=%s",
         request_id,
         slug,
+        kind,
         entry_prefix_for(slug, config.entry_prefix),
     )
-    return _recovering_response(request, request_id, verdict.app_name)
+    return transition_response(request, kind, request_id, verdict.app_name)
