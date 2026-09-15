@@ -67,6 +67,7 @@ from runtime_manager.desired_state import (
 )
 from runtime_manager.docker_backend import DockerBackend, get_docker_backend
 from runtime_manager.errors import CapacityExhaustedError, ProbeFailedError
+from runtime_manager.storage import ENV_STORAGE_TOKEN, AppStorageService, mint_storage_token, storage_env
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +145,7 @@ def build_env(
     health_path: str,
     platform_api_base: str,
     base_path: str,
+    storage_token: str,
     extra: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Environment contract of §4.2 ⑤ — same names ``bisheng dev`` injects.
@@ -151,8 +153,14 @@ def build_env(
     ``PORT`` and ``BISHENG_APP_PORT`` are both set to the manifest port and must
     stay equal; frameworks read one or the other and a disagreement produces an
     app listening where nothing dials.
+
+    ``storage_token`` is the per-app bearer for the attachment handle (T085).
+    It is passed in rather than minted here so a redeploy can carry the app's
+    existing token forward: during the AC-21 grace window the old and the new
+    instance both serve, and both must be able to reach the same attachments.
     """
     env = dict(extra or {})
+    env.update(storage_env(config, app_id=app_id, token=storage_token))
     env.update(
         {
             "BISHENG_APP_DB_URL": "sqlite:////data/app.db",
@@ -320,6 +328,10 @@ class LifecycleService:
             health_path=health.path,
             platform_api_base=request.platform_api_base,
             base_path=request.base_path,
+            # Same token for the app's whole life; it rotates only when the
+            # record is gone (destroy). The old instance keeps serving through
+            # the grace window with the very same credential.
+            storage_token=(previous.env.get(ENV_STORAGE_TOKEN) if previous else None) or mint_storage_token(),
             extra=request.env,
         )
         payload = build_container_payload(
@@ -424,7 +436,24 @@ class LifecycleService:
         if purge_volume:
             app_dir = self._config.apps_root / app_id
             shutil.rmtree(app_dir, ignore_errors=True)
+            self._purge_attachments(app_id)
         return {}
+
+    def _purge_attachments(self, app_id: str) -> None:
+        """AC-43 — the owner's explicit delete takes the attachments with it.
+
+        Best effort on purpose: the container and the volume are already gone
+        and the platform retries destroy on failure, so a store that is down
+        right now must not turn a completed delete into a reported failure.
+        Objects left behind are re-visited by the next purge for the same id.
+        """
+        try:
+            removed = AppStorageService(self._config).purge_app(app_id)
+        except Exception as exc:
+            logger.warning("could not purge attachments of app %s: %s", app_id, exc)
+            return
+        if removed:
+            logger.info("purged %s attachment object(s) of app %s", removed, app_id)
 
     # -- helpers -----------------------------------------------------------
     def _remove_if_exists(self, name: str) -> None:

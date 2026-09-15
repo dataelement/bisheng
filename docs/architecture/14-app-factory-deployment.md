@@ -150,6 +150,10 @@ docker compose --profile app-runtime up -d runtime-manager app-proxy
 | `RTM_RESERVE_MB` / `RTM_OVERCOMMIT_RATIO` / `RTM_BUILD_RESERVE_MB` | | — | 容量准入，见下。**改这里，不是改 config.yaml** |
 | `RTM_BUILD_INDEX_URL` | | — | 内网 pip 源。不设 = 走镜像内默认源（公网 PyPI） |
 | `RTM_DOCKER_HOST` | | — | 留空 = 本机 `/var/run/docker.sock` |
+| `RTM_MINIO_ENDPOINT` / `RTM_MINIO_ACCESS_KEY` / `RTM_MINIO_SECRET_KEY` / `RTM_MINIO_SECURE` | | 可与 `minio.*` 同值 | 托管应用**附件存储**（AC-45）。不设 = 句柄仍注入，应用的存储调用答 503，`runtime-status` 的 `attachment_storage` 会指出来 |
+| `RTM_STORAGE_BUCKET` | | — | 缺省 `bisheng-apps`，**独立于平台的 `bisheng` 桶**（nginx `location /bisheng/` 会把任意 key 转给 MinIO，附件不能进那个桶）。首次使用自动建桶、不设匿名策略、不挂 nginx location |
+| `RTM_STORAGE_MAX_FILE_MB` | | — | 单文件上限，缺省 20；同值注入应用为 `BISHENG_APP_STORAGE_MAX_FILE_MB` |
+| `RTM_APP_FACING_BASE_URL` | systemd 必填 | — | **应用容器**访问 runtime-manager 的地址（注入为 `BISHENG_APP_STORAGE_ENDPOINT` 前缀）。compose 下 `http://runtime-manager:8091`；systemd 下写 `bisheng-apps` 网桥网关，见形态二 |
 
 **app-proxy**：
 
@@ -207,6 +211,21 @@ docker compose --profile app-runtime up -d runtime-manager app-proxy
 
 两个单元都只监听 `127.0.0.1`：前面永远有 nginx，HMAC 是防篡改不是防暴露，
 把编排端口挂到 `0.0.0.0` 等于把编排能力挂到网上。
+
+**附件存储句柄的例外**（AC-45）：托管应用要从容器里回调 runtime-manager 存取附件，
+而 `127.0.0.1` 在容器里是容器自己。systemd 形态把 runtime-manager 绑到
+`bisheng-apps` 网桥的**网关地址**（宿主本地、外网不可达，仍不是 `0.0.0.0`）：
+
+```bash
+GW=$(docker network inspect bisheng-apps -f '{{(index .IPAM.Config 0).Gateway}}')   # 形如 172.18.0.1
+# /etc/bisheng/runtime-manager.env
+RTM_HOST=$GW
+RTM_APP_FACING_BASE_URL=http://$GW:8091
+# 同步改 backend config.yaml 的 app_runtime.manager_base_url 与 app-proxy 的 APP_PROXY_MANAGER_BASE
+```
+
+不这样配的症状：`runtime-status` 的 `attachment_storage` 为 `ok=false`，
+应用里的 SDK `storage` 调用连接被拒。
 
 ## nginx：`location /apps/`
 
@@ -447,15 +466,17 @@ curl -s -b "access_token_cookie=<token>" http://<host>:3001/api/v1/apps/runtime-
 - `capacity` — 当前容量快照：`total_mb` / `mem_available_mb` / `committed_mb` / `cpu` /
   `committed_cpu` / `reserve_mb` / `overcommit_ratio` / `instances`。`readable=false` 表示
   这台机器的 `/proc/meminfo` 读不到——那本身就是要修的事，不会被折叠成 500；
-- `preflight[]` — 五项部署自检，每项直接给出**修复动作**而不是症状：
+- `preflight[]` — 部署自检，每项直接给出**修复动作**而不是症状：
 
 | 检查项 | 不过的含义 |
 |--------|-----------|
 | `orchestration_backend` | 连不上 dockerd。检查 socket 挂载 / 运行身份 |
 | `application_network` | `bisheng-apps` 网络不存在 → `docker network create bisheng-apps` |
 | `data_root_writable` | 数据目录不可写 → 检查 `data_root` / `RTM_DATA_ROOT` 与目录权限 |
+| `host_data_root_mapping` | compose 形态 `RTM_HOST_DATA_ROOT` 不是绝对路径 |
 | `runtime_templates` | 一个运行时模板都没装（镜像不完整） |
 | `base_images` | 基础镜像不在本地。离线环境要**先手动 pull**，否则第一次构建会挂很久然后失败 |
+| `attachment_storage` | 附件存储没配（`RTM_MINIO_*`）、桶配成了公共桶 `bisheng`、或应用容器够不到本进程（systemd 形态没给 `RTM_APP_FACING_BASE_URL`）。detail 里写明改哪个变量 |
 
 再走一遍端到端：用**非管理员账号**访问一个已上线应用的 `/apps/{slug}`
 （管理员会短路权限判定，用管理员验等于没验）。
@@ -501,6 +522,7 @@ tail -f /tmp/bisheng-app-proxy.log            # systemd 形态（单元模板里
 | 期望态文件 | `{data_root}/state/desired-state.json` | 可丢：进程启动时会从容器标签重建 |
 | 构建上下文 | `{data_root}/builds/` | 可丢，纯临时产物 |
 | 应用代码包 | MinIO | 随平台对象存储一起备份 |
+| 应用附件 | MinIO 桶 `bisheng-apps`，前缀 `apps/{app_id}/attachments/` | 随平台对象存储一起备份；**owner 显式删除应用时随之清空** |
 
 ## 相关文档
 

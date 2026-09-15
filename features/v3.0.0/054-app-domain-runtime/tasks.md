@@ -674,24 +674,27 @@
   **覆盖 AC**: AC-21, AC-48
   **依赖**: T082
 
-- [ ] **T084a**: 附件存储句柄测试（Test-First，先于 T084）
+- [x] **T084a**: 附件存储句柄测试（Test-First，先于 T084）
   **文件**: `src/runtime-manager/tests/test_storage.py`（新）
   **逻辑**: `test_four_operations_scoped_to_app_prefix`（put / get / delete / list 四操作的对象键恒被强制加 `apps/{app_id}/attachments/` 前缀）→ AC-45 / `test_cross_app_key_rejected`（传入他应用前缀或 `../` 越界键 → 拒绝，不是静默改写）→ AC-45 / `test_single_file_size_limit_enforced` → AC-45 / `test_bucket_is_bisheng_apps_not_public_bucket`（坑 20：`bisheng` 桶挂着 nginx `/bisheng/` location，附件必须落独立 bucket `bisheng-apps`、且该桶无匿名策略、不挂 nginx location）→ AC-45 / `test_not_counted_into_tenant_storage_quota`（不计租户存储配额）→ AC-45。
   **覆盖 AC**: AC-45
   **依赖**: T031, T019
+  **完成记录（2026-09-16，分支 wt/storage-handle）**：`tests/test_storage.py` 五个指名用例 + 分页 / 光标校验 / 公共桶拒绝 / 未配置 503 / 回环 preflight / 缺失 404 / **per-app token 打他应用 URL = 401** / HTTP 全流程（Bearer 与 HMAC 两路）/ 413 先看 `Content-Length` / MinIO 适配层桩测 / destroy 清附件，共 35 例；`tests/fakes.py` 新增 `FakeObjectStore`（记录每次调用的 bucket / key，`set_bucket_policy` 存在只为断言从未被调）。runtime-manager 套件 138 passed / 5 skipped（基线 102 / 5）。
 
-- [ ] **T084**: 附件存储句柄实现（manager 侧四操作 + 越界拒绝 + 单文件上限）
+- [x] **T084**: 附件存储句柄实现（manager 侧四操作 + 越界拒绝 + 单文件上限）
   **文件**: `src/runtime-manager/runtime_manager/storage.py`（新）
   **逻辑**: 按应用收窄、不进公共可读存储、不计租户存储配额（坑 20：`bisheng` 桶挂着 nginx `/bisheng/` location → 用独立 bucket `bisheng-apps`）。
   **测试**: T084a 全部通过。
   **覆盖 AC**: AC-45
   **依赖**: T084a
+  **完成记录（2026-09-16）**：`runtime_manager/storage.py`（`ObjectStore` 协议 + 惰性 import 的 `MinioObjectStore` + `AppStorageService` 四操作 / `validate_key` 拒绝式校验 / `purge_app` / `storage_preflight`）、`runtime_manager/api/storage.py`（`/v1/apps/{app_id}/storage/objects[...]` 与 `/meta/{key}`，**双凭据**：应用 Bearer 绑 `app_id`，无 Bearer 走 HMAC；独立 router 只在 `main.py` 加一行 `include_router`）、`config.py` 新增 `RTM_MINIO_*` / `RTM_STORAGE_BUCKET` / `RTM_STORAGE_MAX_FILE_MB` / `RTM_APP_FACING_BASE_URL`（未列入 REQUIRED_ENV——不配 = 503 + preflight 指出，不拦整层）、`pyproject.toml` + `uv.lock` 加 `minio>=7.2`、`docker-compose.yml` 补七个变量（`verify-app-runtime-compose.sh` 全过）、`docs/architecture/14` 与 `contracts-runtime-manager.md` §2/§4/§5/§9 同步。错误形状沿用 manager 信封：`invalid_object_key` 400 / `payload_too_large` 413 / `storage_unavailable` 503 / `not_found` 404 / `unauthorized` 401。**偏差**：① 可达性缺口选「manager 绑到 `bisheng-apps` 网桥网关 + `RTM_APP_FACING_BASE_URL`」而非 STS 预签名（应用不该拿到 MinIO 凭据，F057 AC-21），preflight `attachment_storage` 在回环时报 `ok=false`；② backend 错误码 16170–16174 只在 `app_factory.py` **预留注释**、未落码——本波无 backend 调用方，落无人抛的码 = 死代码 + 三语文案空转，首个 backend 消费者（F052 MCP / 数据 tab）那一波再落；③ 本机无 docker daemon，MinIO 适配层以桩 SDK 单测覆盖，真 MinIO 联调留 114（T095 一并）。
 
-- [ ] **T085**: 附件句柄环境变量注入（`BISHENG_APP_STORAGE_*`）
+- [x] **T085**: 附件句柄环境变量注入（`BISHENG_APP_STORAGE_*`）
   **文件**: `src/runtime-manager/runtime_manager/lifecycle.py`, `src/backend/bisheng/app_runtime/domain/constants.py`
   **逻辑**: 与 F057 SDK storage 同名同 API、与 F053 `dev` 同名注入。
   **覆盖 AC**: AC-45
   **依赖**: T084, **T006**（本任务要改 `app_runtime/domain/constants.py`，该文件由 T006 产出）
+  **完成记录（2026-09-16）**：`lifecycle.build_env` 注入 `BISHENG_APP_STORAGE_ENDPOINT` / `BISHENG_APP_STORAGE_TOKEN` / `BISHENG_APP_STORAGE_MAX_FILE_MB`；token 在 deploy 时铸造（`secrets.token_urlsafe(32)`）、**沿用前一记录的值**（AC-21 宽限期新旧实例同一凭据）、只在 destroy 后轮换；存在 `InstanceRecord.env` 里，reconciler 重建走 `record.env` 天然重注入同值、容器 label 恢复路径同样带回；`readonly` 的 `logs` 按名字规则自动脱敏（`test_logs_redact_known_injected_secrets` 改为读真铸造的 token）；`destroy(purge_volume=True)` 顺带 `purge_app`（AC-43）。backend `constants.py::APP_STORAGE_ENV_NAMES` 作为契约副本。`test_lifecycle.py` 补 `test_env_injection_names` 三项 + `test_storage_endpoint_uses_the_app_facing_base_url` + `test_storage_token_is_stable_across_redeploys_and_rotates_after_destroy` + 平台名覆盖调用方值扩到三个 storage 名。**偏差 / 待办**：不注入 bucket / 前缀（F057 AC-21 要求对应用不暴露实现细节；收窄在 manager 侧）；`bisheng dev` 命令在本仓尚不存在（`bisheng-cli/commands` 只有 deploy/login/logs/skills），「F053 `dev` 同名注入」一半无落点，归 F053 / F057（`dev` 期注入的是本地目录句柄，契约 §5 已写明 SDK 按有无 `ENDPOINT` 分辨）。
 
 - [ ] **T086a**: 数据面 manager RPC 测试（Test-First，先于 T086）
   **文件**: `src/runtime-manager/tests/test_appdb.py`（新）
