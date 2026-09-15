@@ -2794,7 +2794,18 @@
       "pendingCapacity": "Approved, but the runtime does not currently have enough resources to start this application. Retry later with \"Bring online\", or ask a platform administrator to free capacity.",
       "pendingDeployFailed": "Approved, but the application failed to start last time. Find the cause under \"Run logs\", fix it and run bisheng deploy again, or retry with \"Bring online\".",
       "pendingUnknown": "Approved, but the application is not live yet. Retry with \"Bring online\"; if it still does not start, check \"Run logs\" for the cause.",
-      "schemaChangeTitle": "Table structure change"
+      "schemaChangeTitle": "Table structure change",
+      "schemaChangeBreaking": "This release modifies or drops columns; the publisher confirmed it explicitly when submitting. After go-live, existing data in the dropped or modified columns will no longer be available.",
+      "schemaChangeAdditive": "This release only adds tables or columns; they take effect automatically at go-live, no confirmation needed.",
+      "schemaChangeBreakingTag": "Breaking",
+      "schemaChangeOp": {
+        "addTable": "Add table",
+        "dropTable": "Drop table",
+        "addColumn": "Add column",
+        "dropColumn": "Drop column",
+        "modifyColumn": "Modify column",
+        "unknown": "Change"
+      }
     },
     "versionList": {
       "title": "Version records",

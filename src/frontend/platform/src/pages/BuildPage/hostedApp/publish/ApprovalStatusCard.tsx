@@ -39,6 +39,7 @@ import {
   approvalStatusI18nKey,
   pendingReasonI18nKey,
 } from "../types"
+import { SchemaChangeNotice } from "./SchemaChangeNotice"
 
 interface ApprovalStatusCardProps {
   app: HostedAppDetail
@@ -82,7 +83,6 @@ export function ApprovalStatusCard({
   // application when the read model itself could not be loaded.
   const parked = (status?.app_state ?? app.state) === "pending_capacity"
   const canWithdraw = !!status?.can?.withdraw && !!approval?.instance_id
-  const schemaChange = status?.schema_change ?? null
 
   const runWithdraw = async (instanceId: number) => {
     setWithdrawing(true)
@@ -255,22 +255,10 @@ export function ApprovalStatusCard({
             </div>
           )}
 
-          {/* Structure-change notice. The read model always sends `null` in
-              this release (the schema wave is deferred), so this block is
-              expected never to render yet — it exists so landing that wave is
-              a backend change alone. */}
-          {!!schemaChange && (
-            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950">
-              <p className="text-sm font-medium">
-                {t("hostedApp.publishStatus.schemaChangeTitle")}
-              </p>
-              {!!schemaChange.summary && (
-                <p className="mt-1 whitespace-pre-wrap break-words text-sm">
-                  {schemaChange.summary}
-                </p>
-              )}
-            </div>
-          )}
+          {/* AC-09 / AC-61 — what the pending release does to the declared
+              tables. Confirmed on the CLI at submit time; shown here, never
+              asked again. Renders nothing when the read model sends null. */}
+          <SchemaChangeNotice change={status.schema_change} />
         </div>
       )}
     </section>

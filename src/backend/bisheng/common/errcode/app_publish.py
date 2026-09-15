@@ -197,7 +197,7 @@ class AppStartupProbeFailedError(AppPublishError):
 
 
 class AppSchemaChangeUnconfirmedError(AppPublishError):
-    """A breaking table-structure change was detected without ``confirm_schema_change`` (deferred wave)."""
+    """A breaking table-structure change (drop / modify) was detected without ``confirm_schema_change`` (AC-09)."""
 
     Code: int = 16229
     Msg: str = "The table structure change must be confirmed explicitly"
