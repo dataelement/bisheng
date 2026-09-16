@@ -11,15 +11,17 @@
       SKILL.md               技能正文(AI 读这个)
       example/               可运行样例,改造它比从零写更稳
       selfcheck.py           部署前连通自检
-    platform-wiring/         平台能力接线:读注入的访问者身份 / 用应用数据库 / bisheng dev 本地同构
-      SKILL.md               第 1 章「访问者身份」置顶带静默失败点警示;模型一章暂未提供
+    platform-wiring/         平台能力接线:访问者身份 / 知识库检索 / 附件存储 / 应用数据库 / bisheng dev
+      SKILL.md               第 1 章「访问者身份」置顶带静默失败点警示;含 SDK 三件套章;模型一章暂未提供
       example/               零依赖样例:显示「你是谁」+ 按人存便签到应用数据库(含幂等加列)
-      selfcheck.py           登录态 + 平台可达 + 库变量可用
+      example-sdk/           装 SDK 的 FastAPI 样例:三件套齐用,健康探活刻意不读身份
+      selfcheck.py           登录态 + 平台可达 + 库变量 + SDK 版本 + 三件套各探一次
 ```
 
 两个包各管一段:「部署纳管」管**怎么把应用交给平台**(清单、打包、预检),「平台能力接线」管
-**应用怎么用平台给的东西**(身份头、数据库、本地 `bisheng dev`)。SDK 三件套(auth / retrieve /
-storage)与模型协议面的章节随各自的 Feature 落地后再补进「平台能力接线」。
+**应用怎么用平台给的东西**(身份、检索、附件、数据库、本地 `bisheng dev`)。SDK 三件套
+(auth / retrieve / storage)的章节已经在「平台能力接线」里;模型协议面一章仍标「暂未提供」,
+随其 Feature 落地后再补。
 
 技能包是平台发布物,`skills sync` **单向覆盖**本地内容(不合并、不保留本地改动)——平台升级后重跑即
 更新到新版本。

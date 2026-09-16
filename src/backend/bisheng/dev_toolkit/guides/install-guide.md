@@ -91,6 +91,11 @@ bash -lc 'bisheng --version'      # zsh：zsh -lic 'bisheng --version'
 - 打印出版本号 = 真的装好。
 - 若报“找不到 / command not found”，但你当前会话里 `bisheng` 能跑 —— 说明装到了只对当前会话有效的地方（项目 venv / 没进 PATH）。**回到第 2 步用 pipx 重装**；Windows 上确认跑过 `py -m pipx ensurepath` 后**新开一个 PowerShell** 再验（PATH 变更要新进程才生效）。验证通过前不要往下走。
 
+> **应用要用平台能力（知道当前是谁、检索知识库、存附件）时还要装一个 Python 包**：
+> `pip install --extra-index-url <平台地址>/api/v1/dev-toolkit/simple/ bisheng-sdk`（同样不依赖公网）。
+> 它装在**应用自己的环境**里，不是命令行那个；用法见 `<平台地址>/api/v1/dev-toolkit/sdk-guide.md`，
+> 也就是 `skills sync` 拉下来的「平台能力接线」技能包正文。纯部署、不碰这些能力的应用不需要它。
+
 然后向用户**简要汇报**：① 命令行已装好并登录到 `<平台地址>`；② 技能接入了哪些 AI 工具；③ **请用户重启一下当前 AI 助手**，让它读到刚接上的技能——之后新开会话用大白话描述想做的应用即可。
 
 ---
