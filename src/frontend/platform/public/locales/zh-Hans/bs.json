@@ -1364,6 +1364,7 @@
       "appReleaseOnline": "发布上线",
       "appReleasePendingOnline": "待上线（未能启动）",
       "appReleaseIterationFailed": "新版本未上线（线上未受影响）",
+      "appReleaseSchemaMigrationFailed": "数据表迁移失败，未上线",
       "appReleaseManualPublish": "手动上线",
       "appReleaseCapabilityDeclared": "声明能力依赖",
       "appReleasePreviewStarted": "拉起审批预览实例",
@@ -2883,6 +2884,17 @@
       },
       "empty": "还没有资源档位。后端首次启动时会自动预置三档，请检查启动日志。",
       "loading": "加载中…"
+    },
+    "tier": {
+      "title": "资源档位",
+      "cores": "{{count}} 核 CPU",
+      "memory": "{{count}} MB 内存",
+      "placeholder": "选择档位",
+      "unknown": "未确定",
+      "cliOnlyHint": "本应用通过 bisheng deploy 发布，档位写在 bisheng-app.yaml 的 tier 字段里；改完重新发布即可生效。",
+      "effectiveHint": "档位自下一次发布或重新上线起生效，正在运行的实例不受影响。",
+      "retiredTag": "已停用",
+      "retiredHint": "该档位已被管理员停用，当前应用照常运行；下次发布需要改成其它档位。"
     }
   }
 }

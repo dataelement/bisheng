@@ -19,7 +19,7 @@ Four things this file exists to prevent:
   name. HTTP headers are latin-1; the injected ``X-BiSheng-User-Name`` /
   ``Dept-Name`` / ``Dept-Path`` must be percent-encoded, and with the usual
   English test account that bug is invisible (design pit 9).
-* **A half-stubbed orchestrator.** ``fake_orchestrator`` replaces **all seventeen**
+* **A half-stubbed orchestrator.** ``fake_orchestrator`` replaces **all eighteen**
   ``orchestrator_client`` methods. Miss one and it silently falls through to
   real HTTP against 127.0.0.1:8091 — which only surfaces as a connection error
   in CI, far from the test that caused it. The fixture asserts the stub set
@@ -92,6 +92,10 @@ _SESSION_PATCH_TARGETS = (
     # pointed at the same in-memory engine or the lookup silently finds nothing.
     "bisheng.app_publish.domain.models.app_preview_session",
     "bisheng.app_publish.domain.services.preview_instance_service",
+    # F055 T062: ``resume`` builds the staged version's declared tables before it
+    # starts anything (AC-36 with AC-42), and that service reads the reference
+    # declaration from its own session. Unpatched it reaches the real database.
+    "bisheng.app_publish.domain.services.schema_evolution_service",
 )
 
 _TABLES = (
@@ -128,6 +132,9 @@ ORCHESTRATOR_METHODS = (
     "preview_start",
     "preview_stop",
     "admission",
+    # publish-time schema evolution (F055 T062) — an intent, not a data-plane
+    # call: the backend declares the shape, the manager derives the DDL
+    "schema_migrate",
     "status",
     "logs",
     "runtime_status",
@@ -438,7 +445,7 @@ async def app_factory(app_db, app_owner):
 
 @pytest.fixture()
 def fake_orchestrator(monkeypatch):
-    """Replace **all seventeen** ``orchestrator_client`` methods with programmable stubs.
+    """Replace **all eighteen** ``orchestrator_client`` methods with programmable stubs.
 
     Returns a namespace with ``calls`` (an ordered list of ``(method, kwargs)``)
     and ``responses`` (a per-method dict the test may overwrite before acting).
@@ -482,6 +489,7 @@ def fake_orchestrator(monkeypatch):
         "probe": {"ready": True, "reason": ""},
         "preview_start": {"instance_id": "prev-inst-1", "upstream": "http://172.31.0.9:8080", "phase": "running"},
         "preview_stop": {"reclaimed": True},
+        "schema_migrate": {"applied": [], "skipped": [], "snapshot_key": None},
         "admission": {
             "admitted": True,
             "reason": "",

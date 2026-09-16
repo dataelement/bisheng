@@ -51,12 +51,14 @@ from bisheng.app_publish.domain.models.app_deployment import (
     STATUS_SUCCEEDED,
     AppDeploymentDao,
 )
-from bisheng.app_publish.domain.services import publish_notification_service
+from bisheng.app_publish.domain.schemas.failure import failure_from_error
+from bisheng.app_publish.domain.services import publish_notification_service, schema_evolution_service
 from bisheng.app_publish.domain.services.preview_instance_service import PreviewInstanceService
 from bisheng.app_publish.domain.services.release_audit import write_release_audit
 from bisheng.app_publish.domain.services.version_service import VersionService
 from bisheng.common.errcode.app_publish import (
     AppCapacityInsufficientError,
+    AppSchemaMigrationFailedError,
     AppStartupProbeFailedError,
     AppVersionNotFoundError,
 )
@@ -73,6 +75,11 @@ STATUS_PENDING_DEPLOY_FAILED = "pending_deploy_failed"
 #: The start failed but the application stayed online on its previous version.
 #: Not a parked outcome: nothing is waiting, the submission just did not land.
 STATUS_ITERATION_FAILED = "iteration_failed"
+#: The declared application tables would not take the release's shape, so the
+#: new version was never started (AC-42). A *failed* run, never a parked one:
+#: the remedy is a different manifest, and a parked application refuses the
+#: submission that would carry it (16252).
+STATUS_SCHEMA_MIGRATION_FAILED = "schema_migration_failed"
 STATUS_STAGED_ONLY = "staged_only"
 STATUS_APP_DELETED = "app_deleted"
 
@@ -230,8 +237,22 @@ class PublishOnlineService:
         rather than "error" — a distinction this method exists to preserve all
         the way to the publish face. Anything that *raises* out of them is a
         system failure and is deliberately not caught.
+
+        The declared-table migration runs **before** the start attempt (AC-42 /
+        T062) and nowhere else. Before, because a refusal then costs the
+        application nothing: whatever was serving is still serving, on a
+        database nobody touched. Nowhere else, because this is the one moment
+        at which the version is known to be the one that will run — a migration
+        at approval time would change the schema under whichever version is
+        live if the start later fails.
         """
         deployment = await cls._deployment_ref(payload_snapshot, app)
+        try:
+            await schema_evolution_service.migrate_for_release(app.id, version.manifest)
+        except AppSchemaMigrationFailedError as error:
+            return await cls._settle_schema_failure(
+                app, version, deployment, payload_snapshot, error=error, instance_id=instance_id
+            )
         result = await action(app.id, actor=actor if actor is not None else cls._owner_actor(app))
 
         if result.ok:
@@ -308,6 +329,97 @@ class PublishOnlineService:
             "app_state": result.state,
             "reason": result.reason,
         }
+
+    @classmethod
+    async def _settle_schema_failure(
+        cls,
+        app,
+        version,
+        deployment,
+        payload_snapshot: dict,
+        *,
+        error: AppSchemaMigrationFailedError,
+        instance_id: int | None,
+    ) -> dict[str, Any]:
+        """The declared tables would not take the new shape, so nothing was started (AC-42).
+
+        Recorded as a **failed pipeline run**, never as 待上线. Parking is for
+        releases one click or one free gigabyte away from serving; this one is
+        waiting on a different ``bisheng-app.yaml``, and parking it would block
+        that fix outright — a parked application refuses new submissions with
+        16252.
+
+        A station message goes out only when the application is online, where
+        the existing ``com_notifications_action_app_publish_iteration_failed``
+        copy ("approved, but the new version did not go live; the online one is
+        still serving") says exactly what happened. When it was not online
+        there is no message: nothing was
+        serving before and nothing is serving now, which makes this the same
+        kind of event as a failed build or a failed probe — reported on the
+        publish face and by ``bisheng deploy``, not pushed. That row and its
+        reasoning are pinned in ``test_notification_matrix.py`` (T068).
+        """
+        online = app.state == _APP_STATE_ONLINE
+        failure = cls._schema_failure(error, online=online)
+        reason = str(failure["details"].get("reason") or STATUS_SCHEMA_MIGRATION_FAILED)
+        await cls._advance_deployment(deployment, stage=STAGE_PUBLISHING, status=STATUS_FAILED, failure=failure)
+        await write_release_audit(
+            AppReleaseAuditAction.SCHEMA_MIGRATION_FAILED,
+            deployment=deployment,
+            version_no=version.version_no,
+            operator_id=int(app.owner_user_id or 0),
+            reason=reason,
+            metadata={
+                "status": STATUS_SCHEMA_MIGRATION_FAILED,
+                "reason_kind": STATUS_SCHEMA_MIGRATION_FAILED,
+                "app_state": app.state,
+                "detail": failure["details"],
+            },
+        )
+        if online:
+            await publish_notification_service.notify_pending_online(
+                tenant_id=int(app.tenant_id or 0),
+                owner_user_id=int(app.owner_user_id or 0),
+                business_name=str(payload_snapshot.get("app_name") or app.name),
+                instance_id=int(instance_id or 0),
+                reason_kind="iteration_failed",
+                reason=reason,
+            )
+        logger.info(
+            f"app_publish.schema_migration_failed app_id={app.id} version_id={version.id} "
+            f"reason={reason} app_state={app.state}"
+        )
+        return {
+            "status": STATUS_SCHEMA_MIGRATION_FAILED,
+            "app_id": app.id,
+            "version_id": version.id,
+            "app_state": app.state,
+            "reason": reason,
+        }
+
+    @staticmethod
+    def _schema_failure(error: AppSchemaMigrationFailedError, *, online: bool) -> dict[str, Any]:
+        """The failure tuple the publish face and ``bisheng deploy --wait`` read.
+
+        The manager's own message is kept verbatim — it names the table and the
+        column, which is the whole of what the owner has to go and change. Its
+        structured verdict arrives as *error kwargs* rather than under
+        ``details`` (``orchestrator_client`` spreads the manager's detail body
+        into them), so it is folded in here; the hints differ only in whether
+        there is a live version to reassure the owner about.
+        """
+        failure = failure_from_error(error, stage=STAGE_PUBLISHING)
+        extras = {
+            key: value
+            for key, value in (getattr(error, "kwargs", None) or {}).items()
+            if key not in ("stage", "details", "hints")
+        }
+        failure["details"] = {"reason": STATUS_SCHEMA_MIGRATION_FAILED, **extras, **failure["details"]}
+        failure["hints"] = [
+            "按提示修改 bisheng-app.yaml 的 database.tables 声明后重新执行 bisheng deploy",
+            "线上版本仍在服务, 未受本次发布影响" if online else "本次发布未上线, 应用数据未被修改",
+        ]
+        return failure
 
     @classmethod
     async def _settle_iteration_failed(

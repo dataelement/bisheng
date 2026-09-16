@@ -8,12 +8,21 @@ holds for the database word for word. So this module is the *only* reader and
 writer outside the application itself, and the backend's ``AppDataService``
 reaches it through the RPC in ``api/appdb.py``.
 
-What it offers is deliberately small and **typed** — table list, table shape,
-paged rows, one-row update, CSV export. There is no statement endpoint and no
-parameter anywhere that carries SQL: every identifier is checked against the
-live ``sqlite_master`` before it is quoted into a statement, so ``CREATE`` /
-``ALTER`` / ``DROP`` / ``PRAGMA`` are not *rejected*, they are *inexpressible*.
-Schema evolution belongs to the publish pipeline (F055), not to a data tab.
+What :class:`AppDbService` offers is deliberately small and **typed** — table
+list, table shape, paged rows, one-row update, CSV export. There is no
+statement endpoint and no parameter anywhere that carries SQL: every identifier
+is checked against the live ``sqlite_master`` before it is quoted into a
+statement, so ``CREATE`` / ``ALTER`` / ``DROP`` / ``PRAGMA`` are not *rejected*,
+they are *inexpressible*. **The data tab can never change a schema.**
+
+Schema evolution belongs to the publish pipeline, and it arrives here as
+:class:`AppDbSchemaService` — a second class in this module, reached through
+``POST /v1/intents/db-migrate`` rather than through the data plane's routes
+(F055 T062 / AC-42). It is in *this* file for one reason: ``sqlite3`` has
+exactly one importer inside the manager, and ``test_appdb.py`` pins that. Its
+input is a **declarative plan** (create this table, add these columns, rebuild
+that one to this shape) — still no SQL on the wire, still every identifier and
+every declared type checked before it is quoted.
 
 Two SQLite facts shape the connection handling:
 
@@ -22,7 +31,10 @@ Two SQLite facts shape the connection handling:
   writes. Every call opens its own connection, does its work in autocommit or
   one short ``BEGIN IMMEDIATE`` block, and closes. Reads open the file
   ``mode=ro``; writes ``mode=rw`` — never ``rwc``, because creating the file on
-  the app's behalf would hand the app an empty database it did not make.
+  the app's behalf would hand the app an empty database it did not make. The
+  one exception is the migration path, where creating it *is* the job: the
+  platform declares the tables and the platform builds them (DEV-07 ②), and on
+  a first release that has to happen before the app has ever run.
 * **``busy_timeout``** is set on every connection, so a write that arrives while
   the app holds the lock waits briefly instead of failing at once. A wait that
   still times out is reported as ``data_busy`` — a retryable answer, not an
@@ -35,6 +47,7 @@ import csv
 import logging
 import re
 import sqlite3
+import tarfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -47,6 +60,7 @@ from runtime_manager.errors import (
     DataInvalidError,
     RowNotFoundError,
     RuntimeManagerError,
+    SchemaMigrationFailedError,
     TableNotFoundError,
 )
 
@@ -461,3 +475,411 @@ class AppDbService:
             conn.close()
         logger.info("app_db export app_id=%s table=%s file=%s", app_id, table, target)
         return target
+
+
+# ---------------------------------------------------------------------------
+# schema evolution — the publish pipeline's half (F055 T062 / AC-42)
+# ---------------------------------------------------------------------------
+
+#: Where a pre-migration copy of the production data lands (F054 design D10).
+#: One tar per migration, named by the epoch second it was taken.
+SNAPSHOT_KEY_TEMPLATE = "apps/{app_id}/db-snapshots/{ts}.tar"
+
+#: The single member inside that tar. Fixed so a restore is "untar, put it back".
+SNAPSHOT_MEMBER = "app.db"
+
+#: Plan verbs. The platform derives them by diffing two manifests; this module
+#: is the only place one of them becomes SQL.
+PLAN_CREATE_TABLE = "create_table"
+PLAN_ADD_COLUMNS = "add_columns"
+PLAN_REBUILD_TABLE = "rebuild_table"
+PLAN_DROP_TABLE = "drop_table"
+PLAN_OPS: frozenset[str] = frozenset({PLAN_CREATE_TABLE, PLAN_ADD_COLUMNS, PLAN_REBUILD_TABLE, PLAN_DROP_TABLE})
+
+#: Verbs that can lose production rows. A plan containing one of these takes a
+#: snapshot **whether or not the caller asked for one** — 「迁移前自动留生产数据
+#: 快照」 is a promise to the owner, and a promise that depends on the caller
+#: remembering a flag is not one.
+DESTRUCTIVE_OPS: frozenset[str] = frozenset({PLAN_REBUILD_TABLE, PLAN_DROP_TABLE})
+
+#: Suffix of the scratch table a rebuild goes through. Long enough that it
+#: cannot collide with a declared name, and dropped again either way.
+_REBUILD_SUFFIX = "__bisheng_migrating"
+
+#: A declared column type, as it may be quoted into DDL. SQLite accepts any
+#: string as a type name (affinity is derived from substrings), so the check is
+#: not "is this a known type" but "is this a *type name* rather than a
+#: statement": letters and spaces, optionally one size suffix.
+_DECLARED_TYPE = re.compile(r"^[A-Za-z][A-Za-z ]{0,30}(\(\s*\d{1,5}\s*(,\s*\d{1,5}\s*)?\))?$")
+
+
+@dataclass(slots=True, frozen=True)
+class _PlanItem:
+    """One validated plan entry. Nothing reaches SQL that did not pass through here."""
+
+    op: str
+    table: str
+    columns: tuple[dict[str, Any], ...] = ()
+
+
+def _migration_failed(message: str, **extra: Any) -> SchemaMigrationFailedError:
+    return SchemaMigrationFailedError(message, **extra)
+
+
+def _default_literal(value: Any) -> str:
+    """A declared default as a SQL literal.
+
+    ``DEFAULT`` is part of the DDL text and cannot be a bound parameter, so this
+    is the one place a *value* is written into a statement — hence the closed
+    set of accepted types and the doubled quote. Anything else is refused
+    rather than coerced: a default the platform cannot spell exactly is a
+    default the application would silently not get.
+    """
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return repr(value)
+    if isinstance(value, str):
+        return "'" + value.replace("'", "''") + "'"
+    raise _migration_failed(f"default value {value!r} is not a string, number or boolean", reason="invalid_default")
+
+
+class AppDbSchemaService:
+    """Apply a declarative table plan to one app's database (AC-42).
+
+    Three properties the tests pin, because each is a way this could quietly do
+    the wrong thing:
+
+    * **The snapshot happens before the first DDL statement, or the migration
+      does not happen at all.** A destructive plan whose snapshot could not be
+      stored is refused — reporting "migrated" after failing to preserve the
+      rows the confirmation was asked about would make AC-42 a lie.
+    * **The whole plan is one transaction.** SQLite is transactional over DDL,
+      so a plan that fails half way leaves the database exactly as it was;
+      there is no "partially migrated" state for anyone to diagnose.
+    * **Every step is idempotent.** ``manual_publish`` retries the same version
+      after a parked release, so the same plan reaches this method again: an
+      existing table is not re-created, an existing column is not re-added, and
+      a rebuild re-derives the same shape.
+    """
+
+    def __init__(self, config: Config, store: Any | None = None) -> None:
+        self._config = config
+        self._store = store
+
+    # ------------------------------------------------------------------
+    # entry point
+    # ------------------------------------------------------------------
+
+    def migrate(self, app_id: str, plan: list[dict[str, Any]], *, snapshot: bool = False) -> dict[str, Any]:
+        """Bring the app's tables to the declared shape. Returns what was done.
+
+        ``snapshot`` only ever *adds* a snapshot: a destructive plan takes one
+        regardless (see :data:`DESTRUCTIVE_OPS`).
+        """
+        items = self._validate(plan)
+        if not items:
+            return {"applied": [], "skipped": [], "snapshot_key": None}
+
+        path = self.db_path(app_id)
+        existed = path.is_file()
+        wanted = snapshot or any(item.op in DESTRUCTIVE_OPS for item in items)
+        conn = self._connect_for_migration(app_id, path)
+        snapshot_key: str | None = None
+        try:
+            if wanted and existed:
+                # Nothing to preserve when the file is ours to create: a first
+                # release has no production data, and an empty tar would only
+                # make the snapshot list harder to read.
+                snapshot_key = self._store_snapshot(app_id, conn)
+            applied, skipped = self._apply(conn, items)
+        finally:
+            conn.close()
+        logger.info(
+            "app_db migrate app_id=%s applied=%s skipped=%s snapshot=%s",
+            app_id,
+            len(applied),
+            len(skipped),
+            snapshot_key or "-",
+        )
+        return {"applied": applied, "skipped": skipped, "snapshot_key": snapshot_key}
+
+    def db_path(self, app_id: str) -> Path:
+        if not _APP_ID.match(app_id or ""):
+            raise DataInvalidError(f"app_id {app_id!r} is not a valid identifier")
+        return self._config.app_data_dir(app_id) / DB_FILENAME
+
+    # ------------------------------------------------------------------
+    # validation — everything refusable without touching the file
+    # ------------------------------------------------------------------
+
+    def _validate(self, plan: Any) -> list[_PlanItem]:
+        """Check the whole plan up front.
+
+        Up front matters: a plan rejected half way would already have taken a
+        snapshot and possibly created a table, so "the release was refused" and
+        "the database was left alone" would stop being the same sentence.
+        """
+        if plan is None:
+            return []
+        if not isinstance(plan, list):
+            raise _migration_failed("plan must be a list of operations", reason="invalid_plan")
+        items: list[_PlanItem] = []
+        for entry in plan:
+            if not isinstance(entry, dict):
+                raise _migration_failed("every plan entry must be an object", reason="invalid_plan")
+            op = str(entry.get("op") or "")
+            if op not in PLAN_OPS:
+                raise _migration_failed(f"unknown plan operation {op!r}", reason="invalid_plan", op=op)
+            table = self._identifier(str(entry.get("table") or ""), what="table")
+            columns = () if op == PLAN_DROP_TABLE else self._columns(table, entry.get("columns"), op=op)
+            items.append(_PlanItem(op=op, table=table, columns=columns))
+        return items
+
+    def _identifier(self, name: str, *, what: str) -> str:
+        try:
+            return _check_identifier(name, what=what)
+        except DataInvalidError as exc:
+            raise _migration_failed(str(exc.detail.get("message") or exc), reason="invalid_identifier") from exc
+
+    def _columns(self, table: str, raw: Any, *, op: str) -> tuple[dict[str, Any], ...]:
+        if not isinstance(raw, list) or not raw:
+            raise _migration_failed(
+                f"operation {op!r} on table {table!r} carries no columns", reason="invalid_plan", table=table
+            )
+        seen: set[str] = set()
+        columns: list[dict[str, Any]] = []
+        for entry in raw:
+            if not isinstance(entry, dict):
+                raise _migration_failed(f"column entry of table {table!r} is not an object", reason="invalid_plan")
+            name = self._identifier(str(entry.get("name") or ""), what="column")
+            if name in seen:
+                raise _migration_failed(
+                    f"column {name!r} is declared twice on table {table!r}", reason="invalid_plan", table=table
+                )
+            seen.add(name)
+            columns.append(
+                {
+                    "name": name,
+                    "type": self._declared_type(table, name, entry.get("type")),
+                    "nullable": entry.get("nullable"),
+                    "default": entry.get("default"),
+                    "primary_key": bool(entry.get("primary_key")),
+                }
+            )
+        return tuple(columns)
+
+    def _declared_type(self, table: str, column: str, declared: Any) -> str:
+        if declared is None or declared == "":
+            # A column with no declared type is legal SQLite (blank affinity)
+            # and is exactly what ``columns: [id, name]`` in a manifest means.
+            return ""
+        text = str(declared).strip()
+        if not _DECLARED_TYPE.match(text):
+            raise _migration_failed(
+                f"column {column!r} of table {table!r} declares type {text!r}, which is not a type name",
+                reason="invalid_type",
+                table=table,
+                column=column,
+            )
+        return text
+
+    # ------------------------------------------------------------------
+    # the snapshot
+    # ------------------------------------------------------------------
+
+    def _store_snapshot(self, app_id: str, conn: sqlite3.Connection) -> str:
+        """A consistent copy of the live database, tarred and stored (AC-42).
+
+        ``Connection.backup`` rather than ``tar app.db``: the file on disk is
+        half of a WAL database, and archiving it while the application is
+        writing produces a copy that is *not* a database. The copy is taken
+        through the same connection the migration will run on, which is also
+        what makes it the state the migration is about to change.
+        """
+        from runtime_manager.storage import ensure_private_bucket, get_object_store
+
+        ts = int(time.time())
+        key = SNAPSHOT_KEY_TEMPLATE.format(app_id=app_id, ts=ts)
+        staging = self._config.data_root / "db-snapshots" / app_id
+        staging.mkdir(parents=True, exist_ok=True)
+        copy = staging / f"{ts}-{SNAPSHOT_MEMBER}"
+        archive = staging / f"{ts}.tar"
+        try:
+            target = sqlite3.connect(copy)
+            try:
+                conn.backup(target)
+            finally:
+                target.close()
+            with tarfile.open(archive, "w") as tar:
+                tar.add(copy, arcname=SNAPSHOT_MEMBER)
+            store = self._store if self._store is not None else get_object_store()
+            bucket = self._config.storage_bucket
+            ensure_private_bucket(store, bucket)
+            store.put_object(bucket, key, archive.read_bytes(), "application/x-tar")
+        except RuntimeManagerError as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            raise _migration_failed(
+                f"the pre-migration data snapshot could not be stored: {detail.get('message') or exc}",
+                reason="snapshot_failed",
+            ) from exc
+        except Exception as exc:
+            raise _migration_failed(
+                f"the pre-migration data snapshot could not be taken: {exc}", reason="snapshot_failed"
+            ) from exc
+        finally:
+            copy.unlink(missing_ok=True)
+            archive.unlink(missing_ok=True)
+        logger.info("app_db snapshot app_id=%s key=%s", app_id, key)
+        return key
+
+    # ------------------------------------------------------------------
+    # the DDL
+    # ------------------------------------------------------------------
+
+    def _connect_for_migration(self, app_id: str, path: Path) -> sqlite3.Connection:
+        """``rwc`` — the one path allowed to create the file (DEV-07 ②)."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            conn = sqlite3.connect(
+                f"file:{path}?mode=rwc", uri=True, timeout=BUSY_TIMEOUT_MS / 1000, isolation_level=None
+            )
+        except sqlite3.OperationalError as exc:
+            raise DataBusyError(f"cannot open the database of app {app_id}: {exc}")
+        conn.row_factory = sqlite3.Row
+        conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+        return conn
+
+    def _apply(
+        self, conn: sqlite3.Connection, items: list[_PlanItem]
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        applied: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            for item in items:
+                outcome = self._apply_one(conn, item)
+                (skipped if outcome.get("skipped") else applied).append(outcome)
+            conn.execute("COMMIT")
+        except sqlite3.Error as exc:
+            self._rollback(conn)
+            raise _migration_failed(f"rejected by SQLite: {exc}", reason="sqlite_error") from exc
+        except RuntimeManagerError:
+            self._rollback(conn)
+            raise
+        return applied, skipped
+
+    @staticmethod
+    def _rollback(conn: sqlite3.Connection) -> None:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
+
+    def _apply_one(self, conn: sqlite3.Connection, item: _PlanItem) -> dict[str, Any]:
+        live = self._live_columns(conn, item.table)
+        if item.op == PLAN_DROP_TABLE:
+            if live is None:
+                return {"op": item.op, "table": item.table, "skipped": "absent"}
+            conn.execute(f"DROP TABLE {_quote(item.table)}")
+            return {"op": item.op, "table": item.table}
+
+        if live is None:
+            # Missing table, whatever the verb said: creating it is where every
+            # verb was trying to end up, and it makes a retry after a release
+            # that died half way do the right thing. This is only safe because
+            # **every** plan entry carries the full target column list — an
+            # ``add_columns`` entry holding just the delta would build a table
+            # with one column in it.
+            self._create(conn, item.table, item.columns)
+            return {"op": PLAN_CREATE_TABLE, "table": item.table, "columns": [c["name"] for c in item.columns]}
+
+        if item.op == PLAN_CREATE_TABLE:
+            return {"op": item.op, "table": item.table, "skipped": "exists"}
+
+        if item.op == PLAN_ADD_COLUMNS:
+            added = self._add_columns(conn, item.table, item.columns, live)
+            if not added:
+                return {"op": item.op, "table": item.table, "skipped": "exists"}
+            return {"op": item.op, "table": item.table, "columns": added}
+
+        self._rebuild(conn, item.table, item.columns, live)
+        return {"op": item.op, "table": item.table, "columns": [c["name"] for c in item.columns]}
+
+    @staticmethod
+    def _live_columns(conn: sqlite3.Connection, table: str) -> list[str] | None:
+        """Column names of ``table``, or ``None`` when the table does not exist."""
+        exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)).fetchone()
+        if not exists:
+            return None
+        return [row["name"] for row in conn.execute(f"PRAGMA table_info({_quote(table)})").fetchall()]
+
+    def _create(self, conn: sqlite3.Connection, table: str, columns: tuple[dict[str, Any], ...]) -> None:
+        body = ", ".join(self._column_ddl(column) for column in columns)
+        conn.execute(f"CREATE TABLE {_quote(table)} ({body})")
+
+    def _add_columns(
+        self, conn: sqlite3.Connection, table: str, columns: tuple[dict[str, Any], ...], live: list[str]
+    ) -> list[str]:
+        added: list[str] = []
+        for column in columns:
+            if column["name"] in live:
+                continue
+            self._require_fillable(table, column)
+            conn.execute(f"ALTER TABLE {_quote(table)} ADD COLUMN {self._column_ddl(column)}")
+            added.append(column["name"])
+        return added
+
+    def _rebuild(
+        self, conn: sqlite3.Connection, table: str, columns: tuple[dict[str, Any], ...], live: list[str]
+    ) -> None:
+        """SQLite's supported way to change or drop a column: build, copy, swap.
+
+        ``ALTER TABLE … DROP COLUMN`` exists in newer SQLite versions and still
+        cannot change a type, so a rebuild is needed for half the breaking
+        cases anyway — doing all of them the same way means one code path has
+        to get the copy step right instead of two.
+        """
+        for column in columns:
+            if column["name"] not in live:
+                self._require_fillable(table, column)
+        carried = [column["name"] for column in columns if column["name"] in live]
+        scratch = f"{table}{_REBUILD_SUFFIX}"
+        conn.execute(f"DROP TABLE IF EXISTS {_quote(scratch)}")
+        self._create(conn, scratch, columns)
+        if carried:
+            names = ", ".join(_quote(name) for name in carried)
+            conn.execute(f"INSERT INTO {_quote(scratch)} ({names}) SELECT {names} FROM {_quote(table)}")
+        conn.execute(f"DROP TABLE {_quote(table)}")
+        conn.execute(f"ALTER TABLE {_quote(scratch)} RENAME TO {_quote(table)}")
+
+    @staticmethod
+    def _require_fillable(table: str, column: dict[str, Any]) -> None:
+        """A new NOT NULL column needs a default — existing rows have no value.
+
+        Refused rather than quietly relaxed to nullable: the declaration is the
+        contract the application's own code is written against, and a column
+        that is nullable in production but NOT NULL in the manifest is a bug
+        that surfaces much later and much further away.
+        """
+        if column["nullable"] is False and column["default"] is None and not column["primary_key"]:
+            raise _migration_failed(
+                f"column {column['name']!r} of table {table!r} is declared NOT NULL without a default, "
+                "so existing rows would have no value for it",
+                reason="notnull_without_default",
+                table=table,
+                column=column["name"],
+            )
+
+    @staticmethod
+    def _column_ddl(column: dict[str, Any]) -> str:
+        parts = [_quote(column["name"])]
+        if column["type"]:
+            parts.append(column["type"])
+        if column["primary_key"]:
+            parts.append("PRIMARY KEY")
+        if column["nullable"] is False:
+            parts.append("NOT NULL")
+        if column["default"] is not None:
+            parts.append(f"DEFAULT {_default_literal(column['default'])}")
+        return " ".join(parts)

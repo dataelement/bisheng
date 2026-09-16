@@ -60,6 +60,7 @@ from bisheng.common.errcode.app_factory import (
     AppProbeFailedError,
     AppRuntimeNotSupportedError,
 )
+from bisheng.common.errcode.app_publish import AppSchemaMigrationFailedError
 from bisheng.common.services.config_service import settings
 
 #: Manager ``detail.code`` → platform error class (contract §3). ``unauthorized``
@@ -80,6 +81,10 @@ _ERROR_BY_MANAGER_CODE: dict[str, type] = {
     "row_not_found": AppDataRowNotFoundError,
     "data_invalid": AppDataInvalidError,
     "data_busy": AppDataBusyError,
+    # Publish-time schema evolution (F055 T062). 16259 belongs to F055's band
+    # rather than F054's because the only caller is the publish pipeline and the
+    # only remedy is a different ``bisheng-app.yaml``.
+    "schema_migration_failed": AppSchemaMigrationFailedError,
 }
 
 #: Per-call read budgets in seconds. ``deploy`` and ``probe`` block on the
@@ -116,6 +121,7 @@ def build_failure_error(payload: dict[str, Any]) -> AppBuildFailedError:
 
     A free function rather than a client method: the facade's public surface is
     exactly the seventeen RPC methods (the test fixtures assert that set), and this
+    exactly the sixteen RPC methods (the test fixtures assert that set), and this
     is a translation of an already-fetched answer, not another RPC.
     """
     return AppBuildFailedError(
@@ -208,6 +214,28 @@ class OrchestratorClient:
     # upstream. A facade method with no caller is dead code, and this facade's
     # method set is asserted lockstep, so a dead one would be copied into two
     # test fixtures forever.
+
+    async def schema_migrate(
+        self, *, app_id: str, plan: list[dict[str, Any]], snapshot: bool = False
+    ) -> dict[str, Any]:
+        """Bring an app's declared tables to their new shape (F055 AC-42 / T062).
+
+        An **intent**, not a data-plane call: the backend states the shape it
+        wants and the manager derives the statements, so no SQL ever crosses
+        this boundary and the five ``db_*`` reads below keep their "there is no
+        DDL to refuse" property. ``snapshot`` can only add a pre-migration
+        snapshot — the manager takes one for any destructive plan regardless,
+        because the promise is to the owner, not to the caller.
+
+        Returns ``{applied[], skipped[], snapshot_key}``; ``snapshot_key`` is
+        the object key under ``apps/{app_id}/db-snapshots/`` or ``None``.
+        """
+        return await self._request(
+            "POST",
+            "/v1/intents/db-migrate",
+            json={"app_id": app_id, "plan": plan, "snapshot": snapshot},
+            op="schema_migrate",
+        )
 
     async def admission(self, *, tier: dict[str, Any] | None = None, purpose: str = "run") -> dict[str, Any]:
         """Capacity gate (AC-19). The verdict **snapshot is passed through verbatim**
@@ -396,6 +424,8 @@ class OrchestratorClient:
 
 #: Process-wide facade. Seventeen public methods (ten orchestration + two
 #: preview + five data plane), no more: the F054/F055 test
+#: Process-wide facade. Sixteen public methods (eleven orchestration + five data
+#: plane), no more: the F054/F055 test
 #: fixtures assert this set so that a newly added method cannot silently fall
 #: through to real HTTP against runtime-manager in a unit test.
 orchestrator_client = OrchestratorClient()

@@ -44,6 +44,8 @@ ALLOWED_CALL_SITES: dict[str, list[str]] = {
         "domain/services/publish_approval_service.py::notify_approvers_of_new_task",
         "domain/services/publish_online_service.py::notify_pending_online",
         "domain/services/publish_online_service.py::notify_pending_online",
+        # T062 schema-migration refusal, on the same channel (F055 AC-42).
+        "domain/services/publish_online_service.py::notify_pending_online",
     ],
     # F054 state actions + F056's one wiring. ``stop`` and ``_start`` each call
     # it once; nothing else in the runtime notifies anybody.

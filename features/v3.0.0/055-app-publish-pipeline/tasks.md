@@ -694,9 +694,12 @@ T001–T007（Wave 1，可并行）
   **证据**（分支 `wt/schema-precheck`）：后端 `bb6a9cf1d`（`schema_evolution_service.py` 纯函数 diff + `accept()` 同步闸 16229 + worker `precheck_schema` 阶段 + publish-status 读模型 `schema_change` + manifest `DatabaseColumn`；`test_schema_evolution.py` 19 例，`test/app_publish/` 383 passed）；CLI `0274b36ac`（TTY 交互确认 / 非 TTY 原样报错 / `--confirm-schema-change` 直通；`tests/test_command_deploy_sync.py` +6，CLI 274 passed）；展示面（platform `SchemaChangeNotice.tsx` + `schemaChange.ts`，vitest +8；client `AppPublishDetailPanel.tsx` 结构变更行，jest +1；三语文案）。
   **偏离**：① 闸不在 `precheck_service.py`，而在 `publish_pipeline_service.accept()` 的同步腿（`16251` / `16252` 之后）——确认必须在 `deploy` 请求返回前发生，CLI 才能把 16229 转成终端提问后**用同一个包重发**；`precheck_service.py` 未改。worker 侧的 `precheck_schema` 阶段（scan 之后、build 之前）只推导摘要写入审批单快照，不二次询问。② 破坏性判据取 `drop_table / drop_column / modify_column`（type / nullable / default 任一变化即 modify），加表 / 加列为非破坏性、不询问；首发（无在线版本）不询问。③ 平台建表 / 迁移快照属 T062，本任务只做检测、确认与展示。
 
-- [ ] **T062**: 应用数据表由 manifest 声明、平台建表（DEV-07 ②）：加列自动迁移无需确认；改 / 删列**迁移前自动留生产数据快照**（键 `apps/{app_id}/db-snapshots/{ts}.tar`）
+- [x] **T062**: 应用数据表由 manifest 声明、平台建表（DEV-07 ②）：加列自动迁移无需确认；改 / 删列**迁移前自动留生产数据快照**（键 `apps/{app_id}/db-snapshots/{ts}.tar`）
   **文件**: `src/backend/bisheng/app_publish/domain/services/schema_evolution_service.py`（增量）, `src/backend/test/app_publish/test_schema_migration_snapshot.py`
   **覆盖 AC**: AC-42
+  **完成证据（2026-09-16，切片 `wt/f055-app-data-tables`，提交 `f670efe9c`）**：后端 `schema_evolution_service.migration_plan()` / `migrate_for_release()`（同一份 diff → 每表一条计划），在 `PublishOnlineService._settle` 里**拉起之前**调用；DDL 全部在 runtime-manager 的 `appdb.AppDbSchemaService`，经新 intent RPC `POST /v1/intents/db-migrate`（客户端方法 `orchestrator_client.schema_migrate`，fake 编排器 lockstep 集合两处同步为 16 个）。快照走 `Connection.backup` + tar + 私有桶 `bisheng-apps`，键如 AC 所写；破坏性计划由 manager 自判是否要快照。新错误码 `16259` + 三语；新审计动作 `app.release.schema_migration_failed` 四处 lockstep 登记。测试：`test/app_publish/test_schema_migration_snapshot.py` 20 例 + runtime-manager `tests/test_appdb_migrate.py` 23 例（RM 全套 260 passed；backend `test/app_publish` + `test/app_runtime` 949 passed）。
+  **偏离**：① 迁移入口不在数据面 `/v1/apps/{app_id}/db/*` 而在 `/v1/intents/db-migrate`——数据面「没有 POST、因而没有 DDL」这条断言（`test_appdb.py`）正是它安全的理由，加个 POST 就废了；同理客户端方法叫 `schema_migrate` 不叫 `db_migrate`，因为 `db_` 前缀的「唯一调用方」断言是按前缀 grep 的。② 改 / 删列走**整表重建**（建新表 → 拷公共列 → 换名）而不是 `ALTER … DROP COLUMN`：SQLite 改类型根本没有 ALTER，两类分开实现等于让两条代码路径各自把拷贝那步做对一次。③ 新增 NOT NULL 且无默认值的列**拒绝**而不是悄悄放宽为可空——声明是应用自己代码依赖的契约，线上可空、manifest 不可空的错会在很远的地方才炸。④ 迁移被拒记为**失败的管线运行**而非待上线（待上线会以 16252 拒掉携带修复的重新提交），应用在线时按 `iteration_failed` 发站内信、不在线时不发（理由随 T068 写进 §8）。⑤ `primary_key` 从 manifest 的 extra 键读，不加进 `DatabaseColumn` 显式字段——它不参与 T061 的变更判据，加成字段会悄悄扩大「发布可以被什么拒绝」。
+  **复审补丁（2026-09-16，同切片）**：⑥ **计划的每一条都带整表目标列，不再带增量**。原实现里 `add_columns` 只带新增的那一列，而执行器遇到「表不存在」会照着计划条目建表——线上库与参照声明不一致时（应用自己建的表、或在线版本是「声明了但平台还没建表」那个 MVP 阶段发的）就会建出一张只有一列的表，且所有既有断言仍然全绿。改为计划陈述目的地、执行器自己对着实际库算增量（只补缺的列）；回归钉在 `tests/test_appdb_migrate.py::test_an_add_columns_plan_builds_a_table_that_is_not_there_yet`。⑦ **`resume` 也要建表**：审批落在已下线应用上时只 stage 不启动（AC-36），F055 的上线腿返回 `staged_only`、迁移不跑——真正把这个版本拉起来的是 `AppStateService.resume`，此前它直接 deploy，声明的表永远不会被建。现在 `_start` 在 `audit_action is RESUME 且有 pending_version_id` 时先迁移再拉起，被拒即 16259 抛给按按钮的人、应用留在 `stopped`；`publish` / `manual_publish` 已在 `_settle` 迁过，不重复付一次 RPC。新测试 `test/app_runtime/test_resume_schema_migration.py` 3 例，并给 `test/app_runtime/conftest.py` 的 `_SESSION_PATCH_TARGETS` 补上 `schema_evolution_service`（否则它用真实 session 读参照声明）。
 
 - [x] **T063**: 版本差异服务端 diff（`GET /api/v1/apps/{app_id}/versions/{a}/diff/{b}` → `{files:[{path,change,additions,deletions}], patches:[…]}`；**服务端算 diff、不下发两份 tar**）
   **文件**: `src/backend/bisheng/app_publish/domain/services/version_diff_service.py`, `src/backend/bisheng/app_publish/api/endpoints/version_diff.py`, `src/backend/test/app_publish/test_version_diff.py`
@@ -728,14 +731,18 @@ T001–T007（Wave 1，可并行）
   **覆盖 AC**: AC-45
   **偏离**: 文件落在 `SystemPage/components/`（与同页其余 tab 同目录，非任务原写的 `SystemPage/` 根）；停用做成「按钮 + 二次确认」而非 Switch——Switch 规范把开关限定为「拨完立即生效、无外溢后果」的设置项，停用档位会改变所有发布者可选项，属应二次确认的动作。
 
-- [ ] **T067**: 发布面补全：能力声明完整白话清单（含失效标记）+ 档位选择卡（随 PRD-2 平台内造应用的提交入口启用；本册对 CLI 应用不可用）
+- [x] **T067**（档位卡半边；能力清单半边仍待 T058 落地后补，见偏离②）: 发布面补全：能力声明完整白话清单（含失效标记）+ 档位选择卡（随 PRD-2 平台内造应用的提交入口启用；本册对 CLI 应用不可用）
   **文件**: `platform/src/pages/BuildPage/hostedApp/publish/{TierSelectCard,SchemaChangeNotice}.tsx`（新）, `platform/src/pages/BuildPage/hostedApp/publish/CapabilityListCard.tsx`（**增量**——该文件由 **T058 创建**，本任务只补「完整白话清单 + 档位联动」，**不得重建**）, `platform/public/locales/{zh-Hans,en,ja}/bs.json`
   **测试载体**: 前端手动验证清单（能力清单逐条白话 + 失效标记与原因；档位卡对 CLI 导入应用置灰并提示走 `bisheng deploy`；结构变更提示位有内容时不塌）
   **覆盖 AC**: AC-61, AC-63
+  **完成证据（2026-09-16，切片 `wt/f055-app-data-tables`，提交 `c0702114f`）**：`publish/TierSelectCard.tsx` 新建并接进 `index.tsx` 的 `pipelineSlot`（`tier` 与 `can.submit` 都取自 `publish-status`）；三语文案落 `hostedApp.tier.*`；vitest `TierSelectCard.test.tsx` 7 例（只读态说清档位在哪儿改 / 规格按核呈现 / 未确定档位不塌 / 已停用档位带标记与说明 / 可选态需要 `can.submit` **且**有列表 / 空 `code` 行不得进 Radix SelectItem / `coresOf` 边界）。`SchemaChangeNotice.tsx` 已由 T061 落地并接在 `ApprovalStatusCard` 内，本轮核实其「有内容时不塌、无内容时整块不渲染」仍成立，未改。
+  **偏离**：① 档位卡的只读态**不画禁用下拉框**——CLI 应用改档位的地方是 `bisheng-app.yaml` 的 `tier`，一个点不动的选择器只会被读成「坏了」，改为直接说清当前档位、规格与去哪儿改；可选态（PRD-2）已接线但本册不可达，档位列表走 props 而非自取，因为档位列表接口是平台超管面（16260）、应用负责人读不到。② **能力声明清单半边未做**：`CapabilityListCard.tsx` 按本任务原文由 T058 创建，而 T058 与本切片在同一波次并行，两边都建同一个文件必然互相覆盖（本任务原文亦明写「不得重建」）。该半边随 T058 落地后在其文件上增量补全。③ CPU 按「核」呈现而非系统页档位编辑器的「毫核」：那边在改精确数值，这边是在读。
 
-- [ ] **T068**: AC-64 触达全表复核（含催办 / 超时提醒 / 升级机制**不做**的显式确认）+ AC-08 静态依赖判据复议（本轮由探活兜底）
+- [x] **T068**: AC-64 触达全表复核（含催办 / 超时提醒 / 升级机制**不做**的显式确认）+ AC-08 静态依赖判据复议（本轮由探活兜底）
   **文件**: `src/backend/test/app_publish/test_notification_matrix.py`, `features/v3.0.0/055-app-publish-pipeline/design.md`（§8 结论回填）
   **覆盖 AC**: AC-08, AC-64
+  **完成证据（2026-09-16，切片 `wt/f055-app-data-tables`）**：`test_notification_matrix.py` 23 例。AC-64 全表写成数据：8 条会发（4 条走审批引擎、F055 不得再发一份；4 条是 F055 自己的，逐条断言有具名常量、断言常量集合恰好等于表、断言三语 `com_notifications_action_*` 文案齐备）+ 3 条不主动提示（资源释放后可手动上线 / 能力被收回 / 数据表迁移被拒且应用本来就不在线），每条把理由与行放在一起，加发送方就得先删那行。**催办 / 超时提醒 / 升级机制不做**从三个方向上闸：两个 worker 包没有 `crontab` / `beat_schedule` / periodic；发布与审批 service 层没有 remind / escalat / overdue / deadline / 催办 / 逾期 的标识符或字面量；`ApprovalScenario` 没有可承载截止时间的字段。AC-08 复议维持原判并按落码核实（检出＝探活 16228 / 指引＝`PROBE_HINTS` 点名三类中间件与 `BISHENG_APP_DB_URL` 且两处抛出点都挂着它 / 预检没有长出依赖清单扫描器）。design §8 两条结论 + §4.2 ⑧ 的 16259 行 + D3 的 T062 落码段已回填。
+  **偏离**：① 「不主动提示」在 spec 原文是两条，本轮**增加第三条**（数据表迁移被拒且应用本来就不在线）——它是 T062 新引入的失败态，与构建失败 / 探活失败同族，那两类也不发站内信；应用在线时仍按 `iteration_failed` 发，因为那条文案说的正是「新版本未能上线、线上版本仍在服务」。② 关键词表里试过 `nag` / `sla` 又删掉：`nag` 在 `manager` 里、`sla` 在大量散文里，一个总在误报的模式会被人删掉而不是读。③ AC-08 的复议结论与 AC-64 的表放在同一个文件里——两者形状相同（都在断言「某样东西是被有意省略的」，而省略没有行为可观察），文件首段写明了这一点。
 
 ---
 

@@ -1364,6 +1364,7 @@
       "appReleaseOnline": "公開開始",
       "appReleasePendingOnline": "公開保留（起動できず）",
       "appReleaseIterationFailed": "新バージョン未公開（稼働中は影響なし）",
+      "appReleaseSchemaMigrationFailed": "データテーブルの移行に失敗し、未公開",
       "appReleaseManualPublish": "手動で公開",
       "appReleaseCapabilityDeclared": "能力依存を宣言",
       "appReleasePreviewStarted": "審査用プレビューを起動",
@@ -2883,6 +2884,17 @@
       },
       "empty": "リソースティアがまだありません。バックエンドの初回起動時に 3 つのティアが自動作成されます。起動ログを確認してください。",
       "loading": "読み込み中…"
+    },
+    "tier": {
+      "title": "リソース階層",
+      "cores": "{{count}} vCPU",
+      "memory": "メモリ {{count}} MB",
+      "placeholder": "階層を選択",
+      "unknown": "未確定",
+      "cliOnlyHint": "このアプリは bisheng deploy で公開されるため、階層は bisheng-app.yaml の tier フィールドで指定します。変更後に再公開すれば反映されます。",
+      "effectiveHint": "階層は次回の公開または再公開から有効になり、稼働中のインスタンスには影響しません。",
+      "retiredTag": "停止済み",
+      "retiredHint": "管理者がこの階層を停止しました。アプリはそのまま稼働しますが、次回の公開では別の階層を指定する必要があります。"
     }
   }
 }

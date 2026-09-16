@@ -347,6 +347,30 @@ class AppSnapshotFileNotFoundError(AppPublishError):
 
 
 # ---------------------------------------------------------------------------
+class AppSchemaMigrationFailedError(AppPublishError):
+    """The declared application tables could not be brought to their new shape (AC-42 / T062).
+
+    Raised only at go-live, from the migration runtime-manager performs before
+    the new version is started, and deliberately **not** merged into 16229:
+    16229 is "you have not confirmed a breaking change", answered on the
+    upload, and its remedy is ``--confirm-schema-change``. This one means the
+    change was confirmed and the database would not take it — a NOT NULL column
+    existing rows have no value for, a type name that is not a type name, a
+    snapshot that could not be stored — and its remedy is a different
+    ``bisheng-app.yaml``.
+
+    ``details.reason`` carries the manager's verdict (``notnull_without_default``
+    / ``invalid_type`` / ``invalid_identifier`` / ``invalid_plan`` /
+    ``invalid_default`` / ``sqlite_error`` / ``snapshot_failed``) plus the
+    ``table`` / ``column`` it is about, so the copy can name them. **A failed
+    migration never starts the new version**: the release stops here and
+    whatever was already serving keeps serving.
+    """
+
+    Code: int = 16259
+    Msg: str = "Application data tables could not be migrated"
+
+
 # 16260-16263 — the resource-tier admin surface (AC-45 / T065). These answer
 # the super admin editing tiers on the system page; the manifest-side tier
 # failure stays 16223 (a CLI author's typo or a retired tier), because the

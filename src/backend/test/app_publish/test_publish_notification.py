@@ -423,6 +423,10 @@ async def test_app_publish_owns_exactly_three_notification_call_sites():
         "domain/services/publish_approval_service.py::notify_approvers_of_new_task",
         "domain/services/publish_online_service.py::notify_pending_online",
         "domain/services/publish_online_service.py::notify_pending_online",
+        # T062: the declared tables would not take the new shape. Same channel
+        # and the same ``iteration_failed`` copy, and it only fires while the
+        # application is online — see ``test_notification_matrix.py``.
+        "domain/services/publish_online_service.py::notify_pending_online",
     ], f"unexpected notification call site(s) in app_publish: {sorted(call_sites)}"
 
 

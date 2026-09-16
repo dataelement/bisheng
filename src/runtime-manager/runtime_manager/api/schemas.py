@@ -133,6 +133,25 @@ class PreviewStartRequest(BaseModel):
 
 class PreviewStopRequest(BaseModel):
     session_id: str
+class DbMigrateRequest(BaseModel):
+    """The declared shape of one app's tables, as a plan (F055 T062 / AC-42).
+
+    ``plan`` entries are ``{op, table, columns[]}`` with ``op`` one of
+    ``create_table`` / ``add_columns`` / ``rebuild_table`` / ``drop_table``.
+    ``columns`` is always the **full target shape** of the table, never a delta:
+    the caller derived the verb from two declarations and cannot know what the
+    live database holds, so the manager works the delta out for itself (and can
+    create a table an ``add_columns`` entry finds missing).
+    The manager validates every identifier and every declared type before any
+    of it becomes SQL, so the field is typed loosely here on purpose — a
+    pydantic model per verb would put the vocabulary in two places and let them
+    drift. ``snapshot`` can only *add* a snapshot: a destructive plan takes one
+    regardless of what the caller asked for.
+    """
+
+    app_id: str
+    plan: list[dict[str, Any]] = Field(default_factory=list)
+    snapshot: bool = False
 
 
 class AdmissionResponse(BaseModel):

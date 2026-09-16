@@ -258,6 +258,33 @@ def set_object_store(store: ObjectStore | None) -> None:
     _ready_buckets.clear()
 
 
+def ensure_private_bucket(store: ObjectStore, bucket: str) -> None:
+    """Create ``bucket`` if it is missing, and never let it be the public one.
+
+    Shared by the attachment handle and by the publish pipeline's pre-migration
+    database snapshots (``appdb.AppDbSchemaService``) — both write into
+    ``bisheng-apps``, and the pit-20 guard has to be one piece of code or the
+    second caller is the one that leaks. No bucket policy is ever written here:
+    a fresh MinIO bucket is private, and staying private is the whole point.
+    """
+    if bucket in _ready_buckets:
+        return
+    if bucket == PUBLIC_PLATFORM_BUCKET:
+        # Refuse to operate at all rather than put objects where nginx can
+        # serve them (pit 20). A config typo must not become a leak.
+        raise StorageUnavailableError(
+            f"RTM_STORAGE_BUCKET must not be the platform's public bucket {PUBLIC_PLATFORM_BUCKET!r}"
+        )
+    try:
+        if not store.bucket_exists(bucket):
+            store.make_bucket(bucket)
+    except RuntimeManagerError:
+        raise
+    except Exception as exc:
+        raise StorageUnavailableError(f"attachment storage is not reachable: {exc}")
+    _ready_buckets.add(bucket)
+
+
 # ---------------------------------------------------------------------------
 # key scoping
 # ---------------------------------------------------------------------------
@@ -380,22 +407,7 @@ class AppStorageService:
         return self._store_override if self._store_override is not None else get_object_store()
 
     def _ensure_bucket(self, store: ObjectStore) -> None:
-        if self.bucket in _ready_buckets:
-            return
-        if self.bucket == PUBLIC_PLATFORM_BUCKET:
-            # Refuse to operate at all rather than put attachments where nginx
-            # can serve them (pit 20). A config typo must not become a leak.
-            raise StorageUnavailableError(
-                f"RTM_STORAGE_BUCKET must not be the platform's public bucket {PUBLIC_PLATFORM_BUCKET!r}"
-            )
-        try:
-            if not store.bucket_exists(self.bucket):
-                store.make_bucket(self.bucket)
-        except RuntimeManagerError:
-            raise
-        except Exception as exc:
-            raise StorageUnavailableError(f"attachment storage is not reachable: {exc}")
-        _ready_buckets.add(self.bucket)
+        ensure_private_bucket(store, self.bucket)
 
     def _ready(self) -> ObjectStore:
         store = self._store()

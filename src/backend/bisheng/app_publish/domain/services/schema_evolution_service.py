@@ -1,4 +1,14 @@
-"""Structure evolution of the declared application tables — ``precheck_schema`` (AC-09 / T061).
+"""Structure evolution of the declared application tables (AC-09 / T061 · AC-42 / T062).
+
+Two halves of one subject, and they meet at :func:`diff_tables`:
+
+* **Detection and confirmation** (T061) — ``precheck_schema``, below.
+* **Execution** (T062) — :func:`migration_plan` turns the same diff into a
+  plan, and :func:`migrate_for_release` hands it to runtime-manager at go-live.
+  **No DDL is written here**: the application's SQLite file lives on the
+  manager's host and the backend does not know the volume layout (F054 K1 /
+  D10-C), which is the same argument that keeps log reading and row editing
+  over there. The backend states the shape; the manager derives statements.
 
 What one release may do to ``database.tables[]`` relative to the version that
 is **currently online**, and which of it needs the owner to say so out loud:
@@ -36,6 +46,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+
+from loguru import logger
 
 from bisheng.app_publish.domain.models.app_deployment import STAGE_PRECHECK_SCHEMA
 from bisheng.app_publish.domain.schemas.app_manifest import AppManifest, DatabaseColumn, DatabaseTable
@@ -235,3 +247,139 @@ def require_confirmation(change: SchemaChange | None, *, confirmed: bool) -> Non
             "确认后进入发布管线, 审批单与发布面会展示这次结构变更, 上线时不再二次确认",
         ],
     )
+
+
+# ---------------------------------------------------------------------------
+# The execution half: the migration plan and the go-live call (AC-42 / T062)
+# ---------------------------------------------------------------------------
+
+#: Plan verbs, in runtime-manager's vocabulary (``runtime_manager/appdb.py``).
+#: Deliberately *not* the ``OP_*`` diff verbs above: the diff describes what
+#: changed, per column, for humans to read on the approval card; the plan
+#: describes what to do, per table, for one executor to carry out. Merging them
+#: sounds tidy and immediately forces the summary to grow execution details
+#: that the two front ends would then render.
+PLAN_CREATE_TABLE = "create_table"
+PLAN_ADD_COLUMNS = "add_columns"
+PLAN_REBUILD_TABLE = "rebuild_table"
+PLAN_DROP_TABLE = "drop_table"
+
+
+def column_payload(column: DatabaseColumn) -> dict[str, Any]:
+    """One declared column, as the manager's plan spells it.
+
+    ``primary_key`` is read out of the manifest's *extra* keys rather than
+    declared on :class:`DatabaseColumn`: it is not part of the change signature
+    (T061 judges ``type`` / ``nullable`` / ``default``), and adding a field to
+    the manifest schema to carry it would quietly widen what a publish can be
+    refused over.
+    """
+    extra = column.model_extra or {}
+    return {
+        "name": column.name,
+        "type": column.type,
+        "nullable": column.nullable,
+        "default": column.default,
+        "primary_key": bool(extra.get("primary_key")),
+    }
+
+
+def migration_plan(previous: list[DatabaseTable], current: list[DatabaseTable]) -> list[dict[str, Any]]:
+    """The plan that turns ``previous`` into ``current`` — per table, in declaration order.
+
+    Derived from :func:`diff_tables` so the migration can never disagree with
+    what the owner confirmed: a table the diff calls untouched produces no plan
+    entry.
+
+    **Every entry carries the full target column list**, whatever its verb.
+    The diff says which tables the release touches; it does not say what the
+    live database currently holds, and the two can disagree — an application
+    that built its own tables, or one whose online version declared tables back
+    when the platform did not build them. An ``add_columns`` entry carrying only
+    the new column would then be read by the executor as the whole shape of a
+    table it has to create, and the application would get a one-column table.
+    So the entry states the destination and the executor works out the delta
+    against what is actually there (it adds only the columns it is missing).
+    A ``rebuild_table`` needs the destination for the same reason plus its own:
+    SQLite changes or drops a column by rebuilding the table.
+
+    ``previous`` is empty on a first release, which makes every declared table
+    an ``add_table`` and therefore a ``create_table`` — that is DEV-07 ②'s
+    「平台建表」 in one line, with no special case for it.
+    """
+    change = diff_tables(previous, current)
+    by_name = {table.name: table for table in current}
+    ops: dict[str, str] = {}
+
+    for item in change.items:
+        if item.op == OP_DROP_TABLE:
+            ops[item.table] = PLAN_DROP_TABLE
+        elif item.op == OP_ADD_TABLE:
+            ops[item.table] = PLAN_CREATE_TABLE
+        elif item.breaking:
+            # A rebuild subsumes any additive column op on the same table, and
+            # ordering is not a defence here: ``ops`` is keyed by table, so the
+            # last write would win by accident of iteration order. Breaking wins
+            # explicitly instead.
+            ops[item.table] = PLAN_REBUILD_TABLE
+        else:
+            ops.setdefault(item.table, PLAN_ADD_COLUMNS)
+
+    plan: list[dict[str, Any]] = []
+    for table in current:
+        op = ops.get(table.name)
+        if op is None or op == PLAN_DROP_TABLE or not table.columns:
+            continue
+        plan.append({"op": op, "table": table.name, "columns": [column_payload(column) for column in table.columns]})
+
+    plan.extend(
+        {"op": PLAN_DROP_TABLE, "table": name}
+        for name, op in ops.items()
+        if op == PLAN_DROP_TABLE and name not in by_name
+    )
+    return plan
+
+
+async def migrate_for_release(app_id: str, manifest: AppManifest | dict[str, Any]) -> dict[str, Any] | None:
+    """Bring the app's declared tables to ``manifest``'s shape, at go-live (AC-42).
+
+    Returns the manager's ``{applied, skipped, snapshot_key}`` report, or
+    ``None`` when the release declares no tables and the online one declared
+    none either — the overwhelmingly common case, and one that must not cost an
+    RPC on every publish.
+
+    Raises :class:`AppSchemaMigrationFailedError` (16259) when the migration was
+    refused; the caller must **not** start the new version afterwards. The
+    snapshot promise lives on the manager side, where the data is: a
+    destructive plan whose snapshot could not be stored fails there rather than
+    being waved through here.
+    """
+    reference = await _reference_tables(app_id)
+    target = tables_of(manifest)
+    plan = migration_plan(reference, target)
+    if not plan:
+        return None
+
+    from bisheng.app_runtime.domain.services.orchestrator_client import orchestrator_client
+
+    snapshot = any(item["op"] in (PLAN_REBUILD_TABLE, PLAN_DROP_TABLE) for item in plan)
+    result = await orchestrator_client.schema_migrate(app_id=app_id, plan=plan, snapshot=snapshot)
+    logger.info(
+        "app_publish.schema_migrated app_id={} ops={} snapshot={}",
+        app_id,
+        [item["op"] for item in plan],
+        (result or {}).get("snapshot_key") or "-",
+    )
+    return result
+
+
+async def _reference_tables(app_id: str) -> list[DatabaseTable]:
+    """The declaration the live database was built from — ``[]`` when there is none."""
+    if not app_id:
+        return []
+    async with get_async_db_session() as session:
+        app = await AppDao.aget(session, app_id)
+        if app is None or not app.current_version_id:
+            return []
+        reference = await AppVersionDao.aget(session, app_id, str(app.current_version_id))
+    return tables_of(reference.manifest) if reference is not None else []

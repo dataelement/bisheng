@@ -20,9 +20,10 @@ manager code               backend error code
 ``row_not_found``          16165 数据行不存在（数据面）
 ``data_invalid``           16166 数据面请求不合法（列 / 值 / 标识符）
 ``data_busy``              16167 应用数据库繁忙，请稍后重试
+``schema_migration_failed`` 16259 应用数据表迁移失败（发布期结构演进）
 =========================  ==========================================
 
-The last two rows are deliberate. ``unauthorized`` means the manager rejected
+``unauthorized`` / ``invalid_request`` are deliberate. ``unauthorized`` means the manager rejected
 *our own* HMAC signature and ``invalid_request`` means we sent it an intent it
 could not parse — both are backend↔manager contract breakage, never anything
 the caller did or can fix. Surfacing them as their own user-facing codes would
@@ -133,4 +134,20 @@ class DataBusyError(RuntimeManagerError):
     """The app holds the write lock past ``busy_timeout``; retryable."""
 
     code = "data_busy"
+    status = 409
+
+
+class SchemaMigrationFailedError(RuntimeManagerError):
+    """A declared-table migration could not be applied (F055 T062 / AC-42).
+
+    One code with a structured ``reason`` rather than a code per cause: the
+    platform's answer is the same either way — the release does not go up and
+    the manifest has to change — while the *sentence* the owner needs differs,
+    and that sentence is built from ``reason`` / ``table`` / ``column``.
+
+    ``409`` rather than ``400``: the plan is well formed (the platform derived
+    it from two manifests), it is the live database that will not take it.
+    """
+
+    code = "schema_migration_failed"
     status = 409
