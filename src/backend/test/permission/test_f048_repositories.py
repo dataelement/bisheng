@@ -74,6 +74,24 @@ async def session_factory() -> AsyncIterator[SessionFactory]:
     async with engine.begin() as connection:
         await connection.run_sync(test_metadata.create_all)
 
+    # ``register_tenant_filter_events()`` attaches its ``do_orm_execute`` /
+    # ``before_flush`` listeners to the global SQLModel ``Session`` class —
+    # there is no per-engine scoping, so once registered they intercept
+    # *every* Session in the process, including other test files' private
+    # SQLite engines. Reset the module state before and after (mirroring
+    # test/tenant/test_tenant_filter.py::filter_engine and the other
+    # register_tenant_filter_events() callers) so this fixture's table
+    # registration doesn't survive past this test — the listener itself
+    # can't be un-registered (SQLAlchemy has no handle to remove a
+    # nested-closure listener), but with ``_tenant_aware_tables`` emptied
+    # back out, `_get_tenant_tables_from_statement` finds nothing to filter
+    # and every later query is a no-op through it. Without this, this was
+    # the one register_tenant_filter_events() caller in the suite that
+    # leaked: any query afterwards against a real tenant-aware table (e.g.
+    # test/audit's ``auditlog``) got a surprise ``tenant_id`` WHERE clause
+    # injected by a listener the test never expected to be active.
+    tenant_filter._initialized = False
+    tenant_filter._tenant_aware_tables = set()
     tenant_filter._tenant_aware_tables.update(
         {
             "permission_grant",
@@ -93,6 +111,8 @@ async def session_factory() -> AsyncIterator[SessionFactory]:
             yield session
 
     yield factory
+    tenant_filter._initialized = False
+    tenant_filter._tenant_aware_tables = set()
     await engine.dispose()
 
 
@@ -369,24 +389,21 @@ async def test_visible_source_contribution_uniqueness_reference_count_and_retire
     session_factory: SessionFactory,
 ) -> None:
     repository = ProjectionRepository(session_factory)
-    first = await repository.aupsert_visible_source(
-        _visible_source(owner="grant_assignee:1", fingerprint_char="a")
-    )
-    duplicate = await repository.aupsert_visible_source(
-        _visible_source(owner="grant_assignee:1", fingerprint_char="a")
-    )
-    second = await repository.aupsert_visible_source(
-        _visible_source(owner="grant_assignee:2", fingerprint_char="b")
-    )
+    first = await repository.aupsert_visible_source(_visible_source(owner="grant_assignee:1", fingerprint_char="a"))
+    duplicate = await repository.aupsert_visible_source(_visible_source(owner="grant_assignee:1", fingerprint_char="a"))
+    second = await repository.aupsert_visible_source(_visible_source(owner="grant_assignee:2", fingerprint_char="b"))
 
     assert duplicate.id == first.id
     assert second.id != first.id
-    assert await repository.acount_active_visible_sources(
-        resource_type="knowledge_space",
-        resource_id="100",
-        visibility_class="ordinary",
-        projected_subject="user:7",
-    ) == 2
+    assert (
+        await repository.acount_active_visible_sources(
+            resource_type="knowledge_space",
+            resource_id="100",
+            visibility_class="ordinary",
+            projected_subject="user:7",
+        )
+        == 2
+    )
 
     checksum_before = await repository.aget_visible_source_checksum(states=("ACTIVE",))
     assert checksum_before is not None
@@ -400,12 +417,15 @@ async def test_visible_source_contribution_uniqueness_reference_count_and_retire
         expected_source_version=1,
         operation_id=None,
     )
-    assert await repository.acount_active_visible_sources(
-        resource_type="knowledge_space",
-        resource_id="100",
-        visibility_class="ordinary",
-        projected_subject="user:7",
-    ) == 1
+    assert (
+        await repository.acount_active_visible_sources(
+            resource_type="knowledge_space",
+            resource_id="100",
+            visibility_class="ordinary",
+            projected_subject="user:7",
+        )
+        == 1
+    )
     assert await repository.aget_visible_source_checksum(states=("ACTIVE",)) != checksum_before
 
 
