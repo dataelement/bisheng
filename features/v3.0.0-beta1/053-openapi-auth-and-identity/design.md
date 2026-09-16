@@ -113,7 +113,7 @@
 | `/api/v2` 密钥面 | 系统集成、个人 Agent | `Authorization: Bearer bs-sak-… / bs-pat-…` | HTTP 401 `26001`；登录 JWT 不能替代 | **禁止回落** |
 | `/api/v3` 发布面 | 工作流 / 知识助手免登录访问者 | 无登录、无 API Key；由发布开关 + 资源状态准入 | 按 guest policy 返回 403 / 404 | **仅此面使用** |
 
-路由层必须物理分开：`router_rpc(prefix='/api/v2', dependencies=[verify_open_api_access])` 与 `router_public(prefix='/api/v3', dependencies=[verify_public_access])` 分别注册，不通过 path if/else 在同一个依赖里分流。
+路由层必须物理分开：`router_rpc(prefix='/api/v2', dependencies=[verify_open_api_access])` 与不挂凭据/身份头鉴权依赖的 `router_public(prefix='/api/v3')` 分别注册。v3 的资源发布准入仍由各端点调用的 guest policy 执行，不进入 v2 密钥依赖。
 
 ### 3.2 v2 密钥请求处理管线（HTTP / WebSocket 共用）
 
@@ -339,9 +339,11 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 
 `GET /assistant/list` 不是单个已发布资源所需能力，不进入 v3；它只保留 v2 密钥版本。
 
-**F2：guest policy。** v3 不校验 JWT 和 API Key，统一校验 `default_operator.enable_guest_access=true`、默认操作员存在且启用、目标工作流/助手处于可发布状态。初次定位资源允许在受控 bypass 中按 ID 查询，随后必须设置资源所属 tenant ContextVar 再进入业务 Service。任一 `X-On-Behalf-Of` / `X-End-User` 头均拒绝，防止匿名调用方伪造身份。
+**F2：guest policy。** v3 不校验 JWT 和 API Key，统一校验 `default_operator.enable_guest_access=true`、默认操作员存在且启用、目标工作流/助手处于可发布状态。初次定位资源允许在受控 bypass 中按 ID 查询，随后必须设置资源所属 tenant ContextVar 再进入业务 Service。按 2026-09-16 用户裁定，`X-On-Behalf-Of` / `X-End-User` 与 Authorization、API Key、登录 Cookie 一起忽略：既不读取为身份，也不因出现而拒绝。移除 v3 路由的身份头检查依赖。HTTP/WS 中间件对准确的 `/api/v3` 路径边界跳过调用方 JWT 解析和身份注入，避免旧登录态在 guest policy 前触发 19103/19104 或调用方租户错误；业务身份只来自默认操作员与发布资源。v2 的密钥验证和 v1 的登录检查保持独立。
 
 **F3：会话绑定。** v3 创建的会话标记 `api_subject_type='public_v3'`，并绑定资源 ID / 默认操作员；history、gen_title、WebSocket 停止和续聊都校验该来源与资源匹配。不得仅凭随机 chat_id 读取或停止其它 v1/v2 会话。
+
+**草稿兼容（2026-09-16）。** 前端先生成 `chat_id` 并查询历史，工作流会话随后才在 WebSocket 初始化时落库。`history` 必须先通过发布资源准入，再将尚不存在的会话返回为成功的 `data=[]`；已有会话继续执行来源、租户、资源和删除状态检查，不能把检查失败统一吞成空数组。`gen_title` 恢复旧 v2 的 5 秒后台生成等待：仍未落库时返回成功的 `{"title":"New Chat"}`，已落库则解析公开会话所属资源、经过发布准入和归属检查后返回标题。不存在会话的标题兜底只返回固定字符串，不读取资源数据。迁移前后各入口的其余差异见 [v3 旧行为兼容核对](v3-legacy-behavior-audit.md)。
 
 **F4：代码复用和切换。** v2/v3 endpoint 只做各自鉴权和 schema 适配，工作流/助手执行逻辑下沉到共享 domain service。client guest 模式 `apiVersion` 类型扩为 `v1 | v2 | v3` 且取 `v3`；platform 两个发布 API 访问页面恢复 F053 修改前的完整 v2 文档；商业网关中显式代理/拦截的 assistant、workflow、chat 路径同步增加 v3。现有分享链接代码、URL 参数与 header 不在此工作流修改。
 
@@ -487,6 +489,8 @@ F048 的 Catalog active、模型 enabled、动作 active、grant level 以及资
 | 17 | HTTP 内网地址不提供 `crypto.randomUUID()`；服务账号授权会在读取 `context` 后、发出写请求前抛错，弹窗无法保存关闭，修改与撤销同样受影响 | `resourceGrantUtils.createResourceGrantIdempotencyKey` 使用 HTTP 可用的 `crypto.getRandomValues()` 生成 128 位随机提交标识，新增、修改、撤销共用；此标识沿用 F048 授权变更契约，与本期排除的 v2 业务 API 幂等能力无关 |
 | 18 | 模型发布成功或 checksum 已一致，不代表旧资源已有 `service_account:*` 的模式和启用标记 | 模型发布脚本和完整对账脚本共用补齐逻辑；`already_current` 也必须写入并校验标记，失败不返回成功，不切换 Catalog；首次迁移覆盖两种主体的逐层标记 |
 | 19 | 用整块 `label` 包裹下拉按钮，会把标题及周边空白的点击转发给按钮，导致弹层外部点击关闭后又打开 | `KeyIssueDialog` 的委托用户、部门选择区域使用具名 `group` 容器，保留字段说明，仅选择器按钮触发展开 |
+| 20 | 新会话先查 history，后经 WebSocket 创建；gen_title 也可能早于后台落库完成 | v3 history 对不存在会话返回 `[]`，gen_title 在原有 5 秒等待后兜底 `New Chat`；保留已有会话归属检查，否则迁移后首次加载出现业务 404 |
+| 21 | 端点声明匿名并不能阻止全局中间件读取浏览器旧 Cookie/Bearer JWT；v3 仍可能提前返回 19103 | HTTP/WS 中间件跳过 v3 的浏览器身份，移除额外身份头拒绝；测试同时带凭据和身份头验证默认操作员不变，并验证 v1/v2 鉴权不退化 |
 
 ---
 
@@ -496,7 +500,7 @@ F048 的 Catalog active、模型 enabled、动作 active、grant level 以及资
 
 | 范围 | 关键用例 |
 |---|---|
-| 三面隔离 | v1 JWT 正常；v2 已登录但无 key 仍 401；v2 只有 key 可调用；v3 无 JWT/key 可访问已发布资源；v3 不接受身份传递头 |
+| 三面隔离 | v1 JWT 正常；v2 已登录但无 key 仍 401；v2 只有 key 可调用；v3 无论是否携带 JWT/key/身份头，均以默认操作员访问已发布资源 |
 | 独立 SA | 创建 SA 后 User/UserTenant 行数不变；两 SA id 与 user id 碰撞不串权；SA 无 admin shortcut；停用/删除 5 秒内失效 |
 | F048 | direct grant / revoke / create autogrant；owner 有权而 SA 无权仍拒；模式 D 不使用 SA grant |
 | 异步身份 | v2 SA / PAT / D 三类快照往返后 actor、tenant 不变；队列载荷无明文 key；worker 串行处理两个 tenant 后 ContextVar 不串；v3 快照不能进入 v2 分支 |
@@ -574,3 +578,5 @@ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/v2/assistant/info/$ASSISTANT
 | 2026-09-14 | 统一服务账号资源授权提交标识的生成方式，兼容 HTTP 内网访问，并覆盖授权、修改、撤销回归 | 测试环境保存授权时只发出 `context` 请求，`crypto.randomUUID()` 不可用导致前端中断 |
 | 2026-09-14 | 模型发布部署脚本复用服务账号存量资源标记补齐，覆盖模型不变和升级两条路径，并补充首次迁移逐层标记回归与显式维护部署说明 | 模型已更新而旧资源标记缺失，服务账号有空间授权但子目录文件列表为空 |
 | 2026-09-16 | 收紧签发和编辑 API 密钥时委托用户、部门选择器的触发区域 | 点击字段标题旁空白时，外层 `label` 的隐式激活导致下拉关闭后重新打开 |
+| 2026-09-16 | 恢复匿名聊天草稿的空历史、默认标题及标题等待行为，记录完整 v3 入口与旧 v2 的差异 | 105 新会话查询 history 返回业务 404，用户要求维持迁移前免登录链接行为 |
+| 2026-09-16 | v3 忽略调用方凭据和身份头，HTTP/WS 中间件跳过浏览器身份；v1/v2 鉴权保持 | 用户明确 v3 不参与 v2 密钥或身份传递判断；核对旧匿名 v2 后发现 v3 身份头拒绝及全局 JWT 干扰 |

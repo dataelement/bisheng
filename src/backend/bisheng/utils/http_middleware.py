@@ -48,6 +48,11 @@ TENANT_CHECK_EXEMPT_PATHS = (
 _IS_SUPER_CACHE_TTL_SECONDS = 300
 
 
+def _uses_browser_identity(path: str) -> bool:
+    """v2 credentials and v3 default operators resolve identity at their endpoints."""
+    return path not in {"/api/v2", "/api/v3"} and not path.startswith(("/api/v2/", "/api/v3/"))
+
+
 def _decode_jwt_subject(token: str) -> dict | None:
     """Decode a JWT token and return the decoded subject dict, or None on failure."""
     try:
@@ -304,10 +309,9 @@ class CustomMiddleware(BaseHTTPMiddleware):
         # Tenant context injection from JWT cookie. Decode the JWT once and
         # share it with the F012 token_version + visible_tenant_ids step so
         # the same token isn't decoded twice on the hot path.
-        # v2 admission belongs exclusively to its API credential. A browser
-        # cookie or login JWT must not replace its errors with 191xx/200xx.
-        is_open_api = request.url.path == "/api/v2" or request.url.path.startswith("/api/v2/")
-        token = None if is_open_api else _extract_http_access_token(request)
+        # v2 resolves its API credential and v3 uses its default operator.
+        # Browser credentials must not change either channel's identity or errors.
+        token = _extract_http_access_token(request) if _uses_browser_identity(request.url.path) else None
         decoded_subject = _decode_jwt_subject(token) if token else None
         tenant_id = _set_tenant_context(token, decoded_subject=decoded_subject)
 
@@ -397,8 +401,12 @@ class WebSocketLoggingMiddleware:
             trace_id = trace_id_generator()
             trace_id_var.set(trace_id)
 
-            # Tenant context injection from JWT cookie
-            token = self._get_cookie_from_scope(scope, "access_token_cookie")
+            # Anonymous v3 sockets must not inherit a visitor's login tenant.
+            token = (
+                self._get_cookie_from_scope(scope, "access_token_cookie")
+                if _uses_browser_identity(scope.get("path", ""))
+                else None
+            )
             _set_tenant_context(token)
 
         await self.app(scope, receive, send)
