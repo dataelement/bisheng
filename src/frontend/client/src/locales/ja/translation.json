@@ -2093,6 +2093,7 @@
   "com_approval_preview_reclaimed_manual": "プレビューを回収しました。必要ならもう一度起動できます。",
   "com_approval_preview_reclaimed_approval": "審査が終了したため、プレビューを回収しました。",
   "com_approval_preview_reclaimed_expired": "プレビューがタイムアウトで回収されました。必要ならもう一度起動できます。",
+  "com_approval_preview_reclaimed_start_failed": "前回は起動できませんでした。もう一度お試しください。",
   "com_approval_preview_blocked_no_image": "このバージョンはビルドが完了していないため、お試しできません。",
   "com_approval_preview_blocked_settled": "このバージョンの審査は終了しているため、お試しできません。",
   "com_approval_preview_action_failed": "操作に失敗しました。しばらくしてからもう一度お試しください。",

@@ -53,11 +53,17 @@ PREVIEW_STATUS_RECLAIMED = "reclaimed"
 
 PREVIEW_STATUSES: frozenset[str] = frozenset({PREVIEW_STATUS_RUNNING, PREVIEW_STATUS_RECLAIMED})
 
-#: ``reclaim_reason`` values. Three triggers, three different sentences in the
-#: panel — an approver who pressed 「回收」 must not be told the approval ended.
+#: ``reclaim_reason`` values. The first three are the three reclaim triggers and
+#: read as three different sentences in the panel — an approver who pressed
+#: 「回收」 must not be told the approval ended.
 RECLAIM_REASON_MANUAL = "manual"
 RECLAIM_REASON_APPROVAL_TERMINAL = "approval_terminal"
 RECLAIM_REASON_EXPIRED = "expired"
+#: The fourth is not a reclaim at all: the instance never came up, so the row is
+#: closed on the way out of a failed start. It exists because calling that
+#: ``manual`` would put a lie in the audit trail — nobody pressed anything —
+#: and "why did this row close" is the one question the row is kept to answer.
+RECLAIM_REASON_START_FAILED = "start_failed"
 
 
 class AppPreviewSession(SQLModelSerializable, table=True):

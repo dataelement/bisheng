@@ -51,6 +51,7 @@ const RECLAIM_REASON_KEY: Record<string, string> = {
   manual: "com_approval_preview_reclaimed_manual",
   approval_terminal: "com_approval_preview_reclaimed_approval",
   expired: "com_approval_preview_reclaimed_expired",
+  start_failed: "com_approval_preview_reclaimed_start_failed",
 };
 
 function formatExpiry(value: string | null): string {

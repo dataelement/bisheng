@@ -277,6 +277,9 @@ async def test_a_failed_start_answers_16266_and_leaves_no_running_row(preview_en
     async with publish_db() as session:
         rows = (await session.exec(select(AppPreviewSession))).all()
     assert [row.status for row in rows] == ["reclaimed"]
+    # Not ``manual``: nobody pressed anything, and the row is kept precisely to
+    # answer "why did this close".
+    assert [row.reclaim_reason for row in rows] == ["start_failed"]
 
 
 async def test_a_failed_start_can_be_retried(preview_env, api_app):
@@ -556,3 +559,17 @@ async def test_a_tenant_administrator_and_a_super_admin_may_preview(preview_env,
 
     assert as_tenant_admin["data"]["state"] == "running"
     assert as_super["data"]["state"] == "running"
+
+
+async def test_a_stale_expired_session_is_replaced_rather_than_handed_back(preview_env, api_app, publish_db):
+    """A direct POST can arrive without the panel's sweep having run."""
+    app, version, _orchestrator = preview_env
+    async with api_app(payload=_payload(APPROVER_USER_ID)) as client:
+        first = _body(await client.post(f"/api/v1/apps/{app.id}/versions/{version.id}/preview"))["data"]
+    await _age_session(publish_db, first["session_id"], days=1)
+
+    async with api_app(payload=_payload(APPROVER_USER_ID)) as client:
+        second = _body(await client.post(f"/api/v1/apps/{app.id}/versions/{version.id}/preview"))["data"]
+
+    assert second["state"] == "running"
+    assert second["session_id"] != first["session_id"]

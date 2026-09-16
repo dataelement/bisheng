@@ -2170,6 +2170,7 @@
   "com_approval_preview_reclaimed_manual": "The preview was shut down. You can start another one.",
   "com_approval_preview_reclaimed_approval": "The approval has ended, so the preview was shut down.",
   "com_approval_preview_reclaimed_expired": "The preview timed out and was shut down. You can start another one.",
+  "com_approval_preview_reclaimed_start_failed": "The last attempt did not come up. You can try again.",
   "com_approval_preview_blocked_no_image": "This version has not finished building yet, so it cannot be tried out.",
   "com_approval_preview_blocked_settled": "The approval of this version has ended, so it can no longer be tried out.",
   "com_approval_preview_action_failed": "That did not work. Please try again in a moment.",

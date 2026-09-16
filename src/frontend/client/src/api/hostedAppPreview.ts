@@ -34,8 +34,14 @@ interface ApiResponse<T> {
  */
 export type PreviewState = "absent" | "running" | "reclaimed";
 
-/** Which of the three triggers ended it — the panel says so, they read differently. */
-export type PreviewReclaimReason = "manual" | "approval_terminal" | "expired";
+/**
+ * Which of the three reclaim triggers ended it — the panel says so, because
+ * they read differently to the person looking at them. `start_failed` is the
+ * fourth value and not a reclaim at all: the instance never came up, so the row
+ * closed on its way out. It reaches the panel only if a start fails and the
+ * status is read back before a new one is raised.
+ */
+export type PreviewReclaimReason = "manual" | "approval_terminal" | "expired" | "start_failed";
 
 /** Why a preview cannot be raised at all; `null` when it can. */
 export type PreviewBlockedReason = "no_image" | "settled";

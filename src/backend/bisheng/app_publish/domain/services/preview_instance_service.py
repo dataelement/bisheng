@@ -64,6 +64,7 @@ from bisheng.app_publish.domain.models.app_preview_session import (
     RECLAIM_REASON_APPROVAL_TERMINAL,
     RECLAIM_REASON_EXPIRED,
     RECLAIM_REASON_MANUAL,
+    RECLAIM_REASON_START_FAILED,
     AppPreviewSession,
     AppPreviewSessionDao,
 )
@@ -158,8 +159,14 @@ class PreviewInstanceService:
             )
 
         existing = await cls._current_session(version_id, user_id)
-        if existing is not None and existing.status == PREVIEW_STATUS_RUNNING:
+        if existing is not None and cls._is_live(existing):
             return cls._payload(existing, runnable_reason=None)
+        if existing is not None:
+            # Past its deadline. ``describe`` sweeps before it reads, but this
+            # call can arrive without one (a stale panel, a direct POST), and
+            # handing back a session the entry would refuse is worse than
+            # raising a new one.
+            await cls._reclaim_one(existing, reason=RECLAIM_REASON_EXPIRED, app=app)
 
         row = await cls._insert_session(app=app, version_id=version_id, approver_user_id=user_id)
         payload = await cls._start_payload(app, version, row)
@@ -170,7 +177,7 @@ class PreviewInstanceService:
             # so the only thing left over is our own row — close it, or the
             # panel would show a running trial that does not exist and the
             # sweep would keep asking the manager about it for seven days.
-            await cls._close_row(row.id, reason=RECLAIM_REASON_MANUAL)
+            await cls._close_row(row.id, reason=RECLAIM_REASON_START_FAILED)
             logger.warning(
                 f"app_publish.preview_start_failed app_id={app.id} version_id={version_id} "
                 f"session={row.id} error={exc!r}"
@@ -186,7 +193,7 @@ class PreviewInstanceService:
                 hints=["可稍后重新点击「拉起预览」", "若持续失败, 请联系平台管理员查看运行环境容量与应用启动日志"],
             ) from exc
         except Exception:
-            await cls._close_row(row.id, reason=RECLAIM_REASON_MANUAL)
+            await cls._close_row(row.id, reason=RECLAIM_REASON_START_FAILED)
             logger.exception(f"app_publish.preview_start_error app_id={app.id} version_id={version_id}")
             raise
 
@@ -315,14 +322,20 @@ class PreviewInstanceService:
         ever real.
         """
         row = await cls._load_session(session_id)
-        if row is None or row.status != PREVIEW_STATUS_RUNNING:
-            return None
-        if row.expires_at is not None and row.expires_at <= datetime.now():
-            # The sweep runs on a tick; the entry must not wait for it. Refusing
-            # here makes the deadline exact from the visitor's point of view
-            # even though the container lives until the next sweep.
-            return None
-        return row
+        return row if row is not None and cls._is_live(row) else None
+
+    @staticmethod
+    def _is_live(row: AppPreviewSession) -> bool:
+        """Running **and** inside its deadline.
+
+        The deadline is checked in Python rather than left to whatever reclaims
+        the container: the sweep runs on the manager's own cadence, and a
+        visitor must not get in during the gap. This is what makes the expiry
+        exact from the approver's point of view (AC-28).
+        """
+        if row.status != PREVIEW_STATUS_RUNNING:
+            return False
+        return row.expires_at is None or row.expires_at > datetime.now()
 
     # ------------------------------------------------------------------
     # internals
@@ -567,6 +580,12 @@ class PreviewInstanceService:
         shows is the client's own, covering the seconds its request is in
         flight; the platform never observes a half-started preview because
         ``preview_start`` returns only after the readiness gate.
+
+        ``reclaimed`` is what the reclaim *call* answers with. A later read of
+        the same version comes back ``absent``, and deliberately so: the
+        finished trial has nothing left to offer, and 「已回收」 kept on screen
+        forever would read as a state the approver is stuck in rather than one
+        they can leave by pressing the button again.
         """
         if row is None:
             return {

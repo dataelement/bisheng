@@ -563,7 +563,8 @@ T001–T007（Wave 1，可并行）
   ⑥ **新增审计 action 两个**：`app.release.preview_started` / `app.release.preview_reclaimed`，四处 lockstep（enum + `_UI_VISIBLE_V2_ACTIONS` + platform `log.ts` + 三语 `bs.json`）已同批完成。回收理由 `manual` / `approval_terminal` / `expired` 记在 metadata，三条腿在容器日志里长得一样，事后问「这次试用为什么结束」只能靠它分辨。
   ⑦ **保留 slug `preview` / `_unavailable`**（`app_provision_service.RESERVED_SLUGS`）：`/apps/preview/{session}` 的路由注册在 `{slug}` 之前，不保留名字的话，一个叫 `preview` 的应用会被永久遮蔽，而对它的负责人来说症状是「我的应用对所有人 404」且任何日志里都没有线索。
   ⑧ **通过（approved）也回收**：AC-28 的「终态」是四个，不止驳回 / 撤回 / 取消。除 `publish_terminal_service` 的三条外，`publish_online_service.bring_online` 里也调了一次——否则审批通过的版本会让预览和真身并排跑满 7 天。
-  ⑨ **欠一条 alembic 迁移**：无。`app_preview_session` 是整表新建，走 `create_all(checkfirst=True)`（后端 AGENTS.md 的 schema 归属规则）；本切片未改任何既有表。
+  ⑨ **第四个 `reclaim_reason`：`start_failed`**（自审补）。拉起失败时行也要关掉（否则面板画着一个不存在的运行实例），但把它记成 `manual` 是往审计里写假话——没人按过任何按钮，而这行被保留下来的唯一理由正是回答「它为什么结束」。三语文案同批补齐。同批还改了 `start`：**过期但仍 running 的旧行不再原样交回**（面板会先扫，但直连 POST 不会），改为就地回收再拉一个新的。
+  ⑩ **欠一条 alembic 迁移**：无。`app_preview_session` 是整表新建，走 `create_all(checkfirst=True)`（后端 AGENTS.md 的 schema 归属规则）；本切片未改任何既有表。
 
 - [x] **T054**: 审批期预览前端（「预览试用」置顶 / 四个界面状态 / 打开预览 / 手动回收）
   **文件**: `client/src/components/approval/AppPreviewPanel.tsx`, `client/src/api/hostedAppPreview.ts`, `client/src/components/approval/AppReviewView.tsx`（置顶挂载）, `client/src/locales/{zh-Hans,en,ja}/translation.json`
