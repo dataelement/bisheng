@@ -10,6 +10,10 @@ from starlette.responses import FileResponse
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge_imp import text_knowledge
 from bisheng.api.v1.schemas import ChunkInput, ExcelRule, KnowledgeFileOne, KnowledgeFileProcess, resp_200
+from bisheng.app_publish.domain.services.capability_bus_service import (
+    CapabilityBusService,
+    hosted_app_access_user,
+)
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
@@ -33,7 +37,11 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_reposit
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
     KnowledgeDocumentVersionRepository,
 )
-from bisheng.knowledge.domain.schemas.retrieval_facade import RetrievalIdentity, RetrievalRequest
+from bisheng.knowledge.domain.schemas.retrieval_facade import (
+    HOSTED_APP_ACTOR_KIND,
+    RetrievalIdentity,
+    RetrievalRequest,
+)
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.knowledge.domain.services.retrieval_facade_service import RetrievalFacadeService
@@ -703,8 +711,14 @@ async def retrieve_chunks(
     one 26321 instead of three distinguishable refusals, and a permission
     outage surfaces as itself (503 / 19002) rather than being relabelled as a
     credential-validation outage.
+
+    F055: a **hosted application** does not reach the facade directly. Its
+    credential authorises the application, not a person, so the call is routed
+    through the capability bus, which supplies the declared whitelist and the
+    identity of the visitor named by ``X-BiSheng-Access-Token``. Without that
+    header there is no access user and the retrieval is refused outright
+    (AC-52) — there is no owner to fall back to.
     """
-    del request  # the facade is session-decoupled; nothing here needs the Request
 
     # Argument validation that used to live inside ``aretrieve_chunks``. It has
     # to stay on this face: ``tag_match_mode="ALL"`` is a documented 400 (it is
@@ -726,22 +740,31 @@ async def retrieve_chunks(
                 raise HTTPException(status_code=400, detail="tag_match_mode=ALL is not yet supported")
             tag_filters[one.knowledge_base_id] = list(one.tags)
 
-    identity = None
     principal = get_current_open_api_principal()
-    if principal is not None:
-        identity = RetrievalIdentity.from_open_api_principal(principal)
-
-    result = await RetrievalFacadeService.retrieve(
-        identity,
-        RetrievalRequest(
+    if principal is not None and principal.actor_kind == HOSTED_APP_ACTOR_KIND:
+        result = await CapabilityBusService.retrieve(
+            app_id=principal.subject_ref or "",
+            access_user_id=hosted_app_access_user(request, principal),
             query=req.query,
             knowledge_ids=req.knowledge_base_ids,
             top_k=req.top_k,
             max_content=req.max_content,
             tag_filters=tag_filters,
-        ),
-        version_repo=version_repo,
-    )
+            version_repo=version_repo,
+        )
+    else:
+        identity = RetrievalIdentity.from_open_api_principal(principal) if principal is not None else None
+        result = await RetrievalFacadeService.retrieve(
+            identity,
+            RetrievalRequest(
+                query=req.query,
+                knowledge_ids=req.knowledge_base_ids,
+                top_k=req.top_k,
+                max_content=req.max_content,
+                tag_filters=tag_filters,
+            ),
+            version_repo=version_repo,
+        )
 
     chunks = [
         RetrieveChunk(

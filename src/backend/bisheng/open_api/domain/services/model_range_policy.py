@@ -156,7 +156,15 @@ async def resolve_range_and_subject(
             subject_id=principal.actor_id,
         )
 
-    app_id = principal.actor_name
+    # ``subject_ref`` is ``app.id`` (a uuid); ``actor_name`` is the application's
+    # *display name*, which is what this used to read. The two are never
+    # interchangeable: the declaration lookup keys on the uuid and the call
+    # record's ``app_id`` column is queried by it, so a display name here made
+    # every hosted-app model call resolve its declaration against a name and
+    # land in the ledger under one (F055 T055 note ①). Falling back to
+    # ``actor_name`` is not an option — a wrong id must fail closed, and
+    # ``declared_model_names`` answering ``None`` is exactly that.
+    app_id = principal.subject_ref or ""
 
     # Step 2 before step 3, always: a forged or expired token is refused whether
     # or not the declaration happens to be readable this second. Reading the

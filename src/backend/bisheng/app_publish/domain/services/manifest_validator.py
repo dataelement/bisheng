@@ -297,18 +297,41 @@ def _check_runtime(manifest: AppManifest) -> None:
 
 
 def _check_capabilities(manifest: AppManifest) -> None:
-    """Refused, not silently dropped (design D16) — see the errcode module for why."""
+    """Refuse a declaration this deployment cannot actually honour (design D16).
+
+    The bus itself is no longer a wave gate — it ships. What is still a
+    deployment fact is whether the open-API scopes a declaration derives can be
+    **issued** here: ``model:invoke`` sits behind ``open_platform.enabled``, so
+    on a deployment without it a declared model would be published into an
+    application whose every model call answers 403, with nothing anywhere saying
+    why. Refused up front instead, which is the same reasoning that made a
+    declaration refused rather than silently dropped in the first place.
+
+    Reference resolution (does this model exist, is this knowledge base of a
+    retrievable type) is a database question and lives in
+    ``capability_bus_service.validate_capability_refs``, called by the receive
+    leg once the application's tenant and owner are known.
+    """
     if manifest.capabilities.is_empty():
         return
+    from bisheng.app_publish.domain.services.capability_bus_service import undeployable_scopes
+
+    refused = undeployable_scopes(manifest.capabilities)
+    if not refused:
+        return
     raise AppCapabilityBusDisabledError(
-        msg="本环境未启用能力总线, 暂不支持 capabilities 声明",
+        msg="本环境未开放能力声明所需的开放能力位, 暂不支持该 capabilities 声明",
         details={
             "field": "capabilities",
-            "reason": "capability_bus_disabled",
+            "reason": "capability_scope_not_deployed",
+            "scopes": refused,
             "declared": {
                 "models": [ref.name for ref in manifest.capabilities.models],
                 "knowledge_bases": [ref.id or ref.name for ref in manifest.capabilities.knowledge_bases],
             },
         },
-        hints=["请从 bisheng-app.yaml 移除 capabilities 声明后重新发布; 能力总线随后续波次开放"],
+        hints=[
+            "请管理员在部署配置中开启 open_platform 后重新发布",
+            "或先从 bisheng-app.yaml 移除对应的能力声明",
+        ],
     )

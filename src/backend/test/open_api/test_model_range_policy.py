@@ -157,7 +157,9 @@ async def test_hosted_app_range_is_its_declaration_and_subject_defaults_to_the_a
     assert model_range.kind == "declared"
     assert model_range.declared == frozenset({"gpt-4o"})
     assert (subject.subject_kind, subject.subject_id) == (SUBJECT_KIND_APP_SELF, None)
-    assert subject.app_id == "survey-app"
+    # ``app.id``, not the display name: the ledger's ``app_id`` column and every
+    # per-application query read this value (F055 T055 note ①).
+    assert subject.app_id == "app-uuid-survey"
 
 
 async def test_a_valid_access_token_names_the_visiting_user():
@@ -172,7 +174,10 @@ async def test_a_valid_access_token_names_the_visiting_user():
     assert (subject.subject_kind, subject.subject_id) == (SUBJECT_KIND_USER, 77)
     # Attribution never widens or narrows what the application may call.
     assert model_range.declared == frozenset({"gpt-4o"})
-    assert verifier.calls == [("signed-token", "survey-app", 9)]
+    # The token is verified against the application's id: an OBO token is minted
+    # per application, so verifying it against the display name would let two
+    # applications that happen to share a name borrow each other's visitors.
+    assert verifier.calls == [("signed-token", "app-uuid-survey", 9)]
 
 
 async def test_an_invalid_access_token_is_refused_rather_than_downgraded():

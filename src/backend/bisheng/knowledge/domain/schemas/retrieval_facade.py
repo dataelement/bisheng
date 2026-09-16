@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.mcp_face import RetrievalIdentityMissingError
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.application.identity import (
@@ -41,6 +42,12 @@ RETRIEVAL_TOP_K_MAX = 200
 RETRIEVAL_MAX_CONTENT_MAX = 60000
 RETRIEVAL_TARGETS_MAX = 50
 RETRIEVAL_SCOPE_MAX = 200
+
+#: ``OpenApiPrincipal.actor_kind`` of a hosted application. Spelled here rather
+#: than imported from ``open_api`` to keep this contract free of a runtime
+#: dependency on the credential base; the value is fixed by
+#: ``api_credential.SUBJECT_KIND_HOSTED_APP`` and asserted by the F055 suite.
+HOSTED_APP_ACTOR_KIND = "hosted_app"
 
 
 @dataclass(frozen=True)
@@ -69,7 +76,19 @@ class RetrievalIdentity:
         fresh actor **widens** what the credential can retrieve. The gate's
         actor is only adopted when it describes this very subject, so a caller
         outside the gate cannot inherit somebody else's privileges.
+
+        **A hosted application is refused here** (F055 AC-52). Its principal's
+        ``authorization_subject_*`` points at the application's *owner*, so a
+        retrieval built from it would silently run with the owner's full
+        visibility and no declared whitelist — the exact fall-back AC-52
+        forbids, arrived at by omission rather than by decision. An application
+        retrieves through ``CapabilityBusService.retrieve``, which supplies the
+        access user's identity and the declaration's whitelist; any face that
+        forgets to route it there gets 26320 instead of somebody else's data.
         """
+
+        if principal is not None and getattr(principal, "actor_kind", None) == HOSTED_APP_ACTOR_KIND:
+            raise RetrievalIdentityMissingError()
 
         actor = None
         contextual = get_current_permission_actor()
@@ -201,6 +220,7 @@ def knowledge_type_label(knowledge_type: int) -> str:
 
 
 __all__ = [
+    "HOSTED_APP_ACTOR_KIND",
     "RETRIEVAL_MAX_CONTENT_MAX",
     "RETRIEVAL_SCOPE_MAX",
     "RETRIEVAL_TARGETS_MAX",
