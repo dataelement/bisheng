@@ -1,18 +1,20 @@
 """F052 T104 — the "same set, whichever door" claims, at the layer that can prove them.
 
-覆盖 AC: AC-08, AC-19, AC-41, AC-43
+覆盖 AC: AC-08, AC-19, AC-41, AC-43, AC-44
 
 "The facade returns exactly the set this identity would see searching the
 platform itself" is ultimately a claim about OpenFGA, Milvus and Elasticsearch
-agreeing, and the full sample (AC-40 / AC-42 / AC-44) therefore belongs to the
-CI middleware stage — see the module note at the bottom for what it must seed
-and assert, and design §7 ③ for the 114 walkthrough that substitutes for it.
+agreeing, and the seeded sample (AC-40 / AC-42) therefore belongs to the CI
+middleware stage — see the module note at the bottom for what it must seed and
+assert, and design §7 ③ for the 114 walkthrough that substitutes for it.
 
 What *is* provable here, and is where the equality would actually break, is the
 seam: the identity each caller hands the facade. Two callers that build the same
 ``RetrievalIdentity`` and pass the same request cannot see different sets,
 because below that seam there is one implementation. So these tests pin the
-seam — plus the structural fact that nothing on this path can touch a session.
+seam — plus the structural fact that nothing on this path can touch a session,
+plus AC-44's fail-closed behaviour at all three doors, which is decided in this
+path rather than in the store.
 """
 
 from __future__ import annotations
@@ -21,6 +23,8 @@ import ast
 import inspect
 from pathlib import Path
 from unittest.mock import MagicMock
+
+import pytest
 
 from bisheng.knowledge.domain.schemas.retrieval_facade import RetrievalIdentity
 from bisheng.knowledge.domain.services import retrieval_facade_service as facade_mod
@@ -87,6 +91,62 @@ def test_identity_from_the_same_principal_is_equal():
         second.login_user.user_id,
         second.login_user.tenant_id,
     )
+
+
+async def test_the_two_open_doors_hand_the_facade_the_very_same_call(monkeypatch):
+    """AC-41 at the seam: one key, one query — v2 and the MCP tool call identically.
+
+    The static guard above says the endpoint does not *build* its own identity.
+    This one goes further and compares what the two doors actually pass: equal
+    ``RetrievalIdentity`` and equal ``RetrievalRequest`` means the set below
+    cannot differ, because below that seam there is one implementation. Stores
+    are not involved, so this holds without middleware; the seeded set equality
+    over real Milvus/ES stays owed to CI (module note at the bottom).
+
+    ``whitelist`` is part of the comparison on purpose: a developer key's range
+    is what an administrator granted it, and a face that started declaring one
+    would narrow that key on its own door only.
+    """
+
+    from bisheng.knowledge.domain.schemas.retrieval_facade import RetrievalFacadeResult
+    from bisheng.open_api.domain.context import (
+        reset_current_open_api_principal,
+        set_current_open_api_principal,
+    )
+    from bisheng.open_api.mcp.tools import knowledge as mcp_knowledge
+    from bisheng.open_endpoints.api.endpoints import filelib as filelib_mod
+    from bisheng.open_endpoints.domain.schemas.filelib import RetrieveReq
+
+    calls: list[tuple] = []
+
+    async def retrieve(identity, req, **_kwargs):
+        calls.append((identity, req))
+        return RetrievalFacadeResult()
+
+    monkeypatch.setattr(facade_mod.RetrievalFacadeService, "retrieve", retrieve)
+
+    principal = _principal()
+    monkeypatch.setattr(filelib_mod, "get_current_open_api_principal", lambda: principal)
+    await filelib_mod.retrieve_chunks(
+        request=MagicMock(),
+        req=RetrieveReq(query="how do I deploy", knowledge_base_ids=[8], top_k=10, max_content=15000),
+        version_repo=MagicMock(),
+    )
+
+    token = set_current_open_api_principal(principal)
+    try:
+        await mcp_knowledge.bisheng_knowledge_search(
+            query="how do I deploy", knowledge_ids=[8], top_k=10, max_content=15000
+        )
+    finally:
+        reset_current_open_api_principal(token)
+
+    assert len(calls) == 2
+    (v2_identity, v2_request), (mcp_identity, mcp_request) = calls
+    assert v2_identity.actor == mcp_identity.actor
+    assert v2_identity.login_user == mcp_identity.login_user
+    assert v2_request == mcp_request
+    assert v2_request.whitelist is None and mcp_request.whitelist is None
 
 
 # ---------------------------------------------------------------------------
@@ -351,7 +411,89 @@ def test_chunk_carries_enough_to_cite(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Still owed to the CI middleware stage (AC-40, AC-42, AC-44)
+# AC-44 — a permission outage is fail-closed at every door, not just one
+# ---------------------------------------------------------------------------
+
+
+async def _facade_door(identity, knowledge_ids):
+    from bisheng.knowledge.domain.schemas.retrieval_facade import RetrievalRequest
+
+    return await facade_mod.RetrievalFacadeService.retrieve(
+        identity, RetrievalRequest(query="q", knowledge_ids=knowledge_ids)
+    )
+
+
+async def _v2_door(knowledge_ids, monkeypatch):
+    from bisheng.open_endpoints.api.endpoints import filelib as filelib_mod
+    from bisheng.open_endpoints.domain.schemas.filelib import RetrieveReq
+
+    monkeypatch.setattr(filelib_mod, "get_current_open_api_principal", lambda: _principal())
+    return await filelib_mod.retrieve_chunks(
+        request=MagicMock(),
+        req=RetrieveReq(query="q", knowledge_base_ids=knowledge_ids),
+        version_repo=MagicMock(),
+    )
+
+
+async def _mcp_door(knowledge_ids, monkeypatch):
+    from bisheng.open_api.domain.context import (
+        reset_current_open_api_principal,
+        set_current_open_api_principal,
+    )
+    from bisheng.open_api.mcp.tools import knowledge as mcp_knowledge
+
+    token = set_current_open_api_principal(_principal())
+    try:
+        return await mcp_knowledge.bisheng_knowledge_search(query="q", knowledge_ids=knowledge_ids)
+    finally:
+        reset_current_open_api_principal(token)
+
+
+@pytest.mark.parametrize("door", ["facade", "v2", "mcp"])
+async def test_a_permission_outage_returns_an_error_and_zero_chunks_at_every_door(
+    door, monkeypatch, fake_engine, knowledge_rows
+):
+    """The engine must never run when visibility could not be decided.
+
+    Returning "what we managed to check" is the dangerous shape here: it is a
+    *shorter* list, indistinguishable from a legitimately narrow grant, so the
+    over-disclosure never looks like a failure. Asserted at all three doors in
+    one test because a fail-closed facade with one door that catches the
+    exception and degrades is exactly the regression AC-44 is about.
+
+    The fault is injected where the outage actually surfaces —
+    ``batch_check_business_actions`` raising ``PermissionServiceUnavailableError``
+    is what a stopped OpenFGA produces. Stopping the real engine (and the seeded
+    sample behind it) stays with the CI middleware stage; what that adds is the
+    store's behaviour, not this path's.
+    """
+
+    from bisheng.common.errcode.permission import PermissionServiceUnavailableError
+
+    knowledge_rows(8)
+
+    async def outage(*_args, **_kwargs):
+        raise PermissionServiceUnavailableError()
+
+    monkeypatch.setattr(facade_mod, "batch_check_business_actions", outage)
+    identity = RetrievalIdentity.from_open_api_principal(_principal())
+
+    with pytest.raises(PermissionServiceUnavailableError):
+        if door == "facade":
+            await _facade_door(identity, [8])
+        elif door == "v2":
+            await _v2_door([8], monkeypatch)
+        else:
+            await _mcp_door([8], monkeypatch)
+
+    assert not [engine for engine in fake_engine.instances if engine.calls], (
+        "the retrieval engine ran while visibility was undecidable — "
+        "an unfiltered or partially filtered result is exactly what AC-44 forbids"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Still owed to the CI middleware stage (AC-40, AC-42)
 # ---------------------------------------------------------------------------
 #
 # The store-level set equality is NOT asserted in this file, and deliberately
@@ -369,8 +511,11 @@ def test_chunk_carries_enough_to_cite(monkeypatch):
 #          MCP search tool yields the same chunk set for the same query.
 #   AC-42  from_user(U1) + whitelist=[S1] equals U1's own in-platform search
 #          restricted to S1, f2 / f3 / f4 absent from both.
-#   AC-44  with OpenFGA stopped: facade, v2 and the MCP tool each raise
-#          19002 / 19201 and return zero chunks — never a shorter list.
+#   AC-44  with OpenFGA actually stopped: facade, v2 and the MCP tool each
+#          raise 19002 / 19201 and return zero chunks. The *decision* is
+#          asserted above by fault injection; what a stopped engine adds is
+#          that the permission layer really does raise rather than time out
+#          into an empty allow-map, which cannot be checked without it.
 #
 # Seeding helpers for the four permission-source variants do not exist yet;
 # they are the actual blocker, not the assertions.
