@@ -26,7 +26,7 @@ metadata:
 2. [知识库检索](#2-知识库检索retrieve)
 3. [附件存储](#3-附件存储storage)
 4. [应用数据库](#4-应用数据库)
-5. [平台模型](#5-平台模型暂未提供) —— 暂未提供
+5. [平台模型](#5-平台模型openai-兼容) —— 地址与凭据都由平台注入，一个字都不要自己拼
 6. [本地运行：`bisheng dev`](#6-本地运行bisheng-dev)
 7. [自检清单](#7-自检清单)
 8. [SDK 从哪来、为什么只有三件套](#8-sdk-从哪来与为什么只有三件套)
@@ -58,7 +58,7 @@ metadata:
 | `X-BiSheng-Dept-Path` | 主部门路径（自顶向下） | 百分号编码，显示前 `unquote` |
 | `X-BiSheng-Subject-Kind` | 主体类型：`human`（真人）或 `service_account`（服务账号） | 线上恒为 `human`；本地 `bisheng dev` 期取决于你 login 用的密钥：服务账号密钥 → `service_account`，个人访问令牌 → `human` |
 | `X-BiSheng-App-Id` | 本应用在平台上的标识 | — |
-| `X-BiSheng-Access-Token` | 每请求的短时访问凭据句柄 | `retrieve` 用它代表**当前访问者**去检索；**不要自己解析、不要转存、不要当权限判据** |
+| `X-BiSheng-Access-Token` | 每请求的短时访问凭据句柄 | 两个去处：`retrieve` 用它代表**当前访问者**去检索（SDK 自动带上），调模型面时由你原样转发（[第 5 章](#5-平台模型openai-兼容)）。**不要自己解析、不要转存、不要当权限判据** |
 | `X-BiSheng-Request-Id` | 请求关联 ID | 打日志时带上，平台侧能对上 |
 
 读法就是读头，例如（标准库，无依赖）：
@@ -320,14 +320,160 @@ def init_schema(conn: sqlite3.Connection) -> None:
 
 ---
 
-## 5. 平台模型（暂未提供）
+## 5. 平台模型（OpenAI 兼容）
 
-> **暂未提供。** 平台的「模型协议面」（让应用用 OpenAI 兼容客户端直接调平台管理的模型）
-> **尚未上线**，本章随其一起补齐。在那之前：
-> - **不要猜** base URL、不要拼 `BISHENG_PLATFORM_API_BASE + "/v1"` 之类的路径去试——那个变量是
->   **平台地址**，不是模型端点，现在没有任何模型端点在它下面。
-> - 现在就需要调模型的应用：用应用**自己**的模型配置（地址、密钥都走环境变量引用，**不写进代码或清单**，
->   否则密钥扫描会拦），等平台面上线后再切换到平台注入的地址与凭据，届时模型名即模型管理里的原名、无档位转换。
+平台把自己管理的模型开成一个 **OpenAI 兼容面**：应用用官方 `openai` 客户端直连，地址和凭据由平台
+以环境变量注入。**不要**自己配服务商账号、**不要**把模型密钥写进代码或清单（密钥扫描会拦），
+**尤其不要自己拼地址**。
+
+### 三个注入名（线上与 `bisheng dev` 同名）
+
+| 变量 | 值 | 备注 |
+|---|---|---|
+| `OPENAI_BASE_URL` | OpenAI 兼容的 base URL | **已含 `/v1`**；官方客户端只在它后面拼 `/chat/completions`、`/models`，不会再补一段 |
+| `OPENAI_API_KEY` | 这次调用用的凭据 | 线上 = 应用自己的运行期凭据（与 `BISHENG_APP_TOKEN` 同值）；本地 `bisheng dev` = 你 `login` 用的那把密钥 |
+| `BISHENG_MODEL_BASE_URL` | 与 `OPENAI_BASE_URL` **同值** | 平台保留名，给不读 OpenAI 惯例变量的引擎 / 框架用 |
+
+```python
+from openai import OpenAI
+
+client = OpenAI()          # 零配置：SDK 自己读 OPENAI_BASE_URL / OPENAI_API_KEY
+
+completion = client.chat.completions.create(
+    model="Qwen2.5-72B-Instruct",                      # ⚠️ 占位，换成你租户里真实存在的名字
+    messages=[{"role": "user", "content": "一句话说明报销标准"}],
+)
+completion.choices[0].message.content
+```
+
+（本章所有示例里的模型名都是占位。怎么拿到真名、撞名了怎么写，见下一节。）
+
+**地址一个字都不要自己拼。** `BISHENG_PLATFORM_API_BASE` 是**平台地址**、不是模型端点，在它后面接
+`/v1` 之类的路径全是错的；平台对外只有一个模型地址出口，就是注入的 `OPENAI_BASE_URL`（它的值由平台在
+`GET /api/v2/auth/whoami` 的 `model_base_url` 字段统一产出）。写死地址的应用换一个部署就调不通，
+而且错得很难查——请求打到一个不存在的路径上，你只会看到 404。
+
+**三个名字可能一个都没有**：这个部署没开放能力层、或者你的应用没声明任何模型时，平台**不注入**它们
+（连你 shell 里同名的值也会被清掉，免得本地指向 api.openai.com 而线上调不通）。所以启动时就检查一次，
+别拖到第一次调用：
+
+```python
+import os
+
+MODEL_READY = bool(os.environ.get("OPENAI_BASE_URL") and os.environ.get("OPENAI_API_KEY"))
+# MODEL_READY 为假时，把「本部署未开放模型能力」如实显示出来，不要退回自己的模型账号
+```
+
+### 模型名：写模型管理页上的原名，撞名了才写限定名
+
+- **基准是模型管理页「模型名称」里那个名字**（不是显示名），大小写原样，不做任何档位 / 别名转换。
+- 同一租户里两个服务商配了同名模型 → 裸名**歧义**，平台拒绝替你挑一个：返回 26214，并在错误体的
+  `candidates` 里列出可用的**限定名**。限定名的写法固定是 `服务商名/模型名`，没有别的分隔符
+  （`:`、`@`、`::` 都不认）。
+- `GET {OPENAI_BASE_URL}/models` 返回的 `id` **恒可直接调用**：名称唯一时是原名，撞名时已经是限定名。
+  另有扩展键 `bisheng_qualified_name`，恒为限定名——想在代码里写一个不受后来撞名影响的稳定名就用它。
+
+```python
+for model in client.models.list().data:
+    model.id                        # 直接可填进 model= 的名字
+    model.owned_by                  # 服务商名
+```
+
+### 只能调**声明过**的模型（这是线上与本地最大的差别）
+
+线上托管期的可调范围 = **应用清单里声明的模型 ∩ 租户里在线的对话模型**，两层都在平台侧算：
+
+```yaml
+# bisheng-app.yaml
+capabilities:
+  models:
+    - name: Qwen2.5-72B-Instruct     # 模型管理页上的原名；撞名时写「服务商名/模型名」
+```
+
+- 清单里**没声明**的模型：即使租户里有、即使你本地调得通，线上一律 26215。改声明要**重新发布**（走审批），
+  不是改个环境变量就行。
+- 清单里**一个模型都没声明**：平台连那三个变量都不注入——应用是「没有地址」，不是「调用时被拒」。
+- 声明过的模型被管理员下线：26212。服务商被整个删掉时模型行跟着没了，名字直接「查无此模型」——
+  多半看到的是 26211，只有删除后的头一分钟（平台按租户缓存可调清单）才会看到 26213。
+  三种都只影响这个模型，应用的其它部分照常可用。
+
+| | `bisheng dev` 本地 | 线上托管 |
+|---|---|---|
+| 凭据 | 你 `login` 那把密钥（需带 `model:invoke` 位，没有就 26003） | 应用自己的运行期凭据（位由清单声明推导） |
+| 可调范围 | 该密钥所在**租户的全部在线对话模型**（**没有**声明这一层） | 声明 ∩ 租户在线模型 |
+| 调用记录里的主体 | 那把密钥的服务账号 | 应用；转发了访问者凭据则是**当前访问用户**（见下） |
+
+**所以本地调得通不代表线上调得通**：本地是租户全量，线上只有声明过的。上线前把要用的模型逐个写进
+`capabilities.models`，比上线后看 26215 便宜。
+
+### 访问者凭据：线上要转发，本地不要
+
+线上每个请求注入给应用的 `X-BiSheng-Access-Token`（第 1 章的请求头表里那一行），应用调模型面时
+**要原样带上同名请求头**，平台的调用记录才有「这次是为谁调的」这一维；不带**不报错**，只是记录里的主体
+一律是「应用自身」，owner 事后查不出是哪个用户触发的。转发不改变可调范围——范围永远由声明决定。
+
+```python
+import os
+
+IS_DEV = os.environ.get("BISHENG_APP_VERSION") == "dev"
+
+def ask(question: str, incoming_headers) -> str:
+    token = incoming_headers.get("X-BiSheng-Access-Token")
+    # 本地 bisheng dev 期一定不要转发：那时 OPENAI_API_KEY 是服务账号密钥，
+    # 服务账号密钥带这个头会被直接拒（26204），不是你的代码写错了。
+    extra = {"X-BiSheng-Access-Token": token} if token and not IS_DEV else {}
+    completion = client.chat.completions.create(
+        model="Qwen2.5-72B-Instruct",
+        messages=[{"role": "user", "content": question}],
+        extra_headers=extra,
+    )
+    return completion.choices[0].message.content
+```
+
+**不要**在这里塞 `X-End-User` / `X-On-Behalf-Of`：本面不承载任何委托。`X-End-User` 由本面自己拒（26205）；
+`X-On-Behalf-Of` 更早就被开放 API 基座拦下（26004；密钥若带委托位则是 26051），两条都到不了模型。
+「这次是为谁调的」只有转发访问者凭据这一条路。
+
+### 承诺面只有两条路径
+
+| 能用 | 用途 |
+|---|---|
+| `POST {OPENAI_BASE_URL}/chat/completions` | 对话补全；`stream=true` 走 SSE |
+| `GET {OPENAI_BASE_URL}/models` | 当前可调模型清单 |
+
+其余 OpenAI 协议路径（`/embeddings`、`/completions`、`/responses`、`/images/*`、`/audio/*`…）一律
+404 + 26201；Anthropic 的 `/messages` 单列 26202「本版仅提供 OpenAI 兼容面」。因此：
+
+- **不要**把这个地址配给走 Anthropic 协议的客户端。
+- **不要**指望在这里做 embedding——要按权限检索文档，用第 2 章的 `retrieve`。
+- `n > 1` 会被拒（26203）：一次只要一个候选。枚举之外的请求字段原样透传给服务商，但平台不对它们作承诺。
+
+### 出错了看哪一类
+
+错误体是 OpenAI 形状（`{"error": {"message", "type", "code", "param"}}`），另带一个扩展键
+`bisheng_code` = 下表的平台码（官方客户端会忽略不认识的键，可从异常的 `body` 里取；取不到就按 HTTP 状态分类）。
+
+| 状态 / 码 | 含义 | 下一步 |
+|---|---|---|
+| 401 | `OPENAI_API_KEY` 没注入或已失效 | 线上：重新上线应用；本地：`bisheng login` 后重跑 `bisheng dev` |
+| 403 / 26003 | 这把凭据没有 `model:invoke` 能力位 | 线上：清单声明模型后重新发布；本地：找管理员给这把密钥勾上 |
+| 403 / 26204 | 这把凭据不接受访问者凭据 | 本地不要转发 `X-BiSheng-Access-Token`；线上转发的必须是本请求原样的那个 |
+| 403 / 26205 | 本面不承载委托 | 去掉 `X-End-User`（`X-On-Behalf-Of` 更早被拒，26004 / 26051，同样是去掉） |
+| 403 / 26215 | 模型没在清单里声明 | 加进 `capabilities.models` 并重新发布 |
+| 404 / 26201 · 26202 | 端点不在承诺面 / 那是 Anthropic 路径 | 只用上表两条 |
+| 404 / 26211 · 26212 · 26213 | 模型不存在（或不属于这个租户）/ 已下线 / 服务商已删 | 对着模型管理页核名字与状态 |
+| 400 / 26203 | 请求不合法（如 `n > 1`、`model` 为空） | 照上一条改 |
+| 400 / 26214 | 裸名歧义 | 改写 `candidates` 里给出的限定名 |
+| 503 / 26216 | 可调范围暂时判不出 | 稍后重试；**不要**改小范围重试 |
+| 429 / 26217 · 26233 | 服务商日调用上限用完 / 上游限流 | 日上限次日零点重置 |
+| 502 / 26231 | 上游服务商失败 | 重试或换模型 |
+
+两条流式专属的坑：
+
+- `stream=true` 时，**范围与模型名的错误仍以普通 JSON 错误体返回**（平台先预取首块再发 200 头），
+  所以别把「拿到 200 就等于模型选对了」写进逻辑。
+- 已经开始流之后出错，SSE 里会先来一条 `data: {"error": {…}}` 再来 `data: [DONE]`。
+  **一段没有内容就正常结束的流不等于成功**——错误事件要读，不能只看流有没有结束。
 
 ---
 
@@ -340,7 +486,7 @@ bisheng dev            # 需要先 bisheng login 过；不校验任何权限位
 bisheng dev --port 3000
 ```
 
-它做三件事，全部和线上**同名**：
+它把线上的运行环境在本机复现一遍，每一项都和线上**同名**：
 
 | 线上 | 本地 `bisheng dev` |
 |---|---|
@@ -348,11 +494,13 @@ bisheng dev --port 3000
 | `/data/app.db`，环境变量 `BISHENG_APP_DB_*` | `<项目>/.bisheng/dev/app.db`，**同名**环境变量；跨重启保留、不进上传包 |
 | `PORT` / `BISHENG_APP_PORT` / `BISHENG_APP_BASE_PATH=/apps/<slug>` 等 | 同名注入；`BASE_PATH` 为空串（根路径） |
 | 启动命令：`BISHENG_APP_START` → `Procfile web:` → `main.py` → `app.py` | 同一顺序 |
+| 模型面三名 `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `BISHENG_MODEL_BASE_URL`，密钥是应用自己的运行期凭据（[第 5 章](#5-平台模型openai-兼容)） | 同名注入；地址同样由平台给出，密钥换成你 login 用的那把。平台没开模型面时三个都不设，连 shell 里同名的值也清掉 |
 
 - 浏览器打开的是 `dev` 打印的**本地入口地址**（迷你代理），不是应用自己的端口——直连应用端口的请求没有身份头，
   这和线上绕过入口是一回事。
 - 本地看不到「张三 vs 李四」的差异：本地不存在真实访问者，所有请求都是那个服务账号。**要验按人隔离，发布后用真实账号访问**。
-- login 用的密钥**不会**进入应用进程的环境变量；应用里任何地方都不该需要它。
+- login 用的密钥**只以 `OPENAI_API_KEY` 一个名字**进应用进程（模型面要用它；线上这一格换成应用自己的运行期
+  凭据），`BISHENG_API_KEY` 一定不在里面。除了交给 `openai` 客户端，应用里任何地方都不该读它、更不该转存。
 
 ---
 
@@ -365,7 +513,8 @@ bisheng dev --port 3000
 - [ ] 用户数据表带 `user_id`，查询恒带 `WHERE user_id = ?`。
 - [ ] 数据库路径读 `BISHENG_APP_DB_PATH`（或 `_URL`），没有写死；建表 `IF NOT EXISTS`；加列走 `ensure_column`。
 - [ ] 没有改列/删列；真要做，走「加新列 → 双写 → 下个版本清理」并带 `--confirm-schema-change`。
-- [ ] 没有拼任何模型端点地址；模型密钥只以环境变量引用出现。
+- [ ] 没有拼任何模型端点地址（读注入的 `OPENAI_BASE_URL` / `OPENAI_API_KEY`，不碰 `BISHENG_PLATFORM_API_BASE`）；
+      要调的模型都写进了清单的 `capabilities.models`；线上转发 `X-BiSheng-Access-Token`、本地不转发。
 - [ ] `bisheng dev` 起来后，通过**本地入口地址**访问，页面上显示的是你的服务账号名。
 - [ ] 用了 SDK 的话：健康检查端点**没有**调 `auth.current_user()`；检索没有任何「取不到凭据就换一种身份」的分支；
       附件路径是应用内相对路径，代码里没有 bucket / 对象键 / 存储地址。

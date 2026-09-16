@@ -7,8 +7,9 @@ schema it teaches, and the self-check fails with a sentence rather than a
 traceback when the developer has not logged in yet. Those hold for every pack;
 the second half of this file pins what is specific to「平台能力接线」(AC-17):
 the auth chapter is first and opens with the silent-failure warning, the
-header names it teaches are app-proxy's, and the model chapter says 暂未提供
-instead of inventing an endpoint.
+header names it teaches are app-proxy's, and the model chapter teaches F051's
+shipped contract through the injected variable names rather than an address
+written out by hand.
 """
 
 from __future__ import annotations
@@ -147,23 +148,53 @@ def test_auth_chapter_teaches_exactly_app_proxys_header_names():
     taught = set(re.findall(r"`(X-BiSheng-[A-Za-z-]+)`", (WIRING / "SKILL.md").read_text(encoding="utf-8")))
     # Every taught name is a real one, and every real one is taught.
     assert taught == injected, f"pack/app-proxy header drift: {taught ^ injected}"
-    # The access-token handle now has exactly one consumer — the SDK's retrieve —
-    # and the row must still forbid the app doing anything with it itself
-    # (parsing it, storing it, treating it as a permission). F057 changed the
-    # contract; this guard changed with it, in the same PR.
+    # The access-token handle has two consumers — the SDK's retrieve, which
+    # carries it for you, and the model face, which the app forwards it to by
+    # hand (F053 T038a) — and the row must still forbid the app doing anything
+    # with it itself (parsing it, storing it, treating it as a permission).
+    # F057 and then F051 changed the contract; this guard changed with them.
     text = (WIRING / "SKILL.md").read_text(encoding="utf-8")
     token_row = next(line for line in text.splitlines() if line.startswith("| `X-BiSheng-Access-Token`"))
     assert "不要自己解析" in token_row
 
 
-def test_model_chapter_is_marked_not_yet_available_and_invents_no_endpoint():
+def test_model_chapter_teaches_the_shipped_face_and_hardcodes_no_address():
+    """F051 shipped, so the chapter teaches the real contract (F053 T038a / F057 T035a).
+
+    What replaced 「暂未提供」 is not free prose: the callable address and the
+    credential both arrive as environment variables, and the one way to get this
+    wrong that no error message can diagnose is composing the address by hand.
+    So the chapter must name the three injected variables, and neither it nor
+    any other file in the pack may carry the address as a literal.
+    """
     body = (WIRING / "SKILL.md").read_text(encoding="utf-8").split("---", 2)[2]
     model = next((content for heading, content in _chapters(body) if "模型" in heading), None)
     assert model is not None
-    assert "暂未提供" in model
+    assert "暂未提供" not in model, "F051 shipped the model face; that claim is stale"
+    # The three names F051 design D2 defined and `bisheng dev` / the hosted
+    # runtime inject under the same spelling.
+    for env_name in ("OPENAI_BASE_URL", "OPENAI_API_KEY", "BISHENG_MODEL_BASE_URL"):
+        assert env_name in model, env_name
+    # The official client, not a hand-rolled HTTP call.
+    assert "openai" in model and "chat.completions.create" in model
     # No URL at all in that chapter: nothing to copy-paste into a client.
     assert not re.search(r"https?://", model)
-    assert "不要猜" in model
+    # And the composed-address trap is named with the variable that invites it.
+    assert "BISHENG_PLATFORM_API_BASE" in model
+
+
+def test_no_pack_file_hardcodes_the_model_face_path():
+    """AC-30's single outward spelling, asserted over the whole pack.
+
+    The address has exactly two legitimate sources — ``whoami.model_base_url``
+    and the environment variable filled from it. A path literal anywhere in the
+    pack is a third one, and it is the copy that goes stale first: it survives a
+    gateway, a path prefix and a port change without a word.
+    """
+    for path in WIRING.rglob("*"):
+        if path.is_file():
+            body = path.read_text(encoding="utf-8", errors="ignore")
+            assert "/api/v2/model/v1" not in body, f"hardcoded model face path in {path}"
 
 
 def test_app_db_chapter_uses_the_injected_env_names_and_stdlib_sqlite3():
