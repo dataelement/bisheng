@@ -24,6 +24,7 @@ from runtime_manager.builder import BuildService
 from runtime_manager.config import get_config
 from runtime_manager.errors import InvalidRequestError
 from runtime_manager.lifecycle import LifecycleService
+from runtime_manager.observability import intent_span
 from runtime_manager.probe import ProbeService
 
 router = APIRouter(prefix="/v1", tags=["intents"], dependencies=[Depends(verify_hmac)])
@@ -34,8 +35,12 @@ async def admission(request: AdmissionRequest) -> AdmissionResponse:
     """AC-19 — can this host take one more instance (or one more build)?"""
     config = get_config()
     tier = Tier(cpu=request.tier.cpu, mem_mb=request.tier.mem) if request.tier else None
-    result = AdmissionService(config).evaluate(tier, purpose=request.purpose)
-    return AdmissionResponse(**result.to_response())
+    with intent_span("admission", None) as span:
+        result = AdmissionService(config).evaluate(tier, purpose=request.purpose)
+        # A refusal is a legitimate answer, not an error — but it is the answer
+        # an operator will come looking for, so it is the span's result.
+        span.result = "ok" if result.admitted else result.reason
+        return AdmissionResponse(**result.to_response())
 
 
 @router.post("/intents/build")
@@ -47,8 +52,10 @@ async def build(request: BuildRequest) -> dict:
     synchronously (400 + the supported set) rather than becoming a build that
     has to be polled to discover it never had a chance.
     """
-    record = BuildService(get_config()).submit(request)
-    return {"build_id": record.build_id, "status": record.status}
+    with intent_span("build", request.app_id) as span:
+        record = BuildService(get_config()).submit(request)
+        span.result = record.status
+        return {"build_id": record.build_id, "status": record.status}
 
 
 @router.get("/builds/{build_id}")
@@ -65,35 +72,44 @@ async def deploy(request: DeployRequest) -> dict:
     a grace window (D4 / AC-21). A refusal (capacity) or a failed readiness gate
     leaves whatever was already serving exactly as it was.
     """
-    return LifecycleService(get_config()).deploy(request)
+    with intent_span("deploy", request.app_id) as span:
+        result = LifecycleService(get_config()).deploy(request)
+        span.result = str(result.get("phase") or "ok")
+        return result
 
 
 @router.post("/intents/stop")
 async def stop(request: StopRequest) -> dict:
     """AC-41 — reclaim the execution body; the app's data is untouched."""
-    return LifecycleService(get_config()).stop(request.app_id)
+    with intent_span("stop", request.app_id) as span:
+        result = LifecycleService(get_config()).stop(request.app_id)
+        span.result = str(result.get("phase") or "ok")
+        return result
 
 
 @router.post("/intents/destroy")
 async def destroy(request: DestroyRequest) -> dict:
     """AC-40 — only ``purge_volume=true`` (the owner's explicit delete) removes data."""
-    return LifecycleService(get_config()).destroy(request.app_id, purge_volume=request.purge_volume)
+    with intent_span("destroy", request.app_id):
+        return LifecycleService(get_config()).destroy(request.app_id, purge_volume=request.purge_volume)
 
 
 @router.post("/intents/probe")
 async def probe(request: ProbeRequest) -> dict:
     """AC-18 — readiness of a live instance, or of a bare image (F055 pre-flight)."""
     service = ProbeService(get_config())
-    if request.app_id:
-        outcome = service.probe_app(request.app_id, timeout=request.timeout)
-    elif request.image_ref:
-        outcome = service.probe_image(
-            image_ref=request.image_ref,
-            env=request.env,
-            port=request.port,
-            health_path=request.health.path,
-            timeout=request.timeout,
-        )
-    else:
-        raise InvalidRequestError("probe needs either app_id or image_ref")
-    return {"ready": outcome.ready, "reason": outcome.reason}
+    with intent_span("probe", request.app_id) as span:
+        if request.app_id:
+            outcome = service.probe_app(request.app_id, timeout=request.timeout)
+        elif request.image_ref:
+            outcome = service.probe_image(
+                image_ref=request.image_ref,
+                env=request.env,
+                port=request.port,
+                health_path=request.health.path,
+                timeout=request.timeout,
+            )
+        else:
+            raise InvalidRequestError("probe needs either app_id or image_ref")
+        span.result = "ready" if outcome.ready else (outcome.reason or "not_ready")
+        return {"ready": outcome.ready, "reason": outcome.reason}

@@ -48,6 +48,7 @@ from app_proxy import connections
 from app_proxy.authz import Verdict, authorize
 from app_proxy.config import get_config
 from app_proxy.login_handoff import WS_CLOSE_EXPIRED, ws_close_code
+from app_proxy.observability import log_fallback, log_request
 from app_proxy.pages import PAGE_DEPLOYING, PAGE_RECOVERING
 from app_proxy.proxy import log_forged_headers, upstream_headers_for
 from app_proxy.routing import resolve_upstream, strip_entry_prefix
@@ -338,7 +339,19 @@ async def proxy_websocket(
     app_id = verdict.app_id
     user_id = verdict.material.get("X-BiSheng-User-Id")
     if not app_id:
-        logger.error("app_proxy.request request_id=%s slug=%s protocol=ws allow without app_id", request_id, slug)
+        log_request(
+            logger,
+            request_id=request_id,
+            slug=slug,
+            user_id=user_id,
+            decision=verdict.decision,
+            reason="allow_without_app_id",
+            cache_hit=verdict.cache_hit,
+            upstream_status=None,
+            latency_ms=(time.monotonic() - started) * 1000,
+            level=logging.ERROR,
+            protocol="ws",
+        )
         await websocket.close(code=ws_close_code(PAGE_RECOVERING))
         return
 
@@ -354,13 +367,7 @@ async def proxy_websocket(
     )
     if upstream is None:
         code = ws_close_code(fallback)
-        logger.warning(
-            "app_proxy.fallback request_id=%s slug=%s protocol=ws kind=%s close_code=%s",
-            request_id,
-            slug,
-            fallback,
-            code,
-        )
+        log_fallback(logger, request_id=request_id, slug=slug, kind=fallback, reason=f"ws_close_{code}")
         await websocket.close(code=code)
         return
 
@@ -423,17 +430,24 @@ async def proxy_websocket(
         # Retrieve every outcome, cancelled or failed, so nothing is logged as
         # "Task exception was never retrieved" after the connection is gone.
         await asyncio.gather(*tasks, return_exceptions=True)
-        logger.info(
-            "app_proxy.request request_id=%s slug=%s user_id=%s protocol=ws decision=allow cache_hit=%s "
-            "generation=%s lifetime_s=%.0f closed_by=%s close_code=%s reason=%s duration_ms=%.1f",
-            request_id,
-            slug,
-            user_id,
-            verdict.cache_hit,
-            getattr(route, "generation", None),
-            lifetime,
-            closed_by,
-            code,
-            reason,
-            (time.monotonic() - started) * 1000,
+        log_request(
+            logger,
+            request_id=request_id,
+            slug=slug,
+            user_id=user_id,
+            decision=verdict.decision,
+            # For a socket the interesting "reason" is why it ended, not why it
+            # was allowed — the verdict's own reason is empty on an allow.
+            reason=reason,
+            cache_hit=verdict.cache_hit,
+            # A WebSocket has no single response status. ``None`` keeps the
+            # field's meaning ("the app produced no HTTP status here") rather
+            # than inventing a 101 that no code path ever read.
+            upstream_status=None,
+            latency_ms=(time.monotonic() - started) * 1000,
+            protocol="ws",
+            generation=getattr(route, "generation", None),
+            lifetime_s=lifetime,
+            closed_by=closed_by,
+            close_code=code,
         )

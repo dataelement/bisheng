@@ -34,6 +34,7 @@ from typing import Any, Protocol
 
 from runtime_manager.config import Config
 from runtime_manager.desired_state import get_store
+from runtime_manager.observability import log_admission_reject
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +201,18 @@ class AdmissionService:
             host = self._probe.snapshot()
         except HostProbeUnavailable as exc:
             logger.error("capacity admission could not read host state: %s", exc)
+            # Also a refusal, and the one an operator is least likely to guess
+            # from the product copy — the zeroed snapshot says "we could not
+            # read", not "the machine has nothing left".
+            blind = {"mem_available_mb": 0, "committed_mb": 0, "total_mb": 0, "cpu": 0, "committed_cpu": 0.0}
+            log_admission_reject(
+                purpose=purpose,
+                reason=REASON_HOST_UNREADABLE,
+                required_mb=required_mb,
+                required_cpu=required_cpu,
+                snapshot=blind,
+                message=str(exc),
+            )
             return AdmissionResult(
                 admitted=False,
                 reason=REASON_HOST_UNREADABLE,
@@ -207,13 +220,7 @@ class AdmissionService:
                 stage=stage,
                 required_mb=required_mb,
                 required_cpu=required_cpu,
-                snapshot={
-                    "mem_available_mb": 0,
-                    "committed_mb": 0,
-                    "total_mb": 0,
-                    "cpu": 0,
-                    "committed_cpu": 0.0,
-                },
+                snapshot=blind,
             )
 
         committed_mb, committed_cpu = self._store.committed()
@@ -228,7 +235,17 @@ class AdmissionService:
         }
 
         def reject(reason: str, message: str) -> AdmissionResult:
-            logger.info("capacity admission rejected (%s): %s | %s", reason, message, snapshot)
+            # §7: the refusal carries the snapshot it was made from, so AC-65's
+            # 「待上线（资源不足）」 copy and an operator's capacity reconciliation
+            # read the same numbers rather than two independent readings.
+            log_admission_reject(
+                purpose=purpose,
+                reason=reason,
+                required_mb=required_mb,
+                required_cpu=required_cpu,
+                snapshot=snapshot,
+                message=message,
+            )
             return AdmissionResult(
                 admitted=False,
                 reason=reason,

@@ -51,6 +51,7 @@ from app_proxy.login_handoff import (
     render_login_handoff,
     ws_close_code,
 )
+from app_proxy.observability import log_request
 from app_proxy.pages import PAGE_HTTP_STATUS, error_payload, json_status, render_page
 from app_proxy.routing import entry_prefix_for
 
@@ -139,6 +140,17 @@ async def handle_entry(request: Request) -> Response:
         # Answered locally: a path that cannot be a slug is not worth an RPC,
         # and refusing to ask also keeps scanners from using the internal
         # endpoint as an existence oracle.
+        log_request(
+            logger,
+            request_id=request_id,
+            slug=slug,
+            user_id=None,
+            decision=DECISION_NOT_FOUND,
+            reason="invalid_slug",
+            cache_hit=False,
+            upstream_status=None,
+            latency_ms=(time.monotonic() - started) * 1000,
+        )
         return render_verdict_response(request, DECISION_NOT_FOUND, request_id=request_id)
 
     verdict = await authorize(
@@ -149,14 +161,16 @@ async def handle_entry(request: Request) -> Response:
     )
 
     if not verdict.allowed:
-        logger.info(
-            "app_proxy.request request_id=%s slug=%s decision=%s reason=%s cache_hit=%s latency_ms=%.1f",
-            request_id,
-            slug,
-            verdict.decision,
-            verdict.reason,
-            verdict.cache_hit,
-            (time.monotonic() - started) * 1000,
+        log_request(
+            logger,
+            request_id=request_id,
+            slug=slug,
+            user_id=verdict.material.get("X-BiSheng-User-Id"),
+            decision=verdict.decision,
+            reason=verdict.reason,
+            cache_hit=verdict.cache_hit,
+            upstream_status=None,
+            latency_ms=(time.monotonic() - started) * 1000,
         )
         return render_verdict_response(request, verdict.decision, verdict=verdict, request_id=request_id)
 
@@ -212,13 +226,20 @@ async def handle_entry_ws(websocket: WebSocket) -> None:
         return
 
     code = WS_CLOSE_NOT_IMPLEMENTED if verdict.decision == DECISION_ALLOW else ws_close_code(verdict.decision)
-    logger.info(
-        "app_proxy.request request_id=%s slug=%s protocol=ws decision=%s reason=%s close_code=%s",
-        request_id,
-        slug,
-        verdict.decision,
-        verdict.reason,
-        code,
+    log_request(
+        logger,
+        request_id=request_id,
+        slug=slug,
+        user_id=verdict.material.get("X-BiSheng-User-Id"),
+        decision=verdict.decision,
+        reason=verdict.reason,
+        cache_hit=verdict.cache_hit,
+        upstream_status=None,
+        # A refused upgrade never reached the app, so there is no latency to
+        # report beyond the verdict itself; the close code is what matters.
+        latency_ms=0.0,
+        protocol="ws",
+        close_code=code,
     )
     await websocket.close(code=code)
 

@@ -62,6 +62,7 @@ from runtime_manager.desired_state import (
 )
 from runtime_manager.docker_backend import DockerBackend, get_docker_backend
 from runtime_manager.lifecycle import Prober, build_container_payload, start_period_seconds
+from runtime_manager.observability import log_rebuild, log_reconcile
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,19 @@ class ReconcileReport:
             f"healthy={len(self.healthy)} failures={len(self.failures)}"
         )
 
+    def action_counts(self) -> dict[str, int]:
+        """The corrections this pass made, as the ``rtm.reconcile`` event carries
+        them (§7). ``healthy`` is deliberately absent — it is the non-action."""
+        return {
+            "recovered": len(self.recovered),
+            "recreated": len(self.recreated),
+            "started": len(self.started),
+            "rebuilt": len(self.rebuilt),
+            "stopped": len(self.stopped),
+            "reclaimed": len(self.reclaimed),
+            "failures": len(self.failures),
+        }
+
 
 class Reconciler:
     """One pass = read the world, then make the smallest correction per app."""
@@ -171,6 +185,7 @@ class Reconciler:
                 report.failures.append((record.app_id, str(exc)))
 
         self._reclaim_orphans(actual, report)
+        log_reconcile(desired=len(self._store.list()), actual=len(actual), actions=report.action_counts())
         if report.acted or report.failures:
             logger.info("reconcile pass: %s", report.summary())
         return report
@@ -308,14 +323,15 @@ class Reconciler:
         address on the application network, and ``generation`` is precisely the
         app-proxy's signal that its cached upstream is stale (D5.1).
         """
-        logger.warning(
-            "app %s unhealthy for %s rounds; rebuilding %s",
-            record.app_id,
-            UNHEALTHY_ROUNDS_BEFORE_REBUILD,
-            record.container_name,
+        generation = record.generation + 1
+        log_rebuild(
+            app_id=record.app_id,
+            container=record.container_name,
+            generation=generation,
+            reason="unhealthy",
+            unhealthy_rounds=UNHEALTHY_ROUNDS_BEFORE_REBUILD,
         )
         self._ensure_absent(record.container_name)
-        generation = record.generation + 1
         container_id = self._create_and_start(record, generation=generation)
         report.rebuilt.append(record.app_id)
         self._settle(record, report, container_id=container_id, generation=generation)
