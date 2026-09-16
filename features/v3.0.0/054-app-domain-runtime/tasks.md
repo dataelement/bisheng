@@ -614,25 +614,33 @@
 
 ### Wave 4 · `[MVP-114]` 纵切紧随项（design §8 优先级 1–3；**不得裁掉**）
 
-- [ ] **T076**: `[MVP-114]` 出站白名单双层测试
+- [x] **T076**: `[MVP-114]` 出站白名单双层测试
   **文件**: `src/runtime-manager/tests/test_egress.py`（新）
   **逻辑**: 构建期只放行配置的包源与平台分发端点；运行期默认封禁一切出站、只放行平台 API 与 manifest 声明域名；直连 IP / UDP 一律阻断（D12；A DNS-only 与 B 换 runtime 均已被否）。
   **测试降级**: 需 docker，CI 中间件阶段 + 114 手动验证。
   **覆盖 AC**: AC-16
   **依赖**: T029
+  **落地记录**（2026-09-16）：`tests/test_egress.py` 54 例全绿（另 3 例 `@pytest.mark.docker` 默认跳过）。四段：判定（AC-16 逐句：声明域名 / 未声明 / 通配区含 apex 但不含 `notexample.com` / 端口未声明单独报 `port_not_allowed` / 直连 IP / 白名单上的 IP 例外 / UDP 恒拒）· 代理（**真回环 socket + 真上游**：CONNECT 放行时双向传字节、拒绝时上游连接数为 0、无凭据 407 带 challenge、错凭据 407、**A 应用不能用 B 的白名单**、绝对形式 HTTP 剥 `Proxy-Authorization` 后转发、origin 形式 400、放行但上游死 → 502 而非 403）· 规则渲染（顺序 = 规则本身、UDP 单独一条、`-I` 位次 1..N、删除命令与插入互逆、nft 先 `delete table` 且优先级在 docker 之前、后端探测三分支）· 接线（deploy 注入且注册声明域名、应用自带 `HTTP_PROXY` 被覆盖、重发布沿用同一凭据、destroy 带走凭据、标签能恢复声明域名、构建走 `bisheng-build` 且 `build_args` 覆盖不了代理、预览用自己的 principal）。
+  **实际偏差记录**: ① brief 要求 docker 相关断言标 `@pytest.mark.e2e`，实际用本包既有的 **`@pytest.mark.docker`**——它在 `pyproject.toml` 注册、`conftest.py` 默认跳过，用 `e2e` 反而不会被跳过；② 测试文件里同时覆盖 T077 的接线，因为「决策正确」与「决策真的被调用」分开测才有意义。
 
-- [ ] **T077**: `[MVP-114]` 出站白名单双层实现（`--internal` 网络 + egress-proxy + `DOCKER-USER` 兜底 + UDP 封禁）
-  **文件**: `src/runtime-manager/runtime_manager/egress.py`（新）, `src/runtime-manager/runtime_manager/lifecycle.py`（接入）
+- [x] **T077**: `[MVP-114]` 出站白名单双层实现（`--internal` 网络 + egress-proxy + `DOCKER-USER` 兜底 + UDP 封禁）
+  **文件**: `src/runtime-manager/runtime_manager/egress.py`（新）, `src/runtime-manager/runtime_manager/egress_proxy.py`（新）, `lifecycle.py` / `builder.py` / `preview.py` / `reconciler.py` / `desired_state.py` / `config.py` / `api/{schemas,readonly,intents}.py`（接入）, `docker/docker-compose.yml`, `docker/verify_app_runtime_compose.py`, `features/v3.0.0/054-app-domain-runtime/deploy/bisheng-egress-proxy.service`（新）, `src/backend/bisheng/app_publish/domain/schemas/app_manifest.py` + `app_state_service.py` + `preview_instance_service.py`（透传 `egress.domains`）
   **逻辑**: D12-C；⚠️ Docker 29 起 nftables 后端**无 `DOCKER-USER` 链**（坑 22），需探测后端分别下发或在部署基线锁定 iptables。**任何非 114 环境部署前是硬前置**。
   **测试**: T076 全部通过。
   **覆盖 AC**: AC-16
   **依赖**: T076
+  **落地记录**（2026-09-16）：三层。**L1** = `bisheng-apps` / `bisheng-build` 建成 `--internal`（compose 已改，存量环境要重建网，preflight 判红并给命令）。**L2** = `egress_proxy.py`，runtime-manager 同一个包的第二个入口点（`python -m runtime_manager.egress_proxy`，compose 里同镜像换 command）：CONNECT 盲隧道 + 绝对形式 HTTP，**不做 TLS 拦截**——平台决定连接能不能存在，从不看里面走什么。**L3** = `egress.py` 渲染 `DOCKER-USER` / nft 规则，兼管 UDP（CONNECT 代理看不见数据报）。
+  **两个值得记的决定**：① **代理按 principal 鉴权**，凭据随注入的 `HTTP_PROXY` 走标准 `Proxy-Authorization`——全机共用一张白名单等于「所有 manifest 的并集」，那不是 AC-16 说的事；按源 IP 认又会在 reconciler 重建实例换 bridge IP 时失效。② **策略是一个文件**（`{data_root}/egress/policy.json`）不是一次 RPC：编排器重启不该把每个托管应用的出站一起带走；代理按 mtime 重读，读坏了保留上一份（坏缓存 fail-open 好过全站断网）。
+  **`RTM_EGRESS_PROXY` 空 = 整层未部署**，没有「开关开了但代理不在」这种把出站全掐死的组合；preflight 第一行直说「托管应用出站不受限」。声明域名落成容器标签 `bisheng.egress.domains`，状态文件丢了也能恢复——恢复出更窄的白名单 = 应用突然访问不了自家 API 且哪儿都没写为什么。
+  **实际偏差记录**: ① 新增文件比任务清单多 `egress_proxy.py`——D12-C 写的 egress-proxy 在仓里本来不存在，不写它「唯一出口」就只是个名词；选择内建而非 squid 镜像，理由是 信创 / air-gap 环境的镜像可得性，以及 squid 无法做 per-app 白名单。② backend 侧多改三个文件（manifest → deploy / preview 意图透传 `egress_domains`）——不透传的话「应用包声明的域名」这半句 AC 没有输入。③ **本机无 docker，L1/L3 的真实生效未验证**：网络 internal、iptables 规则真的丢包、UDP 真的被挡，三项都留在 `@pytest.mark.docker` 与 114 手动验证（命令见 T075 记录与本轮交付说明）。
 
-- [ ] **T078**: `[MVP-114]` docker-socket-proxy 端点白名单（D2-B）
-  **文件**: `src/runtime-manager/runtime_manager/docker_backend.py`, `docker/docker-compose.yaml`
+- [x] **T078**: `[MVP-114]` docker-socket-proxy 端点白名单（D2-B）
+  **文件**: `src/runtime-manager/runtime_manager/docker_backend.py`, `docker/docker-compose.yml`, `src/runtime-manager/tests/test_socket_proxy.py`（新）
   **逻辑**: 把 root 等价权限收成端点级（`/build`、`/containers/create|start|stop|remove`、`/images`、`/networks`）；对 manager 代码只是**换一个 base URL**、不构成返工；代理端口绝不对外暴露。
   **覆盖 AC**: AC-14
   **依赖**: T077
+  **落地记录**（2026-09-16）：`SOCKET_PROXY_PERMISSIONS`（开关 → 需要它的 Protocol 方法）+ `SOCKET_PROXY_DENIED`（**显式列出并写死为 0**，不靠镜像默认值——镜像换版本翻了某个默认值，仓库里什么都不会变）+ `socket_proxy_env()` 产出整份环境。manager 侧改动 = compose 里一行 `RTM_DOCKER_HOST: tcp://docker-socket-proxy:2375`，并撤掉 `docker.sock` 直挂。`tests/test_socket_proxy.py` 9 例：双向 lockstep（每个 Protocol 方法都有开着的开关 / 白名单里没有不存在的方法）、写方法都在 `POST` 门下、`EXEC`/`VOLUMES`/`ALLOW_RESTARTS` 恒 0、**compose 那段环境与 `socket_proxy_env()` 逐字相等**。`VERSION=0` 是真决定：`docker-py` 只有 `version="auto"` 才 `GET /version`，而 `_RealDockerBackend` 刻意不传——谁加了那个参数，该改的是这张表不是参数。
+  **实际偏差记录**: 任务里写的文件名是 `docker/docker-compose.yaml`，仓内真实文件是 `docker/docker-compose.yml`。真代理容器是否确实拒 `/exec`：`@pytest.mark.docker` 两例，114 验证。
 
 - [x] **T079**: `[MVP-114]` WS 反代 + 不变量① 测试
   **文件**: `src/app-proxy/tests/test_websocket.py`（新）
