@@ -220,7 +220,7 @@ async def _connect(
         except (OSError, TimeoutError) as exc:
             # Stale address: drop the cached entry and resolve once more.
             logger.info(
-                "app_proxy.request request_id=%s slug=%s protocol=ws upstream=%s connect_failed=%s attempt=%s",
+                "app_proxy.upstream_retry request_id=%s slug=%s protocol=ws upstream=%s connect_failed=%s attempt=%s",
                 request_id,
                 slug,
                 upstream.base_url,
@@ -232,7 +232,7 @@ async def _connect(
             # The app answered the upgrade with an HTTP error: no ``/ws`` route,
             # or its own refusal. Its own answer, not a stale address — no retry.
             logger.warning(
-                "app_proxy.request request_id=%s slug=%s protocol=ws upstream=%s handshake_rejected=%s",
+                "app_proxy.upstream_error request_id=%s slug=%s protocol=ws upstream=%s handshake_rejected=%s",
                 request_id,
                 slug,
                 upstream.base_url,

@@ -272,7 +272,7 @@ async def forward(
             # Stale address: drop the cached entry and resolve once more. Any
             # later failure is the app's problem, not the route table's.
             logger.info(
-                "app_proxy.request request_id=%s slug=%s upstream=%s connect_failed=%s attempt=%s",
+                "app_proxy.upstream_retry request_id=%s slug=%s upstream=%s connect_failed=%s attempt=%s",
                 request_id,
                 slug,
                 upstream.base_url,
@@ -283,7 +283,7 @@ async def forward(
         except (httpx.HTTPError, RuntimeError) as exc:
             # RuntimeError covers "stream consumed" — a retry after the request
             # body was partially written cannot be replayed honestly.
-            logger.warning("app_proxy.request request_id=%s slug=%s upstream_error=%s", request_id, slug, exc)
+            logger.warning("app_proxy.upstream_error request_id=%s slug=%s error=%s", request_id, slug, exc)
             fallback_reason = "upstream_error"
             break
 
@@ -343,6 +343,6 @@ async def forward(
         slug=slug,
         kind=kind,
         reason=fallback_reason,
+        prefix=entry_prefix_for(slug, config.entry_prefix),
     )
-    logger.debug("app_proxy.fallback prefix=%s", entry_prefix_for(slug, config.entry_prefix))
     return transition_response(request, kind, request_id, verdict.app_name)

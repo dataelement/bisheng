@@ -22,6 +22,12 @@ Three shapes, three audiences:
   distribution over kinds can be watched (a rise in ``recovering`` is the
   runtime layer struggling; a rise in ``not_found`` is usually a scanner).
 
+The three names above are **reserved for these emitters**. Diagnostic lines that
+happen to be about a request (an upstream retry, a handshake refusal) use their
+own names — a line carrying an event name but no ``fields`` would read as a
+structured event with a hole in it, which is precisely what this module exists
+to prevent.
+
 The fields travel on the :class:`logging.LogRecord` as ``event`` and ``fields``
 (a dict), so a JSON handler can serialise them verbatim while the plain-text
 message stays readable in ``journalctl``. ``EVENT_FIELDS`` is the declared
@@ -124,11 +130,11 @@ def log_header_strip(logger: logging.Logger, *, request_id: str, slug: str, stri
     )
 
 
-def log_fallback(logger: logging.Logger, *, request_id: str, slug: str, kind: str, reason: str) -> None:
+def log_fallback(logger: logging.Logger, *, request_id: str, slug: str, kind: str, reason: str, **extra: Any) -> None:
     """Which fallback page was rendered, and why (§7: 兜底页类型分布)."""
     emit(
         logger,
         logging.WARNING,
         EVENT_FALLBACK,
-        {"request_id": request_id, "slug": slug, "kind": kind, "reason": reason},
+        {"request_id": request_id, "slug": slug, "kind": kind, "reason": reason, **extra},
     )
