@@ -21,6 +21,7 @@ from bisheng.open_api.api.exception_handlers import register_open_api_exception_
 from bisheng.open_api.api.middleware import OpenApiAuditMiddleware
 from bisheng.open_api.api.openapi_schema import install_open_api_schema
 from bisheng.open_api.domain.services.call_audit_service import open_api_call_audit_service
+from bisheng.open_api.domain.services.model_call_record_writer import model_call_record_writer
 from bisheng.public_endpoints.api.exception_handlers import register_public_exception_handlers
 from bisheng.public_endpoints.api.router import router_public
 from bisheng.utils.http_middleware import CustomMiddleware, WebSocketLoggingMiddleware
@@ -107,6 +108,10 @@ async def lifespan(app: FastAPI):
     _register_permission_runtime_contexts()
     _register_app_publish_composition()
     open_api_call_audit_service.start()
+    # F051: the model protocol face writes one model_call_record per call
+    # write-behind. Own writer, own table — the audit page must not be drowned
+    # by a face a local coding agent calls in a loop.
+    model_call_record_writer.start()
     async with AsyncExitStack() as startup_stack:
         # F052 MCP face. The streamable-HTTP session manager owns a task group
         # that every request's transport is started into, so it has to be
@@ -169,6 +174,7 @@ async def _platform_lifespan():
         yield
     finally:
         await open_api_call_audit_service.stop()
+        await model_call_record_writer.stop()
         # Hosted-app access records are written fire-and-forget (F054 AC-38);
         # give the in-flight ones a bounded chance to land before the database
         # goes away, so a deploy restart is not a silent gap in an audit asset.

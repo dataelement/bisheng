@@ -102,6 +102,7 @@
 | **162** | app_factory · **F055 段**（发布管线：预检 / 审批 / 版本冻结 / 档位实体） | F055（落码时新建 `common/errcode/` 文件，勿写进 161 那个文件） |
 | **163** | app_factory · **F056 段**（应用广场 / 授权交互 / 审计查询面 / GOV-07） | F056 |
 | **164** | app_factory · **F059 段**（k8s 运行时后端 / 镜像构建与分发） | F059 |
+| **262** | model_face（模型协议直连面 `/api/v2/model/v1`，`common/errcode/model_face.py`）。子段：`26200-26209` 协议面 / 端点 / 请求形状 · `26210-26229` 可用范围与名称解析 · `26230-26249` 上游与流式 · `26250-26259` 记录与账本（保留）。本期启用 26201–26205 / 26211–26217 / 26231–26234。每个码同时带 `openai_type` / `openai_code`（本面前缀下渲染成 OpenAI 错误体，design D4）；模型能力的运行期判定一律走本段——「已收回」= 26212 / 26213、「未声明」= 26215，F055 的 16273 / 16274 只用于知识库等非模型能力 | F051 |
 | **263** | mcp_face（MCP Server 工具面 + 统一检索门面，`common/errcode/mcp_face.py`）。子段：`26300-26319` MCP 传输与工具面（`open_api/mcp/`）· `26320-26339` 统一检索门面（四个调用方共用：MCP 检索工具 / `POST /api/v2/filelib/retrieve` / F055 托管运行期 / F057 SDK retrieve）· `26340+` 保留。**不占 260 段**——260 的 `26032-26039` / `26045-26049` 保留洞由 `test/open_api/test_error_codes.py` 钉死。子类一律写 `Code: int = 263xx`（`pnpm check-i18n` 只认带注解的写法）；`next_step` 三语在后端 `open_api/mcp/errors.py: NEXT_STEP_COPY`，不进 `api_errors` | F052（落码 2026-09-16，同批回写 `docs/constitution.md` C5 + 三语 `packages/locales/src/api_errors/`） |
 
 ---

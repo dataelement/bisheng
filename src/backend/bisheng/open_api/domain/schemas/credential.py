@@ -130,3 +130,7 @@ class WhoamiResponse(BaseModel):
     scopes: list[str]
     key_mask: str
     expires_at: datetime | None
+    # F051 AC-30: the one place `bisheng login`, the connection panel and any
+    # engine configuration read the OpenAI-compatible base URL from. Empty when
+    # the open capability layer is not deployed — the face does not exist then.
+    model_base_url: str = ""

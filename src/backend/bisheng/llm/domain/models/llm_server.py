@@ -489,10 +489,18 @@ class LLMDao:
             await session.commit()
 
     @classmethod
-    async def aget_shared_server_ids_for_leaf(cls, leaf_id: int) -> list[int]:
+    async def aget_shared_server_ids_for_leaf(cls, leaf_id: int, *, raise_on_error: bool = False) -> list[int]:
         """Return Root LLM server IDs shared to the given leaf.
 
-        Returns [] for Root callers or when permissions are unavailable.
+        Returns [] for Root callers, and — by default — also when permissions
+        are unavailable: for the management list that only means a Child sees
+        fewer Root-shared providers for a moment.
+
+        ``raise_on_error=True`` is for callers where swallowing the failure is a
+        silent narrowing that then reads as a configuration error to whoever hit
+        it. The model protocol face passes it so an FGA blip answers "cannot
+        determine the callable range" (503) instead of "that model does not
+        exist" (404).
         """
         from bisheng.permission.application import PermissionSubject, get_permission_relation_api
 
@@ -507,6 +515,8 @@ class LLMDao:
             )
         except Exception:
             _LOG.exception("Permission resource lookup for leaf=%s failed", leaf_id)
+            if raise_on_error:
+                raise
             return []
 
         result: list[int] = []

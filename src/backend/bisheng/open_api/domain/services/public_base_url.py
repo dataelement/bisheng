@@ -66,9 +66,10 @@ def _warn_once(source: str, derived: str) -> None:
         return
     _WARNED.add(source)
     logger.warning(
-        "Skill packs will carry {} (taken from the {}) because neither open_api.public_base_url "
-        "nor X-Forwarded-Host is set. If users open the platform at another address, set "
-        "open_api.public_base_url or forward X-Forwarded-Proto and X-Forwarded-Host from the reverse proxy.",
+        "Addresses handed to external clients (skill packs, the model protocol face base URL) will "
+        "carry {} (taken from the {}) because neither open_api.public_base_url nor X-Forwarded-Host "
+        "is set. If users open the platform at another address, set open_api.public_base_url or "
+        "forward X-Forwarded-Proto and X-Forwarded-Host from the reverse proxy.",
         derived,
         "Host header" if source == "host" else "server socket",
     )
@@ -94,3 +95,18 @@ def resolve_public_base_url(request: Request) -> str:
             host = _bound_socket(request)
             _warn_once("socket", f"{scheme}://{host}{root_path}")
     return f"{scheme}://{host}{root_path}"
+
+
+# The single outward address of the model protocol face (F051 AC-30). Same for
+# every tenant and every key; produced here only, so the CLI, the connection
+# panel and the hosted-runtime injection cannot each invent their own spelling.
+# The trailing ``/v1`` is kept because most engines treat "ends with /v1" as the
+# check for an OpenAI-compatible address, and official clients append only
+# ``/chat/completions`` or ``/models`` to what they are given.
+MODEL_GATEWAY_BASE_PATH = "/api/v2/model/v1"
+
+
+def model_gateway_base_url(request: Request) -> str:
+    """Return the OpenAI-compatible base URL, without a trailing slash."""
+
+    return f"{resolve_public_base_url(request)}{MODEL_GATEWAY_BASE_PATH}"

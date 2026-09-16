@@ -389,6 +389,10 @@
   **覆盖 AC**: AC-17, AC-18
   **2026-09-16 完成证据**: commit `6d7497c31`（`skills/platform-wiring/{SKILL.md,example/,selfcheck.py}` + README 两包分工）；`test_skill_packs.py` 对两包参数化并加 4 条 AC-17 专项断言（auth 章居首且以警示开头 / 身份头名与 app-proxy `INJECTED_HEADER_NAMES` 零漂移 / 模型章「暂未提供」且无 URL / 样例无登录逻辑），`test_distribution_api.py::test_skill_pack_is_a_tarball_carrying_skill_md` 对两包参数化（分发端点真的能按 slug 取到第二包），backend `test/dev_toolkit` 39 passed。SDK 三件套章节按任务说明留桩指向 F057，模型章等 F051。
 
+- [ ] **T038a**（F051 落地后追加）: 「平台能力接线」包的**模型一节**改写——F051 已交付，模型章不再是「暂未提供」。按 F051 [design §4.2 ①③](../051-model-protocol-gateway/design.md) 与 **D5 限定名规则**写：base URL 从 `GET /api/v2/auth/whoami` 的 `model_base_url` 取（唯一出口，不要在包里拼 `/api/v2/model/v1`）；`dev` 与线上注入同名的 `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `BISHENG_MODEL_BASE_URL`，样例用官方 `openai` 客户端、代码零差异；模型名写模型管理页原名，**跨服务商同名时必须写限定名 `服务商名/模型名`**（裸名会被 26214 拒并列出可用限定名，`GET /models` 返回的 `id` 恒可直接调用）；承诺面只有对话补全与模型列表，其余 OpenAI 路径返 26201、Anthropic 路径返 26202。另附 **`X-BiSheng-Access-Token` 转发说明**：app-proxy 把它注入到**应用**而不是浏览器，应用调模型面时必须由应用代码显式转发，否则调用记录的 subject 一律是「应用自身」——不报错，只是审计里没有用户维度（F051 spec 决议-5 允许，但 owner 通常并不想要）。
+  **文件**: `src/backend/bisheng/dev_toolkit/skills/platform-wiring/SKILL.md`（模型章）+ `example/`
+  **覆盖 AC**: AC-17, AC-18（F051 AC-31 / AC-33 的文档侧）
+
 - [x] **T039**: `login` 成功后自动执行一次 `skills sync`（失败不影响登录成功、输出原因并提示可手动重跑）
   **文件**: `src/bisheng-cli/bisheng_cli/commands/login.py`（增量）
   **测试载体**: `src/bisheng-cli/tests/test_command_login.py`（增量，替换 T019 的 `test_no_auto_skills_sync_this_round`）

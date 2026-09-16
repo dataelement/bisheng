@@ -84,6 +84,7 @@ manager 的 body 恒为 `{"detail": {"code","message",...}}`，backend 按此映
 
 `BISHENG_APP_DB_URL`（`sqlite:////data/app.db`）· `BISHENG_APP_DB_PATH` · `BISHENG_APP_ID` · `BISHENG_APP_SLUG` · `BISHENG_APP_VERSION`（版本号）· `BISHENG_APP_VERSION_ID` · `BISHENG_PLATFORM_API_BASE` · `PORT` 与 `BISHENG_APP_PORT`（两者恒等）· `BISHENG_APP_BASE_PATH`（dev 期为空串）· `BISHENG_APP_HEALTH_PATH`。
 **附件句柄（T085，2026-09-16 起）**：`BISHENG_APP_STORAGE_ENDPOINT`（`{RTM_APP_FACING_BASE_URL}/v1/apps/{app_id}/storage`）· `BISHENG_APP_STORAGE_TOKEN`（每应用一把、整个生命周期不变、destroy 后才轮换；deploy 新版本沿用旧 token，30s 宽限期内新旧实例同一凭据）· `BISHENG_APP_STORAGE_MAX_FILE_MB`。**不注入** bucket / 前缀 / MinIO 凭据——收窄在 manager 侧做，应用只见相对路径（F057 AC-21）。名字的 backend 侧副本在 `app_runtime/domain/constants.py::APP_STORAGE_ENV_NAMES`。F053 `dev` 期同名注入的是**本地附件目录句柄**（F053 AC-27），SDK 按有无 `ENDPOINT` 分辨两种形态。
+**模型协议直连面（F051，2026-09-16 起）**：`OPENAI_BASE_URL`（= `{浏览器可见 origin}/api/v2/model/v1`，由 backend 的 `open_api/api/public_base_url.py::model_gateway_base_url` 唯一产出，不因租户或密钥而异）· `OPENAI_API_KEY`（= 该应用的运行期凭据明文，与 `BISHENG_APP_TOKEN` 同值——官方 `openai` 客户端零配置直读的就是这两个名字）· `BISHENG_MODEL_BASE_URL`（= `OPENAI_BASE_URL`，给不读 OpenAI 惯例变量的引擎与技能包文案用的平台保留名）。三名的定义方是 F051 design D2；`dev` 期由 F053 同名注入，故本地与线上代码零差异。
 平台保留 env 名**覆盖**调用方同名值（含上述三个）。
 
 ## 6. 给 app-proxy 的不变量

@@ -20,6 +20,17 @@ from bisheng.llm.domain.const import LLM_CACHE, LLMModelStatus
 _PROXY_URL_SCHEMES = ("http://", "https://", "socks://", "socks4://", "socks5://", "socks5h://")
 
 
+class LlmProviderDailyLimitExceededError(Exception):
+    """The provider's daily call limit configured in model management is used up.
+
+    Same base class and same message as the bare ``Exception`` it replaced, so
+    every existing ``except Exception`` caller is unaffected. It exists so a
+    caller that needs to answer differently — the model protocol face returns
+    HTTP 429 rather than a generic 502 — can tell this apart from an upstream
+    failure without matching on message text.
+    """
+
+
 def usable_proxy_url(value: object) -> str | None:
     """Return a proxy URL the HTTP client will accept, else None.
 
@@ -123,7 +134,9 @@ async def bisheng_model_limit_check(self: "BishengBase"):
         redis_client = await get_redis_client()
         use_num = await redis_client.aincr(cache_key)
         if use_num > self.server_info.limit:
-            raise Exception(f"{self.server_info.name}/{self.model_info.model_name} Quota used up")
+            raise LlmProviderDailyLimitExceededError(
+                f"{self.server_info.name}/{self.model_info.model_name} Quota used up"
+            )
 
 
 def sync_bisheng_model_limit_check(self: "BishengBase"):
@@ -133,7 +146,9 @@ def sync_bisheng_model_limit_check(self: "BishengBase"):
         cache_key = f"model_limit:{now}:{self.server_info.id}"
         use_num = get_redis_client_sync().incr(cache_key)
         if use_num > self.server_info.limit:
-            raise Exception(f"{self.server_info.name}/{self.model_info.model_name} Quota used up")
+            raise LlmProviderDailyLimitExceededError(
+                f"{self.server_info.name}/{self.model_info.model_name} Quota used up"
+            )
 
 
 def get_token_from_usage(token_usage: dict[str, Any] | None) -> tuple[int, int, int, int]:

@@ -26,6 +26,20 @@ class FakeRedis:
 
 
 @pytest.fixture
+def open_platform_enabled(monkeypatch):
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(settings.open_platform, "enabled", True)
+
+
+@pytest.fixture
+def open_platform_disabled(monkeypatch):
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(settings.open_platform, "enabled", False)
+
+
+@pytest.fixture
 async def open_api_db(monkeypatch):
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy.pool import StaticPool

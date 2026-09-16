@@ -22,6 +22,16 @@ class OpenApiConf(BaseModel):
         ),
     )
     pat_admin_ttl_days: int = Field(default=7, ge=1)
+    model_catalog_ttl_seconds: int = Field(
+        default=30,
+        ge=1,
+        description=(
+            "How long the model protocol face caches a tenant's callable model "
+            "catalog. Capped at 60s because that is the outward promise for a "
+            "model taken offline in model management (F051 AC-14); the same 60s "
+            "bound already governs the LLM row cache underneath."
+        ),
+    )
     management_ui_enabled: bool = Field(
         default=True,
         description=(
@@ -48,6 +58,11 @@ class OpenApiConf(BaseModel):
     @classmethod
     def cap_credential_cache_ttl(cls, value: int) -> int:
         return min(value, 5)
+
+    @field_validator("model_catalog_ttl_seconds")
+    @classmethod
+    def cap_model_catalog_ttl(cls, value: int) -> int:
+        return min(value, 60)
 
     @field_validator("public_base_url")
     @classmethod

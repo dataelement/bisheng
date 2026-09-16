@@ -41,16 +41,17 @@ def test_extension_scopes_are_not_issuable_without_open_platform(monkeypatch):
     assert issuable_scope_codes() == ALWAYS_ISSUABLE_OPEN_API_SCOPE_CODES
 
 
-def test_shipped_extension_scopes_become_issuable_with_open_platform(monkeypatch):
-    """``model:invoke`` stays out until F051's protocol face ships — an
-    administrator must not be able to grant a capability nothing implements."""
+def test_the_three_extension_scopes_become_issuable_with_open_platform(monkeypatch):
+    """All three ship now: F051 gave ``model:invoke`` its protocol face and F052
+    gave ``identity:read`` its MCP tools, so an administrator can grant each of
+    them and something implements it. The equality is the point — a fourth scope
+    appearing here without a surface behind it should fail this test."""
 
     monkeypatch.setattr(settings.open_platform, "enabled", True)
 
     codes = issuable_scope_codes()
-    assert {"app:manage", "identity:read"} <= codes
-    assert "model:invoke" not in codes
-    assert codes == ALWAYS_ISSUABLE_OPEN_API_SCOPE_CODES | {"app:manage", "identity:read"}
+    assert {"app:manage", "model:invoke", "identity:read"} <= codes
+    assert codes == ALWAYS_ISSUABLE_OPEN_API_SCOPE_CODES | {"app:manage", "model:invoke", "identity:read"}
 
 
 def test_issuable_scopes_have_localized_presentation_metadata(monkeypatch):
@@ -76,6 +77,7 @@ def test_issuable_scopes_have_localized_presentation_metadata(monkeypatch):
         "assistant",
         "knowledge",
         "knowledge",
+        "local_dev_toolkit",  # model:invoke — F051 protocol face
         "local_dev_toolkit",  # identity:read — F052 MCP tools, no REST route
         "local_dev_toolkit",  # app:manage
         "delegation",
