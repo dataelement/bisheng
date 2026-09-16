@@ -1,0 +1,76 @@
+[project]
+name = "bisheng-sdk"
+version = "0.1.0"
+description = "BiSheng application SDK — auth / retrieve / storage for hosted apps, zero coupling to the backend package"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+# Dependency budget is ONE entry (design D1 / CON-1). This package is installed
+# into every hosted application's container by `pip install` inside a customer's
+# air-gapped network; every extra dependency is one more way that install fails.
+#
+# The entry carries an UPPER bound on purpose. On the wheel distribution path
+# `uv.lock` does not participate in resolution at all — the metadata below is
+# the only thing that can constrain what pip picks. Widening the ceiling is a
+# deliberate decision (re-run the wheel-install smoke first), never a drive-by
+# bump.
+dependencies = [
+    "httpx>=0.27,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.9.0",
+]
+
+# No console script: this is a library an application imports, not a tool a
+# developer runs (the CLI is `src/bisheng-cli/`).
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# The directory is `src/bisheng-sdk/` (hyphen) while the import package is
+# `bisheng_sdk` (underscore). hatchling cannot infer that mapping, and without
+# this line `uv build` happily produces an EMPTY wheel that installs fine and
+# fails at `import bisheng_sdk` (design pit 12).
+[tool.hatch.build.targets.wheel]
+packages = ["bisheng_sdk"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+markers = [
+    "network: needs a real platform — skipped by default, runs only in the 114 manual verification (set BISHENG_SDK_RUN_NETWORK_TESTS=1)",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+exclude = [".venv", "__pycache__", "*.egg-info"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "RUF"]
+ignore = [
+    "E501",   # line length — handled by the formatter
+    "B904",   # raise ... from None is too strict for existing style
+    "UP007",  # Optional[X] over X | None in runtime annotations
+    "RUF012", # mutable class attributes
+    # Every human-facing string this SDK raises is Chinese product copy with
+    # full-width punctuation. RUF001/002/003 would "fix" 「」（）， into ASCII and
+    # silently rewrite the copy the product team signed off on.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["bisheng_sdk"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false

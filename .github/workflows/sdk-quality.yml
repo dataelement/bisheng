@@ -1,0 +1,126 @@
+name: SDK Quality
+
+# Quality gate for src/bisheng-sdk/ (the standalone `bisheng_sdk` package that
+# hosted applications import). Same three-leg shape as cli-quality.yml, and for
+# the same reason: this package is distributed as a wheel into a customer's
+# air-gapped network, where `uv.lock` plays no part and the dependency ceiling
+# in the wheel metadata is the only thing constraining the resolution.
+
+on:
+  pull_request:
+    paths:
+      - "src/bisheng-sdk/**"
+      - "scripts/pack_sdk_wheel.sh"
+      - ".github/workflows/sdk-quality.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  locked:
+    name: Lint & Test (locked resolution)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/bisheng-sdk
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # --frozen, not a plain sync: uv.lock is committed and CI must use it
+      # rather than re-resolving.
+      - name: Sync (frozen)
+        run: uv sync --frozen --extra dev
+
+      - name: Ruff
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      # `network`-marked cases need a real platform and are skipped by default;
+      # they only run during the 114 manual verification.
+      - name: Tests
+        run: uv run pytest -m "not network"
+
+  wheel:
+    name: Wheel install smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      # The packaging script is owned by the distribution slice (F057 T022).
+      # Until it lands, this leg checks the one thing it can check on its own:
+      # that the wheel builds and imports from an empty environment.
+      - name: Build wheel and run the packaging smoke test
+        run: |
+          set -euo pipefail
+          if [ -f scripts/pack_sdk_wheel.sh ]; then
+            bash scripts/pack_sdk_wheel.sh
+          else
+            cd src/bisheng-sdk
+            uv build --wheel
+            WHEEL="$(ls dist/bisheng_sdk-*-py3-none-any.whl | head -n 1)"
+            # A hyphenated directory without `[tool.hatch.build.targets.wheel]`
+            # produces an EMPTY wheel that installs fine and fails at import.
+            WHEEL_LISTING="$(python3 -c "import zipfile,sys;print('\n'.join(zipfile.ZipFile(sys.argv[1]).namelist()))" "${WHEEL}")"
+            case "${WHEEL_LISTING}" in
+              *bisheng_sdk/auth.py*) ;;
+              *) echo "::error::${WHEEL} does not contain bisheng_sdk/auth.py"; exit 1 ;;
+            esac
+            python3 -m venv /tmp/sdk-smoke
+            /tmp/sdk-smoke/bin/pip install --quiet "${WHEEL}"
+            /tmp/sdk-smoke/bin/python -c "import bisheng_sdk, bisheng_sdk.auth, bisheng_sdk.retrieve, bisheng_sdk.storage, bisheng_sdk.errors; print(bisheng_sdk.__version__)"
+          fi
+
+      - name: Version drift guard
+        # Catches "changed the SDK, forgot to re-run pack_sdk_wheel.sh": the
+        # platform would keep serving the previous wheel with no signal at all.
+        if: hashFiles('src/backend/bisheng/dev_toolkit/artifacts/manifest.json') != ''
+        run: |
+          set -euo pipefail
+          PKG_VERSION="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/bisheng-sdk/bisheng_sdk/__init__.py)"
+          MANIFEST_VERSION="$(python3 -c "import json;print((json.load(open('src/backend/bisheng/dev_toolkit/artifacts/manifest.json')).get('sdk') or {}).get('version') or '')")"
+          if [ -z "${MANIFEST_VERSION}" ]; then
+            echo "::notice::artifacts/manifest.json carries no sdk section yet (F057 distribution slice)"
+            exit 0
+          fi
+          if [ "${PKG_VERSION}" != "${MANIFEST_VERSION}" ]; then
+            echo "::error::bisheng_sdk.__version__=${PKG_VERSION} but artifacts/manifest.json says ${MANIFEST_VERSION}"
+            exit 1
+          fi
+
+  highest:
+    name: Upper-bound sentinel (advisory)
+    runs-on: ubuntu-latest
+    # Advisory on purpose: this leg answers "is it time to raise the httpx
+    # ceiling?", which is a decision, not a defect. When it goes red the fix is
+    # to raise the bound after checking the new version — never to delete the
+    # bound, which is how app-proxy got a green suite and a dead production
+    # process.
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: src/bisheng-sdk
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Resolve to the newest allowed dependencies
+        run: uv sync --upgrade --extra dev
+
+      - name: Tests against the newest allowed httpx
+        run: uv run pytest -m "not network"
