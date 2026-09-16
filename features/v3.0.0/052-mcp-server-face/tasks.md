@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 定稿（47 AC，独立审查 17 条已修订；决议 1–12）；2026-08-28 AC-03 术语订正 |
 | design.md | ✅ 已评审（全自动模式，★ 豁免） | 2026-09-16 初版 + 同日 `/sdd-review design` 独立审查就地修订（4 high / 6 medium / ~20 low，见 design 修订历史末行）；D1–D12 / 坑 1–23；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-09-16，`/sdd-review tasks` 已过） | 本文；三条线（共享基础 / 门面 / MCP 面）+ 合流波；审查订正见文末「审查修订记录」 |
-| 实现 | 🚧 进行中 | **11 / 34 完成**（Wave 0 T001–T003 + Line A T101a/T101/T102a/T102/T103a/T103/T105；**T104 部分落地**——身份构造缝与会话解耦已证，存储层集合相等仍欠 CI 中间件样本播种）。Line B（T201–T212）与 Wave C（T301–T304）由 MCP 面切片承接；T209 / T210 阻塞于 F054 / F051。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | **10 / 34 完成**（Wave 0 T001–T003 + Line A T101a/T101/T102a/T102/T103a/T103/T105；**T104 部分落地、不计入完成数**——身份构造缝与会话解耦已证，存储层集合相等仍欠 CI 中间件样本播种）。Line B（T201–T212）与 Wave C（T301–T304）由 MCP 面切片承接；T209 / T210 阻塞于 F054 / F051。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -120,7 +120,7 @@
   **依赖**: T103a
   **落地**: `610551615` — 端点改调门面、`RetrieveReq.max_content` 加 `le=60000`、`docs/api/filelib-retrieve.md` 错误表与 §7.1 口径订正、技能包 `SKILL.md` / `references/api.md` 补 26321/26322/26323 并改写 26044 指引。**额外删除**：`open_endpoints/api/dependencies.py` 的 `get_knowledge_space_chat_service_for_openapi`——端点改走门面后零调用方，属死代码（顺带解掉该文件对 `knowledge/api/` 的跨模块 import）。
 
-- [x] **T104**: 集合相等 + fail-closed 集成用例（CI 中间件分组）
+- [ ] **T104**: 集合相等 + fail-closed 集成用例（CI 中间件分组）——**部分落地，未完成**（勾选留空：`[x]` 会让本条在「哪些还没做」的检索里消失，而 AC-40 / AC-42 / AC-44 的存储层断言确实还没有）
   **文件**: `src/backend/test/knowledge/test_retrieval_facade_equality.py`（新，`@pytest.mark.e2e`）
   **逻辑**: 真 MySQL + Redis + OpenFGA + Milvus/ES（CI）；建样本：服务账号 SA1 授 空间 S1（文件 f1 可见、f2 单文件收权、f3 在未授权文件夹、f4 切自定义模式脱钩）+ 文档库 L1；未授予 空间 S2；自然人 U1 同样授权。断言：`test_sa_equals_expected_set`（门面结果文件集 == {f1 的 chunks} ∪ L1；S2 指定 → 26321）→ AC-40；`test_v2_and_facade_direct_equal`（同 key 经 v2 端点与直调门面集合相等）→ AC-41；`test_user_with_whitelist_equals_platform_search_in_scope`（`from_user(U1)` + `whitelist=[S1]` == U1 平台内限定 S1 的 `aretrieve_chunks`）→ AC-42（F055 承接运行期验收）；`test_mode_d_identity_equals_user_self`（`from_open_api_principal(模式 D principal → U1)` == U1 自检）→ AC-43（F050 承接）；`test_fga_down_three_callers_error_zero_results`（`fga_down` fixture → 门面 / v2 / MCP 工具 ① 三处 19002、无 chunks）→ AC-44；`test_facade_imports_no_session_modules`（静态 import 图）→ AC-08, AC-19。**测试降级**：本地无中间件时 skip；114 手动步骤见 design §7 ③。
   **覆盖 AC**: AC-08, AC-19, AC-40, AC-41, AC-42, AC-43, AC-44
@@ -338,6 +338,10 @@
 - **（T101）`_aretrieve_chunks_dispatch` 未整体删除而是收窄为 `_aretrieve_chunks_for_one`**：design D5 正文要求「存在性 / 类型裁定留在聊天服务这一层」，与 T101 文件清单行的「删除」字面冲突，按正文办。
 - **（T101）三个既有测试文件同批改**：`test_knowledge_space_chat_service_retrieve.py` / `test_knowledge_space_chat_service_visibility.py` / `test_openapi_retrieve_file_visibility.py` 里直接戳私有方法的用例改为对 `RetrievalEngine` 断言。tasks.md 原文要求「既有用例全绿」，但被断言的私有方法本身是这次搬迁的对象——方法搬走断言跟着搬，行为断言未放松，等价性另由 `test_retrieval_engine_extraction.py` 守。
 - **（T103）删除 `get_knowledge_space_chat_service_for_openapi`**：端点改走门面后零调用方（`grep` 全仓确认），死代码按项目口径删除而非保留。
+- **（T003 · 复核修正）`RetrievalIdentity.from_open_api_principal` 改为沿用闸已装的 actor**（仅当它描述的正是本 principal 的授权主体：`subject_type` / `subject_id` / `tenant_id` 三者相等，否则退回按 principal 现构）。原实现每次新建一个 `PermissionActor(data_scope=DATA_SCOPE_ALL)`，而门面随后又把它装进 ContextVar 盖掉闸装的那个——后果是**被 F066 `data_scope` 窄化的个人令牌在检索面拿回全量范围**（窄化判定完全由 `actor.data_scope` 驱动，`permission_action_service.py` 的 `_data_scope_denied_map` / `list_visible_objects`），是一处线上放权；同时管理员事实被抹成 `False`，管理员持有的个人令牌经门面看到的比平台内少（AC-41 / AC-43 的静默反向破坏）。design 坑 8 原文即写「管理员事实取自已装 actor」。守卫：`test_retrieval_facade_equality.py::test_identity_keeps_the_gates_data_scope_narrowing` / `::test_identity_keeps_the_gates_administrator_facts` / `::test_identity_never_adopts_an_actor_for_a_different_subject`。
+- **（T003 · 复核修正）`RetrievalIdentity.from_user` 解析 actor 前先把 ContextVar 清空**。`resolve_permission_actor` 有 ContextVar 短路（design 坑 5），而 F055 托管运行期是**带着应用自己的凭据 actor** 调这个构造器的——不清空就会把访问用户的身份悄悄换成应用的可见范围，正是 AC-42 要挡的放大。守卫：`::test_from_user_does_not_inherit_the_ambient_actor`。
+- **（T103 · 复核修正）端点层两条参数校验补回**：`tag_match_mode="ALL"` → 400、过滤器引用不在 `knowledge_base_ids` 里的库 → 400。两条原本在 `aretrieve_chunks` 体内，端点改走门面时随调用一起丢了；`"ALL"` 未实现，按 `"ANY"` 当作等价处理会**返回比调用方要求更宽的集合**且响应里无从察觉，与 `docs/api/filelib-retrieve.md` §5.1 的对外承诺相反。T103 文件清单本来就写了「`tag_match_mode != "ANY"` 的 400 保留在端点层」。守卫：`test_filelib_retrieve_facade.py::test_tag_match_mode_all_is_still_400` / `::test_filter_for_an_untargeted_knowledge_base_is_400`。
+- **（T103 · 复核修正）文档口径**：`max_content` 超限写成「422」不成立——`/api/v2` 的 `RequestValidationError` 由 `open_api_validation_exception_handler` 统一回 **HTTP 400**。`docs/api/filelib-retrieve.md` 已按实际行为订正（§3.3 与 §5.1）。
 - **（记录，非本切片引入）`open_endpoints/api/endpoints/filelib.py` 的 arch-guard RULE-5 告警是存量**：`from bisheng.knowledge.api.dependencies import get_knowledge_document_version_repository` 在 `3.0-vibe` 原文件上同样触发（已用 `git show 3.0-vibe:` 取原文复跑确认），本次未新增跨模块 `api/` import。
 
 ## 114 验证记录

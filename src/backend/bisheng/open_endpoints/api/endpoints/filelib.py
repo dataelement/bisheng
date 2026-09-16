@@ -706,9 +706,25 @@ async def retrieve_chunks(
     """
     del request  # the facade is session-decoupled; nothing here needs the Request
 
+    # Argument validation that used to live inside ``aretrieve_chunks``. It has
+    # to stay on this face: ``tag_match_mode="ALL"`` is a documented 400 (it is
+    # not implemented), and silently treating it as ``"ANY"`` would return a
+    # *wider* set than asked for with no way for the caller to notice. Same for
+    # a filter naming a knowledge base outside ``knowledge_base_ids`` — dropping
+    # it quietly means the caller's narrowing never happened.
     tag_filters = None
     if req.filters and req.filters.knowledge_base_filters:
-        tag_filters = {f.knowledge_base_id: list(f.tags) for f in req.filters.knowledge_base_filters}
+        target_ids = set(req.knowledge_base_ids)
+        tag_filters = {}
+        for one in req.filters.knowledge_base_filters:
+            if one.knowledge_base_id not in target_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"filter references kb_id {one.knowledge_base_id} not present in knowledge_base_ids",
+                )
+            if one.tag_match_mode != "ANY":
+                raise HTTPException(status_code=400, detail="tag_match_mode=ALL is not yet supported")
+            tag_filters[one.knowledge_base_id] = list(one.tags)
 
     identity = None
     principal = get_current_open_api_principal()

@@ -25,6 +25,7 @@ from unittest.mock import MagicMock
 from bisheng.knowledge.domain.schemas.retrieval_facade import RetrievalIdentity
 from bisheng.knowledge.domain.services import retrieval_facade_service as facade_mod
 from bisheng.open_api.domain.context import OpenApiPrincipal
+from bisheng.permission.application.identity import get_current_permission_actor
 
 
 def _principal(**overrides) -> OpenApiPrincipal:
@@ -115,6 +116,138 @@ def test_service_account_identity_can_never_be_an_administrator():
     assert identity.actor.subject_type == "service_account"
     assert identity.actor.super_admin is False
     assert identity.actor.tenant_admin_tenant_ids == frozenset()
+
+
+def test_identity_keeps_the_gates_data_scope_narrowing():
+    """F066: a narrowed personal token must stay narrowed inside the facade.
+
+    The narrowing lives in the permission runtime and is keyed off
+    ``actor.data_scope``; the facade installs ``identity.actor`` over whatever
+    the gate left, so an actor rebuilt here with the default ``all`` scope does
+    not merely lose a hint — it **widens** what the credential can retrieve,
+    silently and on a live endpoint.
+    """
+
+    from bisheng.permission.application.data_scope import DATA_SCOPE_PERSONAL
+    from bisheng.permission.application.identity import (
+        reset_current_permission_actor,
+        set_current_permission_actor,
+    )
+    from bisheng.permission.domain.services.permission_action_service import PermissionActor
+
+    principal = _principal(
+        actor_kind="natural_person",
+        actor_id=42,
+        authorization_subject_type="user",
+        authorization_subject_id=42,
+        effective_user_id=42,
+    )
+    gate_actor = PermissionActor(
+        subject_type="user",
+        subject_id=42,
+        tenant_id=1,
+        data_scope=DATA_SCOPE_PERSONAL,
+    )
+
+    token = set_current_permission_actor(gate_actor)
+    try:
+        identity = RetrievalIdentity.from_open_api_principal(principal)
+    finally:
+        reset_current_permission_actor(token)
+
+    assert identity.actor.data_scope == DATA_SCOPE_PERSONAL
+
+
+def test_identity_keeps_the_gates_administrator_facts():
+    """design 坑 8: administrator facts come from the installed actor.
+
+    Re-deriving them as ``False`` narrows an administrator's personal token,
+    which breaks the "same set through either door" claim (AC-41 / AC-43) in
+    the quiet direction — fewer results, no error.
+    """
+
+    from bisheng.permission.application.identity import (
+        reset_current_permission_actor,
+        set_current_permission_actor,
+    )
+    from bisheng.permission.domain.services.permission_action_service import PermissionActor
+
+    principal = _principal(
+        actor_kind="natural_person",
+        actor_id=42,
+        authorization_subject_type="user",
+        authorization_subject_id=42,
+        effective_user_id=42,
+    )
+    gate_actor = PermissionActor(
+        subject_type="user",
+        subject_id=42,
+        tenant_id=1,
+        tenant_admin_tenant_ids=frozenset({1}),
+    )
+
+    token = set_current_permission_actor(gate_actor)
+    try:
+        identity = RetrievalIdentity.from_open_api_principal(principal)
+    finally:
+        reset_current_permission_actor(token)
+
+    assert identity.actor.tenant_admin_tenant_ids == frozenset({1})
+
+
+def test_identity_never_adopts_an_actor_for_a_different_subject():
+    """Adoption is keyed on the subject, so an unrelated actor cannot leak in."""
+
+    from bisheng.permission.application.identity import (
+        reset_current_permission_actor,
+        set_current_permission_actor,
+    )
+    from bisheng.permission.domain.services.permission_action_service import PermissionActor
+
+    someone_else = PermissionActor(
+        subject_type="user",
+        subject_id=999,
+        tenant_id=1,
+        super_admin=True,
+    )
+
+    token = set_current_permission_actor(someone_else)
+    try:
+        identity = RetrievalIdentity.from_open_api_principal(_principal())
+    finally:
+        reset_current_permission_actor(token)
+
+    assert (identity.actor.subject_type, identity.actor.subject_id) == ("service_account", 7)
+    assert identity.actor.super_admin is False
+
+
+async def test_from_user_does_not_inherit_the_ambient_actor():
+    """AC-42: the hosted runtime's access user is not the application.
+
+    ``resolve_permission_actor`` returns the ContextVar's actor when one is
+    installed (design 坑 5), and F055 reaches this constructor inside a request
+    authenticated with the application's own credential. Inheriting it would
+    hand the access user the application's visibility — the exact widening the
+    hosted-runtime promise rules out.
+    """
+
+    from bisheng.permission.application.identity import (
+        reset_current_permission_actor,
+        set_current_permission_actor,
+    )
+    from bisheng.permission.domain.services.permission_action_service import PermissionActor
+
+    app_actor = PermissionActor(subject_type="service_account", subject_id=7, tenant_id=1)
+
+    token = set_current_permission_actor(app_actor)
+    try:
+        # tenant 1 is the default tenant, so no tenant-admin round trip happens.
+        identity = await RetrievalIdentity.from_user(42, 1)
+        assert get_current_permission_actor() is app_actor, "the ambient actor must be restored"
+    finally:
+        reset_current_permission_actor(token)
+
+    assert (identity.actor.subject_type, identity.actor.subject_id) == ("user", 42)
 
 
 def test_from_user_does_not_assume_administrator_facts():
@@ -230,7 +363,8 @@ def test_chunk_carries_enough_to_cite(monkeypatch):
 #   permission mode) plus document library L1; space S2 granted to nobody;
 #   natural person U1 granted identically.
 #
-#   AC-40  facade(SA1) chunks ⊆ {f1} ∪ L1 exactly; naming S2 → 26321.
+#   AC-40  facade(SA1) chunks are exactly those of f1 plus those of L1, and no
+#          others; naming S2 answers 26321.
 #   AC-41  the same key through POST /api/v2/filelib/retrieve and through the
 #          MCP search tool yields the same chunk set for the same query.
 #   AC-42  from_user(U1) + whitelist=[S1] equals U1's own in-platform search

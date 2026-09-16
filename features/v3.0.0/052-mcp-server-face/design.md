@@ -255,7 +255,10 @@ await RetrievalFacadeService.check_reachable(identity, knowledge_ids, *, whiteli
 **两处落地时定案的细节**（design 原文留了「二选一」）：
 
 - **`version_repo` 走关键字传参**（`retrieve(..., version_repo=)`），不由门面内部调 `get_knowledge_document_version_repository()`。后者是 FastAPI 依赖工厂，领域服务去调它就是领域层反向依赖入口层（C1）；而且 F055 / F057 未必有 `Request`。v2 端点把自己的 `Depends` 结果原样递进来。
-- **`from_user` 是 `async`**：管理员事实必须经 `resolve_permission_actor` 解析（一次可能的 FGA 往返），不能由调用方猜。`from_open_api_principal` 保持同步——闸已经解析过，principal 里就有。
+- **`from_user` 是 `async`**：管理员事实必须经 `resolve_permission_actor` 解析（一次可能的 FGA 往返），不能由调用方猜。`from_open_api_principal` 保持同步——闸已经解析过，actor 里就有。
+- **执行身份的两条权限事实来源（落地时踩过，写死在此）**：
+  - `from_open_api_principal` **沿用闸装的 actor**（`get_current_permission_actor()`，仅当 `subject_type` / `subject_id` / `tenant_id` 与 principal 的授权主体三者相等时采纳，否则才按 principal 现构一个）。principal 本身**不带** `data_scope` 与管理员事实（`open_api/domain/context.py` 的字段表），闸才有（`dependencies.py` 的 `pat_data_scope` + `_check_is_global_super` / `is_tenant_admin`）。现构一个 `PermissionActor(data_scope=DATA_SCOPE_ALL)` 不是「少带了点信息」——门面随后 `set_current_permission_actor(identity.actor)` 会把闸装的那个盖掉，于是**被 F066 窄化的个人令牌在检索面拿回全量范围**（窄化完全由 `actor.data_scope` 驱动）。坑 8 说的「管理员事实取自已装 actor」就是这一条。
+  - `from_user` **解析前先 `set_current_permission_actor(None)`**、`finally` 复位。`resolve_permission_actor` 先读 ContextVar（坑 5），而 F055 是带着应用自己的凭据 actor 调它的——不清空就把访问用户换成了应用的可见范围（AC-42 反向）。
 
 **`check_reachable` 的口径**：只评估 `knowledge_ids` 里的目标，`whitelist` 只用于判定「是否属于声明范围」与「声明条目是否已消失」；不会去遍历 `whitelist` 中未被 `knowledge_ids` 点名的条目。F055 预检时把能力声明同时传进两个参数即可得到逐条结论。
 

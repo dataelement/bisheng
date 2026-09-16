@@ -77,7 +77,7 @@ Content-Type: application/json
 | `filters.knowledge_base_filters[].tags` | string[] | ✅ | — | 标签名（**不是** tag id）。标签作用域是单个 KB（business_type=knowledge_space, business_id=该 KB 的 id）。 |
 | `filters.knowledge_base_filters[].tag_match_mode` | enum | ❌ | `"ANY"` | 枚举：`"ANY"` 或 `"ALL"`。**目前只支持 ANY**，传 `"ALL"` 返回 400。 |
 | `top_k` | int | ❌ | 10 | 最终返回的 chunk 数量上限，跨所有 KB 合并后再截断。范围 `[1, 200]`。 |
-| `max_content` | int | ❌ | 15000 | 单个 KB 内合并文本的字符上限（影响检索阶段返回的最大 chunk 数），传递给底层 retriever。范围 `1 ~ 60000`；超过 60000 直接 422 拒绝，**不做静默夹取**——响应体里没有承载「已被截断」的字段，悄悄给少了调用方无从察觉。 |
+| `max_content` | int | ❌ | 15000 | 单个 KB 内合并文本的字符上限（影响检索阶段返回的最大 chunk 数），传递给底层 retriever。范围 `1 ~ 60000`；超过 60000 直接按参数校验失败拒绝（本端点上 v2 的校验错误统一回 HTTP 400，见 §5.1），**不做静默夹取**——响应体里没有承载「已被截断」的字段，悄悄给少了调用方无从察觉。 |
 
 ### 3.4 字段语义补充
 
@@ -163,7 +163,10 @@ Content-Type: application/json
 | `knowledge_base_ids` 为空 | `"knowledge_base_ids must not be empty"` |
 | 过滤器引用了不在 `knowledge_base_ids` 中的 KB | `"filter references kb_id 99 not present in knowledge_base_ids"` |
 | `tag_match_mode` 传了 `"ALL"` | `"tag_match_mode=ALL is not yet supported"` |
+| `max_content` 超过 60000 | 字段校验失败，`status_message` 为 pydantic 错误列表 |
 | 字段类型校验失败（FastAPI 自动校验） | `"validation error"` 嵌套结构 |
+
+> `/api/v2` 上的参数校验失败由 v2 异常处理器统一回 **HTTP 400**（不是 FastAPI 默认的 422），响应体形如 `{"status_code": 400, "status_message": [...]}`。
 
 ```json
 {

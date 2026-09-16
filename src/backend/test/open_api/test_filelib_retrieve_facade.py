@@ -198,7 +198,7 @@ def test_empty_knowledge_base_ids_still_400():
         RetrieveReq(query="q", knowledge_base_ids=[])
 
 
-def test_max_content_above_cap_is_422_not_silently_clamped():
+def test_max_content_above_cap_is_refused_not_silently_clamped():
     """design D6 ②: ``RetrieveResp`` has nowhere to report a clamp, so refuse."""
 
     with pytest.raises(ValueError):
@@ -206,6 +206,58 @@ def test_max_content_above_cap_is_422_not_silently_clamped():
 
     # The cap itself is still accepted.
     assert RetrieveReq(query="q", knowledge_base_ids=[8], max_content=60000).max_content == 60000
+
+
+async def test_tag_match_mode_all_is_still_400(facade_spy, as_principal):
+    """AC-25: ``"ALL"`` is not implemented and has always been a 400.
+
+    Accepting it and filtering as if it were ``"ANY"`` returns a *wider* set
+    than the caller asked for, with nothing in the response saying so — the
+    silent-narrowing failure mode in reverse. The refusal also has to happen
+    before the facade runs, or the caller pays for a retrieval it will discard.
+    """
+
+    from fastapi import HTTPException
+
+    as_principal(_service_account_principal())
+
+    with pytest.raises(HTTPException) as exc:
+        await _call(
+            RetrieveReq(
+                query="q",
+                knowledge_base_ids=[8],
+                filters={"knowledge_base_filters": [{"knowledge_base_id": 8, "tags": ["hr"], "tag_match_mode": "ALL"}]},
+            )
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "tag_match_mode=ALL is not yet supported"
+    assert facade_spy.calls == [], "the request must be refused before any retrieval"
+
+
+async def test_filter_for_an_untargeted_knowledge_base_is_400(facade_spy, as_principal):
+    """A filter naming a knowledge base outside ``knowledge_base_ids`` is a 400.
+
+    Dropping it quietly means the narrowing the caller wrote never happened and
+    the answer looks correct — the documented behaviour is to say so.
+    """
+
+    from fastapi import HTTPException
+
+    as_principal(_service_account_principal())
+
+    with pytest.raises(HTTPException) as exc:
+        await _call(
+            RetrieveReq(
+                query="q",
+                knowledge_base_ids=[8],
+                filters={"knowledge_base_filters": [{"knowledge_base_id": 99, "tags": ["hr"]}]},
+            )
+        )
+
+    assert exc.value.status_code == 400
+    assert "99" in exc.value.detail
+    assert facade_spy.calls == []
 
 
 def test_top_k_cap_matches_the_facade_cap():
