@@ -366,7 +366,7 @@
   **文件**: ~~无代码产出（手动验证清单）~~ → `src/frontend/platform/src/test/hostedAppMenuTrim.test.tsx`（新）
   **覆盖 AC**: AC-16
   **证据**（分支 `wt/f056-verification`）：6 例，两侧都断言**整份菜单**而不是「我关心的那一项在不在」——会出现多余项的方向只有计数抓得住。工作流卡片四项按既有顺序 `管理权限 / 添加到模板 / 创建副本 / 删除`；助手卡片三项（`type !== 'assistant'` 的模板闸是既有行为，没有随本 Feature 挪窝）；`HostedAppCard` 恒两项，即使调用方是 `isAdmin` 也不会长出副本 / 模板（两项是在调用点 `showCopy={false}` / `onAddTemp={undefined}` 关掉的）；已上线态删除项**置灰而非消失**（F054 AC-42）；无 `manage_permission` 权限时只剩删除。
-  **偏差**：改为自动化回归而不是手验清单表格——AC-16 的失败方向是「另两类卡片被顺手改了」，这在托管应用的截图里看不见。
+  **偏差**：① 改为自动化回归而不是手验清单表格——AC-16 的失败方向是「另两类卡片被顺手改了」，这在托管应用的截图里看不见。② AC-16 正文写「工作流与助手卡片的 ⚙️ 菜单**四项**」，但助手实际只有三项：`CardComponent` 的「添加到模板」自始就带 `type !== 'assistant'` 闸（`cardComponent/index.tsx`）。AC 的落点是「与既有行为完全一致」，测试按**既有行为**断言（工作流 4 / 助手 3），不按字面的「四项」；spec 该句属笔误，未代改。
 
 - [x] **T030**: 标签体系接入验收（托管应用出现在其已有标签的 tab 下；未设标签仍在默认分类可见；本版无打标入口）
   **文件**: ~~无代码产出（手动验证）~~ → `src/backend/test/app_runtime/test_square_scan_page.py`（追加 AC-08 小节，复用同文件的 `square_env`）
