@@ -16,10 +16,13 @@ Sub-ranges (design §4.2 ④):
 
 Three constraints that are easy to miss:
 
-* Every subclass declares its code as ``Code: int = 263xx``. ``check-i18n.mjs``
-  matches backend codes with ``/Code:\\s*int\\s*=\\s*(\\d+)/g`` — the annotation
-  is what makes a code visible to the three-language parity check. Do **not**
-  copy the un-annotated ``Code = 26001`` style used by ``open_api.py``.
+* Every subclass declares its code **with the ``: int`` annotation**.
+  ``check-i18n.mjs`` finds backend codes by matching that exact annotated form,
+  so it is what makes a code visible to the three-language parity check. Do
+  **not** copy the un-annotated ``Code = 26001`` style used by ``open_api.py``.
+  (Nor write the annotated form with a placeholder digit-plus-letters value in
+  prose anywhere — the scanner's ``\\d+`` stops at the first non-digit and would
+  register a bogus truncated code.)
 * Each class carries a real ``http_status``; ``open_api/api/exception_handlers.py``
   returns it on ``/api/v2`` paths and keeps the 200 envelope everywhere else.
 * Copy for every code lives in
