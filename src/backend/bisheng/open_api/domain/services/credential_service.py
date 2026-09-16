@@ -121,7 +121,12 @@ class CredentialService:
             delegate_entries,
         )
         if audit_operator is not None:
-            await cls._audit(audit_operator, "open_api.api_key.create", row)
+            # ``issue``, not ``create``: that is the name registered in
+            # ``_UI_VISIBLE_V2_ACTIONS``, in the platform log filter and in the
+            # three ``bs.json`` copies. Written under any other name the row
+            # lands in the table and the audit page can never show it — the
+            # 「写了查不到」 failure F056 AC-25 / AC-27 exist to prevent.
+            await cls._audit(audit_operator, "open_api.api_key.issue", row)
         item = await cls._to_item(row)
         return KeyIssuedResponse(**item.model_dump(), plaintext=plaintext)
 
