@@ -71,6 +71,14 @@ from bisheng.permission.domain.services.permission_action_service import Permiss
 #: both sides rather than two different "defaults".
 _DEFAULT_HEALTH: dict[str, Any] = {"path": "/", "interval": 10, "timeout": 3, "retries": 3, "start_period": 20}
 
+#: The backend half of design §7「关键日志 / 指标」. The audit trail records what
+#: an *operator* asked for; this records what the state machine actually did —
+#: including the writes that lost their compare-and-set, which never reach the
+#: audit table at all and are otherwise invisible while an app is "stuck".
+#: Emitted through ``logger.bind`` so the fields stay machine-readable
+#: (``record["extra"]``) instead of only existing inside a formatted sentence.
+EVENT_STATE_TRANSITION = "app.state_transition"
+
 
 @dataclass(slots=True)
 class ActionResult:
@@ -177,7 +185,9 @@ class AppStateService:
         if not is_transition_allowed(app.state, AppState.STOPPED.value):
             raise AppStateConflictError(msg="当前状态不支持下线", app_id=app_id, state=app.state)
 
-        won = await cls._transition(app_id, to_state=AppState.STOPPED, from_states=(app.state,))
+        won = await cls._transition(
+            app_id, to_state=AppState.STOPPED, from_states=(app.state,), reason="stopped by user", actor=actor
+        )
         if not won:
             raise AppStateConflictError(msg="应用状态已变化, 请刷新后重试", app_id=app_id, action="stop")
 
@@ -219,7 +229,9 @@ class AppStateService:
         # visible, retryable failure.
         await orchestrator_client.destroy(app_id=app_id, purge_volume=True)
 
-        won = await cls._transition(app_id, to_state=AppState.DELETED, from_states=(app.state,))
+        won = await cls._transition(
+            app_id, to_state=AppState.DELETED, from_states=(app.state,), reason="deleted by owner", actor=actor
+        )
         if not won:
             raise AppStateConflictError(msg="应用状态已变化, 请刷新后重试", app_id=app_id, action="delete")
 
@@ -326,6 +338,10 @@ class AppStateService:
             from_states=(app.state,),
             current_version_id=version.id,
             pending_version_id=None,
+            # The action name, not "started": publish / manual_publish / resume
+            # all land on ``online`` and only this tells them apart in the log.
+            reason=audit_action.value,
+            actor=actor,
         )
         if not won:
             raise AppStateConflictError(msg="应用状态已变化, 请刷新后重试", app_id=app_id, action=audit_action.value)
@@ -371,7 +387,9 @@ class AppStateService:
         """Record "it did not start, and here is why" without leaving anything half-up."""
         target = shortage_state.value if shortage_state is not None else app.state
         if shortage_state is not None and app.state != shortage_state.value:
-            won = await cls._transition(app.id, to_state=shortage_state, from_states=(app.state,))
+            won = await cls._transition(
+                app.id, to_state=shortage_state, from_states=(app.state,), reason=reason, actor=actor
+            )
             if not won:
                 # The parking did not stick — a concurrent action moved the app
                 # first, or the edge is one the table refuses. Report the state
@@ -476,6 +494,8 @@ class AppStateService:
         from_states: tuple[str, ...],
         current_version_id: Any = ...,
         pending_version_id: Any = ...,
+        reason: str = "",
+        actor: Any = None,
     ) -> bool:
         """The single writer's single gate: check the table, then compare-and-set.
 
@@ -493,14 +513,33 @@ class AppStateService:
         ``stage_version`` deliberately does not come through here — it writes a
         self-edge to fence concurrent stops, and self-edges are not in the
         table.
+
+        Every outcome — refused edge, lost race, applied — leaves one
+        ``app.state_transition`` event (§7), so the question "why is this app in
+        this state" is answerable from the log of this one function.
         """
+        actor_id = int(getattr(actor, "user_id", 0) or 0) or None
+        event = logger.bind(
+            event=EVENT_STATE_TRANSITION,
+            app_id=app_id,
+            from_state="|".join(from_states),
+            to_state=to_state.value,
+            reason=reason,
+            actor=actor_id,
+        )
         illegal = [src for src in from_states if not is_transition_allowed(src, to_state.value)]
         if illegal:
-            logger.error(
-                "app_runtime.illegal_transition app_id={} to={} from={} — refused, state left as is",
+            # One line, not two: the structured event carries everything the
+            # old ``app_runtime.illegal_transition`` line did, and a second
+            # copy under a different name only splits the search.
+            event.bind(result="refused").error(
+                "{} app_id={} {} -> {} refused (illegal edge) reason={} actor={}",
+                EVENT_STATE_TRANSITION,
                 app_id,
-                to_state.value,
                 illegal,
+                to_state.value,
+                reason,
+                actor_id,
             )
             return False
         sources = from_states
@@ -514,6 +553,16 @@ class AppStateService:
                 session, app_id, from_states=sources, to_state=to_state.value, **kwargs
             )
             await session.commit()
+        event.bind(result="applied" if won else "lost_race").info(
+            "{} app_id={} {} -> {} result={} reason={} actor={}",
+            EVENT_STATE_TRANSITION,
+            app_id,
+            sources,
+            to_state.value,
+            "applied" if won else "lost_race",
+            reason,
+            actor_id,
+        )
         return won
 
     @staticmethod

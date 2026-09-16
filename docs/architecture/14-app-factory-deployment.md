@@ -565,6 +565,28 @@ tail -f /tmp/bisheng-app-proxy.log            # systemd 形态（单元模板里
 托管应用自身的日志经平台界面（应用详情 → 日志）与 CLI 查看，保留窗口 =
 容器日志轮转窗口（每应用 30MB），产品口径是"最近的运行日志"，不承诺永久留存。
 
+### 按事件名捞日志
+
+三个进程各有一组**结构化事件**，事件名就是 grep 的锚点（字段以 `键=值` 跟在事件名后面，
+没有值的字段打 `-`）。排障时先按事件名收窄，再看字段，不要按中文提示语去搜——提示语会改，事件名不会。
+
+| 事件 | 进程 | 字段 | 什么时候看它 |
+|------|------|------|------------|
+| `app_proxy.request` | app-proxy | `request_id` `slug` `user_id` `decision` `reason` `cache_hit` `upstream_status` `latency_ms` | 「某个人打不开某个应用」。`decision` 是判定结果，`upstream_status` 为 `-` 表示请求**根本没到应用**（被拒或走了兜底页），有值才是应用自己的回答。已登录却被拒的行（`decision=forbidden` / `stopped`）同样带 `user_id`；`login` 时还没有访问者可言，`not_found` 按 AC-29 什么都不透出。**一次请求一行**，裸路径的 308 补斜杠也算一行（`reason=trailing_slash_redirect`），所以同一个人打开一个应用通常会看到两行 |
+| `app_proxy.header_strip` | app-proxy | `request_id` `slug` `stripped` | **WARNING**。客户端自己带了平台身份头，已被剥离。偶发 = 集成配错；频次异常 = 有人在试探伪造身份（AC-32 在生产上唯一可观测的信号） |
+| `app_proxy.fallback` | app-proxy | `request_id` `slug` `kind` `reason` | 兜底页分布。`kind=recovering` 变多 = 运行时层在挣扎；`kind=deploying` 变多 = 发布窗口变长 |
+| `rtm.intent` | runtime-manager | `kind` `app_id` `result` `latency_ms` | 「点了上线没反应」。`result` 非 `ok` 时是 WARNING，值就是后端映射 161xx 用的那个机器码 |
+| `rtm.reconcile` | runtime-manager | `desired` `actual` `actions` | 每轮对齐做了什么。同一个应用每轮都在 `recreated` / `started` = 崩溃循环被 daemon 的退避掩盖了。`actual=-1` = **这轮没读到编排后端**（不是"宿主上没有实例"），同时会带 `backend_error`；无动作的轮次降到 DEBUG，默认级别看不到 |
+| `rtm.rebuild` | runtime-manager | `app_id` `container` `generation` `reason` | **WARNING**。存活但不健康触发的重建。**频次异常 = 应用本身有问题**，不是平台在抖 |
+| `rtm.admission_reject` | runtime-manager | `purpose` `reason` `required_mb` `required_cpu` `snapshot` | 容量拒绝。`snapshot` 与 `runtime-status` 的 `capacity`、与用户看到的「待上线（资源不足）」成因**是同一份数据** |
+| `app.state_transition` | backend | `app_id` `from_state` `to_state` `reason` `actor` `result` | 应用态每一次变更尝试。`result=lost_race`（并发抢跑）与 `result=refused`（非法跃迁）**不进审计表**，只有这里看得到——「状态卡住不动」先查这两个 |
+
+```bash
+journalctl -u bisheng-app-proxy | grep app_proxy.header_strip        # 伪造头
+journalctl -u bisheng-runtime-manager | grep rtm.rebuild             # 谁在反复重建
+./deploy.sh logs backend | grep app.state_transition | grep lost_race
+```
+
 ## 备份与恢复
 
 托管应用的存档分两处：**代码在对象存储里、数据在 runtime-manager 那台机器的本机磁盘上**。
@@ -574,7 +596,7 @@ tail -f /tmp/bisheng-app-proxy.log            # systemd 形态（单元模板里
 | 内容 | 位置 | 要不要备份 |
 |------|------|-----------|
 | 应用数据（SQLite） | `{data_root}/apps/{app_id}/db/app.db`（默认 `data_root` 为 `/opt/bisheng/app-data`；compose 形态是宿主侧 `BISHENG_APP_DATA_ROOT`） | **要**，且不能裸拷，见下 |
-| 代码快照 | MinIO 独立 bucket **`bisheng-apps`**，键 `apps/{app_id}/versions/{version_id}/code.tar.gz`（只增不改，每个已发布版本一份） | 随 MinIO 备份，**整桶备**——后续落地的附件等同桶前缀（`apps/{app_id}/…`）自然被覆盖 |
+| 代码快照 | MinIO 独立 bucket **`bisheng-apps`**，键 `apps/{app_id}/versions/{version_id}/code.tar.gz`（只增不改，每个已发布版本一份） | 随 MinIO 备份，**整桶备**——同桶下的附件前缀（`apps/{app_id}/attachments/`）一并覆盖 |
 | 应用元数据（应用、版本、实例、审批单） | 平台 MySQL / DM8 的 `app*` 表 | 随平台库备份 |
 | 期望态文件 | `{data_root}/state/desired-state.json` | 可丢：进程启动时会从容器标签重建 |
 | 应用附件 | 同一个 `bisheng-apps` 桶，前缀 `apps/{app_id}/attachments/` | 随整桶备份；**owner 显式删除应用时随之清空** |

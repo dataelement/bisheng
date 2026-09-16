@@ -800,9 +800,10 @@
 - [x] **T093**: 备份手册：应用存档位置随平台备份
   **文件**: `docs/architecture/14-app-factory-deployment.md`「备份与恢复」, `docs/architecture/08-deployment.md`「备份」（新节，交叉引用）
   **实际偏差记录**: ①落点不是 `09-development-guide.md`（面向开发者），而是运维文档 14 里已有的「备份」节扩写 + 08 新增平台级「备份」节指过去——备份是运维动作。②附件前缀 `apps/{app_id}/attachments/` 依赖 T085（未落地），手册按"整桶备份 `bisheng-apps`"写，不为未实现的前缀背书；代码快照键以实现为准（`package_service.py` 的 `apps/{app_id}/versions/{version_id}/code.tar.gz`）。③平台今天**没有**自动 SQLite 快照作业（D10 的 `apps/{app_id}/db-snapshots/{ts}.tar` 未实现），手册给的是运维手工流程（`sqlite3 .backup` / Python `Connection.backup`），并明说这一点。
-  **逻辑**: 列出代码快照（`bisheng-apps/apps/{app_id}/versions/*`）、SQLite 快照（`.backup` 后 tar，坑 19：**裸 tar WAL 库会得到不一致副本**）、附件前缀三处位置与恢复步骤。
+  **逻辑**: 列出代码快照（`bisheng-apps/apps/{app_id}/versions/*`）、SQLite 快照（`.backup` 后 tar，坑 19：**裸 tar WAL 库会得到不一致副本**），附件前缀三处位置与恢复步骤。
   **覆盖 AC**: AC-45
   **依赖**: T085
+  **补记（2026-09-16，分支 `wt/f054-observability`）**：偏差②的前置条件已消失——T084 / T085 落地后附件前缀 `apps/{app_id}/attachments/` 是真的了，手册里那句"后续落地的附件等同桶前缀自然被覆盖"改为直述该前缀随整桶备份覆盖（表格里本来就已有「应用附件」一行，是表格上一行的措辞还停在附件未落地的时点）。偏差①③仍成立，未改。
 
 - [x] **T094a**: 档位解析测试（Test-First，先于 T094）
   **文件**: `src/backend/test/app_runtime/test_tier_resolution.py`（新）
@@ -819,12 +820,15 @@
   **依赖**: T094a
   **完成记录（2026-09-16）**: 实现早已随 T051 落在 `_resolve_tier`（表优先、常量兜底）与 `_start`（只在 `deploy` 时解析并固化）；本轮未改实现，仅由 T094a 的五例反向验证；档位管理 tab 见 F055 T065 / T066。
 
-- [ ] **T095**: 稳定性双形态验收自动化（AC-49 用例可移植性）
-  **文件**: `src/backend/test/app_runtime/test_stability_portable.py`（新）
+- [x] **T095**: 稳定性双形态验收自动化（AC-49 用例可移植性）
+  **文件**: `src/backend/test/app_runtime/test_stability_portable.py`（新）, `docker/verify-app-runtime-stability.sh`（新，真机适配器）
   **逻辑**: 把 AC-20 / AC-22 / AC-46 / AC-47 / AC-48 / AC-50 写成**不含任何 compose 专有步骤**的用例（只用形态无关的意图 RPC 与 `phase` 取值），F059 可原样在 k8s 形态执行（**INV-33，已于 2026-08-17 随 F054 spec 定稿在 `release-contract.md:54` 转正，不再是候选**；T030 的写法即为正式口径，两处口径统一）。
   **测试降级**: 需 docker，CI 中间件阶段 + 114 手动验证。
   **覆盖 AC**: AC-20, AC-22, AC-46, AC-47, AC-48, AC-49, AC-50
   **依赖**: T029, T083
+  **完成记录（2026-09-16，分支 `wt/f054-observability`，commit `1b796a304` + `9f7927d07`）**：13 例通过。① 全部观测只走意图 RPC 门面与 `phase` / `state` 取值；断言的是**平台不添乱**（不越俎代庖重发意图、不把自愈中的应用踢下入口、不让一个应用的失败挪动另一个），恢复计时归运行时层自己的用例。② `test_ac49_no_form_specific_vocabulary` 把 AC-49 变成机器可查的：扫本文件源码命中形态专有词表即失败，必须提及的行用 `# portable-vocab-ok` 标注并写理由——散文式承诺"这些用例形态无关"在第一次有人用单机工具排错时就失效了。③ 真机那一半（真杀执行体计时、运行时服务重启期间零中断、状态文件丢后自动对齐）落成 `docker/verify-app-runtime-stability.sh`（自动识别 systemd / compose，识别不出退 2 不猜；必须显式 `--yes`），`test_ac49_real_host_adapter_covers_what_this_file_cannot` 与用例表联锁，适配器不再覆盖 AC-20 / AC-22 / AC-46 / AC-50 即失败。**偏差**：AC-20 第二类（进程活着、健康检查持续失败）与 AC-47 的限额静态核对脚本代劳不了（前者要应用配合把健康端点切 500），`--howto` 给手工步骤并写明原因，不假装覆盖。**114 上执行**：`bash docker/verify-app-runtime-stability.sh --slug <已上线应用的 slug> --token <对该应用有 use 权限账号的 access_token> --base-url https://127.0.0.1:4101 --yes`（本轮未在 114 跑过——本机无编排宿主）。
+  **审查修正（同日，`/task-review`）**：适配器有三处真机上必然出错，已修。① **入口探测不带会话**——应用入口第二步就是会话校验，匿名请求恒定拿 `login` 判定，脚本第 0 步「应用现在是可访问的」在任何真机上都会失败退 1，整个脚本跑不起来；新增必填 `--token`（或 `BISHENG_ACCESS_TOKEN`），以 `Cookie: access_token_cookie=…` 发出。② **探测请求必须是非导航请求**——过渡态兜底页对导航请求答 200 HTML、对非导航请求才答 503 JSON，原先的 `curl -sf` 一旦被当成导航就会在「恢复中」页面出现的那一刻宣布恢复完成，把 AC-20 / AC-50 的计时测成恒等于 0；现在显式发 `Accept: application/json` 并在文件头写明理由。③ **执行体改按标签查**（`label=bisheng.app.slug=<slug>`）——原先按容器名前缀 `^bisheng-app-<slug>` 匹配，slug 为 `foo` 时会连 `foo-bar` 的容器一起捞上来，然后脚本会去 kill 一个不相干的应用。另修 `--howto` 里的标签名（写成了 `bisheng.app-id`，真实是 `bisheng.app.id`，点号分隔）。`test_ac49_real_host_adapter_covers_what_this_file_cannot` 的联锁仍绿。
+  **强化**：`test_ac48_a_transitional_instance_stays_on_the_entry` 原先只断言 state 仍在 `ENTRY_VISIBLE_STATES`（应用本来就是 `online`，这是恒真式，写进去的 `phase` 对断言没有作用）——改为走真正的 `authorize_entry` 五步判定，断言实例处于 `starting` / `unhealthy` 时判定仍是 `allow`。AC-48 要的正是"判定不看实例健康"，只读状态列读不出这个回归。
 
 - [ ] **T096**: E2E（`/e2e-test`）+ 页面手动验证清单
   **文件**: `src/backend/test/e2e/test_e2e_app_domain_runtime.py`（新，由 `/e2e-test features/v3.0.0/054-app-domain-runtime` 生成）, `features/v3.0.0/054-app-domain-runtime/tasks.md`（追加清单结果）
@@ -833,8 +837,8 @@
   **覆盖 AC**: AC-42, AC-51, AC-52, AC-53, AC-54, AC-55, AC-56, AC-57, AC-58
   **依赖**: T088, T091, T095
 
-- [ ] **T097**: 关键日志 / 指标落地（design §7 整节的承接任务）
-  **文件**: `src/app-proxy/app_proxy/observability.py`（新）, `src/app-proxy/tests/test_observability.py`（新）, `src/runtime-manager/runtime_manager/observability.py`（新）, `src/runtime-manager/tests/test_observability.py`（新）, `src/backend/bisheng/app_runtime/domain/services/app_state_service.py`（`app.state_transition` 结构化日志）
+- [x] **T097**: 关键日志 / 指标落地（design §7 整节的承接任务）
+  **文件**: `src/app-proxy/app_proxy/observability.py`（新）, `src/app-proxy/tests/test_observability.py`（新）, `src/runtime-manager/runtime_manager/observability.py`（新）, `src/runtime-manager/tests/test_observability.py`（新）, `src/backend/bisheng/app_runtime/domain/services/app_state_service.py`（`app.state_transition` 结构化日志）, `src/backend/test/app_runtime/test_state_transition_logging.py`（新）, `docs/architecture/14-app-factory-deployment.md`「按事件名捞日志」（新节）
   **逻辑**: design §7「关键日志 / 指标」此前**无任务承接**——这些是上线后排障与 AC-32 伪造头监控的唯一手段，落不了地只能事后补。三处逐条落：
   - app-proxy：`app_proxy.request`（结构化字段 `request_id / slug / user_id / decision / reason / cache_hit / upstream_status / latency_ms`）· **`app_proxy.header_strip`（记录被剥离的伪造头名；`WARNING` 级并可告警——AC-32「伪造无效」只有这一条能在生产上被观测到）** · `app_proxy.fallback`（兜底页类型分布）。
   - runtime-manager：`rtm.intent`（`kind / app_id / result / latency_ms`）· `rtm.reconcile`（每轮 `desired / actual / actions`）· `rtm.rebuild`（unhealthy 重建，**频次异常 = 应用本身有问题**）· `rtm.admission_reject`（**含容量快照**，与 T021 返回的 snapshot 同字段，供 AC-65 成因与运维对账用同一份数据）。
@@ -842,6 +846,9 @@
   测试断言"**事件名 + 必填字段齐全**"（而非日志文本）：`test_request_log_fields_complete` / `test_header_strip_logged_at_warning_with_forged_names` / `test_fallback_type_recorded` / `test_intent_and_reconcile_fields` / `test_admission_reject_carries_snapshot` / `test_state_transition_logged_for_all_five_actions`。⚠️ backend 侧用 `loguru` 时**不得传 `exc_info` 等 stdlib kwarg**（会炸 KeyError，memory `project_loguru_exc_info_strands_sessions`）；两个独立包用各自的 stdlib logging。
   **覆盖 AC**: AC-32, AC-65
   **依赖**: T045, T029, T051
+  **完成记录（2026-09-16，分支 `wt/f054-observability`，commit `2ea69f371`）**：三处各加一个 `observability` 模块，事件字段一律是**必填关键字参数**——调用点漏字段当场失败，而不是产出一条看着正常、正好缺了要查那一项的日志；字段挂在 `LogRecord.event` / `.fields`（backend 是 loguru `record["extra"]`），JSON handler 能原样序列化、journalctl 里仍是一行可读文本。测试断言事件名 + 必填字段齐全，**不断言文案**：app-proxy 12 例 / runtime-manager 11 例 / backend 9 例，三套全绿（app-proxy 221 passed；runtime-manager 236 passed, 5 skipped；backend `test/app_runtime` 413 passed, 13 skipped）。
+  **审查修正（同日，`/task-review`）**：① **补齐三条没产事件的路径**——裸路径 308 补斜杠（访问者对一个应用的**第一次**请求就是它，原先整条不落日志，排障从被重定向后那条起算，URL 和时间戳都是错的）、WS 侧非法 slug（原先静默关闭，"客户端拿错地址一直重连"这种最容易被报成"应用挂了"的流量零痕迹）、以及把 WS 拒绝那条写死的 `latency_ms=0.0` 改成真实耗时。② **被拒的行原先 `user_id` 恒为空**——身份材料只在 `allow` 时下发，而"谁打不开"恰恰是这个字段存在的理由；`entry_authz_service` 的 `forbidden` / `stopped` 判定补 `user_id`（**不是**注入材料，被拒的请求什么都不注入），app-proxy 的 `Verdict` 加同名字段与 `visitor_id` 取值口径（`login` 不带——那时还没有访问者）。③ `rtm.reconcile` **读不到编排后端的那一轮原先直接 return、不产事件**——"瞎了一小时"和"没事可做"在日志里长得一模一样；补上并用 `actual=-1` 表示"未知"而非"宿主为空"，同时 `desired` 改用这轮真正遍历的那份列表（原先在末尾二次 `list()`，报的可能不是这轮的依据）。④ backend 非法跃迁原先同时打 `app_runtime.illegal_transition` 与结构化事件两条——删掉旧的那条，结构化事件升到 ERROR 承接。⑤ 三条新路径各补回归用例（app-proxy 224 / runtime-manager 237 / backend `test/app_runtime` 415）。
+  **落地时的取舍**：① app-proxy 原有的 printf 日志已近似这三个事件，本轮是**替换而非叠加**（同一请求不会出两条），并补齐了缺的字段：成功路径原先没有 `reason`、非法 slug 与"allow 但没有 app_id"两条路径原先根本不产 `app_proxy.request`。② `upstream_status` 为 `None` 是语义位：分开"请求根本没到应用"（被拒 / 兜底页 / WS）与"应用自己答了 5xx"。③ runtime-manager 的 `rtm.intent` 做成 `intent_span` 上下文管理器并从 `finally` 出事件——失败也是结果，`result` 取后端映射 161xx 用的那个机器码，非 `ok` 时升到 WARNING。④ `rtm.reconcile` 无动作时降到 DEBUG：15 秒一条 INFO 会把有动作的那几轮淹掉，完全不打又失去"循环还活着"的证据。⑤ `rtm.rebuild` 独立成 WARNING 而不并进 reconcile 计数——频次异常是**应用自身**的健康信号，混进计数就读不出来了。⑥ backend 的事件落在 `_transition` 这个唯一写入口，`result` 三值 `applied` / `lost_race` / `refused`；后两者**不进审计表**（审计记的是"谁要做什么"），"应用态卡住不动"今天只有这条日志查得到，为此 `_transition` 增加 `reason` / `actor` 两个关键字参数并由四个调用点传入。⑦ 运维文档 14 补「按事件名捞日志」表（事件→进程→字段→什么时候看它）+ 三条 grep 示例。
 
 ---
 

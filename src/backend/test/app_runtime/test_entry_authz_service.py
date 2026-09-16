@@ -211,6 +211,24 @@ class TestVisibleScope:
         assert verdict["owner_name"] == app_owner.user_name
         assert "headers" not in verdict and verdict.get("obo_token") is None
 
+    async def test_a_refusal_names_the_visitor_for_the_proxy_log(
+        self, app_db, app_factory, normal_user, runtime_enabled, no_tenant_blacklist, visible
+    ):
+        """``user_id`` on a refusal is for ``app_proxy.request`` (design §7).
+
+        It is **not** identity material: nothing is injected into an app that was
+        never reached. It exists because a refusal carrying no visitor makes
+        「某某打不开这个应用」 unanswerable from the logs, which is the single
+        most common thing an operator is asked.
+        """
+        _app, _ = await app_factory(slug="who-was-it", state=AppState.ONLINE.value)
+        visible["allow"] = False
+
+        verdict = await _verdict("who-was-it", _token(normal_user.user_id))
+
+        assert verdict["user_id"] == normal_user.user_id
+        assert "headers" not in verdict, "a refusal must still inject nothing"
+
     async def test_visible_scope_uses_the_use_action(
         self, app_db, app_factory, app_owner, runtime_enabled, no_tenant_blacklist, visible
     ):

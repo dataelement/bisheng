@@ -32,6 +32,7 @@ from starlette.responses import HTMLResponse, JSONResponse, Response, StreamingR
 from app_proxy.authz import Verdict
 from app_proxy.config import get_config
 from app_proxy.headers import build_upstream_headers, is_platform_header
+from app_proxy.observability import log_fallback, log_header_strip, log_request
 from app_proxy.pages import (
     PAGE_DEPLOYING,
     PAGE_HTTP_STATUS,
@@ -134,12 +135,7 @@ def log_forged_headers(connection: HTTPConnection, request_id: str, slug: str) -
         # §7 asks for this signal by name: a client that sends identity headers
         # is either a misconfigured integration or someone probing AC-32, and
         # both are worth seeing before they become an incident.
-        logger.warning(
-            "app_proxy.header_strip request_id=%s slug=%s stripped=%s",
-            request_id,
-            slug,
-            ",".join(sorted(forged)),
-        )
+        log_header_strip(logger, request_id=request_id, slug=slug, stripped=sorted(forged))
 
 
 def upstream_headers_for(connection: HTTPConnection, verdict: Verdict, *, slug: str, request_id: str) -> list:
@@ -212,7 +208,19 @@ async def forward(
     if not app_id:
         # The backend allowed a request but told us nothing to forward to. Not
         # a user-visible fault of theirs — render the transient page, log loudly.
-        logger.error("app_proxy.request request_id=%s slug=%s allow without app_id", request_id, slug)
+        log_request(
+            logger,
+            request_id=request_id,
+            slug=slug,
+            user_id=verdict.visitor_id,
+            decision=verdict.decision,
+            reason="allow_without_app_id",
+            cache_hit=verdict.cache_hit,
+            upstream_status=None,
+            latency_ms=(time.monotonic() - started) * 1000,
+            level=logging.ERROR,
+        )
+        log_fallback(logger, request_id=request_id, slug=slug, kind=PAGE_RECOVERING, reason="allow_without_app_id")
         return transition_response(request, PAGE_RECOVERING, request_id, verdict.app_name)
 
     log_forged_headers(request, request_id, slug)
@@ -223,6 +231,9 @@ async def forward(
     client = get_upstream_client()
     query = request.url.query
     kind = PAGE_RECOVERING
+    # Why the fallback page was rendered, carried through the loop so the two
+    # §7 events agree on the cause instead of each guessing it.
+    fallback_reason = "no_route"
 
     for attempt in (0, 1):
         upstream = await resolve_upstream(app_id, refresh=attempt == 1)
@@ -232,6 +243,7 @@ async def forward(
             # A deploy is in flight and nothing serves yet: the honest page is
             # 「发布中」, and there is no address to retry against.
             kind = PAGE_DEPLOYING
+            fallback_reason = "deploy_in_flight"
             break
 
         url = httpx.URL(f"{upstream.base_url}{upstream_path}")
@@ -260,7 +272,7 @@ async def forward(
             # Stale address: drop the cached entry and resolve once more. Any
             # later failure is the app's problem, not the route table's.
             logger.info(
-                "app_proxy.request request_id=%s slug=%s upstream=%s connect_failed=%s attempt=%s",
+                "app_proxy.upstream_retry request_id=%s slug=%s upstream=%s connect_failed=%s attempt=%s",
                 request_id,
                 slug,
                 upstream.base_url,
@@ -271,19 +283,21 @@ async def forward(
         except (httpx.HTTPError, RuntimeError) as exc:
             # RuntimeError covers "stream consumed" — a retry after the request
             # body was partially written cannot be replayed honestly.
-            logger.warning("app_proxy.request request_id=%s slug=%s upstream_error=%s", request_id, slug, exc)
+            logger.warning("app_proxy.upstream_error request_id=%s slug=%s error=%s", request_id, slug, exc)
+            fallback_reason = "upstream_error"
             break
 
-        logger.info(
-            "app_proxy.request request_id=%s slug=%s user_id=%s decision=allow cache_hit=%s "
-            "upstream_status=%s generation=%s latency_ms=%.1f",
-            request_id,
-            slug,
-            verdict.material.get("X-BiSheng-User-Id"),
-            verdict.cache_hit,
-            response.status_code,
-            upstream.generation,
-            (time.monotonic() - started) * 1000,
+        log_request(
+            logger,
+            request_id=request_id,
+            slug=slug,
+            user_id=verdict.visitor_id,
+            decision=verdict.decision,
+            reason=verdict.reason,
+            cache_hit=verdict.cache_hit,
+            upstream_status=response.status_code,
+            latency_ms=(time.monotonic() - started) * 1000,
+            generation=upstream.generation,
         )
         # ``raw``, not ``multi_items()`` or a dict. Both alternatives lose
         # information a hosted app depends on:
@@ -312,11 +326,23 @@ async def forward(
         ]
         return proxied
 
-    logger.warning(
-        "app_proxy.fallback request_id=%s slug=%s kind=%s prefix=%s",
-        request_id,
-        slug,
-        kind,
-        entry_prefix_for(slug, config.entry_prefix),
+    log_request(
+        logger,
+        request_id=request_id,
+        slug=slug,
+        user_id=verdict.visitor_id,
+        decision=verdict.decision,
+        reason=fallback_reason,
+        cache_hit=verdict.cache_hit,
+        upstream_status=None,
+        latency_ms=(time.monotonic() - started) * 1000,
+    )
+    log_fallback(
+        logger,
+        request_id=request_id,
+        slug=slug,
+        kind=kind,
+        reason=fallback_reason,
+        prefix=entry_prefix_for(slug, config.entry_prefix),
     )
     return transition_response(request, kind, request_id, verdict.app_name)
