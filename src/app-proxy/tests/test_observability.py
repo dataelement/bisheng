@@ -105,7 +105,10 @@ class TestContract:
 class TestRequestEvent:
     def test_request_log_fields_complete(self, logged_in, events, echo_upstream):
         """A forwarded request logs who, where, how it went and how long it took."""
-        assert logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS).status_code == 200
+        # ``/apps/foo/`` — the app's own root. The slash-less form is a 308
+        # first (and a line of its own), which would make "one request, one
+        # line" assert over two requests.
+        assert logged_in.get("/apps/foo/", headers=NAVIGATE_HEADERS).status_code == 200
         assert echo_upstream.requests, "precondition: the request really reached the app"
 
         records = events(EVENT_REQUEST)
@@ -138,6 +141,53 @@ class TestRequestEvent:
         assert records, "a locally refused request is not an unlogged request"
         assert _fields(records[0])["reason"] == "invalid_slug"
         assert not fake_backend.calls, "precondition: no RPC was made"
+
+    def test_a_refused_socket_upgrade_is_logged_too(self, proxy_client, fake_backend, events):
+        """The socket half of the same rule.
+
+        An invalid slug on ``/apps/{slug}/ws`` used to close silently, so a
+        client stuck in a reconnect loop against a mistyped address left no
+        trace at all — the one shape of traffic most likely to be reported as
+        "the app is down".
+        """
+        from starlette.websockets import WebSocketDisconnect
+
+        with pytest.raises(WebSocketDisconnect):
+            with proxy_client.websocket_connect("/apps/..%2f../ws"):
+                pass
+
+        fields = _fields(events(EVENT_REQUEST)[0])
+        assert fields["reason"] == "invalid_slug"
+        assert fields["protocol"] == "ws"
+        assert not fake_backend.calls, "precondition: no RPC was made"
+
+    def test_the_trailing_slash_redirect_is_its_own_line(self, logged_in, events):
+        """The visitor's *first* hit on an app is the 308, not what follows it.
+
+        Leaving it unlogged puts the wrong URL and the wrong timestamp at the
+        start of every「打不开」 investigation, because the only line left is
+        the redirected request.
+        """
+        assert logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS, follow_redirects=False).status_code == 308
+
+        records = events(EVENT_REQUEST)
+        assert len(records) == 1
+        fields = _fields(records[0])
+        assert fields["reason"] == "trailing_slash_redirect"
+        assert fields["decision"] == "allow"
+        assert set(EVENT_FIELDS[EVENT_REQUEST]) <= set(fields)
+
+    def test_a_refusal_names_the_visitor_it_refused(self, proxy_client, fake_backend, events):
+        """``user_id`` is a §7 field, and "who could not get in" is the question
+        it exists for — so it has to survive the path where there is no identity
+        material to read it out of."""
+        payload = deny_response("forbidden")
+        payload["user_id"] = 42
+
+        fake_backend.response = payload
+        proxy_client.get("/apps/foo", headers=NAVIGATE_HEADERS)
+
+        assert _fields(events(EVENT_REQUEST)[0])["user_id"] == "42"
 
 
 class TestHeaderStrip:
@@ -196,7 +246,7 @@ class TestFallback:
         """A visitor who got a fallback page still produced one request line."""
         fake_manager.routes[DEFAULT_APP_ID] = None
 
-        logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS)
+        logged_in.get("/apps/foo/", headers=NAVIGATE_HEADERS)
 
         fields = _fields(events(EVENT_REQUEST)[0])
         assert fields["upstream_status"] is None

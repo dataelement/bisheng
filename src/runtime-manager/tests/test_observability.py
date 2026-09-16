@@ -192,6 +192,31 @@ class TestReconcileAndRebuild:
         fields = _fields(events(EVENT_RECONCILE)[-1])
         assert fields["actions"]["recreated"] == 1
 
+    def test_a_pass_that_could_not_read_the_backend_still_reports(self, rtm_config, fake_docker, events):
+        """The pass that saw nothing is the one somebody is looking for.
+
+        Returning early without an event means a manager that has been blind for
+        an hour looks exactly like a manager with nothing to do. ``actual=-1``
+        rather than ``0`` so the line cannot be read as "the host is empty".
+        """
+        from tests.test_reconciler import _deploy, _reconciler
+
+        _deploy(rtm_config, fake_docker)
+        reconciler = _reconciler(rtm_config, fake_docker)
+
+        def _explode(*_args, **_kwargs):
+            raise RuntimeError("daemon is restarting")
+
+        reconciler._managed_containers = _explode
+
+        report = reconciler.reconcile_once()
+
+        assert report.failures, "precondition: the pass really did fail"
+        fields = _assert_contract(events(EVENT_RECONCILE)[-1], EVENT_RECONCILE)
+        assert fields["desired"] == 1
+        assert fields["actual"] == -1, "unknown, not empty"
+        assert fields["actions"]["failures"] == 1
+
     def test_rebuild_is_its_own_warning(self, rtm_config, fake_docker, events):
         """§7: rebuild frequency is an application-health signal, so it cannot be
         buried inside the reconcile counters."""

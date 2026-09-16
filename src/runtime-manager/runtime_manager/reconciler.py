@@ -175,9 +175,21 @@ class Reconciler:
             # the next round is 15 s away (AC-22 — degraded, not broken).
             logger.warning("reconcile pass skipped: cannot read the orchestration backend: %s", exc)
             report.failures.append(("*", f"orchestration backend unreadable: {exc}"))
+            # The pass that saw nothing is the one an operator comes looking for,
+            # so it gets its event too — ``actual`` is unknown here, not zero,
+            # and ``-1`` says so rather than claiming the host is empty.
+            log_reconcile(
+                desired=len(self._store.list()),
+                actual=-1,
+                actions=report.action_counts(),
+                backend_error=str(exc),
+            )
             return report
 
-        for record in self._store.list():
+        # One read, then act on exactly what was read: recomputing the count at
+        # the end would report a number the pass never worked from.
+        records = self._store.list()
+        for record in records:
             try:
                 self._reconcile_one(record, actual, report)
             except Exception as exc:
@@ -185,7 +197,7 @@ class Reconciler:
                 report.failures.append((record.app_id, str(exc)))
 
         self._reclaim_orphans(actual, report)
-        log_reconcile(desired=len(self._store.list()), actual=len(actual), actions=report.action_counts())
+        log_reconcile(desired=len(records), actual=len(actual), actions=report.action_counts())
         if report.acted or report.failures:
             logger.info("reconcile pass: %s", report.summary())
         return report

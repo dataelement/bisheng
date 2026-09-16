@@ -572,11 +572,11 @@ tail -f /tmp/bisheng-app-proxy.log            # systemd 形态（单元模板里
 
 | 事件 | 进程 | 字段 | 什么时候看它 |
 |------|------|------|------------|
-| `app_proxy.request` | app-proxy | `request_id` `slug` `user_id` `decision` `reason` `cache_hit` `upstream_status` `latency_ms` | 「某个人打不开某个应用」。`decision` 是判定结果，`upstream_status` 为 `-` 表示请求**根本没到应用**（被拒或走了兜底页），有值才是应用自己的回答 |
+| `app_proxy.request` | app-proxy | `request_id` `slug` `user_id` `decision` `reason` `cache_hit` `upstream_status` `latency_ms` | 「某个人打不开某个应用」。`decision` 是判定结果，`upstream_status` 为 `-` 表示请求**根本没到应用**（被拒或走了兜底页），有值才是应用自己的回答。已登录却被拒的行（`decision=forbidden` / `stopped`）同样带 `user_id`；`login` 时还没有访问者可言，`not_found` 按 AC-29 什么都不透出。**一次请求一行**，裸路径的 308 补斜杠也算一行（`reason=trailing_slash_redirect`），所以同一个人打开一个应用通常会看到两行 |
 | `app_proxy.header_strip` | app-proxy | `request_id` `slug` `stripped` | **WARNING**。客户端自己带了平台身份头，已被剥离。偶发 = 集成配错；频次异常 = 有人在试探伪造身份（AC-32 在生产上唯一可观测的信号） |
 | `app_proxy.fallback` | app-proxy | `request_id` `slug` `kind` `reason` | 兜底页分布。`kind=recovering` 变多 = 运行时层在挣扎；`kind=deploying` 变多 = 发布窗口变长 |
 | `rtm.intent` | runtime-manager | `kind` `app_id` `result` `latency_ms` | 「点了上线没反应」。`result` 非 `ok` 时是 WARNING，值就是后端映射 161xx 用的那个机器码 |
-| `rtm.reconcile` | runtime-manager | `desired` `actual` `actions` | 每轮对齐做了什么。同一个应用每轮都在 `recreated` / `started` = 崩溃循环被 daemon 的退避掩盖了 |
+| `rtm.reconcile` | runtime-manager | `desired` `actual` `actions` | 每轮对齐做了什么。同一个应用每轮都在 `recreated` / `started` = 崩溃循环被 daemon 的退避掩盖了。`actual=-1` = **这轮没读到编排后端**（不是"宿主上没有实例"），同时会带 `backend_error`；无动作的轮次降到 DEBUG，默认级别看不到 |
 | `rtm.rebuild` | runtime-manager | `app_id` `container` `generation` `reason` | **WARNING**。存活但不健康触发的重建。**频次异常 = 应用本身有问题**，不是平台在抖 |
 | `rtm.admission_reject` | runtime-manager | `purpose` `reason` `required_mb` `required_cpu` `snapshot` | 容量拒绝。`snapshot` 与 `runtime-status` 的 `capacity`、与用户看到的「待上线（资源不足）」成因**是同一份数据** |
 | `app.state_transition` | backend | `app_id` `from_state` `to_state` `reason` `actor` `result` | 应用态每一次变更尝试。`result=lost_race`（并发抢跑）与 `result=refused`（非法跃迁）**不进审计表**，只有这里看得到——「状态卡住不动」先查这两个 |

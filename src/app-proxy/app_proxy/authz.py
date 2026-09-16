@@ -70,6 +70,13 @@ class Verdict:
     app_state: str | None = None
     cache_hit: bool = False
     reason: str = ""
+    #: The visitor, when the backend could name them. On an ``allow`` the id is
+    #: already in :attr:`material` (it is injected into the app); on a refusal
+    #: there is no material at all, and without this field the ``user_id`` of
+    #: ``app_proxy.request`` would be empty on exactly the lines that answer
+    #: "who could not get in" (§7). Absent for ``login`` — there is no visitor
+    #: to name — and for anything a fail-closed path decided locally.
+    user_id: str | None = None
     #: WebSocket lifetime inputs (D6 invariant ①). Both optional: an older
     #: backend sends neither, and :mod:`app_proxy.websocket` then reads the OBO
     #: claim itself and falls back to the process config for the cap.
@@ -79,6 +86,11 @@ class Verdict:
     @property
     def allowed(self) -> bool:
         return self.decision == DECISION_ALLOW
+
+    @property
+    def visitor_id(self) -> str | None:
+        """Who this verdict is about, allow or not — the ``user_id`` of §7."""
+        return self.material.get("X-BiSheng-User-Id") or self.user_id
 
 
 def is_valid_slug(slug: str) -> bool:
@@ -142,9 +154,11 @@ async def authorize(
 
     material = _coerce_material(payload)
     app_id = payload.get("app_id") or material.get("X-BiSheng-App-Id")
+    user_id = payload.get("user_id")
     return Verdict(
         decision=decision,
         material=material,
+        user_id=str(user_id) if user_id else None,
         obo_token=payload.get("obo_token"),
         app_id=str(app_id) if app_id else None,
         app_name=payload.get("app_name"),

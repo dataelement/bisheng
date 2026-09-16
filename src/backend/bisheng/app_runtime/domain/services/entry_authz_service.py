@@ -152,6 +152,11 @@ async def authorize_entry(
             "app_name": app.name,
             "owner_name": owner_name,
             "app_state": app.state,
+            # Not identity material — app-proxy injects nothing on a refusal.
+            # It is the visitor app-proxy writes into ``app_proxy.request``
+            # (design §7): a refusal whose user_id is empty cannot answer
+            # "who could not get in", and that is the commonest support call.
+            "user_id": user_id,
         }
 
     if app.state == AppState.STOPPED.value:
@@ -163,6 +168,7 @@ async def authorize_entry(
             "app_name": app.name,
             "owner_name": owner_name,
             "app_state": app.state,
+            "user_id": user_id,
         }
 
     user_name, subject_kind = await _user_facts(user_id, subject)

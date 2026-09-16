@@ -529,13 +529,10 @@ class AppStateService:
         )
         illegal = [src for src in from_states if not is_transition_allowed(src, to_state.value)]
         if illegal:
-            logger.error(
-                "app_runtime.illegal_transition app_id={} to={} from={} — refused, state left as is",
-                app_id,
-                to_state.value,
-                illegal,
-            )
-            event.bind(result="refused").warning(
+            # One line, not two: the structured event carries everything the
+            # old ``app_runtime.illegal_transition`` line did, and a second
+            # copy under a different name only splits the search.
+            event.bind(result="refused").error(
                 "{} app_id={} {} -> {} refused (illegal edge) reason={} actor={}",
                 EVENT_STATE_TRANSITION,
                 app_id,

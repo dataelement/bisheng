@@ -64,6 +64,44 @@ async def _state(app_db, app_id) -> str:
     return row.state
 
 
+@pytest.fixture()
+def entry_open(monkeypatch):
+    """The entry path's collaborators, answering "yes" — so what a case varies
+    is the *instance*, and the verdict is the real five-step decision.
+
+    Kept local rather than in ``conftest``: these three doubles are the entry
+    path's own, and a case elsewhere that silently inherited them would be
+    testing something it never asked for.
+    """
+    from bisheng.app_runtime.domain.services import entry_authz_service
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(settings.app_runtime, "enabled", True, raising=False)
+    monkeypatch.setattr(settings.app_runtime, "obo_secret", "f054-stability-obo-secret", raising=False)
+    monkeypatch.setattr(settings.app_runtime, "obo_ttl_seconds", 900, raising=False)
+
+    async def _check(actor, *, resource_type, resource_id, action):
+        return True
+
+    async def _not_disabled(tenant_id: int) -> bool:
+        return False
+
+    monkeypatch.setattr(entry_authz_service, "check_business_action", _check)
+    monkeypatch.setattr(entry_authz_service, "_tenant_disabled", _not_disabled)
+
+
+def _session_token(user_id: int) -> str:
+    from bisheng.user.domain.services.auth import AuthJwt
+
+    return AuthJwt().create_access_token({"user_id": user_id, "user_name": "u", "tenant_id": 1, "token_version": 0})
+
+
+async def _entry_verdict(slug: str, user_id: int) -> dict:
+    from bisheng.app_runtime.domain.services.entry_authz_service import authorize_entry
+
+    return await authorize_entry(slug=slug, access_token=_session_token(user_id), request_id="req-stability")
+
+
 def _intent_kinds(fake_orchestrator) -> list[str]:
     return [name for name, _ in fake_orchestrator.calls]
 
@@ -225,18 +263,29 @@ class TestTransitionalWindow:
     """AC-48 — 「发布中」/「应用恢复中」 is a window, not an outage."""
 
     @pytest.mark.parametrize("phase", (PHASE_STARTING, PHASE_UNHEALTHY))
-    async def test_ac48_a_transitional_instance_stays_on_the_entry(self, app_db, app_factory, app_owner, phase):
-        """The retrying page only works while the application is still reachable
-        through the entry; a state outside ``ENTRY_VISIBLE_STATES`` would answer
-        「应用不存在或未上线」 and the automatic retry would never succeed."""
+    async def test_ac48_a_transitional_instance_stays_on_the_entry(
+        self, app_db, app_factory, app_owner, entry_open, phase
+    ):
+        """The retrying page only works while the entry keeps saying ``allow``.
+
+        Asserted through the real five-step verdict, not through the state
+        column: the point of AC-48 is that the *decision* ignores how the
+        instance is doing. A verdict that consulted ``phase`` would answer
+        「应用不存在或未上线」 during a restart and the page's automatic retry
+        would never succeed — and that regression is invisible to any
+        assertion that only reads the state back out of the table.
+        """
         from bisheng.database.models.app_instance import AppInstanceDao
 
-        app, _ = await app_factory(state=AppState.ONLINE.value)
+        app, _ = await app_factory(slug=f"transitional-{phase}", state=AppState.ONLINE.value)
         async with app_db() as session:
             await AppInstanceDao.aupsert(session, app.id, phase=phase, tenant_id=app.tenant_id)
             await session.commit()
 
-        assert AppState(await _state(app_db, app.id)) in ENTRY_VISIBLE_STATES
+        verdict = await _entry_verdict(app.slug, app_owner.user_id)
+
+        assert verdict["decision"] == "allow", f"a {phase} instance must not close the entry"
+        assert AppState(verdict["app_state"]) in ENTRY_VISIBLE_STATES
 
     async def test_ac48_a_deploy_that_is_still_starting_is_not_a_failure(
         self, app_db, app_factory, app_owner, fake_orchestrator
