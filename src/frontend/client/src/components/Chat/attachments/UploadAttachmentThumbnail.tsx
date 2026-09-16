@@ -12,7 +12,7 @@ export type UploadThumbnailVariant = 'bar' | 'message';
 
 const THUMB_SIZE: Record<UploadThumbnailVariant, string> = {
     bar: 'size-[96px] rounded-2xl',
-    message: 'size-[120px] rounded-xl',
+    message: 'size-[100px] rounded-lg',
 };
 
 /** Top extension + bottom basename labels used in the input panel (bar variant). */

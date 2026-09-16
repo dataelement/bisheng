@@ -5,15 +5,12 @@ import {
     BotIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
-    Loader2,
-    RefreshCwIcon
 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import DeepThinkingGroup from "~/components/Chat/Messages/DeepThinkingGroup";
 import ThinkingContent from "~/components/Chat/Messages/ThinkingContent";
 import { groupEventsForDisplay, type DisplayBlock } from "~/components/Chat/Messages/groupEvents";
-import ToolCallDisplay from "~/components/Chat/Messages/ToolCallDisplay";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import SearchWebUrls from "~/components/Chat/Messages/Content/SearchWebUrls";
@@ -47,86 +44,38 @@ import { ServiceBusyNotice } from "~/components/ServiceBusyNotice";
 const RETRYABLE_ERROR_CODES = new Set([12046, 429, 503, 10540, 12045]);
 
 /**
- * Uploaded-file list for a user message. All attachments render as square
- * thumbnails in a single horizontal row (media + documents/images).
+ * Uploaded-file list for a user message. Every attachment — pictures, media,
+ * documents — is a square tile in one wrapping grid, right-aligned under the
+ * bubble. No horizontal scroll and no cap of its own: the row wraps at the
+ * bubble's width, exactly as the picture row always did.
  */
 function UploadedFileList({ files, conversationId }: { files: any[]; conversationId?: string }) {
-    const scrollRef = useRef<HTMLDivElement>(null);
-    const [fade, setFade] = useState({ left: false, right: false });
-
-    const updateFade = useCallback(() => {
-        const el = scrollRef.current;
-        if (!el) return;
-        const left = el.scrollLeft > 0;
-        const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
-        setFade((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
-    }, []);
-
-    useEffect(() => {
-        updateFade();
-    }, [files, updateFade]);
-
-    const maskStyle = useMemo(() => {
-        if (!fade.left && !fade.right) return undefined;
-        const leftStop = fade.left ? "16px" : "0";
-        const rightStop = fade.right ? "calc(100% - 16px)" : "100%";
-        const value = `linear-gradient(to right, transparent, #000 ${leftStop}, #000 ${rightStop}, transparent)`;
-        return { maskImage: value, WebkitMaskImage: value };
-    }, [fade]);
-
     if (!files || files.length === 0) return null;
 
-    // Pictures are shown as pictures; everything else keeps the compact
-    // icon+name row it always had.
-    const images = files.filter((f) => isImageFileName(f.name || f.file_name));
-    const others = files.filter((f) => !isImageFileName(f.name || f.file_name));
-
     return (
-        <>
-            {/* Images get their own row and their own component: the link stored on
-                the message expires, so it is re-issued at render time — a plain <img>
-                on the stored URL is what used to show "图片已失效". */}
-            {images.length > 0 && (
-                <div className="mb-2 mt-1 flex flex-wrap justify-end gap-2">
-                    {images.map((file, i) => (
+        <div className="mb-2 mt-1 flex flex-wrap justify-end gap-2">
+            {files.map((file, i) => {
+                const name = file.name || file.file_name;
+                // Pictures keep their own component: the link stored on the message
+                // expires, so it is re-issued at render time — a plain <img> on the
+                // stored URL is what used to show "图片已失效".
+                if (isImageFileName(name)) {
+                    return (
                         <MessageImage
-                            key={file.file_id ?? i}
+                            key={file.file_id ?? `image-${i}`}
                             conversationId={conversationId}
                             fileId={file.file_id}
-                            altText={file.name || file.file_name}
+                            altText={name}
                             initialUrl={file.filepath || file.file_path || file.file_url}
                         />
-                    ))}
-                </div>
-            )}
-            {others.length > 0 && (
-                /* 444px = three 120px cards, their three 8px gaps, and half of a
-                   fourth. The old max-w-sm (384px) fit exactly three, so a fourth
-                   attachment sat entirely out of view and the row looked complete
-                   — nobody knew to scroll. Cutting a card in half is the whole
-                   point: a clipped edge is what reads as "there is more". */
-                <div className="mb-2 mt-1 flex max-w-[444px] flex-col gap-2">
-                    <div
-                        ref={scrollRef}
-                        onScroll={updateFade}
-                        style={maskStyle}
-                        className="scrollbar-os flex gap-2 overflow-x-auto"
-                    >
-                        {others.map((file, i) =>
-                            isMediaChipFile(file) ? (
-                                <MediaAttachmentChip
-                                    key={`media-${i}`}
-                                    file={file}
-                                    variant="message"
-                                />
-                            ) : (
-                                <ChatHistoryFileRow key={`file-${i}`} file={file} />
-                            ),
-                        )}
-                    </div>
-                </div>
-            )}
-        </>
+                    );
+                }
+                if (isMediaChipFile(file)) {
+                    return <MediaAttachmentChip key={`media-${i}`} file={file} variant="message" />;
+                }
+                return <ChatHistoryFileRow key={`file-${i}`} file={file} />;
+            })}
+        </div>
     );
 }
 
@@ -425,8 +374,7 @@ function UserBubble({
             {/* Mobile: cap the bubble so its left edge keeps a 40px gap from the
                 content area (long URLs were overflowing off the left edge). */}
             <div className={cn("flex min-w-0 flex-col items-end touch-mobile:max-w-[calc(100%-40px)]", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
-                {/* Uploaded files: icon + filename only (no preview), with soft fade
-                    edges while scrolling so the 120px-clipped list never hard-cuts. */}
+                {/* Uploaded files: square tiles wrapping under the bubble. */}
                 <UploadedFileList files={message.files || []} conversationId={message.conversationId} />
                 {/* min-w-0: without it this flex row's `min-width: auto` floors at
                     the URL's (unbreakable) min-content width, defeating the bubble's
