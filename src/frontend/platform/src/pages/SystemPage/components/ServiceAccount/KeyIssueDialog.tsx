@@ -348,7 +348,11 @@ export function KeyIssueDialog({
                       {t(key)}
                     </p>
                   ))}
-                  <label className="block space-y-2">
+                  <div
+                    role="group"
+                    aria-label={t("openApiManagement.keys.delegateUsers")}
+                    className="block space-y-2"
+                  >
                     <span>{t("openApiManagement.keys.delegateUsers")}</span>
                     <DepartmentUsersSelect
                       value={delegateUsers}
@@ -360,8 +364,12 @@ export function KeyIssueDialog({
                         "openApiManagement.serviceAccount.ownerSearch",
                       )}
                     />
-                  </label>
-                  <label className="block space-y-2">
+                  </div>
+                  <div
+                    role="group"
+                    aria-label={t("openApiManagement.keys.delegateDepartment")}
+                    className="block space-y-2"
+                  >
                     <span>
                       {t("openApiManagement.keys.delegateDepartment")}
                     </span>
@@ -405,7 +413,7 @@ export function KeyIssueDialog({
                         ))}
                       </div>
                     ) : null}
-                  </label>
+                  </div>
                   {delegateInvalid ? (
                     <span className="text-xs text-destructive">
                       {t("openApiManagement.keys.delegateRequired")}
