@@ -1348,6 +1348,7 @@
       "appDataRowEdit": "ホスト型アプリのデータを編集",
       "appDataExport": "ホスト型アプリのデータをエクスポート",
       "appVisibilityChange": "公開範囲の変更",
+      "appTierUpdate": "リソースティアの調整",
       "appReleaseSubmit": "公開申請を提出",
       "appReleasePrecheckFailed": "ホスティング事前チェック失敗",
       "appReleaseScanBlocked": "シークレットスキャンによりブロック",
@@ -1369,6 +1370,7 @@
     "objectTypeEnum": {
       "app": "アプリ",
       "app_version": "アプリバージョン",
+      "resource_tier": "リソースティア",
       "none": "なし",
       "work_flow": "ワークフロー",
       "flow": "スキル",
@@ -2808,6 +2810,49 @@
       "delete": "アプリを削除",
       "deleteDesc": "削除するとアプリのコード・会話履歴・本番データもあわせて削除され、復元できません。実行できるのはアプリ担当者のみです。",
       "blockedByOnline": "先にアプリをオフラインにしてから削除してください。"
+    },
+    "tierAdmin": {
+      "title": "リソースティア",
+      "hint": "ティアの仕様変更は、アプリを次に公開または再オンラインにしたときから有効になります。実行中のアプリには影響しません。ティアは無効化のみ可能で削除はできません。過去のバージョンが仕様の解決に使うためです。",
+      "columns": {
+        "name": "名称",
+        "cpu": "CPU（ミリコア、1000 = 1 コア）",
+        "memory": "メモリ（MB）",
+        "description": "用途の説明",
+        "status": "状態",
+        "inUse": "使用中のアプリ数"
+      },
+      "status": {
+        "enabled": "有効",
+        "disabled": "無効"
+      },
+      "defaultTag": "デフォルトティア",
+      "defaultHint": "bisheng-app.yaml でティアを宣言していないアプリはデフォルトティアに割り当てられるため、無効化できません。",
+      "actions": {
+        "edit": "編集",
+        "save": "保存",
+        "cancel": "キャンセル",
+        "disable": "無効化",
+        "enable": "有効化"
+      },
+      "saveConfirmTitle": "ティア仕様を保存しますか",
+      "saveConfirmDesc": "「{{name}}」は現在 {{count}} 個のアプリが使用しています。新しい仕様は各アプリの次回公開または再オンライン時から有効になり、実行中のインスタンスには影響しません。",
+      "disableConfirmTitle": "ティアを無効化しますか",
+      "disableConfirmDesc": "「{{name}}」を無効化すると、公開時にこのティアを選択できなくなります。すでに使用している {{count}} 個のアプリは引き続き動作し、反復公開でも元のティアを使います。いつでも再度有効化できます。",
+      "enableConfirmTitle": "ティアを有効化しますか",
+      "enableConfirmDesc": "「{{name}}」を有効化すると、公開時に再びこのティアを選択できます。",
+      "validation": {
+        "name": "名称は必須です",
+        "cpu": "CPU は 0 より大きい整数（ミリコア）で入力してください",
+        "memory": "メモリは 0 より大きい整数（MB）で入力してください"
+      },
+      "feedback": {
+        "saved": "ティア仕様を保存しました",
+        "disabled": "ティアを無効化しました。公開時には選択できません",
+        "enabled": "ティアを有効化しました"
+      },
+      "empty": "リソースティアがまだありません。バックエンドの初回起動時に 3 つのティアが自動作成されます。起動ログを確認してください。",
+      "loading": "読み込み中…"
     }
   }
 }

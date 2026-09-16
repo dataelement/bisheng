@@ -416,6 +416,56 @@ export async function withdrawApprovalApi(
 }
 
 // ---------------------------------------------------------------------------
+// F055 T065 — resource tier administration (system page, super admin only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Not under `/api/v1/apps`: F054's `GET /apps/{app_id}` is mounted first on the
+ * backend and would swallow `/apps/resource-tiers` as an application id.
+ */
+const RESOURCE_TIERS_BASE = "/api/v1/resource-tiers"
+
+/** One row of the admin list — the full `resource_tier` row plus its usage. */
+export interface ResourceTierAdminItem {
+  code: string
+  name: string
+  cpu_millicores: number
+  memory_mb: number
+  description: string | null
+  enabled: boolean
+  sort_order: number
+  /** `COUNT(DISTINCT app_id)` over versions whose terminal state is `online`. */
+  in_use_app_count: number
+  /** The tier a manifest without `tier:` resolves to; it can be retuned but never disabled. */
+  is_default: boolean
+  update_time: string | null
+}
+
+/**
+ * Inline-edit body. Only the fields sent are applied; `code` is never
+ * editable (renaming would dangle every frozen `app_version.tier_id`).
+ */
+export interface ResourceTierPatch {
+  name?: string
+  cpu_millicores?: number
+  memory_mb?: number
+  description?: string | null
+  /** `false` retires the tier for NEW publishes only; running apps keep running. */
+  enabled?: boolean
+}
+
+export async function listResourceTiersApi(): Promise<ResourceTierAdminItem[]> {
+  return await axios.get(RESOURCE_TIERS_BASE)
+}
+
+export async function updateResourceTierApi(
+  code: string,
+  patch: ResourceTierPatch,
+): Promise<ResourceTierAdminItem> {
+  return await axios.patch(`${RESOURCE_TIERS_BASE}/${code}`, patch)
+}
+
+// ---------------------------------------------------------------------------
 // business-code helpers
 // ---------------------------------------------------------------------------
 
@@ -455,6 +505,11 @@ export const HOSTED_APP_ERROR = {
   PUBLISH_VERSION_NOT_FOUND: 16253,
   PUBLISH_OWNER_ONLY: 16254,
   PUBLISH_STATE_CONFLICT: 16255,
+  // 1626x — resource tier administration (F055 T065).
+  TIER_ADMIN_FORBIDDEN: 16260,
+  TIER_NOT_FOUND: 16261,
+  TIER_SPEC_INVALID: 16262,
+  TIER_DEFAULT_CANNOT_DISABLE: 16263,
 } as const
 
 /**

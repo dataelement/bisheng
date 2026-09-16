@@ -346,6 +346,57 @@ class AppSnapshotFileNotFoundError(AppPublishError):
     Msg: str = "The file does not exist in this version's snapshot"
 
 
+# 16260-16263 — the resource-tier admin surface (AC-45 / T065). These answer
+# the super admin editing tiers on the system page; the manifest-side tier
+# failure stays 16223 (a CLI author's typo or a retired tier), because the
+# remedy there is "change your bisheng-app.yaml", not "refresh the admin list".
+
+
+class AppTierAdminForbiddenError(AppPublishError):
+    """Tier management is a platform super-admin surface (AC-45).
+
+    A business code rather than an HTTP 403 on purpose: the platform's
+    response interceptor navigates the whole SPA to ``/403`` on a real 403,
+    and a tenant administrator who reaches the URL by hand should see a
+    refusal, not lose the page.
+    """
+
+    Code: int = 16260
+    Msg: str = "Only a platform super administrator may manage resource tiers"
+
+
+class AppTierEditTargetNotFoundError(AppPublishError):
+    """The tier being edited does not exist — the admin list is stale, refresh it."""
+
+    Code: int = 16261
+    Msg: str = "The resource tier to edit does not exist"
+
+
+class AppTierSpecInvalidError(AppPublishError):
+    """A tier patch failed validation (``data.field`` names the offender).
+
+    CPU millicores and memory MB are positive integers, the name is non-empty
+    and the description fits its column; ``code`` is never editable — renaming
+    a tier would dangle every ``app_version.tier_id`` frozen against it.
+    """
+
+    Code: int = 16262
+    Msg: str = "The resource tier specification is invalid"
+
+
+class AppTierDefaultCannotBeDisabledError(AppPublishError):
+    """The default tier (what a manifest without ``tier:`` resolves to) cannot be retired.
+
+    Retiring it would make every ``bisheng deploy`` that never declared a tier
+    fail 16223 with "light is disabled" — a platform-wide outage described as
+    a per-manifest mistake. Retune it instead, or change which tier is the
+    default in code.
+    """
+
+    Code: int = 16263
+    Msg: str = "The default resource tier cannot be disabled"
+
+
 # ---------------------------------------------------------------------------
 # 16270-16289 — capability bus (deferred wave; registered once, see docstring)
 # ---------------------------------------------------------------------------

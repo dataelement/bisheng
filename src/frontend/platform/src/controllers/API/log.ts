@@ -252,6 +252,8 @@ export const V2_ACTIONS: string[] = [
     'app.data_export',
     // F056 governance.
     'app.visibility_change',
+    // F055 resource-tier admin surface (system page "resource tiers" tab).
+    'app.tier_update',
     // F055 publish pipeline. Its own family, deliberately NOT nested under
     // `app.publish` — that name is already the state action "the app went
     // online", and reusing the prefix makes both the filter and the namespace

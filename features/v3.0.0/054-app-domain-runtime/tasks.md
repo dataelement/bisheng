@@ -804,18 +804,20 @@
   **覆盖 AC**: AC-45
   **依赖**: T085
 
-- [ ] **T094a**: 档位解析测试（Test-First，先于 T094）
+- [x] **T094a**: 档位解析测试（Test-First，先于 T094）
   **文件**: `src/backend/test/app_runtime/test_tier_resolution.py`（新）
   **逻辑**: `test_tier_resolved_from_table_when_present_else_default_tiers`（`ResourceTier` 表有行以表为准，否则回落 T006 的 `DEFAULT_TIERS`）→ AC-64 / `test_tier_change_does_not_touch_running_instance`（改档位后运行中实例的限额不变、不触发在线 update、不重建）→ AC-64 / `test_tier_change_takes_effect_on_next_publish`→ AC-64 / `test_tier_change_takes_effect_on_resume`→ AC-64 / `test_ac63_baseline_is_snapshot_tier_not_current_table`（**AC-63 的核验基准恒是"该实例所属版本快照里 `tier_id` 当时解析出的规格"**，不是当下的表；构造"发布后改表"场景断言核验仍用快照值，D11）→ AC-63。
   **覆盖 AC**: AC-63, AC-64
   **依赖**: T051, T009, T006
+  **完成记录（2026-09-16，分支 `wt/tier-admin`）**: 五例全部落地并通过，直接驱动 `AppStateService._resolve_tier` / `publish` / `stop` / `resume`，以 `fake_orchestrator` 记录的 `deploy(tier=…)` 作为「实例启动时解析出的规格」断言；表行由测试自行插入（conftest 里 `resource_tier` 表存在但为空，走的正是 `DEFAULT_TIERS` 兜底分支）。补充断言：未知 code 回落默认档、已停用的行仍可解析（AC-47）。
 
-- [ ] **T094**: 档位规格调整自下次发布 / 重新上线生效（实现）
+- [x] **T094**: 档位规格调整自下次发布 / 重新上线生效（实现）
   **文件**: `src/backend/bisheng/app_runtime/domain/services/app_state_service.py`
   **逻辑**: 限额在**创建容器时**固化、不做在线 update；运行中实例不受影响；`ResourceTier` 表存在时以表为准、否则用 `DEFAULT_TIERS`；**AC-63 的核验基准恒是"该实例所属版本快照里 `tier_id` 当时解析出的规格"**，不是当下的表（D11）。依赖 F055 的档位管理 tab。
   **测试**: T094a 全部通过。
   **覆盖 AC**: AC-63, AC-64
   **依赖**: T094a
+  **完成记录（2026-09-16）**: 实现早已随 T051 落在 `_resolve_tier`（表优先、常量兜底）与 `_start`（只在 `deploy` 时解析并固化）；本轮未改实现，仅由 T094a 的五例反向验证；档位管理 tab 见 F055 T065 / T066。
 
 - [ ] **T095**: 稳定性双形态验收自动化（AC-49 用例可移植性）
   **文件**: `src/backend/test/app_runtime/test_stability_portable.py`（新）

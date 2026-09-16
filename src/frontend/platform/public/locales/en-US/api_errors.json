@@ -518,5 +518,9 @@
   "90001": "You do not have permission to access the admin backend. Please contact the administrator to request access if needed.",
   "90002": "Your current role does not have permission to access the workbench. Please contact the administrator if needed.",
   "personIdAlreadyExists": "Person ID already exists",
-  "fallback": "The operation failed. Please try again later."
+  "fallback": "The operation failed. Please try again later.",
+  "16260": "Only a platform super administrator may manage resource tiers",
+  "16261": "The resource tier to edit does not exist",
+  "16262": "The resource tier specification is invalid",
+  "16263": "The default resource tier cannot be disabled"
 }

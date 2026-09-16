@@ -16,6 +16,7 @@ import Theme from "./theme"
 import UserGroups from "./components/UserGroup"
 import Users from "./components/Users"
 import { PersonalToken } from "./components/PersonalToken"
+import { ResourceTierTab } from "./components/ResourceTierTab"
 import { ServiceAccount } from "./components/ServiceAccount"
 
 export default function SystemPage() {
@@ -51,6 +52,10 @@ export default function SystemPage() {
    *  release can ship the backend while the surface is still being built. */
   const showOpenApiManagement =
     (isSuperAdmin || isChildAdmin) && !!appConfig?.openApiManagementEnabled
+  /** F055 AC-45: resource tiers are platform-level (shared across tenants), so
+   *  super admin only — and only where the app-factory runtime layer is
+   *  deployed; without it there is nothing the tiers would apply to. */
+  const showResourceTierTab = isSuperAdmin && !!appConfig?.appRuntimeEnabled
 
   const defaultTab = showOrgTab
     ? "organization"
@@ -87,6 +92,9 @@ export default function SystemPage() {
             )}
             {showOpenApiManagement && (
               <TabsTrigger value="personalToken">{t("openApiManagement.personalToken.title")}</TabsTrigger>
+            )}
+            {showResourceTierTab && (
+              <TabsTrigger value="resourceTier">{t("hostedApp.tierAdmin.title")}</TabsTrigger>
             )}
             {canAccessSystemConfig && (
               <TabsTrigger value="system">{t("system.systemConfiguration")}</TabsTrigger>
@@ -129,6 +137,11 @@ export default function SystemPage() {
         {showOpenApiManagement && (
           <TabsContent value="personalToken" className="min-h-0 flex-1 overflow-hidden">
             <PersonalToken />
+          </TabsContent>
+        )}
+        {showResourceTierTab && (
+          <TabsContent value="resourceTier" className="min-h-0 flex-1 overflow-hidden">
+            <ResourceTierTab />
           </TabsContent>
         )}
         {canAccessSystemConfig && (

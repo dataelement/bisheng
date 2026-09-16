@@ -33,15 +33,39 @@ from typing import Any
 
 from loguru import logger
 
-from bisheng.app_runtime.domain.constants import DEFAULT_TIERS
-from bisheng.common.errcode.app_publish import AppTierUnavailableError
+from bisheng.app_runtime.domain.constants import DEFAULT_TIERS, AppAuditAction
+from bisheng.common.errcode.app_publish import (
+    AppTierDefaultCannotBeDisabledError,
+    AppTierEditTargetNotFoundError,
+    AppTierSpecInvalidError,
+    AppTierUnavailableError,
+)
 from bisheng.common.services.config_service import settings
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.app_version import TERMINAL_STATE_ONLINE, AppVersion
+from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.resource_tier import DEFAULT_TIER_CODE, ResourceTier, ResourceTierDao
 
 #: Order tiers are displayed in when the seed source does not say otherwise.
 _SEED_ORDER = ("light", "standard", "performance")
+
+#: Columns the admin surface may retune (AC-45). ``code`` is deliberately
+#: absent — renaming a tier would dangle every ``app_version.tier_id`` frozen
+#: against it — and so is ``sort_order``, which the tab does not expose.
+ADMIN_EDITABLE_FIELDS = ("name", "cpu_millicores", "memory_mb", "description", "enabled")
+
+#: ``audit_log.target_type`` of the tier admin events (``app.tier_update``).
+TIER_AUDIT_TARGET_TYPE = "resource_tier"
+
+#: Column widths of ``resource_tier`` — validated here so the failure is a
+#: 16262 naming the field rather than a driver error naming a column.
+_NAME_MAX_LEN = 64
+_DESCRIPTION_MAX_LEN = 500
+#: ``cpu_millicores`` / ``memory_mb`` are plain ``Integer`` columns (signed
+#: 32-bit on both MySQL and DM8); anything above this would be a driver
+#: overflow error, not a spec.
+_INT_COLUMN_MAX = 2**31 - 1
 
 
 def _specs_from_constant() -> dict[str, dict[str, Any]]:
@@ -177,14 +201,6 @@ class ResourceTierService:
         return tier
 
     @classmethod
-    async def update_tier(cls, tier_code: str, **patch: Any) -> bool:
-        """Retune one tier (super-admin surface, deferred wave). ``code`` itself is not editable."""
-        async with get_async_db_session() as session:
-            changed = await ResourceTierDao.aupdate_row(session, tier_code, **patch)
-            await session.commit()
-        return changed
-
-    @classmethod
     async def count_apps_using(cls, tier_code: str) -> int:
         """Distinct apps whose **online** version froze this tier.
 
@@ -204,6 +220,162 @@ class ResourceTierService:
                 )
             )
             return int(result.one() or 0)
+
+    # ------------------------------------------------------------------
+    # Admin surface (AC-45 / T065) — list with usage, retune, retire
+    # ------------------------------------------------------------------
+
+    @classmethod
+    async def list_tiers_for_admin(cls) -> list[dict[str, Any]]:
+        """Every tier — retired ones included — with its ``in_use_app_count``.
+
+        The full list, not the selectable one: a retired tier still has apps
+        on it, and the whole point of showing the count is to let a super
+        admin see what a retirement (or a retune) touches.
+        """
+        rows = await cls.list_tiers()
+        return [cls._admin_row(row, await cls.count_apps_using(row.code)) for row in rows]
+
+    @classmethod
+    async def retune_tier(cls, tier_code: str, *, actor, **patch: Any) -> dict[str, Any]:
+        """Apply a super admin's inline edit to one tier and audit it (AC-45 / AC-47).
+
+        ``patch`` holds any subset of :data:`ADMIN_EDITABLE_FIELDS`; anything
+        else is a programming error, not a user error, so it raises
+        ``ValueError`` the same way the DAO does. Validation is field-by-field
+        with the offender in ``details.field`` (16262). Retiring the default
+        tier is refused (16263) — see the error's docstring. A patch that
+        changes nothing writes nothing and audits nothing, and still returns
+        the current row so the tab can re-render from the answer.
+        """
+        unknown = set(patch) - set(ADMIN_EDITABLE_FIELDS)
+        if unknown:
+            raise ValueError(f"resource_tier fields not editable through the admin surface: {sorted(unknown)}")
+
+        values = cls._validate_patch(patch)
+
+        async with get_async_db_session() as session:
+            current = await ResourceTierDao.aget_by_code(session, tier_code)
+        if current is None:
+            raise AppTierEditTargetNotFoundError(
+                msg=f"资源档位 {tier_code} 不存在",
+                details={"field": "code", "value": tier_code},
+                hints=["档位列表可能已过期, 请刷新后重试"],
+            )
+
+        changes = {
+            field: {"from": getattr(current, field), "to": value}
+            for field, value in values.items()
+            if getattr(current, field) != value
+        }
+        if changes.get("enabled", {}).get("to") is False and current.code == DEFAULT_TIER_CODE:
+            raise AppTierDefaultCannotBeDisabledError(
+                msg=f"默认资源档位 {DEFAULT_TIER_CODE} 不能停用",
+                details={"field": "enabled", "value": tier_code},
+                hints=["未在 bisheng-app.yaml 里声明档位的应用都会落到默认档位; 可以调整它的规格, 但不能停用"],
+            )
+
+        if changes:
+            async with get_async_db_session() as session:
+                await ResourceTierDao.aupdate_row(session, tier_code, **{f: c["to"] for f, c in changes.items()})
+                await session.commit()
+            await cls._audit_retune(current.code, actor=actor, changes=changes)
+
+        async with get_async_db_session() as session:
+            updated = await ResourceTierDao.aget_by_code(session, tier_code)
+        return cls._admin_row(updated, await cls.count_apps_using(tier_code))
+
+    @staticmethod
+    def _validate_patch(patch: dict[str, Any]) -> dict[str, Any]:
+        """Normalise and validate the editable fields; every failure is a 16262 naming the field."""
+
+        def _reject(field: str, value: Any, why: str) -> AppTierSpecInvalidError:
+            return AppTierSpecInvalidError(
+                msg=f"资源档位字段 {field} 不合法: {why}",
+                details={"field": field, "value": value, "reason": why},
+            )
+
+        values: dict[str, Any] = {}
+        for field in ("cpu_millicores", "memory_mb"):
+            if field not in patch:
+                continue
+            raw = patch[field]
+            # ``bool`` is an ``int`` subclass — ``True`` must not become 1 millicore.
+            if isinstance(raw, bool) or not isinstance(raw, int):
+                raise _reject(field, raw, "must_be_integer")
+            if raw <= 0:
+                raise _reject(field, raw, "must_be_positive")
+            if raw > _INT_COLUMN_MAX:
+                raise _reject(field, raw, f"max_value_{_INT_COLUMN_MAX}")
+            values[field] = raw
+        if "name" in patch:
+            name = patch["name"].strip() if isinstance(patch["name"], str) else ""
+            if not name:
+                raise _reject("name", patch["name"], "must_not_be_blank")
+            if len(name) > _NAME_MAX_LEN:
+                raise _reject("name", patch["name"], f"max_length_{_NAME_MAX_LEN}")
+            values["name"] = name
+        if "description" in patch:
+            description = patch["description"]
+            if description is not None and not isinstance(description, str):
+                raise _reject("description", description, "must_be_text")
+            description = (description or "").strip() or None
+            if description is not None and len(description) > _DESCRIPTION_MAX_LEN:
+                raise _reject("description", patch["description"], f"max_length_{_DESCRIPTION_MAX_LEN}")
+            values["description"] = description
+        if "enabled" in patch:
+            if not isinstance(patch["enabled"], bool):
+                raise _reject("enabled", patch["enabled"], "must_be_boolean")
+            values["enabled"] = patch["enabled"]
+        return values
+
+    @staticmethod
+    def _admin_row(row: ResourceTier, in_use_app_count: int) -> dict[str, Any]:
+        return {
+            "code": row.code,
+            "name": row.name,
+            "cpu_millicores": row.cpu_millicores,
+            "memory_mb": row.memory_mb,
+            "description": row.description,
+            "enabled": bool(row.enabled),
+            "sort_order": row.sort_order,
+            "in_use_app_count": in_use_app_count,
+            # The tab hides the retire button on this row and says why — the
+            # same fact 16263 enforces server-side.
+            "is_default": row.code == DEFAULT_TIER_CODE,
+            "update_time": row.update_time.isoformat() if row.update_time else None,
+        }
+
+    @staticmethod
+    async def _audit_retune(tier_code: str, *, actor, changes: dict[str, dict[str, Any]]) -> None:
+        """One ``app.tier_update`` row per successful edit (best effort, like ``release_audit``).
+
+        ``reason`` says what kind of edit it was so the audit page can tell a
+        retirement from a retune without opening the row. Tiers are
+        platform-level (no ``tenant_id`` column), so the resource side of the
+        row is the Root tenant — the operator side is the acting super admin.
+        """
+        enabled_change = changes.get("enabled")
+        if enabled_change is not None:
+            reason = "disabled" if enabled_change["to"] is False else "enabled"
+        else:
+            reason = "retuned"
+        try:
+            await AuditLogDao.ainsert_v2(
+                tenant_id=DEFAULT_TENANT_ID,
+                operator_id=actor.user_id,
+                operator_name=getattr(actor, "user_name", None),
+                operator_tenant_id=int(getattr(actor, "tenant_id", None) or DEFAULT_TENANT_ID),
+                action=AppAuditAction.TIER_UPDATE.value,
+                target_type=TIER_AUDIT_TARGET_TYPE,
+                target_id=tier_code,
+                reason=reason,
+                metadata={"code": tier_code, "changes": changes},
+            )
+        except Exception:
+            # Best effort by design: an unwritten audit row must not undo a
+            # retune that already landed (same shape as release_audit).
+            logger.exception(f"app_publish.tier_audit_failed code={tier_code}")
 
 
 def _rank(code: str) -> int:

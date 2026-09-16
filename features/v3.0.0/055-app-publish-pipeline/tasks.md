@@ -610,14 +610,17 @@ T001–T007（Wave 1，可并行）
 
 ### Wave 7 · 档位管理 tab 与发布面补全（release 必做，本轮顺延）
 
-- [ ] **T065**: 档位管理 API（列表 / 行内改规格与说明 / 停用；**无删除**；「使用中应用数」= `COUNT(DISTINCT app_id) WHERE tier_id=? AND terminal_state='online'`；仅平台超管）
+- [x] **T065**: 档位管理 API（列表 / 行内改规格与说明 / 停用；**无删除**；「使用中应用数」= `COUNT(DISTINCT app_id) WHERE tier_id=? AND terminal_state='online'`；仅平台超管）
   **文件**: `src/backend/bisheng/app_publish/api/endpoints/resource_tier.py`, `src/backend/bisheng/app_publish/domain/services/resource_tier_service.py`（增量）, `src/backend/test/app_publish/test_resource_tier_api.py`
   **覆盖 AC**: AC-45
+  **完成记录（2026-09-16，分支 `wt/tier-admin`）**: `GET /api/v1/resource-tiers` + `PATCH /api/v1/resource-tiers/{tier_code}`（`ResourceTierService.list_tiers_for_admin` / `retune_tier`），仅 `is_global_super || is_admin()` 通过、否则 16260；运行时层未启用 16207；无 DELETE / POST 路由（`test_tier_routes_offer_no_delete_and_no_create` 钉死路由表）。错误码 16260–16263 三语文案随提交进 `packages/locales`；审计 `app.tier_update`（`target_type=resource_tier`）四处 lockstep 登记。`test_resource_tier_api.py` 22 例全绿（含 review 补的三例：超出 32 位整型列上限 → 16262；`cpu_millicores` / `memory_mb` 收到 JSON `true` → 422——原先 pydantic 宽松 `int` 会把它转成 `1` 毫核静默落库，规格字段已改 `StrictInt`）；审计 `target_type=resource_tier` 的三语 `objectTypeEnum` 文案纳入 `test_audit_action_registry_lockstep.py`。review 顺手删除了已被 `retune_tier` 取代、无任何调用方的 `ResourceTierService.update_tier`。
+  **偏离**: ① 路径不在 `/api/v1/apps/**` 下——`bisheng/api/router.py` 先挂 F054 路由，`GET /apps/{app_id}` 会把 `/apps/resource-tiers` 当应用 id 吞掉（16101），故落 `/api/v1/resource-tiers`；② 新增 16263「默认档位不能停用」：`light` 是未声明档位的落点（AC-46），停用它等于让所有未声明档位的 `bisheng deploy` 以 16223 失败，属平台级故障、不该被当作单个清单的错误——服务端拒绝、前端隐藏该行的停用按钮。
 
-- [ ] **T066**: Platform：系统管理页「资源档位」tab（仅平台超管；与工场运行时层开关联动、未部署不出现；`bs-ui/table` + 手写 `useState` 行内编辑〔平台无表单库〕；保存前 `bsConfirm`；停用提示"存量应用不动、发布面不再可选"）
-  **文件**: `platform/src/pages/SystemPage/ResourceTierTab.tsx`, `platform/src/controllers/API/hostedApp.ts`（增量）, `platform/public/locales/{zh-Hans,en,ja}/bs.json`
-  **测试载体**: 前端手动验证清单（非超管看不到 tab；工场运行时层未部署时 tab 不出现；行内改规格 → `bsConfirm` → 保存生效；停用后发布面档位不可选而存量应用不受影响；**列表无删除按钮**；切 en / ja 无裸键）
+- [x] **T066**: Platform：系统管理页「资源档位」tab（仅平台超管；与工场运行时层开关联动、未部署不出现；`bs-ui/table` + 手写 `useState` 行内编辑〔平台无表单库〕；保存前 `bsConfirm`；停用提示"存量应用不动、发布面不再可选"）
+  **文件**: `platform/src/pages/SystemPage/components/ResourceTierTab.tsx`, `platform/src/pages/SystemPage/index.tsx`（增量：`showResourceTierTab = isSuperAdmin && appConfig.appRuntimeEnabled`）, `platform/src/controllers/API/hostedApp.ts`（增量）, `platform/public/locales/{zh-Hans,en-US,ja}/bs.json`（`hostedApp.tierAdmin.*`）
+  **测试载体**: vitest `src/test/resourceTierTab.test.tsx`（7 例：列表 / 默认档位无停用按钮 / 行内改规格→`bsConfirm`→只发变更字段 / 本地校验拒 0 / 停用→确认→PATCH `enabled=false` 且行仍在 / 重新启用 / 空态；全部断言无删除按钮）+ `systemPageTabsVisibility.test.tsx`（超管可见、Child Admin 不可见、运行时层未部署不出现）+ `hostedAppApi.test.ts`（URL 契约）。前端手动验证清单（切 en / ja 无裸键；114 实机）待 114 部署后走一遍。
   **覆盖 AC**: AC-45
+  **偏离**: 文件落在 `SystemPage/components/`（与同页其余 tab 同目录，非任务原写的 `SystemPage/` 根）；停用做成「按钮 + 二次确认」而非 Switch——Switch 规范把开关限定为「拨完立即生效、无外溢后果」的设置项，停用档位会改变所有发布者可选项，属应二次确认的动作。
 
 - [ ] **T067**: 发布面补全：能力声明完整白话清单（含失效标记）+ 档位选择卡（随 PRD-2 平台内造应用的提交入口启用；本册对 CLI 应用不可用）
   **文件**: `platform/src/pages/BuildPage/hostedApp/publish/{TierSelectCard,SchemaChangeNotice}.tsx`（新）, `platform/src/pages/BuildPage/hostedApp/publish/CapabilityListCard.tsx`（**增量**——该文件由 **T058 创建**，本任务只补「完整白话清单 + 档位联动」，**不得重建**）, `platform/public/locales/{zh-Hans,en,ja}/bs.json`
