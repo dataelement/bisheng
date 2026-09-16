@@ -65,7 +65,6 @@ import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
 import { FileChangeApprovalDetail } from "./FileChangeApprovalDetail";
 import { FilePreviewDrawer } from "../FilePreview/FilePreviewDrawer";
 import {
-    checkResourceAction,
     getMyResourcePermissions,
 } from "~/api/permission";
 import {
@@ -514,28 +513,22 @@ export function KnowledgeSpaceContent({
         const objectType = currentFolderId ? "folder" : "knowledge_space";
         const objectId = currentFolderId || space.id;
 
-        Promise.allSettled([
-            checkResourceAction(
-                { resource_type: objectType, resource_id: objectId, action: "create_folder" },
-                { signal: controller.signal },
-            ),
-            checkResourceAction(
-                { resource_type: objectType, resource_id: objectId, action: "upload_file" },
-                { signal: controller.signal },
-            ),
-        ]).then(([createFolderResult, uploadFileResult]) => {
-            if (cancelled) return;
-            setCanCreateFolder(
-                createFolderResult.status === "fulfilled" && Boolean(createFolderResult.value?.allowed)
-            );
-            setCanUploadFile(
-                uploadFileResult.status === "fulfilled" && Boolean(uploadFileResult.value?.allowed)
-            );
-            const canPlaceInTarget =
-                uploadFileResult.status === "fulfilled" && Boolean(uploadFileResult.value?.allowed);
-            setCanMoveFile(canPlaceInTarget);
-            setCanMoveFolder(canPlaceInTarget);
-        }).catch(() => {
+        // Ask what this user holds here, the way the per-file menu does, instead
+        // of asserting each action separately. A per-action probe treats an
+        // action the Catalog has switched off as an error, so disabling
+        // upload_file made every visit pop "Action upload_file is unavailable
+        // for knowledge_space" beside an upload button that was already hidden.
+        // A held-actions list just leaves the action out. One request, not two.
+        getMyResourcePermissions(objectType, String(objectId), { signal: controller.signal })
+            .then((summary) => {
+                if (cancelled) return;
+                const held = new Set(summary?.actions ?? []);
+                setCanCreateFolder(held.has("create_folder"));
+                const canPlaceInTarget = held.has("upload_file");
+                setCanUploadFile(canPlaceInTarget);
+                setCanMoveFile(canPlaceInTarget);
+                setCanMoveFolder(canPlaceInTarget);
+            }).catch(() => {
             if (!cancelled) {
                 setCanCreateFolder(false);
                 setCanUploadFile(false);
