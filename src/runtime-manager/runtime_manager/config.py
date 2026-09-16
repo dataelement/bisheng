@@ -57,6 +57,14 @@ DEFAULT_STORAGE_MAX_FILE_MB = 20
 #: containers running on the same daemon (114 also runs onlyoffice etc.).
 CONTAINER_NAME_PREFIX = "bisheng-app-"
 
+#: Approval-time preview instances (F055 AC-26). A separate name space *and* a
+#: separate ``bisheng.managed`` value: the reconciler filters on
+#: ``bisheng.managed=true``, so a preview is invisible to it — it is neither
+#: adopted into the desired state nor reclaimed as an orphan, which is what
+#: makes "a preview consumes no instance slot" true rather than merely intended.
+PREVIEW_NAME_PREFIX = "bisheng-preview-"
+PREVIEW_MANAGED_VALUE = "preview"
+
 #: Label namespace written on every managed container. Labels are the disaster
 #: recovery source of truth for the desired-state store (AC-50).
 LABEL_MANAGED = "bisheng.managed"
@@ -69,6 +77,9 @@ LABEL_TIER_MEM_MB = "bisheng.tier.mem_mb"
 LABEL_PORT = "bisheng.port"
 LABEL_HEALTH_PATH = "bisheng.health.path"
 LABEL_GENERATION = "bisheng.generation"
+#: Preview session this container belongs to — the only way back from a
+#: container to its session after a manager restart (there is no state file).
+LABEL_PREVIEW_SESSION = "bisheng.preview.session"
 
 #: Variables a deployment must set explicitly — the dataclass defaults below are
 #: development conveniences, not deployment values. ``docker/verify-app-runtime-

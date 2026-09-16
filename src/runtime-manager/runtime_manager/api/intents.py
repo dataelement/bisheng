@@ -16,6 +16,8 @@ from runtime_manager.api.schemas import (
     BuildRequest,
     DeployRequest,
     DestroyRequest,
+    PreviewStartRequest,
+    PreviewStopRequest,
     ProbeRequest,
     StopRequest,
 )
@@ -25,6 +27,7 @@ from runtime_manager.config import get_config
 from runtime_manager.errors import InvalidRequestError
 from runtime_manager.lifecycle import LifecycleService
 from runtime_manager.observability import intent_span
+from runtime_manager.preview import PreviewService
 from runtime_manager.probe import ProbeService
 
 router = APIRouter(prefix="/v1", tags=["intents"], dependencies=[Depends(verify_hmac)])
@@ -92,6 +95,39 @@ async def destroy(request: DestroyRequest) -> dict:
     """AC-40 — only ``purge_volume=true`` (the owner's explicit delete) removes data."""
     with intent_span("destroy", request.app_id):
         return LifecycleService(get_config()).destroy(request.app_id, purge_volume=request.purge_volume)
+
+
+@router.post("/intents/preview")
+async def preview_start(request: PreviewStartRequest) -> dict:
+    """F055 AC-26 — an approver's temporary instance of the pending version.
+
+    Deliberately **not** ``deploy`` with a different id: deploy writes a
+    desired-state record, and a record is exactly what would make a preview
+    count against the instance quota and get resurrected by the reconciler.
+    """
+    with intent_span("preview_start", request.app_id) as span:
+        outcome = PreviewService(get_config()).start(
+            session_id=request.session_id,
+            app_id=request.app_id,
+            version_id=request.version_id,
+            image_ref=request.image_ref,
+            tier=Tier(cpu=request.tier.cpu, mem_mb=request.tier.mem),
+            port=request.port,
+            health_path=request.health.path,
+            env=request.env,
+            timeout=request.timeout,
+        )
+        span.result = outcome.phase
+        return outcome.to_response()
+
+
+@router.post("/intents/preview/stop")
+async def preview_stop(request: PreviewStopRequest) -> dict:
+    """F055 AC-28 — reclaim one preview. Idempotent; a gone preview is a success."""
+    with intent_span("preview_stop", None) as span:
+        result = PreviewService(get_config()).stop(request.session_id)
+        span.result = "reclaimed" if result.get("reclaimed") else "absent"
+        return result
 
 
 @router.post("/intents/probe")

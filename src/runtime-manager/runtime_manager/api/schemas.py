@@ -95,6 +95,35 @@ class ProbeRequest(BaseModel):
     timeout: int | None = None
 
 
+class PreviewStartRequest(BaseModel):
+    """An approver's temporary instance of the version waiting to go live (F055 AC-26).
+
+    Addressed by ``session_id``, never by ``app_id``: the application's own
+    instance must keep serving untouched while a preview of a different version
+    runs beside it. ``app_id`` / ``version_id`` ride along as labels only — for
+    the operator reading ``docker ps``, not for routing.
+
+    There is no ``base_path`` twin of :class:`DeployRequest`'s: the preview is
+    served under ``/apps/preview/{session}``, and the manager is told that
+    through ``env`` like every other environment value rather than growing a
+    second URL-layout assumption.
+    """
+
+    session_id: str
+    app_id: str
+    version_id: str
+    image_ref: str
+    tier: TierIn
+    port: int = 8080
+    env: dict[str, str] = Field(default_factory=dict)
+    health: HealthIn = Field(default_factory=HealthIn)
+    timeout: int | None = None
+
+
+class PreviewStopRequest(BaseModel):
+    session_id: str
+
+
 class AdmissionResponse(BaseModel):
     admitted: bool
     reason: str
