@@ -51,6 +51,7 @@ from runtime_manager.config import (
     Config,
 )
 from runtime_manager.docker_backend import DockerBackend, get_docker_backend
+from runtime_manager.egress import forget_principal, register_principal, runtime_destinations
 from runtime_manager.errors import CapacityExhaustedError, InvalidRequestError, NotFoundError, ProbeFailedError
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,16 @@ def preview_container_name(session_id: str) -> str:
     return f"{PREVIEW_NAME_PREFIX}{session_id}"
 
 
+def preview_principal(session_id: str) -> str:
+    """Egress identity of one preview — never the application's own (D12).
+
+    A trial run holding the live application's proxy credential would be able to
+    keep reaching the outside after the preview was reclaimed, and the
+    application would have no way to tell the two apart in the proxy's log.
+    """
+    return f"{PREVIEW_NAME_PREFIX}{session_id}"
+
+
 def build_preview_payload(
     config: Config,
     *,
@@ -96,6 +107,7 @@ def build_preview_payload(
     base_path: str,
     env: dict[str, str],
     expires_at: int = 0,
+    egress_token: str = "",
 ) -> dict[str, Any]:
     """The Docker Engine create body for a preview — the cage, one notch tighter.
 
@@ -145,6 +157,8 @@ def build_preview_payload(
         platform_api_base=platform_api_base,
         base_path=base_path,
         storage_token=None,
+        egress_token=egress_token,
+        egress_principal=preview_principal(session_id),
         extra=dict(env or {}),
     )
     return {
@@ -219,6 +233,7 @@ class PreviewService:
         env: dict[str, str] | None = None,
         expires_at: int = 0,
         timeout: float | None = None,
+        egress_domains: list[str] | None = None,
     ) -> PreviewOutcome:
         """Bring one preview up and answer with its bridge address.
 
@@ -245,6 +260,16 @@ class PreviewService:
         # retry (the first attempt failed after create, the platform asks
         # again), so the stale body goes first rather than colliding.
         self._force_remove(name)
+        egress_token = register_principal(
+            self._config,
+            principal=preview_principal(session_id),
+            destinations=runtime_destinations(
+                self._config,
+                platform_api_base=platform_api_base,
+                declared=egress_domains or (),
+                injected_env=env,
+            ),
+        )
         payload = build_preview_payload(
             self._config,
             session_id=session_id,
@@ -260,6 +285,7 @@ class PreviewService:
             base_path=base_path,
             env=dict(env or {}),
             expires_at=expires_at,
+            egress_token=egress_token,
         )
 
         container_id = self._docker.create_container(name, payload)
@@ -326,6 +352,7 @@ class PreviewService:
         name = preview_container_name(session_id)
         existed = self._inspect(name) is not None
         self._force_remove(name)
+        forget_principal(self._config, preview_principal(session_id))
         if existed:
             logger.info("preview %s reclaimed", session_id)
         return {"reclaimed": existed}
@@ -364,6 +391,8 @@ class PreviewService:
             session_id = str(labels.get(LABEL_PREVIEW_SESSION) or "")
             logger.info("reclaiming expired preview %s (%s)", session_id or name, name)
             self._force_remove(name)
+            if session_id:
+                forget_principal(self._config, preview_principal(session_id))
             reclaimed.append(session_id or name)
         return reclaimed
 

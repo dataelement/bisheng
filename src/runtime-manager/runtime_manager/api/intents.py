@@ -123,6 +123,7 @@ async def preview_start(request: PreviewStartRequest) -> dict:
             env=request.env,
             expires_at=request.expires_at,
             timeout=request.timeout,
+            egress_domains=list(request.egress_domains),
         )
         span.result = outcome.phase
         return outcome.to_response()

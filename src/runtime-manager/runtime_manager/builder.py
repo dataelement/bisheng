@@ -50,6 +50,7 @@ from runtime_manager.admission import PURPOSE_BUILD, AdmissionService
 from runtime_manager.api.schemas import BuildRequest
 from runtime_manager.config import Config
 from runtime_manager.docker_backend import DockerBackend, get_docker_backend
+from runtime_manager.egress import build_proxy_buildargs
 from runtime_manager.errors import NotFoundError, UnsupportedRuntimeError
 from runtime_manager.source_facts import source_facts
 
@@ -409,7 +410,15 @@ class BuildService:
     def _stage_build(self, request: BuildRequest, record: BuildRecord, context_dir: Path) -> None:
         record.stage = STAGE_DOCKER_BUILD
         tag = image_tag(self._config, request.slug or request.app_id, request.version_no, request.version_id)
-        buildargs = {**build_args_for(self._config, request.runtime), **request.build_args}
+        # The proxy args come **last**: they are the platform's, exactly like the
+        # reserved environment names at run time (contract §5), and a build that
+        # could override them by naming them in ``build_args`` would be a build
+        # with no whitelist at all (AC-16).
+        buildargs = {
+            **build_args_for(self._config, request.runtime),
+            **request.build_args,
+            **build_proxy_buildargs(self._config),
+        }
         lines: list[str] = []
         error: str | None = None
         try:
@@ -419,6 +428,12 @@ class BuildService:
                 tag=tag,
                 buildargs=buildargs,
                 memory_bytes=self._config.build_reserve_mb * MIB,
+                # ``RTM_BUILD_NETWORK`` is the build phase's half of D12: an
+                # ``--internal`` network here means the proxy args above are an
+                # enforcement and not a suggestion, because a Dockerfile that
+                # ignores them finds no route at all. Empty keeps the daemon's
+                # default bridge, which is the pre-D12 behaviour.
+                network_mode=self._config.build_network or None,
             )
             for chunk in stream:
                 error, text = _chunk_to_text(chunk)

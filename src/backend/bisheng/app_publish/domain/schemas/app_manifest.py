@@ -160,3 +160,24 @@ class AppManifest(BaseModel):
     capabilities: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
     database: DatabaseDeclaration = Field(default_factory=DatabaseDeclaration)
     egress: EgressDeclaration = Field(default_factory=EgressDeclaration)
+
+
+def egress_domains_of(manifest: dict[str, Any] | None) -> list[str]:
+    """``egress.domains`` out of a **stored** manifest dict (F054 AC-16).
+
+    Lives beside the schema because the key path is the schema's, and is
+    defensive because the caller's input is not: ``app_version.manifest`` is a
+    JSON column written by whichever version of the publish pipeline was
+    running at the time, so any level of it can be the wrong shape.
+
+    An unreadable declaration yields **nothing** rather than a guess. The
+    manager denies by default, so the failure mode of being wrong here is "this
+    application cannot reach its API" — visible, reported by the application
+    itself, fixed by republishing — and never "this application can reach
+    anything".
+    """
+    egress = manifest.get("egress") if isinstance(manifest, dict) else None
+    domains = egress.get("domains") if isinstance(egress, dict) else None
+    if not isinstance(domains, list):
+        return []
+    return [item.strip() for item in domains if isinstance(item, str) and item.strip()]

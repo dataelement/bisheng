@@ -47,6 +47,7 @@ from runtime_manager.config import (
     CONTAINER_NAME_PREFIX,
     LABEL_APP_ID,
     LABEL_APP_SLUG,
+    LABEL_EGRESS_DOMAINS,
     LABEL_GENERATION,
     LABEL_HEALTH_PATH,
     LABEL_MANAGED,
@@ -66,6 +67,7 @@ from runtime_manager.desired_state import (
     get_store,
 )
 from runtime_manager.docker_backend import DockerBackend, get_docker_backend
+from runtime_manager.egress import egress_env, forget_principal, register_principal, runtime_destinations
 from runtime_manager.errors import CapacityExhaustedError, ProbeFailedError
 from runtime_manager.storage import ENV_STORAGE_TOKEN, AppStorageService, mint_storage_token, storage_env
 
@@ -146,6 +148,8 @@ def build_env(
     platform_api_base: str,
     base_path: str,
     storage_token: str | None,
+    egress_token: str | None = None,
+    egress_principal: str = "",
     extra: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Environment contract of §4.2 ⑤ — same names ``bisheng dev`` injects.
@@ -164,10 +168,21 @@ def build_env(
     same thing AC-29 forbids for the database. With no ``…_ENDPOINT`` the SDK
     falls back to its local-directory form (contract §5), so the trial's files
     die with the container.
+
+    ``egress_token`` is the principal's proxy credential (D12 / AC-16); the
+    caller mints and registers it, this function only shapes the variables.
+    ``egress_principal`` defaults to the app id and is separate from it because
+    a preview is its own principal — sharing the application's would hand a
+    trial run the live application's whitelist *and* its credential. The
+    variables land in the platform block rather than in ``extra`` on purpose: an
+    application that shipped its own ``HTTP_PROXY`` would otherwise route around
+    the whitelist by simply naming the variable.
     """
     env = dict(extra or {})
     if storage_token is not None:
         env.update(storage_env(config, app_id=app_id, token=storage_token))
+    if egress_token:
+        env.update(egress_env(config, principal=egress_principal or app_id, token=egress_token))
     env.update(
         {
             "BISHENG_APP_DB_URL": "sqlite:////data/app.db",
@@ -207,6 +222,7 @@ def build_container_payload(
     start_period: int,
     env: dict[str, str],
     generation: int,
+    egress_domains: list[str] | None = None,
 ) -> dict[str, Any]:
     """The Docker Engine ``POST /containers/create`` body — the cage, spelled out.
 
@@ -236,6 +252,7 @@ def build_container_payload(
             LABEL_PORT: str(port),
             LABEL_HEALTH_PATH: health_path,
             LABEL_GENERATION: str(generation),
+            LABEL_EGRESS_DOMAINS: ",".join(egress_domains or ()),
         },
         "Healthcheck": {
             "Test": ["CMD", "/usr/local/bin/bisheng-healthcheck"],
@@ -325,6 +342,26 @@ class LifecycleService:
         except (PermissionError, OSError) as exc:
             logger.warning("could not chown %s to the app user: %s", data_dir, exc)
 
+        # Before the environment, because the credential goes *into* it. The
+        # policy file is written here and not at container-create time so that a
+        # deploy which then fails its probe leaves an entry nothing can use
+        # (the container is torn down) rather than a live instance the proxy has
+        # never heard of.
+        egress_token = register_principal(
+            config,
+            principal=request.app_id,
+            destinations=runtime_destinations(
+                config,
+                platform_api_base=request.platform_api_base,
+                declared=request.egress_domains,
+                # The platform-reserved URL names the backend put in the intent
+                # — the model face above all, whose address is the *browser*
+                # origin and need not equal ``platform_api_base``. Without it
+                # every model call is refused the moment this layer goes on.
+                injected_env=request.env,
+            ),
+        )
+
         env = build_env(
             config,
             app_id=request.app_id,
@@ -339,6 +376,7 @@ class LifecycleService:
             # record is gone (destroy). The old instance keeps serving through
             # the grace window with the very same credential.
             storage_token=(previous.env.get(ENV_STORAGE_TOKEN) if previous else None) or mint_storage_token(),
+            egress_token=egress_token,
             extra=request.env,
         )
         payload = build_container_payload(
@@ -357,6 +395,7 @@ class LifecycleService:
             start_period=start_period,
             env=env,
             generation=generation,
+            egress_domains=list(request.egress_domains),
         )
 
         # Defensive, not part of the flow: the generation makes this name new
@@ -397,6 +436,7 @@ class LifecycleService:
             desired=DESIRED_RUNNING,
             generation=generation,
             retiring=[c for c in ((previous.container_name,) if previous else ()) if c and c != name],
+            egress_domains=list(request.egress_domains),
         )
         self._store.put(record)
 
@@ -440,6 +480,10 @@ class LifecycleService:
             for name in [record.container_name, *record.retiring]:
                 self._force_remove(name)
             self._store.delete(app_id)
+        # Unconditionally, unlike the volume: the proxy credential is not the
+        # owner's data. A policy entry outliving its application would keep a
+        # working credential on file for a name that can be reused.
+        forget_principal(self._config, app_id)
         if purge_volume:
             app_dir = self._config.apps_root / app_id
             shutil.rmtree(app_dir, ignore_errors=True)

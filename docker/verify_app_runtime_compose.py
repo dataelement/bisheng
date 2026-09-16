@@ -34,6 +34,19 @@ RESET = "\033[0m"
 SERVICES = {
     "app-proxy": ("src/app-proxy/app_proxy/config.py", "APP_PROXY_"),
     "runtime-manager": ("src/runtime-manager/runtime_manager/config.py", "RTM_"),
+    # Same package, second entry point (F054 T077): it reads the same ``RTM_*``
+    # contract, so it is subject to the same two checks.
+    "egress-proxy": ("src/runtime-manager/runtime_manager/config.py", "RTM_"),
+}
+
+#: ``REQUIRED_ENV`` is the *intent API* process's contract. The egress proxy runs
+#: from the same module but serves no API: it needs the policy file's location
+#: and its own listening address, and nothing else. Handing it the orchestration
+#: HMAC secret just to satisfy a reverse check would spread a credential to a
+#: process whose whole design point is that it holds none — the same argument the
+#: systemd unit makes about not giving it the docker socket.
+REQUIRED_ENV_OVERRIDE: dict[str, tuple[str, ...]] = {
+    "egress-proxy": ("RTM_DATA_ROOT", "RTM_EGRESS_LISTEN", "RTM_EGRESS_PROXY"),
 }
 
 #: The application network. ``runtime_manager.config.DEFAULT_NETWORK`` and the
@@ -146,6 +159,8 @@ def check_env_contract(report: Report, repo_root: Path, doc: dict) -> None:
         if not required:
             report.bad(f"{service}: {rel_path} 没有 REQUIRED_ENV，反向校验失效")
             continue
+        if service in REQUIRED_ENV_OVERRIDE:
+            required = set(REQUIRED_ENV_OVERRIDE[service])
         missing = sorted(required - declared)
         report.check(
             not missing,
@@ -226,15 +241,81 @@ def check_data_root_mapping(report: Report, doc: dict) -> None:
     )
 
 
+#: The build network (F054 D12). Same "must be pinned by ``name:``" reason as
+#: the application network: ``docker build`` is given the literal name.
+BUILD_NETWORK = "bisheng-build"
+
+DOCKER_SOCKET = "/var/run/docker.sock"
+
+
+def check_egress_layer(report: Report, doc: dict) -> None:
+    """D12 / D2-B 的配置面：两张 --internal 网 + 两个不暴露端口的代理。
+
+    每一条的失败模式都是**静默**的：网建成非 internal，应用照样跑、出站照样通，
+    只是白名单形同虚设；代理 publish 了端口，谁够得到 2375 谁就是本机 root。
+    """
+    services = doc.get("services", {})
+    networks = doc.get("networks") or {}
+
+    for name in (APP_NETWORK, BUILD_NETWORK):
+        entry = networks.get(name)
+        if entry is None:
+            report.bad(f"顶级 networks 缺少 {name}")
+            continue
+        report.check(
+            bool(entry.get("internal")),
+            f"{name} 是 --internal（托管应用没有默认路由，唯一出口是 egress-proxy）",
+            f"{name} 不是 --internal —— 应用能绕开 egress-proxy 直接出网，AC-16 的 L1 不成立",
+        )
+
+    for name in ("docker-socket-proxy", "egress-proxy"):
+        spec = services.get(name)
+        if spec is None:
+            report.bad(f"{name}: compose 里没有这个 service")
+            continue
+        report.check(
+            not spec.get("ports"),
+            f"{name} 不 publish 任何端口",
+            f"{name} publish 了端口 {spec.get('ports')} —— 够得到它就等于绕过整层收窄",
+        )
+
+    manager = services.get("runtime-manager")
+    if manager is None:
+        return
+    env = manager.get("environment") or {}
+    report.check(
+        (env.get("RTM_DOCKER_HOST") or "").startswith("tcp://docker-socket-proxy"),
+        "runtime-manager 的编排访问面走 docker-socket-proxy（D2-B）",
+        f"runtime-manager 的 RTM_DOCKER_HOST={env.get('RTM_DOCKER_HOST')!r}，未指向 docker-socket-proxy",
+    )
+    mounted = [
+        v.get("source")
+        for v in (manager.get("volumes") or [])
+        if isinstance(v, dict) and v.get("source") == DOCKER_SOCKET
+    ]
+    report.check(
+        not mounted,
+        "runtime-manager 不再直挂 docker.sock",
+        "runtime-manager 仍然直挂 docker.sock —— 端点白名单只要还有直连这条旁路就等于没做",
+    )
+    report.check(
+        "RTM_EGRESS_PROXY" in env,
+        "runtime-manager 声明了 RTM_EGRESS_PROXY（空值 = 整层未部署，preflight 会直说）",
+        "runtime-manager 缺 RTM_EGRESS_PROXY —— 出站白名单会静默地整层不生效",
+    )
+
+
 def main() -> int:
     repo_root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
     doc = json.load(sys.stdin)
 
     report = Report()
     check_env_contract(report, repo_root, doc)
-    print(f"{BOLD}[4/4] 托管应用网络与数据根映射{RESET}")
+    print(f"{BOLD}[4/5] 托管应用网络与数据根映射{RESET}")
     check_networks(report, doc)
     check_data_root_mapping(report, doc)
+    print(f"{BOLD}[5/5] 出站白名单与编排访问面{RESET}")
+    check_egress_layer(report, doc)
     return min(report.failures, 120)
 
 

@@ -1,0 +1,53 @@
+# BiSheng 托管应用出站代理（egress-proxy）—— F054 T077 / design D12-C L2
+#
+# ⚠️ 这份文件是**模板**。真身在独立运维仓 `~/Projects/bisheng-ops/systemd/`
+# （K10），产品仓不持有 114 的部署文件。落库：
+#   cp bisheng-egress-proxy.service /opt/bisheng-ops/systemd/
+#   ln -sf /opt/bisheng-ops/systemd/bisheng-egress-proxy.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now bisheng-egress-proxy
+# 同样要进 `bisheng.target` 的 `Wants=` 与 `deploy.sh` 的 `SERVICES=`。
+#
+# 它跑的是 runtime-manager **同一个包的另一个入口点**，两者之间的全部契约是
+# `{RTM_DATA_ROOT}/egress/policy.json` 这一个文件。这不是图省事：编排器重启时
+# 每个托管应用的出站不能跟着断，而共用一个进程就一定会跟着断。
+#
+# 与 runtime-manager 的三处刻意差异：
+#   1. **不 After=docker.service**，也**不要**给它 docker 组 —— 它只做 CONNECT
+#      转发，给它编排权限是纯粹的权限扩散；
+#   2. **监听网桥而不是回环**：应用容器要够得到它，127.0.0.1 在容器里是容器
+#      自己。地址写 `bisheng-apps` 网桥的网关地址（`docker network inspect
+#      bisheng-apps -f '{{(index .IPAM.Config 0).Gateway}}'`），不要写 0.0.0.0
+#      ——这台机器的其它网卡上不该出现一个开放代理；
+#   3. `RTM_EGRESS_PROXY` 给的是**应用视角**的同一个地址，runtime-manager 那份
+#      必须逐字相同，否则注入进容器的 HTTP_PROXY 指向一个没人监听的地方。
+[Unit]
+Description=BiSheng hosted-app egress proxy (outbound whitelist, :3128)
+After=network-online.target
+Wants=network-online.target
+# 应用起得来但出不去，比应用起不来更难查：把它和编排器绑在一起，
+# 运维停一个就会看见另一个也停。
+PartOf=bisheng.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bisheng/src/runtime-manager
+Environment=PYTHONPATH=/opt/bisheng/src/runtime-manager
+# 与 bisheng-runtime-manager.service 同一份 data root —— 策略文件在
+# {RTM_DATA_ROOT}/egress/policy.json，本进程只读它。
+Environment=RTM_DATA_ROOT=/opt/bisheng/app-data
+# ⚠️ 下面两行的地址必须与 runtime-manager 单元里的 RTM_EGRESS_PROXY 逐字相同。
+# 172.18.0.1 是**示例**：以 `docker network inspect bisheng-apps` 实际网关为准。
+Environment=RTM_EGRESS_LISTEN=172.18.0.1:3128
+Environment=RTM_EGRESS_PROXY=172.18.0.1:3128
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+ExecStart=/opt/bisheng/src/runtime-manager/.venv/bin/python -m runtime_manager.egress_proxy
+StandardOutput=append:/tmp/bisheng-egress-proxy.log
+StandardError=append:/tmp/bisheng-egress-proxy.log
+# 停机时正在转发的连接直接断开是对的：调用方会重试，而拖着一条已经不该存在的
+# 隧道等它自己结束，等的是对端而不是我们。
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
