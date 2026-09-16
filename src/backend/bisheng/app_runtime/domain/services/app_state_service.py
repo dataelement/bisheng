@@ -45,6 +45,7 @@ from bisheng.app_runtime.domain.constants import (
 )
 from bisheng.app_runtime.domain.services import lifecycle_hooks
 from bisheng.app_runtime.domain.services.orchestrator_client import orchestrator_client
+from bisheng.app_runtime.domain.services.state_change_notify import notify_owner_of_admin_state_change
 from bisheng.common.errcode.app_factory import (
     AppCapacityInsufficientError,
     AppManageForbiddenError,
@@ -183,6 +184,9 @@ class AppStateService:
         await orchestrator_client.stop(app_id=app_id)
         await cls._set_instance_phase(app_id, PHASE_STOPPED, tenant_id=app.tenant_id)
         await cls._audit(AppAuditAction.STOP, app, actor, version_id=app.current_version_id, reason="stopped by user")
+        # Post-hook, after the audit: an administrator stopping someone else's
+        # app tells the owner (F056 AC-43). Never raises — see the module.
+        await notify_owner_of_admin_state_change(app=app, actor=actor, action="stop")
         return ActionResult(app_id=app_id, state=AppState.STOPPED.value, version_id=app.current_version_id)
 
     @classmethod
@@ -340,6 +344,12 @@ class AppStateService:
             exec_ref=deployed.get("instance_id"),
         )
         await cls._audit(audit_action, app, actor, version_id=version.id, reason="started", detail=deployed)
+        if audit_action == AppAuditAction.RESUME:
+            # Only a resume is "an administrator changed my running app" (F056
+            # AC-43). Publish and manual publish are F055's pipeline — their
+            # messages come from the approval engine and F055 itself, and a
+            # second copy from here would double them (spec 决议-11).
+            await notify_owner_of_admin_state_change(app=app, actor=actor, action="resume")
         return ActionResult(
             app_id=app_id,
             state=AppState.ONLINE.value,

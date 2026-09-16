@@ -7,9 +7,11 @@
  * to F056. They are props rather than inline sections so three features can
  * land without three edits to the same JSX block.
  *
- * The entry link is rendered from `app.entry_url` exactly as the backend sent
- * it. Composing it from `location.origin` would produce `localhost:3001/apps/…`
- * in dev — a link that goes nowhere, since `/apps` is not in the vite proxy.
+ * The entry link — and the QR code, which encodes the very same string — is
+ * rendered from `app.entry_url` exactly as the backend sent it. Composing it
+ * from `location.origin` would produce `localhost:3001/apps/…` in dev — a link
+ * that goes nowhere, since `/apps` is not in the vite proxy, and a QR code that
+ * scans to nowhere.
  */
 import { Button } from "@/components/bs-ui/button"
 import { toast } from "@/components/bs-ui/toast/use-toast"
@@ -20,6 +22,7 @@ import type {
 } from "@/controllers/API/hostedApp"
 import { copyText } from "@/utils"
 import { Copy, ExternalLink, Loader2 } from "lucide-react"
+import { QRCodeSVG } from "qrcode.react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
@@ -173,26 +176,53 @@ export function PublishTab({
       </Section>
 
       <Section title={t("hostedApp.publish.entryLabel")}>
-        <div className="flex flex-wrap items-center gap-2">
-          <code className="max-w-full break-all rounded bg-muted px-2 py-1 text-xs">
-            {app.entry_url}
-          </code>
-          <Button variant="outline" size="sm" onClick={handleCopy}>
-            <Copy className="mr-1 size-3.5" />
-            {t("hostedApp.publish.copy")}
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <a href={app.entry_url} target="_blank" rel="noreferrer">
-              <ExternalLink className="mr-1 size-3.5" />
-              {t("hostedApp.publish.open")}
-            </a>
-          </Button>
+        <div className="flex flex-wrap items-start gap-4">
+          {/*
+            The QR code and the link share one visibility rule (T091): both
+            are shown whenever the entry exists, and the "not running" hint
+            below covers both — a scanned code lands on the same notice page
+            the link does.
+          */}
+          {app.entry_url && (
+            <div
+              className="flex shrink-0 flex-col items-center gap-1"
+              data-testid="hosted-app-entry-qr"
+            >
+              <div className="rounded-md border bg-white p-1.5">
+                <QRCodeSVG
+                  value={app.entry_url}
+                  size={96}
+                  aria-label={t("hostedApp.publish.qrLabel")}
+                />
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {t("hostedApp.publish.qrLabel")}
+              </span>
+            </div>
+          )}
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <code className="max-w-full break-all rounded bg-muted px-2 py-1 text-xs">
+                {app.entry_url}
+              </code>
+              <Button variant="outline" size="sm" onClick={handleCopy}>
+                <Copy className="mr-1 size-3.5" />
+                {t("hostedApp.publish.copy")}
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <a href={app.entry_url} target="_blank" rel="noreferrer">
+                  <ExternalLink className="mr-1 size-3.5" />
+                  {t("hostedApp.publish.open")}
+                </a>
+              </Button>
+            </div>
+            {!online && (
+              <p className="text-xs text-muted-foreground">
+                {t("hostedApp.publish.entryInactive")}
+              </p>
+            )}
+          </div>
         </div>
-        {!online && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            {t("hostedApp.publish.entryInactive")}
-          </p>
-        )}
       </Section>
 
       <Section title={t("hostedApp.publish.instanceTitle")}>

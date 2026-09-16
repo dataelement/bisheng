@@ -43,6 +43,11 @@ export const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     // live. Statements only — the manual-publish button lives on the detail page.
     app_publish_pending_capacity: "com_notifications_action_app_publish_pending_capacity",
     app_publish_deploy_failed: "com_notifications_action_app_publish_deploy_failed",
+    // hosted application governance (F056 AC-43): an administrator stopped or
+    // resumed the owner's app. Statements only — deliberately NOT in
+    // APPROVAL_CENTER_ACTION_CODES, there is nothing to approve.
+    app_stopped_by_admin: "com_notifications_action_app_stopped_by_admin",
+    app_resumed_by_admin: "com_notifications_action_app_resumed_by_admin",
     menu_grant_revoked: "com_notifications_action_menu_grant_revoked",
     revoked_channel_admin: "com_notifications_action_revoked_channel_admin",
     revoked_knowledge_space_admin: "com_notifications_action_revoked_knowledge_space_admin",

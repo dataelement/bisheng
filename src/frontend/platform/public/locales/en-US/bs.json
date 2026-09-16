@@ -2706,6 +2706,7 @@
       "copied": "Link copied",
       "open": "Open",
       "entryInactive": "The application is not running, so the entry shows the matching notice page.",
+      "qrLabel": "Scan to open",
       "stop": "Take offline",
       "resume": "Bring online",
       "manualPublish": "Bring online",
