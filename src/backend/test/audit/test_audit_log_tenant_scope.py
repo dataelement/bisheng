@@ -31,6 +31,11 @@ from unittest.mock import MagicMock as _MagicMock
 _router_stub = _MagicMock()
 _router_stub.router = _MagicMock()
 _router_stub.router_rpc = _MagicMock()
+# Taken back out below, once this module's own imports are done — see the same
+# note in ``conftest.py``: ``bisheng.telemetry_search`` is a real package, and a
+# MagicMock left standing in for it makes every later suite's
+# ``from bisheng.main import app`` fail with "not a package".
+_stubbed: list[str] = []
 for _m in (
     "bisheng.api.router",
     "bisheng.api.v1",
@@ -43,7 +48,9 @@ for _m in (
     "bisheng.telemetry_search.api",
     "bisheng.telemetry_search.api.router",
 ):
-    _sys.modules.setdefault(_m, _router_stub)
+    if _m not in _sys.modules:
+        _sys.modules[_m] = _router_stub
+        _stubbed.append(_m)
 
 from contextlib import contextmanager, nullcontext  # noqa: E402
 from datetime import datetime, timedelta  # noqa: E402
@@ -59,6 +66,10 @@ from bisheng.common.errcode.http_error import UnAuthorizedError  # noqa: E402
 from bisheng.database.models.audit_log import AuditLog, AuditLogDao  # noqa: E402
 from bisheng.database.models.session import MessageSession  # noqa: E402
 
+for _m in _stubbed:
+    del _sys.modules[_m]
+del _stubbed
+
 # ---------------------------------------------------------------------------
 # SQLite test engine + session
 # ---------------------------------------------------------------------------
@@ -66,62 +77,25 @@ from bisheng.database.models.session import MessageSession  # noqa: E402
 
 @pytest.fixture(scope="module")
 def dao_engine():
-    """SQLite engine with v2.5.1 ``auditlog`` + ``message_session`` schemas."""
+    """SQLite engine with the real ``auditlog`` + ``message_session`` schemas.
+
+    Generated straight from ``AuditLog.__table__`` / ``MessageSession.__table__``
+    (both already imported above) instead of a hand-written ``CREATE TABLE``.
+    A hand-copied DDL string silently drifts the moment the model gains a
+    column — beta2 added ``api_subject_type`` / ``api_subject_id`` /
+    ``external_user_id`` to ``MessageSessionBase`` and this fixture's old
+    literal DDL never got the memo, so every test here failed with
+    ``sqlite3.OperationalError: table message_session has no column named
+    api_subject_type`` even run alone. Creating the table from the model's
+    own SQLAlchemy metadata means it can't drift again.
+    """
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    with engine.begin() as conn:
-        conn.execute(
-            text("""
-            CREATE TABLE IF NOT EXISTS auditlog (
-                id VARCHAR(255) PRIMARY KEY,
-                operator_id INTEGER NOT NULL,
-                operator_name VARCHAR(255),
-                group_ids JSON,
-                system_id VARCHAR(64),
-                event_type VARCHAR(64),
-                object_type VARCHAR(64),
-                object_id VARCHAR(64),
-                object_name TEXT,
-                note TEXT,
-                ip_address VARCHAR(64),
-                tenant_id INTEGER,
-                operator_tenant_id INTEGER,
-                action VARCHAR(64),
-                target_type VARCHAR(32),
-                target_id VARCHAR(64),
-                reason TEXT,
-                metadata JSON,
-                create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
-            )
-        """)
-        )
-        conn.execute(
-            text("""
-            CREATE TABLE IF NOT EXISTS message_session (
-                chat_id VARCHAR(255) PRIMARY KEY,
-                name VARCHAR(255),
-                flow_id VARCHAR(255),
-                flow_type INTEGER NOT NULL,
-                flow_name VARCHAR(255),
-                flow_description TEXT,
-                flow_logo TEXT,
-                user_id INTEGER NOT NULL,
-                tenant_id INTEGER NOT NULL DEFAULT 1,
-                group_ids JSON,
-                is_delete BOOLEAN DEFAULT 0,
-                "like" INTEGER DEFAULT 0,
-                dislike INTEGER DEFAULT 0,
-                copied INTEGER DEFAULT 0,
-                sensitive_status INTEGER DEFAULT 1,
-                create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
-            )
-        """)
-        )
+    AuditLog.__table__.create(engine, checkfirst=True)
+    MessageSession.__table__.create(engine, checkfirst=True)
     yield engine
     engine.dispose()
 
@@ -171,13 +145,35 @@ def patch_dao_session(monkeypatch, session):
 # ---------------------------------------------------------------------------
 
 
-def _insert_audit(session, *, action, tenant_id, operator_tenant_id, operator_id=None, operator_name=None):
+def _insert_audit(
+    session,
+    *,
+    action,
+    tenant_id,
+    operator_tenant_id,
+    operator_id=None,
+    operator_name=None,
+    system_id="system",
+):
+    """``system_id`` defaults to a generic legacy value so every seeded row
+    clears ``AuditLogDao._ui_visible_predicate()`` (``system_id IS NOT NULL
+    OR action IN (_UI_VISIBLE_V2_ACTIONS)``) the same way a real legacy-path
+    row does (``AuditLogService._chat_log`` / ``_build_log`` / ... always set
+    ``system_id`` via ``AuditLogDao.insert_audit_logs``). These tests are
+    about the tenant-scope AND-interaction (``_visible_for_tenant`` /
+    ``bypass_tenant_filter``), not the UI whitelist itself — that mechanism
+    already has dedicated coverage in ``test_tenant_scope_ands_with_operator_
+    and_system`` (system_id route) and ``TestGetAuditLogServiceEndToEnd``
+    (action-whitelist route). Pass ``system_id=None`` where a test needs a
+    row that stays invisible.
+    """
     entry = AuditLog(
         operator_id=operator_id if operator_id is not None else (operator_tenant_id or 0) * 10,
         operator_name=operator_name or f"t{operator_tenant_id}-user",
         tenant_id=tenant_id,
         operator_tenant_id=operator_tenant_id,
         action=action,
+        system_id=system_id,
     )
     session.add(entry)
     session.commit()
@@ -786,6 +782,9 @@ class TestAuditLogsCombinedFilters:
                 tenant_id=2,
                 operator_tenant_id=2,
                 action=f"t.{i}",
+                # Bypasses ``_insert_audit``'s default; set explicitly so this
+                # row clears ``_ui_visible_predicate`` like the others.
+                system_id="system",
             )
             session.add(entry)
             session.commit()
