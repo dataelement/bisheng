@@ -769,18 +769,26 @@
   **覆盖 AC**: AC-38
   **依赖**: T089a, T003
 
-- [ ] **T090a**: 审批期临时预览入口测试（Test-First，先于 T090）
+- [x] **T090a**: 审批期临时预览入口测试（Test-First，先于 T090）
   **文件**: `src/backend/test/app_runtime/test_preview_entry.py`（新，backend 判定侧）, `src/app-proxy/tests/test_preview.py`（新，反代侧）
   **逻辑**: backend 侧：`test_only_approver_of_that_ticket_allowed`（该审批单的审批人 allow；同租户其他用户 / owner 本人 / 别单审批人一律 forbidden 页）→ AC-37 / `test_preview_session_expired_or_unknown_returns_not_found_page`（过期 / 未知 session 与"不存在"同页，防信息泄漏）→ AC-37 / `test_injected_identity_is_approver_himself`（注入的是审批人本人身份，不是 owner、不是模拟身份——INV-32）→ AC-37, AC-31 / `test_fga_unavailable_fail_closed` → AC-12。app-proxy 侧：`test_preview_path_uses_same_strip_and_inject_code`（`/apps/preview/{session}` 走 T039 同一段头剥离 / 注入代码，不另写一份）→ AC-32 / `test_preview_prefix_stripped_and_forwarded_prefix_set` → AC-25 / `test_preview_instance_lifecycle_not_controlled_here`（app-proxy / F054 不拉起也不回收预览实例，**归 F055**；上游不存在时呈过渡态页）→ AC-37。
   **覆盖 AC**: AC-12, AC-25, AC-31, AC-32, AC-37
   **依赖**: T045, T033, T009
 
-- [ ] **T090**: 审批期临时预览入口实现（`/apps/preview/{session}`）
+- [x] **T090**: 审批期临时预览入口实现（`/apps/preview/{session}`）
   **文件**: `src/app-proxy/app_proxy/preview.py`（新）, `src/backend/bisheng/app_runtime/domain/services/entry_authz_service.py`
   **逻辑**: 仅该审批单的审批人可达（其他人得无权限页），注入审批人本人身份，其余注入与转发规则同正式入口；**实例的拉起 / 回收由 F055 控制**。
   **测试**: T090a 全部通过。
   **覆盖 AC**: AC-37
   **依赖**: T090a
+  **证据**（随 F055 T053 同切片落地，分支 `wt/f055-preview-instance`，提交 `fb818bc30`）：`src/backend/test/app_runtime/test_preview_entry.py` 15 例 + `src/app-proxy/tests/test_preview.py` 17 例全绿；app-proxy 全量 **241 passed**（基线 224）。
+
+  **偏离与必须知道的落点**：
+  ① **放行判据是「这个会话的审批人」，不是「该审批单的审批人」**。同一个发布申请上的另一个审批人也拿不到——每个预览注入的是它被拉起时那个人的身份（AC-27），第二个人进去就等于以第一个人的身份操作。owner 同样进不去（owner 有应用自己的入口）。
+  ② **所有拒绝都是 `not_found`，一个字都不多说**。未知 session / 已回收 / 已过期 / 不是本人 / 应用已删，五种同一页——`forbidden` 页会带应用名与负责人，那等于把一个还没审批通过的应用的存在告诉陌生人（AC-30）。`test_an_unknown_session_and_a_real_one_are_indistinguishable` 钉住这条。
+  ③ **`authorize-preview` 是第二个内部端点，不是 `authorize` 上的一个开关**。两个判据合进一个 handler 就等于让它们隔着一个 typo；这个端点上写错的代价是「任何人都能打开未上线应用」。租户豁免走既有前缀匹配（`/api/v1/internal/app-proxy/authorize` 是前缀，已覆盖）。
+  ④ **app-proxy 复用同一段剥离 / 注入代码**（T090a 的 `test_preview_path_uses_same_strip_and_inject_code` 要求）：交给 `forward` 的伪 slug 是 `preview/{session}`，于是 `entry_prefix_for` 正好得出 `/apps/preview/{session}`，前缀剥离与 `X-Forwarded-Prefix` 两处都不用分支。路由必须注册在 `{slug}` 之前（Starlette 按顺序匹配），同时后端把 `preview` 列入保留 slug。
+  ⑤ **预览访问不计 AC-38 的应用访问记录**：那条记录统计的是「谁用了这个应用」，把还没上线版本的审批试用算进去，等于让应用的使用量被自己的审批撑起来。
 
 - [x] **T091**: 入口二维码
   **文件**: `src/frontend/platform/src/pages/BuildPage/hostedApp/tabs/PublishTab.tsx`, `src/frontend/platform/package.json`

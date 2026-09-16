@@ -15,6 +15,17 @@ jest.mock("~/api/hostedAppReview", () => ({
 }));
 
 /**
+ * The preview panel has its own suite; here it is stubbed so this file asserts
+ * *where* it sits rather than what it does — and so the review view's tests do
+ * not fire a real XHR at the preview endpoint.
+ */
+jest.mock("./AppPreviewPanel", () => ({
+  AppPreviewPanel: ({ appId, versionId }: Record<string, unknown>) => (
+    <div data-testid="preview-panel-stub">{`${String(appId)}/${String(versionId)}`}</div>
+  ),
+}));
+
+/**
  * The diff presentation is the shared `@bisheng/file-viewers` component, tested
  * on its own in the platform suite. Here it is a stub, so this file asserts
  * what the review view *feeds* it — which two versions, and whether it asks
@@ -208,4 +219,15 @@ describe("AppReviewView", () => {
     expect(await screen.findByText(refusal)).toBeInTheDocument();
     expect(screen.queryByTestId("review-source-pane")).not.toBeInTheDocument();
   });
+});
+
+test("the try-it-out panel is pinned above the tabs, not hidden inside one", async () => {
+  render(<AppReviewView target={TARGET} localize={localize} onBack={jest.fn()} />);
+
+  const panel = await screen.findByTestId("preview-panel-stub");
+  expect(panel).toHaveTextContent("app-1/ver-2");
+  // Pinned means "before the tab strip in document order", which is what an
+  // approver actually experiences as the panel being at the top.
+  const tablist = screen.getByRole("tablist");
+  expect(panel.compareDocumentPosition(tablist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });

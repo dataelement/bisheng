@@ -549,9 +549,34 @@ T001–T007（Wave 1，可并行）
     **审校修正（切片 f055-review-frontend 自审）**：① **业务码文案改走 `api_errors`**——`api/hostedAppReview.ts` 原先把信封里的 `status_message`（后端写死的中文）当错误文案抛出，等于让 en / ja 审批人看到中文，而 16253 / 16256 / 16257 / 16258 的三语文案早已在 `packages/locales` 里；改用既有的 `utils/apiStatusError.createApiStatusError`（该文件的存在理由正是这个错误曾经上线过一次），顺带删掉从没有人用过的 `HostedAppReviewError` / `REVIEW_ERROR_CODES` 两个导出；② **失败态由空串改为对象**——`failure` 既当消息又当「是否失败」的标志，消息为空时会 falsy 落回正常分支，把「读取被拒」画成「这个包里没有文件」；③ **空文件不再被说成「不支持在线查看」**——判据从 `file.content` 改为 `file.previewable`，`content: ""` 是合法的空文件；④ 选中文件后到取数 effect 跑起来之间那一帧改显示「正在读取」而不是「不支持在线查看」；⑤ 两处 `text-[#ff7d00]` 改 `text-warning`（同色值，且暗色模式跟得上）。新增 `src/api/hostedAppReview.test.ts` 5 例（信封解包 / 路径转义 / 差异新旧侧顺序 / 业务码取 `api_errors` 文案 / 无文案时仍失败关闭）+ `AppReviewView.test.tsx` 补空文件 1 例。
     **手动验证清单（待 114 实机走一遍）**：文件树可展开折叠 · 代码区只读且无下载入口 · 4 tab 切换 · 首发版本的「文件差异」tab 显示「没有可对比的已发布版本」而非空白 · 二进制 / 超大文件显示原因而不是空正文 · 窄屏（<768px）左右两栏改上下堆叠、不横向滚动 · 非审批人打开同一 URL 看到业务码文案而不是整页 403 · 切 en / ja 无裸键。
 
-- [ ] **T053**: 审批期临时预览实例后端（快照拉起 / 临时空库 / 审批人身份注入 + owner 权限放行〔NFR-1.2 审批例外，INV-36〕/ 终态与超时回收 / 不占实例名额）
-  **文件**: `src/backend/bisheng/app_publish/domain/services/preview_instance_service.py`, `src/backend/bisheng/app_publish/api/endpoints/preview.py`, `src/backend/test/app_publish/test_preview_instance.py`
+- [x] **T053**: 审批期临时预览实例后端（快照拉起 / 临时空库 / 审批人身份注入 + owner 权限放行〔NFR-1.2 审批例外，INV-36〕/ 终态与超时回收 / 不占实例名额）
+  **文件**: `src/backend/bisheng/app_publish/domain/services/preview_instance_service.py`, `src/backend/bisheng/app_publish/api/endpoints/preview.py`, `src/backend/bisheng/app_publish/domain/models/app_preview_session.py`（新表）, `src/runtime-manager/runtime_manager/preview.py`（新意图）, `src/backend/test/app_publish/test_preview_instance.py`
   **覆盖 AC**: AC-26, AC-27, AC-28, AC-29, AC-30
+  **证据**（分支 `wt/f055-preview-instance`，提交 `22fdb51f5` + `fb818bc30`）：`test/app_publish/test_preview_instance.py` 27 例全绿 · `src/runtime-manager/tests/test_preview_instance.py` 25 例全绿 · 后端 `test/app_publish test/app_runtime` 合跑 **972 passed / 13 skipped / 0 failed**（主检出同选择基线 928 passed / 2 failed，两条失败即本切片修掉的门禁，见偏差 ④）。
+
+  **偏离与必须知道的落点**：
+  ① **预览不是 `deploy`，是三个新意图**：`POST /v1/intents/preview` · `POST /v1/intents/preview/stop` · `GET /v1/previews/{session}/route`。原文写「复用 `probe` 临时形态 + `deploy` 意图」两条都不成立——`probe_image` 在 `finally` 里把容器删掉（预览要留着），而 `deploy` 会写 `app_id` 键的期望态记录，那条记录正是「占实例名额」和「被 reconciler 复活」的原因。新意图**不写期望态**：`store.committed()` 与 `capacity.instances` 都不计它（`test_starting_a_preview_writes_no_desired_state_record`），容器标 `bisheng.managed=preview` 而不是 `=true`，reconciler 的过滤器看不见它。容量仍然照判——内存是真花掉的，只是名额不计。
+  ② **「临时空库」= tmpfs，不是「新建一个空的应用卷」**：`/data` 挂 `rw,size=64m,mode=1777`，**没有 `Binds`**（AC-29 的试用数据带不进生产）。`mode=1777` 是必须的，不是装饰：镜像以非 root 的 uid 10001 跑，默认 tmpfs 是 root 0755，应用开不了 `/data/app.db` 就 exit 1，症状是「预览拉不起来」而没人猜得到原因（与 `probe.py` 同一个坑）。
+  ③ **预览按审批人分，不按版本分**：两个审批人同一个版本各拿一个实例。AC-27 要求注入审批人本人身份，共用一个就等于让审批人 B 看见审批人 A 敲进去的数据。DAO 的 `aget_running_for` 因此按 `(version_id, approver_user_id)` 取。
+  ④ **超时回收不落平台定时任务**——这是与 F054 既有门禁 `test_switch_off_no_resident_process_or_beat_task`（AC-59「不得往平台镜像里塞常驻 worker」）的正面冲突，先写了 beat 条目再撤掉的。最终两处各管一半：**容器**由 runtime-manager 的 reconcile 每 15s 按容器标签 `bisheng.preview.expires_at` 收（deadline 随容器走，因为管理器才是容器存在的前提进程）；**行**由 `resolve_entry` 当场拒过期会话（对访问者精确）+ 审批人打开面板时 `reclaim_expired()` 对账（一次带索引的范围查询）。没有标签的预览**永不**被扫（缺值不等于「现在就收」）。
+  ⑤ **访问规则复用 `ReviewAccess`，文案不复用**：门与审读视图同一道（该版本的审批人 / owner / 租户管理员 / 平台超管），但 16257 的文案是「没有查看该版本代码的权限」，放在一个「跑起来试试」的按钮旁边是错句子，所以另给 **16264**。新增 16264–16267 四码 + 三语 `api_errors`；16268/16269 预留未用。
+  ⑥ **新增审计 action 两个**：`app.release.preview_started` / `app.release.preview_reclaimed`，四处 lockstep（enum + `_UI_VISIBLE_V2_ACTIONS` + platform `log.ts` + 三语 `bs.json`）已同批完成。回收理由 `manual` / `approval_terminal` / `expired` 记在 metadata，三条腿在容器日志里长得一样，事后问「这次试用为什么结束」只能靠它分辨。
+  ⑦ **保留 slug `preview` / `_unavailable`**（`app_provision_service.RESERVED_SLUGS`）：`/apps/preview/{session}` 的路由注册在 `{slug}` 之前，不保留名字的话，一个叫 `preview` 的应用会被永久遮蔽，而对它的负责人来说症状是「我的应用对所有人 404」且任何日志里都没有线索。
+  ⑧ **通过（approved）也回收**：AC-28 的「终态」是四个，不止驳回 / 撤回 / 取消。除 `publish_terminal_service` 的三条外，`publish_online_service.bring_online` 里也调了一次——否则审批通过的版本会让预览和真身并排跑满 7 天。
+  ⑨ **欠一条 alembic 迁移**：无。`app_preview_session` 是整表新建，走 `create_all(checkfirst=True)`（后端 AGENTS.md 的 schema 归属规则）；本切片未改任何既有表。
+
+- [x] **T054**: 审批期预览前端（「预览试用」置顶 / 四个界面状态 / 打开预览 / 手动回收）
+  **文件**: `client/src/components/approval/AppPreviewPanel.tsx`, `client/src/api/hostedAppPreview.ts`, `client/src/components/approval/AppReviewView.tsx`（置顶挂载）, `client/src/locales/{zh-Hans,en,ja}/translation.json`
+  **测试载体**: 前端手动验证清单（四个界面状态各截一次：未拉起 / 拉起中 / 可用 / 已回收；「预览试用」在详情面板置顶；手动回收后实例消失且不占名额；切 en / ja 无裸键）
+  **覆盖 AC**: AC-26, AC-28
+  **证据**（分支 `wt/f055-preview-instance`）：`AppPreviewPanel.test.tsx` 12 例 + `AppReviewView.test.tsx` 新增置顶 1 例；client jest 全量 `8 failed | 69 passed (77) · 7 failed | 607 passed (614)`，与主检出基线 `8 failed | 68 passed (76) · 7 failed | 594 passed (601)` **同一个失败集**（+13 全为新增）。`tsc-strict` / `eslint` / `pnpm check-i18n` 全绿。
+
+  **偏离与必须知道的落点**：
+  ① **落点是审读视图顶部，不是审批单详情面板**：spec §22 与 AC-25 写的是「审读视图……「预览试用」置顶」，T052 的偏差记录 ③ 也是在审读视图的语境里说「本切片未做」。所以面板挂在 `AppReviewView` 的 tab 条**之上**（`AppPreviewPanel` 在 tab 切换时不卸载，切 tab 不会打断一个正在跑的试用）；入口仍是 `AppPublishDetailPanel` 的「查看待上线版本」。
+  ② **「拉起中」是前端自己的状态，不是后端的**：`preview_start` 只在实例通过探活后才返回，所以平台侧根本观察不到半拉起态——用 Button 的 `loading` 表达请求在途，**不轮询**。轮询会凭空造出一个后端刻意不存在的状态。
+  ③ **「打开预览」开新标签页**：预览跑在自己的 URL 上，就地替换会把审批人赶出审批单、再让他从别人的应用里找路回来记决定。
+  ④ **失败态不改画面**：拉起失败只显示原因、按钮照旧可按（AC-26「允许重新拉起」）；回收失败仍把实例画成运行中——失败的回收把实例画成已消失，是让人以为容器没了而实际还在跑。
+  ⑤ **文案不搬内部词**：面板叫「预览试用」，按钮是「拉起预览 / 打开预览 / 回收」，不出现 session / instance / 实例名额这类内部对象名；「已回收」三种原因各一句话（自己收的 / 审批结束 / 超时），一句话说清楚下一步能不能再拉。
 
 - [ ] **T054**: 审批期预览前端（「预览试用」置顶 / 四个界面状态 / 打开预览 / 手动回收）
   **文件**: `client/src/components/approval/AppPreviewPanel.tsx`, `client/src/locales/{zh-Hans,en,ja}/translation.json`
