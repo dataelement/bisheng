@@ -83,10 +83,14 @@ def register() -> None:
     ``lifecycle_hooks.register_app_deleted_hook``, which matters because a
     worker that re-initialises would otherwise cancel the same approval twice.
     """
-    from bisheng.app_publish.domain.services.app_credential_service import resolve_hosted_app
+    from bisheng.app_publish.domain.services.app_credential_service import (
+        assert_hosted_app_executable,
+        resolve_hosted_app,
+    )
     from bisheng.app_runtime.domain.services import lifecycle_hooks
     from bisheng.open_api.domain.models.api_credential import SUBJECT_KIND_HOSTED_APP
     from bisheng.open_api.domain.services.credential_validator import SUBJECT_RESOLVERS
+    from bisheng.open_api.domain.services.execution_context import SUBJECT_EXECUTION_GUARDS
 
     lifecycle_hooks.register_app_deleted_hook(on_app_deleted)
     lifecycle_hooks.register_app_deleted_hook(on_app_deleted_revoke_credential)
@@ -96,4 +100,9 @@ def register() -> None:
     # credential is refused with 26002 by ``_resolve_from_database`` — which is
     # the fail-closed behaviour we want in a process that did not wire F055.
     SUBJECT_RESOLVERS[SUBJECT_KIND_HOSTED_APP] = resolve_hosted_app
-    logger.debug("app_publish.composition registered (app-deleted hooks + hosted_app subject resolver)")
+    # The same registration for the asynchronous leg. **Both or neither** — a
+    # process that resolves the subject at admission but cannot re-check it at
+    # execution would let a queued task outlive the stop that was supposed to
+    # end it, so this pair belongs in one function.
+    SUBJECT_EXECUTION_GUARDS[SUBJECT_KIND_HOSTED_APP] = assert_hosted_app_executable
+    logger.debug("app_publish.composition registered (app-deleted hooks + hosted_app subject resolver and guard)")

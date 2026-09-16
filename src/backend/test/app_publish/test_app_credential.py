@@ -28,7 +28,9 @@ reason that table exists instead of reusing ``owner_user_id`` as the subject.
 from __future__ import annotations
 
 import ast
+import importlib
 import pathlib
+from contextlib import contextmanager
 
 import pytest
 
@@ -40,13 +42,14 @@ async def hosted_app_resolver():
     """Install the ``hosted_app`` resolver for the duration of one test.
 
     Registered through the composition root so the wiring under test is the one
-    that ships, and torn down afterwards because ``SUBJECT_RESOLVERS`` and the
-    deletion-hook list are both process-wide.
+    that ships, and torn down afterwards because ``SUBJECT_RESOLVERS``, the
+    execution-guard registry and the deletion-hook list are all process-wide.
     """
     from bisheng.app_publish.composition import register
     from bisheng.app_runtime.domain.services import lifecycle_hooks
     from bisheng.open_api.domain.models.api_credential import SUBJECT_KIND_HOSTED_APP
     from bisheng.open_api.domain.services.credential_validator import SUBJECT_RESOLVERS
+    from bisheng.open_api.domain.services.execution_context import SUBJECT_EXECUTION_GUARDS
 
     lifecycle_hooks.clear_app_deleted_hooks()
     register()
@@ -54,7 +57,90 @@ async def hosted_app_resolver():
         yield SUBJECT_RESOLVERS
     finally:
         SUBJECT_RESOLVERS.pop(SUBJECT_KIND_HOSTED_APP, None)
+        SUBJECT_EXECUTION_GUARDS.pop(SUBJECT_KIND_HOSTED_APP, None)
         lifecycle_hooks.clear_app_deleted_hooks()
+
+
+@pytest.fixture()
+def sync_subject_db(monkeypatch):
+    """A **synchronous** SQLite holding just ``app`` + ``hosted_app_subject``.
+
+    The package's async fixture is one aiosqlite connection that a sync engine
+    cannot join, and the execution guard runs on the Celery leg where only sync
+    sessions exist. So this builds the two tables that guard reads and binds the
+    factory by name, exactly as ``_SESSION_PATCH_TARGETS`` binds the async one.
+
+    Yields ``(seed_app, seed_subject)``.
+    """
+    from sqlalchemy.pool import StaticPool
+    from sqlmodel import Session, SQLModel, create_engine
+
+    from bisheng.app_publish.domain.models.hosted_app_subject import HostedAppSubject
+    from bisheng.database.models.app import App
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    SQLModel.metadata.create_all(engine, tables=[App.__table__, HostedAppSubject.__table__])
+
+    @contextmanager
+    def _session():
+        with Session(engine) as session:
+            yield session
+
+    module = importlib.import_module("bisheng.app_publish.domain.services.app_credential_service")
+    monkeypatch.setattr(module, "get_sync_db_session", _session)
+
+    def _seed(*, app_id: str = "app-sync", state: str = "online", tenant_id: int = ROOT_TENANT_ID) -> int:
+        with Session(engine) as session:
+            session.add(
+                App(
+                    id=app_id,
+                    slug=app_id,
+                    name="sync app",
+                    owner_user_id=7,
+                    tenant_id=tenant_id,
+                    state=state,
+                )
+            )
+            subject = HostedAppSubject(app_id=app_id)
+            session.add(subject)
+            session.commit()
+            return int(subject.id)
+
+    return _seed
+
+
+def _hosted_credential(*, subject_id: int, tenant_id: int = ROOT_TENANT_ID):
+    from bisheng.open_api.domain.models.api_credential import SUBJECT_KIND_HOSTED_APP, ApiCredential
+
+    return ApiCredential(
+        id=901,
+        tenant_id=tenant_id,
+        subject_kind=SUBJECT_KIND_HOSTED_APP,
+        subject_id=subject_id,
+        name="hosted-app:sync",
+        key_prefix="bs-app-",
+        last4="abcd",
+        token_hash="0" * 64,
+        scopes=[],
+    )
+
+
+def _hosted_snapshot(*, subject_id: int, tenant_id: int = ROOT_TENANT_ID):
+    from bisheng.open_api.domain.context import OpenApiExecutionSnapshot
+
+    return OpenApiExecutionSnapshot(
+        tenant_id=tenant_id,
+        actor_kind="hosted_app",
+        actor_id=subject_id,
+        authorization_subject_type="user",
+        authorization_subject_id=7,
+        resource_owner_user_id=7,
+        effective_user_id=None,
+        mode="S",
+        credential_id=901,
+        trace_id="trace-hosted",
+        channel="open_api_v2",
+    )
 
 
 async def _set_state(publish_db, app_id: str, state: str) -> None:
@@ -227,6 +313,38 @@ async def test_delegate_can_never_be_issued_to_an_application(publish_db, creden
     app, _ = await app_factory(state="online")
     with pytest.raises(OpenApiDelegateConfigurationInvalidError):
         await AppRuntimeCredentialService.issue(app.id, scopes=["delegate"])
+
+
+@pytest.mark.parametrize(
+    ("scopes", "error_name"),
+    [
+        (["not:a:scope"], "OpenApiUnknownScopeError"),
+        (["delegate"], "OpenApiDelegateConfigurationInvalidError"),
+    ],
+)
+async def test_a_refused_reissue_leaves_the_running_key_alive(
+    publish_db, credential_redis, app_factory, hosted_app_resolver, scopes, error_name
+):
+    """A rejected scope must not take the container's current credential with it.
+
+    Re-issue revokes before it mints, so every reason to refuse the *request*
+    has to be established first — otherwise a capability declaration that
+    derives a scope this deployment does not offer would leave a running
+    application unauthenticated until somebody published again.
+    """
+    import bisheng.common.errcode.open_api as open_api_errors
+    from bisheng.app_publish.domain.services.app_credential_service import AppRuntimeCredentialService
+    from bisheng.open_api.domain.services.credential_validator import validate_bearer
+
+    app, _ = await app_factory(state="online")
+    live = await AppRuntimeCredentialService.issue(app.id)
+
+    with pytest.raises(getattr(open_api_errors, error_name)):
+        await AppRuntimeCredentialService.issue(app.id, scopes=scopes)
+
+    credential_redis.values.clear()
+    assert (await validate_bearer(f"Bearer {live}")).subject_ref == app.id
+    assert len(await _live_credentials(await _subject_id(app.id))) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -553,6 +671,87 @@ async def test_composition_registers_the_resolver_idempotently(hosted_app_resolv
     register()
     assert hosted_app_resolver[SUBJECT_KIND_HOSTED_APP] is resolve_hosted_app
     assert lifecycle_hooks._hooks.count(on_app_deleted_revoke_credential) == 1
+
+
+# ---------------------------------------------------------------------------
+# AC-58, asynchronous leg — a queued task must not outlive the stop
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("state", ["stopped", "pending_capacity", "draft", "deleted"])
+def test_a_queued_task_of_a_stopped_application_is_refused(sync_subject_db, state):
+    """The Celery leg re-checks what the synchronous gate checked.
+
+    Admission happens once, at request time; the work it enqueues can run
+    minutes later. Without this check "the application is offline" would be
+    true only of requests that had not been accepted yet.
+    """
+    from bisheng.app_publish.domain.services.app_credential_service import assert_hosted_app_executable
+    from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError
+
+    subject_id = sync_subject_db(state=state)
+    with pytest.raises(OpenApiCredentialInvalidError):
+        assert_hosted_app_executable(_hosted_credential(subject_id=subject_id), _hosted_snapshot(subject_id=subject_id))
+
+
+def test_a_queued_task_of_an_online_application_is_allowed(sync_subject_db):
+    from bisheng.app_publish.domain.services.app_credential_service import assert_hosted_app_executable
+
+    subject_id = sync_subject_db(state="online")
+    assert_hosted_app_executable(_hosted_credential(subject_id=subject_id), _hosted_snapshot(subject_id=subject_id))
+
+
+def test_a_queued_task_whose_application_moved_tenant_is_refused(sync_subject_db):
+    from bisheng.app_publish.domain.services.app_credential_service import assert_hosted_app_executable
+    from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError
+
+    subject_id = sync_subject_db(state="online", tenant_id=SUB_TENANT_ID)
+    with pytest.raises(OpenApiCredentialInvalidError):
+        assert_hosted_app_executable(
+            _hosted_credential(subject_id=subject_id, tenant_id=ROOT_TENANT_ID),
+            _hosted_snapshot(subject_id=subject_id, tenant_id=ROOT_TENANT_ID),
+        )
+
+
+def test_a_queued_task_with_no_surrogate_row_is_refused(sync_subject_db):
+    from bisheng.app_publish.domain.services.app_credential_service import assert_hosted_app_executable
+    from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError
+
+    sync_subject_db(state="online")
+    with pytest.raises(OpenApiCredentialInvalidError):
+        assert_hosted_app_executable(_hosted_credential(subject_id=4242), _hosted_snapshot(subject_id=4242))
+
+
+def test_a_subject_kind_without_an_execution_guard_cannot_execute(monkeypatch):
+    """Fail-closed default: an unregistered kind is refused, not waved through.
+
+    The pre-F055 shape was an ``if`` / ``elif`` over the two built-in kinds with
+    no ``else``, so a third kind would have restored its identity on the worker
+    with nothing checked at all.
+    """
+    from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError
+    from bisheng.open_api.domain.services import execution_context
+
+    subject_id = 11
+    monkeypatch.setattr(
+        execution_context.CredentialRepository,
+        "get_for_execution_sync",
+        staticmethod(lambda _credential_id: _hosted_credential(subject_id=subject_id)),
+    )
+    monkeypatch.setattr(execution_context, "SUBJECT_EXECUTION_GUARDS", {})
+
+    with pytest.raises(OpenApiCredentialInvalidError):
+        execution_context.validate_execution_snapshot(_hosted_snapshot(subject_id=subject_id))
+
+
+def test_composition_registers_the_execution_guard(hosted_app_resolver):
+    """Resolver and guard are one registration — a process with only the first
+    would admit a hosted application and then never re-check it."""
+    from bisheng.app_publish.domain.services.app_credential_service import assert_hosted_app_executable
+    from bisheng.open_api.domain.models.api_credential import SUBJECT_KIND_HOSTED_APP
+    from bisheng.open_api.domain.services.execution_context import SUBJECT_EXECUTION_GUARDS
+
+    assert SUBJECT_EXECUTION_GUARDS[SUBJECT_KIND_HOSTED_APP] is assert_hosted_app_executable
 
 
 def test_the_injection_variable_name_is_the_one_the_contract_names():

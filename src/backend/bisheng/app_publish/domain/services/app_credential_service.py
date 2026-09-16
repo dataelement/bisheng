@@ -17,6 +17,10 @@ The shape of the whole thing:
   takes effect within ``open_api.credential_cache_ttl_seconds``, which the
   settings model caps at 5 — that cap **is** INV-28's five-second bound, which
   is why :func:`assert_revocation_bound` exists to say so out loud.
+  The refusal has **two** halves, and one without the other is a hole: the
+  resolver guards admission, and :func:`assert_hosted_app_executable` guards the
+  Celery leg, where a task accepted seconds before the stop would otherwise run
+  with the application's authority long after it.
 * **Deletion revokes** (AC-58), through F054's app-deleted hook, wired in
   ``app_publish/composition.py``.
 * **There is no management surface** (AC-59). These rows are a distinct
@@ -47,16 +51,18 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import select
 
 from bisheng.app_publish.domain.models.hosted_app_subject import HostedAppSubject, HostedAppSubjectDao
 from bisheng.app_runtime.domain.constants import AppState
 from bisheng.common.errcode.app_publish import AppRuntimeSubjectUnavailableError
-from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError
+from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError, OpenApiDelegateConfigurationInvalidError
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import bypass_tenant_filter
-from bisheng.core.database import get_async_db_session
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.models.app import App, AppDao
-from bisheng.open_api.domain.context import OpenApiPrincipal
+from bisheng.open_api.domain.context import OpenApiExecutionSnapshot, OpenApiPrincipal
 from bisheng.open_api.domain.models.api_credential import (
     REVOKE_REASON_REISSUED,
     REVOKE_REASON_SUBJECT_DELETED,
@@ -64,6 +70,7 @@ from bisheng.open_api.domain.models.api_credential import (
     ApiCredential,
 )
 from bisheng.open_api.domain.schemas.credential import KeyIssueRequest
+from bisheng.open_api.domain.scopes import DELEGATE_SCOPE_CODE
 from bisheng.open_api.domain.services.credential_service import CredentialService
 
 #: Environment variable the runtime credential is injected under (design D13).
@@ -128,6 +135,19 @@ class AppRuntimeCredentialService:
         app = await load_subject_app(app_id)
         if app is None:
             raise AppRuntimeSubjectUnavailableError(app_id=app_id, reason="app_missing")
+
+        # Every reason to refuse the *request* is established before anything is
+        # revoked. ``CredentialService.issue`` validates the same two things
+        # again a few lines down, but by then the previous key is already gone —
+        # a capability declaration that derives an unknown scope would otherwise
+        # take the running container's credential with it and leave the
+        # application unauthenticated until someone publishes again.
+        requested = CredentialService.validate_scopes(list(scopes))
+        if DELEGATE_SCOPE_CODE in requested:
+            # An application acting on a human's behalf is not a shape this
+            # subject has; ``_delegate_entries`` refuses it too, only later.
+            raise OpenApiDelegateConfigurationInvalidError()
+
         subject = await cls._ensure_subject(app.id)
 
         # Revoke first: a failure between the two leaves the application with no
@@ -138,7 +158,7 @@ class AppRuntimeCredentialService:
             tenant_id=int(app.tenant_id or 0),
             subject_kind=SUBJECT_KIND_HOSTED_APP,
             subject_id=int(subject.id),
-            request=KeyIssueRequest(name=cls._credential_name(app), scopes=list(scopes), expires_at=None),
+            request=KeyIssueRequest(name=cls._credential_name(app), scopes=requested, expires_at=None),
             created_by=None,
         )
         logger.info(
@@ -185,9 +205,19 @@ class AppRuntimeCredentialService:
         existing = await cls._find_subject(app_id)
         if existing is not None:
             return existing
-        async with get_async_db_session() as session:
-            row = await HostedAppSubjectDao.acreate(session, app_id)
-            await session.commit()
+        try:
+            async with get_async_db_session() as session:
+                row = await HostedAppSubjectDao.acreate(session, app_id)
+                await session.commit()
+        except IntegrityError:
+            # ``uk_hosted_app_subject_app`` did its job: a concurrent publish of
+            # the same application inserted first. Read that row rather than
+            # failing the publish — the surrogate has to be *one* per
+            # application, and which of the two racers created it is immaterial.
+            existing = await cls._find_subject(app_id)
+            if existing is None:
+                raise
+            return existing
         return row
 
     @staticmethod
@@ -248,10 +278,33 @@ async def resolve_hosted_app(row: ApiCredential) -> OpenApiPrincipal:
     )
 
 
+def assert_hosted_app_executable(credential: ApiCredential, snapshot: OpenApiExecutionSnapshot) -> None:
+    """``SUBJECT_EXECUTION_GUARDS['hosted_app']`` — the synchronous twin of
+    :func:`resolve_hosted_app`, run when a Celery task restores the identity
+    that enqueued it.
+
+    Without it, "the application went offline" would only be true of requests
+    that had not been accepted yet: work queued a second before the stop would
+    still execute with the application's authority, minutes later (AC-58). Same
+    three refusals as the admission path, same ``26002``, and — like the
+    admission path — nothing here reads the ``user`` row (AC-60).
+    """
+    with bypass_tenant_filter(), get_sync_db_session() as session:
+        subject = session.exec(
+            select(HostedAppSubject).where(HostedAppSubject.id == int(credential.subject_id))
+        ).first()
+        app = session.exec(select(App).where(App.id == subject.app_id)).first() if subject is not None else None
+    if app is None or app.state != AppState.ONLINE.value:
+        raise OpenApiCredentialInvalidError()
+    if int(app.tenant_id or 0) != int(credential.tenant_id or 0) or int(app.tenant_id or 0) != int(snapshot.tenant_id):
+        raise OpenApiCredentialInvalidError()
+
+
 __all__ = [
     "HOSTED_APP_TOKEN_ENV",
     "REVOCATION_BOUND_SECONDS",
     "AppRuntimeCredentialService",
+    "assert_hosted_app_executable",
     "assert_revocation_bound",
     "load_subject_app",
     "resolve_hosted_app",
