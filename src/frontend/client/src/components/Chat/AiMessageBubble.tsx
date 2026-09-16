@@ -21,7 +21,7 @@ import { TaskTurnPanel } from "~/components/Linsight/Execution/TaskTurnPanel";
 import type { ArtifactFile } from "~/components/Linsight/Artifacts/artifactUtils";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
-import { isTransientErrorType } from "~/components/ChatErrorCard";
+import { ChatErrorCard, isTransientErrorType } from "~/components/ChatErrorCard";
 import { MessageFeedbackButtons } from "~/components/Chat/MessageFeedbackButtons";
 import { likeChatApi, disLikeCommentApi } from "~/api/apps";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
@@ -596,6 +596,13 @@ function AssistantBubble({
         ? localize("workstation.chat.answer_interrupted")
         : message.errorText || regularContent || localize("workstation.chat.answer_failed");
 
+    // A failure the backend neither classified (`error_type`) nor attached a raw
+    // exception to: all we have is one human-readable line (a translated
+    // api_errors code, "connection lost", …). Show that line as the card's
+    // description — no per-type explanation, no hint, nothing to disclose.
+    const plainFailureText = message.errorText || regularContent || localize("workstation.chat.answer_failed");
+    const isPlainFailure = !hasAnswerBody && !message.errorType && !message.errorDetail;
+
     const { data: bsConfig } = useGetBsConfig()
 
     const modelName = message.sender || "AI";
@@ -752,18 +759,28 @@ function AssistantBubble({
                             }
                             onRetry={onRegenerate}
                         />
+                    ) : hasAnswerBody ? (
+                        // Cut short after a partial answer: the same one-line neutral
+                        // notice as the transient case, minus Retry. The answer above
+                        // is what matters; the specific reason would be noise, and
+                        // the static attention mark (not the load gauge) says this
+                        // one won't clear by waiting.
+                        <ServiceBusyNotice desc={errorNotice} icon="attention" />
                     ) : (
-                        <div
-                            className={cn(
-                                "text-red-500 bg-red-50 px-3 py-2",
-                                hasAnswerBody && "mt-2",
-                                knowledgeChatLayout
-                                    ? "rounded-[2px] text-[14px] leading-[22px]"
-                                    : "text-sm rounded-[10px]"
-                            )}
-                        >
-                            {errorNotice}
-                        </div>
+                        // Terminal failure with no answer: the same classified card
+                        // task mode uses (title + explanation per error_type, raw
+                        // provider text behind "view details") instead of a red text
+                        // block. With only a plain backend line to show, the card is
+                        // just the title plus that line.
+                        <ChatErrorCard
+                            errorType={resolvedErrorType}
+                            detail={message.errorDetail}
+                            fallbackMessage={isPlainFailure ? undefined : message.errorText || regularContent}
+                            description={isPlainFailure ? plainFailureText : undefined}
+                            // Daily chat never shows the per-type "建议…" line: the
+                            // input box is right below, so "re-send" goes without saying.
+                            hideHint
+                        />
                     )
                 )}
 
