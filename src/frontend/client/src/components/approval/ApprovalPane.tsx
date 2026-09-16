@@ -21,6 +21,7 @@ import { cn } from "~/utils";
 import { Dialog, DialogContent } from "../ui/Dialog";
 import { ExpandableSearchField } from "../ui/ExpandableSearchField";
 import { RequestDetailPanel, TaskDetailPanel } from "./ApprovalDetailPanels";
+import { AppReviewView, type AppReviewTarget } from "./AppReviewView";
 import {
   IN_PROGRESS_STATUSES,
   StatusBadge,
@@ -79,6 +80,14 @@ export function ApprovalPane({
   const [withdrawReason, setWithdrawReason] = useState("");
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
   const [revokeReason, setRevokeReason] = useState("");
+  /**
+   * The review view (AC-25) is a second mode of this same surface, not a second
+   * surface — design D14 案 A, read on the page the approval centre became: it
+   * takes over both columns so the file tree and the code get the full content
+   * panel, and 「返回」 puts the list back with the selection intact. A route of
+   * its own would need a permission guard and a return state for nothing.
+   */
+  const [reviewTarget, setReviewTarget] = useState<AppReviewTarget | null>(null);
 
   const filteredTaskItems = useMemo(() => {
     const byStatus = taskFilter === "pending_me"
@@ -176,15 +185,19 @@ export function ApprovalPane({
     setSelectedTaskId(target?.taskId ?? null);
     setSelectedInstanceId(target?.instanceId ?? null);
     setSearchQuery("");
+    setReviewTarget(null);
     // Deep-links (from a notification) open straight to the detail; otherwise land on the list.
     setCompactView(target?.taskId || target?.instanceId ? "detail" : "list");
     // setCompactView is owned by the shell and stable; excluding it keeps this to a mount/deep-link reset.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, target?.instanceId, target?.taskId]);
 
-  // Switching the nav section clears the search box so the new list starts unfiltered.
+  // Switching the nav section clears the search box so the new list starts
+  // unfiltered, and closes the review view — its release belongs to the
+  // request that was open, not to whatever the other list shows.
   useEffect(() => {
     setSearchQuery("");
+    setReviewTarget(null);
   }, [activeTab]);
 
   useEffect(() => {
@@ -299,6 +312,18 @@ export function ApprovalPane({
     ["approved", "executed"].includes(String(taskDetail?.instance_status ?? "").toLowerCase()) &&
     !taskDetail?.grant_revoked;
 
+  if (reviewTarget) {
+    return (
+      <div className="col-span-full flex min-h-0 flex-col bg-white">
+        <AppReviewView
+          target={reviewTarget}
+          localize={localize}
+          onBack={() => setReviewTarget(null)}
+        />
+      </div>
+    );
+  }
+
   return (
     <>
             {/* Left list — hidden in compact detail view */}
@@ -412,9 +437,9 @@ export function ApprovalPane({
                 {loadingDetail ? (
                   <div className="flex h-full items-center justify-center text-[14px] text-text-3">{localize("com_approval_loading")}</div>
                 ) : activeTab === "my_tasks" && taskDetail ? (
-                  <TaskDetailPanel detail={taskDetail} localize={localize} onBack={() => setCompactView("list")} />
+                  <TaskDetailPanel detail={taskDetail} localize={localize} onBack={() => setCompactView("list")} onOpenReview={setReviewTarget} />
                 ) : activeTab === "my_requests" && requestDetail ? (
-                  <RequestDetailPanel detail={requestDetail} localize={localize} onBack={() => setCompactView("list")} />
+                  <RequestDetailPanel detail={requestDetail} localize={localize} onBack={() => setCompactView("list")} onOpenReview={setReviewTarget} />
                 ) : (
                   <div className="flex h-full items-center justify-center text-[14px] text-text-3">{localize("com_approval_empty_detail")}</div>
                 )}

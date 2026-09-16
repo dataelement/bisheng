@@ -33,7 +33,10 @@
       "reasonTooLarge": "This file is too large, so its content is not compared.",
       "patchTruncated": "This file has too many changes; only the first part is shown.",
       "patchOmitted": "The changes across all files are too large, so this one is not shown.",
-      "maskedSecrets": "{{count}} suspected secrets hidden"
+      "maskedSecrets": "{{count}} suspected secrets hidden",
+      "changeAdded": "Added file",
+      "changeRemoved": "Removed file",
+      "changeModified": "Modified file"
     }
   }
 }

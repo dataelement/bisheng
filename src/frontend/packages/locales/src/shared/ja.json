@@ -33,7 +33,10 @@
       "reasonTooLarge": "ファイルが大きすぎるため、内容は比較しません。",
       "patchTruncated": "このファイルは変更が多すぎるため、先頭部分のみ表示しています。",
       "patchOmitted": "全ファイルの変更量が大きすぎるため、このファイルは表示していません。",
-      "maskedSecrets": "秘密情報の疑いがある箇所を {{count}} 件隠しました"
+      "maskedSecrets": "秘密情報の疑いがある箇所を {{count}} 件隠しました",
+      "changeAdded": "追加されたファイル",
+      "changeRemoved": "削除されたファイル",
+      "changeModified": "変更されたファイル"
     }
   }
 }

@@ -33,7 +33,10 @@
       "reasonTooLarge": "这个文件太大，不比较内容。",
       "patchTruncated": "这个文件改动太多，只展示了前面一部分。",
       "patchOmitted": "所有文件的改动加起来太多，这个文件没有展示。",
-      "maskedSecrets": "已隐藏 {{count}} 处疑似密钥"
+      "maskedSecrets": "已隐藏 {{count}} 处疑似密钥",
+      "changeAdded": "新增的文件",
+      "changeRemoved": "删除的文件",
+      "changeModified": "修改过的文件"
     }
   }
 }

@@ -65,11 +65,20 @@ export interface VersionDiffViewProps {
   className?: string;
 }
 
-const CHANGE_LABEL_KEY: Record<string, string> = {
+// `as const` rather than `Record<string, string>`: the client augments
+// i18next's types from its resource files, so a `t()` argument widened to
+// `string` fails that app's strict typecheck while passing this package's own.
+const CHANGE_LABEL_KEY = {
   added: 'changeAdded',
   removed: 'changeRemoved',
   modified: 'changeModified',
-};
+} as const;
+
+type ChangeLabelKey = (typeof CHANGE_LABEL_KEY)[keyof typeof CHANGE_LABEL_KEY];
+
+function changeLabelKey(change: string): ChangeLabelKey {
+  return CHANGE_LABEL_KEY[change as VersionDiffChange] ?? 'changeModified';
+}
 
 const CHANGE_MARK: Record<string, string> = {
   added: 'A',
@@ -84,10 +93,14 @@ const CHANGE_MARK_CLASS: Record<string, string> = {
 };
 
 /** `previewable`/`comparable` reasons the scanner can answer with. */
-const REASON_KEY: Record<string, string> = {
+const REASON_KEY = {
   binary: 'reasonBinary',
   too_large: 'reasonTooLarge',
-};
+} as const;
+
+function reasonKey(reason: string | null): (typeof REASON_KEY)[keyof typeof REASON_KEY] | 'notComparable' {
+  return REASON_KEY[(reason ?? '') as keyof typeof REASON_KEY] ?? 'notComparable';
+}
 
 type DiffLineKind = 'add' | 'del' | 'hunk' | 'meta' | 'context';
 
@@ -196,7 +209,7 @@ export function VersionDiffView({
                     }`}
                   >
                     <span
-                      title={t(CHANGE_LABEL_KEY[file.change] ?? 'changeModified')}
+                      title={t(changeLabelKey(file.change))}
                       className={`shrink-0 rounded px-1 font-mono text-[11px] ${
                         CHANGE_MARK_CLASS[file.change] ?? CHANGE_MARK_CLASS.modified
                       }`}
@@ -242,7 +255,7 @@ export function VersionDiffView({
                 </div>
                 {!selectedFile.comparable ? (
                   <p className="p-4 text-sm text-slate-500 dark:text-slate-400">
-                    {t(REASON_KEY[selectedFile.reason ?? ''] ?? 'notComparable')}
+                    {t(reasonKey(selectedFile.reason))}
                   </p>
                 ) : selectedPatch?.patch ? (
                   <>
