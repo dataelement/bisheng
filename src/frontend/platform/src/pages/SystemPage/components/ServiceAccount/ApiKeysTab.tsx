@@ -26,6 +26,7 @@ import { formatIsoDateTime } from "@/util/utils"
 import { Loader2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { AccessInfoPanel } from "./AccessInfoPanel"
 import { KeyIssueDialog } from "./KeyIssueDialog"
 import { KeyRevealDialog } from "./KeyRevealDialog"
 
@@ -157,6 +158,10 @@ export function ApiKeysTab({
 
   return (
     <div className="space-y-4">
+      {/* AC-44: the access information sits above the key table — it is what an
+          administrator forwards before any key exists. Absent where the
+          open-capability layer is not deployed (the panel decides). */}
+      <AccessInfoPanel />
       <div className="flex justify-end gap-2">
         <Button
           variant="outline"

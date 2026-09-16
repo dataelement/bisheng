@@ -24,7 +24,10 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from bisheng.common.schemas.api import resp_200, resp_500
 from bisheng.common.services.config_service import settings
 from bisheng.dev_toolkit.domain.services import artifact_service
-from bisheng.open_api.domain.services.public_base_url import resolve_public_base_url
+from bisheng.open_api.domain.services.public_base_url import (
+    model_gateway_base_url,
+    resolve_public_base_url,
+)
 
 router = APIRouter(prefix="/dev-toolkit", tags=["Dev Toolkit"])
 
@@ -87,14 +90,24 @@ def get_dev_toolkit_versions(request: Request):
             #
             # This router is only mounted when the open-capability layer is on,
             # so "the address does not appear where the layer is not deployed"
-            # needs no code. ``model`` holds F051's slot open for the same
-            # reason ``sdk`` does: so filling it is not a reshape.
+            # needs no code.
             "mcp": {
                 "url": f"{resolve_public_base_url(request)}/api/v2/mcp",
                 "transport": "streamable-http",
                 "auth": "bearer",
             },
-            "model": None,
+            # F051's slot, filled (T046). ``model_gateway_base_url`` is the one
+            # producer of this address (F051 AC-30 / design D2) — the same
+            # function ``GET /api/v2/auth/whoami`` answers with — so the
+            # access-information panel and ``bisheng dev`` read it rather than
+            # each appending ``/api/v2/model/v1`` to an origin of their own.
+            # ``protocol`` says which client dialect the address speaks, because
+            # the face answers Anthropic paths with a refusal (26202).
+            "model": {
+                "base_url": model_gateway_base_url(request),
+                "protocol": "openai",
+                "auth": "bearer",
+            },
             "platform": {
                 # From the manifest, never from `bisheng.__version__` — that one
                 # is a hardcoded literal, so comparing the CLI against it would

@@ -2328,6 +2328,21 @@
   },
   "openApiManagement": {
     "empty": "暂无记录",
+    "accessInfo": {
+      "title": "接入信息",
+      "hint": "把这段信息发给开发者，他们照着就能把本地应用连上平台。密钥不在其中，请另行单独转交。",
+      "copy": "复制接入信息",
+      "platformAddress": "平台地址",
+      "mcpAddress": "MCP 服务地址",
+      "modelBaseUrl": "模型调用地址（OpenAI 兼容）",
+      "cliDownload": "命令行工具下载",
+      "loginCommand": "登录命令",
+      "keyPlaceholder": "<在此填入单独转交的密钥>",
+      "cliMissing": "本次部署没有附带命令行工具安装包，请联系平台管理员。",
+      "copyHeader": "毕昇平台接入信息（不含密钥）",
+      "copyLine": "{{label}}：{{value}}",
+      "copyFooter": "密钥不在这段文本里，请向发给你这段信息的管理员单独索取。"
+    },
     "fields": {
       "name": "名称",
       "description": "描述",
