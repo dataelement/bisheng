@@ -332,7 +332,7 @@ class TestGoLive:
         long as the migration takes; migrating after a *failed* start would
         change the schema under the version that is still serving.
         """
-        _, _, pending, _, payload = await _release(
+        _, _, _, _, payload = await _release(
             publish_db, app_factory, deployment_factory, state="online", declaration={"orders": ["id"]}
         )
 
