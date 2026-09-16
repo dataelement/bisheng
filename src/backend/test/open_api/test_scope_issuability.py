@@ -40,12 +40,23 @@ DELEGATE_TARGET = [DelegateScopeInput(subject_type="user", subject_id=9)]
 
 @pytest.fixture
 def delegate_target_exists(monkeypatch):
-    async def active_user(user_id):
-        return SimpleNamespace(user_id=user_id, tenant_id=1)
+    """Make every delegation target in ``DELEGATE_TARGET`` resolve.
+
+    Stubs the **batched** lookup: ``DelegateScopeService.filter_entries`` reads
+    all candidate users in one call (beta2 ``3fe98557d`` aligned picker
+    filtering with save validation). Stubbing the singular
+    ``get_active_natural_person`` instead leaves the real batched method in
+    place, it finds nobody without a database, and the save is refused with
+    ``OpenApiDelegateConfigurationInvalidError`` — which reads like the
+    exclusivity rule under test rather than a stale fixture.
+    """
+
+    async def active_users(user_ids):
+        return {user_id: SimpleNamespace(user_id=user_id, tenant_id=1) for user_id in user_ids}
 
     monkeypatch.setattr(
-        "bisheng.open_api.domain.services.delegate_scope_service.OwnerRepository.get_active_natural_person",
-        active_user,
+        "bisheng.open_api.domain.services.delegate_scope_service.OwnerRepository.get_active_natural_people",
+        active_users,
     )
 
 
