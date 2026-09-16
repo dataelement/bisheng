@@ -13,6 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+from bisheng.common.errcode.mcp_face import McpFaceError
 from bisheng.common.errcode.open_api import (
     OpenApiAsyncUnsupportedError,
     OpenApiAuthError,
@@ -52,6 +53,12 @@ def open_api_http_status(exc: BaseErrorCode | StarletteHTTPException) -> int:
         error_type = type(exc)
         code = exc.code
     if issubclass(error_type, OpenApiAuthError):
+        return getattr(exc, "http_status", error_type.http_status)
+    # F052 module 263. Same shape as the 260 band: the class carries the real
+    # transport status, an instance may narrow it. 26321 has to answer 404 (not
+    # the 400 that the code-range fallback below would produce) or "unreachable"
+    # stops being indistinguishable from "does not exist".
+    if issubclass(error_type, McpFaceError):
         return getattr(exc, "http_status", error_type.http_status)
     if issubclass(
         error_type,

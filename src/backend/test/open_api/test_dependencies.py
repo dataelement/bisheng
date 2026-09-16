@@ -1,14 +1,23 @@
 from types import SimpleNamespace
 
+import pytest
 from fastapi import APIRouter, Depends, FastAPI, File, Request, UploadFile
 from httpx import ASGITransport, AsyncClient
 
-from bisheng.common.errcode.open_api import OpenApiAuthDependencyUnavailableError
+from bisheng.common.errcode.open_api import (
+    OpenApiAuthDependencyUnavailableError,
+    PersonalTokenDisabledError,
+)
 from bisheng.core.context.tenant import get_current_tenant_id, get_visible_tenant_ids
-from bisheng.open_api.api.dependencies import verify_open_api_access
+from bisheng.open_api.api.dependencies import (
+    admit_open_api_principal,
+    open_api_execution_scope,
+    verify_open_api_access,
+)
 from bisheng.open_api.api.exception_handlers import register_open_api_exception_handlers
 from bisheng.open_api.domain.context import OpenApiPrincipal, get_current_open_api_principal
 from bisheng.open_api.domain.scopes import open_api_scope
+from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.application.identity import get_current_permission_actor
 
 
@@ -322,3 +331,122 @@ async def test_delegate_key_on_a_non_toolkit_endpoint_keeps_its_existing_verdict
     scoped = await request(app, "/api/v2/registered", authorization="Bearer opaque")
     assert scoped.status_code == 400
     assert scoped.json()["status_code"] == 26016
+
+
+# ---------------------------------------------------------------------------
+# F052 T201a — the split that lets the MCP face reuse this code, not copy it.
+# ---------------------------------------------------------------------------
+
+
+def bare_connection(headers: list[tuple[bytes, bytes]] | None = None) -> Request:
+    return Request({"type": "http", "headers": headers or [], "path": "/x", "query_string": b""})
+
+
+async def test_admit_returns_principal_and_pat_scope(monkeypatch):
+    async def validate_service_account(_authorization):
+        return service_account_principal()
+
+    async def validate_pat(_authorization):
+        return natural_person_principal()
+
+    conn = bare_connection([(b"authorization", b"Bearer opaque")])
+
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.validate_bearer", validate_service_account)
+    principal, data_scope = await admit_open_api_principal(conn)
+    assert (principal.actor_kind, data_scope) == ("service_account", DATA_SCOPE_ALL)
+    # Admission publishes the principal for the audit middleware and installs
+    # nothing that outlives the call — the execution scope owns that.
+    assert conn.scope["open_api_principal"] is principal
+    assert get_current_tenant_id() is None
+    assert get_current_permission_actor() is None
+
+    async def narrowed_policy(_tenant_id):
+        return SimpleNamespace(enabled=True, data_scope="personal_only")
+
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.validate_bearer", validate_pat)
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.settings.open_api.pat_enabled", True)
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.TenantSettingService.get_policy", narrowed_policy)
+    _principal, data_scope = await admit_open_api_principal(conn)
+    assert data_scope == "personal_only"
+
+
+async def test_admit_refuses_a_personal_token_the_deployment_disabled(monkeypatch):
+    async def validate_pat(_authorization):
+        return natural_person_principal()
+
+    async def disabled_policy(_tenant_id):
+        return SimpleNamespace(enabled=False, data_scope=DATA_SCOPE_ALL)
+
+    conn = bare_connection([(b"authorization", b"Bearer opaque")])
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.validate_bearer", validate_pat)
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.settings.open_api.pat_enabled", False)
+    with pytest.raises(PersonalTokenDisabledError):
+        await admit_open_api_principal(conn)
+
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.settings.open_api.pat_enabled", True)
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.TenantSettingService.get_policy", disabled_policy)
+    with pytest.raises(PersonalTokenDisabledError):
+        await admit_open_api_principal(conn)
+
+
+async def test_pat_policy_read_happens_with_tenant_contextvar_installed(monkeypatch):
+    """The one ordering the split could silently reverse.
+
+    ``TenantSettingService.get_policy`` takes the tenant id explicitly, but the
+    DAO underneath it still runs under the automatic tenant filter — read it
+    before the tenant ContextVar is installed and it fails (or, worse, reads
+    somebody else's row) only on a real database, where no unit test looks.
+    """
+
+    seen: dict[str, object] = {}
+
+    async def validate_pat(_authorization):
+        return natural_person_principal()
+
+    async def recording_policy(_tenant_id):
+        seen["tenant"] = get_current_tenant_id()
+        seen["visible"] = set(get_visible_tenant_ids())
+        return SimpleNamespace(enabled=True, data_scope=DATA_SCOPE_ALL)
+
+    conn = bare_connection([(b"authorization", b"Bearer opaque")])
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.validate_bearer", validate_pat)
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.settings.open_api.pat_enabled", True)
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.TenantSettingService.get_policy", recording_policy)
+
+    await admit_open_api_principal(conn)
+
+    assert seen["tenant"] == 9
+    assert seen["visible"] == {1, 9}
+    assert get_current_tenant_id() is None
+
+
+async def test_execution_scope_installs_and_resets_four_contextvars():
+    principal = service_account_principal()
+    conn = bare_connection()
+
+    async with open_api_execution_scope(conn, principal, data_scope=DATA_SCOPE_ALL) as resolved:
+        assert resolved is principal
+        assert get_current_tenant_id() == 9
+        assert set(get_visible_tenant_ids()) == {1, 9}
+        assert get_current_open_api_principal() is principal
+        actor = get_current_permission_actor()
+        assert actor.fga_subject == "service_account:31"
+        assert actor.data_scope == DATA_SCOPE_ALL
+
+    assert get_current_tenant_id() is None
+    assert get_current_open_api_principal() is None
+    assert get_current_permission_actor() is None
+
+
+async def test_execution_scope_without_prepare_never_resolves_delegation(monkeypatch):
+    """The MCP face passes no ``prepare``: identity headers are refused, not parsed."""
+
+    async def explode(*_args, **_kwargs):
+        raise AssertionError("resolve_request_identity must not run without prepare")
+
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.resolve_request_identity", explode)
+    principal = service_account_principal(scopes=frozenset({"delegate"}))
+    conn = bare_connection([(b"x-on-behalf-of", b"12")])
+
+    async with open_api_execution_scope(conn, principal, data_scope=DATA_SCOPE_ALL) as resolved:
+        assert resolved.mode == "S"
