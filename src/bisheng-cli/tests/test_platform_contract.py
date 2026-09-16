@@ -45,6 +45,11 @@ APP_PROXY_HEADERS = REPO_ROOT / "src/app-proxy/app_proxy/headers.py"
 APP_PROXY_CONFIG = REPO_ROOT / "src/app-proxy/app_proxy/config.py"
 RUNTIME_LIFECYCLE = REPO_ROOT / "src/runtime-manager/runtime_manager/lifecycle.py"
 RUNTIME_ENTRYPOINT = REPO_ROOT / "src/runtime-manager/runtime_manager/templates/python3.11/entrypoint.sh.j2"
+#: §5 of this document is the one definition of what gets injected into an app.
+#: `build_env` implements the part runtime-manager owns; the model face's three
+#: names are filled by F055 T056 from the app's runtime credential, so the
+#: document is the only place both halves are written down together.
+RUNTIME_ENV_CONTRACT = REPO_ROOT / "features/v3.0.0/054-app-domain-runtime/contracts-runtime-manager.md"
 
 
 def _module(path: Path) -> ast.Module:
@@ -200,6 +205,33 @@ def test_dev_env_names_equal_the_runtime_managers_build_env() -> None:
     """
     assert list(devdb.PLATFORM_ENV_NAMES) == _build_env_keys(RUNTIME_LIFECYCLE)
     assert tuple(devdb.RESERVED_ENV_PREFIXES) == tuple(_module_constant(RUNTIME_LIFECYCLE, "RESERVED_ENV_PREFIXES"))
+
+
+def test_model_face_env_names_come_from_the_injection_contract() -> None:
+    """`devdb.MODEL_FACE_ENV_NAMES` ⊆ what §5 of the contract declares.
+
+    These three are not in `build_env` — hosted, F055 T056 fills them from the
+    application's own runtime credential — so there is no source file to read
+    them off. The contract document is what both sides were written against, and
+    a name renamed there without the CLI following is exactly the drift that
+    makes "works with `bisheng dev`, broken hosted" possible (AC-27 / AC-49).
+    """
+    if not RUNTIME_ENV_CONTRACT.is_file():
+        pytest.fail(f"找不到注入环境变量契约 {RUNTIME_ENV_CONTRACT}；若文档被移动，请改这里的路径。")
+    section = RUNTIME_ENV_CONTRACT.read_text(encoding="utf-8").split("## 5. ", 1)
+    assert len(section) == 2, "契约文档的第 5 节（注入应用的环境变量）不见了"
+    body = section[1].split("\n## ", 1)[0]
+    for name in devdb.MODEL_FACE_ENV_NAMES:
+        assert f"`{name}`" in body, f"{name} 不在契约 §5 里——CLI 不得自造注入名"
+    # And the document still says `dev` is the one that injects them locally; if
+    # that sentence goes, this mirror has lost its reason to exist.
+    assert "`dev` 期由 F053 同名注入" in body
+
+
+def test_the_three_model_names_are_not_a_second_copy_of_the_build_env_list() -> None:
+    """The two tuples are disjoint, so neither can quietly absorb the other."""
+    assert not set(devdb.MODEL_FACE_ENV_NAMES) & set(devdb.PLATFORM_ENV_NAMES)
+    assert not set(devdb.MODEL_FACE_ENV_NAMES) & set(_build_env_keys(RUNTIME_LIFECYCLE))
 
 
 def test_dev_framework_exports_match_the_hosted_entrypoint() -> None:

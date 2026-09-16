@@ -35,6 +35,7 @@ from bisheng_cli.main import run as main_run
 from tests.helpers.platform_mock import (
     FAKE_KEY,
     FAKE_KEY_MASK,
+    FAKE_MODEL_BASE_URL,
     PlatformMock,
     env_ok,
     use_mock_transport,
@@ -253,7 +254,13 @@ def test_output_names_identity_source_platform_and_local_url_never_the_key(
     assert env["BISHENG_APP_ID"] == "app-42" and env["BISHENG_APP_SLUG"] == "echo"
     assert env["PORT"] == env["BISHENG_APP_PORT"] == str(ready["data"]["app_port"]) != str(port)
     assert env["BISHENG_APP_DB_PATH"] == str(echo_project / ".bisheng" / "dev" / "app.db")
-    assert "BISHENG_API_KEY" not in env and FAKE_KEY not in "".join(env.values())
+    # The key reaches the app under exactly one name — `OPENAI_API_KEY`, the
+    # platform's name for "the credential this process calls the model face
+    # with" (AC-27; hosted it carries the app's own token instead). Never under
+    # `BISHENG_API_KEY`, and never anywhere else.
+    assert "BISHENG_API_KEY" not in env
+    assert [name for name, value in env.items() if value == FAKE_KEY] == ["OPENAI_API_KEY"]
+    assert env["OPENAI_BASE_URL"] == env["BISHENG_MODEL_BASE_URL"] == FAKE_MODEL_BASE_URL
     assert captured["start"].source == "main.py" and captured["root"] == echo_project.resolve()
     # Teardown stopped the process.
     assert captured["process"].signals

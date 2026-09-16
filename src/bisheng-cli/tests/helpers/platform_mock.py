@@ -29,6 +29,8 @@ from bisheng_cli.commands.skills import DEFAULT_PACKS as _CLI_DEFAULT_PACKS
 # Assembled rather than written out so `scripts/arch-guard.sh` RULE-7 never
 # matches a long key literal in this repo's Python (see conftest docstring).
 FAKE_KEY = "bs-sak-" + "x" * 24
+#: What `whoami.model_base_url` answers on a deployment with the model face on.
+FAKE_MODEL_BASE_URL = "http://platform.test/api/v2/model/v1"
 FAKE_KEY_MASK = "bs-sak-" + "*" * 8 + "wxyz"
 # beta2 authenticates two credential prefixes on the same wire
 # (`credential_validator._TOKEN_RE`): `bs-sak-` service-account keys and
@@ -189,6 +191,7 @@ WHOAMI_FIELDS = (
     "scopes",
     "key_mask",
     "expires_at",
+    "model_base_url",
 )
 
 
@@ -206,6 +209,7 @@ def whoami_ok(
     actor_name: str = "问卷小队开发号",
     tenant_id: int = 1,
     expires_at: str | None = "2026-12-31T00:00:00",
+    model_base_url: str = FAKE_MODEL_BASE_URL,
 ) -> httpx.Response:
     """``GET /api/v2/auth/whoami`` exactly as beta2's ``WhoamiResponse`` serves it.
 
@@ -236,6 +240,10 @@ def whoami_ok(
         "scopes": scopes if scopes is not None else ["app:manage"],
         "key_mask": FAKE_KEY_MASK,
         "expires_at": expires_at,
+        # F051 AC-30: the one outward spelling of the model face's base URL.
+        # Empty string where the open-capability layer is not deployed — the
+        # face does not exist there, and `dev` must not invent an address.
+        "model_base_url": model_base_url,
     }
     return v2_ok(data)
 

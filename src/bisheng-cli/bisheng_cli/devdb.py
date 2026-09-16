@@ -17,10 +17,28 @@ so data survives restarts.
 
 Two things deliberately kept out of the child environment (AC-27):
 
-* the login key — `BISHENG_API_KEY` is stripped even if the developer's shell
-  exports it, and no other variable ever carries the key;
+* the login key under its own name — `BISHENG_API_KEY` is stripped even if the
+  developer's shell exports it. The one place the credential does reach the app
+  is `OPENAI_API_KEY` (see below), which is the platform's name for "the
+  credential this process calls the model face with" and is what the hosted
+  runtime fills with the application's own token;
 * any per-request visitor credential — that arrives per request in a header
   (`devproxy`), never as a process-level variable.
+
+**The model face's three names** (`contracts-runtime-manager.md` §5, F051
+design D2): `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `BISHENG_MODEL_BASE_URL`.
+Hosted, `OPENAI_API_KEY` carries the application's runtime credential
+(`BISHENG_APP_TOKEN`'s value); under `dev` it carries the developer's own
+service-account key, so the same `OpenAI(...)` line works in both places and
+the call is judged against exactly the scopes that key was granted (AC-28).
+The base URL is **read from `whoami.model_base_url`**, never composed here:
+F051 AC-30 makes that field the single outward spelling of the address.
+
+These three are platform-owned names like the rest, so they override the shell —
+and when the platform answers with no model face (the open-capability layer is
+not deployed), they are *removed* rather than inherited. Leaving a developer's
+personal `OPENAI_API_KEY` in place would point the app at api.openai.com and
+make it work locally in a way it can never work hosted.
 """
 
 from __future__ import annotations
@@ -56,6 +74,18 @@ PLATFORM_ENV_NAMES: tuple[str, ...] = (
     "BISHENG_APP_PORT",
     "BISHENG_APP_BASE_PATH",
     "BISHENG_APP_HEALTH_PATH",
+)
+
+#: The model protocol face's names, declared in the same contract section as
+#: `PLATFORM_ENV_NAMES` but set by a different producer hosted (F055 T056 fills
+#: them from the app's runtime credential, not by `lifecycle.build_env`), which
+#: is why they are a separate tuple here rather than three more entries above.
+#: `tests/test_platform_contract.py` reads the contract document itself so this
+#: list cannot drift away from it.
+MODEL_FACE_ENV_NAMES: tuple[str, ...] = (
+    "OPENAI_BASE_URL",
+    "OPENAI_API_KEY",
+    "BISHENG_MODEL_BASE_URL",
 )
 
 #: Framework spellings of the base path, exported by the hosted image's
@@ -117,14 +147,22 @@ def build_dev_env(
     app_id: str | None,
     db: DevDatabase,
     base_env: dict[str, str] | None = None,
+    model_base_url: str | None = None,
+    model_api_key: str | None = None,
 ) -> dict[str, str]:
     """The child environment: the shell's, with the platform names on top.
 
     Platform-owned names **override** whatever the shell had (the reserved
-    prefixes are the platform's, `lifecycle.RESERVED_ENV_PREFIXES`), and the
-    login key is removed. Nothing else is filtered: `BISHENG_APP_START` and the
-    developer's own variables pass through, the same way the hosted entrypoint
-    honours them.
+    prefixes are the platform's, `lifecycle.RESERVED_ENV_PREFIXES`, plus the
+    model face's three), and the login key is removed from its own name.
+    Nothing else is filtered: `BISHENG_APP_START` and the developer's own
+    variables pass through, the same way the hosted entrypoint honours them.
+
+    `model_base_url` is `whoami.model_base_url` verbatim. Both it and
+    `model_api_key` have to be present for the three model names to be set:
+    half a wiring (an address with no credential, or a credential pointed
+    nowhere) is what produces a confusing 401 instead of a clear "this platform
+    has no model face".
     """
     env = dict(os.environ if base_env is None else base_env)
     env.pop(LOGIN_KEY_ENV, None)
@@ -151,6 +189,18 @@ def build_dev_env(
             "FORWARDED_ALLOW_IPS": env.get("FORWARDED_ALLOW_IPS") or "*",
         }
     )
+    base_url = (model_base_url or "").strip()
+    if base_url and model_api_key:
+        env.update(
+            {
+                "OPENAI_BASE_URL": base_url,
+                "OPENAI_API_KEY": model_api_key,
+                "BISHENG_MODEL_BASE_URL": base_url,
+            }
+        )
+    else:
+        for name in MODEL_FACE_ENV_NAMES:
+            env.pop(name, None)
     return env
 
 

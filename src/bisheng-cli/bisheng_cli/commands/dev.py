@@ -77,12 +77,19 @@ def run(args: Any, emitter: Emitter) -> int:
         )
 
     db = devdb.prepare_dev_db(root)
+    # AC-27 / AC-28: the model face is wired from `whoami` — the address it
+    # reports (never one composed here) and the key this session logged in with,
+    # so a model call made locally is judged against exactly the scopes that key
+    # carries, by the same face the hosted app will call.
+    model_base_url = str(whoami.get("model_base_url") or "")
     env = devdb.build_dev_env(
         manifest=manifest,
         app_port=app_port,
         platform_base_url=profile.base_url,
         app_id=app_id,
         db=db,
+        model_base_url=model_base_url,
+        model_api_key=profile.api_key,
     )
     start = devdb.resolve_start_command(root)
 
@@ -110,7 +117,7 @@ def run(args: Any, emitter: Emitter) -> int:
         proxy.stop()
         raise
 
-    _report(emitter, profile, whoami, identity, proxy.url, app_port, db, start)
+    _report(emitter, profile, whoami, identity, proxy.url, app_port, db, start, model_base_url)
     # A long-running command: the machine-readable "it is up, here is where" is
     # a `stage` event, so that `result` (with the real exit code) stays the
     # last line on stdout when the session ends.
@@ -203,6 +210,7 @@ def _report(
     app_port: int,
     db: devdb.DevDatabase,
     start: devdb.StartCommand,
+    model_base_url: str,
 ) -> None:
     """AC-24: identity source and account, platform, local URL — no key, ever."""
     who = whoami.get("actor_name") or "(未命名)"
@@ -220,4 +228,15 @@ def _report(
     )
     emitter.info(f"  应用数据库: {db.path}（BISHENG_APP_DB_URL / BISHENG_APP_DB_PATH，跨重启保留，不进上传包）")
     emitter.info("  BISHENG_APP_BASE_PATH 为空串；平台上是 /apps/<slug>，对外链接请经它拼接。")
+    if model_base_url:
+        emitter.info(
+            f"  模型调用地址: {model_base_url}（OPENAI_BASE_URL / BISHENG_MODEL_BASE_URL；"
+            "OPENAI_API_KEY 为当前 login 凭据，能调哪些模型由这把密钥的权限位决定）"
+        )
+    else:
+        emitter.info(
+            "  这个平台没有部署模型协议面，OPENAI_BASE_URL / OPENAI_API_KEY / "
+            "BISHENG_MODEL_BASE_URL 都不注入（shell 里已有的同名值也会被清掉，"
+            "避免本地指向平台以外的服务、上线后却调不通）。"
+        )
     emitter.info("Ctrl-C 停止。")
