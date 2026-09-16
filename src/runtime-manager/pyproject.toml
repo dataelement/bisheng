@@ -13,6 +13,9 @@ dependencies = [
     # Docker SDK is imported lazily inside runtime_manager.docker_backend so the
     # unit test suite (fake backend) never needs a daemon or the SDK installed.
     "docker>=7.1",
+    # Same pattern for the attachment store (runtime_manager.storage): the SDK
+    # is imported inside the MinIO adapter only, the suite runs on a fake.
+    "minio>=7.2",
 ]
 
 [project.optional-dependencies]

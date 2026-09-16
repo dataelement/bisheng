@@ -47,6 +47,10 @@ DEFAULT_PORT = 8091
 DEFAULT_NETWORK = "bisheng-apps"
 DEFAULT_DATA_ROOT = "/opt/bisheng/app-data"
 DEFAULT_IMAGE_PREFIX = "bisheng-app"
+#: Attachment bucket. A *separate* bucket from the platform's ``bisheng``
+#: (pit 20): no nginx location, no anonymous policy, ever.
+DEFAULT_STORAGE_BUCKET = "bisheng-apps"
+DEFAULT_STORAGE_MAX_FILE_MB = 20
 
 #: Container name prefix. Also the orphan-reclaim selector (T029) and the
 #: "managed by us" marker that keeps the reconciler away from foreign
@@ -178,6 +182,29 @@ class Config:
     log_max_size: str = "10m"
     log_max_file: str = "3"
 
+    # --- attachment storage (D10, AC-45) ---------------------------------
+    #: MinIO endpoint (``host:port``, no scheme). Empty = the attachment handle
+    #: is not configured: it is still *injected* into every instance (the env
+    #: contract must not depend on deployment state) but every call answers
+    #: 503 ``storage_unavailable`` and the pre-flight names the fix.
+    minio_endpoint: str = ""
+    minio_access_key: str = ""
+    minio_secret_key: str = ""
+    minio_secure: bool = False
+    #: Never the platform's public ``bisheng`` bucket: nginx forwards any key
+    #: under ``/bisheng/`` to MinIO, so the only thing between an attachment
+    #: and the internet there is the bucket policy (design pit 20).
+    storage_bucket: str = DEFAULT_STORAGE_BUCKET
+    #: Single-file cap, a deployment setting (AC-45). Injected as
+    #: ``BISHENG_APP_STORAGE_MAX_FILE_MB`` so the SDK can refuse before sending.
+    storage_max_file_mb: int = DEFAULT_STORAGE_MAX_FILE_MB
+    #: Base URL at which *hosted app containers* reach this process — the value
+    #: behind ``BISHENG_APP_STORAGE_ENDPOINT``. Empty = derived from
+    #: ``host``/``port``, which is right for compose (``0.0.0.0`` is replaced
+    #: by the service name there) and wrong for the systemd shape, where
+    #: ``127.0.0.1`` is unreachable from the bridge; the pre-flight says so.
+    app_facing_base_url: str = ""
+
     @property
     def apps_root(self) -> Path:
         """Per-app host volumes: ``{data_root}/apps/{app_id}/db`` → ``/data``."""
@@ -213,6 +240,21 @@ class Config:
         """
         return self.host_apps_root / app_id / "db"
 
+    @property
+    def storage_configured(self) -> bool:
+        return bool(self.minio_endpoint and self.minio_access_key and self.minio_secret_key)
+
+    @property
+    def storage_max_file_bytes(self) -> int:
+        return max(self.storage_max_file_mb, 1) * 1024 * 1024
+
+    @property
+    def app_facing_base(self) -> str:
+        """Where an app container dials this process (see ``app_facing_base_url``)."""
+        if self.app_facing_base_url:
+            return self.app_facing_base_url.rstrip("/")
+        return f"http://{self.host}:{self.port}"
+
     def with_overrides(self, **kwargs) -> Config:
         return replace(self, **kwargs)
 
@@ -245,6 +287,13 @@ def load_config() -> Config:
         stop_timeout_seconds=_env_int("RTM_STOP_TIMEOUT_SECONDS", 10),
         log_max_size=_env_str("RTM_LOG_MAX_SIZE", "10m") or "10m",
         log_max_file=_env_str("RTM_LOG_MAX_FILE", "3") or "3",
+        minio_endpoint=_env_str("RTM_MINIO_ENDPOINT"),
+        minio_access_key=_env_str("RTM_MINIO_ACCESS_KEY"),
+        minio_secret_key=_env_str("RTM_MINIO_SECRET_KEY"),
+        minio_secure=_env_bool("RTM_MINIO_SECURE", False),
+        storage_bucket=_env_str("RTM_STORAGE_BUCKET", DEFAULT_STORAGE_BUCKET) or DEFAULT_STORAGE_BUCKET,
+        storage_max_file_mb=_env_int("RTM_STORAGE_MAX_FILE_MB", DEFAULT_STORAGE_MAX_FILE_MB),
+        app_facing_base_url=_env_str("RTM_APP_FACING_BASE_URL"),
     )
 
 

@@ -46,6 +46,7 @@ from runtime_manager.desired_state import (
 )
 from runtime_manager.docker_backend import DockerBackend, get_docker_backend
 from runtime_manager.errors import BackendUnavailableError, InvalidRequestError, NotFoundError
+from runtime_manager.storage import storage_preflight
 
 logger = logging.getLogger(__name__)
 
@@ -304,6 +305,10 @@ def _preflight(config: Config, docker: DockerBackend, runtimes: list[str], avail
     else:
         images_ok, images_detail = False, "not checked — the orchestration backend is unreachable"
     checks.append({"name": "base_images", "ok": images_ok, "detail": images_detail})
+
+    # Attachment handle (T084/T085): MinIO configured, private bucket, and an
+    # endpoint the app containers can actually dial.
+    checks.append(storage_preflight(config))
 
     return checks
 

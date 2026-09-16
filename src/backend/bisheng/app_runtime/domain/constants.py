@@ -171,6 +171,27 @@ DEFAULT_TIERS: tuple[dict[str, object], ...] = (
 DEFAULT_TIER_ID = "light"
 
 
+#: Attachment storage handle injected into every hosted instance (AC-45, F054
+#: T085) — the backend-side copy of the contract, for F053 (``bisheng dev``
+#: must inject the *same names*) and F057 (the SDK ``storage`` module reads
+#: them). Values are minted by runtime-manager (``runtime_manager/storage.py``
+#: ``STORAGE_ENV_NAMES``), never by the backend: the endpoint is the manager's
+#: own app-facing URL and the token is per app, stable for the app's life.
+#:
+#: * ``BISHENG_APP_STORAGE_ENDPOINT`` — ``{manager}/v1/apps/{app_id}/storage``
+#: * ``BISHENG_APP_STORAGE_TOKEN`` — per-app bearer, scoped to that ``app_id``
+#: * ``BISHENG_APP_STORAGE_MAX_FILE_MB`` — single-file cap, a deployment setting
+#:
+#: Bucket / key prefix / MinIO credentials are deliberately **not** injected:
+#: the manager scopes every key to ``apps/{app_id}/attachments/`` server-side
+#: (F057 AC-21 — no implementation detail reaches the app).
+APP_STORAGE_ENV_NAMES: tuple[str, ...] = (
+    "BISHENG_APP_STORAGE_ENDPOINT",
+    "BISHENG_APP_STORAGE_TOKEN",
+    "BISHENG_APP_STORAGE_MAX_FILE_MB",
+)
+
+
 def default_tier(tier_id: str) -> dict[str, object] | None:
     """Look up a factory tier spec, or ``None`` when the id is unknown."""
     for tier in DEFAULT_TIERS:

@@ -72,9 +72,7 @@ class FakeContainer:
                 "ExposedPorts": self.payload.get("ExposedPorts"),
             },
             "HostConfig": dict(self.payload.get("HostConfig") or {}),
-            "NetworkSettings": {
-                "Networks": {network: {"IPAddress": self.ip if self.running else ""}}
-            },
+            "NetworkSettings": {"Networks": {network: {"IPAddress": self.ip if self.running else ""}}},
         }
 
 
@@ -165,9 +163,7 @@ class FakeDockerBackend:
         self._require_reachable()
         return self.get(container).inspect(self.network)
 
-    def list_containers(
-        self, all_states: bool = True, filters: dict[str, Any] | None = None
-    ) -> list[dict[str, Any]]:
+    def list_containers(self, all_states: bool = True, filters: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         self.calls.append(("list_containers", {"all_states": all_states, "filters": filters}))
         self._require_reachable()
         wanted_labels = [] if not filters else list(filters.get("label") or [])
@@ -244,9 +240,7 @@ class FakeDockerBackend:
             if name is None or item == name
         ]
 
-    def container_logs(
-        self, container: str, tail: int | str = "all", since: int | None = None
-    ) -> str:
+    def container_logs(self, container: str, tail: int | str = "all", since: int | None = None) -> str:
         self.calls.append(("container_logs", {"container": container, "tail": tail, "since": since}))
         self._require_reachable()
         return self.get(container).logs
@@ -350,6 +344,115 @@ class FakeClock:
 
     def advance(self, seconds: float) -> None:
         self.now += seconds
+
+
+@dataclass
+class FakeStoredObject:
+    data: bytes
+    content_type: str
+    etag: str
+    last_modified: str
+
+
+class FakeObjectStore:
+    """In-memory :class:`runtime_manager.storage.ObjectStore` (T084a).
+
+    Records every call so a test can assert *which bucket* and *which key* was
+    asked for — the scoping guarantees live in the request, not in what comes
+    back. ``policies`` exists only to prove nothing ever writes one: a fresh
+    bucket is private and the attachment code must leave it that way.
+
+    Structural, like :class:`FakeHostSnapshot`: it returns plain objects with
+    ``key`` / ``size`` / ``content_type`` / ``etag`` / ``last_modified`` rather
+    than importing the module under test, so the very first red test can run.
+    """
+
+    def __init__(self) -> None:
+        self.buckets: dict[str, dict[str, FakeStoredObject]] = {}
+        self.policies: dict[str, str] = {}
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.reachable = True
+        self._etag = itertools.count(1)
+
+    # -- helpers used by tests --------------------------------------------
+    def keys(self, bucket: str) -> list[str]:
+        return sorted(self.buckets.get(bucket, {}))
+
+    def seed(self, bucket: str, key: str, data: bytes = b"x", content_type: str = "text/plain") -> None:
+        self.buckets.setdefault(bucket, {})[key] = FakeStoredObject(
+            data=data, content_type=content_type, etag=f"etag{next(self._etag)}", last_modified="2026-09-16T00:00:00Z"
+        )
+
+    def calls_of(self, method: str) -> list[dict[str, Any]]:
+        return [kwargs for name, kwargs in self.calls if name == method]
+
+    def _require_reachable(self) -> None:
+        if not self.reachable:
+            raise ConnectionError("object store unreachable")
+
+    def _meta(self, key: str, obj: FakeStoredObject):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            key=key, size=len(obj.data), content_type=obj.content_type, etag=obj.etag, last_modified=obj.last_modified
+        )
+
+    # -- ObjectStore protocol ---------------------------------------------
+    def bucket_exists(self, bucket: str) -> bool:
+        self.calls.append(("bucket_exists", {"bucket": bucket}))
+        self._require_reachable()
+        return bucket in self.buckets
+
+    def make_bucket(self, bucket: str) -> None:
+        self.calls.append(("make_bucket", {"bucket": bucket}))
+        self._require_reachable()
+        self.buckets.setdefault(bucket, {})
+
+    def set_bucket_policy(self, bucket: str, policy: str) -> None:
+        # Present so that calling it is *possible* and therefore assertable.
+        self.calls.append(("set_bucket_policy", {"bucket": bucket, "policy": policy}))
+        self.policies[bucket] = policy
+
+    def put_object(self, bucket: str, key: str, data: bytes, content_type: str):
+        self.calls.append(
+            ("put_object", {"bucket": bucket, "key": key, "size": len(data), "content_type": content_type})
+        )
+        self._require_reachable()
+        self.seed(bucket, key, data, content_type)
+        return self._meta(key, self.buckets[bucket][key])
+
+    def stat_object(self, bucket: str, key: str):
+        self.calls.append(("stat_object", {"bucket": bucket, "key": key}))
+        self._require_reachable()
+        obj = self.buckets.get(bucket, {}).get(key)
+        return None if obj is None else self._meta(key, obj)
+
+    def get_object(self, bucket: str, key: str):
+        self.calls.append(("get_object", {"bucket": bucket, "key": key}))
+        self._require_reachable()
+        obj = self.buckets.get(bucket, {}).get(key)
+        if obj is None:
+            raise KeyError(key)
+        return self._meta(key, obj), iter([obj.data])
+
+    def list_objects(self, bucket: str, prefix: str, start_after: str, limit: int):
+        self.calls.append(
+            ("list_objects", {"bucket": bucket, "prefix": prefix, "start_after": start_after, "limit": limit})
+        )
+        self._require_reachable()
+        out = []
+        for key in self.keys(bucket):
+            if not key.startswith(prefix) or (start_after and key <= start_after):
+                continue
+            out.append(self._meta(key, self.buckets[bucket][key]))
+            if len(out) >= limit:
+                break
+        return out
+
+    def remove_object(self, bucket: str, key: str) -> None:
+        self.calls.append(("remove_object", {"bucket": bucket, "key": key}))
+        self._require_reachable()
+        self.buckets.get(bucket, {}).pop(key, None)
 
 
 class FakeHttpProbe:

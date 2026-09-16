@@ -221,6 +221,18 @@ class AppLogForbiddenError(AppFactoryError):
 
 # ``16162`` (no permission to access application data, AC-56) is reserved for
 # the deferred data-tab wave. Declare it there, not here.
+#
+# ``16170``-``16174`` are reserved for the attachment storage handle (AC-45,
+# F054 T084/T085; runtime-manager ``storage.py``). The manager's error codes
+# map onto them once a backend caller (F052 MCP tools / a data tab) exists —
+# today the only consumer is the hosted app itself via its per-app bearer
+# token, so nothing here raises them yet:
+#   16170  storage_unavailable  (503)   MinIO not configured / unreachable
+#   16171  invalid_object_key   (400)   key leaves ``apps/{app_id}/attachments/``
+#   16172  payload_too_large    (413)   over ``RTM_STORAGE_MAX_FILE_MB``
+#   16173  not_found            (404)   attachment does not exist
+#   16174  unauthorized         (401)   storage token not bound to this app
+# Declare them with their locale copy in the wave that first raises them.
 
 
 # ---------------------------------------------------------------------------

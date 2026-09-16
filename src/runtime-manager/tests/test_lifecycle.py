@@ -196,16 +196,66 @@ def test_env_injection_names(rtm_config, fake_docker):
     assert env["BISHENG_APP_PORT"] == "8080"
     assert env["PORT"] == env["BISHENG_APP_PORT"]
     assert env["BISHENG_APP_BASE_PATH"] == "/apps/sales-report"
+    # T085 — the attachment handle: an endpoint on this process, a per-app
+    # bearer, and the cap so the SDK can refuse before sending.
+    assert env["BISHENG_APP_STORAGE_ENDPOINT"] == f"http://{rtm_config.host}:{rtm_config.port}/v1/apps/app-1/storage"
+    assert len(env["BISHENG_APP_STORAGE_TOKEN"]) >= 32
+    assert env["BISHENG_APP_STORAGE_MAX_FILE_MB"] == str(rtm_config.storage_max_file_mb)
+
+
+def test_storage_endpoint_uses_the_app_facing_base_url(rtm_config, fake_docker):
+    """compose: the service name; systemd: the bridge gateway — never a loopback the app cannot dial."""
+    config = rtm_config.with_overrides(app_facing_base_url="http://runtime-manager:8091/")
+    set_config(config)
+    try:
+        _service(config, fake_docker).deploy(_request())
+    finally:
+        set_config(rtm_config)
+
+    env = _env_of(fake_docker.last_call("create_container")["payload"])
+    assert env["BISHENG_APP_STORAGE_ENDPOINT"] == "http://runtime-manager:8091/v1/apps/app-1/storage"
+
+
+def test_storage_token_is_stable_across_redeploys_and_rotates_after_destroy(rtm_config, fake_docker):
+    """AC-21 × T085: old and new instance share the token through the grace window.
+
+    A token minted per deploy would cut the retiring instance off from its own
+    attachments for the last 30 s of its life. Destroy is the only rotation
+    point — it is also the moment the record (and therefore the bearer check)
+    disappears.
+    """
+    service = _service(rtm_config, fake_docker)
+    service.deploy(_request())
+    first = _env_of(fake_docker.last_call("create_container")["payload"])["BISHENG_APP_STORAGE_TOKEN"]
+
+    service.deploy(_request(version_id="ver-fedcba9876543210", version_no=4))
+    second = _env_of(fake_docker.last_call("create_container")["payload"])["BISHENG_APP_STORAGE_TOKEN"]
+    assert second == first
+    assert get_store(rtm_config).get("app-1").env["BISHENG_APP_STORAGE_TOKEN"] == first
+
+    service.destroy("app-1")
+    service.deploy(_request())
+    third = _env_of(fake_docker.last_call("create_container")["payload"])["BISHENG_APP_STORAGE_TOKEN"]
+    assert third != first
 
 
 def test_platform_env_wins_over_caller_env(rtm_config, fake_docker):
     """A reserved name cannot be redefined by whatever the pipeline passed in."""
     _service(rtm_config, fake_docker).deploy(
-        _request(env={"BISHENG_APP_DB_URL": "postgres://elsewhere", "MY_FLAG": "1"})
+        _request(
+            env={
+                "BISHENG_APP_DB_URL": "postgres://elsewhere",
+                "BISHENG_APP_STORAGE_TOKEN": "caller-chosen",
+                "BISHENG_APP_STORAGE_ENDPOINT": "http://evil.example",
+                "MY_FLAG": "1",
+            }
+        )
     )
 
     env = _env_of(fake_docker.last_call("create_container")["payload"])
     assert env["BISHENG_APP_DB_URL"] == "sqlite:////data/app.db"
+    assert env["BISHENG_APP_STORAGE_TOKEN"] != "caller-chosen"
+    assert env["BISHENG_APP_STORAGE_ENDPOINT"].startswith(f"http://{rtm_config.host}:")
     assert env["MY_FLAG"] == "1"
 
 

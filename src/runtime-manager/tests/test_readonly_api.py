@@ -188,9 +188,14 @@ def test_logs_rejects_an_unparseable_since(rtm_client, rtm_config, fake_docker):
 
 
 def test_logs_redact_known_injected_secrets(rtm_client, rtm_config, fake_docker):
-    """AC-55 — values *we* put in the instance never come back out in a log line."""
-    secret = "attach-tok-9f3c8b21d4e6"
-    name = _deploy(rtm_config, fake_docker, BISHENG_APP_STORAGE_TOKEN=secret)
+    """AC-55 — values *we* put in the instance never come back out in a log line.
+
+    The attachment token (T085) is the real case: minted by the platform, not
+    passed by the caller, so it is read back from the record rather than set.
+    """
+    name = _deploy(rtm_config, fake_docker)
+    secret = get_store(rtm_config).get(APP_ID).env["BISHENG_APP_STORAGE_TOKEN"]
+    assert len(secret) >= 32
     fake_docker.get(name).logs = f"INFO uploading with token={secret}\n"
 
     lines = rtm_client.get(f"/v1/apps/{APP_ID}/logs").json()["lines"]

@@ -293,6 +293,21 @@ services:
       RTM_BUILD_RESERVE_MB: ${BISHENG_RTM_BUILD_RESERVE_MB:-2048}
       RTM_BUILD_INDEX_URL: ${BISHENG_RTM_BUILD_INDEX_URL:-}
       RTM_BUILD_NPM_REGISTRY: ${BISHENG_RTM_BUILD_NPM_REGISTRY:-}
+      # 托管应用附件存储句柄（F054 AC-45）。**独立 bucket `bisheng-apps`**，不是平台
+      # 的 `bisheng` 桶：nginx 的 `location /bisheng/` 会把任意 key 转发给 MinIO，附件
+      # 放进去等于只剩桶策略这一道墙（design 坑 20）。新桶不挂 nginx location、
+      # 不设匿名策略，由 runtime-manager 首次使用时自动创建。
+      # 不配 MinIO 三项 = 句柄仍注入应用，但所有存储调用答 503，
+      # `runtime/status` 的 preflight `attachment_storage` 会指出来。
+      RTM_MINIO_ENDPOINT: 'minio:9000'
+      RTM_MINIO_ACCESS_KEY: 'minioadmin'
+      RTM_MINIO_SECRET_KEY: 'minioadmin'
+      RTM_STORAGE_BUCKET: bisheng-apps
+      RTM_STORAGE_MAX_FILE_MB: ${BISHENG_RTM_STORAGE_MAX_FILE_MB:-20}
+      # 应用容器访问本进程的地址（注入为 BISHENG_APP_STORAGE_ENDPOINT 的前缀）。
+      # compose 下应用容器和本服务同在 bisheng-apps 网络，服务名可解析；
+      # systemd 形态要写 bisheng-apps 网桥网关地址（127.0.0.1 容器里够不到）。
+      RTM_APP_FACING_BASE_URL: 'http://runtime-manager:8091'
     volumes:
       - /etc/localtime:/etc/localtime:ro
       # 这是全平台唯一被允许挂 docker socket 的地方（arch-guard RULE-10 的另一
