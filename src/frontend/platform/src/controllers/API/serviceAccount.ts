@@ -3,6 +3,7 @@ import type {
   ApiKeyIssueForm,
   ApiKeyIssued,
   ApiKeyItem,
+  ApiKeyPage,
   ApiKeyUpdateForm,
   DelegateScopeInput,
   OpenApiScopeCatalog,
@@ -23,7 +24,7 @@ export async function listServiceAccountsApi(params: {
   page: number
   page_size: number
 }): Promise<ServiceAccountPage> {
-  return await axios.get("/api/v1/service-accounts", { params })
+  return await axios.get("/api/v1/service-accounts", { params, silent: true })
 }
 
 export async function createServiceAccountApi(data: ServiceAccountForm): Promise<ServiceAccountItem> {
@@ -58,6 +59,13 @@ export async function listOpenApiScopesApi(): Promise<OpenApiScopeCatalog> {
 
 export async function listServiceAccountKeysApi(id: number): Promise<ApiKeyItem[]> {
   return await axios.get(`/api/v1/service-accounts/${id}/keys`)
+}
+
+export async function listServiceAccountKeysPageApi(
+  id: number,
+  params: { page: number; page_size: number },
+): Promise<ApiKeyPage> {
+  return await axios.get(`/api/v1/service-accounts/${id}/keys/page`, { params, silent: true })
 }
 
 export async function filterDelegateCandidatesApi(

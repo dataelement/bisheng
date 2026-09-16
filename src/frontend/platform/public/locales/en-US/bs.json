@@ -2330,6 +2330,11 @@
     "noDownloadUrl": "No downloadable file address"
   },
   "openApiManagement": {
+    "list": {
+      "loading": "Loading…",
+      "retry": "Failed to load. Click to retry",
+      "done": "All content loaded"
+    },
     "empty": "No records",
     "fields": {
       "name": "Name",

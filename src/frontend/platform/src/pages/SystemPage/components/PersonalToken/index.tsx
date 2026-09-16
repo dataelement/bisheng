@@ -2,7 +2,6 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Badge } from "@/components/bs-ui/badge"
 import { Button, LoadButton } from "@/components/bs-ui/button"
 import { Input } from "@/components/bs-ui/input"
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio-group"
 import { Switch } from "@/components/bs-ui/switch"
 import { message } from "@/components/bs-ui/toast/use-toast"
@@ -25,8 +24,8 @@ import type { PersonalTokenDataScope, PersonalTokenSetting } from "@/types/api/o
 import type { PersonalTokenLedgerItem } from "@/types/api/openApi"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-
-const PAGE_SIZE = 20
+import { OpenApiListFooter } from "../OpenApiList/OpenApiListFooter"
+import { useOpenApiList } from "../OpenApiList/useOpenApiList"
 
 function formatDate(value: string | null): string {
   return value ? new Date(value).toLocaleString() : "-"
@@ -35,29 +34,23 @@ function formatDate(value: string | null): string {
 export function PersonalToken() {
   const { t } = useTranslation()
   const [setting, setSetting] = useState<PersonalTokenSetting | null>(null)
-  const [items, setItems] = useState<PersonalTokenLedgerItem[]>([])
   const [enabled, setEnabled] = useState(false)
   const [ttlDays, setTtlDays] = useState(365)
   const [dataScope, setDataScope] = useState<PersonalTokenDataScope>("all_visible")
   const [saving, setSaving] = useState(false)
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-
-  const loadLedger = useCallback(async (nextPage: number) => {
-    const ledger = await listPersonalTokensApi({ page: nextPage, page_size: PAGE_SIZE })
-    setItems(ledger.data)
-    setTotal(ledger.total)
-    setPage(nextPage)
-  }, [])
+  const fetchPage = useCallback((page: number, pageSize: number) =>
+    listPersonalTokensApi({ page, page_size: pageSize }), [])
+  const list = useOpenApiList(fetchPage)
+  const items = list.items
 
   const load = useCallback(async () => {
-    const nextSetting = await getPersonalTokenSettingApi()
+    const nextSetting = await captureAndAlertRequestErrorHoc(getPersonalTokenSettingApi())
+    if (!nextSetting) return
     setSetting(nextSetting)
     setEnabled(nextSetting.pat_enabled)
     setTtlDays(nextSetting.pat_ttl_days)
     setDataScope(nextSetting.data_scope)
-    await loadLedger(1)
-  }, [loadLedger])
+  }, [])
 
   useEffect(() => {
     void load()
@@ -115,13 +108,14 @@ export function PersonalToken() {
       okTxt: t("openApiManagement.actions.revoke"),
       onOk: (close) => {
         close()
-        void captureAndAlertRequestErrorHoc(revokePersonalTokenApi(item.id)).then(() => loadLedger(page))
+        void captureAndAlertRequestErrorHoc(revokePersonalTokenApi(item.id).then(() => true))
+          .then((success) => { if (success) void list.reload() })
       },
     })
   }
 
   return (
-    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pb-8">
+    <div className="h-full min-h-0 flex-1 space-y-5 overflow-y-auto pb-8">
       <section className="rounded-md border p-4">
         <div className="mb-4">
           <h2 className="font-semibold">{t("openApiManagement.personalToken.settings")}</h2>
@@ -222,17 +216,10 @@ export function PersonalToken() {
               </TableCell>
             </TableRow>
           ))}
-          {!items.length ? <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">{t("openApiManagement.empty")}</TableCell></TableRow> : null}
+          {list.isEmpty ? <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">{t("openApiManagement.empty")}</TableCell></TableRow> : null}
         </TableBody>
       </Table>
-      {total > PAGE_SIZE ? (
-        <AutoPagination
-          page={page}
-          pageSize={PAGE_SIZE}
-          total={total}
-          onChange={(nextPage) => void loadLedger(nextPage)}
-        />
-      ) : null}
+      <OpenApiListFooter status={list.status} itemCount={items.length} onLoadMore={list.loadMore} onRetry={list.retry} />
     </div>
   )
 }
