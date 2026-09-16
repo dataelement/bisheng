@@ -53,6 +53,11 @@ logger = logging.getLogger(__name__)
 #: not it (pit 20).
 PUBLIC_PLATFORM_BUCKET = "bisheng"
 
+#: Addresses that accept connections from this host only. A process bound to
+#: one of these cannot serve an application container, whatever address the
+#: container was told to dial.
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
 #: Namespace every app's objects live under. Keys handed in by an app are
 #: *relative to* the app's own prefix and may never start with this segment —
 #: that is the cross-app rejection.
@@ -550,7 +555,8 @@ def storage_preflight(config: Config) -> dict[str, Any]:
             "detail": f"RTM_STORAGE_BUCKET={PUBLIC_PLATFORM_BUCKET} is the platform's public bucket — use bisheng-apps",
         }
     base = config.app_facing_base
-    if not config.app_facing_base_url and config.host in {"127.0.0.1", "localhost", "::1"}:
+    bound_to_loopback = config.host in _LOOPBACK_HOSTS
+    if not config.app_facing_base_url and bound_to_loopback:
         return {
             "name": name,
             "ok": False,
@@ -558,6 +564,24 @@ def storage_preflight(config: Config) -> dict[str, Any]:
                 f"apps would be told to reach this process at {base}, which is loopback and unreachable "
                 "from the application network — set RTM_APP_FACING_BASE_URL (and RTM_HOST) to the "
                 f"{config.network} bridge gateway address, e.g. http://172.18.0.1:{config.port}"
+            ),
+        }
+    if bound_to_loopback:
+        # ``RTM_APP_FACING_BASE_URL`` is set to something an app container can
+        # route to, but this process only accepts connections on loopback — so
+        # every dial to the advertised address is refused. Half-configuring it
+        # this way is the *likelier* mistake than forgetting the variable
+        # (whoever knows the variable exists sets it first), and answering "ok"
+        # here would retire the one check that was put here to catch it: the
+        # symptom otherwise surfaces inside a customer's application as a
+        # connection error with the platform nowhere in the traceback.
+        return {
+            "name": name,
+            "ok": False,
+            "detail": (
+                f"apps are told to dial {base}, but this process is bound to {config.host} and answers "
+                f"nothing there — bind the {config.network} bridge gateway too (systemd: RTM_HOST, and "
+                "make sure the unit's ExecStart takes its --host from it rather than hardcoding loopback)"
             ),
         }
     return {

@@ -231,6 +231,15 @@ RTM_APP_FACING_BASE_URL=http://$GW:8091
 # 同步改 backend config.yaml 的 app_runtime.manager_base_url 与 app-proxy 的 APP_PROXY_MANAGER_BASE
 ```
 
+⚠️ **`RTM_HOST` 只有在单元的 `ExecStart` 从它取值时才生效。** 老版本的
+`bisheng-runtime-manager.service` 把 `--host 127.0.0.1` 写死在 `ExecStart` 里，
+EnvironmentFile 里设了也不生效——而**只设 `RTM_APP_FACING_BASE_URL`、没换绑定地址
+是比忘记设更常见的半配置**：知道有这个变量的人会先设它。2026-09-16 在 114 上实测：
+`attachment_storage` 答 `ok=true`、写着「apps dial http://172.22.0.1:8091」，
+而容器里 `curl` 那个地址直接连接被拒。现在两头都修了——单元改成
+`--host ${RTM_HOST}`，自检也会在「广播的地址 ≠ 实际绑定」时报 `ok=false`。
+升级既有部署时请一并替换单元文件并 `systemctl daemon-reload`。
+
 不这样配的症状：`runtime-status` 的 `attachment_storage` 为 `ok=false`，
 应用里的 SDK `storage` 调用连接被拒。
 
@@ -485,7 +494,7 @@ curl -s -b "access_token_cookie=<token>" http://<host>:3001/api/v1/apps/runtime-
 | `host_data_root_mapping` | compose 形态 `RTM_HOST_DATA_ROOT` 不是绝对路径 |
 | `runtime_templates` | 一个运行时模板都没装（镜像不完整） |
 | `base_images` | 基础镜像不在本地，`detail` 里逐个列出缺哪些。离线环境要**先手动 pull**（三个模板各一个，见下节），否则第一次构建会挂很久然后失败 |
-| `attachment_storage` | 附件存储没配（`RTM_MINIO_*`）、桶配成了公共桶 `bisheng`、或应用容器够不到本进程（systemd 形态没给 `RTM_APP_FACING_BASE_URL`）。detail 里写明改哪个变量 |
+| `attachment_storage` | 附件存储没配（`RTM_MINIO_*`）、桶配成了公共桶 `bisheng`、应用容器够不到本进程（systemd 形态没给 `RTM_APP_FACING_BASE_URL`），或**给了 `RTM_APP_FACING_BASE_URL` 却仍绑在回环上**（广播的地址没人应答）。detail 里写明改哪个变量 |
 
 再走一遍端到端：用**非管理员账号**访问一个已上线应用的 `/apps/{slug}`
 （管理员会短路权限判定，用管理员验等于没验）。

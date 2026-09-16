@@ -23,8 +23,20 @@ PartOf=bisheng.target
 Type=simple
 WorkingDirectory=/opt/bisheng/src/runtime-manager
 Environment=PYTHONPATH=/opt/bisheng/src/runtime-manager
-# 只监听回环。它没有自己的鉴权门面之外的保护，暴露到 0.0.0.0 等于把编排能力
-# 挂到网上——HMAC 是防篡改不是防暴露。
+# 默认只监听回环：它除了 HMAC 没有别的门面，暴露到 0.0.0.0 等于把编排能力挂到
+# 网上——HMAC 是防篡改不是防暴露。
+#
+# ⚠️ 但**附件存储句柄（F054 T084/T085）要求应用容器够得到本进程**：托管容器在
+# `bisheng-apps` 网桥上，回环对它们不可达。要用附件功能就必须在
+# EnvironmentFile 里把 RTM_HOST 覆盖成网桥网关地址（`docker network inspect
+# bisheng-apps -f '{{(index .IPAM.Config 0).Gateway}}'`，形如 172.22.0.1），并把
+# RTM_APP_FACING_BASE_URL 指向同一个地址。网关地址只在宿主本地可达，外网够不到，
+# 所以这不等于暴露到 0.0.0.0。
+#
+# ExecStart 因此从 $RTM_HOST / $RTM_PORT 取值而不是写死：写死的话
+# EnvironmentFile 里设了也不生效，而 `runtime/status` 的 attachment_storage
+# 自检看到 RTM_APP_FACING_BASE_URL 已设就答 ok——配置看着对、容器却拨不通
+# （2026-09-16 在 114 上实测踩到）。
 Environment=RTM_HOST=127.0.0.1
 Environment=RTM_PORT=8091
 # HMAC 共享密钥经环境注入，不落配置文件（C6）。与 backend 的
@@ -59,7 +71,7 @@ EnvironmentFile=/etc/bisheng/runtime-manager.env
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536
-ExecStart=/opt/bisheng/src/runtime-manager/.venv/bin/python -m uvicorn runtime_manager.main:app --host 127.0.0.1 --port 8091 --workers 1 --no-access-log
+ExecStart=/opt/bisheng/src/runtime-manager/.venv/bin/python -m uvicorn runtime_manager.main:app --host ${RTM_HOST} --port ${RTM_PORT} --workers 1 --no-access-log
 StandardOutput=append:/tmp/bisheng-runtime-manager.log
 StandardError=append:/tmp/bisheng-runtime-manager.log
 # 停机时正在跑的构建可能持有 docker 客户端连接，给足退出时间；

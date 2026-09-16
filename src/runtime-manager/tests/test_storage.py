@@ -309,12 +309,28 @@ def test_preflight_flags_a_loopback_endpoint(rtm_config):
     loopback = storage_preflight(configured.with_overrides(host="127.0.0.1"))
     assert loopback["ok"] is False and "RTM_APP_FACING_BASE_URL" in loopback["detail"]
 
-    explicit = storage_preflight(
-        configured.with_overrides(host="127.0.0.1", app_facing_base_url="http://172.18.0.1:8091")
-    )
-    assert explicit["ok"] is True
     compose = storage_preflight(configured.with_overrides(host="0.0.0.0"))
     assert compose["ok"] is True
+
+
+def test_preflight_flags_an_advertised_address_this_process_does_not_answer_on(rtm_config):
+    """Setting the variable without moving the bind is the half-configuration that bit us.
+
+    Verified on 114 (2026-09-16): with ``RTM_APP_FACING_BASE_URL`` pointed at the
+    ``bisheng-apps`` gateway while the unit's ExecStart still hardcoded
+    ``--host 127.0.0.1``, this row answered ok and a container dialling the
+    advertised address got nothing (``curl`` exit 7 from inside the network).
+    The earlier version of this test asserted exactly that ok, which is how the
+    gap survived — an app hitting it sees only a connection error with no sign
+    that the platform is the one misconfigured.
+    """
+    configured = rtm_config.with_overrides(minio_endpoint="minio:9000", minio_access_key="k", minio_secret_key="s")
+    half = storage_preflight(configured.with_overrides(host="127.0.0.1", app_facing_base_url="http://172.18.0.1:8091"))
+    assert half["ok"] is False
+    assert "bound to 127.0.0.1" in half["detail"] and "RTM_HOST" in half["detail"]
+
+    bound = storage_preflight(configured.with_overrides(host="0.0.0.0", app_facing_base_url="http://172.18.0.1:8091"))
+    assert bound["ok"] is True
 
 
 def test_missing_attachment_is_404_not_empty(rtm_config, fake_object_store):
