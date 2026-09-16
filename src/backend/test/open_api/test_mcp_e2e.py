@@ -10,11 +10,12 @@ a genuine ``ClientSession`` speaking streamable HTTP over the app in-process —
 hand-rolled JSON-RPC posts would keep passing with a broken handshake.
 
 The other kind is about **the stores agreeing** (AC-40 / AC-41 set equality over
-seeded samples, AC-44 with OpenFGA actually stopped). Those need MySQL, Redis,
-OpenFGA and Milvus/ES up together; they are still owed to the CI middleware
-stage and are listed at the bottom of
-``test/knowledge/test_retrieval_facade_equality.py`` rather than stubbed here.
-A skipped placeholder reads as coverage while proving nothing.
+seeded samples, AC-44 with OpenFGA actually stopped, AC-05 timed against the
+deployment's real Redis). Those need MySQL, Redis, OpenFGA and Milvus/ES up
+together, so they live in ``test/e2e/test_e2e_f052_retrieval_set_equality.py``
+(``@pytest.mark.e2e``, seeded by ``test/e2e/helpers/retrieval_sample.py``)
+rather than being stubbed here. A skipped placeholder reads as coverage while
+proving nothing.
 
 AC-45 is not duplicated here either: ``test_mcp_scope_matrix.py`` already walks
 the registry over this same in-process app without stubbing the handlers.
