@@ -5,6 +5,7 @@ import {
   type SnapshotEntry,
   type SnapshotFile,
 } from "~/api/hostedAppReview";
+import { extractApiErrorMessage } from "~/utils/apiStatusError";
 import { cn } from "~/utils";
 import type { LocalizeFn } from "./approvalPresentation";
 import { ancestorPaths, buildReviewTree, pickInitialFile, type ReviewTreeNode } from "./reviewTree";
@@ -95,7 +96,9 @@ export function ReviewSourcePane({ appId, versionId, entries, truncated, localiz
   const [openDirs, setOpenDirs] = useState<Set<string>>(new Set());
   const [file, setFile] = useState<SnapshotFile | null>(null);
   const [loading, setLoading] = useState(false);
-  const [failure, setFailure] = useState("");
+  // A box rather than a string for the same reason as in the view above: an
+  // empty message must still read as "this failed", not as "nothing to show".
+  const [failure, setFailure] = useState<{ message: string } | null>(null);
 
   // Land on the manifest (or the first readable file) and open the folders
   // that hold it, so the pane never opens on an empty right-hand side.
@@ -115,12 +118,12 @@ export function ReviewSourcePane({ appId, versionId, entries, truncated, localiz
       // The tree already knows this one will not be served; asking anyway
       // would spend a round trip to be told the same thing.
       setFile(null);
-      setFailure("");
+      setFailure(null);
       return;
     }
     let cancelled = false;
     setLoading(true);
-    setFailure("");
+    setFailure(null);
     getSnapshotFileApi(appId, versionId, selected)
       .then((data) => {
         if (!cancelled) setFile(data);
@@ -128,7 +131,7 @@ export function ReviewSourcePane({ appId, versionId, entries, truncated, localiz
       .catch((error: unknown) => {
         if (cancelled) return;
         setFile(null);
-        setFailure(error instanceof Error ? error.message : "");
+        setFailure({ message: extractApiErrorMessage(error) });
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -171,7 +174,7 @@ export function ReviewSourcePane({ appId, versionId, entries, truncated, localiz
           />
         ))}
         {truncated && (
-          <p className="px-2 py-1.5 text-[12px] text-[#ff7d00]">
+          <p className="px-2 py-1.5 text-[12px] text-warning">
             {localize("com_approval_review_tree_truncated")}
           </p>
         )}
@@ -187,24 +190,36 @@ export function ReviewSourcePane({ appId, versionId, entries, truncated, localiz
                 {selected}
               </span>
               {file && file.masked_secrets > 0 && (
-                <span className="text-[#ff7d00]">
+                <span className="text-warning">
                   {localize("com_approval_review_masked_secrets", { count: file.masked_secrets })}
                 </span>
               )}
             </div>
             {notPreviewableKey ? (
               <p className="p-4 text-[13px] text-text-3">{localize(notPreviewableKey)}</p>
-            ) : loading ? (
-              <p className="p-4 text-[13px] text-text-3">{localize("com_approval_review_loading")}</p>
             ) : failure ? (
-              <p className="p-4 text-[13px] text-text-3">{failure}</p>
-            ) : file?.content ? (
+              <p className="p-4 text-[13px] text-text-3">
+                {failure.message || localize("com_approval_review_load_failed")}
+              </p>
+            ) : loading || !file ? (
+              // `!file` as well as `loading`: the fetch starts in an effect, so
+              // between picking a file and that effect running there is a frame
+              // with neither a file nor a pending request — reading it as "not
+              // previewable" would flash a wrong explanation on every click.
+              <p className="p-4 text-[13px] text-text-3">{localize("com_approval_review_loading")}</p>
+            ) : file.previewable ? (
+              // `content` on a previewable file can legitimately be the empty
+              // string — an empty file in the package. Branching on the verdict
+              // rather than on the text keeps an empty file from being reported
+              // as one the platform refuses to show.
               <pre className="scrollbar-os min-h-0 flex-1 overflow-auto p-3 font-mono text-[12px] leading-5 text-text-primary">
-                {file.content}
+                {file.content ?? ""}
               </pre>
             ) : (
               <p className="p-4 text-[13px] text-text-3">
-                {localize("com_approval_review_not_previewable_generic")}
+                {localize(
+                  REASON_KEY[file.reason ?? ""] ?? "com_approval_review_not_previewable_generic",
+                )}
               </p>
             )}
           </>

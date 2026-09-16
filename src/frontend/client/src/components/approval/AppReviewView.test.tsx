@@ -139,6 +139,30 @@ describe("AppReviewView", () => {
     expect(mockGetSnapshotFileApi).toHaveBeenCalledTimes(1);
   });
 
+  it("shows an empty file as empty, not as one it refuses to display", async () => {
+    // `content: ""` is a real, readable file. Branching on the text rather than
+    // on `previewable` would tell the approver the platform will not show it.
+    mockGetSnapshotFileApi.mockResolvedValue({
+      version: TREE.version,
+      role: "approver",
+      path: "bisheng-app.yaml",
+      size: 0,
+      previewable: true,
+      reason: null,
+      content: "",
+      masked_secrets: 0,
+      line_count: 0,
+    });
+
+    renderView();
+
+    await screen.findByTestId("review-source-pane");
+    await waitFor(() => expect(mockGetSnapshotFileApi).toHaveBeenCalledTimes(1));
+    expect(
+      screen.queryByText("com_approval_review_not_previewable_generic"),
+    ).not.toBeInTheDocument();
+  });
+
   it("lists the version history an approver has no other way to read", async () => {
     renderView();
     await screen.findByTestId("review-source-pane");

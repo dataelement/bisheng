@@ -2145,6 +2145,7 @@
   "com_approval_review_tab_versions": "Version history",
   "com_approval_review_tab_diff": "What changed",
   "com_approval_review_loading": "Loading...",
+  "com_approval_review_load_failed": "Could not load this content. Please try again.",
   "com_approval_review_tree_empty": "This version's package holds no files that can be viewed.",
   "com_approval_review_tree_truncated": "There are too many files; only some of them are listed here.",
   "com_approval_review_select_file": "Pick a file on the left to read it.",

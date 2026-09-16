@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 /**
@@ -145,7 +145,7 @@ export function VersionDiffView({
   className,
 }: VersionDiffViewProps) {
   const { t } = useTranslation('shared', { keyPrefix: 'hostedApp.versionDiff' });
-  const [selected, setSelected] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
 
   const patchByPath = useMemo(() => {
     const index = new Map<string, VersionDiffPatch>();
@@ -156,11 +156,14 @@ export function VersionDiffView({
   // Follow the data, not the click: a re-fetch (other version picked, list
   // reloaded) must not leave the right pane on a path that is no longer in the
   // list, which renders as a blank panel with no explanation.
-  useEffect(() => {
-    setSelected((current) =>
-      current && files.some((file) => file.path === current) ? current : (files[0]?.path ?? null),
-    );
-  }, [files]);
+  //
+  // Derived during render rather than reconciled in an effect: an effect would
+  // paint one frame of the `selectFile` placeholder every time a diff arrives —
+  // the list is on screen while the effect has yet to run — and that frame is
+  // what a test asserting "the first file's patch is visible" catches
+  // intermittently.
+  const selected =
+    picked && files.some((file) => file.path === picked) ? picked : (files[0]?.path ?? null);
 
   if (loading) {
     return <p className={`text-sm text-slate-500 dark:text-slate-400 ${className ?? ''}`}>{t('loading')}</p>;
@@ -202,7 +205,7 @@ export function VersionDiffView({
                 <li key={file.path}>
                   <button
                     type="button"
-                    onClick={() => setSelected(file.path)}
+                    onClick={() => setPicked(file.path)}
                     aria-current={active}
                     className={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs ${
                       active ? 'bg-slate-100 dark:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'

@@ -13,6 +13,7 @@
  * the source reaches the browser one masked file at a time, and the diff is
  * computed server-side.
  */
+import { createApiStatusError } from "~/utils/apiStatusError";
 import request from "./request";
 
 interface ApiResponse<T> {
@@ -23,24 +24,6 @@ interface ApiResponse<T> {
 
 /** Which door the caller came in through; an approver may read, not act. */
 export type ReviewRole = "owner" | "super_admin" | "tenant_admin" | "approver";
-
-/** 16257 no permission · 16253 no such version · 16256 snapshot gone · 16258 no such file. */
-export const REVIEW_ERROR_CODES = {
-  SNAPSHOT_UNAVAILABLE: 16256,
-  FORBIDDEN: 16257,
-  FILE_NOT_FOUND: 16258,
-  VERSION_NOT_FOUND: 16253,
-} as const;
-
-export class HostedAppReviewError extends Error {
-  constructor(
-    readonly code: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "HostedAppReviewError";
-  }
-}
 
 export interface ReviewVersion {
   version_id: string;
@@ -122,13 +105,20 @@ export interface VersionDiffResponse {
   }[];
 }
 
+/**
+ * The four refusals (16253 no such version · 16256 snapshot swept · 16257 not
+ * allowed to read this version · 16258 no such file in the snapshot) arrive as
+ * business codes inside a 200 envelope, so nothing rejects on its own here.
+ *
+ * The message goes through `createApiStatusError`, which is the only path that
+ * consults the `api_errors` catalogue: `status_message` is the backend's own
+ * Chinese sentence, and showing it directly would put Chinese in front of an
+ * `en` / `ja` reviewer even though all three languages are written and shipped.
+ */
 function unwrap<T>(response: ApiResponse<T> | T): T {
   const envelope = response as ApiResponse<T>;
   if (envelope?.status_code != null && envelope.status_code !== 200) {
-    throw new HostedAppReviewError(
-      envelope.status_code,
-      envelope.status_message || String(envelope.status_code),
-    );
+    throw createApiStatusError(envelope);
   }
   return (envelope?.data ?? response) as T;
 }

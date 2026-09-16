@@ -620,7 +620,7 @@ platform 发布面 / F052 MCP 应用状态工具
 | `GET /api/v1/apps/{app_id}/versions/{version_id}/review-context` | — | `{version:{…}, role, current_version_id, pending_version_id, versions:[{version_id,version_no,kind,terminal_state,submitted_at,is_current,is_pending}]}`——版本按 `version_no` 倒序；**不读快照对象**（快照已被清理也照常返回），供审读视图的「版本历史」tab 与「文件差异」tab 取比对基线 |
 | `GET /api/v1/apps/{app_id}/versions/{base_version_id}/diff/{target_version_id}` | `base` = 旧侧（`a/`），`target` = 新侧（`b/`）；AC-41「迭代相对上一已发布」= `/versions/{current_version_id}/diff/{pending_version_id}`，两个 id 由 `publish-status` 的 `current_version` / `pending_version` 取 | `{base:{…}, target:{…}, role, summary:{files_changed,additions,deletions,truncated}, files:[{path,change:"added"\|"removed"\|"modified",additions,deletions,comparable,reason}], patches:[{path,change,patch,truncated,masked_secrets}]}`——**服务端算、两份 tar 都不下发**；未变更文件不出现；`comparable:false`（binary / too_large）的文件只进 `files` 不进 `patches`；`patch` 为标准 unified diff（`--- a/x` / `+++ b/x`，新增 / 删除侧写 `/dev/null`，3 行上下文），**先 mask 后 diff**；三道闸各留 `truncated` 标记——单文件 2000 行（`patch` 截断、计数仍是真值）、总 patch 文本 2 MiB（超出后的条目 `patch:null`）、文件清单 5000 条（`summary.truncated`）|
 
-> **没有下载整包的端点，且不会有**（D15「源码不以归档形态到浏览器」）——`test_no_archive_download_route_exists` 把这句钉死。审读视图（T052 前端半 / T064）按这三个契约接线；client 侧调用可用 `silent: true`，但后端已保证不回 403/404。
+> **没有下载整包的端点，且不会有**（D15「源码不以归档形态到浏览器」）——`test_no_archive_download_route_exists` 把这句钉死。审读视图（T052 前端半 / T064）按上表四个契约接线；client 侧调用可用 `silent: true`，但后端已保证不回 403/404——**业务码的文案取 `api_errors.<code>`（`utils/apiStatusError.createApiStatusError`），不取信封里的 `status_message`**，后者是后端写死的中文，直接显示会让 en / ja 审批人看到中文。
 
 ### 4.3 关键模块职责
 

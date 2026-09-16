@@ -2068,6 +2068,7 @@
   "com_approval_review_tab_versions": "バージョン履歴",
   "com_approval_review_tab_diff": "変更内容",
   "com_approval_review_loading": "読み込んでいます…",
+  "com_approval_review_load_failed": "内容を読み込めませんでした。しばらくしてからもう一度お試しください。",
   "com_approval_review_tree_empty": "このバージョンのパッケージには表示できるファイルがありません。",
   "com_approval_review_tree_truncated": "ファイルが多すぎるため、一部のみ表示しています。",
   "com_approval_review_select_file": "左側でファイルを選ぶと内容が表示されます。",

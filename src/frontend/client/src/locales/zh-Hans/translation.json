@@ -2074,6 +2074,7 @@
   "com_approval_review_tab_versions": "版本历史",
   "com_approval_review_tab_diff": "文件差异",
   "com_approval_review_loading": "正在读取…",
+  "com_approval_review_load_failed": "内容读取失败，请稍后重试。",
   "com_approval_review_tree_empty": "这个版本的代码包里没有可以查看的文件。",
   "com_approval_review_tree_truncated": "文件太多，这里只列出了一部分。",
   "com_approval_review_select_file": "在左侧选择一个文件查看内容。",

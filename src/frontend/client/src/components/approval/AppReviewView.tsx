@@ -10,6 +10,7 @@ import {
   type SnapshotTree,
   type VersionDiffResponse,
 } from "~/api/hostedAppReview";
+import { extractApiErrorMessage } from "~/utils/apiStatusError";
 import type { LocalizeFn } from "./approvalPresentation";
 import { formatTime } from "./approvalPresentation";
 import { ReviewSourcePane } from "./ReviewSourcePane";
@@ -59,8 +60,17 @@ export interface AppReviewViewProps {
   onBack: () => void;
 }
 
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : "";
+/**
+ * Failure is a box, not a string: an empty message would be falsy and fall
+ * through to the normal pane, showing an empty file tree as though the package
+ * had no files in it. `localize` is left out of it because it is a new function
+ * identity on every render — putting it in an effect's dependencies re-fires
+ * the fetch forever.
+ */
+type Failure = { message: string };
+
+function toFailure(error: unknown): Failure {
+  return { message: extractApiErrorMessage(error) };
 }
 
 export function AppReviewView({ target, localize, onBack }: AppReviewViewProps) {
@@ -70,16 +80,21 @@ export function AppReviewView({ target, localize, onBack }: AppReviewViewProps) 
   const [tree, setTree] = useState<SnapshotTree | null>(null);
   const [diff, setDiff] = useState<VersionDiffResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [failure, setFailure] = useState("");
+  const [failure, setFailure] = useState<Failure | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
-  const [diffFailure, setDiffFailure] = useState("");
+  const [diffFailure, setDiffFailure] = useState<Failure | null>(null);
 
   // The tree and the context are what the header and three of the four tabs
   // need, so both are read once on open rather than per tab switch.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    setFailure("");
+    setFailure(null);
+    // A diff belongs to the release it was read for; dropping it here keeps a
+    // previous target's comparison off the screen if this view is ever handed a
+    // second release without being unmounted first.
+    setDiff(null);
+    setDiffFailure(null);
     Promise.all([getSnapshotTreeApi(appId, versionId), getReviewContextApi(appId, versionId)])
       .then(([treeData, contextData]) => {
         if (cancelled) return;
@@ -90,7 +105,7 @@ export function AppReviewView({ target, localize, onBack }: AppReviewViewProps) 
         if (cancelled) return;
         setTree(null);
         setContext(null);
-        setFailure(errorText(error));
+        setFailure(toFailure(error));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -110,7 +125,7 @@ export function AppReviewView({ target, localize, onBack }: AppReviewViewProps) 
     if (tab !== "diff" || !hasBaseline || !baseVersionId || diff) return;
     let cancelled = false;
     setDiffLoading(true);
-    setDiffFailure("");
+    setDiffFailure(null);
     getVersionDiffApi(appId, baseVersionId, versionId)
       .then((data) => {
         if (!cancelled) setDiff(data);
@@ -118,7 +133,7 @@ export function AppReviewView({ target, localize, onBack }: AppReviewViewProps) 
       .catch((error: unknown) => {
         if (cancelled) return;
         setDiff(null);
-        setDiffFailure(errorText(error));
+        setDiffFailure(toFailure(error));
       })
       .finally(() => {
         if (!cancelled) setDiffLoading(false);
@@ -171,7 +186,9 @@ export function AppReviewView({ target, localize, onBack }: AppReviewViewProps) 
         {loading ? (
           <p className="text-[13px] text-text-3">{localize("com_approval_review_loading")}</p>
         ) : failure ? (
-          <p className="text-[13px] text-text-3">{failure}</p>
+          <p className="text-[13px] text-text-3">
+            {failure.message || localize("com_approval_review_load_failed")}
+          </p>
         ) : tab === "source" ? (
           <ReviewSourcePane
             appId={appId}
@@ -247,7 +264,11 @@ export function AppReviewView({ target, localize, onBack }: AppReviewViewProps) 
               diff ? `v${diff.base.version_no} → v${diff.target.version_no}` : undefined
             }
             loading={diffLoading}
-            errorMessage={diffFailure || undefined}
+            errorMessage={
+              diffFailure
+                ? diffFailure.message || localize("com_approval_review_load_failed")
+                : undefined
+            }
             emptyMessage={hasBaseline ? undefined : localize("com_approval_review_no_baseline")}
           />
         )}
