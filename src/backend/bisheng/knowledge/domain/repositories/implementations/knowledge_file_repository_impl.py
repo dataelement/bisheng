@@ -1,12 +1,19 @@
 from collections.abc import Sequence
 from typing import Any
 
+from sqlalchemy import case, func, or_
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
-from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import (
+    FolderDescendantStatusFlags,
+    KnowledgeFileRepository,
+)
+
+# DM8/Oracle reject an IN/NOT IN list longer than 1000 entries.
+_EXCLUDED_ID_CHUNK_SIZE = 500
 
 
 class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], KnowledgeFileRepository):
@@ -69,8 +76,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
 
         stmt = (
             select(KnowledgeFile)
-            .join(KnowledgeDocumentVersion,
-                  KnowledgeDocumentVersion.knowledge_file_id == KnowledgeFile.id)
+            .join(KnowledgeDocumentVersion, KnowledgeDocumentVersion.knowledge_file_id == KnowledgeFile.id)
             .where(
                 KnowledgeFile.knowledge_id == knowledge_id,
                 KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
@@ -83,12 +89,68 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    # according knowledge_idAndknowledge_file_ids Dapatkanuser_metadata Data field
-    async def get_user_metadata_by_knowledge_file_ids(self, knowledge_id: int, knowledge_file_ids: list[int]) -> dict[
-        int | None, list[dict[str, Any]] | None]:
-        query = select(KnowledgeFile).where(
+    async def find_folder_descendant_status_flags(
+        self,
+        knowledge_id: int,
+        folder_prefixes: dict[int, str],
+        excluded_file_ids: set[int] | None = None,
+    ) -> dict[int, FolderDescendantStatusFlags]:
+        if not folder_prefixes:
+            return {}
+
+        abnormal_statuses = KnowledgeFileStatus.abnormal_values()
+        processing_statuses = {
+            KnowledgeFileStatus.PROCESSING.value,
+            KnowledgeFileStatus.WAITING.value,
+            KnowledgeFileStatus.REBUILDING.value,
+        }
+        tracked_statuses = abnormal_statuses | processing_statuses
+        prefix_conditions = {
+            folder_id: or_(
+                KnowledgeFile.file_level_path == prefix,
+                KnowledgeFile.file_level_path.like(f"{prefix}/%"),
+            )
+            for folder_id, prefix in folder_prefixes.items()
+        }
+        folder_id_expression = case(
+            *((prefix_condition, folder_id) for folder_id, prefix_condition in prefix_conditions.items()),
+            else_=None,
+        )
+        conditions = [
             KnowledgeFile.knowledge_id == knowledge_id,
-            col(KnowledgeFile.id).in_(knowledge_file_ids)
+            KnowledgeFile.file_type == FileType.FILE.value,
+            col(KnowledgeFile.status).in_(sorted(tracked_statuses)),
+            or_(*prefix_conditions.values()),
+        ]
+        # Chunked rather than one NOT IN: DM8/Oracle cap an expression list at
+        # 1000 elements, and a space under heavy review can exceed that.
+        hidden_ids = sorted(excluded_file_ids or ())
+        for offset in range(0, len(hidden_ids), _EXCLUDED_ID_CHUNK_SIZE):
+            conditions.append(col(KnowledgeFile.id).notin_(hidden_ids[offset : offset + _EXCLUDED_ID_CHUNK_SIZE]))
+        statement = (
+            select(
+                folder_id_expression.label("folder_id"),
+                func.max(case((col(KnowledgeFile.status).in_(sorted(abnormal_statuses)), 1), else_=0)),
+                func.max(case((col(KnowledgeFile.status).in_(sorted(processing_statuses)), 1), else_=0)),
+            )
+            .where(*conditions)
+            .group_by(folder_id_expression)
+        )
+        rows = (await self.session.execute(statement)).all()
+        return {
+            int(folder_id): FolderDescendantStatusFlags(
+                has_abnormal_files=bool(has_abnormal),
+                has_processing_files=bool(has_processing),
+            )
+            for folder_id, has_abnormal, has_processing in rows
+        }
+
+    # according knowledge_idAndknowledge_file_ids Dapatkanuser_metadata Data field
+    async def get_user_metadata_by_knowledge_file_ids(
+        self, knowledge_id: int, knowledge_file_ids: list[int]
+    ) -> dict[int | None, list[dict[str, Any]] | None]:
+        query = select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id == knowledge_id, col(KnowledgeFile.id).in_(knowledge_file_ids)
         )
 
         result = await self.session.exec(query)
@@ -100,7 +162,13 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         for knowledge_file in knowledge_files:
             if knowledge_file.user_metadata:
                 # Sort by newness
-                sorted_user_metadata = dict(sorted(knowledge_file.user_metadata.items(), key=lambda item: item[1].get("updated_at", 0), reverse=False))
+                sorted_user_metadata = dict(
+                    sorted(
+                        knowledge_file.user_metadata.items(),
+                        key=lambda item: item[1].get("updated_at", 0),
+                        reverse=False,
+                    )
+                )
                 user_metadata_dict[knowledge_file.id] = sorted_user_metadata
             else:
                 user_metadata_dict[knowledge_file.id] = {}

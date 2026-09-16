@@ -641,9 +641,7 @@ def enqueue_or_dispatch(
 _TERMINAL_STATUSES: frozenset[int] = frozenset(
     {
         KnowledgeFileStatus.SUCCESS.value,
-        KnowledgeFileStatus.FAILED.value,
-        KnowledgeFileStatus.TIMEOUT.value,
-        KnowledgeFileStatus.VIOLATION.value,
+        *KnowledgeFileStatus.abnormal_values(),
     }
 )
 

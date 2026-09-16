@@ -17,6 +17,7 @@ import {
     type KnowledgeStatusTone,
     isKnowledgeApprovalRejected,
     isKnowledgeItemPreviewable,
+    isKnowledgeItemRetryable,
     isKnowledgeItemUploading,
 } from "../knowledgeUtils";
 import { FileChangeActionIcon } from "./FileChangeActionIcon";
@@ -132,9 +133,7 @@ const StatusBadge = ({ file, onOpenApprovalDetail }: {
         );
     }
 
-    // Folder rollup: a folder whose subtree holds a failed / timed-out / flagged file reads
-    // 存在异常, and that wins over any in-progress state below it. The backend walks the whole
-    // subtree by path prefix, so every ancestor level lights up, not just the direct parent.
+    // The creator-only folder anomaly signal wins over any in-progress state.
     const isFolderWithAbnormal = file.type === FileType.FOLDER && file.hasAbnormalFiles === true;
 
     if (status === FileStatus.SUCCESS && !approvalStatusLabel && !isFolderWithAbnormal) return null;
@@ -347,11 +346,7 @@ export function FileListRow({
         onCancelCreate,
     });
 
-    const hasRetryOption = Boolean(
-        file.status === FileStatus.FAILED ||
-        file.status === FileStatus.VIOLATION ||
-        (isFolder && file.hasFailedFiles === true)
-    );
+    const hasRetryOption = isKnowledgeItemRetryable(file);
     const showMoveItem = Boolean(onMove) && !isCreating;
     const showVersionManagement = versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && Boolean(onOpenVersionManagement);
     const showVersionHistory = versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);

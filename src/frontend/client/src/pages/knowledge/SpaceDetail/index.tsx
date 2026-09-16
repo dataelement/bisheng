@@ -36,6 +36,7 @@ import {
     getFileInputAccept,
     getMaxFileSizeBytesForFile,
     getMaxFileSizeMBForFile,
+    isKnowledgeItemRetryable,
     isKnowledgeItemUnderReview,
     isKnowledgeItemUploading,
     PENDING_REVIEW_FILTER,
@@ -1270,13 +1271,9 @@ export function KnowledgeSpaceContent({
     };
 
     const handleBatchRetry = async () => {
-        // Find selected files/folders that have FAILED status or partial failures
-        const retryIds = getReviewedSelection()
-            .filter(f => (
-                f.status === FileStatus.FAILED ||
-                f.status === FileStatus.VIOLATION ||
-                (f.type === FileType.FOLDER && f.hasFailedFiles === true)
-            ))
+        // Find selected files/folders that have an abnormal status or descendant.
+        const retryIds = displayFiles
+            .filter(f => selectedFiles.has(f.id) && isKnowledgeItemRetryable(f))
             .map(f => Number(f.id));
 
         if (retryIds.length === 0) return;
@@ -1336,11 +1333,7 @@ export function KnowledgeSpaceContent({
         canWithdrawPendingUpload(f.pendingUploadApproval, user?.id)
     );
     const reviewedSelectedList = selectedList.filter((f) => !f.pendingUploadApproval);
-    const hasFailedFiles = reviewedSelectedList.some(f =>
-        f.status === FileStatus.FAILED ||
-        f.status === FileStatus.VIOLATION ||
-        (f.type === FileType.FOLDER && f.hasFailedFiles === true)
-    );
+    const hasFailedFiles = reviewedSelectedList.some(isKnowledgeItemRetryable);
     const hasFoldersSelected = reviewedSelectedList.some(f => f.type === FileType.FOLDER);
     const selectionHasFile = reviewedSelectedList.some((f) => f.type !== FileType.FOLDER);
     // Batch move requires the matching move permission for every kind in the

@@ -77,12 +77,12 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
     if (file.approvalStatus) {
         return file.approvalStatus === "pending_review";
     }
-    // Folder rows have no `status`; treat as pending only when children are
-    // still in an in-progress state (PROCESSING / WAITING / REBUILDING).
+    // Folder rows have no `status`; treat as pending only when their subtree
+    // still has an in-progress file (PROCESSING / WAITING / REBUILDING).
     // Terminal failures (FAILED / TIMEOUT / VIOLATION) must NOT keep the
     // auto-refresh polling alive — e.g. 8 success + 1 failed is a stable state.
     if (file.type === FileType.FOLDER) {
-        return file.processingFileNum != null && file.processingFileNum > 0;
+        return file.hasProcessingFiles === true;
     }
     return Boolean(
         file.status && [
@@ -113,6 +113,19 @@ export function isKnowledgeItemUnderReview(file: KnowledgeFile): boolean {
         return true;
     }
     return file.fileChangeApproval?.status === "pending";
+}
+
+export function isKnowledgeItemRetryable(file: KnowledgeFile): boolean {
+    if (file.type === FileType.FOLDER) {
+        return file.hasFailedFiles === true;
+    }
+    return Boolean(
+        file.status && [
+            FileStatus.FAILED,
+            FileStatus.TIMEOUT,
+            FileStatus.VIOLATION,
+        ].includes(file.status)
+    );
 }
 
 // ─── File upload constants ──────────────────────────────────────────

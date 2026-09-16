@@ -136,20 +136,14 @@ function buildApprovalSegments({
 }
 
 /**
- * Folder rows only report success / processing child counts (plus a
- * has-failures flag) — no total. Naming an exact figure would undercount
- * failed children, so the count is stated only when nothing failed, and the
- * wording falls back to "all files it contains" otherwise.
+ * Folder rows carry status flags only — the child counts were dropped when the
+ * rollup became a single boolean aggregate, so there is no figure to quote and
+ * the wording always says "all files it contains".
  */
 function describeFolderScope(
-    file: KnowledgeFile,
+    _file: KnowledgeFile,
     name: string,
     localize: ReturnType<typeof useLocalize>,
 ): string {
-    const counted = file.successFileNum != null || file.processingFileNum != null;
-    if (!counted || file.hasFailedFiles !== false) {
-        return localize("com_knowledge.file_change_tip_delete_folder_scope_all", { 0: name });
-    }
-    const total = (file.successFileNum ?? 0) + (file.processingFileNum ?? 0);
-    return localize("com_knowledge.file_change_tip_delete_folder_scope", { 0: name, 1: total });
+    return localize("com_knowledge.file_change_tip_delete_folder_scope_all", { 0: name });
 }

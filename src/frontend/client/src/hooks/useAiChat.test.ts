@@ -245,3 +245,62 @@ describe("useAiChat conversation switching", () => {
         expect(turn.close).toHaveBeenCalledTimes(1);
     });
 });
+
+/**
+ * Moving the view to a new conversation id must move the turn's state with it.
+ *
+ * Each turn writes into a bucket keyed by the conversation it started in, and
+ * what the caller sees is the bucket of whichever id is current. So pointing
+ * the view at a freshly minted id without carrying the bucket over lands on an
+ * empty one: the answer is on screen one moment and the pane is blank the next.
+ *
+ * Task mode is where this bites. The daily stream's last act is a handoff that
+ * binds the conversation to a server-minted chat id, and it also suppresses the
+ * one history refetch that would otherwise repaint the pane — so nothing brings
+ * the content back until the user navigates away and returns.
+ *
+ * The second test covers what the orphaned bucket does afterwards: it still
+ * sits under the id the turn started with, so going back to a new chat finds
+ * the previous turn's messages instead of the welcome page.
+ */
+describe("useAiChat adopts a new conversation id", () => {
+    it("keeps the turn on screen when the task handoff binds a real chat id", async () => {
+        const { result } = renderChat("new");
+
+        act(() => result.current.sendMessage("write me a report", null, { taskMode: true }));
+        const turn = latestStream();
+        act(() => {
+            turn.submission.onStart();
+            turn.submission.onAgentUpdate?.({ text: "working on it" });
+        });
+        expect(result.current.messages.length).toBeGreaterThan(0);
+
+        act(() => turn.submission.onTaskHandoff?.({ session_version_id: "sv-1", chat_id: "c-real" }));
+
+        await waitFor(() => expect(result.current.conversationId).toBe("c-real"));
+        expect(result.current.messages.length).toBeGreaterThan(0);
+        expect(result.current.messages[result.current.messages.length - 1].text).toBe("working on it");
+    });
+
+    it("leaves nothing behind under the id the turn started with", async () => {
+        const { result, rerender } = renderChat("new");
+
+        act(() => result.current.sendMessage("write me a report", null, { taskMode: true }));
+        const turn = latestStream();
+        act(() => {
+            turn.submission.onStart();
+            turn.submission.onAgentUpdate?.({ text: "working on it" });
+        });
+        act(() => turn.submission.onTaskHandoff?.({ session_version_id: "sv-1", chat_id: "c-real" }));
+        await waitFor(() => expect(result.current.conversationId).toBe("c-real"));
+
+        // The view rewrites its own URL to the id the handoff just minted.
+        rerender({ cid: "c-real" });
+
+        // Starting another new chat must land on the welcome page, not on the
+        // messages the previous turn left behind under "new".
+        rerender({ cid: "new" });
+        await waitFor(() => expect(result.current.conversationId).toBe("new"));
+        expect(result.current.messages).toHaveLength(0);
+    });
+});
