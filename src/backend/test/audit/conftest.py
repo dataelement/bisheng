@@ -19,12 +19,22 @@ Two things the fixtures pin down that are easy to get wrong:
 
 # Pre-mock the modules audit_log eagerly imports that aren't available in the
 # unit-test environment (see test_audit_log_tenant_scope.py for the why).
+#
+# ⚠️ The stubs are **taken back out as soon as our own imports are done**. A
+# conftest is loaded at session start — before any test module — so a stub left
+# in ``sys.modules`` is not scoped to this directory: it becomes the answer
+# every later suite gets. ``bisheng.telemetry_search`` is a real package, and a
+# MagicMock standing in for it makes ``import bisheng.telemetry_search.domain``
+# fail with "not a package" — which is how ``test/open_api`` and
+# ``test/permission`` turned into 11 collection errors the first time this
+# block lived in a conftest instead of a test module.
 import sys as _sys
 from unittest.mock import MagicMock as _MagicMock
 
 _router_stub = _MagicMock()
 _router_stub.router = _MagicMock()
 _router_stub.router_rpc = _MagicMock()
+_stubbed: list[str] = []
 for _m in (
     "bisheng.api.router",
     "bisheng.api.v1",
@@ -37,7 +47,9 @@ for _m in (
     "bisheng.telemetry_search.api",
     "bisheng.telemetry_search.api.router",
 ):
-    _sys.modules.setdefault(_m, _router_stub)
+    if _m not in _sys.modules:
+        _sys.modules[_m] = _router_stub
+        _stubbed.append(_m)
 
 from contextlib import asynccontextmanager, contextmanager, nullcontext  # noqa: E402
 from types import SimpleNamespace  # noqa: E402
@@ -49,6 +61,10 @@ from sqlalchemy.pool import StaticPool  # noqa: E402
 from sqlmodel import Session  # noqa: E402
 
 from bisheng.database.models.audit_log import AuditLog  # noqa: E402
+
+for _m in _stubbed:
+    del _sys.modules[_m]
+del _stubbed
 
 AUDITLOG_DDL = """
     CREATE TABLE IF NOT EXISTS auditlog (
@@ -74,6 +90,29 @@ AUDITLOG_DDL = """
         update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
     )
 """
+
+
+@pytest.fixture(autouse=True)
+def _tenant_context():
+    """Give every test in this directory its own tenant context.
+
+    These tests drive the DAO's hand-written predicates against a private
+    SQLite engine, but the tenant-filter listener is registered on the Session
+    class globally: with ``multi_tenant.enabled`` on and no context set, the
+    very first INSERT raises ``NoTenantContextError``. Whether the flag is on
+    depends on what ran before — ``test/permission`` turns it on and does not
+    put it back — so the suite passed alone and failed in a combined run, which
+    is exactly the failure the AGENTS.md baseline-diff rule warns about. Pinning
+    a context here makes the outcome the same either way.
+    """
+    from bisheng.core.context.tenant import get_current_tenant_id, set_current_tenant_id
+
+    previous = get_current_tenant_id()
+    set_current_tenant_id(1)
+    try:
+        yield
+    finally:
+        set_current_tenant_id(previous)
 
 
 @pytest.fixture(scope="module")
