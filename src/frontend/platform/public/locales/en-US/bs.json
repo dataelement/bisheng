@@ -2758,6 +2758,14 @@
       "empty": "No version records yet",
       "loadFailed": "Failed to load version records"
     },
+    "versionDiff": {
+      "title": "What changed",
+      "base": "Compare from",
+      "target": "Compare to",
+      "needTwoVersions": "There is only one version, so there is nothing to compare yet.",
+      "pickTwoDifferent": "Pick two different versions.",
+      "loadFailed": "Failed to load the version diff"
+    },
     "data": {
       "loading": "Loading…",
       "forbidden": "You do not have permission to access this application's data; only the owner can.",

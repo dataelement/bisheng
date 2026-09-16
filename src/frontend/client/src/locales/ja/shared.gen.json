@@ -18,5 +18,22 @@
       "imageRef": "画像参照",
       "imagesOutsideTable": "表領域外の画像"
     }
+  },
+  "hostedApp": {
+    "versionDiff": {
+      "loading": "比較しています…",
+      "identical": "2 つのバージョンの内容は同じです。",
+      "filesChanged": "{{count}} 件のファイルに変更があります",
+      "additions": "{{count}} 行追加",
+      "deletions": "{{count}} 行削除",
+      "listTruncated": "変更ファイルが多すぎるため、一部のみ表示しています。",
+      "selectFile": "左側でファイルを選ぶと、変更内容が表示されます。",
+      "notComparable": "比較できません",
+      "reasonBinary": "バイナリファイルのため、内容は比較しません。",
+      "reasonTooLarge": "ファイルが大きすぎるため、内容は比較しません。",
+      "patchTruncated": "このファイルは変更が多すぎるため、先頭部分のみ表示しています。",
+      "patchOmitted": "全ファイルの変更量が大きすぎるため、このファイルは表示していません。",
+      "maskedSecrets": "秘密情報の疑いがある箇所を {{count}} 件隠しました"
+    }
   }
 }

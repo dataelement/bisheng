@@ -18,5 +18,22 @@
       "imageRef": "图片引用",
       "imagesOutsideTable": "表格区域外的图片"
     }
+  },
+  "hostedApp": {
+    "versionDiff": {
+      "loading": "正在比较…",
+      "identical": "两个版本的内容完全相同。",
+      "filesChanged": "{{count}} 个文件有变更",
+      "additions": "新增 {{count}} 行",
+      "deletions": "删除 {{count}} 行",
+      "listTruncated": "变更文件过多，此处只列出了一部分。",
+      "selectFile": "在左侧选择一个文件，查看它改了什么。",
+      "notComparable": "无法比较",
+      "reasonBinary": "这是二进制文件，不比较内容。",
+      "reasonTooLarge": "这个文件太大，不比较内容。",
+      "patchTruncated": "这个文件改动太多，只展示了前面一部分。",
+      "patchOmitted": "所有文件的改动加起来太多，这个文件没有展示。",
+      "maskedSecrets": "已隐藏 {{count}} 处疑似密钥"
+    }
   }
 }

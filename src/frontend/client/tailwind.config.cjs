@@ -13,7 +13,11 @@ module.exports = {
   presets: [require('@bisheng/ui/tailwind-preset')],
   // packages/ui is source-shipped: its classes must be scanned here too,
   // or shared components (e.g. @bisheng/ui Button) lose their styles.
-  content: ['./src/**/*.{js,jsx,ts,tsx}', '../packages/ui/src/**/*.{ts,tsx}'],
+  content: [
+    './src/**/*.{js,jsx,ts,tsx}',
+    '../packages/ui/src/**/*.{ts,tsx}',
+    '../packages/file-viewers/src/**/*.{ts,tsx}',
+  ],
   theme: {
     // fontFamily: {
     //   sans: ['Söhne', 'sans-serif'],
