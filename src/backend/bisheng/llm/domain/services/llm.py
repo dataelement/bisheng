@@ -395,6 +395,58 @@ class LLMService:
         return config
 
     @classmethod
+    async def acollect_visible_servers(cls, leaf_id: int, *, strict: bool = False) -> list[LLMServer]:
+        """Every LLM server row this tenant may see: own + Root-shared + inherited.
+
+        Extracted from ``get_all_llm`` so the model protocol face (F051) decides
+        "which models can this tenant call" from the same code the management
+        list renders, instead of a second query that drifts.
+
+        ``strict=True`` propagates a permission-backend failure instead of
+        quietly returning the narrower own-rows-only set — see
+        ``LLMDao.aget_shared_server_ids_for_leaf``.
+        """
+
+        if leaf_id == ROOT_TENANT_ID:
+            return list(await LLMDao.aget_all_server())
+
+        # ``aget_all_server`` is otherwise filtered by the IN-list
+        # ``visible_tenant_ids = {leaf, ROOT}`` (CustomMiddleware), which
+        # would silently include every Root server here and short-circuit
+        # the FGA ``shared_with`` check below. Force strict equality
+        # ``tenant_id = leaf`` so ``own`` truly means "leaf's own", and
+        # the FGA-derived ``shared_ids`` is the single source of truth
+        # for which Root servers this Child sees.
+        async def _own_only():
+            with strict_tenant_filter():
+                return await LLMDao.aget_all_server()
+
+        own, shared_ids, inherited_default_server_ids = await asyncio.gather(
+            _own_only(),
+            LLMDao.aget_shared_server_ids_for_leaf(leaf_id, raise_on_error=strict),
+            cls._aget_inherited_system_default_server_ids_for_leaf(leaf_id),
+        )
+        existing_ids = {s.id for s in own}
+        extra_ids: list[int] = []
+        seen_extra: set[int] = set()
+        for sid in [*shared_ids, *inherited_default_server_ids]:
+            if sid in existing_ids or sid in seen_extra:
+                continue
+            seen_extra.add(sid)
+            extra_ids.append(sid)
+        if not extra_ids:
+            return list(own)
+        with bypass_tenant_filter():
+            shared_servers = await LLMDao.aget_server_by_ids(extra_ids)
+        return list(own) + list(shared_servers)
+
+    @classmethod
+    async def acollect_visible_server_ids(cls, leaf_id: int, *, strict: bool = False) -> list[int]:
+        """Ids only — what a caller that will fetch models by server id needs."""
+
+        return [server.id for server in await cls.acollect_visible_servers(leaf_id, strict=strict)]
+
+    @classmethod
     async def get_all_llm(
         cls,
         only_shared: bool = False,
@@ -417,40 +469,7 @@ class LLMService:
             return await cls._list_shared_root_servers()
 
         leaf_id = get_current_tenant_id() or ROOT_TENANT_ID
-
-        if leaf_id == ROOT_TENANT_ID:
-            llm_servers = await LLMDao.aget_all_server()
-        else:
-            # ``aget_all_server`` is otherwise filtered by the IN-list
-            # ``visible_tenant_ids = {leaf, ROOT}`` (CustomMiddleware), which
-            # would silently include every Root server here and short-circuit
-            # the FGA ``shared_with`` check below. Force strict equality
-            # ``tenant_id = leaf`` so ``own`` truly means "leaf's own", and
-            # the FGA-derived ``shared_ids`` is the single source of truth
-            # for which Root servers this Child sees.
-            async def _own_only():
-                with strict_tenant_filter():
-                    return await LLMDao.aget_all_server()
-
-            own, shared_ids, inherited_default_server_ids = await asyncio.gather(
-                _own_only(),
-                LLMDao.aget_shared_server_ids_for_leaf(leaf_id),
-                cls._aget_inherited_system_default_server_ids_for_leaf(leaf_id),
-            )
-            existing_ids = {s.id for s in own}
-            extra_ids: list[int] = []
-            seen_extra: set[int] = set()
-            for sid in [*shared_ids, *inherited_default_server_ids]:
-                if sid in existing_ids or sid in seen_extra:
-                    continue
-                seen_extra.add(sid)
-                extra_ids.append(sid)
-            if extra_ids:
-                with bypass_tenant_filter():
-                    shared_servers = await LLMDao.aget_server_by_ids(extra_ids)
-                llm_servers = list(own) + list(shared_servers)
-            else:
-                llm_servers = list(own)
+        llm_servers = await cls.acollect_visible_servers(leaf_id)
 
         # share_to_children is intentionally left at default False on list
         # responses — OpenFGA's /read requires either ``user`` or ``object``

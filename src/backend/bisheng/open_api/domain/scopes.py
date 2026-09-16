@@ -24,7 +24,7 @@ class OpenApiScope:
     desc_key: str
     # ``False`` -> never offered nor accepted at issue time, whatever the
     # deployment switches say: the surface it unlocks has not shipped yet
-    # (``model:invoke`` / ``identity:read`` wait for F051 / F052).
+    # (``identity:read`` waits for F052).
     issuable: bool = True
     # ``True`` -> offered / accepted only while ``settings.open_platform.enabled``
     # (伴生 PRD §4.2.4 三扩展位; migration plan M7). Read per call through
@@ -138,11 +138,22 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
     # exclusion is enforced at issue / edit time by CredentialService.
     OpenApiScope(
         "model:invoke",
-        (),
+        # F051 model protocol face: the two promised OpenAI-compatible endpoints
+        # plus the catch-all that refuses everything else. The catch-all is
+        # registered too because it is a real mounted route and carries the same
+        # marker — credentials are judged before the path is.
+        (
+            ("POST", f"{_V2}/model/v1/chat/completions"),
+            ("GET", f"{_V2}/model/v1/models"),
+            ("GET", f"{_V2}/model/v1/{{rest}}"),
+            ("POST", f"{_V2}/model/v1/{{rest}}"),
+            ("PUT", f"{_V2}/model/v1/{{rest}}"),
+            ("DELETE", f"{_V2}/model/v1/{{rest}}"),
+            ("PATCH", f"{_V2}/model/v1/{{rest}}"),
+        ),
         GROUP_LOCAL_DEV_TOOLKIT,
         "openApiManagement.scopes.model_invoke.label",
         "openApiManagement.scopes.model_invoke.desc",
-        issuable=False,  # F051 model protocol face not shipped
         requires_open_platform=True,
     ),
     OpenApiScope(

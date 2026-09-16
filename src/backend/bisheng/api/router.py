@@ -47,6 +47,7 @@ from bisheng.llm.api.router import router as llm_router
 from bisheng.message.api.router import router as message_router
 from bisheng.open_api.api.dependencies import verify_open_api_access
 from bisheng.open_api.api.router import management_router as open_api_management_router
+from bisheng.open_api.api.router import model_gateway_router
 from bisheng.open_api.api.router import rpc_router as open_api_rpc_router
 from bisheng.open_endpoints.api.endpoints.llm import router as llm_router_rpc
 from bisheng.open_endpoints.api.router import (
@@ -162,3 +163,11 @@ router_rpc.include_router(chat_router_rpc)
 # from router_rpc, each endpoint carries @open_api_scope("app:manage") and reads
 # the principal from get_current_open_api_principal().
 router_rpc.include_router(app_publish_v2_router)
+# F051: /api/v2/model/v1/** — the OpenAI-compatible model protocol face. The
+# **only** conditionally mounted v2 sub-router: AC-28 asks that the face be
+# indistinguishable from "no such endpoint" where the open capability layer is
+# not deployed, and a 403 for a missing scope cannot deliver that. `app:manage`
+# above is mounted unconditionally and closed by making its scope unissuable
+# instead — do not "tidy" these two into the same shape.
+if settings.open_platform.enabled:
+    router_rpc.include_router(model_gateway_router)

@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
+from bisheng.common.services.config_service import settings
 from bisheng.open_api.api.dependencies import get_open_api_execution
+from bisheng.open_api.api.public_base_url import model_gateway_base_url
 from bisheng.open_api.domain.context import OpenApiPrincipal
 from bisheng.open_api.domain.repositories.credential_repository import CredentialRepository
 from bisheng.open_api.domain.schemas.credential import WhoamiResourceOwner, WhoamiResponse
@@ -12,7 +14,7 @@ router = APIRouter(prefix="/auth", tags=["OpenAPI", "Auth"])
 
 @router.get("/whoami", response_model=UnifiedResponseModel[WhoamiResponse])
 @open_api_scope(None)
-async def whoami(principal: OpenApiPrincipal = Depends(get_open_api_execution)):
+async def whoami(request: Request, principal: OpenApiPrincipal = Depends(get_open_api_execution)):
     credential = await CredentialRepository.get(principal.credential_id)
     resource_owner = (
         WhoamiResourceOwner(user_id=principal.resource_owner_user_id)
@@ -34,5 +36,6 @@ async def whoami(principal: OpenApiPrincipal = Depends(get_open_api_execution)):
             scopes=sorted(principal.scopes),
             key_mask=credential.key_mask if credential is not None else "",
             expires_at=credential.expires_at if credential is not None else None,
+            model_base_url=model_gateway_base_url(request) if settings.open_platform.enabled else "",
         )
     )
