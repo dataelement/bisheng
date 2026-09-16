@@ -27,6 +27,7 @@ import { useHostedApp } from "./hooks/useHostedApp"
 import { usePublishStatus } from "./hooks/usePublishStatus"
 import { ApprovalStatusCard } from "./publish/ApprovalStatusCard"
 import { DangerZoneCard } from "./publish/DangerZoneCard"
+import { TierSelectCard } from "./publish/TierSelectCard"
 import { VersionDiff } from "./publish/VersionDiff"
 import { VersionListCard } from "./publish/VersionListCard"
 import { VisibilityScopeSection } from "./publish/VisibilityScopeSection"
@@ -140,6 +141,17 @@ export function HostedAppDetail() {
                     reload()
                     reloadPublishStatus()
                   }}
+                />
+                {/*
+                  AC-61 — the tier the release runs on. `can.submit` is the
+                  server's own verdict on whether this application can be
+                  submitted from inside the platform at all; it is false for
+                  every CLI application (AC-06), which makes the card read-only
+                  and its tier list unnecessary.
+                */}
+                <TierSelectCard
+                  tier={publishStatus?.tier ?? null}
+                  canSubmit={publishStatus?.can?.submit}
                 />
                 <VersionListCard
                   appId={app.app_id}

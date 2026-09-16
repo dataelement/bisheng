@@ -2929,6 +2929,17 @@
       },
       "empty": "No resource tiers yet. The backend seeds three tiers on its first start; check its startup log.",
       "loading": "Loading…"
+    },
+    "tier": {
+      "title": "Resource tier",
+      "cores": "{{count}} vCPU",
+      "memory": "{{count}} MB memory",
+      "placeholder": "Choose a tier",
+      "unknown": "Not decided yet",
+      "cliOnlyHint": "This application is published with bisheng deploy, so its tier comes from the tier field in bisheng-app.yaml. Change it there and publish again.",
+      "effectiveHint": "A tier takes effect from the next publish or resume; the running instance is unaffected.",
+      "retiredTag": "Retired",
+      "retiredHint": "An administrator retired this tier. The application keeps running; the next publish has to name a different one."
     }
   }
 }
