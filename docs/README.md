@@ -24,7 +24,7 @@
 
 | 目录 | 内容 |
 |------|------|
-| [`api/`](api/) | 接口文档(filelib 纯检索、知识空间/知识库接口) |
+| [`api/`](api/) | 接口文档(filelib 纯检索、知识空间/知识库接口、[MCP 服务面](api/mcp-server.md)、[模型协议面](api/model-gateway.md)) |
 | [`PRD/`](PRD/) | 现行迭代的产品 PRD 与技术方案(按 `{版本} {主题} PRD/` 组织) |
 | [`product/`](product/) | 产品方案与**对外口径**使用说明(如[多租户产品使用说明](product/多租户产品使用说明.md))——面向客户/实施,不含实现细节 |
 | [`observability/`](observability/) | BS_METRIC 指标日志契约(监控团队解析依据) |

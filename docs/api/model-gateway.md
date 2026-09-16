@@ -15,9 +15,9 @@
 | base URL | `{平台地址}/api/v2/model/v1`，**末尾的 `/v1` 是 base 的一部分**，官方客户端只会在其后拼 `/chat/completions` 与 `/models` |
 | 鉴权 | `Authorization: Bearer bs-sak-…`（服务账号密钥）；托管应用用平台注入的应用运行期凭据 |
 | 权限位 | `model:invoke`，**仅模式 S**（不承载委托） |
-| 地址从哪来 | `GET /api/v2/auth/whoami` 的 `model_base_url` 字段。服务账号详情页的接入信息区复制的就是它 |
+| 地址从哪来 | 持密钥调用的一方读 `GET /api/v2/auth/whoami` 的 `model_base_url` 字段（`bisheng dev`、技能包走这条）；服务账号详情页的接入信息区读 `GET /api/v1/dev-toolkit/versions` 的 `model.base_url`，值同上 |
 
-**地址只有这一个出处。** 页面、CLI、技能包都从 `whoami.model_base_url` 取，不各自用 `location.origin` 或配置里的主机名拼——平台前端在开发期跑在另一个端口，拼出来的地址在客户机器上是死链。
+**地址只有一个生产者。** 上面两个字段都由后端的 `model_gateway_base_url()` 算出，没有第二份拼法：页面、CLI、技能包都不许自己用 `location.origin` 或配置里的主机名拼——平台前端在开发期跑在另一个端口，拼出来的地址在客户机器上是死链。
 
 环境变量名（`bisheng dev` 与托管运行期**同名注入**，应用代码本地线上零差异）：
 
@@ -38,9 +38,10 @@
 解析规则固定，按顺序：
 
 1. **精确匹配模型名**。命中一个即调用。
-2. 命中多个（不同服务商配了同名模型）→ **拒绝，不替你挑**（`26214`），错误体的 `candidates` 列出可用的限定名。
+2. 命中多个（不同服务商配了同名模型）→ **拒绝，不替你挑**（`26214`），错误体的 `candidates` 列出这个裸名命中的全部限定名。
 3. 裸名没命中且请求里带 `/` → 按 **`{服务商名}/{模型名}`** 再解析一次。限定名在任何时候都可用，写死它就不会因为别人新配了一个同名模型而突然歧义。
-4. 仍未命中 → 区分成因：模型已下线 `26212`、服务商已删除 `26213`、其余（不存在 / 不属于本租户 / 不是对话类）一律 `26211`——**「没有」与「不归你」不区分**，否则这条接口就成了模型清单的探测器。
+4. 仍未命中 → 只分两种：模型**已下线** `26212`，其余一律 `26211`——不存在、不属于本租户、不是对话类、服务商已被删除（删服务商会连它的模型行一起删，与「从未存在过」无从分辨），**「没有」与「不归你」不区分**，否则这条接口就成了模型清单的探测器。
+   `26213`「服务商已删除」不来自这一步：名称解析走一层模型目录缓存（`open_api.model_catalog_ttl_seconds`，默认 30 秒、上限 60 秒），窗口内名字还解析得出、真去取模型时行已经没了，那一次才答 `26213`。模型被管理员下线同样最多滞后这一个窗口。
 
 `GET /models` 只列**当前可调用**的对话类模型：`id` 在名称唯一时是裸名、歧义时只给限定名；`owned_by` 是服务商名；另有两个扩展键 `bisheng_model_type`、`bisheng_qualified_name`（恒为限定名，想写稳定名的取它）。
 
@@ -60,7 +61,7 @@
 | `n` | **只接受 1**；`n>1` 直接拒（`26203`）。底层一次只产一个候选，静默少给比报错更难查 |
 | 其它未列出的键 | **原样转发，不做保证**——平台不改写、不注入任何系统提示词 |
 
-响应就是 OpenAI 的 `chat.completion` / `chat.completion.chunk`。思考类模型的推理内容放在 `reasoning_content`，为空时不出现（官方客户端忽略不认识的键）。
+响应就是 OpenAI 的 `chat.completion` / `chat.completion.chunk`。思考类模型的推理内容放在 `reasoning_content`——流式增量里为空即不出现，非流式响应体按 OpenAI 结构完整给出、为空时是 `null`。官方客户端忽略这个它不认识的键，两种形态都不影响它解析。
 
 **本版只提供上面两条端点。** 其余 OpenAI 协议族路径（`/embeddings`、`/completions`、`/responses`、`/images/*`、`/audio/*` …）一律 404 + 可读原因（`26201`），不是框架的空 404。Anthropic 的 `/v1/messages` 单列一码（`26202`）并说明本面只提供 OpenAI 兼容协议——把 `ANTHROPIC_BASE_URL` 指到这里的人，得到的是一句能看懂的话而不是协议层乱码。
 
@@ -78,19 +79,20 @@
 
 | `bisheng_code` | 含义 | HTTP | `type` / `code` |
 |---|---|---|---|
-| 26001 / 26002 / 26027 | 没带凭据 / 凭据无效 / 主体已停用 | 401 | `authentication_error` · `invalid_api_key` |
+| 26001 / 26002 / 26027 / 26043 | 没带凭据 / 凭据无效 / 服务账号已停用 / 个人令牌持有人已失效 | 401 | `authentication_error` · `invalid_api_key` |
 | 26003 | 缺 `model:invoke` 位 | 403 | `permission_error` · `insufficient_scope` |
 | 26051 | 委托专用密钥（本面不承载委托，另发一把） | 403 | `permission_error` · `delegate_only_credential` |
-| 26004 / 26005 / 26010 / 26018 / 26019 / 26205 | 带了身份传递类请求头或 `user_id` 入参 | 400 / 403 | `identity_header_not_accepted` |
-| 26201 / 26202 | 端点不支持 / Anthropic 协议 | 404 | `invalid_request_error` |
+| 26004 / 26005 / 26010 / 26018 / 26019 | 带了身份传递类请求头或 `user_id` 入参（`/api/v2` 共用底座判的） | 400 / 403 | `invalid_request_error` · `identity_header_not_accepted` |
+| 26205 | 本面自己再拒一次 `X-End-User`（共用底座会默默采纳它） | 403 | `permission_error` · `identity_header_not_accepted` |
+| 26201 / 26202 | 端点不支持 / Anthropic 协议 | 404 | `invalid_request_error` · `endpoint_not_supported` / `anthropic_protocol_not_supported` |
 | 26203 | 请求体不合法（`messages` 为空、`n>1` …） | 400 | `invalid_request_error` · `invalid_request` |
-| 26204 | 服务账号密钥附带了访问者凭据 | 403 | `permission_error` · `access_token_not_accepted` |
-| 26211 / 26212 / 26213 | 模型不存在 / 已下线 / 服务商已删除 | 404 | `invalid_request_error` |
+| 26204 | 服务账号密钥附带了访问者凭据，或托管应用的访问者凭据验不过 | 403 | `permission_error` · `access_token_not_accepted` |
+| 26211 / 26212 / 26213 | 模型不存在 / 已下线 / 服务商已删除 | 404 | `invalid_request_error` · `model_not_found` / `model_offline` / `model_revoked` |
 | 26214 | 裸名歧义，`error.candidates` 给限定名 | 400 | `invalid_request_error` · `model_name_ambiguous` |
 | 26215 | 托管应用调了未声明的模型能力 | 403 | `permission_error` · `capability_undeclared` |
 | 26216 | 模型目录 / 能力声明不可判定 → fail-closed | 503 | `server_error` · `model_catalog_unavailable` |
-| 26217 | 服务商日调用上限 | 429 | `rate_limit_error` |
-| 26231 / 26232 / 26233 | 上游失败 / 上游拒绝（上下文超长、参数不支持、内容拦截） / 上游限流 | 502 / 上游状态 / 429 | — |
+| 26217 | 服务商日调用上限 | 429 | `rate_limit_error` · `provider_daily_limit_exceeded` |
+| 26231 / 26232 / 26233 | 上游失败 / 上游拒绝（上下文超长、参数不支持、内容拦截） / 上游限流 | 502 / 上游自己的 4xx / 429 | `server_error` · `upstream_error` / `invalid_request_error` · `upstream_rejected` / `rate_limit_error` · `upstream_rate_limited` |
 | 26234 | 流式中途中断（只出现在 SSE 错误事件里） | — | `server_error` · `stream_interrupted` |
 
 **不可判定一律 fail-closed**（`26216` / `503`）：目录读不出来时报错，不退回「按空清单放行」或「按上次结果放行」。

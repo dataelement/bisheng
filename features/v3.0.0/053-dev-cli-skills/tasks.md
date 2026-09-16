@@ -427,7 +427,7 @@
   **覆盖 AC**: AC-03, AC-23, AC-25
   **2026-09-16 完成证据**: commit `c2b56c686`（`devproxy.py` 508 行）；`tests/test_dev_proxy.py` 25 条 + `tests/test_platform_contract.py`（用 `ast` 读 `app-proxy/app_proxy/headers.py`，断言十个注入头名、顺序、剥离前缀与 hop-by-hop 集合零漂移）；短时凭据句柄本地签发，见偏差记录 29。
 
-  **F057 T043 回写增补（2026-09-16，来自 `wt/f057-tail`；只提请求，未改本 Feature 代码）**：`devproxy.HandleMinter` 现铸的 `bsdev.<b64>.<sig>` 是**本地 HMAC 自签**（`devproxy.py:117 HANDLE_PREFIX = "bsdev"`），平台侧无处验签——全仓只有这一处出现 `bsdev`，后端零受理。请求把它改成**用 `login` 密钥向平台换取的短时凭据**（`login` 密钥仍不进应用进程），否则本地期 `retrieve` 恒 `26001`。另一条同因的事实：`devdb.PLATFORM_ENV_NAMES`（`devdb.py:65-77`）里没有 `BISHENG_APP_TOKEN`，而托管期 retrieve 要**两把**凭据（应用运行期凭据作 Bearer 定白名单 + 访问者凭据走 `X-BiSheng-Access-Token` 定访问用户），所以本地实际先抛 `AppCredentialMissingError`，换完句柄还差这一把。两者合起来 = F057 design §6.2 阻塞项 ③；SDK 侧**不开兼容分支**（F057 D5），修法归本 Feature 与 F052。
+  **F057 T043 回写增补（2026-09-16，来自 `wt/f057-tail`；只提请求，未改本 Feature 代码）**：`devproxy.HandleMinter` 现铸的 `bsdev.<b64>.<sig>` 是**本地 HMAC 自签**（`devproxy.py:117 HANDLE_PREFIX = "bsdev"`），平台侧无处验签——后端零出现、零受理（全仓其余命中只有 SDK 的日志脱敏正则 `bisheng_sdk/errors.py:56` 与测试夹具）。请求把它改成**用 `login` 密钥向平台换取的短时凭据**（`login` 密钥仍不进应用进程），否则本地期 `retrieve` 恒 `26001`。另一条同因的事实：`devdb.PLATFORM_ENV_NAMES`（`devdb.py:65-77`）里没有 `BISHENG_APP_TOKEN`，而托管期 retrieve 要**两把**凭据（应用运行期凭据作 Bearer 定白名单 + 访问者凭据走 `X-BiSheng-Access-Token` 定访问用户），所以本地实际先抛 `AppCredentialMissingError`，换完句柄还差这一把。两者合起来 = F057 design §6.2 阻塞项 ③；SDK 侧**不开兼容分支**（F057 D5），修法归本 Feature 与 F052。
 
 - [x] **T043**: `dev` 本地 SQLite + 与托管运行期**同名**的连接环境变量注入；数据跨重启保留、位于项目本地且不进上传包；同名平台接线环境变量注入（清单来源见上）
   **文件**: `src/bisheng-cli/bisheng_cli/devdb.py`, `src/bisheng-cli/bisheng_cli/commands/dev.py`（增量）

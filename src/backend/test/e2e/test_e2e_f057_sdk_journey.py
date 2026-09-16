@@ -49,9 +49,11 @@ attachments go with them when an owner deletes them (F054 AC-43).
 
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 import sys
+import time
 import venv
 from pathlib import Path
 from uuid import uuid4
@@ -92,6 +94,23 @@ INJECTED_HEADER_NAMES = (
     "x-bisheng-dept-id",
     "x-bisheng-dept-name",
     "x-bisheng-dept-path",
+    "x-bisheng-subject-kind",
+    "x-bisheng-app-id",
+    "x-bisheng-access-token",
+    "x-bisheng-request-id",
+)
+
+# Of the ten, the ones that are always there. The three ``dept-*`` headers are
+# **omitted, not emitted empty**, when the visitor has no department
+# (``app_proxy/headers.py``: "Absent material is omitted... an app doing
+# ``if request.headers.get("X-BiSheng-Dept-Id"):`` must be able to tell 'no
+# department' from 'empty department'"). Asserting all ten unconditionally would
+# fail on a perfectly healthy deployment whose test accounts sit outside any
+# department — which is the common shape after an SSO first login.
+ALWAYS_INJECTED_HEADER_NAMES = (
+    "x-bisheng-user-id",
+    "x-bisheng-user-name",
+    "x-bisheng-tenant-id",
     "x-bisheng-subject-kind",
     "x-bisheng-app-id",
     "x-bisheng-access-token",
@@ -201,6 +220,34 @@ def _entry(app: dict) -> str:
     return app["entry_url"].rstrip("/") + "/"
 
 
+#: How long a stopped application is allowed to keep answering through its entry
+#: before the refusal counts as broken. Docker's default stop grace is 10s and
+#: the container is torn down inside it, so this is that window plus slack.
+STOP_SETTLE_SECONDS = 20.0
+STOP_POLL_INTERVAL_SECONDS = 1.0
+
+
+async def _poll_until_refused(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    headers: dict,
+    **kwargs,
+) -> httpx.Response:
+    """POST ``url`` until it stops answering 200, or until the window expires.
+
+    Returns the last response either way — the caller asserts on it, so a
+    deployment that never settles fails with the real status rather than with a
+    timeout error that says nothing about what the entry answered.
+    """
+    deadline = time.monotonic() + STOP_SETTLE_SECONDS
+    response = await client.post(url, headers=headers, **kwargs)
+    while response.status_code == 200 and time.monotonic() < deadline:
+        await asyncio.sleep(STOP_POLL_INTERVAL_SECONDS)
+        response = await client.post(url, headers=headers, **kwargs)
+    return response
+
+
 class TestE2EF057SdkJourney:
     """The install → identity → retrieve → storage journey, end to end."""
 
@@ -282,23 +329,28 @@ class TestE2EF057SdkJourney:
         app_a: dict,
         user_a_token: str,
     ) -> None:
-        """AC-31: the injected set is exactly the ten, and the visitor credential is among them.
+        """AC-31: nothing outside the ten arrives, the seven unconditional ones do.
 
         The access-token assertion is the one that catches a deployment whose
         ``app_runtime.obo_secret`` is missing or equal to ``jwt_secret``: the
         platform only warns once about that, and every retrieve below would then
         fail as "visitor credential missing" — a configuration fault wearing an
-        SDK fault's clothes.
+        SDK fault's clothes. It is checked **first** so that failure names the
+        configuration instead of surfacing as a set difference.
         """
 
         response = await client.get(f"{_entry(app_a)}__whoami", headers=auth_headers(user_a_token))
         assert response.status_code == 200, response.text[:300]
         injected = {key.lower() for key in response.json()}
-        assert injected == set(INJECTED_HEADER_NAMES), sorted(injected)
+
         assert response.json().get("x-bisheng-access-token"), (
             "no visitor credential injected — set app_runtime.obo_secret to a value "
             "different from jwt_secret and restart the backend"
         )
+        # Nothing outside the contract leaks into the app's namespace...
+        assert injected <= set(INJECTED_HEADER_NAMES), sorted(injected - set(INJECTED_HEADER_NAMES))
+        # ...and everything that does not depend on the visitor's department is there.
+        assert set(ALWAYS_INJECTED_HEADER_NAMES) <= injected, sorted(set(ALWAYS_INJECTED_HEADER_NAMES) - injected)
 
     async def test_journey_04_health_probe_needs_no_identity(
         self,
@@ -505,8 +557,22 @@ class TestE2EF057SdkJourney:
                 ("ask", {"params": {"q": "anything"}}),
                 ("upload", {"files": {"file": (f"{PREFIX}offline.txt", b"x", "text/plain")}}),
             ):
-                response = await client.post(f"{entry}{path}", headers=auth_headers(user_a_token), **kwargs)
-                assert response.status_code != 200, f"{path} answered 200 while the application was stopped"
+                # Retried, not probed once: the state row flips inside the stop
+                # call, but the container still gets docker's stop grace period
+                # (~10s) and a request that slips in during it is answered by a
+                # process that is on its way out. Reading that single 200 as
+                # "the platform kept serving a stopped application" would be a
+                # false alarm; refusing to settle within the window is the real
+                # defect, and that is what this asserts.
+                response = await _poll_until_refused(
+                    client,
+                    f"{entry}{path}",
+                    headers=auth_headers(user_a_token),
+                    **kwargs,
+                )
+                assert response.status_code != 200, (
+                    f"{path} still answered 200 {STOP_SETTLE_SECONDS}s after the application was stopped"
+                )
                 assert "Traceback" not in response.text
         finally:
             assert_resp_200(

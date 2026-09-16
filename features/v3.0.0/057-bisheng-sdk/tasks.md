@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 15 条修订，36 条 AC（决议 1–11） |
 | design.md | ✅ 已评审（全自动模式定案） | 2026-09-16 初版 + 两次续写（末次按 `wt/cli-dev` 改写 D12 / D13 / D4 / D5 / D8，坑扩到 36）；`/sdd-review design` 已跑，发现就地修订；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-09-16） | 本文；**44 任务 / 7 Wave + 1 前置**；36 条 AC 全覆盖（追溯表见末尾）；`/sdd-review tasks` 已跑 |
-| 实现 | 🚧 进行中 | **41 / 45**（两条切片已合流：`wt/f057-sdk-core` 交付包本体 Wave 0–3，`wt/f057-sdk-dist` 交付分发与文档 Wave 0 / 4 / 5 / 6；**收尾切片 `wt/f057-tail` 再勾三条**：T029 wheel 已在位并逐项复核、T041 端到端旅程测试文件（默认跳过、跳过原因点名前置）、T043 跨 Feature 回写登记。仍缺的是需要 114、真实构建容器或模型评测的端到端项——T032 / T040 / T042，逐条见下。）|
+| 实现 | 🚧 进行中 | **41 / 45**（两条切片已合流：`wt/f057-sdk-core` 交付包本体 Wave 0–3，`wt/f057-sdk-dist` 交付分发与文档 Wave 0 / 4 / 5 / 6；**收尾切片 `wt/f057-tail` 再勾三条**：T029 wheel 已在位并逐项复核、T041 端到端旅程测试文件（默认跳过、跳过原因点名前置）、T043 跨 Feature 回写登记。未勾的 4 条：需要 114、真实构建容器或模型评测的 T032 / T040 / T042，以及归姊妹切片 `wt/f053-skillpack-model` 的 T035a，逐条见下。**注意 T041 勾的是「文件已交付」，这 11 个用例至今没在真实部署上跑过**——旅程是否跑通以 T042 为准。）|
 
 ---
 
@@ -416,16 +416,18 @@
 
 ### Wave 7 · 端到端旅程、114 手验、回写
 
-- [ ] **T041**: 端到端旅程测试文件（默认跳过，阻塞项落地后启用）〔3h〕
+- [x] **T041**: 端到端旅程测试文件（默认跳过，阻塞项落地后启用）〔3h〕
   **文件**: `src/backend/test/e2e/test_e2e_f057_sdk_journey.py`（新，照 `test_e2e_f053_openapi_auth_identity.py` 的 `F057_E2E=1` 门 + `E2E_API_BASE`）
   **逻辑**: 前置：平台已部署 T029 / T031、F053 `dev`（`wt/cli-dev` 已合）、F052/F055 OBO 受理（阻塞项 ②）、F054 附件 API（`wt/storage-handle` 已合并部署）。步骤：① `pip install --extra-index-url … bisheng-sdk` 于临时 venv；② `bisheng deploy` T034 的 `example-sdk/`（含知识库能力声明）→ 审批通过（`approve_online_114.py` 同型辅助）；③ 用两个**非 admin** 用户会话经 `/apps/{slug}/` 访问：`GET /` 各得自己的姓名 / 部门；`GET /healthz` 无头 200；④ `POST /ask` 的结果集合 == 同用户直接 `POST /api/v2/filelib/retrieve`（PAT / 会话派生）限定声明库的结果（**集合相等**）；用户无权的库不出现；未声明的库经应用 → `TargetUnreachableError` 或 `CapabilityNotDeclaredError` 的 4xx；⑤ 应用 A 上传 → 应用 B（第二个样例实例）`GET /files` 列不到；⑥ 下线应用后 `POST /ask` / `POST /upload` 得可区分错误。清理只动 `e2e-f057-*` 前缀资源。
   **覆盖 AC**: AC-13, AC-14, AC-15, AC-17, AC-21, AC-24, AC-34
   **依赖**: T029, T031, T034；**阻塞**：design §6.2 阻塞项 ②（托管期 retrieve）与 ③（本地期 retrieve）、契约 ③④⑦
   **完成证据（2026-09-16，`wt/f057-tail`，commit `c81a87928`）**: `src/backend/test/e2e/test_e2e_f057_sdk_journey.py`，11 个用例、默认跳过（`F057_E2E=1` 门，照 `test_e2e_f053_openapi_auth_identity.py`）。`pytest test/e2e/test_e2e_f057_sdk_journey.py -q` → **11 skipped**；带 `F057_E2E=1` 的 `--collect-only` → **11 tests collected**（fixture 名与导入都成立）；ruff check / format 零输出。
   **跳过原因逐条点名「要跑必须先落地什么」**（写在 `SKIP_REASON` 与模块 docstring 里，不是一句泛泛的「需要环境」）：① wheel 已随镜像分发（`/versions.sdk` 非 null）；② `app_runtime.obo_secret` 已配且 ≠ `jwt_secret`——否则 app-proxy 不注入 `X-BiSheng-Access-Token`（只 warn 一次），每次 `/ask` 都答「缺访问者凭据」，测的是部署配置不是 SDK，`test_journey_03b` 就是为这件事单设的、失败信息直接指向该配置项；③ `example-sdk/` 已部署成**两个**在线应用（附件跨应用隔离要两个）；④ 两个**非 admin** 账号、在声明库里可见范围不同（super_admin 短路 ReBAC）；⑤ 个人令牌开关已开（集合相等的另一半要用该用户自己的凭据打 `/api/v2/filelib/retrieve`）。
-  **覆盖到的**: 装包（临时 venv 经 `--extra-index-url` 装 `bisheng-sdk`、`__version__` == manifest 版本）· 两访问者各得自己的姓名 / 部门 · 注入头集合恰等于十个且含访问凭据 · `/healthz` 不读身份（入口 200 + 平台无头探针报 healthy 两半）· `/ask` 与同用户直连 retrieve **集合相等**（三元组 `(document, index, content)`）· 用户无权的文档不出现 · 未声明的库 4xx 且带 `next_step` · 应用 A 的附件在应用 B 列不到 · 同应用内他人附件 403 且不进列表 · 停运后入口拒绝且无堆栈（跑完 resume）。
+  **覆盖到的**: 装包（临时 venv 经 `--extra-index-url` 装 `bisheng-sdk`、`__version__` == manifest 版本）· 两访问者各得自己的姓名 / 部门 · 注入头**不出十个之外**、七个无条件头齐全、访问凭据在其中（见下方复核订正 ②）· `/healthz` 不读身份（入口 200 + 平台无头探针报 healthy 两半）· `/ask` 与同用户直连 retrieve **集合相等**（三元组 `(document, index, content)`）· 用户无权的文档不出现 · 未声明的库 4xx 且带 `next_step` · 应用 A 的附件在应用 B 列不到 · 同应用内他人附件 403 且不进列表 · 停运后入口拒绝且无堆栈（跑完 resume）。
   **偏差（三条，均已写进文件头）**: ① 步骤 ② 的 `bisheng deploy` + 审批**不由测试执行**——审批要人拍板，改成运行前提，应用 id 经 `F057_E2E_APP_ID` / `F057_E2E_APP_B_ID` 传入；② 步骤 ④「未声明的库」需要第三个样例实例（样例把 `KNOWLEDGE_BASE_IDS` 写死在代码里，给它加个查询参数等于测一条只为测试存在的代码路径），故经 `F057_E2E_UNDECLARED_APP_ID` 可选提供、缺省 skip；③ 步骤 ⑥「retrieve 与 storage 给出**可区分**错误」的进程内半边从外面观测不到——应用一停容器就没了，这半边由 SDK 单测覆盖，本文件只断言入口侧拒绝且不吐堆栈。
   **明确不覆盖**: 本地 `dev` 期（阻塞项 ③：`bsdev.` 自签句柄 + 未注入 `BISHENG_APP_TOKEN`）与省略 `knowledge_base_ids`（契约 ③，`RetrieveReq` 仍必填）。两处都在文件头写明，不留「以后想起来再说」。
+  **切片内复核订正（2026-09-16，两处会「为错误的理由失败」的断言已改）**: ① `test_journey_03b` 原断言注入头集合**恰等于十个**——`app_proxy/headers.py` 明写「缺料就不发，不发空值」，三个 `dept-*` 头在访问者没有部门时根本不出现（SSO 首登后的常见形态），这条会在一个完全健康的部署上红。改成两句：`injected ⊆ 十个`（不许漏出契约外的头）+ `七个无条件头 ⊆ injected`，并把访问凭据那句提到最前，让配错 `obo_secret` 时先看到指向配置的失败信息而不是一个集合差。② `test_journey_08` 原在 `stop` 返回后立即探入口——容器还有 docker 的停止宽限期（~10s），窗口内的一次 200 会被读成「平台在给停运应用服务」。改成 20s 内轮询直到不再答 200，仍不收敛才判失败，失败信息点名这个窗口。
+  ⚠️ **勾选的是「文件」这一交付物（任务标题即如此），不是「旅程跑通」**：截至 2026-09-16 这 11 个用例**没有在任何真实部署上跑过一次**，阻塞项 ②③ 未落地前也跑不了。真机跑通归 T042；那一步做完之前，本条不能当作 AC-13 / AC-14 / AC-15 / AC-17 / AC-21 / AC-24 / AC-34 已验证。
 
 - [ ] **T042**: 114 手动验证（`/e2e-test features/v3.0.0/057-bisheng-sdk`）〔3h，`needs_114`〕
   **文件**: 本文（回填「114 验证记录」）
@@ -441,7 +443,7 @@
   **完成证据（2026-09-16，`wt/f057-tail`）**: 三份 tasks 各追加条目，**每条都先对实现侧 grep 过、按现状写**（因此有两条从「请求」改成了「只核对、已交付」）：
   - `053-dev-cli-skills/tasks.md`：T042 条目下追加「`bsdev.` 自签句柄改平台签发」+ 一条同因事实（`devdb.PLATFORM_ENV_NAMES:65-77` 里没有 `BISHENG_APP_TOKEN`，本地实际先抛 `AppCredentialMissingError`，换完句柄还差这一把）；T043 条目下追加 `BISHENG_APP_STORAGE_DIR` 绝对路径 + `.bisheng/.gitignore` + 可选 `BISHENG_APP_STORAGE_MAX_FILE_MB`，并写明**不要注入 `_ENDPOINT`**（两个句柄同时在场时 SDK 判「句柄不唯一」，`bisheng_sdk/storage.py:63`）。
   - `055-app-publish-pipeline/tasks.md`「跨 Feature 回写受理」表加两行：① OBO 签发改 fail-closed = 🔲 未交付（`app_runtime/domain/services/entry_authz_service.py:587-597` 仍是 `_warn_once` + 放行；该文件自己的 ⚠️ 注释写着「等 OBO 有了第一个读者就必须翻」——读者已经到了）；② `16273` 载荷 = ✅ **已交付**（`common/errcode/app_publish.py:495-527` 已带 `capability` / `kind` / `reason`），**只核对未改**。
-  - `052-mcp-server-face/tasks.md`「跨 Feature 回写受理」表加三行：`knowledge_base_ids` 可省略 = 🔲 未交付（`schemas/filelib.py:39-45` 仍 `min_length=1`）；「不可及」码 + `data.unreachable_ids` = ✅ **已交付**（`mcp_face.py` 的 `26320`–`26323`），只核对未改；受理平台签发的本地短时凭据 = 🔲 未交付（全仓只有 `devproxy.py:117` 出现 `bsdev`）。
+  - `052-mcp-server-face/tasks.md`「跨 Feature 回写受理」表加三行：`knowledge_base_ids` 可省略 = 🔲 未交付（`schemas/filelib.py:39-45` 仍 `min_length=1`）；「不可及」码 + `data.unreachable_ids` = ✅ **已交付**（`mcp_face.py` 的 `26320`–`26323`），只核对未改；受理平台签发的本地短时凭据 = 🔲 未交付（`bsdev` 后端零出现零受理，全仓命中只有 CLI 的 `devproxy.py:117` 与 SDK 的脱敏正则 / 测试夹具）。
   **F054 无回写**（design §6.2 回写登记第 1 条）；在此记一句事实供其知悉：F057 `_storage_remote.py` 是附件 router 那条 Bearer 路径的首个消费者，`validate_key` / 路由 / 信封任何改动会让 `src/bisheng-sdk/tests/test_contract_alignment.py` 先红。
   **偏差**: 原注记说「F052 tasks 同期有别的切片在改，回写应在其收口后单独做」。实际落点在文件末尾的「跨 Feature 回写受理」表、与该切片改动的任务条目（T104 / T302）不在同一区域，属**纯追加**，故照常写入；若合流时该文件冲突，取两边并集即可。
 
