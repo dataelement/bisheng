@@ -610,6 +610,7 @@ T001–T007（Wave 1，可并行）
   **测试载体**: 前端手动验证清单（platform 版本 tab 与 client 审读视图**同一组件同一呈现**、二进制文件降级为「不可比较」、大 diff 分块不卡）
   **覆盖 AC**: AC-41
   **完成证据（2026-09-16，切片 f055-review-frontend，提交 `7dc0e7560`）**：呈现组件 `packages/file-viewers/src/VersionDiffView.tsx`（文件清单 + unified diff 着色 + 二进制 / 超大降级 + 三道截断闸各自有话说 + 已屏蔽密钥计数），三语文案进 `packages/locales` 的 `shared` 域并重新生成两端产物；platform 侧 `publish/VersionDiff.tsx` 默认「运行中版本 → 待生效版本」、两侧可改，接进版本 tab 的 `contentSlot`；client 侧审读视图的「文件差异」tab 直接挂同一组件。测试：`platform/src/test/versionDiffView.test.tsx` 7 例（共享组件本身）+ `publish/VersionDiff.test.tsx` 7 例（选版规则与取数接线），platform vitest 全量 `3 failed | 73 passed (76) · 9 failed | 447 passed (456)`，与主检出基线 `3 failed | 71 passed (74) · 9 failed | 433 passed (442)` 同样的失败集（+14 全为新增）。
+  **补充提交** `edde38013`：`hostedApp.ts` 加完差异接口后 615 行、越过 600 行硬线，照 `hostedAppData.ts` 的先例把差异读拆到同级的 `controllers/API/hostedAppReview.ts`（业务码与信封辅助仍留在 `hostedApp.ts`，调用方分支的是那些），拆后 553 行。
   **偏离**：① **呈现组件不在 `platform/.../publish/VersionDiff.tsx`，而在 `@bisheng/file-viewers`**——本任务原写的落点让「同一呈现」只能靠两份拷贝实现（两个 SPA 不共享 `src/`，platform 甚至不依赖 `@bisheng/ui`）。`@bisheng/file-viewers` 是两端都已依赖的源码型共享包，契约正合（props 进、无 HTTP 客户端、文案走 `shared:` 命名空间）。platform 下的 `VersionDiff.tsx` 保留，但只负责选版与取数；② 文案分两处：组件内文案在 `packages/locales` 的 `shared` 域，platform 的卡片标题与选择器标签在 `bs.json`；③ 未新建 workspace 包——新包要 `pnpm install` 才能被解析，而 client 的 jest 一旦 install 就会被未编译的 `canvas` 整体拖垮（`reference_frontend_pnpm_install_breaks_canvas`）。
 
 ---
