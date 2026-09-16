@@ -366,10 +366,22 @@ async def test_hook_failure_does_not_rollback_delete(publish_db, monkeypatch):
 
 
 async def test_register_is_idempotent():
-    """Both roots install the same subscriber; a re-initialising worker must not double it."""
-    from bisheng.app_publish.composition import on_app_deleted, register
-    from bisheng.app_runtime.domain.services import lifecycle_hooks
+    """Both roots install the same subscriber; a re-initialising worker must not double it.
 
+    Everything ``register()`` writes is process-wide, so the teardown restores
+    all of it — the hooks, the capability-environment provider and F051's two
+    ports. A provider left installed makes ``test/app_runtime``'s start tests
+    mint a real credential against a database that is not there, which is
+    invisible here and a wall of red in a combined run.
+    """
+    from bisheng.app_publish.composition import on_app_deleted, register
+    from bisheng.app_runtime.domain.services import lifecycle_hooks, runtime_env_ports
+    from bisheng.open_api.domain.services import model_range_policy
+
+    previous_ports = (
+        model_range_policy.get_hosted_app_declaration_port(),
+        model_range_policy.get_access_subject_verifier(),
+    )
     lifecycle_hooks.clear_app_deleted_hooks()
     try:
         register()
@@ -377,6 +389,9 @@ async def test_register_is_idempotent():
         assert lifecycle_hooks._hooks.count(on_app_deleted) == 1
     finally:
         lifecycle_hooks.clear_app_deleted_hooks()
+        runtime_env_ports.clear_capability_env_provider()
+        model_range_policy.register_hosted_app_declaration_port(previous_ports[0])
+        model_range_policy.register_access_subject_verifier(previous_ports[1])
 
 
 def _function_body(relative_path: str, function_name: str) -> ast.AST:
