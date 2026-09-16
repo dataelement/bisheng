@@ -446,6 +446,15 @@ async def test_the_model_face_and_the_publish_surface_read_the_same_resolution(p
     Two queries answering "is this model callable" is how a publish surface ends
     up showing a model as healthy that the face refuses — or, worse, the other
     way round, with an owner republishing to fix something that was never broken.
+
+    Scope of the guarantee: online / offline / missing, which is what
+    ``resolve_model_name`` decides. One corner is **not** covered and is known —
+    a declaration that names a model bare and later becomes ambiguous (an
+    administrator adds a second provider serving the same model name) reads as
+    revoked here while ``ModelRange.allows`` still admits a *qualified* request
+    for it, because the range test is set membership on the name rather than a
+    re-resolution. F051 tasks.md deviation 20 carries it; do not read this test
+    as evidence that the two sides agree in that case.
     """
     from bisheng.database.models.app_version import AppVersionDao
     from test.open_api.model_gateway_fixtures import install_catalog, model_row, server_row

@@ -451,7 +451,13 @@ def test_the_composition_root_installs_both_ports(_restore_ports):
 
 def test_both_process_entry_points_call_the_composition_root():
     """The API process serves the face; the Celery leg re-checks the identity a
-    queued task carries. Wiring one and not the other is invisible by hand."""
+    queued task carries. Wiring one and not the other is invisible by hand.
+
+    The assertion is on the **call**, not on the import: both entry points
+    import ``register`` under a local alias inside a guarded helper, and an
+    import that nobody invokes registers exactly nothing while still reading
+    like wiring in a diff.
+    """
     import ast
     import pathlib
 
@@ -461,9 +467,18 @@ def test_both_process_entry_points_call_the_composition_root():
     for relative in ("main.py", "worker/main.py"):
         source = (root / relative).read_text(encoding="utf-8")
         tree = ast.parse(source)
-        imported = [
-            node
+        aliases = {
+            alias.asname or alias.name
             for node in ast.walk(tree)
             if isinstance(node, ast.ImportFrom) and node.module == "bisheng.app_publish.composition"
-        ]
-        assert imported, f"{relative} never imports the app_publish composition root"
+            for alias in node.names
+            if alias.name == "register"
+        }
+        assert aliases, f"{relative} never imports the app_publish composition root"
+        called = {
+            node.func.id for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        assert aliases & called, (
+            f"{relative} imports the composition root but never calls it — "
+            "the two ports stay at their fail-closed defaults in that process"
+        )

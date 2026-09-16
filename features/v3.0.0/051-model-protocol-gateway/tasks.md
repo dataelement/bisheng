@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 定稿（决议 1–8 全自动模式定案，同日审查 16 条修订） |
 | design.md | ✅ 已评审（2026-09-16，`/sdd-review design` 两轮） | 用户豁免 ★，D1–D14 标「全自动模式定案」；接手时的第一入口。二轮发现 AC-27 底座缺口 → 新增 26205 / 坑 18 |
 | tasks.md | ✅ 已拆解并评审（2026-09-16，`/sdd-review tasks`） | 本文 |
-| 实现 | 🚧 进行中 | **24 / 30 完成**（2026-09-16：Wave 1–5 全部落地 T001–T021；**Wave 6 的 T022 / T023 / T024 于同日解除阻塞并落地**——F055 T055 / T056 与 F054 `verify_obo_token` 均已合入 `3.0-vibe`，三者由 `app_publish/composition.py:register()` 一并注册；余下 T025 与 Wave 7 T026–T029 全部需要 114）。同日复核并修正 6 处（见「实际偏差记录」8–13），Wave 6 的核实见 15–18。本地用例 131 → **`test/open_api` 759 passed / 3 skipped**（新增 `test_model_gateway_hosted_app.py` 21 条）、**`test/app_publish` 655 → 660 passed**。本地证据：`ruff check` / `ruff format --check` 对本切片文件零输出，`arch-guard.sh` 零输出。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | **24 / 30 完成**（2026-09-16：Wave 1–5 全部落地 T001–T021；**Wave 6 的 T022 / T023 / T024 于同日解除阻塞并落地**——F055 T055 / T056 与 F054 `verify_obo_token` 均已合入 `3.0-vibe`，三者由 `app_publish/composition.py:register()` 一并注册；余下 T025 与 Wave 7 T026–T029 全部需要 114）。同日复核并修正 6 处（见「实际偏差记录」8–13），Wave 6 的核实见 15–18。本地用例 131 → **`test/open_api` 739 → 760 passed / 3 skipped**（新增 `test_model_gateway_hosted_app.py` 21 条；739 为主检出 `3.0-vibe` 同选择基线）、**`test/app_publish` 655 → 660 passed**（同样对主检出基线）。本地证据：`ruff check` / `ruff format --check` 对本切片文件零输出，`arch-guard.sh` 零输出。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -260,6 +260,9 @@
   **逻辑**: 发布一个声明了模型 `x` 的示例应用 → 容器内 `env | grep OPENAI_` 三名齐 → 应用内 `openai` 客户端调 `x` 成功、调 `y` 26215 → 管理员下线 `x` → ≤ 60s 26212、发布面标「已失效」→ `model_call_record` 行 `app_id` 与 `subject_kind` 正确（浏览器访问 → `user`，`curl` 容器内后台调用 → `app_self`）。
   **覆盖 AC**: AC-21, AC-33, AC-34
   **依赖**: T023, T024
+  **⚠️ 部署前置（2026-09-16 复核补入，不做这一步「浏览器访问 → `user`」永远跑不出来）**: 114 的 `config.yaml` 必须配 `app_runtime.obo_secret`（`openssl rand -hex 32`，且**不等于** `jwt_secret`）。出厂默认是空串（`core/config/app_runtime.py:88`），`docker/bisheng/config/config.yaml:216` 也是注释掉的；空串时 `_issue_obo_token` **不签令牌、只按进程记一条 error 日志**，入口照常放行 —— 于是所有托管应用调用都落 `subject_kind=app_self`，与「应用没转发令牌」在本面完全不可区分，T025 的 subject 那一半会「通过得毫无破绽」却什么都没验到。核对方式：改完重启后端 → 浏览器进一次应用 → 后端日志无 `obo_secret is not configured` → 再跑本任务。
+
+
 
 ### Wave 7 · 114 E2E 与引擎适配（需 114）
 
@@ -373,3 +376,8 @@
 16. **T022 要求的「经真实 `CredentialService.issue` 签发」落在 `test/app_publish/`，不在 `test/open_api/`** —— 真实签发要 `app` / `hosted_app_subject` / `api_credential` 三张表加凭据缓存，这套 SQLite 夹具只有 `test/app_publish/conftest.py` 有（`publish_db` / `app_factory` / `credential_redis` / `hosted_app_resolver`），在 `test/open_api/` 里重建一份等于把 F055 的 schema 抄第二遍。落法：端到端三条进 `test/app_publish/test_capability_model.py`（该文件本就是 T024 指定的 F055 归属落点），面行为的 21 条进 `test/open_api/test_model_gateway_hosted_app.py`（T022 指定的文件名，用 `hosted_app_principal()` + 真 Port）。两边共用 `test/open_api/model_gateway_fixtures.py` 的 `install_catalog`，所以「租户有哪些模型」不会两处分叉。
 17. **`hosted_app_resolver` 夹具从 `test_app_credential.py` 移进 `test/app_publish/conftest.py`** —— 它要拆五个进程级注册表，第二份拷贝迟早漂移。`test_app_credential.py` 的 40 条用例逐字未改，仍全绿。
 18. **T023 顺手核实到一条 F054 归属的 fail-open，未在本 Feature 修** —— `_issue_obo_token` 在 `obo_secret` 缺失、或与 `jwt_secret` 相同时**不签令牌、只记一条进程级日志**（`entry_authz_service.py:_warn_once`），入口照常放行。该函数的注释自己写了「等 OBO 有了第一个消费方就必须改 fail-closed」——本 Feature 就是那个消费方，但收紧的是**入口放行判据**（F054 的 AC-34 领域），不是本面的行为：本面这侧的表现是所有调用落 `app_self`，与「应用没转发令牌」无法区分，符合 spec 决议-5 允许的降级。已写进 design.md §6.2 的 F054 依赖行，留给 F054 处置。
+
+**2026-09-16 Wave 6 复审（reviewer 复核 T022–T024 后补记）**
+
+19. **「组合根被两个进程都调到」这条守卫原先只断言了 import** —— `test_both_process_entry_points_call_the_composition_root` 遍历 AST 找 `ImportFrom`，但 `main.py` / `worker/main.py` 都是在 `_register_app_publish_composition()` 里 `from ... import register as register_app_publish` 再调用；**删掉调用、留下 import**，原断言照样绿，而那个进程里两个 Port 全停在 fail-closed 默认值上——正是这条用例声称要拦的事。已改为先取 `register` 的本地别名、再断言存在对该别名的 `ast.Call`（用把 `register_app_publish()` 换成 `pass` 的变异验证过：改前通过、改后失败）。
+20. **已知未覆盖的一个角落：声明写裸名、事后变歧义** —— 范围判定是 `ModelRange.allows` 的**名称集合成员测试**（`model_catalog.py:80-84`：`model.model_name in declared or model.qualified_name in declared`），不是「按 D5 重新解析一次」。声明写 `gpt-4o`、发布后管理员又接入第二个同样提供 `gpt-4o` 的服务商时：发布面 `model_capability_status` 走 `resolve_model_name(tenant, "gpt-4o")` 得 26214 → 标 `REASON_AMBIGUOUS` / 「已失效」，本面却仍然放行**限定名**请求（`azure-openai/gpt-4o` 与 `other/gpt-4o` 都过），等于应用拿到了一个它从未声明过的服务商。两侧因此并不同源，`test_the_model_face_and_the_publish_surface_read_the_same_resolution` 只覆盖了在线 / 下线 / 不存在三档（该用例 docstring 已写明边界）。**本轮不改语义**：AC-34 原文就是「声明中的模型 ∩ 租户已启用」的集合口径，而 D7 那句「按 D5 规则解析后与 C 求交」指向另一种口径，先由 F051 / F055 裁定该角落答 26214（与发布面一致）还是维持现状，再动 Wave 1–5 的 `allows`。触发条件窄（必须发布之后才出现同名服务商，此时再发布会被 F055 预检 16224 拦下），不阻塞交付。

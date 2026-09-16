@@ -327,7 +327,7 @@ config.yaml 里；要避免明文密钥，用 `!env ${VAR}` 语法从环境变�
 |-------------|-------------|-----------|
 | `app_runtime.manager_hmac_secret` | runtime-manager 的 `RTM_HMAC_SECRET`<br>app-proxy 的 `APP_PROXY_MANAGER_SECRET` | 所有编排动作返回 16121「应用运行时不可用」，容易被误判成 dockerd 挂了 |
 | `app_runtime.proxy_hmac_secret` | app-proxy 的 `APP_PROXY_BACKEND_SECRET` | 每次访问 `/apps/{slug}` 都是兜底页；后端日志里是 401 |
-| `app_runtime.obo_secret` | —（只在后端签名，app-proxy 不持有） | 留空只是不注入身份令牌（有告警日志，不影响访问）；与 `jwt_secret` 相同则后端拒绝签发并告警 |
+| `app_runtime.obo_secret` | —（只在后端签名，app-proxy 不持有） | 留空（或与 `jwt_secret` 相同）→ 后端不签身份令牌、只按进程记一条 error 日志，**访问照常放行**，所以症状不是「进不去」而是「进得去但平台不知道是谁进来的」：托管应用的模型调用全部记成 `subject_kind=app_self`（审计的用户维度整列为空），知识检索因取不到访问用户而被拒。**已有消费方后必须配**（`openssl rand -hex 32`，且不等于 `jwt_secret`）；核对方式是日志里没有 `obo_secret is not configured` |
 
 空密钥是 **fail-closed**（拒绝一切调用），不是"免鉴权"。
 
