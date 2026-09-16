@@ -1490,6 +1490,7 @@
     "space_deleted": "スペースが削除されました",
     "space_desc_label": "スペースの説明:",
     "space_invalid_or_deleted": "このナレッジスペースは無効であるか削除されました",
+    "space_load_failed": "ナレッジスペースの読み込みに失敗しました。再試行してください。",
     "space_name_empty": "ナレッジスペース名を入力してください",
     "space_settings": "スペースを編集",
     "space_updated": "スペースが更新されました",
