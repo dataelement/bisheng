@@ -89,6 +89,15 @@ _LLM_ERROR_TRANSLATION: dict[int, type[ModelFaceError]] = {
     InitLlmError.Code: ModelFaceUpstreamError,
 }
 
+# Of the translations above, the ones that mean "the model was taken away
+# between resolution and the call" — the catalog caches for up to a minute, so
+# this is a normal race rather than a defect.
+_WITHDRAWN_ERRORS = (
+    ModelFaceModelRevokedError,
+    ModelFaceModelOfflineError,
+    ModelFaceModelNotFoundError,
+)
+
 STREAM_HEADERS = {
     "Cache-Control": "no-cache",
     # The shipped nginx does not turn proxy buffering off on the /api location,
@@ -164,7 +173,16 @@ class ModelGatewayService:
         try:
             llm = await cls._instantiate(principal, resolved, req)
         except ModelFaceError as exc:
-            cls._finish_record(record, started, result=RESULT_MODEL_UNAVAILABLE, error=exc)
+            # The name resolved a moment ago, so a failure here is either "the
+            # row went away inside the catalog's cache window" (26212 / 26213 —
+            # the model was withdrawn) or the provider client refusing to
+            # initialise. They are different rows in the ledger, not one.
+            cls._finish_record(
+                record,
+                started,
+                result=RESULT_MODEL_UNAVAILABLE if isinstance(exc, _WITHDRAWN_ERRORS) else RESULT_UPSTREAM_FAILED,
+                error=exc,
+            )
             raise
 
         messages = to_langchain_messages(req.messages)

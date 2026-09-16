@@ -61,6 +61,12 @@ class ModelCallRecordRepository:
         Ordered by ``(create_time DESC, id DESC)``: ``create_time`` is
         second-precision, so rows written inside the same second are otherwise
         unordered and a page boundary duplicates some rows while losing others.
+
+        ``tenant_id=None`` reads **every** tenant — it is there for the platform
+        super administrator's cross-tenant view and nothing else. The automatic
+        filter is bypassed here (rows legitimately span tenants for that caller),
+        so a tenant administrator's query must pass their tenant explicitly; an
+        omitted argument is not a narrower read, it is a wider one.
         """
 
         statement = select(ModelCallRecord)

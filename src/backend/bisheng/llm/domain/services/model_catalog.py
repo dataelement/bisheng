@@ -18,6 +18,7 @@ Two facts make the naming rules non-obvious:
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Literal
 
@@ -30,11 +31,16 @@ from bisheng.common.errcode.model_face import (
     ModelFaceModelAmbiguousError,
     ModelFaceModelNotFoundError,
     ModelFaceModelOfflineError,
-    ModelFaceModelRevokedError,
 )
 from bisheng.common.services.config_service import settings
 from bisheng.common.services.metric_log import emit_metric
-from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.context.tenant import (
+    DEFAULT_TENANT_ID,
+    bypass_tenant_filter,
+    current_tenant_id,
+    set_admin_scope_tenant_id,
+    set_visible_tenant_ids,
+)
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
 
@@ -119,10 +125,39 @@ def invalidate_catalog(tenant_id: int | None = None) -> None:
         cache.pop(tenant_id, None)
 
 
+@contextmanager
+def _as_tenant(tenant_id: int):
+    """Make ``tenant_id`` the authoritative tenant for the queries below.
+
+    ``acollect_visible_servers`` takes the leaf id for its permission lookups,
+    but the own-rows query underneath still reads the tenant ContextVar — and
+    this module caches per ``tenant_id``. If the two ever disagreed, one
+    tenant's rows would be cached under another's key, which is a cross-tenant
+    leak with a sixty-second half-life. Binding them here is what makes the
+    parameter in this module's public signature honest for all three consumers
+    (the face, F052's list tool, F055's precheck), including any that call it
+    from a background task with no request context at all.
+    """
+
+    tokens = [
+        current_tenant_id.set(tenant_id),
+        # An operator viewing another tenant through the F019 admin scope must
+        # not shift what an application or a key may call.
+        set_admin_scope_tenant_id(None),
+        set_visible_tenant_ids(frozenset({DEFAULT_TENANT_ID, tenant_id})),
+    ]
+    try:
+        yield
+    finally:
+        for token in reversed(tokens):
+            token.var.reset(token)
+
+
 async def _load_callable_chat_models(tenant_id: int) -> list[CallableModel]:
     from bisheng.llm.domain.services.llm import LLMService
 
-    servers = await LLMService.acollect_visible_servers(tenant_id, strict=True)
+    with _as_tenant(tenant_id):
+        servers = await LLMService.acollect_visible_servers(tenant_id, strict=True)
     if not servers:
         return []
     server_by_id = {server.id: server for server in servers}
@@ -135,8 +170,10 @@ async def _load_callable_chat_models(tenant_id: int) -> list[CallableModel]:
     for model in models:
         server = server_by_id.get(model.server_id)
         if server is None:
-            # Provider row gone, model row left behind: not callable, and the
-            # resolution path reports it as revoked rather than missing.
+            # The query above asks for exactly these server ids, so this cannot
+            # happen today; it stays as the cheap guard that keeps a future
+            # widening of that query from producing a ``CallableModel`` with no
+            # provider name, which would make ``qualified_name`` nonsense.
             continue
         if model.model_type != LLMModelType.LLM.value or not model.online:
             continue
@@ -189,12 +226,22 @@ async def _explain_miss(tenant_id: int, requested: str) -> None:
 
     Only ever reached on the failure path, so its two extra queries never touch
     a successful call.
+
+    There is deliberately no "revoked" (26213) verdict here. Deleting a provider
+    deletes its model rows with it (``LLMDao.adelete_server_by_id``), so by the
+    time a name misses, a taken-away model is indistinguishable from one that
+    never existed — and inventing a distinction would mean keeping a tombstone
+    this feature has no other use for. 26213 is still reachable, and is the
+    honest place for it: within the catalog's cache window the name resolves and
+    ``get_bisheng_llm`` is the one that finds the row gone, which the face
+    translates (``model_gateway_service._LLM_ERROR_TRANSLATION``).
     """
 
     from bisheng.llm.domain.services.llm import LLMService
 
     try:
-        servers = await LLMService.acollect_visible_servers(tenant_id, strict=True)
+        with _as_tenant(tenant_id):
+            servers = await LLMService.acollect_visible_servers(tenant_id, strict=True)
         server_by_id = {server.id: server for server in servers}
         with bypass_tenant_filter():
             models = await LLMDao.aget_model_by_server_ids(list(server_by_id)) if server_by_id else []
@@ -212,8 +259,6 @@ async def _explain_miss(tenant_id: int, requested: str) -> None:
     for model in models:
         if model.model_name not in (requested, bare):
             continue
-        if model.server_id not in server_by_id:
-            raise ModelFaceModelRevokedError(model=requested)
         if model.model_type != LLMModelType.LLM.value:
             # Type is not disclosed: an embedding model reads as "not found",
             # exactly like another tenant's model does.

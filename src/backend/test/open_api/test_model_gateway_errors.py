@@ -83,8 +83,18 @@ async def test_the_rest_of_the_openai_family_is_refused_readably(admitted, metho
     assert body["code"] == "endpoint_not_supported"
 
 
-async def test_the_anthropic_messages_path_gets_its_own_answer(admitted):
-    response = await _call("POST", "/api/v2/model/v1/messages", json={})
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v2/model/v1/messages",
+        # What an Anthropic client actually produces when someone points
+        # ANTHROPIC_BASE_URL at the address we publish: it is handed an origin,
+        # not a versioned base, and appends /v1/messages itself.
+        "/api/v2/model/v1/v1/messages",
+    ],
+)
+async def test_the_anthropic_messages_path_gets_its_own_answer(admitted, path):
+    response = await _call("POST", path, json={})
 
     assert response.status_code == 404
     body = response.json()["error"]

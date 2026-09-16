@@ -149,7 +149,7 @@ async def test_listing_models_is_not_a_model_call(monkeypatch, records):
     assert records == []
 
 
-async def test_no_message_body_or_credential_plaintext_reaches_the_row(monkeypatch, records, caplog):
+async def test_no_message_body_or_credential_plaintext_reaches_the_row(monkeypatch, records):
     install_fake_llm(monkeypatch, FakeBishengLLM(invoke_result=AIMessage(content="secret answer")))
 
     await _post(BODY)
@@ -198,12 +198,19 @@ async def test_the_credential_mask_is_hydrated_per_batch_not_per_call(monkeypatc
     assert lookups == [[7]]
 
 
-def test_a_full_queue_is_reported_rather_than_silently_dropped(caplog):
+def test_a_full_queue_is_reported_rather_than_silently_dropped(monkeypatch):
+    import bisheng.open_api.domain.services.model_call_record_writer as writer_module
+
+    emitted: list = []
+    monkeypatch.setattr(writer_module, "emit_metric", lambda domain, **fields: emitted.append((domain, fields)))
     writer = ModelCallRecordWriter(max_queue_size=1)
 
     assert writer.enqueue(_row()) is True
-    with caplog.at_level("ERROR"):
-        assert writer.enqueue(_row()) is False
+    assert writer.enqueue(_row()) is False
+
+    # Write-behind is best-effort by design, but a lost row that nobody can see
+    # is indistinguishable from a call that never happened.
+    assert emitted == [("model_call_record", {"status": "dropped", "batch_size": 1})]
 
 
 async def test_paging_is_stable_when_rows_share_a_second(record_db):

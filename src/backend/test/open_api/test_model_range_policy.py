@@ -100,6 +100,23 @@ async def test_identity_header_is_judged_before_the_access_token():
         )
 
 
+async def test_a_forged_token_is_refused_even_when_the_declaration_is_unreadable():
+    class BrokenPort:
+        async def declared_model_names(self, app_id, tenant_id):
+            raise RuntimeError("deployment row unreadable")
+
+    register_hosted_app_declaration_port(BrokenPort())
+    register_access_subject_verifier(FakeVerifier(None))
+
+    with pytest.raises(ModelFaceAccessTokenRefusedError) as excinfo:
+        await resolve_range_and_subject(hosted_app_principal(), {ACCESS_TOKEN_HEADER: "forged"})
+
+    # Step 2 before step 3: answering 26216 ("cannot tell right now, retry")
+    # to a permanently invalid token sends the caller round a loop that can
+    # never succeed.
+    assert excinfo.value.code == 26204
+
+
 async def test_header_lookup_is_case_insensitive():
     with pytest.raises(ModelFaceIdentityHeaderRefusedError):
         await resolve_range_and_subject(service_account_principal(), {"x-end-user": "external-1"})

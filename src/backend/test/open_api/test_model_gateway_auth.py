@@ -77,6 +77,26 @@ async def test_a_key_without_model_invoke_is_refused_on_both_promised_endpoints(
     assert "model:invoke" in body["message"]
 
 
+async def test_model_invoke_does_not_open_the_daily_chat_data_plane(monkeypatch):
+    # The two scopes do not imply each other in either direction. The forward
+    # half is asserted above; this is the reverse, and it is the half that would
+    # quietly turn a bare-passthrough key into a session-creating one.
+    from bisheng.main import app
+
+    _admit(monkeypatch, service_account_principal(scopes=frozenset({"model:invoke"})))
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v2/workstation/chat/completions",
+            json={"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]},
+            headers={"Authorization": "Bearer x"},
+        )
+
+    assert response.status_code == 403
+    # A neighbouring path, so the platform envelope — not the OpenAI shape.
+    assert response.json()["status_code"] == 26003
+
+
 async def test_scope_edits_take_effect_on_the_next_call_without_reissuing(monkeypatch):
     app = build_model_face_app()
     records = capture_records(monkeypatch)

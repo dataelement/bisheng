@@ -222,6 +222,65 @@ async def test_a_mid_stream_failure_ends_the_stream_readably(monkeypatch, record
     assert records[0].result == "upstream_failed"
 
 
+@pytest.mark.parametrize(
+    ("platform_error", "expected_code", "expected_result"),
+    [
+        ("LlmModelConfigDeletedError", 26213, "model_unavailable"),
+        ("LlmProviderDeletedError", 26213, "model_unavailable"),
+        ("LlmModelOfflineError", 26212, "model_unavailable"),
+        ("LlmModelTypeError", 26211, "model_unavailable"),
+        ("InitLlmError", 26231, "upstream_failed"),
+    ],
+)
+async def test_a_model_withdrawn_inside_the_cache_window_is_reported_as_such(
+    monkeypatch, records, platform_error, expected_code, expected_result
+):
+    # The catalog caches for up to 60s, so a name can still resolve after an
+    # administrator has deleted or taken down the model. Instantiation is where
+    # that is discovered, and it is the only place 26212 / 26213 can come from:
+    # deleting a provider deletes its model rows, leaving resolution nothing to
+    # explain.
+    import bisheng.common.errcode.server as server_errors
+    from bisheng.llm.domain.services.llm import LLMService
+
+    error_class = getattr(server_errors, platform_error)
+
+    async def explode(**_kwargs):
+        raise error_class()
+
+    monkeypatch.setattr(LLMService, "get_bisheng_llm", staticmethod(explode))
+
+    response = await _post(BODY)
+
+    assert response.json()["error"]["bisheng_code"] == expected_code
+    assert records[0].result == expected_result
+    # The name the caller wrote is preserved even though the model is gone.
+    assert records[0].requested_model == "gpt-4o"
+
+
+async def test_a_client_that_walks_away_mid_stream_is_recorded_as_such(monkeypatch, records):
+    install_fake_llm(
+        monkeypatch,
+        FakeBishengLLM(stream_script=[text_chunk("one"), text_chunk("two"), text_chunk("three")]),
+    )
+    calls = {"count": 0}
+
+    async def disconnected_after_the_first_chunk(_self):
+        calls["count"] += 1
+        return calls["count"] > 1
+
+    monkeypatch.setattr("starlette.requests.Request.is_disconnected", disconnected_after_the_first_chunk)
+
+    app = build_model_face_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(CHAT_PATH, json={**BODY, "stream": True})
+
+    # Not an upstream failure and not a success: nobody was listening, and the
+    # ledger has to say so rather than book it as a completed call.
+    assert response.status_code == 200
+    assert records[0].result == "client_disconnected"
+
+
 async def test_no_session_or_message_row_is_created(monkeypatch, records):
     from bisheng.database.models.session import MessageSessionDao
 

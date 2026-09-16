@@ -14,7 +14,6 @@ from bisheng.common.errcode.model_face import (
     ModelFaceModelAmbiguousError,
     ModelFaceModelNotFoundError,
     ModelFaceModelOfflineError,
-    ModelFaceModelRevokedError,
 )
 from bisheng.common.services.config_service import settings
 from bisheng.llm.domain.services import model_catalog
@@ -50,9 +49,10 @@ def _default_rows():
         model_row(14, 1, "retired-model", online=False),
         model_row(15, 1, "text-embedding-3", model_type="embedding"),
         model_row(16, 3, "root-model"),
-        # A model row whose provider row is gone: the provider was deleted and
-        # this leftover is not callable under any name.
-        model_row(17, 99, "orphaned-model"),
+        # Belongs to a provider this tenant cannot see. Deleting a provider
+        # deletes its models with it, so "not visible" is the only shape a
+        # foreign row can actually take.
+        model_row(17, 99, "another-tenants-model"),
     ]
     return servers, models
 
@@ -65,7 +65,7 @@ async def test_list_callable_only_llm_and_online(monkeypatch):
     assert "gpt-4o" in names
     assert "retired-model" not in names
     assert "text-embedding-3" not in names
-    assert "orphaned-model" not in names
+    assert "another-tenants-model" not in names
 
 
 async def test_root_shared_server_models_are_callable_for_the_child(monkeypatch):
@@ -115,17 +115,39 @@ async def test_qualified_name_resolves_for_ambiguous_and_unique_rows(monkeypatch
     assert unique.model_id == 10
 
 
-async def test_offline_missing_and_provider_deleted_are_distinguishable(monkeypatch):
+async def test_offline_is_distinguishable_from_missing(monkeypatch):
     install_catalog(monkeypatch, *_default_rows())
 
     with pytest.raises(ModelFaceModelOfflineError) as offline:
         await resolve_model_name(TENANT, "retired-model")
     with pytest.raises(ModelFaceModelNotFoundError) as missing:
         await resolve_model_name(TENANT, "never-configured")
-    with pytest.raises(ModelFaceModelRevokedError) as revoked:
-        await resolve_model_name(TENANT, "orphaned-model")
 
-    assert (offline.value.code, missing.value.code, revoked.value.code) == (26212, 26211, 26213)
+    assert (offline.value.code, missing.value.code) == (26212, 26211)
+
+
+async def test_another_tenants_model_reads_as_missing_not_as_revoked(monkeypatch):
+    install_catalog(monkeypatch, *_default_rows())
+
+    with pytest.raises(ModelFaceModelNotFoundError) as excinfo:
+        await resolve_model_name(TENANT, "another-tenants-model")
+
+    # "Not yours" and "does not exist" must be one answer, or the face becomes
+    # an existence oracle for other tenants' configuration (AC-13).
+    assert excinfo.value.code == 26211
+
+
+async def test_a_deleted_provider_leaves_no_model_row_to_explain(monkeypatch):
+    # Deleting a provider deletes its models (LLMDao.adelete_server_by_id), so
+    # resolution cannot report "revoked" — there is nothing left to find. 26213
+    # is raised one step later instead, when the cached name still resolves and
+    # instantiation finds the row gone; that path is asserted in
+    # test_model_gateway_stream.py.
+    servers, models = _default_rows()
+    install_catalog(monkeypatch, [server for server in servers if server.id != 1], models)
+
+    with pytest.raises(ModelFaceModelNotFoundError):
+        await resolve_model_name(TENANT, "gpt-4o")
 
 
 async def test_non_chat_model_reads_as_not_found_without_disclosing_its_type(monkeypatch):

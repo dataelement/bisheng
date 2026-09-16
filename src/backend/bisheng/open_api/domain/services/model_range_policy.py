@@ -157,13 +157,11 @@ async def resolve_range_and_subject(
         )
 
     app_id = principal.actor_name
-    try:
-        declared = await _declaration_port.declared_model_names(app_id, principal.tenant_id)
-    except Exception as exc:
-        raise ModelFaceCatalogUnavailableError(exception=exc) from exc
-    if declared is None:
-        raise ModelFaceCatalogUnavailableError()
 
+    # Step 2 before step 3, always: a forged or expired token is refused whether
+    # or not the declaration happens to be readable this second. Reading the
+    # declaration first would answer 26216 ("cannot tell right now, try again")
+    # to a caller whose token is permanently invalid.
     subject = ResolvedSubject(subject_kind=SUBJECT_KIND_APP_SELF, app_id=app_id)
     if access_token is not None:
         verified = _access_subject_verifier.verify(
@@ -180,6 +178,13 @@ async def resolve_range_and_subject(
             subject_id=verified.user_id,
             app_id=app_id,
         )
+
+    try:
+        declared = await _declaration_port.declared_model_names(app_id, principal.tenant_id)
+    except Exception as exc:
+        raise ModelFaceCatalogUnavailableError(exception=exc) from exc
+    if declared is None:
+        raise ModelFaceCatalogUnavailableError()
 
     return ModelRange(kind="declared", declared=frozenset(declared)), subject
 

@@ -31,9 +31,17 @@ from bisheng.open_api.domain.services.model_gateway_service import ModelGatewayS
 
 router = APIRouter(prefix="/model/v1", tags=["OpenAPI", "Model"])
 
-# Anthropic's Messages API path. Claude Code and friends land here; they get a
+# Anthropic's Messages API paths. Claude Code and friends land here; they get a
 # readable "OpenAI-compatible only" answer rather than a protocol mistranslation.
-ANTHROPIC_MESSAGES_PATH = "messages"
+#
+# Both spellings are recognised because of how the two ecosystems treat a base
+# URL. An OpenAI-compatible base ends with ``/v1`` and clients append only
+# ``/chat/completions``; an Anthropic client is given a bare origin and appends
+# ``/v1/messages`` itself. Someone who points ANTHROPIC_BASE_URL at the address
+# we publish therefore arrives at ``…/model/v1/v1/messages``, and only matching
+# the bare ``messages`` would answer them "no such endpoint" instead of the
+# protocol answer AC-03 / AC-32 promise.
+ANTHROPIC_MESSAGES_PATHS = frozenset({"messages", "v1/messages"})
 
 
 @router.post(
@@ -65,9 +73,9 @@ async def unsupported_endpoint(
     rest: str,
     _principal: OpenApiPrincipal = Depends(get_open_api_execution),
 ) -> None:
-    if rest.strip("/") == ANTHROPIC_MESSAGES_PATH:
+    if rest.strip("/") in ANTHROPIC_MESSAGES_PATHS:
         raise ModelFaceAnthropicNotSupportedError()
     raise ModelFaceEndpointNotSupportedError(path=rest)
 
 
-__all__ = ["ANTHROPIC_MESSAGES_PATH", "router"]
+__all__ = ["ANTHROPIC_MESSAGES_PATHS", "router"]

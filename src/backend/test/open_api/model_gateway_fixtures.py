@@ -120,8 +120,12 @@ def install_catalog(monkeypatch, servers: list, models: list, *, fail_with: Exce
             raise fail_with
         return servers
 
-    async def fetch_models(_server_ids):
-        return models
+    async def fetch_models(server_ids):
+        # ``LLMDao.aget_model_by_server_ids`` filters ``server_id IN ids``. A
+        # fake that ignored that would let a test build a row the database can
+        # never return and then assert on how the code handles it.
+        wanted = set(server_ids)
+        return [model for model in models if model.server_id in wanted]
 
     monkeypatch.setattr(LLMService, "acollect_visible_servers", staticmethod(collect))
     monkeypatch.setattr(model_catalog.LLMDao, "aget_model_by_server_ids", staticmethod(fetch_models))
