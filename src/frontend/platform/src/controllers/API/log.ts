@@ -238,6 +238,8 @@ export const V2_ACTIONS: string[] = [
     'open_api.share_link.revoke',
     'open_api.share_link.expire',
     'open_api.ws.connect',
+    // F052 MCP face: one row per tools/call, plus door refusals.
+    'open_api.mcp.tool_call',
     // F054 hosted applications — the state machine, meta updates and the
     // data-tab row edit / export.
     'app.publish',

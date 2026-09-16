@@ -42,6 +42,12 @@ from bisheng.app_publish.domain.services import schema_evolution_service
 from bisheng.app_publish.domain.services.app_publish_scenario_handler import SCENARIO_CODE
 from bisheng.app_publish.domain.services.release_audit import write_release_audit
 from bisheng.app_publish.domain.services.version_service import VersionService
+from bisheng.app_runtime.domain.services.app_query_service import (
+    LOG_ENTRY_DETAIL as ENTRY_DETAIL,
+)
+from bisheng.app_runtime.domain.services.app_query_service import (
+    OWNER_ONLY_ENTRIES,
+)
 from bisheng.approval.domain.models.approval_instance import ApprovalInstanceStatus, ApprovalTaskStatus
 from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
 from bisheng.common.errcode.app_publish import AppPublishOwnerOnlyError
@@ -72,10 +78,10 @@ class PublishStatusService:
     # ------------------------------------------------------------------
 
     @classmethod
-    async def get_publish_status(cls, app_id: str, *, actor) -> dict[str, Any]:
+    async def get_publish_status(cls, app_id: str, *, actor, entry: str = ENTRY_DETAIL) -> dict[str, Any]:
         """Design §4.2 ② verbatim. Shared by the publish face and F052's MCP tool."""
         app = await cls._load(app_id)
-        await cls._require_viewer(app, actor)
+        await cls._require_viewer(app, actor, entry=entry)
 
         deployment = await cls._latest_deployment(app.id)
         instance = await cls._latest_instance(app)
@@ -179,19 +185,38 @@ class PublishStatusService:
         return int(getattr(actor, "user_id", 0) or 0) == int(app.owner_user_id or 0)
 
     @classmethod
-    async def _require_viewer(cls, app, actor) -> None:
+    async def _require_viewer(cls, app, actor, *, entry: str = ENTRY_DETAIL) -> None:
         """Owner, this tenant's administrator, or a platform super admin.
 
         Refuses with a **business** error so the response is an HTTP 200 the
         front end can render. Raising ``HTTPException(403)`` here would take the
         whole detail page down to ``/403``.
+
+        ``entry`` names the door. On a **credential** door (``cli`` / ``mcp``)
+        only the owner passes — a tenant administrator's own service-account key
+        is refused too (AC-35), because "an administrator may look at anyone's
+        application" is a statement about the platform UI, not about a developer
+        key whose blast radius has to stay predictable when it leaks. Owner
+        equality alone is not enough there either: ``/api/v2`` seeds
+        ``visible_tenant_ids`` with the Root tenant, so the tenant is compared
+        first, exactly as ``AppQueryService._require_log_access`` does it.
         """
+        if entry in OWNER_ONLY_ENTRIES:
+            if int(app.tenant_id or 0) != int(getattr(actor, "tenant_id", 0) or 0):
+                raise cls._not_visible(app)
+            if cls._is_owner(app, actor):
+                return
+            raise cls._not_visible(app)
         if cls._is_owner(app, actor) or bool(getattr(actor, "is_global_super", False)):
             return
         user_id = int(getattr(actor, "user_id", 0) or 0)
         if await check_tenant_admin(user_id, int(app.tenant_id or 0)):
             return
-        raise AppPublishOwnerOnlyError(
+        raise cls._not_visible(app)
+
+    @staticmethod
+    def _not_visible(app) -> AppPublishOwnerOnlyError:
+        return AppPublishOwnerOnlyError(
             msg="没有查看该应用发布状态的权限",
             details={"app_id": app.id, "action": "view_publish_status", "reason": "not_visible"},
             hints=["请联系该应用的负责人或平台管理员"],

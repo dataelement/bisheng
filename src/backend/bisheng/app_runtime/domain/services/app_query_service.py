@@ -46,8 +46,10 @@ LOG_ENTRY_CLI = "cli"
 LOG_ENTRY_MCP = "mcp"
 
 #: Entries that act on a credential rather than a session, and are therefore
-#: bounded by the credential's resource owner.
-_OWNER_ONLY_ENTRIES = frozenset({LOG_ENTRY_CLI, LOG_ENTRY_MCP})
+#: bounded by the credential's resource owner. Public because F052 applies the
+#: same rule to the publish-status read (``PublishStatusService._require_viewer``)
+#: — one spelling of "which doors are credential doors", not two.
+OWNER_ONLY_ENTRIES = frozenset({LOG_ENTRY_CLI, LOG_ENTRY_MCP})
 
 
 class AppQueryService:
@@ -61,14 +63,17 @@ class AppQueryService:
         return cls._detail_payload(app)
 
     @classmethod
-    async def get_instance(cls, app_id: str, *, actor) -> dict[str, Any]:
+    async def get_instance(cls, app_id: str, *, actor, entry: str = LOG_ENTRY_DETAIL) -> dict[str, Any]:
         """Live instance view (AC-23).
 
         "No instance" and "the orchestration backend is down" are deliberately
         two different answers: collapsing them would make every dockerd restart
         render as "this application was deleted" (contract §2).
+
+        ``entry`` picks the admission rule, the same way ``get_logs`` does: the
+        platform detail page admits administrators, a credential door does not.
         """
-        app = await cls._load_visible(app_id, actor)
+        app = await cls._load_visible(app_id, actor, entry=entry)
         try:
             return await orchestrator_client.status(app_id=app.id)
         except AppNotFoundError:
@@ -243,11 +248,25 @@ class AppQueryService:
         return row
 
     @classmethod
-    async def _load_visible(cls, app_id: str, actor) -> App:
+    async def _load_visible(cls, app_id: str, actor, *, entry: str = LOG_ENTRY_DETAIL) -> App:
         app = await cls._load(app_id)
         user_id = int(getattr(actor, "user_id", 0) or 0)
         actor_tenant = int(getattr(actor, "tenant_id", 0) or 0)
         is_super = bool(getattr(actor, "is_global_super", False))
+        if entry in OWNER_ONLY_ENTRIES:
+            # A credential door: tenant first, then owner, and no administrator
+            # bypass at all — the same judgement ``_require_log_access`` makes,
+            # for the same reason (AC-34 / AC-35). ``is_global_super`` is not
+            # consulted even to widen the tenant comparison.
+            #
+            # Both halves answer "no such application" rather than splitting
+            # into 16101 / 16161 the way the log path does: this method is the
+            # one that already speaks that way, and the MCP face folds either
+            # code into the same 26305 anyway — so the pair cannot be used to
+            # probe whether an application exists.
+            if int(app.tenant_id or 0) != actor_tenant or user_id != int(app.owner_user_id or 0):
+                raise AppNotFoundError(app_id=app_id)
+            return app
         if int(app.tenant_id or 0) != actor_tenant and not is_super:
             # Same answer as "does not exist": telling a caller that an app they
             # cannot see exists in another tenant is the leak AC-29 forbids on
@@ -262,7 +281,7 @@ class AppQueryService:
     @staticmethod
     async def _require_log_access(app: App, actor, *, entry: str) -> None:
         user_id = int(getattr(actor, "user_id", 0) or 0)
-        if entry in _OWNER_ONLY_ENTRIES and int(app.tenant_id or 0) != int(getattr(actor, "tenant_id", 0) or 0):
+        if entry in OWNER_ONLY_ENTRIES and int(app.tenant_id or 0) != int(getattr(actor, "tenant_id", 0) or 0):
             # **Owner equality is not enough on a credential door**, so the
             # tenant is compared before it. ``/api/v2`` seeds
             # ``visible_tenant_ids`` as ``{DEFAULT_TENANT_ID, principal.
@@ -286,7 +305,7 @@ class AppQueryService:
             raise AppNotFoundError(app_id=app.id)
         if user_id == int(app.owner_user_id or 0):
             return
-        if entry in _OWNER_ONLY_ENTRIES:
+        if entry in OWNER_ONLY_ENTRIES:
             raise AppLogForbiddenError(app_id=app.id, entry=entry)
         if bool(getattr(actor, "is_global_super", False)):
             return

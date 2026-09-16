@@ -1337,6 +1337,7 @@
       "openApiShareLinkRevoke": "撤销分享链接",
       "openApiShareLinkExpire": "分享链接到期",
       "openApiWsConnect": "开放 API 建立长连接",
+      "openApiMcpToolCall": "MCP 工具调用",
       "appPublish": "托管应用上线",
       "appPublishPending": "托管应用待上线（资源不足）",
       "appManualPublish": "托管应用手动上线",
