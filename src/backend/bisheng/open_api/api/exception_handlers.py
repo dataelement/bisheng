@@ -196,6 +196,11 @@ async def permission_unavailable_exception_handler(conn, exc: BaseErrorCode) -> 
     mark_open_api_error(conn, exc)
     if conn.scope.get("type") != "http":
         raise exc
+    if _is_model_gateway_path(conn):
+        # Registered as its own handler, so it bypasses ``dispatch`` entirely —
+        # the model-face branch has to be repeated here or a permission-backend
+        # outage would come back as the platform envelope.
+        return render_openai_error(exc, 503)
     return _response(exc, 503 if _is_open_api_path(conn) else 200)
 
 

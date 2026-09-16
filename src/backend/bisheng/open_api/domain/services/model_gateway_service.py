@@ -130,14 +130,17 @@ class ModelGatewayService:
         request: Request | None,
         req: ChatCompletionRequest,
     ) -> ChatCompletionResponse | StreamingResponse:
+        headers = request.headers if request is not None else None
+        # Range and subject first, always: a caller that sent a header it should
+        # not have must hear about the header even when the body is also wrong,
+        # or its correction loop gets a different answer every round.
+        model_range, subject = await resolve_range_and_subject(principal, headers)
+
         if req.n is not None and req.n != 1:
             raise ModelFaceRequestInvalidError(
                 msg="Only a single completion candidate is supported; set n=1 or omit it",
                 param="n",
             )
-
-        headers = request.headers if request is not None else None
-        model_range, subject = await resolve_range_and_subject(principal, headers)
 
         record = cls._start_record(principal, subject, req)
         started = time.monotonic()

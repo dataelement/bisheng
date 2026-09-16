@@ -54,6 +54,14 @@ async def test_more_than_one_candidate_is_refused_rather_than_quietly_under_deli
     assert response.json()["error"]["param"] == "n"
 
 
+async def test_a_refused_header_is_reported_before_a_bad_body(admitted):
+    response = await _call("POST", CHAT_PATH, json={**BODY, "n": 2}, headers={"X-End-User": "external-1"})
+
+    # Two things are wrong; the caller hears about the header. Answering the
+    # body first would give an agent a different verdict on each retry.
+    assert response.json()["error"]["bisheng_code"] == 26205
+
+
 @pytest.mark.parametrize(
     ("method", "path"),
     [
@@ -130,6 +138,25 @@ async def test_an_undecidable_catalog_refuses_with_503_rather_than_a_narrower_se
 
     assert response.status_code == 503
     assert response.json()["error"]["bisheng_code"] == 26216
+
+
+async def test_a_permission_backend_outage_is_still_openai_shaped(monkeypatch, admitted):
+    from bisheng.common.errcode.permission import PermissionServiceUnavailableError
+
+    async def explode(*_args, **_kwargs):
+        raise PermissionServiceUnavailableError()
+
+    monkeypatch.setattr(
+        "bisheng.open_api.domain.services.model_gateway_service.list_callable_chat_models",
+        explode,
+    )
+
+    response = await _call("GET", "/api/v2/model/v1/models")
+
+    # That error has its own registered handler, which bypasses the shared
+    # dispatch — without a branch there it would come back as the envelope.
+    assert response.status_code == 503
+    assert response.json()["error"]["type"] == "server_error"
 
 
 async def test_neighbouring_v2_paths_keep_the_platform_envelope(monkeypatch):
