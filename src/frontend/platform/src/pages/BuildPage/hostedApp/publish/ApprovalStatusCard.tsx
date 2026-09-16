@@ -39,6 +39,7 @@ import {
   approvalStatusI18nKey,
   pendingReasonI18nKey,
 } from "../types"
+import { CapabilityListCard } from "./CapabilityListCard"
 import { SchemaChangeNotice } from "./SchemaChangeNotice"
 
 interface ApprovalStatusCardProps {
@@ -259,6 +260,12 @@ export function ApprovalStatusCard({
               tables. Confirmed on the CLI at submit time; shown here, never
               asked again. Renders nothing when the read model sends null. */}
           <SchemaChangeNotice change={status.schema_change} />
+
+          {/* AC-61 / AC-63 — what the release asks the platform for, with
+              anything that no longer resolves marked. Always rendered: an
+              application that declares nothing says so, because a section that
+              disappears reads as "the page failed to load it". */}
+          <CapabilityListCard capabilities={status.capabilities} />
         </div>
       )}
     </section>
