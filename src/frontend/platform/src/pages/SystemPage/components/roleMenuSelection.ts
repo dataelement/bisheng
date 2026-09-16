@@ -17,6 +17,27 @@ export const ADMIN_CHILD_MENUS = [
 
 export const TASK_MODE_MENU_ID = "linsight_task_mode"
 
+/**
+ * What a newly created role has switched on (PRD: the four workbench entries,
+ * plus knowledge and build on the admin side).
+ *
+ * Lives here rather than in the role editor because it is part of the same
+ * frozen inventory: "build on, create-app off" is an acceptance criterion in
+ * its own right (F056 AC-37), and a default that drifts is not something a
+ * screenshot review catches.
+ */
+export const DEFAULT_ENABLED_MENU_IDS = [
+  WORKBENCH_PARENT_ID,
+  "home",
+  TASK_MODE_MENU_ID,
+  "apps",
+  "subscription",
+  "knowledge_space",
+  ADMIN_PARENT_ID,
+  "knowledge",
+  "build",
+] as const
+
 export const CHILD_DEPENDENTS: Record<string, readonly string[]> = {
   home: [TASK_MODE_MENU_ID],
   build: ["create_app"],
