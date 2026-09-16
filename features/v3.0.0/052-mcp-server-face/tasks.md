@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 定稿（47 AC，独立审查 17 条已修订；决议 1–12）；2026-08-28 AC-03 术语订正 |
 | design.md | ✅ 已评审（全自动模式，★ 豁免） | 2026-09-16 初版 + 同日 `/sdd-review design` 独立审查就地修订（4 high / 6 medium / ~20 low，见 design 修订历史末行）；D1–D12 / 坑 1–23；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-09-16，`/sdd-review tasks` 已过） | 本文；三条线（共享基础 / 门面 / MCP 面）+ 合流波；审查订正见文末「审查修订记录」 |
-| 实现 | 🚧 进行中（Line A + Line B 均已交付并过独立评审） | **22 / 34 完成**（T205 为编号占位不计）。Line A：Wave 0 T001–T002 + T101a/T101/T102a/T102/T103a/T103/T105；**T104 部分落地、不计入完成数**——身份构造缝与会话解耦已证，存储层集合相等仍欠 CI 中间件样本播种。Line B（T201–T212）全部落地，含 T209（F054 `AppDataService` 已在 3.0-vibe 上）。T003 门面契约 schema 由 Line A 建立，Line B 延迟 import 消费。|
+| 实现 | 🚧 代码面已齐，余 CI 中间件与 114（2026-09-16 合流波收尾） | **31 / 34 完成**（T205 为编号占位不计）。Line A（T001–T003 / T101–T103 / T105）与 Line B（T201–T212）全部落地；Wave C 的 T301a/T301/T304 落地，**两线合并后 T301a 的 10 条已实跑不再 skip**。**余三项**：T104 与 T302 的「样本播种后的集合相等」部分（必须 MySQL + Redis + OpenFGA + Milvus/ES 同时在位，留 CI 中间件分组）、T303（114 部署与手动验证，步骤已备在文末「114 验证记录」）。T211 已结案为**不做**（前提随「延迟 import + `available()` 门控」消失）。|
 
 ---
 
@@ -130,7 +130,11 @@
   **覆盖 AC**: AC-08, AC-19, AC-40, AC-41, AC-42, AC-43, AC-44
   **依赖**: T103, T301（MCP 工具 ① 那一分支可 `importorskip`）
   **执行位置**: 编号属 Line A，但因依赖 T301 而**在 Wave C 执行**（「编号 ≠ 执行顺序」；Line A 的 owner 在 T103 之后即可转去 T105，T104 与 T302 一起在合流波跑）。
-  **部分落地**: `610551615` — `test/knowledge/test_retrieval_facade_equality.py` 10 例全绿，覆盖**能在无中间件下证的那一层**：AC-41 / AC-43 的身份构造缝（v2 端点不得自建 actor / UserPayload；模式 D = 被代表用户且不带任何提权）、AC-08 / AC-19 会话解耦（静态 import 图 + 签名里没有 `Request` 的位置）、坑 23 无缓存红线守卫。**仍欠 CI 中间件阶段**：AC-40 / AC-42 / AC-44 的存储层集合相等与 fga_down 三处零结果——阻塞点是「单文件直接授权 / 文件夹差异 / 自定义模式脱钩」四种权限来源的样本播种 helper 尚不存在，要播什么、断什么已写在该文件末尾注释里。**刻意不写 skip / NotImplementedError 占位用例**（看起来像覆盖、实际什么也没证）。
+  **部分落地**: `610551615` — `test/knowledge/test_retrieval_facade_equality.py` 10 例全绿，覆盖**能在无中间件下证的那一层**：AC-41 / AC-43 的身份构造缝（v2 端点不得自建 actor / UserPayload；模式 D = 被代表用户且不带任何提权）、AC-08 / AC-19 会话解耦（静态 import 图 + 签名里没有 `Request` 的位置）、坑 23 无缓存红线守卫。**刻意不写 skip / NotImplementedError 占位用例**（看起来像覆盖、实际什么也没证）。
+  **再落地（`005e5f470`，合流波）**: 同文件加到 18 例，把另外两条原本被整体推给中间件、实际由请求路径决定的断言补上——
+  ① **AC-41 行为层** `test_the_two_open_doors_hand_the_facade_the_very_same_call`：同一 principal 下 v2 端点与 MCP 工具 ① 递给门面的 `RetrievalIdentity` 与 `RetrievalRequest` 逐字相等（含 `whitelist is None`）。原先只有 AST 静态守卫，证不到「两边传的参数也一样」；
+  ② **AC-44 三个门面同一次故障注入** `test_a_permission_outage_returns_an_error_and_zero_chunks_at_every_door`（参数化 facade / v2 / mcp）：`batch_check_business_actions` 抛 `PermissionServiceUnavailableError` 时三处都上抛、且检索引擎一次都没被调用。「少给几条」与「授权本来就窄」不可区分，正是这条 AC 要挡的形状。
+  **仍欠 CI 中间件阶段**：AC-40 / AC-42 的存储层集合相等，以及 AC-44 里「真停 OpenFGA」那一半（注入证的是本路径的判断，停引擎才证权限层确实抛而不是超时成空 allow-map）。阻塞点未变——「单文件直接授权 / 文件夹差异 / 自定义模式脱钩」四种权限来源的样本播种 helper 尚不存在，要播什么、断什么写在该文件末尾注释里。
 
 - [x] **T105**: 门面对外契约文档回写
   **文件**: `features/v3.0.0/052-mcp-server-face/design.md`（§4.2 ③ 按实现定稿：`version_repo` 传法、`from_user` 签名）, `features/v3.0.0/055-app-publish-pipeline/tasks.md`（T057 / T060 的「依赖」行改指本契约，一行）, `features/v3.0.0/057-bisheng-sdk/spec.md` 不改（AC-11 已引 F052 AC-19）
@@ -278,11 +282,12 @@
   **偏差**: design D10 把模块名写作 `model_name_resolver`，而 F051 切片的提交把它落在 `model_catalog`。`RESOLVER_MODULES` 两个名字都探，哪个先合入都能亮；都没有就保持熄灭。合并后请核对真实符号名并收敛成一个。
   **证据**: `test/open_api/test_mcp_tools_models.py`——2 条无依赖的（不自造命名规则、「未落地即缺席」）常绿，3 条依赖解析器的 skip。
 
-- [ ] **T211**: fake 门面（Line B 自测用，随 T301 删除）
+- [x] **T211（结案：不做）**: fake 门面（Line B 自测用，随 T301 删除）
   **文件**: `src/backend/test/open_api/fakes/fake_retrieval_facade.py`（新；T301 合流后删除并改 import 真门面）
   **逻辑**: 按 T003 契约实现 `retrieve / list_accessible_knowledge / check_reachable` 的可编程 fake（按 fixture 表返回或抛 26321 / 26322 / 19002）。
   **依赖**: T003
-  **未做，且判断为不必做**。T211 的 fake 门面是为「Line B 先于 Line A 落地时自测 ①②」准备的。本切片改用「延迟 import + `available()` 门控」后，①② 在门面缺席时根本不进清单，没有可自测的对象；真门面合入后 T301a 直接 spy 真类。多造一个 fake 只会多一份要跟着契约漂的代码。
+  **不做，理由**：T211 的 fake 门面是为「Line B 先于 Line A 落地时自测 ①②」准备的。Line B 改用「延迟 import + `available()` 门控」后，①② 在门面缺席时根本不进清单，没有可自测的对象；多造一个 fake 只会多一份要跟着契约漂的代码。
+  **前提已永久消失（合流波复核）**：两线均已在 `3.0-vibe` 上，`knowledge_tools.facade_available()` 为真，`test_mcp_tools_knowledge.py` 的 10 条已实跑（不再整份 skip），同文件的 `test_the_registry_hides_both_tools_when_the_facade_is_absent` 继续守住「工具悄悄消失」不能冒充「门面还没来」。**勾选为 `[x]` 是结案不是交付**——本条不再是待办，才不该留在「哪些还没做」的检索结果里。
 
 - [x] **T212**: MCP 注册表驱动的逐位矩阵（Line B 内可先跑，T301 后补 ①②）
   **文件**: `src/backend/test/open_api/test_mcp_scope_matrix.py`（新）
@@ -315,12 +320,18 @@
   **逻辑**: 用 `mcp_client` 对真 app：`test_standard_client_zero_change_handshake_list_call`（`initialize` → `list_tools` → `call_tool("bisheng_knowledge_list")`）→ AC-01；`test_revoke_then_denied_within_5s`（真 Redis：撤销 → 采样 ≤ 3s 内首次拒绝）→ AC-05；`test_matrix_over_real_app`（复跑 T212 矩阵不 stub handler）→ AC-45；`test_search_set_equality_with_v2`（同 key、同 query、同 ids：MCP 与 v2 chunk 集相等；样本同 T104）→ AC-40, AC-41；`test_fga_down_mcp_search_error_zero_results` → AC-44。**测试降级**：本地 skip；114 手动步骤 design §7。
   **覆盖 AC**: AC-01, AC-05, AC-40, AC-41, AC-44, AC-45
   **依赖**: T301, T104
+  **部分落地**: `005e5f470` — 新建 `test/open_api/test_mcp_e2e.py`，4 例全绿、**不带 `e2e` 标记**（它们不需要中间件）。原任务把两类断言混在一处，这次按「由谁决定」拆开：
+  - **只由请求路径决定、已落地**：AC-01 `test_a_standard_client_connects_lists_and_calls_with_nothing_but_an_address_and_a_key`（真 `ClientSession` 走进程内 ASGI：握手 → `tools/list` → `tools/call("bisheng_knowledge_list")` 拿到 `structuredContent`，除地址与 Bearer 外无任何本地件）；AC-05 三条——`test_a_live_session_is_not_a_grant_the_credential_is_reread_every_call`（逐次数 `validate_bearer`，证不存在会话级凭据记忆）、`test_a_revoked_credential_is_refused_on_the_very_next_call`（会话中途撤销 → 下一次请求被传输层 401 拒）、`test_the_credential_cache_can_never_outlive_the_revocation_bound`（`OpenApiConf.cap_credential_cache_ttl` 把 300 钳成 5——INV-28 的唯一防线，此前仓内只有 F055 侧断言）。
+  - **AC-45 不在本文件重复**：`test_mcp_scope_matrix.py` 已在同一个进程内 app 上按注册表逐位跑过且**不 stub handler**。
+  **仍欠 CI 中间件阶段**：AC-40 / AC-41 的「同样本同 query 下 MCP 与 v2 chunk 集合相等」、AC-44 的真停 OpenFGA、AC-05 的真 Redis TTL 计时——与 T104 同一份样本，播种 helper 不存在是同一个阻塞点。
+  **实现说明（踩到过）**：`identity:read` 那条用例必须在 `OrgDirectoryService` 服务边界打桩。让 handler 真去够数据库，在无中间件环境下会把 SQLAlchemy engine 留在坏状态，**几个文件之后**的 `test_route_error_contract.py::test_child_tenant_key_is_not_mistaken_for_missing_account` 才报错——与 `test_mcp_scope_matrix.py` 里 `quiet_services` 注释记的是同一个坑，已实测复现并修掉。
 
 - [ ] **T303**: 114 部署与手动验证（design §7 ①–⑤）
   **文件**: `features/v3.0.0/052-mcp-server-face/tasks.md`（本节下方「114 验证记录」）
   **逻辑**: `bash /opt/bisheng-ops/deploy.sh`（先查 `linsight_session_version` IN_PROGRESS 与 `free -m`）→ 114 `config.yaml` 已有 `open_platform.enabled: true`（HARNESS.md remote_114）→ 步骤 ①–⑤，用非管理员 `shuiwu` 名下服务账号（**不用 admin**）；同时用 Claude Code 与一个纯 `mcp` python 客户端各接一次（AC-01「任何标准客户端」）；记录 `journalctl -u bisheng-api` 中 `open_api.mcp` 行与 `audit_log` 行。
   **覆盖 AC**: AC-01, AC-05, AC-40
   **依赖**: T302
+  **未做（需 114 机器，本切片无法执行）**：逐条命令已按当前实现核对并写在文末「114 验证记录」，照抄即可跑。`T302` 的依赖不再是阻塞——它能在本地证的那部分已落地，剩下的那部分与本任务要的是同一批真实数据。
 
 - [x] **T304**: 对外文档
   **文件**: `docs/api/mcp-server.md`（新：地址 / 鉴权 / 六类工具入参出参（引 design §4.2 ②）/ 错误三要素与类别表 / Claude Code · Cursor · 纯 python 客户端配置示例 / 「PAT 只见两工具」/ 未部署时 404）, `docs/api/filelib-retrieve.md`（T103 已改，此处只核对交叉引用）
@@ -328,9 +339,12 @@
   **证据**: `docs/api/mcp-server.md`（地址 / 鉴权与身份边界 / 六类工具表与入出参 / 三要素错误与 category 表 / 传输层拒绝的真实状态 / 审计口径 / Claude Code 与纯 python 客户端示例）。
   **评审修订（2026-09-16）**: 应用数据工具那一行原写「数据面服务返回体原样透传」，实际出参是 `{result: …}`（`AppDataResult` 信封）——照文档写客户端会取错一层。已改为写明信封。
 
-- [ ] **T305**: 契约回写与状态
+- [x] **T305**: 契约回写与状态
   **文件**: `features/v3.0.0/release-contract.md`（表 3 F052 行状态；错误码表 263 行由 T001 已加，此处核对）, `features/v3.0.0/README.md`（F052 行状态）, `features/v3.0.0/054-app-domain-runtime/tasks.md`（「跨 Feature 回写受理」表登记 T209 的 insert / delete 请求）, `features/v3.0.0/051-model-protocol-gateway/spec.md` 不改（design 未写；在其 design 编写时引用本文 D10）
   **依赖**: T303
+  **证据**: 表 3 F052 行与 README F052 行都改成**按实现侧取证**的口径（不写「已交付」，写清哪几项未验），两处都点名 T104 / T302 / T303 三个未完项。**核对结果**：① 错误码表 263 行 T001 已加，两张表（`:100` 已分配模块编码、`:106` 段位说明）内容一致、无需改；② F054 tasks 的「跨 Feature 回写受理」表里 T209 的 `insert_row` / `delete_row` 请求**已登记且状态为 🔲 未交付**，本次只复核未改。
+  **偏差**: 原写「依赖 T303」。T303 需要 114 机器，但本任务要回写的是「哪些已落地、哪些还没验」这件事本身——押在 114 之后只会让契约表长期停在「Spec 定稿」，与实现侧严重不符。故先按当前取证回写，并把 T303 未做写进状态里；114 跑完后只需把「未验」几项改掉。
+  **反向口径**：交付与否不能读 `features/` 目录，本次回写的每一句都对着实现侧 grep 过（`open_api/mcp/` 十一个文件、`common/errcode/mcp_face.py` 十一个 `Code: int = 263xx` 且三语 `api_errors` 各 11 个键、`audit_log.py` 与 `platform/controllers/API/log.ts` 的 `open_api.mcp.tool_call` 与三份 `bs.json` 的 `openApiMcpToolCall`、`distribution.py:94` 的 `mcp` 段）。
 
 ---
 
@@ -355,6 +369,12 @@
 > - **AC-13 仍不可验收**：F051 名称解析未在本分支出现，工具 ③ `available()=False`。
 > - **门面侧的 AC 由 Line A 承接，Line B 只做了工具面接线**：AC-10 / AC-11 / AC-19～AC-27 / AC-40～AC-44 / AC-46 的实质实现在门面，本切片对应的 T301a 全份 skip。「MCP 面可用」≠「检索工具可用」。
 > - **AC-01 / AC-05 的 114 端到端验证（T302 / T303）未做**：本地无中间件，且需要真实密钥与真实 MCP 客户端。
+>
+> **2026-09-16 合流波收尾后的增量**（最新，覆盖上一条的后两项）：
+> - **T301a 不再 skip**：两线已在同一棵树上，`facade_available()` 为真，10 条实跑通过——上一条写的「全份 skip」已过期。
+> - **AC-01 / AC-05 已有本地用例**（`test/open_api/test_mcp_e2e.py`）：真 `ClientSession` 走完握手 → 清单 → 调用，撤销后下一次调用被 401 拒，凭据缓存 TTL 被 5s 钳住。**但「≤5 秒」的计时本身没测**——本地用例证的是「每次都重新校验 + 缓存上界存在」，真实计时归 T303 ④。
+> - **AC-41 / AC-44 各交付了一半**：两个门面递给统一门面的调用逐字相等（AC-41 的构造层）、权限引擎故障注入下三处都 fail-closed 且引擎零调用（AC-44 的判断层）。**仍欠**：AC-40 / AC-42 的样本集合相等、AC-41 的存储层集合相等、AC-44 的真停 OpenFGA——都卡在同一个「四种权限来源的样本播种 helper」上。
+> - **一句话口径**：F052 现在是「45 / 47 的代码面已齐，其中 AC-40 / AC-41 / AC-42 / AC-44 只完成了可在无中间件下证的那一层」，加上 AC-13（F051）与 AC-15 的增删两项（F054）待上游。**不得写成「已交付」**。
 
 | AC | 任务 | AC | 任务 | AC | 任务 |
 |---|---|---|---|---|---|
@@ -400,11 +420,29 @@
 - **（Line B 落地）`identity:read` 没有 `endpoints` 条目**。它门控的是 MCP 工具而不是 REST 路由，所以 `test_scopes.py` 里「每个可签发的位都有端点」的断言把它与 `delegate` 一并排除，并在用例里写明理由。
 - **（Line B 落地）停用用户按 `status: "disabled"` 返回，不当作不存在**。spec AC-14 的字段清单里有 `status`，藏起来会让这个字段永远只能是 `active`，并把查询者支去排查一个完全正确的 id。跨租户与不存在仍然同一响应（AC-32 未动）。
 - **（Line B 落地）`ERROR_CATEGORY_MAP` 比 design D4 多映射 16164 / 16165 / 16166 / 16167**。它们和 16163 同类——是「这个应用确实是你的」的真实业务态，折进 26305 等于告诉开发者自己的应用不是自己的。
-- **（Line B 未做）T211 fake 门面**。改用「延迟 import + `available()` 门控」后，①② 在门面缺席时根本不进清单，没有可自测的对象；真门面合入后 T301a 直接 spy 真类。多一个 fake 只多一份要跟着契约漂的代码。
+- **（Line B 未做）T211 fake 门面**。改用「延迟 import + `available()` 门控」后，①② 在门面缺席时根本不进清单，没有可自测的对象；真门面合入后 T301a 直接 spy 真类。多一个 fake 只多一份要跟着契约漂的代码。**合流波结案**：两线已合并、T301a 实跑，前提永久消失，T211 改勾 `[x]` 并在标题标「结案：不做」——它不该再出现在「哪些还没做」的检索里。
+- **（合流波 `005e5f470`）T302 / T104 按「由谁决定」重新切分，而不是整块推给 CI 中间件**。原文把「标准客户端能不能接上」「撤销是否立刻生效」「两个门面是否递了同一份调用」「权限引擎挂了会不会降级返回」与「样本播种后集合是否相等」混在一起标 `@pytest.mark.e2e`。前四条完全由请求路径决定，本地可证且已证（`test/open_api/test_mcp_e2e.py` 4 条 + `test_retrieval_facade_equality.py` 加到 18 条）；只有最后一条真的需要 MySQL / Redis / OpenFGA / Milvus 同时在位。**新增文件不带 `e2e` 标记**——标了就默认被跳过，等于白写。
+- **（合流波）T305 不再等 T303**。原「依赖: T303」会把契约表长期钉在「Spec 定稿」而实现侧已经有十一个文件、十一个错误码和三处审计 lockstep。改为先按当前取证回写，并把「T104 / T302 的集合相等」「T303 的 114 验证」作为未完项写进两张表；114 跑完只需改掉「未验」几项。
+- **（合流波）`test/open_api/test_mcp_e2e.py` 里 `identity:read` 用例必须在服务边界打桩**。第一版让 `bisheng_org_tree` 真去够数据库，本地无中间件时 SQLAlchemy engine 被留在坏状态，**三个文件之后**的 `test_route_error_contract.py::test_child_tenant_key_is_not_mistaken_for_missing_account` 才炸（`Could not refresh instance '<ServiceAccount …>'`）。与 `test_mcp_scope_matrix.py` 的 `quiet_services` 注释记的是同一个坑，实测复现后改桩。**判回归必须跑整个 `test/open_api` 选择，单跑新文件是绿的。**
 
 ## 114 验证记录
 
-- （未开始）
+- **（未执行）** 本切片在本地 worktree 内完成，没有 114 机器。下面是**照当前实现逐条核对过**的可执行清单（T303 的交付物就是把每条的实际输出填回本节）。**不要把这份清单当成验证结果**——一条都还没跑。
+
+**前置**（`reference_remote_dev`）：先看 `linsight_session_version` 有没有 IN_PROGRESS、`free -m` 余量够不够，再 `bash /opt/bisheng-ops/deploy.sh`（默认 `BRANCH=3.0-vibe`）。114 的 `config.yaml` 已有 `open_platform.enabled: true`。**`health` 200 会骗人**：deploy 后先确认 `journalctl -u bisheng-api --since "2 min ago" | grep -i "alembic\|Traceback"` 干净，迁移失败会被 deploy.sh 掩盖。
+
+| # | 验证 | 命令 | 期望 | AC |
+|---|---|---|---|---|
+| ① | 无凭据即拒 | `curl -s -o /dev/null -w '%{http_code}\n' -X POST http://192.168.106.114:4101/api/v2/mcp -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'` | `401`（不是 404、不是 307——裸路径不许重定向，design D1） | AC-02 |
+| ①b | 裸路径不重定向 | 同上加 `-w '%{http_code} %{redirect_url}\n'` | 无 `redirect_url` | AC-01 |
+| ② | 标准客户端接入 | `claude mcp add --transport http bisheng http://192.168.106.114:4101/api/v2/mcp --header "Authorization: Bearer <bs-sak-…>"` 然后在 Claude Code 里 `/mcp` | 工具清单与该密钥权限位一致；**再用纯 `mcp` python 客户端连一次**（`docs/api/mcp-server.md` 的示例），两者看到同一份清单 = AC-01 的「任何标准客户端」 | AC-01 |
+| ③ | 检索不越权 | 用**非管理员 `shuiwu`** 名下的服务账号（只授 1 个知识空间、其中 1 个文件单独收权）调 `bisheng_knowledge_search` | 被收权的那个文件的片段**不出现**；指定一个未授予的空间 → `26321` 且与「库不存在」逐字相同 | AC-40, AC-11 |
+| ③b | 两个门面同集合 | 同一把密钥、同 query 同 `knowledge_ids`，分别走 MCP 工具与 `POST /api/v2/filelib/retrieve` | 两边 chunk 集合相等（按 `document_id` + `chunk_index` 比） | AC-41 |
+| ④ | 撤销 5 秒内生效 | 在管理界面撤销该密钥，**立刻**开始每秒调一次工具并记时间戳 | 首次拒绝距撤销 ≤ 5s（凭据缓存 TTL 上界，`OpenApiConf.cap_credential_cache_ttl`）；已建会话不得继续可用 | AC-05 |
+| ⑤ | 运行时层未部署 | 在 `app_runtime.enabled: false` 的环境上 `/mcp` 看清单、并直调 `bisheng_app_status` | 两类应用工具不在清单；直调得 `16207`；其余四类不受影响 | AC-17, AC-38 |
+| ⑥ | 审计落行 | `journalctl -u bisheng-api --since "10 min ago" \| grep open_api.mcp`；`select action,target_type,target_id,create_time from auditlog where action='open_api.mcp.tool_call' order by id desc limit 10;` | 每次 `tools/call` 一行，`target_type='mcp_tool'`；审计页事件名显示「MCP 工具调用」；**行内不得出现密钥明文或检索片段正文** | AC-07, AC-47 |
+
+**必须用非管理员账号**：`super_admin` 短路 ReBAC，管理员跑 ③ 会全绿而权限运行时可能是坏的。**空列表也是 200**，③ 的判据是「该出现的出现了且该消失的消失了」，不是「有没有报错」。
 
 ## 跨 Feature 回写受理
 
