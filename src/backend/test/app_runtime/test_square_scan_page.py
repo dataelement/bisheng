@@ -37,14 +37,14 @@ def _payload(user_id: int = OWNER_USER_ID, tenant_id: int = ROOT_TENANT_ID):
     return UserPayload(user_id=user_id, user_name=f"user-{user_id}", user_role=[], tenant_id=tenant_id)
 
 
-async def _tagged_tab(env, *, user=None, cursor=None, page_size=20, name=None):
+async def _tagged_tab(env, *, user=None, cursor=None, page_size=20, name=None, tag_id=None):
     from bisheng.api.services.workflow import WorkFlowService
 
     envelope = await WorkFlowService.get_online_flows_cursor(
         user or _payload(),
         name,
         FlowStatus.ONLINE.value,
-        None,
+        tag_id,
         None,
         cursor=cursor,
         page_size=page_size,
@@ -314,3 +314,79 @@ async def test_build_page_still_filters_by_status(square_env, tenant_scope):
     )
 
     assert [row["id"] for row in page.data] == [online.id]
+
+
+# ---------------------------------------------------------------------------
+# F056 T030 / AC-08 — the square's tag system takes the third type
+# ---------------------------------------------------------------------------
+
+
+async def test_tagged_hosted_app_appears_under_its_tag(square_env, tenant_scope):
+    """A hosted application that already carries a tag shows up on that tab.
+
+    The failure this guards is not an error: leave ``HOSTED_APP`` out of the
+    tag prefilter and selecting a tag simply returns nothing hosted. The filter
+    still "works", the list is just short, and nobody looks at the tag service.
+    """
+    from bisheng.database.models.group_resource import ResourceTypeEnum
+
+    tenant_scope(ROOT_TENANT_ID)
+    tagged = square_env.seed_app(name="tagged-hosted")
+    other = square_env.seed_app(name="other-hosted")
+    tag_id = square_env.seed_tag_link(
+        tag_name="finance", resource_id=tagged.id, resource_type=ResourceTypeEnum.HOSTED_APP.value
+    )
+
+    rows = await _tagged_tab(square_env, tag_id=tag_id)
+
+    assert [row["id"] for row in rows] == [tagged.id]
+    assert other.id not in {row["id"] for row in rows}
+
+
+async def test_untagged_hosted_app_stays_in_the_default_category(square_env, tenant_scope):
+    """AC-08's other half: no tag is not the same as no home.
+
+    "Uncategorised" is computed as the complement of "tagged", so a type missing
+    from the complement's gather is reported as untagged even when it is
+    tagged — the mirror image of the bug above, and it puts the same card on
+    two tabs at once.
+    """
+    from bisheng.database.models.group_resource import ResourceTypeEnum
+
+    tenant_scope(ROOT_TENANT_ID)
+    tagged = square_env.seed_app(name="tagged-hosted")
+    untagged = square_env.seed_app(name="untagged-hosted")
+    square_env.seed_tag_link(tag_name="finance", resource_id=tagged.id, resource_type=ResourceTypeEnum.HOSTED_APP.value)
+
+    rows = await _uncategorized_tab(square_env)
+
+    ids = {row["id"] for row in rows}
+    assert untagged.id in ids
+    assert tagged.id not in ids
+
+
+def test_tag_prefilter_spans_all_three_types_and_follows_the_switch(build_list_env, monkeypatch):
+    """The prefilter's type list is where both tag bugs come from.
+
+    Both symptoms above are one omission: the list of resource types the tag
+    prefilter gathers. Asserting the list itself catches the omission at every
+    one of its four call sites at once, which no per-entry probe does. The
+    second half is AC-10 / F054 AC-58 — with the runtime layer absent the type
+    must drop out, or "select a tag" would query a type this deployment does
+    not have.
+    """
+    from bisheng.api.services.workflow import WorkFlowService
+    from bisheng.database.models.group_resource import ResourceTypeEnum
+
+    build_list_env.enable_runtime_layer()
+    assert WorkFlowService._tag_resource_types() == [
+        ResourceTypeEnum.WORK_FLOW,
+        ResourceTypeEnum.ASSISTANT,
+        ResourceTypeEnum.HOSTED_APP,
+    ]
+
+    build_list_env.enable_runtime_layer(False)
+    assert WorkFlowService._tag_resource_types() == [
+        ResourceTypeEnum.WORK_FLOW,
+        ResourceTypeEnum.ASSISTANT,
+    ]

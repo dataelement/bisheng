@@ -25,12 +25,21 @@ predicate without spinning up the full service stack.
 # number; the v1 router chain that drags in heavy ML deps). Conftest's own
 # pre-mocks for ``bisheng.common.services`` etc. remain untouched and let
 # the auth → user_deps chain resolve via MagicMock.
+#
+# ⚠️ The stubs are **taken back out as soon as our own imports are done**, for
+# the same reason conftest.py does it: ``bisheng.telemetry_search`` is a real
+# package, and a MagicMock left standing in for it makes every later
+# ``import bisheng.telemetry_search.domain`` fail with "not a package". Left in,
+# this block took ``test/api/test_route_path_naming.py`` — and anything else
+# that imports ``bisheng.main`` after it — down with a collection error
+# whenever the two ran in the same session.
 import sys as _sys
 from unittest.mock import MagicMock as _MagicMock
 
 _router_stub = _MagicMock()
 _router_stub.router = _MagicMock()
 _router_stub.router_rpc = _MagicMock()
+_stubbed: list[str] = []
 for _m in (
     "bisheng.api.router",
     "bisheng.api.v1",
@@ -43,7 +52,9 @@ for _m in (
     "bisheng.telemetry_search.api",
     "bisheng.telemetry_search.api.router",
 ):
-    _sys.modules.setdefault(_m, _router_stub)
+    if _m not in _sys.modules:
+        _sys.modules[_m] = _router_stub
+        _stubbed.append(_m)
 
 from contextlib import contextmanager, nullcontext  # noqa: E402
 from datetime import datetime, timedelta  # noqa: E402
@@ -58,6 +69,10 @@ from bisheng.api.services.audit_log import AuditLogService  # noqa: E402
 from bisheng.common.errcode.http_error import UnAuthorizedError  # noqa: E402
 from bisheng.database.models.audit_log import AuditLog, AuditLogDao  # noqa: E402
 from bisheng.database.models.session import MessageSession  # noqa: E402
+
+for _m in _stubbed:
+    del _sys.modules[_m]
+del _stubbed
 
 # ---------------------------------------------------------------------------
 # SQLite test engine + session

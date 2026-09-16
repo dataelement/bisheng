@@ -216,38 +216,12 @@ class TestSingleQueryEntry:
         ]
         assert missing == []
 
-    def test_no_second_audit_query_route_exists(self):
-        """The admin's query entry is one route family.
-
-        A per-family page (an access-record list, a model-call list) would
-        satisfy "the data is somewhere" while breaking AC-34's actual promise —
-        that an administrator does not have to know which page holds which
-        event. Written as a route census so a new page fails here rather than
-        being noticed in review.
-        """
-        from fastapi.routing import APIRoute
-
-        from bisheng.main import app
-
-        audit_reads = {
-            route.path
-            for route in app.routes
-            if isinstance(route, APIRoute) and "GET" in route.methods and _is_audit_read(route.path)
-        }
-        assert audit_reads == {
-            "/api/v1/audit",
-            "/api/v1/audit/apps",
-            "/api/v1/audit/export/data",
-            "/api/v1/audit/operators",
-            # Chat-session forensics: a different object (conversations), not an
-            # event-type view of the audit log. Predates this feature.
-            "/api/v1/audit/session",
-            "/api/v1/audit/session/export/data",
-        }
-
-
-def _is_audit_read(path: str) -> bool:
-    return path == "/api/v1/audit" or path.startswith("/api/v1/audit/")
+    # The other half of AC-34 — "there is only one such route family" — is a
+    # census over the whole app, and it lives in
+    # ``test/api/test_audit_query_entry_surface.py``: the modules in this
+    # package stub ``bisheng.api.router`` and friends into ``sys.modules`` to
+    # run the DAO without the app, which makes ``bisheng.main`` unimportable
+    # from here for the rest of the session.
 
 
 async def _list_with_event(user, event_type: str):

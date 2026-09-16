@@ -45,6 +45,7 @@ import {
   ADMIN_CHILD_MENUS,
   ADMIN_PARENT_ID,
   CHILD_DEPENDENTS,
+  DEFAULT_ENABLED_MENU_IDS,
   normalizeRoleMenuSelection,
   TASK_MODE_MENU_ID,
   WORKBENCH_CHILD_MENUS,
@@ -63,19 +64,6 @@ import {
   serializeRoleQuotaSnapshot,
   validateRoleQuota,
 } from "./roleQuotaConfig"
-
-/** 工作台四项（首页 / 应用 / 订阅 / 知识空间）新建角色默认全开，与 PRD 一致 */
-const DEFAULT_ENABLED_MENU_IDS = [
-  WORKBENCH_PARENT_ID,
-  "home",
-  TASK_MODE_MENU_ID,
-  "apps",
-  "subscription",
-  "knowledge_space",
-  ADMIN_PARENT_ID,
-  "knowledge",
-  "build",
-] as const
 
 export default function Roles() {
   const { t } = useTranslation()

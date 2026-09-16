@@ -345,15 +345,22 @@ class TestKnownGaps:
         ),
     )
     def test_access_record_is_reachable_from_the_audit_face(self):
-        from fastapi.routing import APIRoute
+        # Read off the source tree rather than off the route table: this package
+        # stubs ``bisheng.api.router`` into ``sys.modules``, so importing the app
+        # here would raise and the sentinel would 「pass」 forever on the wrong
+        # reason — exactly the way a sentinel stops being one.
+        from pathlib import Path
 
-        from bisheng.main import app
+        import bisheng
 
         on_whitelist = any(action.startswith("app.access") for action in _UI_VISIBLE_V2_ACTIONS)
-        has_route = any(
-            isinstance(route, APIRoute) and "access" in route.path and "audit" in route.path for route in app.routes
-        )
-        assert on_whitelist or has_route
+        package_root = Path(bisheng.__file__).parent
+        readers = [
+            path
+            for path in package_root.rglob("*.py")
+            if "/api/" in path.as_posix() and "AppAccessLogDao" in path.read_text(encoding="utf-8")
+        ]
+        assert on_whitelist or readers
 
     @pytest.mark.xfail(
         strict=True,
