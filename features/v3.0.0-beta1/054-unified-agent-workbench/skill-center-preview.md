@@ -4,7 +4,7 @@
 
 2026-09-10 用户要求先在 `192.168.106.119:3006` 开发前端。页面统一展示“我的技能”，企业赋予和个人上传的技能共用一个列表，来源在详情中呈现。任务模式路由和自动选择技能、工具由另一位同事负责。
 
-该预览沿用 3006 当前提交 `4d16a5030e6ca7dcb375c2f86e2bd5985b12ad9f`，在独立分支 `codex/personal-skill-center-3006` 完成。入口由构建开关 `VITE_SKILL_CENTER_PREVIEW=true` 控制。
+初版预览沿用 3006 提交 `4d16a5030e6ca7dcb375c2f86e2bd5985b12ad9f`，在独立分支 `codex/personal-skill-center-3006` 完成。入口开关优先读取部署环境的 `window.APP_CONFIG.skillCenterPreviewEnabled`；未配置时沿用构建开关 `VITE_SKILL_CENTER_PREVIEW=true`。
 
 ## 页面与操作
 
@@ -67,3 +67,30 @@
 本轮以 3006 已部署的 `8925ac18230ef9c72b6c324b7071571de8e066a3` 为源码基线，保留最新导航与设置页改动。原 PRD 第 4 章同步统一技能菜单、紧凑列表、悬停详情和上传限制；个人上传服务与任务调用仍属于后续后端接入范围。
 
 本轮确定性检查：Skill 包与持久化测试 17 项通过；导航及真实缓存返回回归测试 38 项通过；工作台 1311 个严格文件类型检查、lint、国际化、导入大小写、架构检查和生产构建均通过。浏览器复核结果与发布信息见本次部署记录。
+
+## 2026-09-16 恢复 3006 入口
+
+3006 已部署源码 `c3b332357a683e414d98f11e5e9e638d9e122ac6` 保留了技能中心及详情修复，生产包中的预览开关为 false。后续打包遗漏构建参数，导致侧栏技能中心、上传技能和管理技能入口一同关闭。本轮基于该已部署提交修复配置读取，保留当前环境的其他功能。
+
+三个入口和技能中心路由共用一个布尔开关，优先读取 HTML 在主程序前同步加载的 `APP_CONFIG`。运行时配置中的 true 或 false 为该环境的明确设置；未设置时采用既有构建参数。原有账号与菜单权限校验继续生效。
+
+3006 将下列配置保存在发布目录之外的 `/data/bs119/independent/djh-unified-3006/nginx/conf.d/client-runtime-config.js`：
+
+```js
+window.APP_CONFIG = {
+  disableJa: true,
+  skillCenterPreviewEnabled: true
+};
+```
+
+Nginx 的 3001 server 使用精确路径提供该环境配置，并关闭缓存：
+
+```nginx
+location = /workspace/assets/bisheng/config.js {
+    alias /etc/nginx/conf.d/client-runtime-config.js;
+    default_type application/javascript;
+    add_header Cache-Control "no-store" always;
+}
+```
+
+日后替换 `current` 发布目录和工作台产物时，继续保留此环境配置与 location。调整其他 `APP_CONFIG` 默认项时同步核对环境文件。个人技能仍采用浏览器内的前端预览存储，上传与解压限制分别保持 50 MiB 和 200 MiB。本轮发布记录单独列出构建、测试、环境健康和回滚信息。

@@ -1,4 +1,7 @@
-export const skillCenterPreviewEnabled = import.meta.env.VITE_SKILL_CENTER_PREVIEW === 'true';
+// Runtime config is loaded before the app so deployments can retain their preview setting across builds.
+export const skillCenterPreviewEnabled =
+  (typeof window === 'undefined' ? undefined : window.APP_CONFIG?.skillCenterPreviewEnabled) ??
+  (import.meta.env.VITE_SKILL_CENTER_PREVIEW === 'true');
 export const skillCenterPath = '/c/skills';
 
 export interface SkillManifest {
