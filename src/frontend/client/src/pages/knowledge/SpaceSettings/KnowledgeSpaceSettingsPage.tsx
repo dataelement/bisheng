@@ -206,7 +206,7 @@ export function KnowledgeSpaceSettingsPage() {
       if (!extractApiStatusCode(error)) {
         showToast({
           message: localize("com_knowledge.operation_failed_retry"),
-          severity: NotificationSeverity.ERROR,
+          severity: NotificationSeverity.WARNING,
         });
       }
     }

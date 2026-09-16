@@ -96,7 +96,7 @@ export function useChannelActions({
         } catch (e) {
             // Rollback on failure
             queryClient.invalidateQueries({ queryKey: ["channels", "created"] });
-            showToast({ message: localize("com_subscription.update_failed_retry"), severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_subscription.update_failed_retry"), severity: NotificationSeverity.WARNING });
         }
     };
 
@@ -130,7 +130,7 @@ export function useChannelActions({
             showToast({ message: localize("com_subscription.channel_dissolved"), severity: NotificationSeverity.WARNING });
         } catch (e) {
             queryClient.invalidateQueries({ queryKey: ["channels"] });
-            showToast({ message: localize("com_subscription.dissolve_failed_retry"), severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_subscription.dissolve_failed_retry"), severity: NotificationSeverity.WARNING });
         }
     };
 
@@ -172,7 +172,7 @@ export function useChannelActions({
                 : extractApiErrorMessage(e) || localize("com_subscription.unsubscribe_failed_retry");
             showToast({
                 message,
-                severity: NotificationSeverity.ERROR
+                severity: NotificationSeverity.WARNING
             });
         }
     };
@@ -206,7 +206,7 @@ export function useChannelActions({
                 const channel = channels.find(c => c.id === channelId);
                 if (channel) onChannelSelect({ ...channel, isPinned: !pinned });
             }
-            showToast({ message: localize("com_subscription.operation_failed_retry"), severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_subscription.operation_failed_retry"), severity: NotificationSeverity.WARNING });
         }
     };
 

@@ -82,7 +82,7 @@ export function useInlineRename({
 
         // Creating mode: name must not be empty
         if (isCreating && !trimmed) {
-            showToast({ message: localize("com_knowledge.folder_name_empty"), status: "error", severity: "error" } as any);
+            showToast({ message: localize("com_knowledge.folder_name_empty"), status: "warning", severity: "error" } as any);
             inputRef.current?.focus();
             return;
         }
@@ -104,7 +104,7 @@ export function useInlineRename({
         if (onValidateName) {
             const err = onValidateName(trimmed);
             if (err) {
-                showToast({ message: err, status: "error", severity: "error" } as any);
+                showToast({ message: err, status: "warning", severity: "error" } as any);
                 inputRef.current?.focus();
                 return;
             }

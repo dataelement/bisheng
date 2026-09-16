@@ -19,7 +19,7 @@ const LogLink: React.FC<LogLinkProps> = ({ href, filename, children }) => {
       if (stream.data == null || stream.data === '') {
         console.error('Error downloading file: No data found');
         showToast({
-          status: 'error',
+          status: 'warning',
           message: 'Error downloading file',
         });
         return;

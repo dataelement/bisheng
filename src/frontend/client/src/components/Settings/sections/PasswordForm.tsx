@@ -144,7 +144,7 @@ export function PasswordForm({ onCancel, onSuccess }: PasswordFormProps) {
             if (!encryptedOld || !encryptedNew) {
                 showToast({
                     message: localize("com_account_info_toast_encrypt_failed"),
-                    severity: NotificationSeverity.ERROR,
+                    severity: NotificationSeverity.WARNING,
                 });
                 return;
             }
@@ -178,7 +178,7 @@ export function PasswordForm({ onCancel, onSuccess }: PasswordFormProps) {
             if (code === 10622) {
                 showToast({
                     message: localize("api_errors.10622"),
-                    severity: NotificationSeverity.ERROR,
+                    severity: NotificationSeverity.WARNING,
                 });
                 return;
             }
