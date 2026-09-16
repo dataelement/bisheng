@@ -179,6 +179,16 @@ class Config:
     # --- build (D3) -------------------------------------------------------
     build_index_url: str = ""
     build_trusted_host: str = ""
+    #: Secondary pip index, in practice the platform's own PEP 503 index at
+    #: ``{platform}/api/v1/dev-toolkit/simple/`` — where ``bisheng-sdk`` comes
+    #: from (F057 AC-02). It is a *second* index rather than a replacement
+    #: because an application's third-party dependencies still resolve from the
+    #: deployment's mirror above; only this one package lives on the platform.
+    #: ⚠️ The value must be reachable **from the build container**: on a bridge
+    #: network ``localhost`` is the container itself, so a host address is
+    #: required and the failure otherwise reads as "pip cannot reach the index".
+    build_extra_index_url: str = ""
+    build_extra_trusted_host: str = ""
     #: npm registry for the node20 template — the pip index's twin. Empty means
     #: the base image's default (the public registry).
     build_npm_registry: str = ""
@@ -292,6 +302,8 @@ def load_config() -> Config:
         build_reserve_mb=_env_int("RTM_BUILD_RESERVE_MB", 2048),
         build_index_url=_env_str("RTM_BUILD_INDEX_URL"),
         build_trusted_host=_env_str("RTM_BUILD_TRUSTED_HOST"),
+        build_extra_index_url=_env_str("RTM_BUILD_EXTRA_INDEX_URL"),
+        build_extra_trusted_host=_env_str("RTM_BUILD_EXTRA_TRUSTED_HOST"),
         build_npm_registry=_env_str("RTM_BUILD_NPM_REGISTRY"),
         image_prefix=_env_str("RTM_IMAGE_PREFIX", DEFAULT_IMAGE_PREFIX) or DEFAULT_IMAGE_PREFIX,
         image_retention=_env_int("RTM_IMAGE_RETENTION", 2),

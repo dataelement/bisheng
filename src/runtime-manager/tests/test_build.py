@@ -149,6 +149,61 @@ def test_build_args_inject_index_url(rtm_config, fake_docker):
     assert call["buildargs"]["PIP_TRUSTED_HOST"] == rtm_config.build_trusted_host
 
 
+def test_build_args_inject_extra_index_url_and_trusted_host(rtm_config, fake_docker):
+    """F057 AC-02: ``bisheng-sdk`` resolves from the platform's own simple index.
+
+    A *second* index, never a replacement for the deployment's mirror — the
+    app's third-party dependencies keep coming from there, and only this one
+    package lives on the platform. Both values come from deployment config for
+    the same reason the primary index does: nothing the app ships may choose
+    where its packages come from.
+    """
+    config = rtm_config.with_overrides(
+        build_extra_index_url="http://192.168.0.9:7860/api/v1/dev-toolkit/simple/",
+        build_extra_trusted_host="192.168.0.9",
+    )
+    record = _service(config, fake_docker).run(_request())
+
+    assert record.status == "succeeded"
+    buildargs = fake_docker.last_call("build_image")["buildargs"]
+    assert buildargs["PIP_EXTRA_INDEX_URL"] == config.build_extra_index_url
+    assert buildargs["PIP_EXTRA_TRUSTED_HOST"] == config.build_extra_trusted_host
+    # The primary index is untouched — the two coexist.
+    assert buildargs["PIP_INDEX_URL"] == config.build_index_url
+
+
+def test_dockerfile_declares_and_uses_the_extra_index_args(rtm_config):
+    """The ARGs exist and the pip line expands them; unset stays a plain build.
+
+    The daemon warns about every build arg a Dockerfile does not declare, and
+    the empty-string expansion (``${VAR:+…}``) is what keeps a deployment that
+    ships no SDK building exactly as it did before.
+    """
+    dockerfile = render_build_context("python3.11", {"port": 8080, "app_user": "bisheng"})["Dockerfile"]
+
+    assert 'ARG PIP_EXTRA_INDEX_URL=""' in dockerfile
+    assert 'ARG PIP_EXTRA_TRUSTED_HOST=""' in dockerfile
+    assert '${PIP_EXTRA_INDEX_URL:+--extra-index-url "$PIP_EXTRA_INDEX_URL"}' in dockerfile
+    assert '${PIP_EXTRA_TRUSTED_HOST:+--trusted-host "$PIP_EXTRA_TRUSTED_HOST"}' in dockerfile
+    assert '${PIP_INDEX_URL:+--index-url "$PIP_INDEX_URL"}' in dockerfile
+
+
+def test_config_reads_the_extra_index_env(monkeypatch):
+    """``RTM_BUILD_EXTRA_*``, empty by default (ops opts in per deployment)."""
+    from runtime_manager.config import load_config
+
+    monkeypatch.delenv("RTM_BUILD_EXTRA_INDEX_URL", raising=False)
+    monkeypatch.delenv("RTM_BUILD_EXTRA_TRUSTED_HOST", raising=False)
+    assert load_config().build_extra_index_url == ""
+    assert load_config().build_extra_trusted_host == ""
+
+    monkeypatch.setenv("RTM_BUILD_EXTRA_INDEX_URL", "http://10.0.0.5:7860/api/v1/dev-toolkit/simple/")
+    monkeypatch.setenv("RTM_BUILD_EXTRA_TRUSTED_HOST", "10.0.0.5")
+    config = load_config()
+    assert config.build_extra_index_url == "http://10.0.0.5:7860/api/v1/dev-toolkit/simple/"
+    assert config.build_extra_trusted_host == "10.0.0.5"
+
+
 def test_build_args_are_per_runtime(rtm_config, fake_docker):
     """node20 gets the npm registry and *not* the pip index; static gets nothing.
 

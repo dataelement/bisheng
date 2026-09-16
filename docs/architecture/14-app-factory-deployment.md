@@ -149,6 +149,8 @@ docker compose --profile app-runtime up -d runtime-manager app-proxy
 | `RTM_NETWORK` | | — | 默认 `bisheng-apps` |
 | `RTM_RESERVE_MB` / `RTM_OVERCOMMIT_RATIO` / `RTM_BUILD_RESERVE_MB` | | — | 容量准入，见下。**改这里，不是改 config.yaml** |
 | `RTM_BUILD_INDEX_URL` | | — | 内网 pip 源（`python3.11` 模板）。不设 = 走镜像内默认源（公网 PyPI） |
+| `RTM_BUILD_EXTRA_INDEX_URL` | 用 SDK 时必填 | — | 平台自身的 pip 简单索引 `http://<平台宿主地址>:7860/api/v1/dev-toolkit/simple/`，应用 `requirements.txt` 里的 `bisheng-sdk` 从这里装（第三方依赖仍走上面那个主源）。⚠️ **值必须是构建容器可达的地址**：bridge 网络里 `localhost` 指向容器自己，写成 `localhost` 构建必失败，日志读起来像"平台的 pip 源挂了" |
+| `RTM_BUILD_EXTRA_TRUSTED_HOST` | 同上（http 时） | — | 上一行地址的主机部分；明文 http 索引不加它 pip 直接拒绝 |
 | `RTM_BUILD_NPM_REGISTRY` | | — | 内网 npm 源（`node20` 模板）。不设 = 走镜像内默认源（公网 registry）；`static` 模板不拉任何包 |
 | `RTM_DOCKER_HOST` | | — | 留空 = 本机 `/var/run/docker.sock` |
 | `RTM_MINIO_ENDPOINT` / `RTM_MINIO_ACCESS_KEY` / `RTM_MINIO_SECRET_KEY` / `RTM_MINIO_SECURE` | | 可与 `minio.*` 同值 | 托管应用**附件存储**（AC-45）。不设 = 句柄仍注入，应用的存储调用答 503，`runtime-status` 的 `attachment_storage` 会指出来 |
@@ -495,7 +497,7 @@ curl -s -b "access_token_cookie=<token>" http://<host>:3001/api/v1/apps/runtime-
 
 | `runtime` | 基础镜像 | 构建时做什么 | 启动命令 |
 |-----------|---------|-------------|---------|
-| `python3.11` | `python:3.11-slim` | `requirements.txt` 非空才 `pip install`（走 `RTM_BUILD_INDEX_URL`） | `BISHENG_APP_START` → `Procfile` `web:` → `main.py` → `app.py` |
+| `python3.11` | `python:3.11-slim` | `requirements.txt` 非空才 `pip install`（走 `RTM_BUILD_INDEX_URL`，`bisheng-sdk` 走 `RTM_BUILD_EXTRA_INDEX_URL` 指向的平台简单索引） | `BISHENG_APP_START` → `Procfile` `web:` → `main.py` → `app.py` |
 | `node20` | `node:20-slim` | `package.json` 有依赖才装：有 `package-lock.json` / `npm-shrinkwrap.json` 用 `npm ci`，否则 `npm install`（走 `RTM_BUILD_NPM_REGISTRY`）；有 `scripts.build` 先 `npm run build` 再裁掉 devDependencies | `BISHENG_APP_START` → `Procfile` `web:` → `package.json` `scripts.start` → `main` → `server.js` / `index.js` / `app.js` / `main.js` |
 | `static` | `nginx:1.27-alpine` | 不装任何包。找 `index.html`：包根目录 → `dist/` → `build/` → `public/`，取第一个命中的目录 | 无应用进程；nginx 以非 root 跑，配置、pid、临时文件全在 `/tmp` |
 
@@ -544,6 +546,7 @@ time docker stop <容器名>
 | 所有上线 / 下线动作返回 16121「应用运行时不可用」 | `manager_hmac_secret` 与 `RTM_HMAC_SECRET` 不一致（**不是** dockerd 挂了，先查这个） |
 | 上线卡在「待上线（资源不足）」 | 容量准入没过。看 `runtime-status` 的 `capacity`：先比 `committed_cpu` 与 `cpu × overcommit_ratio`（CPU 常常先于内存撞顶），再看内存。调 runtime-manager 的 `RTM_RESERVE_MB` / `RTM_OVERCOMMIT_RATIO`（**不是 config.yaml**，改完重启该进程），或改用更小的档位 |
 | 构建一直失败在拉包 | 内网无外网出口 → `RTM_BUILD_INDEX_URL` 指向私有 pip 源（`python3.11`）/ `RTM_BUILD_NPM_REGISTRY` 指向私有 npm 源（`node20`）。没有依赖的应用不会拉包，先确认它是不是真的需要 |
+| 构建失败只在 `bisheng-sdk` 这一行 | ①`RTM_BUILD_EXTRA_INDEX_URL` 没配；②配成了 `localhost`（构建容器里那是它自己）；③平台没发布 SDK 安装件——`curl <平台>/api/v1/dev-toolkit/versions` 看 `data.sdk` 是不是 null，是就补 `bash scripts/pack_sdk_wheel.sh` 并提交 |
 | `static` 应用预检失败在 `render_dockerfile`，提示找不到 `index.html` | 构建产物在 `dist/` / `build/` 下，而 CLI 打包默认不带这两个目录 → 项目里加 `.bishengignore` 写一行 `!dist/`，或把 `index.html` 放到包根目录 |
 | `node20` 应用起来了但一直不健康 | 应用没监听 `PORT` / 绑了 `127.0.0.1`（与 python 一样），或 `scripts.start` 里的命令依赖 `npm start` 才有的行为——启动命令是直接执行的，不经过 npm |
 | 应用能跑，但重启后数据没了 | compose 形态漏配 `RTM_HOST_DATA_ROOT`，数据落在了容器内路径对应的宿主目录之外 |

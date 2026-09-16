@@ -63,9 +63,11 @@ def test_versions_reachable_without_any_credential(staged_artifacts, client_fact
 def test_versions_payload_shape(staged_artifacts, client_factory):
     """``cli`` / ``sdk`` / ``platform`` field slots, all three present in one round.
 
-    The ``sdk`` slots are null this round but must exist: F057 (AC-01 / AC-03)
-    consumes this same endpoint, and leaving them out would force either a
-    second endpoint or a breaking reshape later.
+    The ``sdk`` slots were held open null by F053 and are filled by F057, which
+    ships the second wheel through this same endpoint — the reason for holding
+    them open was to avoid either a second endpoint or a breaking reshape. Its
+    own assertions live in ``test_sdk_distribution_api.py``; here the point is
+    only that both halves come back in one round.
     """
     client = client_factory(app_runtime_enabled=True)
 
@@ -79,8 +81,15 @@ def test_versions_payload_shape(staged_artifacts, client_factory):
         "download_path": DOWNLOAD_PATH,
     }
 
-    assert set(data["sdk"]) == {"version", "min_compatible", "download_path"}
-    assert all(value is None for value in data["sdk"].values())
+    assert set(data["sdk"]) == {
+        "version",
+        "min_compatible",
+        "filename",
+        "sha256",
+        "download_path",
+        "index_path",
+    }
+    assert all(value is not None for value in data["sdk"].values())
 
     assert data["platform"]["open_platform_enabled"] is True
     assert data["platform"]["app_runtime_enabled"] is True
@@ -226,8 +235,9 @@ def test_missing_artifacts_degrade_readably_not_500(absent_artifacts, client_fac
     assert versions.status_code == 200
     data = versions.json()["data"]
     assert data["cli"] is None
-    # The shape survives so an agent's parser does not crash on the degraded case.
-    assert set(data["sdk"]) == {"version", "min_compatible", "download_path"}
+    # The shape survives so an agent's parser does not crash on the degraded
+    # case: every key is present, and the two installer sections are null.
+    assert data["sdk"] is None
     assert data["platform"]["open_platform_enabled"] is True
     assert isinstance(data["notice"], str) and data["notice"]
 

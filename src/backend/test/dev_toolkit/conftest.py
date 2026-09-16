@@ -40,6 +40,15 @@ CLI_MIN_COMPATIBLE = "3.0.0"
 WHEEL_NAME = f"bisheng_cli-{CLI_VERSION}-py3-none-any.whl"
 WHEEL_BYTES = b"PK\x03\x04 not a real wheel, only its bytes matter for Content-Length"
 
+# F057: the SDK rides the same staging directory and the same manifest, written
+# by the second packing script. Its version is deliberately unlike the CLI's —
+# the SDK is versioned independently of the platform (F057 决议-6), and a test
+# that used the same number could not tell the two apart.
+SDK_VERSION = "0.1.0"
+SDK_MIN_COMPATIBLE = "0.1.0"
+SDK_WHEEL_NAME = f"bisheng_sdk-{SDK_VERSION}-py3-none-any.whl"
+SDK_WHEEL_BYTES = b"PK\x03\x04 not a real sdk wheel either"
+
 
 @pytest.fixture(autouse=True)
 def _clear_proxy_env(monkeypatch):
@@ -57,22 +66,53 @@ def _artifact_service():
     return importlib.import_module("bisheng.dev_toolkit.domain.services.artifact_service")
 
 
+def _cli_section() -> dict:
+    return {
+        "version": CLI_VERSION,
+        "min_compatible": CLI_MIN_COMPATIBLE,
+        "filename": WHEEL_NAME,
+        "sha256": hashlib.sha256(WHEEL_BYTES).hexdigest(),
+    }
+
+
+def _sdk_section() -> dict:
+    return {
+        "version": SDK_VERSION,
+        "min_compatible": SDK_MIN_COMPATIBLE,
+        "filename": SDK_WHEEL_NAME,
+        "sha256": hashlib.sha256(SDK_WHEEL_BYTES).hexdigest(),
+    }
+
+
 @pytest.fixture()
 def staged_artifacts(monkeypatch, tmp_path) -> Path:
-    """A directory shaped exactly like ``pack_cli_wheel.sh`` output, bound into the service."""
+    """A directory shaped exactly like both packing scripts' output, bound into the service."""
     artifacts = tmp_path / "artifacts"
     artifacts.mkdir()
-    wheel = artifacts / WHEEL_NAME
-    wheel.write_bytes(WHEEL_BYTES)
+    (artifacts / WHEEL_NAME).write_bytes(WHEEL_BYTES)
+    (artifacts / SDK_WHEEL_NAME).write_bytes(SDK_WHEEL_BYTES)
     manifest = {
-        "cli": {
-            "version": CLI_VERSION,
-            "min_compatible": CLI_MIN_COMPATIBLE,
-            "filename": WHEEL_NAME,
-            "sha256": hashlib.sha256(WHEEL_BYTES).hexdigest(),
-        },
+        "cli": _cli_section(),
+        "sdk": _sdk_section(),
         "platform": {"version": MANIFEST_PLATFORM_VERSION},
     }
+    (artifacts / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(_artifact_service(), "ARTIFACTS_DIR", artifacts)
+    return artifacts
+
+
+@pytest.fixture()
+def staged_cli_only(monkeypatch, tmp_path) -> Path:
+    """The staging directory of a release that predates the SDK (manifest has no ``sdk``).
+
+    Every deployment upgrading from F053 looks exactly like this until someone
+    runs ``pack_sdk_wheel.sh``, so "no SDK" has to stay a normal branch rather
+    than a reason for the CLI half to degrade.
+    """
+    artifacts = tmp_path / "artifacts-cli-only"
+    artifacts.mkdir()
+    (artifacts / WHEEL_NAME).write_bytes(WHEEL_BYTES)
+    manifest = {"cli": _cli_section(), "platform": {"version": MANIFEST_PLATFORM_VERSION}}
     (artifacts / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     monkeypatch.setattr(_artifact_service(), "ARTIFACTS_DIR", artifacts)
     return artifacts
