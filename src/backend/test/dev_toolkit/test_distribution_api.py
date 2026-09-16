@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 
+import pytest
+
 from test.dev_toolkit.conftest import (
     CLI_MIN_COMPATIBLE,
     CLI_VERSION,
@@ -255,18 +257,22 @@ def test_skill_pack_reachable_without_any_credential(staged_artifacts, client_fa
     assert route.dependant.security_requirements == []
 
 
-def test_skill_pack_is_a_tarball_carrying_skill_md(staged_artifacts, client_factory):
+@pytest.mark.parametrize("pack", ["deploy-hosting", "platform-wiring"])
+def test_skill_pack_is_a_tarball_carrying_skill_md(staged_artifacts, client_factory, pack):
+    # Both shipped packs (T037 / T038) come off the same endpoint; the CLI's
+    # DEFAULT_PACKS fetches each by slug, so each must resolve here.
     import io
     import tarfile
 
     client = client_factory()
-    response = client.get(SKILLS_PACK_PATH)
+    response = client.get(SKILLS_TEMPLATE.format(pack=pack))
 
+    assert response.status_code == 200
     with tarfile.open(fileobj=io.BytesIO(response.content), mode="r:gz") as tar:
         names = set(tar.getnames())
-    assert "deploy-hosting/SKILL.md" in names
-    assert "deploy-hosting/example/main.py" in names
-    assert "deploy-hosting/selfcheck.py" in names
+    assert f"{pack}/SKILL.md" in names
+    assert f"{pack}/example/main.py" in names
+    assert f"{pack}/selfcheck.py" in names
     # No build noise leaked into the developer's machine.
     assert not any("__pycache__" in n or n.endswith(".pyc") for n in names)
     # Version rides in a header (the body is a tarball, not an envelope), and it

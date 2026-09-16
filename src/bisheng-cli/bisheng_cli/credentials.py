@@ -11,10 +11,11 @@ and on a shared jump host that window is the whole attack.
 copy can only produce the "the admin ticked the box but the CLI still says no"
 failure, which is unfalsifiable from the user's side.
 
-The multi-profile shape ships this round even though `--platform` does not.
-Writing the single-platform shape (key at the top level) would turn adding a
-second platform into a migration; the profile layer costs ten lines now and zero
-later.
+The multi-profile shape landed one round before `--platform` did, on purpose:
+writing the single-platform shape (key at the top level) would have turned adding
+a second platform into a migration. The interaction layer (`load_selected`,
+`list_profiles`, `set_current`) sits on that shape with zero migration — every
+profile is keyed by the normalised base URL and `current` names one of them.
 """
 
 from __future__ import annotations
@@ -280,6 +281,69 @@ def load_current() -> Profile:
             next_step="先执行 bisheng login <平台地址>。",
         )
     return _to_profile(raw)
+
+
+def load_selected(args: Any) -> Profile:
+    """The profile a command should act on: `--platform` if given, else `current`.
+
+    One resolver for every command that talks to a platform, so "which platform
+    did this run against" has exactly one answer and one error shape. A
+    `--platform` naming an address that was never logged into is exit 3 with the
+    address in the message — the same failure a bare `load_current` reports
+    when nothing is logged in at all, because the next step is the same:
+    `bisheng login <that address>`.
+    """
+    selected = getattr(args, "platform", None)
+    if selected:
+        return load_profile(selected)
+    return load_current()
+
+
+def list_profiles() -> list[dict[str, Any]]:
+    """Every stored platform, key **masked**, with the current one flagged.
+
+    This is the payload `bisheng platforms list` prints and emits as JSON. The
+    key is replaced by its mask before the dict leaves this module: the output
+    masker would catch a `bs-sak-` literal anyway, but a listing that carries
+    the key in a field named `api_key` invites someone to read the field.
+    """
+    store = _read_store()
+    current = store.get("current")
+    rows: list[dict[str, Any]] = []
+    for key, raw in (store.get("profiles") or {}).items():
+        profile = _to_profile(raw or {})
+        rows.append(
+            {
+                "base_url": key,
+                "current": key == current,
+                "actor_kind": profile.actor_kind,
+                "actor_name": profile.actor_name,
+                "key_mask": profile.key_mask,
+                "expires_at": profile.expires_at,
+                "logged_in_at": profile.logged_in_at,
+            }
+        )
+    return rows
+
+
+def set_current(base_url: str, *, warn: Callable[[str], None] | None = None) -> str:
+    """Make a stored platform the default for commands run without `--platform`.
+
+    Refuses (exit 3) rather than creating an empty profile: `current` pointing
+    at a platform with no key would make every later command fail with a
+    confusing "not logged in" for an address the store *does* list.
+    """
+    key = normalise_base_url(base_url)
+    store = _read_store()
+    if key not in (store.get("profiles") or {}):
+        raise CliError(
+            f"本机没有 {key} 的凭据，无法切换",
+            exit_code=EXIT_NOT_LOGGED_IN,
+            next_step=f"先执行 bisheng login {key}；已登录的平台用 bisheng platforms list 查看。",
+        )
+    store["current"] = key
+    _write_store(store, warn)
+    return key
 
 
 def _to_profile(raw: dict[str, Any]) -> Profile:

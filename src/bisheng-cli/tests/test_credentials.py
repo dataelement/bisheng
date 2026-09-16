@@ -12,6 +12,7 @@ import os
 import stat
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -120,6 +121,49 @@ def test_load_profile_for_unknown_platform_raises_exit_3() -> None:
     with pytest.raises(CliError) as excinfo:
         credentials.load_profile("http://never-seen.test")
     assert excinfo.value.exit_code == EXIT_NOT_LOGGED_IN
+
+
+# ---- T047: multi-platform interaction layer ---------------------------------
+
+
+def test_load_selected_prefers_platform_flag_over_current() -> None:
+    credentials.save_profile(BASE, _profile())
+    credentials.save_profile(OTHER, _profile(OTHER, tenant_id=9))  # current
+    assert credentials.load_selected(SimpleNamespace(platform=None)).base_url == OTHER
+    assert credentials.load_selected(SimpleNamespace(platform=BASE + "/")).tenant_id == 1
+    assert credentials.load_selected(SimpleNamespace()).base_url == OTHER  # no attribute at all
+
+
+def test_load_selected_unknown_platform_is_exit_3_naming_the_address() -> None:
+    credentials.save_profile(BASE, _profile())
+    with pytest.raises(CliError) as excinfo:
+        credentials.load_selected(SimpleNamespace(platform="http://never.test"))
+    assert excinfo.value.exit_code == EXIT_NOT_LOGGED_IN
+    assert "http://never.test" in excinfo.value.message
+    assert "bisheng login http://never.test" in excinfo.value.next_step
+
+
+def test_list_profiles_masks_the_key_and_flags_current() -> None:
+    credentials.save_profile(BASE, _profile())
+    credentials.save_profile(OTHER, _profile(OTHER, actor_name="另一个号"))
+    rows = credentials.list_profiles()
+    assert [r["base_url"] for r in rows] == [BASE, OTHER]
+    assert [r["current"] for r in rows] == [False, True]
+    assert rows[1]["actor_name"] == "另一个号" and rows[0]["key_mask"] == FAKE_KEY_MASK
+    assert FAKE_KEY not in json.dumps(rows)
+    assert "api_key" not in json.dumps(rows)
+
+
+def test_set_current_switches_and_refuses_unknown() -> None:
+    credentials.save_profile(BASE, _profile())
+    credentials.save_profile(OTHER, _profile(OTHER))
+    assert credentials.load_current().base_url == OTHER
+    assert credentials.set_current(BASE.upper()) == BASE  # normalised like every other lookup
+    assert credentials.load_current().base_url == BASE
+    with pytest.raises(CliError) as excinfo:
+        credentials.set_current("http://never.test")
+    assert excinfo.value.exit_code == EXIT_NOT_LOGGED_IN
+    assert credentials.load_current().base_url == BASE  # untouched by the refusal
 
 
 def test_stored_snapshot_fields() -> None:

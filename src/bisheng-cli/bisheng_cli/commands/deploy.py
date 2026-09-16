@@ -162,7 +162,7 @@ class _ProgressReader:
 
 
 def run(args: Any, emitter: Emitter) -> int:
-    profile = credentials.load_current()
+    profile = credentials.load_selected(args)
     base_url = profile.base_url
     root = project.find_project_root(args.path)
     project.load_manifest(root)

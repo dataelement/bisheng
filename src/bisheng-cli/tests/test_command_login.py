@@ -39,11 +39,12 @@ from bisheng_cli.errors import (
 )
 from bisheng_cli.main import run as main_run
 from tests.helpers.platform_mock import (
+    DEFAULT_PACKS,
     FAKE_KEY,
     FAKE_PAT,
     PlatformMock,
     env_ok,
-    skill_pack,
+    serve_default_packs,
     skills_path,
     use_mock_transport,
     versions_404,
@@ -69,9 +70,9 @@ def _mock(whoami: httpx.Response | None = None) -> PlatformMock:
     if whoami is not None:
         mock.get(WHOAMI, whoami)
         # A successful login now auto-syncs the skill packs (AC-08). Serve the
-        # pack so the happy path exercises the real end-to-end shape; failure
-        # tests never reach this route because login raises before the sync.
-        mock.get(skills_path(), skill_pack())
+        # packs so the happy path exercises the real end-to-end shape; failure
+        # tests never reach these routes because login raises before the sync.
+        serve_default_packs(mock)
     return mock
 
 
@@ -303,12 +304,26 @@ def test_login_auto_syncs_skill_packs(monkeypatch: pytest.MonkeyPatch, home_dir)
     mock = _mock(whoami_ok())
     code, _, err = _run(["login", BASE, "--api-key", FAKE_KEY], monkeypatch=monkeypatch, mock=mock)
     assert code == EXIT_OK
-    assert [path for path in mock.paths_called() if "skills" in path] == [skills_path()]
+    assert [path for path in mock.paths_called() if "skills" in path] == [skills_path(p) for p in DEFAULT_PACKS]
     slug = skills_mod.profile_slug(BASE)
-    assert (home_dir / ".bisheng" / "skills" / slug / "deploy-hosting" / "SKILL.md").is_file()
+    for pack in DEFAULT_PACKS:
+        assert (home_dir / ".bisheng" / "skills" / slug / pack / "SKILL.md").is_file()
     # Where it landed must be on screen. Login used to sync in silence, which is
     # how "5 个文件已同步" could be true while nothing could read them.
     assert "技能包落点" in err
+
+
+def test_login_refuses_platform_flag(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:
+    # `login` names its platform positionally; accepting `--platform` as well
+    # would leave two addresses in one command and no way to tell which one the
+    # key was verified against.
+    mock = PlatformMock()
+    code, _, err = _run(
+        ["--platform", "http://other.test", "login", BASE, "--api-key", FAKE_KEY], monkeypatch=monkeypatch, mock=mock
+    )
+    assert code == EXIT_USAGE
+    assert "--platform" in err
+    assert mock.paths_called() == []
 
 
 def test_login_still_succeeds_when_auto_sync_fails(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:

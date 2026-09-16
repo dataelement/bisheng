@@ -11,7 +11,15 @@
       SKILL.md               技能正文(AI 读这个)
       example/               可运行样例,改造它比从零写更稳
       selfcheck.py           部署前连通自检
+    platform-wiring/         平台能力接线:读注入的访问者身份 / 用应用数据库 / bisheng dev 本地同构
+      SKILL.md               第 1 章「访问者身份」置顶带静默失败点警示;模型一章暂未提供
+      example/               零依赖样例:显示「你是谁」+ 按人存便签到应用数据库(含幂等加列)
+      selfcheck.py           登录态 + 平台可达 + 库变量可用
 ```
+
+两个包各管一段:「部署纳管」管**怎么把应用交给平台**(清单、打包、预检),「平台能力接线」管
+**应用怎么用平台给的东西**(身份头、数据库、本地 `bisheng dev`)。SDK 三件套(auth / retrieve /
+storage)与模型协议面的章节随各自的 Feature 落地后再补进「平台能力接线」。
 
 技能包是平台发布物,`skills sync` **单向覆盖**本地内容(不合并、不保留本地改动)——平台升级后重跑即
 更新到新版本。
@@ -27,7 +35,9 @@
   ```markdown
   <!-- bisheng-skills -->
   ## BiSheng 应用平台
-  改动本项目前请先读:`~/.bisheng/skills/<平台地址>.<哈希>/deploy-hosting/SKILL.md`
+  改动本项目前请先读:
+  - `~/.bisheng/skills/<平台地址>.<哈希>/deploy-hosting/SKILL.md`
+  - `~/.bisheng/skills/<平台地址>.<哈希>/platform-wiring/SKILL.md`
   ```
 
 - **手动**:直接把 `SKILL.md` 的内容贴给 AI,告诉它「照这个把应用部署到平台」。

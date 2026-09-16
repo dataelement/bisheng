@@ -6,10 +6,12 @@ argparse already does. What we give up is colour and shell completion, neither o
 which any acceptance criterion asks for — AC-04 asks for "usable with no TTY and
 machine-readable", which is orthogonal to looking nice.
 
-Deferred commands are **not registered**. Registering `dev` so it can answer "not
-in this version" would make `--help` advertise five commands, an agent would call
-one, and it would get a non-standard failure. Announcing them in the epilogue is
-honest; a stub is not.
+A command is either registered or absent — never a stub. Registering a name so it
+can answer "not in this version" would make `--help` advertise it, an agent would
+call it, and it would get a non-standard failure. `DEFERRED_COMMANDS` is kept as
+the (now empty) list of names announced in the epilogue but not registered, so
+the test that guards "announced ≠ registered" keeps its shape for the next round
+that defers something.
 """
 
 from __future__ import annotations
@@ -20,12 +22,13 @@ from collections.abc import Callable
 from bisheng_cli import __version__
 from bisheng_cli.errors import EXIT_USAGE, CliError
 
-SUBCOMMANDS = ("login", "deploy", "logs", "skills")
-DEFERRED_COMMANDS = ("dev",)
+SUBCOMMANDS = ("login", "deploy", "logs", "skills", "dev", "platforms")
+DEFERRED_COMMANDS: tuple[str, ...] = ()
 
 _EPILOG = (
-    "本版本提供 login / deploy / logs / skills sync 四条命令。\n"
-    "dev 随后续版本提供。\n"
+    "命令: login / deploy / logs / skills sync / dev / platforms。\n"
+    "目标平台: 默认是最近一次 login 的平台；--platform <地址> 指定另一个已登录的平台，"
+    "bisheng platforms use <地址> 切换默认。\n"
     "机器可读输出: 加 --json，NDJSON 走 stdout、人读文本走 stderr，最后一行恒为 result 事件。"
 )
 
@@ -67,19 +70,27 @@ def _add_global_flags(parser: argparse.ArgumentParser, *, mirror: bool) -> None:
         default=default(False),
         help="忽略 HTTP_PROXY / HTTPS_PROXY / ALL_PROXY 环境变量",
     )
+    # AC-12: selects among platforms that were each logged into on their own.
+    # It never creates a profile — an address with no stored key is exit 3.
+    parser.add_argument(
+        "--platform",
+        metavar="BASE_URL",
+        default=default(None),
+        help="作用于这个已登录的平台（默认：最近一次 login 或 platforms use 选定的平台）",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="bisheng",
-        description="BiSheng 开发者 CLI：登录平台、发布托管应用、查看运行日志。",
+        description="BiSheng 开发者 CLI：登录平台、本地运行、发布托管应用、查看运行日志。",
         epilog=_EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"bisheng {__version__}")
     _add_global_flags(parser, mirror=False)
 
-    subparsers = parser.add_subparsers(dest="command", metavar="{login,deploy,logs,skills}")
+    subparsers = parser.add_subparsers(dest="command", metavar="{" + ",".join(SUBCOMMANDS) + "}")
 
     login = subparsers.add_parser("login", help="校验服务账号密钥并把凭据写入本地用户目录")
     login.add_argument("base_url", metavar="BASE_URL", help="目标平台地址，例如 http://bisheng.example.com")
@@ -118,10 +129,36 @@ def build_parser() -> argparse.ArgumentParser:
     skills_sub = skills.add_subparsers(dest="skills_command", metavar="{sync}")
     sync = skills_sub.add_parser("sync", help="拉取平台当前版本的技能包并接入本机 AI 编程工具（幂等，单向覆盖）")
 
+    # `dev` takes no identity argument of any kind (AC-25): the injected identity
+    # is the logged-in service account, full stop. The two port flags are the
+    # only knobs — the proxy is the entry the developer opens, the app port is
+    # what the app process receives as PORT.
+    dev = subparsers.add_parser("dev", help="本地运行应用，并像托管环境一样注入身份与平台接线环境变量")
+    dev.add_argument("path", metavar="PATH", nargs="?", default=".", help="项目根，默认当前目录")
+    dev.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="本地访问入口（迷你代理）监听的端口，默认取 bisheng-app.yaml 的 port",
+    )
+    dev.add_argument(
+        "--app-port",
+        dest="app_port",
+        type=int,
+        default=None,
+        help="应用进程实际监听的端口（注入为 PORT），默认自动挑一个空闲端口",
+    )
+
+    platforms = subparsers.add_parser("platforms", help="列出已登录的平台，或切换默认平台")
+    platforms_sub = platforms.add_subparsers(dest="platforms_command", metavar="{list,use}")
+    platforms_list = platforms_sub.add_parser("list", help="列出本机已登录的平台（密钥恒掩码）")
+    platforms_use = platforms_sub.add_parser("use", help="把某个已登录的平台设为默认")
+    platforms_use.add_argument("base_url", metavar="BASE_URL", help="已登录过的平台地址")
+
     # Every leaf that can receive a flag needs the mirror, or `--json` after it
     # is "unrecognized arguments". `sync` is where `bisheng skills sync --json`
     # lands; `skills` covers `bisheng skills --json sync`.
-    for subparser in (login, deploy, logs, skills, sync):
+    for subparser in (login, deploy, logs, skills, sync, dev, platforms, platforms_list, platforms_use):
         _add_global_flags(subparser, mirror=True)
 
     return parser

@@ -24,6 +24,8 @@ from typing import Any
 
 import httpx
 
+from bisheng_cli.commands.skills import DEFAULT_PACKS as _CLI_DEFAULT_PACKS
+
 # Assembled rather than written out so `scripts/arch-guard.sh` RULE-7 never
 # matches a long key literal in this repo's Python (see conftest docstring).
 FAKE_KEY = "bs-sak-" + "x" * 24
@@ -97,10 +99,27 @@ def versions_404() -> httpx.Response:
 
 
 DEFAULT_PACK = "deploy-hosting"
+#: The packs the CLI syncs, in its own order — re-exported from the CLI so a
+#: pack added there is served by every test that uses `serve_default_packs`.
+DEFAULT_PACKS: tuple[str, ...] = tuple(_CLI_DEFAULT_PACKS)
 
 
 def skills_path(pack: str = DEFAULT_PACK) -> str:
     return f"/api/v1/dev-toolkit/skills/{pack}"
+
+
+def serve_default_packs(mock: PlatformMock) -> PlatformMock:
+    """Route every shipped pack the test did not route itself.
+
+    `skills sync` fetches all of `DEFAULT_PACKS`; a test that only cares about
+    one of them would otherwise trip the mock's "unexpected request" on the
+    others. Routes the test registered are left alone, so a test can still
+    make one pack 404 or answer a specific tarball.
+    """
+    for pack in DEFAULT_PACKS:
+        if not mock.has("GET", skills_path(pack)):
+            mock.get(skills_path(pack), skill_pack({"SKILL.md": f"# {pack}\n"}, pack=pack))
+    return mock
 
 
 def skill_pack(
@@ -361,6 +380,9 @@ class PlatformMock:
 
     def post(self, path: str, response: Route | list[Route]) -> PlatformMock:
         return self.add("POST", path, response)
+
+    def has(self, method: str, path: str) -> bool:
+        return (method.upper(), path) in self._routes
 
     @property
     def transport(self) -> httpx.MockTransport:
