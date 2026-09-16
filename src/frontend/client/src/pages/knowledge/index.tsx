@@ -202,7 +202,7 @@ export default function Knowledge() {
         if (knowledgePluginGate !== "disabled") return;
         showToastRef.current({
             message: localizeRef.current("com_plugin_feature_no_access_toast"),
-            severity: NotificationSeverity.ERROR,
+            severity: NotificationSeverity.WARNING,
         });
         navigateRef.current("/c/new", { replace: true });
     }, [knowledgePluginGate]);
@@ -553,7 +553,7 @@ export default function Knowledge() {
             setActiveSpace(null);
             navigate("/knowledge");
         } catch {
-            showToast({ message: localize("com_knowledge.delete_space_failed"), severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_knowledge.delete_space_failed"), severity: NotificationSeverity.WARNING });
         }
     };
 

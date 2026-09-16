@@ -106,7 +106,7 @@ export function MessageSelectionToolbar({
                     message:
                         translateApiErrorMessage({ status_code: err?.status_code, status_message: err?.status_message })
                         || localize('workstation.messageExport.renderFailed'),
-                    severity: NotificationSeverity.ERROR,
+                    severity: NotificationSeverity.WARNING,
                 });
                 // The error envelope is already logged by the axios interceptor;
                 // we surface the user-facing message and leave the trace to it.

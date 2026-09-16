@@ -129,7 +129,7 @@ export function FileListView({
         } catch (e) {
             showToast?.({
                 message: localize("com_knowledge.file_encoding_update_failed"),
-                severity: NotificationSeverity.ERROR,
+                severity: NotificationSeverity.WARNING,
             });
             throw e;
         }

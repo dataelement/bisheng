@@ -97,7 +97,7 @@ export default function ActionsInput({
     onError(error) {
       showToast({
         message: (error as Error).message || localize('com_assistants_update_actions_error'),
-        status: 'error',
+        status: 'warning',
       });
     },
   });

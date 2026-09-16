@@ -15,7 +15,7 @@ const RunCode: React.FC<CodeBarProps> = React.memo(({ lang, codeRef, blockIndex 
   const { showToast } = useToastContext();
   const execute = useToolCallMutation(Tools.execute_code, {
     onError: () => {
-      showToast({ message: localize('com_ui_run_code_error'), status: 'error' });
+      showToast({ message: localize('com_ui_run_code_error'), status: 'warning' });
     },
   });
 

@@ -212,7 +212,7 @@ export function useSaveArtifactToKnowledge(file: ArtifactFile, versionId: string
                     // between our probe and the register.
                     showToast({
                         message: localize('com_linsight.saveToKnowledgeFailed'),
-                        severity: NotificationSeverity.ERROR,
+                        severity: NotificationSeverity.WARNING,
                     });
                 }
             } catch (e) {
@@ -223,7 +223,7 @@ export function useSaveArtifactToKnowledge(file: ArtifactFile, versionId: string
                     // artifact fetch would otherwise surface raw English.
                     message: (error?.localized && error.message)
                         || localize('com_linsight.saveToKnowledgeFailed'),
-                    severity: NotificationSeverity.ERROR,
+                    severity: NotificationSeverity.WARNING,
                 });
             } finally {
                 refreshQuota();

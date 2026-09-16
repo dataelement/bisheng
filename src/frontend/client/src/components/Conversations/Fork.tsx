@@ -131,7 +131,7 @@ export default function Fork({
     onError: () => {
       showToast({
         message: localize('com_ui_fork_error'),
-        status: 'error',
+        status: 'warning',
       });
     },
   });

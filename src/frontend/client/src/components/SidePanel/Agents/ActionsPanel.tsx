@@ -38,7 +38,7 @@ export default function ActionsPanel({
     onError(error) {
       showToast({
         message: (error as Error).message ?? localize('com_assistants_delete_actions_error'),
-        status: 'error',
+        status: 'warning',
       });
     },
   });
@@ -129,7 +129,7 @@ export default function ActionsPanel({
                       if (!agent_id) {
                         return showToast({
                           message: 'No agent_id found, is the agent created?',
-                          status: 'error',
+                          status: 'warning',
                         });
                       }
                       deleteAgentAction.mutate({

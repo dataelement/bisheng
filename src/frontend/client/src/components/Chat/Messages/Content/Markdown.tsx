@@ -203,7 +203,7 @@ export const a: React.ElementType = memo(({ href, children }: TAnchorProps) => {
       if (stream.data == null || stream.data === '') {
         console.error('Error downloading file: No data found');
         showToast({
-          status: 'error',
+          status: 'warning',
           message: localize('com_ui_download_error'),
         });
         return;

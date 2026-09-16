@@ -231,7 +231,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                         setLoadError(true);
                     }
                     setHasMore(false);
-                    showToast({ message: localize("com_knowledge.load_file_list_failed"), severity: NotificationSeverity.ERROR });
+                    showToast({ message: localize("com_knowledge.load_file_list_failed"), severity: NotificationSeverity.WARNING });
                 }
                 return [];
             } finally {

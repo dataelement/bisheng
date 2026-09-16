@@ -116,7 +116,7 @@ export function ConversationHistory({
             } else {
                 showToast({
                     message: localize("com_knowledge.rename_failed"),
-                    severity: NotificationSeverity.ERROR,
+                    severity: NotificationSeverity.WARNING,
                     showIcon: true,
                 } as any);
             }
