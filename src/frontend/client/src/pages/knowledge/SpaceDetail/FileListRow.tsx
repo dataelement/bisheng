@@ -223,6 +223,10 @@ export function FileListRow({
     // punching an opaque white hole in the row.
     const rowActionClass = cn(
         "rounded-lg",
+        // No focus ring on these. A dropdown returns focus to its trigger when it
+        // closes, so clicking "..." and dismissing the menu left a brand-coloured
+        // ring on the button that reads as the row still being selected.
+        "focus-visible:ring-0 focus-visible:ring-offset-0",
         isSelected ? "hover:bg-white/60" : "hover:bg-btn-fill-2",
     );
 
