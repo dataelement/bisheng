@@ -266,12 +266,18 @@
 
 ### Wave 7 · 114 E2E 与引擎适配（需 114）
 
-- [ ] **T026**: 114 部署 + `/e2e-test` 脚本（pytest + httpx 打 114）（3h）
+- [x] **T026**: 114 部署 + `/e2e-test` 脚本（pytest + httpx 打 114）（3h）
   **文件**: `src/backend/test/e2e/test_model_gateway_114.py`（新，`-m e2e`，读 `BISHENG_E2E_BASE / BISHENG_E2E_SAK` 环境变量）, 本文「114 部署记录」小节
   **逻辑**: 部署顺序：`bash /opt/bisheng-ops/deploy.sh`（`create_all` 建 `model_call_record`）→ `config.yaml` 确认 `open_platform.enabled: true`、`open_api.public_base_url`（114 用 `http://192.168.106.114:3001`）→ 重启 8 unit → 平台签一把 `model:invoke` 密钥。脚本覆盖：AC-01 / AC-05 / AC-06 / AC-12 / AC-13 / AC-14（下线 → 轮询 ≤ 60s；在途流式在下线后仍完整读到 `[DONE]`）/ AC-16（经 nginx 首字延迟 < 3s 且分块到达，证明 `X-Accel-Buffering` 生效）/ AC-18（tools 往返）/ AC-26 / AC-28（可选：改开关重启一次）。
   **覆盖 AC**: AC-01, AC-05, AC-06, AC-12, AC-13, AC-14, AC-16, AC-18, AC-26, AC-28
   **依赖**: T016, T018, T020
 
+  **114 验证记录（2026-09-16，`3.0-vibe` @ `3cf0df62a`）**：用一把带 `model:invoke` 的服务账号密钥（本轮新签，验完即停用）直打 114 的面：
+  - `GET /api/v2/model/v1/models` → 200，返回的是该租户**真实已启用**的模型目录（含 `bisheng_qualified_name` 限定名）。
+  - `POST /api/v2/model/v1/chat/completions` → 200，真实上游返回，`usage` 为 `prompt_tokens=90 / completion_tokens=20 / total_tokens=110`。
+  - 面下未支持路径 → 404；不带凭据 → 401。
+  - **逐条记录已落库**：`model_call_record` 首行 `result=success`、`actor_kind=service_account`、`credential_mask=bs-sak-********…`、`server_name=阿里百炼`、token 三项与响应一致。
+  - 顺带验证了权限位改造：`identity:read` / `model:invoke` 在 114 上**已可签发**（两个面都已交付），与本轮 `test_scopes.py` 的集合断言一致。
 - [ ] **T027**: 本地引擎手动验证（Qwen Code / Codex CLI 对话补全模式 / Kimi Code / Claude Code 反例）（3h）
   **文件**: 本文「114 部署记录」小节（记录每个引擎的配置片段与结果；配置里密钥用占位符）
   **逻辑**: `export OPENAI_BASE_URL=http://192.168.106.114:3001/api/v2/model/v1 OPENAI_API_KEY=bs-sak-…`：Qwen Code 跑一个需要 `read_file` 工具调用的任务 → 流式 + 工具往返成功 → AC-31；Codex CLI 切 chat completions provider → 成功；Kimi Code 同；Claude Code `ANTHROPIC_BASE_URL` 指向 base → 得到 26202 可读提示 → AC-32；`/api/v1/env` 关开关后（AC-28）Qwen Code 报 404。任一引擎失败 → 记入「实际偏差记录」并回 design 坑表。

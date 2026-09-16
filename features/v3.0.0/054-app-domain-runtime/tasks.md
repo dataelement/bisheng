@@ -580,11 +580,15 @@
 
 ### Wave 3 · `[MVP-核心]` 114 部署增量与联调
 
-- [ ] **T072**: `[MVP-核心]` systemd 两单元 + `deploy.sh` / `smoke.sh` 增量
+- [x] **T072**: `[MVP-核心]` systemd 两单元 + `deploy.sh` / `smoke.sh` 增量
   **文件**: `features/v3.0.0/054-app-domain-runtime/deploy/bisheng-runtime-manager.service`（新，模板）, `features/v3.0.0/054-app-domain-runtime/deploy/bisheng-app-proxy.service`（新，模板）
   **逻辑**: §4.2 ⑧：`bisheng-runtime-manager.service`（`127.0.0.1:8091`、`After=docker.service`、以 root 或 docker 组运行）· `bisheng-app-proxy.service`（`127.0.0.1:8090`、`After=bisheng-api.service`、**不需要 docker 权限**）；两者追加进 `bisheng.target` 的 `Wants=` 与 `deploy.sh` 的 `SERVICES=`、`smoke.sh` 增两条探针。⚠️ **这些文件不在产品仓**——真身在独立仓 `~/Projects/bisheng-ops/`（K10），本任务在 feature 目录交付模板 + 落库说明，实际写入由 T075 在 114 上执行。⚠️ 产品仓根 `./deploy.sh`（钉 `feat/2.5.0` 的 nohup 老脚本）与 `docker/deploy.sh`（compose 运维壳）**都不是 114 在用的**，不要引用。
   **回滚**: `systemctl disable --now` 两单元 + 从 `bisheng.target` 与 `SERVICES=` 移除；平台其余服务不受影响。
   **依赖**: T018, T036
+  **落地记录（2026-09-16，114 实机）**：三个单元模板都在 114 上真装真跑（`bisheng-runtime-manager` / `bisheng-app-proxy` / 本轮新增的 `bisheng-egress-proxy`），`deploy.sh` 全程绿、`smoke.sh` `SMOKE OK`。同批修掉三处**只有真机才暴露**的缺陷：
+  ① **单元把 `--host 127.0.0.1` 写死在 ExecStart**，`RTM_HOST` 设了不生效；附件句柄要求应用容器够得到本进程，于是配置看着对、容器 `curl` 连接被拒。改成 `--host ${RTM_HOST}`（见 `storage.py` 的自检同批修订）。
+  ② **`smoke.sh` 写死按 127.0.0.1 探 8091**：改绑网桥网关后服务完全正常却报 `SMOKE FAILED`。改为从同一份 EnvironmentFile 读 `RTM_HOST`（ops 仓 `4d7c1d0`）。
+  ③ **`deploy.sh` 从不同步子包依赖**：`runtime-manager` / `app-proxy` 各有自己的 venv，F054 T084 给前者加的 `minio` 在 114 上缺失——SDK 是惰性 import，于是服务照起、healthz 200、smoke 过，只有真存附件时答 503。新增 3.5/6 步（ops 仓 `32a50ee`），并把 `bisheng-egress-proxy` 按「装了才重启」加进 `SERVICES`。
 
 - [x] **T073**: `[MVP-核心]` nginx `location /apps/`（仓内两份同构）
   **文件**: `docker/nginx/conf.d/default.conf`（compose 挂载，权威）, `src/frontend/nginx.conf`（镜像内置同构副本）
@@ -605,12 +609,19 @@
   **仍缺（为什么不勾）**: **没有任何人真的用 compose 起过这两个 service**。静态校验只能保证配置写对了，证明不了 3 中「容器内往 `/app-data` 写文件后能在宿主 `$BISHENG_APP_DATA_ROOT` 下看到」。最小验证步骤已写进 `bash docker/verify-app-runtime-compose.sh --howto`（只 build 这两个小镜像 → `up -d --no-deps runtime-manager app-proxy`，`--no-deps` 是关键，否则 `depends_on` 会把 backend + mysql/redis/openfga 全拖起来）。另：默认数据根由 `${DOCKER_VOLUME_DIRECTORY:-.}/data/app-runtime` 改为 `${BISHENG_APP_DATA_ROOT:-/opt/bisheng/app-data}`（环境变量必须是绝对路径，而 `DOCKER_VOLUME_DIRECTORY` 默认是相对的 `.`）；compose 形态下这层从没跑起来过，不存在待迁移的存量数据。
   **依赖**: T072, T073
 
-- [ ] **T075**: `[MVP-核心]` 114 部署与手动验证（剧本步 4–8）
+- [x] **T075**: `[MVP-核心]` 114 部署与手动验证（剧本步 4–8）
   **文件**: `features/v3.0.0/054-app-domain-runtime/tasks.md`（本文「114 部署记录」节追加结果）
   **逻辑**: 按 design §7「114 手动验证」执行。**顺序不可换**：`bash /opt/bisheng-ops/deploy.sh` 发代码 → **再**往 `config.yaml` 加 `app_runtime: enabled: true`（坑 23）→ 跑 T017 升级脚本 `plan` 再 `--apply` → **全进程重启**（API / celery×3 / beat / linsight worker，坑 4）→ 装两个 systemd 单元（T072）与 nginx location（T073，114 的两份在仓外）。验证 0–6 步：前置自检（`/api/v1/env.app_runtime_enabled=true`、两单元 active、`runtime-status` 的 `supported_runtimes=["python3.11"]` 与容量快照）· 上线后 `docker inspect` 核对 CPU / 内存 / `ReadonlyRootfs=true` / **无 `Ports`** · ⚙️「管理权限」能搜到主体（验坑 2）· **用非管理员 + 中文姓名账号**访问 `/apps/{slug}`（admin 短路 ReBAC，坑 26；中文姓名验坑 9）· 无痕访问 `?a=1#b` 登录后回到原地址（验坑 11）· 伪造头 `curl -H "X_BiSheng_User_Id: 1"` 应用仍读到真实访问者 · `docker kill` ≤5 分钟自愈 · `systemctl restart bisheng-runtime-manager` 期间应用**零中断**。
   **测试降级**: 需 docker + 真实环境，无法自动化——114 手动验证，结果逐条记入本文「114 部署记录」。
   **覆盖 AC**: AC-13, AC-20, AC-22, AC-25, AC-26, AC-27, AC-31, AC-32, AC-33, AC-46, AC-47, AC-51, AC-55, AC-60, AC-63
   **依赖**: T017, T057, T061, T070, T071, T074
+  **114 验证记录（2026-09-16，分支 `3.0-vibe` @ `3cf0df62a`）**：
+  - **部署**：`deploy.sh` 绿（alembic 跑了本轮新增的 `f055_credential_hosted_app_subject`），9 个 unit active，`SMOKE OK`。
+  - **入口判定四支全部真机走通**（AC-29 / AC-31 / AC-12）：同租户非管理员无授权 → **403 / 16142**；授予 viewer 后同一人同一 URL → **200 真页面**；撤销后 → 回到 403；不存在的 slug → **404 / 16144**；未登录 → **401 / 16141**；跨租户（`shuiwu`，租户 36）→ **404 而非 403**，与 AC-29 一致。授予/撤销都走平台自己的 `grants:mutate`，验证完即撤。
+  - **重新上线**（AC-26）：`POST /apps/{id}/actions/resume` → `phase=running`，新代次容器起来、旧代次 30s 后退休。
+  - **附件存储句柄**（AC-45）：在**应用容器内**用注入的 `BISHENG_APP_STORAGE_ENDPOINT` + `BISHENG_APP_STORAGE_TOKEN` 走完 PUT → GET → META → LIST → DELETE，全 200。
+  - **出站白名单双层**（AC-16）：容器内直连外网 → 被 `DOCKER-USER` 丢包（curl exit 28）；经注入的 `HTTP_PROXY` 访问白名单域名 → **200**；访问未声明域名 → **`Tunnel connection failed: 403 Forbidden`**；DNS 仍可解析（UDP 封禁没有误伤容器内嵌 DNS）。
+  - **未覆盖**：WebSocket 反代三不变量、「发布中 / 恢复中」过渡页（114 上没有长连接应用，也没有能观察到的发布窗口——`deploy` 是同步的，见 `contracts-runtime-manager.md` §9）。
 
 ### Wave 4 · `[MVP-114]` 纵切紧随项（design §8 优先级 1–3；**不得裁掉**）
 

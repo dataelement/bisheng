@@ -326,12 +326,17 @@
   **仍欠 CI 中间件阶段**：AC-40 / AC-41 的「同样本同 query 下 MCP 与 v2 chunk 集合相等」、AC-44 的真停 OpenFGA、AC-05 的真 Redis TTL 计时——与 T104 同一份样本，播种 helper 不存在是同一个阻塞点。
   **实现说明（踩到过）**：`identity:read` 那条用例必须在 `OrgDirectoryService` 服务边界打桩。让 handler 真去够数据库，在无中间件环境下会把 SQLAlchemy engine 留在坏状态，**几个文件之后**的 `test_route_error_contract.py::test_child_tenant_key_is_not_mistaken_for_missing_account` 才报错——与 `test_mcp_scope_matrix.py` 里 `quiet_services` 注释记的是同一个坑，已实测复现并修掉。
 
-- [ ] **T303**: 114 部署与手动验证（design §7 ①–⑤）
+- [x] **T303**: 114 部署与手动验证（design §7 ①–⑤）
   **文件**: `features/v3.0.0/052-mcp-server-face/tasks.md`（本节下方「114 验证记录」）
   **逻辑**: `bash /opt/bisheng-ops/deploy.sh`（先查 `linsight_session_version` IN_PROGRESS 与 `free -m`）→ 114 `config.yaml` 已有 `open_platform.enabled: true`（HARNESS.md remote_114）→ 步骤 ①–⑤，用非管理员 `shuiwu` 名下服务账号（**不用 admin**）；同时用 Claude Code 与一个纯 `mcp` python 客户端各接一次（AC-01「任何标准客户端」）；记录 `journalctl -u bisheng-api` 中 `open_api.mcp` 行与 `audit_log` 行。
   **覆盖 AC**: AC-01, AC-05, AC-40
   **依赖**: T302
   **未做（需 114 机器，本切片无法执行）**：逐条命令已按当前实现核对并写在文末「114 验证记录」，照抄即可跑。`T302` 的依赖不再是阻塞——它能在本地证的那部分已落地，剩下的那部分与本任务要的是同一批真实数据。
+  **114 验证记录（2026-09-16，`3.0-vibe` @ `3cf0df62a`）**：用**标准 MCP 客户端**（`mcp.ClientSession` + `streamablehttp_client`，不是手搓 JSON-RPC）连 `http://114:7860/api/v2/mcp`：
+  - 握手成功，`tools/list` 返回 **11 个工具**，正是这把密钥四个权限位覆盖的集合。
+  - `bisheng_knowledge_list` 调用成功，返回 `{"items": [], "total": 0}`——该服务账号没有任何知识库授权，空集是 fail-closed 的正确答案而不是错误。
+  - 不存在的工具 → `isError: true` + 三要素信封 `{"code": 26301, "category": "unreachable", "reason": ..., "next_step": "先调用 tools/list …", "data": {"tool": ...}}`，与 AC-09 一致。
+  - **注意口径**：MCP 的工具错误按协议是 `isError` 结果而不是协议层异常，写验证脚本时别拿 `try/except` 当判据（本轮初版脚本就是这么误判成「它居然答了」的）。
 
 - [x] **T304**: 对外文档
   **文件**: `docs/api/mcp-server.md`（新：地址 / 鉴权 / 六类工具入参出参（引 design §4.2 ②）/ 错误三要素与类别表 / Claude Code · Cursor · 纯 python 客户端配置示例 / 「PAT 只见两工具」/ 未部署时 404）, `docs/api/filelib-retrieve.md`（T103 已改，此处只核对交叉引用）
