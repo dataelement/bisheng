@@ -39,6 +39,39 @@ def bearer(monkeypatch):
 
 
 @pytest.fixture
+def pat_policy(monkeypatch):
+    """Answer the two database reads a natural-person credential triggers.
+
+    ``get_open_api_principal`` returns early for a service account, but a
+    personal token goes on to read its tenant's policy through
+    ``TenantSettingService.get_policy``, and ``open_api_execution_scope`` then
+    resolves the holder's administrator facts. Both are real round trips, and
+    both turn an outage into 26030 / 503 — so without stand-ins the MCP
+    handshake fails before ``tools/list`` is ever reached, which reads as "the
+    tool registry is broken" rather than "this test has no database".
+    """
+
+    def install(*, enabled=True, data_scope="all_visible", super_admin=False, tenant_admin=False):
+        from types import SimpleNamespace
+
+        async def get_policy(_tenant_id):
+            return SimpleNamespace(enabled=enabled, data_scope=data_scope)
+
+        async def check_is_global_super(_user_id):
+            return super_admin
+
+        async def check_is_tenant_admin(_user_id, _tenant_id):
+            return tenant_admin
+
+        monkeypatch.setattr("bisheng.open_api.api.dependencies.settings.open_api.pat_enabled", True)
+        monkeypatch.setattr("bisheng.open_api.api.dependencies.TenantSettingService.get_policy", get_policy)
+        monkeypatch.setattr("bisheng.utils.http_middleware._check_is_global_super", check_is_global_super)
+        monkeypatch.setattr("bisheng.permission.application.relation_api.is_tenant_admin", check_is_tenant_admin)
+
+    return install
+
+
+@pytest.fixture
 def facade(monkeypatch):
     """Spy on the facade; its own behaviour is covered by ``test/knowledge``."""
 
@@ -197,9 +230,10 @@ async def test_both_tools_run_as_the_same_subject(bearer, mcp_session, facade):
     assert {(item.actor.subject_type, item.actor.subject_id) for item in identities} == {("service_account", 31)}
 
 
-async def test_a_personal_token_sees_the_two_knowledge_tools_and_nothing_else(bearer, mcp_session, facade):
+async def test_a_personal_token_sees_the_two_knowledge_tools_and_nothing_else(bearer, mcp_session, facade, pat_policy):
     """伴生 §4.10.8: a personal access token's MCP surface is search plus list."""
 
+    pat_policy()
     bearer(principal(scopes=frozenset({"knowledge:read"}), actor_kind="natural_person"))
     async with mcp_session(auth("bs-pat-secret")) as session:
         listed = {tool.name for tool in (await session.list_tools()).tools}
