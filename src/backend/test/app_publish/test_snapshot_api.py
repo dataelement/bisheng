@@ -454,3 +454,99 @@ async def test_mask_secrets_keeps_placeholders_and_counts():
     assert count == 1
     assert 'token = "your_token_goes_here_replace_me_now"' in masked
     assert f'secret = "{SECRET_MASK}"' in masked
+
+
+# ---------------------------------------------------------------------------
+# review context — the version history and the two diff sides
+# ---------------------------------------------------------------------------
+
+
+async def _add_version(publish_db, app, *, version_no: int, terminal_state: str | None = None):
+    from bisheng.database.models.app_version import VERSION_KIND_ITERATION, AppVersion, AppVersionDao
+
+    async with publish_db() as session:
+        row = AppVersion(
+            app_id=app.id,
+            version_no=version_no,
+            kind=VERSION_KIND_ITERATION,
+            terminal_state=terminal_state,
+            code_object_key=f"apps/{app.id}/versions/v{version_no}/code.tar.gz",
+            manifest={"name": app.name, "runtime": "python3.11", "port": 8080},
+            capabilities={},
+            injections={},
+            tier_id="light",
+            runtime="python3.11",
+        )
+        await AppVersionDao.ainsert(session, row)
+        await session.commit()
+        return row
+
+
+async def _set_pending(publish_db, app, version_id: str) -> None:
+    from bisheng.database.models.app import App
+
+    async with publish_db() as session:
+        row = await session.get(App, app.id)
+        row.pending_version_id = version_id
+        session.add(row)
+        await session.commit()
+
+
+async def test_review_context_returns_history_newest_first_and_both_diff_sides(
+    publish_db, api_app, stored_app, owner_user
+):
+    """The review view's version-history tab, and the base id its diff tab needs, in one read."""
+    app, current = await stored_app()
+    pending = await _add_version(publish_db, app, version_no=2)
+    await _set_pending(publish_db, app, pending.id)
+
+    async with api_app(payload=owner_user.payload) as client:
+        data = _body(await client.get(f"/api/v1/apps/{app.id}/versions/{pending.id}/review-context"))["data"]
+
+    assert set(data) == {"version", "role", "current_version_id", "pending_version_id", "versions"}
+    assert data["role"] == "owner"
+    assert data["version"]["version_id"] == pending.id
+    assert data["current_version_id"] == current.id
+    assert data["pending_version_id"] == pending.id
+    assert [row["version_no"] for row in data["versions"]] == [2, 1]
+    by_id = {row["version_id"]: row for row in data["versions"]}
+    assert by_id[current.id]["is_current"] is True and by_id[current.id]["is_pending"] is False
+    assert by_id[pending.id]["is_pending"] is True and by_id[pending.id]["is_current"] is False
+
+
+async def test_review_context_admits_the_approver_of_that_version(publish_db, api_app, stored_app):
+    """The whole reason this read exists: publish-status and F054's version list both shut an approver out."""
+    app, version = await stored_app()
+    await _seed_task(publish_db, app=app, version_id=version.id, approver_user_id=APPROVER_USER_ID)
+
+    async with api_app(payload=_payload(APPROVER_USER_ID)) as client:
+        allowed = _body(await client.get(f"/api/v1/apps/{app.id}/versions/{version.id}/review-context"))
+    async with api_app(payload=_payload(OTHER_APPROVER_USER_ID)) as client:
+        refused = _body(await client.get(f"/api/v1/apps/{app.id}/versions/{version.id}/review-context"))
+
+    assert allowed["status_code"] == 200 and allowed["data"]["role"] == "approver"
+    assert refused["status_code"] == 16257
+
+
+async def test_review_context_does_not_read_the_snapshot(publish_db, api_app, app_factory, fake_minio, owner_user):
+    """A swept snapshot still answers: the history is metadata, and 16256 here would blank a working tab."""
+    app, version = await app_factory(with_version=True)  # code_object_key points at nothing
+
+    async with api_app(payload=owner_user.payload) as client:
+        response = await client.get(f"/api/v1/apps/{app.id}/versions/{version.id}/review-context")
+
+    assert response.json()["status_code"] == 200
+    assert response.json()["data"]["versions"][0]["version_id"] == version.id
+
+
+async def test_review_context_missing_app_and_version_use_the_face_wide_codes(
+    publish_db, api_app, stored_app, owner_user
+):
+    app, _version = await stored_app()
+
+    async with api_app(payload=owner_user.payload) as client:
+        no_app = await client.get("/api/v1/apps/no-such-app/versions/v/review-context")
+        no_version = await client.get(f"/api/v1/apps/{app.id}/versions/no-such-version/review-context")
+
+    assert no_app.json()["status_code"] == 16257
+    assert no_version.json()["status_code"] == 16253

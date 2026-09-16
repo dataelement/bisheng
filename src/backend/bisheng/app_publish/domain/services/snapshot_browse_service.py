@@ -1,6 +1,7 @@
 """Read-only browsing of one version's frozen package — the review view's data (AC-25 / T052).
 
-Two reads, one access rule, and three things that are easy to get wrong:
+Three reads (tree, one file, and the surrounding review context), one access
+rule, and three things that are easy to get wrong:
 
 * **Who may look.** The owner, the app's tenant administrator and a platform
   super admin (the same set ``publish-status`` admits), **plus an approver who
@@ -150,6 +151,39 @@ class _Member:
 
 class SnapshotBrowseService:
     """Tree listing and single-file read over a version's snapshot. Never writes."""
+
+    @classmethod
+    async def review_context(cls, app_id: str, version_id: str, *, actor) -> dict[str, Any]:
+        """What the review view needs *around* the source: the version history and the two diff sides.
+
+        An approver cannot get this anywhere else. ``publish-status`` and
+        F054's ``GET /apps/{app_id}/versions`` both admit owner / tenant admin
+        / super admin only, so the approver opening a review view would have
+        an empty 版本历史 tab and no way to learn which version the pending one
+        should be diffed against (AC-25 / AC-41). This read hangs off the same
+        :class:`ReviewAccess` rule as the tree and the file, and answers with
+        the same ``role`` — one access rule for the whole face.
+
+        Read-only and free of the snapshot: no object storage is touched.
+        """
+        app = await ReviewAccess.load_app(app_id)
+        role = await ReviewAccess.require(app, actor, (version_id,))
+        version = await cls.load_version(app.id, version_id)
+        rows = await VersionService.list_versions(app.id)
+        return {
+            "version": cls.version_payload(version),
+            "role": role,
+            "current_version_id": app.current_version_id,
+            "pending_version_id": app.pending_version_id,
+            "versions": [
+                {
+                    **cls.version_payload(row),
+                    "is_current": row.id == app.current_version_id,
+                    "is_pending": row.id == app.pending_version_id,
+                }
+                for row in rows
+            ],
+        }
 
     @classmethod
     async def list_tree(cls, app_id: str, version_id: str, *, actor) -> dict[str, Any]:
