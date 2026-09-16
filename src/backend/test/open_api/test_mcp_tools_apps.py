@@ -257,8 +257,35 @@ def test_the_tools_never_reach_the_orchestrator_directly():
 
 
 def test_personal_tokens_cannot_hold_the_scope_these_tools_need():
-    """The first lock. ``resource_owner_of`` raising 16205 is the second."""
+    """The first lock: a personal token is issued with exactly one scope, and it is not this one.
 
-    from bisheng.open_api.domain.scopes import OPEN_API_SCOPE_MAP
+    ``requires_open_platform`` would not prove it — that flag is about whether
+    the deployment carries the layer at all, not about who may hold the scope.
+    """
 
-    assert OPEN_API_SCOPE_MAP["app:manage"].requires_open_platform is True
+    from bisheng.open_api.domain.services.personal_token_service import PERSONAL_TOKEN_SCOPE
+
+    assert PERSONAL_TOKEN_SCOPE == "knowledge:read"
+    assert PERSONAL_TOKEN_SCOPE != "app:manage"
+
+
+async def test_a_key_with_no_resource_owner_gets_the_same_one_answer(bearer, mcp_session, services):
+    """The second lock, and it must not answer in a different shape than the first.
+
+    ``resource_owner_of`` raises 16205 before any service is reached. That is
+    still "no application you can reach": folding it here keeps the payload a
+    bare ``app_id`` instead of leaking the error's own ``details`` / ``hints``.
+    """
+
+    import json
+
+    ownerless = principal(scopes=frozenset({"app:manage"})).model_copy(update={"resource_owner_user_id": None})
+    bearer(ownerless)
+    async with mcp_session(auth()) as session:
+        status = error_payload(await session.call_tool("bisheng_app_status", {"app_id": APP_ID}))
+        logs = error_payload(await session.call_tool("bisheng_app_logs", {"app_id": APP_ID}))
+
+    assert status["code"] == 26305
+    assert status["data"] == {"app_id": APP_ID}
+    assert status == logs
+    assert "resource_owner_missing" not in json.dumps(status, ensure_ascii=False)

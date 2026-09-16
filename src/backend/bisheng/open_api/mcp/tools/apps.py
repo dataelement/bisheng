@@ -102,8 +102,12 @@ def _fold_not_yours(exc: Exception, app_id: str) -> Exception:
 async def bisheng_app_status(app_id: str) -> AppStatusResult:
     """Runtime state plus the latest release's approval outcome for one of your apps."""
 
-    actor = _actor()
     try:
+        # ``_actor()`` is inside the guard on purpose: a key with no resource
+        # owner raises 16205 from here, and that is one more spelling of "not an
+        # application you can reach" — left outside it would answer in a
+        # different shape than the other four (design D9).
+        actor = _actor()
         instance = await AppQueryService.get_instance(app_id, actor=actor, entry=LOG_ENTRY_MCP)
         publish = await PublishStatusService.get_publish_status(app_id, actor=actor, entry=LOG_ENTRY_MCP)
     except Exception as exc:
@@ -124,11 +128,10 @@ async def bisheng_app_logs(
 ) -> AppLogsResult:
     """Recent output of one of your applications — the app's own lines, never the platform's."""
 
-    actor = _actor()
     try:
         payload = await AppQueryService.get_logs(
             app_id,
-            actor=actor,
+            actor=_actor(),
             tail=min(int(tail or 200), MAX_LOG_TAIL),
             since=since,
             keyword=keyword,

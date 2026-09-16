@@ -18,7 +18,18 @@ OPEN_API_V2_PREFIX = "/api/v2"
 #: and its target. This middleware could only ever write ``POST /api/v2/mcp`` —
 #: true, and useless — so it steps aside rather than doubling every call with a
 #: row that says nothing.
-MCP_FACE_PREFIX = "/api/v2/mcp"
+MCP_FACE_PATH = "/api/v2/mcp"
+
+
+def _is_mcp_face(path: str) -> bool:
+    """Exactly that path (or something under it), never a neighbour that shares its spelling.
+
+    A bare ``startswith`` would also silence a future ``/api/v2/mcp-registry``
+    — and an endpoint that quietly writes no audit row is the kind of hole
+    nobody finds by looking at it.
+    """
+
+    return path == MCP_FACE_PATH or path.startswith(MCP_FACE_PATH + "/")
 
 
 class OpenApiAuditMiddleware:
@@ -30,7 +41,7 @@ class OpenApiAuditMiddleware:
         if (
             scope.get("type") not in {"http", "websocket"}
             or not path.startswith(OPEN_API_V2_PREFIX)
-            or path.startswith(MCP_FACE_PREFIX)
+            or _is_mcp_face(path)
         ):
             await self.app(scope, receive, send)
             return
@@ -156,4 +167,4 @@ class OpenApiAuditMiddleware:
         )
 
 
-__all__ = ["MCP_FACE_PREFIX", "OPEN_API_V2_PREFIX", "OpenApiAuditMiddleware"]
+__all__ = ["MCP_FACE_PATH", "OPEN_API_V2_PREFIX", "OpenApiAuditMiddleware"]

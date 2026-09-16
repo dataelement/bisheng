@@ -217,6 +217,42 @@ async def test_list_tools_is_filtered_by_scope(bearer, mcp_session, runtime_laye
     assert listed == {"bisheng_identity_get_user", "bisheng_org_tree", "bisheng_dept_members"}
 
 
+async def test_a_personal_token_holder_is_a_first_class_subject_on_this_face(bearer, mcp_session, monkeypatch):
+    """Mode S means "as itself", and a natural person is one of the two selves (design K4).
+
+    A personal token is issued with ``knowledge:read`` and nothing else, so the
+    identity and application families must be invisible to it — and the
+    administrator-fact lookup the execution scope runs for a natural person must
+    not turn the whole face into a 503 when it is stubbed out here.
+    """
+
+    from types import SimpleNamespace
+
+    from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
+
+    async def not_super(_user_id):
+        return False
+
+    async def not_tenant_admin(_user_id, _tenant_id):
+        return False
+
+    async def policy(_tenant_id):
+        return SimpleNamespace(enabled=True, data_scope=DATA_SCOPE_ALL)
+
+    monkeypatch.setattr("bisheng.utils.http_middleware._check_is_global_super", not_super)
+    monkeypatch.setattr("bisheng.permission.application.relation_api.is_tenant_admin", not_tenant_admin)
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.settings.open_api.pat_enabled", True)
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.TenantSettingService.get_policy", policy)
+    bearer(principal(scopes=frozenset({"knowledge:read"}), actor_kind="natural_person"))
+
+    async with mcp_session(auth("bs-pat-secret-value")) as session:
+        listed = tool_names(await session.list_tools())
+        refused = await session.call_tool("bisheng_org_tree", {})
+
+    assert listed <= {"bisheng_knowledge_search", "bisheng_knowledge_list"}
+    assert error_payload(refused)["code"] == 26302
+
+
 async def test_empty_scopes_still_handshakes_and_lists_nothing(bearer, mcp_session):
     """Connecting is not a capability — refusing the handshake would read as a broken key."""
 

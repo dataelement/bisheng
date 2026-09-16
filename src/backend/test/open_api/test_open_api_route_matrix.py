@@ -80,6 +80,38 @@ def test_mcp_route_is_gated_or_absent():
     assert isinstance(non_api_routes[0].endpoint, McpAccessGate)
 
 
+def test_the_mcp_route_is_registered_exactly_when_the_open_capability_layer_is_on(monkeypatch):
+    """Both halves of the switch, whatever this checkout's config happens to say.
+
+    ``test_mcp_route_is_gated_or_absent`` above reads the app built at import
+    time, so on a tree whose ``config.yaml`` leaves the layer off it only ever
+    exercises "absent" — and the registration in ``create_app`` would be
+    untested (AC-01 / AC-37). This builds the app both ways instead.
+    """
+
+    from bisheng.common.services.config_service import settings
+    from bisheng.main import create_app
+    from bisheng.open_api.mcp.gate import McpAccessGate
+    from bisheng.open_api.mcp.server import MCP_ROUTE_PATH
+
+    monkeypatch.setattr(settings.open_platform, "enabled", True)
+    enabled = create_app()
+    mounted = [route for route in enabled.routes if getattr(route, "path", None) == MCP_ROUTE_PATH]
+    assert len(mounted) == 1
+    route = mounted[0]
+    # Not an APIRoute: it carries no ``@open_api_scope`` marker, so it must not
+    # be governed by ``router_rpc``'s dependency, and it must stay out of the
+    # published OpenAPI document the v2 contract test compares against.
+    assert not isinstance(route, (APIRoute, APIWebSocketRoute))
+    assert isinstance(route.endpoint, McpAccessGate)
+    assert {"GET", "POST", "DELETE"} <= set(route.methods)
+    assert MCP_ROUTE_PATH not in enabled.openapi().get("paths", {})
+
+    monkeypatch.setattr(settings.open_platform, "enabled", False)
+    disabled = create_app()
+    assert [route for route in disabled.routes if getattr(route, "path", None) == MCP_ROUTE_PATH] == []
+
+
 def test_route_registry_matches_complete_key_authenticated_surface():
     registered = {endpoint for scope in OPEN_API_SCOPES for endpoint in scope.endpoints}
     actual = actual_v2_routes()

@@ -85,7 +85,7 @@ async with streamable_http_client(url, headers=headers) as (read, write, _):
 | `bisheng_dept_members` | `dept_id` · `page=1` · `size=50`（≤200）· `keyword?` | `{members:[{user_id, user_name, status}], total}` |
 | `bisheng_app_status` | `app_id` | `{app_id, app_state, instance{…}, publish{…含审批终态与驳回理由全文}}` |
 | `bisheng_app_logs` | `app_id` · `tail=200`（≤2000）· `since?` · `keyword?` | `{lines, app_state, pending_reason}` |
-| `bisheng_app_db_*` | `app_id` · `table` · `page`/`size`/`order` · `key` · `values` | 数据面服务返回体原样透传 |
+| `bisheng_app_db_*` | `app_id` · `table` · `page`/`size`/`order` · `key` · `values` | `{result: …}`——数据面服务的返回体原样放在 `result` 下（本面不重新声明它的字段，那是应用数据面的契约） |
 
 几条容易踩的：
 

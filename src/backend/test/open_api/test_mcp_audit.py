@@ -146,12 +146,23 @@ async def test_the_target_summary_is_an_allowlist(bearer, mcp_session, rows, org
     assert set(TARGET_KEYS) == {"knowledge_ids", "app_id", "table", "dept_id", "user_id"}
 
 
-@pytest.mark.parametrize(("path", "expected"), [("/api/v2/mcp", 0), ("/api/v2/filelib/retrieve", 1)])
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("/api/v2/mcp", 0),
+        ("/api/v2/filelib/retrieve", 1),
+        # A neighbour that merely starts with the same characters is a normal
+        # v2 endpoint and must still be audited — a bare ``startswith`` would
+        # silence it, and an endpoint that writes no audit row is a hole nobody
+        # finds by reading the code.
+        ("/api/v2/mcp-registry", 1),
+    ],
+)
 async def test_the_generic_v2_middleware_steps_aside_only_for_this_path(rows, path, expected):
     """Otherwise every tool call costs two rows, one of which says nothing.
 
-    The second case guards the guard: short-circuiting by prefix must not
-    accidentally silence the rest of ``/api/v2``.
+    The other cases guard the guard: short-circuiting must not accidentally
+    silence the rest of ``/api/v2``.
     """
 
     from bisheng.open_api.api.middleware import OpenApiAuditMiddleware

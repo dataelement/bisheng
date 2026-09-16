@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 定稿（47 AC，独立审查 17 条已修订；决议 1–12）；2026-08-28 AC-03 术语订正 |
 | design.md | ✅ 已评审（全自动模式，★ 豁免） | 2026-09-16 初版 + 同日 `/sdd-review design` 独立审查就地修订（4 high / 6 medium / ~20 low，见 design 修订历史末行）；D1–D12 / 坑 1–23；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-09-16，`/sdd-review tasks` 已过） | 本文；三条线（共享基础 / 门面 / MCP 面）+ 合流波；审查订正见文末「审查修订记录」 |
-| 实现 | 🚧 Line B 已交付 | 22 / 34 完成（T205 为编号占位不计）。**Line B（MCP 面）全部落地**，含 T209（F054 `AppDataService` 本波次已合入 3.0-vibe，不再阻塞）；**T210 工具 ③ 已按契约实现但保持 `available()=False`**——F051 名称解析未在本分支出现。Line A（门面 T101–T105）与合流波 T302 / T303 归姊妹切片 / 114 环境。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 Line B 已交付（2026-09-16 已过独立评审，修订见下） | 22 / 34 完成（T205 为编号占位不计）。**Line B（MCP 面）全部落地**，含 T209（F054 `AppDataService` 本波次已合入 3.0-vibe，不再阻塞）。**两个工具族虽已按契约实现，但在本分支上恒为 `available()=False`、不进工具清单、其用例整份 skip**：③ 模型清单（T210，等 F051 名称解析）与 ①② 知识库检索 / 清单（T301，等 Line A 门面）——因此 **AC-10 / AC-12 / AC-13 在本分支上无证据**，勾选表示「实现与接线已完成」，不表示已验证。Line A（门面 T101–T105）与合流波 T302 / T303 归姊妹切片 / 114 环境。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -157,7 +157,8 @@
   **逻辑**: `test_no_credential_401_26001_and_no_tools`（`initialize` 即失败）→ AC-02；`test_invalid_revoked_expired_401_26002`（建号发钥仿 `test_credential_validator.py:18 seed_service_account` + `CredentialService` 签发；撤销后立即被拒；`fake_redis` 清键）→ AC-02, AC-05；`test_every_mapped_code_has_three_language_next_step`（`ERROR_CATEGORY_MAP` 键集 == `NEXT_STEP_COPY` 键集，且每项含 zh-Hans / en / ja 非空）→ AC-09；`test_accept_language_selects_next_step_default_zh`（`Accept-Language: en` → 英文；缺省 → 中文）→ AC-09；`test_query_param_token_rejected`（`?token=` / `?authorization=` 不认）→ AC-02；`test_delegate_key_403_26051_at_initialize_and_lists_nothing` → AC-28, AC-29；`test_identity_headers_403_26303`（参数化 `X-On-Behalf-Of` / `X-End-User` / `X-Foo-On-Behalf-Of` / `x-end-user`）→ AC-30；`test_delegate_key_never_falls_back_to_mode_s`（持 delegate + 无身份头 → 仍 26051，不是 26016）→ AC-29；`test_list_tools_filtered_by_scopes`（仅 `knowledge:read` → 恰两工具；PAT 主体同）→ AC-04；`test_empty_scopes_handshake_ok_tools_empty` → AC-04；`test_call_unlisted_tool_26302_names_scope`（仅 knowledge:read 调 `bisheng_org_tree` → `isError`、JSON `code=26302,data.required="identity:read"`，非「未知工具」）→ AC-04, AC-09；`test_unknown_tool_26301` → AC-09；`test_scope_edit_effective_next_call`（编辑权限位 → `invalidate_cache` → 下一次 `tools/list` 即新集合，同一客户端不重连）→ AC-06；`test_app_tools_hidden_when_runtime_disabled_and_direct_call_16207` → AC-17, AC-38；`test_route_absent_when_open_platform_disabled_404` → AC-37；`test_dns_rebinding_protection_disabled_real_host_accepted`（`Host: 192.168.106.114:4101`）→ 坑 1；**`test_bare_path_is_not_redirected`**（`POST /api/v2/mcp` 直接 200/JSON-RPC，**不得**是 307；用 `follow_redirects=False` 的裸 httpx 请求断言，这是 D1 用 `Route` 不用 `Mount` 的唯一可测证据，坑 12 的同源问题）→ AC-01；**`test_tool_error_text_is_parseable_json`**（任取一个被拒的工具调用，把 `content[0].text` 真的 `json.loads()` 一遍并断言含 `code/category/reason/next_step` 四键——只断言 `isError=True` 会漏掉 `Tool.run` 的前缀重包，坑 19）→ AC-09；**`test_successful_call_has_structured_content_and_no_output_validation_error`**（每个已注册工具各一次成功调用：`structuredContent` 非空、文本里不含 `Output validation error`，坑 20）→ AC-10, AC-12；`test_no_key_material_in_any_response`（所有响应体 / 错误体不含 `bs-sak-` / `bs-pat-`）→ AC-47；`test_no_session_or_message_dao_touched`（monkeypatch `MessageSessionDao` / `ChatMessageDao` 任一方法为 `raise`，全流程不触发）→ AC-08；`test_tenant_contextvar_installed_for_handler`（handler 内 `get_current_tenant_id()==密钥租户`、`visible=={1,tenant}`）→ AC-03。
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-08, AC-09, AC-10, AC-12, AC-17, AC-28, AC-29, AC-30, AC-37, AC-38, AC-47
   **依赖**: T201, T202
-  **证据**: 1b359102a + 后续 — `test/open_api/test_mcp_server.py` 29 条，全部经真 `ClientSession`；`conftest.py` 加 `mcp_http` / `mcp_session` 两个**同步工厂**夹具。
+  **证据**: 1b359102a + 后续 — `test/open_api/test_mcp_server.py` 30 条，全部经真 `ClientSession`；`conftest.py` 加 `mcp_http` / `mcp_session` 两个**同步工厂**夹具。
+  **评审修订（2026-09-16）**: 补 `test_a_personal_token_holder_is_a_first_class_subject_on_this_face`。design K4 把自然人（PAT）与服务账号并列为模式 S 的两类主体，本任务原文也写了「PAT 主体同」，但全部用例用的都是 `actor_kind="service_account"` 的 principal——自然人那条路（`admit_open_api_principal` 读租户 PAT 策略 → `open_api_execution_scope` 解析管理员事实）在本面上一次都没跑过。新用例桩掉这三处远程读，断言 PAT 主体能握手、清单里绝不出现身份 / 应用两族、直调 `bisheng_org_tree` 得 26302。**AC-05「撤销 5 秒内生效」本地仍无用例**：全部用例都桩掉 `validate_bearer`；它成立的依据是 `test_scope_edit_takes_effect_on_the_next_call_without_reconnecting` 证明的「每次请求都重新过一遍 `validate_bearer`」＋该函数自身在 `test_credential_validator.py` 的既有覆盖，真正的端到端验收归 T302 / T303。
   **偏差（比 design D12 的写法关键）**: 夹具**不能**是 async generator fixture——`session_manager.run()` 开的是 anyio 任务组，任务组必须在开它的那个 task 里关闭，而 pytest-asyncio 在另一个 task 里做 teardown，直接报 `Attempted to exit cancel scope in a different task`。改成返回 async CM、由测试体自己 `async with`，两端就在同一个 task 里。每次调用新建一个 server 实例（`new_mcp_server()`），因为 `run()` 每实例只能进一次。
 
 - [x] **T203**: `McpAccessGate` + `BishengMcpServer` + `main.py` 路由注册 / lifespan + 中间件短路 + 路由矩阵测试适配
@@ -167,6 +168,7 @@
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-08, AC-09, AC-10, AC-12, AC-17, AC-28, AC-29, AC-30, AC-37, AC-38, AC-47
   **依赖**: T203a
   **证据**: 1b359102a — `open_api/mcp/{gate,server}.py` + `main.py` 条件 `Route` 与 lifespan + `middleware.py` 前缀短路 + `test_open_api_route_matrix.py` 只改那一个断言的遍历方式。
+  **评审修订（2026-09-16）**: `test_open_api_route_matrix.py` 补 `test_the_mcp_route_is_registered_exactly_when_the_open_capability_layer_is_on`——本地 `config.yaml` 的 `open_platform.enabled` 为 false，`test_mcp_route_is_gated_or_absent` 读的是 import 期就建好的 `bisheng.main.app`，于是它**永远只走「不存在」那一支**，`create_app()` 里那段条件注册（AC-01 的正面、AC-37 的反面）实际零覆盖。新用例把两种开关各建一次 app，并断言：恰好一条 `/api/v2/mcp`、不是 `APIRoute`、endpoint 是 `McpAccessGate`、`GET/POST/DELETE` 齐全、不进 `app.openapi()`。
   **偏差 / 补强**: ① 路由矩阵除了加 isinstance 过滤，另加 `test_mcp_route_is_gated_or_absent`——只加过滤等于给「以后任何人往 app 上挂一条无鉴权 Starlette 路由」开了永久豁免；新用例断言`/api/v2` 下的非 APIRoute 恰好只有 MCP 那条且 endpoint 是 `McpAccessGate`。② 闸内用 `AsyncExitStack` 显式进 execution scope，区分「装配执行身份失败」（回 v2 信封）与「传输层自己出错」（交给 MCP 层，响应多半已开始，再发一个就是协议错误）。③ `lifespan` 拆出 `_platform_lifespan`，让 session manager 的 `run()` 包在最外层且只在开关开时进。
 
 - [x] **T204a**: MCP 审计测试
@@ -183,6 +185,7 @@
   **覆盖 AC**: AC-07, AC-47
   **依赖**: T204a
   **证据**: 1b359102a — `open_api/mcp/audit.py`；三处 lockstep（`audit_log.py` / `platform/controllers/API/log.ts` / 三语 `bs.json` 的 `openApiMcpToolCall`）。`platform` vitest `logActions.test.ts` 6 passed；`pnpm check-i18n` OK。
+  **评审修订（2026-09-16）**: 中间件短路原写成 `path.startswith("/api/v2/mcp")`，会顺手把**任何以这串字符开头的兄弟路径**（将来的 `/api/v2/mcp-registry` 之类）一并静音——一个不写审计行的端点是看代码看不出来的洞。改为 `path == "/api/v2/mcp" or path.startswith("/api/v2/mcp/")`（`middleware._is_mcp_face`，常量随之更名 `MCP_FACE_PREFIX` → `MCP_FACE_PATH`），`test_mcp_audit.py` 的参数化补 `/api/v2/mcp-registry` → 仍记 1 行。
 
 - [x] **T205**: （编号占位）开关消费 + MCP 地址字段——已**合并进 T203（挂载）与 T206（地址）**，本条不执行、不计入完成数。
 
@@ -235,6 +238,7 @@
   **覆盖 AC**: AC-16, AC-17, AC-18, AC-34, AC-35, AC-36
   **依赖**: T208a
   **证据**: `publish_status_service.get_publish_status/_require_viewer` 与 `app_query_service.get_instance/_load_visible` 加 `entry`，缺省 `detail` 行为不变；`open_api/mcp/tools/apps.py` 工具 ⑥。
+  **评审修订（2026-09-16）**: ① `_actor()` 原来在 `try` **之外**调用，于是 `resource_owner_of` 对无归属人密钥抛的 **16205 不会被折成 26305**——直接落到 `to_tool_error`，答的是原码 + 该异常自己的 `details` / `hints`，与其它四种「不是你的应用」形状不一。`test_every_not_yours_reason_gives_one_identical_answer` 把 `AppNotOwnedBySubjectError` 注入成 `get_instance` 的返回，走的是 try 内那条路，所以看不出来。已把 `_actor()` 移进 `bisheng_app_status` / `bisheng_app_logs` 的 try，并补 `test_a_key_with_no_resource_owner_gets_the_same_one_answer`（status 与 logs 响应体逐字相等、`data` 只含 `app_id`、不含 `resource_owner_missing`）。② `test_personal_tokens_cannot_hold_the_scope_these_tools_need` 原断言 `requires_open_platform is True`，那是「这套层部署了没有」，证明不了「PAT 拿不到 `app:manage`」；改为断言真正的机关 `personal_token_service.PERSONAL_TOKEN_SCOPE == "knowledge:read"`。
   **偏差**: 「哪些入口算凭据门」抽成 `app_query_service.OWNER_ONLY_ENTRIES` 公共常量，由 app_publish 复用，不在两个模块各写一份 `{"cli", "mcp"}`。`_load_visible` 的凭据门两种失败都答`AppNotFoundError`（而不是拆成 16101 / 16161）——这个方法本来就这么说话，且工具层无论哪个码都折成同一个 26305。
 
 - [x] **T209**: 工具 ⑤ 应用数据（**阻塞于 F054 T086/T087 `AppDataService`**——HEAD `fe10f75ea` 树上不存在；本波次 data-plane 切片**已实现但尚未合并**，合流时以合并后的文件为准）
@@ -311,6 +315,7 @@
   **文件**: `docs/api/mcp-server.md`（新：地址 / 鉴权 / 六类工具入参出参（引 design §4.2 ②）/ 错误三要素与类别表 / Claude Code · Cursor · 纯 python 客户端配置示例 / 「PAT 只见两工具」/ 未部署时 404）, `docs/api/filelib-retrieve.md`（T103 已改，此处只核对交叉引用）
   **依赖**: T301
   **证据**: `docs/api/mcp-server.md`（地址 / 鉴权与身份边界 / 六类工具表与入出参 / 三要素错误与 category 表 / 传输层拒绝的真实状态 / 审计口径 / Claude Code 与纯 python 客户端示例）。
+  **评审修订（2026-09-16）**: 应用数据工具那一行原写「数据面服务返回体原样透传」，实际出参是 `{result: …}`（`AppDataResult` 信封）——照文档写客户端会取错一层。已改为写明信封。
 
 - [ ] **T305**: 契约回写与状态
   **文件**: `features/v3.0.0/release-contract.md`（表 3 F052 行状态；错误码表 263 行由 T001 已加，此处核对）, `features/v3.0.0/README.md`（F052 行状态）, `features/v3.0.0/054-app-domain-runtime/tasks.md`（「跨 Feature 回写受理」表登记 T209 的 insert / delete 请求）, `features/v3.0.0/051-model-protocol-gateway/spec.md` 不改（design 未写；在其 design 编写时引用本文 D10）
