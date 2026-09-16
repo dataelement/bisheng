@@ -127,15 +127,17 @@ def _document_ids(chunks: list[dict]) -> frozenset[int]:
     return frozenset(int(chunk["document_id"]) for chunk in chunks)
 
 
-async def _walk_space_files(client: httpx.AsyncClient, jwt: str, space_id: int) -> set[int]:
-    """Every file this person can browse in the space, folders included.
+async def _walk_space(client: httpx.AsyncClient, jwt: str, space_id: int) -> tuple[set[int], set[int]]:
+    """Every file and folder this person can browse in the space.
 
     Recursive rather than a root listing: two of the four permission sources
     live under folders, and a root-only walk would report them absent no matter
-    what the permission layer decided.
+    what the permission layer decided — the walk would then "agree" with a
+    retrieval that wrongly returned them.
     """
 
     found: set[int] = set()
+    folders: set[int] = set()
     pending: list[int | None] = [None]
     while pending:
         parent = pending.pop()
@@ -155,13 +157,14 @@ async def _walk_space_files(client: httpx.AsyncClient, jwt: str, space_id: int) 
             )
             for row in page.get("data", []):
                 if int(row.get("file_type", 1)) == 0:
+                    folders.add(int(row["id"]))
                     pending.append(int(row["id"]))
                 else:
                     found.add(int(row["id"]))
             if not page.get("has_more"):
                 break
             cursor = page.get("next_cursor")
-    return found
+    return found, folders
 
 
 # ---------------------------------------------------------------------------
@@ -189,11 +192,27 @@ async def sample(client: httpx.AsyncClient, admin_token: str):
         _required_env("F052_E2E_USER_NAME"),
         _required_env("F052_E2E_USER_PASSWORD"),
     )
+    user_id = int(_required_env("F052_E2E_USER_ID"))
+
+    # Two ways this suite silently proves nothing, both caught here rather than
+    # at an assertion: the configured person is an administrator (allowed every
+    # action before the action is validated, so every set comes back complete),
+    # or the id and the credentials name different people (the grants then land
+    # on somebody who never calls).
+    whoami = assert_resp_200(await client.get(f"{API_BASE}/user/info", headers=auth_headers(user_token)))
+    assert whoami.get("role") != "admin", (
+        f"F052_E2E_USER_NAME is a super administrator; this suite is only meaningful as an ordinary user "
+        f"(whoami={whoami.get('user_name')})"
+    )
+    assert int(whoami["user_id"]) == user_id, (
+        f"F052_E2E_USER_ID is {user_id} but F052_E2E_USER_NAME logs in as {whoami['user_id']}"
+    )
+
     async with seed_retrieval_sample(
         client,
         admin_token,
         owner_user_id=int(_required_env("F052_E2E_OWNER_USER_ID")),
-        natural_person_user_id=int(_required_env("F052_E2E_USER_ID")),
+        natural_person_user_id=user_id,
         natural_person_jwt=user_token,
     ) as seeded:
         yield seeded
@@ -314,12 +333,18 @@ async def test_a_personal_token_sees_exactly_what_the_platform_shows_that_person
         )
     )
     retrieved = _document_ids(personal["chunks"])
-    browsed = await _walk_space_files(client, sample.natural_person_jwt, sample.space_id)
+    browsed, folders = await _walk_space(client, sample.natural_person_jwt, sample.space_id)
 
     in_this_space = sample.space_file_ids
     assert retrieved == sample.reachable_file_ids & in_this_space
     assert browsed & in_this_space == retrieved
     assert not retrieved & sample.unreachable_file_ids
+
+    # The folder source, stated directly rather than inferred from f3's
+    # absence: a walk that could not see D2 either would produce the same file
+    # set for the wrong reason.
+    assert sample.detached_folder_id not in folders
+    assert sample.authorised_folder_id in folders
 
 
 # ---------------------------------------------------------------------------
@@ -335,13 +360,34 @@ async def test_a_revoked_key_stops_working_inside_the_revocation_bound(client: h
     configured cache TTL is clamped to the bound. Neither can show what the
     deployment's real Redis does with an entry already in flight, which is the
     only thing an administrator revoking a leaked key cares about.
+
+    A **second key on the same account** is issued and revoked here rather than
+    the sample's own: revoking the sample's key would make every other case in
+    this file depend on running before this one, which is exactly the kind of
+    order coupling that turns a ``-k`` run into a mystery.
     """
 
     from bisheng.app_publish.domain.services.app_credential_service import REVOCATION_BOUND_SECONDS
 
+    issued = assert_resp_200(
+        await client.post(
+            f"{API_BASE}/service-accounts/{sample.service_account_id}/keys",
+            json={"name": "e2e-f052-revocation", "scopes": ["knowledge:read"], "delegate_scopes": []},
+            headers=auth_headers(admin_token),
+        )
+    )
+    # It has to work before revocation, or "refused" proves nothing.
+    warmup = await v2_retrieve(
+        client,
+        issued["plaintext"],
+        query=sample.query,
+        knowledge_ids=(sample.space_id,),
+    )
+    assert_resp_200(warmup)
+
     assert_resp_200(
         await client.post(
-            f"{API_BASE}/service-accounts/{sample.service_account_id}/keys/{sample.service_account_key_id}/revoke",
+            f"{API_BASE}/service-accounts/{sample.service_account_id}/keys/{issued['id']}/revoke",
             headers=auth_headers(admin_token),
         )
     )
@@ -352,7 +398,7 @@ async def test_a_revoked_key_stops_working_inside_the_revocation_bound(client: h
     while time.monotonic() < deadline:
         response = await v2_retrieve(
             client,
-            sample.service_account_key,
+            issued["plaintext"],
             query=sample.query,
             knowledge_ids=(sample.space_id,),
         )

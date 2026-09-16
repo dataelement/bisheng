@@ -105,11 +105,14 @@ class RetrievalSample:
     space_id: int
     ungranted_space_id: int
     library_id: int
-    folder_ids: tuple[int, ...]
+    #: D1 — switched to CUSTOM, so nothing under it inherits the space grant.
+    detached_folder_id: int
+    #: D2 — left on INHERIT, so the authorised path reaches it and stops at the
+    #: file inside, which detached on its own.
+    authorised_folder_id: int
     files: tuple[SeededFile, ...]
     service_account_id: int
     service_account_key: str
-    service_account_key_id: str
     natural_person_user_id: int
     natural_person_token: str
     natural_person_jwt: str
@@ -129,10 +132,6 @@ class RetrievalSample:
     @property
     def space_file_ids(self) -> frozenset[int]:
         return frozenset(one.file_id for one in self.files if one.container == "knowledge_space")
-
-    @property
-    def library_file_ids(self) -> frozenset[int]:
-        return frozenset(one.file_id for one in self.files if one.container == "knowledge_library")
 
     def describe(self, file_id: int) -> str:
         for one in self.files:
@@ -560,7 +559,8 @@ async def seed_retrieval_sample(
         space_id=space_id,
         ungranted_space_id=ungranted_id,
         library_id=library_id,
-        folder_ids=(d1_id, d2_id),
+        detached_folder_id=d1_id,
+        authorised_folder_id=d2_id,
         files=(
             SeededFile(f1, f"f1-{nonce}", True, "inherits the space grant", "knowledge_space"),
             SeededFile(
@@ -576,7 +576,6 @@ async def seed_retrieval_sample(
         ),
         service_account_id=account_id,
         service_account_key=key["plaintext"],
-        service_account_key_id=str(key["id"]),
         natural_person_user_id=natural_person_user_id,
         natural_person_token=personal_token["plaintext"],
         natural_person_jwt=natural_person_jwt,
