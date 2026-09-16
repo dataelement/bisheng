@@ -1658,6 +1658,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         result.follower_num = follower_num
         result.file_num = total_file_num
+        # 909 only. The download button here is offered to everyone and the server
+        # decides, because deciding per file costs 43-124ms a page for a permission
+        # nearly everyone holds. That trade stops making sense once the action is
+        # switched off in the Catalog: then nobody can download, and the button is
+        # an invitation to a guaranteed refusal. One Catalog read answers it for the
+        # whole page, so the affordance can hide without paying the per-file cost.
+        # Only for a caller who holds the space, for the same reason `actions` is:
+        # the square preview answers without the permission runtime on purpose and
+        # must not be made to depend on one. A previewer cannot download anyway.
+        if has_content_permission:
+            runtime = await get_f048_runtime()
+            result.download_action_enabled = "download" in await runtime.effective_actions("knowledge_file")
         # The share link has to tell "already has access" from "may only preview
         # and apply", and `user_role` cannot: it is absent for a non-member, and
         # the client maps an absent role to MEMBER — the same value a real member

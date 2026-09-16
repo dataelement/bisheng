@@ -149,6 +149,8 @@ export interface KnowledgeSpace {
     departmentId?: number;
     departmentName?: string;
     approvalEnabled?: boolean;
+    /** 909 only: the Catalog still has the download action switched on. */
+    downloadActionEnabled?: boolean;
     sensitiveCheckEnabled?: boolean;
     actions?: string[];
     initialPermissionResult?: InitialPermissionResult;
@@ -242,6 +244,8 @@ export interface KnowledgeFile {
 
 interface RawKnowledgeSpace {
     id: number;
+    /** 909 only: absent before the Catalog download switch was reported. */
+    download_action_enabled?: boolean;
     name: string;
     description?: string;
     icon?: string;
@@ -614,6 +618,9 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
             (raw as any).sensitive_check_enabled !== undefined
                 ? Boolean((raw as any).sensitive_check_enabled)
                 : undefined,
+        // 909 only: absent on older backends, and "download is on" is the safe
+        // default there because that is how this line behaved before the flag.
+        downloadActionEnabled: raw.download_action_enabled !== false,
         actions: Array.isArray(raw.actions) ? raw.actions : [],
     };
 }

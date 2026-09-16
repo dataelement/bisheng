@@ -94,6 +94,15 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
         description="Effective F048 actions the current identity holds on this space",
     )
     avatar: str | None = Field(default=None, description="Knowledge Space creator avatar")
+    download_action_enabled: bool = Field(
+        default=True,
+        description=(
+            "909 only: whether the Catalog still has the download action switched on. "
+            "This line offers the download button unconditionally because a per-file "
+            "permission decision costs 43-124ms a page, so the button needs one coarse "
+            "signal to hide behind when nobody can download at all."
+        ),
+    )
     follower_num: int = Field(1, description="Follower Number")
     file_num: int = Field(1, description="Total File Number")
     is_followed: bool = Field(default=False, description="Knowledge Space followed by current user or not")

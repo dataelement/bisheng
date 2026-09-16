@@ -474,8 +474,14 @@ export function KnowledgeSpaceContent({
      *  for a permission nearly everyone holds.
      *
      *  So the affordance is unconditional and a denial arrives as a toast from
-     *  the download call itself, which checks the same permission anyway. */
-    const OFFER_DOWNLOAD_TO_EVERYONE = true;
+     *  the download call itself, which checks the same permission anyway.
+     *
+     *  The one thing that trade cannot absorb is the action being switched off
+     *  in the Permission Catalog: then nobody can download, and offering the
+     *  button promises something that will always be refused. That is a single
+     *  Catalog fact, not a per-file decision, so the server reports it once with
+     *  the space and the button hides without paying the per-page cost. */
+    const offerDownload = space.downloadActionEnabled !== false;
     const permissionEntryProbeKey = displayFiles
         .filter((file) => !file.pendingUploadApproval && !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
@@ -1357,7 +1363,7 @@ export function KnowledgeSpaceContent({
     const canBatchDelete = reviewedSelectedList.length > 0 && reviewedSelectedList.every((file) =>
         deleteEntryIds.has(file.id) && !getFileChangeLockState(file).locked
     );
-    const canBatchDownload = reviewedSelectedList.length > 0 && OFFER_DOWNLOAD_TO_EVERYONE;
+    const canBatchDownload = reviewedSelectedList.length > 0 && offerDownload;
     // "处理相似文档" uses union semantics (like batch retry's hasFailedFiles): the entry
     // appears whenever ANY selected file is a pending similar document. The dialog is then
     // scoped to exactly the selected files (see handleProcessSimilar).
@@ -1823,7 +1829,7 @@ export function KnowledgeSpaceContent({
                                             canManageMembers={canManageMembers}
                                             canRename={renameEntryIds.has(file.id)}
                                             canDelete={deleteEntryIds.has(file.id)}
-                                            canDownload={OFFER_DOWNLOAD_TO_EVERYONE}
+                                            canDownload={offerDownload}
                                             mobileListMode={isH5}
                                             highlightedTagIds={searchTagIds}
                                             highlightKeyword={searchQuery}
