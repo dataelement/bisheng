@@ -2703,6 +2703,14 @@
       "empty": "暂无版本记录",
       "loadFailed": "版本记录加载失败"
     },
+    "versionDiff": {
+      "title": "版本差异",
+      "base": "对比基准",
+      "target": "对比对象",
+      "needTwoVersions": "只有一个版本，暂时没有可以比较的内容。",
+      "pickTwoDifferent": "请选择两个不同的版本。",
+      "loadFailed": "版本差异加载失败"
+    },
     "data": {
       "loading": "正在读取…",
       "forbidden": "你没有访问该应用数据的权限，仅应用所有者可查看。",

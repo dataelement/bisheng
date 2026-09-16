@@ -27,6 +27,7 @@ import { useHostedApp } from "./hooks/useHostedApp"
 import { usePublishStatus } from "./hooks/usePublishStatus"
 import { ApprovalStatusCard } from "./publish/ApprovalStatusCard"
 import { DangerZoneCard } from "./publish/DangerZoneCard"
+import { VersionDiff } from "./publish/VersionDiff"
 import { VersionListCard } from "./publish/VersionListCard"
 import { VisibilityScopeSection } from "./publish/VisibilityScopeSection"
 import { DataTab } from "./tabs/DataTab"
@@ -161,7 +162,15 @@ export function HostedAppDetail() {
           <LogsTab appId={app.app_id} />
         </TabsContent>
         <TabsContent value="versions" className="min-h-0 flex-1 overflow-y-auto">
-          <VersionsTab appId={app.app_id} />
+          <VersionsTab
+            appId={app.app_id}
+            contentSlot={
+              <VersionDiff
+                appId={app.app_id}
+                reloadKey={`${app.state}|${app.current_version_id || ""}|${app.pending_version_id || ""}`}
+              />
+            }
+          />
         </TabsContent>
       </Tabs>
     </div>

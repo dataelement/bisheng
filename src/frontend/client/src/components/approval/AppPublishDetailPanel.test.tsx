@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ApprovalTaskDetail } from "~/api/approval";
 import { AppPublishDetailPanel, isAppPublishScenario } from "./AppPublishDetailPanel";
 import type { LocalizeFn } from "./approvalPresentation";
@@ -143,6 +143,53 @@ describe("AppPublishDetailPanel", () => {
     // Two breaking rows, one additive: the tag appears exactly twice.
     expect(screen.getAllByText("com_approval_app_publish_schema_breaking_tag")).toHaveLength(2);
     expect(screen.getByTestId("app-publish-schema-change").textContent).not.toContain("[object Object]");
+  });
+
+  it("offers the review-view entry only when there is a release to open and a handler to open it", () => {
+    const onOpenReview = jest.fn();
+
+    // No handler wired: the review view is not reachable, so no button.
+    const { unmount } = render(
+      <AppPublishDetailPanel detail={buildDetail()} scope="task" localize={localize} />,
+    );
+    expect(screen.queryByTestId("app-publish-open-review")).not.toBeInTheDocument();
+    unmount();
+
+    // Handler wired but the snapshot names no version: a dead button is worse
+    // than none, so it stays away.
+    const noVersion = buildDetail();
+    noVersion.detail_snapshot = { ...noVersion.detail_snapshot, version_id: "" };
+    const second = render(
+      <AppPublishDetailPanel
+        detail={noVersion}
+        scope="task"
+        localize={localize}
+        onOpenReview={onOpenReview}
+      />,
+    );
+    expect(screen.queryByTestId("app-publish-open-review")).not.toBeInTheDocument();
+    second.unmount();
+
+    render(
+      <AppPublishDetailPanel
+        detail={buildDetail()}
+        scope="task"
+        localize={localize}
+        onOpenReview={onOpenReview}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("app-publish-open-review"));
+
+    // The card is the one place `detail_snapshot` is parsed; the review view is
+    // handed the result rather than parsing it a second time.
+    expect(onOpenReview).toHaveBeenCalledWith({
+      appId: "17",
+      versionId: "v-1",
+      appName: "form-survey",
+      versionNo: 3,
+      releaseKindText: "com_approval_app_publish_kind_initial",
+      capabilities: [],
+    });
   });
 
   it("falls back to placeholders when the tier is missing", () => {

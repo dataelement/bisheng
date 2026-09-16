@@ -424,6 +424,8 @@ export async function withdrawApprovalApi(
   )
 }
 
+// The version diff (T063 / T064) lives in `hostedAppReview.ts`, next door.
+
 // ---------------------------------------------------------------------------
 // F055 T065 — resource tier administration (system page, super admin only)
 // ---------------------------------------------------------------------------
@@ -514,6 +516,10 @@ export const HOSTED_APP_ERROR = {
   PUBLISH_VERSION_NOT_FOUND: 16253,
   PUBLISH_OWNER_ONLY: 16254,
   PUBLISH_STATE_CONFLICT: 16255,
+  // 16256–16258 — the review face (snapshot browsing and the version diff).
+  PUBLISH_SNAPSHOT_UNAVAILABLE: 16256,
+  PUBLISH_REVIEW_FORBIDDEN: 16257,
+  PUBLISH_SNAPSHOT_FILE_NOT_FOUND: 16258,
   // 1626x — resource tier administration (F055 T065).
   TIER_ADMIN_FORBIDDEN: 16260,
   TIER_NOT_FOUND: 16261,

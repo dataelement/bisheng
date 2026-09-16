@@ -1,5 +1,6 @@
 import type { ApprovalInstanceDetail, ApprovalTaskDetail } from "~/api/approval";
 import { cn } from "~/utils";
+import type { AppReviewTarget } from "./AppReviewView";
 import {
   DetailHeader,
   formatSerialNo,
@@ -51,6 +52,13 @@ export interface AppPublishDetailPanelProps {
   scope: "task" | "instance";
   localize: LocalizeFn;
   onBack?: () => void;
+  /**
+   * Opens the review view on the version waiting to go live (AC-24's third
+   * operation, AC-25). Omitted — or called with a release whose snapshot the
+   * backend will not hand over — the button is simply not drawn: a dead
+   * 「查看待上线版本」 is worse than none.
+   */
+  onOpenReview?: (target: AppReviewTarget) => void;
 }
 
 function asText(value: unknown): string {
@@ -120,7 +128,13 @@ function SectionEmpty({ children }: { children: string }) {
  * response also carries and which holds internal fields (tenant_id, deployment_id…)
  * that must not reach an approver's screen.
  */
-export function AppPublishDetailPanel({ detail, scope, localize, onBack }: AppPublishDetailPanelProps) {
+export function AppPublishDetailPanel({
+  detail,
+  scope,
+  localize,
+  onBack,
+  onOpenReview,
+}: AppPublishDetailPanelProps) {
   const snapshot: Record<string, unknown> = detail.detail_snapshot ?? {};
   const instanceId = scope === "task" ? detail.instance_id ?? null : detail.instance_id ?? detail.id ?? null;
   const serialNo = instanceId ? formatSerialNo(instanceId, detail.create_time) : "--";
@@ -145,6 +159,8 @@ export function AppPublishDetailPanel({ detail, scope, localize, onBack }: AppPu
         : asText(snapshot.release_kind_text) || "--";
 
   const versionNo = asText(snapshot.version_no);
+  const reviewAppId = asText(snapshot.app_id);
+  const reviewVersionId = asText(snapshot.version_id);
 
   const basicRows: [string, string][] = [
     [localize("com_approval_field_serial_no"), serialNo],
@@ -211,6 +227,30 @@ export function AppPublishDetailPanel({ detail, scope, localize, onBack }: AppPu
       <div>
         <SectionTitle>{localize("com_approval_section_basic_info")}</SectionTitle>
         <InfoGrid rows={basicRows} />
+        {/* AC-24's third operation. It sits with the release's identity rather
+            than beside 通过 / 驳回: reading the code is what you do *before*
+            deciding, and a read-only view among two decisions invites a
+            misclick. Needs a version id — without one there is nothing to
+            open, so the button does not appear at all. */}
+        {onOpenReview && reviewAppId && reviewVersionId && (
+          <button
+            type="button"
+            data-testid="app-publish-open-review"
+            className="mt-2 inline-flex h-8 items-center rounded-md border border-blue-500 px-3 text-[13px] text-blue-500 hover:bg-blue-500/[0.06]"
+            onClick={() =>
+              onOpenReview({
+                appId: reviewAppId,
+                versionId: reviewVersionId,
+                appName,
+                versionNo: versionNo ? Number(versionNo) : null,
+                releaseKindText,
+                capabilities,
+              })
+            }
+          >
+            {localize("com_approval_review_open")}
+          </button>
+        )}
         {approverNoteText && (
           <div className="mt-2 rounded-lg bg-[#fff7e8] px-3 py-2 text-[12px] text-[#ff7d00] break-all">
             {approverNoteText}

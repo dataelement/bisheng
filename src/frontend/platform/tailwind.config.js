@@ -11,6 +11,10 @@ module.exports = {
     "components/**/*.{ts,tsx}",
     "./index.html",
     "./src/**/*.{js,ts,tsx,jsx}",
+    // packages/file-viewers is source-shipped and consumed by both apps: its
+    // classes must be scanned here too, or a shared component renders unstyled
+    // except for the utilities this app happens to use elsewhere.
+    "../packages/file-viewers/src/**/*.{ts,tsx}",
   ],
   safelist: [
     "bg-status-blue",

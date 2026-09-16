@@ -4,6 +4,7 @@ import { useLocalize } from "~/hooks";
 import { type TranslationKeys } from "~/hooks/useLocalize";
 import { cn } from "~/utils";
 import { AppPublishDetailPanel, isAppPublishScenario } from "./AppPublishDetailPanel";
+import type { AppReviewTarget } from "./AppReviewView";
 import {
   DETAIL_INTERNAL_KEYS,
   DetailHeader,
@@ -28,7 +29,7 @@ type TimelineNode = {
   status?: string | null;
 };
 
-export function TaskDetailPanel({ detail, localize, onBack }: { detail: ApprovalTaskDetail; localize: ReturnType<typeof useLocalize>; onBack?: () => void }) {
+export function TaskDetailPanel({ detail, localize, onBack, onOpenReview }: { detail: ApprovalTaskDetail; localize: ReturnType<typeof useLocalize>; onBack?: () => void; onOpenReview?: (target: AppReviewTarget) => void }) {
   const instanceId = detail.instance_id;
   const serialNo = instanceId ? formatSerialNo(instanceId, detail.create_time) : "--";
 
@@ -53,7 +54,7 @@ export function TaskDetailPanel({ detail, localize, onBack }: { detail: Approval
   return (
     <div className="space-y-5">
       {isAppPublish ? (
-        <AppPublishDetailPanel detail={detail} scope="task" localize={localize} onBack={onBack} />
+        <AppPublishDetailPanel detail={detail} scope="task" localize={localize} onBack={onBack} onOpenReview={onOpenReview} />
       ) : (
         <>
           <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} instanceStatus={detail.instance_status} scope="task"
@@ -208,7 +209,7 @@ export function TaskDetailPanel({ detail, localize, onBack }: { detail: Approval
   );
 }
 
-export function RequestDetailPanel({ detail, localize, onBack }: { detail: ApprovalInstanceDetail; localize: ReturnType<typeof useLocalize>; onBack?: () => void }) {
+export function RequestDetailPanel({ detail, localize, onBack, onOpenReview }: { detail: ApprovalInstanceDetail; localize: ReturnType<typeof useLocalize>; onBack?: () => void; onOpenReview?: (target: AppReviewTarget) => void }) {
   const id = detail.instance_id ?? detail.id;
   const serialNo = id ? formatSerialNo(Number(id), detail.create_time) : "--";
 
@@ -234,7 +235,7 @@ export function RequestDetailPanel({ detail, localize, onBack }: { detail: Appro
   return (
     <div className="space-y-5">
       {isAppPublish ? (
-        <AppPublishDetailPanel detail={detail} scope="instance" localize={localize} onBack={onBack} />
+        <AppPublishDetailPanel detail={detail} scope="instance" localize={localize} onBack={onBack} onOpenReview={onOpenReview} />
       ) : (
         <>
           <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} scope="instance" serialNo={serialNo}
