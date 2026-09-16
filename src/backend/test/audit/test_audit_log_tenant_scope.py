@@ -31,6 +31,11 @@ from unittest.mock import MagicMock as _MagicMock
 _router_stub = _MagicMock()
 _router_stub.router = _MagicMock()
 _router_stub.router_rpc = _MagicMock()
+# Taken back out below, once this module's own imports are done — see the same
+# note in ``conftest.py``: ``bisheng.telemetry_search`` is a real package, and a
+# MagicMock left standing in for it makes every later suite's
+# ``from bisheng.main import app`` fail with "not a package".
+_stubbed: list[str] = []
 for _m in (
     "bisheng.api.router",
     "bisheng.api.v1",
@@ -43,7 +48,9 @@ for _m in (
     "bisheng.telemetry_search.api",
     "bisheng.telemetry_search.api.router",
 ):
-    _sys.modules.setdefault(_m, _router_stub)
+    if _m not in _sys.modules:
+        _sys.modules[_m] = _router_stub
+        _stubbed.append(_m)
 
 from contextlib import contextmanager, nullcontext  # noqa: E402
 from datetime import datetime, timedelta  # noqa: E402
@@ -58,6 +65,10 @@ from bisheng.api.services.audit_log import AuditLogService  # noqa: E402
 from bisheng.common.errcode.http_error import UnAuthorizedError  # noqa: E402
 from bisheng.database.models.audit_log import AuditLog, AuditLogDao  # noqa: E402
 from bisheng.database.models.session import MessageSession  # noqa: E402
+
+for _m in _stubbed:
+    del _sys.modules[_m]
+del _stubbed
 
 # ---------------------------------------------------------------------------
 # SQLite test engine + session
