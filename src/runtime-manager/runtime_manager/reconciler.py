@@ -464,6 +464,7 @@ class Reconciler:
                 self._config,
                 platform_api_base=record.env.get("BISHENG_PLATFORM_API_BASE", ""),
                 declared=record.egress_domains,
+                injected_env=record.env,
             ),
             token=record.env.get(ENV_EGRESS_TOKEN) or None,
         )

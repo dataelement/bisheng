@@ -186,6 +186,44 @@ def test_run_phase_allows_the_platform_the_manager_and_the_declared_domains(egre
     assert not decide(destinations, "pypi.example.com", 443).allowed
 
 
+def test_the_model_face_address_is_on_the_list_even_though_it_is_not_platform_api_base(egress_config: Config):
+    """F051's ``OPENAI_BASE_URL`` is the *browser-visible* origin, not this one.
+
+    It is built from ``open_api.public_base_url`` and only falls back to
+    ``app_runtime.entry_base_url`` (= ``platform_api_base``) when that is unset,
+    so on any deployment where the two differ — the documented normal case — an
+    allowlist derived from ``platform_api_base`` alone refuses every hosted
+    application's model call the moment this layer is switched on. Deriving the
+    platform half from the names the platform injects is what keeps the next
+    platform URL somebody adds from repeating this.
+    """
+    destinations = runtime_destinations(
+        egress_config,
+        platform_api_base="http://entry.example.com",
+        declared=[],
+        injected_env={
+            "OPENAI_BASE_URL": "https://bisheng.customer.com/api/v2/model/v1",
+            "BISHENG_MODEL_BASE_URL": "https://bisheng.customer.com/api/v2/model/v1",
+        },
+    )
+    decision = decide(destinations, "bisheng.customer.com", 443)
+    assert decision.allowed
+    assert decision.trusted, "the platform's own address may be private on an on-premise install"
+
+
+def test_an_applications_own_env_cannot_forge_a_platform_address(egress_config: Config):
+    """Only the reserved names are read, and the backend writes those last."""
+    destinations = runtime_destinations(egress_config, declared=[], injected_env={"MY_API": "https://evil.example.com"})
+    assert not decide(destinations, "evil.example.com", 443).allowed
+
+
+def test_the_deploy_path_puts_the_model_face_on_the_policy(egress_config: Config, fake_docker):
+    service = _service(egress_config, fake_docker)
+    service.deploy(_deploy_request(env={"OPENAI_BASE_URL": "https://bisheng.customer.com/api/v2/model/v1"}))
+    hosts = {d.host for d in get_policy_store(egress_config).get("app-1").destinations}
+    assert "bisheng.customer.com" in hosts
+
+
 def test_the_attachment_handle_host_is_always_on_the_run_phase_list(egress_config: Config):
     """contracts §9: the whitelist must allow ``BISHENG_APP_STORAGE_ENDPOINT``.
 

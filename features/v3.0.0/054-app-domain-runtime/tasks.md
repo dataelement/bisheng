@@ -639,7 +639,9 @@
   2. **（真缺陷，已修）`GET /v1/runtime/status` 每次都 fork 两个进程**：`RTM_FIREWALL_BACKEND` 留空时 `_firewall_check` 每次预检都跑 `iptables` + `nft`（各 10s 超时），而这个端点是平台轮询的。改为进程级缓存（注入 runner 的测试路径不读写缓存）。
   3. **（口径订正）「只存哈希」是假的**：`PrincipalPolicy.label` 存的就是凭据明文（reconciler 重建、重发布宽限期都要复用同一把，明文没法不留）。字段改名 `token`、文档如实写明，并把目录权限收到 0700（文件本来就是 `mkstemp` 的 0600）。
   4. **（小）`db.example.com:5432` 用 5433 连时报的是「未声明」**——端口判定只比 80/443。改成按主机匹配，报 `port_not_allowed`。IPv6 字面量 `[::1]` 落名单时不脱方括号、永远匹配不上，一并修。策略文件是合法 JSON 但不是对象时 `_load` 会抛 `AttributeError` 逃出热路径，收进同一个 except。
-  5. **（小）`test_socket_proxy.py` 两个 `@pytest.mark.docker` 用例打 `127.0.0.1:2375`**——compose 形态下这个端口**从不发布**（这正是 D2-B 的要点），curl 会「连接被拒」而测试把它当通过。改成 `docker exec bisheng-runtime-manager` 从管理器视角问，交付说明里的 114 命令同理。
+  5. **（真缺陷，已修）白名单的平台那半按 `platform_api_base` 单独建，会把 F051 的模型面挡在外面**。`OPENAI_BASE_URL` 取 `open_api.public_base_url`（**浏览器可见 origin**），只有它没配才退回 `entry_base_url`（= `platform_api_base`），两者不同是被文档化的常规形态——白名单一开，托管应用的模型调用全被 `not_declared` 拒。修法不是补一条地址（下一个平台 URL 加进来还会漏），而是 `PLATFORM_URL_ENV_NAMES`：平台保留的四个 URL 名（`BISHENG_PLATFORM_API_BASE` / `BISHENG_APP_STORAGE_ENDPOINT` / `OPENAI_BASE_URL` / `BISHENG_MODEL_BASE_URL`）的值一律进可信名单；它们是平台保留名、backend 在版本自带注入之后覆写，所以值必是平台的，应用自己写别的名字进 env 不产生任何放行（有用例钉住）。
+  6. **（小）`test_socket_proxy.py` 两个 `@pytest.mark.docker` 用例打 `127.0.0.1:2375`**——compose 形态下这个端口**从不发布**（这正是 D2-B 的要点），curl 会「连接被拒」而测试把它当通过。改成 `docker exec bisheng-runtime-manager` 从管理器视角问，交付说明里的 114 命令同理。
+  7. **（小）compose 里 egress-proxy 不再拿 `RTM_HMAC_SECRET`**：它不提供 API、不碰编排面，给它编排凭据是纯粹的权限扩散——和 systemd 单元里「不要给它 docker 组」同一条理由。原来给它只是为了满足 `verify_app_runtime_compose.py` 的 `REQUIRED_ENV` 反向校验；改成脚本按**进程角色**覆盖必填集（`REQUIRED_ENV_OVERRIDE`），代理只需 `RTM_DATA_ROOT` / `RTM_EGRESS_LISTEN` / `RTM_EGRESS_PROXY` 三项。
 
 - [x] **T078**: `[MVP-114]` docker-socket-proxy 端点白名单（D2-B）
   **文件**: `src/runtime-manager/runtime_manager/docker_backend.py`, `docker/docker-compose.yml`, `src/runtime-manager/tests/test_socket_proxy.py`（新）

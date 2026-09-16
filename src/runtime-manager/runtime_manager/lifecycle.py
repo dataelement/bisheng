@@ -354,6 +354,11 @@ class LifecycleService:
                 config,
                 platform_api_base=request.platform_api_base,
                 declared=request.egress_domains,
+                # The platform-reserved URL names the backend put in the intent
+                # — the model face above all, whose address is the *browser*
+                # origin and need not equal ``platform_api_base``. Without it
+                # every model call is refused the moment this layer goes on.
+                injected_env=request.env,
             ),
         )
 

@@ -267,6 +267,7 @@ class PreviewService:
                 self._config,
                 platform_api_base=platform_api_base,
                 declared=egress_domains or (),
+                injected_env=env,
             ),
         )
         payload = build_preview_payload(

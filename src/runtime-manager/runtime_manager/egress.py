@@ -83,6 +83,33 @@ DEFAULT_PORTS: tuple[int, ...] = (80, 443)
 #: because that redaction replaces values wherever they appear in a line.
 ENV_EGRESS_TOKEN = "BISHENG_APP_EGRESS_TOKEN"
 
+#: Platform-reserved environment names whose **value is a platform address**
+#: (contracts §5). Every one of them is on the run-phase allowlist, derived from
+#: the intent's own environment rather than from a list somebody has to remember
+#: to extend.
+#:
+#: That indirection is the whole point. ``platform_api_base`` alone is not the
+#: platform: F051's model face is built from ``open_api.public_base_url`` — the
+#: *browser-visible* origin — and falls back to ``app_runtime.entry_base_url``
+#: only when that is unset, so on any deployment where the two differ (the
+#: documented normal case) an allowlist built from ``platform_api_base`` alone
+#: refuses every hosted application's model call the moment this layer is
+#: switched on. A fixed list of addresses would have had exactly this bug again
+#: the next time somebody adds a platform URL; reading the names the platform
+#: itself injects cannot drift.
+#:
+#: Safe to trust despite arriving inside the caller's ``env``: these names are
+#: platform-reserved and the backend overwrites them *last*, after the version's
+#: own injections (``app_state_service._deploy_payload`` + ``capability_env``).
+#: A value under one of these keys is therefore the platform's, never the
+#: application's.
+PLATFORM_URL_ENV_NAMES: tuple[str, ...] = (
+    "BISHENG_PLATFORM_API_BASE",
+    "BISHENG_APP_STORAGE_ENDPOINT",
+    "OPENAI_BASE_URL",
+    "BISHENG_MODEL_BASE_URL",
+)
+
 # Decision vocabulary. These words travel: they are logged by the proxy, and
 # the 403 body shows the application developer which rule refused them.
 ALLOW = "allowed"
@@ -552,11 +579,25 @@ def platform_destinations(config: Config, platform_api_base: str = "") -> tuple[
     )
 
 
+def platform_env_destinations(env: object = None) -> tuple[Destination, ...]:
+    """Every platform address the platform is about to inject into the instance.
+
+    See :data:`PLATFORM_URL_ENV_NAMES` for why this is read off the environment
+    rather than listed.
+    """
+    values = env if isinstance(env, dict) else {}
+    return merge_destinations(
+        [str(values[name]) for name in PLATFORM_URL_ENV_NAMES if values.get(name)],
+        trusted=True,
+    )
+
+
 def runtime_destinations(
     config: Config,
     *,
     platform_api_base: str = "",
     declared: object = (),
+    injected_env: object = None,
 ) -> tuple[Destination, ...]:
     """Run-phase allowlist for one application: platform + its own declarations.
 
@@ -564,7 +605,11 @@ def runtime_destinations(
     application itself authored, and :func:`address_decision` is what keeps it
     from naming a destination inside the deployment.
     """
-    return merge_destinations(platform_destinations(config, platform_api_base), declared)
+    return merge_destinations(
+        platform_destinations(config, platform_api_base),
+        platform_env_destinations(injected_env),
+        declared,
+    )
 
 
 def build_destinations(config: Config) -> tuple[Destination, ...]:
