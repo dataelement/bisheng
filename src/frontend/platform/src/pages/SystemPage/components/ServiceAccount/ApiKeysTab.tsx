@@ -11,6 +11,13 @@ import {
 } from "@/components/bs-ui/table"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import {
+  Portal,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/bs-ui/tooltip"
+import {
   listOpenApiScopesApi,
   listServiceAccountKeysApi,
   revokeAllServiceAccountKeysApi,
@@ -144,7 +151,7 @@ export function ApiKeysTab({
     return (
       <div className="flex flex-wrap gap-1">
         {key.scopes.map((code) => (
-          <span key={code} className="rounded bg-muted px-1.5 py-0.5 text-xs">
+          <span key={code} className="max-w-full break-words rounded bg-muted px-1.5 py-0.5 text-xs">
             {t(
               scopeLabelKeys.get(code) ||
                 `openApiManagement.scopes.${code.replace(":", "_")}.label`,
@@ -152,6 +159,33 @@ export function ApiKeysTab({
           </span>
         ))}
       </div>
+    )
+  }
+
+  const renderDelegateScopes = (key: ApiKeyItem) => {
+    const names = key.delegate_scopes.map((scope) => {
+      const name = scope.subject_name || `${scope.subject_type}:${scope.subject_id}`
+      return scope.subject_type === "department"
+        ? t("openApiManagement.serviceAccount.departmentScope", { name })
+        : name
+    })
+    if (!names.length) return "-"
+
+    return (
+      <TooltipProvider delayDuration={100}>
+        <Tooltip>
+          <TooltipTrigger type="button" className="block w-full truncate text-left">
+            {names.join(", ")}
+          </TooltipTrigger>
+          <Portal>
+            <TooltipContent side="top" align="start" className="max-w-96">
+              <div className="max-h-64 overflow-y-auto whitespace-pre-line break-words text-left">
+                {names.join("\n")}
+              </div>
+            </TooltipContent>
+          </Portal>
+        </Tooltip>
+      </TooltipProvider>
     )
   }
 
@@ -181,17 +215,17 @@ export function ApiKeysTab({
           {t("openApiManagement.keys.issue")}
         </Button>
       </div>
-      <Table>
+      <Table className="min-w-[1320px] table-fixed">
         <TableHeader>
           <TableRow>
-            <TableHead>{t("openApiManagement.fields.name")}</TableHead>
-            <TableHead>{t("openApiManagement.keys.mask")}</TableHead>
-            <TableHead>{t("openApiManagement.keys.permissions")}</TableHead>
-            <TableHead>{t("openApiManagement.keys.delegateScopes")}</TableHead>
-            <TableHead>{t("openApiManagement.fields.lastUsed")}</TableHead>
-            <TableHead>{t("openApiManagement.fields.expiresAt")}</TableHead>
-            <TableHead>{t("openApiManagement.fields.status")}</TableHead>
-            <TableHead className="text-right">{t("operations")}</TableHead>
+            <TableHead className="w-36">{t("openApiManagement.fields.name")}</TableHead>
+            <TableHead className="w-44">{t("openApiManagement.keys.mask")}</TableHead>
+            <TableHead className="w-48">{t("openApiManagement.keys.permissions")}</TableHead>
+            <TableHead className="w-56">{t("openApiManagement.keys.delegateScopes")}</TableHead>
+            <TableHead className="w-40">{t("openApiManagement.fields.lastUsed")}</TableHead>
+            <TableHead className="w-40">{t("openApiManagement.fields.expiresAt")}</TableHead>
+            <TableHead className="w-24">{t("openApiManagement.fields.status")}</TableHead>
+            <TableHead className="w-40 text-right">{t("operations")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -203,26 +237,12 @@ export function ApiKeysTab({
                 : "expired"
             return (
               <TableRow key={key.id}>
-                <TableCell>{key.name}</TableCell>
-                <TableCell>
+                <TableCell className="truncate" title={key.name}>{key.name}</TableCell>
+                <TableCell className="truncate">
                   <code>{key.key_mask}</code>
                 </TableCell>
-                <TableCell className="max-w-72">{renderScopes(key)}</TableCell>
-                <TableCell>
-                  {key.delegate_scopes
-                    .map((scope) => {
-                      const name =
-                        scope.subject_name ||
-                        `${scope.subject_type}:${scope.subject_id}`
-                      return scope.subject_type === "department"
-                        ? t(
-                            "openApiManagement.serviceAccount.departmentScope",
-                            { name },
-                          )
-                        : name
-                    })
-                    .join(", ") || "-"}
-                </TableCell>
+                <TableCell>{renderScopes(key)}</TableCell>
+                <TableCell>{renderDelegateScopes(key)}</TableCell>
                 <TableCell>
                   {key.last_used_at
                     ? formatIsoDateTime(key.last_used_at)
@@ -238,7 +258,7 @@ export function ApiKeysTab({
                     {t(`openApiManagement.status.${statusKey}`)}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="whitespace-nowrap text-right">
                   <Button
                     variant="link"
                     disabled={
