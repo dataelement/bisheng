@@ -5,7 +5,7 @@
 ## 1. 地址与鉴权
 
 - 监听 `http://127.0.0.1:8091`（backend 配置项 `app_runtime.manager_base_url` 默认值即此）
-- HMAC：签名串 `METHOD\nPATH\nraw_body`，请求头 `X-Signature`，小写 hex，恒时比较；**PATH 不含 query string**；空密钥 fail-closed
+- HMAC：签名串 `METHOD\nPATH\nraw_body`，请求头 `X-Signature`，小写 hex，恒时比较；**PATH 不含 query string**，且是**百分号解码后**的路径（manager 侧取 ASGI `scope["path"]`，不取 `request.url.path`——后者会把段内的 `?` / `#` 当分隔符截断）；含保留字符的路径段（数据面行键 `a?b`、`100%`）由 backend `quote(key, safe="")` 上线、签名仍按解码形；空密钥 fail-closed
 - ⚠️ backend 的 `orchestrator_client` 必须对**自己实际发出的字节**签名（不要让 httpx 重新序列化 json，否则签名对不上）
 - 三方共用一把密钥：`RTM_HMAC_SECRET` == backend `app_runtime.manager_hmac_secret` == app-proxy 侧 manager secret
 - `GET /healthz` 免签（systemd / smoke 用）
@@ -29,6 +29,13 @@
 | `GET /v1/apps/{app_id}/storage/objects/{key}` | 流式字节 + `Content-Type` / `Content-Length` / `ETag`；不存在 → 404 `not_found` | 同上 |
 | `GET /v1/apps/{app_id}/storage/meta/{key}` | 元信息 JSON（同 `objects` 一项）；不存在 → 404 | 同上 |
 | `DELETE /v1/apps/{app_id}/storage/objects/{key}` | `{}`；**不存在 → 404**（不装作成功，F057 AC-25） | 同上 |
+| `GET /v1/apps/{app_id}/db/tables` | `{tables: [{name, column_count}]}`（只列用户表，`sqlite_*` 不出；库文件不存在 → **404 `db_not_found`**） | **backend `AppDataService`**（数据 tab · F052 MCP 数据工具，**均经它、不得直连**） |
+| `GET /v1/apps/{app_id}/db/tables/{table}/schema` | `{table, columns: [{name, type, notnull, default, pk, editable}], key: {column, kind: primary_key\|rowid}, editable}` | 同上 |
+| `GET /v1/apps/{app_id}/db/tables/{table}/rows?page=&size=&order=` | `{rows: [{key, values{}}], total, page, size, order}`；`size` 1–200（默认 50）；`order` = `col` / `-col`，**行键恒为次级排序键**（分页不重不漏）；BLOB 值以 `<blob N bytes>` 占位 | 同上 |
+| `PATCH /v1/apps/{app_id}/db/tables/{table}/rows/{key}` | 入参 `{values: {col: scalar}}` → `{table, key, before{}, after{}}`；**只改一行**（`BEGIN IMMEDIATE` 短事务，受影响行数 ≠ 1 回滚）；行键列 / BLOB 列 / 非标量值 / 未知列 → 400 `data_invalid` | 同上（backend 用 `before/after` 写 `app.data_row_edit` 审计） |
+| `GET /v1/apps/{app_id}/db/export?table=` | `text/csv` 文件（`Content-Disposition: attachment; filename="{table}.csv"`），临时文件发送后即删 | 同上 |
+
+**数据面细则（T086）**：**无 DDL、无任何承载 SQL 的入参**——表名 / 列名 / 排序列一律先对 `sqlite_master` / `PRAGMA table_info` 白名单核对再引号拼接，`CREATE / ALTER / DROP / PRAGMA` 不是"被拒绝"而是"说不出口"（结构演进归 F055）。读路径 `mode=ro`、写路径 `mode=rw`（**永不 `rwc`**——应用自己建库，manager 不替它造空库）；每次调用独立连接 + `busy_timeout=3000ms`，调用结束即关，不持长事务（WAL 单写者，长事务会卡住应用自己的写）。写锁等待超时 → **409 `data_busy`**（可重试）；表不存在 → 404 `table_not_found`；行不存在 / 受影响行数 ≠ 1 → 404 `row_not_found`。行键：单列主键用该列，否则用 `rowid`；`WITHOUT ROWID` 复合主键表 `editable=false`（可读可导、不可编辑）。
 
 **入参约定**：`tier{cpu: vCPU float, mem: MiB int}`；build 必带 **`code_url`（MinIO 预签 URL）** + `code_object_key`（溯源）+ `slug` + `version_no`；deploy 带 `env{}`、`health{path,interval,timeout,retries,start_period}`、`platform_api_base`、`base_path`（缺省 `/apps/{slug}`）。
 
@@ -63,6 +70,8 @@ manager 的 body 恒为 `{"detail": {"code","message",...}}`，backend 按此映
 | `409 probe_failed` | **16124** |
 | `GET /v1/builds/{id}` 的 `status=failed`（带 `stage`/`message`/`tail`） | **16122** |
 | `404 not_found` | 路由 / 实例不存在（app-proxy 直接出停用页） |
+| `404 db_not_found` / `404 table_not_found` / `404 row_not_found` | **16163** / **16164** / **16165**（数据面，T087） |
+| `400 data_invalid` / `409 data_busy` | **16166** / **16167**（数据面，T087） |
 
 ## 4. 环境变量
 
@@ -114,3 +123,4 @@ reconciler 每 **15s** 一轮，`RTM_RECONCILE_ENABLED` 关不掉的产品语义
 出站白名单双层与 docker-socket-proxy（D12 / D2-B，Wave 4，后者**零代码改动**——只改 `RTM_DOCKER_HOST`）。出站白名单落地时须放行 `BISHENG_APP_STORAGE_ENDPOINT` 所指的 manager 地址，否则附件句柄随白名单一起断。
 
 **`GET /v1/apps/{app_id}/route` 的 `409 deploying` 信封（「发布中」窗口，T083，2026-09-16）**：app-proxy 侧**已消费**——`detail.code=deploying` → 导航请求渲染「发布中」自动重试页、XHR 返 503 + 16147、WS 升级以 4503 关闭，并按路由缓存的 3s 缓存该答案（不把一次发布变成对 manager 的请求风暴）。manager 侧**当前不发**：`deploy` 是同步的——探活通过才写期望态（`generation+1`），backend 也要等 `deploy` 返回才把应用置 `online`，重发布期间旧实例照常服务到 30s 宽限期结束；所以现在**不存在**能观察到「发布中」的窗口，路由端点只有 `{upstream,…}` 与 404 两种答案（404 → 「应用恢复中」）。若日后把 deploy 改成异步（先登记期望态再拉起），该窗口即出现，届时**必须**发此信封而不是 404，否则用户在首发布期间看到的是「恢复中」文案。
+出站白名单双层与 docker-socket-proxy（D12 / D2-B，Wave 4，后者**零代码改动**——只改 `RTM_DOCKER_HOST`）。（`GET /v1/apps/{app_id}/db/*` 数据面已于 T086 落地，见 §2 表末五行。）

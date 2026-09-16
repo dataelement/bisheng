@@ -143,6 +143,11 @@ class SignedClient:
         headers = self._headers("GET", path, b"", secret) if sign else {}
         return self.client.get(path, params=params, headers=headers)
 
+    def patch(self, path: str, payload: dict[str, Any] | None = None, *, secret: str | None = None, sign: bool = True):
+        body = json.dumps(payload or {}).encode()
+        headers = self._headers("PATCH", path, body, secret) if sign else {"content-type": "application/json"}
+        return self.client.patch(path, content=body, headers=headers)
+
 
 @pytest.fixture
 def rtm_client(rtm_config: Config, fake_docker: FakeDockerBackend) -> SignedClient:

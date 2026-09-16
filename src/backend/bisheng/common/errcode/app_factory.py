@@ -243,9 +243,6 @@ class AppLogForbiddenError(AppFactoryError):
     Msg: str = "You do not have permission to view this application's logs"
 
 
-# ``16162`` (no permission to access application data, AC-56) is reserved for
-# the deferred data-tab wave. Declare it there, not here.
-#
 # ``16170``-``16174`` are reserved for the attachment storage handle (AC-45,
 # F054 T084/T085; runtime-manager ``storage.py``). The manager's error codes
 # map onto them once a backend caller (F052 MCP tools / a data tab) exists —
@@ -257,6 +254,60 @@ class AppLogForbiddenError(AppFactoryError):
 #   16173  not_found            (404)   attachment does not exist
 #   16174  unauthorized         (401)   storage token not bound to this app
 # Declare them with their locale copy in the wave that first raises them.
+
+
+class AppDataForbiddenError(AppFactoryError):
+    """Data tab / data tools are **owner only** (AC-56).
+
+    Narrower than the log tab on purpose: a tenant administrator may read what
+    an app printed, not the rows it stores. Like :class:`AppOwnerOnlyError`
+    this is a business pre-check — the permission runtime would wave an
+    administrator through.
+    """
+
+    Code: int = 16162
+    Msg: str = "You do not have permission to access this application's data"
+
+
+class AppDataNotReadyError(AppFactoryError):
+    """The application has not created its database yet (manager ``db_not_found``)."""
+
+    Code: int = 16163
+    Msg: str = "The application has not created its database yet"
+
+
+class AppDataTableNotFoundError(AppFactoryError):
+    """No such table in the application's database (manager ``table_not_found``)."""
+
+    Code: int = 16164
+    Msg: str = "The table does not exist in the application's database"
+
+
+class AppDataRowNotFoundError(AppFactoryError):
+    """No row with that key — or the update would have touched ≠ 1 rows and was rolled back."""
+
+    Code: int = 16165
+    Msg: str = "The row does not exist or has been changed by the application"
+
+
+class AppDataInvalidError(AppFactoryError):
+    """Bad identifier / unknown column / binary column / non-scalar value / key change.
+
+    Raised on the backend for anything that is obviously not a plain
+    identifier (the manager checks again against the live schema): the data
+    plane carries **no DDL**, and a table name that is really a statement is
+    refused before it leaves this process.
+    """
+
+    Code: int = 16166
+    Msg: str = "The data request is invalid"
+
+
+class AppDataBusyError(AppFactoryError):
+    """The application holds its database write lock; retry (manager ``data_busy``)."""
+
+    Code: int = 16167
+    Msg: str = "The application's database is busy; please try again"
 
 
 # ---------------------------------------------------------------------------

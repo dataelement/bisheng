@@ -15,7 +15,7 @@ Seven things this file exists to prevent:
   list_tenant_admins`` returns ``[]`` for it by construction), which is exactly
   why AC-21's approver resolution needs a Root fallback — and why proving it
   with a super admin proves nothing.
-* **A half-stubbed orchestrator.** ``fake_orchestrator`` replaces **all ten**
+* **A half-stubbed orchestrator.** ``fake_orchestrator`` replaces **all fifteen**
   ``orchestrator_client`` methods and asserts its stub set still equals the
   facade's public surface. Miss one and it silently falls through to real HTTP
   against 127.0.0.1:8091, which surfaces as a connection error far from the
@@ -212,6 +212,12 @@ ORCHESTRATOR_METHODS = (
     "status",
     "logs",
     "runtime_status",
+    # data plane (F054 T087) — the app's SQLite through the manager, never a file
+    "db_tables",
+    "db_schema",
+    "db_rows",
+    "db_update_row",
+    "db_export",
 )
 
 
@@ -958,7 +964,7 @@ def fake_minio(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def fake_orchestrator(monkeypatch):
-    """Replace **all ten** ``orchestrator_client`` methods with programmable stubs.
+    """Replace **all fifteen** ``orchestrator_client`` methods with programmable stubs.
 
     Returns a namespace with ``calls`` (an ordered list of ``(method, kwargs)``)
     and ``responses`` (a per-method dict a test may overwrite before acting —
@@ -1021,6 +1027,25 @@ def fake_orchestrator(monkeypatch):
             "capacity": {"mem_available_mb": 8192, "committed_mb": 1024, "total_mb": 32768, "cpu": 8},
             "preflight": [],
         },
+        "db_tables": {"tables": [{"name": "users", "column_count": 2}]},
+        "db_schema": {
+            "table": "users",
+            "columns": [
+                {"name": "id", "type": "INTEGER", "notnull": False, "default": None, "pk": 1, "editable": True},
+                {"name": "name", "type": "TEXT", "notnull": True, "default": None, "pk": 0, "editable": True},
+            ],
+            "key": {"column": "id", "kind": "primary_key"},
+            "editable": True,
+        },
+        "db_rows": {
+            "rows": [{"key": 1, "values": {"id": 1, "name": "alice"}}],
+            "total": 1,
+            "page": 1,
+            "size": 50,
+            "order": "",
+        },
+        "db_update_row": {"table": "users", "key": 1, "before": {"name": "alice"}, "after": {"name": "bob"}},
+        "db_export": b"id,name\r\n1,alice\r\n",
     }
     calls: list[tuple[str, dict[str, Any]]] = []
 

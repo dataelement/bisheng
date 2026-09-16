@@ -16,9 +16,14 @@ conventions worth knowing before adding an endpoint here:
 
 from __future__ import annotations
 
+from typing import Any
+from urllib.parse import quote
+
 from fastapi import APIRouter, Body, Depends, Query
+from fastapi.responses import Response
 from pydantic import BaseModel
 
+from bisheng.app_runtime.domain.services.app_data_service import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, AppDataService
 from bisheng.app_runtime.domain.services.app_meta_service import AppMetaService
 from bisheng.app_runtime.domain.services.app_query_service import AppQueryService
 from bisheng.app_runtime.domain.services.app_state_service import AppStateService
@@ -35,6 +40,12 @@ class AppMetaPatch(BaseModel):
     description: str | None = None
     #: MinIO object name, never a presigned URL — those expire.
     logo: str | None = None
+
+
+class AppRowPatch(BaseModel):
+    """AC-56 — the columns to change on one row. Scalars only; the key column is refused."""
+
+    values: dict[str, Any]
 
 
 def _action_payload(result) -> dict:
@@ -159,3 +170,66 @@ async def stop_app(app_id: str, user: UserPayload = Depends(UserPayload.get_logi
 @router.post("/{app_id}/actions/resume", response_model=UnifiedResponseModel[dict], summary="Re-enable an application")
 async def resume_app(app_id: str, user: UserPayload = Depends(UserPayload.get_login_user)):
     return resp_200(data=_action_payload(await AppStateService.resume(app_id, actor=user)))
+
+
+# ---------------------------------------------------------------------------
+# data plane (AC-56) — owner only; refusals are 16162 inside a 200 envelope
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{app_id}/data/tables", response_model=UnifiedResponseModel[dict], summary="Tables of the app's database")
+async def list_app_tables(app_id: str, user: UserPayload = Depends(UserPayload.get_login_user)):
+    return resp_200(data=await AppDataService.list_tables(app_id, actor=user))
+
+
+@router.get(
+    "/{app_id}/data/tables/{table}/schema", response_model=UnifiedResponseModel[dict], summary="Columns of one table"
+)
+async def get_app_table_schema(app_id: str, table: str, user: UserPayload = Depends(UserPayload.get_login_user)):
+    return resp_200(data=await AppDataService.get_table_schema(app_id, table, actor=user))
+
+
+@router.get("/{app_id}/data/tables/{table}/rows", response_model=UnifiedResponseModel[dict], summary="One page of rows")
+async def get_app_table_rows(
+    app_id: str,
+    table: str,
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    order: str | None = Query(default=None, description="column or -column; the row key is always the tiebreaker"),
+    user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    return resp_200(data=await AppDataService.get_rows(app_id, table, actor=user, page=page, size=size, order=order))
+
+
+@router.patch(
+    "/{app_id}/data/tables/{table}/rows/{key}", response_model=UnifiedResponseModel[dict], summary="Edit one row"
+)
+async def update_app_table_row(
+    app_id: str,
+    table: str,
+    key: str,
+    patch: AppRowPatch = Body(...),
+    user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Exactly one row; audited as ``app.data_row_edit`` with before / after."""
+    return resp_200(data=await AppDataService.update_row(app_id, table, key, patch.values, actor=user))
+
+
+@router.get("/{app_id}/data/export", summary="Export one table as CSV")
+async def export_app_table(
+    app_id: str,
+    table: str = Query(...),
+    user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """A file, not an envelope — the platform downloads it as a blob.
+
+    A refusal still arrives as the JSON envelope (the business-error handler
+    answers before this body runs), which is why the platform inspects the
+    blob's content type before saving it as a CSV.
+    """
+    filename, content = await AppDataService.export_table(app_id, table, actor=user)
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )

@@ -102,9 +102,11 @@ class AppAuditAction(StrEnum):
     #: deletion itself already happened, so this is recorded rather than raised.
     DELETE_HOOK_FAILED = "app.delete_hook_failed"
     META_UPDATE = "app.meta_update"
-    #: Data-tab row edit (AC-56) — deferred wave, registered now so the audit
-    #: whitelist is touched exactly once.
+    #: Data-tab row edit (AC-56): table / key / before / after in the metadata.
     DATA_ROW_EDIT = "app.data_row_edit"
+    #: Data-tab table export (AC-56): a whole table left the platform as a file,
+    #: which is worth a row of its own even though nothing changed.
+    DATA_EXPORT = "app.data_export"
     #: F056: who may see this application changed. Lives here rather than in a
     #: private F056 constant because this enum is what the lockstep test walks —
     #: an action defined elsewhere would never be checked against the whitelist
