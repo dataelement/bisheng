@@ -86,5 +86,10 @@ in particular `26044` means the administrator restricted retrieval to the
 user's own knowledge bases: tell the user to contact their administrator, do
 not retry.
 
+When no status code comes back at all and the script says the platform address
+could not be reached, the machine you run on has no route to it — a key cannot
+fix that. Tell the user this skill only works where that address opens, on a
+computer of their own; do not retry or look for another way in.
+
 Do not pass a user ID in the request body or add an identity-delegation header.
 Personal access tokens always act as their holder.

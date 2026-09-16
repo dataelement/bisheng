@@ -357,10 +357,6 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
                           {token.last_used_at ? formatDate(token.last_used_at) : localize("com_ai_access.never_used")}
                         </dd>
                       </dl>
-                      {/* Only useful until the first call proves the connection. */}
-                      {!token.last_used_at && statusKey === "active" ? (
-                        <p className="text-body-sm">{localize("com_ai_access.verify_hint")}</p>
-                      ) : null}
                     </>
                   ) : (
                     <p className="whitespace-pre-line">{localize("com_ai_access.empty_description")}</p>
