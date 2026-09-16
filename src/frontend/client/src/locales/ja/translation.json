@@ -2299,7 +2299,7 @@
     "expires_label": "有効期限",
     "get_key": "キーを生成",
     "guide_title": "AI アシスタントと連携",
-    "install_prompt": "$t(bisheng) ナレッジ検索スキルをインストールしてください。\nスキルのダウンロード先：{{skillPackUrl}}\nAPI Key の取得ページ：{{tokenPageUrl}}\n上記のアドレスを開けない場合は、この環境からプラットフォームに接続できないということです。別の方法を試さず、そのまま伝えてください。",
+    "install_prompt": "$t(bisheng) ナレッジ検索スキルをインストールしてください。\nスキルのダウンロード先：{{skillPackUrl}}\nAPI Key の取得ページ：{{tokenPageUrl}}",
     "install_step": "ステップ 1：インストール指示をコピーして AI アシスタントに送信",
     "key_label": "API Key",
     "key_step": "ステップ 2：キーを生成し、AI アシスタントに送って設定を完了",
@@ -2326,7 +2326,6 @@
     "status_none": "未連携",
     "status_revoked": "失効済み",
     "supported_note": "WorkBuddy デスクトップ版など、PC にインストールした AI アシスタントに送ってください。",
-    "title": "AI アシスタント連携",
-    "verify_hint": "このキーはまだどの AI アシスタントにも使われていません。設定後に「ナレッジベースで…を調べて」と頼むと、ここに使用日時が表示されます。キーを保存していない場合は、新しく取得してください。"
+    "title": "AI アシスタント連携"
   }
 }

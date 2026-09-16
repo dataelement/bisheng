@@ -2305,7 +2305,7 @@
     "expires_label": "有效期至",
     "get_key": "生成我的密钥",
     "guide_title": "连接 AI 助手",
-    "install_prompt": "请安装 $t(bisheng) 知识检索技能。\n技能包下载地址：{{skillPackUrl}}\n密钥获取地址：{{tokenPageUrl}}\n如果你打不开上面的地址，说明你所在的环境连不上这个平台，请直接这样告诉我，不要尝试其他办法。",
+    "install_prompt": "请安装 $t(bisheng) 知识检索技能。\n技能包下载地址：{{skillPackUrl}}\n密钥获取地址：{{tokenPageUrl}}",
     "install_step": "第 1 步：复制安装指令，发给 AI 助手安装检索技能",
     "key_label": "API Key",
     "key_step": "第 2 步：生成密钥，发给 AI 助手完成配置",
@@ -2332,7 +2332,6 @@
     "status_none": "未连接",
     "status_revoked": "已吊销",
     "supported_note": "发给装在你电脑上的 AI 助手，比如 WorkBuddy 桌面版。",
-    "title": "AI 助手接入",
-    "verify_hint": "还没有 AI 助手用过这把密钥。配置好后问它「帮我在知识库里查…」，这里会显示使用时间。没保存密钥的话，重新获取一把。"
+    "title": "AI 助手接入"
   }
 }

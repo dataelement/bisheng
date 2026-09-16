@@ -12,6 +12,7 @@ from bisheng.open_api.domain.models.api_credential import (
     SUBJECT_KIND_SERVICE_ACCOUNT,
 )
 from bisheng.open_api.domain.schemas.credential import (
+    DelegateScopeInput,
     KeyIssuedResponse,
     KeyIssueRequest,
     KeyItem,
@@ -22,6 +23,7 @@ from bisheng.open_api.domain.schemas.credential import (
 )
 from bisheng.open_api.domain.scopes import issuable_scopes
 from bisheng.open_api.domain.services.credential_service import CredentialService
+from bisheng.open_api.domain.services.delegate_scope_service import DelegateScopeService
 from bisheng.open_api.domain.services.service_account_service import ServiceAccountService
 from bisheng.permission.application.process_runtime import ensure_f048_process_runtime_ready
 
@@ -56,6 +58,20 @@ async def list_open_api_scopes(_admin: UserPayload = Depends(get_service_account
 
 async def _account(service_account_id: int):
     return await ServiceAccountService.get_row(service_account_id)
+
+
+@router.post(
+    "/{service_account_id}/delegate-candidates:filter",
+    response_model=UnifiedResponseModel[list[DelegateScopeInput]],
+)
+async def filter_delegate_candidates(
+    service_account_id: int,
+    data: list[DelegateScopeInput],
+    _admin: UserPayload = Depends(get_service_account_admin),
+):
+    account = await _account(service_account_id)
+    eligible = await DelegateScopeService.filter_entries(tenant_id=account.tenant_id, entries=data)
+    return resp_200(data=[DelegateScopeInput(subject_type=kind, subject_id=sid) for kind, sid in eligible])
 
 
 @router.get("/{service_account_id}/keys", response_model=UnifiedResponseModel[list[KeyItem]])

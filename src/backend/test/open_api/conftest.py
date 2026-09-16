@@ -46,6 +46,7 @@ async def open_api_db(monkeypatch):
     from sqlmodel.ext.asyncio.session import AsyncSession
 
     from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
+    from bisheng.database.models.department import Department
     from bisheng.database.models.tenant import UserTenant
     from bisheng.open_api.domain.models import (
         ApiCredential,
@@ -63,6 +64,7 @@ async def open_api_db(monkeypatch):
     async with engine.begin() as connection:
         await connection.run_sync(User.__table__.create)
         await connection.run_sync(UserTenant.__table__.create)
+        await connection.run_sync(Department.__table__.create)
         await connection.run_sync(ServiceAccount.__table__.create)
         await connection.run_sync(ApiCredential.__table__.create)
         await connection.run_sync(ApiCredentialDelegateScope.__table__.create)
