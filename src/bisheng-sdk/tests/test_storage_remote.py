@@ -139,7 +139,9 @@ def test_list_during_an_outage_raises_instead_of_returning_an_empty_list(remote)
     assert "attachment_storage" in caught.value.next_step
 
 
-def test_connect_failure_is_unavailable_not_an_empty_answer(monkeypatch: pytest.MonkeyPatch, remote_env):
+@pytest.fixture
+def unreachable_manager(monkeypatch: pytest.MonkeyPatch, remote_env):
+    """附件端点连不上——坑 27 最常见的生产故障（manager 只听 127.0.0.1）。"""
     from bisheng_sdk import _http
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -149,10 +151,32 @@ def test_connect_failure_is_unavailable_not_an_empty_answer(monkeypatch: pytest.
     monkeypatch.setattr(
         _http, "client", lambda base_url, kind="retrieve": httpx.Client(base_url=base_url, transport=transport)
     )
+    monkeypatch.setattr(
+        _http,
+        "aclient",
+        lambda base_url, kind="retrieve": httpx.AsyncClient(base_url=base_url, transport=transport),
+    )
+
+
+def test_connect_failure_is_a_storage_outage_not_a_platform_outage(unreachable_manager):
+    """附件端点与平台 API 是两个地址、两套排查动作（坑 27）。
+
+    翻成 `PlatformUnreachableError` 会把人支去查 `BISHENG_PLATFORM_API_BASE`，而真正
+    要看的是 `runtime/status` 的 `attachment_storage` 自检项与 `RTM_APP_FACING_BASE_URL`。
+    AC-25 要求这几类错误彼此可区分，这一条就是分界线。
+    """
     from bisheng_sdk.errors import PlatformUnreachableError
 
-    with pytest.raises((StorageUnavailableError, PlatformUnreachableError)):
-        storage.list()
+    for call in (lambda: storage.list(), lambda: storage.stat("a.txt"), lambda: storage.put("a.txt", b"x")):
+        with pytest.raises(StorageUnavailableError) as caught:
+            call()
+        assert not isinstance(caught.value, PlatformUnreachableError)
+        assert "attachment_storage" in caught.value.next_step
+
+
+async def test_async_connect_failure_is_also_a_storage_outage(unreachable_manager):
+    with pytest.raises(StorageUnavailableError):
+        await storage.alist()
 
 
 def test_client_side_cap_refuses_before_sending(remote):
@@ -191,12 +215,16 @@ async def test_async_twins_have_the_same_wire_shape(remote):
     assert transport.last.headers["Authorization"] == f"Bearer {pm.FAKE_STORAGE_TOKEN}"
 
 
-async def test_async_stat_and_delete(remote):
+async def test_async_stat_open_and_delete(remote):
     def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "DELETE":
             return httpx.Response(200, json={})
-        return httpx.Response(200, json=pm.storage_meta())
+        if "/meta/" in request.url.path:
+            return httpx.Response(200, json=pm.storage_meta())
+        return httpx.Response(200, content=b"hello world")
 
     remote(handler)
     assert (await storage.astat("a.txt")).size == 11
+    with await storage.aopen("a.txt") as handle:
+        assert handle.read() == b"hello world"
     await storage.adelete("a.txt")

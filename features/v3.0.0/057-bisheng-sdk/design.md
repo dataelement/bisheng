@@ -116,8 +116,7 @@
 - **对令牌形态不感知**：访问者凭据线上是 app-proxy 注入的 HS256 OBO JWT（aud `bisheng-app-obo`、900 s，`entry_authz_service.py`）；`dev` 期是 `bisheng dev` 迷你代理每请求现铸的 `bsdev.<b64 payload>.<hmac>` 句柄（`devproxy.py:HandleMinter.mint`、**本地自签**）。SDK 只做「上下文里有就带、没有就抛」，**不解析、不校验、不续期**——两种形态对 SDK 是同一条码。
 - **本地 `dev` 期仍不可端到端验证，原因换了一个**：`bisheng dev` 既不注入 `BISHENG_APP_TOKEN`（没有应用运行期凭据可发——本地根本没有「已上线的应用」），其 `bsdev.` 句柄也无从被平台验签（坑 32）。SDK 侧的呈现是 `AppCredentialMissingError`（"本地期平台尚未注入该凭据，检索请在发布后用真实账号验证"），**不为本地开兼容分支、不拿 `login` 密钥顶替应用凭据**——顶替等于让本地检索以服务账号身份跑，与线上语义不同，正是 spec 决议-3 要挡住的「本地能跑、线上不一样」。若 F053 后续要补，修法是「`dev` 向平台换一枚该应用的短时运行期凭据 + 一枚平台签发的访问者凭据」，SDK 零改动。
 - **服务端仍未补的一半**：`RetrieveReq.knowledge_base_ids` 今天 `min_length=1` 必填（`open_endpoints/domain/schemas/filelib.py`），F052 AC-22「未指定目标 → 在全部被授予范围内检索」要求它可省略。SDK 已按「`None` 即省略该键」落码，放宽当天零改动；在那之前不带库 id 的调用会得到 422 → `PlatformRefusedError`（坑 6）。
-- **入参出参 = 门面的入参出参**（AC-11 / AC-18）：`search(query, *, knowledge_base_ids=None, top_k=10, max_content=15000, filters=None)`，字段名与 `RetrieveReq` 一一对应，`filters` 形状 = `RetrieveFilters`（**`tag_match_mode` 的字面量是大写 `"ANY"`**，`"ALL"` 服务端未实现会答 400，SDK 不替它翻译成 `ANY`——那会返回比调用方要的更宽的结果集）；出参 `RetrieveResult(chunks: list[Chunk], total: int)`，`Chunk` 六字段照 `RetrieveChunk`。SDK 不排序、不去重、不截断、不缓存。
-- **入参出参 = 门面的入参出参**（AC-11 / AC-18）：`search(query, *, knowledge_base_ids=None, top_k=10, max_content=15000, filters=None)`，字段名与 `RetrieveReq` 一一对应，`filters` 形状 = `RetrieveFilters`；`knowledge_base_ids=None` 时**省略该键**（`extra="forbid"`，不能送 `null` 以外的自造值）；出参 `RetrieveResult(chunks: list[Chunk], total: int)`，`Chunk` 六字段照 `RetrieveChunk`。SDK 不排序、不去重、不截断、不缓存。
+- **入参出参 = 门面的入参出参**（AC-11 / AC-18）：`search(query, *, knowledge_base_ids=None, top_k=10, max_content=15000, filters=None)`，字段名与 `RetrieveReq` 一一对应，`filters` 形状 = `RetrieveFilters`（**`tag_match_mode` 的字面量是大写 `"ANY"`**，`"ALL"` 服务端未实现会答 400，SDK 不替它翻译成 `ANY`——那会返回比调用方要的更宽的结果集）；`knowledge_base_ids=None` 时**省略该键**（`extra="forbid"`，不能送 `null` 以外的自造值），`[]` 则原样送出、由服务端拒（今天 `min_length=1`）；出参 `RetrieveResult(chunks: list[Chunk], total: int)`，`Chunk` 六字段照 `RetrieveChunk`。SDK 不排序、不去重、不截断、不缓存。
 - **何时该重新考虑**：F052 design 若把门面独立成新路径（如 `/api/v2/knowledge/retrieve`）→ 只改 `_http.py` 的 `RETRIEVE_PATH` 常量与 `_codes.py`。
 
 ### D6：错误层次 = 一个基类 + 按「应用的下一步动作」分格的 18 个子类；服务端码经 `_codes.py` 一张表映射，未登记码绝不吞
@@ -481,7 +480,7 @@ SDK **不读** `BISHENG_APP_TOKEN` / `BISHENG_API_KEY` / 任何密钥类变量�
 
 - **不做**：SDK 侧重试 / 断路器；`as_user`；本地白名单预演（除非 F055 提供预检可及性接口，spec 决议-3）；清空附件空间；下载直链；非 Python SDK（v3.1）。
 - **不做（本 Feature 边界，理由已定案）**：不为本地 `dev` 期缺失的两把凭据在 SDK 里开任何兼容分支（阻塞项 ③ 的修法在 F053 / F052；SDK 只负责把上下文里的访问者凭据与注入的应用凭据一起送出去，并在缺任何一把时明确报错）；不在 SDK 里兜底缺失的 `BISHENG_APP_STORAGE_DIR`（契约 ⑦；宁可 `StorageHandleMissingError` 也不静默落临时目录，spec §3）。
-- **待上游落地后的 SDK 增量**：F052 分配「不可及」码 → 填 `_codes.py`；`knowledge_base_ids` 放宽 → 指南示例改为可省略；F054 附件 API 加 presign → `storage.share()`（另起 AC）；F054 若为 backend 调用方落 `16170–16174` → `_codes` 的 str 表旁加 int 表项（SDK 走 Bearer 路径不会遇到，仅为对账完整）。
+- **待上游落地后的 SDK 增量**：F052 分配「不可及」码 → 填 `_codes.py`；`knowledge_base_ids` 放宽 → 指南示例改为可省略，**并同批确认 F052 对空列表 `[]` 的语义**：今天 `[]` 被 `min_length=1` 拒（fail-closed，SDK 原样送出即可），若放宽后把 `[]` 也当成「未指定 = 全部被授予范围」，一个把目标库过滤到空的应用就会静默检索得**比它要的更宽**——那时 SDK 侧要在 `_body` 里把 `[]` 挡成明确错误；F054 附件 API 加 presign → `storage.share()`（另起 AC）；F054 若为 backend 调用方落 `16170–16174` → `_codes` 的 str 表旁加 int 表项（SDK 走 Bearer 路径不会遇到，仅为对账完整）。
 - **可选增强**：`versions` 载荷下发 `packs[]` 替代 CLI `DEFAULT_PACKS`（第三个技能包出现时）；F055 托管预检校验应用锁定的 SDK 版本 ∈ 平台区间。
 
 ---

@@ -38,7 +38,9 @@ def test_rejection_is_not_normalisation():
     """`a/../b` 是拒绝，不是"给你 b"——写出它的应用几乎肯定想越界。"""
     with pytest.raises(InvalidAttachmentPathError) as caught:
         _paths.validate("a/../b")
-    assert "b" != getattr(caught.value, "path", None) or caught.value.path == "a/../b"
+    # 错误里回显的是**原样**的路径：换成规范化后的 `b` 就等于告诉调用方
+    # "我懂你的意思"，下一步就会有人把拒绝改成放行。
+    assert caught.value.path == "a/../b"
 
 
 @pytest.mark.parametrize("path", ["a.txt", "报告/2026 年度.pdf", "a/b/c.bin", "x" * 1024])

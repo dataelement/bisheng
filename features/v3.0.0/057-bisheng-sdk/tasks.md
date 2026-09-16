@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 15 条修订，36 条 AC（决议 1–11） |
 | design.md | ✅ 已评审（全自动模式定案） | 2026-09-16 初版 + 两次续写（末次按 `wt/cli-dev` 改写 D12 / D13 / D4 / D5 / D8，坑扩到 36）；`/sdd-review design` 已跑，发现就地修订；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-09-16） | 本文；**44 任务 / 7 Wave + 1 前置**；36 条 AC 全覆盖（追溯表见末尾）；`/sdd-review tasks` 已跑 |
-| 实现 | 🚧 进行中 | **21 / 44**（Wave 1–3 = SDK 包本体三件套已完成，commit `ff32fac67`；Wave 4–7 = 分发 / 技能包 / 联调由姊妹切片与后续波次承接）。两个前置依赖分支（`wt/storage-handle`、`wt/cli-dev`）须先合入（T000 核对）；两个跨 Feature 阻塞项（design §6.2 ②③）与契约 ③④⑦ 未落地前，Wave 7 的 114 联调只能部分执行；Wave 1–6 全部可离线完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | **22 / 44**（Wave 0–3 = T000–T021 全部完成，另含 Wave 1 的 CI 门 T008；commits `ff32fac67` → `68482f3ad` → `cd6fd8ba8` → 审查修复；Wave 4–7 = 分发 / 技能包 / 联调由姊妹切片与后续波次承接）。两个前置依赖分支（`wt/storage-handle`、`wt/cli-dev`）须先合入（T000 核对）；两个跨 Feature 阻塞项（design §6.2 ②③）与契约 ③④⑦ 未落地前，Wave 7 的 114 联调只能部分执行；Wave 1–6 全部可离线完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -230,7 +230,8 @@
   **依赖**: T002, T005, T011, T017
 
 - [x] **T019**: `_storage_remote.py` 实现〔2.5h〕
-  **完成**: ✅ 2026-09-16（ff32fac67）`bisheng_sdk/_storage_remote.py`。**偏差**：`open()` 在远端后端是「整读后包成 BytesIO」，不是流式——httpx 的流式响应要求把请求上下文交给调用方管理，而 `storage.open()` 的契约是返回一个普通 file-like；大文件的真流式留到 F054 加 presign 时再议。
+  **完成**: ✅ 2026-09-16（ff32fac67；审查修复见下）`bisheng_sdk/_storage_remote.py`。**偏差**：`open()` 在远端后端是「整读后包成 BytesIO」，不是流式——httpx 的流式响应要求把请求上下文交给调用方管理，而 `storage.open()` 的契约是返回一个普通 file-like；大文件的真流式留到 F054 加 presign 时再议。
+  **审查修复（2026-09-16）**: 附件端点的**传输层失败原先漏翻**——`_http.request` 抛的 `PlatformUnreachableError` 直接逃到应用，于是「连不上 runtime-manager」（坑 27：manager 只听 `127.0.0.1` / 未配 `RTM_APP_FACING_BASE_URL`，这是托管期 storage 最常见的故障）被呈现成「连不上平台」，`next_step` 把人支去查 `BISHENG_PLATFORM_API_BASE`，而真正要看的是 `runtime/status` 的 `attachment_storage` 自检项。design D6 的 `StorageUnavailableError` 行本就写明「连接失败（坑 27）」属于它，代码没跟上；AC-25 的「彼此可区分」也因此破了。修法：`RemoteBackend._send` / `AsyncRemoteBackend._asend` 统一捕获并翻成 `StorageUnavailableError`（原 message 保留）。原测试 `pytest.raises((StorageUnavailableError, PlatformUnreachableError))` 两边都收，正是它把这个缺陷放过去的——已收紧成只认 `StorageUnavailableError` 并断言 `next_step` 点名 `attachment_storage`（`test_connect_failure_is_a_storage_outage_not_a_platform_outage` + 异步孪生一条）。
   **文件**: `src/bisheng-sdk/bisheng_sdk/_storage_remote.py`（新）
   **逻辑**: `_RemoteBackend(endpoint, token)`（`endpoint` 已含 `/v1/apps/{app_id}/storage`，SDK 不拼 `app_id`）：`_http.request("storage", …, bearer=token)`；`put` 用 `content=` 传 file object 或 bytes（httpx 流式，原始字节非 multipart）、`Content-Type` 显式或 `mimetypes` 猜、缺长度时先 `seek/tell` 取长度；`get` 整读、`open` 返回 `resp.iter_bytes()` 包装的 file-like；`stat` 打 `/meta/{key}`；`list`（循环 `next_cursor`，`limit` 到达即停）；`delete` 把 `200 {}` 当成功。错误映射按 **manager 信封 `{"detail":{"code","message",…extra}}` 的机器码**（坑 26）：`invalid_object_key` → `InvalidAttachmentPathError`、`unauthorized`（恒 401）→ `StorageHandleRejectedError(reason=detail["message"])`、`not_found` → `AttachmentNotFoundError`、`payload_too_large` → `AttachmentTooLargeError(limit_bytes=detail["max_file_mb"]*1024**2)`、`storage_unavailable` / 连接失败 / 无码 5xx → `StorageUnavailableError`、其它 → `PlatformRefusedError(code=None, details=detail)`。**路径段 `quote(seg, safe="")` 后拼接**；**永不走 manager 的 HMAC 路径**（那是 backend / F052 用的）。
   **测试**: T018 全部通过。
@@ -238,7 +239,8 @@
   **依赖**: T018
 
 - [x] **T020**: storage 门面测试（后端选择 + 两后端跑同一套行为用例 + 异步孪生）〔1.5h〕
-  **完成**: ✅ 2026-09-16（ff32fac67）`tests/test_storage_facade.py`（9 用例，local / remote 参数化跑同一段脚本）。
+  **完成**: ✅ 2026-09-16（ff32fac67；审查修复见下）`tests/test_storage_facade.py`（local / remote 参数化跑同一段脚本）。
+  **审查修复（2026-09-16）**: `test_six_functions_and_six_async_twins_exist` 的名字说六个异步孪生，断言里只列了五个——**`aopen` 从来没实现过**，而这条测试的写法恰好让缺失看不出来。已补 `storage.aopen` / `AsyncRemoteBackend.aopen`（远端 = `aget` 后包 `BytesIO`，与同步 `open` 同形；本地 = `asyncio.to_thread`），断言改成「六个同步函数逐个推导出 `a<name>` 并要求是协程函数」，缺任何一个都会点名。D10「六函数各有异步孪生」至此才真的成立——少了它，用 FastAPI 的应用读大附件只能在事件循环里阻塞。
   **文件**: `src/bisheng-sdk/tests/test_storage_facade.py`（新）
   **测试**: `test_same_api_over_both_backends`（参数化 `local` / `remote(mock)`：`put → stat → list → get → delete → get 抛 NotFound` 同一脚本两边结果形状相等）→ AC-20, AC-23 / `test_six_functions_and_six_async_twins_exist`（`put/get/open/stat/list/delete` 与 `aput/…`）→ AC-20 / `test_handle_resolution_is_per_call_not_cached`（改环境变量后下一次调用换后端——`dev` 重启场景）→ AC-25 / `test_path_validated_before_any_io`（非法路径零请求、零磁盘写）→ AC-21 / `test_no_url_returning_function`（`dir(storage)` 无以 `url` / `link` / `presign` 结尾的名字）→ AC-22
   **覆盖 AC**: AC-20, AC-21, AC-22, AC-23, AC-25
@@ -447,4 +449,6 @@
 - **`_codes.py` 不再留空位**：F052 的门面码已分配（`26320` 无执行身份 / `26321` 不可及含 `unreachable_ids` / `26322` 能力已收回 / `26323` 范围过大），前三个已登记映射，`26323` 按「未登记码原样呈现」走 `PlatformRefusedError`。
 - **新增私有模块 `_attachment.py`**（design §4.3 模块表已补）：`AttachmentMeta` 放在这里而不是 `storage.py`，否则两个后端 import 它会与 `storage` 形成循环 import。公开面集合不受影响（仍是四个非下划线模块）。
 - **`tag_match_mode` 字面量是大写 `"ANY"`**：design §4.2 ③ 初稿的示例写的是小写，服务端 `RetrieveFilters` 的 Literal 只认 `"ANY"` / `"ALL"`，小写会 422。已就地改正 design。
+- **审查回合修掉的两处实现缺陷**（2026-09-16，详见 T019 / T020 条目下）：① 附件端点的传输层失败漏翻成 `StorageUnavailableError`，托管期最常见的 storage 故障被呈现成"平台连不上"（design D6 / 坑 27 / AC-25）；② `storage.aopen` 从未实现，而 `test_six_functions_and_six_async_twins_exist` 只断言了五个孪生，让缺失看不出来（D10）。两处的测试都已收紧成"缺了就会点名"的形状。
+- **一条留给 F052 的 fail-closed 预警**（design §8 已登记）：`knowledge_base_ids=[]` 今天被服务端 `min_length=1` 拒，SDK 原样送出即可；F052 放宽必填时若把 `[]` 也当成「未指定 = 全部被授予范围」，一个把目标库过滤到空的应用就会静默检索得**比它要的更宽**——那时 SDK 要在 `_body` 里把 `[]` 挡成明确错误。
 - **本切片范围**：Wave 1–3（T001–T021）+ T008 的 CI 门。T022–T043（打包脚本、manifest、四个分发端点、runtime-manager 取包、技能包增量、指南、评测样本、114 联调）归姊妹切片 `f057-sdk-dist` 与后续波次，本切片未动 `src/backend/bisheng/dev_toolkit/artifacts/`。

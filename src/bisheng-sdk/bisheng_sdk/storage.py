@@ -38,6 +38,7 @@ __all__ = (
     "adelete",
     "aget",
     "alist",
+    "aopen",
     "aput",
     "astat",
     "delete",
@@ -130,6 +131,14 @@ async def aget(path: str) -> bytes:
     if isinstance(backend, _storage_remote.AsyncRemoteBackend):
         return await backend.aget(validated)
     return await asyncio.to_thread(backend.get, validated)
+
+
+async def aopen(path: str) -> IO[bytes]:
+    validated = _paths.validate(path)
+    backend = _backend(is_async=True)
+    if isinstance(backend, _storage_remote.AsyncRemoteBackend):
+        return await backend.aopen(validated)
+    return await asyncio.to_thread(backend.open, validated)
 
 
 async def astat(path: str) -> AttachmentMeta:

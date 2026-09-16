@@ -78,10 +78,11 @@ def test_path_is_validated_before_any_io(backend: str):
 
 
 def test_six_functions_and_six_async_twins_exist():
+    """每个同步函数都要有异步孪生——少一个，用 FastAPI 的应用就只能在事件循环里阻塞。"""
     for name in ("put", "get", "open", "stat", "list", "delete"):
         assert callable(getattr(storage, name))
-    for name in ("aput", "aget", "astat", "alist", "adelete"):
-        assert inspect.iscoroutinefunction(getattr(storage, name))
+        twin = f"a{name}"
+        assert inspect.iscoroutinefunction(getattr(storage, twin, None)), f"缺异步孪生 {twin}"
 
 
 def test_handle_is_resolved_per_call_not_cached(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -102,6 +103,8 @@ async def test_async_roundtrip_on_the_local_backend(tmp_path: Path, monkeypatch:
     monkeypatch.setenv("BISHENG_APP_STORAGE_DIR", str(tmp_path / "attachments"))
     await storage.aput("a.txt", b"hi")
     assert await storage.aget("a.txt") == b"hi"
+    with await storage.aopen("a.txt") as handle:
+        assert handle.read() == b"hi"
     assert [row.path for row in await storage.alist()] == ["a.txt"]
     await storage.adelete("a.txt")
     with pytest.raises(AttachmentNotFoundError):
