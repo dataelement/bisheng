@@ -69,3 +69,26 @@ async def test_other_failures_still_propagate():
             resource_ids=[12],
             actions=["visible"],
         )
+
+
+@pytest.mark.asyncio
+async def test_the_check_endpoint_answers_no_for_a_disabled_action():
+    """A UI probe asks "may I?" - a switched-off action answers no, not an error.
+
+    The client hides the affordance either way; returning an error additionally
+    popped the raw catalog message as a toast on every page load.
+    """
+    from bisheng.permission.api.endpoints import decision
+
+    api = SimpleNamespace(
+        check=AsyncMock(side_effect=InvalidCatalogActionError(msg="Action upload_file is unavailable"))
+    )
+    with patch.object(decision, "permission_actor", AsyncMock(return_value=SimpleNamespace(super_admin=False))):
+        response = await decision.check_permission_action(
+            {"resource_type": "knowledge_space", "resource_id": "12", "action": "upload_file"},
+            login_user=SimpleNamespace(user_id=7),
+            api=api,
+        )
+
+    assert response.data == {"allowed": False}
+    assert response.status_code == 200
