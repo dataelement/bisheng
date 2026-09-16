@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 15 条修订，36 条 AC（决议 1–11） |
 | design.md | ✅ 已评审（全自动模式定案） | 2026-09-16 初版 + 两次续写（末次按 `wt/cli-dev` 改写 D12 / D13 / D4 / D5 / D8，坑扩到 36）；`/sdd-review design` 已跑，发现就地修订；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-09-16） | 本文；**44 任务 / 7 Wave + 1 前置**；36 条 AC 全覆盖（追溯表见末尾）；`/sdd-review tasks` 已跑 |
-| 实现 | 🚧 进行中 | **38 / 45**（两条切片已合流：`wt/f057-sdk-core` 交付包本体 Wave 0–3，`wt/f057-sdk-dist` 交付分发与文档 Wave 0 / 4 / 5 / 6。仍缺的是需要 114 或真实构建容器的端到端项，逐条见下。）|
+| 实现 | 🚧 进行中 | **39 / 45**（2026-09-16 Wave 5 尾批：**T035a 落地**——模型章两条回归断言改为守 F051 已交付的契约，分支 `wt/f053-skillpack-model`，`test/dev_toolkit` **119 passed**；以下为上一批记录。两条切片已合流：`wt/f057-sdk-core` 交付包本体 Wave 0–3，`wt/f057-sdk-dist` 交付分发与文档 Wave 0 / 4 / 5 / 6。仍缺的是需要 114 或真实构建容器的端到端项，逐条见下。）|
 
 ---
 
@@ -368,12 +368,14 @@
   **依赖**: T033, T034
   **证据**: `test/dev_toolkit/test_platform_wiring_sdk.py`（17 用例，含两条回归：auth 章仍第一 + 章首警示块、模型章仍「暂未提供」且无 URL）（10607e923）。
 
-- [ ] **T035a**（F051 落地后追加）: 模型章的两条回归断言要改口径〔0.3h〕
+- [x] **T035a**（F051 落地后追加）: 模型章的两条回归断言要改口径〔0.3h〕
   **起因**: T034 / T035 里的 `test_model_chapter_still_marked_unavailable_and_invents_no_base_url` 假定模型面尚未交付。F051 已交付并定名三个环境变量，该断言从此守错了东西。
   **改成**: ① 模型章不再含「暂未提供」，而是教官方 `openai` 客户端 + **`OPENAI_BASE_URL` / `OPENAI_API_KEY` / `BISHENG_MODEL_BASE_URL`** 三个注入名；② **仍然断言包里没有手拼的 base URL 字面量**（`/api/v2/model/v1` 只能来自 `whoami.model_base_url` 或注入的环境变量，F051 AC-30 的唯一出口口径不变）；③ `test_no_sdk_wrapper_for_model_or_appdb` 一字不改——SDK 依旧不封装 chat（DEV-07）。
   **另附**：指南需写明 `X-BiSheng-Access-Token` 由应用代码**显式转发**给模型面，否则调用记录的 subject 记为「应用自身」（F051 spec 决议-5 允许，但审计里就没有用户维度了）。
   **覆盖 AC**: AC-26, AC-30
   **依赖**: T035
+  **2026-09-16 完成证据**（分支 `wt/f053-skillpack-model`，与 F053 T038a 同批）: 两条断言各自改名并改口径——① `test/dev_toolkit/test_skill_packs.py::test_model_chapter_is_marked_not_yet_available_and_invents_no_endpoint` → `test_model_chapter_teaches_the_shipped_face_and_hardcodes_no_address`：断言模型章**不含**「暂未提供」、含三个注入名、教官方 `openai` 客户端（`chat.completions.create`）、点名 `BISHENG_PLATFORM_API_BASE` 这个拼地址陷阱，**保留**原「章内无任何 `https?://`」断言；② `test/dev_toolkit/test_platform_wiring_sdk.py::test_model_chapter_still_says_not_yet_available` → `test_model_chapter_teaches_the_injected_names_and_no_literal_address`：断言三个注入名 + 清单声明与 26215 + `X-BiSheng-Access-Token` 转发与 26204，同样保留无 URL 断言。③ `test_no_sdk_wrapper_is_taught_for_models_or_the_app_database`（DEV-07）一字未改，仍绿。两个文件的模块 docstring 同步订正。`cd src/backend && pytest test/dev_toolkit -q` → **119 passed**。
+  **偏差**: 口径②「不得出现手拼 base URL 字面量」原只落在模型章，本批**加强为包级**——新增 `test_skill_packs.py::test_no_pack_file_hardcodes_the_model_face_path`，对 `platform-wiring/` 下每个文件断言不含 `/api/v2/model/v1`；另附的 `X-BiSheng-Access-Token` 转发说明落在 F053 T038a 的模型章里（第 1 章请求头表同批补了指向）。
 
 - [x] **T036**: `selfcheck.py` **增量**：在 F053 已交付的脚本上追加 SDK 三步〔2h〕
   **文件**: `src/backend/bisheng/dev_toolkit/skills/platform-wiring/selfcheck.py`（**增量**，109 行版本已含：读 `~/.bisheng/credentials.json` → 打 `/api/v2/auth/whoami` → 校验应用库变量，`fail(reason, next_step)` 打两行并 `SystemExit(1)`）

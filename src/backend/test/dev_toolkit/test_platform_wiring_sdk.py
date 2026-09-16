@@ -6,9 +6,9 @@ two new chapters, the SDK example, and the self-check's SDK steps.
 
 Two of the assertions below are **regressions in the other direction**: the
 identity chapter must still come first and still open with the silent-failure
-warning, and the model chapter must still say 暂未提供 rather than invent an
-endpoint. Inserting chapters is exactly the edit that breaks those, so they are
-asserted here as well as in F053's file.
+warning, and the model chapter must still carry no literal address. Inserting
+chapters is exactly the edit that breaks those, so they are asserted here as
+well as in F053's file.
 """
 
 from __future__ import annotations
@@ -108,10 +108,23 @@ def test_storage_chapter_states_the_local_online_difference_and_the_quota_rule()
     assert "BISHENG_APP_STORAGE_MAX_FILE_MB" in chapter
 
 
-def test_model_chapter_still_says_not_yet_available():
-    """Regression: the renumbering must not have touched the model chapter's content."""
+def test_model_chapter_teaches_the_injected_names_and_no_literal_address():
+    """Regression, re-aimed (F057 T035a): F051 shipped, so「暂未提供」would now be a lie.
+
+    The three things a reader must come away with are the injected variable
+    names, that the callable range is the manifest declaration rather than the
+    tenant, and that the visitor credential has to be forwarded by the app or
+    the call record loses its user dimension. The no-URL assertion stays exactly
+    as it was — AC-30 keeps one outward spelling of the address either way.
+    """
     chapter = _chapter("模型")
-    assert "暂未提供" in chapter and "不要猜" in chapter
+    assert "暂未提供" not in chapter
+    for env_name in ("OPENAI_BASE_URL", "OPENAI_API_KEY", "BISHENG_MODEL_BASE_URL"):
+        assert env_name in chapter, env_name
+    # The declaration is the range hosted, and an undeclared model is refused.
+    assert "capabilities" in chapter and "26215" in chapter
+    # Forwarding the visitor credential, and the local case where it is refused.
+    assert "X-BiSheng-Access-Token" in chapter and "26204" in chapter
     assert not re.search(r"https?://", chapter)
 
 
