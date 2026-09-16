@@ -336,6 +336,22 @@ export interface HostedAppSchemaChange {
 }
 
 /**
+ * One declared platform capability of a release (F055 AC-61 / AC-63).
+ *
+ * `name` is what the owner wrote, resolved to a readable name where the
+ * platform has one — a knowledge base's own name rather than its id. `revoked`
+ * is computed per request, never stored: it says the capability no longer
+ * resolves *right now*, with `reason` saying why (`revoked` gone or no longer
+ * retrievable, `ambiguous` a bare name that now matches several).
+ */
+export interface HostedAppCapability {
+  kind: "model" | "knowledge" | string
+  name: string
+  revoked: boolean
+  reason: string
+}
+
+/**
  * `GET /api/v1/apps/{id}/publish-status` — the single release read model
  * (AC-38), shared with the MCP status tool.
  */
@@ -348,8 +364,8 @@ export interface HostedAppPublishStatus {
   deployment: HostedAppDeploymentRef | null
   approval: HostedAppApproval | null
   tier: HostedAppTier | null
-  /** Deferred capability wave; always empty in this release. */
-  capabilities: unknown[]
+  /** Declared platform capabilities of the release the owner is about to get. */
+  capabilities: HostedAppCapability[]
   schema_change: HostedAppSchemaChange | null
   can: {
     withdraw: boolean

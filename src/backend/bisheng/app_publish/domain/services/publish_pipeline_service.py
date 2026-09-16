@@ -58,7 +58,12 @@ from bisheng.app_publish.domain.models.app_deployment import (
 )
 from bisheng.app_publish.domain.schemas.app_manifest import ICON_EXTENSIONS, MAX_ICON_BYTES, AppManifest
 from bisheng.app_publish.domain.schemas.failure import failure_from_error
-from bisheng.app_publish.domain.services import package_service, precheck_service, schema_evolution_service
+from bisheng.app_publish.domain.services import (
+    capability_bus_service,
+    package_service,
+    precheck_service,
+    schema_evolution_service,
+)
 from bisheng.app_publish.domain.services.manifest_validator import validate_manifest
 from bisheng.app_publish.domain.services.release_audit import write_release_audit
 from bisheng.app_publish.domain.services.secret_scanner import scan_package
@@ -230,6 +235,18 @@ class PublishPipelineService:
 
             # AC-03's two gates, asked before the approval gate ever sees this.
             await cls._assert_submittable(app_id)
+
+            # AC-07's capability half. On the synchronous leg because 16224 is a
+            # synchronous-leg code (design §4.2, stage ``precheck_manifest``) and
+            # because the CLI turns it into a message the developer fixes in
+            # ``bisheng-app.yaml`` before re-sending — which only works while the
+            # upload is still the answer. Needs the tenant and the owner, which
+            # is why it sits here rather than inside ``validate_manifest``.
+            await capability_bus_service.validate_capability_refs(
+                validated.manifest.capabilities,
+                tenant_id=tenant,
+                owner_user_id=owner_user_id,
+            )
 
             # AC-09 — the structure-evolution gate. Still no RPC: one read of
             # the online version's frozen manifest. The summary is kept for the

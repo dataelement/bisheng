@@ -606,27 +606,52 @@ T001–T007（Wave 1，可并行）
   ⑪ **`OpenApiExecutionSnapshot` 不带 `subject_ref`**（有意，未改）：快照是有损投影（`actor_name` 也没带）。异步腿要拿应用 uuid，用 `actor_id`（= `hosted_app_subject.id`）回查即可；F059 的能力调用审计双归属若需要 uuid，在自己的 writer 里回查，不要给快照加字段（那是跨 F051/F059 的契约变更）。
   ⑫ **`open_api.call` 审计行对本主体是匿名的**（已知，未改）：中间件的 `operator_id` 只对 `natural_person` 取值、`operator_name` 只对 `service_account` 取值，所以本主体落成 `operator_id=0` + 无名，审计面 `_operator_kind()` 判为 `system`。`metadata.actor_kind="hosted_app"` / `actor_id` / `credential_id` 仍在，可追溯。给它补显示名会让 `_operator_kind()` 误判成 `service_account`（判据是「operator_id=0 且有名」），属 AC-55 / T059 + F056 审计面一并拍板的事。
 
-- [ ] **T056**: 模型能力注入（经 F051 OpenAI 兼容面 + `BISHENG_PLATFORM_API_BASE` / `BISHENG_APP_TOKEN` 注入；未声明不可调用；工作台无任何底层账号 / 端点配置入口）
+> **T056–T060 于 2026-09-16 由切片 `f055-capability-injection` 一并落地**（分支 `wt/f055-capability-injection`，提交 `347ff7d52` 后端 + `0ff17021f` 前端）。五项共享同一个新模块 `capability_bus_service.py`，故证据与偏离在 T056 下集中记一次，其余任务只记各自的落点与用例。
+
+- [x] **T056**: 模型能力注入（经 F051 OpenAI 兼容面 + `BISHENG_PLATFORM_API_BASE` / `BISHENG_APP_TOKEN` 注入；未声明不可调用；工作台无任何底层账号 / 端点配置入口）
   **文件**: `src/backend/bisheng/app_publish/domain/services/capability_bus_service.py`, `src/backend/test/app_publish/test_capability_model.py`
   **覆盖 AC**: AC-49, AC-51, AC-54
+  **证据**: `capability_bus_service.py`（`HostedAppDeclarationAdapter` / `derive_scopes` / `undeployable_scopes` / `model_face_base_url` / `runtime_capability_env`）+ `app_runtime/domain/services/runtime_env_ports.py`（新端口）+ `app_state_service._start` 合并能力环境 + `composition.register()` 三处注册。用例 `test_capability_model.py` 18 例 + `test/app_runtime/test_capability_env_injection.py` 5 例，全绿。
+  **偏离与必须知道的落点**：
+  ① **注入的名字不是任务标题写的那两个**。按 design D13 与 F054 `contracts-runtime-manager.md` §5，模型面用 `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `BISHENG_MODEL_BASE_URL` 三名 + `BISHENG_APP_TOKEN`；`BISHENG_PLATFORM_API_BASE` 是 **v2 业务面**地址，早已由 runtime-manager 的 `build_env` 注入，本切片不碰。任务标题沿用了 D13 修订前的写法。
+  ② **注入走端口而不是直连**。`app_runtime` 不得 import `app_publish`（RULE-5），故新增 `runtime_env_ports`（与 `lifecycle_hooks` 同形）：F055 在 composition 里注册 provider，F054 在 `deploy` 前 `await capability_env(...)` 并把结果**最后**合并进 `env`（平台保留名覆盖调用方同名值）。未注册 = 无能力环境（诚实），provider 抛错 = 中止启动（不端上一个没有凭据的容器）。
+  ③ **明文凭据不进 `app_version.injections`**。凭据在拉起前现签、注入一次、不落库；`injections` 仍为 `{}`，`version_service` 未改。
+  ④ **`model_face_base_url()` 不经 `Request`**。上线发生在 Celery 腿，没有请求可读转发头；取 `open_api.public_base_url`，退 `app_runtime.entry_base_url`，两者皆空则**不注入**该变量并 warn（不猜地址）。路径常量复用 `public_base_url.MODEL_GATEWAY_BASE_PATH`。
+  ⑤ **16231 改了判据、保住了含义**。原先「声明非空即拒」（本轮不做）改为「声明派生出的 scope 在本部署不可签发即拒」——`model:invoke` 受 `open_platform.enabled` 闸，关着时声明模型仍应拒，否则会发布出一个每次模型调用都 403 的应用；只声明知识库（`knowledge:read` 无闸）则放行。
+  ⑥ **顺带修掉一个真缺陷**：`model_range_policy` 把 `principal.actor_name`（应用**显示名**）当 `app_id` 用，于是声明查找与 `model_call_record.app_id` 都落在名字上（正是 T055 note ① 提醒过的）。改为 `principal.subject_ref`（`app.id`），并把 `test/open_api/model_gateway_fixtures.hosted_app_principal` 补上 `subject_ref`、两条断言改成 uuid。
+  ⑦ **顺带补上 OBO 的第一个 reader**：`entry_authz_service` 此前只签不验，F051 的 `AccessSubjectVerifierPort` 一直没人注册（= 每个访问者令牌都被拒、每次调用都记成「应用自身」）。新增 `verify_obo_token` + `AccessSubjectVerifier`，由 F055 composition 注册（依赖方向仍是 F055 → F054）。**F054 AC-34 里「OBO 尚无消费者、暂不 fail-closed」的前提到此失效**——下一个动 entry 的切片应按当初的约定把「未签发令牌」改成拒绝进入。
 
-- [ ] **T057**: 知识库能力注入与 fail-closed（白名单由平台按当前生效声明确定、应用不可自报；运行期可及 = 白名单 ∩ 访问用户可见范围，文件级经 F052 门面；无访问用户身份一律拒绝、绝不回退全量；集合相等断言）
+- [x] **T057**: 知识库能力注入与 fail-closed（白名单由平台按当前生效声明确定、应用不可自报；运行期可及 = 白名单 ∩ 访问用户可见范围，文件级经 F052 门面；无访问用户身份一律拒绝、绝不回退全量；集合相等断言）
   **文件**: `src/backend/bisheng/app_publish/domain/services/capability_bus_service.py`（增量）, `src/backend/test/app_publish/test_capability_knowledge.py`
   **依赖**: F052 门面已落地（2026-09-16），契约见 [F052 design §4.2 ③](../052-mcp-server-face/design.md)。调用形态：`identity = await RetrievalIdentity.from_user(访问用户 id, tenant_id)`（**async**）→ `await RetrievalFacadeService.retrieve(identity, RetrievalRequest(query=…, whitelist=当前生效声明))`。`identity=None` 门面直接抛 26320，不必自己再判一次；白名单内的库已被删除 → 26322 `KnowledgeCapabilityRevokedError(data.knowledge_id)`，由 T058 转 16273。
   **覆盖 AC**: AC-50, AC-52
+  **证据**: `CapabilityBusService.retrieve / accessible_knowledge`；`test_capability_knowledge.py` 11 例，含 AC-50 的集合相等断言（`set(effective_scope) == 白名单 ∩ 用户可见`）与无访问用户即 26320。
+  **偏离与必须知道的落点**：
+  ① **堵掉了一个当时还够不着、开了 scope 就会真漏的口子**（T055 note ⑩ (a) 点名的那个）：`RetrievalIdentity.from_open_api_principal` 对 `hosted_app` 主体会用 `authorization_subject_*`（= 归属人）造身份、白名单为空 → **归属人全量可见范围**。本切片让它对该 kind 直接抛 26320，于是任何忘记走能力总线的检索面只会 fail-closed。`filelib/retrieve` 改为托管应用走总线，MCP 检索工具**故意保持拒绝**——MCP 面是开发者面且明确拒收身份头，没有访问用户可言。
+  ② **白名单在运行期解析、不冻结**。声明里的知识库可写 `id` 或 `name`；`name` 走新增的 `KnowledgeDao.aget_by_exact_names`（返回**全部**同名行，`aget_knowledge_by_name` 的 `.first()` 会静默绑到最早那条）。同名多条 = `ambiguous`，解析不到 / 类型不支持 = `revoked`，两者都掉出白名单但**不影响其余能力**。
+  ③ **知识读用应用自己的租户**，不继承调用方的 ambient tenant（`_as_tenant`，与 `model_catalog._as_tenant` 同形）。
+  ④ **复核时补上的真漏（26052）**：偏离 ① 只堵住了「拿 principal 造检索身份」这一道门，而 `knowledge:read` 这个 scope 一共罩着 **7 条 v2 路由**——`GET /filelib`、`GET /filelib/file/list`、`detail_qa`、`query_qa`、`GET /citation/{id}` 都走 `get_open_api_operator()`，对本主体解析为**应用归属人（带归属人角色）**；`GET /filelib/download_statistic` 更直接，凭 scope 就能取走 `/app/data` 下任意 `.log`。声明只买了「检索」一条，scope 却开了七条，所以改成**按路由准入、默认拒绝**：`OpenApiScopeMarker` 新增 `hosted_app` 开关（默认 `False`），`dependencies.admit_request` 对该 actor_kind 未开关即抛新码 **26052**（403，`OpenApiHostedAppEndpointRefusedError`，三语已补）；只有 `POST /filelib/retrieve` 与模型面三条路由开了关。第二道防线在 `open_endpoints/domain/utils._principal_user_id`——MCP 面等非 `APIRoute` 入口拿不到 marker，那里同样拒。用例：`test/open_api/test_hosted_app_route_admission.py`（3 例，行为）+ `test_open_api_route_matrix.py::test_only_the_capability_faces_admit_a_hosted_application`（lockstep 清单）+ `test_capability_knowledge.py` 两例（兜底层）。AC-59 的源码扫描测试相应收紧：凭据符号仍然全树禁止，**准入控制**两处文件按名单放行并写明理由。
 
-- [ ] **T058**: 能力收回错误态（`16273` 带能力名与「已收回」原因、不回退旧值、应用整体可用）+ 迭代上线后旧能力 5 秒内失效 + 发布面「已失效 + 原因」标记（按需计算、不落库、不起定时任务）
+- [x] **T058**: 能力收回错误态（`16273` 带能力名与「已收回」原因、不回退旧值、应用整体可用）+ 迭代上线后旧能力 5 秒内失效 + 发布面「已失效 + 原因」标记（按需计算、不落库、不起定时任务）
   **文件**: `src/backend/bisheng/app_publish/domain/services/capability_bus_service.py`（增量）, `platform/src/pages/BuildPage/hostedApp/publish/CapabilityListCard.tsx`（**新建方**——T067 只在其上增量补全，两处都标「新」会互相覆盖）, `src/backend/test/app_publish/test_capability_revoked.py`
   **覆盖 AC**: AC-37, AC-53, AC-63
+  **证据**: `16273` / `16274` 两个错误类补 `capability` / `kind` / `reason` 载荷（原先无参）；`capability_status()` 按需计算、`model_capability_status()` 走 F051 `resolve_model_name` 出活口径；`publish_status_service._capabilities_payload` 接进发布面读模型。前端 `CapabilityListCard.tsx` + 6 例 vitest + 三语各 8 键。用例 `test_capability_revoked.py` 16 例。
+  **复核补充**：③ 16231 换了判据（见 T056 偏离 ⑤）却没换文案——`api_errors` 三语仍写着「本环境未启用能力总线，请移除 capabilities 声明」，现在的正确处置是让管理员开 `open_platform`，照旧文案改只会白改一轮。三语已改，产物已用 `packages/locales/scripts/build.mjs` 重新生成。④ `publish_status_service._capabilities_payload` 传 `version.capabilities` 时补 `or {}`：`capability_status()` 把 `None` 当作「改读正在跑的版本」，列为 NULL 的待发布版本会让发布面挂着待发布版本的名字、展示在跑版本的声明。
+  **偏离**：① **AC-37 的「5 秒」没有窗口需要断言**——生效声明按 `app.current_version_id` 每次现读、无缓存，指针一动下次调用即新声明；凭据侧的 5 秒上界仍由 T055 的 `assert_revocation_bound()` 守，本文件再断言一次以免它被当成实现细节删掉。② 发布面读模型里能力解析失败**答空列表并 warn**，不让知识模块的一分钟故障把整页拖垮（空读作「没展示声明」，不读作「一切正常」）。
 
-- [ ] **T059**: 能力调用审计双归属（actor = 应用 / subject = 当前访问用户；**仅模型调用**允许 subject = 「应用自身」并显式标注，检索无访问用户一律拒；含模型名与 token 数 / 检索目标；subject 列随 F050，落地前以附加字段承载）
+- [x] **T059**: 能力调用审计双归属（actor = 应用 / subject = 当前访问用户；**仅模型调用**允许 subject = 「应用自身」并显式标注，检索无访问用户一律拒；含模型名与 token 数 / 检索目标；subject 列随 F050，落地前以附加字段承载）
   **文件**: `src/backend/bisheng/app_publish/domain/services/capability_audit.py`, `src/backend/test/app_publish/test_capability_audit.py`
   **覆盖 AC**: AC-55
+  **证据**: `capability_audit.record_retrieval`（尽力而为、绝不把检索带崩）+ `assert_model_attribution`（钉住 F051 侧那一对，供测试调用）+ 新表 `app_capability_call_record`。用例 `test_capability_audit.py` 13 例。
+  **复核补充**：④ 总线自己抛的拒绝（`_assert_targets_declared` 的 16273 / 16274）原先**不落记录**，而同一句话在门面深一层抛（26322）却落——「这个应用一直在够什么」的答案会随哪一层说不而变。现已一并记录（有访问用户时），并把 `credential_id` 从 `filelib` 一路带到记录行（原先该列声明了却永远为 NULL）。用例 `test_capability_audit.py::test_a_refusal_the_bus_itself_raises_is_recorded_like_any_other`。
+  **偏离**：① **检索记录落自己的表，不落 `audit_log`**，与 F051 的 `model_call_record` 同一理由（design D9 / K7：托管应用一次问答一次检索，混进审计表会淹掉人类尺度的事件）。**因此不新增 audit action，四处 lockstep 未动**。代价是 F056 审计面目前读不到这张表——如果产品要求它出现在「系统操作」页，那是 F056 侧一次读模型扩展，不是再加一个 action。② 模型侧**一行代码都没重复写**：`model_call_record` 早已有 `app_id` / `subject_kind` / `subject_id` / token 数，本切片只修 `app_id` 取值（见 T056 偏离 ⑥）并把这对属性变成可断言的。③ 无访问用户的检索**不写记录**（没有可归属的 subject，编一个正是 AC-55 禁止的），refusal 本身由 26320 送达调用方。
 
-- [ ] **T060**: 预检的能力声明引用校验（所引模型在本租户已启用且按 F051 名称解析规则可唯一解析〔裸名歧义 → 拒绝并提示限定名〕；所引知识库存在且为 F052 门面支持的类型）+ 审批单能力白话摘要接真数据
-  **文件**: `src/backend/bisheng/app_publish/domain/services/precheck_service.py`（增量）, `src/backend/test/app_publish/test_precheck_capability_refs.py`
+- [x] **T060**: 预检的能力声明引用校验（所引模型在本租户已启用且按 F051 名称解析规则可唯一解析〔裸名歧义 → 拒绝并提示限定名〕；所引知识库存在且为 F052 门面支持的类型）+ 审批单能力白话摘要接真数据
+  **文件**: ~~`src/backend/bisheng/app_publish/domain/services/precheck_service.py`（增量）~~ → `capability_bus_service.validate_capability_refs`，由 `publish_pipeline_service.accept()` 在同步腿调用, `src/backend/test/app_publish/test_precheck_capability_refs.py`
   **依赖**: F052 门面已落地（2026-09-16），契约见 [F052 design §4.2 ③](../052-mcp-server-face/design.md)。知识库引用校验用 `RetrievalFacadeService.is_supported_knowledge_type(t)`（纯函数、非 async）与 `await RetrievalFacadeService.check_reachable(identity, 声明列表, whitelist=声明列表)` → `ReachabilityReport{reachable, unreachable, revoked}`。**预检必须走这两个方法而不是自己查表**——「门面支持的类型」只能有一份口径，否则预检放行的声明运行期会答不可及。
   **覆盖 AC**: AC-07, AC-24
+  **证据**: `validate_capability_refs()`（模型走 `resolve_model_name`、知识库走门面两方法）+ `publish_approval_service._capabilities_payload`（审批单白话摘要接真数据）。用例 `test_precheck_capability_refs.py` 16 例。
+  **偏离**：① **落点不在 `precheck_service.py`**——该模块按其模块文档是**异步腿**（Celery 上的构建与探活），而 16224 是同步腿的码（design §4.2 阶段表第 2 行 `precheck_manifest` **同步**），且 CLI 要把它转成终端提示后**用同一个包重发**，只有在 `accept()` 里拒才成立。`validate_manifest` 里做不了：它拿不到租户与归属人。`precheck_service.py` 未改。② **可及性以「归属人」为上限**判定（design D13），不是任何访问用户——访问用户每次都不同，按谁校验都没有意义。③ 知识库同名歧义提示改用 id 引用；模型裸名歧义**原样透传 F051 的候选限定名**，不自己编占位符。
 
 ---
 

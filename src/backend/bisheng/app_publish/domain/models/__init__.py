@@ -8,12 +8,26 @@ tenant SELECT filter covers it (design K6).
 whose isolation is derived from the ``app`` row (see its module docstring).
 Listing it here only puts the table into ``SQLModel.metadata``.
 
+``app_capability_call_record`` does carry ``tenant_id`` and is covered by the
+automatic filter for the same reason ``app_deployment`` is.
+
 ``resource_tier`` is **not** here on purpose — it is owned by F055 but read by
 F054, so its model sits in ``bisheng/database/models/resource_tier.py`` to keep
 ``app_runtime`` from importing ``app_publish`` (design D11 / D16).
 """
 
 from bisheng.app_publish.domain.models.app_deployment import AppDeployment, AppDeploymentDao
+from bisheng.app_publish.domain.models.capability_call_record import (
+    AppCapabilityCallRecord,
+    AppCapabilityCallRecordDao,
+)
 from bisheng.app_publish.domain.models.hosted_app_subject import HostedAppSubject, HostedAppSubjectDao
 
-__all__ = ["AppDeployment", "AppDeploymentDao", "HostedAppSubject", "HostedAppSubjectDao"]
+__all__ = [
+    "AppCapabilityCallRecord",
+    "AppCapabilityCallRecordDao",
+    "AppDeployment",
+    "AppDeploymentDao",
+    "HostedAppSubject",
+    "HostedAppSubjectDao",
+]

@@ -124,9 +124,13 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.database.models.tenant",
     "bisheng.user.domain.models.user",
     "bisheng.user.domain.models.user_role",
+    "bisheng.knowledge.domain.models.knowledge",
     "bisheng.app_publish.domain.models.app_deployment",
+    "bisheng.app_publish.domain.models.capability_call_record",
     "bisheng.app_publish.domain.models.hosted_app_subject",
     "bisheng.app_publish.domain.services.app_credential_service",
+    "bisheng.app_publish.domain.services.capability_audit",
+    "bisheng.app_publish.domain.services.capability_bus_service",
     "bisheng.app_publish.domain.services.package_service",
     "bisheng.app_publish.domain.services.manifest_validator",
     "bisheng.app_publish.domain.services.secret_scanner",
@@ -189,6 +193,8 @@ _TABLES = (
     "api_credential",
     "api_credential_delegate_scope",
     "hosted_app_subject",
+    "app_capability_call_record",
+    "knowledge",
 )
 
 _METADATA_MODULES = (
@@ -203,6 +209,7 @@ _METADATA_MODULES = (
     "bisheng.user.domain.models.user",
     "bisheng.user.domain.models.user_role",
     "bisheng.database.models.role",
+    "bisheng.knowledge.domain.models.knowledge",
     "bisheng.app_publish.domain.models",
     "bisheng.open_api.domain.models",
     "bisheng.approval.domain.models.approval_scenario",
@@ -688,6 +695,47 @@ async def deployment_factory(publish_db, owner_user):
             )
             await AppDeploymentDao.acreate(session, row)
             await session.commit()
+        return row
+
+    return _create
+
+
+@pytest.fixture()
+async def knowledge_factory(publish_db, owner_user):
+    """``await knowledge_factory(name=..., type=...)`` → a ``Knowledge`` row.
+
+    Straight through the session, like ``app_factory``: the capability suite
+    needs knowledge bases that exist, not knowledge bases that were created the
+    way the product creates them (which would drag in Milvus and ES). What the
+    tests do assert about them is resolution and type support, and both are
+    decided from the columns seeded here.
+    """
+    from bisheng.core.context.tenant import set_current_tenant_id
+    from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+
+    counter = {"n": 0}
+
+    async def _create(
+        *,
+        name: str | None = None,
+        knowledge_type: int = KnowledgeTypeEnum.NORMAL.value,
+        tenant_id: int = ROOT_TENANT_ID,
+        user_id: int | None = None,
+    ):
+        counter["n"] += 1
+        set_current_tenant_id(tenant_id)
+        row = Knowledge(
+            name=name or f"f055-kb-{counter['n']}",
+            type=knowledge_type,
+            tenant_id=tenant_id,
+            user_id=user_id if user_id is not None else owner_user.user_id,
+            collection_name=f"col_{counter['n']}",
+            index_name=f"idx_{counter['n']}",
+        )
+        async with publish_db() as session:
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
         return row
 
     return _create

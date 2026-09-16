@@ -306,6 +306,23 @@ class KnowledgeDao(KnowledgeBase):
             return result.all()
 
     @classmethod
+    async def aget_by_exact_names(cls, names: list[str]) -> list[Knowledge]:
+        """Every knowledge base whose name is exactly one of ``names``.
+
+        Unlike :meth:`aget_knowledge_by_name` this returns **all** matches rather
+        than the first: a name is not unique within a tenant, and a caller that
+        has to tell "one match" from "several" (F055's capability declaration
+        resolves ``knowledge_bases[].name`` and must refuse an ambiguous one
+        instead of binding to whichever row was created first) cannot do that
+        with a ``.first()``.
+        """
+        if not names:
+            return []
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Knowledge).where(col(Knowledge.name).in_(names)))
+            return result.all()
+
+    @classmethod
     async def aget_knowledge_ids_created_by(
         cls,
         user_id: int,

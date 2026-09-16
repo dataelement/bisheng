@@ -58,12 +58,21 @@ def service_account_principal(
     )
 
 
-def hosted_app_principal(*, app_slug: str = "survey-app", tenant_id: int = 9) -> OpenApiPrincipal:
-    """A hosted-application principal.
+def hosted_app_principal(
+    *,
+    app_slug: str = "survey-app",
+    app_id: str = "app-uuid-survey",
+    tenant_id: int = 9,
+    scopes: frozenset[str] = frozenset({"model:invoke"}),
+) -> OpenApiPrincipal:
+    """A hosted-application principal, shaped exactly like ``resolve_hosted_app``'s.
 
-    ``model_construct`` because F055 T055 has not widened ``actor_kind``'s
-    Literal yet; once it has, this becomes a normal construction and nothing
-    else in these tests changes.
+    The split between ``actor_name`` and ``subject_ref`` is the point: the name
+    is the application's *display* name and the ref is ``app.id``. Everything
+    that identifies the application — the declaration lookup, the call record's
+    ``app_id``, the access token's audience — keys on the ref, so a fixture that
+    put the id in the name would let a regression through unnoticed (F055 T055
+    note ①).
     """
 
     return OpenApiPrincipal.model_construct(
@@ -71,9 +80,10 @@ def hosted_app_principal(*, app_slug: str = "survey-app", tenant_id: int = 9) ->
         actor_kind="hosted_app",
         actor_id=5,
         actor_name=app_slug,
+        subject_ref=app_id,
         tenant_id=tenant_id,
         resource_owner_user_id=12,
-        scopes=frozenset({"model:invoke"}),
+        scopes=scopes,
         mode="S",
         authorization_subject_type="service_account",
         authorization_subject_id=5,

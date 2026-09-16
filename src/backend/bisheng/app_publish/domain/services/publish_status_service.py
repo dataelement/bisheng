@@ -102,9 +102,7 @@ class PublishStatusService:
             "deployment": cls._deployment_payload(deployment),
             "approval": approval,
             "tier": await cls._tier_payload(current_version or pending_version),
-            # Capability declarations are a deferred wave. The key is present
-            # and empty so neither consumer has to change shape when they land.
-            "capabilities": [],
+            "capabilities": await cls._capabilities_payload(app, pending_version or current_version),
             "schema_change": await cls._schema_change_payload(app, deployment),
             "can": {
                 # Withdrawing goes through the approval centre's own endpoint,
@@ -373,6 +371,63 @@ class PublishStatusService:
             return None
         change = await schema_evolution_service.evaluate(app.id, deployment.manifest)
         return change.to_payload() if change is not None else None
+
+    @staticmethod
+    async def _capabilities_payload(app, version) -> list[dict[str, Any]]:
+        """The declared capabilities with their 「已失效」 marks (AC-61 / AC-63).
+
+        Computed on every read and stored nowhere (design D13): the mark is a
+        comparison between what the release declared and what the platform has
+        right now, and persisting it would give the surface a value that can be
+        wrong without anything noticing. The version shown is the one the owner
+        is about to get — the pending release when there is one, the running one
+        otherwise — because that is the declaration they would be editing.
+
+        The model verdicts cost one catalog read, cached by F051 for a minute, so
+        they are resolved for real rather than shown as permanently healthy.
+        """
+        if version is None:
+            return []
+        from bisheng.app_publish.domain.services import capability_bus_service as bus
+
+        try:
+            rows = await bus.capability_status(
+                app_id=app.id,
+                tenant_id=int(app.tenant_id or 0),
+                # ``or {}`` rather than the raw column: ``capability_status``
+                # treats ``None`` as "read the running version instead", and a
+                # version row whose ``capabilities`` is NULL would then make this
+                # surface describe the *running* declaration while naming the
+                # pending one. An empty declaration must read as empty.
+                capabilities=getattr(version, "capabilities", None) or {},
+            )
+            models = await bus.model_capability_status(
+                bus.EffectiveDeclaration(
+                    app_id=app.id,
+                    tenant_id=int(app.tenant_id or 0),
+                    version_id=str(getattr(version, "id", "") or ""),
+                    app_name=app.name or "",
+                    models=tuple(row.label for row in rows if row.kind == bus.CAPABILITY_KIND_MODEL),
+                )
+            )
+        except Exception:
+            # The publish page must render even when the catalog or the
+            # knowledge module is having a bad minute. Returning nothing is
+            # honest — an empty list reads as "no declaration shown", not as
+            # "everything is fine" — and the log carries the cause.
+            logger.exception(f"app_publish.status_capabilities_unresolved app_id={app.id}")
+            return []
+
+        resolved = {row.label: row for row in models}
+        return [
+            {
+                "kind": row.kind,
+                "name": resolved.get(row.label, row).display_name,
+                "revoked": resolved.get(row.label, row).revoked,
+                "reason": resolved.get(row.label, row).reason,
+            }
+            for row in rows
+        ]
 
     @staticmethod
     async def _tier_payload(version) -> dict[str, Any] | None:

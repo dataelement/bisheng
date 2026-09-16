@@ -250,3 +250,31 @@ class OpenApiDelegateLocalDevRefusedError(OpenApiAuthError):
     Code = 26051
     Msg = "This credential is delegation-only; issue a separate key without delegate for local development"
     http_status = 403
+
+
+class OpenApiHostedAppEndpointRefusedError(OpenApiAuthError):
+    """A hosted application reached a v2 endpoint that executes as a natural person.
+
+    The legacy ``/api/v2`` business endpoints run as ``get_open_api_operator()``,
+    which for this subject resolves to the application's **owner** — with the
+    owner's roles. That is fine for a service-account key, whose holder *is* that
+    person; it is the exact fall-back F055 AC-52 forbids for an application,
+    which may only reach what its capability declaration names.
+
+    The gap is not hypothetical and is not about one endpoint: a declaration that
+    names a single knowledge base derives ``knowledge:read``, and that one scope
+    also opens ``GET /filelib``, ``GET /filelib/file/list``, ``detail_qa``,
+    ``query_qa`` and the citation detail — every one of which would answer with
+    the owner's full visibility and no whitelist. So the refusal lives at the
+    single place all of them share (``_principal_user_id``) rather than on each
+    route, where the next route added would silently miss it.
+
+    An application's own faces never reach here: the model face resolves its
+    range through ``model_range_policy`` and ``/filelib/retrieve`` routes this
+    subject through ``CapabilityBusService``, which builds the *access user's*
+    identity instead.
+    """
+
+    Code = 26052
+    Msg = "This endpoint is not available to hosted applications; use the declared capability faces"
+    http_status = 403

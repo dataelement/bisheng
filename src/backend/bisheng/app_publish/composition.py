@@ -76,6 +76,26 @@ async def on_app_deleted(*, app_id: str, actor_user_id: int, tenant_id: int) -> 
         logger.info(f"app_publish.release_cancelled app_id={app_id} instance_id={instance.id}")
 
 
+async def _capability_env(*, app_id: str, capabilities) -> dict[str, str]:
+    """``runtime_env_ports`` provider — the environment one hosted container starts with.
+
+    Issuing happens here, at the last possible moment before the container is
+    created (design D13): the plaintext is returned once, injected, and never
+    stored, and the previous instance's key is revoked by the same call.
+
+    ``capabilities`` is the declaration of the version **about to run**, handed
+    over by the caller. Reading it back through the application row would find
+    the version that is running *now*, i.e. the old one, and derive the old
+    scopes for the new container.
+    """
+    from bisheng.app_publish.domain.services.capability_bus_service import (
+        parse_declaration,
+        runtime_capability_env,
+    )
+
+    return await runtime_capability_env(app_id, declaration=parse_declaration(capabilities))
+
+
 def register() -> None:
     """Install F055's subscriptions in this process. Safe to call more than once.
 
@@ -87,10 +107,17 @@ def register() -> None:
         assert_hosted_app_executable,
         resolve_hosted_app,
     )
+    from bisheng.app_publish.domain.services.capability_bus_service import HostedAppDeclarationAdapter
     from bisheng.app_runtime.domain.services import lifecycle_hooks
+    from bisheng.app_runtime.domain.services.entry_authz_service import AccessSubjectVerifier
+    from bisheng.app_runtime.domain.services.runtime_env_ports import register_capability_env_provider
     from bisheng.open_api.domain.models.api_credential import SUBJECT_KIND_HOSTED_APP
     from bisheng.open_api.domain.services.credential_validator import SUBJECT_RESOLVERS
     from bisheng.open_api.domain.services.execution_context import SUBJECT_EXECUTION_GUARDS
+    from bisheng.open_api.domain.services.model_range_policy import (
+        register_access_subject_verifier,
+        register_hosted_app_declaration_port,
+    )
 
     lifecycle_hooks.register_app_deleted_hook(on_app_deleted)
     lifecycle_hooks.register_app_deleted_hook(on_app_deleted_revoke_credential)
@@ -105,4 +132,26 @@ def register() -> None:
     # execution would let a queued task outlive the stop that was supposed to
     # end it, so this pair belongs in one function.
     SUBJECT_EXECUTION_GUARDS[SUBJECT_KIND_HOSTED_APP] = assert_hosted_app_executable
-    logger.debug("app_publish.composition registered (app-deleted hooks + hosted_app subject resolver and guard)")
+    # The capability bus, in three registrations that must land together.
+    #
+    # ``model_range_policy`` defines two ports and fails closed on both: an
+    # unregistered declaration port answers 26216 to every hosted-app model
+    # call, and an unregistered verifier turns every visitor token into a
+    # refusal. Registering one without the other is the shape that hurts —
+    # a readable declaration plus an unverifiable token would attribute every
+    # call to 「应用自身」 while still serving it.
+    #
+    # The access-token verifier is F054's by ownership (it issues the token) and
+    # is installed from here because F055 is the only composition root either
+    # side has. The dependency still points F055 → F054 → nothing.
+    register_hosted_app_declaration_port(HostedAppDeclarationAdapter())
+    register_access_subject_verifier(AccessSubjectVerifier())
+    # And the injection side: F054's start path asks this provider for the
+    # environment a hosted application needs, so ``app_runtime`` never imports
+    # ``app_publish`` (RULE-5). Unregistered = no capability environment, which
+    # is exactly right in a process that did not wire F055.
+    register_capability_env_provider(_capability_env)
+    logger.debug(
+        "app_publish.composition registered (app-deleted hooks + hosted_app subject resolver and guard "
+        "+ capability declaration port, access-subject verifier and runtime env provider)"
+    )

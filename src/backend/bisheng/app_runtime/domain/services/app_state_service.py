@@ -43,7 +43,7 @@ from bisheng.app_runtime.domain.constants import (
     default_tier,
     is_transition_allowed,
 )
-from bisheng.app_runtime.domain.services import lifecycle_hooks
+from bisheng.app_runtime.domain.services import lifecycle_hooks, runtime_env_ports
 from bisheng.app_runtime.domain.services.orchestrator_client import orchestrator_client
 from bisheng.app_runtime.domain.services.state_change_notify import notify_owner_of_admin_state_change
 from bisheng.common.errcode.app_factory import (
@@ -316,7 +316,18 @@ class AppStateService:
             )
 
         try:
-            deployed = await orchestrator_client.deploy(**cls._deploy_payload(app, version, tier))
+            payload = cls._deploy_payload(app, version, tier)
+            # The capability environment is merged **last** and wins over the
+            # version's own injections: the platform-reserved names (the runtime
+            # credential and the model face address) are the platform's to set,
+            # which is what F054 contract §5's "平台保留 env 名覆盖调用方同名值"
+            # means at this end of the wire. Resolved here rather than inside
+            # ``_deploy_payload`` because minting the credential is an await and
+            # that helper is a pure function the tests assert against.
+            payload["env"].update(
+                await runtime_env_ports.capability_env(app_id=app.id, capabilities=version.capabilities)
+            )
+            deployed = await orchestrator_client.deploy(**payload)
         except (AppProbeFailedError, AppCapacityInsufficientError) as exc:
             # Deliberately *before* the state is claimed: an app that never
             # started must not spend a moment advertising an entry URL that

@@ -365,3 +365,57 @@ class TestInjectionMaterial:
         assert verdict["obo_token"] is None
         assert verdict["obo_expires_at"] is None, "no token, no expiry — the cap alone bounds a socket"
         assert "X-BiSheng-Access-Token" not in verdict["headers"]
+
+    async def test_the_verifier_reads_back_exactly_what_the_issuer_wrote(
+        self, app_db, app_factory, app_owner, runtime_enabled, no_tenant_blacklist, visible
+    ):
+        """F055 T057 gave OBO its first reader; this is the round trip.
+
+        Until now nothing verified these tokens, so "issue" and "read back" could
+        not disagree. They can now, and the capability bus attributes every call
+        to whatever this returns.
+        """
+        from bisheng.app_runtime.domain.services.entry_authz_service import verify_obo_token
+
+        app, _ = await app_factory(slug="verify-app", state=AppState.ONLINE.value)
+        verdict = await _verdict("verify-app", _token(app_owner.user_id))
+
+        assert verify_obo_token(verdict["obo_token"], app_id=app.id, tenant_id=1) == app_owner.user_id
+
+    async def test_a_token_for_another_application_or_tenant_names_nobody(
+        self, app_db, app_factory, app_owner, runtime_enabled, no_tenant_blacklist, visible
+    ):
+        """An OBO token is minted per application; without this check app B could
+        act as app A's visitor by replaying their token."""
+        from bisheng.app_runtime.domain.services.entry_authz_service import verify_obo_token
+
+        app, _ = await app_factory(slug="scoped-app", state=AppState.ONLINE.value)
+        token = (await _verdict("scoped-app", _token(app_owner.user_id)))["obo_token"]
+
+        assert verify_obo_token(token, app_id="some-other-app", tenant_id=1) is None
+        assert verify_obo_token(token, app_id=app.id, tenant_id=99) is None
+
+    async def test_a_forged_or_absent_token_names_nobody(self, runtime_enabled):
+        """Every refusal answers the same way — a distinguishable one would turn
+        the token into a probe for which applications exist."""
+        from bisheng.app_runtime.domain.services.entry_authz_service import verify_obo_token
+
+        assert verify_obo_token("", app_id="app", tenant_id=1) is None
+        assert verify_obo_token("not-a-jwt", app_id="app", tenant_id=1) is None
+        forged = jwt.encode({"sub": "{}", "aud": "bisheng-app-obo"}, "another-secret", algorithm="HS256")
+        assert verify_obo_token(forged, app_id="app", tenant_id=1) is None
+
+    async def test_a_shared_secret_verifies_nothing(self, runtime_enabled, monkeypatch):
+        """The issuer refuses to sign when the secrets are shared; the reader must
+        refuse to trust too, or a platform session cookie would pass as an OBO."""
+        from bisheng.app_runtime.domain.services.entry_authz_service import verify_obo_token
+        from bisheng.common.services.config_service import settings
+
+        token = jwt.encode(
+            {"sub": json.dumps({"app_id": "app", "user_id": 1, "tenant_id": 1}), "aud": "bisheng-app-obo"},
+            settings.jwt_secret,
+            algorithm="HS256",
+        )
+        monkeypatch.setattr(settings.app_runtime, "obo_secret", settings.jwt_secret, raising=False)
+
+        assert verify_obo_token(token, app_id="app", tenant_id=1) is None

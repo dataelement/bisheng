@@ -34,10 +34,10 @@ Copy for every code lives in
 in the same change (CI ``pnpm check-i18n``). The generated artifacts under
 ``platform/public/locales`` / ``client/src/locales`` are never hand-edited.
 
-Two codes are declared here before their first writer exists — ``16273`` /
-``16274`` (capability bus, deferred wave). That is deliberate: the whitelist,
-the three locale files and this module are one lockstep, and touching all four
-twice for the same feature is how a code ends up written but untranslated.
+``16273`` / ``16274`` (capability bus) were registered one wave before their
+first writer landed, so the whitelist, the three locale files and this module
+were touched once rather than twice. Both are written now
+(``app_publish/domain/services/capability_bus_service.py``).
 """
 
 from bisheng.common.errcode.base import BaseErrorCode
@@ -398,22 +398,69 @@ class AppTierDefaultCannotBeDisabledError(AppPublishError):
 
 
 # ---------------------------------------------------------------------------
-# 16270-16289 — capability bus (deferred wave; registered once, see docstring)
+# 16270-16289 — capability bus
 # ---------------------------------------------------------------------------
+#
+# Model refusals stay in the 262 band (``26212`` / ``26213`` offline / revoked,
+# ``26215`` undeclared) — the two codes below are for knowledge and every later
+# non-model capability. Two pairs is deliberate: a model refusal is rendered as
+# an OpenAI error body on the model face, and translating it into a 162 code
+# would strip that rendering (design D13).
 
 
 class AppCapabilityRevokedError(AppPublishError):
-    """The capability was granted at approval time and has since been revoked (AC-63)."""
+    """A declared capability is gone from the platform since the release (AC-53 / AC-63).
+
+    Carries the capability's **name as the owner wrote it** plus a machine
+    reason, because "which of my six knowledge bases stopped working" is the
+    only question the owner actually has. ``reason`` is the vocabulary the
+    publish surface's 「已失效」 mark reads: ``revoked`` (gone or no longer of a
+    retrievable type), ``ambiguous`` (a bare name that now matches several) and
+    ``unresolvable`` (never resolved at all).
+    """
 
     Code: int = 16273
-    Msg: str = "This capability has been revoked"
+    Msg: str = "能力「{capability}」已被收回"
+
+    def __init__(
+        self,
+        capability: str | None = None,
+        *,
+        kind: str | None = None,
+        reason: str = "revoked",
+        knowledge_id: int | None = None,
+        **kwargs,
+    ):
+        super().__init__(
+            msg=self.Msg.format(capability=capability or ""),
+            capability=capability,
+            kind=kind,
+            reason=reason,
+            knowledge_id=knowledge_id,
+            **kwargs,
+        )
+        self.capability = capability
+        self.reason = reason
 
 
 class AppCapabilityNotDeclaredError(AppPublishError):
-    """The application asked for a capability it never declared (AC-49)."""
+    """The application asked for a capability it never declared (AC-51).
+
+    Distinct from 16273 on purpose: the remedies differ completely — declare it
+    and publish again, versus ask an administrator why it disappeared.
+    """
 
     Code: int = 16274
-    Msg: str = "This capability was not declared by the application"
+    Msg: str = "能力「{capability}」未在应用的能力声明中"
+
+    def __init__(self, capability: str | None = None, *, kind: str | None = None, **kwargs):
+        super().__init__(
+            msg=self.Msg.format(capability=capability or ""),
+            capability=capability,
+            kind=kind,
+            **kwargs,
+        )
+        self.capability = capability
 
 
 # ---------------------------------------------------------------------------

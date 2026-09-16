@@ -330,9 +330,14 @@ async def _build_payload(
         "source": "cli",
         "submitted_at": (deployment.create_time or datetime.now()).isoformat(),
         "tier": await _tier_payload(deployment.tier_code or manifest.get("tier") or "light"),
-        # Capability declarations are a deferred wave; the key is present and
-        # empty so the client panel's shape never changes when they land.
-        "capabilities": [],
+        # AC-24: what this release asks the platform for, in the words the owner
+        # wrote, with anything that no longer resolves already marked. Frozen
+        # into the snapshot rather than recomputed at render time because the
+        # card must keep describing *the release that was submitted* even after
+        # the declaration changes underneath it.
+        "capabilities": await _capabilities_payload(
+            manifest.get("capabilities"), tenant_id=int(deployment.tenant_id or app.tenant_id or 0)
+        ),
         "visibility_snapshot": [],
         # AC-09 / AC-24: the confirmed structure change, ``None`` when the
         # release declares nothing new relative to the online version.
@@ -341,6 +346,28 @@ async def _build_payload(
         # administrators, so an approver is not left wondering.
         "approver_note": None if has_department else "no_department_admin_source",
     }
+
+
+async def _capabilities_payload(capabilities, *, tenant_id: int) -> list[dict[str, Any]]:
+    """The capability summary an approver reads (AC-24), in plain language.
+
+    Names, not ids: an approver deciding whether an application may search
+    「财务档案」 cannot do that from ``{"id": "418"}``. Resolution goes through
+    the capability bus, which is the same resolution the runtime will use, so
+    the card cannot promise a capability the platform would refuse.
+    """
+    from bisheng.app_publish.domain.services.capability_bus_service import capability_status
+
+    if not capabilities:
+        return []
+    try:
+        rows = await capability_status(tenant_id=tenant_id, capabilities=capabilities)
+    except Exception:
+        # The card must render. An unresolved summary is better than an
+        # approval request that cannot be opened, and the log carries the cause.
+        logger.warning(f"app_publish.capability_summary_unresolved tenant_id={tenant_id}")
+        return []
+    return [{"kind": row.kind, "name": row.display_name, "revoked": row.revoked, "reason": row.reason} for row in rows]
 
 
 async def _tier_payload(tier_code: str) -> dict[str, Any]:

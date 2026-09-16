@@ -462,3 +462,61 @@ def _issue_obo_token(*, app_id: str, user_id: int, tenant_id: int, subject_kind:
         "exp": expires_at,
     }
     return jwt.encode(payload, secret, algorithm="HS256"), expires_at
+
+
+def verify_obo_token(token: str, *, app_id: str, tenant_id: int) -> int | None:
+    """The reader :func:`_issue_obo_token` was written for — returns the visitor's user id.
+
+    ``None`` for every failure, with no distinction between them: an expired,
+    forged, wrong-application or wrong-tenant token must answer the same way, or
+    the token becomes a probe for which applications exist and who is inside
+    them. The caller turns that ``None`` into a refusal (F051 26204 on the model
+    face, and no retrieval at all on the capability bus) — never into "the
+    application itself", which would make attribution something the caller can
+    steer by sending garbage.
+
+    ``app_id`` and ``tenant_id`` are checked against the token's own claims
+    because an OBO token is issued **per application**: without that check a
+    visitor's token for app A would let app B act as them.
+    """
+
+    secret = settings.app_runtime.obo_secret
+    if not token or not secret or secret == settings.jwt_secret:
+        return None
+    try:
+        payload = jwt.decode(
+            token,
+            secret,
+            algorithms=["HS256"],
+            audience=OBO_AUDIENCE,
+            issuer=settings.cookie_conf.jwt_iss,
+        )
+        claims = json.loads(payload.get("sub") or "{}")
+    except Exception:
+        # Every rejection PyJWT can raise (signature, expiry, audience, issuer)
+        # plus a malformed ``sub``. Logged at debug: a refused token is a normal
+        # event on a public entry, not an incident.
+        logger.debug("app_runtime.obo_verify rejected app_id={}", app_id)
+        return None
+
+    if str(claims.get("app_id") or "") != str(app_id):
+        return None
+    if int(claims.get("tenant_id") or 0) != int(tenant_id or 0):
+        return None
+    user_id = claims.get("user_id")
+    return int(user_id) if user_id else None
+
+
+class AccessSubjectVerifier:
+    """F051's ``AccessSubjectVerifierPort``, wired from F055's composition root.
+
+    A thin adapter rather than the port itself: the token's shape belongs to
+    F054 (it issues it), while the registry belongs to the model face. Both
+    sides keep their own module and neither imports the other.
+    """
+
+    def verify(self, token: str, *, app_id: str, tenant_id: int):
+        from bisheng.open_api.domain.services.model_range_policy import AccessSubject
+
+        user_id = verify_obo_token(token, app_id=app_id, tenant_id=tenant_id)
+        return AccessSubject(user_id=user_id) if user_id else None

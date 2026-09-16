@@ -18,6 +18,7 @@ from bisheng.common.errcode.open_api import (
     OpenApiDelegateLocalDevRefusedError,
     OpenApiDelegationModeUnsupportedError,
     OpenApiEndpointUnregisteredError,
+    OpenApiHostedAppEndpointRefusedError,
     OpenApiRemovedIdentityInputError,
     OpenApiScopeMissingError,
     PersonalTokenDisabledError,
@@ -32,6 +33,7 @@ from bisheng.open_api.domain.context import (
 )
 from bisheng.open_api.domain.scopes import (
     DELEGATE_SCOPE_CODE,
+    HOSTED_APP_ACTOR_KIND,
     LOCAL_DEV_TOOLKIT_SCOPE_CODES,
     get_open_api_scope_marker,
 )
@@ -193,6 +195,16 @@ async def open_api_access_context(
         marker = get_open_api_scope_marker(conn.scope.get("endpoint"))
         if marker is None:
             raise OpenApiEndpointUnregisteredError()
+        # F055 AC-52, and the reason it cannot be left to the scope check: an
+        # application's scopes are derived from its capability declaration, and
+        # one declared knowledge base buys ``knowledge:read`` — which also
+        # admits the five legacy filelib routes that execute as the
+        # application's *owner*, and ``download_statistic``, which serves any
+        # ``/app/data`` log file to whoever holds the scope. The declaration
+        # bought one route; the scope opens seven. So the subject is admitted
+        # per route, default-deny, and the capability faces opt in.
+        if principal.actor_kind == HOSTED_APP_ACTOR_KIND and not marker.hosted_app:
+            raise OpenApiHostedAppEndpointRefusedError()
         # INV-31 runtime half: the local development toolkit faces execute as
         # the service account itself and never carry delegation, so a delegated
         # key is refused here rather than further down. Both neighbours are
