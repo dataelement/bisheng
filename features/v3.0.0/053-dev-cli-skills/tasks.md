@@ -430,11 +430,15 @@
   **覆盖 AC**: AC-03, AC-23, AC-25
   **2026-09-16 完成证据**: commit `c2b56c686`（`devproxy.py` 508 行）；`tests/test_dev_proxy.py` 25 条 + `tests/test_platform_contract.py`（用 `ast` 读 `app-proxy/app_proxy/headers.py`，断言十个注入头名、顺序、剥离前缀与 hop-by-hop 集合零漂移）；短时凭据句柄本地签发，见偏差记录 29。
 
+  **F057 T043 回写增补（2026-09-16，来自 `wt/f057-tail`；只提请求，未改本 Feature 代码）**：`devproxy.HandleMinter` 现铸的 `bsdev.<b64>.<sig>` 是**本地 HMAC 自签**（`devproxy.py:117 HANDLE_PREFIX = "bsdev"`），平台侧无处验签——后端零出现、零受理（全仓其余命中只有 SDK 的日志脱敏正则 `bisheng_sdk/errors.py:56` 与测试夹具）。请求把它改成**用 `login` 密钥向平台换取的短时凭据**（`login` 密钥仍不进应用进程），否则本地期 `retrieve` 恒 `26001`。另一条同因的事实：`devdb.PLATFORM_ENV_NAMES`（`devdb.py:65-77`）里没有 `BISHENG_APP_TOKEN`，而托管期 retrieve 要**两把**凭据（应用运行期凭据作 Bearer 定白名单 + 访问者凭据走 `X-BiSheng-Access-Token` 定访问用户），所以本地实际先抛 `AppCredentialMissingError`，换完句柄还差这一把。两者合起来 = F057 design §6.2 阻塞项 ③；SDK 侧**不开兼容分支**（F057 D5），修法归本 Feature 与 F052。
+
 - [x] **T043**: `dev` 本地 SQLite + 与托管运行期**同名**的连接环境变量注入；数据跨重启保留、位于项目本地且不进上传包；同名平台接线环境变量注入（清单来源见上）
   **文件**: `src/bisheng-cli/bisheng_cli/devdb.py`, `src/bisheng-cli/bisheng_cli/commands/dev.py`（增量）
   **测试载体**: `src/bisheng-cli/tests/test_dev_env.py`
   **覆盖 AC**: AC-26, AC-27
   **2026-09-16 完成证据**: commit `c2b56c686`（`devdb.py`）；`tests/test_dev_env.py` + `test_platform_contract.py` 用 `ast` 读 `runtime-manager/runtime_manager/lifecycle.py` 的 `build_env`，断言 11 个注入变量名与 `RESERVED_ENV_PREFIXES` 与本地一致；库落 `<项目>/.bisheng/dev/app.db`，`.bisheng/` 是打包硬排除（T015）。
+
+  **F057 T043 回写增补（2026-09-16，来自 `wt/f057-tail`；只提请求，未改本 Feature 代码）**：`dev` 期 storage 今天完全不可跑——`devdb.PLATFORM_ENV_NAMES`（`devdb.py:65-77`）里没有任何 `BISHENG_APP_STORAGE_*`，SDK 于是恒抛 `StorageHandleMissingError`（**故意不兜底落临时目录**，F057 spec §3）。请求增补三条：① 注入 `BISHENG_APP_STORAGE_DIR = <项目根>/.bisheng/attachments/` 的**绝对路径**（选 `.bisheng/` 之下是因为它已是 CLI 的硬排除目录、`!` 取不回，比软排除的 `attachments/` 更强地保证附件不进上传包，F053 AC-32）；② 同时写 `<项目根>/.bisheng/.gitignore`（内容 `attachments/` + `*.db`），使「`.bisheng/app.json` 建议提交进 git」与「附件不进 git」并存；③ 建议同名注入可选的 `BISHENG_APP_STORAGE_MAX_FILE_MB`（值取平台 `RTM_STORAGE_MAX_FILE_MB`，不注入 = 本地不限，与线上上限不一致时上线才发现）。**不要注入 `BISHENG_APP_STORAGE_ENDPOINT`**——本地目录句柄与远端句柄同时在场时 SDK 判「句柄不唯一」并拒绝。= F057 design §6.2 契约 ⑦。
 
 - [x] **T044**: `dev` 启动前置校验与输出（未 `login` / 凭据无效 / 平台不可达 → 拒绝并提示；缺 manifest 或必填项 → 拒绝并列缺失项；输出注入身份来源与账号、本地访问地址；`dev` 本身不验权限位）
   **文件**: `src/bisheng-cli/bisheng_cli/commands/dev.py`（增量）, `src/bisheng-cli/bisheng_cli/cli.py`（注册第五条命令）

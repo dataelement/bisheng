@@ -460,6 +460,9 @@
 | **F053**（接入信息区 T046） | MCP 接入地址 | ✅ 已交付 | `GET /api/v1/dev-toolkit/versions` 的 `mcp: {url, transport, auth}`；同批留了 `model: null` 槽位给 F051 |
 | **F056**（审计查询面） | MCP 调用的审计行 | ✅ 已交付 | `action="open_api.mcp.tool_call"` / `target_type="mcp_tool"`，三处 lockstep 已登记，审计页事件名「MCP 工具调用」 |
 | **F055**（发布面）/ **F054**（详情页） | `get_publish_status` / `get_instance` 加 `entry` 形参 | ✅ 已交付 | 两处均为可选形参、缺省 `"detail"`，既有调用方行为逐字不变 |
+| **F057 T043**（SDK `retrieve`） | `RetrieveReq.knowledge_base_ids` **可省略**（AC-22）：省略 = 「该主体可及的全部」，由门面按白名单 ∩ 可见范围算，范围过大时以 `26323` 拒并要求点名。SDK 的 `search(query)` 今天不带库 id 会撞 `min_length=1` 的 422，被包成 `PlatformRefusedError(422)`——一个形状上无法与「参数写错」区分的答案 | 🔲 **未交付**（2026-09-16 核实：`open_endpoints/domain/schemas/filelib.py:39-45` 仍是 `Field(..., min_length=1)` + `extra="forbid"`） | = F057 design §6.2 契约 ③。在此之前 F057 的指南与样例**一律显式传 `knowledge_base_ids`**（其 T033 / T034 已如此），SDK 不在本地模拟「全部」 |
+| **F057 T043**（SDK `retrieve`） | 「不可及」码 + `data.unreachable_ids`（AC-11）；「能力已收回」可与普通失败区分 | ✅ **已交付**（2026-09-16 只核对未改） | `common/errcode/mcp_face.py`：`26321` 带 `unreachable_ids`（404）、`26322` 带 `knowledge_id`（409）、`26320` 无执行身份（403）、`26323` 范围过大（400）。F057 `bisheng_sdk/_codes.py` 已按此登记前三个，`26323` 原样呈现为 `PlatformRefusedError` |
+| **F057 T043**（本地 `bisheng dev` 期） | 受理**平台签发**的本地短时访问凭据：`dev` 的迷你代理每请求注入一个访问者凭据句柄，改由平台签发后，`/api/v2/filelib/retrieve` 与 MCP 检索工具须认得它并据以确立访问用户 | 🔲 **未交付**（2026-09-16 核实：`bsdev` 在后端零出现——全仓命中只有 CLI 的 `bisheng_cli/devproxy.py:117`（签发方）、SDK 的日志脱敏正则 `bisheng_sdk/errors.py:56` 与两处测试夹具，没有任何一处受理） | = F057 design §6.2 阻塞项 ③ 的服务端半边（CLI 半边已回写 F053 T042）。在此之前本地期 retrieve 端到端不可验，SDK **不开兼容分支**，只把错误照实抛出并指路「发布后用真实账号验证」 |
 
 ---
 
