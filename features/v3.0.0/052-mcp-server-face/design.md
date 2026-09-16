@@ -226,23 +226,38 @@
 
 **③ 门面契约**（`knowledge/domain/schemas/retrieval_facade.py`）
 
+> **已落地（2026-09-16，T105 回写）**：以下为实现后的真实签名，`knowledge/domain/schemas/retrieval_facade.py` 与 `knowledge/domain/services/retrieval_facade_service.py` 为准。
+
 ```
 RetrievalIdentity(actor: PermissionActor, login_user: UserPayload)         # frozen dataclass
-  .from_open_api_principal(principal)  .from_user(user_id, tenant_id, *, data_scope=DATA_SCOPE_ALL)
+  .from_open_api_principal(principal)                                      # 同步；S→主体自身，D→("user", effective_user_id)
+  await .from_user(user_id, tenant_id, *, user_name="", data_scope=DATA_SCOPE_ALL)   # 异步：管理员事实经 resolve_permission_actor 解析
 RetrievalRequest(query: str, knowledge_ids: list[int] | None = None,
                  whitelist: list[int] | None = None, top_k: int = 10, max_content: int = 15000,
-                 tag_filters: dict[int, list[str]] | None = None)
+                 tag_filters: dict[int, list[str]] | None = None)          # tag_filters = {knowledge_id: [tag_name]}
 RetrievalChunk(knowledge_id, knowledge_type, knowledge_name, document_id, document_name,
                chunk_index, content, document_update_time)
 RetrievalFacadeResult(chunks: list[RetrievalChunk], total: int, effective_scope: list[int],
                       truncated_params: dict[str, int])
-AccessibleKnowledge(knowledge_id, name, type, description)
+AccessibleKnowledge(knowledge_id, name, type, description)                 # type = "space" | "library"
 ReachabilityReport(reachable: list[int], unreachable: list[int], revoked: list[int])
-RetrievalFacadeService.retrieve(identity, req) / list_accessible_knowledge(identity, *, name=None, limit=200)
-                      / check_reachable(identity, knowledge_ids, *, whitelist=None) / is_supported_knowledge_type(t)
+knowledge_type_label(knowledge_type: int) -> "space" | "library"
+
+await RetrievalFacadeService.retrieve(identity, req, *, version_repo=None) -> RetrievalFacadeResult
+await RetrievalFacadeService.list_accessible_knowledge(identity, *, name=None, limit=200) -> list[AccessibleKnowledge]
+await RetrievalFacadeService.check_reachable(identity, knowledge_ids, *, whitelist=None) -> ReachabilityReport
+     RetrievalFacadeService.is_supported_knowledge_type(t) -> bool          # 纯函数，非 async
+
 常量 SUPPORTED_KNOWLEDGE_TYPES={0,3} · RETRIEVAL_TOP_K_MAX=200 · RETRIEVAL_MAX_CONTENT_MAX=60000
      · RETRIEVAL_TARGETS_MAX=50 · RETRIEVAL_SCOPE_MAX=200
 ```
+
+**两处落地时定案的细节**（design 原文留了「二选一」）：
+
+- **`version_repo` 走关键字传参**（`retrieve(..., version_repo=)`），不由门面内部调 `get_knowledge_document_version_repository()`。后者是 FastAPI 依赖工厂，领域服务去调它就是领域层反向依赖入口层（C1）；而且 F055 / F057 未必有 `Request`。v2 端点把自己的 `Depends` 结果原样递进来。
+- **`from_user` 是 `async`**：管理员事实必须经 `resolve_permission_actor` 解析（一次可能的 FGA 往返），不能由调用方猜。`from_open_api_principal` 保持同步——闸已经解析过，principal 里就有。
+
+**`check_reachable` 的口径**：只评估 `knowledge_ids` 里的目标，`whitelist` 只用于判定「是否属于声明范围」与「声明条目是否已消失」；不会去遍历 `whitelist` 中未被 `knowledge_ids` 点名的条目。F055 预检时把能力声明同时传进两个参数即可得到逐条结论。
 
 **④ 错误码 263 段**（`common/errcode/mcp_face.py`；`McpFaceError(BaseErrorCode)` 带 `http_status`）
 

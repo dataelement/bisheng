@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from langchain_core.documents import Document
 
-from bisheng.common.errcode.open_api import OpenApiAuthDependencyUnavailableError
 from bisheng.common.errcode.permission import PermissionServiceUnavailableError
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.services.knowledge_file_visibility_service import IndexFilter
@@ -163,22 +162,38 @@ async def test_permission_filter_failure_is_fail_closed(monkeypatch):
 
 
 async def test_v2_adapter_maps_permission_outage_to_503_without_chunks(monkeypatch):
+    """F052 D6: the outage now surfaces as itself, not as a credential outage.
+
+    It used to be re-raised as ``OpenApiAuthDependencyUnavailableError`` (26030
+    "credential validation dependency unavailable"), which told the caller to
+    look at the wrong subsystem. The transport status is still 503.
+    """
+
+    from bisheng.open_api.api.exception_handlers import open_api_http_status
     from bisheng.open_endpoints.api.endpoints.filelib import retrieve_chunks
     from bisheng.open_endpoints.domain.schemas.filelib import RetrieveReq
 
     monkeypatch.setattr(
-        "bisheng.open_endpoints.api.endpoints.filelib.get_open_api_operator_async",
-        AsyncMock(return_value=MagicMock(user_id=99)),
+        "bisheng.open_endpoints.api.endpoints.filelib.get_current_open_api_principal",
+        lambda: MagicMock(
+            authorization_subject_type="service_account",
+            authorization_subject_id=7,
+            tenant_id=1,
+            actor_id=7,
+            actor_name="agent",
+            effective_user_id=None,
+        ),
     )
     monkeypatch.setattr(
-        "bisheng.open_endpoints.api.endpoints.filelib.KnowledgeSpaceChatService.aretrieve_chunks",
+        "bisheng.knowledge.domain.services.retrieval_facade_service.RetrievalFacadeService.retrieve",
         AsyncMock(side_effect=PermissionServiceUnavailableError()),
     )
 
-    with pytest.raises(OpenApiAuthDependencyUnavailableError) as exc:
+    with pytest.raises(PermissionServiceUnavailableError) as exc:
         await retrieve_chunks(
             request=MagicMock(),
             req=RetrieveReq(query="secret", knowledge_base_ids=[8]),
             version_repo=MagicMock(),
         )
-    assert exc.value.http_status == 503
+    assert open_api_http_status(exc.value) == 503
+    assert exc.value.code == 19002

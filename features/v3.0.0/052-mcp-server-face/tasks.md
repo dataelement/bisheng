@@ -54,48 +54,55 @@
 
 ### Wave 0 · 共享基础（单一 owner，无测试配对，两条线分叉前落完）
 
-- [ ] **T001**: 错误码 263 段 + 三语 + C5 / release-contract 登记
+- [x] **T001**: 错误码 263 段 + 三语 + C5 / release-contract 登记
   **文件**: `src/backend/bisheng/common/errcode/mcp_face.py`（新）, `src/frontend/packages/locales/src/api_errors/{zh-Hans,en,ja}.json`（三语视为一组）, `docs/constitution.md`（C5：`:128` 那行「26x–27x」段位表加 `263 mcp_face`；在 `:135`「**261 is assigned**」段之后补一条「**263 is assigned** …」写清子段与 HTTP 状态约定；文件头 `:9` 的 “Last revised / registry re-derived to 40 modules” 改成 41 并注明本次新增）, `features/v3.0.0/release-contract.md`（「已分配模块编码（MMMEE）」表，`:96-104` 那张表里 260 行之后加 263 行）, `src/backend/test/open_api/test_error_codes.py`（追加 263 段契约断言）
   **逻辑**: 按 design §4.2 ④ 定义 `McpFaceError(BaseErrorCode)`（`Code=26300`、`http_status: int = 400`，构造签名仿 `common/errcode/open_api.py:6-22 OpenApiAuthError`）与十个子类：`26301 McpUnknownToolError(404)` / `26302 McpToolScopeMissingError(403, __init__(required))` / `26303 McpIdentityHeaderRefusedError(403)` / `26304 McpToolArgumentInvalidError(400)` / `26305 McpAppNotOwnedError(403)` / `26306 McpIdentityNotFoundError(404)` / `26320 RetrievalIdentityMissingError(403)` / `26321 KnowledgeUnreachableError(404, __init__(unreachable_ids))` / `26322 KnowledgeCapabilityRevokedError(409, __init__(knowledge_id))` / `26323 RetrievalScopeTooLargeError(400)`。模块 docstring 仿 `app_factory.py:1-28`：子段 26300–26319 传输 / 工具面、26320–26339 门面（四调用方共用）、26340+ 保留；写明「不占 260 段」。每个子类**必须**写成 `Code: int = 263xx`（`check-i18n.mjs:106` 的 `/Code:\s*int\s*=\s*(\d+)/g` 只认这一形，坑 18——`open_api.py` 整份用的是不带注解的 `Code = 26001`，别照抄它）。三语：每码 `"<code>"` 主文案（**只放主文案**，`next_step` 归 T202 后端表——design D4）；`test_error_codes.py` 新增 `test_mcp_face_codes_are_in_263_band_and_have_three_language_copy`（读三文件，断言 `mcp_face.py` 每个 `Code` 都在 26300–26339 且三文件都有该键）。**该文件既有的两条断言不会被误伤**：`test_only_designated_open_api_error_codes_are_implemented :39-46` 只扫 `bisheng.common.errcode.open_api` 模块里 `OpenApiAuthError` 的子类，`test_reserved_and_removed_codes_are_not_reused :49-52` 只检查 260 段的保留洞——新模块是独立文件、独立基类，与两者无交集；新增断言写成第三个函数即可，**不要**去扩 `EXPECTED_CODES`。
   **依赖**: 无
+  **落地**: `64cc2c386` — `common/errcode/mcp_face.py` 十个码（子类一律 `Code: int = 263xx`）+ 三语文案 + C5 / release-contract 登记；`test_error_codes.py::test_mcp_face_codes_are_in_263_band_and_have_three_language_copy` 同时钉死波段、注解写法与三语齐全。
 
-- [ ] **T002**: v2 exception handler 对 `McpFaceError` 的真实 HTTP 状态映射
+- [x] **T002**: v2 exception handler 对 `McpFaceError` 的真实 HTTP 状态映射
   **文件**: `src/backend/bisheng/open_api/api/exception_handlers.py`（`open_api_http_status :45-75`）, `src/backend/test/open_api/test_http_status.py`（追加）
   **逻辑**: 在 `OpenApiAuthError` 分支之后加 `if issubclass(error_type, McpFaceError): return getattr(exc, "http_status", error_type.http_status)`；其余分支不动。测试：26321 → 404、26322 → 409、26320 → 403、26323 → 400 在 `/api/v2/**` 上为真 HTTP 状态；`/api/v1` 路径不受影响（仍 200 信封）。
   **依赖**: T001
+  **落地**: `64cc2c386` — `exception_handlers.open_api_http_status` 加 `McpFaceError` 分支；`test_http_status.py` 两条新用例（26320→403 / 26321→404 / 26322→409 / 26323→400，且 `/api/v1` 仍 200 信封）。
 
-- [ ] **T003**: 门面契约 schema（Line A / Line B 共同依赖的**唯一**共享文件）
+- [x] **T003**: 门面契约 schema（Line A / Line B 共同依赖的**唯一**共享文件）
   **文件**: `src/backend/bisheng/knowledge/domain/schemas/retrieval_facade.py`（新）
   **逻辑**: 按 design §4.2 ③ 逐字落：`RetrievalIdentity`（frozen dataclass，`actor: PermissionActor`、`login_user: UserPayload`；两个构造 classmethod——`from_open_api_principal(principal)`：S 模式 `subject_type=principal.authorization_subject_type, subject_id=principal.authorization_subject_id`，D 模式 `("user", effective_user_id)`；`login_user = UserPayload(user_id=principal.effective_user_id or principal.actor_id, user_name=principal.actor_name, user_role=[], tenant_id=principal.tenant_id, is_global_super=False)`（坑 8：不调 `init_login_user`）；`from_user(user_id, tenant_id, *, data_scope=DATA_SCOPE_ALL)` 经 `resolve_permission_actor` 解析管理员事实后构造 actor）· `RetrievalRequest` · `RetrievalChunk` · `RetrievalFacadeResult` · `AccessibleKnowledge` · `ReachabilityReport` · 五个常量。**只放数据结构与常量，不放逻辑**（Line B 的 fake 门面据此写）。`PermissionActor` import 走 `bisheng.permission.domain.services.permission_action_service`（与 `dependencies.py:50` 同一路径）。
   **依赖**: 无
+  **落地**: `64cc2c386` — `knowledge/domain/schemas/retrieval_facade.py`。**偏差**：`from_user` 落成 `async`（管理员事实必须经 `resolve_permission_actor` 解析，不能由调用方猜），`from_open_api_principal` 保持同步；已回写 design §4.2 ③。
 
 ### Line A · 统一检索门面（Test-First 配对）
 
-- [ ] **T101a**: 引擎搬迁等价测试
+- [x] **T101a**: 引擎搬迁等价测试
   **文件**: `src/backend/test/knowledge/test_retrieval_engine_extraction.py`（新）
   **逻辑**: 用 monkeypatch 替换 `KnowledgeRetrieverTool`、`KnowledgeDao.aquery_by_id`、`KnowledgeFileVisibilityService.build_index_prefilter / post_filter_retrievable_files`、`KnowledgeFileDao.aget_file_by_ids` 为可控 fake，断言：`test_chat_service_aretrieve_chunks_delegates_to_engine`（同输入 → `KnowledgeSpaceChatService.aretrieve_chunks` 与 `RetrievalEngine.retrieve_many` 返回逐项相等，含 `document_update_time` 水合）→ AC-20；`test_engine_constructs_without_request`（`RetrievalEngine(login_user)` 不需 `Request`，可见性服务以 `request=None` 构造仍完成双层过滤——坑 4 守卫）→ AC-19；`test_space_path_keeps_two_layer_filter`（prefilter 与 post_filter 各被调用一次、被 post_filter 丢弃的 `document_id` 不出现）→ AC-20；`test_library_path_requires_use_then_filters_files`（`ensure_knowledge_use_async` 被调、失败即 `UnAuthorizedError` 上抛）→ AC-20；`test_permission_unavailable_propagates_unchanged`（fake 抛 `PermissionServiceUnavailableError` → 原样冒出、无结果）→ AC-24；`test_chat_service_empty_ids_still_400`（平台内路径的 400 行为不变，决议-9）。
   **覆盖 AC**: AC-19, AC-20, AC-24
   **依赖**: T003
+  **落地**: `291b1e405` — `test/knowledge/test_retrieval_engine_extraction.py` 14 例全绿。
 
-- [ ] **T101**: `RetrievalEngine` 搬出 + 聊天服务薄委托
+- [x] **T101**: `RetrievalEngine` 搬出 + 聊天服务薄委托
   **文件**: `src/backend/bisheng/knowledge/domain/services/retrieval_engine.py`（新）, `src/backend/bisheng/knowledge/domain/services/knowledge_space_chat_service.py`（`aretrieve_chunks :726-770` 改委托；删除 `_attach_document_update_time :788` / `_aretrieve_chunks_for_kb :809` / `_aretrieve_chunks_dispatch :836` / `_aretrieve_chunks_for_knowledge_base :869` / `_resolve_kb_file_ids_by_tags :907`；`_retrieve_and_filter :393` 与 `_resolve_kb_target_file_ids :695` 若仍被对话链其它方法调用则**保留并改为委托引擎同名方法**，不复制）
   **逻辑**: design D5-B。`RetrievalEngine(login_user: UserPayload, *, version_repo=None)`：`retrieve_many(targets: list[Knowledge], *, query, tag_filters, max_content) -> list[tuple[int, Document]]`（`asyncio.gather` 逐库；接收**已加载的 Knowledge 行**而非 id——可及性由门面预判，引擎不再 `aquery_by_id`/抛 `NotFoundError`）、`retrieve_space(space, ...)`、`retrieve_library(kb, ...)`、`attach_document_update_time(results)`；内部 `KnowledgeFileVisibilityService(request=None, login_user)` + `svc.version_repo = version_repo`；`permission_filter | …` 结构化日志随方法搬入。`KnowledgeSpaceChatService.aretrieve_chunks` 保持签名与 400 / 10962 / 404 行为：先自行 `aquery_by_id` 逐个加载与类型分派（原 `_aretrieve_chunks_dispatch` 的判断留在聊天服务这一层，只把「取 docs」交给引擎），再 `flattened[:top_k]`。
   **测试**: T101a 全部通过；`test/knowledge` 既有用例（`grep -l aretrieve_chunks test/`）全绿。
   **覆盖 AC**: AC-19, AC-20, AC-24
   **依赖**: T101a
+  **落地**: `291b1e405` — `retrieval_engine.py` 新建，聊天服务 946→752 行。**偏差**：`_aretrieve_chunks_dispatch` 未整体删除，而是收窄成 `_aretrieve_chunks_for_one`（存在性 / 类型裁定 + 空间级闸留在聊天服务这一层，design D5 正文即如此要求，只是文件清单行写了「删除」）；`_retrieve_and_filter` / `_resolve_kb_target_file_ids` 中前者保留为委托（文件夹对话在用）、后者随引擎搬走。**三个既有测试文件同批改**：`test_knowledge_space_chat_service_retrieve.py` / `test_knowledge_space_chat_service_visibility.py` / `test_openapi_retrieve_file_visibility.py` 里直接戳私有方法的用例改为对引擎断言——方法搬走了断言跟着搬，行为断言本身未放松。
 
-- [ ] **T102a**: `RetrievalFacadeService` 单元测试
+- [x] **T102a**: `RetrievalFacadeService` 单元测试
   **文件**: `src/backend/test/knowledge/test_retrieval_facade.py`（新）, `src/backend/test/knowledge/conftest.py`（新：`fake_engine`（记录 `retrieve_many` 调用、按 fixture 表返回 Document）、`fake_visibility`（monkeypatch `batch_check_business_actions` 返回按 `{resource_type: {id: actions}}` 查表）、`fake_visible_objects`（monkeypatch `runtime.list_visible_objects`）、`knowledge_rows`（monkeypatch `KnowledgeDao.aget_list_by_ids`）；**autouse 清代理 env**（`ALL_PROXY` 等六个，HARNESS.md 陷阱））
   **逻辑**: `test_identity_none_rejected_26320` / `test_identity_without_subject_rejected_26320`（不调引擎）→ AC-23；`test_explicit_targets_all_reachable_calls_engine_with_rows` → AC-22；`test_any_unreachable_target_fails_whole_request_26321_same_response`（参数化：不存在 / 存在未授予 / type=1 QA / type=2 个人 → 同一码 + `data.unreachable_ids` 只列不可及 id、**不带原因字段**）→ AC-11, AC-27；`test_no_targets_no_whitelist_uses_all_accessible`（`list_visible_objects` 两种资源类型各一次 → 过滤 type∈{0,3}）→ AC-22；`test_scope_larger_than_200_rejected_26323`（不静默截断）；`test_admin_actor_scans_tenant_but_personal_scope_does_not`（坑 7）；`test_whitelist_intersects_visible_silently_when_not_targeted`（白名单内不可见库不出现、不报错）→ AC-21；`test_whitelist_outside_target_is_unreachable`（执行身份本人可见、且是租户管理员 actor，仍 26321）→ AC-21；`test_whitelist_entry_deleted_raises_26322_and_no_engine_call`（含 `data.knowledge_id`；显式指定同库且**无白名单**时 → 26321）→ AC-46；`test_top_k_and_max_content_clamped_visibly`（`truncated_params` 含被夹字段）；`test_permission_unavailable_never_returns_partial`（引擎中途抛 19002 → 异常冒出、无结果对象）→ AC-24；`test_chunks_carry_knowledge_name_and_type` → AC-19；`test_list_accessible_knowledge_excludes_unsupported_types`（QA / 个人库不出现；返回 `AccessibleKnowledge`）→ AC-27；`test_check_reachable_report_three_buckets`；`test_facade_installs_actor_contextvar_and_resets`（坑 5：调用前后 `get_current_permission_actor()` 恢复原值）；`test_data_scope_personal_inherited`（actor `data_scope=personal_only` 透传到 `batch_check_business_actions` 的 actor 解析——断言 fake 收到的 actor.data_scope）。
   **覆盖 AC**: AC-11, AC-19, AC-21, AC-22, AC-23, AC-24, AC-27, AC-46
   **依赖**: T001, T003, T101
+  **落地**: `e82561fc5` — `test/knowledge/test_retrieval_facade.py` 33 例 + `test/knowledge/conftest.py` 四个可编程 fake。
 
-- [ ] **T102**: `RetrievalFacadeService` 实现
+- [x] **T102**: `RetrievalFacadeService` 实现
   **文件**: `src/backend/bisheng/knowledge/domain/services/retrieval_facade_service.py`（新）
   **逻辑**: design D5。`retrieve(identity, req)`：① `identity is None or identity.actor is None or not identity.actor.subject_id` → 26320；② `top_k = min(req.top_k, RETRIEVAL_TOP_K_MAX)`、`max_content = min(…)`，被夹的记入 `truncated_params`；③ 范围解析：`targets = req.knowledge_ids`；若 `req.whitelist is not None`：`whitelist == []` → 全部目标不可及（有目标 → 26321(targets)；无目标 → 空结果 `effective_scope=[]`，不报错——app 声明为空是 F055 的预检问题）；有目标 → `∉ whitelist` 的进 unreachable；无目标 → `targets = whitelist`；若 `whitelist is None and not targets` → `list_accessible_knowledge` 全集（> `RETRIEVAL_SCOPE_MAX` → 26323）；`len(targets) > RETRIEVAL_TARGETS_MAX` → 26323；④ `rows = KnowledgeDao.aget_list_by_ids(targets)`：白名单条目缺行 / `type ∉ SUPPORTED` → **26322**（取第一条，`data.knowledge_id`）；非白名单缺行 / 类型不支持 → unreachable；⑤ `token = set_current_permission_actor(identity.actor)` 后一次 `batch_check_business_actions(identity.login_user, resource_type="knowledge_space", ids, actions=("visible",))` + 一次 `resource_type="knowledge_library"（以 F048 registry 名为准）, actions=("use",)`；显式目标不可见 → unreachable；白名单（未显式）不可见 → 剔除；`unreachable` 非空 → 26321；⑥ `RetrievalEngine(identity.login_user).retrieve_many(可及 rows, ...)` → `[:top_k]` → `attach_document_update_time` → 组 `RetrievalChunk`（`knowledge_name / knowledge_type` 取自 rows）；`finally reset_current_permission_actor(token)`。异常一律不捕获权限族（19002 / 19201 / `PermissionCheckFailedError` 等原样上抛）。`list_accessible_knowledge(identity, *, name=None, limit=200)`：actor 管理员且 `data_scope == ALL` → 租户内 `Knowledge` 扫描（type∈{0,3}、`delete==0`；自动租户过滤）；否则 `runtime.list_visible_objects(actor, resource_type=…, max_results=RETRIEVAL_SCOPE_MAX)` 两类型 → `aget_list_by_ids` → 类型过滤 → `batch_check_business_actions` 二次确认（`visible` 是超集）；`name` 子串过滤在内存做。`check_reachable(identity, knowledge_ids, *, whitelist=None) -> ReachabilityReport`（复用 ③④⑤，不调引擎；F055 T060 预检用）。`is_supported_knowledge_type(t)` 纯函数。**不创建会话、不写消息、不 import 任何 `chat_session` / `message` 模块**（AC-08 / AC-19；T104 用 `test_facade_imports_no_session_modules` 静态守卫）。
   **测试**: T102a 全部通过
   **覆盖 AC**: AC-11, AC-19, AC-21, AC-22, AC-23, AC-24, AC-27, AC-46
   **依赖**: T102a
+  **落地**: `e82561fc5` — `retrieval_facade_service.py`。**偏差**：`retrieve` 的 `version_repo` 走关键字传参而非门面内部取依赖工厂（领域服务调 FastAPI 依赖工厂 = 反向依赖入口层，C1）；`check_reachable` 只评估 `knowledge_ids` 点名的目标、`whitelist` 仅用于判定是否属声明范围与条目是否消失（不遍历未点名的白名单条目）。两条均已回写 design §4.2 ③。
 
 - [ ] **T103a**: v2 `POST /filelib/retrieve` 收敛测试
   **文件**: `src/backend/test/open_api/test_filelib_retrieve_facade.py`（新）, `src/backend/test/open_api/test_data_scope_matrix.py`（改分类 + 补一条用例，见下）
