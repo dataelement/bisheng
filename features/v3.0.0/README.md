@@ -18,7 +18,7 @@
 | F049 | openapi-auth-baseline | A | ✅ spec / design / tasks 存档 · **实现由 `feat/3.0.0-beta2` F053 承接**（2026-09-10，见 [beta2-openapi-base-migration.md](./beta2-openapi-base-migration.md)） | — | 伴生 P0：凭据底座 / 服务账号（含资源归属人）/ 全端点接入 / 管理界面 / 零迁移升级；三扩展位登记 |
 | F050 | identity-modes | A | 📝 Spec 已写（48 AC，独立审查中） | F049（+F052） | 伴生 P1：两种身份模式 / 受限委托 / 审计双归属 / 裸 `user_id` 收口 / `delegate` 位与互斥 |
 | F051 | model-protocol-gateway | A | ✅ Spec 定稿（36 AC，经独立审查修订） | F049 | DEV-02 模型协议面（仅 OpenAI 兼容）+ 模型调用逐条审计 |
-| F052 | mcp-server-face | A | ✅ Spec 定稿（47 AC，经独立审查修订） | F049 | DEV-02 MCP 六类工具 + 统一检索门面（文件级 fail-closed） |
+| F052 | mcp-server-face | A | ✅ Spec / design / tasks 定稿 · 🚧 实现 31/34（代码面已齐；余 T104 · T302 的集合相等断言待 CI 中间件、T303 待 114） | F049 | DEV-02 MCP 六类工具 + 统一检索门面（文件级 fail-closed） |
 | F053 | dev-cli-skills | A 尾 / B | ✅ Spec 定稿（55 有效 AC，经独立审查修订） | F049, F051, F052 | DEV-03 两包 / DEV-04 CLI 四命令 / DEV-05 本地身份注入 / DEV-01 接入信息区 |
 | F057 | bisheng-sdk | A 尾 / B | ✅ Spec 定稿（36 AC，经独立审查修订） | F052, F053（storage 依赖 F054） | DEV-07 三件套 + 开发者指南 |
 | F058 | openapi-responses | A | ✅ Spec 定稿（36 AC，经独立审查修订） | F050 | 伴生 P1 日常模式会话 Responses 契约（不在 PRD-1） |
