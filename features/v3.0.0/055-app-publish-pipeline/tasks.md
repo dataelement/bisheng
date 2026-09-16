@@ -538,13 +538,15 @@ T001–T007（Wave 1，可并行）
 
 > 优先级顺序取 design §8（`withdraw` 守卫已上提至 Wave 3.8，见文首「§6 字面读法的两处对齐」）。
 
-- [ ] **T052**: 审读视图（左文件树 + 右只读代码 + 4 tab）+ 「查看待上线版本」入口；弹窗 `viewMode:'review'` 放宽至 1200px（K11 ③ / D14 案 A）
+- [x] **T052**: 审读视图（左文件树 + 右只读代码 + 4 tab）+ 「查看待上线版本」入口；弹窗 `viewMode:'review'` 放宽至 1200px（K11 ③ / D14 案 A）
   **文件**: `client/src/components/approval/AppReviewView.tsx`, **`client/src/pages/settings/SettingsPage.tsx` + `client/src/components/approval/ApprovalPane.tsx`**（2026-09-10 改接 beta2 后审批中心由设置页承载、原 `ApprovalCenterDialog.tsx` 已删；「弹窗 `viewMode:'review'` 放宽至 1200px」的前提随之失效，尺寸按页面重估）, `client/src/locales/{zh-Hans,en,ja}/translation.json`, `src/backend/bisheng/app_publish/api/endpoints/snapshot.py`
   **测试载体**: `src/backend/test/app_publish/test_snapshot_api.py`（快照只读端点：归属 / 审批人放行 / 二进制与超大文件降级）+ 前端手动验证清单（文件树可展开、代码只读不可编辑、4 tab 切换、1200px 下不横向滚动、无「查看待上线版本」死链）
   **覆盖 AC**: AC-24, AC-25
   - [x] **后端半（2026-09-16 完成，切片 publish-diff-review-backend）**：`api/endpoints/snapshot.py`（`GET …/versions/{version_id}/snapshot/tree` + `…/snapshot/file?path=`）+ `domain/services/snapshot_browse_service.py`（`ReviewAccess` 访问规则 + 流式读归档、不落盘）；`test_snapshot_api.py` 20 个用例全绿（归属 / 审批人持任务放行 / **走真实 `publish_approval_service.submit` 产生的审批人放行**（钉住访问规则依赖的 `payload_snapshot.version_id` 与 `business_resource_type="app"`）/ 其它版本审批人与陌生人 16257 / 二进制与超大降级 / 密钥 mask / 非法路径 16258 / 快照缺失或损坏 16256 / 单顶层目录去前缀 / 条目超 `max_package_entries` 置 `truncated` / 无整包下载路由）。契约见 design §4.2 ⑨。审校补交：`packages/locales` 六个生成产物（platform `api_errors.json` ×3、client `api_errors.gen.json` ×3）经 `node scripts/build.mjs` 重建后随码提交（首次提交漏了，`--check` 会挂 CI）。
     **实际偏差记录**：① 审批人放行判据取"持有**该版本**发布申请的审批任务"（任意状态），不是"持有任一任务"——被驳回后回看自己审过的版本仍可，但审批版本 3 不开版本 1；② 除 owner / 审批人外，**租户管理员与平台超管也放行**（与 `publish-status` 的 `_require_viewer` 同口径，审批人来源本就含 `tenant_admin`）；③ 树 / 单文件**不落盘**，只有差异接口走 `safe_extract`；④ "不可预览"走数据级降级（`previewable:false` + `reason`）而不是错误码，错误码只给"文件不存在 / 路径非法"（16258）；⑤ 三个新码 16256/16257/16258 落在发布流程段，16259 预留未用。
-  - [ ] **前端半**（`AppReviewView.tsx` / 「查看待上线版本」入口 / i18n / 手动清单）——未做，由后续前端切片承接；D14「MVP 期整块不渲染以免死链」前提不变。
+  - [x] **前端半（2026-09-16 完成，切片 f055-review-frontend，提交 `3789e5e28`）**：`client/src/components/approval/AppReviewView.tsx`（壳 + 四 tab）+ `ReviewSourcePane.tsx`（左树右只读正文）+ `reviewTree.ts`（扁平条目折树的纯函数）+ `api/hostedAppReview.ts`（四个只读端点、业务码从 200 信封里取出来抛）；入口按钮落在 `AppPublishDetailPanel` 的基本信息区，经 `ApprovalDetailPanels` 透传到 `ApprovalPane` 的 `reviewTarget` 状态。三语各 20 键。测试：`reviewTree.test.ts` 8 例 + `AppReviewView.test.tsx` 6 例 + `AppPublishDetailPanel.test.tsx` 新增 1 例，client jest 全量 `8 failed | 66 passed (74) · 7 failed | 555 passed (562)`，与主检出基线 `8 failed | 64 passed (72) · 7 failed | 540 passed (547)` 同样的失败集（+15 全为新增）。
+    **实际偏差记录**：① **尺寸前提按页面重估的结论 = 审读视图占满设置内容区**（`col-span-full` 接管 300px 列表 + 详情两栏），不是「弹窗放宽到 1200px」——beta2 把审批中心改成设置页后已无弹窗可放宽，D14 案 A 的实质（同一处界面切 viewMode、不新开路由与权限守卫）原样保留；② **新增一个后端只读端点 `…/review-context`**（见 design §4.2 ⑨ 的 ⚠️ 段）：AC-25 的「版本历史」与「文件差异」两个 tab 在审批人身上原本无法成立，`publish-status` 与 F054 的版本列表都只放 owner / 租户管理员 / 平台超管。不新增错误码；③ 「预览试用」置顶按钮属 T054，本切片未做；④ 入口按钮放在基本信息区而非通过 / 驳回旁——只读动作混进两个决策按钮之间是误点来源；⑤ 两端 `tailwind.config` 的 `content` 补了 `packages/file-viewers/src`，此前共享组件的 class 只在「恰好本应用别处也用了」时才会生成。
+    **手动验证清单（待 114 实机走一遍）**：文件树可展开折叠 · 代码区只读且无下载入口 · 4 tab 切换 · 首发版本的「文件差异」tab 显示「没有可对比的已发布版本」而非空白 · 二进制 / 超大文件显示原因而不是空正文 · 窄屏（<768px）左右两栏改上下堆叠、不横向滚动 · 非审批人打开同一 URL 看到业务码文案而不是整页 403 · 切 en / ja 无裸键。
 
 - [ ] **T053**: 审批期临时预览实例后端（快照拉起 / 临时空库 / 审批人身份注入 + owner 权限放行〔NFR-1.2 审批例外，INV-36〕/ 终态与超时回收 / 不占实例名额）
   **文件**: `src/backend/bisheng/app_publish/domain/services/preview_instance_service.py`, `src/backend/bisheng/app_publish/api/endpoints/preview.py`, `src/backend/test/app_publish/test_preview_instance.py`
@@ -603,10 +605,12 @@ T001–T007（Wave 1，可并行）
   **完成证据（2026-09-16，切片 publish-diff-review-backend）**：三个文件如上落码，`test_version_diff.py` 15 个用例全绿（形态与三种 change / 响应不含归档 / 二进制与超大不比较 / 相同版本空 diff / 密钥先 mask 后 diff / 单文件行数闸 / 总 patch 字节闸 / 文件数闸 / 审批人持待上线版本任务可比对已发布版本 / 陌生人 16257 / 版本不存在 16253 与快照缺失或损坏 16256 / 路由为登录态无 open_api marker / 租户管理员判定用应用租户）；`test/app_publish` 全套 397 passed（主检出基线 364 passed，+33 全为新增）。精确契约见 design §4.2 ⑨。
   **实际偏差记录**：① 响应在 design 字面 `{files, patches}` 之上加了 `base` / `target` / `role` / `summary`，`files` 项多 `comparable` / `reason`，`patches` 项多 `truncated` / `masked_secrets`——超集，未改字面字段；② `a` = 旧侧 `b` = 新侧由路径顺序决定，"上一已发布版本"由前端从 `publish-status` 的 `current_version` / `pending_version` 取，后端不另提供 `diff/previous` 语法糖；③ 体积闸三道（单文件 2000 行 / 总 2 MiB / 5000 文件）为常量非配置——先有真实超限样本再考虑进 `settings.app_runtime`；④ 差异接口复用 `safe_extract` 落临时目录（与树 / 单文件的流式读不同），因为要对整棵树做逐字节比较，落盘比全量读进内存更可控。
 
-- [ ] **T064**: 版本差异前端（版本 tab 与审读视图**同一呈现组件**）
+- [x] **T064**: 版本差异前端（版本 tab 与审读视图**同一呈现组件**）
   **文件**: `platform/src/pages/BuildPage/hostedApp/publish/VersionDiff.tsx`, `client/src/components/approval/AppReviewView.tsx`（增量接入）, `platform/public/locales/{zh-Hans,en,ja}/bs.json`
   **测试载体**: 前端手动验证清单（platform 版本 tab 与 client 审读视图**同一组件同一呈现**、二进制文件降级为「不可比较」、大 diff 分块不卡）
   **覆盖 AC**: AC-41
+  **完成证据（2026-09-16，切片 f055-review-frontend，提交 `7dc0e7560`）**：呈现组件 `packages/file-viewers/src/VersionDiffView.tsx`（文件清单 + unified diff 着色 + 二进制 / 超大降级 + 三道截断闸各自有话说 + 已屏蔽密钥计数），三语文案进 `packages/locales` 的 `shared` 域并重新生成两端产物；platform 侧 `publish/VersionDiff.tsx` 默认「运行中版本 → 待生效版本」、两侧可改，接进版本 tab 的 `contentSlot`；client 侧审读视图的「文件差异」tab 直接挂同一组件。测试：`platform/src/test/versionDiffView.test.tsx` 7 例（共享组件本身）+ `publish/VersionDiff.test.tsx` 7 例（选版规则与取数接线），platform vitest 全量 `3 failed | 73 passed (76) · 9 failed | 447 passed (456)`，与主检出基线 `3 failed | 71 passed (74) · 9 failed | 433 passed (442)` 同样的失败集（+14 全为新增）。
+  **偏离**：① **呈现组件不在 `platform/.../publish/VersionDiff.tsx`，而在 `@bisheng/file-viewers`**——本任务原写的落点让「同一呈现」只能靠两份拷贝实现（两个 SPA 不共享 `src/`，platform 甚至不依赖 `@bisheng/ui`）。`@bisheng/file-viewers` 是两端都已依赖的源码型共享包，契约正合（props 进、无 HTTP 客户端、文案走 `shared:` 命名空间）。platform 下的 `VersionDiff.tsx` 保留，但只负责选版与取数；② 文案分两处：组件内文案在 `packages/locales` 的 `shared` 域，platform 的卡片标题与选择器标签在 `bs.json`；③ 未新建 workspace 包——新包要 `pnpm install` 才能被解析，而 client 的 jest 一旦 install 就会被未编译的 `canvas` 整体拖垮（`reference_frontend_pnpm_install_breaks_canvas`）。
 
 ---
 
