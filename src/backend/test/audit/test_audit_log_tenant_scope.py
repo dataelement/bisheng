@@ -81,62 +81,25 @@ del _stubbed
 
 @pytest.fixture(scope="module")
 def dao_engine():
-    """SQLite engine with v2.5.1 ``auditlog`` + ``message_session`` schemas."""
+    """SQLite engine with the real ``auditlog`` + ``message_session`` schemas.
+
+    Generated straight from ``AuditLog.__table__`` / ``MessageSession.__table__``
+    (both already imported above) instead of a hand-written ``CREATE TABLE``.
+    A hand-copied DDL string silently drifts the moment the model gains a
+    column — beta2 added ``api_subject_type`` / ``api_subject_id`` /
+    ``external_user_id`` to ``MessageSessionBase`` and this fixture's old
+    literal DDL never got the memo, so every test here failed with
+    ``sqlite3.OperationalError: table message_session has no column named
+    api_subject_type`` even run alone. Creating the table from the model's
+    own SQLAlchemy metadata means it can't drift again.
+    """
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    with engine.begin() as conn:
-        conn.execute(
-            text("""
-            CREATE TABLE IF NOT EXISTS auditlog (
-                id VARCHAR(255) PRIMARY KEY,
-                operator_id INTEGER NOT NULL,
-                operator_name VARCHAR(255),
-                group_ids JSON,
-                system_id VARCHAR(64),
-                event_type VARCHAR(64),
-                object_type VARCHAR(64),
-                object_id VARCHAR(64),
-                object_name TEXT,
-                note TEXT,
-                ip_address VARCHAR(64),
-                tenant_id INTEGER,
-                operator_tenant_id INTEGER,
-                action VARCHAR(64),
-                target_type VARCHAR(32),
-                target_id VARCHAR(64),
-                reason TEXT,
-                metadata JSON,
-                create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
-            )
-        """)
-        )
-        conn.execute(
-            text("""
-            CREATE TABLE IF NOT EXISTS message_session (
-                chat_id VARCHAR(255) PRIMARY KEY,
-                name VARCHAR(255),
-                flow_id VARCHAR(255),
-                flow_type INTEGER NOT NULL,
-                flow_name VARCHAR(255),
-                flow_description TEXT,
-                flow_logo TEXT,
-                user_id INTEGER NOT NULL,
-                tenant_id INTEGER NOT NULL DEFAULT 1,
-                group_ids JSON,
-                is_delete BOOLEAN DEFAULT 0,
-                "like" INTEGER DEFAULT 0,
-                dislike INTEGER DEFAULT 0,
-                copied INTEGER DEFAULT 0,
-                sensitive_status INTEGER DEFAULT 1,
-                create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
-            )
-        """)
-        )
+    AuditLog.__table__.create(engine, checkfirst=True)
+    MessageSession.__table__.create(engine, checkfirst=True)
     yield engine
     engine.dispose()
 
