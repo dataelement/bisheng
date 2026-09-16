@@ -9,10 +9,14 @@ answer:
 * **subject** (audit attribution only) comes from a signed short-lived access
   token, never from a header a caller could simply write.
 
-The two ports are defined here and registered by their owners (F055 for the
-declaration read, F054 for token verification). Their defaults fail closed, so a
-hosted-app credential that appears before its owner has registered anything is
-refused rather than let through with the tenant-wide range.
+The two ports are defined here and their implementations belong elsewhere — the
+declaration read to F055, token verification to F054 — but **both are installed
+by one caller**, ``app_publish/composition.py``, because registering one without
+the other is the shape that hurts: a readable declaration plus an unverifiable
+token would serve every call while attributing all of them to the application
+itself. Their defaults fail closed, so a hosted-app credential that appears in a
+process which did not wire that composition root is refused rather than let
+through with the tenant-wide range.
 """
 
 from __future__ import annotations

@@ -73,9 +73,13 @@ def hosted_app_principal(
     ``app_id``, the access token's audience — keys on the ref, so a fixture that
     put the id in the name would let a regression through unnoticed (F055 T055
     note ①).
+
+    Fully validated, not ``model_construct``: F055 T055 widened the
+    ``actor_kind`` Literal to admit ``hosted_app``, so the workaround the
+    earlier wave needed would now only hide a field this principal gets wrong.
     """
 
-    return OpenApiPrincipal.model_construct(
+    return OpenApiPrincipal(
         credential_id=71,
         actor_kind="hosted_app",
         actor_id=5,

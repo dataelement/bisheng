@@ -1457,6 +1457,47 @@ def credential_redis(monkeypatch):
     return redis
 
 
+@pytest.fixture()
+async def hosted_app_resolver():
+    """Install the ``hosted_app`` resolver for the duration of one test.
+
+    Registered through the composition root so the wiring under test is the one
+    that ships, and torn down afterwards because **every** registry it writes to
+    is process-wide. The teardown has to cover all five, not just the credential
+    ones: the capability-bus wave added a runtime-environment provider and
+    F051's two ports to ``register()``, and leaving the provider installed made
+    ``test/app_runtime``'s start tests mint a real credential against a database
+    that is not there — green alone, a wall of red in a combined run.
+
+    Lives in the conftest rather than in ``test_app_credential`` because the
+    model-capability file needs the same wiring to call F051's face as a
+    published application (F051 T022); two copies of a teardown this exacting
+    would drift.
+    """
+    from bisheng.app_publish.composition import register
+    from bisheng.app_runtime.domain.services import lifecycle_hooks, runtime_env_ports
+    from bisheng.open_api.domain.models.api_credential import SUBJECT_KIND_HOSTED_APP
+    from bisheng.open_api.domain.services import model_range_policy
+    from bisheng.open_api.domain.services.credential_validator import SUBJECT_RESOLVERS
+    from bisheng.open_api.domain.services.execution_context import SUBJECT_EXECUTION_GUARDS
+
+    previous_ports = (
+        model_range_policy.get_hosted_app_declaration_port(),
+        model_range_policy.get_access_subject_verifier(),
+    )
+    lifecycle_hooks.clear_app_deleted_hooks()
+    register()
+    try:
+        yield SUBJECT_RESOLVERS
+    finally:
+        SUBJECT_RESOLVERS.pop(SUBJECT_KIND_HOSTED_APP, None)
+        SUBJECT_EXECUTION_GUARDS.pop(SUBJECT_KIND_HOSTED_APP, None)
+        lifecycle_hooks.clear_app_deleted_hooks()
+        runtime_env_ports.clear_capability_env_provider()
+        model_range_policy.register_hosted_app_declaration_port(previous_ports[0])
+        model_range_policy.register_access_subject_verifier(previous_ports[1])
+
+
 # ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------

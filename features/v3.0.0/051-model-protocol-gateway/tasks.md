@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 定稿（决议 1–8 全自动模式定案，同日审查 16 条修订） |
 | design.md | ✅ 已评审（2026-09-16，`/sdd-review design` 两轮） | 用户豁免 ★，D1–D14 标「全自动模式定案」；接手时的第一入口。二轮发现 AC-27 底座缺口 → 新增 26205 / 坑 18 |
 | tasks.md | ✅ 已拆解并评审（2026-09-16，`/sdd-review tasks`） | 本文 |
-| 实现 | 🚧 进行中 | **21 / 30 完成**（2026-09-16：Wave 1–5 全部落地，T001–T021；Wave 6 T022–T025 阻塞于 F055 T055 / T056 与 F054 OBO 验签，Wave 7 T026–T029 需 114）。同日复核并修正 6 处（见「实际偏差记录」8–13），本地用例 120 → **131 passed**。本地证据：`test/open_api` + `test/llm` 无新增失败（见各任务证据行），`ruff check` / `ruff format --check` 对本切片文件零输出，`arch-guard.sh` 零输出，`check-i18n` OK。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | **24 / 30 完成**（2026-09-16：Wave 1–5 全部落地 T001–T021；**Wave 6 的 T022 / T023 / T024 于同日解除阻塞并落地**——F055 T055 / T056 与 F054 `verify_obo_token` 均已合入 `3.0-vibe`，三者由 `app_publish/composition.py:register()` 一并注册；余下 T025 与 Wave 7 T026–T029 全部需要 114）。同日复核并修正 6 处（见「实际偏差记录」8–13），Wave 6 的核实见 15–18。本地用例 131 → **`test/open_api` 759 passed / 3 skipped**（新增 `test_model_gateway_hosted_app.py` 21 条）、**`test/app_publish` 655 → 660 passed**。本地证据：`ruff check` / `ruff format --check` 对本切片文件零输出，`arch-guard.sh` 零输出。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -44,7 +44,7 @@
 - **T005**（`test/open_api/conftest.py` 收编 `open_platform_enabled` / `open_platform_disabled`；`test/open_api/test_scope_issuability.py:36-42` 删本地定义）—— 共享测试夹具，既有用例零改动（fixture 名不变，只换供给位置）。
 - **T023**（`bisheng/app_runtime/domain/services/obo_token.py` 新建、`entry_authz_service.py:379-426` 抽常量与签发逻辑）—— **改的是 F054 领域对象**：`OBO_AUDIENCE`（`entry_authz_service.py:78`）已是模块级常量，抽取必须保持签发侧字节级等价（app-proxy 已发出的 OBO 令牌要继续验得过），实现 PR 由 F054 出或本 Feature 代出后由 F054 review。
 - **T020**（回写 F054 `contracts-runtime-manager.md §5`、F053 design §6.2 表、F055 design D13 环境变量名）—— 只加名不改既有名。
-- **依赖上游任务 ID**：F055 **T055**（`hosted_app` 主体解析器 + CHECK 放宽迁移）· **T056**（注册 `HostedAppDeclarationPort`、凭据 `scopes` 含 `model:invoke`、`BISHENG_APP_TOKEN`）· F054（OBO 验签实现 + runtime-manager 注入三名，无任务号，见 F054 tasks 追加项）· F056（查询面接线）· F052 / F055 T060（消费 `model_catalog`）。
+- **依赖上游任务 ID**：F055 **T055**（`hosted_app` 主体解析器 + CHECK 放宽迁移，**✅ 2026-09-16 已落地**）· **T056**（注册 `HostedAppDeclarationPort`、凭据 `scopes` 含 `model:invoke`、`BISHENG_APP_TOKEN`，**✅ 已落地**）· F054（OBO 验签实现 + runtime-manager 注入三名，无任务号，见 F054 tasks 追加项；**✅ 验签已落地**，入口侧 fail-open 仍在 F054 手上，见偏差 18）· F056（查询面接线）· F052 / F055 T060（消费 `model_catalog`）。
 
 ---
 
@@ -216,27 +216,44 @@
   **依赖**: T020
   **完成证据**: F053 tasks.md 追加 **T038a**（模型章改写 + `X-BiSheng-Access-Token` 转发说明）；F057 tasks.md 追加 **T035a**（模型章两条回归断言改口径，`test_no_sdk_wrapper_for_model_or_appdb` 不动）。
 
-### Wave 6 · 托管应用运行期路径（**依赖 F055 T055 / T056、F054 OBO 验签**）
+### Wave 6 · 托管应用运行期路径（~~依赖 F055 T055 / T056、F054 OBO 验签~~ **上游已落地，2026-09-16 解除**）
 
-> 在上游落地前，本 Wave 的测试用 fake Port + `model_construct` 构造 `hosted_app` principal 通过（T010 已含），代码可先合；下列任务是**接线与真实断言**，须待上游。
+> ~~在上游落地前，本 Wave 的测试用 fake Port + `model_construct` 构造 `hosted_app` principal 通过（T010 已含），代码可先合；下列任务是**接线与真实断言**，须待上游。~~
+>
+> **2026-09-16**：三项上游全部在 `3.0-vibe` 上：`resolve_hosted_app`（F055 T055）、`HostedAppDeclarationAdapter` + `derive_scopes` + `runtime_capability_env`（F055 T056）、`verify_obo_token` + `AccessSubjectVerifier`（F054）。两个 Port 由 **F055 的组合根 `app_publish/composition.py:register()` 一并注册**（两者必须同进同退，理由见该文件注释），组合根本身由 `main.py` 与 `worker/main.py` 各调一次。本面**代码零改动**即接通——这正是 D7 的 Port 设计要换来的结果；T022–T024 落的是真实断言。
 
-- [ ] **T022**: `hosted_app` principal 正式构造 + 范围收窄真实断言（3h）**依赖 F055 T055**
+- [x] **T022**: `hosted_app` principal 正式构造 + 范围收窄真实断言（3h）~~**依赖 F055 T055**~~
   **文件**: `src/backend/test/open_api/test_model_gateway_hosted_app.py`（新）, `src/backend/bisheng/open_api/domain/services/model_range_policy.py`（若 F055 把 `actor_kind` Literal 扩为含 `"hosted_app"`，去掉 `model_construct` 变通；T055 的解析器返回的 principal 字段（`actor_id = app 内部 id`、`actor_name = slug`、`resource_owner_user_id = owner`）按 F055 实际回填本文 §4.2 ④ 的 `actor_*` 语义）
   **逻辑**: 经真实 `CredentialService.issue(subject_kind="hosted_app", ...)` 签发 → `/models` 只返回 `declared ∩ C` → AC-34；`declared` 外模型 → 26215；`declared` 内已下线 → 26212 → AC-13 / AC-34；声明 Port 未注册 → 26216 → AC-35。
   **覆盖 AC**: AC-13, AC-34, AC-35
   **依赖**: T011, T015b, F055 T055
+  **完成证据**（2026-09-16）：
+  - `src/backend/test/open_api/test_model_gateway_hosted_app.py`（新，21 条，与 T023 共用）——范围半：`/models` 只回 `declared ∩ C`（声明里有、租户没有的 `claude-3` 与租户有、没声明的 `qwen-max` 都不出现）、未声明 → 26215、已下线 → 26212、租户没有 → 26211、缓存窗口内被摘 → **26213（不是 26215）**、声明为空 → 26215 而非 26216、Port 未注册 / 声明读不到 / 他租户声明 → 26216 且**绝不回退租户范围**。声明侧用的是 F055 的真 `HostedAppDeclarationAdapter`（只桩 `load_effective_declaration`），`None` ⟷ 空集的区分因此是真代码在判。
+  - `src/backend/test/app_publish/test_capability_model.py`（+3 条端到端）——走**真实** `AppRuntimeCredentialService.issue` 签发 `bs-app-` 明文 → 真实 `validate_bearer` → `resolve_hosted_app` → 本面：声明内可调、租户其它模型 26215、声明内模型下线 26212 且声明本身不变。夹具 `published_app_client` 只把模型目录换成 F051 套件的**同一个** `install_catalog` 假件（模型管理的表不在 `test/app_publish` 的 schema 里），两侧对「租户有什么」的认知因此不可能分叉。
+  - `model_construct` 变通已删：`test/open_api/model_gateway_fixtures.py:hosted_app_principal` 改为完整校验构造（`OpenApiPrincipal.actor_kind` Literal 已含 `hosted_app`）。
+  - §4.2 ④ 的 `actor_*` 语义按 `resolve_hosted_app` 实际回填进 design.md（`actor_id = hosted_app_subject.id` / `actor_name = app.name` 显示名 / 应用机器标识只有 `subject_ref = app.id` 一个来源）。
 
-- [ ] **T023**: 访问凭据验签 Port 接线（F054 提供实现）+ subject 落记录（3h）**依赖 F054 OBO 验签**
+- [x] **T023**: 访问凭据验签 Port 接线（F054 提供实现）+ subject 落记录（3h）~~**依赖 F054 OBO 验签**~~
   **文件**: `src/backend/bisheng/app_runtime/domain/services/obo_token.py`（**F054 归属**：从 `entry_authz_service.py:379-426` 抽 `OBO_AUDIENCE` / secret 读取 / `issue` 与新 `verify_obo_token(token, *, app_id, tenant_id) -> AccessSubject | None`；本任务只登记需求，实现 PR 由 F054 出或本 Feature 代出后由 F054 review）, `src/backend/bisheng/main.py`（lifespan 注册 `register_access_subject_verifier(verify_obo_token)`——**放 `app_runtime` 组合根**，不在 `open_api` 内 import `app_runtime`）, `src/backend/test/open_api/test_model_gateway_hosted_app.py`（增：有效头 → 行 `subject_kind=="user"`、`subject_id==user`；无头 → `app_self`；过期 / 错 `app_id` / 错签名 → 26204；任何情况下范围不随 subject 变）
   **逻辑**: design D7；spec 决议-5。`app_id` 维度：行 `app_id = principal.actor_name`（slug）或 F055 定义的应用标识——以 T055 回填为准。
   **覆盖 AC**: AC-21, AC-22, AC-34
   **依赖**: T022, T018
+  **完成证据**（2026-09-16）：
+  - **实现已由上游提供，本任务不新写代码**：`verify_obo_token(token, *, app_id, tenant_id) -> int | None` 与其适配器 `AccessSubjectVerifier` 落在 `bisheng/app_runtime/domain/services/entry_authz_service.py`（F054 归属，非本 Feature 代出），注册点是 `bisheng/app_publish/composition.py:register()` 里的 `register_access_subject_verifier(AccessSubjectVerifier())` —— 与 T023 原计划的「放 `app_runtime` 组合根、在 `main.py` lifespan 注册」等价且更严：**两个 Port 在同一个函数里同进同退**，不会出现「声明读得到、令牌验不了 → 全部记成应用自身却照常服务」这种半接线。`main.py` 与 `worker/main.py` 各调一次组合根。
+  - `test/open_api/test_model_gateway_hosted_app.py` 的 subject 半（用**真** `_issue_obo_token` 签 + 真 `AccessSubjectVerifier` 验，非 fake）：有效令牌 → 行 `subject_kind == "user"` / `subject_id == 77` / `app_id == app.id`；无令牌 → `app_self` + `subject_id is None`，同时 `resource_owner_user_id` 照记（归属人与「谁发起的调用」是两列两义）；**五种坏令牌**（他应用、他租户、非 JWT、已过期、错签名）参数化 → 一律 26204、不降级成 `app_self`、且在摸模型之前就拒（`records == []`）；范围不随 subject 变（带/不带令牌的 `/models` 响应逐字节相同）；判定序 ②→③（声明读不到 + 坏令牌 → 26204 而不是 26216）。
+  - 注册本身也有守卫：`test_the_composition_root_installs_both_ports`（调真组合根后两个 Port 的类型断言）与 `test_both_process_entry_points_call_the_composition_root`（AST 断言 `main.py` / `worker/main.py` 都 import 了组合根）。
+  - `app_id` 维度的悬而未决项按 T055 实际回填：**是 `principal.subject_ref`（`app.id` uuid），不是 `actor_name`（slug/显示名）**；design §4.2 ④ 与 D7 已同步。
 
-- [ ] **T024**: F055 声明 Port 注册验证 + 能力收回错误对齐（2h）**依赖 F055 T056 / T058**
+- [x] **T024**: F055 声明 Port 注册验证 + 能力收回错误对齐（2h）~~**依赖 F055 T056 / T058**~~
   **文件**: `src/backend/test/app_publish/test_capability_model.py`（F055 归属，增：经本面 26215 / 26212 / 26213 与 F055 `16273` / `16274` 的对应关系——本面**不**改码，F055 在发布面读接口按 `declared ∖ 当前可解析` 计算「已失效」）, `features/v3.0.0/055-app-publish-pipeline/design.md`（D13 与错误码表 16270–16289 段各补一句：**模型能力的运行期判定一律走 262 段**——「已收回」= 26212 / 26213、「未声明」= 26215；F055 的 `16273`（能力已被收回）/ `16274`（未在能力声明中的能力）**只用于知识库等非模型能力**）
   **逻辑**: 消除两个错误码族对同一事件的重复——**两边各有一对码**（16273 ⟷ 26212/26213、16274 ⟷ 26215），只登记 16273 一半会留下同样的歧义。F055 AC-53 在模型面的表现 = 26212 / 26213（spec AC-13）、AC-51 的表现 = 26215（spec AC-34）。
   **覆盖 AC**: AC-13, AC-34
   **依赖**: T022
+  **完成证据**（2026-09-16）：
+  - **本面不改码**（任务原文即如此）。F055 侧两处文档补齐：`055/design.md` 错误码表 16270–16289 行加了「两码只用于知识库等非模型能力」的限定，「一码一义」清单加了第四条，写全**双向**对应（16273 ⟷ 26212/26213、16274 ⟷ 26215）并点名只登记一半会留下同样的歧义；D13 原有的那句保持不变（已正确）。
+  - `test/app_publish/test_capability_model.py::test_this_features_capability_codes_are_never_raised_for_a_model` —— AST 遍历 `capability_bus_service`，断言每一处 `AppCapabilityRevokedError` / `AppCapabilityNotDeclaredError` 都显式带 `kind=CAPABILITY_KIND_KNOWLEDGE`；哪天有人给模型路径加一处 162 段的 raise，这条会点名文件行号。比散文声明强的地方就在这里。
+  - `test_the_model_face_and_the_publish_surface_read_the_same_resolution` —— 同一份声明（`gpt-4o` 在线 / `retired` 下线）下，发布面的 `model_capability_status` 标记与本面的拒绝同源（都出自 `resolve_model_name`），避免「发布面说健康、面上拒」或反过来。
+  - 本面 26213 的托管应用侧也补了用例（见 T022 证据行），因为 16273「已收回」对应的是 26212 **和** 26213 两个码。
 
 - [ ] **T025**: 114 托管应用端到端（2h）**依赖 F055 T056 部署到 114**
   **文件**: 本文「114 部署记录」小节
@@ -313,7 +330,8 @@
 | AC-35 | T008, T009, T010, T011, T022 | 本地 / [后] |
 | AC-36 | T017, T018, T028 | 本地 / 114 |
 
-`[后]` = 依赖 F055 T055 / T056 或 F054 OBO 验签，上游未落地前只有 fake Port 用例通过。
+~~`[后]` = 依赖 F055 T055 / T056 或 F054 OBO 验签，上游未落地前只有 fake Port 用例通过。~~
+**2026-09-16 起 `[后]` 全部解除**：上游三项已在 `3.0-vibe` 上，T022 / T023 / T024 已按真实实现断言（fake Port 的单元用例 T010 保留——它守的是判定序与 Port 契约本身，与真实现的用例互补而非重复）。AC-13 / AC-21 / AC-22 / AC-34 / AC-35 的本地覆盖因此不再打折；标 `[后]` 的行里只剩 T025 需要 114。
 
 ---
 
@@ -337,6 +355,7 @@
 5. **`ChunkAssembler` 的 `finish_reason` 优先采信上游 `response_metadata.finish_reason`，`tool_calls` 只是兜底** —— design D8 的措辞容易读成「有 tool_call 就写 tool_calls」。上游是权威的（`length` / `content_filter` 必须原样传出），所以顺序是先读上游、读不到才按有无 tool_call 推断。
 6. **`_explain_miss` 的两次补查也走 `strict=True`** —— 失败路径再遇到权限后端故障时，答案应当是 26216 而不是把它误判成 26211「不存在」。
 7. **Wave 6（T022–T025）与 Wave 7（T026–T029）未做**：前者阻塞于 F055 T055（`hosted_app` 主体解析器 + `OpenApiPrincipal.actor_kind` Literal 扩容）/ F055 T056（注册 `HostedAppDeclarationPort`）与 F054 的 OBO 验签实现；本面的 hosted_app 分支已按契约写完并以 fake Port 测通（T010 / T011），上游落地后只需注册实现、不改本面代码。后者需要 114。
+   —— **2026-09-16 更新**：阻塞解除，T022 / T023 / T024 已落地（见下方 15–18）；「上游落地后只需注册实现、不改本面代码」这句话被证实了，本面一行没改。T025 与 Wave 7 仍未做，全部需要 114。
 
 **2026-09-16 复核（Wave 1–5 实施后的审查与修正）**
 
@@ -346,4 +365,11 @@
 11. **Anthropic 路径只认了 `messages`，认不出真实客户端发的 `v1/messages`** —— Anthropic 客户端拿到的是 origin、自己补 `/v1/messages`；把 `ANTHROPIC_BASE_URL` 指到我们公布的地址（已以 `/v1` 结尾）就会打到 `…/model/v1/v1/messages`，原实现答 26201「没这个端点」而不是 AC-03 / AC-32 承诺的协议提示。已改为两种拼法都答 26202，测试参数化。
 12. **`_instantiate` 失败一律记 `model_unavailable`，与 D9 的 result 词表不符** —— 10013（provider 客户端初始化失败）映射到 26231 上游失败，却在账本里记成「模型不可用」。已按错误族分流：26211 / 26212 / 26213 记 `model_unavailable`，其余记 `upstream_failed`。
 13. **三处测试补强** —— ① `client_disconnected` 分支此前无任何用例（T014 / T017 都写了要断言），补 `test_a_client_that_walks_away_mid_stream_is_recorded_as_such`；② `test_a_full_queue_is_reported_rather_than_silently_dropped` 原本只断言 `enqueue` 返回 `False`，`caplog` 拿到手却没断言（loguru 不进 `caplog`，断了也是空转），改为断言 `emit_metric("model_call_record", status="dropped")` 真的发出——「不静默」这半句这才有人守；③ AC-06 的反向蕴含（持 `model:invoke` 不能调 `/api/v2/workstation/chat/completions`）T012 写了但没落地，补 `test_model_invoke_does_not_open_the_daily_chat_data_plane`。
-14. **仍未覆盖、且本地覆盖不了的一条**：T017 列的 `test_telemetry_event_same_tokens`（AC-23「与平台既有 token 账本同源」的端到端断言）没有落地，也不打算在单测里造——本面的用例把 `BishengLLM` 整个替换成假件，遥测那一段根本不会跑，造一个假遥测只会守住假件自己。今天的证据是 `test_the_model_is_built_for_this_face_and_charged_to_the_resource_owner`（`app_type == MODEL_GATEWAY`、`user_id == resource_owner_user_id`）+ `usage_from` 与遥测取同一个最终结果对象；真正的同源核对是 T028 在 114 上按 `trace_id` 比对 ES 事件与 `model_call_record`。
+14. **仍未覆盖、且本地覆盖不了的一条（Wave 1–5 口径）**：T017 列的 `test_telemetry_event_same_tokens`（AC-23「与平台既有 token 账本同源」的端到端断言）没有落地，也不打算在单测里造——本面的用例把 `BishengLLM` 整个替换成假件，遥测那一段根本不会跑，造一个假遥测只会守住假件自己。今天的证据是 `test_the_model_is_built_for_this_face_and_charged_to_the_resource_owner`（`app_type == MODEL_GATEWAY`、`user_id == resource_owner_user_id`）+ `usage_from` 与遥测取同一个最终结果对象；真正的同源核对是 T028 在 114 上按 `trace_id` 比对 ES 事件与 `model_call_record`。
+
+**2026-09-16 Wave 6 实施（T022–T024，上游解除阻塞后）**
+
+15. **T023 计划的注册落点改了，而且比原计划严** —— 任务原文写「新建 `app_runtime/domain/services/obo_token.py`、在 `main.py` lifespan 调 `register_access_subject_verifier`」。实际上游已经把 `verify_obo_token` 留在 `entry_authz_service.py`（与 `_issue_obo_token` 同文件，签发与验签的常量共享因此是编译期保证的，不是约定），适配器 `AccessSubjectVerifier` 也在那里；**注册点是 F055 的组合根 `app_publish/composition.py:register()`，两个 Port 同一个函数装**。没有另建模块、没有在 `open_api` 里 import `app_runtime`（依赖方向仍是 F055 → F054 → 无），并且避免了「只注册一个」的半接线。按「上游已给出更好的实现就不重复造」处理，本任务不新写实现代码。
+16. **T022 要求的「经真实 `CredentialService.issue` 签发」落在 `test/app_publish/`，不在 `test/open_api/`** —— 真实签发要 `app` / `hosted_app_subject` / `api_credential` 三张表加凭据缓存，这套 SQLite 夹具只有 `test/app_publish/conftest.py` 有（`publish_db` / `app_factory` / `credential_redis` / `hosted_app_resolver`），在 `test/open_api/` 里重建一份等于把 F055 的 schema 抄第二遍。落法：端到端三条进 `test/app_publish/test_capability_model.py`（该文件本就是 T024 指定的 F055 归属落点），面行为的 21 条进 `test/open_api/test_model_gateway_hosted_app.py`（T022 指定的文件名，用 `hosted_app_principal()` + 真 Port）。两边共用 `test/open_api/model_gateway_fixtures.py` 的 `install_catalog`，所以「租户有哪些模型」不会两处分叉。
+17. **`hosted_app_resolver` 夹具从 `test_app_credential.py` 移进 `test/app_publish/conftest.py`** —— 它要拆五个进程级注册表，第二份拷贝迟早漂移。`test_app_credential.py` 的 40 条用例逐字未改，仍全绿。
+18. **T023 顺手核实到一条 F054 归属的 fail-open，未在本 Feature 修** —— `_issue_obo_token` 在 `obo_secret` 缺失、或与 `jwt_secret` 相同时**不签令牌、只记一条进程级日志**（`entry_authz_service.py:_warn_once`），入口照常放行。该函数的注释自己写了「等 OBO 有了第一个消费方就必须改 fail-closed」——本 Feature 就是那个消费方，但收紧的是**入口放行判据**（F054 的 AC-34 领域），不是本面的行为：本面这侧的表现是所有调用落 `app_self`，与「应用没转发令牌」无法区分，符合 spec 决议-5 允许的降级。已写进 design.md §6.2 的 F054 依赖行，留给 F054 处置。
