@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 15 条修订，36 条 AC（决议 1–11） |
 | design.md | ✅ 已评审（全自动模式定案） | 2026-09-16 初版 + 两次续写（末次按 `wt/cli-dev` 改写 D12 / D13 / D4 / D5 / D8，坑扩到 36）；`/sdd-review design` 已跑，发现就地修订；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-09-16） | 本文；**44 任务 / 7 Wave + 1 前置**；36 条 AC 全覆盖（追溯表见末尾）；`/sdd-review tasks` 已跑 |
-| 实现 | 🔲 未开始 | 0 / 44。两个前置依赖分支（`wt/storage-handle`、`wt/cli-dev`）须先合入（T000 核对）；两个跨 Feature 阻塞项（design §6.2 ②③）与契约 ③④⑦ 未落地前，Wave 7 的 114 联调只能部分执行；Wave 1–6 全部可离线完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | **21 / 44**（Wave 1–3 = SDK 包本体三件套已完成，commit `ff32fac67`；Wave 4–7 = 分发 / 技能包 / 联调由姊妹切片与后续波次承接）。两个前置依赖分支（`wt/storage-handle`、`wt/cli-dev`）须先合入（T000 核对）；两个跨 Feature 阻塞项（design §6.2 ②③）与契约 ③④⑦ 未落地前，Wave 7 的 114 联调只能部分执行；Wave 1–6 全部可离线完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -84,38 +84,44 @@
 
 ### Wave 0 · 前置依赖核对
 
-- [ ] **T000**: 前置依赖分支合并核对（先于任何编码）〔0.5h〕
+- [x] **T000**: 前置依赖分支合并核对（先于任何编码）〔0.5h〕
+  **完成**: ✅ 2026-09-16 在 `3.0-vibe` `375a8594f` 上逐条核对，六项全部就位（两个前置分支都已合入，`wt/storage-handle` / `wt/cli-dev` 不再存在于 worktree 列表）：① `src/runtime-manager/runtime_manager/storage.py` 有 `STORAGE_ENV_NAMES`；② `app_runtime/domain/constants.py:APP_STORAGE_ENV_NAMES` 三名齐；③ `src/bisheng-cli/bisheng_cli/devproxy.py` 命中 `X-BiSheng-` 20 处（十头 + 归一化表）；④ `dev_toolkit/skills/platform-wiring/` 存在；⑤ `DEFAULT_PACKS = ("deploy-hosting", "platform-wiring")` 已两元素；⑥ `artifacts/manifest.json` 键为 `['cli', 'platform', '_note']`——**尚无 `sdk` 段**（归姊妹切片 T022 / T029）。另核对到本文未登记的一条：F055 的托管期检索服务端已合入（`filelib.py` 的 `HOSTED_APP_ACTOR_KIND` 分支 + `CapabilityBusService.retrieve`），其凭据形状与 design 初稿不同，见「实际偏差记录」第一条。
   **文件**: 本文（回填核对结果，不改代码）
   **逻辑**: 本 Feature 的实现分支必须从**已含两个前置分支**的基线切出，顺序 `wt/cli-dev` → `wt/storage-handle` → 本 Feature（坑 35：两分支都写 `src/backend/bisheng/dev_toolkit/artifacts/`，二进制不可 textual merge）。逐条核对并把结果写进本任务下方：① `test -f src/runtime-manager/runtime_manager/storage.py` 且 `grep -q "STORAGE_ENV_NAMES" ` 命中（F054 T084）② `grep -n "BISHENG_APP_STORAGE_ENDPOINT" src/backend/bisheng/app_runtime/domain/constants.py`（backend 契约副本）③ `test -f src/bisheng-cli/bisheng_cli/devproxy.py` 且 `grep -c "X-BiSheng-" ` ≥ 10（F053 T042）④ `test -d src/backend/bisheng/dev_toolkit/skills/platform-wiring`（F053 T038）⑤ `grep -n "DEFAULT_PACKS" src/bisheng-cli/bisheng_cli/commands/skills.py` 是否已两元素 ⑥ `python3 -c "import json;print(json.load(open('src/backend/bisheng/dev_toolkit/artifacts/manifest.json')).keys())"`。**任一项缺失就停下**——缺的那项对应的任务（T018/T019 对账、T033–T036 增量、T038）会按「文件不存在」写成新建，把对方的实现覆盖掉。
   **依赖**: 无
 
 ### Wave 1 · SDK 包工程、测试基建、errors、上下文与 auth
 
-- [ ] **T001**: SDK 包工程骨架（本仓第二个可发布包工程）〔2h〕
+- [x] **T001**: SDK 包工程骨架（本仓第二个可发布包工程）〔2h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`src/bisheng-sdk/{pyproject.toml,uv.lock,README.md,bisheng_sdk/__init__.py}`；`uv build --wheel` 产物含 15 个 `bisheng_sdk/*.py`（非空 wheel）。**偏差**：`__init__.py` 一次性 import 三模块（不留空模块占位），因为三个 Wave 在同一批落地。
   **文件**: `src/bisheng-sdk/pyproject.toml`（新）, `src/bisheng-sdk/bisheng_sdk/__init__.py`（新）, `src/bisheng-sdk/uv.lock`（新，`uv lock` 后**提交**）, `src/bisheng-sdk/README.md`（新，占位：安装 + 指南端点链接，正文随 T037）
   **逻辑**: 照抄 `src/bisheng-cli/pyproject.toml`（D1）：name=`bisheng-sdk`、version=`0.1.0`、`requires-python=">=3.11"`、`dependencies=["httpx>=0.27,<1.0"]`（**唯一依赖、带上界**）、`[project.optional-dependencies] dev=["pytest>=8.0","pytest-asyncio>=0.23","ruff>=0.9.0"]`、hatchling + **`[tool.hatch.build.targets.wheel] packages=["bisheng_sdk"]`**（坑 12）、`[tool.ruff]` 含 `RUF001/002/003` ignore、pytest marker `network`、`asyncio_mode="auto"`。`__init__.py`：`__version__ = "0.1.0"`（单一版本真相）、`__all__ = ("auth", "retrieve", "storage")`、`from . import auth, retrieve, storage`（延迟到 T006 / T015 / T021 落文件后再加 import，先用空模块占位）。**无 console script**。
   **依赖**: 无
 
-- [ ] **T002**: pytest 基建：零网络哨兵 + 环境隔离 + 上下文清理 + mock 平台响应工厂〔3h〕
+- [x] **T002**: pytest 基建：零网络哨兵 + 环境隔离 + 上下文清理 + mock 平台响应工厂〔3h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`tests/conftest.py` + `tests/helpers/platform_mock.py`。**偏差**：MockTransport 不经生产代码的参数注入，而是 `monkeypatch` `_http.client` / `_http.aclient` 两个工厂——生产代码里因此没有任何测试专用钩子，真实的 `request` / `parse_envelope` 路径仍被完整走到。
   **文件**: `src/bisheng-sdk/tests/conftest.py`（新）, `src/bisheng-sdk/tests/helpers/platform_mock.py`（新）, `src/bisheng-sdk/tests/helpers/__init__.py`（新）
   **逻辑**: fixtures——`no_network`（autouse；替换 `httpx.Client` / `AsyncClient` 默认 transport 为抛 `AssertionError` 的哨兵；清 `HTTP_PROXY` 等六个代理变量）· `clean_env`（autouse；`monkeypatch.delenv` 全部 `BISHENG_*`，防开发机残留）· `reset_context`（autouse；每用例前后把 `_context` 的 ContextVar 复位）· `platform_env`（设 `BISHENG_PLATFORM_API_BASE=http://platform.test`）· `hosted_headers(user_id="42", name="张三", dept=True, token=FAKE_OBO)` 造十头（**中文名按 `quote(safe="/")` 编码**，照 `entry_authz_service._encode`；`dept=False` 时**省略**三头而非空串）· `dev_headers()`（`Subject-Kind=service_account`、无部门）。假令牌常量**拼接**：`FAKE_OBO = "eyJ" + "a" * 40`、`FAKE_KEY = "bs-sak-" + "x" * 43`（坑 22）。
   `platform_mock.py`：基于 `httpx.MockTransport` 的响应工厂，**形状照 design §4.2 ③④⑤ 逐字构造、不许"顺手规整"**：`versions_ok(sdk_version, min_compatible)` / `versions_sdk_null()` / `versions_404()` · `retrieve_ok(chunks)` / `v2_error(http_status, code, message, data=None)`（`26001`→401、`26003`→403 且 `data.required` 为**单个字符串**、`26030`→503、`16273`→带 `data.capability` / `data.reason`、`16274`）· `storage_put_ok(meta)` / `storage_get_ok(bytes, content_type)` / `storage_stat_ok` / `storage_list(pages)`（多页 cursor）/ `storage_err(http_status, code)` · `v1_envelope(data)`（HTTP 200 + 信封）。工厂记录每次请求（方法 / 路径 / 头 / body）供断言。
   **依赖**: T001
 
-- [ ] **T003**: errors 与脱敏测试〔1.5h〕
+- [x] **T003**: errors 与脱敏测试〔1.5h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`tests/test_errors.py`（8 用例，含四种凭据形态的掩码参数化）。
   **文件**: `src/bisheng-sdk/tests/test_errors.py`（新）
   **测试**: `test_every_error_has_message_and_next_step`（design D6 表每个类实例化后 `str()` 含"下一步"）→ AC-19, AC-25 / `test_hierarchy_single_base`（全部继承 `BishengSdkError`；`PlatformIdentityMissingError` **不是** `VisitorCredentialMissingError` 子类，反之亦然——auth 与 retrieve 的缺失可区分）→ AC-07, AC-15, AC-19 / `test_redact_masks_sak_pat_bearer_and_jwt`（把 `FAKE_KEY` / `"bs-pat-"+"y"*43` / `"Bearer "+FAKE_OBO` / 裸 `FAKE_OBO` 塞进 message、next_step、details，`str()` 与 `repr()` 都只剩掩码）→ AC-04 / `test_platform_refused_keeps_code_message_details_verbatim`（未登记码不丢任何字段）→ AC-19 / `test_storage_errors_distinguishable`（Missing / Rejected / Unavailable / NotFound / TooLarge / InvalidPath 六类互不为子类且文案互异）→ AC-25
   **覆盖 AC**: AC-04, AC-07, AC-15, AC-19, AC-25
   **依赖**: T002
 
-- [ ] **T004**: `errors.py` 实现〔1.5h〕
+- [x] **T004**: `errors.py` 实现〔1.5h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`bisheng_sdk/errors.py`。**偏差**：19 个子类而非 18——按 D5 改写新增 `AppCredentialMissingError`（应用运行期凭据未注入，与访问者凭据缺失可区分）。
   **文件**: `src/bisheng-sdk/bisheng_sdk/errors.py`（新）
   **逻辑**: `class BishengSdkError(Exception)`：`message` / `next_step` / `code: int | None` / `details: dict | None`，`__str__` = `redact(...)`；D6 表的 18 个子类，带各自结构化属性（`ScopeMissingError.required: str`、`TargetUnreachableError.ids: list`、`CapabilityRevokedError.capability / reason`、`SdkIncompatibleError.sdk_version / min_compatible / platform_version`、`AttachmentTooLargeError.limit_bytes`、`StorageHandleRejectedError.reason`）。`redact(text)`：正则替换 `bs-sak-\S+` / `bs-pat-\S+` → `bs-***`、`Bearer \S+` → `Bearer ***`、`eyJ[A-Za-z0-9_-]{10,}(\.[A-Za-z0-9_-]+){0,2}` → `***`。所有文案中文（RUF001-003 已 ignore）。
   **测试**: T003 全部通过。
   **覆盖 AC**: AC-04, AC-07, AC-15, AC-19, AC-25
   **依赖**: T003
 
-- [ ] **T005**: 头名常量、上下文与 auth 测试（含三处对账、并发隔离、三种接法）〔3h〕
+- [x] **T005**: 头名常量、上下文与 auth 测试（含三处对账、并发隔离、三种接法）〔3h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`tests/test_auth.py`（22 用例）+ `tests/test_context_isolation.py`（4 用例）+ `tests/test_contract_alignment.py`（9 用例，源文件缺失即 skip）。
   **文件**: `src/bisheng-sdk/tests/test_auth.py`（新）, `src/bisheng-sdk/tests/test_context_isolation.py`（新）, `src/bisheng-sdk/tests/test_contract_alignment.py`（新）
   **测试**（`test_auth.py`）: `test_current_user_from_hosted_headers`（十头 → `Identity`，`user_name == "张三"` 已解码、`dept_path` 保留 `/`、`subject_kind == "human"`）→ AC-06 / `test_missing_dept_headers_become_none_not_empty`（坑 2）→ AC-10 / `test_dev_headers_service_account_without_dept`（`subject_kind == "service_account"`、三部门 `None`、结构与线上同一 dataclass）→ AC-06, AC-10 / `test_dev_headers_personal_token_is_human_with_dept`（PAT `login` 时 `dev` 注入 `subject_kind == "human"` 且可能带部门——SDK 原样透传、不推导，design D4「与 spec 的口径差」/ 坑 33）→ AC-06 / `test_no_context_raises_identity_missing_never_none`（裸调用、空上下文、有其它头但无 `User-Id` 三种 → `PlatformIdentityMissingError`；断言**不返回** `None`）→ AC-07 / `test_identity_has_no_token_field_and_repr_has_no_token`（`Identity` 无 `access_token` 属性；`repr` 不含 `FAKE_OBO`）→ AC-04, AC-08 / `test_no_as_user_or_login_or_verify_api`（`dir(bisheng_sdk.auth)` 无 `as_user` / `login` / `verify` / `impersonate` / `sign`）→ AC-08 / `test_header_name_normalisation`（`X_BISHENG_USER_ID` / `x-bisheng-user-id` / WSGI `HTTP_X_BISHENG_USER_ID` 都能读到）→ AC-31 / `test_ids_are_strings_not_ints`（坑 20）→ AC-06 / `test_from_headers_is_pure_and_does_not_touch_context` → AC-09 / `test_asgi_middleware_sets_and_resets_per_request`（纯 ASGI 可调用；两次请求不同用户各得其身份；请求结束后上下文为空）→ AC-09 / `test_asgi_middleware_passes_headerless_request_through`（探活请求进应用、不 4xx；只有调 `current_user()` 才抛）→ AC-07 / `test_asgi_middleware_handles_websocket_scope`（握手 scope 的头进上下文）→ AC-09 / `test_wsgi_middleware_reads_http_x_bisheng_environ` → AC-31 / `test_bind_context_manager_for_streamlit_style`（`with auth.bind(headers):` 内可读，退出后抛）→ AC-09 / `test_middleware_is_not_starlette_basehttpmiddleware`（`issubclass` 为假，坑 14）→ AC-09
   **测试**（`test_context_isolation.py`）: `test_asyncio_gather_two_requests_isolated`（`asyncio.gather` 两个协程各 `bind` 不同用户、互不串扰）→ AC-09 / `test_thread_pool_has_no_identity`（`ThreadPoolExecutor` 里 `current_user()` 抛错——后台任务无访问者是刻意的）→ AC-07 / `test_created_task_inherits_copy_documented`（`asyncio.create_task` 能读到父身份——记录 asyncio 语义，坑 21）→ AC-09
@@ -123,64 +129,74 @@
   **覆盖 AC**: AC-04, AC-06, AC-07, AC-08, AC-09, AC-10, AC-31
   **依赖**: T002, T004
 
-- [ ] **T006**: `_headers.py` / `_env.py` / `_context.py` / `auth.py` 实现〔4h〕
+- [x] **T006**: `_headers.py` / `_env.py` / `_context.py` / `auth.py` 实现〔4h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`bisheng_sdk/{_headers,_env,_context,auth}.py`。
   **文件**: `src/bisheng-sdk/bisheng_sdk/_headers.py`（新）, `src/bisheng-sdk/bisheng_sdk/_env.py`（新）, `src/bisheng-sdk/bisheng_sdk/_context.py`（新）, `src/bisheng-sdk/bisheng_sdk/auth.py`（新）
   **逻辑**: `_headers.py`：`INJECTED_HEADER_NAMES`（十个，逐字照 `app-proxy/headers.py:29-40`）、`HEADER_*` 常量、`normalize_name()`（`strip().lower().replace("_","-")`，WSGI 形态先去 `HTTP_` 前缀）、`snapshot(headers: Iterable[tuple[str,str]]) -> dict[str,str]`（只收 `x-bisheng-` 前缀）、`parse_identity(snapshot) -> Identity`（design §4.2 ①：`User-Id` 缺 → `PlatformIdentityMissingError`；`unquote` 三个文本头与 `Dept-Path`；缺部门 → `None`；`Subject-Kind` 缺省 `"human"`）。`_env.py`：变量名常量 + `platform_api_base()`（空 → `PlatformUnreachableError` 点名 `BISHENG_PLATFORM_API_BASE` / `app_runtime.entry_base_url`，坑 19）。`_context.py`：`_current: ContextVar[dict[str,str] | None]`、`bind(snapshot)` 返回 token、`reset(token)`、`access_token() -> str | None`。`auth.py`：`@dataclass(frozen=True) Identity`、`current_user()`、`from_headers(mapping)`、`bind(headers)`（contextmanager）、`ASGIMiddleware`（**纯 ASGI 类**：`__init__(app)`、`async __call__(scope, receive, send)`；`scope["type"] in ("http","websocket")` 时 `bind(snapshot(scope["headers"] 解码 latin-1))`，`try: await app finally: reset`）、`WSGIMiddleware`（同形，从 `environ` 取 `HTTP_X_BISHENG_*`）。**无 `as_user`、无验签、无环境变量读取**（D3 / D4 / 决议-8）。
   **测试**: T005 全部通过。
   **覆盖 AC**: AC-04, AC-06, AC-07, AC-08, AC-09, AC-10, AC-31
   **依赖**: T004, T005
 
-- [ ] **T007**: 公开面守卫测试（AC-33 的自动化）〔1h〕
+- [x] **T007**: 公开面守卫测试（AC-33 的自动化）〔1h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`tests/test_public_surface.py` + `tests/test_import_smoke.py`。**偏差**：`BISHENG_APP_TOKEN` 的 grep 型断言按 D5 改写后的契约调整为「只允许出现在 `_env.py` 的代码里」，并改用 `ast` 区分代码与 docstring——否则解释性文档会把断言逼红。
   **文件**: `src/bisheng-sdk/tests/test_public_surface.py`（新）, `src/bisheng-sdk/tests/test_import_smoke.py`（新，照 `src/bisheng-cli/tests/test_import_smoke.py`：模块级 import 全部公开与私有模块、断言 `httpx` 有 `MockTransport` / `AsyncClient`）
   **测试**: `test_public_modules_are_exactly_auth_retrieve_storage_errors`（`pkgutil.iter_modules` 非下划线集合相等）→ AC-33 / `test_dunder_all_is_three_capability_modules` → AC-01, AC-33 / `test_chat_appdb_llm_db_client_do_not_import`（五个名字 `ModuleNotFoundError`）→ AC-30, AC-33 / `test_no_convenience_factory_symbols`（全包无 `openai` / `OpenAI` / `create_engine` / `connect(` / `sqlalchemy` 字符串——grep 源码）→ AC-30 / `test_no_process_level_credential_env_read`（源码 grep 无 `BISHENG_APP_TOKEN` / `BISHENG_API_KEY`，红线 1）→ AC-12 / `test_version_declared_once`（`bisheng_sdk.__version__` 是唯一字面量，`_compat` 引用同一对象）→ AC-03
   **覆盖 AC**: AC-01, AC-03, AC-12, AC-30, AC-33
   **依赖**: T006（T015 / T021 落文件后集合才完整；本任务先按占位模块通过，两处落地后**不得改集合**）
 
-- [ ] **T008**: SDK 质量门 CI〔1h〕
+- [x] **T008**: SDK 质量门 CI〔1h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`.github/workflows/sdk-quality.yml` 三 leg；wheel leg 在 `scripts/pack_sdk_wheel.sh`（分发切片 T022）落地前自带 `uv build` + 空 wheel 校验 + 装包冒烟的等价实现。
   **文件**: `.github/workflows/sdk-quality.yml`（新）
   **逻辑**: 照 `cli-quality.yml` 三 leg：`locked`（`uv sync --frozen --extra dev` → `ruff check` + `ruff format --check` → `pytest -m "not network"`）· `highest`（`uv sync --resolution highest` 再跑测试，抓上界内的新版本破坏）· `wheel`（`bash scripts/pack_sdk_wheel.sh` + drift guard：`bisheng_sdk.__version__` == `manifest.json["sdk"]["version"]`、wheel 不被 `.gitignore` 匹配、manifest `git diff --quiet`）。paths：`src/bisheng-sdk/**`、`scripts/pack_sdk_wheel.sh`、本文件。`wheel` leg 依赖 T022 脚本存在，先以 `if: hashFiles('scripts/pack_sdk_wheel.sh') != ''` 守住。
   **依赖**: T001
 
-- [ ] **T009**: Wave 1 收口：`__init__.py` 挂 auth、ruff 全绿、`uv lock --check`〔0.5h〕
+- [x] **T009**: Wave 1 收口：`__init__.py` 挂 auth、ruff 全绿、`uv lock --check`〔0.5h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`ruff check` / `ruff format --check` 全绿（31 文件）；`uv lock` 已生成并提交。
   **文件**: `src/bisheng-sdk/bisheng_sdk/__init__.py`（增量）
   **逻辑**: `from . import auth`；`uv run ruff check . && uv run ruff format --check . && uv lock --check && uv run pytest`。
   **依赖**: T006, T007
 
 ### Wave 2 · HTTP 层、版本兼容与 retrieve
 
-- [ ] **T010**: HTTP 层测试（客户端池 / 超时 / trust_env / 信封解析顺序 / 码映射两级降级）〔2h〕
+- [x] **T010**: HTTP 层测试（客户端池 / 超时 / trust_env / 信封解析顺序 / 码映射两级降级）〔2h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`tests/test_http.py`（19 用例）。
   **文件**: `src/bisheng-sdk/tests/test_http.py`（新）
   **测试**: `test_envelope_status_code_read_before_http_status`（HTTP 200 + `status_code=10500` 信封 → 错误；HTTP 401 + 信封 `26001` → `VisitorCredentialRejectedError`，坑 7）→ AC-19 / `test_code_table_maps_registered_codes`（`26001`/`26002`/`26027`→Rejected · `26003`→`ScopeMissingError(required="knowledge:read")` · `26030`→PermissionEvaluation · `16273`→CapabilityRevoked(capability, reason) · `16274`→CapabilityNotDeclared）→ AC-14, AC-16, AC-17, AC-19 / `test_unregistered_code_falls_back_by_http_class_then_refused`（401 无码→Rejected；5xx 无码→Unreachable；403 未知码→`PlatformRefusedError` 且 `code` / `message` / `details` 原样）→ AC-16, AC-19 / `test_connect_error_and_timeout_are_unreachable_with_no_retry`（MockTransport 抛 `httpx.ConnectError`；断言只请求一次）→ AC-16, AC-19 / `test_trust_env_false_by_default_and_env_override`（设 `ALL_PROXY` 不影响；`BISHENG_SDK_TRUST_ENV=1` 时 `Client(trust_env=True)`）→ AC-19 / `test_timeouts_by_kind`（retrieve 读 30 s、storage 120 s、connect 5 s 常量）→ AC-19 / `test_client_pooled_per_base_url`（同 base 同实例，不同 base 不同实例）→ AC-18 / `test_bearer_header_never_logged_or_in_exception`（异常 `details` 里不含令牌）→ AC-04
   **覆盖 AC**: AC-04, AC-14, AC-16, AC-17, AC-18, AC-19
   **依赖**: T002, T004
 
-- [ ] **T011**: `_http.py` + `_codes.py` 实现〔3h〕
+- [x] **T011**: `_http.py` + `_codes.py` 实现〔3h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`bisheng_sdk/{_http,_codes}.py`。**偏差**：`TARGET_UNREACHABLE_CODES` 不再留空——F052 已分配 `26321`（`data.unreachable_ids`），同批登记 `26320` / `26322`；`26323`（范围过大）按「未登记码原样呈现」走 `PlatformRefusedError`。
   **文件**: `src/bisheng-sdk/bisheng_sdk/_http.py`（新）, `src/bisheng-sdk/bisheng_sdk/_codes.py`（新）
   **逻辑**: `_http.py`：`client(base_url) -> httpx.Client` / `aclient(base_url) -> httpx.AsyncClient`（`dict` 池、`threading.Lock`；`trust_env = os.environ.get("BISHENG_SDK_TRUST_ENV") == "1"`；`Timeout(connect=5, read=…, write=…, pool=5)`）、`request(kind, method, path, *, bearer, json=None, content=None, stream=False)`、`parse_envelope(resp) -> Any`（顺序：JSON body 有 `status_code` 且 ≠ 200 → `_codes.map_error(code, message, http_status, data)`；非 2xx 无信封 → 按 HTTP 类兜底；2xx → `data`）、**零重试**（D11）。`_codes.py`：`CODE_TO_ERROR: dict[int, type]`（`26001/26002/26027` · `26003` · `26030` · `16273` · `16274`）、`TARGET_UNREACHABLE_CODES: frozenset[int] = frozenset()`（**F052 分配后填**，坑 25 同型；命中时构造 `TargetUnreachableError(ids=data.get("unreachable_ids", []))`）、`map_error()` 两级降级（D6 映射顺序）。
   **测试**: T010 全部通过。
   **覆盖 AC**: AC-04, AC-14, AC-16, AC-17, AC-18, AC-19
   **依赖**: T010
 
-- [ ] **T012**: 版本兼容测试〔1h〕
+- [x] **T012**: 版本兼容测试〔1h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`tests/test_compat.py`（11 用例）。
   **文件**: `src/bisheng-sdk/tests/test_compat.py`（新）
   **测试**: `test_compatible_when_min_le_local`（`min_compatible="0.1.0"`、本地 `0.1.0` / `0.2.0` 通过）→ AC-03 / `test_incompatible_raises_with_both_versions_and_remedy`（`min_compatible="0.3.0"` → `SdkIncompatibleError`，`str()` 含 `0.3.0`、本地版本、平台版本与「从当前平台重新获取 SDK」）→ AC-03 / `test_sdk_block_null_or_404_is_platform_too_old`（两种 → `PlatformTooOldError`，文案含「开放能力层未部署」可能）→ AC-03, AC-05 / `test_probe_once_per_process_per_base_and_failure_not_cached`（成功后第二次不再请求；`ConnectError` 后再调会重试）→ AC-03 / `test_auth_never_probes`（`current_user()` 全程零请求——`no_network` 哨兵已保证，显式断言）→ AC-03 / `test_version_tuple_algorithm_matches_cli`（`"0.10.0" > "0.9.9"`，不做字符串比较）→ AC-03
   **覆盖 AC**: AC-03, AC-05
   **依赖**: T002, T011
 
-- [ ] **T013**: `_compat.py` 实现〔1h〕
+- [x] **T013**: `_compat.py` 实现〔1h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`bisheng_sdk/_compat.py`。
   **文件**: `src/bisheng-sdk/bisheng_sdk/_compat.py`（新）
   **逻辑**: `ensure_compatible(base_url)` / `aensure_compatible(base_url)`：进程内 `dict[base_url, True]` 缓存成功；`GET /api/v1/dev-toolkit/versions` → 404 或 `data.sdk` 为 null / 无 `version` → `PlatformTooOldError`；`_version_tuple(min_compatible) > _version_tuple(__version__)` → `SdkIncompatibleError(sdk_version=__version__, min_compatible, platform_version=data.platform.version)`；连接失败 → `PlatformUnreachableError`（不缓存）。`_version_tuple` 照 `bisheng_cli/http.py:_version_tuple`（三段 int，非数字段按 0）。`__version__` 从包根 import（T007 单一真相断言）。
   **测试**: T012 全部通过。
   **覆盖 AC**: AC-03, AC-05
   **依赖**: T012
 
-- [ ] **T014**: retrieve 测试（同步 / 异步参数化）〔2.5h〕
+- [x] **T014**: retrieve 测试（同步 / 异步参数化）〔2.5h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`tests/test_retrieve.py`（24 用例）。**偏差**：按 briefs-wave4 的跨 Feature 裁定与 F055 已合入实现，断言的是**两把凭据**而不是「只送访问者凭据」；`test_app_token_alone_is_never_enough` / `test_visitor_credential_alone_is_refused_locally` 两条替代了原先的 grep 型「代码里不得出现 BISHENG_APP_TOKEN」断言。`16273` / `26321` / `26322` 不再标 `[受阻]`——服务端已有写入方，只是 114 联调仍待 T042。
   **文件**: `src/bisheng-sdk/tests/test_retrieve.py`（新）
   **测试**: `test_search_posts_to_filelib_retrieve_with_context_token_as_bearer`（上下文 `bind(hosted_headers())` → 记录的请求：`POST http://platform.test/api/v2/filelib/retrieve`、`Authorization: Bearer <FAKE_OBO>`、body 键 == `RetrieveReq` 字段）→ AC-11, AC-12 / `test_body_is_field_for_field_and_none_ids_omitted`（`knowledge_base_ids=None` → body 无该键；`filters` 形状照 `RetrieveFilters`；无自造字段）→ AC-11, AC-18 / `test_result_mirrors_retrieve_resp`（`RetrieveResult.chunks[i]` 六字段 == 响应；`total` 原样；顺序不变）→ AC-11, AC-18 / `test_no_context_or_no_token_raises_missing_and_sends_nothing`（无上下文 / 有十头但无 `Access-Token` → `VisitorCredentialMissingError`，零请求）→ AC-15 / `test_process_env_app_token_is_never_used`（设 `BISHENG_APP_TOKEN=FAKE_KEY`、无上下文 → 仍 Missing、零请求；红线 1）→ AC-12, AC-15 / `test_no_as_user_parameter`（`inspect.signature(search)` 无 `as_user` / `user_id` / `on_behalf_of`）→ AC-08, AC-12 / `test_401_maps_rejected_with_next_step_mentioning_facade`（坑 5 文案）→ AC-15, AC-19 / `test_26003_maps_scope_missing_with_required_verbatim` → AC-14, AC-19 / `test_16273_maps_capability_revoked_with_name_and_reason`（`[受阻于 F055 T058]`，仅 mock）→ AC-17, AC-19 / `test_26030_maps_permission_evaluation_and_returns_no_chunks`（异常而非空列表）→ AC-16 / `test_target_unreachable_placeholder`（`monkeypatch` `_codes.TARGET_UNREACHABLE_CODES={99999}` → `TargetUnreachableError.ids == data.unreachable_ids`；`[受阻于 F052]`）→ AC-17, AC-19 / `test_incompat_surfaces_on_first_search`（`versions_sdk_null()` → `PlatformTooOldError`，未发检索请求）→ AC-03 / `test_two_users_same_query_get_their_own_results_no_cache`（两次 bind 不同用户、mock 返回不同结果、各得其果、两次请求）→ AC-18 / `test_async_twin_same_behaviour`（以上核心用例对 `asearch` 参数化）→ AC-11 / `test_422_is_platform_refused_with_details`（坑 6；`[受阻于 F052]` 放宽后改为成功用例）→ AC-19
   **覆盖 AC**: AC-03, AC-08, AC-11, AC-12, AC-14, AC-15, AC-16, AC-17, AC-18, AC-19
   **依赖**: T002, T006, T011, T013
 
-- [ ] **T015**: `retrieve.py` 实现〔2.5h〕
+- [x] **T015**: `retrieve.py` 实现〔2.5h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`bisheng_sdk/retrieve.py`。**偏差**：见 design D5 改写（两把凭据）。`tag_match_mode` 缺省值按服务端 Literal 取大写 `"ANY"`（design §4.2 ③ 初稿写的小写会 422）。
   **文件**: `src/bisheng-sdk/bisheng_sdk/retrieve.py`（新）, `src/bisheng-sdk/bisheng_sdk/__init__.py`（增量：`from . import retrieve`）
   **逻辑**: `@dataclass(frozen=True) Chunk(content, knowledge_id: int, document_id: int, document_name: str, chunk_index: int, document_update_time: str)`、`RetrieveResult(chunks: list[Chunk], total: int)`、`KnowledgeBaseFilter(knowledge_base_id: int, tags: list[str], tag_match_mode: str)`。`search(query: str, *, knowledge_base_ids: Sequence[int] | None = None, top_k: int = 10, max_content: int = 15000, filters: Sequence[KnowledgeBaseFilter] | None = None) -> RetrieveResult` 与 `asearch(...)`：① `token = _context.access_token()`，None → `VisitorCredentialMissingError`（`next_step` 含「经平台入口访问；线上另确认 `app_runtime.obo_secret` 已配置」）；② `base = _env.platform_api_base()`；③ `_compat.ensure_compatible(base)`；④ body 字段一一对应（`None` 键省略）；⑤ `_http.request("retrieve", "POST", "/api/v2/filelib/retrieve", bearer=token, json=body)` → `parse_envelope` → 构造结果。**不排序、不去重、不缓存、不读任何环境变量密钥**。`RETRIEVE_PATH` 为模块常量（D5「何时重新考虑」）。
   **测试**: T014 全部通过；T007 集合仍为四个公开模块。
@@ -189,41 +205,47 @@
 
 ### Wave 3 · storage
 
-- [ ] **T016**: 路径规则与本地目录后端测试〔2h〕
+- [x] **T016**: 路径规则与本地目录后端测试〔2h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`tests/test_paths.py`（26 用例）+ `tests/test_storage_local.py`（16 用例）。
   **文件**: `src/bisheng-sdk/tests/test_paths.py`（新）, `src/bisheng-sdk/tests/test_storage_local.py`（新）
   **测试**（paths，规则 = manager `runtime_manager/storage.py:validate_key:277-306` 的逐条镜像）: `test_traversal_matrix_rejected`（`../a` · `a/../b` · `/abs` · `a//b` · `a/./b` · `a\\b` · `""` · `"."` · 尾随 `/` · 含 `\x00` · 含 `\n` · UTF-8 1025 字节 → `InvalidAttachmentPathError`，**不规范化后放行**）→ AC-21 / `test_apps_prefix_rejected_even_for_own_app`（`apps/anything` → 拒；manager 保留命名空间，坑 29）→ AC-21 / `test_valid_unicode_paths_accepted`（`报告/2026 年度.pdf`）→ AC-20 / `test_prefix_rule_allows_empty_and_trailing_slash`（`validate_prefix` 镜像：`""` / `报告/` 通过、`apps/` 拒）→ AC-20
   **测试**（local）: `test_backend_selected_by_dir_env`（`BISHENG_APP_STORAGE_DIR=tmp` → 本地后端；同时设 `BISHENG_APP_STORAGE_ENDPOINT` → `StorageHandleMissingError`「句柄不唯一」；都不设 → Missing——`bisheng dev` 今天两个都不注入，坑 34）→ AC-23, AC-25 / `test_put_get_stat_list_delete_roundtrip`（bytes / file object / PathLike 三种 `data`；`stat.size` / `content_type`（`mimetypes` 猜）/ `modified_at` 为 `datetime | None`；`list("报告/")` 只返前缀内、按 path 升序；`delete` 后 `get` → `AttachmentNotFoundError`）→ AC-20, AC-23 / `test_put_is_atomic_tmp_then_replace`（写入中途异常不留半文件；目录内无 `.tmp` 残留）→ AC-23 / `test_real_disk_location_not_in_meta_or_errors`（`AttachmentMeta.path` 是应用内路径；`AttachmentNotFoundError` 文案不含 tmp 绝对路径）→ AC-21, AC-23 / `test_max_file_mb_env_enforced_locally_else_unlimited`（设 `BISHENG_APP_STORAGE_MAX_FILE_MB=1` → 1 MB + 1 字节 `AttachmentTooLargeError(limit_bytes=1048576)`；**单位是 MB、与线上同名同单位**；不设 → 通过，坑 23）→ AC-22 / `test_no_clear_or_prefix_delete_api`（`dir(storage)` 无 `clear` / `delete_prefix` / `delete_many` / `url` / `presign` / `share`）→ AC-22, AC-24 / `test_dir_env_missing_dir_created_lazily_under_project`（首次 put 建目录）→ AC-23
   **覆盖 AC**: AC-20, AC-21, AC-22, AC-23, AC-24, AC-25
   **依赖**: T002, T004
 
-- [ ] **T017**: `_paths.py` + `_storage_local.py` 实现〔2.5h〕
+- [x] **T017**: `_paths.py` + `_storage_local.py` 实现〔2.5h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`bisheng_sdk/{_paths,_storage_local}.py`（+ `_attachment.py`：两个后端共用的 `AttachmentMeta`，由 `storage` 再导出，避免 `storage` ↔ 后端的循环 import）。
   **文件**: `src/bisheng-sdk/bisheng_sdk/_paths.py`（新）, `src/bisheng-sdk/bisheng_sdk/_storage_local.py`（新）
   **逻辑**: `_paths.validate(path) -> str` / `_paths.validate_prefix(prefix) -> str`（D9 规则 = manager `validate_key` / `validate_prefix` 的逐条镜像；返回原串，不规范化）。`_LocalDirBackend(root: Path)`：`put`（`tempfile.NamedTemporaryFile(dir=root, delete=False)` 流式写 → `os.replace`；写前若已知长度且超 `BISHENG_APP_STORAGE_MAX_FILE_MB × 1024²` 直接拒；未知长度边写边计数超限即删 tmp 并抛）· `get` / `open` / `stat`（`os.stat` + `mimetypes.guess_type`）· `list(prefix, limit)`（`os.walk` 相对化、posix 分隔、排序）· `delete`。`root / path` 解析后 `resolve()` 必须仍在 `root` 内（防御性二次守卫）。所有异常文案只含应用内路径。
   **测试**: T016 全部通过。
   **覆盖 AC**: AC-20, AC-21, AC-22, AC-23, AC-24, AC-25
   **依赖**: T016
 
-- [ ] **T018**: 远端 HTTP 后端测试 + 附件 API 对账（design §4.2 ④ 契约的可执行快照）〔2.5h〕
+- [x] **T018**: 远端 HTTP 后端测试 + 附件 API 对账（design §4.2 ④ 契约的可执行快照）〔2.5h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`tests/test_storage_remote.py`（20 用例）+ `tests/test_contract_alignment.py` 的路由 / 路径规则 / 环境变量名三条对账。
   **文件**: `src/bisheng-sdk/tests/test_storage_remote.py`（新）, `src/bisheng-sdk/tests/test_contract_alignment.py`（增量，T005 已建）
   **测试**: `test_backend_selected_by_endpoint_and_token_env`（`BISHENG_APP_STORAGE_ENDPOINT` + `_TOKEN` 齐 → 远端；只有 ENDPOINT 无 TOKEN → `StorageHandleMissingError`「句柄不完整」）→ AC-20, AC-25 / `test_put_streams_body_with_bearer_and_content_length`（`PUT {E}/objects/%E6%8A%A5%E5%91%8A/a.pdf`（**逐段 `quote(seg, safe="")`**）、`Authorization: Bearer <token>`、body = **原始字节流非 multipart**、`Content-Length` 存在、传 file object 时不整读进内存）→ AC-20, AC-21 / `test_get_stat_list_delete_wire_shapes`（`GET {E}/objects/{key}` 下载 · **`GET {E}/meta/{key}` 元信息（不是 `/stat/`）** · `GET {E}/objects?prefix=&cursor=&limit=` 列举、跟 `next_cursor` 翻两页合并 · `DELETE {E}/objects/{key}` → **`200 {}` 当成功、不是 204**，坑 29）→ AC-20 / `test_413_payload_too_large_maps_with_max_file_mb`（manager 信封 `{"detail":{"code":"payload_too_large","message":…,"max_file_mb":20}}` → `AttachmentTooLargeError(limit_bytes=20*1024**2)`）→ AC-22 / `test_401_unauthorized_maps_rejected_with_manager_message`（**只有 401、没有 403、没有「已下线」专用码**：令牌不属本应用 / 应用已 destroy / 无 Bearer 全是 `unauthorized`，`reason` = `detail.message`，坑 28）→ AC-25 / `test_404_not_found_maps_attachment_not_found`（含 `delete` 缺失路径也是 404、不是静默成功）→ AC-25 / `test_503_storage_unavailable_and_connect_error_map_unavailable_not_empty_list`（`list` 在 503 时抛而不是返 `[]`；`next_step` 点名 `runtime/status` preflight `attachment_storage`，坑 27）→ AC-25 / `test_400_invalid_object_key_maps_invalid_path`（服务端二次校验的呈现）→ AC-21 / `test_meta_never_carries_bucket_key_endpoint_or_token`（`AttachmentMeta` 字段集合恰 `path/size/content_type/modified_at`（+ `etag` 保留）；`key`→`path` 已剥应用前缀；异常 `details` 不含 token）→ AC-21 / `test_app_id_never_sent_by_client`（请求体 / 查询串 / 头里无 `app_id`——它只在注入的 ENDPOINT 里）→ AC-21 / `test_async_twins_same_wire_shape`（参数化）→ AC-20
   **测试**（对账，仓外或文件缺失时 `skip` 并打印原因，坑 30）: `test_storage_routes_match_manager_verbatim`（读 `src/runtime-manager/runtime_manager/api/storage.py` 文本，断言四条 `@router` 路径与 `prefix="/v1/apps/{app_id}/storage"` 与 `_storage_remote.py` 的常量一致）→ AC-20 / `test_path_rules_match_manager_validate_key`（读 `runtime_manager/storage.py` 的 `validate_key`，逐条规则与 `_paths.py` 对齐）→ AC-21 / `test_env_names_match_manager_storage_env_names`（`STORAGE_ENV_NAMES` == `_env.py` 三名）→ AC-31
   **覆盖 AC**: AC-20, AC-21, AC-22, AC-25, AC-31
   **依赖**: T002, T005, T011, T017
 
-- [ ] **T019**: `_storage_remote.py` 实现〔2.5h〕
+- [x] **T019**: `_storage_remote.py` 实现〔2.5h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`bisheng_sdk/_storage_remote.py`。**偏差**：`open()` 在远端后端是「整读后包成 BytesIO」，不是流式——httpx 的流式响应要求把请求上下文交给调用方管理，而 `storage.open()` 的契约是返回一个普通 file-like；大文件的真流式留到 F054 加 presign 时再议。
   **文件**: `src/bisheng-sdk/bisheng_sdk/_storage_remote.py`（新）
   **逻辑**: `_RemoteBackend(endpoint, token)`（`endpoint` 已含 `/v1/apps/{app_id}/storage`，SDK 不拼 `app_id`）：`_http.request("storage", …, bearer=token)`；`put` 用 `content=` 传 file object 或 bytes（httpx 流式，原始字节非 multipart）、`Content-Type` 显式或 `mimetypes` 猜、缺长度时先 `seek/tell` 取长度；`get` 整读、`open` 返回 `resp.iter_bytes()` 包装的 file-like；`stat` 打 `/meta/{key}`；`list`（循环 `next_cursor`，`limit` 到达即停）；`delete` 把 `200 {}` 当成功。错误映射按 **manager 信封 `{"detail":{"code","message",…extra}}` 的机器码**（坑 26）：`invalid_object_key` → `InvalidAttachmentPathError`、`unauthorized`（恒 401）→ `StorageHandleRejectedError(reason=detail["message"])`、`not_found` → `AttachmentNotFoundError`、`payload_too_large` → `AttachmentTooLargeError(limit_bytes=detail["max_file_mb"]*1024**2)`、`storage_unavailable` / 连接失败 / 无码 5xx → `StorageUnavailableError`、其它 → `PlatformRefusedError(code=None, details=detail)`。**路径段 `quote(seg, safe="")` 后拼接**；**永不走 manager 的 HMAC 路径**（那是 backend / F052 用的）。
   **测试**: T018 全部通过。
   **覆盖 AC**: AC-20, AC-21, AC-22, AC-25
   **依赖**: T018
 
-- [ ] **T020**: storage 门面测试（后端选择 + 两后端跑同一套行为用例 + 异步孪生）〔1.5h〕
+- [x] **T020**: storage 门面测试（后端选择 + 两后端跑同一套行为用例 + 异步孪生）〔1.5h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`tests/test_storage_facade.py`（9 用例，local / remote 参数化跑同一段脚本）。
   **文件**: `src/bisheng-sdk/tests/test_storage_facade.py`（新）
   **测试**: `test_same_api_over_both_backends`（参数化 `local` / `remote(mock)`：`put → stat → list → get → delete → get 抛 NotFound` 同一脚本两边结果形状相等）→ AC-20, AC-23 / `test_six_functions_and_six_async_twins_exist`（`put/get/open/stat/list/delete` 与 `aput/…`）→ AC-20 / `test_handle_resolution_is_per_call_not_cached`（改环境变量后下一次调用换后端——`dev` 重启场景）→ AC-25 / `test_path_validated_before_any_io`（非法路径零请求、零磁盘写）→ AC-21 / `test_no_url_returning_function`（`dir(storage)` 无以 `url` / `link` / `presign` 结尾的名字）→ AC-22
   **覆盖 AC**: AC-20, AC-21, AC-22, AC-23, AC-25
   **依赖**: T017, T019
 
-- [ ] **T021**: `storage.py` 实现 + `__init__.py` 挂载〔1.5h〕
+- [x] **T021**: `storage.py` 实现 + `__init__.py` 挂载〔1.5h〕
+  **完成**: ✅ 2026-09-16（ff32fac67）`bisheng_sdk/storage.py`；`tests/test_public_surface.py` 的公开面集合最终 == `{auth, retrieve, storage, errors}`。
   **文件**: `src/bisheng-sdk/bisheng_sdk/storage.py`（新）, `src/bisheng-sdk/bisheng_sdk/__init__.py`（增量：`from . import storage`）
   **逻辑**: `@dataclass(frozen=True) AttachmentMeta(path, size: int, content_type: str | None, modified_at: datetime | None, etag: str = "")`（`modified_at` 由 manager 的 `last_modified` ISO 串解析，MinIO 无值时 `""` → `None`）；`_backend()`（**每次调用重算、不缓存**，`dev` 重启即换）：有 `BISHENG_APP_STORAGE_ENDPOINT` → 远端（缺 `_TOKEN` → `StorageHandleMissingError`「句柄不完整」）· 无 ENDPOINT 有 `BISHENG_APP_STORAGE_DIR` → 本地 · **两者都有 → `StorageHandleMissingError`「句柄不唯一」** · 都没有 → `StorageHandleMissingError`（D8）；六函数 + 六 `a*` 孪生（本地后端的异步版用 `asyncio.to_thread`）。每个函数首行 `_paths.validate`。
   **测试**: T020 全部通过；T007 公开面集合最终 == `{auth, retrieve, storage, errors}`。
@@ -420,4 +442,9 @@
 
 > **只留一行指针**，论证在 design.md（决策 / 坑），这里不重复。推翻已定案的决策先记 design 决策再记这里。
 
-- （暂无）
+- **retrieve 的凭据形状按 F055 已合入实现改写**（2026-09-16，design D5 / CON-3 已同步）：一次检索送**两把**凭据——`Authorization: Bearer <BISHENG_APP_TOKEN>`（应用运行期凭据，平台据此取当前生效声明的白名单）与 `X-BiSheng-Access-Token`（本请求注入的访问者凭据，平台据此确立访问用户）。初稿「只把访问者凭据当 Bearer 送」作废：`credential_validator` 不受理 OBO 令牌，且门面无从知道是哪个应用在调、取不到白名单。访问者凭据仍然只从请求上下文取，应用凭据只经 `_env.app_token()` 一处读取。
+- **新增异常类 `AppCredentialMissingError`**（D6 表由 18 类变 19 类）：应用运行期凭据未注入时的明确错误。本地 `bisheng dev` 期必然命中它（本地没有已上线的应用，因此没有应用凭据），这正是「本地期 retrieve 不可端到端验证」在 SDK 侧的如实呈现——不开兼容分支、不拿 `login` 密钥顶替。
+- **`_codes.py` 不再留空位**：F052 的门面码已分配（`26320` 无执行身份 / `26321` 不可及含 `unreachable_ids` / `26322` 能力已收回 / `26323` 范围过大），前三个已登记映射，`26323` 按「未登记码原样呈现」走 `PlatformRefusedError`。
+- **新增私有模块 `_attachment.py`**（design §4.3 模块表已补）：`AttachmentMeta` 放在这里而不是 `storage.py`，否则两个后端 import 它会与 `storage` 形成循环 import。公开面集合不受影响（仍是四个非下划线模块）。
+- **`tag_match_mode` 字面量是大写 `"ANY"`**：design §4.2 ③ 初稿的示例写的是小写，服务端 `RetrieveFilters` 的 Literal 只认 `"ANY"` / `"ALL"`，小写会 422。已就地改正 design。
+- **本切片范围**：Wave 1–3（T001–T021）+ T008 的 CI 门。T022–T043（打包脚本、manifest、四个分发端点、runtime-manager 取包、技能包增量、指南、评测样本、114 联调）归姊妹切片 `f057-sdk-dist` 与后续波次，本切片未动 `src/backend/bisheng/dev_toolkit/artifacts/`。
