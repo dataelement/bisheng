@@ -124,7 +124,7 @@
   - **`extra='forbid'`**：字段名拼错立刻被拒并给出"未知字段 X，你是不是想写 Y"（Levenshtein 近似建议）。向前兼容方向是"平台新增可选字段、老 CLI 不写"，`forbid` 不阻碍它；反方向（新 CLI 写了老平台不认的字段）由 `manifest_version` 闸给出明确的"请升级平台"而不是"未知字段"。
   - **YAML 解析用 `yaml.safe_load`**（禁 `full_load` / `unsafe_load`——`!!python/object` 是 RCE）；文件必须在包根 `bisheng-app.yaml`，缺失 → 16203。
 - **F053 / F054 如何消费**：F054 只读 `runtime` / `port` / `tier` / `egress.domains`（F054 §4.2 ④）；F053 是**独立 CLI 包、不能 import backend**，故 CLI 只做"三个必填项存在 + YAML 可解析"级快速失败，**权威校验恒在服务端**（K7 / F053 决议-2 同源）。
-- **结构演进（`database.tables[]`）本轮后置**：MVP 期该字段**允许声明但不建表、不做破坏性变更检测**——预检对非空 `database.tables[]` 给出 `hints`「本环境暂不由平台建表，请用 `BISHENG_APP_DB_URL` 自行建表」而**不拒绝**（应用自己在 SQLite 里 `CREATE TABLE IF NOT EXISTS` 完全可行，拒绝反而挡死剧本）。改 / 删列的显式确认（AC-09 / AC-42）与迁移前生产数据快照随后置波次，落点 = 预检新增 `precheck_schema` 阶段 + `POST /api/v2/apps/deploy` 的 `confirm_schema_change` 参数（端点参数**本期就留**，避免 CLI 侧改两次）。
+- **结构演进（`database.tables[]`）本轮后置**：MVP 期该字段**允许声明但不建表、不做破坏性变更检测**——预检对非空 `database.tables[]` 给出 `hints`「本环境暂不由平台建表，请用 `BISHENG_APP_DB_URL` 自行建表」而**不拒绝**（应用自己在 SQLite 里 `CREATE TABLE IF NOT EXISTS` 完全可行，拒绝反而挡死剧本）。改 / 删列的显式确认（AC-09 / AC-42）与迁移前生产数据快照随后置波次，落点 = 预检新增 `precheck_schema` 阶段 + `POST /api/v2/apps/deploy` 的 `confirm_schema_change` 参数（端点参数**本期就留**，避免 CLI 侧改两次）。**T061 已落地显式确认**（`schema_evolution_service.py`）：闸在 `accept()` 同步腿、以**在线版本**的 `database.tables[]` 为基准，删表 / 删列 / 改列（type / nullable / default 任一变化）未确认拒 `16229`，加表 / 加列不问；worker 侧 `precheck_schema` 只推导摘要写入审批单与发布面。平台建表与迁移前快照仍属 T062。
 - **何时该重新考虑**：出现第二个消费方需要机器可读的 schema（如技能包要内嵌 JSON Schema 供 agent 自校验）→ 用 `TypeAdapter.json_schema()` 从同一个 pydantic 模型导出，仍不引 jsonschema 运行时依赖；或 manifest 需要表达条件依赖（如 `runtime=node20` 时 `port` 默认值不同）→ 那时才值得上 discriminated union。
 
 ### D4：托管预检编排 = 线性 fail-fast 阶段机，失败原因恒为 `{stage, code, message, details, hints}` 五元组
@@ -492,7 +492,7 @@ platform 发布面 / F052 MCP 应用状态工具
 | 端点 | 入参 | 返回 | 消费者 |
 |---|---|---|---|
 | `GET /api/v2/apps/deploy-limits` | — | `{max_package_mb, max_unpacked_mb, max_package_entries}`（读 `settings.app_runtime.*`，默认 50 / 200 / 20000） | **F053** 打包后上传前自查（AC-32「按部署配置的上限」的取值途径；取不到 → 直接上传、服务端 16201 兜底，D2） |
-| `POST /api/v2/apps/deploy` | multipart：`package`（tar.gz，≤ `max_package_mb`）· `app_id`（迭代必填、首发省略）· `confirm_schema_change: bool`（本期只接受不消费，D3） | `{deployment_id, app_id, version_id, entry_url?}` | **F053** `bisheng deploy` |
+| `POST /api/v2/apps/deploy` | multipart：`package`（tar.gz，≤ `max_package_mb`）· `app_id`（迭代必填、首发省略）· `confirm_schema_change: bool`（T061 起消费：相对在线版本的破坏性结构变更未确认 → `16229`，首发不问） | `{deployment_id, app_id, version_id, entry_url?}` | **F053** `bisheng deploy` |
 | `GET /api/v2/apps/deployments/{deployment_id}` | — | `{stage, status, failure{stage,code,message,details,hints[]}, app_id, version_no, approval{instance_id,status,reject_reason}, app_state, pending_reason}` | **F053** 轮询 / `--wait` |
 | `GET /api/v2/apps/{app_id}/logs` | `tail, since, keyword` | `{lines[]}`（**转发 F054 `GET /api/v1/apps/{id}/logs` 的同一服务方法**，只加 `app:manage` + 归属人与租户判定） | **F053** `bisheng logs` |
 

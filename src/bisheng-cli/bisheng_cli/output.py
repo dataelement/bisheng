@@ -33,6 +33,7 @@ STAGE_LABELS: dict[str, str] = {
     "received": "已接收",
     "secret_scan": "安全扫描",
     "precheck_manifest": "应用声明校验",
+    "precheck_schema": "结构变更预检",
     "precheck_build": "依赖构建",
     "precheck_probe": "启动探活",
     "version_recorded": "版本已记录",
@@ -246,6 +247,38 @@ def format_scan_hits(hits: list[dict[str, Any]]) -> str:
         location = f"{hit.get('file', '?')}:{hit.get('line', '?')}"
         rule = hit.get("rule_id") or hit.get("name_i18n_key") or "unknown-rule"
         lines.append(f"  {location}  规则 {rule}")
+    return "\n".join(lines)
+
+
+# `items[].op` of the platform's structure-change summary (F055 design §4.2 ②).
+# Display only, like STAGE_LABELS: an unknown op is printed verbatim.
+SCHEMA_OP_LABELS: dict[str, str] = {
+    "add_table": "加表",
+    "drop_table": "删表",
+    "add_column": "加列",
+    "drop_column": "删列",
+    "modify_column": "改列",
+}
+SCHEMA_BREAKING_OPS = frozenset({"drop_table", "drop_column", "modify_column"})
+
+
+def format_schema_change(items: list[dict[str, Any]]) -> str:
+    """Render the structure-change items the platform refused with 16229.
+
+    One line per item, breaking ones flagged, so the person at the prompt (or
+    the agent reading the transcript) sees exactly what `--confirm-schema-change`
+    would be confirming. Additive items are listed too: the confirmation covers
+    the release, and hiding half the diff is how someone confirms the wrong
+    thing.
+    """
+    lines = []
+    for item in items:
+        op = str(item.get("op") or "?")
+        table = item.get("table") or "?"
+        column = item.get("column")
+        target = f"表 {table}" + (f" 列 {column}" if column else "")
+        flag = "  ← 破坏性，需确认" if op in SCHEMA_BREAKING_OPS else ""
+        lines.append(f"  {SCHEMA_OP_LABELS.get(op, op)}  {target}{flag}")
     return "\n".join(lines)
 
 

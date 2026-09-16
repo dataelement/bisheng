@@ -31,7 +31,9 @@ Design decisions worth not re-litigating:
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 #: Runtime templates this platform can build. A **local copy** of
 #: runtime-manager's ``GET /v1/runtime/status.supported_runtimes``, on purpose:
@@ -87,12 +89,45 @@ class CapabilityDeclaration(BaseModel):
         return not self.models and not self.knowledge_bases
 
 
-class DatabaseTable(BaseModel):
-    """One declared application table. Accepted but not created this round (D3)."""
+class DatabaseColumn(BaseModel):
+    """One declared column of an application table.
+
+    ``type`` / ``nullable`` / ``default`` are the three attributes the
+    structure-evolution precheck compares (AC-09): a column whose name survives
+    but whose type, nullability or default changed is a *modification*, and a
+    modification is breaking. ``extra="allow"`` keeps a developer's own
+    annotations (``comment:`` / ``index:`` ...) out of the comparison and out
+    of the refusal path — nothing outside those three attributes can fail a
+    publish.
+    """
 
     model_config = ConfigDict(extra="allow")
 
     name: str = Field(min_length=1, max_length=64)
+    type: str | None = Field(default=None, max_length=64)
+    nullable: bool | None = None
+    default: Any = None
+
+
+class DatabaseTable(BaseModel):
+    """One declared application table. Accepted but not created this round (D3).
+
+    ``columns`` is what ``precheck_schema`` diffs across releases. A bare string
+    entry (``columns: [id, name]``) is accepted as a name-only column so a
+    manifest written before the attributes existed keeps validating.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str = Field(min_length=1, max_length=64)
+    columns: list[DatabaseColumn] = Field(default_factory=list)
+
+    @field_validator("columns", mode="before")
+    @classmethod
+    def _names_become_columns(cls, value: Any) -> Any:
+        if not isinstance(value, list):
+            return value
+        return [{"name": item} if isinstance(item, str) else item for item in value]
 
 
 class DatabaseDeclaration(BaseModel):

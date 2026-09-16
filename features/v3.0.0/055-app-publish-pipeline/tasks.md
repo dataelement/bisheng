@@ -587,9 +587,11 @@ T001–T007（Wave 1，可并行）
 
 ### Wave 6 · 结构演进与版本差异（release 必做，本轮顺延）
 
-- [ ] **T061**: `precheck_schema` 阶段 + 改 / 删列显式确认（CLI 交互或 `--confirm-schema-change`；未确认拒 `16229`；已确认进入管线、发布时不再二次确认；审批单与发布面展示结构变更）
+- [x] **T061**: `precheck_schema` 阶段 + 改 / 删列显式确认（CLI 交互或 `--confirm-schema-change`；未确认拒 `16229`；已确认进入管线、发布时不再二次确认；审批单与发布面展示结构变更）
   **文件**: `src/backend/bisheng/app_publish/domain/services/schema_evolution_service.py`, `src/backend/bisheng/app_publish/domain/services/precheck_service.py`（增量）, `src/backend/test/app_publish/test_schema_evolution.py`
   **覆盖 AC**: AC-09
+  **证据**（分支 `wt/schema-precheck`）：后端 `bb6a9cf1d`（`schema_evolution_service.py` 纯函数 diff + `accept()` 同步闸 16229 + worker `precheck_schema` 阶段 + publish-status 读模型 `schema_change` + manifest `DatabaseColumn`；`test_schema_evolution.py` 19 例，`test/app_publish/` 383 passed）；CLI `0274b36ac`（TTY 交互确认 / 非 TTY 原样报错 / `--confirm-schema-change` 直通；`tests/test_command_deploy_sync.py` +6，CLI 274 passed）；展示面（platform `SchemaChangeNotice.tsx` + `schemaChange.ts`，vitest +8；client `AppPublishDetailPanel.tsx` 结构变更行，jest +1；三语文案）。
+  **偏离**：① 闸不在 `precheck_service.py`，而在 `publish_pipeline_service.accept()` 的同步腿（`16251` / `16252` 之后）——确认必须在 `deploy` 请求返回前发生，CLI 才能把 16229 转成终端提问后**用同一个包重发**；`precheck_service.py` 未改。worker 侧的 `precheck_schema` 阶段（scan 之后、build 之前）只推导摘要写入审批单快照，不二次询问。② 破坏性判据取 `drop_table / drop_column / modify_column`（type / nullable / default 任一变化即 modify），加表 / 加列为非破坏性、不询问；首发（无在线版本）不询问。③ 平台建表 / 迁移快照属 T062，本任务只做检测、确认与展示。
 
 - [ ] **T062**: 应用数据表由 manifest 声明、平台建表（DEV-07 ②）：加列自动迁移无需确认；改 / 删列**迁移前自动留生产数据快照**（键 `apps/{app_id}/db-snapshots/{ts}.tar`）
   **文件**: `src/backend/bisheng/app_publish/domain/services/schema_evolution_service.py`（增量）, `src/backend/test/app_publish/test_schema_migration_snapshot.py`

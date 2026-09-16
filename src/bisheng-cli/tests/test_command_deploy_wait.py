@@ -65,6 +65,7 @@ SERVER_STAGES = (
     "received",
     "secret_scan",
     "precheck_manifest",
+    "precheck_schema",
     "precheck_build",
     "precheck_probe",
     "version_recorded",

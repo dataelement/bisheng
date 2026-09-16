@@ -37,7 +37,8 @@ from typing import Any
 from loguru import logger
 
 from bisheng.app_publish.domain.constants import AppReleaseAuditAction
-from bisheng.app_publish.domain.models.app_deployment import ACTIVE_STATUSES, AppDeploymentDao
+from bisheng.app_publish.domain.models.app_deployment import ACTIVE_STATUSES, STATUS_FAILED, AppDeploymentDao
+from bisheng.app_publish.domain.services import schema_evolution_service
 from bisheng.app_publish.domain.services.app_publish_scenario_handler import SCENARIO_CODE
 from bisheng.app_publish.domain.services.release_audit import write_release_audit
 from bisheng.app_publish.domain.services.version_service import VersionService
@@ -98,7 +99,7 @@ class PublishStatusService:
             # Capability declarations are a deferred wave. The key is present
             # and empty so neither consumer has to change shape when they land.
             "capabilities": [],
-            "schema_change": None,
+            "schema_change": await cls._schema_change_payload(app, deployment),
             "can": {
                 # Withdrawing goes through the approval centre's own endpoint,
                 # which enforces "applicant only" itself; this flag only decides
@@ -329,6 +330,24 @@ class PublishStatusService:
             if reason in (PENDING_REASON_CAPACITY, PENDING_REASON_DEPLOY_FAILED):
                 return reason
         return None
+
+    @staticmethod
+    async def _schema_change_payload(app, deployment) -> dict[str, Any] | None:
+        """What the pending release will do to the declared tables (AC-09 / AC-61).
+
+        Derived, like everything else here: the latest attempt's manifest
+        against the **online** version's, through the same diff the gate used.
+        Only an attempt that is still on its way matters — in flight, or parked
+        after approval. A failed attempt changed nothing, and once the release
+        is online the reference *is* that release, so there is nothing left to
+        announce.
+        """
+        if deployment is None or not deployment.manifest:
+            return None
+        if deployment.status == STATUS_FAILED or deployment.version_id == app.current_version_id:
+            return None
+        change = await schema_evolution_service.evaluate(app.id, deployment.manifest)
+        return change.to_payload() if change is not None else None
 
     @staticmethod
     async def _tier_payload(version) -> dict[str, Any] | None:

@@ -109,6 +109,42 @@ describe("AppPublishDetailPanel", () => {
     expect(container.textContent).not.toContain("[object Object]");
   });
 
+  it("adds the structure-change row only when the release changes the declared tables", () => {
+    // Default fixture: schema_change is null — the row must not exist at all.
+    const { container, unmount } = render(
+      <AppPublishDetailPanel detail={buildDetail()} scope="task" localize={localize} />,
+    );
+    expect(container.querySelector('[data-testid="app-publish-schema-change"]')).toBeNull();
+    expect(container.textContent).not.toContain("com_approval_app_publish_field_schema_change");
+    unmount();
+
+    const detail = buildDetail();
+    detail.detail_snapshot = {
+      ...detail.detail_snapshot,
+      schema_change: {
+        has_breaking: true,
+        items: [
+          { table: "orders", column: "amount", op: "modify_column" },
+          { table: "orders", column: "note", op: "drop_column" },
+          { table: "settings", column: null, op: "add_table" },
+        ],
+      },
+    };
+    render(<AppPublishDetailPanel detail={detail} scope="task" localize={localize} />);
+
+    expect(screen.getByTestId("app-publish-schema-change")).toBeInTheDocument();
+    expect(screen.getByText("com_approval_app_publish_field_schema_change")).toBeInTheDocument();
+    expect(screen.getByText("com_approval_app_publish_schema_breaking")).toBeInTheDocument();
+    expect(screen.getByText("orders.amount")).toBeInTheDocument();
+    expect(screen.getByText("orders.note")).toBeInTheDocument();
+    expect(screen.getByText("settings")).toBeInTheDocument();
+    expect(screen.getByText("com_approval_app_publish_schema_op_modify_column")).toBeInTheDocument();
+    expect(screen.getByText("com_approval_app_publish_schema_op_add_table")).toBeInTheDocument();
+    // Two breaking rows, one additive: the tag appears exactly twice.
+    expect(screen.getAllByText("com_approval_app_publish_schema_breaking_tag")).toHaveLength(2);
+    expect(screen.getByTestId("app-publish-schema-change").textContent).not.toContain("[object Object]");
+  });
+
   it("falls back to placeholders when the tier is missing", () => {
     const detail = buildDetail();
     detail.detail_snapshot = { ...detail.detail_snapshot, tier: {}, tier_name: "" };

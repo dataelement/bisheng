@@ -28,6 +28,24 @@ type VisibilityEntry = {
   name: string;
 };
 
+/** One row of the structure change (`schema_change.items[]`, F055 AC-09). */
+type SchemaChangeEntry = {
+  op: string;
+  target: string;
+  breaking: boolean;
+};
+
+/** Ops the backend gate required confirmation for (schema_evolution_service.BREAKING_OPS). */
+const BREAKING_SCHEMA_OPS = new Set(["drop_table", "drop_column", "modify_column"]);
+
+const SCHEMA_OP_I18N: Record<string, string> = {
+  add_table: "com_approval_app_publish_schema_op_add_table",
+  drop_table: "com_approval_app_publish_schema_op_drop_table",
+  add_column: "com_approval_app_publish_schema_op_add_column",
+  drop_column: "com_approval_app_publish_schema_op_drop_column",
+  modify_column: "com_approval_app_publish_schema_op_modify_column",
+};
+
 export interface AppPublishDetailPanelProps {
   detail: ApprovalTaskDetail | ApprovalInstanceDetail;
   scope: "task" | "instance";
@@ -69,6 +87,19 @@ function toVisibilityEntries(value: unknown): VisibilityEntry[] {
       type: asText(record.type) || asText(record.subject_type),
       name: asText(record.name) || asText(record.subject_name) || asText(record.id),
     };
+  });
+}
+
+function toSchemaChangeEntries(value: unknown): SchemaChangeEntry[] {
+  const items = asRecord(value).items;
+  if (!Array.isArray(items)) return [];
+  return items.flatMap((item) => {
+    const record = asRecord(item);
+    const table = asText(record.table);
+    if (!table) return [];
+    const column = asText(record.column);
+    const op = asText(record.op);
+    return [{ op, target: column ? `${table}.${column}` : table, breaking: BREAKING_SCHEMA_OPS.has(op) }];
   });
 }
 
@@ -136,6 +167,11 @@ export function AppPublishDetailPanel({ detail, scope, localize, onBack }: AppPu
 
   const capabilities = toCapabilityEntries(snapshot.capabilities);
   const visibility = toVisibilityEntries(snapshot.visibility_snapshot);
+  // AC-09 / AC-24: the "结构变更" row appears only when the release changes the
+  // declared tables. Breaking rows were confirmed by the publisher at submit
+  // time — the approver sees what was confirmed, they are not asked again.
+  const schemaChange = toSchemaChangeEntries(snapshot.schema_change);
+  const schemaChangeBreaking = asRecord(snapshot.schema_change).has_breaking === true;
 
   const tier = asRecord(snapshot.tier);
   const cpuMillicores = Number(tier.cpu_millicores);
@@ -225,10 +261,45 @@ export function AppPublishDetailPanel({ detail, scope, localize, onBack }: AppPu
         )}
       </div>
 
-      {/* ④ Resource tier */}
+      {/* ④ Resource tier (+ the structure-change row when there is one) */}
       <div>
         <SectionTitle>{localize("com_approval_app_publish_section_tier")}</SectionTitle>
         <InfoGrid rows={tierRows} />
+        {schemaChange.length > 0 && (
+          <div
+            data-testid="app-publish-schema-change"
+            className="mt-3 rounded-lg border border-[#ffe4ba] bg-[#fff7e8] px-3 py-2"
+          >
+            <div className="text-[13px] font-medium text-text-primary">
+              {localize("com_approval_app_publish_field_schema_change")}
+            </div>
+            <div className="mt-0.5 text-[12px] text-[#ff7d00]">
+              {localize(
+                schemaChangeBreaking
+                  ? "com_approval_app_publish_schema_breaking"
+                  : "com_approval_app_publish_schema_additive",
+              )}
+            </div>
+            <ul className="mt-2 space-y-1">
+              {schemaChange.map((entry, index) => (
+                <li
+                  key={`${entry.op}-${entry.target}-${index}`}
+                  className="flex flex-wrap items-center gap-2 text-[12px] text-[#4e5969]"
+                >
+                  <span className="rounded bg-white px-1.5 py-0.5 text-[#1d2129]">
+                    {SCHEMA_OP_I18N[entry.op] ? localize(SCHEMA_OP_I18N[entry.op]) : entry.op || "--"}
+                  </span>
+                  <code className="break-all font-mono">{entry.target}</code>
+                  {entry.breaking && (
+                    <span className="rounded bg-[#ffece8] px-1.5 py-0.5 text-[#f53f3f]">
+                      {localize("com_approval_app_publish_schema_breaking_tag")}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

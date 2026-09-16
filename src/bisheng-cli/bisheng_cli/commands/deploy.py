@@ -48,12 +48,19 @@ from bisheng_cli.errors import (
     error_from_platform,
 )
 from bisheng_cli.http import UPLOAD_READ_TIMEOUT, PlatformClient
-from bisheng_cli.output import Emitter, format_scan_hits
+from bisheng_cli.output import Emitter, format_scan_hits, format_schema_change
 
 COMMAND = "deploy"
 DEPLOY_PATH = "/api/v2/apps/deploy"
 DEPLOYMENT_PATH = "/api/v2/apps/deployments/{deployment_id}"
 PACKAGE_FIELD = "package"
+CONFIRM_SCHEMA_FLAG = "--confirm-schema-change"
+
+# "This release drops or modifies a column of the online version and nobody
+# said so." Answered on the upload itself (F055 AC-09), which is what makes it
+# the one platform refusal this command turns into a question: the package is
+# still on disk, so a "yes" is one more POST rather than a whole new run.
+SCHEMA_CHANGE_UNCONFIRMED = 16229
 
 # 2s, then ×1.5 every five polls, capped at 10s. A long connection is not an
 # option here: nginx caps `proxy_read_timeout` at 300s while an approval is a
@@ -303,7 +310,60 @@ def _upload(
     package_stat: packaging.PackageStat,
     app_id: str | None,
 ) -> dict[str, Any]:
-    fields: dict[str, str] = {"confirm_schema_change": "true" if args.confirm_schema_change else "false"}
+    """POST the package; on 16229, show the structure change and ask once.
+
+    The platform refuses a breaking table change (drop / modify column) with
+    16229 unless `--confirm-schema-change` was sent. At a terminal that becomes
+    a question with the diff in front of the person; a "yes" re-sends the same
+    package with the flag. Without a terminal the refusal stands — "no TTY"
+    must never mean "assume yes" for a change that can lose production rows —
+    and the error's next step already names the flag.
+
+    Sent with the flag and still refused means the platform did not honour
+    it; that is re-raised as-is rather than asked about, because asking would
+    loop on an answer the caller already gave.
+    """
+    confirmed = bool(args.confirm_schema_change)
+    try:
+        return _post_package(client, emitter, package_path, package_stat, app_id, confirm_schema_change=confirmed)
+    except CliError as exc:
+        if exc.code != SCHEMA_CHANGE_UNCONFIRMED or confirmed:
+            raise
+        items = schema_change_items(exc.details)
+        if items:
+            emitter.error("平台检出应用数据表结构变更（相对当前在线版本）:")
+            emitter.error(format_schema_change(items))
+        if not emitter.is_tty:
+            raise
+        if not confirm(
+            "以上改列 / 删列会影响线上已有数据，确认变更并继续发布?",
+            assume_yes=False,
+            is_tty=True,
+            flag_name=CONFIRM_SCHEMA_FLAG,
+            reader=input,
+        ):
+            raise CliError(
+                "已按用户要求取消本次发布",
+                exit_code=EXIT_USAGE,
+                code=SCHEMA_CHANGE_UNCONFIRMED,
+                next_step=f"确认变更影响后带上 {CONFIRM_SCHEMA_FLAG} 重新发布。",
+                details=exc.details,
+                hints=exc.hints,
+            ) from exc
+        emitter.info("已确认结构变更，重新上传同一个包…")
+        return _post_package(client, emitter, package_path, package_stat, app_id, confirm_schema_change=True)
+
+
+def _post_package(
+    client: PlatformClient,
+    emitter: Emitter,
+    package_path: Path,
+    package_stat: packaging.PackageStat,
+    app_id: str | None,
+    *,
+    confirm_schema_change: bool,
+) -> dict[str, Any]:
+    fields: dict[str, str] = {"confirm_schema_change": "true" if confirm_schema_change else "false"}
     if app_id:
         fields["app_id"] = app_id
     emitter.info(f"开始上传（{package_stat.entry_count} 个条目，sha256 {package_stat.sha256[:12]}…）")
@@ -316,6 +376,23 @@ def _upload(
             read_timeout=UPLOAD_READ_TIMEOUT,
         )
     return data or {}
+
+
+def schema_change_items(details: Any) -> list[dict[str, Any]]:
+    """The `items[]` of a 16229 payload, wherever the envelope put them.
+
+    A synchronous refusal arrives as the envelope's `data`
+    (`{exception, details: {items, breaking, ...}, hints}`); a five-tuple
+    would carry `details.items` directly. Both are read so the same printer
+    serves both, and anything else yields an empty list rather than a crash
+    in the middle of an error path.
+    """
+    if not isinstance(details, dict):
+        return []
+    inner = details.get("details")
+    source = inner if isinstance(inner, dict) and "items" in inner else details
+    items = source.get("items")
+    return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
 
 
 def _accept(emitter: Emitter, root: Path, base_url: str, accepted: dict[str, Any], state: dict[str, Any]) -> None:

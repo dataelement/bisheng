@@ -2784,7 +2784,18 @@
       "pendingCapacity": "审批已通过，但运行环境暂时没有足够资源启动该应用。可稍后点击「手动上线」重试，或联系平台管理员释放资源。",
       "pendingDeployFailed": "审批已通过，但应用上一次启动失败。请先在「运行日志」中定位原因，修复后重新执行 bisheng deploy，或点击「手动上线」重试。",
       "pendingUnknown": "审批已通过，但应用尚未上线。可点击「手动上线」重试；若仍不成功，请在「运行日志」中查看原因。",
-      "schemaChangeTitle": "表结构变更"
+      "schemaChangeTitle": "表结构变更",
+      "schemaChangeBreaking": "本次发布含改列 / 删列，发布者已在提交时显式确认。上线后，被删除或改动的列中现有数据将不再可用。",
+      "schemaChangeAdditive": "本次发布只新增表或列，上线时自动生效，无需确认。",
+      "schemaChangeBreakingTag": "破坏性",
+      "schemaChangeOp": {
+        "addTable": "新增表",
+        "dropTable": "删除表",
+        "addColumn": "新增列",
+        "dropColumn": "删除列",
+        "modifyColumn": "修改列",
+        "unknown": "变更"
+      }
     },
     "versionList": {
       "title": "版本记录",

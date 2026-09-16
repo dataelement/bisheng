@@ -131,6 +131,7 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.app_publish.domain.services.resource_tier_service",
     "bisheng.app_publish.domain.services.version_service",
     "bisheng.app_publish.domain.services.precheck_service",
+    "bisheng.app_publish.domain.services.schema_evolution_service",
     "bisheng.app_publish.domain.services.publish_pipeline_service",
     "bisheng.app_publish.domain.services.publish_approval_service",
     "bisheng.app_publish.domain.services.publish_status_service",

@@ -49,6 +49,7 @@ from bisheng.app_publish.domain.constants import AppReleaseAuditAction
 from bisheng.app_publish.domain.models.app_deployment import (
     STAGE_PRECHECK_BUILD,
     STAGE_PRECHECK_PROBE,
+    STAGE_PRECHECK_SCHEMA,
     STAGE_RECEIVED,
     STAGE_SECRET_SCAN,
     STATUS_RUNNING,
@@ -57,7 +58,7 @@ from bisheng.app_publish.domain.models.app_deployment import (
 )
 from bisheng.app_publish.domain.schemas.app_manifest import ICON_EXTENSIONS, MAX_ICON_BYTES, AppManifest
 from bisheng.app_publish.domain.schemas.failure import failure_from_error
-from bisheng.app_publish.domain.services import package_service, precheck_service
+from bisheng.app_publish.domain.services import package_service, precheck_service, schema_evolution_service
 from bisheng.app_publish.domain.services.manifest_validator import validate_manifest
 from bisheng.app_publish.domain.services.release_audit import write_release_audit
 from bisheng.app_publish.domain.services.secret_scanner import scan_package
@@ -78,8 +79,14 @@ from bisheng.utils import generate_uuid
 #: The asynchronous stage machine, in order. Reordering this tuple is the whole
 #: mechanical cost of moving the secret scan before the build — and the reason
 #: it must not be done without amending F055 AC-01 and F053 AC-31a (design D5).
+#:
+#: ``precheck_schema`` sits between the scan and the build: it is one database
+#: read, it cannot fail (the gate already answered the upload, see
+#: :meth:`PublishPipelineService.accept`), and its only product — the change
+#: summary — must exist before the approval request is built.
 PIPELINE_STAGES: tuple[tuple[str, str], ...] = (
     (STAGE_SECRET_SCAN, "_stage_scan"),
+    (STAGE_PRECHECK_SCHEMA, "_stage_schema"),
     (STAGE_PRECHECK_BUILD, "_stage_build"),
     (STAGE_PRECHECK_PROBE, "_stage_probe"),
 )
@@ -192,9 +199,13 @@ class PublishPipelineService:
     ) -> AcceptResult:
         """Receive one package. Fast, local, and it leaves nothing behind when it refuses.
 
-        ``confirm_schema_change`` is accepted and recorded but not consumed this
-        round (design D3): the parameter exists now so the CLI's flag does not
-        have to change again when structural evolution ships.
+        ``confirm_schema_change`` is the answer to the ``precheck_schema`` gate
+        (AC-09): an iteration whose ``database.tables[]`` drops or modifies a
+        column of the **online** version is refused with 16229 unless it is
+        ``True``. Asked here, on the synchronous leg, for the same reason the
+        manifest is validated here — the CLI turns the refusal into a question
+        and re-sends, which only works while the upload itself is the answer.
+        A first publish has no online version and is never asked.
         """
         if not settings.app_runtime.enabled:
             raise AppPublishRuntimeLayerDisabledError(
@@ -219,6 +230,12 @@ class PublishPipelineService:
 
             # AC-03's two gates, asked before the approval gate ever sees this.
             await cls._assert_submittable(app_id)
+
+            # AC-09 — the structure-evolution gate. Still no RPC: one read of
+            # the online version's frozen manifest. The summary is kept for the
+            # audit row so "what was confirmed" survives the attempt.
+            schema_change = await schema_evolution_service.evaluate(app_id, validated.manifest)
+            schema_evolution_service.require_confirmation(schema_change, confirmed=confirm_schema_change)
 
             version_id = generate_uuid()
             code_object_key = await package_service.store_package(
@@ -255,6 +272,7 @@ class PublishPipelineService:
                 "source": "cli",
                 "tier_code": validated.tier.code,
                 "confirm_schema_change": bool(confirm_schema_change),
+                "schema_change": schema_change.to_payload() if schema_change is not None else None,
                 "manifest_hints": validated.hints,
                 **_actor_audit_fields(principal),
             },
@@ -470,6 +488,31 @@ class PublishPipelineService:
         )
 
     @classmethod
+    async def _stage_schema(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:
+        """Record the structure change for the approval card — never re-ask (AC-09).
+
+        The gate ran on the receive leg with the caller's confirmation in hand;
+        the worker has no such answer and must not invent one. What it can do is
+        derive the same summary from the same two manifests, so the approval
+        request built a few stages later carries it (``payload_snapshot`` →
+        ``detail_snapshot``, design §4.2 ④) without a second implementation of
+        the diff. The in-flight gate (16251) keeps a second *running* release
+        off this application, so in the common case the reference is the one
+        the gate saw. It is re-derived rather than copied from the audit row
+        on purpose: a parked attempt is ``succeeded`` and does not block a
+        new upload, and if it is brought online while this one is still in
+        the worker, the card must describe the change against what is online
+        *now* — that is what the approver decides on.
+        """
+        change = await schema_evolution_service.evaluate(deployment.app_id, context["manifest"])
+        context["schema_change"] = change.to_payload() if change is not None else None
+        logger.info(
+            f"app_publish.precheck_schema deployment_id={deployment.id} app_id={deployment.app_id} "
+            f"items={len(change.items) if change is not None else 0} "
+            f"breaking={bool(change is not None and change.has_breaking)}"
+        )
+
+    @classmethod
     async def _stage_probe(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:
         await precheck_service.precheck_probe(deployment, manifest=context["manifest"], image_ref=context["image_ref"])
 
@@ -571,7 +614,12 @@ class PublishPipelineService:
         from bisheng.app_publish.domain.services import publish_approval_service
 
         await VersionService.record_version(
-            deployment, approval=publish_approval_service, image_ref=context.get("image_ref")
+            deployment,
+            approval=publish_approval_service,
+            image_ref=context.get("image_ref"),
+            # Forwarded to ``submit`` as a port kwarg: the approval card shows
+            # what ``precheck_schema`` derived, not a third computation.
+            schema_change=context.get("schema_change"),
         )
 
     # -- plumbing --------------------------------------------------------

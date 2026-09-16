@@ -41,7 +41,7 @@ from typing import Any
 from loguru import logger
 
 from bisheng.app_publish.domain.constants import AppReleaseAuditAction
-from bisheng.app_publish.domain.services import publish_notification_service
+from bisheng.app_publish.domain.services import publish_notification_service, schema_evolution_service
 from bisheng.app_publish.domain.services.app_publish_scenario_handler import (
     RELEASE_KIND_INITIAL,
     RELEASE_KIND_ITERATION,
@@ -158,6 +158,11 @@ async def submit(deployment, **kwargs: Any) -> ApprovalGateResult:
     raises it *before* anything is written, which is exactly why
     ``record_version`` calls the gate first: a failure here leaves no version
     row behind (design D6).
+
+    ``schema_change`` (a port kwarg, AC-09) is the summary the pipeline's
+    ``precheck_schema`` stage derived. A caller that never ran that stage may
+    omit it and the summary is derived here from the same two manifests —
+    one diff implementation either way, never a third.
     """
     app_id = str(deployment.app_id or "")
     async with get_async_db_session() as session:
@@ -168,6 +173,12 @@ async def submit(deployment, **kwargs: Any) -> ApprovalGateResult:
             msg="应用不存在, 无法提交发布审批",
             details={"app_id": app_id, "reason": "app_missing"},
         )
+
+    if "schema_change" in kwargs:
+        schema_change = kwargs["schema_change"]
+    else:
+        change = await schema_evolution_service.evaluate(app_id, deployment.manifest or {})
+        schema_change = change.to_payload() if change is not None else None
 
     owner_user_id = int(app.owner_user_id or deployment.owner_user_id or 0)
     owner_name = await _owner_user_name(owner_user_id)
@@ -180,6 +191,7 @@ async def submit(deployment, **kwargs: Any) -> ApprovalGateResult:
         version_no=previous_version_no + 1,
         release_kind=RELEASE_KIND_INITIAL if previous_version_no == 0 else RELEASE_KIND_ITERATION,
         has_department=department_id is not None,
+        schema_change=schema_change,
     )
 
     gate, handler = _build_publish_approval_gate()
@@ -288,6 +300,7 @@ async def _build_payload(
     version_no: int,
     release_kind: str,
     has_department: bool,
+    schema_change: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The payload snapshot: what the card renders *and* what the callbacks read.
 
@@ -321,7 +334,9 @@ async def _build_payload(
         # empty so the client panel's shape never changes when they land.
         "capabilities": [],
         "visibility_snapshot": [],
-        "schema_change": None,
+        # AC-09 / AC-24: the confirmed structure change, ``None`` when the
+        # release declares nothing new relative to the online version.
+        "schema_change": schema_change,
         # AC-16: says *why* the request went straight past the department
         # administrators, so an approver is not left wondering.
         "approver_note": None if has_department else "no_department_admin_source",

@@ -2784,7 +2784,18 @@
       "pendingCapacity": "承認は通りましたが、実行環境に起動できるだけのリソースが一時的にありません。しばらくしてから「手動公開」で再試行するか、プラットフォーム管理者にリソースの解放を依頼してください。",
       "pendingDeployFailed": "承認は通りましたが、前回の起動に失敗しました。「実行ログ」で原因を特定し、修正後に bisheng deploy を再実行するか、「手動公開」で再試行してください。",
       "pendingUnknown": "承認は通りましたが、アプリはまだ公開されていません。「手動公開」で再試行し、それでも起動しない場合は「実行ログ」で原因を確認してください。",
-      "schemaChangeTitle": "テーブル構造の変更"
+      "schemaChangeTitle": "テーブル構造の変更",
+      "schemaChangeBreaking": "このリリースには列の変更 / 削除が含まれ、公開者が提出時に明示的に確認しています。公開後、削除または変更された列の既存データは利用できなくなります。",
+      "schemaChangeAdditive": "このリリースはテーブルまたは列の追加のみで、公開時に自動的に反映されます。確認は不要です。",
+      "schemaChangeBreakingTag": "破壊的",
+      "schemaChangeOp": {
+        "addTable": "テーブル追加",
+        "dropTable": "テーブル削除",
+        "addColumn": "列追加",
+        "dropColumn": "列削除",
+        "modifyColumn": "列変更",
+        "unknown": "変更"
+      }
     },
     "versionList": {
       "title": "バージョン記録",

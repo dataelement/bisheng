@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from bisheng_cli.output import STAGE_LABELS, Emitter, mask, stage_label, wrap_stream
+from bisheng_cli.output import STAGE_LABELS, Emitter, format_schema_change, mask, stage_label, wrap_stream
 from tests.helpers.platform_mock import FAKE_KEY, FAKE_PAT
 
 
@@ -138,6 +138,22 @@ def test_utf8_wrapper_survives_gbk_console() -> None:
 def test_unknown_stage_is_printed_verbatim() -> None:
     assert stage_label("received") == STAGE_LABELS["received"]
     assert stage_label("brand_new_stage") == "brand_new_stage"
+
+
+def test_format_schema_change_flags_breaking_items_and_keeps_unknown_ops() -> None:
+    text = format_schema_change(
+        [
+            {"table": "orders", "column": "amount", "op": "modify_column"},
+            {"table": "audit", "column": None, "op": "drop_table"},
+            {"table": "settings", "column": "key", "op": "add_column"},
+            {"table": "x", "column": "y", "op": "rename_column"},
+        ]
+    )
+    lines = text.splitlines()
+    assert lines[0].startswith("  改列  表 orders 列 amount") and "破坏性" in lines[0]
+    assert lines[1].startswith("  删表  表 audit") and "列" not in lines[1].split("表 audit")[1].split("←")[0]
+    assert lines[2] == "  加列  表 settings 列 key"
+    assert lines[3].startswith("  rename_column  表 x 列 y") and "破坏性" not in lines[3]
 
 
 @pytest.mark.parametrize("text", ["nothing to mask", ""])

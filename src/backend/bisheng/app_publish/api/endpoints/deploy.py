@@ -138,9 +138,10 @@ async def deploy(
     Returns as soon as the fast checks pass; everything slow runs on a worker
     and is observed through ``GET /deployments/{id}``.
 
-    ``confirm_schema_change`` is accepted and recorded but not acted on this
-    release — the flag exists now so the CLI does not have to change its
-    command surface again when structural evolution ships.
+    ``confirm_schema_change`` answers the ``precheck_schema`` gate (AC-09): an
+    iteration that drops or modifies a column of the online version's declared
+    tables is refused with 16229 unless it is ``true``; the answer is recorded
+    on the deployment and the worker never asks a second time.
     """
     spooled = await package_service.spool_upload(package)
     try:

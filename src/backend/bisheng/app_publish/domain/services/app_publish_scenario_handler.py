@@ -124,8 +124,10 @@ class AppPublishScenarioHandler:
             # Owned by F056; the slot is fixed now so the client panel does not
             # have to change shape when the visibility region lands.
             "visibility_snapshot": list(payload.get("visibility_snapshot") or []),
-            # Structural evolution is a deferred wave — ``null`` means "not
-            # evaluated", which is what the panel renders as "无结构变更".
+            # ``{has_breaking, items[{table, column, op}]}`` from the pipeline's
+            # ``precheck_schema`` stage (AC-09), or ``null`` when the release
+            # declares nothing new relative to the online version — which the
+            # panel renders as "无结构变更".
             "schema_change": payload.get("schema_change"),
             "approver_note": payload.get("approver_note"),
         }

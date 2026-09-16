@@ -175,6 +175,7 @@ def test_stage_and_status_value_sets_match_the_design():
         "received",
         "secret_scan",
         "precheck_manifest",
+        "precheck_schema",
         "precheck_build",
         "precheck_probe",
         "version_recorded",

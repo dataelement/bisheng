@@ -314,16 +314,25 @@ export interface HostedAppTier {
   enabled?: boolean
 }
 
+/** One structural difference of the pending release relative to the online version. */
+export interface HostedAppSchemaChangeItem {
+  table: string
+  /** `null` for table-level operations (`add_table` / `drop_table`). */
+  column: string | null
+  /** `add_table` | `drop_table` | `add_column` | `drop_column` | `modify_column`; unknown values render verbatim. */
+  op: string
+}
+
 /**
- * Breaking table-structure change awaiting confirmation.
- *
- * The backend always sends `null` in this release (the capability/schema wave
- * is deferred). The shape is declared now so the publish face can keep a slot
- * for it without changing type when the wave lands.
+ * What the pending release does to the declared application tables
+ * (F055 AC-09, design §4.2 ②). `null` when nothing changes — a first publish,
+ * an unchanged iteration, a failed attempt, or a release already online.
+ * Breaking items (drop / modify) were confirmed by the publisher at submit
+ * time; the face only shows them, it never asks.
  */
 export interface HostedAppSchemaChange {
-  summary?: string | null
-  details?: string[] | null
+  has_breaking: boolean
+  items: HostedAppSchemaChangeItem[]
 }
 
 /**
