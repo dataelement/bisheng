@@ -107,6 +107,7 @@ function Sidebar({
   const { data: bsConfig } = useGetBsConfig();
   const { user, logout } = useAuthContext();
   const localize = useLocalize();
+  const skillCenterLabel = localize('com_skill_center_title');
   // Admin-configured sidebar entry names; blank config keeps the localized defaults.
   const menuNames = useWorkbenchMenuNames();
   const [langcode, setLangcode] = useRecoilState(store.lang);
@@ -182,7 +183,7 @@ function Sidebar({
         section: 'skills' as const,
         to: hasPlugin('home') ? skillCenterPath : '/menu-unavailable?plugin=home',
         icon: <Outlined.Newspaper />,
-        label: localize('com_skill_center_title'),
+        label: skillCenterLabel,
         isActive: pathname === skillCenterPath,
         closeDrawerOnNavigate: true,
       },
@@ -227,7 +228,7 @@ function Sidebar({
     });
     // Menu names are read field-by-field: the hook returns a fresh object each render.
   }, [canOpenWorkbenchEntry, pathname, menuUnavailablePlugin, isMobile, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins,
-    menuNames.home, menuNames.knowledge, menuNames.channel, menuNames.apps, langcode]);
+    menuNames.home, menuNames.knowledge, menuNames.channel, menuNames.apps, skillCenterLabel]);
 
   const changeLang = useCallback((value: string) => {
     let userLang = value;
