@@ -1,4 +1,11 @@
-"""Fail-closed validation of ``bs-sak-`` and ``bs-pat-`` credentials."""
+"""Fail-closed validation of ``bs-sak-``, ``bs-pat-`` and ``bs-app-`` credentials.
+
+``SUBJECT_RESOLVERS`` is a registry, not a closed set: the ``hosted_app``
+resolver is installed by ``app_publish``'s composition root so this module never
+imports the publish pipeline (F049 design D2). Until that registration runs, a
+``hosted_app`` credential is refused — an unresolvable subject kind is not a
+degraded mode, it is an invalid credential.
+"""
 
 from __future__ import annotations
 
@@ -22,12 +29,14 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.open_api.domain.context import OpenApiPrincipal
 from bisheng.open_api.domain.models.api_credential import (
+    HOSTED_APP_TOKEN_PREFIX,
     KEY_SECRET_LENGTH,
     PERSONAL_TOKEN_PREFIX,
     REVOKE_REASON_SUBJECT_DELETED,
     REVOKE_REASON_SUBJECT_DISABLED,
     REVOKE_REASON_TENANT_CHANGED,
     SERVICE_ACCOUNT_KEY_PREFIX,
+    SUBJECT_KIND_HOSTED_APP,
     SUBJECT_KIND_NATURAL_PERSON,
     SUBJECT_KIND_SERVICE_ACCOUNT,
     ApiCredential,
@@ -36,8 +45,17 @@ from bisheng.open_api.domain.repositories.credential_repository import Credentia
 from bisheng.open_api.domain.repositories.service_account_repository import ServiceAccountRepository
 from bisheng.open_api.domain.services.credential_service import CREDENTIAL_CACHE_KEY, CredentialService, hash_token
 
+#: Which prefix a plaintext must carry for each subject kind. Built from the
+#: constants rather than written out, so a prefix change moves the regex and the
+#: pin below together (C6: no literal copies of key material shapes).
+_SUBJECT_KIND_PREFIXES: dict[str, str] = {
+    SUBJECT_KIND_SERVICE_ACCOUNT: SERVICE_ACCOUNT_KEY_PREFIX,
+    SUBJECT_KIND_NATURAL_PERSON: PERSONAL_TOKEN_PREFIX,
+    SUBJECT_KIND_HOSTED_APP: HOSTED_APP_TOKEN_PREFIX,
+}
+
 _TOKEN_RE = re.compile(
-    rf"^(?:{re.escape(SERVICE_ACCOUNT_KEY_PREFIX)}|{re.escape(PERSONAL_TOKEN_PREFIX)})"
+    rf"^(?:{'|'.join(re.escape(prefix) for prefix in _SUBJECT_KIND_PREFIXES.values())})"
     rf"[A-Za-z0-9_-]{{{KEY_SECRET_LENGTH}}}$"
 )
 
@@ -109,9 +127,14 @@ SUBJECT_RESOLVERS: dict[str, SubjectResolver] = {
 
 
 def _prefix_matches_subject(plaintext: str, subject_kind: str) -> bool:
-    return (subject_kind == SUBJECT_KIND_SERVICE_ACCOUNT and plaintext.startswith(SERVICE_ACCOUNT_KEY_PREFIX)) or (
-        subject_kind == SUBJECT_KIND_NATURAL_PERSON and plaintext.startswith(PERSONAL_TOKEN_PREFIX)
-    )
+    """Fail-closed pin of a plaintext to the subject kind it was issued for.
+
+    An unknown kind returns ``False`` rather than falling through to "no rule
+    applies, so it is fine" — that is what stops a subject kind added to the
+    model without a prefix from authenticating against any token shape.
+    """
+    prefix = _SUBJECT_KIND_PREFIXES.get(subject_kind)
+    return prefix is not None and plaintext.startswith(prefix)
 
 
 async def validate_bearer(authorization: str | None) -> OpenApiPrincipal:
@@ -158,8 +181,14 @@ async def _resolve_from_database(plaintext: str, digest: str) -> OpenApiPrincipa
         raise OpenApiCredentialInvalidError()
     if row.revoked_at is not None:
         # Preserve the actionable cause of lifecycle revocation after the
-        # holder/account row has been disabled or deleted.
-        if row.revoke_reason in {REVOKE_REASON_SUBJECT_DISABLED, REVOKE_REASON_SUBJECT_DELETED}:
+        # holder/account row has been disabled or deleted. A hosted application
+        # is deliberately excluded: its holder is a container, nobody can act on
+        # a distinguishing message, and telling a stale token apart from a
+        # revoked one would turn it into a probe for the application's state.
+        if (
+            row.revoke_reason in {REVOKE_REASON_SUBJECT_DISABLED, REVOKE_REASON_SUBJECT_DELETED}
+            and row.subject_kind != SUBJECT_KIND_HOSTED_APP
+        ):
             if row.subject_kind == SUBJECT_KIND_NATURAL_PERSON:
                 raise PersonalTokenHolderInvalidError()
             raise ServiceAccountInactiveError()

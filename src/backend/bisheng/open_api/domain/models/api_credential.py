@@ -12,12 +12,24 @@ from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, Js
 
 SERVICE_ACCOUNT_KEY_PREFIX = "bs-sak-"
 PERSONAL_TOKEN_PREFIX = "bs-pat-"
+#: Runtime credential of a hosted application (F055 AC-57). A third prefix
+#: rather than a reused ``bs-sak-``: the prefix is what ``_prefix_matches_subject``
+#: pins a plaintext to its subject kind, so sharing one would let a leaked
+#: application token be presented against a service-account row.
+HOSTED_APP_TOKEN_PREFIX = "bs-app-"
 KEY_SECRET_LENGTH = 43
 KEY_MASK_FILL = "********"
 
 SUBJECT_KIND_SERVICE_ACCOUNT = "service_account"
 SUBJECT_KIND_NATURAL_PERSON = "natural_person"
-CREDENTIAL_SUBJECT_KINDS = frozenset({SUBJECT_KIND_SERVICE_ACCOUNT, SUBJECT_KIND_NATURAL_PERSON})
+#: The subject is one row of ``app`` — resolved through ``hosted_app_subject``
+#: because ``subject_id`` is an integer and ``app.id`` is a uuid string (F055
+#: T055). No management surface issues or lists these (AC-59); the publish
+#: pipeline is the only writer.
+SUBJECT_KIND_HOSTED_APP = "hosted_app"
+CREDENTIAL_SUBJECT_KINDS = frozenset(
+    {SUBJECT_KIND_SERVICE_ACCOUNT, SUBJECT_KIND_NATURAL_PERSON, SUBJECT_KIND_HOSTED_APP}
+)
 
 REVOKE_REASON_MANUAL = "manual"
 REVOKE_REASON_BATCH = "batch"
@@ -39,8 +51,12 @@ class ApiCredential(SQLModelSerializable, table=True):
 
     __tablename__ = "api_credential"
     __table_args__ = (
+        # Kept in lockstep with CREDENTIAL_SUBJECT_KINDS. Existing databases were
+        # created with the two-value form by
+        # ``v3_0_0b1_f053_api_credential_tables``; widening it there needs its own
+        # revision (create_all never alters an existing table).
         CheckConstraint(
-            "subject_kind IN ('service_account', 'natural_person')",
+            "subject_kind IN ('service_account', 'natural_person', 'hosted_app')",
             name="ck_api_credential_subject_kind",
         ),
         Index("idx_api_credential_subject", "tenant_id", "subject_kind", "subject_id"),
@@ -55,7 +71,7 @@ class ApiCredential(SQLModelSerializable, table=True):
         sa_column=Column(Integer, nullable=False, index=True, comment="Tenant ID"),
     )
     subject_kind: str = Field(
-        sa_column=Column(String(32), nullable=False, comment="service_account | natural_person"),
+        sa_column=Column(String(32), nullable=False, comment="service_account | natural_person | hosted_app"),
     )
     subject_id: int = Field(
         sa_column=Column(
