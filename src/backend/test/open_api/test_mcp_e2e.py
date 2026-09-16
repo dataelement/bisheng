@@ -24,15 +24,13 @@ from __future__ import annotations
 
 import pytest
 
+from bisheng.app_publish.domain.services.app_credential_service import REVOCATION_BOUND_SECONDS
 from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError
 from bisheng.core.config.open_platform import OpenApiConf
 from bisheng.knowledge.domain.services.retrieval_facade_service import RetrievalFacadeService
 from bisheng.open_api.mcp.tools import knowledge as knowledge_tools
 
 from .test_mcp_server import _http_errors, auth, principal, tool_names
-
-#: The bound INV-28 / AC-05 puts on "revoked means refused".
-REVOCATION_BOUND_SECONDS = 5
 
 
 @pytest.fixture
@@ -144,6 +142,10 @@ def test_the_credential_cache_can_never_outlive_the_revocation_bound():
     five minutes on every face at once, and nothing in the request path would
     look wrong. The clamp is the only thing standing between AC-05 and that, so
     it is pinned here rather than left to whoever edits the config model next.
+
+    The bound is imported rather than re-typed: AC-05 and F055's INV-28 are the
+    same five seconds, and a local copy would keep asserting the old number
+    after someone moved the real one.
     """
 
     assert OpenApiConf(credential_cache_ttl_seconds=300).credential_cache_ttl_seconds == REVOCATION_BOUND_SECONDS

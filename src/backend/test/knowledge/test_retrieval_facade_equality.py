@@ -13,8 +13,9 @@ seam: the identity each caller hands the facade. Two callers that build the same
 ``RetrievalIdentity`` and pass the same request cannot see different sets,
 because below that seam there is one implementation. So these tests pin the
 seam — plus the structural fact that nothing on this path can touch a session,
-plus AC-44's fail-closed behaviour at all three doors, which is decided in this
-path rather than in the store.
+plus AC-44's fail-closed behaviour at each of the three doors that AC names
+(MCP search tool, v2 ``POST /filelib/retrieve``, hosted runtime), which is
+decided in this path rather than in the store.
 """
 
 from __future__ import annotations
@@ -449,7 +450,62 @@ async def _mcp_door(knowledge_ids, monkeypatch):
         reset_current_open_api_principal(token)
 
 
-@pytest.mark.parametrize("door", ["facade", "v2", "mcp"])
+async def _hosted_runtime_door(knowledge_ids, monkeypatch):
+    """A hosted application retrieving for its visitor — AC-44's third named door.
+
+    It is the one door that does not call the facade directly: F055 routes it
+    through ``CapabilityBusService``, which wraps the call in
+    ``except BaseErrorCode`` because every refusal still owes the capability
+    ledger a row (AC-55). That handler is precisely where "log it and return
+    what we have" gets written by someone tidying up, so leaving this door out
+    would exempt the only place the regression could actually be introduced.
+
+    Only the two collaborators that need a database are doubled — the
+    declaration read and the ledger write. The facade underneath is the real
+    one, so the outage travels the real path.
+    """
+
+    from bisheng.app_publish.domain.services import capability_audit
+    from bisheng.app_publish.domain.services.capability_bus_service import (
+        CapabilityBusService,
+        DeclaredKnowledge,
+        EffectiveDeclaration,
+    )
+
+    declaration = EffectiveDeclaration(
+        app_id="app-fail-closed",
+        tenant_id=1,
+        version_id="v1",
+        app_name="报销助手",
+        knowledge=tuple(DeclaredKnowledge(label=str(one), knowledge_id=one) for one in knowledge_ids),
+    )
+
+    async def require_declaration(_app_id):
+        return declaration
+
+    async def record_retrieval(**_kwargs):
+        return None
+
+    monkeypatch.setattr(CapabilityBusService, "_require_declaration", staticmethod(require_declaration))
+    monkeypatch.setattr(capability_audit, "record_retrieval", record_retrieval)
+
+    return await CapabilityBusService.retrieve(
+        app_id=declaration.app_id,
+        access_user_id=42,
+        query="q",
+        knowledge_ids=list(knowledge_ids),
+    )
+
+
+_DOORS = {
+    "facade": lambda identity, ids, monkeypatch: _facade_door(identity, ids),
+    "v2": lambda identity, ids, monkeypatch: _v2_door(ids, monkeypatch),
+    "mcp": lambda identity, ids, monkeypatch: _mcp_door(ids, monkeypatch),
+    "hosted_runtime": lambda identity, ids, monkeypatch: _hosted_runtime_door(ids, monkeypatch),
+}
+
+
+@pytest.mark.parametrize("door", sorted(_DOORS))
 async def test_a_permission_outage_returns_an_error_and_zero_chunks_at_every_door(
     door, monkeypatch, fake_engine, knowledge_rows
 ):
@@ -457,9 +513,11 @@ async def test_a_permission_outage_returns_an_error_and_zero_chunks_at_every_doo
 
     Returning "what we managed to check" is the dangerous shape here: it is a
     *shorter* list, indistinguishable from a legitimately narrow grant, so the
-    over-disclosure never looks like a failure. Asserted at all three doors in
-    one test because a fail-closed facade with one door that catches the
-    exception and degrades is exactly the regression AC-44 is about.
+    over-disclosure never looks like a failure. Asserted at the three doors
+    AC-44 names — the MCP search tool, v2 ``POST /filelib/retrieve`` and the
+    hosted runtime — plus the facade itself, because a fail-closed facade with
+    one door that catches the exception and degrades is exactly the regression
+    this AC is about.
 
     The fault is injected where the outage actually surfaces —
     ``batch_check_business_actions`` raising ``PermissionServiceUnavailableError``
@@ -479,12 +537,7 @@ async def test_a_permission_outage_returns_an_error_and_zero_chunks_at_every_doo
     identity = RetrievalIdentity.from_open_api_principal(_principal())
 
     with pytest.raises(PermissionServiceUnavailableError):
-        if door == "facade":
-            await _facade_door(identity, [8])
-        elif door == "v2":
-            await _v2_door([8], monkeypatch)
-        else:
-            await _mcp_door([8], monkeypatch)
+        await _DOORS[door](identity, [8], monkeypatch)
 
     assert not [engine for engine in fake_engine.instances if engine.calls], (
         "the retrieval engine ran while visibility was undecidable — "
@@ -511,11 +564,12 @@ async def test_a_permission_outage_returns_an_error_and_zero_chunks_at_every_doo
 #          MCP search tool yields the same chunk set for the same query.
 #   AC-42  from_user(U1) + whitelist=[S1] equals U1's own in-platform search
 #          restricted to S1, f2 / f3 / f4 absent from both.
-#   AC-44  with OpenFGA actually stopped: facade, v2 and the MCP tool each
-#          raise 19002 / 19201 and return zero chunks. The *decision* is
-#          asserted above by fault injection; what a stopped engine adds is
-#          that the permission layer really does raise rather than time out
-#          into an empty allow-map, which cannot be checked without it.
+#   AC-44  with OpenFGA actually stopped: the MCP tool, v2 and the hosted
+#          runtime each raise 19002 / 19201 and return zero chunks. The
+#          *decision* is asserted above by fault injection at all three doors
+#          (plus the facade); what a stopped engine adds is that the permission
+#          layer really does raise rather than time out into an empty
+#          allow-map, which cannot be checked without it.
 #
 # Seeding helpers for the four permission-source variants do not exist yet;
 # they are the actual blocker, not the assertions.

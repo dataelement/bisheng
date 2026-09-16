@@ -133,7 +133,7 @@
   **部分落地**: `610551615` — `test/knowledge/test_retrieval_facade_equality.py` 10 例全绿，覆盖**能在无中间件下证的那一层**：AC-41 / AC-43 的身份构造缝（v2 端点不得自建 actor / UserPayload；模式 D = 被代表用户且不带任何提权）、AC-08 / AC-19 会话解耦（静态 import 图 + 签名里没有 `Request` 的位置）、坑 23 无缓存红线守卫。**刻意不写 skip / NotImplementedError 占位用例**（看起来像覆盖、实际什么也没证）。
   **再落地（`005e5f470`，合流波）**: 同文件加到 18 例，把另外两条原本被整体推给中间件、实际由请求路径决定的断言补上——
   ① **AC-41 行为层** `test_the_two_open_doors_hand_the_facade_the_very_same_call`：同一 principal 下 v2 端点与 MCP 工具 ① 递给门面的 `RetrievalIdentity` 与 `RetrievalRequest` 逐字相等（含 `whitelist is None`）。原先只有 AST 静态守卫，证不到「两边传的参数也一样」；
-  ② **AC-44 三个门面同一次故障注入** `test_a_permission_outage_returns_an_error_and_zero_chunks_at_every_door`（参数化 facade / v2 / mcp）：`batch_check_business_actions` 抛 `PermissionServiceUnavailableError` 时三处都上抛、且检索引擎一次都没被调用。「少给几条」与「授权本来就窄」不可区分，正是这条 AC 要挡的形状。
+  ② **AC-44 逐门面同一次故障注入** `test_a_permission_outage_returns_an_error_and_zero_chunks_at_every_door`（参数化 facade / v2 / mcp / hosted_runtime）：`batch_check_business_actions` 抛 `PermissionServiceUnavailableError` 时四处都上抛、且检索引擎一次都没被调用。「少给几条」与「授权本来就窄」不可区分，正是这条 AC 要挡的形状。**参数取自 spec AC-44 点名的三个门面**（MCP 检索工具 / v2 `POST /filelib/retrieve` / **托管运行期**）**再加门面本身**——本任务原文第 129 行把「三处」写成「门面 / v2 / MCP」，漏掉了托管运行期；而托管运行期是唯一一个不直连门面、经 `CapabilityBusService.retrieve` 且**带 `except BaseErrorCode` 包裹**的调用方（它要给 AC-55 能力台账补一行），正是「顺手改成记一笔再返回已有结果」最可能被写进去的位置。已按 spec 补齐。
   **仍欠 CI 中间件阶段**：AC-40 / AC-42 的存储层集合相等，以及 AC-44 里「真停 OpenFGA」那一半（注入证的是本路径的判断，停引擎才证权限层确实抛而不是超时成空 allow-map）。阻塞点未变——「单文件直接授权 / 文件夹差异 / 自定义模式脱钩」四种权限来源的样本播种 helper 尚不存在，要播什么、断什么写在该文件末尾注释里。
 
 - [x] **T105**: 门面对外契约文档回写
@@ -373,7 +373,7 @@
 > **2026-09-16 合流波收尾后的增量**（最新，覆盖上一条的后两项）：
 > - **T301a 不再 skip**：两线已在同一棵树上，`facade_available()` 为真，10 条实跑通过——上一条写的「全份 skip」已过期。
 > - **AC-01 / AC-05 已有本地用例**（`test/open_api/test_mcp_e2e.py`）：真 `ClientSession` 走完握手 → 清单 → 调用，撤销后下一次调用被 401 拒，凭据缓存 TTL 被 5s 钳住。**但「≤5 秒」的计时本身没测**——本地用例证的是「每次都重新校验 + 缓存上界存在」，真实计时归 T303 ④。
-> - **AC-41 / AC-44 各交付了一半**：两个门面递给统一门面的调用逐字相等（AC-41 的构造层）、权限引擎故障注入下三处都 fail-closed 且引擎零调用（AC-44 的判断层）。**仍欠**：AC-40 / AC-42 的样本集合相等、AC-41 的存储层集合相等、AC-44 的真停 OpenFGA——都卡在同一个「四种权限来源的样本播种 helper」上。
+> - **AC-41 / AC-44 各交付了一半**：两个门面递给统一门面的调用逐字相等（AC-41 的构造层）、权限引擎故障注入下 **spec AC-44 点名的三个门面（MCP 工具 / v2 / 托管运行期）加门面本身共四处**都 fail-closed 且引擎零调用（AC-44 的判断层）。**仍欠**：AC-40 / AC-42 的样本集合相等、AC-41 的存储层集合相等、AC-44 的真停 OpenFGA——都卡在同一个「四种权限来源的样本播种 helper」上。
 > - **一句话口径**：F052 现在是「45 / 47 的代码面已齐，其中 AC-40 / AC-41 / AC-42 / AC-44 只完成了可在无中间件下证的那一层」，加上 AC-13（F051）与 AC-15 的增删两项（F054）待上游。**不得写成「已交付」**。
 
 | AC | 任务 | AC | 任务 | AC | 任务 |
@@ -421,7 +421,9 @@
 - **（Line B 落地）停用用户按 `status: "disabled"` 返回，不当作不存在**。spec AC-14 的字段清单里有 `status`，藏起来会让这个字段永远只能是 `active`，并把查询者支去排查一个完全正确的 id。跨租户与不存在仍然同一响应（AC-32 未动）。
 - **（Line B 落地）`ERROR_CATEGORY_MAP` 比 design D4 多映射 16164 / 16165 / 16166 / 16167**。它们和 16163 同类——是「这个应用确实是你的」的真实业务态，折进 26305 等于告诉开发者自己的应用不是自己的。
 - **（Line B 未做）T211 fake 门面**。改用「延迟 import + `available()` 门控」后，①② 在门面缺席时根本不进清单，没有可自测的对象；真门面合入后 T301a 直接 spy 真类。多一个 fake 只多一份要跟着契约漂的代码。**合流波结案**：两线已合并、T301a 实跑，前提永久消失，T211 改勾 `[x]` 并在标题标「结案：不做」——它不该再出现在「哪些还没做」的检索里。
-- **（合流波 `005e5f470`）T302 / T104 按「由谁决定」重新切分，而不是整块推给 CI 中间件**。原文把「标准客户端能不能接上」「撤销是否立刻生效」「两个门面是否递了同一份调用」「权限引擎挂了会不会降级返回」与「样本播种后集合是否相等」混在一起标 `@pytest.mark.e2e`。前四条完全由请求路径决定，本地可证且已证（`test/open_api/test_mcp_e2e.py` 4 条 + `test_retrieval_facade_equality.py` 加到 18 条）；只有最后一条真的需要 MySQL / Redis / OpenFGA / Milvus 同时在位。**新增文件不带 `e2e` 标记**——标了就默认被跳过，等于白写。
+- **（合流波 `005e5f470`）T302 / T104 按「由谁决定」重新切分，而不是整块推给 CI 中间件**。原文把「标准客户端能不能接上」「撤销是否立刻生效」「两个门面是否递了同一份调用」「权限引擎挂了会不会降级返回」与「样本播种后集合是否相等」混在一起标 `@pytest.mark.e2e`。前四条完全由请求路径决定，本地可证且已证（`test/open_api/test_mcp_e2e.py` 4 条 + `test_retrieval_facade_equality.py` 加到 19 条）；只有最后一条真的需要 MySQL / Redis / OpenFGA / Milvus 同时在位。**新增文件不带 `e2e` 标记**——标了就默认被跳过，等于白写。
+- **（合流波复核补齐）AC-44 的第三个门面「托管运行期」原先漏在参数化之外**。本任务第 129 行把 AC-44 的三处写成「门面 / v2 / MCP 工具 ①」，而 spec AC-44 点名的是「MCP 检索工具、v2 `POST /filelib/retrieve`、**托管运行期检索**」——门面是共用实现，不是门。漏掉的恰恰是唯一一个不直连门面的调用方：`CapabilityBusService.retrieve` 为了给 AC-55 能力台账补一行，**用 `except BaseErrorCode` 包住了门面调用**，「记一笔然后把已有结果返回去」只可能写在那里。参数化已补 `hosted_runtime`（真门面 + 真 `from_user`，只替掉声明读取与台账写入两个要库的协作者），该门面的台账行为本身由 `test/app_publish/test_capability_audit.py` 承接，此处不重复断言。
+- **（合流波复核补齐）`test_mcp_e2e.py` 的 `REVOCATION_BOUND_SECONDS` 改为从 `app_credential_service` import**，不再本地重写 `= 5`。AC-05 与 F055 INV-28 是同一个 5 秒；抄一份会在真正的界限挪动后继续断言旧数字。
 - **（合流波）T305 不再等 T303**。原「依赖: T303」会把契约表长期钉在「Spec 定稿」而实现侧已经有十一个文件、十一个错误码和三处审计 lockstep。改为先按当前取证回写，并把「T104 / T302 的集合相等」「T303 的 114 验证」作为未完项写进两张表；114 跑完只需改掉「未验」几项。
 - **（合流波）`test/open_api/test_mcp_e2e.py` 里 `identity:read` 用例必须在服务边界打桩**。第一版让 `bisheng_org_tree` 真去够数据库，本地无中间件时 SQLAlchemy engine 被留在坏状态，**三个文件之后**的 `test_route_error_contract.py::test_child_tenant_key_is_not_mistaken_for_missing_account` 才炸（`Could not refresh instance '<ServiceAccount …>'`）。与 `test_mcp_scope_matrix.py` 的 `quiet_services` 注释记的是同一个坑，实测复现后改桩。**判回归必须跑整个 `test/open_api` 选择，单跑新文件是绿的。**
 
