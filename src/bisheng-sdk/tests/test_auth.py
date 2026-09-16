@@ -176,5 +176,26 @@ def test_wsgi_middleware_reads_http_x_bisheng_environ():
         return [b"ok"]
 
     environ = {"HTTP_X_BISHENG_USER_ID": "42", "HTTP_X_BISHENG_USER_NAME": "%E5%BC%A0%E4%B8%89", "PATH_INFO": "/"}
-    auth.WSGIMiddleware(app)(environ, lambda *args: None)
+    body = auth.WSGIMiddleware(app)(environ, lambda *args: None)
     assert seen == ["张三"]
+    assert list(body) == [b"ok"]
+    body.close()
+    with pytest.raises(PlatformIdentityMissingError):
+        auth.current_user()
+
+
+def test_wsgi_middleware_keeps_the_identity_until_the_body_is_consumed():
+    """流式响应的业务代码在视图返回之后才跑——那时 `current_user()` 仍要拿得到身份。"""
+    seen: list[str] = []
+
+    def app(environ, start_response):
+        def stream():
+            seen.append(auth.current_user().user_id)
+            yield b"chunk"
+
+        return stream()
+
+    body = auth.WSGIMiddleware(app)({"HTTP_X_BISHENG_USER_ID": "42"}, lambda *args: None)
+    assert list(body) == [b"chunk"]
+    assert seen == ["42"]
+    body.close()

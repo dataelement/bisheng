@@ -155,6 +155,25 @@ class ASGIMiddleware:
             _context.reset(token)
 
 
+class _ResetOnClose:
+    """WSGI 响应体的包装：迭代完（或服务器 close 时）才复位上下文。"""
+
+    def __init__(self, body, token) -> None:
+        self._body = body
+        self._token = token
+
+    def __iter__(self):
+        return iter(self._body)
+
+    def close(self) -> None:
+        try:
+            closer = getattr(self._body, "close", None)
+            if closer is not None:
+                closer()
+        finally:
+            _context.reset(self._token)
+
+
 class WSGIMiddleware:
     """WSGI 版：从 ``environ`` 的 ``HTTP_X_BISHENG_*`` 还原同一份快照。"""
 
@@ -164,6 +183,11 @@ class WSGIMiddleware:
     def __call__(self, environ, start_response):
         token = _context.bind(_headers.wsgi_snapshot(environ))
         try:
-            return self.app(environ, start_response)
-        finally:
+            result = self.app(environ, start_response)
+        except BaseException:
             _context.reset(token)
+            raise
+        # 上下文要活到响应**迭代完**为止，不是活到视图函数返回为止：一个流式
+        # 响应（`yield` 出来的生成器）会在返回之后才真正跑业务代码，那时再调
+        # `current_user()` 必须仍拿得到身份。
+        return _ResetOnClose(result, token)

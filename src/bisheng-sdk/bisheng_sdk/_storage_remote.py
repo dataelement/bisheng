@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import io
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import IO, Any
 from urllib.parse import quote
 
@@ -84,15 +86,16 @@ class RemoteBackend:
 
     def put(self, path: str, data: Any, content_type: str | None = None) -> AttachmentMeta:
         size = self._check_size(path, data)
-        resp = _http.request(
-            "storage",
-            "PUT",
-            self._objects_url(path),
-            base_url=self.endpoint,
-            bearer=self.token,
-            headers=self._put_headers(content_type, size),
-            content=_payload(data),
-        )
+        with _payload(data) as body:
+            resp = _http.request(
+                "storage",
+                "PUT",
+                self._objects_url(path),
+                base_url=self.endpoint,
+                bearer=self.token,
+                headers=self._put_headers(content_type, size),
+                content=body,
+            )
         return self._meta_of(_http.parse_manager_envelope(resp, path=path), path)
 
     def get(self, path: str) -> bytes:
@@ -161,15 +164,16 @@ class AsyncRemoteBackend(RemoteBackend):
 
     async def aput(self, path: str, data: Any, content_type: str | None = None) -> AttachmentMeta:
         size = self._check_size(path, data)
-        resp = await _http.arequest(
-            "storage",
-            "PUT",
-            self._objects_url(path),
-            base_url=self.endpoint,
-            bearer=self.token,
-            headers=self._put_headers(content_type, size),
-            content=_payload(data),
-        )
+        with _payload(data) as body:
+            resp = await _http.arequest(
+                "storage",
+                "PUT",
+                self._objects_url(path),
+                base_url=self.endpoint,
+                bearer=self.token,
+                headers=self._put_headers(content_type, size),
+                content=body,
+            )
         return self._meta_of(_http.parse_manager_envelope(resp, path=path), path)
 
     async def aget(self, path: str) -> bytes:
@@ -237,15 +241,24 @@ def async_from_env(endpoint: str, token: str) -> AsyncRemoteBackend:
     return AsyncRemoteBackend(endpoint, token, max_bytes=_env.storage_max_file_bytes())
 
 
-def _payload(data: Any) -> Any:
-    """httpx 的 `content=` 接受 bytes / 可迭代 / 文件对象；str 先编码成 UTF-8。"""
+@contextmanager
+def _payload(data: Any) -> Iterator[Any]:
+    """httpx 的 `content=` 接受 bytes / 可迭代 / 文件对象；str 先编码成 UTF-8。
+
+    本地路径由**这里**打开也由这里关闭：httpx 不会关掉调用方给的文件对象，
+    交给 GC 的话，一个循环上传几千个附件的应用会先撞上文件描述符上限。
+    """
     if isinstance(data, str):
-        return data.encode("utf-8")
+        yield data.encode("utf-8")
+        return
     if isinstance(data, (bytearray, memoryview)):
-        return bytes(data)
+        yield bytes(data)
+        return
     if isinstance(data, os.PathLike):
-        return open(data, "rb")
-    return data
+        with open(data, "rb") as handle:
+            yield handle
+        return
+    yield data
 
 
 __all__ = ("AsyncRemoteBackend", "RemoteBackend", "async_from_env", "encode_key", "from_env")
