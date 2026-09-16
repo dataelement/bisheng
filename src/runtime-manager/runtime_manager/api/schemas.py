@@ -68,6 +68,11 @@ class DeployRequest(BaseModel):
     health: HealthIn = Field(default_factory=HealthIn)
     platform_api_base: str = ""
     base_path: str = ""
+    #: ``egress.domains`` from the version's ``bisheng-app.yaml`` (AC-16). The
+    #: platform's own addresses are **not** in here — the manager derives those
+    #: from its own configuration, so an application cannot reach the platform
+    #: by declaring it and cannot lose access by not declaring it.
+    egress_domains: list[str] = Field(default_factory=list)
 
 
 class StopRequest(BaseModel):
@@ -129,10 +134,17 @@ class PreviewStartRequest(BaseModel):
     #: its own. 0 = no deadline, and the manager then never sweeps it.
     expires_at: int = 0
     timeout: int | None = None
+    #: The version's declared outbound domains, carried for the same reason the
+    #: rest of the environment is: a preview whose outbound calls are refused
+    #: because the trial run got a narrower whitelist than the release will have
+    #: reads to an approver as "this version is broken".
+    egress_domains: list[str] = Field(default_factory=list)
 
 
 class PreviewStopRequest(BaseModel):
     session_id: str
+
+
 class DbMigrateRequest(BaseModel):
     """The declared shape of one app's tables, as a plan (F055 T062 / AC-42).
 

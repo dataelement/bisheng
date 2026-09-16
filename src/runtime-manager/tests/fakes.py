@@ -87,6 +87,10 @@ class FakeDockerBackend:
         #: present; emptying it reproduces the "nobody ran ``docker network
         #: create bisheng-apps``" state a fresh host is actually in.
         self.networks: list[str] = [network]
+        #: Networks created ``--internal``. Empty by default, which is the state
+        #: 114 is actually in: its ``bisheng-apps`` predates the egress work, so
+        #: "the pre-flight complains" is the honest starting position.
+        self.internal_networks: set[str] = set()
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.reachable = True
         #: Stream the next ``build_image`` call replays. A dict with a ``error``
@@ -235,7 +239,7 @@ class FakeDockerBackend:
         self.calls.append(("list_networks", {"name": name}))
         self._require_reachable()
         return [
-            {"Name": item, "Id": f"fakenet{index}"}
+            {"Name": item, "Id": f"fakenet{index}", "Internal": item in self.internal_networks}
             for index, item in enumerate(self.networks)
             if name is None or item == name
         ]

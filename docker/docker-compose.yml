@@ -251,13 +251,14 @@ services:
       - etcd
       - minio
 
-  # ── 应用工场运行时层（F054 T074）────────────────────────────────────
-  # 两个 service 都挂在 `app-runtime` profile 后面：**「整层不装」是产品明确
+  # ── 应用工场运行时层（F054 T074 / T077 / T078）──────────────────────
+  # 四个 service 都挂在 `app-runtime` profile 后面：**「整层不装」是产品明确
   # 支持的形态**（GOV-10 / AC-59）。不带 --profile app-runtime 启动时它们根本
   # 不创建，平台其余部分零变化——这正是 nginx 的 `location /apps/` 必须用
   # 变量式 upstream 的原因（静态主机名解析不了会让 nginx 整个起不来）。
   #
-  # 两者都**不 publish 端口**：外部流量一律经 frontend 的 nginx 进来。
+  # 四者都**不 publish 端口**：外部流量一律经 frontend 的 nginx 进来；
+  # docker-socket-proxy 与 egress-proxy 更是连内网都只对本层可见。
   runtime-manager:
     container_name: bisheng-runtime-manager
     profiles: [app-runtime]
@@ -308,12 +309,36 @@ services:
       # compose 下应用容器和本服务同在 bisheng-apps 网络，服务名可解析；
       # systemd 形态要写 bisheng-apps 网桥网关地址（127.0.0.1 容器里够不到）。
       RTM_APP_FACING_BASE_URL: 'http://runtime-manager:8091'
+      # D2-B（T078）：编排访问面不再是整块 root 等价权限，而是端点白名单。
+      # **本进程零代码改动**——只是换一个 base URL，docker_backend.py 的
+      # 那层 Protocol 存在的全部理由就是这一行能这么改。
+      RTM_DOCKER_HOST: 'tcp://docker-socket-proxy:2375'
+      # D12（T077）出站白名单。给的是**应用容器视角**的地址：它们和本服务、
+      # egress-proxy 同在 bisheng-apps 网络上，服务名可解析。
+      # 留空 = 整层没部署，`runtime/status` 的 preflight 会直说「托管应用出站
+      # 不受限」——没有「开关打开但代理不存在」这种能把出站全掐死的组合。
+      RTM_EGRESS_PROXY: 'egress-proxy:3128'
+      # 构建期在自己的 --internal 网络上跑，出口同样只有 egress-proxy，
+      # 所以注入的 HTTP_PROXY/HTTPS_PROXY build arg 是强制而不是建议。
+      RTM_BUILD_NETWORK: bisheng-build
+      # L3 兜底（DOCKER-USER / nft）要用的应用网段。compose 形态下由 docker 自
+      # 动分配，装好后用 `docker network inspect bisheng-apps` 读出来写回这里；
+      # 留空则 preflight 明说「L3 没生成，白名单全靠 --internal」。
+      RTM_APPS_SUBNET: ${BISHENG_RTM_APPS_SUBNET:-}
+      # 留空 = 探测。Docker 29 起默认 nftables 后端**没有 DOCKER-USER 链**
+      # （design 坑 22），iptables 规则会「下发成功」却不生效，所以探测结果是
+      # nftables 时 preflight 直接判红，而不是假装装好了。
+      RTM_FIREWALL_BACKEND: ${BISHENG_RTM_FIREWALL_BACKEND:-}
+      # 构建期能访问的平台自身分发端点（装 bisheng-sdk 用，AC-16）。
+      RTM_PLATFORM_BASE_URL: 'http://backend:7860'
+      RTM_EGRESS_ALLOW: ${BISHENG_RTM_EGRESS_ALLOW:-}
+      RTM_EGRESS_BUILD_ALLOW: ${BISHENG_RTM_EGRESS_BUILD_ALLOW:-}
+      RTM_EGRESS_LISTEN: '0.0.0.0:3128'
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      # 这是全平台唯一被允许挂 docker socket 的地方（arch-guard RULE-10 的另一
-      # 半：backend 编译期与运行期都不得持有编排访问面）。D2-B 的
-      # docker-socket-proxy 变体是 Wave 4 的事，届时只改 RTM_DOCKER_HOST。
-      - /var/run/docker.sock:/var/run/docker.sock
+      # ⚠️ docker socket **不再直挂**（D2-B，T078）：编排走
+      # docker-socket-proxy 的端点白名单。全平台仍然只有那一个容器持有 socket，
+      # 而它是一个没有业务代码、只做 HTTP 转发的镜像。
       # 源路径写成与 RTM_HOST_DATA_ROOT **逐字相同的表达式**，这样两者不可能漂移。
       # 不能沿用 ${DOCKER_VOLUME_DIRECTORY:-.}：它默认是相对路径 `.`，compose 自己
       # 会相对本文件解析，但作为环境变量原样传进去后 dockerd 只接受绝对路径。
@@ -324,6 +349,81 @@ services:
       # bridge IP**（probe.py:95），不在这张网上就永远探不通。
       - default
       - bisheng-apps
+    depends_on:
+      - docker-socket-proxy
+    restart: on-failure
+
+  # D2-B：把「全有全无的 root 等价权限」收成端点级。放行的端点由
+  # runtime_manager.docker_backend.SOCKET_PROXY_PERMISSIONS 唯一定义，
+  # tests/test_socket_proxy.py 逐字比对本段——改一边不改另一边测试就红。
+  # **绝不 publish 端口**：谁够得到 2375 谁就是这台机器的 root。
+  docker-socket-proxy:
+    container_name: bisheng-docker-socket-proxy
+    profiles: [app-runtime]
+    image: tecnativa/docker-socket-proxy:0.3.0
+    environment:
+      ALLOW_RESTARTS: "0"
+      ALLOW_START: "1"
+      ALLOW_STOP: "1"
+      AUTH: "0"
+      BUILD: "1"
+      COMMIT: "0"
+      CONFIGS: "0"
+      CONTAINERS: "1"
+      DISTRIBUTION: "0"
+      EVENTS: "0"
+      EXEC: "0"
+      GRPC: "0"
+      IMAGES: "1"
+      INFO: "0"
+      NETWORKS: "1"
+      NODES: "0"
+      PING: "1"
+      PLUGINS: "0"
+      POST: "1"
+      SECRETS: "0"
+      SERVICES: "0"
+      SESSION: "0"
+      SWARM: "0"
+      SYSTEM: "0"
+      TASKS: "0"
+      VERSION: "0"
+      VOLUMES: "0"
+    volumes:
+      # :ro 只挡文件系统写，不挡 API 写——真正的收窄是上面那张表。
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - default
+    restart: on-failure
+
+  # D12 L2：托管应用出站的唯一出口。它自己就是 runtime-manager 那个镜像，跑
+  # 另一个入口点——策略文件是两者之间的全部契约，所以编排器重启不会把所有应用
+  # 的出站一起带走。
+  # 它**同时**接在 bisheng-apps（--internal，应用只够得到它）与 default
+  #（有默认路由，能真的出网）上——「内网 + 唯一出口」这句话的字面落点。
+  egress-proxy:
+    container_name: bisheng-egress-proxy
+    profiles: [app-runtime]
+    build:
+      context: ../src/runtime-manager
+    command: ["python", "-m", "runtime_manager.egress_proxy"]
+    environment:
+      TZ: Asia/Shanghai
+      RTM_HOST: '0.0.0.0'
+      RTM_PORT: '8091'
+      RTM_HMAC_SECRET: ${BISHENG_RTM_HMAC_SECRET:-}
+      # 与 runtime-manager 同一份 data root：策略文件就在 {data_root}/egress/。
+      RTM_DATA_ROOT: /app-data
+      RTM_HOST_DATA_ROOT: ${BISHENG_APP_DATA_ROOT:-/opt/bisheng/app-data}
+      RTM_EGRESS_PROXY: 'egress-proxy:3128'
+      RTM_EGRESS_LISTEN: '0.0.0.0:3128'
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${BISHENG_APP_DATA_ROOT:-/opt/bisheng/app-data}:/app-data
+    networks:
+      - default
+      - bisheng-apps
+      - bisheng-build
     restart: on-failure
 
   app-proxy:
@@ -378,7 +478,22 @@ services:
 # 两个 service 都显式列了 `networks:`，这是有意的：一旦给 service 写了 networks，
 # 它就**不再自动接 default**，而 nginx→app-proxy、backend→runtime-manager 都靠
 # default 上的服务名解析，所以两张网都得列上。
+#
+# `internal: true` = D12 的 L1（AC-16）。接在这张网上的容器**没有默认路由**，
+# 所以托管应用连不上外网；唯一出口是同时接了 default 的 egress-proxy。
+# ⚠️ 这个属性只在建网时生效：升级到本版本的环境里 `bisheng-apps` 已经存在且
+# 不是 internal，compose 不会去改它，`runtime/status` 的
+# `application_network_internal` 会判红并给出重建命令。删网前要先停掉全部
+# 托管应用（网络在用时删不掉）。
 networks:
   bisheng-apps:
     name: bisheng-apps
     driver: bridge
+    internal: true
+  # 构建期专用（RTM_BUILD_NETWORK）。同样 --internal：`docker build` 拿到的
+  # HTTP_PROXY build arg 因此不是「建议」——忽略它的 Dockerfile 根本没有路由。
+  # 只有 egress-proxy 在这张网上，构建容器连 runtime-manager 都够不到。
+  bisheng-build:
+    name: bisheng-build
+    driver: bridge
+    internal: true

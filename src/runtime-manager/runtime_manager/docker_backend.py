@@ -72,9 +72,7 @@ class DockerBackend(Protocol):
 
     def list_networks(self, name: str | None = None) -> list[dict[str, Any]]: ...
 
-    def container_logs(
-        self, container: str, tail: int | str = "all", since: int | None = None
-    ) -> str: ...
+    def container_logs(self, container: str, tail: int | str = "all", since: int | None = None) -> str: ...
 
 
 class _RealDockerBackend:
@@ -91,11 +89,7 @@ class _RealDockerBackend:
             except ImportError as exc:  # pragma: no cover - deployment error
                 raise BackendUnavailableError(f"docker SDK is not installed: {exc}")
             try:
-                self._api = (
-                    docker.APIClient(base_url=self._base_url)
-                    if self._base_url
-                    else docker.APIClient()
-                )
+                self._api = docker.APIClient(base_url=self._base_url) if self._base_url else docker.APIClient()
             except Exception as exc:  # pragma: no cover - daemon down
                 raise BackendUnavailableError(f"cannot reach the orchestration backend: {exc}")
         return self._api
@@ -124,9 +118,7 @@ class _RealDockerBackend:
     def inspect_container(self, container: str) -> dict[str, Any]:
         return self._client().inspect_container(container)
 
-    def list_containers(
-        self, all_states: bool = True, filters: dict[str, Any] | None = None
-    ) -> list[dict[str, Any]]:
+    def list_containers(self, all_states: bool = True, filters: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         return self._client().containers(all=all_states, filters=filters or {})
 
     def build_image(
@@ -165,15 +157,111 @@ class _RealDockerBackend:
         # that makes every publish fail on a fresh host.
         return self._client().networks(names=[name] if name else None)
 
-    def container_logs(
-        self, container: str, tail: int | str = "all", since: int | None = None
-    ) -> str:
-        raw = self._client().logs(
-            container, stdout=True, stderr=True, tail=tail, since=since, timestamps=True
-        )
+    def container_logs(self, container: str, tail: int | str = "all", since: int | None = None) -> str:
+        raw = self._client().logs(container, stdout=True, stderr=True, tail=tail, since=since, timestamps=True)
         if isinstance(raw, bytes):
             return raw.decode("utf-8", errors="replace")
         return str(raw)
+
+
+#: D2-B — ``tecnativa/docker-socket-proxy`` permission flag → the protocol
+#: methods that need it. This is the endpoint whitelist itself, in the one place
+#: that knows which Docker API endpoints this process actually calls, so that
+#: adding a method to :class:`DockerBackend` without widening the proxy fails a
+#: test here rather than failing a deploy on a customer's host.
+#:
+#: The proxy's permissions are coarse (a flag per endpoint family, plus ``POST``
+#: as a global write gate), so this is the *smallest* set that makes the
+#: protocol above work — not a list of everything the manager might like.
+SOCKET_PROXY_PERMISSIONS: dict[str, tuple[str, ...]] = {
+    # ``GET /_ping`` — the reachability answer ``runtime/status`` reports.
+    "PING": ("ping",),
+    # ``/containers/*`` — create, inspect, list, remove, logs.
+    "CONTAINERS": (
+        "create_container",
+        "inspect_container",
+        "list_containers",
+        "remove_container",
+        "container_logs",
+    ),
+    # ``/containers/{id}/start`` and ``/stop`` are gated separately from
+    # ``CONTAINERS`` by the proxy, and separately from each other.
+    "ALLOW_START": ("start_container",),
+    "ALLOW_STOP": ("stop_container",),
+    # ``POST /build``.
+    "BUILD": ("build_image",),
+    # ``/images/*`` — the retention sweep and its ``list`` half.
+    "IMAGES": ("list_images", "remove_image"),
+    # ``GET /networks`` — read only; the application network is created by the
+    # deployment, never by this process.
+    "NETWORKS": ("list_networks",),
+    # The global write gate. Without it the proxy is read-only and every create
+    # / build / remove answers 403 — which surfaces to a user as "编排器不可用"
+    # with a perfectly healthy daemon behind it.
+    "POST": (
+        "create_container",
+        "start_container",
+        "stop_container",
+        "remove_container",
+        "build_image",
+        "remove_image",
+    ),
+}
+
+#: Flags the proxy understands that must stay **off**, listed rather than merely
+#: omitted: the image defaults them to 0, but writing them down is what makes a
+#: reviewer able to read this table as a decision instead of an oversight.
+#: ``EXEC`` is the one that matters — it is arbitrary code in any container on
+#: the host, and nothing in :class:`DockerBackend` asks for it. ``VOLUMES`` is
+#: off because instances use bind mounts the manager creates on the filesystem,
+#: not named volumes. ``ALLOW_RESTARTS`` is off because a restart is precisely
+#: what the reconciler must own (contracts §8: exited ⇒ ``start``, never a
+#: restart that loses the daemon's backoff).
+#:
+#: ``VERSION`` is off and that is a real decision, not an omission: ``docker-py``
+#: only calls ``GET /version`` when it is constructed with ``version="auto"``,
+#: and :class:`_RealDockerBackend` deliberately does not. If anyone ever adds
+#: that argument, every call will start failing 403 at construction — the flag,
+#: not the argument, is where the fix belongs.
+SOCKET_PROXY_DENIED: tuple[str, ...] = (
+    "ALLOW_RESTARTS",
+    "AUTH",
+    "COMMIT",
+    "CONFIGS",
+    "DISTRIBUTION",
+    "EVENTS",
+    "EXEC",
+    "GRPC",
+    "INFO",
+    "NODES",
+    "PLUGINS",
+    "SECRETS",
+    "SERVICES",
+    "SESSION",
+    "SWARM",
+    "SYSTEM",
+    "TASKS",
+    "VERSION",
+    "VOLUMES",
+)
+
+
+def socket_proxy_env() -> dict[str, str]:
+    """The proxy container's full environment — every flag, on or off.
+
+    Every flag is emitted explicitly, including the zeros. Relying on the
+    image's defaults would mean a future version of the image that flips one of
+    them silently widens this deployment's blast radius, and nothing in our
+    repository would have changed.
+    """
+    env = dict.fromkeys(SOCKET_PROXY_PERMISSIONS, "1")
+    env.update(dict.fromkeys(SOCKET_PROXY_DENIED, "0"))
+    return dict(sorted(env.items()))
+
+
+def protocol_methods() -> tuple[str, ...]:
+    """Method names of the :class:`DockerBackend` protocol, for the lockstep test."""
+    return tuple(sorted(name for name in vars(DockerBackend) if not name.startswith("_")))
 
 
 _backend: DockerBackend | None = None

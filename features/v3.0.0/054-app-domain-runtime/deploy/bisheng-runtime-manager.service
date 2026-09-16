@@ -30,6 +30,31 @@ Environment=RTM_PORT=8091
 # HMAC 共享密钥经环境注入，不落配置文件（C6）。与 backend 的
 # app_runtime.manager_hmac_secret 必须一致，两边不一致的症状是所有编排意图
 # 被回 401，而 backend 侧会把它折叠成 16121「编排器不可用」。
+#
+# ⚠️ T077 / T078 起，这份 EnvironmentFile 还必须给出下面这些（`RTM_` 前缀）：
+#   RTM_DOCKER_HOST=tcp://127.0.0.1:2375   D2-B：编排走 docker-socket-proxy 的
+#       端点白名单。端点清单由 runtime_manager.docker_backend.socket_proxy_env()
+#       唯一给出（`python -c "from runtime_manager.docker_backend import
+#       socket_proxy_env; print(socket_proxy_env())"`），代理容器**只绑 127.0.0.1**。
+#       留空 = 回到直连 /var/run/docker.sock 的 D2-A 形态，那时本单元需要 docker 组。
+#   RTM_EGRESS_PROXY=<bisheng-apps 网关>:3128   D12：应用视角的唯一出口地址，
+#       必须与 bisheng-egress-proxy.service 的 RTM_EGRESS_LISTEN 逐字相同。
+#       **留空 = 整层未部署**，`GET /v1/runtime/status` 的 preflight 会直说
+#       「托管应用出站不受限」——没有「开关开了但代理不在」这种掐死出站的组合。
+#   RTM_BUILD_NETWORK=bisheng-build        构建期专用 --internal 网。
+#   RTM_APPS_SUBNET=<docker network inspect bisheng-apps 的 Subnet>  L3 兜底网段。
+#   RTM_FIREWALL_BACKEND=iptables|nftables 留空则探测；探测到 nftables 会判红，
+#       因为 Docker 29 起 nftables 后端**没有 DOCKER-USER 链**（design 坑 22），
+#       iptables 规则会「下发成功」却从不被查阅。
+#   RTM_PLATFORM_BASE_URL=<平台地址>       构建期唯一放行的平台分发端点（装
+#       bisheng-sdk 用，AC-16）。
+#
+# 前置资源随之增加两条（原有的 `docker network create bisheng-apps` 要改写法）：
+#   docker network create --internal bisheng-apps
+#   docker network create --internal bisheng-build
+# 已存在的网**不会**被 `create` 改成 internal：先停掉全部托管应用、`docker
+# network rm`、再按上面重建。preflight 的 application_network_internal 这一行
+# 就是用来发现「看着装好了其实没改」的。
 EnvironmentFile=/etc/bisheng/runtime-manager.env
 Restart=on-failure
 RestartSec=5

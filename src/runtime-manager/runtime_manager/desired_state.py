@@ -35,6 +35,7 @@ from typing import Any
 from runtime_manager.config import (
     LABEL_APP_ID,
     LABEL_APP_SLUG,
+    LABEL_EGRESS_DOMAINS,
     LABEL_GENERATION,
     LABEL_HEALTH_PATH,
     LABEL_MANAGED,
@@ -95,6 +96,11 @@ def _nanos_to_seconds(value: Any, default: int) -> int:
     return nanos // NANO if nanos > 0 else default
 
 
+def _split_label(value: Any) -> list[str]:
+    """Label values are strings; the declared domain list travels comma joined."""
+    return [item for item in str(value or "").replace(",", " ").split() if item]
+
+
 def phase_for(running: bool, health: str) -> str:
     if not running:
         return PHASE_STOPPED
@@ -140,6 +146,11 @@ class InstanceRecord:
     health_timeout: int = 3
     health_retries: int = 3
     start_period: int = 0
+    #: Outbound domains the version's manifest declared (AC-16). Kept on the
+    #: record so a reconciler rebuild re-registers the same egress policy — see
+    #: ``LABEL_EGRESS_DOMAINS`` for why losing them is worse than losing the
+    #: container.
+    egress_domains: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -211,6 +222,7 @@ class InstanceRecord:
             health_timeout=_nanos_to_seconds(healthcheck.get("Timeout"), 3),
             health_retries=_as_int(healthcheck.get("Retries"), 3),
             start_period=_nanos_to_seconds(healthcheck.get("StartPeriod"), 0),
+            egress_domains=_split_label(labels.get(LABEL_EGRESS_DOMAINS)),
         )
 
 

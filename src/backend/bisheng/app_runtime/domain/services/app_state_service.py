@@ -36,6 +36,7 @@ from typing import Any
 
 from loguru import logger
 
+from bisheng.app_publish.domain.schemas.app_manifest import egress_domains_of
 from bisheng.app_runtime.domain.constants import (
     DEFAULT_TIER_ID,
     AppAuditAction,
@@ -70,6 +71,7 @@ from bisheng.permission.domain.services.permission_action_service import Permiss
 #: runtime-manager's ``HealthIn`` so an omitted block means the same thing on
 #: both sides rather than two different "defaults".
 _DEFAULT_HEALTH: dict[str, Any] = {"path": "/", "interval": 10, "timeout": 3, "retries": 3, "start_period": 20}
+
 
 #: The backend half of design §7「关键日志 / 指标」. The audit trail records what
 #: an *operator* asked for; this records what the state machine actually did —
@@ -461,6 +463,12 @@ class AppStateService:
             # (D5.2); passing it explicitly keeps the value out of the manager's
             # assumptions about URL layout.
             "base_path": f"/apps/{app.slug}",
+            # ``egress.domains`` from the version's manifest (F054 AC-16). Sent
+            # raw: what is a legal destination is the manager's question, not
+            # this layer's, and the platform's own addresses are added there —
+            # so an application can neither reach the platform by declaring it
+            # nor lose it by leaving it out.
+            "egress_domains": egress_domains_of(manifest),
         }
 
     # ------------------------------------------------------------------

@@ -36,7 +36,7 @@ PROFILE="app-runtime"
 # service 根本不创建，平台其余部分零变化。这个不等式一旦被破坏（比如有人顺手把
 # profiles 删了），默认装机就会多起两个容器并要求配密钥。
 EXPECTED_SERVICES_WITHOUT_PROFILE=11
-EXPECTED_SERVICES_WITH_PROFILE=13
+EXPECTED_SERVICES_WITH_PROFILE=15
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; BOLD='\033[1m'; RESET='\033[0m'
 
@@ -144,7 +144,7 @@ echo "compose: ${COMPOSE_FILE}"
 echo ""
 
 # ─── 1. compose 可解析（两种 profile 组合都要过）──────────────────────────────
-head_ "[1/4] compose 语法与插值"
+head_ "[1/5] compose 语法与插值"
 if err=$(docker compose -f "${COMPOSE_FILE}" config -q 2>&1); then
   pass "不带 profile 解析通过"
 else
@@ -157,7 +157,7 @@ else
 fi
 
 # ─── 2. profile 表达仍然成立 ─────────────────────────────────────────────────
-head_ "[2/4] profile 计数（「整层不装」形态）"
+head_ "[2/5] profile 计数（「整层不装」形态）"
 n_without=$(docker compose -f "${COMPOSE_FILE}" config --services 2>/dev/null | grep -c . || true)
 n_with=$(docker compose -f "${COMPOSE_FILE}" --profile "${PROFILE}" config --services 2>/dev/null | grep -c . || true)
 if [ "${n_without}" = "${EXPECTED_SERVICES_WITHOUT_PROFILE}" ]; then
@@ -171,8 +171,8 @@ else
   fail "带 profile 的 service 数 = ${n_with}，期望 ${EXPECTED_SERVICES_WITH_PROFILE}"
 fi
 
-# ─── 3/4. 环境变量契约 + 网络（交给 python 做，需要读 config.py 的 AST）──────
-head_ "[3/4] 环境变量名 ↔ config.py 读取点"
+# ─── 3–5. 环境变量契约 + 网络 + 出站白名单（交给 python，要读 config.py 的 AST）──
+head_ "[3/5] 环境变量名 ↔ config.py 读取点"
 compose_json="$(docker compose -f "${COMPOSE_FILE}" --profile "${PROFILE}" config --format json 2>/dev/null)"
 if [ -z "${compose_json}" ]; then
   fail "无法导出 compose JSON"

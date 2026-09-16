@@ -68,6 +68,7 @@ from runtime_manager.desired_state import (
     phase_for,
 )
 from runtime_manager.docker_backend import DockerBackend, get_docker_backend
+from runtime_manager.egress import ENV_EGRESS_TOKEN, register_principal, runtime_destinations
 from runtime_manager.lifecycle import Prober, build_container_payload, start_period_seconds
 from runtime_manager.observability import log_rebuild, log_reconcile
 
@@ -450,6 +451,22 @@ class Reconciler:
     def _create_and_start(self, record: InstanceRecord, *, generation: int) -> str:
         tier = Tier(cpu=record.tier_cpu, mem_mb=record.tier_mem_mb)
         self._config.app_data_dir(record.app_id).mkdir(parents=True, exist_ok=True)
+        # Re-assert the egress policy with the credential the record already
+        # carries (it is in ``record.env``). The recreated instance keeps that
+        # value, so re-minting one here would hand the container a credential the
+        # policy file has never seen — and the recovery path this method also
+        # serves is exactly the one where the policy file may be the thing that
+        # went missing.
+        register_principal(
+            self._config,
+            principal=record.app_id,
+            destinations=runtime_destinations(
+                self._config,
+                platform_api_base=record.env.get("BISHENG_PLATFORM_API_BASE", ""),
+                declared=record.egress_domains,
+            ),
+            token=record.env.get(ENV_EGRESS_TOKEN) or None,
+        )
         payload = build_container_payload(
             self._config,
             app_id=record.app_id,
@@ -466,6 +483,7 @@ class Reconciler:
             start_period=record.start_period or start_period_seconds(tier),
             env=record.env,
             generation=generation,
+            egress_domains=record.egress_domains,
         )
         container_id = self._docker.create_container(record.container_name, payload)
         self._docker.start_container(container_id)

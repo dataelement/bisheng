@@ -45,6 +45,7 @@ from runtime_manager.desired_state import (
     phase_for,
 )
 from runtime_manager.docker_backend import DockerBackend, get_docker_backend
+from runtime_manager.egress import egress_preflight
 from runtime_manager.errors import BackendUnavailableError, InvalidRequestError, NotFoundError
 from runtime_manager.storage import storage_preflight
 
@@ -309,6 +310,11 @@ def _preflight(config: Config, docker: DockerBackend, runtimes: list[str], avail
     # Attachment handle (T084/T085): MinIO configured, private bucket, and an
     # endpoint the app containers can actually dial.
     checks.append(storage_preflight(config))
+
+    # Outbound whitelist (T077 / AC-16). Passing ``None`` for an unreachable
+    # backend rather than skipping the rows: "not checked" is an answer an
+    # operator can act on, a missing row is one they will not notice.
+    checks.extend(egress_preflight(config, docker if available else None))
 
     return checks
 

@@ -68,6 +68,7 @@ from bisheng.app_publish.domain.models.app_preview_session import (
     AppPreviewSession,
     AppPreviewSessionDao,
 )
+from bisheng.app_publish.domain.schemas.app_manifest import egress_domains_of
 from bisheng.app_publish.domain.services.release_audit import write_release_audit
 from bisheng.app_publish.domain.services.snapshot_browse_service import ReviewAccess
 from bisheng.app_publish.domain.services.version_service import VersionService
@@ -466,6 +467,11 @@ class PreviewInstanceService:
             # points, which is exactly what ``base_path`` / ``X-Forwarded-Prefix``
             # are for (F054 D5.2).
             "base_path": preview_entry_path(row.id),
+            # Same reason as every other field here: the trial must behave the
+            # way the release will. A preview given a narrower outbound
+            # whitelist than the release gets fails its own API calls, and the
+            # approver reads that as a broken version (F054 AC-16).
+            "egress_domains": egress_domains_of(manifest),
         }
 
     @staticmethod

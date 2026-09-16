@@ -34,6 +34,15 @@ starts, and its SQLite lives somewhere nobody ever looks.
 whole process behind ``tecnativa/docker-socket-proxy`` with **zero code
 change**. That is the entire reason the docker client is funnelled through
 ``runtime_manager.docker_backend``.
+
+``RTM_EGRESS_PROXY`` is the switch for the outbound whitelist (D12 / AC-16) and
+it follows the same "configuration presence *is* the switch" rule as
+``RTM_MINIO_ENDPOINT``: empty means the egress layer is **not deployed**, so no
+proxy variables are injected into instances and ``GET /v1/runtime/status`` says
+so in its pre-flight. There is deliberately no ``RTM_EGRESS_ENABLED=true`` that
+can be set without an address behind it — that combination would point every
+hosted app at a proxy which is not there and take their outbound traffic down
+in a way no health check can see.
 """
 
 from __future__ import annotations
@@ -51,6 +60,10 @@ DEFAULT_IMAGE_PREFIX = "bisheng-app"
 #: (pit 20): no nginx location, no anonymous policy, ever.
 DEFAULT_STORAGE_BUCKET = "bisheng-apps"
 DEFAULT_STORAGE_MAX_FILE_MB = 20
+#: Where ``python -m runtime_manager.egress_proxy`` binds by default. It must be
+#: reachable from the application network, so loopback is wrong here in both
+#: deployment shapes — unlike the intent API, which is loopback-only on purpose.
+DEFAULT_EGRESS_LISTEN = "0.0.0.0:3128"
 
 #: Container name prefix. Also the orphan-reclaim selector (T029) and the
 #: "managed by us" marker that keeps the reconciler away from foreign
@@ -77,6 +90,13 @@ LABEL_TIER_MEM_MB = "bisheng.tier.mem_mb"
 LABEL_PORT = "bisheng.port"
 LABEL_HEALTH_PATH = "bisheng.health.path"
 LABEL_GENERATION = "bisheng.generation"
+#: The application's declared outbound domains (AC-16). Labelled for the same
+#: reason the tier is: after a lost state file the reconciler rebuilds the
+#: instance from labels alone, and an instance rebuilt without its declarations
+#: would come back with a *narrower* whitelist than its owner published — an
+#: application that silently stops reaching its own API, with nothing anywhere
+#: saying why.
+LABEL_EGRESS_DOMAINS = "bisheng.egress.domains"
 #: Preview session this container belongs to — the only way back from a
 #: container to its session after a manager restart (there is no state file).
 LABEL_PREVIEW_SESSION = "bisheng.preview.session"
@@ -97,6 +117,10 @@ REQUIRED_ENV: tuple[str, ...] = (
     "RTM_PORT",
     "RTM_HMAC_SECRET",  # empty = fail closed, every intent answered 401
     "RTM_DATA_ROOT",
+    # Empty is a legal *value* (the egress layer is not deployed) but leaving the
+    # variable out of a deployment file is how it goes missing by accident, and
+    # the accident is invisible: apps keep working, with unrestricted outbound.
+    "RTM_EGRESS_PROXY",
 )
 
 #: Additionally required when *this process itself* runs in a container, where
@@ -142,6 +166,12 @@ def _env_path(name: str) -> Path | None:
     return Path(raw) if raw else None
 
 
+def _env_tuple(name: str) -> tuple[str, ...]:
+    """Comma- or whitespace-separated list variable."""
+    raw = _env_str(name).replace(",", " ")
+    return tuple(item for item in raw.split() if item)
+
+
 @dataclass(frozen=True)
 class Config:
     """Immutable process configuration.
@@ -160,6 +190,37 @@ class Config:
     # --- orchestration backend -------------------------------------------
     docker_host: str = ""
     network: str = DEFAULT_NETWORK
+
+    # --- outbound whitelist (D12, AC-16) ---------------------------------
+    #: ``host:port`` of the egress proxy **as an application container reaches
+    #: it**. Empty = the layer is not deployed (see the module docstring).
+    egress_proxy: str = ""
+    #: Where the proxy process itself binds, ``host:port``. Only read by
+    #: ``python -m runtime_manager.egress_proxy``.
+    egress_listen: str = DEFAULT_EGRESS_LISTEN
+    #: Always-allowed destinations on top of the ones derived from the
+    #: deployment (platform API, this process). ``host`` or ``host:port``;
+    #: a leading dot allows the subdomains of a zone.
+    egress_allow: tuple[str, ...] = ()
+    #: The same, for the **build** phase, which otherwise reaches only the
+    #: configured package index and the platform's own distribution endpoint.
+    egress_build_allow: tuple[str, ...] = ()
+    #: Platform base URL used by the *build* phase — where ``pip install
+    #: bisheng-sdk`` fetches the platform's own wheel from (AC-16 "平台自身的分
+    #: 发端点"). The run phase learns the platform address from the deploy
+    #: intent instead, which is the value the backend actually advertises.
+    platform_base_url: str = ""
+    #: Network ``docker build`` runs on. Empty = the daemon's default bridge.
+    #: An ``--internal`` network here is what makes the build-phase allowlist
+    #: an enforcement rather than a preference.
+    build_network: str = ""
+    #: Application subnet, for the L2 ``DOCKER-USER`` fallback. Empty = the
+    #: fallback is not generated (the pre-flight says so).
+    apps_subnet: str = ""
+    #: ``iptables`` | ``nftables`` | empty to probe. Docker 29 defaults to the
+    #: nftables backend, which has **no DOCKER-USER chain** (design pit 22):
+    #: rules go in "successfully" and filter nothing.
+    firewall_backend: str = ""
 
     # --- storage ----------------------------------------------------------
     #: Where *this process* reads and writes app data, build contexts and the
@@ -258,6 +319,20 @@ class Config:
         return self.host_apps_root / app_id / "db"
 
     @property
+    def egress_dir(self) -> Path:
+        """Where the rendered egress policy lives — read by the proxy process."""
+        return self.data_root / "egress"
+
+    @property
+    def egress_policy_path(self) -> Path:
+        return self.egress_dir / "policy.json"
+
+    @property
+    def egress_enabled(self) -> bool:
+        """The address *is* the switch — see the module docstring."""
+        return bool(self.egress_proxy)
+
+    @property
     def storage_configured(self) -> bool:
         return bool(self.minio_endpoint and self.minio_access_key and self.minio_secret_key)
 
@@ -293,6 +368,14 @@ def load_config() -> Config:
         build_index_url=_env_str("RTM_BUILD_INDEX_URL"),
         build_trusted_host=_env_str("RTM_BUILD_TRUSTED_HOST"),
         build_npm_registry=_env_str("RTM_BUILD_NPM_REGISTRY"),
+        egress_proxy=_env_str("RTM_EGRESS_PROXY"),
+        egress_listen=_env_str("RTM_EGRESS_LISTEN", DEFAULT_EGRESS_LISTEN) or DEFAULT_EGRESS_LISTEN,
+        egress_allow=_env_tuple("RTM_EGRESS_ALLOW"),
+        egress_build_allow=_env_tuple("RTM_EGRESS_BUILD_ALLOW"),
+        platform_base_url=_env_str("RTM_PLATFORM_BASE_URL"),
+        build_network=_env_str("RTM_BUILD_NETWORK"),
+        apps_subnet=_env_str("RTM_APPS_SUBNET"),
+        firewall_backend=_env_str("RTM_FIREWALL_BACKEND"),
         image_prefix=_env_str("RTM_IMAGE_PREFIX", DEFAULT_IMAGE_PREFIX) or DEFAULT_IMAGE_PREFIX,
         image_retention=_env_int("RTM_IMAGE_RETENTION", 2),
         build_timeout_seconds=_env_int("RTM_BUILD_TIMEOUT_SECONDS", 1800),
