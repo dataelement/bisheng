@@ -145,6 +145,7 @@ reconciler 每 **15s** 一轮，`RTM_RECONCILE_ENABLED` 关不掉的产品语义
 **出站白名单双层与 docker-socket-proxy（D12 / D2-B）已于 T077 / T078 落地**，见 §4 与 §5 的新增项。落地口径三条，排障时按这个顺序看：
 1. **三层，不是一层**。L1 = `bisheng-apps` / `bisheng-build` 建成 `--internal`（应用没有默认路由）；L2 = `egress-proxy`（runtime-manager 同一个包的第二个入口点 `python -m runtime_manager.egress_proxy`），它是唯一能看见**域名**的一层，也就是「只放行声明域名」唯一可能成立的地方；L3 = `DOCKER-USER` / nft 兜底，兼管 UDP（CONNECT 代理看不见数据报）。
 2. **`BISHENG_APP_STORAGE_ENDPOINT` 所指地址恒在放行名单上**，并且同时进 `NO_PROXY`（同网直连，不绕代理），`tests/test_egress.py::test_the_attachment_handle_host_is_always_on_the_run_phase_list` 钉住这条。
-3. **策略是一个文件**（`{RTM_DATA_ROOT}/egress/policy.json`），不是一次 RPC：编排器重启不该把每个托管应用的出站一起带走。代理按 mtime 重读，读坏了保留上一份。
+3. **策略是一个文件**（`{RTM_DATA_ROOT}/egress/policy.json`），不是一次 RPC：编排器重启不该把每个托管应用的出站一起带走。代理按 mtime 重读，读坏了保留上一份。文件里存了**凭据明文**（reconciler 重建实例、重发布宽限期都必须复用同一把），因此目录 0700、文件 0600，只有本部署的两个进程读得到。
+4. **放行名单分两半，判定不同**（2026-09-16 review 补）：部署侧配置的那半（deploy 意图的 `platform_api_base`、`RTM_APP_FACING_BASE_URL`、`RTM_EGRESS_ALLOW` / `RTM_EGRESS_BUILD_ALLOW`、包源）标 `trusted`，**允许是私网地址**——私有化平台本来就是。应用 manifest 声明的那半**不允许**：代理按定义同时挂在 `bisheng-apps` 与有默认路由的网上（compose 形态下它就坐在 mysql / redis / minio 旁边），不加这道闸，一行 `egress: {domains: [mysql]}` 就把「唯一出口」变成「进平台内网的中继」，正是 L1 要消除的可达性。落法：代理放行后先解析域名，**任一**解析结果非公网即 403 `private_address`，报文直接写出运维侧的口子 `RTM_EGRESS_ALLOW`；随后连的是刚判过的那个地址而不是域名（第二次解析不可能给出不同答案）。`trusted` 标志随策略文件一起落盘，`from_dict` 缺字段一律按 **不可信** 读。
 
 **存量环境升级注意**：`docker network create` 不会把已存在的网改成 internal，compose 也不会。`GET /v1/runtime/status` 的 preflight 新增 `egress_whitelist` / `application_network_internal` / `egress_firewall_fallback` 三行，**没改到位时逐行给出改法**；`RTM_EGRESS_PROXY` 留空时第一行直接写「托管应用出站不受限」。

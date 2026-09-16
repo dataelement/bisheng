@@ -409,12 +409,11 @@ services:
     command: ["python", "-m", "runtime_manager.egress_proxy"]
     environment:
       TZ: Asia/Shanghai
-      RTM_HOST: '0.0.0.0'
-      RTM_PORT: '8091'
-      RTM_HMAC_SECRET: ${BISHENG_RTM_HMAC_SECRET:-}
+      # 刻意**不给** RTM_HMAC_SECRET / RTM_DOCKER_HOST：本进程不提供 API、不碰
+      # 编排面，只做 CONNECT 转发。给它编排凭据是纯粹的权限扩散，和 systemd 单元
+      # 里「不要给它 docker 组」是同一条理由。
       # 与 runtime-manager 同一份 data root：策略文件就在 {data_root}/egress/。
       RTM_DATA_ROOT: /app-data
-      RTM_HOST_DATA_ROOT: ${BISHENG_APP_DATA_ROOT:-/opt/bisheng/app-data}
       RTM_EGRESS_PROXY: 'egress-proxy:3128'
       RTM_EGRESS_LISTEN: '0.0.0.0:3128'
     volumes:

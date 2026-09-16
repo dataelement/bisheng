@@ -39,6 +39,16 @@ SERVICES = {
     "egress-proxy": ("src/runtime-manager/runtime_manager/config.py", "RTM_"),
 }
 
+#: ``REQUIRED_ENV`` is the *intent API* process's contract. The egress proxy runs
+#: from the same module but serves no API: it needs the policy file's location
+#: and its own listening address, and nothing else. Handing it the orchestration
+#: HMAC secret just to satisfy a reverse check would spread a credential to a
+#: process whose whole design point is that it holds none — the same argument the
+#: systemd unit makes about not giving it the docker socket.
+REQUIRED_ENV_OVERRIDE: dict[str, tuple[str, ...]] = {
+    "egress-proxy": ("RTM_DATA_ROOT", "RTM_EGRESS_LISTEN", "RTM_EGRESS_PROXY"),
+}
+
 #: The application network. ``runtime_manager.config.DEFAULT_NETWORK`` and the
 #: raw Docker API ``NetworkMode`` both use this literal name, so compose must
 #: pin ``name:`` — otherwise compose prefixes it with the project name and every
@@ -149,6 +159,8 @@ def check_env_contract(report: Report, repo_root: Path, doc: dict) -> None:
         if not required:
             report.bad(f"{service}: {rel_path} 没有 REQUIRED_ENV，反向校验失效")
             continue
+        if service in REQUIRED_ENV_OVERRIDE:
+            required = set(REQUIRED_ENV_OVERRIDE[service])
         missing = sorted(required - declared)
         report.check(
             not missing,

@@ -22,6 +22,11 @@ It is deliberately the dumbest proxy that can enforce that:
   the proxy itself — refused. In particular there is no status or admin
   endpoint: the process is reachable from every hosted application, so its own
   surface is one thing worth keeping at zero.
+* **A name an application declared is checked twice** — once against its
+  allowlist, and then against *where it resolves*
+  (:func:`runtime_manager.egress.address_decision`). This process is dual-homed
+  by construction, so without the second check ``egress: {domains: [mysql]}``
+  would make it a relay into the platform's own network.
 
 Identity comes from ``Proxy-Authorization``, which every HTTP client fills in on
 its own from the credentials in the injected proxy URL. The policy it is checked
@@ -39,12 +44,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
 from dataclasses import dataclass
 
 from runtime_manager.config import Config, get_config
 from runtime_manager.egress import (
     DENY_UNKNOWN_PRINCIPAL,
     EgressPolicyStore,
+    address_decision,
     authorize,
     get_policy_store,
 )
@@ -237,8 +244,42 @@ class EgressProxy:
                 await self._refuse(writer, 403, "Forbidden", decision.reason, decision.detail)
             return
 
+        # Second gate, and only for what the *application* declared: where the
+        # name actually points. The proxy is dual-homed — onto the application
+        # network and off the box — so without this a manifest naming ``mysql``
+        # or a public name pointed at ``10.0.0.5`` turns the one hole in the wall
+        # into a relay into the deployment's own network.
+        dial = host
+        if not decision.trusted:
+            resolved = await self._resolve(host, port)
+            if resolved is None:
+                await self._refuse(writer, 502, "Bad Gateway", "upstream_unreachable", f"cannot resolve {host}")
+                return
+            verdict = address_decision(host, resolved)
+            if verdict is not None:
+                logger.warning(
+                    "rtm.egress_deny principal=%s host=%s port=%s reason=%s", principal, host, port, verdict.reason
+                )
+                await self._refuse(writer, 403, "Forbidden", verdict.reason, verdict.detail)
+                return
+            # Dial the address that was just checked rather than the name, so a
+            # second lookup cannot answer differently from the one we judged.
+            dial = resolved[0]
+
         logger.info("rtm.egress_allow principal=%s host=%s port=%s", principal, host, port)
-        await self._forward(request, reader, writer, host, port, path)
+        await self._forward(request, reader, writer, host, port, path, dial=dial)
+
+    async def _resolve(self, host: str, port: int) -> list[str] | None:
+        """Every address ``host`` answers with, or ``None`` if it answers with none."""
+        try:
+            infos = await asyncio.wait_for(
+                asyncio.get_running_loop().getaddrinfo(host, port, type=socket.SOCK_STREAM),
+                timeout=UPSTREAM_TIMEOUT_SECONDS,
+            )
+        except (TimeoutError, OSError, ValueError):
+            return None
+        addresses = [info[4][0] for info in infos if info[4]]
+        return addresses or None
 
     async def _refuse(
         self, writer: asyncio.StreamWriter, status: int, phrase: str, reason: str, detail: str, extra: str = ""
@@ -258,10 +299,11 @@ class EgressProxy:
         host: str,
         port: int,
         path: str,
+        dial: str = "",
     ) -> None:
         try:
             up_reader, up_writer = await asyncio.wait_for(
-                asyncio.open_connection(host, port), timeout=UPSTREAM_TIMEOUT_SECONDS
+                asyncio.open_connection(dial or host, port), timeout=UPSTREAM_TIMEOUT_SECONDS
             )
         except (TimeoutError, OSError) as exc:
             # 502, not 403: the destination *is* allowed and simply did not

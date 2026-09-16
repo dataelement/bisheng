@@ -115,28 +115,39 @@ def test_the_compose_file_gives_the_proxy_exactly_this_environment():
     )
 
 
-@pytest.mark.docker
-def test_the_socket_proxy_refuses_exec_on_this_host():
-    """D2-B end to end. Run on 114 with the app-runtime profile up.
+#: How to reach the proxy *as the manager does*, which is the only vantage point
+#: that exists: the compose form publishes no port for it at all (that is the
+#: point), so a ``curl`` from the host would answer "connection refused" and read
+#: as a pass on a deployment that is wide open. Asking from inside the manager
+#: container answers the real question. In the systemd form the proxy binds
+#: ``127.0.0.1:2375`` and ``RTM_DOCKER_HOST`` says so — read it off the unit
+#: rather than assuming either shape.
+_PROXY_BASE = "http://docker-socket-proxy:2375"
+_ASK = (
+    "import sys,urllib.request,urllib.error\n"
+    "req=urllib.request.Request(sys.argv[1], method=sys.argv[2])\n"
+    "try: print(urllib.request.urlopen(req, timeout=5).status)\n"
+    "except urllib.error.HTTPError as exc: print(exc.code)\n"
+)
 
-    ``127.0.0.1:2375`` is the proxy as *the manager* reaches it; the port is
-    never published outside the compose network.
-    """
+
+def _ask_proxy(path: str, method: str = "GET") -> str:
     out = subprocess.run(
-        ["curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "-X", "POST", "http://127.0.0.1:2375/v1.44/exec"],
+        ["docker", "exec", "bisheng-runtime-manager", "python", "-c", _ASK, f"{_PROXY_BASE}{path}", method],
         capture_output=True,
         text=True,
         check=False,
     )
-    assert out.stdout.strip() == "403"
+    assert out.returncode == 0, out.stderr
+    return out.stdout.strip()
+
+
+@pytest.mark.docker
+def test_the_socket_proxy_refuses_exec_on_this_host():
+    """D2-B end to end. Run on 114 with the app-runtime profile up."""
+    assert _ask_proxy("/v1.44/exec", "POST") == "403"
 
 
 @pytest.mark.docker
 def test_the_socket_proxy_allows_the_endpoints_the_manager_needs():
-    out = subprocess.run(
-        ["curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "http://127.0.0.1:2375/v1.44/containers/json"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert out.stdout.strip() == "200"
+    assert _ask_proxy("/v1.44/containers/json") == "200"

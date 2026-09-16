@@ -91,6 +91,7 @@ DENY_IP_LITERAL = "ip_literal"
 DENY_PORT = "port_not_allowed"
 DENY_UDP = "udp_not_allowed"
 DENY_UNKNOWN_PRINCIPAL = "unknown_principal"
+DENY_PRIVATE_ADDRESS = "private_address"
 
 PROTO_TCP = "tcp"
 PROTO_UDP = "udp"
@@ -103,18 +104,28 @@ PROTO_UDP = "udp"
 
 @dataclass(frozen=True)
 class Destination:
-    """One allowlist entry: a host (or a ``.zone`` suffix) and its ports."""
+    """One allowlist entry: a host (or a ``.zone`` suffix) and its ports.
+
+    ``trusted`` says **who put it here**, and it is not decoration. An entry the
+    *deployment* configured (the platform API, this process, ``RTM_EGRESS_ALLOW``)
+    may legitimately live on a private address — on-premise platforms usually do.
+    An entry an *application* declared in its own ``bisheng-app.yaml`` may not:
+    the proxy is dual-homed by construction (it is the only process with a route
+    both onto ``bisheng-apps`` and off the box), so a manifest naming ``mysql``,
+    ``minio`` or ``10.0.0.5`` would otherwise turn the one hole in the wall into
+    a relay into the deployment's own network — precisely the reachability L1
+    exists to remove. See :func:`address_decision`.
+    """
 
     host: str
     ports: tuple[int, ...] = DEFAULT_PORTS
+    trusted: bool = False
 
     @property
     def is_zone(self) -> bool:
         return self.host.startswith(".")
 
-    def matches(self, host: str, port: int) -> bool:
-        if port not in self.ports:
-            return False
+    def host_matches(self, host: str) -> bool:
         host = host.lower().rstrip(".")
         if self.is_zone:
             # ``.example.com`` covers ``a.example.com`` **and** ``example.com``:
@@ -124,13 +135,16 @@ class Destination:
             return host == self.host[1:] or host.endswith(self.host)
         return host == self.host
 
+    def matches(self, host: str, port: int) -> bool:
+        return port in self.ports and self.host_matches(host)
+
     def render(self) -> str:
         if tuple(self.ports) == DEFAULT_PORTS:
             return self.host
         return ";".join(f"{self.host}:{port}" for port in self.ports)
 
 
-def parse_destination(raw: str) -> Destination | None:
+def parse_destination(raw: str, trusted: bool = False) -> Destination | None:
     """``https://host:port/path`` / ``host:port`` / ``*.zone`` → :class:`Destination`.
 
     Returns ``None`` for anything that does not name a host, so a manifest with
@@ -149,42 +163,62 @@ def parse_destination(raw: str) -> Destination | None:
             return None
         if port is None:
             port = 443 if split.scheme == "https" else 80
-        return Destination(host=host, ports=(port,))
+        return Destination(host=host, ports=(port,), trusted=trusted)
 
     text = text.split("/", 1)[0]
     host, sep, port_text = text.rpartition(":")
     if sep and port_text.isdigit():
-        return None if not host else Destination(host=_normalise_host(host), ports=(int(port_text),))
-    return None if not text else Destination(host=_normalise_host(text))
+        if not host:
+            return None
+        return Destination(host=_normalise_host(host), ports=(int(port_text),), trusted=trusted)
+    return None if not text else Destination(host=_normalise_host(text), trusted=trusted)
 
 
 def _normalise_host(host: str) -> str:
     host = host.strip().lower().rstrip(".")
     if host.startswith("*."):
-        return host[1:]
+        host = host[1:]
+    # ``[::1]`` is how an IPv6 literal is written in a URL and in a CONNECT
+    # target, but the host a decision is made about has the brackets stripped
+    # (``urlsplit().hostname`` does it too). Storing the bracketed form would
+    # make an IPv6 entry silently unmatchable.
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
     return host
 
 
-def merge_destinations(*groups: object) -> tuple[Destination, ...]:
+def merge_destinations(*groups: object, trusted: bool = False) -> tuple[Destination, ...]:
     """Flatten and de-duplicate, merging the ports of repeated hosts.
 
     The same host arriving twice with different ports (``platform:7860`` from
     the deploy intent and ``platform`` from ``RTM_EGRESS_ALLOW``) must end up
     with *both*, not with whichever came last.
+
+    ``trusted`` applies to the raw strings in ``groups``; a :class:`Destination`
+    that already carries its own answer keeps it. Trust is **unioned** per host
+    for the same reason ports are: a host the deployment configured stays
+    deployment-configured even if an application happens to name it too.
     """
     ports: dict[str, set[int]] = {}
+    trust: dict[str, bool] = {}
     order: list[str] = []
     for group in groups:
-        items = [group] if isinstance(group, str) else list(group or ())  # type: ignore[arg-type]
+        scalar = isinstance(group, (str, Destination))
+        items = [group] if scalar else list(group or ())  # type: ignore[arg-type]
         for item in items:
-            destination = item if isinstance(item, Destination) else parse_destination(str(item))
+            if isinstance(item, Destination):
+                destination, item_trusted = item, item.trusted
+            else:
+                destination, item_trusted = parse_destination(str(item)), trusted
             if destination is None:
                 continue
             if destination.host not in ports:
                 ports[destination.host] = set()
+                trust[destination.host] = False
                 order.append(destination.host)
             ports[destination.host].update(destination.ports)
-    return tuple(Destination(host=host, ports=tuple(sorted(ports[host]))) for host in order)
+            trust[destination.host] = trust[destination.host] or item_trusted
+    return tuple(Destination(host=host, ports=tuple(sorted(ports[host])), trusted=trust[host]) for host in order)
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +231,10 @@ class EgressDecision:
     allowed: bool
     reason: str
     detail: str = ""
+    #: Only meaningful when ``allowed``: the matching entry came from the
+    #: deployment's own configuration rather than from an application manifest,
+    #: so :func:`address_decision` does not apply to it.
+    trusted: bool = False
 
 
 def decide(
@@ -223,14 +261,15 @@ def decide(
     if not host:
         return EgressDecision(False, DENY_NOT_DECLARED, "no destination host")
 
+    match = next((d for d in destinations if d.matches(host, port)), None)
     literal = _as_ip(host)
     if literal is not None:
         # An address that is *itself* on the list is fine — on a single-machine
         # deployment the platform API base genuinely is an IP. What is refused
         # is reaching an arbitrary address directly, which is how a name-based
         # whitelist gets walked around.
-        if any(d.matches(host, port) for d in destinations):
-            return EgressDecision(True, ALLOW, f"{host}:{port} is declared")
+        if match is not None:
+            return _allow(match, host, port)
         return EgressDecision(
             False,
             DENY_IP_LITERAL,
@@ -238,9 +277,12 @@ def decide(
             "declare a hostname in bisheng-app.yaml egress.domains",
         )
 
-    if any(d.matches(host, port) for d in destinations):
-        return EgressDecision(True, ALLOW, f"{host}:{port} is declared")
-    if any(d.matches(host, other) for d in destinations for other in DEFAULT_PORTS):
+    if match is not None:
+        return _allow(match, host, port)
+    # Match on the host alone — not on the *default* ports — or a destination
+    # declared as ``db.example.com:5432`` reached on 5433 reports "not declared"
+    # about a host that plainly is.
+    if any(d.host_matches(host) for d in destinations):
         return EgressDecision(
             False,
             DENY_PORT,
@@ -251,6 +293,48 @@ def decide(
         DENY_NOT_DECLARED,
         f"{host} is not declared; add it to egress.domains in bisheng-app.yaml and publish a new version",
     )
+
+
+def _allow(match: Destination, host: str, port: int) -> EgressDecision:
+    return EgressDecision(True, ALLOW, f"{host}:{port} is declared", trusted=match.trusted)
+
+
+def address_decision(host: str, addresses: object) -> EgressDecision | None:
+    """Second gate for an application-declared name: *where does it resolve*.
+
+    ``None`` means "nothing to object to". A decision means refuse.
+
+    The whitelist is decided on a name, but the proxy then opens a socket, and
+    the proxy is the one process in the deployment with a route both onto the
+    application network and off the box. Without this, ``egress: {domains:
+    [mysql]}`` in a ``bisheng-app.yaml`` — or a public name whose owner points it
+    at ``10.0.0.5`` — is a relay straight into the platform's own network, which
+    is exactly the reachability the ``--internal`` network was created to remove.
+
+    It applies only to what an *application* declared: an operator who puts a
+    private address on ``RTM_EGRESS_ALLOW`` (an on-premise model gateway, an
+    internal mirror) has said so deliberately, and that is the escape hatch this
+    refusal names.
+    """
+    resolved = [str(item) for item in (addresses or ())]
+    if not resolved:
+        return EgressDecision(False, DENY_NOT_DECLARED, f"{host} does not resolve to any address")
+    private = sorted({address for address in resolved if not _is_public(address)})
+    if not private:
+        return None
+    return EgressDecision(
+        False,
+        DENY_PRIVATE_ADDRESS,
+        f"{host} resolves to {', '.join(private)}, which is inside the deployment's own network. "
+        "An application's egress.domains may only name destinations on the public internet; "
+        "an operator who means to open an internal address adds it to RTM_EGRESS_ALLOW",
+    )
+
+
+def _is_public(address: str) -> bool:
+    ip = _as_ip(address)
+    # An address that does not parse is not one we can vouch for.
+    return ip is not None and bool(ip.is_global)
 
 
 def _as_ip(host: str) -> ipaddress._BaseAddress | None:
@@ -272,7 +356,11 @@ class PrincipalPolicy:
     principal: str
     token_hash: str
     destinations: tuple[Destination, ...] = ()
-    label: str = ""
+    #: The credential **in plaintext**, and yes that is on purpose — see
+    #: :func:`hash_token` for why the hash is next to it rather than instead of
+    #: it. Never rendered: it is not in any API response, and the injected copy
+    #: is redacted out of logs by name (:data:`ENV_EGRESS_TOKEN`).
+    token: str = ""
 
     def authenticates(self, token: str) -> bool:
         return bool(token) and secrets.compare_digest(self.token_hash, hash_token(token))
@@ -281,8 +369,8 @@ class PrincipalPolicy:
         return {
             "principal": self.principal,
             "token_hash": self.token_hash,
-            "label": self.label,
-            "destinations": [{"host": d.host, "ports": list(d.ports)} for d in self.destinations],
+            "token": self.token,
+            "destinations": [{"host": d.host, "ports": list(d.ports), "trusted": d.trusted} for d in self.destinations],
         }
 
     @classmethod
@@ -290,9 +378,16 @@ class PrincipalPolicy:
         return cls(
             principal=str(data.get("principal") or ""),
             token_hash=str(data.get("token_hash") or ""),
-            label=str(data.get("label") or ""),
+            token=str(data.get("token") or ""),
             destinations=tuple(
-                Destination(host=str(item.get("host") or ""), ports=tuple(int(p) for p in item.get("ports") or ()))
+                Destination(
+                    host=str(item.get("host") or ""),
+                    ports=tuple(int(p) for p in item.get("ports") or ()),
+                    # Absent ⇒ untrusted. The file is the proxy's only input, so
+                    # a reader that guessed "trusted" here would turn a format
+                    # mistake into an open relay into the private network.
+                    trusted=bool(item.get("trusted")),
+                )
                 for item in data.get("destinations") or ()
                 if item.get("host")
             ),
@@ -305,7 +400,17 @@ def mint_egress_token() -> str:
 
 
 def hash_token(token: str) -> str:
-    """Only the hash is persisted: the policy file is world-readable to the proxy."""
+    """What the proxy compares against, in constant time.
+
+    The plaintext is stored beside it (``PrincipalPolicy.token``) rather than
+    discarded: the manager has to be able to re-inject *the same* credential
+    when the reconciler recreates an instance from a record, and when a redeploy
+    runs the old and new containers side by side through AC-21's grace window.
+    Hashing is therefore not a secrecy measure here — the file already holds the
+    secret, and is written ``0600`` into a directory only this deployment's two
+    processes can read. It is what keeps the *comparison* constant-time and
+    keeps a malformed entry from authenticating anything.
+    """
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
@@ -351,14 +456,19 @@ class EgressPolicyStore:
             return
         try:
             raw = json.loads(self._path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+            # Valid JSON of the wrong shape is as unreadable as broken JSON, and
+            # letting it raise out of here would take down whichever hot path is
+            # reading — which for the proxy is every single connection.
+            if not isinstance(raw, dict):
+                raise TypeError(f"expected an object, got {type(raw).__name__}")
+            policies: dict[str, PrincipalPolicy] = {}
+            for item in raw.get("principals") or ():
+                policy = PrincipalPolicy.from_dict(item)
+                if policy.principal:
+                    policies[policy.principal] = policy
+        except (OSError, ValueError, TypeError, AttributeError) as exc:
             logger.warning("egress policy %s is unreadable, keeping the previous copy: %s", self._path, exc)
             return
-        policies: dict[str, PrincipalPolicy] = {}
-        for item in raw.get("principals", []):
-            policy = PrincipalPolicy.from_dict(item)
-            if policy.principal:
-                policies[policy.principal] = policy
         self._policies = policies
         self._stamp = stamp
 
@@ -387,7 +497,9 @@ class EgressPolicyStore:
                 self._flush()
 
     def _flush(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
+        # 0700 on the directory and 0600 on the file (``mkstemp``'s default,
+        # preserved by ``os.replace``): the plaintext credentials live here.
+        self._path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         payload = {"version": 1, "principals": [p.to_dict() for p in self._policies.values()]}
         fd, tmp = tempfile.mkstemp(dir=str(self._path.parent), prefix=".egress-", suffix=".json")
         try:
@@ -427,11 +539,16 @@ def platform_destinations(config: Config, platform_api_base: str = "") -> tuple[
     ``BISHENG_APP_STORAGE_ENDPOINT``, and contracts §9 records that leaving it
     out breaks the attachment handle along with the whitelist. The app-proxy is
     absent on purpose — it dials *in*, never out.
+
+    Every entry here is ``trusted``: it came out of the deployment's own
+    configuration, and on an on-premise platform all three of them routinely are
+    private addresses.
     """
     return merge_destinations(
         platform_api_base or config.platform_base_url,
         config.app_facing_base,
         config.egress_allow,
+        trusted=True,
     )
 
 
@@ -441,7 +558,12 @@ def runtime_destinations(
     platform_api_base: str = "",
     declared: object = (),
 ) -> tuple[Destination, ...]:
-    """Run-phase allowlist for one application: platform + its own declarations."""
+    """Run-phase allowlist for one application: platform + its own declarations.
+
+    ``declared`` stays **untrusted** — it is the one input on this list that the
+    application itself authored, and :func:`address_decision` is what keeps it
+    from naming a destination inside the deployment.
+    """
     return merge_destinations(platform_destinations(config, platform_api_base), declared)
 
 
@@ -459,6 +581,9 @@ def build_destinations(config: Config) -> tuple[Destination, ...]:
         config.build_npm_registry,
         config.platform_base_url,
         config.egress_build_allow,
+        # All five come from the deployment; a private package mirror is the
+        # normal shape of an air-gapped install, not something to refuse.
+        trusted=True,
     )
 
 
@@ -539,18 +664,16 @@ def _build_token(config: Config) -> str:
     """
     store = get_policy_store(config)
     existing = store.get(PRINCIPAL_BUILD)
-    token = mint_egress_token()
-    if existing is not None and existing.label:
-        # ``label`` carries the plaintext for the one principal that has no
-        # container to inject it into — the build args are composed here, on
-        # demand, long after the token was minted.
-        token = existing.label
+    # The build principal is the one with no container to inject into: the build
+    # args are composed here, on demand, long after the token was minted, so the
+    # stored plaintext is the only copy there is.
+    token = existing.token if existing is not None and existing.token else mint_egress_token()
     store.put(
         PrincipalPolicy(
             principal=PRINCIPAL_BUILD,
             token_hash=hash_token(token),
             destinations=build_destinations(config),
-            label=token,
+            token=token,
         )
     )
     return token
@@ -575,13 +698,13 @@ def register_principal(
     store = get_policy_store(config)
     existing = store.get(principal)
     if token is None:
-        token = existing.label if existing is not None and existing.label else mint_egress_token()
+        token = existing.token if existing is not None and existing.token else mint_egress_token()
     store.put(
         PrincipalPolicy(
             principal=principal,
             token_hash=hash_token(token),
             destinations=destinations,
-            label=token,
+            token=token,
         )
     )
     return token
@@ -712,6 +835,14 @@ def firewall_rules(config: Config, *, proxy_address: str = "") -> list[FirewallR
     return rules
 
 
+#: Detection result, remembered for the life of the process. ``detect_firewall_backend``
+#: shells out twice in the worst case, and it is called from ``GET /v1/runtime/status``,
+#: which the platform polls: without this, every poll spawns subprocesses and can
+#: block the event loop for as long as their timeouts. The answer only changes when
+#: the daemon is reconfigured, which means a restart anyway.
+_backend_cache: str = ""
+
+
 def detect_firewall_backend(runner=None) -> str:
     """Which firewall backend dockerd is driving — ``iptables`` or ``nftables``.
 
@@ -722,12 +853,22 @@ def detect_firewall_backend(runner=None) -> str:
     option, pinning iptables in the deployment baseline, is expressed here as
     ``RTM_FIREWALL_BACKEND``.
     """
-    run = runner or _run
-    if run(["iptables", "-S", "DOCKER-USER"])[0] == 0:
-        return BACKEND_IPTABLES
-    if run(["nft", "list", "tables"])[0] == 0:
-        return BACKEND_NFTABLES
-    return BACKEND_UNKNOWN
+    global _backend_cache
+    # An injected runner is a test or a deliberate re-probe; it neither reads nor
+    # fills the cache, so one test's answer cannot leak into the next.
+    if runner is not None:
+        if runner(["iptables", "-S", "DOCKER-USER"])[0] == 0:
+            return BACKEND_IPTABLES
+        return BACKEND_NFTABLES if runner(["nft", "list", "tables"])[0] == 0 else BACKEND_UNKNOWN
+    if _backend_cache:
+        return _backend_cache
+    if _run(["iptables", "-S", "DOCKER-USER"])[0] == 0:
+        _backend_cache = BACKEND_IPTABLES
+    elif _run(["nft", "list", "tables"])[0] == 0:
+        _backend_cache = BACKEND_NFTABLES
+    else:
+        _backend_cache = BACKEND_UNKNOWN
+    return _backend_cache
 
 
 def _run(argv: list[str]) -> tuple[int, str]:  # pragma: no cover - exercised on a real host

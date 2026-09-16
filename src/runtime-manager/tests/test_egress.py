@@ -37,6 +37,7 @@ from runtime_manager.egress import (
     DENY_IP_LITERAL,
     DENY_NOT_DECLARED,
     DENY_PORT,
+    DENY_PRIVATE_ADDRESS,
     DENY_UDP,
     DENY_UNKNOWN_PRINCIPAL,
     ENV_EGRESS_TOKEN,
@@ -355,8 +356,11 @@ async def test_connect_to_a_declared_host_tunnels_bytes(egress_config: Config, r
     _proxy, port = running_proxy
     upstream = _Upstream()
     upstream_port = await upstream.start()
+    # ``trusted`` = "the deployment configured this", which is what a loopback
+    # stand-in for a public upstream has to be: an *application*-declared name
+    # resolving to loopback is refused on purpose, and has its own test below.
     token = register_principal(
-        egress_config, principal="app-1", destinations=(Destination("127.0.0.1", (upstream_port,)),)
+        egress_config, principal="app-1", destinations=(Destination("127.0.0.1", (upstream_port,), trusted=True),)
     )
     try:
         reader, writer = await asyncio.open_connection("127.0.0.1", port)
@@ -423,7 +427,7 @@ async def test_absolute_form_http_is_forwarded_without_the_proxy_credential(egre
     upstream = await asyncio.start_server(handle, "127.0.0.1", 0)
     upstream_port = upstream.sockets[0].getsockname()[1]
     token = register_principal(
-        egress_config, principal="app-1", destinations=(Destination("127.0.0.1", (upstream_port,)),)
+        egress_config, principal="app-1", destinations=(Destination("127.0.0.1", (upstream_port,), trusted=True),)
     )
     try:
         head = await _talk(
@@ -457,9 +461,112 @@ async def test_an_allowed_but_dead_upstream_is_502_not_403(egress_config: Config
     dead_port = dead.sockets[0].getsockname()[1]
     dead.close()
     await dead.wait_closed()
-    token = register_principal(egress_config, principal="app-1", destinations=(Destination("127.0.0.1", (dead_port,)),))
+    token = register_principal(
+        egress_config, principal="app-1", destinations=(Destination("127.0.0.1", (dead_port,), trusted=True),)
+    )
     head = await _talk(port, f"CONNECT 127.0.0.1:{dead_port} HTTP/1.1\r\n{_auth('app-1', token)}\r\n".encode())
     assert b"502 Bad Gateway" in head
+
+
+async def test_an_application_declared_name_pointing_inside_the_deployment_is_refused(
+    egress_config: Config, running_proxy
+):
+    """The hole in the wall must not double as a relay into the platform's network.
+
+    The proxy is the one process with a route both onto ``bisheng-apps`` and off
+    the box, and in the compose form it sits on the platform's own network next
+    to mysql / redis / minio. Without this gate a single line of
+    ``egress: {domains: [mysql]}`` in somebody's ``bisheng-app.yaml`` reaches all
+    of them — the exact reachability the ``--internal`` network removed.
+    """
+    _proxy, port = running_proxy
+    upstream = _Upstream()
+    upstream_port = await upstream.start()
+    # Declared by the application (untrusted), and it resolves to loopback.
+    token = register_principal(
+        egress_config, principal="app-1", destinations=(Destination("127.0.0.1", (upstream_port,)),)
+    )
+    try:
+        head = await _talk(port, f"CONNECT 127.0.0.1:{upstream_port} HTTP/1.1\r\n{_auth('app-1', token)}\r\n".encode())
+        assert b"403 Forbidden" in head
+        assert DENY_PRIVATE_ADDRESS.encode() in head
+        assert b"RTM_EGRESS_ALLOW" in head, "the refusal has to name the operator's escape hatch"
+        assert upstream.connections == 0
+    finally:
+        await upstream.stop()
+
+
+async def test_the_same_address_is_reachable_once_the_operator_declares_it(egress_config: Config, running_proxy):
+    """``RTM_EGRESS_ALLOW`` is the deployment saying so deliberately — on-premise
+    model gateways and internal mirrors are the normal case, not an attack."""
+    _proxy, port = running_proxy
+    upstream = _Upstream()
+    upstream_port = await upstream.start()
+    config = egress_config.with_overrides(egress_allow=(f"127.0.0.1:{upstream_port}",))
+    token = register_principal(config, principal="app-1", destinations=runtime_destinations(config, declared=[]))
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", port)
+        writer.write(f"CONNECT 127.0.0.1:{upstream_port} HTTP/1.1\r\n{_auth('app-1', token)}\r\n".encode())
+        await writer.drain()
+        assert b"200 Connection Established" in await reader.readuntil(b"\r\n\r\n")
+        writer.close()
+    finally:
+        await upstream.stop()
+
+
+def test_the_address_gate_applies_to_the_manifest_and_not_to_the_platform(egress_config: Config):
+    """The two halves of the run-phase list carry different answers."""
+    destinations = runtime_destinations(
+        egress_config, platform_api_base="http://10.0.0.5:7860", declared=["api.openai.com"]
+    )
+    assert decide(destinations, "10.0.0.5", 7860).trusted, "the platform may live on a private address"
+    assert not decide(destinations, "api.openai.com", 443).trusted
+
+
+def test_a_host_the_deployment_also_configures_stays_trusted_if_a_manifest_names_it(egress_config: Config):
+    config = egress_config.with_overrides(egress_allow=("internal.example.com",))
+    destinations = runtime_destinations(config, declared=["internal.example.com"])
+    assert decide(destinations, "internal.example.com", 443).trusted
+
+
+def test_address_decision_refuses_a_name_that_answers_with_any_private_address():
+    """Any, not all: a rebinding answer carries one of each."""
+    from runtime_manager.egress import address_decision
+
+    assert address_decision("x.example.com", ["93.184.216.34"]) is None
+    refused = address_decision("x.example.com", ["93.184.216.34", "10.0.0.5"])
+    assert refused is not None and refused.reason == DENY_PRIVATE_ADDRESS
+    assert "10.0.0.5" in refused.detail
+    for private in ("127.0.0.1", "169.254.169.254", "::1", "fd00::1", "192.168.1.1", "172.17.0.2"):
+        assert address_decision("x.example.com", [private]) is not None, private
+
+
+def test_address_decision_refuses_a_name_that_resolves_to_nothing():
+    from runtime_manager.egress import address_decision
+
+    assert address_decision("x.example.com", []) is not None
+
+
+def test_the_trust_flag_survives_the_policy_file(egress_config: Config):
+    """The file is the proxy's only input; a flag that did not round-trip would
+    make every platform destination look application-declared and be refused."""
+    register_principal(
+        egress_config,
+        principal="app-1",
+        destinations=runtime_destinations(
+            egress_config, platform_api_base="http://10.0.0.5:7860", declared=["api.openai.com"]
+        ),
+    )
+    reloaded = EgressPolicyStore(egress_config.egress_policy_path).get("app-1")
+    by_host = {d.host: d.trusted for d in reloaded.destinations}
+    assert by_host["10.0.0.5"] is True
+    assert by_host["api.openai.com"] is False
+
+
+def test_a_declared_port_that_is_not_a_default_still_reports_the_port_rather_than_the_host(egress_config: Config):
+    """``db.example.com:5432`` reached on 5433 is a port mistake, not an undeclared host."""
+    decision = decide(merge_destinations(["db.example.com:5432"]), "db.example.com", 5433)
+    assert decision.reason == DENY_PORT
 
 
 # ---------------------------------------------------------------------------

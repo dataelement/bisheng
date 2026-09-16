@@ -634,6 +634,13 @@
   **`RTM_EGRESS_PROXY` 空 = 整层未部署**，没有「开关开了但代理不在」这种把出站全掐死的组合；preflight 第一行直说「托管应用出站不受限」。声明域名落成容器标签 `bisheng.egress.domains`，状态文件丢了也能恢复——恢复出更窄的白名单 = 应用突然访问不了自家 API 且哪儿都没写为什么。
   **实际偏差记录**: ① 新增文件比任务清单多 `egress_proxy.py`——D12-C 写的 egress-proxy 在仓里本来不存在，不写它「唯一出口」就只是个名词；选择内建而非 squid 镜像，理由是 信创 / air-gap 环境的镜像可得性，以及 squid 无法做 per-app 白名单。② backend 侧多改三个文件（manifest → deploy / preview 意图透传 `egress_domains`）——不透传的话「应用包声明的域名」这半句 AC 没有输入。③ **本机无 docker，L1/L3 的真实生效未验证**：网络 internal、iptables 规则真的丢包、UDP 真的被挡，三项都留在 `@pytest.mark.docker` 与 114 手动验证（命令见 T075 记录与本轮交付说明）。
 
+  **Review 修订（2026-09-16，同批次 review）**：
+  1. **（真缺陷，已修）代理是「唯一出口」也是「唯一双挂点」——manifest 能把它当成进平台内网的中继**。compose 形态下 `egress-proxy` 同时挂 `bisheng-apps` 与 `default`，而 mysql / redis / minio / backend 都在 `default` 上；systemd 形态下它干脆跑在宿主上。原实现对声明域名只查「在不在名单里」，于是一行 `egress: {domains: [mysql:3306]}`（或一个指向 `10.0.0.5` 的公网域名）就能拿到平台内网——`--internal` 网刚消除的可达性又被 L2 还回去了。**修法**：`Destination` 加 `trusted`——部署侧配置的条目（`platform_api_base` / `RTM_APP_FACING_BASE_URL` / `RTM_EGRESS_ALLOW` / 包源）为可信，**允许私网**（私有化平台本来就是私网）；manifest 声明的一律不可信，代理放行后先解析、**任一**解析结果非公网即 403 `private_address`，报文点名运维侧口子 `RTM_EGRESS_ALLOW`，随后连的是刚判过的地址而非域名（顺带消掉 DNS 重绑定）。`trusted` 随策略文件落盘，读不到一律按不可信。新增 8 例（`test_an_application_declared_name_pointing_inside_the_deployment_is_refused` 等）。
+  2. **（真缺陷，已修）`GET /v1/runtime/status` 每次都 fork 两个进程**：`RTM_FIREWALL_BACKEND` 留空时 `_firewall_check` 每次预检都跑 `iptables` + `nft`（各 10s 超时），而这个端点是平台轮询的。改为进程级缓存（注入 runner 的测试路径不读写缓存）。
+  3. **（口径订正）「只存哈希」是假的**：`PrincipalPolicy.label` 存的就是凭据明文（reconciler 重建、重发布宽限期都要复用同一把，明文没法不留）。字段改名 `token`、文档如实写明，并把目录权限收到 0700（文件本来就是 `mkstemp` 的 0600）。
+  4. **（小）`db.example.com:5432` 用 5433 连时报的是「未声明」**——端口判定只比 80/443。改成按主机匹配，报 `port_not_allowed`。IPv6 字面量 `[::1]` 落名单时不脱方括号、永远匹配不上，一并修。策略文件是合法 JSON 但不是对象时 `_load` 会抛 `AttributeError` 逃出热路径，收进同一个 except。
+  5. **（小）`test_socket_proxy.py` 两个 `@pytest.mark.docker` 用例打 `127.0.0.1:2375`**——compose 形态下这个端口**从不发布**（这正是 D2-B 的要点），curl 会「连接被拒」而测试把它当通过。改成 `docker exec bisheng-runtime-manager` 从管理器视角问，交付说明里的 114 命令同理。
+
 - [x] **T078**: `[MVP-114]` docker-socket-proxy 端点白名单（D2-B）
   **文件**: `src/runtime-manager/runtime_manager/docker_backend.py`, `docker/docker-compose.yml`, `src/runtime-manager/tests/test_socket_proxy.py`（新）
   **逻辑**: 把 root 等价权限收成端点级（`/build`、`/containers/create|start|stop|remove`、`/images`、`/networks`）；对 manager 代码只是**换一个 base URL**、不构成返工；代理端口绝不对外暴露。
