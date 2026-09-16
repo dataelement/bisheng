@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 
+import httpx
 import pytest
 
 from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError, OpenApiCredentialMissingError
@@ -107,10 +108,27 @@ async def test_no_credential_is_refused_at_the_handshake(mcp_http, monkeypatch):
 
 
 async def test_invalid_or_revoked_credential_cannot_even_initialise(bearer, mcp_session):
+    """AC-02 from the client's side: the handshake itself fails, so nothing is listed.
+
+    The SDK surfaces transport failures through its task group, so the 401 comes
+    back wrapped in an ``ExceptionGroup`` — unwrapped here rather than matched
+    loosely, or a future crash inside the handshake would also pass.
+    """
+
     bearer(None)
-    with pytest.raises(Exception):
+    with pytest.raises(BaseExceptionGroup) as raised:
         async with mcp_session(auth()):
             pass
+
+    assert [error.response.status_code for error in _http_errors(raised.value)] == [401]
+
+
+def _http_errors(exc: BaseException) -> list[httpx.HTTPStatusError]:
+    """Flatten a (possibly nested) exception group down to the HTTP failures."""
+
+    if isinstance(exc, BaseExceptionGroup):
+        return [error for child in exc.exceptions for error in _http_errors(child)]
+    return [exc] if isinstance(exc, httpx.HTTPStatusError) else []
 
 
 async def test_query_parameter_token_is_not_a_credential(mcp_http, monkeypatch):

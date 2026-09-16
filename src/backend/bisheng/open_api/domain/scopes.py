@@ -151,7 +151,10 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
         GROUP_LOCAL_DEV_TOOLKIT,
         "openApiManagement.scopes.identity_read.label",
         "openApiManagement.scopes.identity_read.desc",
-        issuable=False,  # F052 MCP face not shipped
+        # F052 MCP face shipped: the three identity / organisation tools read it.
+        # No ``endpoints`` entry — this scope has no REST route of its own, it
+        # gates MCP tools, and the registry check happens in
+        # ``open_api/mcp/registry.py`` rather than off a route marker.
         requires_open_platform=True,
         hint_keys=("openApiManagement.scopes.identity_read.warning",),
     ),

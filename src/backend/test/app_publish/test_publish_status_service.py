@@ -481,3 +481,86 @@ async def test_runtime_hint_never_breaks_the_payload_it_decorates(publish_db):
     hint = await PublishStatusService.runtime_hint("no-such-app-id")
 
     assert hint == {"app_state": None, "pending_reason": None}
+
+
+# ---------------------------------------------------------------------------
+# F052 T208 — ``entry`` narrows the same read to owner-only on a credential door
+# ---------------------------------------------------------------------------
+
+
+async def test_the_owner_reads_the_publish_status_through_the_credential_door(publish_db, app_factory, tier_seed):
+    app, _ = await app_factory(with_version=True)
+
+    status = await _service().get_publish_status(app.id, actor=_actor(OWNER_USER_ID), entry="mcp")
+
+    assert status["app_id"] == app.id
+    assert status["approval"] is None or "reject_reason" in status["approval"]
+
+
+async def test_a_tenant_administrator_reads_it_on_the_page_but_not_through_a_key(
+    publish_db, app_factory, tier_seed, tenant_admin_user, monkeypatch
+):
+    """AC-35: an administrator's own service-account key is refused too.
+
+    "An administrator may look at anyone's application" is a statement about
+    the platform UI. A developer key's blast radius has to stay predictable
+    when it leaks, so the credential door does not inherit it.
+    """
+    from bisheng.app_publish.domain.services import publish_status_service
+    from bisheng.common.errcode.app_publish import AppPublishOwnerOnlyError
+
+    async def _is_tenant_admin(user_id: int, tenant_id: int) -> bool:
+        return user_id == TENANT_ADMIN_USER_ID
+
+    monkeypatch.setattr(publish_status_service, "check_tenant_admin", _is_tenant_admin)
+    app, _ = await app_factory(with_version=True)
+    actor = _actor(TENANT_ADMIN_USER_ID, tenant_id=SUB_TENANT_ID)
+
+    assert (await _service().get_publish_status(app.id, actor=actor))["app_id"] == app.id
+
+    for entry in ("cli", "mcp"):
+        with pytest.raises(AppPublishOwnerOnlyError):
+            await _service().get_publish_status(app.id, actor=actor, entry=entry)
+
+
+async def test_a_super_admin_key_gets_no_bypass_on_the_credential_door(publish_db, app_factory, tier_seed):
+    from bisheng.common.errcode.app_publish import AppPublishOwnerOnlyError
+
+    app, _ = await app_factory(with_version=True)
+    actor = _actor(SUPER_ADMIN_USER_ID, is_global_super=True)
+
+    assert (await _service().get_publish_status(app.id, actor=actor))["app_id"] == app.id
+    with pytest.raises(AppPublishOwnerOnlyError):
+        await _service().get_publish_status(app.id, actor=actor, entry="mcp")
+
+
+async def test_a_stranger_and_a_missing_application_share_one_error_code(publish_db, app_factory, tier_seed):
+    """Both are 16254 here; the ``details.reason`` still differs, and that is fine.
+
+    On the platform face an owner benefits from "this application was deleted"
+    versus "you may not see it". What must not differ is what leaves the
+    *credential* face — and it does not: F052's tool rebuilds the refusal as a
+    bare ``McpAppNotOwnedError(app_id=...)`` and never forwards ``details``.
+    ``test_mcp_tools_apps.py`` asserts the two payloads byte for byte.
+    """
+    from bisheng.common.errcode.app_publish import AppPublishOwnerOnlyError
+
+    app, _ = await app_factory(with_version=True)
+
+    with pytest.raises(AppPublishOwnerOnlyError) as stranger:
+        await _service().get_publish_status(app.id, actor=_actor(999_999), entry="mcp")
+    with pytest.raises(AppPublishOwnerOnlyError) as missing:
+        await _service().get_publish_status("no-such-app", actor=_actor(999_999), entry="mcp")
+
+    assert stranger.value.Code == missing.value.Code == 16254
+
+
+async def test_the_two_doors_return_the_same_content_for_the_owner(publish_db, app_factory, tier_seed):
+    """AC-18 / AC-38: one function, so only the admission rule differs."""
+
+    app, _ = await app_factory(with_version=True)
+    actor = _actor(OWNER_USER_ID)
+
+    assert await _service().get_publish_status(app.id, actor=actor) == await _service().get_publish_status(
+        app.id, actor=actor, entry="mcp"
+    )

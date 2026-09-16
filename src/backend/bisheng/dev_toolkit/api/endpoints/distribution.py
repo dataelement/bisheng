@@ -18,12 +18,13 @@ the image, and ``clear_minio_share_host`` hands back a path that depends on the
 front-end nginx proxy — a CLI connecting directly would get a URL it cannot use.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from bisheng.common.schemas.api import resp_200, resp_500
 from bisheng.common.services.config_service import settings
 from bisheng.dev_toolkit.domain.services import artifact_service
+from bisheng.open_api.domain.services.public_base_url import resolve_public_base_url
 
 router = APIRouter(prefix="/dev-toolkit", tags=["Dev Toolkit"])
 
@@ -53,7 +54,7 @@ INSTALL_GUIDE_MISSING_MESSAGE = "安装指引未随本次部署发布，请联�
 
 
 @router.get("/versions")
-def get_dev_toolkit_versions():
+def get_dev_toolkit_versions(request: Request):
     """Version and compatibility truth for the CLI's pre-flight probe.
 
     Answers 200 even with nothing staged: the shape stays identical and ``cli``
@@ -78,6 +79,22 @@ def get_dev_toolkit_versions():
             # Holding the slots open now is what keeps that from becoming either
             # a second endpoint or a breaking reshape of this one.
             "sdk": {"version": None, "min_compatible": None, "download_path": None},
+            # F052: where a local coding agent points its MCP client. One
+            # address, derived the same way the skill packs derive theirs, so
+            # the access-information panel does not compose a second URL of its
+            # own. It carries no credential — the key is issued separately and
+            # travels in the Authorization header.
+            #
+            # This router is only mounted when the open-capability layer is on,
+            # so "the address does not appear where the layer is not deployed"
+            # needs no code. ``model`` holds F051's slot open for the same
+            # reason ``sdk`` does: so filling it is not a reshape.
+            "mcp": {
+                "url": f"{resolve_public_base_url(request)}/api/v2/mcp",
+                "transport": "streamable-http",
+                "auth": "bearer",
+            },
+            "model": None,
             "platform": {
                 # From the manifest, never from `bisheng.__version__` — that one
                 # is a hardcoded literal, so comparing the CLI against it would

@@ -29,7 +29,7 @@ from __future__ import annotations
 from typing import Any
 
 from bisheng.core.context.tenant import get_current_tenant_id
-from bisheng.database.models.department import Department, DepartmentDao
+from bisheng.database.models.department import Department, DepartmentDao, UserDepartmentDao
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.user.domain.models.user import UserDao
@@ -66,23 +66,21 @@ class OrgDirectoryService:
             return None
         size = max(1, min(int(size or 50), MAX_MEMBER_PAGE_SIZE))
         page = max(1, int(page or 1))
-        rows, total = await DepartmentDao.aget_members(
+        rows, total = await UserDepartmentDao.aget_members(
             int(department.id),
             page=page,
             limit=size,
             keyword=keyword or "",
         )
-        members = []
-        for row in rows or []:
-            user_id = int(row[0])
-            user = await UserDao.aget_user(user_id)
-            members.append(
-                {
-                    "user_id": user_id,
-                    "user_name": row[1],
-                    "status": cls._status(user),
-                }
-            )
+        user_ids = [int(row[0]) for row in rows or []]
+        # One lookup for the page, not one per row: ``aget_members`` selects
+        # names but not the disabled flag, and a member list of 200 should not
+        # cost 200 round trips to add it.
+        by_id = {int(user.user_id): user for user in (await UserDao.aget_user_by_ids(user_ids)) or []}
+        members = [
+            {"user_id": int(row[0]), "user_name": row[1], "status": cls._status(by_id.get(int(row[0])))}
+            for row in rows or []
+        ]
         return {"members": members, "total": int(total or 0)}
 
     @classmethod
@@ -95,8 +93,12 @@ class OrgDirectoryService:
         """
 
         user = await UserDao.aget_user(int(user_id))
-        if user is None or int(getattr(user, "delete", 0) or 0) == 1:
+        if user is None:
             return None
+        # A disabled person is still a person in this org chart, and is returned
+        # with ``status: "disabled"``. Hiding them would read as "no such user"
+        # and send an agent hunting for a typo in an id that is perfectly valid —
+        # and would leave ``status`` a field that can only ever say "active".
         membership = await UserTenantDao.aget_active_user_tenant(int(user_id))
         tenant_id = int(get_current_tenant_id() or 0)
         if membership is None or int(membership.tenant_id or 0) != tenant_id:
@@ -132,7 +134,7 @@ class OrgDirectoryService:
 
     @classmethod
     async def _departments_of(cls, user_id: int) -> list[dict[str, Any]]:
-        memberships = await DepartmentDao.aget_user_departments(user_id)
+        memberships = await UserDepartmentDao.aget_user_departments(user_id)
         department_ids = [int(item.department_id) for item in memberships or []]
         if not department_ids:
             return []

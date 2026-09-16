@@ -41,13 +41,16 @@ def test_extension_scopes_are_not_issuable_without_open_platform(monkeypatch):
     assert issuable_scope_codes() == ALWAYS_ISSUABLE_OPEN_API_SCOPE_CODES
 
 
-def test_only_app_manage_becomes_issuable_with_open_platform(monkeypatch):
+def test_shipped_extension_scopes_become_issuable_with_open_platform(monkeypatch):
+    """``model:invoke`` stays out until F051's protocol face ships — an
+    administrator must not be able to grant a capability nothing implements."""
+
     monkeypatch.setattr(settings.open_platform, "enabled", True)
 
     codes = issuable_scope_codes()
-    assert "app:manage" in codes
-    assert {"model:invoke", "identity:read"}.isdisjoint(codes)
-    assert codes == ALWAYS_ISSUABLE_OPEN_API_SCOPE_CODES | {"app:manage"}
+    assert {"app:manage", "identity:read"} <= codes
+    assert "model:invoke" not in codes
+    assert codes == ALWAYS_ISSUABLE_OPEN_API_SCOPE_CODES | {"app:manage", "identity:read"}
 
 
 def test_issuable_scopes_have_localized_presentation_metadata(monkeypatch):
@@ -73,12 +76,16 @@ def test_issuable_scopes_have_localized_presentation_metadata(monkeypatch):
         "assistant",
         "knowledge",
         "knowledge",
-        "local_dev_toolkit",
+        "local_dev_toolkit",  # identity:read — F052 MCP tools, no REST route
+        "local_dev_toolkit",  # app:manage
         "delegation",
     ]
     assert all(scope.label_key.startswith("openApiManagement.scopes.") for scope in scopes)
     assert all(scope.desc_key.startswith("openApiManagement.scopes.") for scope in scopes)
-    assert all(scope.endpoints for scope in scopes if scope.code != "delegate")
+    # ``delegate`` gates a mode rather than a surface; ``identity:read`` gates
+    # MCP tools, which are dispatched from the tool registry and so have no
+    # ``/api/v2`` route to register. Everything else answers on a route.
+    assert all(scope.endpoints for scope in scopes if scope.code not in {"delegate", "identity:read"})
 
 
 def test_registry_maps_each_endpoint_to_exactly_one_scope():

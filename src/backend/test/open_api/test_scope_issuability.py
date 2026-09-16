@@ -63,10 +63,21 @@ def test_app_manage_is_accepted_once_open_platform_is_on(open_platform_enabled):
     assert CredentialService.validate_scopes(["knowledge:read", "app:manage"]) == ["knowledge:read", "app:manage"]
 
 
-@pytest.mark.parametrize("scope", ["model:invoke", "identity:read"])
+@pytest.mark.parametrize("scope", ["model:invoke"])
 def test_pending_extension_scopes_stay_unissuable_even_with_open_platform(open_platform_enabled, scope):
     with pytest.raises(OpenApiExtensionScopeNotDeployedError):
         CredentialService.validate_scopes([scope])
+
+
+def test_identity_read_becomes_issuable_with_the_mcp_face(open_platform_enabled):
+    """F052 shipped the three tools that read it, so an administrator may now tick it."""
+
+    assert CredentialService.validate_scopes(["identity:read"]) == ["identity:read"]
+
+
+def test_identity_read_is_still_refused_without_the_open_capability_layer(open_platform_disabled):
+    with pytest.raises(OpenApiExtensionScopeNotDeployedError):
+        CredentialService.validate_scopes(["identity:read"])
 
 
 def test_app_manage_registers_the_four_app_factory_v2_routes():
@@ -173,7 +184,8 @@ async def test_scope_catalog_offers_app_manage_only_with_open_platform(monkeypat
     codes = {item.code for item in shown.scopes}
     assert shown.open_platform_enabled is True
     assert "app:manage" in codes
-    assert {"model:invoke", "identity:read"}.isdisjoint(codes)
+    assert "identity:read" in codes  # F052 MCP face
+    assert "model:invoke" not in codes
     app_manage = next(item for item in shown.scopes if item.code == "app:manage")
     assert app_manage.group == "local_dev_toolkit"
     assert [(endpoint.method, endpoint.path) for endpoint in app_manage.endpoints] == [
