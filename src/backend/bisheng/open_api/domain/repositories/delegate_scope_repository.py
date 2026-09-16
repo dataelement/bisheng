@@ -28,9 +28,7 @@ class DelegateScopeRepository:
         async with get_async_db_session() as session:
             async with session.begin():
                 await session.exec(
-                    delete(ApiCredentialDelegateScope).where(
-                        ApiCredentialDelegateScope.credential_id == credential_id
-                    )
+                    delete(ApiCredentialDelegateScope).where(ApiCredentialDelegateScope.credential_id == credential_id)
                 )
                 for subject_type, subject_id in entries:
                     session.add(
@@ -45,22 +43,25 @@ class DelegateScopeRepository:
     @classmethod
     async def get_department(cls, department_id: int) -> Department | None:
         async with get_async_db_session() as session:
-            return (
-                await session.exec(select(Department).where(Department.id == department_id))
-            ).first()
+            return (await session.exec(select(Department).where(Department.id == department_id))).first()
+
+    @classmethod
+    async def get_departments(cls, department_ids: tuple[int, ...]) -> dict[int, Department]:
+        departments = {}
+        async with get_async_db_session() as session:
+            for offset in range(0, len(department_ids), 500):
+                rows = await session.exec(
+                    select(Department).where(Department.id.in_(department_ids[offset : offset + 500]))
+                )
+                departments.update((int(row.id), row) for row in rows.all())
+        return departments
 
     @classmethod
     async def target_in_departments(cls, user_id: int, department_ids: tuple[int, ...]) -> bool:
         if not department_ids:
             return False
         async with get_async_db_session() as session:
-            scoped = list(
-                (
-                    await session.exec(
-                        select(Department).where(Department.id.in_(department_ids))
-                    )
-                ).all()
-            )
+            scoped = list((await session.exec(select(Department).where(Department.id.in_(department_ids)))).all())
             memberships = list(
                 (
                     await session.exec(

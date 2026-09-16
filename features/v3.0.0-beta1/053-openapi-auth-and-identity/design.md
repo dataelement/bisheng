@@ -266,6 +266,8 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 
 **C2：委托范围。** 使用独立表 `api_credential_delegate_scope`，支持 user / department 条目。编辑密钥去掉 `delegate` 时同事务清空范围。user 条目只需验证目标存在于 `User`、`delete=0` 且同租户活跃；服务账号不存在于 User，因此无需 `user_type` 判断。department 子树在调用期按物化路径展开。
 
+候选过滤与保存共用 `DelegateScopeService.filter_entries`：用户要求 `User.delete=0`、`UserTenant.status=active`、`is_active=1`，且当前归属租户等于服务账号租户；部门要求同租户、`status=active`、`is_deleted=0`。管理端先按原有权限加载可见候选，再通过 `POST /api/v1/service-accounts/{id}/delegate-candidates:filter` 批量取合法子集（请求/响应均为 `DelegateScopeInput[]`，只读，无新增存储）。该接口沿用服务账号管理员鉴权和账号可见性检查，租户取账号自身；仅签发/编辑密钥的委托选择器使用，用户的组织树浏览及姓名搜索、部门的逐层展开及搜索均过滤。保存仍重新校验，防止候选加载后用户/部门状态变化；过滤不改变多选数量、用户与部门混用及调用期特权主体限制。
+
 **C3：五道准入。** 依次检查：①凭据有 `delegate`；②目标 User 存在、启用、同租户；③目标不是超级管理员 / 租户管理员；④目标命中委托范围；⑤端点允许 D。失败分别落 `26004 / 26005 / 26007 / 26004 / 26006`。全部通过后，授权主体直接改为 `user:{target_id}`。PAT 携带 OBO 在检查 ① 前拒绝。
 
 **C4：裸参数收口与检索过滤。** 原 v2 `filelib` 的裸 `user_id` 和 `/assistant/list` 死参数一律拒绝并指向 `X-On-Behalf-Of`。`POST /filelib/retrieve` 两个召回分支都执行文件级 prefilter + post-filter；权限服务异常向上返回 503，不能降级成全量结果。
