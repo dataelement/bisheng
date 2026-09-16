@@ -21,6 +21,7 @@ import {
   issueServiceAccountKeyApi,
   updateServiceAccountKeyApi,
 } from "@/controllers/API/serviceAccount"
+import { createDelegateCandidateSource } from "@/controllers/API/serviceAccountCandidates"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type {
   ApiKeyIssued,
@@ -80,6 +81,7 @@ export function KeyIssueDialog({
     DelegateDepartment[]
   >([])
   const [loading, setLoading] = useState(false)
+  const candidates = useMemo(() => createDelegateCandidateSource(serviceAccountId), [serviceAccountId])
 
   const delegateInvalid =
     selectedScopes.includes("delegate") &&
@@ -355,6 +357,8 @@ export function KeyIssueDialog({
                   >
                     <span>{t("openApiManagement.keys.delegateUsers")}</span>
                     <DepartmentUsersSelect
+                      key={`${serviceAccountId}:${editingKey?.id ?? "new"}:${open}`}
+                      filterUserIds={candidates.filterUserIds}
                       value={delegateUsers}
                       onChange={setDelegateUsers}
                       placeholder={t(
@@ -374,6 +378,8 @@ export function KeyIssueDialog({
                       {t("openApiManagement.keys.delegateDepartment")}
                     </span>
                     <TreeDepartmentSelect
+                      key={`${serviceAccountId}:${editingKey?.id ?? "new"}:${open}`}
+                      dataSource={candidates.departmentSource}
                       value={null}
                       onChange={(id, node) => {
                         if (

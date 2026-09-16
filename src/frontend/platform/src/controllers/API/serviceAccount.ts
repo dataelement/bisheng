@@ -4,6 +4,7 @@ import type {
   ApiKeyIssued,
   ApiKeyItem,
   ApiKeyUpdateForm,
+  DelegateScopeInput,
   OpenApiScopeCatalog,
   ServiceAccountForm,
   ServiceAccountDeleteResult,
@@ -57,6 +58,14 @@ export async function listOpenApiScopesApi(): Promise<OpenApiScopeCatalog> {
 
 export async function listServiceAccountKeysApi(id: number): Promise<ApiKeyItem[]> {
   return await axios.get(`/api/v1/service-accounts/${id}/keys`)
+}
+
+export async function filterDelegateCandidatesApi(
+  id: number,
+  candidates: DelegateScopeInput[],
+  signal?: AbortSignal,
+): Promise<DelegateScopeInput[]> {
+  return await axios.post(`/api/v1/service-accounts/${id}/delegate-candidates:filter`, candidates, { signal })
 }
 
 export async function issueServiceAccountKeyApi(
