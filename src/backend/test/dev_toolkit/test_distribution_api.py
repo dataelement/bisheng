@@ -235,8 +235,9 @@ def test_missing_artifacts_degrade_readably_not_500(absent_artifacts, client_fac
     assert versions.status_code == 200
     data = versions.json()["data"]
     assert data["cli"] is None
-    # The shape survives so an agent's parser does not crash on the degraded
-    # case: every key is present, and the two installer sections are null.
+    # The top-level keys survive so an agent's parser does not crash on the
+    # degraded case; each installer section is null as a whole, which is the one
+    # branch a consumer reads ("this deployment ships no SDK at all").
     assert data["sdk"] is None
     assert data["platform"]["open_platform_enabled"] is True
     assert isinstance(data["notice"], str) and data["notice"]
