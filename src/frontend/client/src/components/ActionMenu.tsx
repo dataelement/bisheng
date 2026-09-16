@@ -64,31 +64,13 @@ interface ActionMenuContentProps extends DropdownMenuContentProps {
     width?: number | string;
 }
 
-/* How the user is currently driving the UI.
- *
- * When a menu closes, Radix sends focus back to the trigger. That is right for
- * the keyboard — it is where the user was — but the browser then paints the
- * focus ring, so a "..." button clicked with the mouse kept a brand-coloured
- * ring after the menu was dismissed. Nothing in the close event says which
- * happened; the input modality is what tells them apart. */
-let lastInputWasKeyboard = false;
-let modalityListenersInstalled = false;
-
-function trackInputModality(): void {
-    if (modalityListenersInstalled || typeof window === "undefined") return;
-    modalityListenersInstalled = true;
-    window.addEventListener("keydown", () => { lastInputWasKeyboard = true; }, true);
-    window.addEventListener("pointerdown", () => { lastInputWasKeyboard = false; }, true);
-}
-
 export const ActionMenuContent = React.forwardRef<
     React.ElementRef<typeof DropdownMenuContent>,
     ActionMenuContentProps
 >(function ActionMenuContent(
-    { className, align = "end", sideOffset = 8, width, style, onCloseAutoFocus, ...props },
+    { className, align = "end", sideOffset = 8, width, style, ...props },
     ref,
 ) {
-    trackInputModality();
     const widthStyle =
         width != null
             ? { width: typeof width === "number" ? `${width}px` : width }
@@ -100,14 +82,6 @@ export const ActionMenuContent = React.forwardRef<
             sideOffset={sideOffset}
             className={cn(actionMenuContentClassName, className)}
             style={widthStyle ? { ...widthStyle, ...style } : style}
-            onCloseAutoFocus={(event) => {
-                onCloseAutoFocus?.(event);
-                if (event.defaultPrevented) return;
-                // Keep the focus return for the keyboard, drop it for the mouse:
-                // a pointer user has no use for the ring and reads it as the row
-                // still being selected.
-                if (!lastInputWasKeyboard) event.preventDefault();
-            }}
             {...props}
         />
     );

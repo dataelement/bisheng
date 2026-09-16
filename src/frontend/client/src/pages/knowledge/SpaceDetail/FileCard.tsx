@@ -850,7 +850,7 @@ export function FileCard({
                                         <Button
                                             variant="outline"
                                             size="icon"
-                                            className="w-5 h-5 rounded-md shrink-0"
+                                            className="w-5 h-5 rounded-md shrink-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                                             onClick={(e) => e.stopPropagation()}
                                         >
                                             <MoreVertical className="size-4 text-text-2 group-hover:text-text-1" />
