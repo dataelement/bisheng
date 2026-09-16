@@ -33,7 +33,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import Column, DateTime, Index, Integer, String, UniqueConstraint, delete, text, update
-from sqlmodel import Field, col, select
+from sqlmodel import Field, col, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -170,6 +170,50 @@ class AppDao:
         statement = select(App.id, App.slug, App.state).where(col(App.id).in_(list(app_ids)))
         result = await session.exec(statement)
         return {row[0]: (row[1], row[2]) for row in result.all()}
+
+    @classmethod
+    async def alist_by_ids(cls, session: AsyncSession, app_ids: Sequence[str]) -> list[App]:
+        """Whole rows for a bounded id batch — read only, deleted rows included.
+
+        The audit page needs name / slug / state / owner for the applications
+        its rows point at, one statement per page (same reasoning as
+        :meth:`alist_slug_state_by_ids`). Deleted applications are *not*
+        filtered out: their audit rows are exactly the ones a name snapshot
+        exists for (AC-21). The caller decides on tenant bypass — a global
+        super reading every tenant's audit rows needs it, a tenant admin's
+        rows are already scoped by the audit query.
+        """
+        if not app_ids:
+            return []
+        result = await session.exec(select(App).where(col(App.id).in_(list(app_ids))))
+        return list(result.all())
+
+    @classmethod
+    async def asearch_for_audit(
+        cls, session: AsyncSession, tenant_id: int | None, keyword: str, limit: int
+    ) -> list[App]:
+        """Name / slug substring search for the audit page's application
+        selector (F056 AC-28) — read only, **deleted rows included**.
+
+        This is deliberately not ``AppQueryService.list_apps``: that one drops
+        ``state='deleted'`` and scopes to owner / tenant admin, while the audit
+        selector must offer a deleted application so its delete event and
+        history stay reachable (AC-21). ``tenant_id=None`` means the caller is
+        a global super reading across tenants and has wrapped the session in
+        ``bypass_tenant_filter()``; otherwise the predicate is written out
+        rather than left to the automatic filter, for the reason given on
+        :meth:`alist_by_tenant`.
+        """
+        statement = select(App)
+        if tenant_id is not None:
+            statement = statement.where(App.tenant_id == tenant_id)
+        keyword = (keyword or "").strip()
+        if keyword:
+            pattern = f"%{keyword}%"
+            statement = statement.where(or_(col(App.name).like(pattern), col(App.slug).like(pattern)))
+        statement = statement.order_by(col(App.update_time).desc(), col(App.id).desc()).limit(limit)
+        result = await session.exec(statement)
+        return list(result.all())
 
     @classmethod
     async def alist_by_tenant(cls, session: AsyncSession, tenant_id: int) -> list[App]:

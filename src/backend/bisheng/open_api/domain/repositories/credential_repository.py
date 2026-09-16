@@ -50,6 +50,22 @@ class CredentialRepository:
             return (await session.exec(select(ApiCredential).where(ApiCredential.id == credential_id))).first()
 
     @classmethod
+    async def get_by_ids(cls, credential_ids: list[int]) -> list[ApiCredential]:
+        """Batch read for display — the audit page resolves the key mask of
+        the credential an ``open_api.call`` / ``app.release.submit`` row names
+        in ``metadata.credential_id`` (F056 AC-17). Tenant filter bypassed:
+        a global super's audit page spans tenants and the rows themselves were
+        already scoped by the audit query. Revoked rows are included on
+        purpose — a mask must stay readable after the key is gone.
+        """
+        if not credential_ids:
+            return []
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                statement = select(ApiCredential).where(col(ApiCredential.id).in_(credential_ids))
+                return list((await session.exec(statement)).all())
+
+    @classmethod
     async def get_by_hash(cls, token_hash: str) -> ApiCredential | None:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
@@ -143,12 +159,16 @@ class CredentialRepository:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 async with session.begin():
-                    statement = select(ApiCredential).where(
-                        ApiCredential.subject_kind == "natural_person",
-                        ApiCredential.subject_id == user_id,
-                        ApiCredential.tenant_id != tenant_id,
-                        col(ApiCredential.revoked_at).is_(None),
-                    ).with_for_update()
+                    statement = (
+                        select(ApiCredential)
+                        .where(
+                            ApiCredential.subject_kind == "natural_person",
+                            ApiCredential.subject_id == user_id,
+                            ApiCredential.tenant_id != tenant_id,
+                            col(ApiCredential.revoked_at).is_(None),
+                        )
+                        .with_for_update()
+                    )
                     rows = list((await session.exec(statement)).all())
                     migrated: list[tuple[ApiCredential, int]] = []
                     now = datetime.now()
@@ -185,9 +205,7 @@ class CredentialRepository:
             async with session.begin():
                 session.add(row)
                 await session.exec(
-                    delete(ApiCredentialDelegateScope).where(
-                        ApiCredentialDelegateScope.credential_id == row.id
-                    )
+                    delete(ApiCredentialDelegateScope).where(ApiCredentialDelegateScope.credential_id == row.id)
                 )
                 for subject_type, subject_id in entries:
                     session.add(

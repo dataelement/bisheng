@@ -1492,7 +1492,19 @@
       "jumpTo": "跳至",
       "page": "页"
     },
-    "workbench_daily": "工作台（日常模式）"
+    "workbench_daily": "工作台（日常模式）",
+    "selectApp": "选择对象应用",
+    "searchApp": "按应用名或标识搜索",
+    "selectTenant": "选择租户",
+    "tenant": "租户",
+    "appSlug": "应用标识",
+    "reason": "原因",
+    "versionLabel": "版本 {{no}}",
+    "deletedSuffix": "已删除",
+    "serviceAccount": "服务账号",
+    "appOwner": "应用归属人",
+    "exportEmpty": "当前筛选条件下没有记录可导出",
+    "exportTruncated": "共 {{total}} 条记录，超过单次导出上限，仅导出最新的 {{max}} 条，请缩小筛选范围"
   },
   "tag": {
     "labelMaxLength": "标签名不能超过10个字符",
