@@ -17,6 +17,7 @@ endpoint that the pipeline refuses outright.
 from fastapi import APIRouter
 
 from bisheng.app_publish.api.endpoints.deploy import router as deploy_router
+from bisheng.app_publish.api.endpoints.preview import router as preview_router
 from bisheng.app_publish.api.endpoints.publish_status import router as publish_status_router
 from bisheng.app_publish.api.endpoints.resource_tier import router as resource_tier_router
 from bisheng.app_publish.api.endpoints.snapshot import router as snapshot_router
@@ -32,5 +33,6 @@ v2_router.include_router(deploy_router)
 v1_router = APIRouter()
 v1_router.include_router(publish_status_router)
 v1_router.include_router(snapshot_router)
+v1_router.include_router(preview_router)
 v1_router.include_router(version_diff_router)
 v1_router.include_router(resource_tier_router)

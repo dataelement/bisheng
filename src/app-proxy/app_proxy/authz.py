@@ -82,6 +82,11 @@ class Verdict:
     #: claim itself and falls back to the process config for the cap.
     obo_expires_at: float | None = None
     ws_max_lifetime_seconds: float | None = None
+    #: Set only on an approval-time preview (F055 AC-26): the upstream is then
+    #: resolved by session rather than by ``app_id``, because a preview has no
+    #: desired-state record in the manager. ``app_id`` is still the application
+    #: under review — it is what gets injected as ``X-BiSheng-App-Id``.
+    preview_session: str | None = None
 
     @property
     def allowed(self) -> bool:
@@ -121,6 +126,35 @@ def _coerce_material(payload: dict[str, Any]) -> dict[str, str]:
     return {str(k): str(v) for k, v in raw.items() if v is not None}
 
 
+async def authorize_preview(
+    *,
+    session: str,
+    access_token: str | None,
+    request_id: str,
+    client_ip: str | None = None,
+) -> Verdict:
+    """The ``/apps/preview/{session}`` twin of :func:`authorize` (F055 AC-26).
+
+    A separate call and a separate cache key rather than a flag: the two
+    verdicts answer different questions about different things, and the day one
+    of them changes shape the other must not quietly follow. Everything after
+    the RPC — unknown decisions refused, material coerced — is the shared
+    :func:`_verdict_from`, because *that* part going out of step is how a
+    verdict this build does not understand becomes a forward.
+    """
+    try:
+        payload = await get_backend_client().authorize_preview(
+            session=session,
+            access_token=access_token,
+            request_id=request_id,
+            client_ip=client_ip,
+        )
+    except InternalRpcError as exc:
+        logger.warning("app_proxy.authz preview=%s request_id=%s fail_closed=%s", session, request_id, exc)
+        return Verdict(decision=DECISION_UNAVAILABLE, reason=str(exc))
+    return _verdict_from(payload, label=f"preview {session}", request_id=request_id)
+
+
 async def authorize(
     *,
     slug: str,
@@ -141,12 +175,16 @@ async def authorize(
         # blip into three seconds of refusals for every visitor.
         logger.warning("app_proxy.authz slug=%s request_id=%s fail_closed=%s", slug, request_id, exc)
         return Verdict(decision=DECISION_UNAVAILABLE, reason=str(exc))
+    return _verdict_from(payload, label=f"slug {slug}", request_id=request_id)
 
+
+def _verdict_from(payload: dict[str, Any], *, label: str, request_id: str) -> Verdict:
+    """Payload → :class:`Verdict`, refusal-by-default. Point 3 of the module docstring."""
     decision = str(payload.get("decision") or "")
     if decision not in KNOWN_DECISIONS:
         logger.error(
-            "app_proxy.authz slug=%s request_id=%s unknown decision %r — refusing",
-            slug,
+            "app_proxy.authz %s request_id=%s unknown decision %r — refusing",
+            label,
             request_id,
             decision,
         )
@@ -167,6 +205,7 @@ async def authorize(
         cache_hit=bool(payload.get("cache_hit")),
         obo_expires_at=_optional_number(payload.get("obo_expires_at")),
         ws_max_lifetime_seconds=_optional_number(payload.get("ws_max_lifetime_seconds")),
+        preview_session=str(payload["preview_session"]) if payload.get("preview_session") else None,
     )
 
 

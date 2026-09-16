@@ -58,6 +58,15 @@ class AppReleaseAuditAction(StrEnum):
     #: Capability declaration of a release (AC-55) — first writer lands with
     #: the capability bus wave; registered now so the whitelist is touched once.
     CAPABILITY_DECLARED = "app.release.capability_declared"
+    #: An approver raised a temporary preview instance of a pending version
+    #: (AC-26). Worth its own row rather than a log line: it is the record that
+    #: a given person ran the code before deciding on it, and it is how an
+    #: administrator accounts for a container that belongs to no application.
+    PREVIEW_STARTED = "app.release.preview_started"
+    #: …and it went away. ``reason`` is ``manual`` / ``approval_terminal`` /
+    #: ``expired`` — three triggers that look identical in the container log and
+    #: need telling apart when somebody asks why a trial ended (AC-28).
+    PREVIEW_RECLAIMED = "app.release.preview_reclaimed"
     #: The two-phase compensation after "approval created, version INSERT
     #: failed" (design D6).
     ROLLBACK = "app.release.rollback"

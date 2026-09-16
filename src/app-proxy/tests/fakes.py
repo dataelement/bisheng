@@ -130,13 +130,21 @@ class FakeBackend:
     """
 
     path = "/api/v1/internal/app-proxy/authorize"
+    preview_path = "/api/v1/internal/app-proxy/authorize-preview"
 
     def __init__(self, secret: str) -> None:
         self.secret = secret
         self.response: dict[str, Any] = allow_response()
+        #: Verdict for ``authorize-preview``. ``None`` means "answer with
+        #: :attr:`response`", which keeps every existing test unchanged; a test
+        #: about the preview entry sets it explicitly.
+        self.preview_response: dict[str, Any] | None = None
         self.status_code = 200
         self.fail: Exception | None = None
         self.calls: list[dict[str, Any]] = []
+        #: Paths the fake was asked for, so a test can prove the *preview*
+        #: endpoint was called and not the application one.
+        self.paths: list[str] = []
         #: When true, wrap the body in the platform's ``{status_code, data}``
         #: envelope — the endpoint may end up going through resp_200().
         self.envelope = False
@@ -153,7 +161,10 @@ class FakeBackend:
             await response(scope, receive, send)
             return
         self.calls.append(json.loads(raw) if raw else {})
+        self.paths.append(request.url.path)
         body = self.response
+        if request.url.path == self.preview_path and self.preview_response is not None:
+            body = self.preview_response
         if self.envelope:
             body = {"status_code": 200, "status_message": "SUCCESS", "data": body}
         response = JSONResponse(body, status_code=self.status_code)
@@ -177,6 +188,7 @@ class FakeManager:
         self.status_code = 200
         self.fail: Exception | None = None
         self.calls: list[str] = []
+        self.paths: list[str] = []
 
     async def __call__(self, scope, receive, send) -> None:
         request = Request(scope, receive)
@@ -189,8 +201,11 @@ class FakeManager:
             await response(scope, receive, send)
             return
 
+        # ``/v1/apps/{id}/route`` and ``/v1/previews/{id}/route`` both put the
+        # id in the same position, so one expression serves both.
         app_id = request.url.path.rsplit("/", 2)[-2]
         self.calls.append(app_id)
+        self.paths.append(request.url.path)
         if self.status_code >= 400:
             response = JSONResponse({"code": "internal_error"}, status_code=self.status_code)
             await response(scope, receive, send)
@@ -432,3 +447,32 @@ class WsUpstreamTransport:
             proxy=None,
             max_size=None,
         )
+
+
+#: A preview session id shaped like the one the platform mints (uuid4 hex).
+DEFAULT_PREVIEW_SESSION = "2f1c8d4ab0e5461d9a77c3e5d8b21f40"
+
+
+def preview_allow_response(
+    *,
+    session: str = DEFAULT_PREVIEW_SESSION,
+    material: dict[str, str] | None = None,
+    app_id: str = DEFAULT_APP_ID,
+    obo_token: str = "obo.preview.token",
+) -> dict[str, Any]:
+    """What ``authorize-preview`` hands back for the approver it belongs to.
+
+    Note what is **absent**: no ``owner_name``. A preview refusal must not name
+    anybody — the visitor has not been told the application exists.
+    """
+    headers = dict(DEFAULT_HEADER_MATERIAL if material is None else material)
+    headers.setdefault("X-BiSheng-App-Id", app_id)
+    return {
+        "decision": "allow",
+        "headers": headers,
+        "obo_token": obo_token,
+        "app_state": "draft",
+        "app_id": app_id,
+        "app_name": "问卷小助手",
+        "preview_session": session,
+    }

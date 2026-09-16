@@ -212,6 +212,131 @@ async def authorize_entry(
     }
 
 
+async def authorize_preview_entry(
+    *,
+    session: str,
+    access_token: str | None,
+    request_id: str = "",
+    client_ip: str | None = None,
+) -> dict[str, Any]:
+    """The verdict for ``/apps/preview/{session}`` (F054 AC-37, F055 AC-26 / AC-27).
+
+    Same five-step order as :func:`authorize_entry` and, where it differs, the
+    difference is the point:
+
+    * **Step 3 is the preview session, not the slug.** Unknown, reclaimed and
+      expired are one answer — ``not_found`` — because the difference would
+      tell a stranger that a session id was once real.
+    * **Step 4 is "is this *that* approver", not the visible scope.** A preview
+      belongs to the person it was raised for and to nobody else: not the
+      owner, not another approver on the same request, not a tenant
+      administrator. AC-27 says the instance carries the approver's own
+      identity, so a second person entering it would be acting as the first.
+      (The owner's own way in is the application's real entry; the approval
+      exception in NFR-1.2 / INV-36 widens what the *capabilities* inside the
+      preview may do, not who may open it.)
+    * **There is no ``stopped`` branch.** A preview has two states, running and
+      gone, and "gone" is ``not_found``.
+
+    The identity material is the ordinary one — this really is the approver
+    visiting — plus the app id of the application under review, so the trial
+    instance sees the same environment shape it will see in production.
+    """
+    if not settings.app_runtime.enabled:
+        return {"decision": DECISION_NOT_ENABLED}
+
+    subject = _decode_jwt_subject(access_token) if access_token else None
+    if subject is None:
+        return {"decision": DECISION_LOGIN, "reason": "no_session"}
+
+    user_id = int(subject.get("user_id") or 0)
+    tenant_id = int(subject.get("tenant_id") or 0)
+    if not user_id:
+        return {"decision": DECISION_LOGIN, "reason": "no_session"}
+
+    session_reason = await _session_invalid_reason(user_id, tenant_id, subject, access_token)
+    if session_reason:
+        return {"decision": DECISION_LOGIN, "reason": session_reason}
+
+    row = await _resolve_preview_session(session)
+    if row is None:
+        return {"decision": DECISION_NOT_FOUND}
+
+    if int(row.approver_user_id or 0) != user_id:
+        # Not ``forbidden``: the visitor has not been told this preview exists,
+        # and telling them now — with an app name and an owner to ask — would
+        # hand out the existence of an unpublished application (AC-30).
+        logger.info(
+            "app_runtime.preview_entry refused session={} visitor={} owner_of_session={}",
+            session,
+            user_id,
+            row.approver_user_id,
+        )
+        return {"decision": DECISION_NOT_FOUND}
+
+    app = await _load_app_by_id(str(row.app_id))
+    if app is None:
+        return {"decision": DECISION_NOT_FOUND}
+
+    set_current_tenant_id(int(app.tenant_id or 0))
+    user_name, subject_kind = await _user_facts(user_id, subject)
+    material = await _identity_material(
+        app=app, user_id=user_id, user_name=user_name, subject_kind=subject_kind, request_id=request_id
+    )
+    obo_token, obo_expires_at = _issue_obo_token(
+        app_id=app.id,
+        user_id=user_id,
+        tenant_id=int(app.tenant_id or 0),
+        subject_kind=material.get("X-BiSheng-Subject-Kind", "human"),
+    )
+    if obo_token:
+        material["X-BiSheng-Access-Token"] = obo_token
+    logger.debug("app_runtime.preview_entry allow session={} user={} ip={}", session, user_id, client_ip)
+    # No access record: AC-38 counts visits to an *application*, and a trial
+    # instance of a version that may never ship is not one. Counting it would
+    # inflate an app's usage with its own approvals.
+    return {
+        "decision": DECISION_ALLOW,
+        "app_id": app.id,
+        "app_name": app.name,
+        "app_state": app.state,
+        "preview_session": row.id,
+        "headers": material,
+        "obo_token": obo_token,
+        "obo_expires_at": obo_expires_at,
+        "ws_max_lifetime_seconds": int(settings.app_runtime.ws_max_lifetime_seconds),
+    }
+
+
+async def _resolve_preview_session(session: str):
+    """F055 owns the session's lifetime; this module only asks whether it is live.
+
+    Imported inside the function so ``app_runtime`` keeps no import-time edge to
+    ``app_publish`` — the dependency direction is F055 → F054 everywhere else,
+    and a module-level import here would make it a cycle.
+    """
+    try:
+        from bisheng.app_publish.domain.services.preview_instance_service import PreviewInstanceService
+
+        return await PreviewInstanceService.resolve_entry(session)
+    except Exception as exc:
+        # Fail-closed, like every other unanswerable question on this path
+        # (AC-12): a broken lookup must not become "let them in".
+        logger.error("app_runtime.preview_entry session lookup failed session={}: {}", session, exc)
+        return None
+
+
+async def _load_app_by_id(app_id: str) -> App | None:
+    if not app_id:
+        return None
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            row = await AppDao.aget(session, app_id)
+    if row is None or row.state == AppState.DELETED.value:
+        return None
+    return row
+
+
 # ---------------------------------------------------------------------------
 # session
 # ---------------------------------------------------------------------------

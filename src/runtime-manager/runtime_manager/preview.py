@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -42,6 +43,7 @@ from runtime_manager.config import (
     LABEL_HEALTH_PATH,
     LABEL_MANAGED,
     LABEL_PORT,
+    LABEL_PREVIEW_EXPIRES_AT,
     LABEL_PREVIEW_SESSION,
     LABEL_VERSION_ID,
     PREVIEW_MANAGED_VALUE,
@@ -89,6 +91,7 @@ def build_preview_payload(
     port: int,
     health_path: str,
     env: dict[str, str],
+    expires_at: int = 0,
 ) -> dict[str, Any]:
     """The Docker Engine create body for a preview — the cage, one notch tighter.
 
@@ -105,6 +108,10 @@ def build_preview_payload(
       the desired state nor to reclaim it as an orphan.
     * No ``Healthcheck``: nothing reconciles a preview, so a health verdict
       would have no reader; readiness is decided once, by the start probe.
+    * It carries its own **deadline** as a label. Nothing else in this process
+      remembers a preview, and the platform is not allowed a resident worker
+      for the app factory (F054 AC-59) — so the container is the only place the
+      expiry can live where it will still be read after either side restarts.
     """
     return {
         "Image": image_ref,
@@ -117,6 +124,7 @@ def build_preview_payload(
             LABEL_VERSION_ID: version_id,
             LABEL_PORT: str(port),
             LABEL_HEALTH_PATH: health_path,
+            LABEL_PREVIEW_EXPIRES_AT: str(int(expires_at or 0)),
         },
         "HostConfig": {
             "NanoCpus": round(tier.cpu * NANO),
@@ -171,6 +179,7 @@ class PreviewService:
         port: int = 8080,
         health_path: str = "/",
         env: dict[str, str] | None = None,
+        expires_at: int = 0,
         timeout: float | None = None,
     ) -> PreviewOutcome:
         """Bring one preview up and answer with its bridge address.
@@ -208,6 +217,7 @@ class PreviewService:
             port=port,
             health_path=health_path,
             env=dict(env or {}),
+            expires_at=expires_at,
         )
 
         container_id = self._docker.create_container(name, payload)
@@ -278,6 +288,43 @@ class PreviewService:
             logger.info("preview %s reclaimed", session_id)
         return {"reclaimed": existed}
 
+    # -- sweep -------------------------------------------------------------
+    def reclaim_expired(self, *, now: float | None = None) -> list[str]:
+        """Remove every preview whose deadline has passed; answer their session ids.
+
+        Driven by the reconcile pass rather than by a timer of its own: that
+        loop already runs every 15 s, already reads the daemon, and already
+        survives a restart — three properties a second scheduler would have to
+        re-earn. A preview with **no** deadline label (an older container, or
+        one started before this field existed) is left alone: reclaiming on a
+        missing value would kill a live trial for want of a label.
+        """
+        moment = time.time() if now is None else now
+        reclaimed: list[str] = []
+        try:
+            rows = self._docker.list_containers(
+                all_states=True, filters={"label": [f"{LABEL_MANAGED}={PREVIEW_MANAGED_VALUE}"]}
+            )
+        except Exception as exc:
+            logger.warning("preview sweep skipped: cannot read the orchestration backend: %s", exc)
+            return reclaimed
+
+        for row in rows:
+            names = row.get("Names") or []
+            name = str(names[0]).lstrip("/") if names else str(row.get("Name") or "").lstrip("/")
+            if not name:
+                continue
+            info = self._inspect(name)
+            labels = ((info or {}).get("Config") or {}).get("Labels") or {}
+            deadline = _as_epoch(labels.get(LABEL_PREVIEW_EXPIRES_AT))
+            if deadline is None or deadline > moment:
+                continue
+            session_id = str(labels.get(LABEL_PREVIEW_SESSION) or "")
+            logger.info("reclaiming expired preview %s (%s)", session_id or name, name)
+            self._force_remove(name)
+            reclaimed.append(session_id or name)
+        return reclaimed
+
     # -- helpers -----------------------------------------------------------
     @staticmethod
     def _require_session(session_id: str) -> None:
@@ -308,3 +355,12 @@ class PreviewService:
             self._docker.remove_container(ref, force=True)
         except Exception as exc:
             logger.debug("remove preview %s: %s", ref, exc)
+
+
+def _as_epoch(raw: Any) -> float | None:
+    """Label value → epoch seconds, or ``None`` for "no deadline was recorded"."""
+    try:
+        value = float(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None

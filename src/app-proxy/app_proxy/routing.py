@@ -49,18 +49,23 @@ class Upstream:
         return self.phase == PHASE_STARTING
 
 
-async def resolve_upstream(app_id: str, *, refresh: bool = False) -> Upstream | None:
+async def resolve_upstream(app_id: str, *, refresh: bool = False, preview: bool = False) -> Upstream | None:
     """``None`` = nothing to forward to right now → the "恢复中" page, not an error.
 
     A stopped app, a crash window and the seconds between two containers all
     look the same from here, and all three are legitimately transient. The one
     case the manager *can* tell apart — a deploy in flight — comes back as an
     :class:`Upstream` whose :attr:`Upstream.starting` is true.
+
+    ``preview=True`` resolves an approval-time preview session instead of an
+    application (F055 AC-26). A reclaimed or timed-out preview answers 404,
+    which lands on the same ``None`` — correctly: from here the two are the
+    same fact, "there is nothing serving at that address right now".
     """
     try:
-        payload = await get_manager_client().route(app_id, refresh=refresh)
+        payload = await get_manager_client().route(app_id, refresh=refresh, preview=preview)
     except InternalRpcError as exc:
-        logger.warning("app_proxy.route app_id=%s unavailable: %s", app_id, exc)
+        logger.warning("app_proxy.route app_id=%s preview=%s unavailable: %s", app_id, preview, exc)
         return None
     if not payload:
         return None

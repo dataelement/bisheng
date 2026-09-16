@@ -15,7 +15,7 @@ Seven things this file exists to prevent:
   list_tenant_admins`` returns ``[]`` for it by construction), which is exactly
   why AC-21's approver resolution needs a Root fallback — and why proving it
   with a super admin proves nothing.
-* **A half-stubbed orchestrator.** ``fake_orchestrator`` replaces **all fifteen**
+* **A half-stubbed orchestrator.** ``fake_orchestrator`` replaces **all eighteen**
   ``orchestrator_client`` methods and asserts its stub set still equals the
   facade's public surface. Miss one and it silently falls through to real HTTP
   against 127.0.0.1:8091, which surfaces as a connection error far from the
@@ -125,6 +125,7 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.user.domain.models.user",
     "bisheng.user.domain.models.user_role",
     "bisheng.app_publish.domain.models.app_deployment",
+    "bisheng.app_publish.domain.models.app_preview_session",
     "bisheng.app_publish.domain.models.hosted_app_subject",
     "bisheng.app_publish.domain.services.app_credential_service",
     "bisheng.app_publish.domain.services.package_service",
@@ -140,6 +141,7 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.app_publish.domain.services.publish_notification_service",
     "bisheng.app_publish.domain.services.publish_online_service",
     "bisheng.app_publish.domain.services.publish_terminal_service",
+    "bisheng.app_publish.domain.services.preview_instance_service",
     "bisheng.app_publish.domain.services.app_publish_scenario_handler",
     "bisheng.app_runtime.domain.services.app_state_service",
     "bisheng.app_runtime.domain.services.app_meta_service",
@@ -175,6 +177,7 @@ _TABLES = (
     "app_version",
     "app_instance",
     "app_deployment",
+    "app_preview_session",
     "resource_tier",
     "approval_scenario",
     "approval_route_rule",
@@ -219,6 +222,11 @@ ORCHESTRATOR_METHODS = (
     "stop",
     "destroy",
     "probe",
+    # F055 T053 approval-time preview instances — session-addressed, and they
+    # write no desired-state record, so they are *not* a flavour of deploy.
+    "preview_start",
+    "preview_stop",
+    "preview_route",
     "admission",
     "status",
     "logs",
@@ -975,7 +983,7 @@ def fake_minio(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def fake_orchestrator(monkeypatch):
-    """Replace **all fifteen** ``orchestrator_client`` methods with programmable stubs.
+    """Replace **all eighteen** ``orchestrator_client`` methods with programmable stubs.
 
     Returns a namespace with ``calls`` (an ordered list of ``(method, kwargs)``)
     and ``responses`` (a per-method dict a test may overwrite before acting —
@@ -1017,6 +1025,9 @@ def fake_orchestrator(monkeypatch):
         "stop": {"phase": "stopped"},
         "destroy": {},
         "probe": {"ready": True, "reason": ""},
+        "preview_start": {"instance_id": "prev-inst-1", "upstream": "http://172.31.0.9:8080", "phase": "running"},
+        "preview_stop": {"reclaimed": True},
+        "preview_route": {"upstream": "http://172.31.0.9:8080", "version_id": "ver-1", "generation": 0},
         "admission": {
             "admitted": True,
             "reason": "",

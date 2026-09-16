@@ -80,6 +80,12 @@ LABEL_GENERATION = "bisheng.generation"
 #: Preview session this container belongs to — the only way back from a
 #: container to its session after a manager restart (there is no state file).
 LABEL_PREVIEW_SESSION = "bisheng.preview.session"
+#: Unix epoch seconds after which the preview may be reclaimed. The deadline
+#: rides on the container rather than in a platform timer because this process
+#: is the one that has to be alive for the container to exist at all — and
+#: because the platform image is not allowed a resident worker for the app
+#: factory (F054 AC-59).
+LABEL_PREVIEW_EXPIRES_AT = "bisheng.preview.expires_at"
 
 #: Variables a deployment must set explicitly — the dataclass defaults below are
 #: development conveniences, not deployment values. ``docker/verify-app-runtime-

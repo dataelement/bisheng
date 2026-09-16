@@ -20,7 +20,12 @@ import pytest
 
 from runtime_manager.admission import AdmissionService, Tier
 from runtime_manager.api.schemas import DeployRequest, HealthIn, TierIn
-from runtime_manager.config import LABEL_MANAGED, LABEL_PREVIEW_SESSION, PREVIEW_MANAGED_VALUE
+from runtime_manager.config import (
+    LABEL_MANAGED,
+    LABEL_PREVIEW_EXPIRES_AT,
+    LABEL_PREVIEW_SESSION,
+    PREVIEW_MANAGED_VALUE,
+)
 from runtime_manager.errors import CapacityExhaustedError, InvalidRequestError, NotFoundError, ProbeFailedError
 from runtime_manager.preview import PreviewService, preview_container_name
 from tests.fakes import FakeHostProbe, ImmediateScheduler
@@ -295,3 +300,80 @@ def test_preview_start_stop_and_route_over_the_rpc(rtm_client, fake_docker, monk
     assert stopped.json() == {"reclaimed": True}
 
     assert rtm_client.get(f"/v1/previews/{SESSION}/route").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# expiry (AC-28's timeout leg)
+# ---------------------------------------------------------------------------
+
+
+def test_the_deadline_rides_on_the_container_as_a_label(rtm_config, fake_docker):
+    _start(_preview(rtm_config, fake_docker), expires_at=1_900_000_000)
+
+    labels = fake_docker.get(preview_container_name(SESSION)).labels
+    assert labels[LABEL_PREVIEW_EXPIRES_AT] == "1900000000"
+
+
+def test_the_sweep_removes_a_preview_past_its_deadline(rtm_config, fake_docker):
+    service = _preview(rtm_config, fake_docker)
+    _start(service, expires_at=1_000)
+
+    assert service.reclaim_expired(now=1_001) == [SESSION]
+    assert _absent(fake_docker, preview_container_name(SESSION))
+
+
+def test_the_sweep_leaves_a_preview_inside_its_deadline_alone(rtm_config, fake_docker):
+    service = _preview(rtm_config, fake_docker)
+    _start(service, expires_at=2_000)
+
+    assert service.reclaim_expired(now=1_999) == []
+    assert fake_docker.get(preview_container_name(SESSION)).running is True
+
+
+def test_a_preview_without_a_deadline_is_never_swept(rtm_config, fake_docker):
+    """A missing label means "no deadline recorded", never "reclaim it now"."""
+    service = _preview(rtm_config, fake_docker)
+    _start(service)  # expires_at defaults to 0
+
+    assert service.reclaim_expired(now=9_999_999_999) == []
+    assert fake_docker.get(preview_container_name(SESSION)).running is True
+
+
+def test_the_sweep_never_touches_an_applications_own_container(rtm_config, fake_docker):
+    """It filters ``bisheng.managed=preview``; an app carries ``=true``."""
+    from runtime_manager.lifecycle import LifecycleService
+
+    lifecycle = LifecycleService(
+        rtm_config,
+        docker=fake_docker,
+        admission=AdmissionService(rtm_config, host_probe=FakeHostProbe()),
+        prober=FakeProber(),
+        scheduler=ImmediateScheduler(),
+    )
+    lifecycle.deploy(
+        DeployRequest(
+            app_id="app-1",
+            slug="sales-report",
+            version_id="ver-live",
+            version_no=3,
+            image_ref="bisheng-app/sales-report:3-ver-live",
+            tier=TierIn(cpu=0.5, mem=512),
+            health=HealthIn(path="/healthz"),
+        )
+    )
+    live_name = next(c.name for c in fake_docker.containers.values() if c.labels.get(LABEL_MANAGED) == "true")
+
+    assert _preview(rtm_config, fake_docker).reclaim_expired(now=9_999_999_999) == []
+    assert fake_docker.get(live_name).running is True
+
+
+def test_the_reconcile_pass_runs_the_preview_sweep(rtm_config, fake_docker):
+    """AC-28 without a platform timer: the loop that already exists carries it."""
+    from runtime_manager.reconciler import Reconciler
+
+    _start(_preview(rtm_config, fake_docker), expires_at=1)
+
+    report = Reconciler(rtm_config, docker=fake_docker, prober=FakeProber()).reconcile_once()
+
+    assert SESSION in report.reclaimed
+    assert _absent(fake_docker, preview_container_name(SESSION))

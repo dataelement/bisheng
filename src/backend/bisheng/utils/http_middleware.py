@@ -40,6 +40,9 @@ TENANT_CHECK_EXEMPT_PATHS = (
     # v3.0.0 F054: app-proxy's HMAC-signed entry authorization. No JWT rides on
     # this request — the visitor's session token is *data in the body* to be
     # judged — so there is no tenant context and the handler runs under bypass.
+    # The match is a prefix, so F055's ``…/authorize-preview`` (the entry verdict
+    # for an approval-time preview instance) is covered by this same entry — it
+    # is the same kind of request for the same reason.
     "/api/v1/internal/app-proxy/authorize",
     # The nginx error_page fallback: a static page served when app-proxy is down.
     # Reached by an anonymous browser, so it must not require a session.

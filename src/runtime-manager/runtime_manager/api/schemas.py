@@ -117,6 +117,9 @@ class PreviewStartRequest(BaseModel):
     port: int = 8080
     env: dict[str, str] = Field(default_factory=dict)
     health: HealthIn = Field(default_factory=HealthIn)
+    #: Unix epoch seconds after which the manager may reclaim this preview on
+    #: its own. 0 = no deadline, and the manager then never sweeps it.
+    expires_at: int = 0
     timeout: int | None = None
 
 

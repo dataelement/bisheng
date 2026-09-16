@@ -19,7 +19,7 @@ Four things this file exists to prevent:
   name. HTTP headers are latin-1; the injected ``X-BiSheng-User-Name`` /
   ``Dept-Name`` / ``Dept-Path`` must be percent-encoded, and with the usual
   English test account that bug is invisible (design pit 9).
-* **A half-stubbed orchestrator.** ``fake_orchestrator`` replaces **all fifteen**
+* **A half-stubbed orchestrator.** ``fake_orchestrator`` replaces **all eighteen**
   ``orchestrator_client`` methods. Miss one and it silently falls through to
   real HTTP against 127.0.0.1:8091 — which only surfaces as a connection error
   in CI, far from the test that caused it. The fixture asserts the stub set
@@ -87,6 +87,11 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.app_runtime.domain.services.visibility_audit",
     "bisheng.app_runtime.api.endpoints.internal_app_proxy",
     "bisheng.app_runtime.api.endpoints.apps",
+    # F055 owns the preview session row; F054's entry path only reads it
+    # (through ``PreviewInstanceService.resolve_entry``), and both have to be
+    # pointed at the same in-memory engine or the lookup silently finds nothing.
+    "bisheng.app_publish.domain.models.app_preview_session",
+    "bisheng.app_publish.domain.services.preview_instance_service",
 )
 
 _TABLES = (
@@ -100,6 +105,8 @@ _TABLES = (
     "app_version",
     "app_instance",
     "app_access_log",
+    # F055's preview session row, read by the ``/apps/preview/{session}`` verdict.
+    "app_preview_session",
     # F055's table. Present but empty on purpose: that is the MVP reality (the
     # seed runs on first boot) and it exercises F054's DEFAULT_TIERS fallback
     # through its intended branch instead of through a missing-table error.
@@ -116,6 +123,11 @@ ORCHESTRATOR_METHODS = (
     "stop",
     "destroy",
     "probe",
+    # F055 T053 approval-time preview instances — session-addressed, and they
+    # write no desired-state record, so they are *not* a flavour of deploy.
+    "preview_start",
+    "preview_stop",
+    "preview_route",
     "admission",
     "status",
     "logs",
@@ -188,6 +200,7 @@ async def app_engine():
         "bisheng.database.models.app_instance",
         "bisheng.database.models.app_access_log",
         "bisheng.database.models.resource_tier",
+        "bisheng.app_publish.domain.models.app_preview_session",
     ):
         importlib.import_module(module)
 
@@ -426,7 +439,7 @@ async def app_factory(app_db, app_owner):
 
 @pytest.fixture()
 def fake_orchestrator(monkeypatch):
-    """Replace **all fifteen** ``orchestrator_client`` methods with programmable stubs.
+    """Replace **all eighteen** ``orchestrator_client`` methods with programmable stubs.
 
     Returns a namespace with ``calls`` (an ordered list of ``(method, kwargs)``)
     and ``responses`` (a per-method dict the test may overwrite before acting).
@@ -468,6 +481,9 @@ def fake_orchestrator(monkeypatch):
         "stop": {"phase": "stopped"},
         "destroy": {},
         "probe": {"ready": True, "reason": ""},
+        "preview_start": {"instance_id": "prev-inst-1", "upstream": "http://172.31.0.9:8080", "phase": "running"},
+        "preview_stop": {"reclaimed": True},
+        "preview_route": {"upstream": "http://172.31.0.9:8080", "version_id": "ver-1", "generation": 0},
         "admission": {
             "admitted": True,
             "reason": "",

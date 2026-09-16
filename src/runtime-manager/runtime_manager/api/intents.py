@@ -115,6 +115,7 @@ async def preview_start(request: PreviewStartRequest) -> dict:
             port=request.port,
             health_path=request.health.path,
             env=request.env,
+            expires_at=request.expires_at,
             timeout=request.timeout,
         )
         span.result = outcome.phase

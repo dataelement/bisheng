@@ -52,6 +52,7 @@ from bisheng.app_publish.domain.models.app_deployment import (
     AppDeploymentDao,
 )
 from bisheng.app_publish.domain.services import publish_notification_service
+from bisheng.app_publish.domain.services.preview_instance_service import PreviewInstanceService
 from bisheng.app_publish.domain.services.release_audit import write_release_audit
 from bisheng.app_publish.domain.services.version_service import VersionService
 from bisheng.common.errcode.app_publish import (
@@ -132,6 +133,13 @@ class PublishOnlineService:
         from bisheng.app_runtime.domain.services.app_state_service import AppStateService
 
         await AppStateService.stage_version(app_id, version_id)
+
+        # AC-28: approval reached a terminal state — 通过 is one of the four —
+        # so every approver's trial instance of this version goes away. Done
+        # here rather than only on the three refusals in ``publish_terminal_
+        # service``, or an approved release would leave its previews running
+        # for the full seven-day timeout beside the real thing.
+        await PreviewInstanceService.reclaim_on_release_terminal(payload_snapshot)
 
         if app.state == _APP_STATE_STOPPED:
             # AC-36: approval landing on a stopped application records the
