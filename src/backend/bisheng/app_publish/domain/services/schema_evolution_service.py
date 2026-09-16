@@ -289,9 +289,19 @@ def migration_plan(previous: list[DatabaseTable], current: list[DatabaseTable]) 
 
     Derived from :func:`diff_tables` so the migration can never disagree with
     what the owner confirmed: a table the diff calls untouched produces no plan
-    entry, and every breaking item becomes a ``rebuild_table`` carrying the
-    **full target column list** (SQLite changes or drops a column by rebuilding
-    the table, so the executor needs the destination, not the delta).
+    entry.
+
+    **Every entry carries the full target column list**, whatever its verb.
+    The diff says which tables the release touches; it does not say what the
+    live database currently holds, and the two can disagree — an application
+    that built its own tables, or one whose online version declared tables back
+    when the platform did not build them. An ``add_columns`` entry carrying only
+    the new column would then be read by the executor as the whole shape of a
+    table it has to create, and the application would get a one-column table.
+    So the entry states the destination and the executor works out the delta
+    against what is actually there (it adds only the columns it is missing).
+    A ``rebuild_table`` needs the destination for the same reason plus its own:
+    SQLite changes or drops a column by rebuilding the table.
 
     ``previous`` is empty on a first release, which makes every declared table
     an ``add_table`` and therefore a ``create_table`` — that is DEV-07 ②'s
@@ -300,7 +310,6 @@ def migration_plan(previous: list[DatabaseTable], current: list[DatabaseTable]) 
     change = diff_tables(previous, current)
     by_name = {table.name: table for table in current}
     ops: dict[str, str] = {}
-    added_columns: dict[str, list[str]] = {}
 
     for item in change.items:
         if item.op == OP_DROP_TABLE:
@@ -315,20 +324,13 @@ def migration_plan(previous: list[DatabaseTable], current: list[DatabaseTable]) 
             ops[item.table] = PLAN_REBUILD_TABLE
         else:
             ops.setdefault(item.table, PLAN_ADD_COLUMNS)
-            added_columns.setdefault(item.table, []).append(item.column or "")
 
     plan: list[dict[str, Any]] = []
     for table in current:
         op = ops.get(table.name)
-        if op is None or op == PLAN_DROP_TABLE:
+        if op is None or op == PLAN_DROP_TABLE or not table.columns:
             continue
-        columns = table.columns
-        if op == PLAN_ADD_COLUMNS:
-            wanted = set(added_columns.get(table.name) or ())
-            columns = [column for column in table.columns if column.name in wanted]
-        if not columns:
-            continue
-        plan.append({"op": op, "table": table.name, "columns": [column_payload(column) for column in columns]})
+        plan.append({"op": op, "table": table.name, "columns": [column_payload(column) for column in table.columns]})
 
     plan.extend(
         {"op": PLAN_DROP_TABLE, "table": name}

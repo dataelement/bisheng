@@ -141,6 +141,35 @@ class TestPlatformCreatesDeclaredTables:
         assert second["applied"] == []
         assert second["skipped"] == [{"op": "add_columns", "table": "orders", "skipped": "exists"}]
 
+    def test_an_add_columns_plan_builds_a_table_that_is_not_there_yet(self, service, live_db):
+        """The plan's verb comes from two *declarations*; the database may disagree.
+
+        An application that went online before the platform built tables has a
+        file whose shape nobody here decided. The next release adds a column and
+        the platform derives ``add_columns`` — for a table that does not exist.
+        Every plan entry therefore carries the **full target shape**, and this
+        test is what stops it shrinking back to the delta: a one-column
+        ``orders`` table would pass every other assertion in this file and break
+        the application at its first query.
+        """
+        result = service.migrate(
+            APP_ID,
+            [
+                {
+                    "op": "add_columns",
+                    "table": "invoices",
+                    "columns": [
+                        _column("id", "INTEGER", primary_key=True),
+                        _column("buyer", "TEXT", nullable=False),
+                        _column("channel", "TEXT"),
+                    ],
+                }
+            ],
+        )
+
+        assert [item["op"] for item in result["applied"]] == ["create_table"]
+        assert [name for name, _, _ in _shape(live_db, "invoices")] == ["id", "buyer", "channel"]
+
     def test_a_declared_table_that_the_app_already_built_is_left_alone(self, service, live_db):
         """Apps create their own tables today (``CREATE TABLE IF NOT EXISTS``).
 
@@ -243,8 +272,10 @@ class TestPreMigrationSnapshot:
         assert [name for name, _, _ in _shape(live_db, "orders")] == ["id", "buyer", "note"]
         assert _rows(live_db, "SELECT COUNT(*) FROM orders") == [(2,)]
 
-    def test_an_additive_plan_asks_for_no_snapshot_even_when_told_to(self, service, live_db, fake_object_store):
-        """``snapshot=True`` only ever adds one; it is the plan that decides it is needed."""
+    def test_the_caller_can_ask_for_a_snapshot_an_additive_plan_would_not_take(
+        self, service, live_db, fake_object_store
+    ):
+        """``snapshot=True`` only ever *adds* one; the plan decides when it is mandatory."""
         result = service.migrate(
             APP_ID,
             [{"op": "add_columns", "table": "orders", "columns": [_column("channel", "TEXT")]}],

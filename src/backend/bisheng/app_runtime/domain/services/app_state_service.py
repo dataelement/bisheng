@@ -291,6 +291,21 @@ class AppStateService:
         version = await cls._load_version(app_id, version_id)
         tier = await cls._resolve_tier(version.tier_id)
 
+        if audit_action is AppAuditAction.RESUME and app.pending_version_id:
+            # F055 AC-36 with AC-42. An approval that landed while the application
+            # was stopped only *staged* its version: nothing was started, so
+            # F055's go-live path never ran and the version's declared tables
+            # were never built. Resuming is where that version actually goes
+            # live, so the migration happens here too — before the start, so a
+            # refusal (16259) leaves the application stopped on a database
+            # nobody touched. ``publish`` / ``manual_publish`` already migrated
+            # in ``PublishOnlineService._settle`` and must not pay for a second
+            # RPC, which is why this is keyed on the action rather than on
+            # "there is a pending version".
+            from bisheng.app_publish.domain.services import schema_evolution_service
+
+            await schema_evolution_service.migrate_for_release(app_id, version.manifest)
+
         # An application that is *already online* keeps its state when a start
         # fails. The previous version is still serving — a new instance is
         # created beside the old one and a failed probe only tears down the new

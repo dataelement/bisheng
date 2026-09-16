@@ -84,17 +84,25 @@ class TestMigrationPlan:
             }
         ]
 
-    def test_a_new_column_carries_only_that_column(self):
-        """An additive plan names what is new; sending the whole table would make
-        the executor's "skip what exists" the only thing keeping data safe."""
+    def test_an_additive_plan_still_carries_the_whole_target_table(self):
+        """The verb says what changed; the columns say where the table must end up.
+
+        Sending only the new column reads fine until the table is not there —
+        an application that built its own tables, or an online version that
+        declared tables back when the platform did not build them. The executor
+        creates a missing table from the entry it is given, so a delta-only
+        entry would build a one-column table and the application would meet it
+        at its first query. The executor adds only the columns it is missing,
+        so carrying the whole shape costs nothing when the table does exist.
+        """
         previous = _tables({"orders": ["id"]})
         current = _tables({"orders": ["id", {"name": "channel", "type": "TEXT", "default": "web"}]})
 
         plan = _service().migration_plan(previous, current)
 
         assert [item["op"] for item in plan] == ["add_columns"]
-        assert [column["name"] for column in plan[0]["columns"]] == ["channel"]
-        assert plan[0]["columns"][0]["default"] == "web"
+        assert [column["name"] for column in plan[0]["columns"]] == ["id", "channel"]
+        assert plan[0]["columns"][1]["default"] == "web"
 
     @pytest.mark.parametrize(
         ("previous", "current"),
@@ -208,7 +216,7 @@ class TestMigrateForRelease:
 
         (_, kwargs) = fake_orchestrator.calls[-1]
         assert [item["op"] for item in kwargs["plan"]] == ["add_columns"]
-        assert [column["name"] for column in kwargs["plan"][0]["columns"]] == ["channel"]
+        assert [column["name"] for column in kwargs["plan"][0]["columns"]] == ["id", "channel"]
 
     async def test_a_breaking_plan_asks_for_the_snapshot(self, publish_db, app_factory, fake_orchestrator):
         app, version = await app_factory(with_version=True)
@@ -428,7 +436,13 @@ class TestGoLive:
     ):
         """AC-36 stages the version and starts nothing, so there is nothing to
         migrate *for* — and changing the schema under the version that will
-        resume later is exactly the accident the ordering rule exists to stop."""
+        resume later is exactly the accident the ordering rule exists to stop.
+
+        The bill is paid by the start that actually happens: ``resume`` builds
+        the staged version's tables before it deploys anything
+        (``test/app_runtime/test_resume_schema_migration.py``). Without that
+        half, this assertion would be describing a hole rather than an ordering.
+        """
         _, _, _, _, payload = await _release(
             publish_db, app_factory, deployment_factory, state="stopped", declaration={"orders": ["id"]}
         )

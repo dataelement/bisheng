@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
-import { TierSelectCard, coresOf } from "./TierSelectCard"
+import { TierSelectCard, coresOf, selectableTiers } from "./TierSelectCard"
 
 /**
  * The global `react-i18next` mock (src/test/setup.ts) echoes the key and drops
@@ -98,18 +98,17 @@ describe("TierSelectCard", () => {
   it("test_a_row_without_a_code_never_reaches_a_select_item", () => {
     // An empty `value` on a Radix item throws and blanks the whole page; older
     // backends do send rows like this, so the filter is here, not there.
-    render(
-      <TierSelectCard
-        tier={null}
-        canSubmit
-        options={[
-          { code: "", name: "Broken row", cpu_millicores: null, memory_mb: null },
-          { code: "light", name: "Light", cpu_millicores: 500, memory_mb: 1024 },
-        ]}
-        value="light"
-      />,
-    )
+    // Asserted on the filter rather than on the rendered menu: `SelectContent`
+    // only mounts when the menu opens, so a render test would pass even with
+    // the filter deleted.
+    const rows = [
+      { code: "", name: "Broken row", cpu_millicores: null, memory_mb: null },
+      { code: "light", name: "Light", cpu_millicores: 500, memory_mb: 1024 },
+    ]
 
+    expect(selectableTiers(rows).map((one) => one.code)).toEqual(["light"])
+
+    render(<TierSelectCard tier={null} canSubmit options={rows} value="light" />)
     expect(screen.getByRole("combobox")).toBeInTheDocument()
   })
 

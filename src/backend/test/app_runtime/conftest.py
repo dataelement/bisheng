@@ -87,6 +87,10 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.app_runtime.domain.services.visibility_audit",
     "bisheng.app_runtime.api.endpoints.internal_app_proxy",
     "bisheng.app_runtime.api.endpoints.apps",
+    # F055 T062: ``resume`` builds the staged version's declared tables before it
+    # starts anything (AC-36 with AC-42), and that service reads the reference
+    # declaration from its own session. Unpatched it reaches the real database.
+    "bisheng.app_publish.domain.services.schema_evolution_service",
 )
 
 _TABLES = (

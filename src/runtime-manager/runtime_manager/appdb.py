@@ -787,7 +787,10 @@ class AppDbSchemaService:
         if live is None:
             # Missing table, whatever the verb said: creating it is where every
             # verb was trying to end up, and it makes a retry after a release
-            # that died half way do the right thing.
+            # that died half way do the right thing. This is only safe because
+            # **every** plan entry carries the full target column list — an
+            # ``add_columns`` entry holding just the delta would build a table
+            # with one column in it.
             self._create(conn, item.table, item.columns)
             return {"op": PLAN_CREATE_TABLE, "table": item.table, "columns": [c["name"] for c in item.columns]}
 

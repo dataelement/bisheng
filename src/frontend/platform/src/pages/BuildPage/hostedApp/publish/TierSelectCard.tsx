@@ -52,6 +52,19 @@ interface TierSelectCardProps {
   onChange?: (code: string) => void
 }
 
+/**
+ * Rows that may become a `<SelectItem>`.
+ *
+ * A Radix item with an empty `value` throws and blanks the whole page, and
+ * older backends do send rows like that — so the list is filtered here rather
+ * than trusted. Exported because the filter is the guard: a `<SelectContent>`
+ * is not mounted until the menu opens, so a render test cannot see the item
+ * that would have thrown.
+ */
+export function selectableTiers(options: TierOption[]): TierOption[] {
+  return options.filter((one) => !!one.code)
+}
+
 /** `500` → `0.5`, `2000` → `2`. `null` when the spec is unknown. */
 export function coresOf(millicores: number | null | undefined): number | null {
   if (typeof millicores !== "number" || !Number.isFinite(millicores) || millicores <= 0) {
@@ -80,9 +93,7 @@ export function TierSelectCard({
   }
 
   const currentSpec = spec(tier?.cpu_millicores, tier?.memory_mb)
-  // A tier row whose `code` is empty would crash the Radix item and take the
-  // page down with it; the list is filtered rather than trusted.
-  const selectable = options.filter((one) => !!one.code)
+  const selectable = selectableTiers(options)
 
   return (
     <section
