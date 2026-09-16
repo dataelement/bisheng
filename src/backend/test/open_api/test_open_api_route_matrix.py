@@ -1,8 +1,10 @@
 from fastapi.routing import APIRoute, APIWebSocketRoute
 
 from bisheng.api.router import router_rpc
+from bisheng.common.services.config_service import settings
 from bisheng.main import app
 from bisheng.open_api.api.dependencies import verify_open_api_access
+from bisheng.open_api.api.exception_handlers import MODEL_GATEWAY_PATH_PREFIX
 from bisheng.open_api.domain.scopes import OPEN_API_SCOPES, get_open_api_scope_marker
 
 REMOVED_CHAT_ROUTES = {
@@ -42,11 +44,14 @@ def test_every_real_v2_route_is_globally_key_protected_and_marked():
 
 
 def test_route_registry_matches_complete_key_authenticated_surface():
-    registered = {
-        endpoint
-        for scope in OPEN_API_SCOPES
-        for endpoint in scope.endpoints
-    }
+    registered = {endpoint for scope in OPEN_API_SCOPES for endpoint in scope.endpoints}
+    if not settings.open_platform.enabled:
+        # The model protocol face is the one conditionally mounted sub-router
+        # (F051 AC-28), and ``bisheng.main.app`` decided that at import time —
+        # monkeypatching the switch here would remount nothing. Drop its
+        # registrations from the expectation instead; the mounted state is
+        # asserted in test_model_gateway_switch.py against a freshly built app.
+        registered = {item for item in registered if not item[1].startswith(MODEL_GATEWAY_PATH_PREFIX)}
     actual = actual_v2_routes()
     actual_without_whoami = actual - {("GET", "/api/v2/auth/whoami")}
     assert DAILY_ROUTES <= actual_without_whoami

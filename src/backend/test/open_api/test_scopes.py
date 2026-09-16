@@ -41,13 +41,14 @@ def test_extension_scopes_are_not_issuable_without_open_platform(monkeypatch):
     assert issuable_scope_codes() == ALWAYS_ISSUABLE_OPEN_API_SCOPE_CODES
 
 
-def test_only_app_manage_becomes_issuable_with_open_platform(monkeypatch):
+def test_app_manage_and_model_invoke_become_issuable_with_open_platform(monkeypatch):
     monkeypatch.setattr(settings.open_platform, "enabled", True)
 
     codes = issuable_scope_codes()
     assert "app:manage" in codes
-    assert {"model:invoke", "identity:read"}.isdisjoint(codes)
-    assert codes == ALWAYS_ISSUABLE_OPEN_API_SCOPE_CODES | {"app:manage"}
+    assert "model:invoke" in codes
+    assert "identity:read" not in codes
+    assert codes == ALWAYS_ISSUABLE_OPEN_API_SCOPE_CODES | {"app:manage", "model:invoke"}
 
 
 def test_issuable_scopes_have_localized_presentation_metadata(monkeypatch):
@@ -73,6 +74,8 @@ def test_issuable_scopes_have_localized_presentation_metadata(monkeypatch):
         "assistant",
         "knowledge",
         "knowledge",
+        # model:invoke (F051) then app:manage — identity:read stays unissuable.
+        "local_dev_toolkit",
         "local_dev_toolkit",
         "delegation",
     ]

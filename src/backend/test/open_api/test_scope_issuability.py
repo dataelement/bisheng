@@ -1,7 +1,8 @@
 """Issue-time policy for the extension scopes (migration plan M7).
 
-* ``app:manage`` is issuable exactly while ``open_platform.enabled`` is on;
-  ``model:invoke`` / ``identity:read`` stay unissuable (F051 / F052 pending).
+* ``app:manage`` and ``model:invoke`` are issuable exactly while
+  ``open_platform.enabled`` is on; ``identity:read`` stays unissuable (F052
+  pending).
 * ``delegate`` and the local development toolkit scopes are refused together,
   on issue and on edit alike (伴生 PRD §4.2.4 / AC-48, release-contract INV-31).
 * A personal token never receives an extension scope (伴生 PRD §4.10.3).
@@ -33,14 +34,8 @@ from bisheng.open_api.domain.services.credential_service import CredentialServic
 DELEGATE_TARGET = [DelegateScopeInput(subject_type="user", subject_id=9)]
 
 
-@pytest.fixture
-def open_platform_enabled(monkeypatch):
-    monkeypatch.setattr(settings.open_platform, "enabled", True)
-
-
-@pytest.fixture
-def open_platform_disabled(monkeypatch):
-    monkeypatch.setattr(settings.open_platform, "enabled", False)
+# ``open_platform_enabled`` / ``open_platform_disabled`` now live in
+# test/open_api/conftest.py — the model protocol face tests need the same two.
 
 
 @pytest.fixture
@@ -63,10 +58,31 @@ def test_app_manage_is_accepted_once_open_platform_is_on(open_platform_enabled):
     assert CredentialService.validate_scopes(["knowledge:read", "app:manage"]) == ["knowledge:read", "app:manage"]
 
 
-@pytest.mark.parametrize("scope", ["model:invoke", "identity:read"])
+@pytest.mark.parametrize("scope", ["identity:read"])
 def test_pending_extension_scopes_stay_unissuable_even_with_open_platform(open_platform_enabled, scope):
     with pytest.raises(OpenApiExtensionScopeNotDeployedError):
         CredentialService.validate_scopes([scope])
+
+
+def test_model_invoke_issuable_once_open_platform_on(open_platform_enabled):
+    assert CredentialService.validate_scopes(["model:invoke"]) == ["model:invoke"]
+
+
+def test_model_invoke_still_refused_while_open_platform_is_off(open_platform_disabled):
+    with pytest.raises(OpenApiExtensionScopeNotDeployedError):
+        CredentialService.validate_scopes(["model:invoke"])
+
+
+def test_model_invoke_registers_the_model_face_v2_routes():
+    assert OPEN_API_SCOPE_MAP["model:invoke"].endpoints == (
+        ("POST", "/api/v2/model/v1/chat/completions"),
+        ("GET", "/api/v2/model/v1/models"),
+        ("GET", "/api/v2/model/v1/{rest}"),
+        ("POST", "/api/v2/model/v1/{rest}"),
+        ("PUT", "/api/v2/model/v1/{rest}"),
+        ("DELETE", "/api/v2/model/v1/{rest}"),
+        ("PATCH", "/api/v2/model/v1/{rest}"),
+    )
 
 
 def test_app_manage_registers_the_four_app_factory_v2_routes():
@@ -173,7 +189,8 @@ async def test_scope_catalog_offers_app_manage_only_with_open_platform(monkeypat
     codes = {item.code for item in shown.scopes}
     assert shown.open_platform_enabled is True
     assert "app:manage" in codes
-    assert {"model:invoke", "identity:read"}.isdisjoint(codes)
+    assert "model:invoke" in codes
+    assert "identity:read" not in codes
     app_manage = next(item for item in shown.scopes if item.code == "app:manage")
     assert app_manage.group == "local_dev_toolkit"
     assert [(endpoint.method, endpoint.path) for endpoint in app_manage.endpoints] == [

@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 
+from bisheng.common.services.config_service import settings
 from bisheng.main import app
+from bisheng.open_api.api.exception_handlers import MODEL_GATEWAY_PATH_PREFIX
 from bisheng.open_api.api.openapi_schema import BEARER_SCHEME_NAME
 
 
@@ -51,6 +53,14 @@ def test_generated_customer_contract_matches_registered_v2_http_routes():
         for method in path_item
         if method in {"get", "post", "put", "patch", "delete"}
     }
+    if not settings.open_platform.enabled:
+        # The contract json is generated with the open capability layer on, so
+        # it always documents the model protocol face. This process may have
+        # imported the app with the switch off, in which case the face is not
+        # mounted at all (F051 AC-28) — compare the rest.
+        documented_operations = {
+            item for item in documented_operations if not item[0].startswith(MODEL_GATEWAY_PATH_PREFIX)
+        }
     assert documented_operations == expected_operations
     assert all(
         operation["security"] == [{BEARER_SCHEME_NAME: []}]
@@ -67,9 +77,9 @@ def test_generated_customer_contract_matches_registered_v2_http_routes():
     }
     assert referenced <= schemas.keys()
 
-    workflow_ref = contract["paths"]["/api/v2/workflow/invoke"]["post"]["requestBody"]["content"][
-        "application/json"
-    ]["schema"]["$ref"]
+    workflow_ref = contract["paths"]["/api/v2/workflow/invoke"]["post"]["requestBody"]["content"]["application/json"][
+        "schema"
+    ]["$ref"]
     workflow_properties = schemas[workflow_ref.rsplit("/", 1)[-1]]["properties"]
     assert "input" in workflow_properties
 

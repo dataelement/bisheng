@@ -325,6 +325,13 @@
   **覆盖 AC**: AC-02, AC-03, AC-26, AC-27, AC-28, AC-30, AC-35, AC-36
   **依赖**: T033, T034
 
+- [ ] **T035a**（F051 落地后追加）: 模型章的两条回归断言要改口径〔0.3h〕
+  **起因**: T034 / T035 里的 `test_model_chapter_still_marked_unavailable_and_invents_no_base_url` 假定模型面尚未交付。F051 已交付并定名三个环境变量，该断言从此守错了东西。
+  **改成**: ① 模型章不再含「暂未提供」，而是教官方 `openai` 客户端 + **`OPENAI_BASE_URL` / `OPENAI_API_KEY` / `BISHENG_MODEL_BASE_URL`** 三个注入名；② **仍然断言包里没有手拼的 base URL 字面量**（`/api/v2/model/v1` 只能来自 `whoami.model_base_url` 或注入的环境变量，F051 AC-30 的唯一出口口径不变）；③ `test_no_sdk_wrapper_for_model_or_appdb` 一字不改——SDK 依旧不封装 chat（DEV-07）。
+  **另附**：指南需写明 `X-BiSheng-Access-Token` 由应用代码**显式转发**给模型面，否则调用记录的 subject 记为「应用自身」（F051 spec 决议-5 允许，但审计里就没有用户维度了）。
+  **覆盖 AC**: AC-26, AC-30
+  **依赖**: T035
+
 - [ ] **T036**: `selfcheck.py` **增量**：在 F053 已交付的脚本上追加 SDK 三步〔2h〕
   **文件**: `src/backend/bisheng/dev_toolkit/skills/platform-wiring/selfcheck.py`（**增量**，109 行版本已含：读 `~/.bisheng/credentials.json` → 打 `/api/v2/auth/whoami` → 校验应用库变量，`fail(reason, next_step)` 打两行并 `SystemExit(1)`）
   **逻辑**: 沿用既有 `fail()` 与输出风格、**不重写骨架**（F053 的 `test_selfcheck_reports_readable_reason_when_not_logged_in` 对两包参数化，改掉未登录分支的文案会红）。追加（D13）：① `import bisheng_sdk`（失败 → 打印 `pip install --extra-index-url <base>/api/v1/dev-toolkit/simple/ bisheng-sdk`，`<base>` 取 `BISHENG_PLATFORM_API_BASE` 或凭据文件的 `current`；**SDK 未装不算致命**——脚本继续跑既有三步后以「SDK 未安装」退出 1） ② `urllib` 打 `/api/v1/dev-toolkit/versions` 比对 `sdk.min_compatible`（脚本自己算三段元组，不 import SDK 内部函数；`sdk` 为 null → 提示「平台未发布 SDK 安装件 / 开放能力层未部署」） ③ auth：`BISHENG_APP_ID` 存在则对 `http://127.0.0.1:${BISHENG_APP_PORT}/__whoami` 发一次请求（经 `bisheng dev` 迷你代理进来的回显）再 `auth.from_headers` 解析；否则 `fail("未经 bisheng dev 启动", "在项目根执行 bisheng dev，用它打印的本地入口地址访问")` ④ retrieve：`bind` 上 ③ 的头后 `search("selfcheck", top_k=1)`，逐类异常翻一句；**`VisitorCredentialRejectedError` 时明确写「平台尚未受理应用侧访问凭据（本地为 `bsdev.` 句柄、线上为 OBO），不是你的密钥问题」**（坑 5 / 坑 32） ⑤ storage：`put/stat/delete` `_selfcheck/probe.txt`；无句柄时提示「`bisheng dev` 尚未注入 `BISHENG_APP_STORAGE_DIR`」（坑 34）。全程不打 traceback、不打密钥。
