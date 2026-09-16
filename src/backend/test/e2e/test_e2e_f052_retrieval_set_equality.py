@@ -199,10 +199,18 @@ async def sample(client: httpx.AsyncClient, admin_token: str):
     # action before the action is validated, so every set comes back complete),
     # or the id and the credentials name different people (the grants then land
     # on somebody who never calls).
+    #
+    # "Administrator" is checked on every flag ``/user/info`` carries, not just
+    # ``role``: a **tenant** administrator is not ``role == "admin"`` and would
+    # sail through a super-admin-only check while still taking the same
+    # short-circuit.
     whoami = assert_resp_200(await client.get(f"{API_BASE}/user/info", headers=auth_headers(user_token)))
-    assert whoami.get("role") != "admin", (
-        f"F052_E2E_USER_NAME is a super administrator; this suite is only meaningful as an ordinary user "
-        f"(whoami={whoami.get('user_name')})"
+    elevated = [name for name in ("is_global_super", "is_child_admin", "is_department_admin") if bool(whoami.get(name))]
+    if whoami.get("role") == "admin":
+        elevated.append("role=admin")
+    assert not elevated, (
+        f"F052_E2E_USER_NAME is an administrator ({', '.join(elevated)}); this suite is only meaningful as an "
+        f"ordinary user (whoami={whoami.get('user_name')})"
     )
     assert int(whoami["user_id"]) == user_id, (
         f"F052_E2E_USER_ID is {user_id} but F052_E2E_USER_NAME logs in as {whoami['user_id']}"

@@ -39,7 +39,13 @@ platform, and a sample that only ever exercised a service account would leave
 the PAT path — a different admission branch — unrun.
 
 Every file carries the same nonce sentence, so one query matches all five and
-the visible set is decided by permissions alone rather than by relevance.
+the visible set is decided by permissions alone rather than by relevance. Each
+one also carries a per-file marker line, which is not decoration: upload dedup
+is by **content md5 or file name, scoped to the knowledge base**
+(``KnowledgeFileDao.get_file_by_condition``), so five byte-identical uploads
+into the same space would yield one file and four duplicate rejections — with
+the rejection reported as the *existing* file's row, which reads exactly like a
+successful create.
 
 Prerequisites (the caller is expected to have checked them; see the suite that
 uses this helper):
@@ -72,7 +78,8 @@ PREFIX = "e2e-f052-retrieval-"
 #: ``KnowledgeFileStatus.SUCCESS`` / ``FAILED`` / ``TIMEOUT`` / ``VIOLATION``.
 #: Written as literals because the wire is what the helper polls.
 FILE_SUCCESS = 2
-FILE_TERMINAL_FAILURES = frozenset({3, 6, 7})
+FILE_FAILED = 3
+FILE_TERMINAL_FAILURES = frozenset({FILE_FAILED, 6, 7})
 
 #: A freshly uploaded file has to be parsed, embedded and indexed by the
 #: knowledge Celery worker before any of it is retrievable.
@@ -268,12 +275,16 @@ async def assert_not_granted(
     *,
     resource_type: str,
     resource_id: int,
-    subject_ids: tuple[str, ...],
+    subjects: tuple[tuple[str, str], ...],
 ) -> None:
     """Fail the seeding, not the assertion, when a detachment did not detach.
 
     A sample that silently kept a grant turns "the set is wrong" into "the
     product is broken", which is the most expensive way to read a red test.
+
+    ``subjects`` are ``(type, id)`` pairs, never bare ids: a service account and
+    a user are numbered in separate spaces, so matching on the id alone would
+    report a leak whenever the two happen to collide.
     """
 
     roster = await _get(
@@ -282,7 +293,7 @@ async def assert_not_granted(
         f"/permissions/resources/{resource_type}/{resource_id}/grants",
         {"page_size": 200},
     )
-    leaked = [row for row in roster["data"] if str(row["subject"]["id"]) in subject_ids]
+    leaked = [row for row in roster["data"] if (str(row["subject"]["type"]), str(row["subject"]["id"])) in subjects]
     if leaked:
         raise AssertionError(
             f"seeding failed: {resource_type} {resource_id} still grants {leaked} after the CUSTOM-mode detachment"
@@ -298,21 +309,34 @@ async def _wait_for_space_files(
     client: httpx.AsyncClient,
     admin_token: str,
     space_id: int,
-    file_ids: tuple[int, ...],
+    files_by_parent: dict[int | None, tuple[int, ...]],
 ) -> None:
+    """Poll each file inside the folder it actually lives in.
+
+    ``/children`` lists **direct** children: with no ``parent_id`` it matches
+    ``file_level_path == ''``, i.e. the space root only, and ``file_ids``
+    narrows that set rather than replacing it. Polling every file from the root
+    would therefore never see the two that live under folders, and the wait
+    would always end in the ingest timeout below — a failure that looks exactly
+    like "no Celery worker".
+    """
+
     deadline = asyncio.get_running_loop().time() + INGEST_TIMEOUT_SECONDS
     while True:
-        page = await _get(
-            client,
-            admin_token,
-            f"/knowledge/space/{space_id}/children",
-            {"file_ids": list(file_ids), "page_size": 100},
-        )
-        states = {int(row["id"]): int(row.get("status") or 0) for row in page.get("data", [])}
+        states: dict[int, int] = {}
+        for parent_id, file_ids in files_by_parent.items():
+            if not file_ids:
+                continue
+            params: dict[str, object] = {"file_ids": list(file_ids), "page_size": 100}
+            if parent_id is not None:
+                params["parent_id"] = parent_id
+            page = await _get(client, admin_token, f"/knowledge/space/{space_id}/children", params)
+            states.update({int(row["id"]): int(row.get("status") or 0) for row in page.get("data", [])})
         failed = {one: state for one, state in states.items() if state in FILE_TERMINAL_FAILURES}
         if failed:
             raise AssertionError(f"seeding failed: space {space_id} files did not parse: {failed}")
-        if all(states.get(one) == FILE_SUCCESS for one in file_ids):
+        wanted = tuple(one for group in files_by_parent.values() for one in group)
+        if all(states.get(one) == FILE_SUCCESS for one in wanted):
             return
         if asyncio.get_running_loop().time() > deadline:
             raise AssertionError(
@@ -362,8 +386,12 @@ async def cleanup_prefixed(client: httpx.AsyncClient, admin_token: str) -> None:
     "the previous run died".
     """
 
-    spaces = await _get(client, admin_token, "/knowledge", {"type": 3, "name": PREFIX, "page_size": 100})
-    for row in spaces.get("data", []):
+    # Knowledge spaces are NOT listable through ``GET /knowledge``: that handler
+    # raises ``KnowledgeSpaceListNotSupportedError`` for ``type=3`` outright.
+    # ``/knowledge/space/mine`` is the creator's own list, and every space this
+    # helper makes is created by this administrator.
+    spaces = await _get(client, admin_token, "/knowledge/space/mine")
+    for row in spaces if isinstance(spaces, list) else spaces.get("data", []):
         if str(row.get("name", "")).startswith(PREFIX):
             await client.delete(f"{API_BASE}/knowledge/space/{row['id']}", headers=auth_headers(admin_token))
 
@@ -409,11 +437,16 @@ async def seed_retrieval_sample(
 
     nonce = uuid4().hex[:10]
     query = f"bisheng f052 retrieval sample {nonce}"
-    body = (
-        f"BiSheng F052 retrieval sample document. {query}. "
-        "This sentence exists so one query matches every seeded file and the "
-        "returned set is decided by permissions alone."
-    ).encode()
+
+    def document_bytes(marker: str) -> bytes:
+        """The shared sentence, plus the one line that keeps the md5 unique."""
+
+        return (
+            f"BiSheng F052 retrieval sample document. {query}. "
+            "This sentence exists so one query matches every seeded file and the "
+            "returned set is decided by permissions alone.\n"
+            f"Sample slot: {marker}.\n"
+        ).encode()
 
     await cleanup_prefixed(client, admin_token)
 
@@ -448,8 +481,35 @@ async def seed_retrieval_sample(
     folder_d2 = await _post(client, admin_token, f"/knowledge/space/{space_id}/folders", {"name": f"d2-{nonce}"})
     d1_id, d2_id = int(folder_d1["id"]), int(folder_d2["id"])
 
-    async def add_space_file(name: str, parent_id: int | None) -> int:
-        path = await _upload(client, admin_token, name, body)
+    seen_file_ids: set[int] = set()
+
+    def accept_created(rows: list, slot: str, container: str) -> int:
+        """Take the new file's id, refusing a row that is a duplicate rejection.
+
+        A rejected duplicate comes back as the row of the file it collided
+        with, carrying ``FAILED`` — same shape as a successful create, and with
+        somebody else's id. Left unchecked it makes a sample of five files
+        silently become a sample of one.
+        """
+
+        if not rows:
+            raise AssertionError(f"seeding failed: {slot} was not added to {container}")
+        row = rows[0]
+        status = int(row.get("status") or 0)
+        if status == FILE_FAILED:
+            raise AssertionError(
+                f"seeding failed: {slot} was rejected by {container} as a duplicate "
+                f"(content md5 or file name already present); row={row}"
+            )
+        file_id = int(row["id"])
+        if file_id in seen_file_ids:
+            raise AssertionError(f"seeding failed: {slot} came back as already-seeded file {file_id}")
+        seen_file_ids.add(file_id)
+        return file_id
+
+    async def add_space_file(slot: str, parent_id: int | None) -> int:
+        name = f"{PREFIX}{slot}-{nonce}.txt"
+        path = await _upload(client, admin_token, name, document_bytes(slot))
         created = await _post(
             client,
             admin_token,
@@ -457,16 +517,14 @@ async def seed_retrieval_sample(
             {"file_path": [path], "parent_id": parent_id},
         )
         rows = created if isinstance(created, list) else created.get("data", [])
-        if not rows:
-            raise AssertionError(f"seeding failed: {name} was not added to space {space_id}")
-        return int(rows[0]["id"])
+        return accept_created(rows, name, f"space {space_id}")
 
-    f1 = await add_space_file(f"{PREFIX}f1-{nonce}.txt", None)
-    f2 = await add_space_file(f"{PREFIX}f2-{nonce}.txt", None)
-    f3 = await add_space_file(f"{PREFIX}f3-{nonce}.txt", d1_id)
-    f4 = await add_space_file(f"{PREFIX}f4-{nonce}.txt", d2_id)
+    f1 = await add_space_file("f1", None)
+    f2 = await add_space_file("f2", None)
+    f3 = await add_space_file("f3", d1_id)
+    f4 = await add_space_file("f4", d2_id)
 
-    library_path = await _upload(client, admin_token, f"{PREFIX}l1-{nonce}.txt", body)
+    library_path = await _upload(client, admin_token, f"{PREFIX}l1-{nonce}.txt", document_bytes("l1"))
     processed = await _post(
         client,
         admin_token,
@@ -474,11 +532,14 @@ async def seed_retrieval_sample(
         {"knowledge_id": library_id, "file_list": [{"file_path": library_path}]},
     )
     library_rows = processed if isinstance(processed, list) else processed.get("data", [])
-    if not library_rows:
-        raise AssertionError(f"seeding failed: the library file was not accepted by library {library_id}")
-    library_file_id = int(library_rows[0]["id"])
+    library_file_id = accept_created(library_rows, f"{PREFIX}l1-{nonce}.txt", f"library {library_id}")
 
-    await _wait_for_space_files(client, admin_token, space_id, (f1, f2, f3, f4))
+    await _wait_for_space_files(
+        client,
+        admin_token,
+        space_id,
+        {None: (f1, f2), d1_id: (f3,), d2_id: (f4,)},
+    )
     await _wait_for_library_file(client, admin_token, library_id, library_file_id)
 
     account = await _post(
@@ -499,7 +560,7 @@ async def seed_retrieval_sample(
         {"name": f"{PREFIX}key", "scopes": ["knowledge:read"], "delegate_scopes": []},
     )
 
-    subject_ids = (str(account_id), str(natural_person_user_id))
+    subjects = (("service_account", str(account_id)), ("user", str(natural_person_user_id)))
     for resource_type, resource_id in (("knowledge_space", space_id), ("knowledge_library", library_id)):
         await grant_subject(
             client,
@@ -533,7 +594,7 @@ async def seed_retrieval_sample(
             admin_token,
             resource_type=resource_type,
             resource_id=resource_id,
-            subject_ids=subject_ids,
+            subjects=subjects,
         )
 
     # The PAT switch is deployment-level state, so it is read before it is
