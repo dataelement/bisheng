@@ -19,7 +19,7 @@ import pytest
 
 from bisheng_cli import devdb, ignore, packaging
 from bisheng_cli.errors import EXIT_LOCAL_INVALID, CliError
-from tests.helpers.platform_mock import FAKE_KEY
+from tests.helpers.platform_mock import FAKE_KEY, FAKE_MODEL_BASE_URL
 
 MANIFEST = {"name": "表单问卷小应用", "runtime": "python3.11", "port": 8080, "slug": "survey"}
 
@@ -70,6 +70,51 @@ def test_platform_names_override_the_shell_and_the_key_never_enters(sample_proje
     assert FAKE_KEY not in "".join(env.values())
     # The reserved prefixes are the hosted runtime's; every name we set is under one.
     assert all(name.startswith(devdb.RESERVED_ENV_PREFIXES) for name in devdb.PLATFORM_ENV_NAMES)
+
+
+# ---- the model face's three names (AC-27 / AC-28) ---------------------------
+
+
+def test_model_face_names_carry_the_address_whoami_reported(sample_project: Path) -> None:
+    """The base URL is F051's field verbatim — nothing is composed here.
+
+    Both OpenAI spellings and the platform's reserved name get the same value,
+    so an app can read whichever its engine prefers and behave the same hosted.
+    """
+    env = _env(sample_project, model_base_url=FAKE_MODEL_BASE_URL, model_api_key=FAKE_KEY)
+    assert env["OPENAI_BASE_URL"] == FAKE_MODEL_BASE_URL
+    assert env["BISHENG_MODEL_BASE_URL"] == FAKE_MODEL_BASE_URL
+    assert env["OPENAI_API_KEY"] == FAKE_KEY
+    assert set(env) == set(devdb.PLATFORM_ENV_NAMES) | set(devdb.FRAMEWORK_ENV_NAMES) | set(devdb.MODEL_FACE_ENV_NAMES)
+    # The key reaches the app under exactly one name — the platform's name for
+    # "the credential this process calls the model face with" — and never under
+    # the name the CLI itself reads it from.
+    assert "BISHENG_API_KEY" not in env
+    assert [name for name, value in env.items() if value == FAKE_KEY] == ["OPENAI_API_KEY"]
+
+
+def test_no_model_face_means_the_three_names_are_removed_not_inherited(sample_project: Path) -> None:
+    """AC-28 fail-closed, one step earlier: no face, no half-wiring.
+
+    A developer's personal `OPENAI_API_KEY` surviving into the app would make
+    model calls work locally against somebody else's service and fail the moment
+    the same code is hosted — the exact local-only divergence INV-32 forbids.
+    """
+    shell = {
+        "OPENAI_BASE_URL": "https://api.openai.com/v1",
+        "OPENAI_API_KEY": "sk-personal",
+        "BISHENG_MODEL_BASE_URL": "https://elsewhere.test/v1",
+    }
+    env = _env(sample_project, base_env=shell, model_base_url="", model_api_key=FAKE_KEY)
+    for name in devdb.MODEL_FACE_ENV_NAMES:
+        assert name not in env
+    assert "sk-personal" not in "".join(env.values())
+
+
+def test_an_address_without_a_credential_wires_nothing(sample_project: Path) -> None:
+    env = _env(sample_project, model_base_url=FAKE_MODEL_BASE_URL, model_api_key=None)
+    for name in devdb.MODEL_FACE_ENV_NAMES:
+        assert name not in env
 
 
 def test_db_lives_under_dot_bisheng_dev_and_persists_across_runs(sample_project: Path) -> None:

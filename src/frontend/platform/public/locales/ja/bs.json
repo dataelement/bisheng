@@ -2331,6 +2331,21 @@
   },
   "openApiManagement": {
     "empty": "レコードがありません",
+    "accessInfo": {
+      "title": "接続情報",
+      "hint": "この情報を開発者に渡してください。ローカルアプリをプラットフォームに接続するのに必要な内容がすべて含まれています。キーは含まれていないため、別途お渡しください。",
+      "copy": "接続情報をコピー",
+      "platformAddress": "プラットフォームアドレス",
+      "mcpAddress": "MCP サーバーアドレス",
+      "modelBaseUrl": "モデル呼び出しアドレス（OpenAI 互換）",
+      "cliDownload": "コマンドラインツールのダウンロード",
+      "loginCommand": "ログインコマンド",
+      "keyPlaceholder": "<別途受け取ったキーを入力>",
+      "cliMissing": "今回のデプロイにはコマンドラインツールのインストーラーが含まれていません。プラットフォーム管理者にお問い合わせください。",
+      "copyHeader": "BiSheng プラットフォーム接続情報（キーは含まれません）",
+      "copyLine": "{{label}}：{{value}}",
+      "copyFooter": "キーはこのテキストに含まれていません。この情報を送った管理者に個別にお問い合わせください。"
+    },
     "fields": {
       "name": "名前",
       "description": "説明",

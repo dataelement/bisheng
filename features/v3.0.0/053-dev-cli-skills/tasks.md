@@ -15,7 +15,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 13 项就地修订，55 条有效 AC 定稿（决议 1–12） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日评审 12 条修订（D1–D14 / 21 坑）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；**50 任务 / 5 Wave / 35 条 `[MVP-核心]`**；55 条 AC 全覆盖（AC-39 为墓碑、AC-48 / AC-50 为跨 Feature 旅程引用，见追溯表）；**+ 同日 `/sdd-review tasks` 14 条修订**（2 high：F054 `logs` 链路事实回正〔runtime-manager 端点已落码〕· 依赖上界与 wheel 安装冒烟〔app-proxy 生产事故同型敞口〕；9 medium：161 段错误码登记 · 未登记码按 HTTP 状态兜底 · `26002` 三成因不可分 · `data.required` 是字符串 · base_url 归一化 · T022/T026 伪依赖 · T002 拆 T002a · 产物缺失时端点行为 · F055 扫描顺序偏离进依赖表；3 low：偏离计数补第三处 · CI 改 `--frozen` · T031 落点改独立 workflow 文件） |
-| 实现 | 🚧 进行中 | **47 / 52 完成**（2026-09-16 Wave 3–5 顺延项落地：**T038 / T042 / T043 / T044 / T047 / T048 已实现**——`bisheng dev` 迷你代理 + 本地 SQLite + 同名接线 env、`platforms list/use` + 全局 `--platform`、版本不兼容阻断 exit 2、「平台能力接线」技能包；CLI 全量 **327 passed**（基线 268）、backend `test/dev_toolkit` **38 passed**、ruff 全绿、wheel 重打并提交；剩 T033 / T041 / T045 / T046 / T050。偏差见「实际偏差记录」29–34）。**41 / 52 完成**（2026-08-18 缺陷修订：**T054 / T055 已实现**——`sync` 现把技能包接入本机 AI 编程工具并如实报告、技能包按平台分目录、`deploy` 在项目 `AGENTS.md` 留位置指针；起因是「同步成功但 AI 读不到」的现场失败，详见 design.md 顶部 2026-08-18 缺陷修订块与 spec §2.10。CLI 全量 **247 passed / 0 failed**、`ruff check` + `ruff format --check` 全绿，并在 114 真机验证 `login` / `skills sync` 输出与软链重指向）。**39 / 50 完成**（2026-08-18 增补：**Wave 3「部署纳管」技能包切片 T035/T036/T037/T039/T040/T049 已实现并在 114 端到端验证**——CLI 全量 219 passed、`skills sync` 在 114 上装 wheel→sync→写入 `~/.bisheng/skills/deploy-hosting/`→selfcheck 通过、端点 `GET /skills/deploy-hosting` 返 200 gzip、未知/越界 slug 404、教程新内容 nginx 200；T038「平台能力接线」仍随 F057 顺延；决策增补见 design.md 顶部 2026-08-18 块）。**33 / 50 完成**（前序）。Wave 1 全部（T001–T018 含 T002a）+ **Wave 2 的 CLI 侧全部**（T019–T026 三条命令、T030 打包脚本、T031 CI、T032 README）+ **Wave 2 的平台侧全部**（T027–T029 分发端点、集成测试、租户豁免）。CLI：`cd src/bisheng-cli && uv run pytest` **203 passed / 0 failed**、`ruff check` + `ruff format --check` 全绿、`uv lock --check` 无漂移、wheel 构建 + 干净 venv 安装冒烟（`import bisheng_cli.main` / `bisheng --version` / 三条命令 `--help`）通过。平台侧（2026-08-18）：`cd src/backend && uv run pytest test/dev_toolkit test/open_api -q` **111 passed / 0 failed**（其中 dev_toolkit 8 条）、`ruff check` + `ruff format --check` 全绿、`arch-guard.sh` 六个文件零输出、`from bisheng.main import app` 可起（624 路由）。**未完成**：T033（114 手验，依赖平台侧上线）。~~T034（上游回写）~~ → **2026-08-19 收口批完成**：四项回写的代码早在 `874bd688b` / `95c0ed98e` 交付，本次把条目登记进 F049 / F055 两份 tasks.md 的「跨 Feature 回写受理」表，并接受 F055 T050 ③ 的 `deploy-limits` 口径回写进本 spec AC-32；唯一没做的是「顺延项落点核对」半项，见该任务偏差记录。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | **50 / 52 完成**（2026-09-16 Wave 5 顺延项落地：**T041 / T045 / T046 已实现**——服务账号详情页接入信息区 + 一键复制（不含密钥）、`dev` 期按 `contracts-runtime-manager.md` §5 同名注入模型面三名并把「本地与线上同判」两侧钉成断言、「部署纳管」技能包补审批状态本地跟踪且两个 `xfail(strict=True)` 哨兵转为内容对账型真断言；CLI 全量 **346 passed / 0 failed**（基线 334 passed + 1 failed，那 1 条是 `whoami` 桩缺 `model_base_url`，本批修掉）、backend `test/dev_toolkit` **76 passed**、`test/open_api` **707 passed / 3 skipped**、platform `vitest` 新文件 **11 passed** 且 `tsc-strict` / `eslint` / `check-i18n` 全绿、ruff 全绿、wheel 重打并提交（复审重跑 sha 一致）；**剩 T033**（114 手验）**与 T038a**（「平台能力接线」包模型一节改写，F051 落地后追加项，不在本批切片范围）。偏差见「实际偏差记录」35–42（41 / 42 为同批复审补的两处真缺陷：接入信息区两个地址来源不一致、`--wait` 终态漏教两个），其中 **35 是与 AC-23 字面表述的冲突，建议改 spec 措辞而非改实现**）。**47 / 52 完成**（2026-09-16 Wave 3–5 顺延项落地：**T038 / T042 / T043 / T044 / T047 / T048 已实现**——`bisheng dev` 迷你代理 + 本地 SQLite + 同名接线 env、`platforms list/use` + 全局 `--platform`、版本不兼容阻断 exit 2、「平台能力接线」技能包；CLI 全量 **327 passed**（基线 268）、backend `test/dev_toolkit` **38 passed**、ruff 全绿、wheel 重打并提交；剩 T033 / T041 / T045 / T046 / T050。偏差见「实际偏差记录」29–34）。**41 / 52 完成**（2026-08-18 缺陷修订：**T054 / T055 已实现**——`sync` 现把技能包接入本机 AI 编程工具并如实报告、技能包按平台分目录、`deploy` 在项目 `AGENTS.md` 留位置指针；起因是「同步成功但 AI 读不到」的现场失败，详见 design.md 顶部 2026-08-18 缺陷修订块与 spec §2.10。CLI 全量 **247 passed / 0 failed**、`ruff check` + `ruff format --check` 全绿，并在 114 真机验证 `login` / `skills sync` 输出与软链重指向）。**39 / 50 完成**（2026-08-18 增补：**Wave 3「部署纳管」技能包切片 T035/T036/T037/T039/T040/T049 已实现并在 114 端到端验证**——CLI 全量 219 passed、`skills sync` 在 114 上装 wheel→sync→写入 `~/.bisheng/skills/deploy-hosting/`→selfcheck 通过、端点 `GET /skills/deploy-hosting` 返 200 gzip、未知/越界 slug 404、教程新内容 nginx 200；T038「平台能力接线」仍随 F057 顺延；决策增补见 design.md 顶部 2026-08-18 块）。**33 / 50 完成**（前序）。Wave 1 全部（T001–T018 含 T002a）+ **Wave 2 的 CLI 侧全部**（T019–T026 三条命令、T030 打包脚本、T031 CI、T032 README）+ **Wave 2 的平台侧全部**（T027–T029 分发端点、集成测试、租户豁免）。CLI：`cd src/bisheng-cli && uv run pytest` **203 passed / 0 failed**、`ruff check` + `ruff format --check` 全绿、`uv lock --check` 无漂移、wheel 构建 + 干净 venv 安装冒烟（`import bisheng_cli.main` / `bisheng --version` / 三条命令 `--help`）通过。平台侧（2026-08-18）：`cd src/backend && uv run pytest test/dev_toolkit test/open_api -q` **111 passed / 0 failed**（其中 dev_toolkit 8 条）、`ruff check` + `ruff format --check` 全绿、`arch-guard.sh` 六个文件零输出、`from bisheng.main import app` 可起（624 路由）。**未完成**：T033（114 手验，依赖平台侧上线）。~~T034（上游回写）~~ → **2026-08-19 收口批完成**：四项回写的代码早在 `874bd688b` / `95c0ed98e` 交付，本次把条目登记进 F049 / F055 两份 tasks.md 的「跨 Feature 回写受理」表，并接受 F055 T050 ③ 的 `deploy-limits` 口径回写进本 spec AC-32；唯一没做的是「顺延项落点核对」半项，见该任务偏差记录。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -402,14 +402,18 @@
   **文件**: `src/backend/test/dev_toolkit/fixtures/skill_trigger_samples.md`, `src/backend/test/dev_toolkit/test_skill_trigger.py`
   **覆盖 AC**: AC-22
 
-- [ ] **T041**: 跨 Feature 旅程验收（接入信息文本 + key → `login` → 调通一次 MCP 工具；agent 凭技能包 + CLI + MCP 完成声明补全 → deploy → 预检修复 → 审批状态跟踪）
-  **文件**: `features/v3.0.0/053-dev-cli-skills/tasks.md`（回填执行结果）；**可检查半边** → `src/backend/test/dev_toolkit/test_journey_prerequisites.py`（新，2026-09-16，分支 `wt/f056-verification`，由 F056 T027–T033 验收批顺带交付）
+- [x] **T041**: 跨 Feature 旅程验收（接入信息文本 + key → `login` → 调通一次 MCP 工具；agent 凭技能包 + CLI + MCP 完成声明补全 → deploy → 预检修复 → 审批状态跟踪）
+  **文件**: `src/backend/bisheng/dev_toolkit/skills/deploy-hosting/SKILL.md`（增量：审批状态本地跟踪一节）, `features/v3.0.0/053-dev-cli-skills/tasks.md`（回填执行结果）；**可检查半边** → `src/backend/test/dev_toolkit/test_journey_prerequisites.py`（新，2026-09-16，分支 `wt/f056-verification`，由 F056 T027–T033 验收批顺带交付；2026-09-16 本批把两个哨兵转真断言）
   **前置**: F052（MCP 面）就绪
   **覆盖 AC**: AC-46, AC-47
   **进度（可检查半边已落，整条旅程仍待 114 + F052）**：真机跑一遍需要 MCP 面与一台机器，这里落的是旅程的**本地前置条件**——agent 实际读的那份材料，以及它被教着去处理的错误码。
   - 已验证（5 例）：技能包教对了 `bisheng login <平台地址> --api-key bs-sak-…`（含 `--api-key-stdin`，且说明 key 由管理员单独转交）；清单必填 / 可选键齐全**并且**明确列出「不存在的键」（清单拒未知字段，agent 自造 `command:` 只会拿到 16221）；`bisheng deploy .` 与 `--dry-run`；「部署成功不等于上线」这句在。
   - **预检错误码双向对账**：技能包排障表里的码全部在 `bisheng/common/errcode/app_publish.py` 里存在（不教平台不会报的码），且 16220–16249 band 里除管理员侧的 16223 / 16224 / 16225 / 16227 外**没有漏教的码**（漏一个 = agent 撞上后无从下手）。这条是防腐的重点：后端改码而技能包不动，今天不会有任何东西报错。
-  - **两处缺口（xfail(strict=True) 哨兵）**：① **AC-47 最后一步无法本地完成**——技能包说了「要等管理员在审批中心通过」，却没教任何本地跟踪方式；`bisheng deploy --wait` 在 CLI 里已经实现、MCP 应用状态工具归 F052，两者技能包都没提，于是 agent 只能让开发者离开对话去网页上看。补一句即可，归 F053 自己。② **AC-46 的输入不存在**——服务账号详情页「接入信息区」与一键复制（AC-44 / AC-45，本文件 T046）未实现，管理员今天没有可复制的接入信息文本；`KeyRevealDialog` 里的第二个复制块是**内嵌明文 key 的 curl 示例**，不是 AC-45 要求的「不含 key 值的接入信息」。T046 落地当天哨兵报错。
+  - ~~**两处缺口（xfail(strict=True) 哨兵）**~~ → **2026-09-16 两处均已闭合**（commit `07c758c35`，哨兵转为普通断言）：① **AC-47 最后一步**——技能包补上「审批状态在终端里跟」一节：`bisheng deploy . --wait` 的五个终态退出码（0 通过并上线 / 20 驳回含理由全文 / 21 撤回 / 22 待上线不需重新审批 / 23 等待超时**不代表审批失败**）逐格给下一步动作，随时查一眼用 MCP 工具 `bisheng_app_status`（需 `app:manage` 位），并点明 `bisheng logs` 看的是运行日志不是审批状态。② **AC-46 的输入**——T046 落地，管理员在服务账号详情页有了可复制且不含密钥的接入信息文本。
+  - **转真断言时把「存在性」升级成「内容对账」**（哨兵只断言字符串在不在，那挡不住教错）：教的四个退出码逐个回 `bisheng_cli/errors.py` 核对数值、教的 MCP 工具名与 scope 回 `mcp/registry.py` 核对、接入信息区五项键齐全且组件源码里不出现 `plaintext` / `bs-sak-` / `Authorization` / `issuedKey`。任一侧改名即红。
+  - **仍需 114 真机的四步（本地造不出来，不伪造）**：管理员把 key 单独转交 → 开发者真的 `bisheng login` → 经 F052 真的调通一次 MCP 工具 → 管理员在审批中心真的通过并看到应用上线。前两步的材料与命令已由 T046 / 技能包备齐，第三步依赖 114 上 `open_platform.enabled=true`。
+  - **2026-09-16 复审补**：退出码表补齐到**六个**终态（增 24 审批单取消 / 25 审批异常，两者都是「再 deploy 一次是错的」；22 的成因改为「容量不足或上线执行失败」），守卫改为从 `deploy.py::APPROVAL_TERMINALS` 反解全部终态再逐个要求包里有行——加第七个终态而不教当天就红。见「实际偏差记录」42。
+  - `test/dev_toolkit/test_journey_prerequisites.py` 现 **13 passed / 0 xfailed**。
 
 ---
 
@@ -435,19 +439,23 @@
   **覆盖 AC**: AC-03, AC-24, AC-29, AC-53
   **2026-09-16 完成证据**: commit `c2b56c686`（`commands/dev.py`、`cli.py` 注册第五条 `dev` 与第六条 `platforms`）；`tests/test_command_dev.py` 覆盖 凭据缺失 exit 3 零请求 / manifest 缺项 exit 6 列字段 / probe 三态 / whoami 401 exit 4 / 无权限位照常启动 / 输出含身份来源、平台与本地地址且永不含密钥；`test_cli.py::test_no_as_flag_anywhere`。
 
-- [ ] **T045**: `dev` 期平台能力调用按服务账号**被显式授予**的范围放行（经 F051 / F052 面执行，过滤强度与 fail-closed 与线上一致；迷你代理只注入身份与环境、不代理这些调用）+ 「本地与线上同构」端到端（同一份代码 `dev` 跑通后 `deploy` 上线，托管环境取到的是**当前访问用户**身份）
-  **文件**: `features/v3.0.0/053-dev-cli-skills/tasks.md`（回填执行结果）
+- [x] **T045**: `dev` 期平台能力调用按服务账号**被显式授予**的范围放行（经 F051 / F052 面执行，过滤强度与 fail-closed 与线上一致；迷你代理只注入身份与环境、不代理这些调用）+ 「本地与线上同构」端到端（同一份代码 `dev` 跑通后 `deploy` 上线，托管环境取到的是**当前访问用户**身份）
+  **文件**: `src/bisheng-cli/bisheng_cli/devdb.py`（增量：`MODEL_FACE_ENV_NAMES` + `build_dev_env` 两个新参数）, `src/bisheng-cli/bisheng_cli/commands/dev.py`（增量：从 `whoami.model_base_url` 取址、`_report` 多一行）, `src/bisheng-cli/tests/helpers/platform_mock.py`（桩补 `model_base_url`）
+  **测试载体**: `src/bisheng-cli/tests/test_dev_capability_calls.py`（新，6 条）, `src/backend/test/dev_toolkit/test_dev_capability_parity.py`（新，16 条）, `tests/test_dev_env.py` / `tests/test_platform_contract.py` / `tests/test_command_dev.py`（增量）
   **前置**: F051 / F052 / F054 app-proxy 就绪
   **覆盖 AC**: AC-28, AC-49
+  **2026-09-16 完成证据**: commit `792e901c9`。① 模型面三名按 `contracts-runtime-manager.md` §5 同名注入——`OPENAI_BASE_URL` / `BISHENG_MODEL_BASE_URL` 取 `whoami.model_base_url`（F051 AC-30 唯一出口，用例断言 CLI 源码里不出现 `/api/v2/model/v1` 字面量）、`OPENAI_API_KEY` 取当前 login 凭据；平台没有模型面时三名一个都不注入并把 shell 里的同名值清掉（`test_no_model_face_means_the_three_names_are_removed_not_inherited`）。② 「过滤强度与 fail-closed 与线上一致」的论据是**只有一个判者**，两侧各自钉住：CLI 侧断言迷你代理对任何路径都只转发到本机应用（含 `/api/v2/model/v1/**` / `/api/v2/mcp` / `/api/v2/filelib/retrieve` 五条）、不附加 login 凭据、`dev` 从不读 `whoami` 的 `scopes`；平台侧断言模型面每条路由挂同一个 `model:invoke` marker 且只收 mode S、MCP gate 复用 `/api/v2` 的 `admit_open_api_principal` / `open_api_execution_scope` 而非另写一份、每个已安装 MCP 工具缺位即拒、检索门面身份缺失即拒（三种缺失形态）。③ CLI 全量 **346 passed / 0 failed**（基线 334 passed + 1 failed），backend `test/dev_toolkit` **73 passed**。④ 偏差见「实际偏差记录」35–36；**仍需 114**：同一份代码 `dev` 跑通 → `deploy` 上线 → 用**非 owner 的真实账号**访问、确认拿到的是当前访问用户而非服务账号（AC-49 的后半句本地无法复现，spec §范围边界已明写）。
 
 ---
 
 ### Wave 5 · 顺延：平台侧接入信息区与 CLI 其余顺延项（release 必做，本轮不做）
 
-- [ ] **T046**: 接入信息区（platform 服务账号详情页「API 密钥」tab 顶部：MCP 地址 / OpenAI 兼容 base URL / CLI 下载链接 / `bisheng login` 指引）+ 「一键复制接入信息」（**不含 key 值，也不含任何可换取 key 值的凭据**；实时生成不做快照；无分享链接 / 二维码 / 站内信推送）；未部署开放能力层时该区不出现
-  **文件**: `src/frontend/platform/src/pages/ServiceAccount/`（F049 已建的详情页增量）, `src/frontend/platform/src/controllers/API/`（读 `dev-toolkit/versions`）, `src/frontend/packages/locales/`（三语）
-  **测试载体**: 手动验证（Playwright 未落地）+ `src/backend/test/dev_toolkit/test_distribution_api.py` 已覆盖端点侧
+- [x] **T046**: 接入信息区（platform 服务账号详情页「API 密钥」tab 顶部：MCP 地址 / OpenAI 兼容 base URL / CLI 下载链接 / `bisheng login` 指引）+ 「一键复制接入信息」（**不含 key 值，也不含任何可换取 key 值的凭据**；实时生成不做快照；无分享链接 / 二维码 / 站内信推送）；未部署开放能力层时该区不出现
+  **文件**: `src/backend/bisheng/dev_toolkit/api/endpoints/distribution.py`（填上 F052 留的 `model` 槽位）, `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/AccessInfoPanel.tsx`（新）, `.../ServiceAccount/ApiKeysTab.tsx`（增量：挂到 tab 顶部）, `src/frontend/platform/src/controllers/API/devToolkit.ts` + `src/types/api/devToolkit.ts`（新）, `src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/bs.json`（`openApiManagement.accessInfo.*` 三语）
+  **测试载体**: `src/frontend/platform/src/test/serviceAccountAccessInfo.test.tsx`（新，9 条）, `src/backend/test/dev_toolkit/test_distribution_versions_mcp.py`（增量：model 槽位两条）
   **覆盖 AC**: AC-44, AC-45
+  **2026-09-16 完成证据**: commit `5386aae6c`。地址不在前端拼：MCP 与模型 base URL 都来自 `GET /api/v1/dev-toolkit/versions`，其中 `model` 槽位本次由 `model_gateway_base_url(request)` 填上——与 `whoami.model_base_url` 同一个产出函数（F051 AC-30），用例断言两个地址同源；平台地址与安装件链接取浏览器当前 origin（载荷给的是 `download_path` 路径，正是为此）。未部署开放能力层时该区不出现**且不发请求**（`/api/v1/env` 的 `open_platform_enabled` 是同一个进程级开关；GET 拿到 404 会被响应拦截器变成整页跳转，所以不能靠 404 兜）。复制文本点击时实时生成、不存快照，逐条断言不含 `bs-sak-` / `bs-pat-` / `bs-app-` / `Authorization` / `Bearer` / `access_token`。platform `vitest` 新文件 **11 passed**、`tsc-strict` 全绿、`eslint` 零输出、`pnpm check-i18n` 无新漂移。**Playwright 仍未落地**：肉眼验证（两种开关状态、复制到剪贴板、下载链接可点）留给 114。
+  **2026-09-16 复审补**：平台地址与安装件链接改取载荷新增的 `platform.base_url`（与 MCP / 模型地址同一产出函数），浏览器 origin 退为兜底——初版在网关 / 路径前缀部署下会把一条 404 的 `bisheng login` 命令和一条能用的 MCP 地址一起交给开发者。见「实际偏差记录」41。
 
 - [x] **T047**: 多平台凭据的**交互层**（`--platform` 参数注册 · profile 列出与切换默认平台）——数据结构已由 T012 落好，本任务零迁移
   **文件**: `src/bisheng-cli/bisheng_cli/cli.py`, `src/bisheng-cli/bisheng_cli/credentials.py`（增量）
@@ -514,7 +522,7 @@
 | AC-25 | T042 | ✅ |
 | AC-26 | T043 | ✅ |
 | AC-27 | T043 | ✅ |
-| AC-28 | T045 | ⏭ |
+| AC-28 | T045 | ✅ |
 | AC-29 | T044 | ✅ |
 | AC-30 | T003, T004, T013, T014, T021, T022 | ✅ |
 | AC-31 | T007, T008, T017, T018, T021, T022, T033 | ✅ |
@@ -533,12 +541,12 @@
 | AC-41 | T025, T026, T033 | ✅（单测闭环；114 联调受阻于 **F054 T057 + F055 T039**——manager 侧 T030/T031 已落码，见 T032 说明） |
 | AC-42 | T025, T026, T033（必须用第二把归属人不同的密钥） | ✅ |
 | AC-43 | T025, T026；`app_state` 回写 T034 ② | ✅（降级：明确提示而非空白） |
-| AC-44 | T046 | ⏭ |
-| AC-45 | T046 | ⏭ |
-| AC-46 | T041 | ⏭ |
-| AC-47 | T041 | ⏭ |
+| AC-44 | T046 | ✅ |
+| AC-45 | T046 | ✅ |
+| AC-46 | T041 | ✅（本地前置条件已钉；密钥转交与真的 `login` 待 114） |
+| AC-47 | T041 | ✅（审批状态本地跟踪已补齐；整条旅程真机跑通待 114） |
 | AC-48 | **旅程引用，经 F054 / F056 验证**；T033 剧本连带跑过，本 Feature 不单独验收 | ↗ |
-| AC-49 | T045 | ⏭ |
+| AC-49 | T045 | ✅（同名注入已成立；「托管环境取到当前访问用户」待 114 用非 owner 账号验） |
 | AC-50 | **经 F055 验证**（每次发布必审 / 扫描同规则集 / 元信息与档位取自 `bisheng-app.yaml`）；T033 剧本连带跑过 | ↗ |
 | AC-51 | T011, T012, T021, T022, T025, T026 | ✅ |
 | AC-52 | T007, T008, T011, T012, T033（等 5 秒余量） | ✅ |
@@ -599,3 +607,14 @@
 32. **`cli.DEFERRED_COMMANDS` 清空但保留**，`SUBCOMMANDS` 六条（含 `platforms`，tasks 未单列命令名）—— 「announced ≠ registered」的守卫用例保形，下一轮再顺延什么直接填回去。`platforms` 是 T047 交互层的落点：`list` 只打印 login 时平台回的 `key_mask`，`use` 对未登录地址 exit 3 并指回 `bisheng login`，不会凭空造 profile。
 33. **`skills sync` 改为两包，老平台缺 `platform-wiring` 时跳过并 warn、不整体失败** —— 新 CLI 对着还没发布第二包的平台（`GET /skills/platform-wiring` 404）应当仍能把「部署纳管」同步下来；整体失败会把「平台老」伪装成「同步坏了」。跳过**只认 404**（`CliError.details.http_status`）：第二包 5xx 是平台在失败，照常 exit 8，不会被当成「平台老」。`deploy` 写进项目 `AGENTS.md` 的指针随 `DEFAULT_PACKS` 变成两行。
 34. **技能包契约测试把 `Dept-*` 三个头在 SKILL.md 表里逐行写全，样例文案避开 "login" 字样** —— 前者是让「教的头名 == app-proxy 注入的头名」能按反引号全名机器比对（缩写形态 `-Dept-Name` 匹配不上，写全也符合「标识写全、可 grep」的仓库规则）；后者是 `test_example_reads_identity_from_headers_and_has_no_login` 对样例做 `login/password/jwt/set-cookie` 子串扫描，样例正文一句「你 login 的服务账号」误中，改成「你在命令行里登记的那个服务账号」。
+
+### Wave 5 · 接入信息区 / `dev` 期能力调用 / 跨 Feature 旅程（2026-09-16 实施；T041 / T045 / T046）
+
+35. **⚠️ login 密钥以 `OPENAI_API_KEY` 进入应用进程，与 AC-23 的字面表述「login 密钥本身不进入应用进程」冲突——按 AC-27 与 F051 design D2 执行，在此登记** —— AC-23 那句话写在**每请求短时凭据句柄**的语境里（「由迷你代理以当前 login 密钥换取或本地签发」），管的是访问者凭据那条线；AC-27 则明写进程级注入项包含「**模型协议面 base URL 与凭据**」，`contracts-runtime-manager.md` §5 与 F051 design D2 把凭据的名字定死为 `OPENAI_API_KEY`（托管侧同名注入应用自己的 `BISHENG_APP_TOKEN` 值，官方 `openai` 客户端零配置直读的就是这个名字）。**不注入就没有同构可言**：同一行 `OpenAI()` 本地必须另写一套取值逻辑，正是 INV-32 要消灭的分叉。落地时把边界收紧成可断言的三条——密钥只出现在这**一个**名字下（`test_dev_env.py` / `test_command_dev.py` 各有一条 `[name for name, value in env.items() if value == FAKE_KEY] == ["OPENAI_API_KEY"]`）、`BISHENG_API_KEY` 仍被显式剔除、每请求访问者凭据仍然只走 header。**建议改 spec AC-23 的措辞**（把「login 密钥」限定为「访问者凭据」），而不是改实现。
+36. **平台没有模型协议面时，三个名字是「清掉」而不是「不设」** —— design 只说「取 `whoami.model_base_url`」，没说取不到怎么办。留着开发者 shell 里自己的 `OPENAI_API_KEY` / `OPENAI_BASE_URL`，应用会在本地对着 api.openai.com 跑通、上线即挂，而且现场看起来像「平台的模型面坏了」。契约文档 §5 末句「平台保留 env 名**覆盖**调用方同名值（含上述三个）」支持这个读法：既然是平台保留名，平台没有值时就该是空的。`dev` 启动输出同批加一行明说这件事，免得开发者靠客户端库的 404 去猜。
+37. **`MODEL_FACE_ENV_NAMES` 单列一个常量，不并进 `PLATFORM_ENV_NAMES`** —— 后者是 `runtime_manager.lifecycle.build_env` 那个 `env.update({...})` 的镜像，契约测试逐字比对键列表；三个模型名在托管侧由 **F055 T056** 从应用运行期凭据填，不经 `build_env`，并进去会让那条契约测试当场红、且掩盖「两个填充方」这个事实。改为让契约测试去读 `contracts-runtime-manager.md` §5 正文（断言三个名字带反引号出现，且「`dev` 期由 F053 同名注入」那句还在），并加一条「两个元组不相交」——这样 CLI 侧依然没有第二份定义。
+38. **T045 的「过滤强度与 fail-closed 与线上一致」用「只有一个判者」的结构性断言兑现，不做 dev 期的端到端权限用例** —— 本地起 `dev` 打真平台的权限矩阵，等于把 `test/open_api/test_mcp_scope_matrix.py` 与模型面那一批重写一遍，而且要一套中间件才跑得起来。真正会腐化的是**出现分支**：某天有人给面上加一个「本地调用放宽」的口子。所以两侧各钉结构：CLI 侧断言代理不代理能力调用、不附加凭据、不读 scopes；平台侧断言模型面路由的 marker 与 mode、MCP gate 复用 `/api/v2` 的准入函数、每个已安装工具缺位即拒、检索门面身份缺失即拒。行为层覆盖仍在各自 Feature 的测试里，本文件不重复。
+39. **`GET /api/v1/dev-toolkit/versions` 的 `model` 槽位填的是 `{base_url, protocol, auth}`，`protocol` 是新字段** —— F052 留槽时只写了「holds F051's slot open」没定形状。跟 `mcp` 段对齐（那边是 `{url, transport, auth}`），但地址字段名用 `base_url` 而不是 `url`：这一段是 OpenAI 客户端的 `base_url` 参数，叫别的名字会让接入的人多猜一次。`protocol: "openai"` 是必要的——同一个地址对 Anthropic 路径答 26202，消费方需要知道该配哪种客户端。
+40. **接入信息区读 `/api/v1/dev-toolkit/versions` 前先看 `appConfig.openPlatformEnabled`，不靠 404 判断** —— 两者是同一个进程级开关（`settings.open_platform.enabled`），不会漂移；而 platform 的响应拦截器对 **GET 拿到 404 会把整页跳到 `/404`**（`controllers/request.ts`），靠请求失败来决定「该区不出现」会把管理员从密钥管理页踢走。请求本身仍带 `catch`：平台答不上来时该区静默不出现，它是加速器不是闸门。
+41. **接入信息区的「平台地址」与安装件链接改取 `platform.base_url`，浏览器 origin 退为兜底（切片复审补）** —— 初版里五行地址有两个来源：MCP 与模型地址由后端 `resolve_public_base_url` 产出，平台地址与下载链接由浏览器 `window.location.origin` 拼。两者在普通部署下相等，但**网关 / 路径前缀部署**（`open_api.public_base_url = https://portal.example.com/bisheng`）下 origin 少了前缀——管理员会把一条 404 的 `bisheng login https://portal.example.com` 和一条能用的 MCP 地址一起复制给开发者，而这正是 AC-46 的入口。处置：`versions` 载荷的 `platform` 段增加 `base_url`（同一个 `resolve_public_base_url(request)`，与 `mcp` / `model` 同源），前端 `versions.platform.base_url || window.location.origin`。没有翻「平台地址以浏览器为准」那条旧决议：未配置 `public_base_url` 时该函数解析的就是**这次浏览器请求**的 `X-Forwarded-Host` / `Host`，普通部署下取值与 origin 完全一致；只有运营方显式声明过对外地址时才以声明为准。载荷是纯增字段（design §4.2 的 JSON 示例本就落后于 `mcp` / `model` 两次增补，未回改示例）。用例：`test_distribution_versions_mcp.py` 两条（前缀部署下三个地址同前缀 / 未配置时跟随浏览器请求）+ `serviceAccountAccessInfo.test.tsx` 两条（有 base 用 base、无 base 回退 origin）。
+42. **「部署纳管」包的 `--wait` 退出码表补齐到六个终态（切片复审补）** —— 初版只教了 0 / 20 / 21 / 22 / 23，漏掉 `EXIT_CANCELLED = 24`（应用被删、审批单取消）与 `EXIT_APPROVAL_EXCEPTION = 25`（平台解析不出审批人、单子置异常）。这两个恰恰是「**再 deploy 一次是错的**」的两种：24 要先清 `.bisheng/app.json` 的过期标识再建新应用，25 只能找管理员处理异常单。包里写着「据退出码决定下一步、不用解析文案」，漏教等于 agent 撞上一个没有语义的非零码，默认动作就是重试。同批把 22 的成因从「平台容量不足」改成「容量不足或上线执行失败」（`deploy.py::PENDING_REASONS = {"capacity", "deploy_failed"}` 两种）。守卫也换了形状：`test_journey_prerequisites.py` 新增一条，从 `deploy.py` 的 `APPROVAL_TERMINALS` 字面量 + `pending_online` / `timeout` / `EXIT_OK` 反解出「`--wait` 可能返回的全部终态」，再回 `errors.py` 取数值、逐个要求包里有对应行——**加第七个终态而不教，当天就红**，不再依赖复审时有人记得数一遍。

@@ -2386,6 +2386,21 @@
   },
   "openApiManagement": {
     "empty": "No records",
+    "accessInfo": {
+      "title": "Access information",
+      "hint": "Send this to your developers — it is everything they need to point a local application at this platform. The key is not included; hand it over separately.",
+      "copy": "Copy access information",
+      "platformAddress": "Platform address",
+      "mcpAddress": "MCP server address",
+      "modelBaseUrl": "Model base URL (OpenAI-compatible)",
+      "cliDownload": "Command-line tool download",
+      "loginCommand": "Login command",
+      "keyPlaceholder": "<paste the key you were given>",
+      "cliMissing": "This deployment does not ship the command-line installer. Contact your platform administrator.",
+      "copyHeader": "BiSheng platform access information (no key included)",
+      "copyLine": "{{label}}: {{value}}",
+      "copyFooter": "The key is not in this text. Ask the administrator who sent it to you for the key separately."
+    },
     "fields": {
       "name": "Name",
       "description": "Description",

@@ -12,12 +12,21 @@ parts that rot silently: a precheck code renamed in the backend leaves the skill
 pack telling the agent to fix something the platform never reports, and nothing
 fails until a developer is stuck.
 
-The two steps that are **not** satisfied today are marked ``xfail(strict=True)``
-rather than described in prose, so they turn red on the day they land.
+Two steps used to be missing and were held here as ``xfail(strict=True)``
+sentinels: the pack taught no local way to follow an approval, and the
+access-information text an administrator hands over did not exist. T041 and
+T046 landed both, so those sentinels are now ordinary assertions — and the
+assertions check the *content*, not merely its presence, because an exit code
+or a tool name taught wrongly is worse than one never taught.
+
+What still needs a real platform and a real machine (reported, not faked):
+handing a key over, ``bisheng login`` against it, one live MCP tool call, and
+an administrator actually approving the release.
 """
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -95,31 +104,144 @@ class TestJourneyStepsTheSkillPackTeaches:
         assert "部署成功不等于上线" in skill_text
 
 
-class TestJourneyGapsNotYetClosed:
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "AC-47 last step: the pack tells the agent to wait for an approval "
-            "but never how to follow it from the local conversation. "
-            "`bisheng deploy --wait` exists in the CLI and the MCP status tool "
-            "is F052's; neither is mentioned. Delete this sentinel once the "
-            "pack teaches one of them."
-        ),
-    )
-    def test_approval_tracking_is_teachable_without_leaving_the_terminal(self, skill_text):
-        assert "--wait" in skill_text or "应用状态" in skill_text
+SRC_ROOT = Path(__file__).resolve().parents[3]
+PLATFORM_SRC = SRC_ROOT / "frontend" / "platform" / "src"
+SERVICE_ACCOUNT_DIR = PLATFORM_SRC / "pages" / "SystemPage" / "components" / "ServiceAccount"
+CLI_EXIT_CODES = SRC_ROOT / "bisheng-cli" / "bisheng_cli" / "errors.py"
+CLI_DEPLOY = SRC_ROOT / "bisheng-cli" / "bisheng_cli" / "commands" / "deploy.py"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "AC-46 input: the service-account detail page's 接入信息区 and its "
-            "one-click copy (F053 AC-44 / AC-45, task T046) are not built, so "
-            "there is no access-info text for an administrator to hand over. "
-            "Delete this sentinel when T046 lands."
-        ),
-    )
-    def test_access_info_text_exists_for_an_administrator_to_copy(self):
-        platform_src = Path(__file__).resolve().parents[3] / "frontend" / "platform" / "src"
-        service_account = platform_src / "pages" / "SystemPage" / "components" / "ServiceAccount"
-        sources = "\n".join(path.read_text(encoding="utf-8") for path in service_account.rglob("*.tsx"))
-        assert "dev-toolkit" in sources
+
+def _exit_code_values() -> dict[str, int]:
+    """``EXIT_* = <int>`` as `errors.py` defines them, read rather than remembered."""
+    module = ast.parse(CLI_EXIT_CODES.read_text(encoding="utf-8"))
+    values: dict[str, int] = {}
+    for node in module.body:
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if isinstance(target, ast.Name) and target.id.startswith("EXIT_") and isinstance(node.value, ast.Constant):
+            values[target.id] = node.value.value
+    return values
+
+
+def _wait_terminal_exit_names() -> set[str]:
+    """Every exit code ``deploy --wait`` can end on.
+
+    Derived from `deploy.py` rather than listed here: `APPROVAL_TERMINALS` is the
+    CLI's own enumeration of "this request will never reach a decision", and the
+    two outcomes `--wait` produces itself (`pending_online`, `timeout`) plus a
+    successful `EXIT_OK` complete the set. A sixth terminal added to the CLI
+    lands in this set automatically, which is the point: the pack must teach it
+    on the same day, or an agent meets a non-zero code it has no model for and
+    falls back to guessing (usually "deploy again").
+    """
+    module = ast.parse(CLI_DEPLOY.read_text(encoding="utf-8"))
+    names: set[str] = {"EXIT_OK", "EXIT_PENDING_ONLINE", "EXIT_WAIT_TIMEOUT"}
+    for node in ast.walk(module):
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            target_id = node.target.id
+        elif isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            target_id = node.targets[0].id
+        else:
+            continue
+        if target_id != "APPROVAL_TERMINALS" or not isinstance(node.value, ast.Dict):
+            continue
+        names.update(value.id for value in node.value.values if isinstance(value, ast.Name))
+    return names
+
+
+class TestJourneyLastStepApprovalTracking:
+    """AC-47's final link, closed by T041.
+
+    The pack used to end at "wait for an administrator to approve it", which is
+    where an agent has to send the developer to a web page — the one thing AC-47
+    says must not happen. Both local ways of following an approval now exist and
+    both are taught; these tests keep them taught *and correct*, because an exit
+    code or a tool name that drifts is worse than one that was never written.
+    """
+
+    def test_the_pack_teaches_both_local_ways_to_follow_an_approval(self, skill_text):
+        assert "bisheng deploy . --wait" in skill_text
+        assert "--wait-timeout" in skill_text
+        assert "bisheng_app_status" in skill_text
+
+    def test_the_exit_codes_it_teaches_are_the_codes_the_cli_actually_returns(self, skill_text):
+        """Read off `errors.py`, not remembered — a renumbering must break here.
+
+        The pack is the agent's whole model of "what does this exit code mean";
+        teaching 20 as "rejected" while the CLI returns something else sends it
+        to fix a rejection that did not happen.
+        """
+        source = CLI_EXIT_CODES.read_text(encoding="utf-8")
+        for name, taught in (
+            ("EXIT_REJECTED", 20),
+            ("EXIT_WITHDRAWN", 21),
+            ("EXIT_PENDING_ONLINE", 22),
+            ("EXIT_WAIT_TIMEOUT", 23),
+            ("EXIT_CANCELLED", 24),
+            ("EXIT_APPROVAL_EXCEPTION", 25),
+        ):
+            assert f"{name} = {taught}" in source, f"{name} is no longer {taught}"
+            assert f"| {taught} |" in skill_text, f"exit code {taught} lost its row in the pack"
+
+    def test_no_terminal_the_cli_can_return_is_left_untaught(self, skill_text):
+        """The table is complete against `deploy.py`, not against what I remembered.
+
+        `--wait` ends on six codes; the pack tells the agent to branch on the
+        code without reading the text, so one missing row is an agent with no
+        next action — and the two easiest to forget (`cancelled`, `exception`)
+        are exactly the two where retrying `deploy` is the wrong move.
+        """
+        values = _exit_code_values()
+        rows = set(re.findall(r"^\|\s*(\d+)\s*\|", skill_text, flags=re.MULTILINE))
+        for name in sorted(_wait_terminal_exit_names()):
+            assert name in values, f"{name} vanished from errors.py"
+            assert str(values[name]) in rows, (
+                f"`deploy --wait` can return {name}={values[name]}, the pack never says so"
+            )
+
+    def test_the_status_tool_it_names_is_a_real_tool_with_that_scope(self, skill_text):
+        """`app:manage` is what the pack tells the developer to ask their admin for."""
+        from bisheng.open_api.mcp.registry import TOOLS_BY_NAME
+
+        spec = TOOLS_BY_NAME.get("bisheng_app_status")
+        assert spec is not None, "the pack names an MCP tool the face does not serve"
+        assert spec.scope == "app:manage"
+        assert "app:manage" in skill_text
+
+    def test_it_does_not_confuse_logs_with_approval_state(self, skill_text):
+        # The most likely wrong move once `logs` is in the same section.
+        assert "不是**审批状态" in skill_text
+
+
+class TestAccessInfoAnAdministratorCanHandOver:
+    """AC-46's input, landed by T046 — the journey's first step has a source.
+
+    The developer's half of AC-46 (login, then one MCP call) needs a machine;
+    what can be pinned here is that the text they are handed exists, names all
+    four things, and carries no key.
+    """
+
+    @pytest.fixture(scope="class")
+    def panel_source(self) -> str:
+        return "\n".join(path.read_text(encoding="utf-8") for path in SERVICE_ACCOUNT_DIR.rglob("*.tsx"))
+
+    def test_the_panel_reads_the_addresses_from_the_platform(self, panel_source):
+        assert "dev-toolkit" in panel_source or "getDevToolkitVersionsApi" in panel_source
+
+    def test_it_covers_all_four_items_the_developer_needs(self, panel_source):
+        for key in ("mcpAddress", "modelBaseUrl", "cliDownload", "loginCommand", "platformAddress"):
+            assert f"accessInfo.{key}" in panel_source, f"the access-information block lost {key}"
+        assert "bisheng login" in panel_source
+
+    def test_the_copied_text_carries_no_credential(self, panel_source):
+        """AC-45, checked where it can actually rot: the component's own source.
+
+        The key is represented by a placeholder key, and nothing in the block
+        ever reads an issued key — `KeyRevealDialog` is the one place plaintext
+        exists, and it is a different component.
+        """
+        panel = (SERVICE_ACCOUNT_DIR / "AccessInfoPanel.tsx").read_text(encoding="utf-8")
+        assert "accessInfo.keyPlaceholder" in panel
+        for forbidden in ("plaintext", "bs-sak-", "Authorization", "issuedKey"):
+            assert forbidden not in panel, f"the access-information block references {forbidden}"
