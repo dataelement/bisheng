@@ -101,6 +101,10 @@ def ask(q: str) -> JSONResponse:
         return problem(exc, status=401)
     except errors.VisitorCredentialRejectedError as exc:
         return problem(exc, status=401)
+    except errors.AppCredentialMissingError as exc:
+        # 应用自己的运行期凭据没注入 —— 环境的问题,不是这次访问者的问题。
+        # 单列出来是为了不让它混进下面的 502:那会读成"平台挂了",实际是本应用没拿到凭据。
+        return problem(exc, status=503)
     except errors.ScopeMissingError as exc:
         return problem(exc, status=403)
     except errors.CapabilityRevokedError as exc:

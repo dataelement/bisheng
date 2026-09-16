@@ -151,6 +151,7 @@ docker compose --profile app-runtime up -d runtime-manager app-proxy
 | `RTM_BUILD_INDEX_URL` | | — | 内网 pip 源（`python3.11` 模板）。不设 = 走镜像内默认源（公网 PyPI） |
 | `RTM_BUILD_EXTRA_INDEX_URL` | 用 SDK 时必填 | — | 平台自身的 pip 简单索引 `http://<平台宿主地址>:7860/api/v1/dev-toolkit/simple/`，应用 `requirements.txt` 里的 `bisheng-sdk` 从这里装（第三方依赖仍走上面那个主源）。⚠️ **值必须是构建容器可达的地址**：bridge 网络里 `localhost` 指向容器自己，写成 `localhost` 构建必失败，日志读起来像"平台的 pip 源挂了" |
 | `RTM_BUILD_EXTRA_TRUSTED_HOST` | 同上（http 时） | — | 上一行地址的主机部分；明文 http 索引不加它 pip 直接拒绝 |
+| ↑ 配这两项时**同时配 `RTM_BUILD_INDEX_URL`** | | | pip 在主源与附加源里**都找**同一个包名、取版本高的那个。主源若是公网 PyPI，外部同名包只要版本更高就会顶掉平台这份。指到内网镜像即可关掉这条路 |
 | `RTM_BUILD_NPM_REGISTRY` | | — | 内网 npm 源（`node20` 模板）。不设 = 走镜像内默认源（公网 registry）；`static` 模板不拉任何包 |
 | `RTM_DOCKER_HOST` | | — | 留空 = 本机 `/var/run/docker.sock` |
 | `RTM_MINIO_ENDPOINT` / `RTM_MINIO_ACCESS_KEY` / `RTM_MINIO_SECRET_KEY` / `RTM_MINIO_SECURE` | | 可与 `minio.*` 同值 | 托管应用**附件存储**（AC-45）。不设 = 句柄仍注入，应用的存储调用答 503，`runtime-status` 的 `attachment_storage` 会指出来 |

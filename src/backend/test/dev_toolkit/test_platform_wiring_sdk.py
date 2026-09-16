@@ -84,9 +84,17 @@ def test_retrieve_chapter_states_per_user_semantics_and_the_local_difference():
         assert term in chapter, term
     # Examples must pass knowledge base ids: the facade still requires them.
     assert "knowledge_base_ids=" in chapter
-    # The honest note: the platform half is not accepting these credentials yet,
-    # so "credential refused" is not the developer's bug to chase.
-    assert "尚未上线" in chapter and "换密钥没有用" in chapter
+    # Both credentials are named, and so is the rule that makes them unswappable
+    # — the settled F055 contract, which the chapter must not simplify away.
+    assert "BISHENG_APP_TOKEN" in chapter
+    assert "没有 owner 兜底" in chapter
+    # The honest note is about `bisheng dev`, not about the hosted half: hosted
+    # retrieval is merged, and saying otherwise sends the developer chasing a
+    # platform that is working.
+    assert "本地 `bisheng dev` 还不能" in chapter and "换密钥没有用" in chapter
+    assert "尚未上线" not in chapter, "hosted retrieval is live; that claim is stale"
+    # And the error the developer actually meets first under `dev` is listed.
+    assert "AppCredentialMissingError" in chapter
 
 
 def test_storage_chapter_states_the_local_online_difference_and_the_quota_rule():
@@ -157,6 +165,21 @@ def test_example_sdk_requirements_carry_the_sdk():
     assert not [line for line in stdlib_example.splitlines() if line.strip() and not line.startswith("#")]
 
 
+def test_example_sdk_separates_a_missing_app_credential_from_a_platform_outage():
+    """An un-injected ``BISHENG_APP_TOKEN`` is an environment fault, not a 502.
+
+    Folded into the catch-all it would read as "the platform is down" — which is
+    exactly the wrong thing to chase, since the fix is to redeploy the app (or,
+    locally, to wait for `bisheng dev` to inject it).
+    """
+    source = (EXAMPLE_SDK / "main.py").read_text(encoding="utf-8")
+    ask = source.split('@app.post("/ask")', 1)[1].split("@app.", 1)[0]
+
+    assert "errors.AppCredentialMissingError" in ask
+    # Declared before the catch-all, or Python never reaches it.
+    assert ask.index("errors.AppCredentialMissingError") < ask.index("errors.BishengSdkError")
+
+
 def test_example_sdk_healthz_does_not_call_auth():
     """A probe request carries no identity, so an auth call there fails the whole app."""
     source = (EXAMPLE_SDK / "main.py").read_text(encoding="utf-8")
@@ -179,6 +202,67 @@ def test_example_sdk_keeps_the_manifest_and_the_code_on_one_knowledge_base_id():
 
 
 # ---- self-check ---------------------------------------------------------------
+
+
+def _selfcheck_module():
+    """Import ``selfcheck.py`` by path — it is a shipped script, not a package module."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("platform_wiring_selfcheck", SELFCHECK)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_selfcheck_probes_the_dev_entry_not_the_app_port(tmp_path, monkeypatch):
+    """The one address that proves nothing is the app's own port.
+
+    ``bisheng dev`` listens twice: the mini proxy (the local entry, which injects
+    the ``X-BiSheng-*`` headers) and the application process. ``PORT`` /
+    ``BISHENG_APP_PORT`` name the **second** one, so a probe sent there arrives
+    with no injected header at all — the check would fail for every developer
+    and then blame them for "connecting straight to the app port".
+    """
+    selfcheck = _selfcheck_module()
+    (tmp_path / "bisheng-app.yaml").write_text("name: x\nruntime: python3.11\nport: 8080\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("BISHENG_APP_PORT", "54321")
+    monkeypatch.setenv("PORT", "54321")
+    monkeypatch.delenv(selfcheck.DEV_ENTRY_ENV, raising=False)
+
+    resolved = selfcheck.dev_entry_url(None)
+
+    assert resolved == "http://127.0.0.1:8080"
+    assert "54321" not in resolved
+
+
+def test_selfcheck_entry_url_prefers_the_explicit_address(tmp_path, monkeypatch):
+    """``bisheng dev --port`` makes the manifest's port wrong, so it can be overridden."""
+    selfcheck = _selfcheck_module()
+    (tmp_path / "bisheng-app.yaml").write_text("port: 8080\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert selfcheck.dev_entry_url("http://127.0.0.1:3000") == "http://127.0.0.1:3000"
+    # A bare host:port is accepted too — that is how the address is printed.
+    assert selfcheck.dev_entry_url("127.0.0.1:3000/") == "http://127.0.0.1:3000"
+
+    monkeypatch.setenv(selfcheck.DEV_ENTRY_ENV, "http://127.0.0.1:3100")
+    assert selfcheck.dev_entry_url(None) == "http://127.0.0.1:3100"
+
+
+def test_selfcheck_skips_the_sdk_trio_when_there_is_no_dev_session(tmp_path, monkeypatch, capsys):
+    """No entry address is "not applicable here", the same as the app-db check.
+
+    A hard failure would mean the recommended invocation (``python selfcheck.py``
+    from a plain shell) can never exit 0, which trains developers to ignore it.
+    """
+    selfcheck = _selfcheck_module()
+    monkeypatch.chdir(tmp_path)  # no bisheng-app.yaml anywhere above it
+    monkeypatch.delenv(selfcheck.DEV_ENTRY_ENV, raising=False)
+
+    assert selfcheck.check_sdk_auth(selfcheck.dev_entry_url(None)) is None
+    printed = capsys.readouterr().out
+    assert "跳过" in printed and "bisheng dev" in printed
 
 
 def _run_selfcheck(home: Path, extra_env: dict | None = None) -> subprocess.CompletedProcess:

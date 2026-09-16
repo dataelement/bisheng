@@ -177,21 +177,31 @@ for chunk in result.chunks:
 
 所以**验证 per-user 差异的路径 = 发布后用真实账号访问**，本地复现不了。
 
+检索要**两把**凭据，平台各用各的：应用自己的运行期凭据（环境变量 `BISHENG_APP_TOKEN`，答「哪个应用」，
+平台据此取你声明的白名单）和每请求注入的访问者凭据（答「为谁做」，平台据此确立访问用户）。
+两把都由平台注入、SDK 自己带上，**你不用写一行取凭据的代码**；重要的是知道它们不可互换——
+只带应用凭据会被以「没有访问用户」拒绝，**没有 owner 兜底**。
+
 ### 出错了看哪一类
 
 | 异常 | 说明 | 下一步 |
 |---|---|---|
 | `VisitorCredentialMissingError` | 本请求没有访问者凭据（直连了应用端口 / 后台任务 / 健康检查） | 经平台入口访问；后台任务不要检索 |
-| `VisitorCredentialRejectedError` | 平台拒绝了这枚凭据 | 让用户刷新重进；**见下方「如实说明」** |
+| `VisitorCredentialRejectedError` | 平台拒绝了这枚凭据：已过期、被伪造，或签给的是另一个应用 | 让用户刷新重进；本地见下方「如实说明」 |
+| `AppCredentialMissingError` | 没有应用自己的运行期凭据（`BISHENG_APP_TOKEN` 未注入） | 线上：重新上线应用；本地 `bisheng dev`：见下方「如实说明」 |
 | `ScopeMissingError` | 本地期密钥缺 `knowledge:read` 能力位 | 找管理员给这把密钥勾上 |
 | `TargetUnreachableError` | 指定的库里有不可及的（线上：未声明；本地：不存在/未授予） | 去掉它，或在清单里声明后重发 |
 | `CapabilityRevokedError` / `CapabilityNotDeclaredError` | 能力被收回 / 从没声明过 | 找 owner 重新声明并重发 |
 | `PermissionEvaluationError` | 权限引擎暂时不可用 | 稍后重试；**不要**改小范围重试 |
 | `SdkIncompatibleError` / `PlatformTooOldError` | SDK 与平台版本不兼容 / 平台没发布 SDK | 从当前平台重新取 SDK；或联系管理员 |
 
-> **如实说明（本轮）**：平台侧受理应用侧访问凭据的那一半**尚未上线**，所以现在调 `retrieve`
-> 大概率答「凭据被拒」（`VisitorCredentialRejectedError`）。**这不是你的代码写错了，也不是密钥的问题，
-> 换密钥没有用。** 按本章写法接好线即可，平台侧就绪后同一份代码直接生效。
+> **如实说明（本轮）：线上能用，本地 `bisheng dev` 还不能。**
+> 线上托管期检索已经打通（前提是部署配好了访问者凭据的签发密钥；没配就没有访问者凭据，
+> 平台一律拒绝而不是退回应用身份）。
+> 本地 `bisheng dev` 期则有两处上游还没就绪：① 它**不注入** `BISHENG_APP_TOKEN`，所以本地先撞上
+> `AppCredentialMissingError`；② 它本地自签的访问者凭据平台无从验签，补上①也会被拒。
+> **两者都不是你的代码写错了，也不是密钥的问题，换密钥没有用**——按本章写法接好线，
+> 本地先用别的方式验业务逻辑，检索的真实行为**发布后用真实账号验**。
 
 ---
 
@@ -360,8 +370,10 @@ bisheng dev --port 3000
 - [ ] 用了 SDK 的话：健康检查端点**没有**调 `auth.current_user()`；检索没有任何「取不到凭据就换一种身份」的分支；
       附件路径是应用内相对路径，代码里没有 bucket / 对象键 / 存储地址。
 
-跑一次连通自检：`python selfcheck.py`（未 login / 平台不可达 / SDK 未装 / 版本不兼容 时各给一句可读原因；
-在 `bisheng dev` 起的进程里跑还会检查数据库变量、身份注入、检索与附件三件套）。
+跑一次连通自检：`python selfcheck.py`（未 login / 平台不可达 / SDK 未装 / 版本不兼容 时各给一句可读原因）。
+想连身份、检索、附件三件套一起验：**另开一个终端让 `bisheng dev` 跑着**，在项目根再执行一次；
+用了 `bisheng dev --port` 的话把它打印的**本地入口地址**作为参数传进来——
+`python selfcheck.py http://127.0.0.1:3000`。传应用自己的端口验不出东西（那条路上没有注入头）。
 
 ---
 

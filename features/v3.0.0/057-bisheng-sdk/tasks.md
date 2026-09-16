@@ -325,6 +325,7 @@
   **覆盖 AC**: AC-26, AC-27, AC-28, AC-30, AC-32, AC-35, AC-36
   **依赖**: T000, T021（API 定稿）
   **证据**: `skills/platform-wiring/SKILL.md`（10607e923）：填 SDK 桩、插第 2/3 章、原 2–5 章顺延为 4–7、目录与锚点同批更新、末尾加第 8 章；`X-BiSheng-Access-Token` 行改措辞并同批改 F053 的 `test_skill_packs.py` 守卫断言。全文反引号里的 `X-BiSheng-*` 仍恰为 app-proxy 的十个。
+  **偏差（评审期修正）**: 本任务 ② 要求的「如实写明」照初稿写成了「**平台尚未受理**应用侧访问凭据」，这一句现在**是错的**——F055 的托管检索（`filelib.py` 的 `HOSTED_APP_ACTOR_KIND` 分支 → `CapabilityBusService.retrieve`）与访问者凭据核验（`composition.py` 注册 `AccessSubjectVerifier`）都已合入 `3.0-vibe`，线上这条路是通的（前提是部署配了 `app_runtime.obo_secret`）。照原文写会把开发者支去查一个没坏的平台。改为：线上通、**本地 `bisheng dev` 不通**，并点名本地的两处上游缺口（不注入 `BISHENG_APP_TOKEN`、本地自签句柄平台无从验签）。同批：错误表补 `AppCredentialMissingError` 行（本地实际先撞的就是它）、检索章补「两把凭据各答什么、不可互换、没有 owner 兜底」一段（settled 契约在正文里落地，不只在 design 里）。T035 的断言同批改：由 `assert "尚未上线" in chapter` 改为断言新措辞 + `assert "尚未上线" not in chapter`。
 
 - [x] **T034**: SDK 版可运行样例（FastAPI，三件套齐用）——**新目录 `example-sdk/`，不动既有 `example/`**〔2h〕
   **文件**: `src/backend/bisheng/dev_toolkit/skills/platform-wiring/example-sdk/main.py`（新）, `.../example-sdk/bisheng-app.yaml`（新）, `.../example-sdk/requirements.txt`（新：`fastapi`、`uvicorn`、`bisheng-sdk`）
@@ -333,6 +334,8 @@
   **覆盖 AC**: AC-26, AC-30, AC-32, AC-34
   **依赖**: T033
   **证据**: `skills/platform-wiring/example-sdk/{main.py,bisheng-app.yaml,requirements.txt}`（10607e923）；既有 `example/` 一字未动。清单声明一个知识库能力，与 `main.py` 的 `KNOWLEDGE_BASE_IDS` 由 T035 的断言守着同源。
+  **偏差（评审期修正）**: `/ask` 原来把 `AppCredentialMissingError` 兜进最后那条 `BishengSdkError → 502`，读起来是「平台挂了」，实际是本应用没拿到运行期凭据（本地必然如此）。单列一条 → 503，T035 加一条断言守它排在兜底分支之前。
+  **评审期实跑**（不入库，仅记录）：把姊妹切片 `wt/f057-sdk-core` 的包放到 `PYTHONPATH` 后用 `TestClient` 跑本样例：`/healthz` 无身份 200；`/` 无身份 401「未取得平台注入的访问者身份」、有身份 200 且显示姓名；`/ask` 有身份无应用凭据 503、完全无身份 401「检索不会以任何其它身份发起」。四种开发者常犯的错各得一条可区分的明确拒绝，无一条静默给出错误答案。
 
 - [x] **T035**: 技能包增量 + SDK 样例 + 自检脚本测试〔1.5h〕
   **文件**: `src/backend/test/dev_toolkit/test_platform_wiring_sdk.py`（新；**不改** F053 的 `test_skill_packs.py`——那里的共通断言与 `WIRING` 专项断言继续守 F053 的部分，本文件只加 SDK 增量的断言）
@@ -355,6 +358,7 @@
   **覆盖 AC**: AC-03, AC-28
   **依赖**: T035
   **证据**: `selfcheck.py` 追加五步（装没装 / 版本兼容 / 身份 / 检索 / 附件），沿用既有 `fail()` 与输出风格（10607e923）；T035 用真 `http.server` + 桩 `bisheng_sdk` 跑通「版本不兼容」与「SDK 未装」两条可读失败路径，输出无 Traceback。
+  **偏差（评审期修正）**: 本任务 ③ 写的探测地址 `http://127.0.0.1:${BISHENG_APP_PORT}/__whoami` **不成立**——`bisheng dev` 起两个监听，迷你代理（本地入口，注入身份头）听 `--port` / 清单 `port`，而 `PORT` / `BISHENG_APP_PORT` 注入给应用的是**应用自己**那个（`commands/dev.py` 的 `proxy_port` / `app_port`，后者是 `pick_free_port`）。照原文实现这一步**永远过不了**，且把原因报成「你直连了应用端口」。改为：入口地址按 `argv[1]` → `BISHENG_DEV_ENTRY_URL` → 最近 `bisheng-app.yaml` 的 `port` 解析（`dev_entry_url()`）；解析不到或连不上 → **跳过**身份 / 检索 / 附件三步（与 `check_app_db` 在普通 shell 里的处理一致），不再判失败；④ 增 `AppCredentialMissingError` 分支（`bisheng dev` 不注入 `BISHENG_APP_TOKEN`，本地实际先撞的是它，不是「凭据被拒」），`VisitorCredentialRejectedError` 文案改为「本地自签平台无从验签 / 线上过期或签给别的应用」。SKILL.md §7 同批改运行方式。
 
 - [x] **T037**: README、指针与目录树〔1h〕
   **文件**: `src/bisheng-sdk/README.md`（增量：安装两种方式、三行用法、异常速查、「完整指南见 `GET /api/v1/dev-toolkit/sdk-guide.md` / `skills sync` 后的 `platform-wiring/SKILL.md`」——**不复制章节**，决议-7）, `src/backend/bisheng/dev_toolkit/skills/deploy-hosting/SKILL.md`（增量：`:138` 「由另一份技能覆盖，本轮不展开」改为指向 `platform-wiring`）, `src/backend/bisheng/dev_toolkit/skills/README.md`（增量：**`wt/cli-dev` 已把 `platform-wiring/` 加进目录树**——本任务只在其条目下补一行 `example-sdk/` 与「含 SDK 三件套章」），`src/backend/bisheng/dev_toolkit/guides/install-guide.md`（增量：一句「装 SDK 见 sdk-guide.md」，若该文件有安装段）
@@ -447,4 +451,5 @@
 - **D5 / CON-3 按 F055 已落地实现修订（2026-09-16）**：retrieve 送**两把**凭据——应用运行期凭据作 `Authorization: Bearer`（平台据此取该应用当前生效的能力声明白名单）、注入的访问者凭据作 `X-BiSheng-Access-Token` 头（平台据此确立访问用户），缺访问者头即拒绝且无 owner 兜底。design.md 初稿的「只送访问者凭据作 Bearer」作废，已就地改 D5 / CON-3 / §4.1 B / §4.2 ②③ / §6.2 并记入修订历史。
 - **T008 并入 T028 交付**：CI 文件与打包脚本同属分发面，`sdk-quality.yml` 一次写全三 leg；包尚未落地时各 leg 打 notice 跳过。
 - **T037 少交付一处**：`src/bisheng-sdk/README.md` 归姊妹切片的 T001 创建，本切片不碰（同文件冲突），合并后补一句指向 `sdk-guide.md`。
-- **阻塞项 ②③ 与契约 ⑦ 仍成立**（平台未受理应用侧访问凭据、`bisheng dev` 未注入本地附件目录）：技能包两章与自检脚本**如实写明**，不为它们在 SDK 或文档里造兜底。
+- **阻塞项 ② 已消解、③ 与契约 ⑦ 仍成立**（2026-09-16 评审期核实）：托管期检索**已经打通**（`filelib.py` 的 `HOSTED_APP_ACTOR_KIND` 分支 + `composition.py` 注册的 `AccessSubjectVerifier` 均在 `3.0-vibe` 上），design §6.2 阻塞项 ② 不再成立；仍不成立的是**本地 `bisheng dev`**：不注入 `BISHENG_APP_TOKEN`（`devdb.PLATFORM_ENV_NAMES` 无此名）、本地自签 `bsdev.` 句柄平台无从验签、未注入 `BISHENG_APP_STORAGE_DIR`。技能包两章与自检脚本按**这个**口径如实写明，不为它们在 SDK 或文档里造兜底。
+- **评审期修正三处**（见 T033 / T034 / T036 各自的「偏差（评审期修正）」）：① 自检的身份探测打错了端口（探应用端口而非 `bisheng dev` 的本地入口），该步**永远过不了**且把原因报成开发者的错；② 技能包与自检把「平台尚未受理凭据」当现状写，与已合入的 F055 实现矛盾；③ 样例把「应用凭据未注入」混进 502「平台不可达」。
