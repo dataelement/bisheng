@@ -62,6 +62,55 @@ ALLOWED_CALL_SITES: dict[str, list[str]] = {
 #: caller skips the helper layer.
 NOTIFY_CALLEES = ("send_generic_notify", "send_message", "notify_users", "notify_admins")
 
+#: §3.0.3 rows 1 to 4, which 决议-11 assigns to the approval engine (AC-40, AC-41).
+#: The census above proves F055 does **not** duplicate them; on its own that is
+#: half an assertion, because "nobody sends it" satisfies it just as well as
+#: "exactly one side sends it". These are the codes the engine must still emit.
+APPROVAL_ENGINE_ACTION_CODES = {
+    # request created → the resolved approvers (F055 sends this one from the
+    # publish side; the engine re-sends it when a task is reassigned).
+    "approval_task_pending",
+    "approval_instance_approved",
+    "approval_task_rejected",
+    "approval_instance_withdrawn",
+    # AC-41: the application was deleted, so its in-flight request was cancelled.
+    "approval_instance_cancelled",
+}
+
+
+def _notified_action_codes(package: str) -> set[str]:
+    """Every ``action_code=`` literal handed to a notification call in ``package``.
+
+    Read off the AST rather than off a constant table: the engine spells these
+    inline at each call site, so a table would only prove that the table exists.
+    """
+    import importlib
+
+    module = importlib.import_module(package)
+    # ``bisheng.approval`` has no ``__init__.py`` — it is a namespace package,
+    # so ``__file__`` is None and only ``__path__`` locates it.
+    root = Path(module.__file__).parent if module.__file__ else Path(next(iter(module.__path__)))
+    codes: set[str] = set()
+    for path in sorted(root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if isinstance(node.func, ast.Attribute):
+                callee = node.func.attr
+            elif isinstance(node.func, ast.Name):
+                callee = node.func.id
+            else:
+                continue
+            if not (callee.lstrip("_").startswith("notify_") or callee.endswith("_notify") or callee in NOTIFY_CALLEES):
+                continue
+            for keyword in node.keywords:
+                if keyword.arg != "action_code":
+                    continue
+                if isinstance(keyword.value, ast.Constant) and isinstance(keyword.value.value, str):
+                    codes.add(keyword.value.value)
+    return codes
+
 
 def _call_sites(package: str) -> list[str]:
     """Every notification call site in ``package``, excluding its own senders.
@@ -107,6 +156,21 @@ class TestTableCensus:
             f"{package}: notification call sites drifted from §3.0.3. Adding a "
             "sender means adding a row to the table (and its three-language "
             "copy); removing one means a recipient stops being told."
+        )
+
+    async def test_the_approval_engine_still_sends_rows_one_to_four(self):
+        """AC-40 / AC-41 — the rows F056 deliberately does not wire.
+
+        Every other assertion in this class is negative ("F055 must not send
+        this"). A refactor that dropped the engine's own sender would satisfy
+        all of them and silently empty four rows of the table: the owner would
+        never learn their release was approved or rejected, and the approver
+        never that the request was withdrawn or cancelled.
+        """
+        codes = _notified_action_codes("bisheng.approval")
+
+        assert APPROVAL_ENGINE_ACTION_CODES <= codes, (
+            f"§3.0.3 rows 1 to 4 lost a sender in the approval engine: {sorted(APPROVAL_ENGINE_ACTION_CODES - codes)}"
         )
 
     async def test_capability_revocation_sends_nothing(self):
@@ -163,13 +227,25 @@ class TestSendFailureNeverBlocksTheAction:
 
     @pytest.fixture()
     def broken_message_chain(self, monkeypatch):
-        """Make the real send blow up as deep as the chain goes."""
+        """Make the real send blow up as deep as the chain goes.
+
+        Yields a counter the tests assert on. A "nothing raised" test passes
+        just as happily when the failure never happened — if the senders ever
+        stop reaching ``get_message_service`` (an early return on an empty
+        recipient list, a different dependency), every case in this class would
+        keep passing while proving nothing. The counter is what keeps them
+        honest.
+        """
         from bisheng.message.api import dependencies as message_dependencies
 
+        reached: list[str] = []
+
         async def _explode(session=None):
+            reached.append("get_message_service")
             raise RuntimeError("inbox unavailable")
 
         monkeypatch.setattr(message_dependencies, "get_message_service", _explode)
+        return reached
 
     async def test_approver_notice_failure_is_swallowed(self, broken_message_chain):
         from bisheng.app_publish.domain.services import publish_notification_service
@@ -187,6 +263,7 @@ class TestSendFailureNeverBlocksTheAction:
             )
             is None
         )
+        assert broken_message_chain, "the send never reached the broken chain — the test proved nothing"
 
     @pytest.mark.parametrize("reason_kind", ["capacity", "deploy_failed", "iteration_failed"])
     async def test_parked_notice_failure_is_swallowed(self, broken_message_chain, monkeypatch, reason_kind):
@@ -210,6 +287,7 @@ class TestSendFailureNeverBlocksTheAction:
         # The recipients were resolved and the publish outcome is unchanged;
         # only the delivery failed.
         assert recipients == [2, 11]
+        assert broken_message_chain, "the send never reached the broken chain — the test proved nothing"
 
     async def test_admin_state_change_notice_failure_is_swallowed(self, broken_message_chain):
         from types import SimpleNamespace
@@ -228,6 +306,7 @@ class TestSendFailureNeverBlocksTheAction:
         )
 
         assert isinstance(sent, bool)
+        assert broken_message_chain, "the send never reached the broken chain — the test proved nothing"
 
     async def test_admin_recipient_lookup_failure_still_reaches_the_owner(self, monkeypatch):
         """The parked notice resolves two groups of recipients; losing the

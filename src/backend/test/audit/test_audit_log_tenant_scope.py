@@ -25,20 +25,16 @@ predicate without spinning up the full service stack.
 # number; the v1 router chain that drags in heavy ML deps). Conftest's own
 # pre-mocks for ``bisheng.common.services`` etc. remain untouched and let
 # the auth → user_deps chain resolve via MagicMock.
-#
-# ⚠️ The stubs are **taken back out as soon as our own imports are done**, for
-# the same reason conftest.py does it: ``bisheng.telemetry_search`` is a real
-# package, and a MagicMock left standing in for it makes every later
-# ``import bisheng.telemetry_search.domain`` fail with "not a package". Left in,
-# this block took ``test/api/test_route_path_naming.py`` — and anything else
-# that imports ``bisheng.main`` after it — down with a collection error
-# whenever the two ran in the same session.
 import sys as _sys
 from unittest.mock import MagicMock as _MagicMock
 
 _router_stub = _MagicMock()
 _router_stub.router = _MagicMock()
 _router_stub.router_rpc = _MagicMock()
+# Taken back out below, once this module's own imports are done — see the same
+# note in ``conftest.py``: ``bisheng.telemetry_search`` is a real package, and a
+# MagicMock left standing in for it makes every later suite's
+# ``from bisheng.main import app`` fail with "not a package".
 _stubbed: list[str] = []
 for _m in (
     "bisheng.api.router",
@@ -149,13 +145,35 @@ def patch_dao_session(monkeypatch, session):
 # ---------------------------------------------------------------------------
 
 
-def _insert_audit(session, *, action, tenant_id, operator_tenant_id, operator_id=None, operator_name=None):
+def _insert_audit(
+    session,
+    *,
+    action,
+    tenant_id,
+    operator_tenant_id,
+    operator_id=None,
+    operator_name=None,
+    system_id="system",
+):
+    """``system_id`` defaults to a generic legacy value so every seeded row
+    clears ``AuditLogDao._ui_visible_predicate()`` (``system_id IS NOT NULL
+    OR action IN (_UI_VISIBLE_V2_ACTIONS)``) the same way a real legacy-path
+    row does (``AuditLogService._chat_log`` / ``_build_log`` / ... always set
+    ``system_id`` via ``AuditLogDao.insert_audit_logs``). These tests are
+    about the tenant-scope AND-interaction (``_visible_for_tenant`` /
+    ``bypass_tenant_filter``), not the UI whitelist itself — that mechanism
+    already has dedicated coverage in ``test_tenant_scope_ands_with_operator_
+    and_system`` (system_id route) and ``TestGetAuditLogServiceEndToEnd``
+    (action-whitelist route). Pass ``system_id=None`` where a test needs a
+    row that stays invisible.
+    """
     entry = AuditLog(
         operator_id=operator_id if operator_id is not None else (operator_tenant_id or 0) * 10,
         operator_name=operator_name or f"t{operator_tenant_id}-user",
         tenant_id=tenant_id,
         operator_tenant_id=operator_tenant_id,
         action=action,
+        system_id=system_id,
     )
     session.add(entry)
     session.commit()
@@ -764,6 +782,9 @@ class TestAuditLogsCombinedFilters:
                 tenant_id=2,
                 operator_tenant_id=2,
                 action=f"t.{i}",
+                # Bypasses ``_insert_audit``'s default; set explicitly so this
+                # row clears ``_ui_visible_predicate`` like the others.
+                system_id="system",
             )
             session.add(entry)
             session.commit()

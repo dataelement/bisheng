@@ -327,7 +327,7 @@ class TestResponseCarriesNoSecret:
 
 
 class TestKnownGaps:
-    """The two GOV-04 rows that are *not* reachable on the audit face today.
+    """The three GOV-04 rows that are *not* reachable on the audit face today.
 
     Written as strict xfails on purpose. A prose note in a report is invisible
     to whoever lands the missing piece; a sentinel that turns red the moment
@@ -374,6 +374,23 @@ class TestKnownGaps:
         import importlib.util
 
         assert importlib.util.find_spec("bisheng.database.models.model_call_record") is not None
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "AC-25 / AC-34 gap: the runtime capability call IS written — "
+            "`OpenApiAuditMiddleware` enqueues an `open_api.call` row per v2 call, "
+            "with the dual attribution the AC asks for — but `open_api.call` is on "
+            "neither `_UI_VISIBLE_V2_ACTIONS` nor the platform log filter, so the "
+            "page's own predicate drops it before any user filter runs. Registering "
+            "it is not a one-line change: this is the highest-volume action in the "
+            "table and the whitelist is also what the *unfiltered* list shows, so "
+            "the carrying decision (design §5 高频事件承载) has to be made first. "
+            "Delete this sentinel when it is registered."
+        ),
+    )
+    def test_runtime_capability_calls_are_selectable(self):
+        assert "open_api.call" in _UI_VISIBLE_V2_ACTIONS
 
 
 class TestDaoStillCountsWhatItReturns:

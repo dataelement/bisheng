@@ -9,8 +9,11 @@
  * split inbox where a message read in one place still shows unread in the
  * other.
  *
- * Asserted as a census over the API layer rather than over components: a
- * second inbox needs the inbox endpoints, whatever it looks like.
+ * Asserted as a census over the endpoints rather than over components: a second
+ * inbox needs the inbox endpoints, whatever it looks like. The whole `src`
+ * tree is scanned, not only `controllers/` — the rule that HTTP lives in the
+ * API layer is a convention, and a second inbox is exactly the kind of change
+ * that would be prototyped with a call straight from a component.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join, resolve } from "node:path"
@@ -33,17 +36,26 @@ function sourceFiles(dir: string): string[] {
   })
 }
 
-describe("the admin app never calls the inbox", () => {
-  const files = sourceFiles(resolve(__dirname, "..", "controllers"))
+const SRC_ROOT = resolve(__dirname, "..")
 
-  it.each(INBOX_ENDPOINTS)("no API module requests %s", (endpoint) => {
-    const offenders = files.filter((file) => readFileSync(file, "utf-8").includes(endpoint))
+describe("the admin app never calls the inbox", () => {
+  // `test/` is this file's own home — the endpoint strings above would
+  // otherwise report themselves.
+  const files = sourceFiles(SRC_ROOT).filter((file) => !file.startsWith(join(SRC_ROOT, "test")))
+
+  it.each(INBOX_ENDPOINTS)("nothing in the app requests %s", (endpoint) => {
+    const offenders = files
+      .filter((file) => readFileSync(file, "utf-8").includes(endpoint))
+      .map((file) => file.slice(SRC_ROOT.length + 1))
     expect(offenders).toEqual([])
   })
 
-  it("scans a non-empty set of API modules", () => {
+  it("scans the API layer and the pages, not an empty set", () => {
     // Guards the guard: a path typo would make every assertion above pass over
-    // zero files.
-    expect(files.length).toBeGreaterThan(5)
+    // zero files. Both roots are named because the whole point of widening the
+    // scan past `controllers/` is that a component could call the inbox
+    // directly.
+    expect(files.filter((file) => file.startsWith(join(SRC_ROOT, "controllers"))).length).toBeGreaterThan(5)
+    expect(files.filter((file) => file.startsWith(join(SRC_ROOT, "pages"))).length).toBeGreaterThan(5)
   })
 })

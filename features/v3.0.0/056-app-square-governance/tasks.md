@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查修订（45 AC、11 决议，跨 Feature 归属规则全文改写） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日 `/sdd-review design` 14 条修订（D1–D11 / K1–K11 / 坑 21 条）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文（33 任务 / 4 Wave / 21 条 `[MVP-核心]`）；2026-08-17 初稿 + 同日 `/sdd-review tasks` 15 条修订（审计租户字段口径、client i18n、`objectTypeEnum.app` 新增认领、T009/T011 实现手段写死、夹具与追溯口径） |
-| 实现 | 🟡 进行中（2026-08-18） | **20 / 33 完成**；`[MVP-核心]` 21 条中完成 20（T001–T020），未完成 1：**T021**（114 部署与人工验收）；**T016** 代码已齐、2026-09-10 勾选，但需 `F056_E2E=1` 对真实部署（MySQL / Redis / OpenFGA）跑、114 重建后执行。Wave 3–4 顺延 12 条未启。偏差见文末「实际偏差记录」 |
+| 实现 | 🟡 进行中（2026-09-16） | **32 / 33 完成**；`[MVP-核心]` 21 条中完成 20（T001–T020），未完成 1：**T021**（114 部署与人工验收，本 Feature 唯一未勾任务）；**T016** 代码已齐、2026-09-10 勾选，但需 `F056_E2E=1` 对真实部署（MySQL / Redis / OpenFGA）跑、114 重建后执行。Wave 3–4 顺延 12 条（T022–T033）已全部落地：T022–T026 + T032 先期交付，T027–T031 + T033 于 2026-09-16 分支 `wt/f056-verification` 交付（四条原写「无代码产出」的验收任务改为自动化回归，见各任务偏差段）。**仍只能在 114 上证的**：T021 整张手验清单；T029 / T030 / T031 的视觉确认；T033「站内信真的出现在 client 铃铛里」这一步。偏差见文末「实际偏差记录」 |
 
 ---
 
@@ -350,15 +350,17 @@
 - [x] **T027**: 审计查询面角色边界与「单一查询入口」回归（仅租户管理员及以上；owner / 普通用户调查询与导出接口被拒；高频三类事件与低频事件同面经事件类型筛选可达）
   **文件**: `src/backend/test/audit/test_audit_scope_and_roles.py`（新）, `src/backend/bisheng/api/services/audit_log.py`
   **覆盖 AC**: AC-33, AC-34
-  **证据**（分支 `wt/f056-verification`）：`test/audit/test_audit_scope_and_roles.py` 9 例——owner / 普通用户调 `get_audit_log` / `export_audit_log` / `search_audit_apps` 三处一律拒（AC-33，导出与列表共用 `_prepare_audit_query` 由「同一个拒绝」证明，不是读源码推断）；租户管理员与持 `log` 菜单的角色可读；用户组管理员维持既有口径（v2 行按 `group_member_ids` 命中，不越出本组）。AC-34 behavioural 半边同文件（`app.visibility_change` 低频事件与 `app.release.capability_declared` 运行期事件只靠 `event_type` 区分、同一次调用、对象应用筛选一次取回两条）+ `AppAuditAction` / `AppReleaseAuditAction` 全员在白名单上；structural 半边落 `test/api/test_audit_query_entry_surface.py`（路由普查：`/api/v1/audit` 家族恰好六条 GET，且不存在 `access-log` / `call-record` 之类按事件族另开的查询页）。
-  **偏差**：路由普查**不能**放在 `test/audit/`——该目录的 `test_audit_log_tenant_scope.py` 在模块级把 `bisheng.api.router` / `bisheng.telemetry_search` 塞进 `sys.modules`，`bisheng.main` 此后整个 session 不可导入。顺带把那个文件的桩改成与 conftest 同款「导完即摘」（原来用 `setdefault` 且从不摘），这同时修好了既有的 `test/api/test_route_path_naming.py` —— 它与 `test/audit` 同场跑时一直是 collection error。
+  **证据**（分支 `wt/f056-verification`）：`test/audit/test_audit_scope_and_roles.py` 8 例——owner / 普通用户调 `get_audit_log` / `export_audit_log` / `search_audit_apps` 三处一律拒（AC-33，导出与列表共用 `_prepare_audit_query` 由「同一个拒绝」证明，不是读源码推断）；租户管理员与持 `log` 菜单的角色可读；用户组管理员维持既有口径（v2 行按 `group_member_ids` 命中，不越出本组）。AC-34 behavioural 半边同文件（`app.visibility_change` 低频事件与 `app.release.capability_declared` 运行期事件只靠 `event_type` 区分、同一次调用、对象应用筛选一次取回两条）+ `AppAuditAction` / `AppReleaseAuditAction` 全员在白名单上；structural 半边落 `test/api/test_audit_query_entry_surface.py`（路由普查：`/api/v1/audit` 家族恰好六条 GET，且不存在 `access-log` / `call-record` 之类按事件族另开的查询页）。
+  **偏差**：路由普查**不能**放在 `test/audit/`——该目录在模块级把 `bisheng.api.router` / `bisheng.telemetry_search` 塞进 `sys.modules` 以便脱离 App 跑 DAO，普查需要真 App，落 `test/api/`（与同目录 `test_route_path_naming.py` 同款）。
+  **评审订正（2026-09-16）**：原偏差还写了「顺带把 `test_audit_log_tenant_scope.py` 的桩改成导完即摘，修好了 `test/api/test_route_path_naming.py` 的 collection error」——**这两句都不成立，且那次改动带进了回归**。① 「导完即摘」3.0-vibe 上**本来就有**（发版线自己的提交），本切片是在合并时把发版线那一侧覆盖掉又写了一遍；② 覆盖的同时丢掉了发版线同一次提交里的另一半——`_insert_audit` 的 `system_id="system"` 默认值与末尾那处显式 `system_id`，没有它种子行过不了 `AuditLogDao._ui_visible_predicate()`，于是 `test_audit_log_tenant_scope.py` **33 例挂 14 例**（`assert 0 == 5`）；③ 所谓 collection error 在正确环境下复现不出来（发版线 `pytest test/audit test/api` = 109 passed，零 error）——当初大概率是没清 SOCKS 代理变量、`premock_import_chain` 预加载失败造出来的假象（`src/backend/AGENTS.md` 记过这个坑）。处置：`git checkout 3.0-vibe -- src/backend/test/audit/test_audit_log_tenant_scope.py` 原样取回发版线版本（本切片在该文件上没有任何需要保留的改动）。复核后 `test/audit` = **131 passed / 2 xfailed / 0 failed**（发版线 71 passed / 0 failed）。**教训按仓库 AGENTS.md §7**：合并时对双方各自新增内容的文件，不能整份取一侧——要么逐 hunk 解，要么解完与来源分支逐文件 `git diff` 复核。
 
 - [x] **T028**: 各写入方事件的可查性验收（CLI 首发导入 / 发布类含审批单四终态 / 下线 · 重新上线 / 删除后仍可查 / 元信息修改 / 访问记录 / 密钥事件 / 运行期凭据与能力声明 / 生产数据行编辑 / 模型调用逐条；并验证记录与响应不含密钥明文）
   **文件**: `src/backend/test/audit/test_hosted_app_event_queryability.py`（新）
   **覆盖 AC**: AC-18, AC-19, AC-20, AC-21, AC-23, AC-24, AC-25, AC-26
   **证据**：54 例。20 类托管应用事件 + 3 类密钥事件按**写入方实际落的行形状**逐族三断言（在 `_UI_VISIBLE_V2_ACTIONS` 上 / 被「对象应用」筛出 / 被「事件类型」筛出，且他应用同类行不混入）；已删除应用三条历史仍可查且对象列回落 `object_name` 名称快照（AC-21）；发布族（`metadata.app_id`）与状态族（`target_type='app'`）在一次对象应用查询里合成同一条时间线（AC-19）；AC-26 = 响应不含原始 `metadata`（往 metadata 里塞明文也取不出来）+ 服务账号行只出 `key_mask`；分页与 total 一致。
   **顺带修的实缺陷**：密钥签发事件写的是 `open_api.api_key.create`，而白名单 / `platform log.ts` / 三语 `bs.json` 登记的都是 `open_api.api_key.issue` —— 行落了库、审计页一条都筛不出来（AC-25 / AC-27 的「写了查不到」）。改**写入方**对齐登记名（`bisheng/open_api/domain/services/credential_service.py`，登记侧三处不动），并补 `test_the_issue_writer_uses_the_registered_name` 守住写入方本身（既有 lockstep 测试只守登记侧）。
-  **两处真实缺口（xfail(strict=True) 哨兵，不写成散文）**：① **AC-24 访问记录**——F054 已把访问记录写进 `app_access_log` 表，但全仓**没有任何端点读它**，白名单上也没有 `app.access*`，所以「在审计查询面按对象应用 / 操作人 / 时间范围查到」今天不成立；② **AC-25 模型调用逐条**——F051 的 `model_call_record` 未落到本分支。缺口一补上哨兵即 XPASS 报错、强制删待办。
+  **三处真实缺口（xfail(strict=True) 哨兵，不写成散文）**：① **AC-24 访问记录**——F054 已把访问记录写进 `app_access_log` 表，但全仓**没有任何端点读它**，白名单上也没有 `app.access*`，所以「在审计查询面按对象应用 / 操作人 / 时间范围查到」今天不成立；② **AC-25 模型调用逐条**——F051 的 `model_call_record` 未落到本分支；③ **AC-25 / AC-34 运行期能力调用**（评审新增）——`OpenApiAuditMiddleware` 每次 v2 调用都按双归属口径入队一条 `open_api.call`，**行落了库**，但 `open_api.call` 既不在 `_UI_VISIBLE_V2_ACTIONS` 也不在 `platform log.ts`，页面自己的谓词在任何用户筛选之前就把它滤掉了——与本任务顺带修的 `api_key.create` 同一种失效，只是这次错在登记侧。**没有直接补登记**：它是全表里频次最高的动作，而白名单同时也是**未加筛选**时列表展示的范围，登记等于把审计页默认视图淹掉；这属 design §5「高频事件承载」要先拍的板，不是评审能顺手定的。缺口一 / 三补上哨兵即 XPASS 报错、强制删待办。
+  **顺带发现（不在本 Feature §2.3 表内，未动）**：`open_api.pat.regenerate` / `.delete` / `.revoke_holder` / `.tenant_migrate` 四个动作同样写了但两侧都没登记——同一失效，归 PAT / F049 一侧。
 
 ### Wave 4 · 顺延 · GOV-07 验收 / 标签接入 / 事件触达（只列标题 / 文件 / 覆盖 AC）
 
@@ -375,9 +377,10 @@
   **前提确认**：标签预过滤 4 处（`workflow.py:340 / 744 / 836 / 1408`）实现均已由 F054 T060 落地并统一走 `_tag_resource_types()`；本版确无打标入口（`LabelSelect.tsx` 对 `flowType===35` 只做展示分档）。
 
 - [x] **T031**: GOV-07 界面通道零新增权限点验收（无 `create_app` 者看不到新建入口、其既有托管应用的运行 / 访问 / 迭代发布 / 详情页管理入口不受影响；升级前后角色配置面菜单项与权限点数量不变、新建角色默认值不变；三个承载面分别寄居既有页面、不新增一级菜单）
-  **文件**: ~~无代码产出~~ → `src/frontend/platform/src/test/gov07NoNewPermissionPoint.test.ts`（新）；`src/frontend/platform/src/pages/SystemPage/components/roleMenuSelection.ts` / `Roles.tsx`（`DEFAULT_ENABLED_MENU_IDS` 移入纯模块以便断言）
+  **文件**: ~~无代码产出~~ → `src/frontend/platform/src/test/gov07NoNewPermissionPoint.test.ts`（新）；`src/backend/test/role/test_gov07_permission_point_inventory.py`（新，评审补）；`src/frontend/platform/src/pages/SystemPage/components/roleMenuSelection.ts` / `Roles.tsx`（`DEFAULT_ENABLED_MENU_IDS` 移入纯模块以便断言）
   **覆盖 AC**: AC-35, AC-36, AC-37, AC-38
   **证据**：9 例。AC-37 = 角色配置面清单冻结成**字面量**（两个父项 + 工作台四项 + 任务模式 + 管理端十项 = 17 个可选项，去重后仍 17，且无任何 `hosted` / `app_runtime` / `deploy` / `square` 命名的项）+ 级联规则 `CHILD_DEPENDENTS` 三条不变 + 新建角色默认值逐项冻结（含 `build` 开、`create_app` 不开）；AC-35 = 新建入口仍只受 `create_app` 一道闸、本版不存在托管应用的界面新建入口（模板入口显式把 `AppType.HOSTED_APP` 排除）；AC-36 = 卡片上的运行 / 权限 / 发布 / 删除入口一律由 per-resource ReBAC action 决定，与 `create_app` 无耦合；AC-38 = 路由权限 id 集合冻结为既有 11 个、托管应用详情页寄居 `permission: 'build'`、HeaderMenu 无工场一级菜单。
+  **评审补（后端半边，5 例）**：权限点是在**后端**新增的，前端那份清单只是它的开关面——只冻前端等于只看了第二现场。`test/role/test_gov07_permission_point_inventory.py` 冻 `WebMenuResource` 全量 22 个键（字面量，非计数）、`auth.py` 的 `_ROLE_UI_WORKBENCH_CHILDREN` / `_ROLE_UI_ADMIN_CHILDREN`、`UserMenuAccessService._PARENT_DEPENDENCIES` 里 `create_app → (admin, build)` 的级联（个人菜单授权走的是这条，不是 `CHILD_DEPENDENTS`），并断言三处都没有 `hosted` / `app_runtime` / `deploy` / `square` / `publish` / `factory` 命名的键。最后一例做**两侧对账**：把 `roleMenuSelection.ts` 的两个数组解析出来与后端两个 frozenset 比对——只加一侧的键是「UI 里关不掉的权限点」或「开了不生效的开关」，两边各自的测试都发现不了。
   **偏差**：把 `DEFAULT_ENABLED_MENU_IDS` 从 `Roles.tsx`（600 行级页面组件，测试里导入会拖进整张依赖图）移到同目录的纯模块 `roleMenuSelection.ts`——它本来就与该模块的清单是同一件事，AC-37 的两半断言现在读同一个真相源。零行为变化。
 
 - [x] **T032**: 事件触达接线——租户管理员（或超管代行）下线 / 重新上线 → owner 站内消息（owner 本人执行时不发；挂 F054 `AppStateService.stop/resume` 后置钩子，复用平台既有消息通知能力；**发送失败只记日志、不回滚业务动作**）
@@ -391,9 +394,10 @@
   **覆盖 AC**: AC-39, AC-40, AC-41, AC-42, AC-44, AC-45
   **证据**：三份，各答一个只有跨 Feature 视角才看得见的问题。
   ① **后端普查（12 例）**——F055 / 审批引擎 / F054 / F049 / F048 各测各的行，没人测这张表。`test_notification_table_acceptance.py` 一次遍历 `app_publish` / `app_runtime` / `open_api` 三个包，把发信调用点**按名字**钉死（app_publish 三处、app_runtime 两处、open_api **零处**）；AC-44 的四类静默行分别由「open_api 零调用点」（密钥）、「`visibility_audit` 源码里没有 notify」（新获可见权限）、「没有任何 `ACTION_*` 常量带 capabilit / revoke / resource」（能力被收回、资源释放后可手动上线）守住；两个发信模块声明的 action code 之并集恰为 6 个，多一个就是表上多一行。
-  ② **AC-45 行为验证（同文件 4 例）**——把消息链最底层弄坏（`get_message_service` 直接抛），断言 `notify_approvers_of_new_task` / `notify_pending_online`（三种 reason_kind）/ `notify_owner_of_admin_state_change` 一律正常返回；另补一例：待上线通知的管理员名单解析失败时**owner 仍然收得到**（要动手的是 owner）。
+  ② **AC-45 行为验证（同文件 4 例）**——把消息链最底层弄坏（`get_message_service` 直接抛），断言 `notify_approvers_of_new_task` / `notify_pending_online`（三种 reason_kind）/ `notify_owner_of_admin_state_change` 一律正常返回；另补一例：待上线通知的管理员名单解析失败时**owner 仍然收得到**（要动手的是 owner）。**评审补**：fixture 改为返回「是否真的打到了那个爆炸点」的计数器，每例断言它非空——「没抛异常」这种断言在发信方提前 return（收件人空、换了依赖）时同样成立，加了计数器这几例才不会某天变成空跑。
+  ②b **评审补 · AC-40 / AC-41 的正向半边**——原普查只证「F055 不重复发」，而「谁都不发」同样满足它：审批四个终态（通过 / 驳回 / 撤回 / 因删除取消）的发送方在审批引擎里，一次重构把它删掉，owner 永远收不到「你的发布通过了」而所有断言照绿。新增 `test_the_approval_engine_still_sends_rows_one_to_four`，AST 普查 `bisheng.approval`（命名空间包，`__file__` 为 None，须走 `__path__`）里所有发信调用的 `action_code=` 字面量，断言五个码都还在。
   ③ **client 收件端（16 例）**——后端那半边不保证收件人**读得懂**。把 F055 / F056 发的 5 个码 + 审批引擎的 5 个码（含 AC-41 的 `approval_instance_cancelled`）逐个过三语 bundle（走 `NotificationRow` 真实的 `映射 || 派生 key` 回退逻辑），并断言每条文案都带 `{{target}}`（owner 可能有多个应用）；statement 不得进 `APPROVAL_CENTER_ACTION_CODES`（消息类型一错就长出按不动的审批按钮），而审批待办必须仍在里面；AC-44 的四类在文案侧也不留残句。
-  ④ **AC-39 管理后台无消息面**——`adminBackendNoInboxFace.test.ts` 普查 platform 的 API 层，断言五个 inbox 端点（`/api/v1/message/{list,unread_count,mark_read,mark_all_read,approve}`）一个都没被调用，并自带「扫到的文件数 > 5」防止路径写错导致空扫通过。
+  ④ **AC-39 管理后台无消息面**——`adminBackendNoInboxFace.test.ts` 普查 platform **整个 `src/`**（排除 `test/` 自身），断言五个 inbox 端点（`/api/v1/message/{list,unread_count,mark_read,mark_all_read,approve}`）一个都没被调用，并自带「`controllers/` 与 `pages/` 各扫到 > 5 个文件」防止路径写错导致空扫通过。**评审补**：原来只扫 `controllers/`——「HTTP 只走 API 层」是约定不是机制，而第二个收件箱恰恰最可能先在组件里直连试出来。
   **发现但不在本任务修**：`app_publish_iteration_failed` 没登记进 client 的 `NOTIFICATION_ACTION_TEXT_KEYS`，靠 `NotificationRow` 的派生 key 回退才有文案（三语都在，用户无感）。属 F055 登记侧的一致性问题，已由上述 ③ 覆盖住「有文案」这条底线。
 
 ---
