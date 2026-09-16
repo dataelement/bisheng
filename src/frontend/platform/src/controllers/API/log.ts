@@ -274,6 +274,7 @@ export const V2_ACTIONS: string[] = [
     'app.release.online',
     'app.release.pending_online',
     'app.release.iteration_failed',
+    'app.release.schema_migration_failed',
     'app.release.manual_publish',
     'app.release.capability_declared',
     'app.release.rollback',

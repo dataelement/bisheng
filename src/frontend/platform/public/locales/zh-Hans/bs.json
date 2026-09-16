@@ -1364,6 +1364,7 @@
       "appReleaseOnline": "发布上线",
       "appReleasePendingOnline": "待上线（未能启动）",
       "appReleaseIterationFailed": "新版本未上线（线上未受影响）",
+      "appReleaseSchemaMigrationFailed": "数据表迁移失败，未上线",
       "appReleaseManualPublish": "手动上线",
       "appReleaseCapabilityDeclared": "声明能力依赖",
       "appReleaseRollback": "发布回滚"

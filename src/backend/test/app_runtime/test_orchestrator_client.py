@@ -316,6 +316,11 @@ class TestFormAgnostic:
             "destroy",
             "probe",
             "admission",
+            # publish-time schema evolution (F055 T062). Named ``schema_migrate``
+            # rather than ``db_migrate`` on purpose: the ``db_`` prefix marks the
+            # data plane, whose single-caller rule is asserted in
+            # ``test_app_data_service.py`` by grepping for exactly that prefix.
+            "schema_migrate",
             "status",
             "logs",
             "runtime_status",

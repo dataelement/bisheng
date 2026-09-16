@@ -14,11 +14,13 @@ from runtime_manager.api.schemas import (
     AdmissionRequest,
     AdmissionResponse,
     BuildRequest,
+    DbMigrateRequest,
     DeployRequest,
     DestroyRequest,
     ProbeRequest,
     StopRequest,
 )
+from runtime_manager.appdb import AppDbSchemaService
 from runtime_manager.auth import verify_hmac
 from runtime_manager.builder import BuildService
 from runtime_manager.config import get_config
@@ -92,6 +94,22 @@ async def destroy(request: DestroyRequest) -> dict:
     """AC-40 — only ``purge_volume=true`` (the owner's explicit delete) removes data."""
     with intent_span("destroy", request.app_id):
         return LifecycleService(get_config()).destroy(request.app_id, purge_volume=request.purge_volume)
+
+
+@router.post("/intents/db-migrate")
+async def db_migrate(request: DbMigrateRequest) -> dict:
+    """F055 T062 / AC-42 — bring an app's declared tables to the shape it declares.
+
+    An intent rather than a data-plane route: the caller states the shape it
+    wants and the manager works out which statements get there, so the data
+    tab's five routes stay provably free of DDL (``test_appdb.py``). Adding a
+    POST under ``/v1/apps/{app_id}/db/…`` would weaken exactly the assertion
+    that makes that namespace safe.
+    """
+    with intent_span("db_migrate", request.app_id) as span:
+        result = AppDbSchemaService(get_config()).migrate(request.app_id, request.plan, snapshot=request.snapshot)
+        span.result = "migrated" if result["applied"] else "noop"
+        return result
 
 
 @router.post("/intents/probe")

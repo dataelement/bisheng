@@ -1364,6 +1364,7 @@
       "appReleaseOnline": "公開開始",
       "appReleasePendingOnline": "公開保留（起動できず）",
       "appReleaseIterationFailed": "新バージョン未公開（稼働中は影響なし）",
+      "appReleaseSchemaMigrationFailed": "データテーブルの移行に失敗し、未公開",
       "appReleaseManualPublish": "手動で公開",
       "appReleaseCapabilityDeclared": "能力依存を宣言",
       "appReleaseRollback": "公開をロールバック"

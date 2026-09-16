@@ -282,6 +282,7 @@
   "16256": "The code snapshot of this version is unavailable",
   "16257": "You do not have permission to view the source of this version",
   "16258": "The file does not exist in this version's snapshot",
+  "16259": "The application data tables could not be migrated. This release did not go live and the running version is unaffected",
   "16273": "This capability has been revoked",
   "16274": "This capability was not declared by the application",
   "16291": "The application runtime credential subject is unavailable",

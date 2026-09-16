@@ -15,7 +15,7 @@ Seven things this file exists to prevent:
   list_tenant_admins`` returns ``[]`` for it by construction), which is exactly
   why AC-21's approver resolution needs a Root fallback — and why proving it
   with a super admin proves nothing.
-* **A half-stubbed orchestrator.** ``fake_orchestrator`` replaces **all fifteen**
+* **A half-stubbed orchestrator.** ``fake_orchestrator`` replaces **all sixteen**
   ``orchestrator_client`` methods and asserts its stub set still equals the
   facade's public surface. Miss one and it silently falls through to real HTTP
   against 127.0.0.1:8091, which surfaces as a connection error far from the
@@ -220,6 +220,9 @@ ORCHESTRATOR_METHODS = (
     "destroy",
     "probe",
     "admission",
+    # publish-time schema evolution (F055 T062) — an intent, not a data-plane
+    # call: the backend declares the shape, the manager derives the DDL
+    "schema_migrate",
     "status",
     "logs",
     "runtime_status",
@@ -975,7 +978,7 @@ def fake_minio(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def fake_orchestrator(monkeypatch):
-    """Replace **all fifteen** ``orchestrator_client`` methods with programmable stubs.
+    """Replace **all sixteen** ``orchestrator_client`` methods with programmable stubs.
 
     Returns a namespace with ``calls`` (an ordered list of ``(method, kwargs)``)
     and ``responses`` (a per-method dict a test may overwrite before acting —
@@ -1017,6 +1020,7 @@ def fake_orchestrator(monkeypatch):
         "stop": {"phase": "stopped"},
         "destroy": {},
         "probe": {"ready": True, "reason": ""},
+        "schema_migrate": {"applied": [], "skipped": [], "snapshot_key": None},
         "admission": {
             "admitted": True,
             "reason": "",

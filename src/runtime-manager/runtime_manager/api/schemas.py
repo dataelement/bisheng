@@ -95,6 +95,23 @@ class ProbeRequest(BaseModel):
     timeout: int | None = None
 
 
+class DbMigrateRequest(BaseModel):
+    """The declared shape of one app's tables, as a plan (F055 T062 / AC-42).
+
+    ``plan`` entries are ``{op, table, columns[]}`` with ``op`` one of
+    ``create_table`` / ``add_columns`` / ``rebuild_table`` / ``drop_table``;
+    the manager validates every identifier and every declared type before any
+    of it becomes SQL, so the field is typed loosely here on purpose — a
+    pydantic model per verb would put the vocabulary in two places and let them
+    drift. ``snapshot`` can only *add* a snapshot: a destructive plan takes one
+    regardless of what the caller asked for.
+    """
+
+    app_id: str
+    plan: list[dict[str, Any]] = Field(default_factory=list)
+    snapshot: bool = False
+
+
 class AdmissionResponse(BaseModel):
     admitted: bool
     reason: str

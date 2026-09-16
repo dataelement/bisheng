@@ -1381,6 +1381,7 @@
       "appReleaseOnline": "Published live",
       "appReleasePendingOnline": "Pending publish (could not start)",
       "appReleaseIterationFailed": "New version not published (live version unaffected)",
+      "appReleaseSchemaMigrationFailed": "Data table migration failed, not published",
       "appReleaseManualPublish": "Manually published",
       "appReleaseCapabilityDeclared": "Capabilities declared",
       "appReleaseRollback": "Publish rolled back"

@@ -19,7 +19,7 @@ Four things this file exists to prevent:
   name. HTTP headers are latin-1; the injected ``X-BiSheng-User-Name`` /
   ``Dept-Name`` / ``Dept-Path`` must be percent-encoded, and with the usual
   English test account that bug is invisible (design pit 9).
-* **A half-stubbed orchestrator.** ``fake_orchestrator`` replaces **all fifteen**
+* **A half-stubbed orchestrator.** ``fake_orchestrator`` replaces **all sixteen**
   ``orchestrator_client`` methods. Miss one and it silently falls through to
   real HTTP against 127.0.0.1:8091 — which only surfaces as a connection error
   in CI, far from the test that caused it. The fixture asserts the stub set
@@ -117,6 +117,9 @@ ORCHESTRATOR_METHODS = (
     "destroy",
     "probe",
     "admission",
+    # publish-time schema evolution (F055 T062) — an intent, not a data-plane
+    # call: the backend declares the shape, the manager derives the DDL
+    "schema_migrate",
     "status",
     "logs",
     "runtime_status",
@@ -426,7 +429,7 @@ async def app_factory(app_db, app_owner):
 
 @pytest.fixture()
 def fake_orchestrator(monkeypatch):
-    """Replace **all fifteen** ``orchestrator_client`` methods with programmable stubs.
+    """Replace **all sixteen** ``orchestrator_client`` methods with programmable stubs.
 
     Returns a namespace with ``calls`` (an ordered list of ``(method, kwargs)``)
     and ``responses`` (a per-method dict the test may overwrite before acting).
@@ -468,6 +471,7 @@ def fake_orchestrator(monkeypatch):
         "stop": {"phase": "stopped"},
         "destroy": {},
         "probe": {"ready": True, "reason": ""},
+        "schema_migrate": {"applied": [], "skipped": [], "snapshot_key": None},
         "admission": {
             "admitted": True,
             "reason": "",

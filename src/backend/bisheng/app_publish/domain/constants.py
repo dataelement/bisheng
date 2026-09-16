@@ -54,6 +54,13 @@ class AppReleaseAuditAction(StrEnum):
     #: reading this event as if it did would send an operator hunting an outage
     #: that never happened.
     ITERATION_FAILED = "app.release.iteration_failed"
+    #: Approved, and the declared application tables would not take the new
+    #: shape, so the new version was never started (AC-42). Its own action
+    #: rather than ``ITERATION_FAILED``: that one says the *start* failed and
+    #: implies an application that is still serving, and an operator reading it
+    #: for a migration refusal would go looking at runtime logs that have
+    #: nothing in them.
+    SCHEMA_MIGRATION_FAILED = "app.release.schema_migration_failed"
     MANUAL_PUBLISH = "app.release.manual_publish"
     #: Capability declaration of a release (AC-55) — first writer lands with
     #: the capability bus wave; registered now so the whitelist is touched once.
