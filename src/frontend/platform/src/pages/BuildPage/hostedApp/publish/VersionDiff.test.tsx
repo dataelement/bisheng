@@ -8,11 +8,14 @@ const getHostedAppVersionDiffApi = vi.fn()
 
 vi.mock("@/controllers/API/hostedApp", () => ({
   getHostedAppVersionsApi: (...args: unknown[]) => getHostedAppVersionsApi(...args),
-  getHostedAppVersionDiffApi: (...args: unknown[]) => getHostedAppVersionDiffApi(...args),
   getHostedAppErrorMessage: (error: unknown) =>
     error && typeof error === "object" && "status_message" in error
       ? String((error as { status_message: unknown }).status_message)
       : "",
+}))
+
+vi.mock("@/controllers/API/hostedAppReview", () => ({
+  getHostedAppVersionDiffApi: (...args: unknown[]) => getHostedAppVersionDiffApi(...args),
 }))
 
 function version(overrides: Partial<HostedAppVersion> & { version_no: number }): HostedAppVersion {

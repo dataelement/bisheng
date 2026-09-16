@@ -424,69 +424,7 @@ export async function withdrawApprovalApi(
   )
 }
 
-// ---------------------------------------------------------------------------
-// F055 T063 / T064 — version diff (version tab · client review view)
-// ---------------------------------------------------------------------------
-
-/** One version side of a diff, as `version_diff_service` reports it. */
-export interface HostedAppDiffVersion {
-  version_id: string
-  version_no: number
-  kind: "initial" | "iteration"
-  terminal_state: "online" | "rejected" | "withdrawn" | null
-  submitted_at: string | null
-}
-
-export interface HostedAppVersionDiff {
-  base: HostedAppDiffVersion
-  target: HostedAppDiffVersion
-  role: "owner" | "super_admin" | "tenant_admin" | "approver"
-  summary: {
-    files_changed: number
-    additions: number
-    deletions: number
-    truncated: boolean
-  }
-  files: {
-    path: string
-    change: "added" | "removed" | "modified"
-    additions: number
-    deletions: number
-    comparable: boolean
-    reason: string | null
-  }[]
-  patches: {
-    path: string
-    change: "added" | "removed" | "modified"
-    patch: string | null
-    truncated: boolean
-    masked_secrets: number
-  }[]
-}
-
-/**
- * What changed between two versions — computed server-side.
- *
- * `base` is the older side and `target` the newer, which is why AC-41's
- * "the iteration against the last published version" reads
- * `current_version_id` → `pending_version_id` and not the other way round.
- * Neither archive is downloadable and none is sent here: the response carries
- * a bounded, already-masked unified diff.
- *
- * `silent: true` for the usual reason (module header): a viewer the backend
- * refuses gets business code 16257 in a 200 envelope, and the caller needs the
- * code to tell "not allowed" from "broken".
- */
-export async function getHostedAppVersionDiffApi(
-  appId: string,
-  baseVersionId: string,
-  targetVersionId: string,
-): Promise<HostedAppVersionDiff> {
-  return await axios.get(
-    `${APPS_BASE}/${appId}/versions/${baseVersionId}/diff/${targetVersionId}`,
-    { silent: true },
-  )
-}
+// The version diff (T063 / T064) lives in `hostedAppReview.ts`, next door.
 
 // ---------------------------------------------------------------------------
 // F055 T065 — resource tier administration (system page, super admin only)

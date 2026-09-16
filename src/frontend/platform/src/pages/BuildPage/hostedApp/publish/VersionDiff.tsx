@@ -16,11 +16,13 @@
  */
 import {
   getHostedAppErrorMessage,
-  getHostedAppVersionDiffApi,
   getHostedAppVersionsApi,
   type HostedAppVersion,
-  type HostedAppVersionDiff,
 } from "@/controllers/API/hostedApp"
+import {
+  getHostedAppVersionDiffApi,
+  type HostedAppVersionDiff,
+} from "@/controllers/API/hostedAppReview"
 import {
   Select,
   SelectContent,
