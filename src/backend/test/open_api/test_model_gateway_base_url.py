@@ -12,7 +12,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from bisheng.common.services.config_service import settings
-from bisheng.open_api.api.public_base_url import MODEL_GATEWAY_BASE_PATH, model_gateway_base_url
+from bisheng.open_api.domain.services.public_base_url import MODEL_GATEWAY_BASE_PATH, model_gateway_base_url
 from test.open_api.model_gateway_fixtures import service_account_principal
 
 
