@@ -64,6 +64,7 @@ const versions = (overrides: Partial<DevToolkitVersions> = {}): DevToolkitVersio
   model: { base_url: MODEL_BASE_URL, protocol: "openai", auth: "bearer" },
   platform: {
     version: "3.0.0",
+    base_url: null,
     open_platform_enabled: true,
     app_runtime_enabled: true,
   },
@@ -108,6 +109,39 @@ describe("service-account access information (AC-44)", () => {
         `bisheng login ${window.location.origin} --api-key openApiManagement.accessInfo.keyPlaceholder`,
       ),
     ).toBeInTheDocument()
+  })
+
+  it("builds the login command and the installer link on the address the backend resolved", async () => {
+    // A gateway or path-prefix deployment: the browser's origin has no
+    // `/bisheng` prefix, so composing these two rows from it would print a
+    // login command that 404s right under an MCP address that works.
+    const base = "https://portal.example.com/bisheng"
+    vi.mocked(getDevToolkitVersionsApi).mockResolvedValue(
+      versions({
+        platform: {
+          version: "3.0.0",
+          base_url: base,
+          open_platform_enabled: true,
+          app_runtime_enabled: true,
+        },
+      }),
+    )
+    renderPanel(true)
+
+    expect(
+      await screen.findByText(
+        `bisheng login ${base} --api-key openApiManagement.accessInfo.keyPlaceholder`,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("link")).toHaveAttribute("href", `${base}${DOWNLOAD_PATH}`)
+    expect(screen.queryByText(window.location.origin)).not.toBeInTheDocument()
+  })
+
+  it("falls back to the browser's origin when the payload carries no base", async () => {
+    // An older backend, or a deployment that declared nothing: the origin is
+    // then exactly what the backend would have resolved anyway.
+    renderPanel(true)
+    expect(await screen.findByText(window.location.origin)).toBeInTheDocument()
   })
 
   it("is absent — and asks for nothing — where the open-capability layer is not deployed", async () => {

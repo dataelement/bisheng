@@ -73,6 +73,37 @@ async def test_the_model_and_mcp_addresses_share_one_origin(monkeypatch):
     assert payload["mcp"]["url"].startswith("https://bisheng.corp.example.com/")
 
 
+async def test_versions_carries_the_platform_base_url_every_other_address_is_built_on(monkeypatch):
+    """AC-44's 平台地址 and installer link must not come from a second source.
+
+    The panel shows five addresses side by side and an administrator forwards
+    all five at once. Two of them (`bisheng login <地址>` and the installer link)
+    would otherwise be built from the browser's origin, which on a path-prefix
+    deployment is missing the prefix the other three carry — a login command
+    that 404s printed directly under an MCP address that works.
+    """
+
+    monkeypatch.setattr(settings.open_api, "public_base_url", "https://portal.example.com/bisheng")
+    payload = await versions()
+    base = payload["platform"]["base_url"]
+    assert base == "https://portal.example.com/bisheng"
+    # Same prefix as the two addresses the panel does not build itself.
+    assert payload["mcp"]["url"] == f"{base}/api/v2/mcp"
+    assert payload["model"]["base_url"] == f"{base}/api/v2/model/v1"
+
+
+async def test_the_platform_base_url_follows_the_browsers_own_request_when_unconfigured(monkeypatch):
+    """No operator declaration: it is the address *this* request arrived at.
+
+    So a plain deployment sees exactly what `window.location.origin` would have
+    given, and nothing regresses by preferring this field over the origin.
+    """
+
+    monkeypatch.setattr(settings.open_api, "public_base_url", "")
+    payload = await versions({"X-Forwarded-Proto": "https", "X-Forwarded-Host": "bisheng.corp.example.com"})
+    assert payload["platform"]["base_url"] == "https://bisheng.corp.example.com"
+
+
 async def test_the_versions_payload_carries_no_credential_material():
     payload = json.dumps(await versions())
     for marker in ("bs-sak-", "bs-pat-", "Authorization", "token"):

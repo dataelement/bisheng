@@ -26,6 +26,7 @@ an administrator actually approving the release.
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -107,6 +108,46 @@ SRC_ROOT = Path(__file__).resolve().parents[3]
 PLATFORM_SRC = SRC_ROOT / "frontend" / "platform" / "src"
 SERVICE_ACCOUNT_DIR = PLATFORM_SRC / "pages" / "SystemPage" / "components" / "ServiceAccount"
 CLI_EXIT_CODES = SRC_ROOT / "bisheng-cli" / "bisheng_cli" / "errors.py"
+CLI_DEPLOY = SRC_ROOT / "bisheng-cli" / "bisheng_cli" / "commands" / "deploy.py"
+
+
+def _exit_code_values() -> dict[str, int]:
+    """``EXIT_* = <int>`` as `errors.py` defines them, read rather than remembered."""
+    module = ast.parse(CLI_EXIT_CODES.read_text(encoding="utf-8"))
+    values: dict[str, int] = {}
+    for node in module.body:
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if isinstance(target, ast.Name) and target.id.startswith("EXIT_") and isinstance(node.value, ast.Constant):
+            values[target.id] = node.value.value
+    return values
+
+
+def _wait_terminal_exit_names() -> set[str]:
+    """Every exit code ``deploy --wait`` can end on.
+
+    Derived from `deploy.py` rather than listed here: `APPROVAL_TERMINALS` is the
+    CLI's own enumeration of "this request will never reach a decision", and the
+    two outcomes `--wait` produces itself (`pending_online`, `timeout`) plus a
+    successful `EXIT_OK` complete the set. A sixth terminal added to the CLI
+    lands in this set automatically, which is the point: the pack must teach it
+    on the same day, or an agent meets a non-zero code it has no model for and
+    falls back to guessing (usually "deploy again").
+    """
+    module = ast.parse(CLI_DEPLOY.read_text(encoding="utf-8"))
+    names: set[str] = {"EXIT_OK", "EXIT_PENDING_ONLINE", "EXIT_WAIT_TIMEOUT"}
+    for node in ast.walk(module):
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            target_id = node.target.id
+        elif isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            target_id = node.targets[0].id
+        else:
+            continue
+        if target_id != "APPROVAL_TERMINALS" or not isinstance(node.value, ast.Dict):
+            continue
+        names.update(value.id for value in node.value.values if isinstance(value, ast.Name))
+    return names
 
 
 class TestJourneyLastStepApprovalTracking:
@@ -137,9 +178,27 @@ class TestJourneyLastStepApprovalTracking:
             ("EXIT_WITHDRAWN", 21),
             ("EXIT_PENDING_ONLINE", 22),
             ("EXIT_WAIT_TIMEOUT", 23),
+            ("EXIT_CANCELLED", 24),
+            ("EXIT_APPROVAL_EXCEPTION", 25),
         ):
             assert f"{name} = {taught}" in source, f"{name} is no longer {taught}"
             assert f"| {taught} |" in skill_text, f"exit code {taught} lost its row in the pack"
+
+    def test_no_terminal_the_cli_can_return_is_left_untaught(self, skill_text):
+        """The table is complete against `deploy.py`, not against what I remembered.
+
+        `--wait` ends on six codes; the pack tells the agent to branch on the
+        code without reading the text, so one missing row is an agent with no
+        next action — and the two easiest to forget (`cancelled`, `exception`)
+        are exactly the two where retrying `deploy` is the wrong move.
+        """
+        values = _exit_code_values()
+        rows = set(re.findall(r"^\|\s*(\d+)\s*\|", skill_text, flags=re.MULTILINE))
+        for name in sorted(_wait_terminal_exit_names()):
+            assert name in values, f"{name} vanished from errors.py"
+            assert str(values[name]) in rows, (
+                f"`deploy --wait` can return {name}={values[name]}, the pack never says so"
+            )
 
     def test_the_status_tool_it_names_is_a_real_tool_with_that_scope(self, skill_text):
         """`app:manage` is what the pack tells the developer to ask their admin for."""

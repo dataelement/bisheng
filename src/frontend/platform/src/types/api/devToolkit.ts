@@ -39,6 +39,13 @@ export interface DevToolkitVersions {
   model: DevToolkitModelFace | null
   platform: {
     version: string
+    /**
+     * The address this deployment answers at, resolved by the backend from the
+     * same producer as `mcp` / `model`. Prefer it over `window.location.origin`
+     * for anything a developer will run: behind a gateway or a path prefix the
+     * origin is missing that prefix. Optional so an older payload still parses.
+     */
+    base_url?: string | null
     open_platform_enabled: boolean
     app_runtime_enabled: boolean
   }

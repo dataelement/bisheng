@@ -113,6 +113,17 @@ def get_dev_toolkit_versions(request: Request):
                 # is a hardcoded literal, so comparing the CLI against it would
                 # be permanently right or permanently wrong.
                 "version": snapshot.platform_version,
+                # The address this deployment answers at, from the same producer
+                # as `mcp` and `model` above. The access-information panel needs
+                # it for the two rows it would otherwise build from the browser's
+                # own origin (`bisheng login <地址>` and the installer link):
+                # behind a gateway or a path prefix the origin is missing that
+                # prefix, so a panel mixing the two sources would hand a
+                # developer a login command that 404s next to an MCP address
+                # that works. Unconfigured this resolves from *this* request's
+                # forwarded Host, i.e. the browser's own address, so nothing
+                # changes for a plain deployment.
+                "base_url": resolve_public_base_url(request),
                 "open_platform_enabled": settings.open_platform.enabled,
                 "app_runtime_enabled": settings.app_runtime.enabled,
             },

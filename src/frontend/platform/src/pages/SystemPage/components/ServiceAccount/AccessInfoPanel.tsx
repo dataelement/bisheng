@@ -22,10 +22,14 @@ import { useTranslation } from "react-i18next"
  *   `GET /api/v1/dev-toolkit/versions`, which asks the backend's single
  *   producer for them — composing `origin + /api/v2/model/v1` in the browser
  *   would be a second spelling of an address that already has one;
- * * the platform address and the installer link come from the browser's own
- *   origin, because that is the address the administrator actually reached the
- *   platform at, and the payload hands back `download_path` (a path, not a URL)
- *   precisely so the browser joins it.
+ * * the platform address and the installer link join `download_path` (a path,
+ *   not a URL — the payload hands it back that way on purpose) to the base the
+ *   backend resolved for this very request, falling back to the browser's own
+ *   origin. Not the origin first: behind a gateway or a path prefix the origin
+ *   is missing that prefix, and a block mixing the two sources would print a
+ *   `bisheng login` command that 404s directly above an MCP address that works.
+ *   Unconfigured, the backend resolves this request's forwarded Host — the
+ *   browser's own address — so a plain deployment sees no difference.
  *
  * The block is absent where the open-capability layer is not deployed: the
  * endpoint is not even registered there, and `openPlatformEnabled` is the same
@@ -58,7 +62,8 @@ export function AccessInfoPanel() {
 
   if (!openPlatformEnabled || !versions) return null
 
-  const platformAddress = window.location.origin
+  const platformAddress =
+    versions.platform?.base_url?.replace(/\/+$/, "") || window.location.origin
   const cliDownloadUrl = versions.cli
     ? `${platformAddress}${versions.cli.download_path}`
     : ""
