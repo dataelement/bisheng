@@ -256,6 +256,29 @@ class TestTransitionalWindow:
         assert await _state(app_db, app.id) == AppState.ONLINE.value
 
 
+#: The half no in-process double can prove: real recovery timing, real
+#: zero-interruption during a runtime-service restart, real startup alignment.
+#: A host-side adapter script owns these, and this file must not pretend to.
+REAL_HOST_ACS = ("AC-20", "AC-22", "AC-46", "AC-50")
+
+
+def test_ac49_real_host_adapter_covers_what_this_file_cannot():
+    """The runbook half of AC-49, kept in lockstep with the case list.
+
+    AC-49 is about one case list with per-form adapters. If the adapter and this
+    file drift, the deployment that actually runs is verified by neither — and
+    the drift is invisible, because both sides keep passing on their own.
+    """
+    script = (
+        Path(__file__).resolve().parents[4] / "docker" / "verify-app-runtime-stability.sh"  # portable-vocab-ok: path
+    )
+    assert script.exists(), "the host-side stability adapter is missing; AC-49's real-host half has no runner"
+
+    text = script.read_text(encoding="utf-8")
+    uncovered = [ac for ac in REAL_HOST_ACS if ac not in text]
+    assert not uncovered, f"the host-side adapter no longer covers {uncovered}"
+
+
 def test_ac49_no_form_specific_vocabulary():
     """The portability guard — AC-49 stated as a property of this file.
 
