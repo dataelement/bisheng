@@ -49,7 +49,7 @@
 
 - **CON-1 SDK 是独立包，不 import `bisheng`**：不读后端配置、不连数据库、不引 FastAPI / SQLModel。依赖预算 **`httpx>=0.27,<1.0` 一条**（D1）；其余全标准库。推论：版本比较不引 `packaging`（照 CLI `http.py:_version_tuple` 的三段元组比较）。
 - **CON-2 只访问平台注入的两个地址**：SDK 运行期只打 `BISHENG_PLATFORM_API_BASE`（retrieve、版本探测）与 `BISHENG_APP_STORAGE_ENDPOINT`（附件；值是 runtime-manager 的应用面地址而非平台 API，F054 契约 §5 / 坑 27）；不做遥测、不查公网、不引第三方地址（spec §3「托管期出站可达」：F054 AC-16 运行期出站白名单须含这两个地址，F054 契约 §9 已登记）。
-- **CON-3 两类凭据结构上不混用**：托管容器内同时存在应用运行期凭据（`BISHENG_APP_TOKEN`，F055 T056 注入，应用自身身份）与每请求注入的访问者凭据（`X-BiSheng-Access-Token`，F054 AC-34）。SDK retrieve **只从请求上下文读后者**，代码里不出现 `BISHENG_APP_TOKEN` 字面量（tests 以 grep 断言），不提供 `as_user` 及任何等价参数（AC-08 / AC-12 / 决议-2）。
+- **CON-3 两类凭据各司其职、角色不可互换**（2026-09-16 按 F055 已落地实现修订，见 D5）：托管容器内同时存在应用运行期凭据（`BISHENG_APP_TOKEN`，F055 注入，回答「哪个应用」）与每请求注入的访问者凭据（`X-BiSheng-Access-Token`，F054 AC-34，回答「为谁做」）。retrieve **两把都送**：应用凭据作 `Authorization: Bearer`（平台据此取该应用当前生效的能力声明白名单），访问者凭据作同名请求头（平台据此确立访问用户）。**访问者凭据只从请求上下文取、绝不从进程级环境变量取**——否则后台任务会顺手拿到一把，越权路径就在一个默认参数之外；缺访问者头时服务端一律拒绝，**没有 owner 兜底**（AC-52）。不提供 `as_user` 及任何等价参数（AC-08 / AC-12 / 决议-2）。
 - **CON-4 无注入即抛错，不返回 None / 缺省身份、不提供宽松开关**（AC-07 / 决议-1）。健康探活、后台任务、单测裸调用遇到抛错是**刻意的**。
 - **CON-5 请求作用域**：身份与凭据只活在当前请求上下文（AC-09），不跨请求缓存；同进程并发互不串扰；WebSocket 取握手时的头。
 - **CON-6 凭据不落盘、不回显**（AC-04）：所有异常 `__str__`、日志、`repr` 统一过 `redact()`；`Identity` 对象**不携带**访问令牌（令牌只在上下文里供 retrieve 读）。
@@ -107,10 +107,12 @@
 - **与 spec 的口径差（全自动模式定案：不改 spec、由 design 记差）**：spec AC-06 / AC-10 写「`dev` 期返回开发者**服务账号**、组织字段可为空」，而已落地的 `bisheng dev` 允许用个人访问令牌（`bs-pat-`）`login`，此时注入的是**自然人**身份（`subject_kind="human"`、可能有部门）。两者对 SDK 是同一条码路（原样透传，AC-06「不自行推导或补全」），AC-10 在服务账号密钥这一主用法上仍逐字成立；把 PAT 情形写进 spec 会把 F053 的密钥策略拽进 F057 的 AC。指南按「取决于你 login 用的密钥」写（T033），本地/线上差异清单里补这一句。
 - **何时该重新考虑**：F050 若给注入头加字段（如角色）→ 在 `_headers.py` 追加常量 + `Identity` 追加可选字段，三处对账测试会先红。
 
-### D5：retrieve 执行凭据 = 请求上下文里的 `X-BiSheng-Access-Token` 值，作为 `Authorization: Bearer` 直投 `POST /api/v2/filelib/retrieve`；SDK 对令牌形态不感知
+### D5：retrieve 送两把凭据 —— 应用运行期凭据作 `Authorization: Bearer`、访问者凭据作 `X-BiSheng-Access-Token` 头，直投 `POST /api/v2/filelib/retrieve`；SDK 对令牌形态不感知
 
-- **备选**：A. 用 `BISHENG_APP_TOKEN` + `X-On-Behalf-Of: <user_id>` 走 F050 模式 D — F050 spec §范围边界明写 OBO 与模式 D 是**两套信任机制、不得混用**；且会让 SDK 读进程级凭据（CON-3 违规）；B. 新开一个专用端点 `POST /api/v2/apps/self/retrieve` — F052 AC-26「门面是开放面上唯一检索路径」、AC-25「v2 `POST /filelib/retrieve` 经同一门面」，再开端点是第二条路径；C. **复用 `POST /api/v2/filelib/retrieve`（`open_endpoints/api/endpoints/filelib.py:687-736`），Bearer = 注入的访问者凭据**（选定）。
-- **对令牌形态不感知**：线上它是 app-proxy 注入的 HS256 OBO JWT（aud `bisheng-app-obo`、900 s，`entry_authz_service.py:379-425`）；`dev` 期是 `bisheng dev` 迷你代理每请求现铸的 `bsdev.<b64 payload>.<hmac>` 句柄（`devproxy.py:HandleMinter.mint`（`:247-262`）、TTL 900 s、**本地自签**）。SDK 只做「上下文里有就带、没有就抛 `VisitorCredentialMissingError`」，**不解析、不校验、不续期**——两种形态对 SDK 是同一条码。
+> **2026-09-16 修订（按 F055 已落地实现）**：本条初稿写的是「只送访问者凭据作 Bearer」。F055 合入的托管运行契约（`open_endpoints/api/endpoints/filelib.py` 的 `HOSTED_APP_ACTOR_KIND` 分支 → `CapabilityBusService.retrieve`）以**应用凭据识别应用、以访问者头识别访问者**，两者缺一不可，且缺访问者头即拒绝（AC-52）。以 F055 的实现为准，初稿的单凭据形态作废。
+
+- **备选**：A. 用 `BISHENG_APP_TOKEN` + `X-On-Behalf-Of: <user_id>` 走 F050 模式 D — F050 spec §范围边界明写 OBO 与模式 D 是**两套信任机制、不得混用**；且会让 SDK 读进程级凭据（CON-3 违规）；B. 新开一个专用端点 `POST /api/v2/apps/self/retrieve` — F052 AC-26「门面是开放面上唯一检索路径」、AC-25「v2 `POST /filelib/retrieve` 经同一门面」，再开端点是第二条路径；C. **复用 `POST /api/v2/filelib/retrieve`（`open_endpoints/api/endpoints/filelib.py` 的 `HOSTED_APP_ACTOR_KIND` 分支），Bearer = 应用运行期凭据 + `X-BiSheng-Access-Token` 头 = 本请求注入的访问者凭据**（选定）。⚠️ 备选 A 被否的是「`X-On-Behalf-Of: <user_id>` 由应用自报 user id」那一半——应用自报主体正是越权面；这里送的是入口签发的**不可伪造的访问者凭据**，与 F050 模式 D 不是一回事。
+- **对令牌形态不感知**：线上它是 app-proxy 注入的 HS256 OBO JWT（aud `bisheng-app-obo`、900 s，`entry_authz_service.py:379-425`）；`dev` 期是 `bisheng dev` 迷你代理每请求现铸的 `bsdev.<b64 payload>.<hmac>` 句柄（`devproxy.py:HandleMinter.mint`（`:247-262`）、TTL 900 s、**本地自签**）。SDK 只做「上下文里有就带、没有就抛 `VisitorCredentialMissingError`」，**不解析、不校验、不续期**——两种形态对 SDK 是同一条码。应用凭据同理只做「环境里有就当 Bearer 送、没有就抛 `AppCredentialMissingError`」。
 - **服务端必须补的三半（本文 §6.2 登记为阻塞项，SDK 先按现有线上契约落码）**：① `validate_bearer`（`open_api/domain/services/credential_validator.py:43` 的 `_TOKEN_RE` 只认 `bs-sak-` / `bs-pat-`）要能受理 OBO 令牌并以 `sub.user_id` 为执行身份、`sub.app_id` 定白名单（F055 T057）——`entry_authz_service.py:389-394` 的 docstring 明写「OBO 有了第一个消费者时签发必须改 fail-closed」，**那个消费者就是本 SDK**；② `RetrieveReq.knowledge_base_ids` 今天 `min_length=1` 必填（`open_endpoints/domain/schemas/filelib.py:43-45`），F052 AC-22「未指定目标 → 在全部被授予范围内检索」要求它可省略；③ **`dev` 的 `bsdev.` 句柄是本地 HMAC 自签的，平台无从验签**——本地期 retrieve 因此与托管期同样答 `26001`（坑 32）。**全自动模式定案**：修法归 F053 / F052 而不是 SDK——`bisheng dev` 用 `login` 密钥向平台换一枚平台签发的短时凭据（每会话换、每请求下发，`login` 密钥仍不进应用进程），SDK 侧零改动；备选「F052 受理本地自签句柄」被否决（要求平台信任开发者机器上自选的 HMAC 密钥，等于给任何本地进程一条以服务账号身份检索的路，与 INV-30 相悖）。
 - **入参出参 = 门面的入参出参**（AC-11 / AC-18）：`search(query, *, knowledge_base_ids=None, top_k=10, max_content=15000, filters=None)`，字段名与 `RetrieveReq` 一一对应，`filters` 形状 = `RetrieveFilters`；`knowledge_base_ids=None` 时**省略该键**（`extra="forbid"`，不能送 `null` 以外的自造值）；出参 `RetrieveResult(chunks: list[Chunk], total: int)`，`Chunk` 六字段照 `RetrieveChunk`。SDK 不排序、不去重、不截断、不缓存。
 - **何时该重新考虑**：F052 design 若把门面独立成新路径（如 `/api/v2/knowledge/retrieve`）→ 只改 `_http.py` 的 `RETRIEVE_PATH` 常量与 `_codes.py`。
@@ -231,11 +233,15 @@
 ```
 retrieve.search(query, ...) 
   → _context.access_token()（无 → VisitorCredentialMissingError）
+  → _env.app_token()（无 → AppCredentialMissingError）
   → _compat.ensure_compatible(base)（每进程一次；GET /api/v1/dev-toolkit/versions）
-  → POST {BISHENG_PLATFORM_API_BASE}/api/v2/filelib/retrieve  Authorization: Bearer <token>  body=RetrieveReq
+  → POST {BISHENG_PLATFORM_API_BASE}/api/v2/filelib/retrieve
+        Authorization: Bearer <BISHENG_APP_TOKEN>        ← 哪个应用（定白名单）
+        X-BiSheng-Access-Token: <本请求注入的访问者凭据>   ← 为谁做（定访问用户）
+        body=RetrieveReq
   → _http.parse_envelope → 200: RetrieveResult ；错误: _codes.map(status, code) → errors.*
 ```
-服务端（非本 Feature）：`verify_open_api_access` 受理 OBO → 门面按 `sub.app_id` 定白名单 ∩ `sub.user_id` 可见范围（F055 T057 / F052 AC-21）→ 审计 actor=app / subject=user（F055 T059）。
+服务端（非本 Feature，**F055 已落地**）：`filelib.py` 的 `HOSTED_APP_ACTOR_KIND` 分支 → `CapabilityBusService.retrieve` 按应用当前生效声明定白名单 ∩ 访问用户可见范围（F052 AC-21）→ 审计 actor=应用 / subject=访问用户。**无 `X-BiSheng-Access-Token` 即拒绝（AC-52），没有 owner 兜底。**
 
 **C. storage**
 ```
@@ -284,12 +290,12 @@ runtime-manager 构建：pip install --index-url $PIP_INDEX_URL --extra-index-ur
 | `BISHENG_APP_STORAGE_MAX_FILE_MB`（本地） | 可选（F053 `dev` 可注入，与线上同名） | 本地期单文件上限；不注入 = 不限（坑 23） |
 | `BISHENG_SDK_TRUST_ENV` | 开发者 | `=1` 时 httpx 读代理环境变量（D11） |
 
-SDK **不读** `BISHENG_APP_TOKEN` / `BISHENG_API_KEY` / 任何密钥类变量（CON-3；tests 以源码 grep 断言）。
+SDK 读 `BISHENG_APP_TOKEN`（**只**作 retrieve 的 `Authorization: Bearer`，即「哪个应用」那一把，F055 契约），**不读** `BISHENG_API_KEY` 或任何其它密钥类变量；访问者凭据永不从环境变量取（CON-3；tests 以源码 grep 断言）。
 
 **③ retrieve 线上契约**（= `POST /api/v2/filelib/retrieve` 既有形状，`open_endpoints/domain/schemas/filelib.py:39-69`）
 
 ```jsonc
-// 请求  Authorization: Bearer <X-BiSheng-Access-Token 的值>
+// 请求  Authorization: Bearer <BISHENG_APP_TOKEN>   +   X-BiSheng-Access-Token: <注入的访问者凭据>
 { "query": "…", "knowledge_base_ids": [1, 2],          // None 时省略该键（待 F052 放宽必填）
   "filters": {"knowledge_base_filters": [{"knowledge_base_id": 1, "tags": ["a"], "tag_match_mode": "any"}]},
   "top_k": 10, "max_content": 15000 }
@@ -439,7 +445,7 @@ SDK **不读** `BISHENG_APP_TOKEN` / `BISHENG_API_KEY` / 任何密钥类变量�
 | `artifact_service.read_skill_pack` / `read_install_guide` 模式（`artifact_service.py:211-243`） | 内部 Python | ✅ | 新包目录自动分发；`sdk-guide.md` 照 `install-guide` 形态 |
 | `scripts/pack_cli_wheel.sh` 与 `cli-quality.yml` 的 manifest 契约 | 构建脚本 | ✅ 但会**清空 `sdk` 段 / 删 SDK wheel** | T023 同批改 CLI 脚本（坑 9 / 10） |
 | runtime-manager 构建参数（`builder.py:366-369`、`config.py:159-160, 231-232`、`Dockerfile.j2:21-42`） | 构建契约 | ✅ 只有 `PIP_INDEX_URL` | T030–T032 加 extra index |
-| F055 `BISHENG_APP_TOKEN` 注入（T056）与 `16273` / `16274` 写入方（T058） | 环境变量 / 错误码 | ❌ 未实现 | SDK 不读前者（CON-3）；后者只 mock（坑 25） |
+| F055 `BISHENG_APP_TOKEN` 注入与托管期检索受理（`HOSTED_APP_ACTOR_KIND` → `CapabilityBusService.retrieve`）、`16273` / `16274` 写入方 | 环境变量 / 服务端 / 错误码 | ✅ 注入与受理已落地；错误码写入方待 F055 T058 | retrieve 以它作 Bearer（CON-3 / D5 修订）；`16273` / `16274` 仍只 mock（坑 25） |
 | `bisheng_cli.commands.skills.DEFAULT_PACKS` | CLI 常量 | ✅ 只含 `deploy-hosting` | T038 追加 + 重打 CLI wheel（坑 24） |
 
 **跨 Feature 回写登记（本文提出、对方 tasks 受理）**：
@@ -479,4 +485,5 @@ SDK **不读** `BISHENG_APP_TOKEN` / `BISHENG_API_KEY` / 任何密钥类变量�
 |---|---|---|
 | 2026-09-16 | 初版（D1–D16、坑 1–25、§4.2 契约 ①–⑦、§6.2 阻塞项 ①②⑤ 与契约 ③④、回写三项）；全自动模式定案 | spec 定稿后补 design |
 | 2026-09-16（同日续） | 补 §2 Constitution Check（C1–C8）；**D8 / §4.2 ②④ / D6 storage 行 / D9 路径规则 / §4.1 C 按 F054 `wt/storage-handle`（T084 / T085 已实现）改写**：句柄改 `BISHENG_APP_STORAGE_ENDPOINT/_TOKEN/_MAX_FILE_MB`、落 runtime-manager `/v1/apps/{app_id}/storage`、manager 信封 `{"detail":{code}}`、`/meta/` 路径、`200 {}` 删除、`apps/` 保留前缀；作废初稿的 backend 落点 / `_URL` / `16163+` 建议与 F054 回写项；§6.2 ⑤ 由阻塞项改为已实现契约；新增坑 26–30；修正引用 tasks 编号（T026 / T032 / T038 / T027 / T023 / T030–T032 / T014）| 续写前核对 storage-handle worktree（brief 要求） |
+| 2026-09-16（四续） | **按 F055 已落地的托管检索契约修订 D5 / CON-3 / §4.1 B / §4.2 ②③ / §6.2**：retrieve 送两把凭据（应用运行期凭据作 Bearer 定白名单、注入的访问者凭据作同名头定访问用户），缺访问者头即拒绝且无 owner 兜底；初稿的单凭据形态作废 | 实现期核对 `filelib.py` 的 `HOSTED_APP_ACTOR_KIND` 分支，发现与初稿不一致（wave-4 brief 已裁定以 F055 为准） |
 | 2026-09-16（同日三续） | **按 F053 分支 `wt/cli-dev` `b61b209e4` 改写**：D12 由「新建技能包」改为「在 F053 已建的 `platform-wiring` 上做增量」、D13 自检改为追加步骤、D4 `subject_kind` 随密钥种类、D5 增第三半（`bsdev.` 本地自签句柄不可被平台受理，修法归 F053 / F052）、D8 本地句柄标注「`dev` 今天未注入」；§6.2 阻塞项 ① 消解为已实现契约，新增阻塞项 ③ 与契约 ⑦；新增坑 31–36；回写登记第 2 条按「已交付 + 增补」重写；修正行号（`credential_validator.py:43`、`pack_cli_wheel.sh:97 / 106-119`、`api/router.py:141`、`artifact_service.py:211-231`、`distribution.py:80`）| `/sdd-review design` + brief 要求核对 cli-dev worktree |
