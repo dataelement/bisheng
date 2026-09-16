@@ -19,6 +19,11 @@ interface MediaPlayerProps {
     /** Start on its own. Off in knowledge preview, where opening a file is
      *  browsing; on in chat, where opening a clip is asking to watch it. */
     autoPlay?: boolean;
+    /** Force the dark stage (white controls over a scrim) for audio too — for
+     *  a player sitting on a lightbox, where the light audio card glares. */
+    darkStage?: boolean;
+    /** Extra classes on the stage, e.g. a stage colour to replace the default. */
+    className?: string;
 }
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -229,7 +234,15 @@ function VolumeControl({
     );
 }
 
-export function MediaPlayer({ kind, src, allowDownload = false, onDownload, autoPlay = false }: MediaPlayerProps) {
+export function MediaPlayer({
+    kind,
+    src,
+    allowDownload = false,
+    onDownload,
+    autoPlay = false,
+    darkStage = false,
+    className,
+}: MediaPlayerProps) {
     const localize = useLocalize();
     const isVideo = kind === "video";
     const containerRef = useRef<HTMLDivElement>(null);
@@ -375,7 +388,7 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload, auto
     const showMoreMenu = allowDownload || pipSupported;
     /* Video plays on a black stage with white controls over a scrim; audio has no
        picture, so it uses the design-system neutral fill with dark controls. */
-    const onDarkStage = isVideo;
+    const onDarkStage = isVideo || darkStage;
     const hoverClass = onDarkStage ? "hover:bg-white/20" : "hover:bg-fill-3";
     const iconButtonClass = cn(
         "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
@@ -406,6 +419,7 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload, auto
                 "relative overflow-hidden",
                 onDarkStage ? "bg-black" : "bg-fill-2",
                 fullscreen ? "flex h-full w-full flex-col justify-center" : "rounded-xl",
+                className,
             )}
         >
             {isVideo ? (
@@ -428,7 +442,7 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload, auto
                         className="flex h-[200px] w-full items-center justify-center"
                         onClick={togglePlay}
                     >
-                        <Outlined.FileAudio className="size-12 text-text-4" />
+                        <Outlined.FileAudio className={cn("size-12", onDarkStage ? "text-white/60" : "text-text-4")} />
                     </div>
                     <audio
                         ref={(node) => {
