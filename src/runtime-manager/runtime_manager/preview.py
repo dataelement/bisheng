@@ -85,15 +85,34 @@ def build_preview_payload(
     *,
     session_id: str,
     app_id: str,
+    slug: str,
     version_id: str,
+    version_no: int,
     image_ref: str,
     tier: Tier,
     port: int,
     health_path: str,
+    platform_api_base: str,
+    base_path: str,
     env: dict[str, str],
     expires_at: int = 0,
 ) -> dict[str, Any]:
     """The Docker Engine create body for a preview — the cage, one notch tighter.
+
+    **The environment is the ordinary one** (:func:`runtime_manager.lifecycle.
+    build_env`, contract §5) and that is the whole point of a trial run: the
+    approver has to see the application behave the way it will behave in
+    production, and an app that is not told ``BISHENG_APP_DB_URL`` does not
+    start at all — which reads as "the preview is broken" rather than as "the
+    platform forgot to tell it where its database is". Only two values differ,
+    and both are the AC speaking:
+
+    * ``BISHENG_APP_BASE_PATH`` is ``/apps/preview/{session}``, not
+      ``/apps/{slug}`` — the same source has to rebuild its URLs correctly at
+      both entry points (D5.2).
+    * **no attachment handle at all** (``storage_token=None``): the app's
+      storage bearer would let a trial upload land in the application's
+      production attachments, the same crossing AC-29 forbids for the database.
 
     Differences from :func:`runtime_manager.lifecycle.build_container_payload`,
     each load bearing:
@@ -113,9 +132,24 @@ def build_preview_payload(
       for the app factory (F054 AC-59) — so the container is the only place the
       expiry can live where it will still be read after either side restarts.
     """
+    from runtime_manager.lifecycle import build_env
+
+    container_env = build_env(
+        config,
+        app_id=app_id,
+        slug=slug,
+        version_id=version_id,
+        version_no=version_no,
+        port=port,
+        health_path=health_path,
+        platform_api_base=platform_api_base,
+        base_path=base_path,
+        storage_token=None,
+        extra=dict(env or {}),
+    )
     return {
         "Image": image_ref,
-        "Env": [f"{key}={value}" for key, value in sorted(env.items())],
+        "Env": [f"{key}={value}" for key, value in sorted(container_env.items())],
         "ExposedPorts": {f"{port}/tcp": {}},
         "Labels": {
             LABEL_MANAGED: PREVIEW_MANAGED_VALUE,
@@ -176,8 +210,12 @@ class PreviewService:
         version_id: str,
         image_ref: str,
         tier: Tier,
+        slug: str = "",
+        version_no: int = 0,
         port: int = 8080,
         health_path: str = "/",
+        platform_api_base: str = "",
+        base_path: str = "",
         env: dict[str, str] | None = None,
         expires_at: int = 0,
         timeout: float | None = None,
@@ -211,11 +249,15 @@ class PreviewService:
             self._config,
             session_id=session_id,
             app_id=app_id,
+            slug=slug,
             version_id=version_id,
+            version_no=version_no,
             image_ref=image_ref,
             tier=tier,
             port=port,
             health_path=health_path,
+            platform_api_base=platform_api_base,
+            base_path=base_path,
             env=dict(env or {}),
             expires_at=expires_at,
         )

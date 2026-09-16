@@ -53,12 +53,16 @@ def _start(service, **overrides):
     payload = {
         "session_id": SESSION,
         "app_id": "app-1",
+        "slug": "sales-report",
         "version_id": "ver-0123456789abcdef",
+        "version_no": 4,
         "image_ref": "bisheng-app/sales-report:4-ver-0123",
         "tier": Tier(cpu=0.5, mem_mb=512),
         "port": 8080,
         "health_path": "/healthz",
-        "env": {"BISHENG_APP_ID": "app-1"},
+        "platform_api_base": "https://platform.example.com",
+        "base_path": f"/apps/preview/{SESSION}",
+        "env": {"APP_OWN_SETTING": "1"},
     }
     payload.update(overrides)
     return service.start(**payload)
@@ -89,6 +93,56 @@ def test_preview_data_is_a_tmpfs_and_never_the_application_volume(rtm_config, fa
     # container exits 1 on start-up and the preview fails for a reason nobody
     # would guess from "preview did not become ready".
     assert "mode=1777" in host_config["Tmpfs"]["/data"]
+
+
+def _env_of(fake_docker, name: str) -> dict[str, str]:
+    raw = fake_docker.get(name).payload["Env"]
+    return dict(entry.split("=", 1) for entry in raw)
+
+
+def test_a_preview_gets_the_whole_environment_contract(rtm_config, fake_docker):
+    """§5's names, all of them — a partial environment is a broken app, not a preview.
+
+    The one that bites first is ``BISHENG_APP_DB_URL``: an app that is not told
+    where its database lives exits on start-up, and the approver reads that as
+    "this release is broken" rather than as "the platform forgot to tell it".
+    """
+    _start(_preview(rtm_config, fake_docker))
+
+    env = _env_of(fake_docker, preview_container_name(SESSION))
+    assert env["BISHENG_APP_DB_URL"] == "sqlite:////data/app.db"
+    assert env["BISHENG_APP_DB_PATH"] == "/data/app.db"
+    assert env["BISHENG_APP_ID"] == "app-1"
+    assert env["BISHENG_APP_SLUG"] == "sales-report"
+    assert env["BISHENG_APP_VERSION"] == "4"
+    assert env["BISHENG_APP_VERSION_ID"] == "ver-0123456789abcdef"
+    assert env["BISHENG_PLATFORM_API_BASE"] == "https://platform.example.com"
+    assert env["PORT"] == env["BISHENG_APP_PORT"] == "8080"
+    assert env["BISHENG_APP_HEALTH_PATH"] == "/healthz"
+    # The app's own declared variables survive; platform-reserved names win.
+    assert env["APP_OWN_SETTING"] == "1"
+
+
+def test_the_preview_is_told_its_own_base_path_not_the_applications(rtm_config, fake_docker):
+    """D5.2 — the same source runs at ``/apps/{slug}`` and at the preview entry."""
+    _start(_preview(rtm_config, fake_docker))
+
+    env = _env_of(fake_docker, preview_container_name(SESSION))
+    assert env["BISHENG_APP_BASE_PATH"] == f"/apps/preview/{SESSION}"
+
+
+def test_a_preview_carries_no_attachment_handle(rtm_config, fake_docker):
+    """AC-29's other half: a trial upload must not land in production attachments.
+
+    The app's storage bearer is per application and lifelong; handing it to a
+    throwaway instance would write test files into the real attachment prefix,
+    which is the same crossing the AC forbids for the database.
+    """
+    _start(_preview(rtm_config, fake_docker))
+
+    env = _env_of(fake_docker, preview_container_name(SESSION))
+    assert "BISHENG_APP_STORAGE_ENDPOINT" not in env
+    assert "BISHENG_APP_STORAGE_TOKEN" not in env
 
 
 def test_a_preview_is_labelled_preview_so_the_reconciler_cannot_see_it(rtm_config, fake_docker):

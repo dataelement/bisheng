@@ -115,7 +115,7 @@ def build_failure_error(payload: dict[str, Any]) -> AppBuildFailedError:
     """16122 from a ``build_status`` payload whose ``status`` is ``failed``.
 
     A free function rather than a client method: the facade's public surface is
-    exactly the eighteen RPC methods (the test fixtures assert that set), and this
+    exactly the seventeen RPC methods (the test fixtures assert that set), and this
     is a translation of an already-fetched answer, not another RPC.
     """
     return AppBuildFailedError(
@@ -202,9 +202,12 @@ class OrchestratorClient:
             "POST", "/v1/intents/preview/stop", json={"session_id": session_id}, op="preview_stop"
         )
 
-    async def preview_route(self, *, session_id: str) -> dict[str, Any]:
-        """Where a preview is answering → ``{upstream, version_id, generation}``; 16101 once it is gone."""
-        return await self._request("GET", f"/v1/previews/{session_id}/route", op="preview_route")
+    # There is deliberately **no** ``preview_route`` here. ``GET /v1/previews/
+    # {session}/route`` exists on the manager, but its only caller is app-proxy,
+    # which holds its own manager client — the backend never resolves a preview
+    # upstream. A facade method with no caller is dead code, and this facade's
+    # method set is asserted lockstep, so a dead one would be copied into two
+    # test fixtures forever.
 
     async def admission(self, *, tier: dict[str, Any] | None = None, purpose: str = "run") -> dict[str, Any]:
         """Capacity gate (AC-19). The verdict **snapshot is passed through verbatim**
@@ -391,7 +394,7 @@ class OrchestratorClient:
         raise error_cls(msg=message, manager_code=code or "unknown", **extras)
 
 
-#: Process-wide facade. Eighteen public methods (ten orchestration + three
+#: Process-wide facade. Seventeen public methods (ten orchestration + two
 #: preview + five data plane), no more: the F054/F055 test
 #: fixtures assert this set so that a newly added method cannot silently fall
 #: through to real HTTP against runtime-manager in a unit test.

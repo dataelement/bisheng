@@ -101,7 +101,7 @@ class AppPreviewSession(SQLModelSerializable, table=True):
     )
     reclaim_reason: str | None = Field(
         default=None,
-        sa_column=Column(String(32), nullable=True, comment="manual | approval_terminal | expired"),
+        sa_column=Column(String(32), nullable=True, comment="manual | approval_terminal | expired | start_failed"),
     )
     expires_at: datetime = Field(
         sa_column=Column(
@@ -180,9 +180,11 @@ class AppPreviewSessionDao:
     async def alist_expired(cls, session: AsyncSession, *, now: datetime, limit: int = 200) -> list[AppPreviewSession]:
         """Live trials whose deadline has passed, oldest first.
 
-        Read under ``bypass_tenant_filter`` by the sweep: it runs on a Celery
-        beat tick with no tenant context, and a tenant-scoped read there would
-        either raise or silently sweep one tenant's previews only.
+        Read under ``bypass_tenant_filter`` by the sweep. There is no beat task
+        (F054 AC-59 forbids a resident app-factory worker in the platform
+        image): this runs as a side errand of an approver opening the panel, so
+        the caller's tenant context is *one* tenant's and a tenant-scoped read
+        would silently sweep only that one.
         """
         statement = (
             select(AppPreviewSession)

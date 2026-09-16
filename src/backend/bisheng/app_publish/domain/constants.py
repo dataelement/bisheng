@@ -64,8 +64,9 @@ class AppReleaseAuditAction(StrEnum):
     #: administrator accounts for a container that belongs to no application.
     PREVIEW_STARTED = "app.release.preview_started"
     #: …and it went away. ``reason`` is ``manual`` / ``approval_terminal`` /
-    #: ``expired`` — three triggers that look identical in the container log and
-    #: need telling apart when somebody asks why a trial ended (AC-28).
+    #: ``expired`` / ``start_failed`` — endings that look identical in the
+    #: container log and need telling apart when somebody asks why a trial
+    #: ended (AC-28); the fourth is "it never came up at all".
     PREVIEW_RECLAIMED = "app.release.preview_reclaimed"
     #: The two-phase compensation after "approval created, version INSERT
     #: failed" (design D6).

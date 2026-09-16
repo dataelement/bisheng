@@ -103,20 +103,28 @@ class PreviewStartRequest(BaseModel):
     runs beside it. ``app_id`` / ``version_id`` ride along as labels only — for
     the operator reading ``docker ps``, not for routing.
 
-    There is no ``base_path`` twin of :class:`DeployRequest`'s: the preview is
-    served under ``/apps/preview/{session}``, and the manager is told that
-    through ``env`` like every other environment value rather than growing a
-    second URL-layout assumption.
+    ``slug`` / ``version_no`` / ``platform_api_base`` / ``base_path`` are the
+    same fields :class:`DeployRequest` carries, and for the same reason: the
+    container gets the **whole** environment contract of §5. A preview that saw
+    only a partial one would not be a trial of the release — an app never told
+    ``BISHENG_APP_DB_URL`` exits on start-up, and an approver would read that as
+    "this release is broken". ``base_path`` is ``/apps/preview/{session}`` here
+    rather than ``/apps/{slug}``; that one difference is the point of it being
+    a field.
     """
 
     session_id: str
     app_id: str
+    slug: str = ""
     version_id: str
+    version_no: int = 0
     image_ref: str
     tier: TierIn
     port: int = 8080
     env: dict[str, str] = Field(default_factory=dict)
     health: HealthIn = Field(default_factory=HealthIn)
+    platform_api_base: str = ""
+    base_path: str = ""
     #: Unix epoch seconds after which the manager may reclaim this preview on
     #: its own. 0 = no deadline, and the manager then never sweeps it.
     expires_at: int = 0

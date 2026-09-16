@@ -266,6 +266,16 @@ async def test_an_obo_token_is_issued_for_the_approver(preview_session, session_
     subject = json.loads(claims["sub"])
     assert subject["user_id"] == APPROVER_USER_ID
     assert subject["app_id"] == app.id
+    # AC-27's carrier: inside a trial the platform capabilities pass at the
+    # owner's level, and this claim is the only thing that says "this visit is
+    # a trial". Without it a capability bus cannot tell a preview from a
+    # production visit and would apply the visitor's scope to both.
+    assert subject["preview_session"] == row.id
+    # The other half — that an ordinary ``/apps/{slug}`` visit carries **no**
+    # such marker — is pinned by ``test_entry_authz_service.py::
+    # test_obo_token_signed_with_dedicated_secret``, which asserts the whole
+    # subject dict by equality. A production visit that claimed to be a trial
+    # would invert the approval exception into a privilege escalation.
 
 
 async def test_a_preview_visit_is_not_recorded_as_an_application_access(preview_session, session_token, monkeypatch):

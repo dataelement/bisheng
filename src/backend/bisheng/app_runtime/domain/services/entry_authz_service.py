@@ -288,6 +288,11 @@ async def authorize_preview_entry(
         user_id=user_id,
         tenant_id=int(app.tenant_id or 0),
         subject_kind=material.get("X-BiSheng-Subject-Kind", "human"),
+        # The approval exception rides the token, not a header: AC-27 widens
+        # what the *platform* does for this visit, so the fact belongs where the
+        # platform reads it back, never where the application could read — or
+        # forge — it.
+        preview_session=row.id,
     )
     if obo_token:
         material["X-BiSheng-Access-Token"] = obo_token
@@ -534,8 +539,27 @@ def _warn_once(key: str, message: str) -> None:
     logger.error(message)
 
 
-def _issue_obo_token(*, app_id: str, user_id: int, tenant_id: int, subject_kind: str) -> tuple[str | None, int | None]:
+def _issue_obo_token(
+    *,
+    app_id: str,
+    user_id: int,
+    tenant_id: int,
+    subject_kind: str,
+    preview_session: str | None = None,
+) -> tuple[str | None, int | None]:
     """Short-lived on-behalf-of token injected into the app (AC-34).
+
+    ``preview_session`` marks the token as belonging to an **approval-time
+    trial**, and it is the carrier for the one exception in NFR-1.2 / INV-36:
+    inside a preview the platform capabilities pass at the **owner's** level
+    (F055 AC-27) rather than at the visitor's, because the point of the trial is
+    to see the release work, and an approver who is not in the app's knowledge
+    scope would otherwise see a release that "does not work". The flag has to
+    ride the token: it is the only thing the capability bus gets that says
+    *which* visit this is, and a capability bus that cannot tell a preview from
+    a production visit will quietly apply the wrong rule to both. No reader
+    yet — the capability bus is F055 T056 to T060 — so this is the fact being
+    carried, not the rule being applied.
 
     Returns ``(token, expires_at)`` — the expiry as epoch seconds, so the
     caller can state it to app-proxy without decoding the token — or
@@ -574,13 +598,18 @@ def _issue_obo_token(*, app_id: str, user_id: int, tenant_id: int, subject_kind:
 
     now = int(time.time())
     expires_at = now + int(settings.app_runtime.obo_ttl_seconds)
+    subject: dict[str, Any] = {
+        "app_id": app_id,
+        "user_id": user_id,
+        "tenant_id": tenant_id,
+        "subject_kind": subject_kind,
+    }
+    if preview_session:
+        subject["preview_session"] = preview_session
     payload = {
         # Serialised like the platform's own session subject so both decode the
         # same way; PyJWT 2.10 also requires ``sub`` to be a string.
-        "sub": json.dumps(
-            {"app_id": app_id, "user_id": user_id, "tenant_id": tenant_id, "subject_kind": subject_kind},
-            sort_keys=True,
-        ),
+        "sub": json.dumps(subject, sort_keys=True),
         "aud": OBO_AUDIENCE,
         "iss": settings.cookie_conf.jwt_iss,
         "iat": now,

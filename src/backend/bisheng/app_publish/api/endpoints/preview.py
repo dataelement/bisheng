@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
+from bisheng.app_publish.api.endpoints.deploy import require_app_runtime_enabled
 from bisheng.app_publish.domain.services.preview_instance_service import PreviewInstanceService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
@@ -55,8 +56,17 @@ async def start_preview(
     app_id: str,
     version_id: str,
     user: UserPayload = Depends(UserPayload.get_login_user),
+    _enabled: None = Depends(require_app_runtime_enabled),
 ):
-    """AC-26. Same shape as the read; ``entry_url`` is what 「打开预览」 opens."""
+    """AC-26. Same shape as the read; ``entry_url`` is what 「打开预览」 opens.
+
+    Gated on the runtime-layer switch, and only this call of the three: raising
+    a preview provisions a container, so on an installation without the app
+    factory it would walk to an orchestrator RPC and die on a timeout, which
+    reads as "the platform is broken" (16207 says "not installed here"). The
+    read and the reclaim stay ungated on purpose — switching the layer off
+    while a trial is up must not strand its row with no way to close it.
+    """
     return resp_200(data=await PreviewInstanceService.start(app_id, version_id, actor=user))
 
 

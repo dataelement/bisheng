@@ -81,7 +81,7 @@ from bisheng.common.errcode.app_publish import (
     AppVersionReviewForbiddenError,
 )
 from bisheng.common.services.config_service import settings
-from bisheng.core.context.tenant import bypass_tenant_filter, set_current_tenant_id
+from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id, set_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.app import AppDao
 
@@ -297,13 +297,23 @@ class PreviewInstanceService:
         except Exception:
             logger.exception("app_publish.preview_expire_scan_failed")
             return 0
+        # Each reclaim re-points the tenant ContextVar at the row's own tenant
+        # (the audit row has to name the right version, and that read is
+        # filtered). This runs inside somebody's request, so the caller's tenant
+        # has to be put back — otherwise the next read in ``describe`` runs
+        # under a stranger's tenant and answers 「未拉起」 for a live trial.
+        caller_tenant = get_current_tenant_id()
         reclaimed = 0
-        for row in rows:
-            try:
-                if await cls._reclaim_one(row, reason=RECLAIM_REASON_EXPIRED):
-                    reclaimed += 1
-            except Exception:
-                logger.exception(f"app_publish.preview_expire_failed session={row.id}")
+        try:
+            for row in rows:
+                try:
+                    if await cls._reclaim_one(row, reason=RECLAIM_REASON_EXPIRED):
+                        reclaimed += 1
+                except Exception:
+                    logger.exception(f"app_publish.preview_expire_failed session={row.id}")
+        finally:
+            if caller_tenant is not None:
+                set_current_tenant_id(int(caller_tenant))
         if reclaimed:
             logger.info(f"app_publish.preview_expired count={reclaimed}")
         return reclaimed
@@ -434,22 +444,28 @@ class PreviewInstanceService:
         return {
             "session_id": row.id,
             "app_id": app.id,
+            # Same fields ``AppStateService._deploy_payload`` sends, because the
+            # container gets the same environment contract (contracts-runtime-
+            # manager §5). A preview handed a partial environment is not a trial
+            # of the release: an app never told ``BISHENG_APP_DB_URL`` exits on
+            # start-up, and the approver reads that as a broken release.
+            "slug": app.slug,
             "version_id": version.id,
+            "version_no": version.version_no,
             "image_ref": version.image_ref or "",
             "tier": await cls._tier_payload(version.tier_id),
             "port": int(manifest.get("port") or 8080),
             # The manager reclaims the container on its own once this passes —
             # the platform has no timer of its own (see the module docstring).
             "expires_at": int(row.expires_at.timestamp()),
-            "env": {
-                **{str(key): str(value) for key, value in env.items()},
-                # The app rebuilds absolute URLs from this, and under a preview
-                # it is not ``/apps/{slug}``: the same source has to work at
-                # both entry points, which is exactly what ``base_path`` /
-                # ``X-Forwarded-Prefix`` are for (F054 D5.2).
-                "BISHENG_APP_BASE_PATH": preview_entry_path(row.id),
-            },
+            "env": {str(key): str(value) for key, value in env.items()},
             "health": {**_DEFAULT_HEALTH, **health},
+            "platform_api_base": settings.app_runtime.entry_base_url or "",
+            # The app rebuilds absolute URLs from this, and under a preview it
+            # is not ``/apps/{slug}``: the same source has to work at both entry
+            # points, which is exactly what ``base_path`` / ``X-Forwarded-Prefix``
+            # are for (F054 D5.2).
+            "base_path": preview_entry_path(row.id),
         }
 
     @staticmethod
@@ -526,11 +542,17 @@ class PreviewInstanceService:
         app_row = app if app is not None else await cls._load_app(row.app_id)
         if app_row is None:
             return
+        # Under the current tenant, not the caller's: the expiry sweep is
+        # cross-tenant, and ``get_version`` is a tenant-filtered read — without
+        # this it answers ``None`` for every row outside the approver's own
+        # tenant and the audit row loses the version it is about.
+        set_current_tenant_id(int(app_row.tenant_id or 0))
         version = await VersionService.get_version(row.app_id, row.version_id)
         await cls._audit(
             AppReleaseAuditAction.PREVIEW_RECLAIMED,
             app=app_row,
             version=version,
+            version_id=row.version_id,
             operator_id=int(row.approver_user_id or 0),
             metadata={"session_id": row.id, "reclaim_reason": reason},
             reason=reason,
@@ -550,6 +572,7 @@ class PreviewInstanceService:
         version,
         operator_id: int,
         metadata: dict[str, Any],
+        version_id: str | None = None,
         reason: str | None = None,
     ) -> None:
         from types import SimpleNamespace
@@ -560,7 +583,10 @@ class PreviewInstanceService:
                 id=None,
                 app_id=app.id,
                 tenant_id=int(app.tenant_id or 0),
-                version_id=getattr(version, "id", None),
+                # The row's own version id backs the lookup up: an audit row
+                # whose ``target_id`` is null is not filterable by version,
+                # which is the one thing AC-01 asks of this family.
+                version_id=getattr(version, "id", None) or version_id,
                 submitted_by_user_id=operator_id,
                 stage=None,
             ),

@@ -154,9 +154,45 @@ async def test_the_preview_is_told_its_own_base_path_not_the_apps(preview_env, a
     async with api_app(payload=_payload(APPROVER_USER_ID)) as client:
         data = _body(await client.post(f"/api/v1/apps/{app.id}/versions/{version.id}/preview"))["data"]
 
-    env = orchestrator.calls[0][1]["env"]
-    assert env["BISHENG_APP_BASE_PATH"] == f"/apps/preview/{data['session_id']}"
-    assert f"/apps/{app.slug}" not in env["BISHENG_APP_BASE_PATH"]
+    kwargs = orchestrator.calls[0][1]
+    assert kwargs["base_path"] == f"/apps/preview/{data['session_id']}"
+    assert kwargs["base_path"] != f"/apps/{app.slug}"
+
+
+async def test_raising_is_refused_when_the_runtime_layer_is_off(preview_env, api_app):
+    """16207, not a 15 s orchestrator timeout that reads as "the platform is broken".
+
+    Reading and reclaiming stay open: turning the layer off while a trial is up
+    must not strand its row with no way to close it.
+    """
+    app, version, orchestrator = preview_env
+
+    async with api_app(payload=_payload(APPROVER_USER_ID), app_runtime_enabled=False) as client:
+        started = _body(await client.post(f"/api/v1/apps/{app.id}/versions/{version.id}/preview"))
+        read = _body(await client.get(f"/api/v1/apps/{app.id}/versions/{version.id}/preview"))
+
+    assert started["status_code"] == 16207
+    assert orchestrator.calls == []
+    assert read["status_code"] == 200
+    assert read["data"]["state"] == "absent"
+
+
+async def test_the_preview_is_handed_the_whole_environment_contract(preview_env, api_app):
+    """The manager can only build §5's environment from what it is told.
+
+    Without ``slug`` / ``version_no`` / ``platform_api_base`` the container
+    comes up missing ``BISHENG_APP_DB_URL`` and friends, and an approver reads
+    "the app exits on start-up" as "this release is broken".
+    """
+    app, version, orchestrator = preview_env
+
+    async with api_app(payload=_payload(APPROVER_USER_ID)) as client:
+        await client.post(f"/api/v1/apps/{app.id}/versions/{version.id}/preview")
+
+    kwargs = orchestrator.calls[0][1]
+    assert kwargs["slug"] == app.slug
+    assert kwargs["version_no"] == version.version_no
+    assert "platform_api_base" in kwargs
 
 
 async def test_the_deadline_is_handed_to_the_orchestrator(preview_env, api_app, app_runtime_settings):
@@ -497,6 +533,52 @@ async def test_opening_the_panel_closes_out_expired_rows(preview_env, api_app, p
 
     assert data["state"] == "absent"
     assert ("preview_stop", {"session_id": started["session_id"]}) in orchestrator.calls
+
+
+async def test_sweeping_another_tenants_expired_row_does_not_hide_my_own(preview_env, api_app, publish_db, app_factory):
+    """The sweep is cross-tenant; the read that follows it is not.
+
+    Each reclaim re-points the tenant ContextVar at the row it is closing, so a
+    sweep that ends on a foreign tenant leaves the caller's own — tenant-
+    filtered — read looking in the wrong place. The panel then says 「未拉起」
+    for a trial that is running, and the approver raises a second container.
+    """
+    from bisheng.app_publish.domain.models.app_preview_session import (
+        PREVIEW_STATUS_RUNNING,
+        AppPreviewSession,
+        AppPreviewSessionDao,
+    )
+    from bisheng.core.context.tenant import bypass_tenant_filter, set_current_tenant_id
+
+    app, version, _orchestrator = preview_env
+    async with api_app(payload=_payload(APPROVER_USER_ID)) as client:
+        started = _body(await client.post(f"/api/v1/apps/{app.id}/versions/{version.id}/preview"))["data"]
+
+    other_tenant = 90901
+    other_app, other_version = await app_factory(tenant_id=other_tenant, with_version=True)
+    foreign_session = AppPreviewSession(
+        tenant_id=other_tenant,
+        app_id=other_app.id,
+        version_id=other_version.id,
+        approver_user_id=OTHER_APPROVER_USER_ID,
+        status=PREVIEW_STATUS_RUNNING,
+        expires_at=datetime.now() - timedelta(days=1),
+    )
+    async with publish_db() as session:
+        await AppPreviewSessionDao.acreate(session, foreign_session)
+        await session.commit()
+    set_current_tenant_id(ROOT_TENANT_ID)
+
+    async with api_app(payload=_payload(APPROVER_USER_ID)) as client:
+        data = _body(await client.get(f"/api/v1/apps/{app.id}/versions/{version.id}/preview"))["data"]
+
+    assert data["state"] == "running"
+    assert data["session_id"] == started["session_id"]
+    # …and the sweep really did run, or the assertion above proves nothing.
+    async with publish_db() as db:
+        with bypass_tenant_filter():
+            foreign = await db.get(AppPreviewSession, foreign_session.id)
+    assert foreign.status == "reclaimed"
 
 
 async def test_a_reclaimed_session_is_not_resolvable_as_an_entry(preview_env, api_app):

@@ -324,7 +324,6 @@ class TestFormAgnostic:
             # what keeps them off the instance quota.
             "preview_start",
             "preview_stop",
-            "preview_route",
             # data plane (T087): typed table / row operations, never a statement
             "db_tables",
             "db_schema",

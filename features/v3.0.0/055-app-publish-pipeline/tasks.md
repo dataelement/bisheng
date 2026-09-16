@@ -552,7 +552,7 @@ T001–T007（Wave 1，可并行）
 - [x] **T053**: 审批期临时预览实例后端（快照拉起 / 临时空库 / 审批人身份注入 + owner 权限放行〔NFR-1.2 审批例外，INV-36〕/ 终态与超时回收 / 不占实例名额）
   **文件**: `src/backend/bisheng/app_publish/domain/services/preview_instance_service.py`, `src/backend/bisheng/app_publish/api/endpoints/preview.py`, `src/backend/bisheng/app_publish/domain/models/app_preview_session.py`（新表）, `src/runtime-manager/runtime_manager/preview.py`（新意图）, `src/backend/test/app_publish/test_preview_instance.py`
   **覆盖 AC**: AC-26, AC-27, AC-28, AC-29, AC-30
-  **证据**（分支 `wt/f055-preview-instance`，提交 `22fdb51f5` + `fb818bc30`）：`test/app_publish/test_preview_instance.py` 27 例全绿 · `src/runtime-manager/tests/test_preview_instance.py` 25 例全绿 · 后端 `test/app_publish test/app_runtime` 合跑 **972 passed / 13 skipped / 0 failed**（主检出同选择基线 928 passed / 2 failed，两条失败即本切片修掉的门禁，见偏差 ④）。
+  **证据**（分支 `wt/f055-preview-instance`，提交 `22fdb51f5` + `fb818bc30` + 复核修 `HEAD`）：`test/app_publish/test_preview_instance.py` 31 例全绿 · `src/runtime-manager/tests/test_preview_instance.py` 28 例全绿（runtime-manager 全量 265 passed / 5 skipped，基线 237 / 5）· 后端 `test/app_publish test/app_runtime` 合跑 **976 passed / 13 skipped / 0 failed**（主检出同选择基线 928 passed / 2 failed，两条失败即本切片修掉的门禁，见偏差 ④）。
 
   **偏离与必须知道的落点**：
   ① **预览不是 `deploy`，是三个新意图**：`POST /v1/intents/preview` · `POST /v1/intents/preview/stop` · `GET /v1/previews/{session}/route`。原文写「复用 `probe` 临时形态 + `deploy` 意图」两条都不成立——`probe_image` 在 `finally` 里把容器删掉（预览要留着），而 `deploy` 会写 `app_id` 键的期望态记录，那条记录正是「占实例名额」和「被 reconciler 复活」的原因。新意图**不写期望态**：`store.committed()` 与 `capacity.instances` 都不计它（`test_starting_a_preview_writes_no_desired_state_record`），容器标 `bisheng.managed=preview` 而不是 `=true`，reconciler 的过滤器看不见它。容量仍然照判——内存是真花掉的，只是名额不计。
@@ -566,6 +566,16 @@ T001–T007（Wave 1，可并行）
   ⑨ **第四个 `reclaim_reason`：`start_failed`**（自审补）。拉起失败时行也要关掉（否则面板画着一个不存在的运行实例），但把它记成 `manual` 是往审计里写假话——没人按过任何按钮，而这行被保留下来的唯一理由正是回答「它为什么结束」。三语文案同批补齐。同批还改了 `start`：**过期但仍 running 的旧行不再原样交回**（面板会先扫，但直连 POST 不会），改为就地回收再拉一个新的。
   ⑩ **欠一条 alembic 迁移**：无。`app_preview_session` 是整表新建，走 `create_all(checkfirst=True)`（后端 AGENTS.md 的 schema 归属规则）；本切片未改任何既有表。
 
+  ⑪ **AC-27 只做到了一半，另一半本分支做不了，别当它已经交付**（复核补记）。做到的是「注入审批人本人身份」与「临时库可写」；**没做**的是「平台能力按 owner 权限放行」与能力调用计审计——能力总线本身是 T056～T059，不在本分支上，没有可以放行的调用点。为了让那一半**可以**被实现而不是被默默做错，本切片把事实带到了线上：预览入口签发的 OBO 令牌里多一个 `preview_session` 声明（`entry_authz_service._issue_obo_token`），能力总线据此分辨「这次访问是审批试用」。**接 T056～T059 的人必须读这条**：不读它，能力总线会对预览按访问者（审批人）的可见范围过滤，于是一个不在应用知识库范围里的审批人看到的是「这个版本坏了」，而 NFR-1.2 / INV-36 登记的例外形同虚设。正式入口的 OBO **不带**这个声明，`test_obo_token_signed_with_dedicated_secret` 用整字典相等钉住——带上了就等于把审批例外倒过来变成越权。
+
+  ⑫ **预览容器拿的是 §5 的整套环境变量**（复核修）。初版只注入了 `BISHENG_APP_BASE_PATH`，`BISHENG_APP_DB_URL` / `BISHENG_APP_ID` / `BISHENG_APP_SLUG` / `BISHENG_APP_VERSION(_ID)` / `BISHENG_PLATFORM_API_BASE` / `PORT` 一个都没有——应用拿不到数据库地址会在启动时退出，症状是「预览拉不起来」而审批人读成「这个版本是坏的」，`/data` 那块 tmpfs 也就白挂了。现在 `build_preview_payload` 走 `lifecycle.build_env`（与 deploy 同一个函数），意图入参补 `slug` / `version_no` / `platform_api_base` / `base_path`。**唯二的差别**：`base_path` 是 `/apps/preview/{session}`；**附件句柄三名一个都不注入**（`storage_token=None`）——应用自己的 storage bearer 交给临时实例，试用上传就会落进生产附件前缀，与 AC-29 拦数据库是同一条线。用例：runtime-manager `test_a_preview_gets_the_whole_environment_contract` / `test_a_preview_carries_no_attachment_handle`，backend `test_the_preview_is_handed_the_whole_environment_contract`。
+
+  ⑬ **跨租户超时对账后必须把租户上下文放回去**（复核修）。`reclaim_expired()` 走 bypass 扫全站，而每条回收都要把租户上下文指到那行自己的租户（审计行要写对版本，而版本读是带租户过滤的）。扫完不还原，紧接着 `describe` 里那次**带过滤**的自查就落到别人租户上，面板对一个正在跑的试用答「未拉起」，审批人于是再拉一个容器。现在 `reclaim_expired` 在 `finally` 里还原调用方租户；用例 `test_sweeping_another_tenants_expired_row_does_not_hide_my_own`（并断言外租户那行确实被收了，否则断言是空的）。
+
+  ⑭ **「拉起」这一个调用挂上 `require_app_runtime_enabled`**（复核补）：与 deploy / 档位端点同一道闸。运行层关掉的环境里拉预览会一路走到编排器 RPC 再超时，读起来是「平台坏了」而不是「这个环境没装这个功能」（16207）。**读与回收刻意不挂闸**——试用跑着的时候把运行层关掉，不能让那行没法关掉。用例 `test_raising_is_refused_when_the_runtime_layer_is_off`。
+
+  ⑮ **`orchestrator_client.preview_route` 已删**（复核）：manager 上 `GET /v1/previews/{session}/route` 照旧存在，但它的唯一调用方是 app-proxy（自带 manager 客户端），backend 从不解析预览上游。门面方法集是 lockstep 断言的，留一个没有调用方的方法等于把死代码抄进两个 conftest 长住。门面现为 **17** 个方法。
+
 - [x] **T054**: 审批期预览前端（「预览试用」置顶 / 四个界面状态 / 打开预览 / 手动回收）
   **文件**: `client/src/components/approval/AppPreviewPanel.tsx`, `client/src/api/hostedAppPreview.ts`, `client/src/components/approval/AppReviewView.tsx`（置顶挂载）, `client/src/locales/{zh-Hans,en,ja}/translation.json`
   **测试载体**: 前端手动验证清单（四个界面状态各截一次：未拉起 / 拉起中 / 可用 / 已回收；「预览试用」在详情面板置顶；手动回收后实例消失且不占名额；切 en / ja 无裸键）
@@ -578,11 +588,6 @@ T001–T007（Wave 1，可并行）
   ③ **「打开预览」开新标签页**：预览跑在自己的 URL 上，就地替换会把审批人赶出审批单、再让他从别人的应用里找路回来记决定。
   ④ **失败态不改画面**：拉起失败只显示原因、按钮照旧可按（AC-26「允许重新拉起」）；回收失败仍把实例画成运行中——失败的回收把实例画成已消失，是让人以为容器没了而实际还在跑。
   ⑤ **文案不搬内部词**：面板叫「预览试用」，按钮是「拉起预览 / 打开预览 / 回收」，不出现 session / instance / 实例名额这类内部对象名；「已回收」三种原因各一句话（自己收的 / 审批结束 / 超时），一句话说清楚下一步能不能再拉。
-
-- [ ] **T054**: 审批期预览前端（「预览试用」置顶 / 四个界面状态 / 打开预览 / 手动回收）
-  **文件**: `client/src/components/approval/AppPreviewPanel.tsx`, `client/src/locales/{zh-Hans,en,ja}/translation.json`
-  **测试载体**: 前端手动验证清单（四个界面状态各截一次：未拉起 / 拉起中 / 可用 / 已回收；「预览试用」在详情面板置顶；手动回收后实例消失且不占名额；切 en / ja 无裸键）
-  **覆盖 AC**: AC-26, AC-28
 
 ---
 
