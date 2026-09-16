@@ -612,6 +612,7 @@ T001–T007（Wave 1，可并行）
 
 - [ ] **T057**: 知识库能力注入与 fail-closed（白名单由平台按当前生效声明确定、应用不可自报；运行期可及 = 白名单 ∩ 访问用户可见范围，文件级经 F052 门面；无访问用户身份一律拒绝、绝不回退全量；集合相等断言）
   **文件**: `src/backend/bisheng/app_publish/domain/services/capability_bus_service.py`（增量）, `src/backend/test/app_publish/test_capability_knowledge.py`
+  **依赖**: F052 门面已落地（2026-09-16），契约见 [F052 design §4.2 ③](../052-mcp-server-face/design.md)。调用形态：`identity = await RetrievalIdentity.from_user(访问用户 id, tenant_id)`（**async**）→ `await RetrievalFacadeService.retrieve(identity, RetrievalRequest(query=…, whitelist=当前生效声明))`。`identity=None` 门面直接抛 26320，不必自己再判一次；白名单内的库已被删除 → 26322 `KnowledgeCapabilityRevokedError(data.knowledge_id)`，由 T058 转 16273。
   **覆盖 AC**: AC-50, AC-52
 
 - [ ] **T058**: 能力收回错误态（`16273` 带能力名与「已收回」原因、不回退旧值、应用整体可用）+ 迭代上线后旧能力 5 秒内失效 + 发布面「已失效 + 原因」标记（按需计算、不落库、不起定时任务）
@@ -624,6 +625,7 @@ T001–T007（Wave 1，可并行）
 
 - [ ] **T060**: 预检的能力声明引用校验（所引模型在本租户已启用且按 F051 名称解析规则可唯一解析〔裸名歧义 → 拒绝并提示限定名〕；所引知识库存在且为 F052 门面支持的类型）+ 审批单能力白话摘要接真数据
   **文件**: `src/backend/bisheng/app_publish/domain/services/precheck_service.py`（增量）, `src/backend/test/app_publish/test_precheck_capability_refs.py`
+  **依赖**: F052 门面已落地（2026-09-16），契约见 [F052 design §4.2 ③](../052-mcp-server-face/design.md)。知识库引用校验用 `RetrievalFacadeService.is_supported_knowledge_type(t)`（纯函数、非 async）与 `await RetrievalFacadeService.check_reachable(identity, 声明列表, whitelist=声明列表)` → `ReachabilityReport{reachable, unreachable, revoked}`。**预检必须走这两个方法而不是自己查表**——「门面支持的类型」只能有一份口径，否则预检放行的声明运行期会答不可及。
   **覆盖 AC**: AC-07, AC-24
 
 ---

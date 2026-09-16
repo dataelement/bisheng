@@ -40,15 +40,14 @@ class RetrieveReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: str = Field(..., min_length=1, description="User question")
-    knowledge_base_ids: list[int] = Field(
-        ..., min_length=1, description="Knowledge base ids to search across"
-    )
+    knowledge_base_ids: list[int] = Field(..., min_length=1, description="Knowledge base ids to search across")
     filters: RetrieveFilters | None = None
     top_k: int = Field(default=10, ge=1, le=200, description="Max chunks to return")
     max_content: int = Field(
         default=15000,
         ge=1,
-        description="Per-knowledge-base content length cap during merge",
+        le=60000,
+        description="Per-knowledge-base content length cap during merge (max 60000)",
     )
 
 

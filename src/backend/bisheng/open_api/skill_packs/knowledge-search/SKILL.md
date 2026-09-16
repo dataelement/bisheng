@@ -82,8 +82,11 @@ user for an ID before trying to find it yourself:
 
 The script prints the API's JSON error body to stderr; `status_code` there is
 the business code. Look it up in `references/api.md` and follow its action —
-in particular `26044` means the administrator restricted retrieval to the
-user's own knowledge bases: tell the user to contact their administrator, do
+in particular `26321` means one of the knowledge bases you named is not
+reachable for this key: drop it, or list the knowledge bases again and work
+from that set; retrying the same request will not help. `26044` still appears
+on the listing endpoints when the administrator restricted access to the
+user's own knowledge bases — tell the user to contact their administrator, do
 not retry.
 
 Do not pass a user ID in the request body or add an identity-delegation header.

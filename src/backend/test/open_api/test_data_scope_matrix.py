@@ -31,14 +31,21 @@ from test.permission.test_data_scope_enforcement import (
 )
 
 # ── AC-R3: every knowledge:read endpoint is classified for the narrowing ──
-# raise   → single-resource gate raises 26044 on a non-owned target
-# narrow  → list surface silently intersects with the holder-created set
-# per-item→ mixed-parent items resolve False in batch checks (then 404 path)
-# sa-only → modes=("S",): personal tokens cannot reach it at all
+# raise      → single-resource gate raises 26044 on a non-owned target
+# narrow     → list surface silently intersects with the holder-created set
+# per-item   → mixed-parent items resolve False in batch checks (then 404 path)
+# sa-only    → modes=("S",): personal tokens cannot reach it at all
+# unreachable→ F052: the unified retrieval facade decides in **batch**, and a
+#              batch check resolves a narrowed-out target to False instead of
+#              raising (permission_action_service "design decision 2"). The
+#              endpoint therefore answers 404 / 26321 — the same answer it gives
+#              for a knowledge base that does not exist, which is what AC-11 /
+#              AC-27 require: "exists but was not created by me" must not be
+#              distinguishable from "does not exist".
 KNOWLEDGE_READ_CLASSIFICATION = {
     ("GET", "/api/v2/filelib/"): "narrow",
     ("GET", "/api/v2/filelib/file/list"): "raise",
-    ("POST", "/api/v2/filelib/retrieve"): "raise",
+    ("POST", "/api/v2/filelib/retrieve"): "unreachable",
     ("GET", "/api/v2/filelib/download_statistic"): "sa-only",
     ("GET", "/api/v2/filelib/detail_qa"): "raise",
     ("POST", "/api/v2/filelib/query_qa"): "raise",
@@ -177,3 +184,59 @@ async def test_admin_holder_is_narrowed_exactly_the_same(gate, monkeypatch):
 
     assert denied.status_code == 403
     assert denied.json()["status_code"] == 26044  # super-admin shortcut never fired
+
+
+async def test_narrowed_token_retrieve_is_unreachable_not_26044(gate, monkeypatch):
+    """F052 D6 ①: narrowing a retrieve target must not be distinguishable.
+
+    A batch check resolves a data-scope-narrowed target to ``False`` rather than
+    raising (``permission_action_service.batch_check_actions``: "Batch checks
+    carry filtering semantics: narrowed-out targets resolve to False instead of
+    raising"), so the facade classes it as unreachable. That is the required
+    outcome, not an accident of the implementation: a narrowed token that still
+    got 26044 here could tell "this knowledge base exists but I did not create
+    it" apart from "this knowledge base does not exist", which is exactly the
+    enumeration channel AC-11 / AC-27 close.
+    """
+
+    from unittest.mock import MagicMock
+
+    from bisheng.common.errcode.mcp_face import KnowledgeUnreachableError
+    from bisheng.knowledge.domain.schemas.retrieval_facade import RetrievalIdentity, RetrievalRequest
+    from bisheng.knowledge.domain.services.retrieval_facade_service import RetrievalFacadeService
+    from bisheng.open_api.api.exception_handlers import open_api_http_status
+
+    identity = RetrievalIdentity.from_open_api_principal(_pat_principal())
+
+    async def batch_check(_login_user, *, resource_type, resource_ids, actions):
+        # What the real batch path returns for a narrowed-out target.
+        return {str(one): frozenset() for one in resource_ids}
+
+    async def rows(ids):
+        row = MagicMock()
+        row.id = 999
+        row.type = 3
+        row.name = "someone else's space"
+        row.description = ""
+        return [row] if 999 in ids else []
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.retrieval_facade_service.batch_check_business_actions",
+        batch_check,
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.retrieval_facade_service.KnowledgeDao.aget_list_by_ids", rows
+    )
+
+    with pytest.raises(KnowledgeUnreachableError) as narrowed:
+        await RetrievalFacadeService.retrieve(identity, RetrievalRequest(query="q", knowledge_ids=[999]))
+    with pytest.raises(KnowledgeUnreachableError) as absent:
+        await RetrievalFacadeService.retrieve(identity, RetrievalRequest(query="q", knowledge_ids=[12345]))
+
+    assert narrowed.value.code == absent.value.code == 26321
+    assert open_api_http_status(narrowed.value) == 404
+    # Byte-identical apart from the id each one names.
+    narrowed_body = narrowed.value.to_dict()
+    absent_body = absent.value.to_dict()
+    narrowed_body["data"]["unreachable_ids"] = absent_body["data"]["unreachable_ids"] = []
+    assert narrowed_body == absent_body

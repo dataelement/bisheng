@@ -13,9 +13,6 @@ from bisheng.api.v1.schemas import ChunkInput, ExcelRule, KnowledgeFileOne, Know
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
-from bisheng.common.errcode.open_api import OpenApiAuthDependencyUnavailableError
-from bisheng.common.errcode.permission import PermissionServiceUnavailableError
-from bisheng.common.errcode.tenant_fga import PermissionBackendUnavailableError
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.utils import async_file_download, save_download_file
 from bisheng.core.logger import trace_id_var
@@ -36,9 +33,11 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_reposit
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
     KnowledgeDocumentVersionRepository,
 )
+from bisheng.knowledge.domain.schemas.retrieval_facade import RetrievalIdentity, RetrievalRequest
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+from bisheng.knowledge.domain.services.retrieval_facade_service import RetrievalFacadeService
+from bisheng.open_api.domain.context import get_current_open_api_principal
 from bisheng.open_api.domain.scopes import open_api_scope
 from bisheng.open_endpoints.domain.schemas.filelib import (
     APIAddQAParam,
@@ -695,42 +694,65 @@ async def retrieve_chunks(
 
     Designed for external retrieval-tool integrations. Delegation is supplied
     only through ``X-On-Behalf-Of``.
+
+    F052: this runs on ``RetrievalFacadeService`` — the same code the MCP search
+    tool, the hosted runtime and the SDK use — so "what this credential can
+    retrieve" has one answer regardless of which door it came through. The
+    request and response shapes are unchanged; the errors are not. A knowledge
+    base that is missing, ungranted or of an unsupported type now answers with
+    one 26321 instead of three distinguishable refusals, and a permission
+    outage surfaces as itself (503 / 19002) rather than being relabelled as a
+    credential-validation outage.
     """
-    # F030 AD-02: bind the chat service to the resolved acting identity so the
-    # existing per-user view_file/view_space filtering in aretrieve_chunks
-    # (INV-7) applies to the target user instead of always the default operator.
-    login_user = await get_open_api_operator_async()
-    chat_svc = KnowledgeSpaceChatService(request=request, login_user=login_user)
-    chat_svc.version_repo = version_repo
+    del request  # the facade is session-decoupled; nothing here needs the Request
 
-    kb_filters = None
+    # Argument validation that used to live inside ``aretrieve_chunks``. It has
+    # to stay on this face: ``tag_match_mode="ALL"`` is a documented 400 (it is
+    # not implemented), and silently treating it as ``"ANY"`` would return a
+    # *wider* set than asked for with no way for the caller to notice. Same for
+    # a filter naming a knowledge base outside ``knowledge_base_ids`` — dropping
+    # it quietly means the caller's narrowing never happened.
+    tag_filters = None
     if req.filters and req.filters.knowledge_base_filters:
-        kb_filters = {
-            f.knowledge_base_id: {"tags": f.tags, "tag_match_mode": f.tag_match_mode}
-            for f in req.filters.knowledge_base_filters
-        }
+        target_ids = set(req.knowledge_base_ids)
+        tag_filters = {}
+        for one in req.filters.knowledge_base_filters:
+            if one.knowledge_base_id not in target_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"filter references kb_id {one.knowledge_base_id} not present in knowledge_base_ids",
+                )
+            if one.tag_match_mode != "ANY":
+                raise HTTPException(status_code=400, detail="tag_match_mode=ALL is not yet supported")
+            tag_filters[one.knowledge_base_id] = list(one.tags)
 
-    try:
-        results = await chat_svc.aretrieve_chunks(
+    identity = None
+    principal = get_current_open_api_principal()
+    if principal is not None:
+        identity = RetrievalIdentity.from_open_api_principal(principal)
+
+    result = await RetrievalFacadeService.retrieve(
+        identity,
+        RetrievalRequest(
             query=req.query,
-            knowledge_base_ids=req.knowledge_base_ids,
-            kb_filters=kb_filters,
+            knowledge_ids=req.knowledge_base_ids,
             top_k=req.top_k,
             max_content=req.max_content,
-        )
-    except (PermissionBackendUnavailableError, PermissionServiceUnavailableError) as exc:
-        raise OpenApiAuthDependencyUnavailableError() from exc
+            tag_filters=tag_filters,
+        ),
+        version_repo=version_repo,
+    )
 
     chunks = [
         RetrieveChunk(
-            content=doc.page_content,
-            knowledge_id=kb_id,
-            document_id=int(doc.metadata.get("document_id", 0)),
-            document_name=str(doc.metadata.get("document_name", "")),
-            chunk_index=int(doc.metadata.get("chunk_index", 0)),
-            document_update_time=str(doc.metadata.get("document_update_time", "")),
+            content=chunk.content,
+            knowledge_id=chunk.knowledge_id,
+            document_id=chunk.document_id,
+            document_name=chunk.document_name,
+            chunk_index=chunk.chunk_index,
+            document_update_time=chunk.document_update_time,
         )
-        for kb_id, doc in results
+        for chunk in result.chunks
     ]
     return resp_200(data=RetrieveResp(chunks=chunks, total=len(chunks)))
 
