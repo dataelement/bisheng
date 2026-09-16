@@ -1,6 +1,7 @@
 """Exercise real v2 routes, middleware, and the assistant error adapter."""
 
 import re
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -15,6 +16,8 @@ from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.errcode.open_api import PersonalTokenDataScopeError
 from bisheng.common.errcode.permission import PermissionDeniedError, PermissionServiceUnavailableError
 from bisheng.main import app
+from bisheng.open_api.domain.models.api_credential import ApiCredential
+from bisheng.open_api.domain.services.credential_service import hash_token
 from test.open_api.test_dependencies import service_account_principal
 
 HTTP_ROUTES = [
@@ -50,6 +53,53 @@ async def test_every_registered_v2_http_route_rejects_missing_or_malformed_key(m
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.request(method, path, headers=headers)
     assert (response.status_code, response.json()["status_code"]) == (401, 26001)
+
+
+@pytest.mark.parametrize("prefix", ["bs-sak-", "bs-pat-"])
+@pytest.mark.parametrize(
+    "secret_length,state,expected_code",
+    [
+        (42, "unknown", 26001),
+        (44, "unknown", 26001),
+        (43, "unknown", 26002),
+        (43, "revoked", 26002),
+        (43, "expired", 26002),
+    ],
+)
+async def test_file_list_distinguishes_malformed_and_invalid_credentials(
+    fake_redis, monkeypatch, prefix, secret_length, state, expected_code
+):
+    plaintext = prefix + "a" * secret_length
+    row = None
+    if state != "unknown":
+        row = ApiCredential(
+            id=1,
+            tenant_id=2,
+            subject_kind="service_account" if prefix == "bs-sak-" else "natural_person",
+            subject_id=7,
+            name="fixture",
+            key_prefix=prefix,
+            last4="aaaa",
+            token_hash=hash_token(plaintext),
+            revoked_at=datetime.now() if state == "revoked" else None,
+            revoke_reason="manual" if state == "revoked" else None,
+            expires_at=datetime.now() - timedelta(seconds=1) if state == "expired" else None,
+        )
+    lookup = AsyncMock(return_value=row)
+    monkeypatch.setattr(
+        "bisheng.open_api.domain.services.credential_validator.CredentialRepository.get_by_hash", lookup
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v2/filelib/file/list",
+            params={"knowledge_id": 137},
+            headers={"Authorization": f"Bearer {plaintext}", "X-On-Behalf-Of": "150025"},
+        )
+    assert (response.status_code, response.json()["status_code"]) == (401, expected_code)
+    if expected_code == 26001:
+        lookup.assert_not_awaited()
+    else:
+        lookup.assert_awaited_once_with(hash_token(plaintext))
 
 
 async def test_login_cookie_cannot_override_api_credential_errors(monkeypatch):
