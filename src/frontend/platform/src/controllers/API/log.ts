@@ -276,6 +276,8 @@ export const V2_ACTIONS: string[] = [
     'app.release.iteration_failed',
     'app.release.manual_publish',
     'app.release.capability_declared',
+    'app.release.preview_started',
+    'app.release.preview_reclaimed',
     'app.release.rollback',
 ];
 

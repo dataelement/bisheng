@@ -346,6 +346,7 @@ class AppSnapshotFileNotFoundError(AppPublishError):
     Msg: str = "The file does not exist in this version's snapshot"
 
 
+# ---------------------------------------------------------------------------
 # 16260-16263 — the resource-tier admin surface (AC-45 / T065). These answer
 # the super admin editing tiers on the system page; the manifest-side tier
 # failure stays 16223 (a CLI author's typo or a retired tier), because the
@@ -395,6 +396,67 @@ class AppTierDefaultCannotBeDisabledError(AppPublishError):
 
     Code: int = 16263
     Msg: str = "The default resource tier cannot be disabled"
+
+
+# 16264-16267 — approval-time preview instances (AC-26～AC-29 / T053). They are
+# their own little band because the approver's screen shows them next to the
+# review view's 1625x codes and the two must not be confused: 1625x is about
+# *reading* a version, 1626x is about *running* one.
+
+
+class AppPreviewForbiddenError(AppPublishError):
+    """The caller may not raise or reclaim a preview of this version (AC-26 / AC-30).
+
+    The same rule as the review view (``ReviewAccess``) minus one branch: only
+    people who can *decide* on this release get a running instance of it, so an
+    approver holding a task on that version, the owner, the app's tenant
+    administrator and a platform super admin — nobody else.
+
+    Deliberately **not** 16257: that code's copy says "you cannot view the
+    source", which is the wrong sentence on a button whose subject is a
+    trial run, and both appear on the same screen.
+    """
+
+    Code: int = 16264
+    Msg: str = "You do not have permission to run a preview of this version"
+
+
+class AppPreviewNotRunnableError(AppPublishError):
+    """This version has nothing to start a preview from (AC-26).
+
+    Most often a release that never finished its build — ``image_ref`` is only
+    written once the build stage succeeds — but also a version whose approval
+    already ended, where a trial instance would be answering questions nobody
+    is deciding on any more. ``data.reason`` says which.
+    """
+
+    Code: int = 16265
+    Msg: str = "This version cannot be previewed"
+
+
+class AppPreviewStartFailedError(AppPublishError):
+    """The preview instance did not come up (AC-26 「拉起失败展示原因并允许重新拉起」).
+
+    Carries the orchestrator's own reason: capacity, or a container that never
+    became ready. The remedy is the same either way — look at the reason and
+    press 「拉起预览」 again — which is why the two do not get separate codes
+    here; the capacity case already has 16226 for the *publish* path, and
+    reusing it would make a failed trial look like a failed release.
+    """
+
+    Code: int = 16266
+    Msg: str = "The preview instance could not be started"
+
+
+class AppPreviewSessionNotFoundError(AppPublishError):
+    """No such preview session, or it has already been reclaimed.
+
+    One answer for both, deliberately: a reclaimed session and a fabricated id
+    must look the same to anyone poking at ``/apps/preview/{session}``.
+    """
+
+    Code: int = 16267
+    Msg: str = "The preview session does not exist or has been reclaimed"
 
 
 # ---------------------------------------------------------------------------

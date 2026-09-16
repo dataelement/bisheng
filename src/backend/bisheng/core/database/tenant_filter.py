@@ -122,7 +122,9 @@ _TENANT_AWARE_MODEL_MODULES = (
     # under bypass, so before_flush does not fill it); registering it here is
     # what makes the F056 query face's reads auto-filtered.
     "bisheng.database.models.app_access_log",
-    # F055 publish pipeline. `app_deployment` carries tenant_id and is filtered.
+    # F055 publish pipeline. `app_deployment` and `app_preview_session` carry
+    # tenant_id and are filtered; `hosted_app_subject` does not (it derives
+    # isolation from the `app` row).
     "bisheng.app_publish.domain.models",
     # `resource_tier` has NO tenant_id column: resource tiers are platform-level
     # and shared across tenants (AC-44). Listing it here only guarantees

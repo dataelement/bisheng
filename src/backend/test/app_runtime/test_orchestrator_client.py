@@ -319,6 +319,11 @@ class TestFormAgnostic:
             "status",
             "logs",
             "runtime_status",
+            # approval-time previews (F055 T053): session-addressed, and not a
+            # flavour of deploy — they write no desired-state record, which is
+            # what keeps them off the instance quota.
+            "preview_start",
+            "preview_stop",
             # data plane (T087): typed table / row operations, never a statement
             "db_tables",
             "db_schema",

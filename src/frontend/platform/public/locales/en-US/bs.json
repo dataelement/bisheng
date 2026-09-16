@@ -1383,6 +1383,8 @@
       "appReleaseIterationFailed": "New version not published (live version unaffected)",
       "appReleaseManualPublish": "Manually published",
       "appReleaseCapabilityDeclared": "Capabilities declared",
+      "appReleasePreviewStarted": "Review preview started",
+      "appReleasePreviewReclaimed": "Review preview reclaimed",
       "appReleaseRollback": "Publish rolled back"
     },
     "objectTypeEnum": {

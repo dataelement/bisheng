@@ -296,6 +296,8 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     "app.release.iteration_failed",
     "app.release.manual_publish",
     "app.release.capability_declared",
+    "app.release.preview_started",
+    "app.release.preview_reclaimed",
     "app.release.rollback",
 )
 

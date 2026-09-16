@@ -11,6 +11,7 @@ import {
   type VersionDiffResponse,
 } from "~/api/hostedAppReview";
 import { extractApiErrorMessage } from "~/utils/apiStatusError";
+import { AppPreviewPanel } from "./AppPreviewPanel";
 import type { LocalizeFn } from "./approvalPresentation";
 import { formatTime } from "./approvalPresentation";
 import { ReviewSourcePane } from "./ReviewSourcePane";
@@ -169,6 +170,14 @@ export function AppReviewView({ target, localize, onBack }: AppReviewViewProps) 
         {releaseKindText ? (
           <span className="shrink-0 text-[12px] text-text-3">{releaseKindText}</span>
         ) : null}
+      </div>
+
+      {/* 「预览试用」 sits above the tabs, not inside one (AC-25 「置顶」):
+          running the release is the first thing offered an approver, not a
+          fifth thing to find behind a tab. It renders in every tab state and
+          keeps its own status, so switching tabs never interrupts a trial. */}
+      <div className="px-5 pt-3">
+        <AppPreviewPanel appId={appId} versionId={versionId} localize={localize} />
       </div>
 
       <div className="px-5 pt-2">

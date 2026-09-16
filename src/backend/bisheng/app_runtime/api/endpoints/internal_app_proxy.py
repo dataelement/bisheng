@@ -28,7 +28,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from bisheng.app_runtime.domain.services.entry_authz_service import authorize_entry
+from bisheng.app_runtime.domain.services.entry_authz_service import authorize_entry, authorize_preview_entry
 from bisheng.app_runtime.domain.services.hmac_auth import verify_proxy_hmac
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.core.context.tenant import bypass_tenant_filter
@@ -74,6 +74,40 @@ async def authorize(payload: AuthorizeRequest, _: None = Depends(verify_proxy_hm
     with bypass_tenant_filter():
         verdict = await authorize_entry(
             slug=payload.slug,
+            access_token=payload.access_token,
+            request_id=payload.request_id,
+            client_ip=payload.client_ip,
+        )
+    return resp_200(data=verdict)
+
+
+class AuthorizePreviewRequest(BaseModel):
+    """What app-proxy sends for ``/apps/preview/{session}`` (F054 T090, F055 AC-26)."""
+
+    session: str
+    access_token: str | None = None
+    request_id: str = ""
+    client_ip: str | None = None
+
+
+@router.post(
+    "/internal/app-proxy/authorize-preview",
+    response_model=UnifiedResponseModel[dict],
+    summary="Entry verdict for an approval-time preview instance (HMAC-signed)",
+)
+async def authorize_preview(payload: AuthorizePreviewRequest, _: None = Depends(verify_proxy_hmac)):
+    """A second endpoint rather than a flag on ``authorize``.
+
+    The two verdicts share the session checks and nothing else: one resolves a
+    slug and asks the permission engine about the visible scope, the other
+    resolves a preview session and asks whether the visitor *is* the approver
+    it was raised for. Folding them into one handler with a branch would put
+    the two access rules one typo away from each other, on the endpoint where
+    that mistake means "anyone can open an unpublished application".
+    """
+    with bypass_tenant_filter():
+        verdict = await authorize_preview_entry(
+            session=payload.session,
             access_token=payload.access_token,
             request_id=payload.request_id,
             client_ip=payload.client_ip,

@@ -44,6 +44,15 @@ from bisheng.utils import generate_uuid
 _SLUG_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _SLUG_MAX_LENGTH = 64
 
+#: Segments ``/apps/{…}`` already means something else. ``preview`` is F055's
+#: approval-time preview entry (``/apps/preview/{session}``) and ``_unavailable``
+#: is the nginx error_page fallback — an application holding either name would
+#: be permanently shadowed by a route registered ahead of it, which reads to its
+#: owner as "my app 404s for everyone" with nothing in any log to explain it.
+#: A set rather than a check at the route: the refusal has to happen where the
+#: name is chosen, or the collision is only discovered after the first publish.
+RESERVED_SLUGS: frozenset[str] = frozenset({"preview", "_unavailable"})
+
 #: How many ``-2``, ``-3`` … variants to try before falling back to a random
 #: suffix. Small on purpose: a long scan means the name is generic, and a
 #: random suffix is a better answer than the 47th sequential one.
@@ -109,16 +118,18 @@ class AppProvisionService:
         if declared:
             if not _SLUG_PATTERN.match(declared) or len(declared) > _SLUG_MAX_LENGTH:
                 raise AppSlugConflictError(msg="应用标识格式不合法, 只允许小写字母 / 数字 / 连字符", slug=declared)
+            if declared in RESERVED_SLUGS:
+                raise AppSlugConflictError(msg=f"应用标识 {declared} 是平台保留名, 请更换", slug=declared)
             if await cls._slug_taken(declared):
                 raise AppSlugConflictError(msg=f"应用标识 {declared} 已被占用, 请更换", slug=declared)
             return declared
 
         base = cls.slugify(name)
-        if not await cls._slug_taken(base):
+        if base not in RESERVED_SLUGS and not await cls._slug_taken(base):
             return base
         for suffix in range(2, 2 + _SLUG_SUFFIX_ATTEMPTS):
             candidate = f"{base[: _SLUG_MAX_LENGTH - 4]}-{suffix}"
-            if not await cls._slug_taken(candidate):
+            if candidate not in RESERVED_SLUGS and not await cls._slug_taken(candidate):
                 return candidate
         return f"{base[: _SLUG_MAX_LENGTH - 9]}-{generate_uuid()[:8]}"
 

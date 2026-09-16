@@ -1366,6 +1366,8 @@
       "appReleaseIterationFailed": "新バージョン未公開（稼働中は影響なし）",
       "appReleaseManualPublish": "手動で公開",
       "appReleaseCapabilityDeclared": "能力依存を宣言",
+      "appReleasePreviewStarted": "審査用プレビューを起動",
+      "appReleasePreviewReclaimed": "審査用プレビューを回収",
       "appReleaseRollback": "公開をロールバック"
     },
     "objectTypeEnum": {

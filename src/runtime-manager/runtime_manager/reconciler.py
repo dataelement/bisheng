@@ -37,6 +37,13 @@ Two properties are asserted as loudly as the recovery itself:
   runs onlyoffice, rabbitmq and a JVM or two on the same daemon; a reconciler
   that reasons in terms of "not in my desired state" instead of "mine, and not
   in my desired state" is a data-loss incident waiting for a deploy.
+
+One pass does a second, unrelated thing: it reclaims **approval-time previews**
+whose deadline has passed (F055 AC-28). They are deliberately outside
+everything above — ``bisheng.managed=preview``, no desired-state record — so
+the sweep reads their own label and touches nothing else. It rides this loop
+rather than a scheduler of its own because this loop already runs every 15 s,
+already reads the daemon and already survives a restart.
 """
 
 from __future__ import annotations
@@ -197,6 +204,13 @@ class Reconciler:
                 report.failures.append((record.app_id, str(exc)))
 
         self._reclaim_orphans(actual, report)
+        # F055 AC-28's timeout leg. Previews are invisible to everything above
+        # (they carry ``bisheng.managed=preview``), so this is a separate pass
+        # over their own label — and it lives here rather than in a platform
+        # beat task because the manager is the process that has to be alive for
+        # the container to exist, and F054 AC-59 forbids a resident app-factory
+        # worker in the platform image.
+        report.reclaimed.extend(self._reclaim_expired_previews())
         log_reconcile(desired=len(records), actual=len(actual), actions=report.action_counts())
         if report.acted or report.failures:
             logger.info("reconcile pass: %s", report.summary())
@@ -390,6 +404,18 @@ class Reconciler:
             logger.warning("reclaiming orphaned instance %s (no app declares it)", name)
             self._force_remove(name)
             report.reclaimed.append(name)
+
+    def _reclaim_expired_previews(self) -> list[str]:
+        """Approval-time previews past the deadline stamped on their label."""
+        from runtime_manager.preview import PreviewService
+
+        try:
+            return PreviewService(self._config, docker=self._docker).reclaim_expired()
+        except Exception as exc:
+            # Never fails the pass: the applications this loop exists for are
+            # unaffected by a preview that would not go away.
+            logger.warning("preview expiry sweep failed: %s", exc)
+            return []
 
     # -- backend helpers ---------------------------------------------------
     def _managed_containers(self) -> dict[str, dict[str, Any]]:

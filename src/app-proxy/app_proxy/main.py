@@ -6,6 +6,9 @@ Route surface is deliberately tiny:
   peer, so a backend outage does not get the proxy restarted.
 * ``/apps/{slug}`` and ``/apps/{slug}/{tail}`` — everything else, HTTP and
   WebSocket alike.
+* ``/apps/preview/{session}`` — F055's approval-time preview instance
+  (:mod:`app_proxy.preview`). Registered *before* the slug routes and backed by
+  a name no application may hold, so it shadows nothing.
 * ``POST /internal/connections/close`` — the backend's HMAC-signed push that
   ends open sockets on a revoke / stop / delete (D6 invariant ②). Inbound
   control plane, not a user surface; nginx does not route it.
@@ -348,6 +351,16 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     prefix = get_config().entry_prefix.rstrip("/")
+    # **Before** the ``{slug}`` routes, because Starlette matches in order and
+    # ``{slug}`` would otherwise swallow ``preview``. The backend reserves the
+    # name so no application can hold it (``RESERVED_SLUGS``), which is what
+    # keeps this ordering from shadowing somebody's app (F055 AC-26).
+    from app_proxy.preview import PREVIEW_SEGMENT, handle_preview_entry
+
+    application.add_route(f"{prefix}/{PREVIEW_SEGMENT}/{{session}}", handle_preview_entry, methods=ENTRY_METHODS)
+    application.add_route(
+        f"{prefix}/{PREVIEW_SEGMENT}/{{session}}/{{tail:path}}", handle_preview_entry, methods=ENTRY_METHODS
+    )
     # Two routes, because ``{tail:path}`` does not match the empty string:
     # ``/apps/foo`` and ``/apps/foo/x`` are both entry points (AC-25).
     application.add_route(f"{prefix}/{{slug}}", handle_entry, methods=ENTRY_METHODS)

@@ -21,6 +21,9 @@
 | `POST /v1/intents/stop` / `destroy` | `{phase}` / `{}` | F054 下线 / 删除 |
 | `POST /v1/intents/probe` | `{ready, reason}`（入参 `app_id` 或 `{image_ref, env, port, health}` 二选一，都不给 → 400） | F055 预检 / 终检 |
 | `GET /v1/apps/{app_id}/route` | `{upstream, version_id, generation}`；**404 = 无实例 / 已下线 → 直接渲染停用页，不要重试** | **app-proxy** |
+| `POST /v1/intents/preview` | `{instance_id, upstream, phase}`（入参 `{session_id, app_id, slug, version_id, version_no, image_ref, tier, port, env, health, platform_api_base, base_path, expires_at, timeout}` —— 与 `deploy` 同一组，因为容器拿的是 §5 的**整套**环境；`base_path` 是 `/apps/preview/{session}`，**不注入附件句柄**）；容量不足 → `capacity_exhausted`、探活不过 → `probe_failed`（两种都已把容器拆掉） | **F055 审批期预览拉起（T053）** |
+| `POST /v1/intents/preview/stop` | `{reclaimed: bool}`，**幂等**——已回收的会话答 `{reclaimed:false}` 而不是 404 | F055 回收（终态 / 手动 / 超时三条腿都走它） |
+| `GET /v1/previews/{session_id}/route` | `{upstream, version_id, generation}`（`generation` 恒为 0，预览不做原地切换）；**404 = 已回收 / 从未拉起 → 渲染「不存在」，不要重试** | **app-proxy `/apps/preview/{session}`** |
 | `GET /v1/apps/{app_id}/status` | `{instance_id, phase, health, current_version_id, started_at, restart_count, last_probe_at}`；`phase ∈ pending\|building\|starting\|running\|unhealthy\|stopped\|failed`；**404 = 无实例**（`detail.code=not_found`） | F054 详情页 / `app_instance` 对账 · **F052** MCP 应用状态工具 |
 | `GET /v1/apps/{app_id}/logs?tail=&since=&keyword=` | `{lines: [...]}`（无日志即 `[]`） | 详情页运行日志 tab · **F053** CLI `logs` · **F052** MCP 日志工具 |
 | `GET /v1/runtime/status` | `{backend_available, supported_runtimes[], capacity{...}, preflight[{name, ok, detail}]}` | 超管运行环境状态（AC-23）· F055 预检前置自检 |
@@ -88,6 +91,9 @@ manager 的 body 恒为 `{"detail": {"code","message",...}}`，backend 按此映
 平台保留 env 名**覆盖**调用方同名值（含上述三个）。
 
 ## 6. 给 app-proxy 的不变量
+
+**预览实例按 `session_id` 定址，不进期望态**（F055 AC-26）：容器名 `bisheng-preview-{session}`、标签 `bisheng.managed=preview`，因此 reconciler（只看 `bisheng.managed=true`）既不收养也不回收它，`store.committed()` 与 `capacity.instances` 都不计它——这就是「不占应用运行实例名额」的落点。`/data` 是 tmpfs 而非应用卷（AC-29：试用数据带不进生产），`RestartPolicy=no`（平台回收后不得自己复活）。容量仍然照判：内存是真的花掉的，只是名额不计。
+**环境变量给的是 §5 整套**，只差两处，两处都是 AC 在说话：`BISHENG_APP_BASE_PATH` 为 `/apps/preview/{session}`；**附件三名一个都不注入**（应用自己的 storage bearer 交给临时实例，试用上传就会落进生产附件前缀，与数据库同一条红线）。给半套环境的预览不是「试用这个版本」——应用拿不到 `BISHENG_APP_DB_URL` 直接启动失败，审批人看到的是「这个版本是坏的」。
 
 **路由缓存 3s × manager 侧旧实例宽限 30s** —— 这个差值就是「版本切换不落 502」（AC-21）的**全部**理由。改任一个数必须同时改另一个，并重跑切换用例。
 

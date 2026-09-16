@@ -235,8 +235,15 @@ async def forward(
     # §7 events agree on the cause instead of each guessing it.
     fallback_reason = "no_route"
 
+    # An approval-time preview is addressed by session, not by app id: it has
+    # no desired-state record in the manager (F055 AC-26). Everything else on
+    # this path — the strip, the injection, the retry, the fallback pages — is
+    # the same code, which is the point.
+    route_id = verdict.preview_session or app_id
+    is_preview = bool(verdict.preview_session)
+
     for attempt in (0, 1):
-        upstream = await resolve_upstream(app_id, refresh=attempt == 1)
+        upstream = await resolve_upstream(route_id, refresh=attempt == 1, preview=is_preview)
         if upstream is None:
             break
         if upstream.starting:

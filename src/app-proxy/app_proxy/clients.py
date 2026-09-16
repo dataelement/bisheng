@@ -183,6 +183,9 @@ class BackendAuthzClient(HmacClient):
 
     peer = "backend"
     path = "/api/v1/internal/app-proxy/authorize"
+    #: F055's approval-time preview entry. A second endpoint, not a flag: the
+    #: two verdicts answer different questions and must not be one typo apart.
+    preview_path = "/api/v1/internal/app-proxy/authorize-preview"
 
     def __init__(self, *args, ttl_seconds: float = 3.0, clock: Callable[[], float] = time.monotonic, **kwargs):
         super().__init__(*args, **kwargs)
@@ -196,18 +199,49 @@ class BackendAuthzClient(HmacClient):
         request_id: str,
         client_ip: str | None = None,
     ) -> dict:
-        key = (token_fingerprint(access_token), slug)
+        return await self._verdict(
+            self.path,
+            key=(token_fingerprint(access_token), slug),
+            body={
+                "slug": slug,
+                "access_token": access_token,
+                "request_id": request_id,
+                "client_ip": client_ip,
+            },
+        )
+
+    async def authorize_preview(
+        self,
+        *,
+        session: str,
+        access_token: str | None,
+        request_id: str,
+        client_ip: str | None = None,
+    ) -> dict:
+        """Same 3 s cache, a **disjoint** key space.
+
+        ``("preview", session)`` rather than the bare session: an application
+        whose slug happened to equal a session id would otherwise share a cache
+        entry with it, and one of the two verdicts would be served for the
+        other.
+        """
+        return await self._verdict(
+            self.preview_path,
+            key=(token_fingerprint(access_token), "preview", session),
+            body={
+                "session": session,
+                "access_token": access_token,
+                "request_id": request_id,
+                "client_ip": client_ip,
+            },
+        )
+
+    async def _verdict(self, path: str, *, key: tuple, body: dict) -> dict:
         cached = self.cache.get(key)
         if cached is not None:
             return {**cached, "cache_hit": True}
 
-        body = {
-            "slug": slug,
-            "access_token": access_token,
-            "request_id": request_id,
-            "client_ip": client_ip,
-        }
-        response = await self._send("POST", self.path, json=body)
+        response = await self._send("POST", path, json=body)
         if response.status_code >= 500:
             raise InternalRpcError(self.peer, f"HTTP {response.status_code}")
         if response.status_code in (401, 403):
@@ -248,27 +282,34 @@ class ManagerRouteClient(HmacClient):
         super().__init__(*args, **kwargs)
         self.cache: TTLCache[dict] = TTLCache(ttl_seconds, clock=clock)
 
-    async def route(self, app_id: str, *, refresh: bool = False) -> dict | None:
+    async def route(self, app_id: str, *, refresh: bool = False, preview: bool = False) -> dict | None:
         """Resolve the upstream. ``refresh=True`` bypasses **and** drops the entry.
 
         That flag is the D5.1 invalidation path: a connection error against a
         cached address means the address is stale (version switch, restart), so
         the entry is dropped and re-fetched exactly once before we give up and
         render "应用恢复中".
+
+        ``preview=True`` asks the manager's preview route instead (F055 AC-26).
+        The id is then a preview session, so it gets its own cache key: a
+        preview and an application are different objects, and an id collision
+        between the two must not be able to cross-serve them.
         """
+        key = ("preview", app_id) if preview else app_id
         if refresh:
-            self.cache.invalidate(app_id)
+            self.cache.invalidate(key)
         else:
-            cached = self.cache.get(app_id)
+            cached = self.cache.get(key)
             if cached is not None:
                 return {**cached, "cache_hit": True}
 
-        response = await self._send("GET", f"/v1/apps/{app_id}/route")
+        path = f"/v1/previews/{app_id}/route" if preview else f"/v1/apps/{app_id}/route"
+        response = await self._send("GET", path)
         if response.status_code == 404:
             return None
         if response.status_code == 409 and self._is_deploying(response):
             payload = {"phase": ROUTE_PHASE_STARTING}
-            self.cache.set(app_id, payload)
+            self.cache.set(key, payload)
             return {**payload, "cache_hit": False}
         if response.status_code >= 400:
             raise InternalRpcError(self.peer, f"HTTP {response.status_code}")
@@ -279,7 +320,7 @@ class ManagerRouteClient(HmacClient):
         if not isinstance(payload, dict) or not payload.get("upstream"):
             raise InternalRpcError(self.peer, "response has no upstream field")
 
-        self.cache.set(app_id, payload)
+        self.cache.set(key, payload)
         return {**payload, "cache_hit": False}
 
     @staticmethod

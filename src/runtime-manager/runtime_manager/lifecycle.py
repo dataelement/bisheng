@@ -145,7 +145,7 @@ def build_env(
     health_path: str,
     platform_api_base: str,
     base_path: str,
-    storage_token: str,
+    storage_token: str | None,
     extra: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Environment contract of §4.2 ⑤ — same names ``bisheng dev`` injects.
@@ -158,9 +158,16 @@ def build_env(
     It is passed in rather than minted here so a redeploy can carry the app's
     existing token forward: during the AC-21 grace window the old and the new
     instance both serve, and both must be able to reach the same attachments.
+    **``None`` injects no attachment handle at all** — the approval-time preview
+    passes it, because a trial run holding the application's own storage bearer
+    would write test uploads straight into production attachments, which is the
+    same thing AC-29 forbids for the database. With no ``…_ENDPOINT`` the SDK
+    falls back to its local-directory form (contract §5), so the trial's files
+    die with the container.
     """
     env = dict(extra or {})
-    env.update(storage_env(config, app_id=app_id, token=storage_token))
+    if storage_token is not None:
+        env.update(storage_env(config, app_id=app_id, token=storage_token))
     env.update(
         {
             "BISHENG_APP_DB_URL": "sqlite:////data/app.db",

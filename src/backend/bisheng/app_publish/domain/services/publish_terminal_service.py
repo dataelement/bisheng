@@ -16,6 +16,12 @@ What they deliberately do **not** do:
   actually held a task. Cancellation notifies the approvers from
   ``cancel_instance_by_business``. A second message from here would double
   every one of them.
+* **They do reclaim the approval-time previews.** A trial instance of a
+  version whose approval just ended is answering questions nobody is deciding
+  on any more (AC-28), so all three endings call
+  ``PreviewInstanceService.reclaim_on_release_terminal``. It swallows its own
+  failures on purpose: the outbox judges this callback by whether it raised,
+  and a stuck container must not be reported as a failed approval.
 * **Cancellation writes no terminal state.** There is no fourth value and there
   should not be one: cancellation only happens because the application was
   deleted, and a deleted application's version list is not reachable, so the
@@ -35,6 +41,7 @@ from loguru import logger
 
 from bisheng.app_publish.domain.constants import AppReleaseAuditAction
 from bisheng.app_publish.domain.models.app_deployment import STAGE_APPROVED, AppDeploymentDao
+from bisheng.app_publish.domain.services.preview_instance_service import PreviewInstanceService
 from bisheng.app_publish.domain.services.release_audit import write_release_audit
 from bisheng.app_publish.domain.services.version_service import VersionService
 from bisheng.core.database import get_async_db_session
@@ -121,6 +128,11 @@ class PublishTerminalService:
                     f"app_publish.terminal_state_already_set app_id={app_id} version_id={version_id} "
                     f"attempted={terminal_state}"
                 )
+
+        # AC-28: an approval that ended takes every trial of that version with
+        # it. Best effort inside the service — it never raises — because the
+        # outbox reads an exception here as "the approval callback failed".
+        await PreviewInstanceService.reclaim_on_release_terminal(payload_snapshot)
 
         deployment = await cls._close_deployment(payload_snapshot, message=message, reason=failure_reason)
         await write_release_audit(

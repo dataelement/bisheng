@@ -212,6 +212,136 @@ async def authorize_entry(
     }
 
 
+async def authorize_preview_entry(
+    *,
+    session: str,
+    access_token: str | None,
+    request_id: str = "",
+    client_ip: str | None = None,
+) -> dict[str, Any]:
+    """The verdict for ``/apps/preview/{session}`` (F054 AC-37, F055 AC-26 / AC-27).
+
+    Same five-step order as :func:`authorize_entry` and, where it differs, the
+    difference is the point:
+
+    * **Step 3 is the preview session, not the slug.** Unknown, reclaimed and
+      expired are one answer — ``not_found`` — because the difference would
+      tell a stranger that a session id was once real.
+    * **Step 4 is "is this *that* approver", not the visible scope.** A preview
+      belongs to the person it was raised for and to nobody else: not the
+      owner, not another approver on the same request, not a tenant
+      administrator. AC-27 says the instance carries the approver's own
+      identity, so a second person entering it would be acting as the first.
+      (The owner's own way in is the application's real entry; the approval
+      exception in NFR-1.2 / INV-36 widens what the *capabilities* inside the
+      preview may do, not who may open it.)
+    * **There is no ``stopped`` branch.** A preview has two states, running and
+      gone, and "gone" is ``not_found``.
+
+    The identity material is the ordinary one — this really is the approver
+    visiting — plus the app id of the application under review, so the trial
+    instance sees the same environment shape it will see in production.
+    """
+    if not settings.app_runtime.enabled:
+        return {"decision": DECISION_NOT_ENABLED}
+
+    subject = _decode_jwt_subject(access_token) if access_token else None
+    if subject is None:
+        return {"decision": DECISION_LOGIN, "reason": "no_session"}
+
+    user_id = int(subject.get("user_id") or 0)
+    tenant_id = int(subject.get("tenant_id") or 0)
+    if not user_id:
+        return {"decision": DECISION_LOGIN, "reason": "no_session"}
+
+    session_reason = await _session_invalid_reason(user_id, tenant_id, subject, access_token)
+    if session_reason:
+        return {"decision": DECISION_LOGIN, "reason": session_reason}
+
+    row = await _resolve_preview_session(session)
+    if row is None:
+        return {"decision": DECISION_NOT_FOUND}
+
+    if int(row.approver_user_id or 0) != user_id:
+        # Not ``forbidden``: the visitor has not been told this preview exists,
+        # and telling them now — with an app name and an owner to ask — would
+        # hand out the existence of an unpublished application (AC-30).
+        logger.info(
+            "app_runtime.preview_entry refused session={} visitor={} owner_of_session={}",
+            session,
+            user_id,
+            row.approver_user_id,
+        )
+        return {"decision": DECISION_NOT_FOUND}
+
+    app = await _load_app_by_id(str(row.app_id))
+    if app is None:
+        return {"decision": DECISION_NOT_FOUND}
+
+    set_current_tenant_id(int(app.tenant_id or 0))
+    user_name, subject_kind = await _user_facts(user_id, subject)
+    material = await _identity_material(
+        app=app, user_id=user_id, user_name=user_name, subject_kind=subject_kind, request_id=request_id
+    )
+    obo_token, obo_expires_at = _issue_obo_token(
+        app_id=app.id,
+        user_id=user_id,
+        tenant_id=int(app.tenant_id or 0),
+        subject_kind=material.get("X-BiSheng-Subject-Kind", "human"),
+        # The approval exception rides the token, not a header: AC-27 widens
+        # what the *platform* does for this visit, so the fact belongs where the
+        # platform reads it back, never where the application could read — or
+        # forge — it.
+        preview_session=row.id,
+    )
+    if obo_token:
+        material["X-BiSheng-Access-Token"] = obo_token
+    logger.debug("app_runtime.preview_entry allow session={} user={} ip={}", session, user_id, client_ip)
+    # No access record: AC-38 counts visits to an *application*, and a trial
+    # instance of a version that may never ship is not one. Counting it would
+    # inflate an app's usage with its own approvals.
+    return {
+        "decision": DECISION_ALLOW,
+        "app_id": app.id,
+        "app_name": app.name,
+        "app_state": app.state,
+        "preview_session": row.id,
+        "headers": material,
+        "obo_token": obo_token,
+        "obo_expires_at": obo_expires_at,
+        "ws_max_lifetime_seconds": int(settings.app_runtime.ws_max_lifetime_seconds),
+    }
+
+
+async def _resolve_preview_session(session: str):
+    """F055 owns the session's lifetime; this module only asks whether it is live.
+
+    Imported inside the function so ``app_runtime`` keeps no import-time edge to
+    ``app_publish`` — the dependency direction is F055 → F054 everywhere else,
+    and a module-level import here would make it a cycle.
+    """
+    try:
+        from bisheng.app_publish.domain.services.preview_instance_service import PreviewInstanceService
+
+        return await PreviewInstanceService.resolve_entry(session)
+    except Exception as exc:
+        # Fail-closed, like every other unanswerable question on this path
+        # (AC-12): a broken lookup must not become "let them in".
+        logger.error("app_runtime.preview_entry session lookup failed session={}: {}", session, exc)
+        return None
+
+
+async def _load_app_by_id(app_id: str) -> App | None:
+    if not app_id:
+        return None
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            row = await AppDao.aget(session, app_id)
+    if row is None or row.state == AppState.DELETED.value:
+        return None
+    return row
+
+
 # ---------------------------------------------------------------------------
 # session
 # ---------------------------------------------------------------------------
@@ -409,8 +539,27 @@ def _warn_once(key: str, message: str) -> None:
     logger.error(message)
 
 
-def _issue_obo_token(*, app_id: str, user_id: int, tenant_id: int, subject_kind: str) -> tuple[str | None, int | None]:
+def _issue_obo_token(
+    *,
+    app_id: str,
+    user_id: int,
+    tenant_id: int,
+    subject_kind: str,
+    preview_session: str | None = None,
+) -> tuple[str | None, int | None]:
     """Short-lived on-behalf-of token injected into the app (AC-34).
+
+    ``preview_session`` marks the token as belonging to an **approval-time
+    trial**, and it is the carrier for the one exception in NFR-1.2 / INV-36:
+    inside a preview the platform capabilities pass at the **owner's** level
+    (F055 AC-27) rather than at the visitor's, because the point of the trial is
+    to see the release work, and an approver who is not in the app's knowledge
+    scope would otherwise see a release that "does not work". The flag has to
+    ride the token: it is the only thing the capability bus gets that says
+    *which* visit this is, and a capability bus that cannot tell a preview from
+    a production visit will quietly apply the wrong rule to both. No reader
+    yet — the capability bus is F055 T056 to T060 — so this is the fact being
+    carried, not the rule being applied.
 
     Returns ``(token, expires_at)`` — the expiry as epoch seconds, so the
     caller can state it to app-proxy without decoding the token — or
@@ -449,13 +598,18 @@ def _issue_obo_token(*, app_id: str, user_id: int, tenant_id: int, subject_kind:
 
     now = int(time.time())
     expires_at = now + int(settings.app_runtime.obo_ttl_seconds)
+    subject: dict[str, Any] = {
+        "app_id": app_id,
+        "user_id": user_id,
+        "tenant_id": tenant_id,
+        "subject_kind": subject_kind,
+    }
+    if preview_session:
+        subject["preview_session"] = preview_session
     payload = {
         # Serialised like the platform's own session subject so both decode the
         # same way; PyJWT 2.10 also requires ``sub`` to be a string.
-        "sub": json.dumps(
-            {"app_id": app_id, "user_id": user_id, "tenant_id": tenant_id, "subject_kind": subject_kind},
-            sort_keys=True,
-        ),
+        "sub": json.dumps(subject, sort_keys=True),
         "aud": OBO_AUDIENCE,
         "iss": settings.cookie_conf.jwt_iss,
         "iat": now,

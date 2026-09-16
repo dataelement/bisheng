@@ -1366,6 +1366,8 @@
       "appReleaseIterationFailed": "新版本未上线（线上未受影响）",
       "appReleaseManualPublish": "手动上线",
       "appReleaseCapabilityDeclared": "声明能力依赖",
+      "appReleasePreviewStarted": "拉起审批预览实例",
+      "appReleasePreviewReclaimed": "回收审批预览实例",
       "appReleaseRollback": "发布回滚"
     },
     "objectTypeEnum": {

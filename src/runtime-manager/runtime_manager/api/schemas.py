@@ -95,6 +95,46 @@ class ProbeRequest(BaseModel):
     timeout: int | None = None
 
 
+class PreviewStartRequest(BaseModel):
+    """An approver's temporary instance of the version waiting to go live (F055 AC-26).
+
+    Addressed by ``session_id``, never by ``app_id``: the application's own
+    instance must keep serving untouched while a preview of a different version
+    runs beside it. ``app_id`` / ``version_id`` ride along as labels only — for
+    the operator reading ``docker ps``, not for routing.
+
+    ``slug`` / ``version_no`` / ``platform_api_base`` / ``base_path`` are the
+    same fields :class:`DeployRequest` carries, and for the same reason: the
+    container gets the **whole** environment contract of §5. A preview that saw
+    only a partial one would not be a trial of the release — an app never told
+    ``BISHENG_APP_DB_URL`` exits on start-up, and an approver would read that as
+    "this release is broken". ``base_path`` is ``/apps/preview/{session}`` here
+    rather than ``/apps/{slug}``; that one difference is the point of it being
+    a field.
+    """
+
+    session_id: str
+    app_id: str
+    slug: str = ""
+    version_id: str
+    version_no: int = 0
+    image_ref: str
+    tier: TierIn
+    port: int = 8080
+    env: dict[str, str] = Field(default_factory=dict)
+    health: HealthIn = Field(default_factory=HealthIn)
+    platform_api_base: str = ""
+    base_path: str = ""
+    #: Unix epoch seconds after which the manager may reclaim this preview on
+    #: its own. 0 = no deadline, and the manager then never sweeps it.
+    expires_at: int = 0
+    timeout: int | None = None
+
+
+class PreviewStopRequest(BaseModel):
+    session_id: str
+
+
 class AdmissionResponse(BaseModel):
     admitted: bool
     reason: str

@@ -89,6 +89,11 @@ _ERROR_BY_MANAGER_CODE: dict[str, type] = {
 _TIMEOUTS: dict[str, float] = {
     "deploy": 300.0,
     "probe": 300.0,
+    # A preview goes through the same readiness gate as a deploy, so it gets
+    # the same budget; a shared 15 s one would turn every cold start into a
+    # false "orchestrator unavailable".
+    "preview_start": 300.0,
+    "preview_stop": 120.0,
     "stop": 120.0,
     "destroy": 120.0,
     "build": 60.0,
@@ -110,7 +115,7 @@ def build_failure_error(payload: dict[str, Any]) -> AppBuildFailedError:
     """16122 from a ``build_status`` payload whose ``status`` is ``failed``.
 
     A free function rather than a client method: the facade's public surface is
-    exactly the fifteen RPC methods (the test fixtures assert that set), and this
+    exactly the seventeen RPC methods (the test fixtures assert that set), and this
     is a translation of an already-fetched answer, not another RPC.
     """
     return AppBuildFailedError(
@@ -177,6 +182,32 @@ class OrchestratorClient:
     async def probe(self, **payload: Any) -> dict[str, Any]:
         """Readiness of a live app (``app_id``) or of a bare image (``image_ref``) → ``{ready, reason}``."""
         return await self._request("POST", "/v1/intents/probe", json=payload, op="probe")
+
+    async def preview_start(self, **payload: Any) -> dict[str, Any]:
+        """F055 AC-26 — an approver's temporary instance → ``{instance_id, upstream, phase}``.
+
+        A separate intent from ``deploy`` rather than ``deploy`` with another
+        id: deploy declares an application's desired state, and a preview must
+        write no such record — that is what keeps it off the instance quota and
+        out of the reconciler's reach. Keyed by ``session_id``; the app and
+        version ids ride along as labels only.
+        """
+        return await self._request("POST", "/v1/intents/preview", json=payload, op="preview_start")
+
+    async def preview_stop(self, *, session_id: str) -> dict[str, Any]:
+        """Reclaim one preview → ``{reclaimed: bool}``. Idempotent, and it has to be:
+        terminal approval, the approver's button and the timeout sweep can all
+        fire for the same session (AC-28)."""
+        return await self._request(
+            "POST", "/v1/intents/preview/stop", json={"session_id": session_id}, op="preview_stop"
+        )
+
+    # There is deliberately **no** ``preview_route`` here. ``GET /v1/previews/
+    # {session}/route`` exists on the manager, but its only caller is app-proxy,
+    # which holds its own manager client — the backend never resolves a preview
+    # upstream. A facade method with no caller is dead code, and this facade's
+    # method set is asserted lockstep, so a dead one would be copied into two
+    # test fixtures forever.
 
     async def admission(self, *, tier: dict[str, Any] | None = None, purpose: str = "run") -> dict[str, Any]:
         """Capacity gate (AC-19). The verdict **snapshot is passed through verbatim**
@@ -363,8 +394,8 @@ class OrchestratorClient:
         raise error_cls(msg=message, manager_code=code or "unknown", **extras)
 
 
-#: Process-wide facade. Fifteen public methods (ten orchestration + five data
-#: plane), no more: the F054/F055 test
+#: Process-wide facade. Seventeen public methods (ten orchestration + two
+#: preview + five data plane), no more: the F054/F055 test
 #: fixtures assert this set so that a newly added method cannot silently fall
 #: through to real HTTP against runtime-manager in a unit test.
 orchestrator_client = OrchestratorClient()
