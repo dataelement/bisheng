@@ -2437,7 +2437,7 @@
     "expires_label": "Expires on",
     "get_key": "Generate my key",
     "guide_title": "Connect an AI assistant",
-    "install_prompt": "Install the $t(bisheng) knowledge-search skill.\nSkill download URL: {{skillPackUrl}}\nAPI Key page: {{tokenPageUrl}}\nIf you can't open the addresses above, your environment can't reach this platform. Tell me so directly and don't try workarounds.",
+    "install_prompt": "Install the $t(bisheng) knowledge-search skill.\nSkill download URL: {{skillPackUrl}}\nAPI Key page: {{tokenPageUrl}}",
     "install_step": "Step 1: Copy the install instruction and send it to your AI assistant",
     "key_label": "API Key",
     "key_step": "Step 2: Generate a key and send it to your AI assistant",
@@ -2464,7 +2464,6 @@
     "status_none": "Not connected",
     "status_revoked": "Revoked",
     "supported_note": "Send it to an AI assistant installed on your computer, such as WorkBuddy desktop.",
-    "title": "AI assistant access",
-    "verify_hint": "No AI assistant has used this key yet. Once it is set up, ask it to “search my knowledge base for…” and the time appears here. Didn’t save the key? Get a new one."
+    "title": "AI assistant access"
   }
 }

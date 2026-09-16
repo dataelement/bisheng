@@ -85,10 +85,10 @@ it.each(["en", "zh-Hans", "ja"])("copies the visible prompt in %s with the curre
     tokenPageUrl: "http://localhost:3080/workspace/settings/ai-access?connect=1",
   });
   expect(screen.getByText(prompt, { normalizer: (value) => value })).toBeInTheDocument();
-  // The note says which assistant to paste into; the prompt's fourth line lets an
-  // assistant that cannot reach this instance say so instead of improvising.
+  // The note says which assistant to paste into. The prompt itself stays at three
+  // lines — connectivity guidance belongs to the skill pack, not this copy box.
   expect(screen.getByText(mockI18n.t("com_ai_access.supported_note"))).toBeInTheDocument();
-  expect(prompt.split("\n")).toHaveLength(4);
+  expect(prompt.split("\n")).toHaveLength(3);
   await userEvent.click(screen.getByRole("button", { name: mockI18n.t("com_ai_access.copy_all") }));
   expect(copyText).toHaveBeenCalledWith(prompt);
 });
@@ -112,11 +112,10 @@ it("reveals the issued key in a stacked dialog and masks it once dismissed", asy
   await waitFor(() => expect(screen.queryByText(plaintext)).not.toBeInTheDocument());
   expect(onOpenChange).not.toHaveBeenCalled();
   expect(screen.getByText(token.key_mask)).toBeInTheDocument();
-  // The card keeps only what the holder acts on: expiry, last use, and — until
-  // the first call — how to verify. Created time and a "Valid" label are gone.
+  // The card keeps only what the holder acts on: expiry and last use.
+  // Created time and a "Valid" label are gone.
   expect(screen.getByText("2027-09-11")).toBeInTheDocument();
   expect(screen.getByText(mockI18n.t("com_ai_access.never_used"))).toBeInTheDocument();
-  expect(screen.getByText(mockI18n.t("com_ai_access.verify_hint"))).toBeInTheDocument();
   expect(screen.queryByText("2026-09-11")).not.toBeInTheDocument();
   expect(screen.queryByText(mockI18n.t("com_ai_access.status_active"))).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Copy API Key" })).not.toBeInTheDocument();
@@ -211,7 +210,6 @@ it("shows expired status and prevents issuance when disabled", async () => {
   jest.mocked(getPersonalTokenStatusApi).mockResolvedValue(statusOf({ token: { ...token, is_valid: false } }));
   const { rerender } = render(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
   expect(await screen.findByText(mockI18n.t("com_ai_access.status_expired"))).toBeInTheDocument();
-  expect(screen.queryByText(mockI18n.t("com_ai_access.verify_hint"))).not.toBeInTheDocument();
   rerender(<PersonalTokenDialog open={false} onOpenChange={jest.fn()} />);
   jest.mocked(getPersonalTokenStatusApi).mockResolvedValue(statusOf({ enabled: false }));
   rerender(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
@@ -219,13 +217,12 @@ it("shows expired status and prevents issuance when disabled", async () => {
   expect(screen.getByRole("button", { name: "Generate my key" })).toBeDisabled();
 });
 
-it("drops the setup hint once an assistant has used the key", async () => {
+it("shows the last-used date in place of 'never used'", async () => {
   jest.mocked(getPersonalTokenStatusApi).mockResolvedValue(
     statusOf({ token: { ...token, last_used_at: "2026-09-12T08:00:00" } }),
   );
   render(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
   expect(await screen.findByText("2026-09-12")).toBeInTheDocument();
-  expect(screen.queryByText(mockI18n.t("com_ai_access.verify_hint"))).not.toBeInTheDocument();
   expect(screen.queryByText(mockI18n.t("com_ai_access.never_used"))).not.toBeInTheDocument();
 });
 

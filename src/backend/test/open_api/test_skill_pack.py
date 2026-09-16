@@ -151,6 +151,20 @@ def test_script_surfaces_business_error_bodies(script, monkeypatch, capsys):
     assert "HTTP 403" in err and "26044" in err  # the business code reaches the agent
 
 
+def test_script_explains_an_unreachable_platform(script, monkeypatch, capsys):
+    def unreachable(request, timeout=30):
+        raise OSError("[Errno 111] Connection refused")
+
+    monkeypatch.setattr(script, "urlopen", unreachable)
+    monkeypatch.setenv("KNOWLEDGE_API_KEY", "bs-pat-test")
+
+    assert _run(script, monkeypatch, "--base-url", "https://kb.test", "--query", "q", "--knowledge-base-id", "7") == 1
+    err = capsys.readouterr().err
+    # No status code came back: this is reachability, not credentials. The agent
+    # has to say so — a key cannot fix it and retrying will not either.
+    assert "could not be reached" in err and "do not retry" in err.lower()
+
+
 # ── credentials: env override, file fallback, actionable errors ─────────────
 
 
