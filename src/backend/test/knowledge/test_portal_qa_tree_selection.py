@@ -556,8 +556,9 @@ async def test_portal_qa_inaccessible_space_returns_empty_scope(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("paged", [False, True])
 async def test_portal_qa_folder_scope_filters_to_authorized_department_files(
-    monkeypatch,
+    monkeypatch, paged,
 ):
     service = svc_mod.KnowledgeSpaceService(
         request=SimpleNamespace(headers={}),
@@ -594,6 +595,12 @@ async def test_portal_qa_folder_scope_filters_to_authorized_department_files(
         AsyncMock(return_value=[]),
     )
 
+    if paged:
+        service.knowledge_file_repo = SimpleNamespace(list_qa_subtree_page=AsyncMock(
+            side_effect=[[allowed_file, denied_file], []]))
+        monkeypatch.setattr(svc_mod.SpaceFileDao, "get_children_by_prefix",
+                            AsyncMock(side_effect=AssertionError("禁止全子树读取")))
+
     result = await service.resolve_shougang_portal_qa_scope_file_ids(
         mode="files",
         knowledge_space_ids=[7103],
@@ -605,6 +612,7 @@ async def test_portal_qa_folder_scope_filters_to_authorized_department_files(
         ],
         file_refs=[],
         max_files=20,
+        subtree_page_size=200 if paged else None,
     )
 
     assert result == {7103: [9301]}
@@ -614,6 +622,9 @@ async def test_portal_qa_folder_scope_filters_to_authorized_department_files(
         "view_folder",
         space_id=7103,
     )
+
+    if paged:
+        assert [call.kwargs["after_id"] for call in service.knowledge_file_repo.list_qa_subtree_page.await_args_list] == [0, 9302]
 
 
 @pytest.mark.asyncio

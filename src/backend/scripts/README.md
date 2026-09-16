@@ -150,6 +150,80 @@ PYTHONPATH=./ .venv/bin/python scripts/backfill_department_short_names.py \
 
 ## Knowledge Space Scripts
 
+### `report_portal_knowledge_counts.py`
+
+只读统计指定租户下全部门户知识空间, 按公共库、部门库、团队库、科室库、个人库分组导出 JSON。
+个人库合并为一个组, 其他库逐库列出 ID、名称、首页获取标记、总数及两套独立的一级分类/业务域统计。
+
+在 `src/backend` 目录执行:
+
+```bash
+.venv/bin/python scripts/report_portal_knowledge_counts.py \
+  --output /tmp/portal_knowledge_counts.json
+
+# 可指定配置和租户; 多租户模式必须明确指定租户, 每次只统计一个租户
+.venv/bin/python scripts/report_portal_knowledge_counts.py \
+  --config config.yaml --tenant-id 1 --page-size 500 \
+  --output /tmp/portal_knowledge_counts_tenant1.json
+```
+
+- 使用现有数据库配置和租户过滤, 只初始化数据库连接。无需启动应用、ES、OpenFGA 或首页缓存,
+  不创建表、不提交事务、不写业务数据。没有 `--apply` 参数。
+- 输出目录必须存在, 目标文件必须不存在; 完整生成后再落地, 不覆盖已有文件。
+- 范围为 `Knowledge.type=SPACE` 且未退役的全部库, 包括未开启首页获取的库和个人收藏库。
+  这是一份租户库存报表, 不受某个登录用户的库访问权限限制。
+- 只统计 `SUCCESS` 状态的有效文件入口。排除文件夹、回收站、历史版本、失效入口、失效逻辑文档。
+  发布和共享入口保留, 按其**当前所在库**计数, 不按原始上传库归属。
+- 库内按逻辑文档去重。优先使用 `reference_document_id`, 无引用时使用当前版本归属的文档 ID;
+  二者冲突时排除并记录异常。旧文件没有文档关系时使用独立的文件 ID 身份, 不按文件名或 MD5 合并。
+- 一级分类及业务域优先取 `split_rule` 内的结构化编码, 缺失时解析 `file_encoding`。
+  `by_category`、`by_business_domain` 是两个独立维度, 不是交叉分组。
+- 两个维度的每个统计项同时输出 `code` 和 `name`, 覆盖全局、大类及单库。
+  分类名称优先取当前租户门户的文件分类字典, 其次是分类卡片、系统文件编码配置、内置字典;
+  业务域名称优先取当前租户门户业务域配置, 其次是内置字典。停用项仍可用于历史知识的名称映射。
+  未知编码显示 `未知分类 (CODE)` 或 `未知业务域 (CODE)`, 不丢失原编码和数量。
+- 科室库兼容 `team_ks` 以及绑定部门的旧版用户所有 `team` 库。缺失空间分类进入 `unassigned`,
+  无效部门绑定进入异常记录, 不因此隐藏库或丢弃其有效知识。空库仍列出。
+- `portal_discovery_enabled` 是数据库原始开关; `portal_discovery_only` 表示按空间类型、有效部门绑定和
+  开关共同判断后是否纳入首页获取范围。该字段用于标记, 不用于缩小本次统计范围。
+
+JSON 结构:
+
+| 字段 | 含义 |
+| --- | --- |
+| `schema_version` / `tenant_id` | 报表格式版本、统计租户 |
+| `started_at` / `generated_at` | 开始和结束时间, 含时区 |
+| `counting_rules` | 数据源、去重、分类和一致性说明 |
+| `summary.space_count` / `summary.counts` | 全部库数量、全局知识汇总 |
+| `groups[].counts` | 当前大类汇总 |
+| `groups[].spaces[]` | 单库明细; 个人库组固定为空数组, 不展开个人信息 |
+| `groups[].space_count` | 该大类实际库数量, 包括合并前的个人库数量 |
+| `portal_enabled_space_count` / `portal_discovery_space_count` | 大类内开关开启库数、实际纳入首页的库数 |
+| `counts.summed_count` | 各库内部去重后相加, 同一文档在两个库各计一次 |
+| `counts.distinct_count` | 当前组内跨库去重后的文档数量 |
+| `counts.by_category` / `counts.by_business_domain` | 每项包含 `code`、`name`、`summed_count` 和 `distinct_count` |
+| `anomalies` | 异常原因、数量及最多 20 个样本 ID, 不是全部排除文件的逐条清单 |
+
+例如同一逻辑文档分别在公共库、部门库中出现, 两库各计 1, 全局结果为:
+
+```json
+{
+  "summed_count": 2,
+  "distinct_count": 1,
+  "by_category": [{"kind": "value", "code": "POL", "name": "政策制度", "summed_count": 2, "distinct_count": 1}],
+  "by_business_domain": [{"kind": "value", "code": "PP", "name": "生产", "summed_count": 2, "distinct_count": 1}]
+}
+```
+
+维度中 `kind=value` 表示正常编码, `unclassified` 表示未分类, `conflict` 表示同一文档在当前组内的
+入口维度不一致, 包括一处有编码而另一处缺失。冲突文档在该组统一归入冲突项, 并附最多 20 个
+`document_samples`。同一维度的两种计数分别与组内总数相等; 跨库去重数不能直接累加子组。
+有分类冲突时, 父组会将对应分类转入冲突项, 所以父子组的同名分类数也不一定直接相加。
+
+报表是数据库库存口径, 不保证等于依赖 ES 索引和缓存的首页数字。查询使用单个只读会话事务及
+数据库默认隔离级别; 扫描期间的并发修改可能影响结果。文件分批读取, 去重集合仍占用与有效
+文档/库组合数量成比例的内存。MySQL/DM8 使用相同 ORM 查询, DM8 实机验证需在 Linux 环境完成。
+
 ### `rebuild_knowledge_space_content_stat.py`
 
 重建数据看板的知识空间内容统计索引 `mid_knowledge_space_content_stat`。默认模式严格只读，

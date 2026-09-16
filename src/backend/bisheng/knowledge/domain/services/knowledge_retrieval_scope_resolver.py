@@ -460,6 +460,10 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         self,
         scope: RetrievalScope,
         hits: Sequence[CanonicalChunkHit],
+        *,
+        entry_batch_checker=None,
+        strict_explicit: bool = False,
+        skip_unready: bool = False,
     ) -> Sequence[MappedEntryHit]:
         self._require_enabled()
         if not hits:
@@ -486,6 +490,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
 
         mapped: list[MappedEntryHit] = []
         seen_chunks: set[tuple[int, int]] = set()
+        prepared = []
         for hit in hits:
             document_id = int(hit.canonical_document_id)
             chunk_key = (document_id, int(hit.chunk_index))
@@ -493,10 +498,27 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
                 # Same canonical chunk hitting several requested spaces keeps
                 # exactly one mapped hit (spec 3.5 rule 6).
                 continue
+            entries = entries_by_document.get(document_id, [])
+            if strict_explicit and explicit_entries:
+                entries = [entry for entry in entries if int(entry.id) in explicit_entries]
+            if skip_unready:
+                ready_entries = []
+                for entry in entries:
+                    try:
+                        self._require_projection_ready(entry)
+                    except SharedStorageContractError as exc:
+                        if exc.code not in {
+                            SharedStorageErrorCode.MEMBERSHIP_PROJECTION_NOT_READY,
+                            SharedStorageErrorCode.CONTENT_PROJECTION_NOT_READY,
+                        }:
+                            raise
+                        continue
+                    ready_entries.append(entry)
+                entries = ready_entries
             candidates = self._final_document_check(
                 documents.get(document_id),
                 hit,
-                entries_by_document.get(document_id, []),
+                entries,
                 all_entries=all_entries_by_document.get(document_id, []),
                 space_ids=space_order,
             )
@@ -510,12 +532,23 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
                     int(hit.chunk_index),
                 )
                 continue
+            prepared.append((hit, candidates))
+
+        permissions = None
+        if entry_batch_checker is not None and prepared:
+            unique_entries = {int(entry.id): entry for _, entries in prepared for entry in entries}
+            permissions = await entry_batch_checker(list(unique_entries.values()))
+        for hit, candidates in prepared:
+            chunk_key = (int(hit.canonical_document_id), int(hit.chunk_index))
+            if chunk_key in seen_chunks:
+                continue
             chosen = await self._select_and_authorize_entry(
                 scope,
                 hit,
                 candidates,
                 space_order=space_order,
                 explicit_entries=explicit_entries,
+                entry_permissions=permissions,
             )
             if chosen is None:
                 continue
@@ -637,6 +670,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         *,
         space_order: dict[int, int],
         explicit_entries: set[int],
+        entry_permissions: dict[int, bool] | None = None,
     ) -> tuple[MappedEntryHit, KnowledgeFile] | None:
         ranked = sorted(
             candidates,
@@ -650,12 +684,13 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
 
         for entry in ranked:
             self._require_projection_ready(entry)
-            allowed = await self._check_entry_view(
-                int(scope.tenant_id),
-                scope.user_id,
-                int(entry.knowledge_id),
-                int(entry.id),
-            )
+            if entry_permissions is None:
+                allowed = await self._check_entry_view(
+                    int(scope.tenant_id), scope.user_id,
+                    int(entry.knowledge_id), int(entry.id),
+                )
+            else:
+                allowed = entry_permissions.get(int(entry.id), False)
             if not allowed:
                 # OpenFGA file-level final check denied this entry; try the
                 # next visible candidate of another requested space.

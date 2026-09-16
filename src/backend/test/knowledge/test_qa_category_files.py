@@ -6,6 +6,17 @@ import pytest
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
 
+@pytest.mark.parametrize("space_count", [241, 1000])
+@pytest.mark.parametrize("stats_only", [False, True])
+def test_category_request_preserves_large_space_scope(space_count, stats_only):
+    from bisheng.knowledge.domain.schemas.knowledge_space_schema import ShougangPortalQaCategoryFilesReq
+
+    space_ids = list(range(1, space_count + 1))
+    req = ShougangPortalQaCategoryFilesReq(space_ids=space_ids, stats_only=stats_only)
+    assert req.space_ids == space_ids
+    assert req.stats_only is stats_only
+
+
 def request(**kwargs):
     return SimpleNamespace(
         space_ids=[10],

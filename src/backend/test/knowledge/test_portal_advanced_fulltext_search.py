@@ -272,5 +272,5 @@ async def test_category_browse_deduplicates_documents_across_batches_and_pages(m
         [ShougangPortalCategoryFileCountItem(code="NEW")],
         discovery_scope="portal_enabled",
     )
-    assert navigation_counts == {"NEW": len(listed)}
-    database_count.assert_not_awaited()
+    assert navigation_counts == {"NEW": 5}
+    database_count.assert_awaited_once_with({"NEW": {12, 366}})

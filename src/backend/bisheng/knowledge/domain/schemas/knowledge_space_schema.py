@@ -794,7 +794,7 @@ class ShougangPortalRelatedFilesResp(BaseModel):
 
 
 class ShougangPortalQaCategoryFilesReq(BaseModel):
-    space_ids: list[int] = Field(default_factory=list, max_length=200)
+    space_ids: list[int] = Field(default_factory=list)
     discovery_scope: Literal["legacy", "public"] = "legacy"
     document_type: str | None = Field(default=None, max_length=100)
     file_subcategory_code: str | None = Field(default=None, max_length=100)

@@ -609,10 +609,15 @@ async def test_configured_rerank_batches_candidates_and_merges_scores(monkeypatc
     result = await workstation_service.WorkStationService._rerank_retrieval_candidates(
         question='问题',
         candidates=docs,
+        login_user=SimpleNamespace(user_id=7),
     )
 
     assert [doc.page_content for doc in result[:3]] == ['39', '38', '37']
-    rerank_factory.assert_awaited_once_with(model_id=99)
+    from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+    rerank_factory.assert_awaited_once_with(
+        model_id=99, user_id=7, app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+        app_name=ApplicationTypeEnum.DAILY_CHAT.value, app_type=ApplicationTypeEnum.DAILY_CHAT,
+    )
 
 
 @pytest.mark.asyncio
@@ -640,6 +645,7 @@ async def test_rerank_error_falls_back_to_global_rrf_order(monkeypatch):
     result = await workstation_service.WorkStationService._rerank_retrieval_candidates(
         question='问题',
         candidates=docs,
+        login_user=SimpleNamespace(user_id=7),
     )
 
     assert result == docs

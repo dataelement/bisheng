@@ -37,6 +37,19 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         super().__init__(session, KnowledgeFile)
         track_fulltext_file_changes(session)
 
+    async def list_qa_subtree_page(self, *, space_id: int, prefix: str,
+                                   after_id: int, limit: int) -> list[KnowledgeFile]:
+        statement = select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id == space_id,
+            KnowledgeFile.id > after_id,
+            KnowledgeFile.file_type == FileType.FILE.value,
+            KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+            col(KnowledgeFile.deleted_at).is_(None),
+            or_(KnowledgeFile.file_level_path == prefix,
+                col(KnowledgeFile.file_level_path).startswith(prefix + '/', autoescape=True)),
+        ).order_by(KnowledgeFile.id).limit(max(1, min(limit, 500)))
+        return list((await self.session.exec(statement)).all())
+
     async def list_qa_category_candidates(
         self,
         *,

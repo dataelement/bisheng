@@ -9,6 +9,11 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
     """Knowledge Base File Repository Interface Class"""
 
+    async def list_qa_subtree_page(self, *, space_id: int, prefix: str,
+                                   after_id: int, limit: int) -> list[KnowledgeFile]:
+        """按入口 ID 游标读取指定子树的有效文件，业务层继续检查权限。"""
+        ...
+
     async def list_qa_category_candidates(
         self,
         *,

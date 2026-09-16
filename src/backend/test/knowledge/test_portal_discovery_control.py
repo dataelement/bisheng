@@ -1157,7 +1157,7 @@ async def test_portal_counts_keep_explicit_empty_card_scope_empty() -> None:
 
 
 @pytest.mark.asyncio
-async def test_portal_enabled_counts_ignore_card_space_bindings() -> None:
+async def test_portal_enabled_counts_use_database_without_fulltext_and_ignore_card_bindings() -> None:
     login_user = Mock(user_id=7, user_name="访问者", tenant_id=1)
     service = KnowledgeSpaceService(request=Mock(headers={}), login_user=login_user)
     discovery = PortalDiscoveryResult(
@@ -1189,7 +1189,10 @@ async def test_portal_enabled_counts_ignore_card_space_bindings() -> None:
             return_value={"STD": 3},
         ) as count_categories,
         patch.object(
-            service, "count_shougang_portal_files", new_callable=AsyncMock, return_value={"total": 3}
+            service,
+            "count_shougang_portal_files",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("fulltext unavailable"),
         ) as count_list,
     ):
         domain_result = await service.count_shougang_portal_domain_files(
@@ -1204,13 +1207,8 @@ async def test_portal_enabled_counts_ignore_card_space_bindings() -> None:
     assert domain_result == {"PM": 4}
     assert category_result == {"STD": 3}
     count_domains.assert_awaited_once_with({"PM": {10, 20}})
-    count_categories.assert_not_awaited()
-    count_list.assert_awaited_once()
-    request = count_list.await_args.args[0]
-    assert request.discovery_scope == "portal_enabled"
-    assert request.document_type == "STD"
-    assert request.space_ids == []
-    assert request.query_type == "browse"
+    count_categories.assert_awaited_once_with({"STD": {10, 20}})
+    count_list.assert_not_awaited()
 
 
 @pytest.mark.asyncio

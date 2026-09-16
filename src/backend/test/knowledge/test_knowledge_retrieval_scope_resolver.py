@@ -165,6 +165,32 @@ class RecordingEntryChecker:
         return int(entry_file_id) not in self.denied_entries
 
 
+async def test_unified_batch_checks_unique_entries_and_explicit_scope_only():
+    from unittest.mock import AsyncMock
+    entries = [make_entry(1, space_id=20, entry_type='manager'),
+               make_entry(2, space_id=10, entry_type='share')]
+    resolver, _, _, entry_checker = make_resolver(entries=entries, documents=[make_document()])
+    checker = AsyncMock(return_value={1: False, 2: True})
+    scope = make_scope(explicit={20: (1,)})
+    mapped = await resolver.map_and_authorize_hits(scope, [hit(chunk_index=0), hit(chunk_index=1)],
+        entry_batch_checker=checker, strict_explicit=True, skip_unready=True)
+    assert mapped == []
+    assert [entry.id for entry in checker.await_args.args[0]] == [1]
+    assert checker.await_count == 1
+
+
+async def test_unified_fresh_batch_observes_revocation_between_phases():
+    from unittest.mock import AsyncMock
+    resolver, _, _, _ = make_resolver(entries=[make_entry(1, space_id=20, entry_type='manager')],
+                                     documents=[make_document()])
+    checker = AsyncMock(side_effect=[{1: True}, {1: False}])
+    scope = make_scope()
+    initial = await resolver.map_and_authorize_hits(scope, [hit(), hit(chunk_index=1)], entry_batch_checker=checker)
+    final = await resolver.map_and_authorize_hits(scope, [hit()], entry_batch_checker=checker)
+    assert len(initial) == 2 and final == []
+    assert checker.await_count == 2
+
+
 def make_entry(
     entry_id: int,
     *,
@@ -985,3 +1011,24 @@ async def test_find_active_entries_for_documents_impl(async_db_session: AsyncSes
     )
 
     assert [int(r.id) for r in rows] == [1]
+
+
+async def test_qa_subtree_repository_cursor_excludes_siblings_and_other_spaces(async_db_session):
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus, FileType
+    from datetime import datetime
+    rows = [make_entry(i, space_id=10 if i != 5 else 20, entry_type='manager',
+                       file_level_path=path) for i, path in
+            [(1, '/7'), (2, '/7/8'), (3, '/70'), (4, '/7'), (5, '/7'), (6, '/7')]]
+    for row in rows:
+        row.file_type = FileType.FILE.value
+        row.status = KnowledgeFileStatus.SUCCESS.value
+    rows[3].deleted_at = datetime.now()
+    rows[5].status = KnowledgeFileStatus.FAILED.value
+    async_db_session.add_all(rows)
+    await async_db_session.commit()
+    repo = KnowledgeFileRepositoryImpl(async_db_session)
+    first = await repo.list_qa_subtree_page(space_id=10, prefix='/7', after_id=0, limit=1)
+    second = await repo.list_qa_subtree_page(space_id=10, prefix='/7', after_id=first[-1].id, limit=1)
+    last = await repo.list_qa_subtree_page(space_id=10, prefix='/7', after_id=second[-1].id, limit=1)
+    assert [r.id for r in first + second] == [1, 2]
+    assert last == []

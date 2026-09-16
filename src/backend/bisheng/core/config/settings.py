@@ -110,6 +110,9 @@ class ElasticsearchConf(BaseModel):
         if isinstance(self.ssl_verify, str):
             self.ssl_verify = ast.literal_eval(self.ssl_verify)
 
+        if isinstance(self.ssl_verify, dict):
+            self.ssl_verify.setdefault("request_timeout", 30.0)
+
         return self
 
 
@@ -742,9 +745,18 @@ class KnowledgeRetrievalRuntimeConf(BaseModel):
     """知识检索读链路的超时与进程级并发保护。"""
 
     total_timeout_seconds: float = Field(default=60, gt=0, le=300)
+    portal_unified_qa_enabled: bool = False
+    portal_unified_qa_tenant_ids: list[int] = Field(default_factory=list)
+    portal_unified_qa_user_ids: list[int] = Field(default_factory=list)
+    portal_qa_initial_limit: int = Field(default=200, ge=1, le=800)
+    portal_qa_candidate_limit: int = Field(default=300, ge=1, le=300)
+    portal_qa_max_rounds: int = Field(default=3, ge=1, le=3)
+    portal_qa_pool_limit: int = Field(default=1600, ge=1, le=1600)
+    portal_qa_request_timeout_seconds: float = Field(default=300, gt=0, le=600)
+    portal_qa_heartbeat_seconds: float = Field(default=10, gt=0, le=30)
     embedding_timeout_seconds: float = Field(default=15, gt=0, le=300)
     milvus_timeout_seconds: float = Field(default=15, gt=0, le=300)
-    elasticsearch_timeout_seconds: float = Field(default=15, gt=0, le=300)
+    elasticsearch_timeout_seconds: float = Field(default=30, gt=0, le=300)
     source_link_timeout_seconds: float = Field(default=8, gt=0, le=300)
     max_knowledge_base_concurrency: int = Field(default=8, ge=1, le=32)
     max_embedding_concurrency: int = Field(default=16, ge=1, le=64)

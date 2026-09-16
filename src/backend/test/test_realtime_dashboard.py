@@ -630,32 +630,65 @@ async def test_realtime_qa_field_enums_keep_codes_and_use_readable_labels(
 
 
 @pytest.mark.asyncio
-async def test_realtime_temporal_datasets_default_to_today_and_include_today():
+@pytest.mark.parametrize(
+    ("dataset_code", "defaults_to_today"),
+    [
+        ("mid_realtime_qa_question_fact", False),
+        ("mid_user_daily_participation", True),
+    ],
+)
+async def test_realtime_temporal_dataset_default_time_scope(dataset_code, defaults_to_today):
     from bisheng.telemetry_search.domain.schemas.component import (
         ComponentDataConfig,
-        TimeFilter,
     )
     from bisheng.telemetry_search.domain.services.component import DataQueryService
 
     today = datetime.now().date()
     service = DataQueryService(
-        dataset_code="mid_realtime_qa_question_fact",
+        dataset_code=dataset_code,
         data_config=ComponentDataConfig(),
     )
     filters, time_range = await service.convert_filters({}, {})
 
-    assert len(filters) == 1
-    assert datetime.fromtimestamp(time_range[0] / 1000).date() == today
-    assert datetime.fromtimestamp(time_range[1] / 1000).date() == today
+    if defaults_to_today:
+        assert len(filters) == 1
+        assert datetime.fromtimestamp(time_range[0] / 1000).date() == today
+        assert datetime.fromtimestamp(time_range[1] / 1000).date() == today
+    else:
+        assert filters == []
+        assert time_range == []
 
-    service.time_filters = [
-        TimeFilter(type="recent_days", mode="dynamic", recentDays=7)
-    ]
-    _, seven_day_range = await service.convert_filters({}, {})
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("filter_source", ["component", "query"])
+async def test_realtime_qa_explicit_time_filter_includes_today_and_can_be_cleared(filter_source):
+    from bisheng.telemetry_search.domain.schemas.component import ComponentDataConfig, TimeFilter
+    from bisheng.telemetry_search.domain.services.component import DataQueryService
+
+    today = datetime.now().date()
+    time_filter = TimeFilter(type="recent_days", mode="dynamic", recentDays=7)
+    service = DataQueryService(
+        dataset_code="mid_realtime_qa_question_fact",
+        data_config=ComponentDataConfig(),
+    )
+    if filter_source == "component":
+        service.data_config.time_filter = time_filter
+    else:
+        service.time_filters = [time_filter]
+
+    filters, seven_day_range = await service.convert_filters({}, {})
+    assert len(filters) == 1
+    assert filters[0].filters[0].field == "timestamp"
     assert datetime.fromtimestamp(seven_day_range[0] / 1000).date() == (
         today - timedelta(days=6)
     )
     assert datetime.fromtimestamp(seven_day_range[1] / 1000).date() == today
+
+    service.data_config.time_filter = None
+    service.time_filters = []
+    filters, time_range = await service.convert_filters({}, {})
+    assert filters == []
+    assert time_range == []
 
 
 @pytest.mark.asyncio

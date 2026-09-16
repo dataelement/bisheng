@@ -5782,22 +5782,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         discovery_scope: str = "legacy",
     ) -> dict[str, int]:
-        """Count portal categories from their traversable lists; retain legacy bound-space counts."""
+        """Count active database documents within each category's discovery scope."""
         if discovery_scope == "portal_enabled":
-            counts: dict[str, int] = {}
-            for category in categories:
-                if category.code in counts:
-                    continue
-                result = await self.count_shougang_portal_files(
-                    ShougangPortalFileCountReq(
-                        query_type="browse",
-                        document_type=category.code,
-                        discovery_scope="portal_enabled",
-                        sort="updated_at_desc",
-                    )
-                )
-                counts[category.code] = int(result["total"])
-            return counts
+            discovery = await self.resolve_portal_discovery(scope=discovery_scope)
+            enabled_space_ids = set(discovery.discoverable_space_ids)
+            return await KnowledgeFileDao.async_count_files_by_category_scopes(
+                {category.code: set(enabled_space_ids) for category in categories}
+            )
         visible_scopes: dict[str, set[int]] = {}
         if discovery_scope in {"portal_public", "portal_configured"}:
             discovery = await self.resolve_portal_discovery(scope=discovery_scope)
@@ -7604,6 +7595,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         folder_refs: list,
         file_refs: list,
         max_files: int | None = None,
+        subtree_page_size: int | None = None,
     ) -> dict[int, list[int]]:
         """解析门户问答知识范围。
 
@@ -7734,6 +7726,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     denied_resource_count += 1
                     continue
                 prefix = f"{folder.file_level_path or ''}/{folder.id}"
+                if subtree_page_size is not None:
+                    if self.knowledge_file_repo is None:
+                        raise RuntimeError('QA subtree repository unavailable')
+                    after_id = 0
+                    while True:
+                        page = await self.knowledge_file_repo.list_qa_subtree_page(
+                            space_id=space_id, prefix=prefix, after_id=after_id,
+                            limit=subtree_page_size,
+                        )
+                        if not page:
+                            break
+                        for file in await current_visible_files(space_id, page):
+                            add_file(space_id, int(file.id))
+                        after_id = max(int(file.id) for file in page)
+                    continue
                 descendants = await SpaceFileDao.get_children_by_prefix(
                     space_id,
                     prefix,
