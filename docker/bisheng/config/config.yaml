@@ -238,7 +238,8 @@ logger_conf:
   #   reserve_mb       → RTM_RESERVE_MB         闸①：先从 MemAvailable 扣掉的余量
   #   overcommit_ratio → RTM_OVERCOMMIT_RATIO   闸②：承诺规格之和的天花板比例
   #   build_reserve_mb → RTM_BUILD_RESERVE_MB   构建同样过闸，按此预留
-  #   build_index_url  → RTM_BUILD_INDEX_URL    构建期注入容器的包索引 PIP_INDEX_URL
+  #   build_index_url  → RTM_BUILD_INDEX_URL    构建期注入容器的包索引 PIP_INDEX_URL（python3.11 模板）
+  #                      RTM_BUILD_NPM_REGISTRY 同上，node20 模板的 npm 源（static 模板不拉包）
   # compose 形态在 docker-compose.yml 的 runtime-manager 服务上设；systemd 形态写进
   # 它的 EnvironmentFile。写在本文件里不会报错，但也**不会生效**（后端启动时会就此告警）。
 

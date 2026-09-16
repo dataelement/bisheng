@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+// Container HEALTHCHECK probe for the node20 runtime.
+//
+// Shipped in the image rather than expressed as a `curl` command at create time
+// because node:20-slim carries neither curl nor wget, and because each runtime
+// template owns the probe that suits it. The path and port come from the same
+// environment variables the platform injects, so there is exactly one place
+// they are defined. Same verdict rule as the python probe: any answer below 500
+// is healthy, anything else (including no answer within 2s) is not.
+"use strict";
+const http = require("http");
+
+const port = process.env.BISHENG_APP_PORT || process.env.PORT || "{{ port }}";
+let path = process.env.BISHENG_APP_HEALTH_PATH || "{{ health_path }}";
+if (!path.startsWith("/")) {
+  path = "/" + path;
+}
+const url = `http://127.0.0.1:${port}${path}`;
+
+const request = http.get({ host: "127.0.0.1", port, path, timeout: 2000 }, (response) => {
+  response.resume();
+  process.exit(response.statusCode < 500 ? 0 : 1);
+});
+request.on("timeout", () => {
+  request.destroy(new Error("timed out after 2s"));
+});
+request.on("error", (error) => {
+  process.stderr.write(`health probe ${url} failed: ${error.message}\n`);
+  process.exit(1);
+});

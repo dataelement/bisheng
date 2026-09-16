@@ -762,14 +762,16 @@
   **覆盖 AC**: AC-54
   **依赖**: T067
 
-- [ ] **T092**: `node20` / `static` Dockerfile 模板
-  **文件**: `src/runtime-manager/runtime_manager/templates/node20/Dockerfile.j2`（新）, `src/runtime-manager/runtime_manager/templates/static/Dockerfile.j2`（新）
-  **逻辑**: 同一份模板矩阵扩两档，`SUPPORTED_RUNTIMES` 自动含三值；安全基线（非 root / read-only 友好 / base path wrapper）与 `python3.11` 一致。
+- [x] **T092**: `node20` / `static` Dockerfile 模板
+  **文件**: `src/runtime-manager/runtime_manager/templates/node20/{Dockerfile.j2, entrypoint.sh.j2, healthcheck.js.j2}`（新）, `src/runtime-manager/runtime_manager/templates/static/{Dockerfile.j2, entrypoint.sh.j2, healthcheck.sh.j2, nginx.conf.j2}`（新）, `src/runtime-manager/runtime_manager/source_facts.py`（新）, `builder.py` / `config.py`, `src/runtime-manager/tests/test_templates.py`（新）, `src/backend/bisheng/app_publish/domain/schemas/app_manifest.py`
+  **实际偏差记录**: ①模板需要知道的源码事实（node 有无锁文件 / 依赖 / `scripts.build`，static 的 `index.html` 在哪个目录）在**渲染期**由 `source_facts` 读定并进渲染上下文，不在镜像里用 shell 猜——渲染出的 Dockerfile 写明做了什么，源码树不满足在 `render_dockerfile` 阶段以一句话失败。②`static` 用官方 `nginx:1.27-alpine` + 模板自带完整 `nginx.conf`（pid / 临时目录全在 `/tmp`，入口脚本运行期把 `PORT` 替进 `/tmp` 的副本），不用 `nginx-unprivileged`（信创镜像源更常有官方 tag）。③构建参数按运行时分发（`build_args_for`）：`python3.11` 收 `PIP_*`，`node20` 收 `BISHENG_NPM_REGISTRY`（新增 `RTM_BUILD_NPM_REGISTRY`；不叫 `NPM_CONFIG_REGISTRY`，npm 会把空值当"registry 为空"），`static` 无——避免 daemon 对未声明 ARG 的告警混进失败日志尾。④backend 本地副本 `SUPPORTED_RUNTIMES` 同 commit 扩到三值（该常量注释明文要求）；`deploy-hosting` 技能文案同步三运行时的启动命令解析顺序与 `!dist/` 取回规则。⑤`node20` 启动命令**不经 `npm start`**（直接 exec `scripts.start`，`node_modules/.bin` 进 PATH），保证应用是 pid 1 的进程且运行期不写 `$HOME`。⑥（review 修正）依赖层的 `COPY` 按渲染期读定的锁文件清单逐个列出（`node.lockfiles`），不用 `package*.json` 通配——通配会漏掉 `npm-shrinkwrap.json`，而它单独存在时已选定了 `npm ci`，构建会在 npm 拒绝无锁文件处失败；compose 形态补 `RTM_BUILD_NPM_REGISTRY` 透传（`BISHENG_RTM_BUILD_NPM_REGISTRY`），否则该变量只在 systemd 形态可配。
+  **测试**: `tests/test_templates.py`（三运行时安全基线一致性 / node 三种安装档 + build 档 / static 根目录探测与缺 `index.html` 报错 / nginx 只读 rootfs 与前缀不变量）+ `test_build.py` 新增按运行时分发构建参数与 static 渲染期失败用例 + `test_readonly_api.py` 新增 `base_images` 三镜像逐个报缺；runtime-manager 全套 140 passed / 5 skipped；backend `test/app_publish` + `test/dev_toolkit/test_skill_packs.py` 66 passed。真镜像构建与启动只能在 114 验证（`docs/architecture/14-app-factory-deployment.md`「运行时模板与基础镜像」给出逐条命令），**本任务未在 114 跑过**。
   **覆盖 AC**: AC-15
   **依赖**: T023
 
-- [ ] **T093**: 备份手册：应用存档位置随平台备份
-  **文件**: `docs/architecture/09-development-guide.md`（或运维备份章节）
+- [x] **T093**: 备份手册：应用存档位置随平台备份
+  **文件**: `docs/architecture/14-app-factory-deployment.md`「备份与恢复」, `docs/architecture/08-deployment.md`「备份」（新节，交叉引用）
+  **实际偏差记录**: ①落点不是 `09-development-guide.md`（面向开发者），而是运维文档 14 里已有的「备份」节扩写 + 08 新增平台级「备份」节指过去——备份是运维动作。②附件前缀 `apps/{app_id}/attachments/` 依赖 T085（未落地），手册按"整桶备份 `bisheng-apps`"写，不为未实现的前缀背书；代码快照键以实现为准（`package_service.py` 的 `apps/{app_id}/versions/{version_id}/code.tar.gz`）。③平台今天**没有**自动 SQLite 快照作业（D10 的 `apps/{app_id}/db-snapshots/{ts}.tar` 未实现），手册给的是运维手工流程（`sqlite3 .backup` / Python `Connection.backup`），并明说这一点。
   **逻辑**: 列出代码快照（`bisheng-apps/apps/{app_id}/versions/*`）、SQLite 快照（`.backup` 后 tar，坑 19：**裸 tar WAL 库会得到不一致副本**）、附件前缀三处位置与恢复步骤。
   **覆盖 AC**: AC-45
   **依赖**: T085

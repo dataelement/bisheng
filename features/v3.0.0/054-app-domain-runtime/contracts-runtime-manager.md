@@ -66,8 +66,8 @@ manager 的 body 恒为 `{"detail": {"code","message",...}}`，backend 按此映
 
 ## 7. 114 部署增量（批 2 部分）
 
-- 新 systemd 单元 `bisheng-runtime-manager.service`：`After=/Requires=docker.service`；`WorkingDirectory=<repo>/src/runtime-manager`；`ExecStart=<venv>/bin/uvicorn runtime_manager.main:app --host 127.0.0.1 --port 8091`；`EnvironmentFile` 至少给 `RTM_HMAC_SECRET` / `RTM_DATA_ROOT` / `RTM_BUILD_INDEX_URL`。加进 `bisheng.target` 的 `Wants=` 与 `deploy.sh` 的 `SERVICES=`
-- **前置资源**：`docker network create bisheng-apps`（不存在则所有 deploy 失败）；`/opt/bisheng/app-data/{apps,state,builds}` 可写；`docker pull python:3.11-slim` 预拉（air-gap / 信创必需）
+- 新 systemd 单元 `bisheng-runtime-manager.service`：`After=/Requires=docker.service`；`WorkingDirectory=<repo>/src/runtime-manager`；`ExecStart=<venv>/bin/uvicorn runtime_manager.main:app --host 127.0.0.1 --port 8091`；`EnvironmentFile` 至少给 `RTM_HMAC_SECRET` / `RTM_DATA_ROOT` / `RTM_BUILD_INDEX_URL`（T092 起内网 npm 源另给 `RTM_BUILD_NPM_REGISTRY`）。加进 `bisheng.target` 的 `Wants=` 与 `deploy.sh` 的 `SERVICES=`
+- **前置资源**：`docker network create bisheng-apps`（不存在则所有 deploy 失败）；`/opt/bisheng/app-data/{apps,state,builds}` 可写；基础镜像预拉（air-gap / 信创必需）：`docker pull python:3.11-slim node:20-slim nginx:1.27-alpine`——三个运行时模板各一个（T092 起），以 `GET /v1/runtime/status` 的 `base_images` 检查项为准
 - 依赖（独立 venv，不动 backend）：`cd src/runtime-manager && uv sync`
 - smoke 增量：`curl -s 127.0.0.1:8091/healthz` → `{"status":"ok"}`；带签名 `POST /v1/admission` 应返回 `admitted` 与 snapshot（顺带验密钥配对）
 - **批 4 增量**：进程启动即拉起 reconcile 线程（15s 一轮，启动先做一次全量对齐）。部署自检改用带签名的 `GET /v1/runtime/status`——它一次性回答"编排后端通不通 / 网络建了没 / data_root 可写否 / 模板与基础镜像在不在"，比逐条 `docker` 命令核对可靠。**新机器只要 `preflight` 有 `ok=false`，就不要开始上线应用**

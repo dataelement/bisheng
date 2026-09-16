@@ -15,8 +15,8 @@ Design decisions worth not re-litigating:
 * **``runtime`` is a plain ``str`` here, validated against
   :data:`SUPPORTED_RUNTIMES` one layer up.** As an ``Enum`` field a bad value
   would come out of pydantic as a generic 16221 "manifest invalid"; the CLI's
-  remedy for an unsupported runtime is completely different ("this deployment
-  ships python3.11 only"), so it gets its own code, 16222.
+  remedy for an unsupported runtime is completely different ("pick one of the
+  runtimes this deployment ships"), so it gets its own code, 16222.
 * **``manifest_version`` is the forward-compatibility gate.** The compatible
   direction (platform adds an optional field, an old CLI omits it) needs no
   gate. The other direction — a newer CLI writing keys this platform does not
@@ -43,7 +43,10 @@ from pydantic import BaseModel, ConfigDict, Field
 #: ⚠️ **F054 must change this constant in the same commit that adds a runtime
 #: template** — otherwise a newly supported runtime is rejected 16222 in the
 #: synchronous leg and never reaches the manager that would have accepted it.
-SUPPORTED_RUNTIMES: tuple[str, ...] = ("python3.11",)
+#: Mirrors ``src/runtime-manager/runtime_manager/templates/`` (one entry per
+#: template directory); an install that ships fewer templates is narrowed by
+#: the asynchronous re-check, never widened.
+SUPPORTED_RUNTIMES: tuple[str, ...] = ("python3.11", "node20", "static")
 
 #: Highest ``manifest_version`` this platform understands.
 SUPPORTED_MANIFEST_VERSION = 1

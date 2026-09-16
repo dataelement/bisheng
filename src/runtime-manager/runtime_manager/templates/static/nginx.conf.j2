@@ -1,0 +1,64 @@
+# BiSheng hosted-app nginx config — static runtime.
+#
+# Rendered at build time into /etc/bisheng/nginx.conf.tmpl; the entrypoint
+# substitutes __PORT__ at start and runs nginx from the /tmp copy. Everything
+# nginx writes (pid, temp files) is pinned under /tmp because the root
+# filesystem is read-only (AC-17). No `user` directive: the master already
+# runs as the unprivileged app user.
+worker_processes 1;
+pid /tmp/nginx/nginx.pid;
+error_log /dev/stderr warn;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    access_log /dev/stdout;
+
+    client_body_temp_path /tmp/nginx/client_body;
+    proxy_temp_path /tmp/nginx/proxy;
+    fastcgi_temp_path /tmp/nginx/fastcgi;
+    uwsgi_temp_path /tmp/nginx/uwsgi;
+    scgi_temp_path /tmp/nginx/scgi;
+
+    sendfile on;
+    tcp_nopush on;
+    server_tokens off;
+    gzip on;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+    # The app is always behind app-proxy under /apps/{slug}. A directory
+    # redirect must stay relative (`/docs/`), never `http://<bridge-ip>:port/docs/`,
+    # or the browser leaves the platform. Root-absolute links inside the shipped
+    # HTML are the developer's contract (DEV-04); the platform rewrites no HTML.
+    absolute_redirect off;
+    port_in_redirect off;
+
+    server {
+        listen __PORT__;
+        root /app/www;
+        index index.html;
+
+        # The build context ships next to the app files when the package root
+        # is the served directory; none of it is content.
+        location ~ /\. {
+            return 404;
+        }
+        location ~ ^/(Dockerfile|entrypoint\.sh|nginx\.conf|healthcheck\.sh|bisheng-app\.yaml)$ {
+            return 404;
+        }
+
+        # Assets: a missing file is a 404, never the SPA shell.
+        location ~* \.(js|mjs|css|map|json|png|jpe?g|gif|svg|ico|webp|avif|woff2?|ttf|otf|eot|txt|xml|pdf|wasm|mp3|mp4|webm)$ {
+            try_files $uri =404;
+        }
+
+        # Pages: real path first, then the SPA fallback for client-side routers.
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+    }
+}

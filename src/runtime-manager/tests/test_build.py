@@ -28,6 +28,7 @@ from runtime_manager.builder import (
     STAGE_BUILD_ADMISSION,
     STAGE_DOCKER_BUILD,
     STAGE_FETCH_SOURCE,
+    STAGE_RENDER_DOCKERFILE,
     BuildService,
     discover_runtimes,
     image_tag,
@@ -37,6 +38,9 @@ from runtime_manager.errors import UnsupportedRuntimeError
 from tests.fakes import FakeHostProbe
 
 MIB = 1024 * 1024
+
+#: Every runtime this checkout ships, in ``discover_runtimes`` (sorted) order.
+ALL_RUNTIMES = ["node20", "python3.11", "static"]
 
 
 def _request(**overrides) -> BuildRequest:
@@ -86,7 +90,19 @@ def test_supported_runtimes_dynamic_from_templates():
     runtime by adding a directory — never by editing a constant that some other
     module also hard-codes.
     """
-    assert discover_runtimes() == ["python3.11"]
+    assert discover_runtimes() == ALL_RUNTIMES
+
+
+def test_supported_runtimes_follow_the_shipped_template_dirs(tmp_path):
+    """Remove a template directory and the runtime disappears from the list."""
+    templates = tmp_path / "templates"
+    for runtime in ("python3.11", "static"):
+        (templates / runtime).mkdir(parents=True)
+        (templates / runtime / "Dockerfile.j2").write_text("FROM {{ base_image }}\n", encoding="utf-8")
+    # A directory without Dockerfile.j2 is not a runtime, whatever its name.
+    (templates / "node20").mkdir()
+
+    assert discover_runtimes(templates) == ["python3.11", "static"]
 
 
 def test_unsupported_runtime_rejected_lists_supported(rtm_config, fake_docker):
@@ -96,7 +112,7 @@ def test_unsupported_runtime_rejected_lists_supported(rtm_config, fake_docker):
 
     detail = excinfo.value.detail
     assert detail["code"] == "unsupported_runtime"
-    assert detail["supported_runtimes"] == ["python3.11"]
+    assert detail["supported_runtimes"] == ALL_RUNTIMES
     assert "go1.22" in detail["message"]
 
 
@@ -131,6 +147,41 @@ def test_build_args_inject_index_url(rtm_config, fake_docker):
     call = fake_docker.last_call("build_image")
     assert call["buildargs"]["PIP_INDEX_URL"] == rtm_config.build_index_url
     assert call["buildargs"]["PIP_TRUSTED_HOST"] == rtm_config.build_trusted_host
+
+
+def test_build_args_are_per_runtime(rtm_config, fake_docker):
+    """node20 gets the npm registry and *not* the pip index; static gets nothing.
+
+    The daemon warns about every build arg the Dockerfile does not declare, and
+    that warning would land in the log tail a developer reads on failure.
+    """
+    config = rtm_config.with_overrides(build_npm_registry="https://npm.example.com/")
+    node_files = {"package.json": '{"dependencies": {"express": "^4"}}', "server.js": "// app\n"}
+    record = _service(config, fake_docker, fetcher=_fetcher(node_files)).run(_request(runtime="node20"))
+    assert record.status == "succeeded"
+    assert fake_docker.last_call("build_image")["buildargs"] == {"BISHENG_NPM_REGISTRY": "https://npm.example.com/"}
+
+    record = _service(config, fake_docker, fetcher=_fetcher({"index.html": "<html>"})).run(_request(runtime="static"))
+    assert record.status == "succeeded"
+    assert fake_docker.last_call("build_image")["buildargs"] == {}
+
+
+def test_static_without_index_fails_at_render_stage_with_the_fix(rtm_config, fake_docker):
+    """A tree the template cannot serve is a render failure with a sentence.
+
+    Not a ``docker_build`` failure reading "COPY failed: no source files" —
+    the stage says what to fix, and the message names the packager's
+    ``dist/`` soft-exclude, which is where this actually comes from.
+    """
+    record = _service(rtm_config, fake_docker, fetcher=_fetcher({"README.md": "no page here"})).run(
+        _request(runtime="static")
+    )
+
+    assert record.status == "failed"
+    assert record.stage == STAGE_RENDER_DOCKERFILE
+    assert "index.html" in record.message
+    assert ".bishengignore" in record.message
+    assert fake_docker.call_count("build_image") == 0
 
 
 def test_build_memory_limited_and_admission_checked(rtm_config, fake_docker):
@@ -240,7 +291,7 @@ def test_build_endpoint_rejects_unsupported_runtime(rtm_client):
     assert response.status_code == 400
     detail = response.json()["detail"]
     assert detail["code"] == "unsupported_runtime"
-    assert detail["supported_runtimes"] == ["python3.11"]
+    assert detail["supported_runtimes"] == ALL_RUNTIMES
 
 
 def test_unknown_build_id_is_404(rtm_client):
@@ -249,11 +300,13 @@ def test_unknown_build_id_is_404(rtm_client):
 
 @pytest.mark.docker
 def test_real_image_builds_and_runs():
-    """Real ``docker build`` of the python3.11 template + a start smoke.
+    """Real ``docker build`` of every template + a start smoke.
 
     Only a real daemon can answer: does the base image exist in this registry,
-    does pip resolve against the configured index, does the non-root user own
-    what it needs, does the entrypoint actually exec the app. Runs in the CI
-    middleware stage and in the 114 verification (T075 step 1).
+    does pip / npm resolve against the configured source, does the non-root
+    user own what it needs, does the entrypoint actually exec the app (nginx
+    for ``static``). Runs in the CI middleware stage and in the 114 verification
+    (T075 step 1; the per-runtime commands for T092 are in
+    ``docs/architecture/14-app-factory-deployment.md`` 「运行时模板与基础镜像」).
     """
     pytest.skip("executed in the CI docker stage / on 114, not in the unit suite")
