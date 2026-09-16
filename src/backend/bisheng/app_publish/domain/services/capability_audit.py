@@ -51,6 +51,7 @@ async def record_retrieval(
     app_name: str | None,
     tenant_id: int,
     version_id: str | None,
+    credential_id: int | None = None,
     access_user_id: int,
     requested: Sequence[int] | None,
     effective: Sequence[int] | None,
@@ -71,6 +72,11 @@ async def record_retrieval(
         tenant_id=int(tenant_id or 0),
         app_id=app_id,
         app_name=app_name,
+        # Which key the application acted with. Nullable because the bus can be
+        # reached without one (an in-process caller), never because it is
+        # optional information: a key is re-issued on every start, so this is
+        # what ties a row to the container instance that produced it.
+        credential_id=credential_id,
         subject_kind=SUBJECT_KIND_USER,
         subject_user_id=int(access_user_id),
         capability=CAPABILITY_KNOWLEDGE,

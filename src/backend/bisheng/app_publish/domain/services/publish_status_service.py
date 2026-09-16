@@ -394,7 +394,12 @@ class PublishStatusService:
             rows = await bus.capability_status(
                 app_id=app.id,
                 tenant_id=int(app.tenant_id or 0),
-                capabilities=getattr(version, "capabilities", None),
+                # ``or {}`` rather than the raw column: ``capability_status``
+                # treats ``None`` as "read the running version instead", and a
+                # version row whose ``capabilities`` is NULL would then make this
+                # surface describe the *running* declaration while naming the
+                # pending one. An empty declaration must read as empty.
+                capabilities=getattr(version, "capabilities", None) or {},
             )
             models = await bus.model_capability_status(
                 bus.EffectiveDeclaration(

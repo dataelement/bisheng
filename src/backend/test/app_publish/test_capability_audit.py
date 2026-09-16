@@ -138,6 +138,42 @@ async def test_a_refusal_is_recorded_too_with_its_code(publish_db, app_factory, 
     assert record.subject_user_id == ACCESS_USER_ID
 
 
+async def test_a_refusal_the_bus_itself_raises_is_recorded_like_any_other(
+    publish_db, app_factory, knowledge_factory, fake_facade
+):
+    """Which layer said no must not decide whether the attempt is in the ledger.
+
+    Naming an undeclared knowledge base is refused by the bus before the facade
+    runs (16274). It is still a call this application made for this visitor, and
+    "what did this app keep reaching for" is only answerable if it is recorded —
+    a 26322 refusal raised one layer deeper already is.
+    """
+    from bisheng.common.errcode.app_publish import AppCapabilityNotDeclaredError
+
+    kb = await knowledge_factory(name="产品手册")
+    undeclared = await knowledge_factory(name="财务档案")
+    app_row, _version = await _online_app_declaring(publish_db, app_factory, [kb.id])
+
+    with pytest.raises(AppCapabilityNotDeclaredError):
+        await CapabilityBusService.retrieve(
+            app_id=app_row.id,
+            access_user_id=ACCESS_USER_ID,
+            query="报销流程",
+            knowledge_ids=[undeclared.id],
+            credential_id=4242,
+        )
+
+    (record,) = await _records(publish_db)
+    assert (record.result, record.error_code) == (RESULT_REFUSED, 16274)
+    assert record.targets == {"requested": [undeclared.id], "effective": []}
+    assert (record.subject_kind, record.subject_user_id) == (SUBJECT_KIND_USER, ACCESS_USER_ID)
+    # The key the application acted with — one per container start, so this is
+    # what ties the row to the instance that produced it.
+    assert record.credential_id == 4242
+    # And the facade never ran: the refusal is the bus's own.
+    assert fake_facade["effective"] == []
+
+
 async def test_a_retrieval_with_no_access_user_is_refused_and_attributed_to_nobody(
     publish_db, app_factory, knowledge_factory, fake_facade
 ):

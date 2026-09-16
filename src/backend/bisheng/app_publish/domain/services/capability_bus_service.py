@@ -454,6 +454,7 @@ class CapabilityBusService:
         top_k: int = 10,
         max_content: int = 15000,
         tag_filters: dict | None = None,
+        credential_id: int | None = None,
         version_repo=None,
     ):
         """Search, as the access user, inside the application's declared scope.
@@ -475,13 +476,27 @@ class CapabilityBusService:
 
         declaration = await cls._require_declaration(app_id)
         whitelist = declaration.knowledge_whitelist
-        cls._assert_targets_declared(declaration, knowledge_ids)
+
+        started = time.monotonic()
+        try:
+            # Inside the recorded span on purpose: a call refused because the
+            # application named an undeclared or revoked knowledge base is still
+            # a call that application made on somebody's behalf, and AC-55's
+            # ledger is where "it kept asking for 财务档案" becomes visible. A
+            # refusal raised one layer deeper (26322 from the facade) is already
+            # recorded, so leaving this one out would make the table's answer to
+            # "what did this app try" depend on which layer said no.
+            cls._assert_targets_declared(declaration, knowledge_ids)
+        except BaseErrorCode as exc:
+            await cls._record(
+                declaration, access_user_id, knowledge_ids, None, started, error=exc, credential_id=credential_id
+            )
+            raise
 
         identity = None
         if access_user_id:
             identity = await RetrievalIdentity.from_user(int(access_user_id), declaration.tenant_id)
 
-        started = time.monotonic()
         try:
             result = await RetrievalFacadeService.retrieve(
                 identity,
@@ -497,13 +512,17 @@ class CapabilityBusService:
             )
         except KnowledgeCapabilityRevokedError as exc:
             revoked = cls._as_revoked(declaration, exc)
-            await cls._record(declaration, access_user_id, knowledge_ids, None, started, error=revoked)
+            await cls._record(
+                declaration, access_user_id, knowledge_ids, None, started, error=revoked, credential_id=credential_id
+            )
             raise revoked from exc
         except BaseErrorCode as exc:
-            await cls._record(declaration, access_user_id, knowledge_ids, None, started, error=exc)
+            await cls._record(
+                declaration, access_user_id, knowledge_ids, None, started, error=exc, credential_id=credential_id
+            )
             raise
 
-        await cls._record(declaration, access_user_id, knowledge_ids, result, started)
+        await cls._record(declaration, access_user_id, knowledge_ids, result, started, credential_id=credential_id)
         return result
 
     @classmethod
@@ -540,6 +559,7 @@ class CapabilityBusService:
         started: float,
         *,
         error: BaseErrorCode | None = None,
+        credential_id: int | None = None,
     ) -> None:
         """Write the dual-attribution record (AC-55), refusals included.
 
@@ -559,6 +579,7 @@ class CapabilityBusService:
             app_name=declaration.app_name,
             tenant_id=declaration.tenant_id,
             version_id=declaration.version_id,
+            credential_id=credential_id,
             access_user_id=int(access_user_id),
             requested=[int(one) for one in (requested or [])],
             effective=list(getattr(result, "effective_scope", []) or []),
