@@ -284,6 +284,12 @@ async def test_declaring_no_model_at_all_refuses_by_name_rather_than_by_range(ho
 
 
 async def test_without_a_registered_declaration_port_every_call_is_26216(hosted):
+    # The shipped default, installed explicitly rather than assumed: whichever
+    # file ran before this one may have left a real adapter behind, and a test
+    # about fail-closed behaviour that silently exercised a working port would
+    # be worse than no test.
+    register_hosted_app_declaration_port(model_range_policy._UnregisteredDeclarationPort())
+
     for method, path, body in (("GET", MODELS_PATH, None), ("POST", CHAT_PATH, BODY)):
         response = await _call(method, path, json_body=body)
 
