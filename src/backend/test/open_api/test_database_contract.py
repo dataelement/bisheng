@@ -27,11 +27,22 @@ def test_service_account_is_an_independent_subject():
 
 
 def test_api_credential_contract_has_only_supported_subject_kinds():
-    assert CREDENTIAL_SUBJECT_KINDS == {"service_account", "natural_person"}
+    """The constant and the CHECK are one lockstep — a kind in one only is an insert error.
+
+    ``hosted_app`` joined the set with F055 T055 (the hosted application's
+    runtime credential). This test previously asserted its *absence*, which was
+    right while the beta2 base carried no resolver for it: an accepted
+    ``subject_kind`` with nothing able to resolve it is a credential that
+    authenticates as nothing. What replaces that guard is the pair of assertions
+    below plus ``test_app_credential.test_every_subject_kind_has_a_prefix`` —
+    every accepted kind must have its own key prefix, so none of them can
+    present another's token.
+    """
+    assert CREDENTIAL_SUBJECT_KINDS == {"service_account", "natural_person", "hosted_app"}
     constraints = [item for item in ApiCredential.__table__.constraints if isinstance(item, CheckConstraint)]
     assert len(constraints) == 1
-    assert "natural_person" in str(constraints[0].sqltext)
-    assert "hosted_app" not in str(constraints[0].sqltext)
+    for kind in CREDENTIAL_SUBJECT_KINDS:
+        assert f"'{kind}'" in str(constraints[0].sqltext)
     assert isinstance(ApiCredential.__table__.c.subject_id.type, BigInteger)
 
 

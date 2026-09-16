@@ -1,9 +1,10 @@
 """Composition root of the publish pipeline (design D16).
 
 One function, :func:`register`, called once per **process**. It subscribes F055
-to the events F054 publishes, which is the only wiring that cannot be resolved
-lazily at the call site: nobody imports this module in order to delete an
-application, so the subscription has to be installed up front.
+to the events F054 publishes and installs the ``hosted_app`` credential subject
+resolver — the wiring that cannot be resolved lazily at the call site: nobody
+imports this module in order to delete an application or to authenticate a
+runtime credential, so both have to be installed up front.
 
 **It must be called from two places, and only calling one is the worst
 outcome.** The API process handles deletions from the detail page; the Celery
@@ -28,6 +29,23 @@ from __future__ import annotations
 from loguru import logger
 
 from bisheng.app_publish.domain.services.app_publish_scenario_handler import SCENARIO_CODE
+
+
+async def on_app_deleted_revoke_credential(*, app_id: str, actor_user_id: int, tenant_id: int) -> None:
+    """Revoke the deleted application's runtime credential (AC-58).
+
+    A **separate** subscriber from :func:`on_app_deleted` rather than two steps
+    in one: the hook fan-out collects failures per subscriber, so cancelling the
+    approval and killing the key each get audited on their own instead of one
+    swallowing the other's failure.
+
+    Deliberately not paired with a re-issue anywhere: going offline deactivates
+    the subject through :func:`resolve_hosted_app` (the application is no longer
+    ``online``) and resuming revives the same key, so only deletion is terminal.
+    """
+    from bisheng.app_publish.domain.services.app_credential_service import AppRuntimeCredentialService
+
+    await AppRuntimeCredentialService.revoke(app_id)
 
 
 async def on_app_deleted(*, app_id: str, actor_user_id: int, tenant_id: int) -> None:
@@ -65,7 +83,17 @@ def register() -> None:
     ``lifecycle_hooks.register_app_deleted_hook``, which matters because a
     worker that re-initialises would otherwise cancel the same approval twice.
     """
+    from bisheng.app_publish.domain.services.app_credential_service import resolve_hosted_app
     from bisheng.app_runtime.domain.services import lifecycle_hooks
+    from bisheng.open_api.domain.models.api_credential import SUBJECT_KIND_HOSTED_APP
+    from bisheng.open_api.domain.services.credential_validator import SUBJECT_RESOLVERS
 
     lifecycle_hooks.register_app_deleted_hook(on_app_deleted)
-    logger.debug("app_publish.composition registered (app-deleted hook)")
+    lifecycle_hooks.register_app_deleted_hook(on_app_deleted_revoke_credential)
+    # Registered here rather than declared in ``open_api`` so the dependency
+    # keeps pointing F055 → the credential base and never back (F049 design D2:
+    # "defined and registered by F055"). Until this runs, a ``hosted_app``
+    # credential is refused with 26002 by ``_resolve_from_database`` — which is
+    # the fail-closed behaviour we want in a process that did not wire F055.
+    SUBJECT_RESOLVERS[SUBJECT_KIND_HOSTED_APP] = resolve_hosted_app
+    logger.debug("app_publish.composition registered (app-deleted hooks + hosted_app subject resolver)")

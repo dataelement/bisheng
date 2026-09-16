@@ -24,9 +24,11 @@ from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.open_api.domain.models.api_credential import (
     CREDENTIAL_SUBJECT_KINDS,
+    HOSTED_APP_TOKEN_PREFIX,
     KEY_SECRET_LENGTH,
     PERSONAL_TOKEN_PREFIX,
     SERVICE_ACCOUNT_KEY_PREFIX,
+    SUBJECT_KIND_HOSTED_APP,
     SUBJECT_KIND_NATURAL_PERSON,
     SUBJECT_KIND_SERVICE_ACCOUNT,
     ApiCredential,
@@ -55,6 +57,8 @@ def credential_prefix(subject_kind: str) -> str:
         return SERVICE_ACCOUNT_KEY_PREFIX
     if subject_kind == SUBJECT_KIND_NATURAL_PERSON:
         return PERSONAL_TOKEN_PREFIX
+    if subject_kind == SUBJECT_KIND_HOSTED_APP:
+        return HOSTED_APP_TOKEN_PREFIX
     raise ValueError(f"unsupported credential subject kind: {subject_kind!r}")
 
 

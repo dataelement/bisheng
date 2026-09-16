@@ -12,10 +12,17 @@ class OpenApiPrincipal(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     credential_id: int
-    actor_kind: Literal["service_account", "natural_person"]
+    actor_kind: Literal["service_account", "natural_person", "hosted_app"]
     actor_id: int
     actor_name: str
     tenant_id: int
+    # The subject's non-integer identity, when its kind has one. ``hosted_app``
+    # is the only such kind today: ``actor_id`` is the ``hosted_app_subject``
+    # surrogate (``subject_id`` is an integer column) while the application is
+    # addressed everywhere else by its uuid ``app.id``, which is what this
+    # carries. Defaulted so a principal cached by an older release still
+    # validates.
+    subject_ref: str | None = None
     resource_owner_user_id: int | None
     scopes: frozenset[str]
     mode: Literal["S", "D"] = "S"
@@ -33,7 +40,7 @@ class OpenApiExecutionSnapshot(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     tenant_id: int
-    actor_kind: Literal["service_account", "natural_person"]
+    actor_kind: Literal["service_account", "natural_person", "hosted_app"]
     actor_id: int
     authorization_subject_type: Literal["service_account", "user"]
     authorization_subject_id: int

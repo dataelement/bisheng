@@ -125,6 +125,8 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.user.domain.models.user",
     "bisheng.user.domain.models.user_role",
     "bisheng.app_publish.domain.models.app_deployment",
+    "bisheng.app_publish.domain.models.hosted_app_subject",
+    "bisheng.app_publish.domain.services.app_credential_service",
     "bisheng.app_publish.domain.services.package_service",
     "bisheng.app_publish.domain.services.manifest_validator",
     "bisheng.app_publish.domain.services.secret_scanner",
@@ -153,6 +155,10 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.approval.domain.repositories.approval_instance_repository",
     "bisheng.approval.domain.repositories.approval_scenario_repository",
     "bisheng.approval.domain.repositories.approval_query_repository",
+    # T055 issues / revokes through the beta2 credential base, which binds the
+    # session factory by name in each repository module.
+    "bisheng.open_api.domain.repositories.credential_repository",
+    "bisheng.open_api.domain.repositories.delegate_scope_repository",
 )
 
 _TABLES = (
@@ -180,6 +186,9 @@ _TABLES = (
     "approval_exception",
     "approval_outbox",
     "approval_action_log",
+    "api_credential",
+    "api_credential_delegate_scope",
+    "hosted_app_subject",
 )
 
 _METADATA_MODULES = (
@@ -195,6 +204,7 @@ _METADATA_MODULES = (
     "bisheng.user.domain.models.user_role",
     "bisheng.database.models.role",
     "bisheng.app_publish.domain.models",
+    "bisheng.open_api.domain.models",
     "bisheng.approval.domain.models.approval_scenario",
     "bisheng.approval.domain.models.approval_instance",
 )
@@ -1328,6 +1338,62 @@ def api_app(monkeypatch):
         return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver", headers=headers)
 
     return _build
+
+
+# ---------------------------------------------------------------------------
+# Runtime credentials (T055)
+# ---------------------------------------------------------------------------
+
+
+class _FakeRedis:
+    """The four methods the credential base calls, backed by a dict.
+
+    Same shape as ``test/open_api/conftest.py``'s, duplicated rather than
+    imported because a conftest is not an importable module path and the two
+    packages must stay independently runnable.
+    """
+
+    def __init__(self):
+        self.values: dict[str, Any] = {}
+
+    async def aget(self, key: str):
+        return self.values.get(key)
+
+    async def aset(self, key: str, value, expiration: int = 3600):
+        self.values[key] = value
+        return True
+
+    async def asetNx(self, key: str, value, expiration: int = 3600):
+        if key in self.values:
+            return False
+        self.values[key] = value
+        return True
+
+    async def adelete(self, key: str):
+        return int(self.values.pop(key, None) is not None)
+
+
+@pytest.fixture()
+def credential_redis(monkeypatch):
+    """Bind the credential cache to an in-process dict.
+
+    Returned so a test can assert the *cache entry itself* disappeared on
+    revocation — "the row says revoked" is not the same fact as "a request in
+    flight stops being accepted", and only the second one is INV-28.
+    """
+    redis = _FakeRedis()
+
+    async def _get_redis():
+        return redis
+
+    for module_name in (
+        "bisheng.open_api.domain.services.credential_service",
+        "bisheng.open_api.domain.services.credential_validator",
+        "bisheng.open_api.domain.services.tenant_setting_service",
+    ):
+        module = importlib.import_module(module_name)
+        monkeypatch.setattr(module, "get_redis_client", _get_redis)
+    return redis
 
 
 # ---------------------------------------------------------------------------

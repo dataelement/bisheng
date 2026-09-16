@@ -559,9 +559,44 @@ T001–T007（Wave 1，可并行）
 
 ### Wave 5 · 能力总线与应用运行期凭据（release 必做，本轮顺延）
 
-- [ ] **T055**: `hosted_app` 主体解析器注册与凭据生命周期（签发 / 重签 / 5 秒失效 / 下线拒绝 / 删除撤销 / 无任何管理入口 / 不进服务账号列表）
+- [x] **T055**: `hosted_app` 主体解析器注册与凭据生命周期（签发 / 重签 / 5 秒失效 / 下线拒绝 / 删除撤销 / 无任何管理入口 / 不进服务账号列表）
   **文件**: `src/backend/bisheng/app_publish/domain/services/app_credential_service.py`, `src/backend/bisheng/open_api/domain/subject_resolvers.py`（注册 `SUBJECT_RESOLVERS['hosted_app']`）, `src/backend/test/app_publish/test_app_credential.py`
   **覆盖 AC**: AC-57, AC-58, AC-59, AC-60
+  **证据**（分支 `wt/f055-hosted-credentials`）：`app_credential_service.py`（`AppRuntimeCredentialService.issue / revoke`、`resolve_hosted_app`、`HOSTED_APP_TOKEN_ENV = "BISHENG_APP_TOKEN"`、`assert_revocation_bound()`）+ 新表模型 `app_publish/domain/models/hosted_app_subject.py` + 底座三处（`api_credential.py` 加 `SUBJECT_KIND_HOSTED_APP` / `HOSTED_APP_TOKEN_PREFIX = "bs-app-"` 与 CHECK 放宽、`credential_service.credential_prefix()` 第三分支、`credential_validator._SUBJECT_KIND_PREFIXES` 前缀钉死）+ `context.py` 两处 Literal 扩容与新增 `OpenApiPrincipal.subject_ref` + `composition.register()` 注册解析器与删除钩子。测试 `test/app_publish/test_app_credential.py` 29 例全绿；`test/app_publish/ test/open_api/ test/app_runtime/` 合跑 1311 passed / 13 skipped / 0 failed。
+
+  **偏离与必须知道的落点**：
+  ① **`subject_id` 用代理键，不是 `app.id`**。`api_credential.subject_id` 是 BIGINT 而 `app.id` 是 uuid 字符串，新建表 `hosted_app_subject`（`id` BIGINT 自增 / `app_id` 唯一，**无 `tenant_id`**，隔离随 `app` 派生）给每个应用分配一次整型代理键。不复用 `owner_user_id`：那样 `revoke_subject('hosted_app', owner)` 会一次撤销该人名下**所有**应用的凭据（`test_revoking_one_application_leaves_a_sibling_of_the_same_owner_alive` 锁住）。应用的 uuid 经新字段 `OpenApiPrincipal.subject_ref` 透出，F051 T023 的 `ModelCallRecord.app_id` 用它（不要用 `actor_name`，那是应用显示名）。
+  ② **解析器落点不是 `open_api/domain/subject_resolvers.py`**（该文件在 beta2 底座上不存在；注册表在 `credential_validator.SUBJECT_RESOLVERS`）。解析器函数写在 F055 侧，由 `app_publish/composition.py` 的 `register()` 注入 —— 依赖方向保持 F055 → 底座，`open_api` 不 import `app_publish`。未注册前该 kind 按 `26002` 拒（F049 design D2 原文）。
+  ③ **鉴权期拒绝一律 26002，`16291` 只由签发路径抛**。「应用已下线 / 已删除 / 跨租户」三种都答同一个 26002：区分开会让过期 token 变成应用状态的探测器，而且 `validate_bearer` 的 `except OpenApiAuthError: raise` 只放行 260 段，非 260 段会被吞成 26021。`16291`（`AppRuntimeSubjectUnavailableError`）在 `issue()` 遇到应用不存在 / 已删除时抛，调用方是管线。
+  ④ **下线 = 主体停用，不撤销**。`resolve_hosted_app` 要求 `app.state == online`；重新上线后**同一把明文**继续可用，无需重新发布（`test_the_same_key_works_again_after_a_resume`）。5 秒上界由 `OpenApiConf.cap_credential_cache_ttl`（min(value, 5)）保证，无轮询；`assert_revocation_bound()` 供测试锁住这条。删除经 F054 `lifecycle_hooks` 的**第二个独立订阅者** `on_app_deleted_revoke_credential` 撤销（与取消审批单分开注册，钩子 fan-out 才能分别记失败）。
+  ⑤ **`effective_user_id = None`（故意）**，`authorization_subject_type/id = user/owner`。访问用户只能来自每次请求的 OBO 令牌（F051 design D7），写进凭据就等于给能力总线留了一个"回退到 owner 全量可见范围"的口子，正是 AC-52 禁止的。T056/T057 接线时不要改这一条。
+  ⑥ **`scopes` 由调用方传入**，本服务不认识"模型 / 知识库"；T056/T057 负责按能力声明派生。当前默认空集 = 有身份、零权限（能力总线未部署时的诚实表达）。`delegate` 位对本主体恒被 `OpenApiDelegateConfigurationInvalidError` 拒。
+  ⑦ **新增审计 action：无**。AC-58 的「两者事件计审计」由 F054 既有的 `app.stop` / `app.delete` 承载；凭据签发 / 撤销只写 `logger.info`，不传 `audit_operator`，以免运行期凭据出现在 `open_api.api_key.*` 审计里（AC-59 的口径是「无管理入口」，多一条可查的审计不违背，但多一个 action 要动四处 lockstep，不值）。
+  ⑧ **改了一条既有断言**：`test/open_api/test_database_contract.py::test_api_credential_contract_has_only_supported_subject_kinds` 原本断言 `hosted_app` **不在**受支持集合里（beta2 底座删掉 vibe 期常量时立的守卫）。它守的是"有 kind 没解析器"，现在由「每个 kind 必须有独占前缀」（`test_every_subject_kind_has_a_prefix`）+ 未注册即 26002 两条接手。
+  ⑨ **欠一条 alembic 迁移（本轮未owning head，按公共 brief 只报不写）**：存量库的 `api_credential` CHECK 仍是两值，插入 `hosted_app` 会被约束拒。当前唯一 head = `merge_app_factory_beta2_heads`。所需内容：
+
+  ```python
+  """Widen api_credential.subject_kind CHECK for hosted applications (F055 T055)."""
+  revision = "f055_credential_hosted_app_subject"
+  down_revision = "merge_app_factory_beta2_heads"
+
+  _NAME = "ck_api_credential_subject_kind"
+  _NEW = "subject_kind IN ('service_account', 'natural_person', 'hosted_app')"
+
+  def upgrade() -> None:
+      # MySQL 8.0.16+ / DM8 都真执行 CHECK；SQLite 无 ALTER，靠 create_all 建新库。
+      dialect = op.get_bind().dialect.name
+      if dialect == "sqlite":
+          return
+      with op.batch_alter_table("api_credential") as batch:
+          batch.drop_constraint(_NAME, type_="check")
+          batch.create_check_constraint(_NAME, _NEW)
+
+  def downgrade() -> None:
+      # 降级前须先删掉所有 subject_kind='hosted_app' 行（属运维前置，迁移只发 DDL）。
+      ...
+  ```
+  新表 `hosted_app_subject` **不需要**迁移：升级期的 `create_all(checkfirst=True)` 覆盖整表新建（模型已挂进 `app_publish/domain/models/__init__.py`，该包已在 `tenant_filter._TENANT_AWARE_MODEL_MODULES` 中）。
 
 - [ ] **T056**: 模型能力注入（经 F051 OpenAI 兼容面 + `BISHENG_PLATFORM_API_BASE` / `BISHENG_APP_TOKEN` 注入；未声明不可调用；工作台无任何底层账号 / 端点配置入口）
   **文件**: `src/backend/bisheng/app_publish/domain/services/capability_bus_service.py`, `src/backend/test/app_publish/test_capability_model.py`
