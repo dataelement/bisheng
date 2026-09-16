@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
-import { assistantExamples, workflowExamples, type ApiIdentityMode, type PublishedApiKind } from './apiRequestExamples';
+import { assistantExamples, workflowExamples, type ApiIdentityMode, type PublishedApiKind } from './apiRequestExampleBuilders';
 
 interface ApiRequestExamplesProps {
     kind: PublishedApiKind;
