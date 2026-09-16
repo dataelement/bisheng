@@ -22,10 +22,7 @@ import {
   listServiceAccountsApi,
 } from "@/controllers/API/serviceAccount"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import type {
-  ServiceAccountDelegateScope,
-  ServiceAccountItem,
-} from "@/types/api/openApi"
+import type { ServiceAccountItem } from "@/types/api/openApi"
 import { formatIsoDateTime } from "@/util/utils"
 import { ChevronLeft, Loader2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
@@ -88,32 +85,6 @@ export function ServiceAccount() {
       setAutoOpenIssue(tab === "keys")
       setSelected(account)
     }
-  }
-
-  const formatDelegateScope = (scope: ServiceAccountDelegateScope) => {
-    const name =
-      scope.subject_name || `${scope.subject_type}:${scope.subject_id}`
-    return scope.subject_type === "department"
-      ? t("openApiManagement.serviceAccount.departmentScope", { name })
-      : name
-  }
-
-  const renderDelegateScopes = (account: ServiceAccountItem) => {
-    if (!account.has_delegate) return "-"
-    const displayed = account.delegate_scopes
-      .slice(0, 2)
-      .map(formatDelegateScope)
-    const remaining = account.delegate_scopes.length - displayed.length
-    return (
-      <span title={account.delegate_scopes.map(formatDelegateScope).join(", ")}>
-        {displayed.join(", ")}
-        {remaining > 0
-          ? t("openApiManagement.serviceAccount.moreScopes", {
-              count: remaining,
-            })
-          : ""}
-      </span>
-    )
   }
 
   if (selected) {
@@ -214,7 +185,6 @@ export function ServiceAccount() {
             <TableHead>{t("openApiManagement.fields.name")}</TableHead>
             <TableHead>{t("openApiManagement.fields.status")}</TableHead>
             <TableHead>{t("openApiManagement.fields.activeKeys")}</TableHead>
-            <TableHead>{t("openApiManagement.fields.delegate")}</TableHead>
             <TableHead>{t("openApiManagement.fields.owner")}</TableHead>
             <TableHead>{t("openApiManagement.fields.lastUsed")}</TableHead>
             <TableHead>{t("openApiManagement.fields.creator")}</TableHead>
@@ -260,9 +230,6 @@ export function ServiceAccount() {
                     />
                   ) : null}
                 </TableCell>
-                <TableCell className="max-w-56 truncate">
-                  {renderDelegateScopes(account)}
-                </TableCell>
                 <TableCell>
                   <span
                     className={
@@ -307,7 +274,7 @@ export function ServiceAccount() {
           })}
           {listLoading ? (
             <TableRow>
-              <TableCell colSpan={7} className="py-8 text-center">
+              <TableCell colSpan={6} className="py-8 text-center">
                 <Loader2
                   aria-label={t("loading")}
                   className="mx-auto size-5 animate-spin"
@@ -318,7 +285,7 @@ export function ServiceAccount() {
           {!listLoading && !accounts.length ? (
             <TableRow>
               <TableCell
-                colSpan={7}
+                colSpan={6}
                 className="text-center text-muted-foreground"
               >
                 {t("openApiManagement.empty")}
