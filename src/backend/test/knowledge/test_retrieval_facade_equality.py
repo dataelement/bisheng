@@ -546,30 +546,33 @@ async def test_a_permission_outage_returns_an_error_and_zero_chunks_at_every_doo
 
 
 # ---------------------------------------------------------------------------
-# Still owed to the CI middleware stage (AC-40, AC-42)
+# The store-level half (AC-40, AC-42) lives where it can actually run
 # ---------------------------------------------------------------------------
 #
-# The store-level set equality is NOT asserted in this file, and deliberately
-# not stubbed either: a skipped-or-NotImplemented test reads as coverage while
-# proving nothing. What the middleware stage has to seed and assert:
+# Set equality over real Milvus/ES is NOT asserted in this file, and
+# deliberately not stubbed either: a skipped-or-NotImplemented test reads as
+# coverage while proving nothing. It is written out in full — sample and
+# assertions — in ``test/e2e/test_e2e_f052_retrieval_set_equality.py``, whose
+# sample the helper ``test/e2e/helpers/retrieval_sample.py`` seeds:
 #
-#   sample — service account SA1 granted space S1 (file f1 visible, f2 revoked
-#   individually, f3 inside an unauthorised folder, f4 detached by a custom
-#   permission mode) plus document library L1; space S2 granted to nobody;
-#   natural person U1 granted identically.
+#   sample — service account SA1 granted space S1 (file f1 reachable; f2 CUSTOM
+#   at the file, an individual revocation; f3 inside folder D1, which detached;
+#   f4 CUSTOM under an authorised folder) plus document library L1; space S2
+#   granted to nobody; natural person U1 granted identically, holding a PAT.
 #
-#   AC-40  facade(SA1) chunks are exactly those of f1 plus those of L1, and no
-#          others; naming S2 answers 26321.
+#   AC-40  the open face returns exactly f1's chunks plus L1's, and no others;
+#          naming S2 answers 26321 instead of a quietly shorter list.
 #   AC-41  the same key through POST /api/v2/filelib/retrieve and through the
-#          MCP search tool yields the same chunk set for the same query.
-#   AC-42  from_user(U1) + whitelist=[S1] equals U1's own in-platform search
-#          restricted to S1, f2 / f3 / f4 absent from both.
-#   AC-44  with OpenFGA actually stopped: the MCP tool, v2 and the hosted
-#          runtime each raise 19002 / 19201 and return zero chunks. The
-#          *decision* is asserted above by fault injection at all three doors
-#          (plus the facade); what a stopped engine adds is that the permission
-#          layer really does raise rather than time out into an empty
-#          allow-map, which cannot be checked without it.
+#          MCP search tool yields the same (document_id, chunk_index) set.
+#   AC-42  U1's PAT through the open face equals what U1 browses in S1 with
+#          their own session; f2 / f3 / f4 absent from both.
+#   AC-44  with OpenFGA actually stopped: v2 and the MCP tool each answer
+#          19002 / 19201 with zero chunks. The *decision* is asserted above by
+#          fault injection at all four doors; what a stopped engine adds is
+#          that the permission layer really does raise rather than time out
+#          into an empty allow-map, which cannot be checked without it.
 #
-# Seeding helpers for the four permission-source variants do not exist yet;
-# they are the actual blocker, not the assertions.
+# That suite is ``@pytest.mark.e2e`` and skipped unless ``F052_E2E=1``; it needs
+# a deployment with MySQL + Redis + OpenFGA + MinIO + Milvus/ES **and a running
+# knowledge Celery worker**, because an unindexed sample makes every set
+# trivially empty.
