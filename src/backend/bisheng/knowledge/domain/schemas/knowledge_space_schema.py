@@ -542,6 +542,7 @@ class ShougangPortalFileBrowseReq(BaseModel):
 
 
 class ShougangPortalFileSearchReq(ShougangPortalFileBrowseReq):
+    retrieval_profile: Literal["legacy", "portal_global_shared"] = "legacy"
     q: str | None = Field(default=None, description="Search keyword")
     sort: str = Field(
         default="relevance", description="Sort mode: relevance / updated_at / updated_at_desc / updated_at_asc"
@@ -549,6 +550,15 @@ class ShougangPortalFileSearchReq(ShougangPortalFileBrowseReq):
     rerank_model_id: str | None = Field(
         default=None, description="Optional rerank model ID for this portal search request"
     )
+
+    @model_validator(mode="after")
+    def validate_retrieval_profile(self):
+        if self.retrieval_profile == "portal_global_shared" and (
+            not (self.q or "").strip() or self.recommendation
+            or self.discovery_scope not in {"portal_public", "portal_configured", "portal_enabled"}
+        ):
+            raise ValueError("shared global search requires a portal keyword scope without recommendation")
+        return self
 
 
 class ShougangPortalAdvancedFileSearchReq(ShougangPortalFileBrowseReq):
@@ -634,12 +644,18 @@ class ShougangPortalFileCountReq(ShougangPortalAdvancedFileSearchReq):
     """Independent exact-count request for portal file-list variants."""
 
     query_type: Literal["browse", "keyword", "advanced", "recommendation"] = "browse"
+    retrieval_profile: Literal["legacy", "portal_global_shared"] = "legacy"
     q: str | None = Field(default=None, max_length=500)
     filter_tag: str | None = Field(default=None, description="Optional second tag intersection filter")
 
     @model_validator(mode="after")
     def validate_count_mode(self):
         self.cursor = None
+        if self.retrieval_profile == "portal_global_shared" and (
+            self.query_type != "keyword" or self.recommendation
+            or self.discovery_scope not in {"portal_public", "portal_configured", "portal_enabled"}
+        ):
+            raise ValueError("shared global count requires a portal keyword scope without recommendation")
         if self.query_type == "keyword" and not (self.q or "").strip():
             raise ValueError("keyword count requires q")
         if self.query_type == "recommendation" and not (self.recommendation or "").strip():

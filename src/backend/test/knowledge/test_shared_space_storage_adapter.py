@@ -297,6 +297,26 @@ class TestSharedSpaceStorageReader:
         assert hits[0].canonical_version_id == 100
         assert hits[0].score == pytest.approx(1.5)
 
+    @pytest.mark.parametrize("count", [1, 20, 241])
+    async def test_portal_queries_keep_complete_membership_and_optional_phrase_boost(self, count):
+        reader = self._reader()
+        ids = tuple(range(11, 11 + count))
+        filter_ = BackendQueryFilter(tenant_id=1, requested_space_ids=ids, routing_version=3)
+        await reader.search_es(filter_, query_text="振动", limit=240, phrase_boost=3.0)
+        body = reader.es_client.search.call_args.kwargs["body"]
+        assert {"terms": {"metadata.knowledge_ids": list(ids)}} in body["query"]["bool"]["filter"]
+        assert body["query"]["bool"]["must"][0]["bool"]["should"][1] == {
+            "match_phrase": {"text": {"query": "振动", "boost": 3.0}}}
+        await reader.search_milvus(filter_, vector=[0.1] * 4, limit=72)
+        expr = reader.milvus_runtime.search_milvus.call_args.kwargs["expr"]
+        expected = (f"ARRAY_CONTAINS(knowledge_ids, {ids[0]})" if count == 1
+                    else f"ARRAY_CONTAINS_ANY(knowledge_ids, {list(ids)})")
+        assert expected in expr
+        assert "tenant_id" not in expr
+        await reader.search_es(filter_, query_text="振动", limit=5)
+        assert reader.es_client.search.call_args.kwargs["body"]["query"]["bool"]["must"] == [
+            {"match": {"text": "振动"}}]
+
     async def test_es_routing_only_used_for_canonical_document_queries(self):
         calls = []
         reader = self._reader()

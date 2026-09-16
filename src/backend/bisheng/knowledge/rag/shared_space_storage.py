@@ -1471,14 +1471,21 @@ class SharedSpaceStorageReader:
         *,
         query_text: str,
         limit: int,
+        phrase_boost: float | None = None,
     ) -> list[CanonicalChunkHit]:
         """BM25 search on the shared index with membership pre-filter."""
         snapshot = await self._assert_readable()
+        text_query: dict[str, Any] = {"match": {"text": query_text}}
+        if phrase_boost is not None:
+            text_query = {"bool": {"should": [
+                {"match": {"text": {"query": query_text, "boost": 1.0}}},
+                {"match_phrase": {"text": {"query": query_text, "boost": phrase_boost}}},
+            ], "minimum_should_match": 1}}
         body = {
             "size": int(limit),
             "query": {
                 "bool": {
-                    "must": [{"match": {"text": query_text}}],
+                    "must": [text_query],
                     "filter": self._es_bool_filter(filter_),
                 }
             },
