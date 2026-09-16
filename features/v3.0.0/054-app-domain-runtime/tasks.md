@@ -634,45 +634,53 @@
   **覆盖 AC**: AC-14
   **依赖**: T077
 
-- [ ] **T079**: `[MVP-114]` WS 反代 + 不变量① 测试
+- [x] **T079**: `[MVP-114]` WS 反代 + 不变量① 测试
   **文件**: `src/app-proxy/tests/test_websocket.py`（新）
   **逻辑**: 握手时定死连接授权有效期 = `min(OBO 剩余寿命, ws_max_lifetime_seconds)` + 随机抖动，到期主动 `close(4001)`；WS 升级请求走同一段头剥离代码。
   **覆盖 AC**: AC-25, AC-35
   **依赖**: T045
+  **落地记录**（2026-09-16，fd4500e04 + 本轮 review 修订）：`tests/test_websocket.py` 对**真实**回环 WS 服务器（`tests/fakes.py::WsEchoUpstream`）断言——双向帧回显 / 前缀剥离与 query 保留 / 子协议协商 / 关闭码双向透传 / 伪造 `x-bisheng-*` 与 `X-Forwarded-*` 剥离 + 十头注入 / 平台会话 cookie 不出站 / 五类拒绝不触上游 / D5.1 失效重取一次 / 寿命 = min(OBO, cap)+抖动、到期 4001 且上游同码 / 后端下发的 cap 优先于进程 env。
 
-- [ ] **T080**: `[MVP-114]` WS 反代与不变量① 实现
+- [x] **T080**: `[MVP-114]` WS 反代与不变量① 实现
   **文件**: `src/app-proxy/app_proxy/websocket.py`（新）
   **逻辑**: D6「WS 三不变量落地程度」。
   **测试**: T079 全部通过。
   **覆盖 AC**: AC-25, AC-35
   **依赖**: T079
+  **落地记录**（2026-09-16）：`websocket.py` 先连上游再 `accept`（浏览器绝不会握着一条背后没人的 socket）；头列表与 HTTP 路径共用 `proxy.upstream_headers_for`（AC-32 一处实现），剔除浏览器自己的 `Sec-WebSocket-*`；两个泵 + 到期 / 吊销 / 周期重问三个任务，先完成者定关闭码、两端同码。`websockets>=13` 从 `uvicorn[standard]` 的传递依赖提为直接依赖（客户端一侧的契约，lock 内已有该包）。`APP_PROXY_WS_PROXY_ENABLED` 默认改 `true`，`false` = 允许的升级以 4501 关闭（原 MVP 行为）。**后端配合**：`authorize_entry` 的 allow 判定新增 `obo_expires_at` / `ws_max_lifetime_seconds`（`test_entry_authz_service.py::test_allow_verdict_states_the_websocket_lifetime_inputs`），老后端不发时 app-proxy 退回解 OBO `exp` 声明 + 进程 env 兜底。
 
-- [ ] **T081**: `[MVP-114]` WS 不变量②③（吊销 / 下线主动断连 + 前端重握手常态）
+- [x] **T081**: `[MVP-114]` WS 不变量②③（吊销 / 下线主动断连 + 前端重握手常态）
   **文件**: `src/app-proxy/app_proxy/connections.py`（新）, `src/backend/bisheng/app_runtime/domain/services/app_state_service.py`（下线 / 撤权时通知）
   **逻辑**: app-proxy 维护 connection → (user, app) 索引，应用下线、可见范围撤销时主动断开该用户连接——**②正是自研 app-proxy 的核心理由**（反代生态无先例），别因为"先只做①"就忘了。
   **覆盖 AC**: AC-35
   **依赖**: T080, **T051**（本任务要改 `app_state_service.py` 的下线 / 撤权路径——该文件由 T049 建、T051 补齐五动作；只写 `依赖: T080` 时链路 T080→T079→T045 完全不经过 T049/T051，并行执行会撞上一个尚不存在的文件）
+  **落地记录**（2026-09-16，**app-proxy 半边已落、backend 半边未接**）：`connections.py` 进程内 registry（(app, user) 索引）+ `POST /internal/connections/close`（与 authorize 同一 HMAC、同一 secret、空密钥 fail-closed；body `{app_id, user_ids|null, reason}`，`reason` 取判定词 `forbidden|stopped|not_found` 决定关闭码，未知词 → 4503）；不在 `/apps/` 之下、nginx 不路由。**安全网**：每条连接每 `APP_PROXY_WS_REAUTHORIZE_INTERVAL_SECONDS`（默认 30s）重问一次判定、非 allow 即关——这是多进程 / 多节点下客户可依赖的上界，推送只是快路径。**③** 落为 `login_handoff.WS_CLOSE_CODES` 的文档化契约（4001 / 4401 / 4403 / 4404 / 4503 / 4501 全部含义为「重新握手」）。
+  **实际偏差记录（未做、留给 backend 切片）**：`app_state_service.py` 的 stop / delete 与 F048 撤权路径**尚未**调用该端点。backend 须补：① `app_runtime` 新增 app-proxy 地址列表配置（单机 systemd 形态 `http://127.0.0.1:8090`，compose 形态 `http://app-proxy:8090`）；② 在 `stop` / `delete` 转态成功后、以及应用可见范围撤销（F048 grant 变更）后，对每个地址 `POST /internal/connections/close`，body 如上（下线 / 删除 `user_ids=null`、`reason=stopped`；撤权 `user_ids=[受影响 user_id]`、`reason=forbidden`），签名 = `hmac_auth.py` 同一算法（`METHOD\nPATH\n` + raw body，secret = `proxy_hmac_secret`）；③ 推送**尽力而为**（超时 2s、失败只 warning），不得阻塞状态转换——上界由 app-proxy 的周期重问保证。
 
 ### Wave 5 · release 必做（MVP-核心之外，按 design §8 优先级）
 
-- [ ] **T082a**: 两个过渡态页测试（Test-First，先于 T082）
+- [x] **T082a**: 两个过渡态页测试（Test-First，先于 T082）
+  **落地记录**（2026-09-16）：`tests/test_transition_pages.py` 六个规划用例全部落地 + `test_deploying_answer_is_cached_like_a_route` / `test_verdict_pages_never_carry_retry_markup` / `test_ws_upgrade_during_deploy_gets_a_close_code`；「发布中」由 manager 的 409 `deploying` 信封触发（fake 里给出保留形态，见 T083 偏差）。
   **文件**: `src/app-proxy/tests/test_transition_pages.py`（新）
   **逻辑**: `test_deploying_page_on_generation_switch`（切换窗口 → 「发布中」页而非报错页）→ AC-48 / `test_recovering_page_on_upstream_unreachable`（上游不可达 → 「应用恢复中」页）→ AC-36 / `test_auto_retry_markup_present`（页面含 `meta http-equiv=refresh` 或内联定时 reload，间隔可断言）→ AC-36, AC-48 / `test_ready_after_retry_enters_app`（fake 上游从不可达转就绪 → 下一次请求进入应用，用户无需手动刷新）→ AC-48 / `test_mutually_exclusive_with_four_fallback_pages`（过渡态与 forbidden / stopped / not_found / not_enabled 四类兜底页**互斥**，同一请求只可能命中一类）→ AC-36 / `test_xhr_gets_json_not_transition_html`（非导航请求仍走 T042 的分流口径，返 JSON + 真实状态码）。
   **覆盖 AC**: AC-36, AC-48
   **依赖**: T045, T041
 
-- [ ] **T082**: 两个过渡态页实现（「发布中」/「应用恢复中」+ 自动重试）
+- [x] **T082**: 两个过渡态页实现（「发布中」/「应用恢复中」+ 自动重试）
   **文件**: `src/app-proxy/app_proxy/pages.py`
   **逻辑**: 自渲染 + `meta http-equiv=refresh` / 内联 JS 定时 reload，就绪后自动进入应用、用户无需手动刷新；与四类兜底页**互斥**。
   **测试**: T082a 全部通过。
   **覆盖 AC**: AC-36, AC-48
   **依赖**: T082a
+  **落地记录**（2026-09-16）：`pages.py` 新增 `PAGE_DEPLOYING`、`TRANSITIONAL_KINDS`；只有过渡态两页带 `meta refresh`（10s 无脚本地板）+ 内联退避重载脚本（3s 起、每次 +2s、封顶 10s，计数放 `sessionStorage`、拿不到就不退避）——两者都 > 3s 路由缓存，每次重载都真的重问 manager；四类判定页零脚本。三语文案同批（`test_pages_i18n` parity 自动覆盖新页）。**错误码**：过渡态两页从借用 16121 改为专属 **16147（发布中）/ 16148（恢复中）**，本轮 review 补齐 backend `common/errcode/app_factory.py` 登记 + `packages/locales` 三语（实现提交曾漏登记，`check-i18n` 会红）。响应带 `Retry-After`。
 
-- [ ] **T083**: 切流量 health gate 与「发布中」联调
+- [x] **T083**: 切流量 health gate 与「发布中」联调
   **文件**: `src/runtime-manager/runtime_manager/lifecycle.py`, `src/app-proxy/app_proxy/routing.py`
   **逻辑**: 新实例探活通过才切上游、旧实例宽限退休；切换窗口内入口呈「发布中」而非报错页。
   **覆盖 AC**: AC-21, AC-48
   **依赖**: T082
+  **落地记录**（2026-09-16）：health gate 半边**早已成立**——manager `deploy()` 同步探活通过才 `store.put`（`generation+1`）、旧实例 30s 宽限退休（`test_route_generation_bumps_only_after_probe_pass`），backend `_start` 等 `deploy` 返回才置 `online`；app-proxy 侧 `routing.py` 新增 `Upstream.phase/starting`、`clients.py` 消费 manager 的 `409 detail.code=deploying`（缓存同路由 3s），HTTP → 「发布中」页 / XHR 16147 / WS 4503。
+  **实际偏差记录**：**manager 当前不发 `409 deploying`**，也没改 `lifecycle.py`——deploy 同步 + backend 后置 `online` + 重发布期间旧实例照常服务，意味着现在**不存在**可观察到「发布中」的窗口（首发布期间入口判定是 `not_found`，重发布期间打到旧实例）；给 manager 硬加一个「在途」相位会让崩溃重建（`PHASE_STARTING`）与首发布无法区分、且触碰其它切片持有的 lifecycle / reconciler。信封形态登记在 `contracts-runtime-manager.md` §9：deploy 改异步之日必须发它而不是 404。
 
 - [x] **T084a**: 附件存储句柄测试（Test-First，先于 T084）
   **文件**: `src/runtime-manager/tests/test_storage.py`（新）

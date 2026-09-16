@@ -8,6 +8,11 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "httpx>=0.27",
+    # The WebSocket *client* for the upstream leg (T080). uvicorn[standard]
+    # happens to pull the same package for its server side, but a transitive
+    # dependency is not a contract — a uvicorn release switching to wsproto
+    # would silently remove our client library.
+    "websockets>=13",
 ]
 
 [project.optional-dependencies]

@@ -207,6 +207,30 @@ class AppPermissionEngineUnavailableError(AppFactoryError):
     Msg: str = "The permission service is unavailable; access is denied"
 
 
+class AppEntryDeployingError(AppFactoryError):
+    """Publish window: a deploy is in flight and nothing serves yet (AC-48).
+
+    Raised by nobody in this process — app-proxy emits the code to
+    non-navigation callers (the page itself auto-retries). Registered here so
+    the code has exactly one meaning and copy in the three ``api_errors``
+    bundles, like the six entry verdicts above.
+    """
+
+    Code: int = 16147
+    Msg: str = "The application is being published; retry shortly"
+
+
+class AppEntryRecoveringError(AppFactoryError):
+    """Crash / restart window: the instance is not answering yet (AC-36).
+
+    Same emitter as :class:`AppEntryDeployingError`. Distinct from 16121
+    (orchestrator unavailable): the manager is fine, the app is not back yet.
+    """
+
+    Code: int = 16148
+    Msg: str = "The application is restarting; retry shortly"
+
+
 # ---------------------------------------------------------------------------
 # 16160-16179 — data plane / logs
 # ---------------------------------------------------------------------------

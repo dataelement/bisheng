@@ -20,24 +20,42 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from app_proxy.clients import InternalRpcError, get_manager_client
+from app_proxy.clients import ROUTE_PHASE_STARTING, InternalRpcError, get_manager_client
 
 logger = logging.getLogger(__name__)
+
+PHASE_RUNNING = "running"
+PHASE_STARTING = ROUTE_PHASE_STARTING
 
 
 @dataclass(frozen=True)
 class Upstream:
-    base_url: str
+    """Where to forward — or, when ``phase`` is ``starting``, why not yet.
+
+    A ``starting`` upstream has no ``base_url``: the manager has a deploy in
+    flight for this app and nothing serving (T083). It is a distinct object
+    rather than ``None`` because the caller renders a different page for it
+    (「发布中」, AC-48) than for "nothing to forward to" (「应用恢复中」, AC-36).
+    """
+
+    base_url: str = ""
     version_id: str | None = None
     generation: int | None = None
     cache_hit: bool = False
+    phase: str = PHASE_RUNNING
+
+    @property
+    def starting(self) -> bool:
+        return self.phase == PHASE_STARTING
 
 
 async def resolve_upstream(app_id: str, *, refresh: bool = False) -> Upstream | None:
     """``None`` = nothing to forward to right now → the "恢复中" page, not an error.
 
     A stopped app, a crash window and the seconds between two containers all
-    look the same from here, and all three are legitimately transient.
+    look the same from here, and all three are legitimately transient. The one
+    case the manager *can* tell apart — a deploy in flight — comes back as an
+    :class:`Upstream` whose :attr:`Upstream.starting` is true.
     """
     try:
         payload = await get_manager_client().route(app_id, refresh=refresh)
@@ -46,6 +64,8 @@ async def resolve_upstream(app_id: str, *, refresh: bool = False) -> Upstream | 
         return None
     if not payload:
         return None
+    if not payload.get("upstream"):
+        return Upstream(phase=str(payload.get("phase") or PHASE_STARTING), cache_hit=bool(payload.get("cache_hit")))
     return Upstream(
         base_url=str(payload["upstream"]).rstrip("/"),
         version_id=payload.get("version_id"),

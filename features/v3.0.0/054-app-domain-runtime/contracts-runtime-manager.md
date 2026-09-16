@@ -111,4 +111,6 @@ reconciler 每 **15s** 一轮，`RTM_RECONCILE_ENABLED` 关不掉的产品语义
 
 ## 9. 尚未实现（留给后续批次）
 
-`GET /v1/apps/{app_id}/db/*`（数据 tab / MCP 数据工具，D10，后置 Wave）；出站白名单双层与 docker-socket-proxy（D12 / D2-B，Wave 4，后者**零代码改动**——只改 `RTM_DOCKER_HOST`）。出站白名单落地时须放行 `BISHENG_APP_STORAGE_ENDPOINT` 所指的 manager 地址，否则附件句柄随白名单一起断。
+出站白名单双层与 docker-socket-proxy（D12 / D2-B，Wave 4，后者**零代码改动**——只改 `RTM_DOCKER_HOST`）。出站白名单落地时须放行 `BISHENG_APP_STORAGE_ENDPOINT` 所指的 manager 地址，否则附件句柄随白名单一起断。
+
+**`GET /v1/apps/{app_id}/route` 的 `409 deploying` 信封（「发布中」窗口，T083，2026-09-16）**：app-proxy 侧**已消费**——`detail.code=deploying` → 导航请求渲染「发布中」自动重试页、XHR 返 503 + 16147、WS 升级以 4503 关闭，并按路由缓存的 3s 缓存该答案（不把一次发布变成对 manager 的请求风暴）。manager 侧**当前不发**：`deploy` 是同步的——探活通过才写期望态（`generation+1`），backend 也要等 `deploy` 返回才把应用置 `online`，重发布期间旧实例照常服务到 30s 宽限期结束；所以现在**不存在**能观察到「发布中」的窗口，路由端点只有 `{upstream,…}` 与 404 两种答案（404 → 「应用恢复中」）。若日后把 deploy 改成异步（先登记期望态再拉起），该窗口即出现，届时**必须**发此信封而不是 404，否则用户在首发布期间看到的是「恢复中」文案。

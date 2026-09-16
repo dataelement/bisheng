@@ -18,7 +18,15 @@ import os
 import httpx
 import pytest
 
-from tests.fakes import EchoUpstream, FakeBackend, FakeManager, FrozenClock, UpstreamTransport
+from tests.fakes import (
+    EchoUpstream,
+    FakeBackend,
+    FakeManager,
+    FrozenClock,
+    UpstreamTransport,
+    WsEchoUpstream,
+    WsUpstreamTransport,
+)
 
 BACKEND_SECRET = "backend-secret-for-tests"
 MANAGER_SECRET = "manager-secret-for-tests"
@@ -68,8 +76,37 @@ def upstream_transport(echo_upstream) -> UpstreamTransport:
     return transport
 
 
+@pytest.fixture(scope="session")
+def ws_echo_upstream() -> WsEchoUpstream:
+    """One real WebSocket echo server for the whole session (a thread + a port).
+
+    Session-scoped because starting a thread and binding a port per test is
+    slow and pointless; per-test state (``handshakes``, ``reject_status``) is
+    reset by :func:`ws_upstream`.
+    """
+    server = WsEchoUpstream().start()
+    yield server
+    server.stop()
+
+
+@pytest.fixture
+def ws_upstream(ws_echo_upstream) -> WsEchoUpstream:
+    ws_echo_upstream.handshakes.clear()
+    ws_echo_upstream.reject_status = None
+    return ws_echo_upstream
+
+
+@pytest.fixture
+def ws_transport(ws_upstream) -> WsUpstreamTransport:
+    from tests.fakes import DEFAULT_UPSTREAM
+
+    transport = WsUpstreamTransport()
+    transport.register(DEFAULT_UPSTREAM, ws_upstream)
+    return transport
+
+
 @pytest.fixture(autouse=True)
-def wired(fake_backend, fake_manager, upstream_transport, frozen_clock):
+def wired(fake_backend, fake_manager, upstream_transport, ws_transport, frozen_clock):
     """Point the process at the fakes, then put it back.
 
     Autouse because a test that forgot it would silently reach for
@@ -84,6 +121,11 @@ def wired(fake_backend, fake_manager, upstream_transport, frozen_clock):
         manager_base=MANAGER_BASE,
         backend_secret=BACKEND_SECRET,
         manager_secret=MANAGER_SECRET,
+        # Real seconds, not the frozen clock: the deadline is an ``asyncio``
+        # timer. Tests that assert expiry shrink this to a fraction of a second.
+        ws_max_lifetime_seconds=3600.0,
+        ws_lifetime_jitter_seconds=0.0,
+        ws_reauthorize_interval_seconds=3600.0,
     )
     set_config(config)
 
@@ -109,6 +151,13 @@ def wired(fake_backend, fake_manager, upstream_transport, frozen_clock):
         proxy.set_upstream_transport(upstream_transport)
     except ImportError:  # pragma: no cover - only before T045 lands
         proxy = None
+    try:
+        from app_proxy import connections, websocket
+
+        websocket.set_upstream_connector(ws_transport)
+        connections.registry.clear()
+    except ImportError:  # pragma: no cover - only before T080 lands
+        websocket = None
 
     yield config
 
@@ -116,6 +165,9 @@ def wired(fake_backend, fake_manager, upstream_transport, frozen_clock):
     set_config(None)
     if proxy is not None:
         proxy.set_upstream_transport(None)
+    if websocket is not None:
+        websocket.set_upstream_connector(None)
+        connections.registry.clear()
 
 
 @pytest.fixture

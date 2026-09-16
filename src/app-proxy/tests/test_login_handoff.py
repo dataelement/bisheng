@@ -138,12 +138,16 @@ class TestWebSocketRefusal:
                 pass
         assert excinfo.value.code == close_code
 
-    def test_ws_refused_while_proxying_is_not_yet_enabled(self, proxy_client, fake_backend):
-        """Allowed, but WS reverse proxying is Wave 4 (T079/T080).
+    def test_ws_refused_with_4501_when_proxying_is_switched_off(self, proxy_client, wired):
+        """Allowed, but ``APP_PROXY_WS_PROXY_ENABLED=false`` on this deployment.
 
-        A distinct code so the 114 walkthrough can tell "you may not" from
-        "not built yet" without reading logs.
+        A distinct code so a walkthrough can tell "you may not" from "this
+        deployment does not proxy sockets" without reading logs. The proxied
+        path itself is ``test_websocket.py``.
         """
+        from app_proxy.config import set_config
+
+        set_config(wired.with_overrides(ws_proxy_enabled=False))
         proxy_client.cookies.set("access_token_cookie", "jwt-token-for-tests")
         with pytest.raises(WebSocketDisconnect) as excinfo:
             with proxy_client.websocket_connect("/apps/foo/ws"):

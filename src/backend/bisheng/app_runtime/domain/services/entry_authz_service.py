@@ -169,7 +169,7 @@ async def authorize_entry(
     material = await _identity_material(
         app=app, user_id=user_id, user_name=user_name, subject_kind=subject_kind, request_id=request_id
     )
-    obo_token = _issue_obo_token(
+    obo_token, obo_expires_at = _issue_obo_token(
         app_id=app.id,
         user_id=user_id,
         tenant_id=int(app.tenant_id or 0),
@@ -197,6 +197,12 @@ async def authorize_entry(
         "app_state": app.state,
         "headers": material,
         "obo_token": obo_token,
+        # WebSocket lifetime inputs (D6 invariant ①, T081): app-proxy fixes a
+        # socket's authorised lifetime at the handshake as
+        # ``min(OBO remaining, ws_max_lifetime_seconds)``. Stated here so the
+        # cap is this process's config, not a second copy in the proxy's env.
+        "obo_expires_at": obo_expires_at,
+        "ws_max_lifetime_seconds": int(settings.app_runtime.ws_max_lifetime_seconds),
     }
 
 
@@ -397,8 +403,12 @@ def _warn_once(key: str, message: str) -> None:
     logger.error(message)
 
 
-def _issue_obo_token(*, app_id: str, user_id: int, tenant_id: int, subject_kind: str) -> str | None:
+def _issue_obo_token(*, app_id: str, user_id: int, tenant_id: int, subject_kind: str) -> tuple[str | None, int | None]:
     """Short-lived on-behalf-of token injected into the app (AC-34).
+
+    Returns ``(token, expires_at)`` — the expiry as epoch seconds, so the
+    caller can state it to app-proxy without decoding the token — or
+    ``(None, None)`` when no token is issued.
 
     Signed with ``app_runtime.obo_secret``, which **must differ** from
     ``settings.jwt_secret``: sharing them would make every OBO token a valid
@@ -422,16 +432,17 @@ def _issue_obo_token(*, app_id: str, user_id: int, tenant_id: int, subject_kind:
     secret = settings.app_runtime.obo_secret
     if not secret:
         _warn_once("obo_secret_missing", "app_runtime.entry obo_secret is not configured; no OBO token issued")
-        return None
+        return None, None
     if secret == settings.jwt_secret:
         _warn_once(
             "obo_secret_equals_jwt",
             "app_runtime.entry obo_secret equals jwt_secret; refusing to sign (AC-34). "
             "Sharing them would make every OBO token a valid platform session — set a distinct secret.",
         )
-        return None
+        return None, None
 
     now = int(time.time())
+    expires_at = now + int(settings.app_runtime.obo_ttl_seconds)
     payload = {
         # Serialised like the platform's own session subject so both decode the
         # same way; PyJWT 2.10 also requires ``sub`` to be a string.
@@ -442,6 +453,6 @@ def _issue_obo_token(*, app_id: str, user_id: int, tenant_id: int, subject_kind:
         "aud": OBO_AUDIENCE,
         "iss": settings.cookie_conf.jwt_iss,
         "iat": now,
-        "exp": now + int(settings.app_runtime.obo_ttl_seconds),
+        "exp": expires_at,
     }
-    return jwt.encode(payload, secret, algorithm="HS256")
+    return jwt.encode(payload, secret, algorithm="HS256"), expires_at

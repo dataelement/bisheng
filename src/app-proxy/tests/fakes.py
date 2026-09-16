@@ -17,9 +17,11 @@ prove nothing.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
+import threading
 from typing import Any
 
 import httpx
@@ -43,6 +45,15 @@ DEFAULT_HEADER_MATERIAL = {
 
 DEFAULT_APP_ID = "app-0001"
 DEFAULT_UPSTREAM = "http://172.20.0.7:8080"
+
+#: What the manager would answer while a deploy is in flight and nothing serves
+#: yet — the 409 ``deploying`` envelope reserved in contracts-runtime-manager.md
+#: §9. The manager does not emit it today (its deploy is synchronous, so no
+#: such window exists); the proxy consumes it so the day it appears the page is
+#: 「发布中」 and not 「恢复中」. Programmed into :class:`FakeManager` as a
+#: route value without an ``upstream`` so a script can say "starting, starting,
+#: then ready" the same way it says "refused, then ready".
+DEPLOYING_ROUTE: dict[str, Any] = {"phase": "starting"}
 
 
 def sign(method: str, path: str, raw_body: bytes, secret: str) -> str:
@@ -189,6 +200,13 @@ class FakeManager:
         route = queued.pop(0) if queued else self.routes.get(app_id)
         if route is None:
             response = JSONResponse({"code": "not_found", "message": "no live instance"}, status_code=404)
+        elif not route.get("upstream"):
+            # The reserved shape for an in-flight deploy: an error envelope, not
+            # a route (contracts-runtime-manager.md §9 — see DEPLOYING_ROUTE).
+            response = JSONResponse(
+                {"detail": {"code": "deploying", "message": "a deploy is in flight", "phase": "starting"}},
+                status_code=409,
+            )
         else:
             response = JSONResponse(route)
         await response(scope, receive, send)
@@ -266,3 +284,151 @@ class UpstreamTransport(httpx.AsyncBaseTransport):
         if app is None:
             raise httpx.ConnectError(f"no route to {origin}", request=request)
         return await httpx.ASGITransport(app=app).handle_async_request(request)
+
+
+class WsEchoUpstream:
+    """A hosted app speaking WebSocket, on a real loopback port.
+
+    Not an in-memory stub: the proxy's real ``websockets`` client performs a
+    real handshake against it, so what :attr:`handshakes` records is exactly
+    what a hosted app would see — the whole point of the strip / inject
+    assertions (AC-32), same as :class:`EchoUpstream` for HTTP.
+
+    Runs on its own thread with its own event loop because ``TestClient`` drives
+    the proxy from a portal thread of its own; the two must not share a loop.
+
+    Frames are echoed back. A text frame ``close:<code>:<reason>`` makes the
+    server close the connection with that code — how the suite drives
+    "upstream hangs up" without a second control channel.
+    """
+
+    def __init__(self) -> None:
+        self.handshakes: list[dict[str, Any]] = []
+        #: Subprotocols the app is willing to speak; the first one the client
+        #: offers that is in here wins (RFC 6455 §4.2.2 order).
+        self.subprotocols: list[str] = ["chat", "json"]
+        #: When set, the handshake is refused with this HTTP status.
+        self.reject_status: int | None = None
+        self.port: int = 0
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._thread: threading.Thread | None = None
+        self._ready = threading.Event()
+        self._stop: asyncio.Event | None = None
+
+    # -- lifecycle -----------------------------------------------------
+    def start(self) -> WsEchoUpstream:
+        self._thread = threading.Thread(target=self._run, name="ws-echo-upstream", daemon=True)
+        self._thread.start()
+        if not self._ready.wait(5):  # pragma: no cover - only on a wedged host
+            raise RuntimeError("WsEchoUpstream did not start")
+        return self
+
+    def stop(self) -> None:
+        if self._loop is not None and self._stop is not None:
+            self._loop.call_soon_threadsafe(self._stop.set)
+        if self._thread is not None:
+            self._thread.join(5)
+
+    def _run(self) -> None:
+        asyncio.run(self._main())
+
+    async def _main(self) -> None:
+        from websockets.asyncio.server import serve
+
+        self._loop = asyncio.get_running_loop()
+        self._stop = asyncio.Event()
+        async with serve(
+            self._handler,
+            "127.0.0.1",
+            0,
+            subprotocols=self.subprotocols,
+            select_subprotocol=self._select_subprotocol,
+            process_request=self._process_request,
+        ) as server:
+            self.port = server.sockets[0].getsockname()[1]
+            self._ready.set()
+            await self._stop.wait()
+
+    # -- protocol --------------------------------------------------------
+    def _select_subprotocol(self, connection, offered):
+        """First offered protocol the app speaks; none offered is fine too —
+        a real app does not fail the handshake over an absent header."""
+        for candidate in offered:
+            if candidate in self.subprotocols:
+                return candidate
+        return None
+
+    async def _process_request(self, connection, request):
+        if self.reject_status is not None:
+            from http import HTTPStatus
+
+            return connection.respond(HTTPStatus(self.reject_status), "refused by the app\n")
+        return None
+
+    async def _handler(self, connection) -> None:
+        from websockets.exceptions import ConnectionClosed
+
+        record: dict[str, Any] = {
+            "path": connection.request.path,
+            "headers": [[k, v] for k, v in connection.request.headers.raw_items()],
+            "subprotocol": connection.subprotocol,
+            "close_code": None,
+        }
+        self.handshakes.append(record)
+        try:
+            async for message in connection:
+                if isinstance(message, str) and message.startswith("close:"):
+                    _, code, reason = message.split(":", 2)
+                    await connection.close(int(code), reason)
+                    break
+                await connection.send(message)
+        except ConnectionClosed:
+            pass
+        finally:
+            await connection.wait_closed()
+            record["close_code"] = connection.close_code
+
+    @property
+    def base_url(self) -> str:
+        return f"ws://127.0.0.1:{self.port}"
+
+
+class WsUpstreamTransport:
+    """The WebSocket twin of :class:`UpstreamTransport`: origin → real server, or refuse.
+
+    Plugged in through ``app_proxy.websocket.set_upstream_connector``. It
+    rewrites only the authority of the URL the proxy built and hands the rest
+    (path, query, headers, subprotocols) to the real client, so the proxy's
+    own URL construction is what gets exercised.
+    """
+
+    def __init__(self) -> None:
+        self.servers: dict[str, WsEchoUpstream] = {}
+        self.refuse: set[str] = set()
+        self.attempts: list[str] = []
+
+    def register(self, base_url: str, server: WsEchoUpstream) -> None:
+        self.servers[base_url.rstrip("/").replace("http://", "ws://").replace("https://", "wss://")] = server
+
+    async def __call__(self, url: str, headers: list[tuple[str, str]], subprotocols: list[str], timeout: float):
+        from urllib.parse import urlsplit, urlunsplit
+
+        from websockets.asyncio.client import connect
+
+        parts = urlsplit(url)
+        origin = f"{parts.scheme}://{parts.netloc}"
+        self.attempts.append(origin)
+        if origin in self.refuse:
+            raise OSError(f"connection refused: {origin}")
+        server = self.servers.get(origin)
+        if server is None:
+            raise OSError(f"no route to {origin}")
+        real = urlunsplit(("ws", f"127.0.0.1:{server.port}", parts.path, parts.query, ""))
+        return await connect(
+            real,
+            additional_headers=headers,
+            subprotocols=subprotocols or None,
+            open_timeout=timeout,
+            proxy=None,
+            max_size=None,
+        )

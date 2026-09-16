@@ -225,11 +225,21 @@ class BackendAuthzClient(HmacClient):
         return {**payload, "cache_hit": False}
 
 
+#: The manager's answer while a deploy is in flight and nothing serves yet
+#: (contract §2, 409 ``deploying``). Surfaced as a route payload carrying a
+#: ``phase`` and no ``upstream`` so the caller renders 「发布中」 instead of
+#: 「应用恢复中」 (T083).
+ROUTE_PHASE_STARTING = "starting"
+
+
 class ManagerRouteClient(HmacClient):
     """``GET /v1/apps/{app_id}/route`` + the route cache.
 
     ``None`` means "the manager knows this app and it has no live instance"
-    (404) — an expected answer during stop / crash windows, not an error.
+    (404) — an expected answer during stop / crash windows, not an error. A
+    ``{"phase": "starting"}`` payload means a deploy is in flight (409) and is
+    cached like a route: the retrying page must not turn one deploy into a
+    request storm on the manager.
     """
 
     peer = "manager"
@@ -256,6 +266,10 @@ class ManagerRouteClient(HmacClient):
         response = await self._send("GET", f"/v1/apps/{app_id}/route")
         if response.status_code == 404:
             return None
+        if response.status_code == 409 and self._is_deploying(response):
+            payload = {"phase": ROUTE_PHASE_STARTING}
+            self.cache.set(app_id, payload)
+            return {**payload, "cache_hit": False}
         if response.status_code >= 400:
             raise InternalRpcError(self.peer, f"HTTP {response.status_code}")
         try:
@@ -267,6 +281,15 @@ class ManagerRouteClient(HmacClient):
 
         self.cache.set(app_id, payload)
         return {**payload, "cache_hit": False}
+
+    @staticmethod
+    def _is_deploying(response: httpx.Response) -> bool:
+        """Only the manager's own ``deploying`` envelope; any other 409 is an error."""
+        try:
+            detail = response.json().get("detail")
+        except (ValueError, AttributeError):
+            return False
+        return isinstance(detail, dict) and detail.get("code") == "deploying"
 
 
 _backend_client: BackendAuthzClient | None = None
