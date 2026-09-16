@@ -5,7 +5,8 @@
 #   * runs as a non-root user
 #   * writes nothing under / at runtime → survives ReadonlyRootfs (AC-17)
 #   * exec-form ENTRYPOINT → the app is pid 1's process and receives SIGTERM
-#   * dependencies resolved from the deployment's configured index only
+#   * dependencies resolved from the deployment's configured indexes only
+#     (its mirror, plus the platform's own simple index for `bisheng-sdk`)
 #
 # Only classic-builder-compatible syntax is used (no `COPY --chmod`, no
 # heredocs): 114 and the 信创 baselines build through the plain daemon builder,
@@ -20,6 +21,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 ARG PIP_INDEX_URL=""
 ARG PIP_TRUSTED_HOST=""
+# Secondary index — in practice the platform's own PEP 503 index, which is where
+# `bisheng-sdk` comes from (F057). Empty by default, so a deployment that does
+# not ship the SDK builds exactly as before.
+ARG PIP_EXTRA_INDEX_URL=""
+ARG PIP_EXTRA_TRUSTED_HOST=""
 
 RUN set -eux; \
     groupadd --system --gid {{ app_gid }} {{ app_user }}; \
@@ -39,6 +45,8 @@ RUN set -eux; \
         pip install --no-cache-dir \
             ${PIP_INDEX_URL:+--index-url "$PIP_INDEX_URL"} \
             ${PIP_TRUSTED_HOST:+--trusted-host "$PIP_TRUSTED_HOST"} \
+            ${PIP_EXTRA_INDEX_URL:+--extra-index-url "$PIP_EXTRA_INDEX_URL"} \
+            ${PIP_EXTRA_TRUSTED_HOST:+--trusted-host "$PIP_EXTRA_TRUSTED_HOST"} \
             -r requirements.txt; \
     fi
 

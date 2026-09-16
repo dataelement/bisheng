@@ -33,6 +33,28 @@ router = APIRouter(prefix="/dev-toolkit", tags=["Dev Toolkit"])
 
 CLI_DOWNLOAD_PATH = "/api/v1/dev-toolkit/cli/download"
 
+# F057 AC-01 / AC-02: the SDK is distributed by the platform itself, over the
+# same anonymous, intranet-only route family as the CLI. Two addresses, because
+# they serve two different clients: a human (or an agent) fetches the wheel from
+# the download path, while pip — inside a hosted build container that cannot
+# reach the public internet — resolves `bisheng-sdk` through the simple index.
+SDK_DOWNLOAD_PATH = "/api/v1/dev-toolkit/sdk/download"
+SDK_INDEX_PATH = "/api/v1/dev-toolkit/simple/"
+
+# PEP 503 normalised project name. pip normalises whatever it is asked to
+# install and then requests that exact path segment, so this spelling is not
+# cosmetic: `bisheng_sdk/` would never be requested and the index would look
+# empty to pip while looking fine in a browser.
+SDK_PROJECT_NAME = "bisheng-sdk"
+
+# Same judgement as the CLI's message: names the real cause (a release did not
+# ship its build output) and the real next step, and is not an error code (D14).
+SDK_MISSING_MESSAGE = "SDK 安装件未随本次部署发布，请联系平台管理员"  # noqa: RUF001
+
+# The SDK guide is the「平台能力接线」pack's SKILL.md (决议-7). Missing means the
+# pack did not ship — again a release problem, not a platform fault.
+SDK_GUIDE_MISSING_MESSAGE = "SDK 开发者指南未随本次部署发布，请联系平台管理员"  # noqa: RUF001
+
 # Header the ``skills sync`` output reads to report each pack's version (AC-14).
 # A header, not an envelope field, because the body is a tarball, not JSON.
 PACK_VERSION_HEADER = "X-Bisheng-Pack-Version"
@@ -56,6 +78,16 @@ ARTIFACT_MISSING_MESSAGE = "CLI 安装件未随本次部署发布，请联系平
 INSTALL_GUIDE_MISSING_MESSAGE = "安装指引未随本次部署发布，请联系平台管理员"  # noqa: RUF001
 
 
+def _versions_notice(cli: dict | None, sdk: dict | None) -> str | None:
+    """One sentence naming whichever installer this deployment is missing."""
+    missing = []
+    if cli is None:
+        missing.append(ARTIFACT_MISSING_MESSAGE)
+    if sdk is None:
+        missing.append(SDK_MISSING_MESSAGE)
+    return "；".join(missing) if missing else None  # noqa: RUF001
+
+
 @router.get("/versions")
 def get_dev_toolkit_versions(request: Request):
     """Version and compatibility truth for the CLI's pre-flight probe.
@@ -75,13 +107,28 @@ def get_dev_toolkit_versions(request: Request):
             "download_path": CLI_DOWNLOAD_PATH,
         }
 
+    sdk = None
+    if snapshot.sdk is not None:
+        sdk = {
+            "version": snapshot.sdk.version,
+            # The platform's floor, not the wheel's own version: an application
+            # pinned below it is refused at its first call (F057 AC-03). The SDK
+            # reads this field before its first retrieve / storage request.
+            "min_compatible": snapshot.sdk.min_compatible,
+            "filename": snapshot.sdk.filename,
+            "sha256": snapshot.sdk.sha256,
+            "download_path": SDK_DOWNLOAD_PATH,
+            "index_path": SDK_INDEX_PATH,
+        }
+
     return resp_200(
         {
             "cli": cli,
-            # F057 consumes this same endpoint for the SDK (its AC-01 / AC-03).
-            # Holding the slots open now is what keeps that from becoming either
-            # a second endpoint or a breaking reshape of this one.
-            "sdk": {"version": None, "min_compatible": None, "download_path": None},
+            # F057 AC-01 / AC-03: the whole section goes null when no SDK wheel
+            # shipped, rather than null-valued keys — the SDK reads "is there an
+            # SDK on this platform at all" off this one branch, and `notice`
+            # carries the human half.
+            "sdk": sdk,
             # F052: where a local coding agent points its MCP client. One
             # address, derived the same way the skill packs derive theirs, so
             # the access-information panel does not compose a second URL of its
@@ -128,8 +175,10 @@ def get_dev_toolkit_versions(request: Request):
                 "app_runtime_enabled": settings.app_runtime.enabled,
             },
             # Present in every response (null when healthy) so consumers never
-            # have to branch on a key's existence.
-            "notice": None if cli else ARTIFACT_MISSING_MESSAGE,
+            # have to branch on a key's existence. Both wheels are release
+            # output of their own script, so a deployment can be missing either
+            # one and the notice has to say which.
+            "notice": _versions_notice(cli, sdk),
         }
     )
 
@@ -154,6 +203,114 @@ def download_cli_installer():
         filename=snapshot.cli.filename,
         media_type="application/octet-stream",
     )
+
+
+def _serve_sdk_wheel(filename: str | None):
+    """Stream the staged SDK wheel, for both the bare and the named download path.
+
+    Two routes, one handler: a human copies the bare path out of the access
+    panel, while pip follows the index's link, whose last segment **must** be a
+    legal wheel filename — pip derives the distribution's name and version from
+    it and silently skips any link that does not look like one (it never reads
+    ``Content-Disposition`` there). A wrong filename is a 404 rather than "the
+    file we happen to have": the name is how the client states which artifact it
+    verified the hash of.
+    """
+    snapshot = artifact_service.read_snapshot()
+    if snapshot.sdk is None or (filename is not None and filename != snapshot.sdk.filename):
+        # A real 404, not the 200-plus-envelope habit of /api/v1 — pip is a
+        # client on this route and would try to install the envelope.
+        return JSONResponse(
+            status_code=404,
+            content=resp_500(code=404, message=SDK_MISSING_MESSAGE).model_dump(),
+        )
+
+    return FileResponse(
+        snapshot.sdk.path,
+        filename=snapshot.sdk.filename,
+        media_type="application/octet-stream",
+    )
+
+
+@router.get("/sdk/download")
+def download_sdk_wheel():
+    """Anonymous SDK download — the address a developer pastes into ``pip install``."""
+    return _serve_sdk_wheel(None)
+
+
+@router.get("/sdk/download/{filename}")
+def download_sdk_wheel_by_filename(filename: str):
+    """The same wheel under its own filename, which is what pip follows from the index."""
+    return _serve_sdk_wheel(filename)
+
+
+def _simple_index_html(title: str, links: list[str]) -> Response:
+    """Minimal PEP 503 page. pip parses anchors; everything else is decoration."""
+    body = "".join(links)
+    return Response(
+        content=(f"<!DOCTYPE html><html><head><title>{title}</title></head><body>{body}</body></html>"),
+        media_type="text/html; charset=utf-8",
+    )
+
+
+@router.get("/simple/")
+def sdk_simple_index_root():
+    """PEP 503 index root: the hosted build's ``--extra-index-url`` points here.
+
+    Listed unconditionally — the project page is where "no wheel shipped" turns
+    into a 404, which is the answer pip knows how to report ("no matching
+    distribution") instead of silently treating an empty root as a healthy index
+    with nothing in it.
+    """
+    return _simple_index_html(
+        "Simple index",
+        [f'<a href="{SDK_PROJECT_NAME}/">{SDK_PROJECT_NAME}</a>'],
+    )
+
+
+@router.get("/simple/bisheng-sdk/")
+def sdk_simple_index_project():
+    """PEP 503 project page — one link, hash-pinned.
+
+    The ``#sha256=`` fragment is what makes an unauthenticated, plain-HTTP
+    intranet index safe to install from: pip verifies the digest before
+    unpacking, so the bytes are checked even though the channel is not. The
+    relative href climbs two segments to ``/api/v1/dev-toolkit/sdk/download/…``
+    so the page works unchanged behind a gateway path prefix.
+    """
+    snapshot = artifact_service.read_snapshot()
+    if snapshot.sdk is None:
+        return JSONResponse(
+            status_code=404,
+            content=resp_500(code=404, message=SDK_MISSING_MESSAGE).model_dump(),
+        )
+
+    href = f"../../sdk/download/{snapshot.sdk.filename}"
+    if snapshot.sdk.sha256:
+        href = f"{href}#sha256={snapshot.sdk.sha256}"
+    return _simple_index_html(
+        SDK_PROJECT_NAME,
+        [f'<a href="{href}">{snapshot.sdk.filename}</a>'],
+    )
+
+
+@router.get("/sdk-guide.md")
+def get_sdk_guide():
+    """The SDK developer guide as markdown — the same file the skill pack ships.
+
+    Anonymous and ``.md`` for the same reasons as the install guide: an AI
+    coding tool fetches it before anyone holds a key, and the suffix plus
+    ``text/markdown`` tell it this is prose to follow. One source with the pack
+    (决议-7), so the guide cannot drift from what the agent was taught.
+    """
+    content = artifact_service.read_sdk_guide()
+    if content is None:
+        return JSONResponse(
+            status_code=404,
+            content=resp_500(code=404, message=SDK_GUIDE_MISSING_MESSAGE).model_dump(),
+        )
+
+    return Response(content=content, media_type="text/markdown; charset=utf-8")
 
 
 @router.get("/install-guide.md")

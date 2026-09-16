@@ -60,6 +60,11 @@ GUIDES_DIR = Path(__file__).resolve().parents[2] / "guides"
 # name must not become a filesystem lookup.
 INSTALL_GUIDE_NAME = "install-guide.md"
 
+# The pack whose SKILL.md doubles as the SDK developer guide (F057 决议-7). A
+# fixed name for the same reason the install guide's is: there is exactly one,
+# and no caller-supplied segment may reach the disk.
+SDK_GUIDE_PACK = "platform-wiring"
+
 # A pack name is a URL path segment that becomes a filesystem lookup, so it is
 # validated the same way F055 validates a manifest ``slug`` before it ever
 # touches the disk — no dots, no slashes, nothing that could climb out of
@@ -83,10 +88,30 @@ class CliArtifact:
 
 
 @dataclass(frozen=True)
+class SdkArtifact:
+    """One installable ``bisheng-sdk`` wheel plus the metadata pip and the SDK need.
+
+    Same shape as :class:`CliArtifact`, separate class because the two are
+    independent releases: ``min_compatible`` here is the *platform's* declared
+    floor for applications' pinned SDK (F057 决议-6 / ``dev_toolkit.sdk_compat``),
+    not a statement about this platform's own version.
+    """
+
+    version: str
+    min_compatible: str
+    filename: str
+    sha256: str
+    path: Path
+
+
+@dataclass(frozen=True)
 class DistributionSnapshot:
     """Everything the distribution endpoints know, read in one pass over the disk.
 
-    ``cli`` is ``None`` when the artifacts were never packed or never committed.
+    ``cli`` and ``sdk`` are ``None`` when their artifacts were never packed or
+    never committed — independently of each other, because the two wheels come
+    off two scripts and every deployment upgrading from F053 carries the CLI
+    alone until someone runs ``pack_sdk_wheel.sh``.
     ``platform_version`` comes from the manifest as well, deliberately *not* from
     ``bisheng.__version__`` — that one is a hardcoded literal in source and would
     make every compatibility comparison meaningless.
@@ -94,6 +119,7 @@ class DistributionSnapshot:
 
     cli: CliArtifact | None
     platform_version: str | None
+    sdk: SdkArtifact | None = None
 
 
 def _read_manifest() -> dict | None:
@@ -113,45 +139,69 @@ def _read_manifest() -> dict | None:
     return content if isinstance(content, dict) else None
 
 
+def _staged_wheel(manifest: dict, section: str) -> tuple[dict, Path] | None:
+    """The manifest section and its wheel on disk, or ``None`` if either is missing.
+
+    One judgement shared by both wheels: a section without a file (a partial
+    checkout or a partial rsync) is as unusable as a file without a section, and
+    either way the caller must not advertise a download path that fails on the
+    first byte. Each wheel is judged on its own — a missing SDK never withdraws
+    the CLI.
+    """
+    meta = manifest.get(section) or {}
+    filename = meta.get("filename")
+    version = meta.get("version")
+    if not filename or not version:
+        return None
+
+    wheel_path = ARTIFACTS_DIR / Path(filename).name
+    if not wheel_path.is_file():
+        logger.warning(
+            "dev_toolkit manifest advertises {} for '{}' but the file is not in {}; serving the degraded payload",
+            filename,
+            section,
+            ARTIFACTS_DIR,
+        )
+        return None
+    return meta, wheel_path
+
+
 def read_snapshot() -> DistributionSnapshot:
     """Read the staged artifacts. Never raises for a missing or partial staging area."""
     manifest = _read_manifest()
     if manifest is None:
-        return DistributionSnapshot(cli=None, platform_version=None)
+        return DistributionSnapshot(cli=None, platform_version=None, sdk=None)
 
     platform_version = (manifest.get("platform") or {}).get("version")
-    cli_meta = manifest.get("cli") or {}
-    filename = cli_meta.get("filename")
-    version = cli_meta.get("version")
 
-    if not filename or not version:
-        return DistributionSnapshot(cli=None, platform_version=platform_version)
-
-    # The manifest and the wheel are committed together, but a partial checkout
-    # (or a partial rsync) can carry one without the other. Trusting the manifest
-    # alone would hand out a download path that 500s on the first byte.
-    wheel_path = ARTIFACTS_DIR / Path(filename).name
-    if not wheel_path.is_file():
-        logger.warning(
-            "dev_toolkit manifest advertises {} but the file is not in {}; serving the degraded payload",
-            filename,
-            ARTIFACTS_DIR,
-        )
-        return DistributionSnapshot(cli=None, platform_version=platform_version)
-
-    return DistributionSnapshot(
-        cli=CliArtifact(
-            version=version,
+    cli = None
+    staged_cli = _staged_wheel(manifest, "cli")
+    if staged_cli is not None:
+        cli_meta, cli_path = staged_cli
+        cli = CliArtifact(
+            version=cli_meta["version"],
             # A release that predates the min_compatible key is compatible with
             # itself and nothing older, which is what falling back to `version`
             # expresses.
-            min_compatible=cli_meta.get("min_compatible") or version,
-            filename=wheel_path.name,
+            min_compatible=cli_meta.get("min_compatible") or cli_meta["version"],
+            filename=cli_path.name,
             sha256=cli_meta.get("sha256") or "",
-            path=wheel_path,
-        ),
-        platform_version=platform_version,
-    )
+            path=cli_path,
+        )
+
+    sdk = None
+    staged_sdk = _staged_wheel(manifest, "sdk")
+    if staged_sdk is not None:
+        sdk_meta, sdk_path = staged_sdk
+        sdk = SdkArtifact(
+            version=sdk_meta["version"],
+            min_compatible=sdk_meta.get("min_compatible") or sdk_meta["version"],
+            filename=sdk_path.name,
+            sha256=sdk_meta.get("sha256") or "",
+            path=sdk_path,
+        )
+
+    return DistributionSnapshot(cli=cli, platform_version=platform_version, sdk=sdk)
 
 
 @dataclass(frozen=True)
@@ -245,4 +295,22 @@ def read_install_guide() -> str | None:
         return path.read_text(encoding="utf-8")
     except OSError:
         logger.exception("dev_toolkit install guide at {} is unreadable; serving the degraded 404", path)
+        return None
+
+
+def read_sdk_guide() -> str | None:
+    """The SDK developer guide, or ``None`` if absent.
+
+    It is the「平台能力接线」pack's own ``SKILL.md`` — not a copy (F057 决议-7).
+    The guide (read by people) and the pack (read by an agent) teach the same
+    three calls, and two files would drift within a release. Serving the pack's
+    file over HTTP costs nothing and makes the drift structurally impossible.
+    """
+    path = SKILLS_DIR / SDK_GUIDE_PACK / "SKILL.md"
+    if not path.is_file():
+        return None
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        logger.exception("dev_toolkit sdk guide at {} is unreadable; serving the degraded 404", path)
         return None

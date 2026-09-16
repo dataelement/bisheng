@@ -147,10 +147,13 @@ def test_auth_chapter_teaches_exactly_app_proxys_header_names():
     taught = set(re.findall(r"`(X-BiSheng-[A-Za-z-]+)`", (WIRING / "SKILL.md").read_text(encoding="utf-8")))
     # Every taught name is a real one, and every real one is taught.
     assert taught == injected, f"pack/app-proxy header drift: {taught ^ injected}"
-    # The access-token handle has no consumer this round; the pack must say so.
+    # The access-token handle now has exactly one consumer — the SDK's retrieve —
+    # and the row must still forbid the app doing anything with it itself
+    # (parsing it, storing it, treating it as a permission). F057 changed the
+    # contract; this guard changed with it, in the same PR.
     text = (WIRING / "SKILL.md").read_text(encoding="utf-8")
     token_row = next(line for line in text.splitlines() if line.startswith("| `X-BiSheng-Access-Token`"))
-    assert "不要依赖" in token_row
+    assert "不要自己解析" in token_row
 
 
 def test_model_chapter_is_marked_not_yet_available_and_invents_no_endpoint():

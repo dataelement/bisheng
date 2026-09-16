@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 15 条修订，36 条 AC（决议 1–11） |
 | design.md | ✅ 已评审（全自动模式定案） | 2026-09-16 初版 + 两次续写（末次按 `wt/cli-dev` 改写 D12 / D13 / D4 / D5 / D8，坑扩到 36）；`/sdd-review design` 已跑，发现就地修订；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-09-16） | 本文；**44 任务 / 7 Wave + 1 前置**；36 条 AC 全覆盖（追溯表见末尾）；`/sdd-review tasks` 已跑 |
-| 实现 | 🚧 进行中 | **22 / 44**（Wave 0–3 = T000–T021 全部完成，另含 Wave 1 的 CI 门 T008；commits `ff32fac67` → `68482f3ad` → `cd6fd8ba8` → 审查修复；Wave 4–7 = 分发 / 技能包 / 联调由姊妹切片与后续波次承接）。两个前置依赖分支（`wt/storage-handle`、`wt/cli-dev`）须先合入（T000 核对）；两个跨 Feature 阻塞项（design §6.2 ②③）与契约 ③④⑦ 未落地前，Wave 7 的 114 联调只能部分执行；Wave 1–6 全部可离线完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | **38 / 45**（两条切片已合流：`wt/f057-sdk-core` 交付包本体 Wave 0–3，`wt/f057-sdk-dist` 交付分发与文档 Wave 0 / 4 / 5 / 6。仍缺的是需要 114 或真实构建容器的端到端项，逐条见下。）|
 
 ---
 
@@ -89,6 +89,7 @@
   **文件**: 本文（回填核对结果，不改代码）
   **逻辑**: 本 Feature 的实现分支必须从**已含两个前置分支**的基线切出，顺序 `wt/cli-dev` → `wt/storage-handle` → 本 Feature（坑 35：两分支都写 `src/backend/bisheng/dev_toolkit/artifacts/`，二进制不可 textual merge）。逐条核对并把结果写进本任务下方：① `test -f src/runtime-manager/runtime_manager/storage.py` 且 `grep -q "STORAGE_ENV_NAMES" ` 命中（F054 T084）② `grep -n "BISHENG_APP_STORAGE_ENDPOINT" src/backend/bisheng/app_runtime/domain/constants.py`（backend 契约副本）③ `test -f src/bisheng-cli/bisheng_cli/devproxy.py` 且 `grep -c "X-BiSheng-" ` ≥ 10（F053 T042）④ `test -d src/backend/bisheng/dev_toolkit/skills/platform-wiring`（F053 T038）⑤ `grep -n "DEFAULT_PACKS" src/bisheng-cli/bisheng_cli/commands/skills.py` 是否已两元素 ⑥ `python3 -c "import json;print(json.load(open('src/backend/bisheng/dev_toolkit/artifacts/manifest.json')).keys())"`。**任一项缺失就停下**——缺的那项对应的任务（T018/T019 对账、T033–T036 增量、T038）会按「文件不存在」写成新建，把对方的实现覆盖掉。
   **依赖**: 无
+  **核对结果（基线 375a8594f）**: ① `runtime_manager/storage.py` 存在且含 `STORAGE_ENV_NAMES` ✅ ② `app_runtime/domain/constants.py:198` 有 `BISHENG_APP_STORAGE_ENDPOINT` ✅ ③ `bisheng_cli/devproxy.py` 存在、`X-BiSheng-` 出现 20 次 ✅ ④ `skills/platform-wiring/` 已在 ✅ ⑤ `DEFAULT_PACKS` 已是两元素 ✅ ⑥ manifest 键 = cli / platform / _note ✅。两个前置分支均已合入 `3.0-vibe`，无一项缺失。
 
 ### Wave 1 · SDK 包工程、测试基建、errors、上下文与 auth
 
@@ -149,6 +150,7 @@
   **文件**: `.github/workflows/sdk-quality.yml`（新）
   **逻辑**: 照 `cli-quality.yml` 三 leg：`locked`（`uv sync --frozen --extra dev` → `ruff check` + `ruff format --check` → `pytest -m "not network"`）· `highest`（`uv sync --resolution highest` 再跑测试，抓上界内的新版本破坏）· `wheel`（`bash scripts/pack_sdk_wheel.sh` + drift guard：`bisheng_sdk.__version__` == `manifest.json["sdk"]["version"]`、wheel 不被 `.gitignore` 匹配、manifest `git diff --quiet`）。paths：`src/bisheng-sdk/**`、`scripts/pack_sdk_wheel.sh`、本文件。`wheel` leg 依赖 T022 脚本存在，先以 `if: hashFiles('scripts/pack_sdk_wheel.sh') != ''` 守住。
   **依赖**: T001
+  **证据**: 与 T028 合并交付于 `.github/workflows/sdk-quality.yml`（10607e923）；包未落地时三个 leg 各自打 notice 跳过而不是红。
 
 - [x] **T009**: Wave 1 收口：`__init__.py` 挂 auth、ruff 全绿、`uv lock --check`〔0.5h〕
   **完成**: ✅ 2026-09-16（ff32fac67）`ruff check` / `ruff format --check` 全绿（31 文件）；`uv lock` 已生成并提交。
@@ -256,76 +258,87 @@
 
 ### Wave 4 · 平台分发（打包、manifest、端点、CI、提交 wheel）
 
-- [ ] **T022**: `scripts/pack_sdk_wheel.sh` + `sdk_compat.py`〔2h〕
+- [x] **T022**: `scripts/pack_sdk_wheel.sh` + `sdk_compat.py`〔2h〕
   **文件**: `scripts/pack_sdk_wheel.sh`（新）, `src/backend/bisheng/dev_toolkit/sdk_compat.py`（新）
   **逻辑**: `sdk_compat.py`：`SDK_MIN_COMPATIBLE = "0.1.0"`（平台声明的最低兼容 SDK 版本，D16；docstring 说明升它 = 宣告老 SDK 应用下次调用报错）。脚本照 `pack_cli_wheel.sh` 五步：① `uv build --wheel`（`src/bisheng-sdk/`）② 校验 wheel 含 `bisheng_sdk/auth.py`（`WHEEL_LISTING="$(unzip -l …)"` + `case`，**不用 `| grep -q`**，坑 12）且文件名含版本 ③ 清 venv 装 wheel 冒烟：`python -c "import bisheng_sdk, bisheng_sdk.auth, bisheng_sdk.retrieve, bisheng_sdk.storage, bisheng_sdk.errors; assert bisheng_sdk.__version__=='${VERSION}'"` ④ `rm -f "${ARTIFACTS_DIR}"/bisheng_sdk-*.whl`（**只删自己前缀**）→ 拷贝 → sha256 → **python 合并写 manifest**：读旧 JSON（缺则 `{}`），设 `["sdk"] = {version, min_compatible: SDK_MIN_COMPATIBLE(sed 自 sdk_compat.py), filename, sha256}`，`["platform"]` 与 `["cli"]` / `_note` 保留 ⑤ `git check-ignore` 自检。末尾提示「提交 wheel + manifest，否则平台照旧答 sdk=null」。
   **依赖**: T001
+  **证据**: `scripts/pack_sdk_wheel.sh` + `bisheng/dev_toolkit/sdk_compat.py`（1358ad8f3）。脚本已实跑验证（用姊妹切片 `wt/f057-sdk-core` 的包做 dry run）：构建 → `unzip -l` 校验三模块 → 空 venv 装包冒烟 → 合并写 manifest，`cli` / `platform` 两段字节不变。
 
-- [ ] **T023**: `pack_cli_wheel.sh` 改为合并写 manifest、只删自己前缀 wheel（跨 Feature 改动）〔1h〕
+- [x] **T023**: `pack_cli_wheel.sh` 改为合并写 manifest、只删自己前缀 wheel（跨 Feature 改动）〔1h〕
   **文件**: `scripts/pack_cli_wheel.sh`（增量）
   **逻辑**: `:88` `rm -f "${ARTIFACTS_DIR}"/*.whl` → `rm -f "${ARTIFACTS_DIR}"/bisheng_cli-*.whl`；`:96-110` heredoc → `python3 - <<'PY'` 读旧 manifest、只替换 `cli` 与 `platform` 段、保留 `sdk` 段、写回（`indent=2` + 尾换行，与现有格式字节一致以免 `cli-quality.yml` drift guard 误报）。头注释追加两行说明。**跑一次脚本确认 `git diff` 只有预期变化**。
   **依赖**: T022
+  **证据**: `scripts/pack_cli_wheel.sh` 改合并写 + 只删 `bisheng_cli-*.whl`（1358ad8f3）；重跑脚本后差异只有 `_note` 一行（78f231bce），wheel sha256 未变。
 
-- [ ] **T024**: `artifact_service` 的 SDK 段测试〔1h〕
+- [x] **T024**: `artifact_service` 的 SDK 段测试〔1h〕
   **文件**: `src/backend/test/dev_toolkit/conftest.py`（增量：`staged_artifacts` 追加 `sdk` 段 + 假 wheel `bisheng_sdk-0.1.0-py3-none-any.whl`；新 fixture `staged_cli_only`——manifest 无 `sdk` 段）, `src/backend/test/dev_toolkit/test_artifact_service_sdk.py`（新）
   **测试**: `test_snapshot_reads_sdk_artifact`（`snapshot.sdk.version/min_compatible/filename/sha256/path`）→ AC-01 / `test_sdk_none_when_section_absent_cli_still_present`（老 manifest 不影响 CLI）→ AC-01 / `test_sdk_none_when_wheel_file_missing_logs_warning`（照 CLI 的部分 rsync 分支）→ AC-01 / `test_min_compatible_defaults_to_version` → AC-03 / `test_read_sdk_guide_returns_platform_wiring_skill_md_or_none` → AC-26
   **覆盖 AC**: AC-01, AC-03, AC-26
   **依赖**: 无（后端侧独立）
+  **证据**: `test/dev_toolkit/test_artifact_service_sdk.py`（6 用例）+ conftest 的 `staged_artifacts` 扩 sdk 段与新 fixture `staged_cli_only`（1358ad8f3）。
 
-- [ ] **T025**: `artifact_service.py` 增量实现〔1h〕
+- [x] **T025**: `artifact_service.py` 增量实现〔1h〕
   **文件**: `src/backend/bisheng/dev_toolkit/domain/services/artifact_service.py`（增量）
   **逻辑**: `@dataclass(frozen=True) SdkArtifact(version, min_compatible, filename, sha256, path)`；`DistributionSnapshot` 加 `sdk: SdkArtifact | None`；`read_snapshot` 用同一套「manifest 有段 + 文件在盘」判定，缺一则 `None`（不影响 `cli`）；`read_sdk_guide() -> str | None` = `SKILLS_DIR / "platform-wiring" / "SKILL.md"`（缺 → None，照 `read_install_guide`）。不读 DB（C3 无关）。
   **测试**: T024 全部通过；既有 `test_distribution_api.py` 除 `sdk` null 断言外不变。
   **覆盖 AC**: AC-01, AC-03, AC-26
   **依赖**: T024
+  **证据**: `artifact_service.py` 加 `SdkArtifact` / `DistributionSnapshot.sdk` / `read_sdk_guide()`，两个 wheel 共用 `_staged_wheel()` 判定（1358ad8f3）。
 
-- [ ] **T026**: 分发端点集成测试（四端点 + `versions` 的 `sdk` 段 + 改 F053 的 null 断言）〔2h〕
+- [x] **T026**: 分发端点集成测试（四端点 + `versions` 的 `sdk` 段 + 改 F053 的 null 断言）〔2h〕
   **文件**: `src/backend/test/dev_toolkit/test_distribution_api.py`（增量：`:80-81` 与 `:228` 改为「有 staged sdk 时六键齐全；无时整段 null + `notice`」）, `src/backend/test/dev_toolkit/test_sdk_distribution_api.py`（新）
   **测试**: `test_versions_sdk_section_when_staged`（`version/min_compatible/filename/sha256/download_path/index_path` 六键，值照 manifest）→ AC-01, AC-03 / `test_versions_sdk_null_and_notice_when_not_staged` → AC-01 / `test_sdk_download_streams_wheel_with_content_disposition_anonymously`（无 Cookie 无 Bearer）→ AC-01 / `test_sdk_download_with_filename_segment_only_accepts_manifest_filename`（正确名 200；其它 404）→ AC-02 / `test_sdk_download_missing_is_real_404_with_envelope`（不是 200 信封、不是 500）→ AC-01 / `test_simple_index_root_lists_bisheng_sdk`（`text/html`；含 `href="bisheng-sdk/"`）→ AC-02 / `test_simple_index_project_page_links_download_with_sha256_fragment`（`href="../../sdk/download/bisheng_sdk-0.1.0-py3-none-any.whl#sha256=<manifest sha>"`；PEP 503 规范化名）→ AC-02 / `test_simple_index_404_when_not_staged` → AC-02 / `test_sdk_guide_md_served_as_markdown_anonymously_and_404_when_missing` → AC-26 / `test_all_sdk_routes_absent_when_open_platform_disabled`（四个路径 404，同 `test_routes_absent_when_open_platform_disabled`）→ AC-05 / `test_multi_tenant_no_jwt_does_not_raise_on_sdk_routes`（`/api/v1/dev-toolkit` 前缀已在 `TENANT_CHECK_EXEMPT_PATHS`，`http_middleware.py:61`）→ AC-01
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-05, AC-26
   **依赖**: T025
+  **证据**: `test/dev_toolkit/test_sdk_distribution_api.py`（12 用例）；同批把 F053 的 `sdk` 三键 null 断言改成「有 staged 时六键齐全 / 无时整段 null」（1358ad8f3）。
 
-- [ ] **T027**: `distribution.py` 增量实现（四端点 + `versions` 填值）〔2h〕
+- [x] **T027**: `distribution.py` 增量实现（四端点 + `versions` 填值）〔2h〕
   **文件**: `src/backend/bisheng/dev_toolkit/api/endpoints/distribution.py`（增量）
   **逻辑**: 常量 `SDK_DOWNLOAD_PATH = "/api/v1/dev-toolkit/sdk/download"`、`SDK_INDEX_PATH = "/api/v1/dev-toolkit/simple/"`、`SDK_MISSING_MESSAGE = "SDK 安装件未随本次部署发布，请联系平台管理员"`、`SDK_GUIDE_MISSING_MESSAGE`；`get_dev_toolkit_versions` 的 `sdk` 由 `snapshot.sdk` 填（六键）或整段 `None`；`notice` 逻辑：cli 或 sdk 任一缺失即给文案（拼接）。`@router.get("/sdk/download")` 与 `@router.get("/sdk/download/{filename}")` 共用 `_serve_sdk_wheel(filename: str | None)`（D15）；`@router.get("/simple/")` 与 `@router.get("/simple/bisheng-sdk/")` 返回 `HTMLResponse`（最小 PEP 503：`<!DOCTYPE html><html><body><a href=…>…</a></body></html>`）；`@router.get("/sdk-guide.md")` 照 `get_install_guide`。**无 `Depends`**（匿名，D10 同源）。
   **测试**: T026 全部通过；`test/dev_toolkit` 全量通过；`ruff` + `arch-guard.sh` 零输出。
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-05, AC-26
   **依赖**: T026
+  **证据**: `distribution.py` 四端点 + `versions` 的 `sdk` 段 + `_versions_notice()`（1358ad8f3）。`test/dev_toolkit` 全量 114 passed；ruff 与 arch-guard 零输出。
 
-- [ ] **T028**: `sdk-quality.yml` wheel leg 接入真实脚本 + drift guard〔0.5h〕
+- [x] **T028**: `sdk-quality.yml` wheel leg 接入真实脚本 + drift guard〔0.5h〕
   **文件**: `.github/workflows/sdk-quality.yml`（增量）
   **逻辑**: 去掉 T008 的 `hashFiles` 守卫；drift guard 读 `manifest.json["sdk"]["version"]`；「Artifacts are committed」步骤 `git diff --quiet -- manifest.json`。
   **依赖**: T008, T022
+  **证据**: `.github/workflows/sdk-quality.yml`（10607e923）三 leg 一次写全（含 T008 的 locked / highest），wheel leg 直接调真脚本 + `sdk.version` drift guard + manifest 未提交守卫。**偏差**：T008 原归姊妹切片，但 CI 文件与打包脚本同属分发面，合在本切片一次写完。
 
 - [ ] **T029**: 打包并提交 SDK wheel（Wave 4 末尾，串行）〔0.5h〕
   **文件**: `src/backend/bisheng/dev_toolkit/artifacts/bisheng_sdk-0.1.0-py3-none-any.whl`（新，二进制）, `src/backend/bisheng/dev_toolkit/artifacts/manifest.json`（增量 `sdk` 段）
   **逻辑**: `bash scripts/pack_sdk_wheel.sh` → 确认 `cli` 段字节不变 → 提交。⚠️ 与 T038（重打 CLI wheel）**不得并行**。
   **依赖**: T021, T022, T023, T027
+  **未做（本轮）**: 需要 `src/bisheng-sdk/` 与本提交在同一棵树上才能构建并提交 wheel，而包本体在姊妹切片 `wt/f057-sdk-core`（`ff32fac67`）。合并两个切片后执行一次 `bash scripts/pack_sdk_wheel.sh` 并提交 wheel + manifest 即可（脚本已验证可跑通，见 T022）。在那之前 `/versions` 的 `sdk` 段是 null、`/sdk/download` 与 `/simple/bisheng-sdk/` 答 404 —— 这是已被测试固定的降级形态，不是缺陷。
 
 ### Wave 5 · 托管构建期取包
 
-- [ ] **T030**: runtime-manager extra index 测试〔1h〕
+- [x] **T030**: runtime-manager extra index 测试〔1h〕
   **文件**: `src/runtime-manager/tests/test_build.py`（增量）
   **测试**: `test_build_args_inject_extra_index_url_and_trusted_host`（照 `test_build_args_inject_index_url:126-133`：`buildargs["PIP_EXTRA_INDEX_URL"] == config.build_extra_index_url`、`PIP_EXTRA_TRUSTED_HOST`）→ AC-02 / `test_dockerfile_renders_extra_index_args_and_pip_flags`（渲染文本含 `ARG PIP_EXTRA_INDEX_URL=""`、`${PIP_EXTRA_INDEX_URL:+--extra-index-url "$PIP_EXTRA_INDEX_URL"}`、`${PIP_EXTRA_TRUSTED_HOST:+--trusted-host "$PIP_EXTRA_TRUSTED_HOST"}`；`--index-url` 行保留）→ AC-02 / `test_config_reads_rtm_build_extra_env`（`RTM_BUILD_EXTRA_INDEX_URL` / `RTM_BUILD_EXTRA_TRUSTED_HOST`，缺省空串）→ AC-02 / `test_template_render_still_deterministic`（既有用例不变）→ AC-02
   **覆盖 AC**: AC-02
   **依赖**: 无
+  **证据**: `src/runtime-manager/tests/test_build.py` 追加 3 用例（buildargs / Dockerfile 渲染 / `RTM_BUILD_EXTRA_*` 读取），`tests/test_build.py` 19 passed 1 skipped（1358ad8f3）。
 
-- [ ] **T031**: runtime-manager `config.py` / `builder.py` / `Dockerfile.j2` 增量〔1.5h〕
+- [x] **T031**: runtime-manager `config.py` / `builder.py` / `Dockerfile.j2` 增量〔1.5h〕
   **文件**: `src/runtime-manager/runtime_manager/config.py`（增量：`build_extra_index_url` / `build_extra_trusted_host` 字段 + `RTM_BUILD_EXTRA_*` 读取，紧邻 `:159-160` / `:231-232`）, `src/runtime-manager/runtime_manager/builder.py`（增量：`:366-369` buildargs 加两键）, `src/runtime-manager/runtime_manager/templates/python3.11/Dockerfile.j2`（增量：`:21-22` 后加两个 `ARG`；`:39-42` pip 行加两个 shell 参数展开；头注释第 8 行补「SDK 自平台简单索引」）, `docs/architecture/14-app-factory-deployment.md`（增量：runtime-manager 环境变量表在 `RTM_BUILD_INDEX_URL` 行（`:151`）之后追加 `RTM_BUILD_EXTRA_INDEX_URL` / `RTM_BUILD_EXTRA_TRUSTED_HOST` 两行，备注「值必须是**构建容器可达**的宿主机地址，不能写 `localhost`」，坑 15。`features/v3.0.0/054-app-domain-runtime/deploy/` 只有两个 systemd unit 文件、无 env 模板，不改）
   **逻辑**: 只做追加；`--extra-index-url` 与 `--index-url` 并存（第三方依赖走主索引，`bisheng-sdk` 由 pip 在两个索引里都找、按 hash 取平台那份）。README / 部署文档注明值必须是**构建容器可达**的宿主机地址，非 `localhost`（坑 15）。
   **测试**: T030 全部通过；`cd src/runtime-manager && uv run ruff check . && uv run pytest -q`。
   **覆盖 AC**: AC-02
   **依赖**: T030
+  **证据**: `config.py` 两字段 + `builder.py` 两 buildarg + `Dockerfile.j2` 两 ARG 与两处 pip 参数展开 + `docs/architecture/14-app-factory-deployment.md` 环境变量表两行与一条排障行（1358ad8f3）。
 
 - [ ] **T032**: 114 构建期真机验证〔1.5h，`needs_114`〕
   **文件**: 本文（回填结果）
   **逻辑**: `/etc/bisheng/runtime-manager.env` 加 `RTM_BUILD_EXTRA_INDEX_URL=http://192.168.106.114:7860/api/v1/dev-toolkit/simple/` 与 `RTM_BUILD_EXTRA_TRUSTED_HOST=192.168.106.114` → `systemctl restart bisheng-runtime-manager` → 用 T034 样例（`requirements.txt` 含 `bisheng-sdk`）`bisheng deploy` → `journalctl -u bisheng-runtime-manager` 看 pip 从 `/simple/bisheng-sdk/` 取到 wheel、hash 校验通过。⚠️ 需 T029 已部署（`deploy.sh` 重启 8 unit）。记录 `docker build` 的出站路径是否被 F054 出站白名单放行（F054 AC-16 尚未实现，本轮容器出站不受限——记录事实）。
   **覆盖 AC**: AC-02
   **依赖**: T029, T031
+  **未做（需 114）**: 本切片无 114 访问，且它依赖 T029 已部署。
 
 ### Wave 6 · 技能包、指南、自检、评测样本、CLI 包清单
 
-- [ ] **T033**: 「平台能力接线」`SKILL.md` **增量**：填 SDK 桩 + 插 retrieve / storage 两章〔3h〕
+- [x] **T033**: 「平台能力接线」`SKILL.md` **增量**：填 SDK 桩 + 插 retrieve / storage 两章〔3h〕
   **文件**: `src/backend/bisheng/dev_toolkit/skills/platform-wiring/SKILL.md`（**增量**，F053 T038 已交付 226 行五章版本；先 `git log -1 -- <该文件>` 确认在手的是对方那版，T000 已核对）, `src/backend/test/dev_toolkit/test_skill_packs.py`（**增量，改 F053 的一条断言**——见下 ④）
   **逻辑**: **不动的部分**（F053 的 `test_skill_packs.py` 直接断言，坑 31）：frontmatter（`name: platform-wiring`、中性 description、`metadata.display-name`）、第 1 章「访问者身份」仍是**目录第一条与正文第一章**且章首 `> ⚠️` 警示块含「静默」「登录页」原样、模型章仍含「暂未提供」「不要猜」且**全章零 URL**、应用数据库章仍含 `BISHENG_APP_DB_PATH` / `BISHENG_APP_DB_URL` / `--confirm-schema-change` / `只**记录**`、`bisheng dev` 章与自检清单章内容不动（编号可顺延）。⚠️ 另有一条**全文级**约束：`test_auth_chapter_teaches_exactly_app_proxys_header_names` 断言「SKILL.md 里所有反引号包住的 `X-BiSheng-*` 名字**集合恰等于** app-proxy 的十个」——新写的 retrieve / storage 两章**不得出现第十一个 `X-BiSheng-*` 名**（坑 36）。**本任务改四处**：
   ① 第 1 章末尾的「### SDK 用法（随后续版本补齐）」桩 → 换成实体内容：`user = bisheng_sdk.auth.current_user()` 一行 vs 三种错误做法（自建登录页 / 自读头自己拼 / 自解析凭据）对照；三种接法（ASGI 纯中间件 / WSGI / `auth.bind()` 供 Streamlit）；无注入即抛 `PlatformIdentityMissingError`（健康端点不调 auth、后台任务不假设有访问者）；`user_id` 是 `str` 且**不是**平台 `user` 表的行；`subject_kind` 在 `dev` 期**取决于 login 用的密钥**（服务账号密钥 → `service_account`、个人访问令牌 → `human`，坑 33）、线上恒 `human`；「本地看不到 per-user 差异，验证路径 = 发布后用真实账号访问」。**保留**原有「读头也是合法写法」的表格（spec AC-32 明认直读注入头合法）。
@@ -335,19 +348,25 @@
   两章插在第 1 章之后、应用数据库章之前，**同批更新目录编号与锚点**（原 2/3/4/5 章顺延为 4/5/6/7，锚点 `#2-应用数据库` 等一并改；改完 `grep -n "^#\|](#" SKILL.md` 双向对表）。另在末尾「## 参考」前加一节「SDK 装哪来 / 准入门槛」：`pip install --extra-index-url <平台>/api/v1/dev-toolkit/simple/ bisheng-sdk`、托管构建期只需 `requirements.txt` 写 `bisheng-sdk`、以及 chat / appdb 为什么不在 SDK 里（一段）。全文零真实密钥。
   **覆盖 AC**: AC-26, AC-27, AC-28, AC-30, AC-32, AC-35, AC-36
   **依赖**: T000, T021（API 定稿）
+  **证据**: `skills/platform-wiring/SKILL.md`（10607e923）：填 SDK 桩、插第 2/3 章、原 2–5 章顺延为 4–7、目录与锚点同批更新、末尾加第 8 章；`X-BiSheng-Access-Token` 行改措辞并同批改 F053 的 `test_skill_packs.py` 守卫断言。全文反引号里的 `X-BiSheng-*` 仍恰为 app-proxy 的十个。
+  **偏差（评审期修正）**: 本任务 ② 要求的「如实写明」照初稿写成了「**平台尚未受理**应用侧访问凭据」，这一句现在**是错的**——F055 的托管检索（`filelib.py` 的 `HOSTED_APP_ACTOR_KIND` 分支 → `CapabilityBusService.retrieve`）与访问者凭据核验（`composition.py` 注册 `AccessSubjectVerifier`）都已合入 `3.0-vibe`，线上这条路是通的（前提是部署配了 `app_runtime.obo_secret`）。照原文写会把开发者支去查一个没坏的平台。改为：线上通、**本地 `bisheng dev` 不通**，并点名本地的两处上游缺口（不注入 `BISHENG_APP_TOKEN`、本地自签句柄平台无从验签）。同批：错误表补 `AppCredentialMissingError` 行（本地实际先撞的就是它）、检索章补「两把凭据各答什么、不可互换、没有 owner 兜底」一段（settled 契约在正文里落地，不只在 design 里）。T035 的断言同批改：由 `assert "尚未上线" in chapter` 改为断言新措辞 + `assert "尚未上线" not in chapter`。
 
-- [ ] **T034**: SDK 版可运行样例（FastAPI，三件套齐用）——**新目录 `example-sdk/`，不动既有 `example/`**〔2h〕
+- [x] **T034**: SDK 版可运行样例（FastAPI，三件套齐用）——**新目录 `example-sdk/`，不动既有 `example/`**〔2h〕
   **文件**: `src/backend/bisheng/dev_toolkit/skills/platform-wiring/example-sdk/main.py`（新）, `.../example-sdk/bisheng-app.yaml`（新）, `.../example-sdk/requirements.txt`（新：`fastapi`、`uvicorn`、`bisheng-sdk`）
   **逻辑**: **为什么另起目录**：F053 已交付的 `example/` 是零依赖标准库样例，`test_skill_packs.py::test_example_is_stdlib_only` 对两个包都断言 `requirements.txt` 为空/无第三方；把 SDK 塞进它会当场红，且「不装 SDK 也能接线」是 spec AC-32 承认的合法路径，不该被删。`SKILL.md`（T033）在 SDK 各章指向 `example-sdk/`，「参考」节两个样例都列。
   内容：`app.add_middleware(bisheng_sdk.auth.ASGIMiddleware)`；`GET /`（页面：`你好，{user.user_name}` + 部门 + 「本地开发 · 服务账号」角标当 `subject_kind == "service_account"`）；`GET /healthz`（**不调 auth**）；`GET /__whoami`（回显本请求的十头，供 T036 自检解析）；`POST /ask`（`retrieve.search(q, knowledge_base_ids=[...])`，库 id 从 `bisheng-app.yaml` 的 `capabilities.knowledge_bases` 同源读一份常量）；`POST /upload` / `GET /files` / `GET /files/{path}`（storage 三操作，下载由应用自己吐流——AC-22）；每个端点把 D6 异常翻成 4xx JSON `{error, next_step}`（**不 500、不 traceback**）。四条托管契约（PORT / 0.0.0.0 / `/data` / `BISHENG_APP_BASE_PATH`）照 `deploy-hosting/example/main.py`。manifest 声明一个知识库能力（`capabilities` 非空）——⚠️ F053 的 `test_skill_packs.py::test_example_manifest_is_valid_against_the_platform_schema` 断言 `manifest.capabilities.is_empty()`，但它只读 `example/bisheng-app.yaml`，**不覆盖 `example-sdk/`**；`test_example_is_stdlib_only` 同理只读 `example/requirements.txt`。这正是另起目录的原因，两条断言一字不改。`example-sdk/` 的 schema 合法性由 T035 单列断言。
   **覆盖 AC**: AC-26, AC-30, AC-32, AC-34
   **依赖**: T033
+  **证据**: `skills/platform-wiring/example-sdk/{main.py,bisheng-app.yaml,requirements.txt}`（10607e923）；既有 `example/` 一字未动。清单声明一个知识库能力，与 `main.py` 的 `KNOWLEDGE_BASE_IDS` 由 T035 的断言守着同源。
+  **偏差（评审期修正）**: `/ask` 原来把 `AppCredentialMissingError` 兜进最后那条 `BishengSdkError → 502`，读起来是「平台挂了」，实际是本应用没拿到运行期凭据（本地必然如此）。单列一条 → 503，T035 加一条断言守它排在兜底分支之前。
+  **评审期实跑**（不入库，仅记录）：把姊妹切片 `wt/f057-sdk-core` 的包放到 `PYTHONPATH` 后用 `TestClient` 跑本样例：`/healthz` 无身份 200；`/` 无身份 401「未取得平台注入的访问者身份」、有身份 200 且显示姓名；`/ask` 有身份无应用凭据 503、完全无身份 401「检索不会以任何其它身份发起」。四种开发者常犯的错各得一条可区分的明确拒绝，无一条静默给出错误答案。
 
-- [ ] **T035**: 技能包增量 + SDK 样例 + 自检脚本测试〔1.5h〕
+- [x] **T035**: 技能包增量 + SDK 样例 + 自检脚本测试〔1.5h〕
   **文件**: `src/backend/test/dev_toolkit/test_platform_wiring_sdk.py`（新；**不改** F053 的 `test_skill_packs.py`——那里的共通断言与 `WIRING` 专项断言继续守 F053 的部分，本文件只加 SDK 增量的断言）
   **测试**: `test_auth_chapter_still_first_with_warning_block_after_edit`（回归守 F053 契约：第一个 `## ` 标题含「访问者身份」；其后首个非空行以 `> ⚠️` 开头）→ AC-27 / `test_auth_chapter_teaches_sdk_one_liner_and_three_wrong_ways`（含 `auth.current_user()` 与「自建登录页」「自己解析」「自己校验」三类错误做法；**桩句「随后续版本补齐」已消失**）→ AC-27 / `test_retrieve_chapter_states_per_user_and_local_diff`（含「白名单」「可见范围」「fail-closed」「本地看得少」「真实账号」）→ AC-35 / `test_storage_chapter_states_local_online_diff_and_quota`（含「不计」「配额」「不进」「上传包」「直链」）→ AC-36 / `test_model_chapter_still_marked_unavailable_and_invents_no_base_url`（回归：仍含「暂未提供」，不含拼 base URL 的示例）→ AC-30 / `test_toc_anchors_resolve`（目录每条 `](#…)` 都能在正文找到对应标题，防章节顺延漏改锚点）→ AC-26 / `test_no_sdk_wrapper_for_model_or_appdb`（全文不含 `bisheng_sdk.chat` / `bisheng_sdk.appdb`）→ AC-30 / `test_example_sdk_manifest_valid_against_schema`（`AppManifest(**yaml)` 不抛；`capabilities` 非空且只声明知识库）→ AC-26 / `test_example_sdk_requirements_pin_bisheng_sdk` → AC-02 / `test_example_sdk_healthz_does_not_call_auth`（`main.py` 源码里 `/healthz` 处理函数体内无 `current_user`）→ AC-27 / `test_selfcheck_readable_failure_without_env`（`subprocess` 空 HOME、无 `BISHENG_*` → 非零退出、输出含「未」或「下一步」、无 `Traceback`）→ AC-28 / `test_selfcheck_reports_incompatible_sdk_readably`（假 `versions` 响应经 `BISHENG_PLATFORM_API_BASE` 指向本地 `http.server`，`min_compatible="9.9.9"` → 输出含双方版本）→ AC-03, AC-28 / `test_sdk_guide_endpoint_serves_this_file`（`read_sdk_guide()` 内容 == `platform-wiring/SKILL.md`）→ AC-26
   **覆盖 AC**: AC-02, AC-03, AC-26, AC-27, AC-28, AC-30, AC-35, AC-36
   **依赖**: T033, T034
+  **证据**: `test/dev_toolkit/test_platform_wiring_sdk.py`（17 用例，含两条回归：auth 章仍第一 + 章首警示块、模型章仍「暂未提供」且无 URL）（10607e923）。
 
 - [ ] **T035a**（F051 落地后追加）: 模型章的两条回归断言要改口径〔0.3h〕
   **起因**: T034 / T035 里的 `test_model_chapter_still_marked_unavailable_and_invents_no_base_url` 假定模型面尚未交付。F051 已交付并定名三个环境变量，该断言从此守错了东西。
@@ -356,35 +375,41 @@
   **覆盖 AC**: AC-26, AC-30
   **依赖**: T035
 
-- [ ] **T036**: `selfcheck.py` **增量**：在 F053 已交付的脚本上追加 SDK 三步〔2h〕
+- [x] **T036**: `selfcheck.py` **增量**：在 F053 已交付的脚本上追加 SDK 三步〔2h〕
   **文件**: `src/backend/bisheng/dev_toolkit/skills/platform-wiring/selfcheck.py`（**增量**，109 行版本已含：读 `~/.bisheng/credentials.json` → 打 `/api/v2/auth/whoami` → 校验应用库变量，`fail(reason, next_step)` 打两行并 `SystemExit(1)`）
   **逻辑**: 沿用既有 `fail()` 与输出风格、**不重写骨架**（F053 的 `test_selfcheck_reports_readable_reason_when_not_logged_in` 对两包参数化，改掉未登录分支的文案会红）。追加（D13）：① `import bisheng_sdk`（失败 → 打印 `pip install --extra-index-url <base>/api/v1/dev-toolkit/simple/ bisheng-sdk`，`<base>` 取 `BISHENG_PLATFORM_API_BASE` 或凭据文件的 `current`；**SDK 未装不算致命**——脚本继续跑既有三步后以「SDK 未安装」退出 1） ② `urllib` 打 `/api/v1/dev-toolkit/versions` 比对 `sdk.min_compatible`（脚本自己算三段元组，不 import SDK 内部函数；`sdk` 为 null → 提示「平台未发布 SDK 安装件 / 开放能力层未部署」） ③ auth：`BISHENG_APP_ID` 存在则对 `http://127.0.0.1:${BISHENG_APP_PORT}/__whoami` 发一次请求（经 `bisheng dev` 迷你代理进来的回显）再 `auth.from_headers` 解析；否则 `fail("未经 bisheng dev 启动", "在项目根执行 bisheng dev，用它打印的本地入口地址访问")` ④ retrieve：`bind` 上 ③ 的头后 `search("selfcheck", top_k=1)`，逐类异常翻一句；**`VisitorCredentialRejectedError` 时明确写「平台尚未受理应用侧访问凭据（本地为 `bsdev.` 句柄、线上为 OBO），不是你的密钥问题」**（坑 5 / 坑 32） ⑤ storage：`put/stat/delete` `_selfcheck/probe.txt`；无句柄时提示「`bisheng dev` 尚未注入 `BISHENG_APP_STORAGE_DIR`」（坑 34）。全程不打 traceback、不打密钥。
   **测试**: T035 全部通过；`cd src/backend && uv run pytest test/dev_toolkit -q` 全绿（含 F053 既有用例）。
   **覆盖 AC**: AC-03, AC-28
   **依赖**: T035
+  **证据**: `selfcheck.py` 追加五步（装没装 / 版本兼容 / 身份 / 检索 / 附件），沿用既有 `fail()` 与输出风格（10607e923）；T035 用真 `http.server` + 桩 `bisheng_sdk` 跑通「版本不兼容」与「SDK 未装」两条可读失败路径，输出无 Traceback。
+  **偏差（评审期修正）**: 本任务 ③ 写的探测地址 `http://127.0.0.1:${BISHENG_APP_PORT}/__whoami` **不成立**——`bisheng dev` 起两个监听，迷你代理（本地入口，注入身份头）听 `--port` / 清单 `port`，而 `PORT` / `BISHENG_APP_PORT` 注入给应用的是**应用自己**那个（`commands/dev.py` 的 `proxy_port` / `app_port`，后者是 `pick_free_port`）。照原文实现这一步**永远过不了**，且把原因报成「你直连了应用端口」。改为：入口地址按 `argv[1]` → `BISHENG_DEV_ENTRY_URL` → 最近 `bisheng-app.yaml` 的 `port` 解析（`dev_entry_url()`）；解析不到或连不上 → **跳过**身份 / 检索 / 附件三步（与 `check_app_db` 在普通 shell 里的处理一致），不再判失败；④ 增 `AppCredentialMissingError` 分支（`bisheng dev` 不注入 `BISHENG_APP_TOKEN`，本地实际先撞的是它，不是「凭据被拒」），`VisitorCredentialRejectedError` 文案改为「本地自签平台无从验签 / 线上过期或签给别的应用」。SKILL.md §7 同批改运行方式。
 
-- [ ] **T037**: README、指针与目录树〔1h〕
+- [x] **T037**: README、指针与目录树〔1h〕
   **文件**: `src/bisheng-sdk/README.md`（增量：安装两种方式、三行用法、异常速查、「完整指南见 `GET /api/v1/dev-toolkit/sdk-guide.md` / `skills sync` 后的 `platform-wiring/SKILL.md`」——**不复制章节**，决议-7）, `src/backend/bisheng/dev_toolkit/skills/deploy-hosting/SKILL.md`（增量：`:138` 「由另一份技能覆盖，本轮不展开」改为指向 `platform-wiring`）, `src/backend/bisheng/dev_toolkit/skills/README.md`（增量：**`wt/cli-dev` 已把 `platform-wiring/` 加进目录树**——本任务只在其条目下补一行 `example-sdk/` 与「含 SDK 三件套章」），`src/backend/bisheng/dev_toolkit/guides/install-guide.md`（增量：一句「装 SDK 见 sdk-guide.md」，若该文件有安装段）
   **覆盖 AC**: AC-26, AC-32
   **依赖**: T033
+  **证据**: `skills/deploy-hosting/SKILL.md` 的 capabilities 条改为指向 `platform-wiring`、`skills/README.md` 目录树补 `example-sdk/` 与自检说明、`guides/install-guide.md` 第 4 步后加 SDK 安装命令与 `sdk-guide.md` 指针（10607e923）。**偏差**：`src/bisheng-sdk/README.md` 由姊妹切片的 T001 创建，本切片不碰它以免同文件冲突——合并后需按本任务原意补一句「完整指南见 `GET /api/v1/dev-toolkit/sdk-guide.md`」。
 
-- [ ] **T038**: 核对 CLI `DEFAULT_PACKS` + 用合并版脚本重打 CLI wheel（跨 Feature，串行）〔1h〕
+- [x] **T038**: 核对 CLI `DEFAULT_PACKS` + 用合并版脚本重打 CLI wheel（跨 Feature，串行）〔1h〕
   **文件**: `src/bisheng-cli/bisheng_cli/commands/skills.py`（**仅当仍是单元素时**改 `:57`）, `src/bisheng-cli/tests/test_command_skills.py`（同前提；`wt/cli-dev` 已补「其一 404 时另一仍成功」用例）, `src/backend/bisheng/dev_toolkit/artifacts/bisheng_cli-3.0.0-py3-none-any.whl` + `manifest.json`（重打）
   **逻辑**: ① `grep -n "DEFAULT_PACKS" src/bisheng-cli/bisheng_cli/commands/skills.py`——`wt/cli-dev` 合并后应已是 `("deploy-hosting", "platform-wiring")`，**是则常量与测试零改动**；仍是单元素（合并丢了）才补，并同批补测试。② 无论改没改都要重打一次 wheel：T023 把打包脚本改成了合并写 manifest，旧 wheel 对应的 manifest 段需要用新脚本重生成——`cd src/bisheng-cli && uv run pytest -m "not network"` 全绿 → `bash scripts/pack_cli_wheel.sh` → 确认 `manifest.json["sdk"]` 段**原样保留**、`cli` 段只有 sha256 可能变 → 提交。⚠️ 与 T029 串行（同一 `artifacts/` 目录，坑 35）。
   **覆盖 AC**: AC-28, AC-32
   **依赖**: T000, T023, T029, T033
+  **证据**: `DEFAULT_PACKS` 已是 `("deploy-hosting", "platform-wiring")`，常量与测试零改动；用合并版脚本重打 CLI wheel 一次，manifest 仅 `_note` 变、wheel sha256 不变（78f231bce）。
 
-- [ ] **T039**: auth 静默失败点评测样本 + 结构断言〔1.5h〕
+- [x] **T039**: auth 静默失败点评测样本 + 结构断言〔1.5h〕
   **文件**: `src/backend/test/dev_toolkit/fixtures/auth_silent_failure_samples.md`（新）, `src/backend/test/dev_toolkit/test_auth_silent_failure_samples.py`（新）
   **逻辑**: 样本 ≥ 5 条、不含产品名、朴素答案会是"做个登录页"的应用需求（如「做一个内部请假申请页，要知道是谁提交的」「做个部门看板，只让本部门的人看」「做个文件上传工具，按人隔离」「做个问答机器人，答案只能来自用户有权限的知识库」「给同事做个小工具，需要显示当前登录人的名字和部门」），每条附「未读包的典型产出」与「读包后应有产出」判据（不自建登录 / 不自读头 / 用 `auth.current_user()`）。测试：`test_at_least_five_samples`、`test_samples_are_product_name_neutral`、`test_each_sample_carries_identity_intent`（含「谁」「登录」「当前用户」「身份」「部门」「权限」之一）、`test_skill_auth_chapter_lists_forbidden_patterns`（照 `test_skill_trigger.py` 风格）。
   **覆盖 AC**: AC-29
   **依赖**: T033
+  **证据**: `test/dev_toolkit/fixtures/auth_silent_failure_samples.md`（6 条样本，各带「未读包的典型产出 / 读包后应有产出」两半判据）+ `test_auth_silent_failure_samples.py`（5 条结构断言）（10607e923）。
 
 - [ ] **T040**: 评测跑分（模型判定）并回填〔1.5h〕
   **文件**: 本文（回填）
   **逻辑**: 用 `skill-creator` 评测：对 T039 每条样本各跑「未读包 vs 读包（含 `platform-wiring/SKILL.md`）」两次生成，人工 / 模型判定读包后 5/5 不自建登录、改读 `auth.current_user()`；把样本 id、判定与日期回填到本文「实际偏差记录」上方的评测记录小节。未达 100% → 改 SKILL.md auth 章后重跑，不改判据。
   **覆盖 AC**: AC-29
   **依赖**: T039
+  **未做（需跑模型评测）**: 样本与判据已就位（T039），评测跑分需要「未读包 vs 读包」两轮生成，不在本切片的离线能力内。
 
 ### Wave 7 · 端到端旅程、114 手验、回写
 
@@ -393,17 +418,20 @@
   **逻辑**: 前置：平台已部署 T029 / T031、F053 `dev`（`wt/cli-dev` 已合）、F052/F055 OBO 受理（阻塞项 ②）、F054 附件 API（`wt/storage-handle` 已合并部署）。步骤：① `pip install --extra-index-url … bisheng-sdk` 于临时 venv；② `bisheng deploy` T034 的 `example-sdk/`（含知识库能力声明）→ 审批通过（`approve_online_114.py` 同型辅助）；③ 用两个**非 admin** 用户会话经 `/apps/{slug}/` 访问：`GET /` 各得自己的姓名 / 部门；`GET /healthz` 无头 200；④ `POST /ask` 的结果集合 == 同用户直接 `POST /api/v2/filelib/retrieve`（PAT / 会话派生）限定声明库的结果（**集合相等**）；用户无权的库不出现；未声明的库经应用 → `TargetUnreachableError` 或 `CapabilityNotDeclaredError` 的 4xx；⑤ 应用 A 上传 → 应用 B（第二个样例实例）`GET /files` 列不到；⑥ 下线应用后 `POST /ask` / `POST /upload` 得可区分错误。清理只动 `e2e-f057-*` 前缀资源。
   **覆盖 AC**: AC-13, AC-14, AC-15, AC-17, AC-21, AC-24, AC-34
   **依赖**: T029, T031, T034；**阻塞**：design §6.2 阻塞项 ②（托管期 retrieve）与 ③（本地期 retrieve）、契约 ③④⑦
+  **未做（Wave 7，不在本切片范围）**
 
 - [ ] **T042**: 114 手动验证（`/e2e-test features/v3.0.0/057-bisheng-sdk`）〔3h，`needs_114`〕
   **文件**: 本文（回填「114 验证记录」）
   **逻辑**: 顺序：`versions` 的 `sdk` 段 → `curl -OJ …/sdk/download` + `pip install` → `simple/` 两页 → `sdk-guide.md` → `skills sync` 拉到两个包并接入 `~/.claude/skills/` → `bisheng dev` 跑 `example-sdk/`（auth 必过；retrieve 预期答「凭据被拒」= 阻塞项 ③、storage 预期「无句柄」= 契约 ⑦，**如实记录为上游未就绪，不判 SDK 缺陷**）+ `selfcheck.py` → `deploy` → 两个非 admin 用户访问（**不用 admin**，super_admin 短路 ReBAC）→ 回填每步结果与阻塞项状态。storage 托管期先看 `GET /v1/runtime/status` 的 preflight `attachment_storage.ok`，systemd 形态需 `RTM_APP_FACING_BASE_URL` 指到 `bisheng-apps` 网桥网关（坑 27）。
   **覆盖 AC**: AC-01, AC-02, AC-05, AC-06, AC-10, AC-13, AC-14, AC-20, AC-23, AC-28, AC-34
   **依赖**: T029, T032, T038；部分受阻于 design §6.2 阻塞项 ②③ 与契约 ③④⑦
+  **未做（需 114，Wave 7）**
 
 - [ ] **T043**: 跨 Feature 回写登记（只追加文档条目，不改他人代码）〔1h〕
   **文件**: `features/v3.0.0/053-dev-cli-skills/tasks.md`（**T043 增补**：注入 `BISHENG_APP_STORAGE_DIR=<项目根>/.bisheng/attachments/` 绝对路径 + 写 `.bisheng/.gitignore` + 建议同名注入 `BISHENG_APP_STORAGE_MAX_FILE_MB`（取平台 `RTM_STORAGE_MAX_FILE_MB`）、**不注入 `_ENDPOINT`**；**T042 增补**：`devproxy.HandleMinter` 的本地自签 `bsdev.` 句柄改为平台签发的短时凭据，否则本地 retrieve 恒 `26001`）, `features/v3.0.0/055-app-publish-pipeline/tasks.md`（T057 追加 OBO Bearer 受理 + `entry_authz` 签发改 fail-closed；T058 追加 `16273` 载荷 `data.capability` / `data.reason="revoked"`）, `features/v3.0.0/052-mcp-server-face/spec.md` 或其未来 tasks（`knowledge_base_ids` 可省略；「不可及」码 + `data.unreachable_ids`；受理平台签发的本地短时凭据）
   **不写回 F054**：附件句柄契约以 `wt/storage-handle` 为准，本文只做消费者（design §6.2 回写登记第 1 条）；仅在本任务结果里记一句事实——F057 `_storage_remote.py` 是该 router Bearer 路径的首个消费者，`validate_key` / 路由 / 信封任何改动会让 `test_contract_alignment.py` 先红。
   **依赖**: T021, T027（契约定稿后）
+  **未做（Wave 7，不在本切片范围）**；另注：`features/v3.0.0/052-mcp-server-face/tasks.md` 同期有别的切片在改，回写应在其收口后单独做，避免同文件冲突。
 
 ---
 

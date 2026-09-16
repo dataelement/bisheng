@@ -1,10 +1,13 @@
 name: SDK Quality
 
-# Quality gate for src/bisheng-sdk/ (the standalone `bisheng_sdk` package that
-# hosted applications import). Same three-leg shape as cli-quality.yml, and for
-# the same reason: this package is distributed as a wheel into a customer's
-# air-gapped network, where `uv.lock` plays no part and the dependency ceiling
-# in the wheel metadata is the only thing constraining the resolution.
+# Quality gate for src/bisheng-sdk/ (the `bisheng-sdk` application runtime SDK).
+#
+# Same three legs as cli-quality.yml, and for the same reason: the repo's CI runs
+# no tests for the standalone packages, so anything not wired into a gate here
+# ends up a suite nobody runs. The wheel leg matters more for the SDK than for
+# the CLI — a hosted application installs the *wheel* inside a build container
+# with no public internet, so the dependency ceilings in the wheel metadata are
+# the only constraint that applies there, and uv.lock plays no part at all.
 
 on:
   pull_request:
@@ -22,9 +25,6 @@ jobs:
   locked:
     name: Lint & Test (locked resolution)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: src/bisheng-sdk
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,12 +34,28 @@ jobs:
         with:
           enable-cache: true
 
-      # --frozen, not a plain sync: uv.lock is committed and CI must use it
-      # rather than re-resolving.
+      # The package and the distribution machinery land in separate changes, so
+      # a run triggered by the script alone must say "nothing to test" rather
+      # than fail on a directory that does not exist yet.
+      - name: Is the package present?
+        id: guard
+        run: |
+          if [ -f src/bisheng-sdk/pyproject.toml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::src/bisheng-sdk/ is not on this branch — skipping the SDK legs"
+          fi
+
+      # --frozen, not a plain sync: uv.lock is committed and CI must use it.
       - name: Sync (frozen)
+        if: steps.guard.outputs.present == 'true'
+        working-directory: src/bisheng-sdk
         run: uv sync --frozen --extra dev
 
       - name: Ruff
+        if: steps.guard.outputs.present == 'true'
+        working-directory: src/bisheng-sdk
         run: |
           uv run ruff check .
           uv run ruff format --check .
@@ -47,6 +63,8 @@ jobs:
       # `network`-marked cases need a real platform and are skipped by default;
       # they only run during the 114 manual verification.
       - name: Tests
+        if: steps.guard.outputs.present == 'true'
+        working-directory: src/bisheng-sdk
         run: uv run pytest -m "not network"
 
   wheel:
@@ -59,59 +77,64 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
 
-      # The packaging script is owned by the distribution slice (F057 T022).
-      # Until it lands, this leg checks the one thing it can check on its own:
-      # that the wheel builds and imports from an empty environment.
-      - name: Build wheel and run the packaging smoke test
+      - name: Is the package present?
+        id: guard
         run: |
-          set -euo pipefail
-          if [ -f scripts/pack_sdk_wheel.sh ]; then
-            bash scripts/pack_sdk_wheel.sh
+          if [ -f src/bisheng-sdk/pyproject.toml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
           else
-            cd src/bisheng-sdk
-            uv build --wheel
-            WHEEL="$(ls dist/bisheng_sdk-*-py3-none-any.whl | head -n 1)"
-            # A hyphenated directory without `[tool.hatch.build.targets.wheel]`
-            # produces an EMPTY wheel that installs fine and fails at import.
-            WHEEL_LISTING="$(python3 -c "import zipfile,sys;print('\n'.join(zipfile.ZipFile(sys.argv[1]).namelist()))" "${WHEEL}")"
-            case "${WHEEL_LISTING}" in
-              *bisheng_sdk/auth.py*) ;;
-              *) echo "::error::${WHEEL} does not contain bisheng_sdk/auth.py"; exit 1 ;;
-            esac
-            python3 -m venv /tmp/sdk-smoke
-            /tmp/sdk-smoke/bin/pip install --quiet "${WHEEL}"
-            /tmp/sdk-smoke/bin/python -c "import bisheng_sdk, bisheng_sdk.auth, bisheng_sdk.retrieve, bisheng_sdk.storage, bisheng_sdk.errors; print(bisheng_sdk.__version__)"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::src/bisheng-sdk/ is not on this branch — skipping the wheel leg"
           fi
+
+      - name: Build wheel and run the packaging smoke test
+        if: steps.guard.outputs.present == 'true'
+        run: bash scripts/pack_sdk_wheel.sh
 
       - name: Version drift guard
         # Catches "changed the SDK, forgot to re-run pack_sdk_wheel.sh": the
-        # platform would keep serving the previous wheel with no signal at all.
-        if: hashFiles('src/backend/bisheng/dev_toolkit/artifacts/manifest.json') != ''
+        # platform would keep distributing the previous wheel, and applications
+        # built after the change would silently pin the old one.
+        if: steps.guard.outputs.present == 'true'
         run: |
           set -euo pipefail
           PKG_VERSION="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/bisheng-sdk/bisheng_sdk/__init__.py)"
-          MANIFEST_VERSION="$(python3 -c "import json;print((json.load(open('src/backend/bisheng/dev_toolkit/artifacts/manifest.json')).get('sdk') or {}).get('version') or '')")"
-          if [ -z "${MANIFEST_VERSION}" ]; then
-            echo "::notice::artifacts/manifest.json carries no sdk section yet (F057 distribution slice)"
-            exit 0
-          fi
+          MANIFEST_VERSION="$(python3 -c "import json;print(json.load(open('src/backend/bisheng/dev_toolkit/artifacts/manifest.json'))['sdk']['version'])")"
           if [ "${PKG_VERSION}" != "${MANIFEST_VERSION}" ]; then
             echo "::error::bisheng_sdk.__version__=${PKG_VERSION} but artifacts/manifest.json says ${MANIFEST_VERSION}"
+            exit 1
+          fi
+          # The wheel must be committable: `.gitignore` carries build/, lib/,
+          # wheels/ and sdist/ without a leading slash, so a future rename of the
+          # staging directory would make `git add` fail silently.
+          WHEEL="$(ls src/backend/bisheng/dev_toolkit/artifacts/bisheng_sdk-*.whl | head -n 1)"
+          if git check-ignore -q "${WHEEL}"; then
+            echo "::error::${WHEEL} is matched by a .gitignore rule and would never reach the backend image"
+            exit 1
+          fi
+
+      - name: Artifacts are committed, not just built
+        # The wheel travels inside the backend package because the image's build
+        # context is only ./src/backend/. A diff here means the committed copy is
+        # stale — and the `cli` section must be untouched by an SDK rebuild.
+        if: steps.guard.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- src/backend/bisheng/dev_toolkit/artifacts/manifest.json; then
+            echo "::error::artifacts/manifest.json is out of date — run bash scripts/pack_sdk_wheel.sh and commit the result"
+            git --no-pager diff -- src/backend/bisheng/dev_toolkit/artifacts/manifest.json
             exit 1
           fi
 
   highest:
     name: Upper-bound sentinel (advisory)
     runs-on: ubuntu-latest
-    # Advisory on purpose: this leg answers "is it time to raise the httpx
-    # ceiling?", which is a decision, not a defect. When it goes red the fix is
-    # to raise the bound after checking the new version — never to delete the
+    # Advisory on purpose: this leg answers "is it time to raise a ceiling?",
+    # which is a decision, not a defect. When it goes red the fix is to raise the
+    # bound after checking the new version, or to pin — never to delete the
     # bound, which is how app-proxy got a green suite and a dead production
     # process.
     continue-on-error: true
-    defaults:
-      run:
-        working-directory: src/bisheng-sdk
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -119,8 +142,21 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
 
+      - name: Is the package present?
+        id: guard
+        run: |
+          if [ -f src/bisheng-sdk/pyproject.toml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Resolve to the newest allowed dependencies
+        if: steps.guard.outputs.present == 'true'
+        working-directory: src/bisheng-sdk
         run: uv sync --upgrade --extra dev
 
-      - name: Tests against the newest allowed httpx
+      - name: Tests against the newest httpx in range
+        if: steps.guard.outputs.present == 'true'
+        working-directory: src/bisheng-sdk
         run: uv run pytest -m "not network"

@@ -1,0 +1,5 @@
+# 托管构建期就从这三行装起来。bisheng-sdk 由平台自己的包索引提供 ——
+# 构建环境已经指向它,这里什么都不用配;本机开发时见 SKILL.md 最后一章的 pip 命令。
+fastapi
+uvicorn
+bisheng-sdk
