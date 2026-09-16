@@ -284,11 +284,14 @@
   **覆盖 AC**: AC-20, AC-23, AC-24, AC-36
   **依赖**: T026
 
-- [ ] **T029**: 发布说明 + docs 补章（1h）
+- [x] **T029**: 发布说明 + docs 补章（1h）
   **文件**: `docs/api/`（如有 v2 文档目录：新增「模型协议面」页，内容 = design §4.2 ①②③ + 引擎配置片段）, `features/v3.0.0/release-contract.md`（变更历史加一行：F051 design / tasks 定稿、262 登记、`model:invoke` 可签发）
   **并入本任务（从 T016 移来，2026-09-16）**: 模型面的对外客户文档写在这里，不再往 beta1 那两份手写 md 里塞——理由见 T016「未做的一半」。写这一页时顺带确认 `openapi-v2-key-auth-api.json` 是最新的（catch-all 不进契约是有意的），以及 `whoami.model_base_url` 是文中唯一的 base URL 出处。
   **覆盖 AC**: AC-30
   **依赖**: T027, T028
+  **完成证据（2026-09-16，切片 `wt/f057-tail`）**: 新增 `docs/api/model-gateway.md`（照 `docs/api/mcp-server.md` 的房式，七节：接入 / 模型名解析四步 / 承诺参数 / OpenAI 错误体与码表 / 身份与边界 / 引擎配置片段 / 调用记录）；`features/v3.0.0/release-contract.md` 变更历史加「2026-09-16（F051 收口）」一行。**逐条对着实现侧核过**：`model_gateway.py`（两条端点 + catch-all、`ANTHROPIC_MESSAGES_PATHS` 两种拼法）、`schemas/model_gateway.py`（承诺字段表、`extra="allow"` 原样转发、`reasoning_content` 非空才出现）、`model_gateway_service.py:148`（`n != 1` → 26203）、`common/errcode/model_face.py`（26201–26205 / 26211–26217 / 26231–26234 逐个）、`credential.py:136` 的 `model_base_url`。
+  **顺带核对的两处，结论都是不改**: ① `features/v3.0.0-beta1/053-openapi-auth-and-identity/openapi-v2-key-auth-api.json` 已含 `/api/v2/model/v1/chat/completions` 与 `/models`（全表 48 条操作），是最新的、catch-all 如设计不进契约；② release-contract 错误码表 262 行（`:105`）早已登记且与 `model_face.py` 一致，未动。
+  **偏差**: 「发布说明」在本仓没有独立的 release note 文件（`docs/blog/` 只有两篇长文，无版本发布说明），故按本任务文件清单落在 release-contract 变更历史；若后续建立版本发布说明文件，本行内容可原样搬过去。
 
 ---
 
