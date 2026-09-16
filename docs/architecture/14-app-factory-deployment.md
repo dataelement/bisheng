@@ -311,6 +311,7 @@ config.yaml 里；要避免明文密钥，用 `!env ${VAR}` 语法从环境变�
 | `obo_ttl_seconds` | `900` | 注入应用的身份令牌寿命（秒），最小 60 |
 | `entry_base_url` | `""` | 用户实际访问平台的对外基地址，如 `https://bisheng.example.com`（不带结尾斜杠）。**强烈建议配**：留空时应用地址只能给出相对路径 `/apps/{slug}`，浏览器里能用，但二维码、CLI 回显、外发链接都是残缺的 |
 | `ws_max_lifetime_seconds` | `28800` | 单条被反代 WebSocket 的授权寿命上限（秒）。能力后置，当前占位 |
+| `access_log_merge_window_seconds` | `1800` | 托管应用访问记录的合并窗口（秒）：同一用户在窗口内反复进入同一应用只记一条（Redis 键 `app_access:{app_id}:{user_id}` 的 TTL）。30 分钟对齐会话粒度，刷新页面不会多出一条；Redis 不可达时照常记录、只是不去重 |
 | `max_package_mb` | `50` | 上传包体积上限（MB） |
 | `max_unpacked_mb` | `200` | 解包后总体积上限（MB），防解压炸弹 |
 | `max_package_entries` | `20000` | 包内条目数上限，防海量小文件 |

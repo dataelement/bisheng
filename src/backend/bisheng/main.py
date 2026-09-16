@@ -9,6 +9,7 @@ from loguru import logger
 
 from bisheng.api.router import router, router_rpc
 from bisheng.app_runtime.api.exception_handlers import register_app_runtime_exception_handlers
+from bisheng.app_runtime.domain.services.app_access_log_service import flush_pending_access_records
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.exceptions.auth import AuthJWTException
 from bisheng.common.init_data import init_default_data
@@ -152,6 +153,10 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await open_api_call_audit_service.stop()
+        # Hosted-app access records are written fire-and-forget (F054 AC-38);
+        # give the in-flight ones a bounded chance to land before the database
+        # goes away, so a deploy restart is not a silent gap in an audit asset.
+        await flush_pending_access_records(timeout=5.0)
         thread_pool.tear_down()
         await close_app_context()
 

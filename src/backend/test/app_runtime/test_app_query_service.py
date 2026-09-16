@@ -210,7 +210,10 @@ class TestLogs:
         result = await AppQueryService.get_logs(app.id, actor=app_owner.payload)
         assert result["lines"] == []
 
-        tables = set(sqlmodel.SQLModel.metadata.tables)
+        # ``app_access_log`` is not a runtime log: it is the AC-38 access
+        # record (who entered, when) that the same D14-B decision *does* put in
+        # a table. What must stay absent is any store of application output.
+        tables = set(sqlmodel.SQLModel.metadata.tables) - {"app_access_log"}
         assert not {name for name in tables if name.startswith("app_") and "log" in name}
 
     async def test_owner_only_entries_refuse_a_root_tenant_app_from_a_leaf_key(
