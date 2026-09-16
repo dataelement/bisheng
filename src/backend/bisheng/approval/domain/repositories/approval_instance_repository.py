@@ -112,6 +112,36 @@ class ApprovalInstanceRepository:
             return (await session.exec(statement)).first()
 
     @classmethod
+    async def list_instances_by_resource(
+        cls,
+        *,
+        tenant_id: int,
+        scenario_code: str,
+        business_resource_type: str,
+        business_resource_id: str,
+    ) -> list[ApprovalInstance]:
+        """Every request ever filed against one business object, newest first.
+
+        The plural of :meth:`find_active_instance_by_resource` with no status
+        filter: a read side that has to answer "who was ever asked to approve
+        *this* version" (F055's review view admits an approver by the task
+        they hold) needs the whole history, because the version being reviewed
+        is not necessarily the one the newest request is about.
+        """
+        statement = (
+            select(ApprovalInstance)
+            .where(
+                ApprovalInstance.tenant_id == tenant_id,
+                ApprovalInstance.scenario_code == scenario_code,
+                ApprovalInstance.business_resource_type == business_resource_type,
+                ApprovalInstance.business_resource_id == business_resource_id,
+            )
+            .order_by(ApprovalInstance.id.desc())
+        )
+        async with get_async_db_session() as session:
+            return list((await session.exec(statement)).all())
+
+    @classmethod
     async def create_task(cls, row: ApprovalTask) -> ApprovalTask:
         async with get_async_db_session() as session:
             session.add(row)

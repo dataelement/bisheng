@@ -340,6 +340,7 @@
   - **案 A（选定方向）**：同弹窗内 `viewMode: 'list' | 'review'` 切换，review 态把 `DialogContent` className 放宽到 `md:max-w-[1200px]`（改 `:388-393` 的表达式即可，**零结构改动**）；
   - 案 B：client 另开一条路由页 — 否决：脱离决议-3「处理面在弹窗」的口径，且要新建路由 + 权限守卫 + 返回态。
   - **MVP 期整块不渲染**（连「查看待上线版本」按钮也不出），避免死链。只读代码 / 文件树 / diff **platform 与 client 都无现成件**，client 侧 `pages/knowledge/FilePreview/` 与 `components/Messages/Content/CodeBlock.tsx` 可参考。
+  - **2026-09-16 后端半已落码**（T052 后端 + T063）：文件树 / 单文件只读 / 版本差异三个端点与访问规则见 **§4.2 ⑨**；前端审读视图与「查看待上线版本」入口仍未渲染（无死链前提不变）。
 - **审批期临时预览实例（AC-26～28）—— 后置**：走 F054 已登记为 Outgoing 的预览入口路由 `/apps/preview/{session}`（F054 §6.1，后置 Wave）；**实例生命周期归 F055**：以待上线版本快照拉起（复用 `POST /v1/intents/probe` 的临时形态 + `deploy` 意图但不占应用实例名额）、连一个临时空库、注入**审批人本人身份**、平台能力按 **owner** 权限放行（NFR-1.2 审批例外，INV-36 已登记）并计审计；审批出终态或超时（默认 **7 天**，`settings.app_runtime.preview_ttl_days`）即回收，回收后可再拉起。
 - **站内消息（AC-64 / AC-65）—— MVP 做（改动极小）**：
   - **审批类**沿用既有通用动作码，差异靠 `scenario_code` → **一处代码**：`client/src/components/messageApproval/notificationContent.ts` 的 `APPROVAL_TASK_SCENARIO_TEXT_KEYS` 加 `app_publish_request: 'com_notifications_action_request_app_publish'`；**三处 i18n**：`client/src/locales/{zh-Hans,en,ja}/translation.json`（同族键 `com_notifications_action_request_channel` 在 `zh-Hans:489` / `en:501` / `ja:486`）。
@@ -369,7 +370,7 @@
   - **同一个 service 方法** `PublishStatusService.get_publish_status(app_id, actor)` 供**发布面**与 **F052 MCP 应用状态工具**消费 → AC-38「两处返回一致」由"只有一处实现"结构性保证，不靠约定。
   - **K11 ② 红线**：对无权者**不能回 403/404**（整页跳 `/403`）→ 无权时返回 200 + 业务码 `16254` 或让前端以 `silent: true` 调用。
 - **撤回按钮**：直接调既有 `POST /api/v1/approval/instances/{instance_id}/withdraw`（owner-only 由后端 applicant 校验天然成立，D10）。
-- **WB-15 版本差异（AC-41）后置**：落点方向 = 版本 tab 与审读视图**同一呈现组件**（`hostedApp/publish/VersionDiff.tsx`），数据源 = 服务端比对两个版本快照的 tar 条目（`GET /api/v1/apps/{app_id}/versions/{a}/diff/{b}` → `{files:[{path, change, additions, deletions}], patches:[…]}`），**服务端算 diff 不下发两份 tar**（下发等于把代码明文交给浏览器，且 50MB 包会直接卡死页面）。
+- **WB-15 版本差异（AC-41）后置**：落点方向 = 版本 tab 与审读视图**同一呈现组件**（`hostedApp/publish/VersionDiff.tsx`），数据源 = 服务端比对两个版本快照的 tar 条目（`GET /api/v1/apps/{app_id}/versions/{a}/diff/{b}` → `{files:[{path, change, additions, deletions}], patches:[…]}`），**服务端算 diff 不下发两份 tar**（下发等于把代码明文交给浏览器，且 50MB 包会直接卡死页面）。**2026-09-16 后端已落码**（T063，`version_diff_service.py`），精确契约与三道体积闸见 **§4.2 ⑨**；前端 T064 未做。
 - **何时该重新考虑**：发布面区块数量超过 8 个或状态卡需要实时刷新（那时才值得为 platform 引入轮询 hook 或重估 react-query 冻结令）。
 
 ### D16：MVP-核心边界（本轮做哪些 AC、哪些后置）与模块划分
@@ -590,7 +591,7 @@ platform 发布面 / F052 MCP 应用状态工具
 | 16200–16219 | 接收与包 | `16201` 包超出大小上限 · `16202` 包解析失败 / 非法路径条目 · `16203` 缺 `bisheng-app.yaml` · `16205` 该应用归属他人 · `16207` 工场运行时层未启用 |
 | 16220–16239 | 预检 | `16221` manifest 校验失败 · `16222` `runtime` 取值不支持 · `16223` 档位不存在或已停用 · `16224` 能力声明引用不可解析 · **`16225` 审批场景未启用**（Gate 抛异常，D6）· **`16226` 运行环境容量不足**（构建 / 上线准入闸，D4）· `16227` 依赖构建失败 · `16228` 启动探活失败 · `16229` 结构变更未确认 · `16230` 能力声明含密钥引用（本版不支持）· `16231` 本环境未启用能力总线 · `16232` 清单声明了 WebSocket（本版托管入口不反代 WS，握手 close `4501`；改用 SSE / 轮询）|
 | 16240–16249 | 密钥扫描 | `16241` 发布前密钥扫描命中 |
-| 16250–16269 | 发布流程 | `16251` 已存在在途审批单 · `16252` 待上线态不接受新提交 · `16253` 版本记录不存在 · `16254` 仅 owner 可执行 · `16255` 当前应用态不允许该动作 |
+| 16250–16269 | 发布流程 | `16251` 已存在在途审批单 · `16252` 待上线态不接受新提交 · `16253` 版本记录不存在 · `16254` 仅 owner 可执行 · `16255` 当前应用态不允许该动作 · **`16256` 版本快照不可用**（版本行在、对象不在 / 解析失败，`details.reason ∈ {missing, storage_error, unreadable_archive}`）· **`16257` 无权查看该版本代码**（审读视图 / 差异；含应用不存在 `reason: not_found`，不区分以免探测）· **`16258` 快照中没有该文件**（`reason ∈ {not_found, illegal_path}`；目录也算 not_found）|
 | 16270–16289 | 能力总线 | `16273` 该能力已被收回 · `16274` 未在能力声明中的能力 |
 | 16290–16299 | 运行期凭据 | `16291` 应用运行期凭据主体不可用 |
 
@@ -600,6 +601,18 @@ platform 发布面 / F052 MCP 应用状态工具
 > - **原 `16226`「依赖托管契约外的中间件」已删**：D4 明确本轮不做静态依赖分析，判据下沉为探活失败（`16228`），该码**没有任何写入方**。号已改派给容量不足。
 >
 > `withdraw` 终态守卫用 **approval 段 181xx**，不占 162（D10）。
+
+**⑨ 审读视图只读接口 + 版本差异**（`/api/v1`，登录态；AC-25 / AC-41；2026-09-16 落码 T063 + T052 后端半）
+
+三个端点共用一条访问规则 `ReviewAccess.require(app, actor, version_ids)`（`snapshot_browse_service.py`）：**owner / 该应用租户的管理员 / 平台超管 / 持有该版本发布申请审批任务的审批人**——"持有任务"按字面：`approval_task.approver_user_id = 调用人` 且所在 instance 的 `payload_snapshot.version_id ∈ version_ids`（差异接口传两个版本，审批人只需持有其一——AC-41 要比的正是"待上线 vs 上一已发布"，后者没有自己的审批单）。任务状态不限（已决的审批人仍可回看自己审过的东西）。**拒绝一律 200 + 业务码**（K11 ②）：无权 / 应用不存在 → `16257`；版本不存在 → `16253`；快照对象缺失或解析失败 → `16256`；文件不存在 / 路径非法 → `16258`。三个响应都带 `role ∈ owner|super_admin|tenant_admin|approver`，前端据此决定还画不画只有 owner 才有的动作。
+
+| 端点 | 入参 | 返回 |
+|---|---|---|
+| `GET /api/v1/apps/{app_id}/versions/{version_id}/snapshot/tree` | — | `{version:{version_id,version_no,kind,terminal_state,submitted_at}, role, entries:[{path,name,type:"file"\|"dir",size,previewable?,reason?}], total_files, truncated}`——**扁平、按 path 排序**，目录条目由文件路径推导（归档没写目录成员也齐全）；`previewable/reason` 只在 `type=file` 上有，`reason ∈ null\|"binary"\|"too_large"`，判据与密钥扫描同一套（头 8 KiB 含 NUL / >1 MiB）；单顶层目录包按解包规则**去前缀**（`snapshot_root_prefix`）；条目超 `max_package_entries` → `truncated:true` |
+| `GET /api/v1/apps/{app_id}/versions/{version_id}/snapshot/file?path=` | `path`：包内相对 POSIX 路径（1–1024 字符；绝对 / `..` → 16258 `illegal_path`） | `{version, role, path, size, previewable, reason, content, masked_secrets, line_count}`——`previewable:false` 时 `content:null`（**字节不出库**）；`content` 已过 `mask_secrets`（命中密钥规则的值替换为 `***`，占位符不替换），`masked_secrets` 为替换次数 |
+| `GET /api/v1/apps/{app_id}/versions/{base_version_id}/diff/{target_version_id}` | `base` = 旧侧（`a/`），`target` = 新侧（`b/`）；AC-41「迭代相对上一已发布」= `/versions/{current_version_id}/diff/{pending_version_id}`，两个 id 由 `publish-status` 的 `current_version` / `pending_version` 取 | `{base:{…}, target:{…}, role, summary:{files_changed,additions,deletions,truncated}, files:[{path,change:"added"\|"removed"\|"modified",additions,deletions,comparable,reason}], patches:[{path,change,patch,truncated,masked_secrets}]}`——**服务端算、两份 tar 都不下发**；未变更文件不出现；`comparable:false`（binary / too_large）的文件只进 `files` 不进 `patches`；`patch` 为标准 unified diff（`--- a/x` / `+++ b/x`，新增 / 删除侧写 `/dev/null`，3 行上下文），**先 mask 后 diff**；三道闸各留 `truncated` 标记——单文件 2000 行（`patch` 截断、计数仍是真值）、总 patch 文本 2 MiB（超出后的条目 `patch:null`）、文件清单 5000 条（`summary.truncated`）|
+
+> **没有下载整包的端点，且不会有**（D15「源码不以归档形态到浏览器」）——`test_no_archive_download_route_exists` 把这句钉死。审读视图（T052 前端半 / T064）按这三个契约接线；client 侧调用可用 `silent: true`，但后端已保证不回 403/404。
 
 ### 4.3 关键模块职责
 
@@ -805,6 +818,7 @@ platform 发布面 / F052 MCP 应用状态工具
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-09-16 | **T063 + T052 后端半落码**：新增 §4.2 ⑨（快照文件树 / 单文件只读 / 版本差异三个 `/api/v1` 端点的精确契约与共用访问规则 `ReviewAccess`）；§4.2 ⑧ 发布流程段补 `16256` / `16257` / `16258` 三码（16259 预留未用）；D14 / D15 补"后端已落码、前端未做"标注。落点：`app_publish/domain/services/{snapshot_browse_service,version_diff_service}.py`、`api/endpoints/{snapshot,version_diff}.py`；`secret_scanner.py` 新增 `skip_reason` / `mask_secrets` 供审读复用（规则表仍单一来源）；`approval_instance_repository.list_instances_by_resource`（只读、查全部历史 instance）。设计取舍：树 / 单文件走**流式读归档、不落盘**（每次点击解一遍 50 MB 到磁盘会把 API 节点磁盘悄悄写满），差异走 `safe_extract` 落临时目录（六种非法条目与体积闸对冻结字节再跑一次） | PRD-1 收尾切片 publish-diff-review-backend |
 | 2026-08-17 | **评审修订（15 条，1 high / 7 medium / 7 low）**：① **错误码 16225 一码双义拆解**——构建期容量不足改 `16226`，`16225` 专归「审批场景未启用」；同批删死码（原 16226 中间件，无写入方）与重叠码（16271/16272 与 16223），成因区分改用 `details.reason`（C5，D4 / D6 / §4.2⑧）；② **D5 扫描顺序回退为 spec 字面顺序**——"提前到构建之前"降级为**待 ★ 确认的偏离**（原文自行拍板且"仍满足 F053 AC-31a"的说法**被证伪**：AC-31a 逐字要求"托管预检 → 安全扫描 → 审批单"，`053/spec.md:109`），D4 / §4.1 阶段序同改；③ **C1 / D16 的 arch-guard 论证被证伪并重写**——RULE-5 只匹配 `api/endpoints/` 与 `api/router.py`（`arch-guard.sh:71-82`），domain 层跨模块 import 无护栏，且 `ResourceTier` 归 F055 / F054 只读已构成双向依赖 → 模型改落 `database/models/resource_tier.py` 两模块共读，拆模块判据改为文件规模与 owner 边界；④ **D8 前置 2 撤销"抽公共函数两处共用"**——`_get_admin_recipient_ids` 是**无条件 union**、D8 要的是**条件回退**，合并的两种错法各自致命，改为两个函数并存（坑 2 同改）；⑤ **AC-17 自审标注补落点**——引擎侧无通道（`resolve_approvers` 返回 `list[int]`、`ApprovalGateResult` 四字段），改走 handler 实例属性并写死"每次请求新建 handler"前提；⑥ preset 补必填 `handler_key`（漏传 = import 期 `ValidationError`）；⑦ **K9 / §8 回写项 1 删除**（161–164 分配早已写进 release-contract 与 constitution C5，原文会产生空转任务）；⑧ **包体上限三处统一**为 `settings.app_runtime.max_package_mb` 并新增 `GET /api/v2/apps/deploy-limits` 给 CLI 取值（F053 AC-32），§8 增回写 F053 一项；⑨ 波次表 AC-24 改为「除『查看待上线版本』入口外」并补对 §6 裁剪基准扩张的判据；⑩ §4.2④ 补 `business_resource_type/id` 两个必填字段并厘清与 `app.release.*` 审计筛选的关系；⑪ 预检第 2 步归属定死为同步段本地校验、`runtime` 与 manager 的复核下沉异步段；⑫ 死码 / 重叠码清理（并入①）；⑬ D14「零前端代码」补前提——`isApprovalMessageType` 也认 `message_type`，非审批通知禁用 `request`/`approve`（写进 §4.2⑦ 发送契约）；⑭ K5 出处订正 F054 **D10**（非 D8）；⑮ 行号漂移与 HEAD 口径订正（`_UI_VISIBLE_V2_ACTIONS :193-259` / `_V2_NAMESPACE_TO_ACTION_PREFIX :261` / `ainsert_v2 :428` / platform `bs.json :1832,:1842` / client `zh-Hans:489 en:501 ja:486`），并声明 **F054 已落码**（`app_factory.py` 与 `app` 审计命名空间已就位，§4.2⑥ 由待办改为既成事实） | design 评审（15 条 ISSUE）逐条处理 |
 | 2026-08-17 | 初版：D1–D16 决策 + 30 条坑 + 对外契约（管线端点 / 状态接口 / AppManifest / 审批场景 payload / 两张新表 / 审计事件族 / 通知 action_code / 错误码 162 段）+ 测试与 114 手动验证（对应 `mvp-114-path.md` §1 步 3–4）+ MVP-核心边界表。**三项显式偏离 / 待回写**：① **密钥扫描位置提前到构建之前**（D5，对 spec AC-01 字面顺序的偏离，行为与 AC-10 完全一致，回改成本为零）；② **档位数值以本 spec AC-44 为准并回写 F054 `DEFAULT_TIERS`**（D11 / 坑 27）；③ **F054 需补 `AppProvisionService.create_draft`**（D2 / 坑 26）。另登记 `release-contract.md:98` 与 constitution C5 的错误码回写、approval-module skill 的同步义务。**（本行为历史记录：其中 ① 已在上一行的评审修订中降级为待 ★ 确认项、错误码回写项已确认为无需再做——以上一行为准）** | F055 design 编写（spec 65 AC + 两份探查笔记 E1/E2 + `mvp-114-path.md` §6 裁剪基准 + F054/F049 design 契约 + approval-module SKILL） |
 

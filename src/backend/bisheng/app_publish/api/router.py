@@ -18,6 +18,8 @@ from fastapi import APIRouter
 
 from bisheng.app_publish.api.endpoints.deploy import router as deploy_router
 from bisheng.app_publish.api.endpoints.publish_status import router as publish_status_router
+from bisheng.app_publish.api.endpoints.snapshot import router as snapshot_router
+from bisheng.app_publish.api.endpoints.version_diff import router as version_diff_router
 
 #: Mounted under ``/api/v2`` → ``/api/v2/apps/**``.
 v2_router = APIRouter()
@@ -26,3 +28,5 @@ v2_router.include_router(deploy_router)
 #: Mounted under ``/api/v1`` → ``/api/v1/apps/**``.
 v1_router = APIRouter()
 v1_router.include_router(publish_status_router)
+v1_router.include_router(snapshot_router)
+v1_router.include_router(version_diff_router)
