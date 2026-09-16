@@ -288,6 +288,63 @@ def test_a_hosted_app_principal_cannot_build_a_facade_identity():
         RetrievalIdentity.from_open_api_principal(principal)
 
 
+def test_a_hosted_app_cannot_borrow_its_owner_through_the_legacy_v2_helpers(monkeypatch):
+    """The other half of the same door, and the one the declaration opens.
+
+    A declaration naming one knowledge base derives ``knowledge:read`` — and
+    that single scope also admits ``GET /filelib``, ``GET /filelib/file/list``,
+    ``detail_qa``, ``query_qa`` and the citation detail, all of which execute as
+    ``get_open_api_operator()``. For this subject that resolves to the
+    application's **owner**, with the owner's roles: the application would read
+    every knowledge base the owner can see, whitelist or no whitelist.
+
+    So the refusal sits in ``_principal_user_id``, which all of them share — one
+    place rather than five, and the route added next inherits it.
+    """
+    from bisheng.common.errcode.open_api import OpenApiHostedAppEndpointRefusedError
+    from bisheng.open_endpoints.domain import utils as open_api_utils
+
+    principal = SimpleNamespace(
+        actor_kind="hosted_app",
+        actor_id=5,
+        actor_name="调研应用",
+        subject_ref="app-uuid",
+        tenant_id=1,
+        mode="S",
+        effective_user_id=None,
+        # The owner is right there and readable — the point is that it is never
+        # adopted, not that this application happens to have no owner.
+        resource_owner_user_id=42,
+    )
+    monkeypatch.setattr(open_api_utils, "get_current_open_api_principal", lambda: principal)
+
+    for helper in (open_api_utils.get_open_api_operator, open_api_utils.get_open_api_operator_async):
+        with pytest.raises(OpenApiHostedAppEndpointRefusedError) as excinfo:
+            result = helper()
+            if hasattr(result, "__await__"):
+                # ``get_open_api_operator_async`` refuses before its first await,
+                # so the coroutine has to be driven one step to surface it.
+                result.send(None)
+        assert excinfo.value.code == 26052
+        assert excinfo.value.http_status == 403
+
+
+def test_a_service_account_still_reaches_the_legacy_v2_helpers(monkeypatch):
+    """The refusal above is keyed on the subject kind, not on v2 as a whole."""
+    from bisheng.open_endpoints.domain import utils as open_api_utils
+
+    principal = SimpleNamespace(
+        actor_kind="service_account",
+        actor_id=5,
+        mode="S",
+        effective_user_id=None,
+        resource_owner_user_id=42,
+    )
+    monkeypatch.setattr(open_api_utils, "get_current_open_api_principal", lambda: principal)
+
+    assert open_api_utils._principal_user_id() == (42, True)
+
+
 # ---------------------------------------------------------------------------
 # Revocation surfaces as 16273 rather than as a quietly smaller search
 # ---------------------------------------------------------------------------

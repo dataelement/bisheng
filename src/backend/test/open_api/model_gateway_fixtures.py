@@ -63,6 +63,7 @@ def hosted_app_principal(
     app_slug: str = "survey-app",
     app_id: str = "app-uuid-survey",
     tenant_id: int = 9,
+    scopes: frozenset[str] = frozenset({"model:invoke"}),
 ) -> OpenApiPrincipal:
     """A hosted-application principal, shaped exactly like ``resolve_hosted_app``'s.
 
@@ -82,7 +83,7 @@ def hosted_app_principal(
         subject_ref=app_id,
         tenant_id=tenant_id,
         resource_owner_user_id=12,
-        scopes=frozenset({"model:invoke"}),
+        scopes=scopes,
         mode="S",
         authorization_subject_type="service_account",
         authorization_subject_id=5,

@@ -32,6 +32,11 @@ EXPECTED_CODES = {
     26044,
     26050,
     26051,
+    # F055 AC-52: a hosted application reaching a v2 endpoint that executes as a
+    # natural person. Its scopes come from a capability declaration, and the one
+    # that declaration derives (``knowledge:read``) also admits six neighbouring
+    # routes that would run as the application's owner.
+    26052,
 }
 
 

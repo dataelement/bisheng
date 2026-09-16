@@ -692,7 +692,11 @@ def detail_qa(*, id: int):
 
 
 @router.post("/retrieve")
-@open_api_scope("knowledge:read")
+# ``hosted_app=True`` — the one route of the seven under ``knowledge:read`` that
+# a hosted application may reach, because it is the only one routed through the
+# capability bus (declared whitelist ∩ the visitor's own visibility). The other
+# six execute as the application's owner and are refused at the gate with 26052.
+@open_api_scope("knowledge:read", hosted_app=True)
 async def retrieve_chunks(
     request: Request,
     req: RetrieveReq,
@@ -750,6 +754,7 @@ async def retrieve_chunks(
             top_k=req.top_k,
             max_content=req.max_content,
             tag_filters=tag_filters,
+            credential_id=principal.credential_id,
             version_repo=version_repo,
         )
     else:

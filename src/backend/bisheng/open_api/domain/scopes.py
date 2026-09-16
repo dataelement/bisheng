@@ -227,12 +227,27 @@ def issuable_scope_codes() -> frozenset[str]:
 
 OPEN_API_SCOPE_ATTR = "__open_api_scope__"
 
+#: ``OpenApiPrincipal.actor_kind`` of a hosted application, fixed by
+#: ``api_credential.SUBJECT_KIND_HOSTED_APP``. Spelled here, next to the marker
+#: that decides which routes admit it, so the gate and the compatibility shim
+#: read one constant instead of two string literals that can drift apart. Not
+#: imported from the credential base on purpose: this module is a leaf that the
+#: route decorators load at import time.
+HOSTED_APP_ACTOR_KIND = "hosted_app"
+
 
 @dataclass(frozen=True, slots=True)
 class OpenApiScopeMarker:
     scope: str | None
     modes: frozenset[IdentityMode]
     session: bool
+    #: Whether a **hosted application** may reach this route (F055 AC-52).
+    #: Default-deny, because a scope is far coarser than the set of routes an
+    #: application should get from declaring one capability: ``knowledge:read``
+    #: covers seven routes and a declaration only ever buys the one the
+    #: capability bus serves. Opting in is per route, so the route added next
+    #: inherits the refusal rather than the permission.
+    hosted_app: bool = False
 
 
 def open_api_scope(
@@ -240,13 +255,14 @@ def open_api_scope(
     *,
     modes: tuple[IdentityMode, ...] = ("S", "D"),
     session: bool = False,
+    hosted_app: bool = False,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     if scope is not None and scope not in OPEN_API_SCOPE_CODES:
         raise ValueError(f"unknown open API scope {scope!r}")
     mode_set = frozenset(modes)
     if not mode_set or not mode_set <= {"S", "D"}:
         raise ValueError("modes must be a non-empty subset of {'S', 'D'}")
-    marker = OpenApiScopeMarker(scope=scope, modes=mode_set, session=session)
+    marker = OpenApiScopeMarker(scope=scope, modes=mode_set, session=session, hosted_app=hosted_app)
 
     def decorate(func: Callable[..., Any]) -> Callable[..., Any]:
         setattr(func, OPEN_API_SCOPE_ATTR, marker)

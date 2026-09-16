@@ -134,3 +134,54 @@ def test_route_registry_matches_complete_key_authenticated_surface():
 def test_removed_chat_routes_are_not_registered():
     paths = {path for _method, path in actual_v2_routes()}
     assert paths.isdisjoint(REMOVED_CHAT_ROUTES)
+
+
+def test_only_the_capability_faces_admit_a_hosted_application():
+    """F055 AC-52 as a lockstep, because the scope alone is far too coarse.
+
+    A hosted application's scopes come from its capability declaration, and one
+    declared knowledge base derives ``knowledge:read`` — which covers seven
+    routes. Six of them execute as the application's **owner**
+    (``get_open_api_operator``) or, in ``download_statistic``'s case, serve any
+    ``/app/data`` log file to whoever holds the scope. Only the retrieval route
+    goes through ``CapabilityBusService``, which narrows to the declared
+    whitelist ∩ the visiting user's own visibility.
+
+    So the admission is per route and default-deny, and this test is the list.
+    Adding a route here is a decision: it means "this route is safe for a
+    subject that is an application, not a person".
+    """
+
+    expected = {
+        ("POST", "/api/v2/filelib/retrieve"),
+        ("POST", "/api/v2/model/v1/chat/completions"),
+        ("GET", "/api/v2/model/v1/models"),
+    }
+    catch_all = {(method, "/api/v2/model/v1/{rest:path}") for method in ("GET", "POST", "PUT", "DELETE", "PATCH")}
+    if settings.open_platform.enabled:
+        expected |= catch_all
+    else:
+        # The model face is not mounted at all — see the note in
+        # ``test_route_registry_matches_complete_key_authenticated_surface``.
+        expected = {("POST", "/api/v2/filelib/retrieve")}
+
+    admitted = set()
+    for route in app.routes:
+        if not getattr(route, "path", "").startswith("/api/v2") or not isinstance(route, APIRoute):
+            continue
+        marker = get_open_api_scope_marker(route.endpoint)
+        if marker is not None and marker.hosted_app:
+            admitted.update((method, route.path) for method in route.methods)
+
+    assert admitted == expected
+
+
+def test_a_route_admits_no_hosted_application_unless_it_says_so():
+    """The default the list above depends on."""
+    from bisheng.open_api.domain.scopes import open_api_scope
+
+    @open_api_scope("knowledge:read")
+    def _endpoint():  # pragma: no cover - never called
+        return None
+
+    assert get_open_api_scope_marker(_endpoint).hosted_app is False

@@ -498,6 +498,22 @@ async def test_hosted_app_credentials_are_invisible_to_the_service_account_conso
     assert len(await CredentialRepository.list_by_subject(SUBJECT_KIND_HOSTED_APP, subject_id)) == 1
 
 
+#: API-layer files allowed to name the subject kind at all, and why.
+#:
+#: The rule AC-59 states is "no endpoint exposes the application's runtime
+#: credential" — no listing, no re-issue, no plaintext. **Refusing** the subject
+#: is the opposite of exposing it, and route admission has to name it somewhere:
+#: F055 T056-T060 made the gate default-deny for this actor kind and marked the
+#: two capability faces as the exceptions. Both are still held to the credential
+#: half of the rule below, and everything else is still scanned exactly.
+_ADMISSION_CONTROL_FILES = {
+    # Refuses this subject on every route that did not opt in (26052).
+    "open_api/api/dependencies.py",
+    # The model face opts in: ``hosted_app=True`` on its three routes.
+    "open_api/api/endpoints/model_gateway.py",
+}
+
+
 def test_no_api_endpoint_mentions_the_hosted_app_subject_kind():
     """AC-59 is the absence of a surface; absences are only testable by reading the tree.
 
@@ -513,8 +529,12 @@ def test_no_api_endpoint_mentions_the_hosted_app_subject_kind():
     for api_dir in (root / "open_api" / "api", root / "app_publish" / "api", root / "app_runtime" / "api"):
         for path in api_dir.rglob("*.py"):
             text = path.read_text()
-            if "hosted_app" in text or "SUBJECT_KIND_HOSTED_APP" in text or "HOSTED_APP_TOKEN_PREFIX" in text:
-                offenders.append(str(path.relative_to(root)))
+            relative = str(path.relative_to(root))
+            # The credential half: never allowed, admission control included.
+            if "SUBJECT_KIND_HOSTED_APP" in text or "HOSTED_APP_TOKEN_PREFIX" in text:
+                offenders.append(relative)
+            elif "hosted_app" in text and relative not in _ADMISSION_CONTROL_FILES:
+                offenders.append(relative)
     assert offenders == [], f"AC-59: no endpoint may expose hosted-app runtime credentials — {offenders}"
 
 

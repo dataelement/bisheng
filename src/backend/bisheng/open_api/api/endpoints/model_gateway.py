@@ -49,7 +49,7 @@ ANTHROPIC_MESSAGES_PATHS = frozenset({"messages", "v1/messages"})
     response_model=ChatCompletionResponse,
     responses={200: {"content": {"text/event-stream": {}}, "description": "Streamed when stream=true"}},
 )
-@open_api_scope("model:invoke", modes=("S",))
+@open_api_scope("model:invoke", modes=("S",), hosted_app=True)
 async def chat_completions(
     body: ChatCompletionRequest,
     request: Request,
@@ -59,7 +59,7 @@ async def chat_completions(
 
 
 @router.get("/models", response_model=ModelList)
-@open_api_scope("model:invoke", modes=("S",))
+@open_api_scope("model:invoke", modes=("S",), hosted_app=True)
 async def list_models(
     request: Request,
     principal: OpenApiPrincipal = Depends(get_open_api_execution),
@@ -68,7 +68,7 @@ async def list_models(
 
 
 @router.api_route("/{rest:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
-@open_api_scope("model:invoke", modes=("S",))
+@open_api_scope("model:invoke", modes=("S",), hosted_app=True)
 async def unsupported_endpoint(
     rest: str,
     _principal: OpenApiPrincipal = Depends(get_open_api_execution),
