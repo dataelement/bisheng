@@ -134,13 +134,35 @@ def patch_dao_session(monkeypatch, session):
 # ---------------------------------------------------------------------------
 
 
-def _insert_audit(session, *, action, tenant_id, operator_tenant_id, operator_id=None, operator_name=None):
+def _insert_audit(
+    session,
+    *,
+    action,
+    tenant_id,
+    operator_tenant_id,
+    operator_id=None,
+    operator_name=None,
+    system_id="system",
+):
+    """``system_id`` defaults to a generic legacy value so every seeded row
+    clears ``AuditLogDao._ui_visible_predicate()`` (``system_id IS NOT NULL
+    OR action IN (_UI_VISIBLE_V2_ACTIONS)``) the same way a real legacy-path
+    row does (``AuditLogService._chat_log`` / ``_build_log`` / ... always set
+    ``system_id`` via ``AuditLogDao.insert_audit_logs``). These tests are
+    about the tenant-scope AND-interaction (``_visible_for_tenant`` /
+    ``bypass_tenant_filter``), not the UI whitelist itself — that mechanism
+    already has dedicated coverage in ``test_tenant_scope_ands_with_operator_
+    and_system`` (system_id route) and ``TestGetAuditLogServiceEndToEnd``
+    (action-whitelist route). Pass ``system_id=None`` where a test needs a
+    row that stays invisible.
+    """
     entry = AuditLog(
         operator_id=operator_id if operator_id is not None else (operator_tenant_id or 0) * 10,
         operator_name=operator_name or f"t{operator_tenant_id}-user",
         tenant_id=tenant_id,
         operator_tenant_id=operator_tenant_id,
         action=action,
+        system_id=system_id,
     )
     session.add(entry)
     session.commit()
@@ -749,6 +771,9 @@ class TestAuditLogsCombinedFilters:
                 tenant_id=2,
                 operator_tenant_id=2,
                 action=f"t.{i}",
+                # Bypasses ``_insert_audit``'s default; set explicitly so this
+                # row clears ``_ui_visible_predicate`` like the others.
+                system_id="system",
             )
             session.add(entry)
             session.commit()
