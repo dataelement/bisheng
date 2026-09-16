@@ -74,7 +74,7 @@
 - **T029 / T038**（`dev_toolkit/artifacts/manifest.json` + 两个 wheel）——二进制，**串行**；`wt/cli-dev` 已提交过一版 CLI wheel + manifest，合并后**先合并再重打**，不要手工编辑 manifest（坑 35）。
 - **T030 / T031**（runtime-manager `config.py` / `builder.py` / `templates/python3.11/Dockerfile.j2` / `tests/test_build.py`）——F054 拥有；纯追加两个 ARG / 两个 buildarg / 两个 config 字段；`wt/storage-handle` 也改 `config.py`（追加 `storage_*` 字段），两处不相邻但同文件，合并顺序见 T000。
 - **T033 另改 F053 的测试**（`test/dev_toolkit/test_skill_packs.py` 里 `test_auth_chapter_teaches_exactly_app_proxys_header_names` 的 `assert "不要依赖" in token_row` 一句）——`X-BiSheng-Access-Token` 从「本轮无消费方」变成「retrieve 在用」，守卫断言随契约同批更新，同一 PR。
-- **T033 / T034 / T036**（`skills/platform-wiring/` 的 `SKILL.md` / `example/` / `selfcheck.py`）——**包本体归 F053 T038 且已交付**，本 Feature 只做增量：换 auth 章的「SDK 用法」桩、插 retrieve / storage 两章、加 SDK 样例与自检步骤；**章序、目录第一条、`> ⚠️` 警示块、模型章「暂未提供」一律不动**（F053 的 `test_skill_packs.py` 断言，坑 31）。**T037** 改 `skills/deploy-hosting/SKILL.md:138` 指针一句与 `skills/README.md` 目录树。
+- **T033 / T034 / T036**（`skills/platform-wiring/` 的 `SKILL.md` / 新目录 `example-sdk/` / `selfcheck.py`）——**包本体归 F053 T038 且已交付**，本 Feature 只做增量：换 auth 章的「SDK 用法」桩、插 retrieve / storage 两章、加 SDK 样例与自检步骤；**章序、目录第一条、`> ⚠️` 警示块、模型章「暂未提供」一律不动**（F053 的 `test_skill_packs.py` 断言，坑 31）。**T037** 改 `skills/deploy-hosting/SKILL.md:138` 指针一句与 `skills/README.md` 目录树。
 - **T038**（`src/bisheng-cli/bisheng_cli/commands/skills.py` + `tests/test_command_skills.py`）——`wt/cli-dev` 已把 `DEFAULT_PACKS` 改成两元素并补过测试；合并后若已两元素则**只重打 CLI wheel 一次**（因 T023 改了打包脚本），常量与测试零改动。
 - **T043**——只追加文档条目到 F052 / F053 / F055 tasks，不改他人代码；**F054 无回写**（附件契约以 `wt/storage-handle` 为准，design §6.2 回写登记第 1 条）。
 
@@ -287,7 +287,7 @@
   **依赖**: 无
 
 - [ ] **T031**: runtime-manager `config.py` / `builder.py` / `Dockerfile.j2` 增量〔1.5h〕
-  **文件**: `src/runtime-manager/runtime_manager/config.py`（增量：`build_extra_index_url` / `build_extra_trusted_host` 字段 + `RTM_BUILD_EXTRA_*` 读取，紧邻 `:159-160` / `:231-232`）, `src/runtime-manager/runtime_manager/builder.py`（增量：`:366-369` buildargs 加两键）, `src/runtime-manager/runtime_manager/templates/python3.11/Dockerfile.j2`（增量：`:21-22` 后加两个 `ARG`；`:39-42` pip 行加两个 shell 参数展开；头注释第 8 行补「SDK 自平台简单索引」）, `features/v3.0.0/054-app-domain-runtime/deploy/`（若有 env 模板：`runtime-manager.env` 追加两行注释掉的示例）
+  **文件**: `src/runtime-manager/runtime_manager/config.py`（增量：`build_extra_index_url` / `build_extra_trusted_host` 字段 + `RTM_BUILD_EXTRA_*` 读取，紧邻 `:159-160` / `:231-232`）, `src/runtime-manager/runtime_manager/builder.py`（增量：`:366-369` buildargs 加两键）, `src/runtime-manager/runtime_manager/templates/python3.11/Dockerfile.j2`（增量：`:21-22` 后加两个 `ARG`；`:39-42` pip 行加两个 shell 参数展开；头注释第 8 行补「SDK 自平台简单索引」）, `docs/architecture/14-app-factory-deployment.md`（增量：runtime-manager 环境变量表在 `RTM_BUILD_INDEX_URL` 行（`:151`）之后追加 `RTM_BUILD_EXTRA_INDEX_URL` / `RTM_BUILD_EXTRA_TRUSTED_HOST` 两行，备注「值必须是**构建容器可达**的宿主机地址，不能写 `localhost`」，坑 15。`features/v3.0.0/054-app-domain-runtime/deploy/` 只有两个 systemd unit 文件、无 env 模板，不改）
   **逻辑**: 只做追加；`--extra-index-url` 与 `--index-url` 并存（第三方依赖走主索引，`bisheng-sdk` 由 pip 在两个索引里都找、按 hash 取平台那份）。README / 部署文档注明值必须是**构建容器可达**的宿主机地址，非 `localhost`（坑 15）。
   **测试**: T030 全部通过；`cd src/runtime-manager && uv run ruff check . && uv run pytest -q`。
   **覆盖 AC**: AC-02

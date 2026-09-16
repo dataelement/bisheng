@@ -358,9 +358,9 @@ SDK **不读** `BISHENG_APP_TOKEN` / `BISHENG_API_KEY` / 任何密钥类变量�
 | backend `dev_toolkit/domain/services/artifact_service.py` | `SdkArtifact` + `DistributionSnapshot.sdk` + `read_sdk_guide()` | 不读 DB |
 | backend `dev_toolkit/api/endpoints/distribution.py` | ⑥ 的四个端点 + `versions` 的 `sdk` 段 | 无鉴权依赖 |
 | backend `dev_toolkit/sdk_compat.py` | `SDK_MIN_COMPATIBLE` 常量 | — |
-| backend `dev_toolkit/skills/platform-wiring/` | SKILL.md / example / selfcheck.py | — |
+| backend `dev_toolkit/skills/platform-wiring/` | **增量**：SKILL.md 的 SDK / retrieve / storage 三段 · 新目录 `example-sdk/`（装 SDK 的 FastAPI 样例）· `selfcheck.py` 追加三步 | 不新建包、不改章序与警示块、不动既有 `example/`（零依赖样例是 AC-32 的第二条合法路径） |
 | `scripts/pack_sdk_wheel.sh` | 构建 → 冒烟 → 暂存 → 合并 manifest | 不动 `cli` 段 |
-| runtime-manager `config.py` / `builder.py` / `templates/python3.11/Dockerfile.j2` | extra index 两个 buildarg | — |
+| runtime-manager `config.py` / `builder.py` / `templates/python3.11/Dockerfile.j2` | extra index 两个 buildarg（+ `docs/architecture/14-app-factory-deployment.md:151` 环境变量表追两行） | — |
 
 ---
 
@@ -458,7 +458,7 @@ SDK **不读** `BISHENG_APP_TOKEN` / `BISHENG_API_KEY` / 任何密钥类变量�
 - **后端测试**（`src/backend/test/dev_toolkit/`，`asyncio_mode=auto`，conftest 已剥代理变量）：`staged_artifacts` fixture（`conftest.py:61`）扩出 `sdk` 段 + 假 wheel；四个新端点的 200 / 404 / 匿名 / 开关关闭 = 404；简单索引 HTML 形状；技能包增量断言落**新文件** `test_platform_wiring_sdk.py`（F053 的 `test_skill_packs.py` 不改，其中两条回归断言反过来守住本 Feature 不改坏 auth 章与模型章，坑 31）；自检脚本无环境时可读失败；评测样本结构断言。
 - **runtime-manager 测试**：`test_build.py` 断言两个新 buildarg 渲染进 Dockerfile 与传给 `build_image`。
 - **CI**：新 `.github/workflows/sdk-quality.yml`（paths `src/bisheng-sdk/**` / `scripts/pack_sdk_wheel.sh`），三 leg 照 `cli-quality.yml`（locked / highest-resolution / wheel smoke + manifest drift guard on `sdk.version`）。
-- **114 手验**（在阻塞项 ②③ 落地、`wt/storage-handle` 与 `wt/cli-dev` 合入并部署后）：`bash scripts/pack_sdk_wheel.sh` → 提交 → `bash /opt/bisheng-ops/deploy.sh` → `curl -s http://192.168.106.114:7860/api/v1/dev-toolkit/versions | jq .data.sdk` → `pip install --extra-index-url http://<114>:7860/api/v1/dev-toolkit/simple/ bisheng-sdk` → `bisheng deploy` platform-wiring `example/` → 用非 admin `shuiwu` 与另一非 admin 账号访问，断言 `auth` 各得其身份、retrieve 集合等于 `/api/v2/filelib/retrieve` 同用户限定声明库的结果、应用 B 列不到应用 A 附件（storage 先看 `GET /v1/runtime/status` preflight `attachment_storage.ok`，systemd 形态要 `RTM_APP_FACING_BASE_URL` 指到 `bisheng-apps` 网桥网关，坑 27）。**验权限一律非 admin**（super_admin 短路 ReBAC）。
+- **114 手验**（在阻塞项 ②③ 落地、`wt/storage-handle` 与 `wt/cli-dev` 合入并部署后）：`bash scripts/pack_sdk_wheel.sh` → 提交 → `bash /opt/bisheng-ops/deploy.sh` → `curl -s http://192.168.106.114:7860/api/v1/dev-toolkit/versions | jq .data.sdk` → `pip install --extra-index-url http://<114>:7860/api/v1/dev-toolkit/simple/ bisheng-sdk` → `bisheng deploy` platform-wiring 的 `example-sdk/` → 用非 admin `shuiwu` 与另一非 admin 账号访问，断言 `auth` 各得其身份、retrieve 集合等于 `/api/v2/filelib/retrieve` 同用户限定声明库的结果、应用 B 列不到应用 A 附件（storage 先看 `GET /v1/runtime/status` preflight `attachment_storage.ok`，systemd 形态要 `RTM_APP_FACING_BASE_URL` 指到 `bisheng-apps` 网桥网关，坑 27）。**验权限一律非 admin**（super_admin 短路 ReBAC）。
 - **测试环境前提**：SDK 单测与后端单测**不需要**两个前置分支（一切经 mock / fixture）；只有 `test_contract_alignment.py` 的三条对账用例要读 `wt/storage-handle` 的 `runtime_manager/storage.py`、`api/storage.py` 与 app-proxy 的 `headers.py`——文件缺失时 `skip` 并打印「前置分支未合入」（坑 30）。技能包增量任务（T033–T036）**必须**在 `wt/cli-dev` 已合入的基线上做（T000 核对，坑 31）。
 - **可观测**：SDK 不写日志（应用的日志是应用的）；异常 `__str__` 足以定位；runtime-manager 日志对 `BISHENG_APP_STORAGE_TOKEN` 值自动脱敏（`api/readonly.py` 的 `*TOKEN*` 名匹配，坑 18）。
 
