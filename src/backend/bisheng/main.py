@@ -1,5 +1,5 @@
 import os
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -107,6 +107,22 @@ async def lifespan(app: FastAPI):
     _register_permission_runtime_contexts()
     _register_app_publish_composition()
     open_api_call_audit_service.start()
+    async with AsyncExitStack() as startup_stack:
+        # F052 MCP face. The streamable-HTTP session manager owns a task group
+        # that every request's transport is started into, so it has to be
+        # entered here — and exactly once per process, which is what its own
+        # ``_has_started`` guard enforces. Entered only when the route exists,
+        # so a deployment without the open-capability layer starts nothing.
+        if settings.open_platform.enabled:
+            from bisheng.open_api.mcp.server import mcp_session_manager_run
+
+            await startup_stack.enter_async_context(mcp_session_manager_run())
+        async with _platform_lifespan():
+            yield
+
+
+@asynccontextmanager
+async def _platform_lifespan():
     try:
         await init_default_data()
         # F035 task-mode compatibility data remains unrelated to F048 resource
@@ -227,6 +243,17 @@ def create_app():
     app.include_router(router)
     app.include_router(router_rpc)
     app.include_router(router_public)
+    # F052 MCP face. A bare Starlette ``Route``, not ``app.mount`` and not an
+    # ``APIRoute``: the path has to match exactly (a ``Mount`` would answer 307
+    # on the bare path), and it must stay out of ``app.openapi()`` and out of
+    # ``router_rpc``'s dependency — it authenticates itself in ``McpAccessGate``
+    # because a Starlette route carries no ``@open_api_scope`` marker to read.
+    # Conditional on purpose, like ``dev_toolkit_router``: where the
+    # open-capability layer is not deployed the path simply does not exist.
+    if settings.open_platform.enabled:
+        from bisheng.open_api.mcp.server import build_mcp_route
+
+        app.router.routes.append(build_mcp_route())
     from bisheng.department.api.endpoints.department_limit import (
         router as department_limit_router,
     )

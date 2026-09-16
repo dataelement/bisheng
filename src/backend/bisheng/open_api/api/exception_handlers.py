@@ -54,9 +54,11 @@ def open_api_http_status(exc: BaseErrorCode | StarletteHTTPException) -> int:
         code = exc.code
     if issubclass(error_type, OpenApiAuthError):
         return getattr(exc, "http_status", error_type.http_status)
-    # F052 module 263 carries its own transport status the same way 260 does;
-    # without this branch the generic tail below would answer 400 for every
-    # facade error (26321 must be 404, 26322 409).
+    # F052 module 263. Same shape as the 260 band: the class carries the real
+    # transport status, an instance may narrow it. Without this branch the
+    # generic tail below would answer 400 for every facade error — 26321 has to
+    # answer 404 (or "unreachable" stops being indistinguishable from "does not
+    # exist") and 26322 has to answer 409.
     if issubclass(error_type, McpFaceError):
         return getattr(exc, "http_status", error_type.http_status)
     if issubclass(

@@ -94,6 +94,93 @@ def fake_redis(monkeypatch):
     return redis
 
 
+@asynccontextmanager
+async def _mcp_app():
+    """A FastAPI app carrying only the MCP route, with its session manager running.
+
+    Not ``bisheng.main.app``: the route is registered at import time under
+    ``open_platform.enabled``, which is off in the shipped test config. Each
+    caller gets its own server because ``StreamableHTTPSessionManager.run()``
+    may be entered once per instance.
+
+    This is a plain context manager rather than an async fixture on purpose. The
+    session manager's ``run()`` opens an anyio task group, and a task group has
+    to be closed in the task that opened it — pytest-asyncio tears async
+    fixtures down in a different task, which fails with "attempted to exit
+    cancel scope in a different task". Entering it inside the test's own body
+    keeps both ends in one task.
+    """
+
+    from fastapi import FastAPI
+
+    from bisheng.open_api.api.exception_handlers import register_open_api_exception_handlers
+    from bisheng.open_api.mcp.server import build_mcp_route, mcp_session_manager_run, new_mcp_server
+
+    server = new_mcp_server()
+    app = FastAPI()
+    register_open_api_exception_handlers(app)
+    app.router.routes.append(build_mcp_route(server))
+    async with mcp_session_manager_run(server):
+        yield app
+
+
+@pytest.fixture
+def mcp_http():
+    """``async with mcp_http(headers) as client`` → raw HTTP against the MCP route.
+
+    For the transport-level facts a protocol client hides: the status code of a
+    refusal, whether the bare path redirects, what a real ``Host`` header does.
+    """
+
+    import httpx
+
+    @asynccontextmanager
+    async def open_client(headers: dict[str, str] | None = None, **client_kwargs):
+        async with _mcp_app() as app:
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://testserver",
+                headers=headers or {},
+                **client_kwargs,
+            ) as client:
+                yield client
+
+    return open_client
+
+
+@pytest.fixture
+def mcp_session():
+    """``async with mcp_session(headers) as session`` → a real initialised ``ClientSession``.
+
+    A genuine MCP client over the app in-process, because "any standard client
+    connects with no changes" is only verified by a standard client: hand-rolled
+    JSON-RPC posts would keep passing with a broken handshake.
+    """
+
+    import httpx
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamable_http_client
+
+    @asynccontextmanager
+    async def connect(headers: dict[str, str] | None = None):
+        async with _mcp_app() as app:
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://testserver",
+                headers=headers or {},
+            ) as http_client:
+                async with streamable_http_client("http://testserver/api/v2/mcp", http_client=http_client) as (
+                    read_stream,
+                    write_stream,
+                    _get_session_id,
+                ):
+                    async with ClientSession(read_stream, write_stream) as session:
+                        await session.initialize()
+                        yield session
+
+    return connect
+
+
 @pytest.fixture
 def audit_events(monkeypatch):
     events: list[dict] = []

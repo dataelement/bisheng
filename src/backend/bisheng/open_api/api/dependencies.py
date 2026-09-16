@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, Request, WebSocket, WebSocketException
@@ -61,17 +61,76 @@ async def verify_open_api_access(conn: HTTPConnection) -> AsyncIterator[OpenApiP
         yield principal
 
 
-@asynccontextmanager
-async def open_api_access_context(
-    conn: HTTPConnection, *, inspect_body: bool = True
-) -> AsyncIterator[OpenApiPrincipal]:
-    """Share admission checks with failures raised before dependency execution."""
+async def admit_open_api_principal(conn: HTTPConnection) -> tuple[OpenApiPrincipal, str]:
+    """Authenticate the bearer and settle the personal-token data scope.
+
+    The first half of ``open_api_access_context``, exported so a non-``APIRoute``
+    entrance can reuse the *same code* rather than a second copy of it. The MCP
+    face (F052) is one such entrance: it registers as a plain Starlette route, so
+    neither the router-level dependency nor the ``@open_api_scope`` marker
+    reaches it, and "the credential semantics are identical" has to be a fact
+    about the call graph rather than a claim in a document.
+
+    Nothing is installed in a ContextVar that outlives this call —
+    ``open_api_execution_scope`` owns the execution identity.
+    """
 
     try:
         principal = await validate_bearer(conn.headers.get("Authorization"))
     except OpenApiAuthError as exc:
         _raise_for_connection(conn, exc)
         raise AssertionError("unreachable")
+
+    conn.scope[_SCOPE_PRINCIPAL_KEY] = principal
+    if principal.actor_kind != "natural_person":
+        return principal, DATA_SCOPE_ALL
+
+    # ``get_policy`` takes the tenant id explicitly, but the DAO underneath it
+    # still runs under the automatic tenant filter (C3) — so the tenant
+    # ContextVars go in *before* the read, exactly as the unsplit version had
+    # them. Reversing these two is the one way this refactor could go wrong
+    # without any test noticing, which is why
+    # ``test_pat_policy_read_happens_with_tenant_contextvar_installed`` pins it.
+    tenant_token = current_tenant_id.set(principal.tenant_id)
+    visible_token = visible_tenant_ids.set(frozenset({DEFAULT_TENANT_ID, principal.tenant_id}))
+    try:
+        if not settings.open_api.pat_enabled:
+            raise PersonalTokenDisabledError()
+        try:
+            tenant_policy = await TenantSettingService.get_policy(principal.tenant_id)
+        except OpenApiAuthError:
+            raise
+        except Exception as exc:
+            raise OpenApiAuthDependencyUnavailableError() from exc
+        if not tenant_policy.enabled:
+            raise PersonalTokenDisabledError()
+        # F066: reuse this policy read — no second lookup on the hot path.
+        return principal, tenant_policy.data_scope
+    except OpenApiAuthError as exc:
+        _raise_for_connection(conn, exc)
+        raise AssertionError("unreachable")
+    finally:
+        visible_tenant_ids.reset(visible_token)
+        current_tenant_id.reset(tenant_token)
+
+
+@asynccontextmanager
+async def open_api_execution_scope(
+    conn: HTTPConnection,
+    principal: OpenApiPrincipal,
+    *,
+    data_scope: str,
+    prepare: Callable[[OpenApiPrincipal], Awaitable[OpenApiPrincipal]] | None = None,
+) -> AsyncIterator[OpenApiPrincipal]:
+    """Install the four execution ContextVars for the duration of the request.
+
+    ``prepare`` runs after the tenant ContextVars are up and before the
+    permission actor is built — that is where ``/api/v2``'s marker, scope and
+    identity-header admission lives, because ``resolve_request_identity`` reads
+    the database under the tenant filter and because delegation can still change
+    who the actor *is*. An entrance with no delegation to resolve (the MCP face)
+    passes no ``prepare`` at all.
+    """
 
     tenant_token = current_tenant_id.set(principal.tenant_id)
     # A credential is always tenant-scoped. Root-owned shared rows remain
@@ -80,23 +139,57 @@ async def open_api_access_context(
     visible_token = visible_tenant_ids.set(frozenset({DEFAULT_TENANT_ID, principal.tenant_id}))
     principal_token = None
     permission_token = None
-    conn.scope[_SCOPE_PRINCIPAL_KEY] = principal
-    pat_data_scope = DATA_SCOPE_ALL
     try:
+        if prepare is not None:
+            principal = await prepare(principal)
+            conn.scope[_SCOPE_PRINCIPAL_KEY] = principal
+
+        super_admin = False
+        tenant_admin_tenant_ids: frozenset[int] = frozenset()
         if principal.actor_kind == "natural_person":
-            if not settings.open_api.pat_enabled:
-                raise PersonalTokenDisabledError()
+            from bisheng.permission.application.relation_api import is_tenant_admin
+            from bisheng.utils.http_middleware import _check_is_global_super
+
             try:
-                tenant_policy = await TenantSettingService.get_policy(principal.tenant_id)
+                super_admin = await _check_is_global_super(principal.actor_id)
+                if not super_admin and await is_tenant_admin(principal.actor_id, principal.tenant_id):
+                    tenant_admin_tenant_ids = frozenset({principal.tenant_id})
             except OpenApiAuthError:
                 raise
             except Exception as exc:
                 raise OpenApiAuthDependencyUnavailableError() from exc
-            if not tenant_policy.enabled:
-                raise PersonalTokenDisabledError()
-            # F066: reuse this policy read — no second lookup on the hot path.
-            pat_data_scope = tenant_policy.data_scope
 
+        actor = PermissionActor(
+            subject_type=principal.authorization_subject_type,
+            subject_id=principal.authorization_subject_id,
+            tenant_id=principal.tenant_id,
+            super_admin=super_admin,
+            tenant_admin_tenant_ids=tenant_admin_tenant_ids,
+            data_scope=data_scope,
+        )
+        principal_token = set_current_open_api_principal(principal)
+        permission_token = set_current_permission_actor(actor)
+        yield principal
+    except OpenApiAuthError as exc:
+        _raise_for_connection(conn, exc)
+    finally:
+        if permission_token is not None:
+            reset_current_permission_actor(permission_token)
+        if principal_token is not None:
+            reset_current_open_api_principal(principal_token)
+        visible_tenant_ids.reset(visible_token)
+        current_tenant_id.reset(tenant_token)
+
+
+@asynccontextmanager
+async def open_api_access_context(
+    conn: HTTPConnection, *, inspect_body: bool = True
+) -> AsyncIterator[OpenApiPrincipal]:
+    """Share admission checks with failures raised before dependency execution."""
+
+    principal, pat_data_scope = await admit_open_api_principal(conn)
+
+    async def admit_request(principal: OpenApiPrincipal) -> OpenApiPrincipal:
         marker = get_open_api_scope_marker(conn.scope.get("endpoint"))
         if marker is None:
             raise OpenApiEndpointUnregisteredError()
@@ -122,45 +215,16 @@ async def open_api_access_context(
             on_behalf_of=conn.headers.get("X-On-Behalf-Of"),
             end_user=conn.headers.get("X-End-User"),
         )
+        # Published before the mode check on purpose: a request refused for
+        # "this endpoint does not accept delegation" must still be audited as
+        # the delegated identity it actually carried.
         conn.scope[_SCOPE_PRINCIPAL_KEY] = principal
         if principal.mode not in marker.modes:
             raise OpenApiDelegationModeUnsupportedError()
+        return principal
 
-        super_admin = False
-        tenant_admin_tenant_ids: frozenset[int] = frozenset()
-        if principal.actor_kind == "natural_person":
-            from bisheng.permission.application.relation_api import is_tenant_admin
-            from bisheng.utils.http_middleware import _check_is_global_super
-
-            try:
-                super_admin = await _check_is_global_super(principal.actor_id)
-                if not super_admin and await is_tenant_admin(principal.actor_id, principal.tenant_id):
-                    tenant_admin_tenant_ids = frozenset({principal.tenant_id})
-            except OpenApiAuthError:
-                raise
-            except Exception as exc:
-                raise OpenApiAuthDependencyUnavailableError() from exc
-
-        actor = PermissionActor(
-            subject_type=principal.authorization_subject_type,
-            subject_id=principal.authorization_subject_id,
-            tenant_id=principal.tenant_id,
-            super_admin=super_admin,
-            tenant_admin_tenant_ids=tenant_admin_tenant_ids,
-            data_scope=pat_data_scope,
-        )
-        principal_token = set_current_open_api_principal(principal)
-        permission_token = set_current_permission_actor(actor)
-        yield principal
-    except OpenApiAuthError as exc:
-        _raise_for_connection(conn, exc)
-    finally:
-        if permission_token is not None:
-            reset_current_permission_actor(permission_token)
-        if principal_token is not None:
-            reset_current_open_api_principal(principal_token)
-        visible_tenant_ids.reset(visible_token)
-        current_tenant_id.reset(tenant_token)
+    async with open_api_execution_scope(conn, principal, data_scope=pat_data_scope, prepare=admit_request) as resolved:
+        yield resolved
 
 
 def get_open_api_execution(conn: HTTPConnection) -> OpenApiPrincipal:
@@ -199,8 +263,10 @@ async def _assert_no_removed_identity_input(conn: HTTPConnection, *, inspect_bod
         if "user_id" in form:
             raise OpenApiRemovedIdentityInputError()
         return
-    if content_type and content_type != "application/json" and not (
-        content_type.startswith("application/") and content_type.endswith("+json")
+    if (
+        content_type
+        and content_type != "application/json"
+        and not (content_type.startswith("application/") and content_type.endswith("+json"))
     ):
         return
     body = await conn.body()
@@ -216,8 +282,10 @@ async def _assert_no_removed_identity_input(conn: HTTPConnection, *, inspect_bod
 
 __all__ = [
     "WS_POLICY_VIOLATION",
+    "admit_open_api_principal",
     "get_open_api_execution",
     "get_service_account_admin",
+    "open_api_execution_scope",
     "verify_open_api_access",
     "watch_websocket_credential",
 ]

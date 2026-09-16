@@ -244,6 +244,10 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     "open_api.share_link.revoke",
     "open_api.share_link.expire",
     "open_api.ws.connect",
+    # F052 MCP face: one row per tools/call, plus the refusals that never
+    # reached a tool. The generic ``open_api.call`` middleware is short-circuited
+    # for that path, so this is the only writer and there is no double row.
+    "open_api.mcp.tool_call",
     # F054 app factory (design D14 / pit 24). The hosted-application state
     # machine, meta updates and the data-tab row edit / export (AC-56, written
     # by AppDataService).

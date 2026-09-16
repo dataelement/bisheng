@@ -5,13 +5,13 @@ from fastapi import APIRouter, Depends, Request, Response
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.core.context.tenant import get_current_tenant_id
-from bisheng.open_api.api.public_base_url import resolve_public_base_url
 from bisheng.open_api.domain.schemas.personal_token import (
     PersonalTokenInstallPrompt,
     PersonalTokenIssued,
     PersonalTokenStatus,
 )
 from bisheng.open_api.domain.services.personal_token_service import PersonalTokenService
+from bisheng.open_api.domain.services.public_base_url import resolve_public_base_url
 
 router = APIRouter(prefix="/me/api-token", tags=["PersonalToken"])
 

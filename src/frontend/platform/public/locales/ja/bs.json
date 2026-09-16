@@ -1337,6 +1337,7 @@
       "openApiShareLinkRevoke": "共有リンクを取り消し",
       "openApiShareLinkExpire": "共有リンクの期限切れ",
       "openApiWsConnect": "オープン API の接続確立",
+      "openApiMcpToolCall": "MCP ツールの呼び出し",
       "appPublish": "ホスト型アプリを公開",
       "appPublishPending": "ホスト型アプリ公開待ち（容量不足）",
       "appManualPublish": "ホスト型アプリを手動公開",

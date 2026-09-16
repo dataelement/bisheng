@@ -14,15 +14,35 @@ from bisheng.open_api.domain.services.call_audit_service import open_api_call_au
 
 OPEN_API_V2_PREFIX = "/api/v2"
 
+#: F052's MCP face audits itself, one row per ``tools/call`` with the tool name
+#: and its target. This middleware could only ever write ``POST /api/v2/mcp`` —
+#: true, and useless — so it steps aside rather than doubling every call with a
+#: row that says nothing.
+MCP_FACE_PATH = "/api/v2/mcp"
+
+
+def _is_mcp_face(path: str) -> bool:
+    """Exactly that path (or something under it), never a neighbour that shares its spelling.
+
+    A bare ``startswith`` would also silence a future ``/api/v2/mcp-registry``
+    — and an endpoint that quietly writes no audit row is the kind of hole
+    nobody finds by looking at it.
+    """
+
+    return path == MCP_FACE_PATH or path.startswith(MCP_FACE_PATH + "/")
+
 
 class OpenApiAuditMiddleware:
     def __init__(self, app) -> None:
         self.app = app
 
     async def __call__(self, scope: dict[str, Any], receive, send) -> None:
-        if scope.get("type") not in {"http", "websocket"} or not str(
-            scope.get("path", "")
-        ).startswith(OPEN_API_V2_PREFIX):
+        path = str(scope.get("path", ""))
+        if (
+            scope.get("type") not in {"http", "websocket"}
+            or not path.startswith(OPEN_API_V2_PREFIX)
+            or _is_mcp_face(path)
+        ):
             await self.app(scope, receive, send)
             return
 
@@ -116,12 +136,8 @@ class OpenApiAuditMiddleware:
             "actor_kind": principal.actor_kind if principal else None,
             "actor_id": principal.actor_id if principal else None,
             "identity_mode": principal.mode if principal else None,
-            "authorization_subject_type": (
-                principal.authorization_subject_type if principal else None
-            ),
-            "authorization_subject_id": (
-                principal.authorization_subject_id if principal else None
-            ),
+            "authorization_subject_type": (principal.authorization_subject_type if principal else None),
+            "authorization_subject_id": (principal.authorization_subject_id if principal else None),
             "on_behalf_of_user_id": principal.on_behalf_of_user_id if principal else None,
             "end_user_id": principal.end_user_id if principal else None,
             "scope": marker.scope if marker else None,
@@ -132,15 +148,9 @@ class OpenApiAuditMiddleware:
             "trace_id": str(trace_id_var.get() or ""),
         }
         tenant_id = principal.tenant_id if principal else None
-        operator_id = (
-            principal.actor_id
-            if principal is not None and principal.actor_kind == "natural_person"
-            else 0
-        )
+        operator_id = principal.actor_id if principal is not None and principal.actor_kind == "natural_person" else 0
         operator_name = (
-            principal.actor_name
-            if principal is not None and principal.actor_kind == "service_account"
-            else None
+            principal.actor_name if principal is not None and principal.actor_kind == "service_account" else None
         )
         open_api_call_audit_service.enqueue(
             AuditLog(
@@ -157,4 +167,4 @@ class OpenApiAuditMiddleware:
         )
 
 
-__all__ = ["OPEN_API_V2_PREFIX", "OpenApiAuditMiddleware"]
+__all__ = ["MCP_FACE_PATH", "OPEN_API_V2_PREFIX", "OpenApiAuditMiddleware"]

@@ -1354,6 +1354,7 @@
       "openApiShareLinkRevoke": "Revoke share link",
       "openApiShareLinkExpire": "Share link expired",
       "openApiWsConnect": "Open API websocket connect",
+      "openApiMcpToolCall": "MCP tool call",
       "appPublish": "Hosted app published",
       "appPublishPending": "Hosted app pending (insufficient capacity)",
       "appManualPublish": "Hosted app published manually",

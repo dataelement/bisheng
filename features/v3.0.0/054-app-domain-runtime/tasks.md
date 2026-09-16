@@ -995,3 +995,13 @@
 | T067 | F055 / F056 的留位是三个**具名 slot prop**，不是 `children` | 否 | `children` 只有一个位置，三个 Feature 会在同一处打架 |
 
 **批 1 顺带修正的既有问题**：`AGENTS.md:62` 的「8 RULEs」与 `docs/constitution.md` 锚点表都已随 RULE-10 更新为 10 条（design K1 点名的过时表述）。
+
+---
+
+## 跨 Feature 回写受理
+
+> 别的 Feature 请求本 Feature 交付的增量，逐条记「谁请求 / 请求什么 / 交付没交付 / 在哪」。只追加。
+
+| 请求方 | 请求内容 | 状态 | 交付物 |
+|---|---|---|---|
+| **F052**（MCP 工具面 T209，2026-09-16） | `AppDataService` 补 `insert_row` / `delete_row`，对应 manager RPC `POST /v1/apps/{id}/db/tables/{t}/rows` 与 `DELETE …/rows/{key}`。**原因**：F052 spec 决议-8 与伴生 PRD §4.2.4 都把 `app:manage` 写成「表结构与数据**读写**」，读写含行级增删改；今天 manager 侧只有 `PATCH …/rows/{key}`，所以 MCP 面只交付了读与改。护栏沿用现有的：owner-only 内建、每次写记 `app.data_row_edit` 审计（带 before / after）、不含 DDL | 🔲 未交付 | 落地后 F052 在 `open_api/mcp/registry.py` 补 `bisheng_app_db_row_insert` / `_row_delete` 两个工具（当前**未占位**——`available()` 恒假的空壳不如没有），并解除 spec AC-15 中「增 / 删」两项的待验状态 |

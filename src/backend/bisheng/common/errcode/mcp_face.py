@@ -1,42 +1,40 @@
-"""MCP face and unified retrieval facade error codes — module 263 (F052).
+"""MCP server face + unified retrieval facade error codes — module 263 (F052).
 
-Module 263 was claimed by F052 because the 260 band is **full in the places
-that matter**: ``common/errcode/open_api.py`` owns 26001-26031 / 26040-26044 /
-26050-26051 and keeps 26032-26039 plus 26045-26049 *reserved* (pinned by
-``test/open_api/test_error_codes.py``). Squeezing the MCP face into those holes
-would have collided with that reservation, so the whole face lives here.
+Module 263 is claimed by F052. It is deliberately **not** part of the 260 band
+(F049 open API auth): 260 still reserves 26032-26039 and 26045-26049 as holes
+that ``test/open_api/test_error_codes.py`` pins, and squatting there would make
+"one code, one meaning" depend on remembering which holes are free.
 
-Sub-ranges (design §4.2 ④):
+Sub-ranges:
 
-* ``26300-26319`` MCP transport / tool face (owned by the MCP server slice)
-* ``26320-26339`` unified retrieval facade — shared by all four callers
-  (MCP search tool, v2 ``POST /filelib/retrieve``, F055 hosted runtime,
-  F057 SDK retrieve)
+* ``26300-26319`` MCP transport + tool face (owned by ``open_api/mcp/``)
+* ``26320-26339`` unified retrieval facade (shared by its four callers: the MCP
+  search tool, ``POST /api/v2/filelib/retrieve``, the hosted-app runtime and the
+  SDK's ``retrieve``)
 * ``26340+`` reserved
 
-Three constraints that are easy to miss:
+Two constraints that are easy to miss:
 
-* Every subclass declares its code **with the ``: int`` annotation**.
-  ``check-i18n.mjs`` finds backend codes by matching that exact annotated form,
-  so it is what makes a code visible to the three-language parity check. Do
-  **not** copy the un-annotated ``Code = 26001`` style used by ``open_api.py``.
-  (Nor write the annotated form with a placeholder digit-plus-letters value in
-  prose anywhere — the scanner's ``\\d+`` stops at the first non-digit and would
-  register a bogus truncated code.)
-* Each class carries a real ``http_status``; ``open_api/api/exception_handlers.py``
-  returns it on ``/api/v2`` paths and keeps the 200 envelope everywhere else.
+* Every subclass declares its code **with the ``Code: int`` annotation**.
+  ``pnpm check-i18n`` collects backend codes by matching that annotated form, so
+  the un-annotated ``Code = <number>`` spelling used throughout ``open_api.py``
+  is invisible to it — a missing translation would pass CI silently. (Prose in
+  this file avoids writing the annotated form with a number attached, or the
+  collector would read the example as a real code.)
 * Copy for every code lives in
-  ``src/frontend/packages/locales/src/api_errors/{zh-Hans,en,ja}.json`` and
-  ships in the same change (CI ``pnpm check-i18n``). The ``next_step`` hint the
-  MCP face returns to a local agent is **not** stored there — the backend
-  process does not ship the frontend locale package and cannot read it.
+  ``src/frontend/packages/locales/src/api_errors/{zh-Hans,en,ja}.json`` and ships
+  in the same change. The ``next_step`` guidance an MCP client reads is **not**
+  there — the backend process does not carry the frontend locale package, so it
+  lives in ``open_api/mcp/errors.py: NEXT_STEP_COPY`` instead.
 """
+
+from typing import Any
 
 from bisheng.common.errcode.base import BaseErrorCode
 
 
 class McpFaceError(BaseErrorCode):
-    """Base of the 263xx family (MCP face + unified retrieval facade)."""
+    """Base of the 263xx family; carries the real transport status for v2."""
 
     Code: int = 26300
     Msg: str = "MCP face error"
@@ -56,12 +54,12 @@ class McpFaceError(BaseErrorCode):
 
 
 # ---------------------------------------------------------------------------
-# 26300-26319 — MCP transport / tool face
+# 26300-26319 — MCP transport and tool face
 # ---------------------------------------------------------------------------
 
 
 class McpUnknownToolError(McpFaceError):
-    """No such tool in the registry (also: a tool whose backend is not landed)."""
+    """No such tool, or the tool's server-side dependency has not shipped yet."""
 
     Code: int = 26301
     Msg: str = "Unknown MCP tool"
@@ -69,7 +67,12 @@ class McpUnknownToolError(McpFaceError):
 
 
 class McpToolScopeMissingError(McpFaceError):
-    """The key does not carry the scope this tool maps to (AC-04)."""
+    """The credential does not hold the scope this tool maps to.
+
+    A separate code from 26003 (which answers an HTTP endpoint): one code, one
+    meaning, and the agent must be able to tell "this tool needs a scope you do
+    not have" from "this endpoint needs a scope you do not have".
+    """
 
     Code: int = 26302
     Msg: str = "API credential lacks the scope required by this tool"
@@ -80,7 +83,7 @@ class McpToolScopeMissingError(McpFaceError):
 
 
 class McpIdentityHeaderRefusedError(McpFaceError):
-    """The MCP face never carries delegation — identity headers are refused."""
+    """An identity-passing header reached the MCP face (AC-30)."""
 
     Code: int = 26303
     Msg: str = "The MCP face does not carry delegated identity"
@@ -88,18 +91,21 @@ class McpIdentityHeaderRefusedError(McpFaceError):
 
 
 class McpToolArgumentInvalidError(McpFaceError):
-    """Tool arguments failed validation; ``data.errors`` carries the summary."""
+    """The tool arguments failed validation."""
 
     Code: int = 26304
     Msg: str = "Invalid MCP tool arguments"
     http_status: int = 400
 
+    def __init__(self, errors: Any = None, **kwargs):
+        super().__init__(errors=errors, **kwargs)
+
 
 class McpAppNotOwnedError(McpFaceError):
-    """Not an application owned by this key's resource owner (AC-34).
+    """Not an application this credential's resource owner owns (AC-34).
 
-    Missing, other-tenant and other-owner applications all answer with this
-    one shape, and it never names the owner.
+    The same answer for "does not exist", "another tenant's" and "someone
+    else's", and it never names the owner.
     """
 
     Code: int = 26305
@@ -108,7 +114,7 @@ class McpAppNotOwnedError(McpFaceError):
 
 
 class McpIdentityNotFoundError(McpFaceError):
-    """User / department absent or in another tenant — one shared answer (AC-32)."""
+    """User or department absent, or in another tenant — one answer (AC-32)."""
 
     Code: int = 26306
     Msg: str = "User or department not found"
@@ -116,12 +122,12 @@ class McpIdentityNotFoundError(McpFaceError):
 
 
 # ---------------------------------------------------------------------------
-# 26320-26339 — unified retrieval facade (shared by all four callers)
+# 26320-26339 — unified retrieval facade (all four callers)
 # ---------------------------------------------------------------------------
 
 
 class RetrievalIdentityMissingError(McpFaceError):
-    """Fail-closed: no execution identity, therefore no retrieval (AC-23)."""
+    """No execution identity could be established — refuse, never fall back."""
 
     Code: int = 26320
     Msg: str = "Retrieval requires an execution identity"
@@ -129,38 +135,29 @@ class RetrievalIdentityMissingError(McpFaceError):
 
 
 class KnowledgeUnreachableError(McpFaceError):
-    """One answer for missing / ungranted / unsupported knowledge bases (AC-11).
-
-    The facade refuses the whole request rather than silently dropping the
-    unreachable targets, and it never says *why* a target is unreachable —
-    the three causes must stay indistinguishable so existence does not leak.
-    """
+    """One answer for missing / ungranted / unsupported / outside-whitelist."""
 
     Code: int = 26321
     Msg: str = "Knowledge base is unreachable"
     http_status: int = 404
 
-    def __init__(self, unreachable_ids: list[int], **kwargs):
-        super().__init__(unreachable_ids=list(unreachable_ids), **kwargs)
+    def __init__(self, unreachable_ids: Any = None, **kwargs):
+        super().__init__(unreachable_ids=list(unreachable_ids or []), **kwargs)
 
 
 class KnowledgeCapabilityRevokedError(McpFaceError):
-    """A declared (whitelisted) knowledge base no longer exists (AC-46).
-
-    Distinguishable on purpose: F055 turns it into an app-visible "capability
-    revoked" error instead of quietly narrowing the declared scope.
-    """
+    """A declared (whitelisted) knowledge base is gone — a distinguishable signal."""
 
     Code: int = 26322
     Msg: str = "Declared knowledge capability has been revoked"
     http_status: int = 409
 
-    def __init__(self, knowledge_id: int, **kwargs):
-        super().__init__(knowledge_id=int(knowledge_id), **kwargs)
+    def __init__(self, knowledge_id: Any = None, **kwargs):
+        super().__init__(knowledge_id=knowledge_id, **kwargs)
 
 
 class RetrievalScopeTooLargeError(McpFaceError):
-    """Too many targets, or a granted scope wider than the facade enumerates."""
+    """Too many targets, or too wide a granted scope to enumerate."""
 
     Code: int = 26323
     Msg: str = "Retrieval scope is too large; name the knowledge bases explicitly"
