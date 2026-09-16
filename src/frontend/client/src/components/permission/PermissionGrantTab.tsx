@@ -1,4 +1,6 @@
-import { Loader2, LockKeyhole, Plus, Trash2 } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+// `LockKeyhole` stays on lucide: bisheng-icons has no lock glyph.
+import { LockKeyhole } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   getGrantablePermissionModels,
@@ -360,7 +362,7 @@ export function PermissionGrantTab({
             onClick={() => void handleSubmit(selectedAddChanges)}
           >
             {submitting && (
-              <Loader2 aria-hidden="true" className="animate-spin" />
+              <Outlined.Loading aria-hidden="true" className="animate-spin" />
             )}
             {localize("f048_permission.grant.submit")}
           </Button>
@@ -464,7 +466,7 @@ export function PermissionGrantTab({
                     })
                   }
                 >
-                  <Trash2 aria-hidden="true" />
+                  <Outlined.Delete aria-hidden="true" />
                 </Button>
               </div>
             );
@@ -538,7 +540,7 @@ export function PermissionGrantTab({
               }
               onClick={handleAdd}
             >
-              <Plus aria-hidden="true" />
+              <Outlined.Plus aria-hidden="true" />
               {localize("f048_permission.grant.add")}
             </Button>
           </div>
@@ -557,7 +559,7 @@ export function PermissionGrantTab({
           onClick={() => void handleSubmit()}
         >
           {submitting && (
-            <Loader2 aria-hidden="true" className="animate-spin" />
+            <Outlined.Loading aria-hidden="true" className="animate-spin" />
           )}
           {localize("f048_permission.grant.submit")}
         </Button>

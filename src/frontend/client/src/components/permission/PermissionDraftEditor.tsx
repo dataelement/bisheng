@@ -78,6 +78,13 @@ export function PermissionDraftEditor({
           capabilities.relationModels.find((model) => model.id === activeModelId)?.name
           ?? row.modelName
           ?? row.modelKey;
+        // Meta line under the name. A protected row no longer prints「受保护」—
+        // the frozen relation label on the right already says it can't change —
+        // so only these three can put something on the line.
+        const showReadOnly =
+          !row.protected && (row.scope === "INHERITED" || row.editable === false);
+        const showInheritedFrom = row.scope === "INHERITED" && !!row.inheritedFromName;
+        const hasMeta = !!row.sourceType || showReadOnly || showInheritedFrom;
 
         return (
           <div key={rowKey} className="flex min-h-11 items-center gap-3 py-2">
@@ -85,10 +92,12 @@ export function PermissionDraftEditor({
               <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-fill-4 text-caption text-white">
                 {row.subjectName.trim().slice(0, 1).toUpperCase()}
               </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-body text-text-1">{row.subjectName}</div>
-                {(row.sourceType || row.protected || row.scope === "INHERITED" || row.editable === false) && (
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-text-3">
+              {/* Name and its meta (source tag, read-only note) sit on one line:
+                  the name truncates, the meta keeps its width. */}
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div className="min-w-0 truncate text-body text-text-1">{row.subjectName}</div>
+                {hasMeta && (
+                  <div className="flex shrink-0 flex-wrap items-center gap-1.5 text-caption text-text-3">
                     {row.sourceType && (
                       <SourceBadge
                         source={{
@@ -97,13 +106,10 @@ export function PermissionDraftEditor({
                         }}
                       />
                     )}
-                    {row.protected && (
-                      <span>{localize("f048_permission.roster.protected")}</span>
-                    )}
-                    {!row.protected && (row.scope === "INHERITED" || row.editable === false) && (
+                    {showReadOnly && (
                       <span>{localize("f048_permission.roster.read_only")}</span>
                     )}
-                    {row.scope === "INHERITED" && row.inheritedFromName && (
+                    {showInheritedFrom && (
                       <span>
                         {localize("f048_permission.roster.inherited_from")}: {row.inheritedFromName}
                       </span>
