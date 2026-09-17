@@ -125,7 +125,7 @@ def _build_space_service(
     return svc
 
 
-@router.post("/", status_code=201)
+@router.post("/", status_code=200)
 @open_api_scope("knowledge:write")
 async def create(
     request: Request,
@@ -174,7 +174,7 @@ async def create(
     raise KnowledgeTypeNotSupportedError.http_exception()
 
 
-@router.put("/", status_code=201)
+@router.put("/", status_code=200)
 @open_api_scope("knowledge:write")
 async def update_knowledge(
     *,
