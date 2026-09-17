@@ -12,13 +12,14 @@ from pathlib import Path
 PACK = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACK))
 
+from fusion.audit_sql import generate_audit_sql
 from fusion.citation_sql import generate_citation_sql
 from fusion.dictionary_sql import generate_dictionary_sql
 from fusion.flow_sql import generate_assistant_sql, generate_flow_sql
 from fusion.group_resource_sql import generate_group_resource_sql
 from fusion.identity_sql import generate_identity_sql
 from fusion.knowledge_sql import generate_knowledge_sql
-from fusion.maps import load_map, persist_runtime_maps
+from fusion.maps import load_map, load_tool_key_map, persist_runtime_maps, upsert_alloc
 from fusion.mark_sql import generate_mark_sql
 from fusion.minio_keys import collect_map_jobs, merge_jobs_tsv
 from fusion.openfga_grants import (
@@ -34,7 +35,7 @@ from fusion.openfga_tuples import (
 )
 from fusion.qa_sql import generate_qa_sql
 from fusion.relations_sql import generate_relations_sql
-from fusion.report_sql import generate_report_sql
+from fusion.report_sql import allocate_report_version_keys, generate_report_sql
 from fusion.rollback_sql import generate_rollback_sql
 from fusion.session_sql import generate_session_sql
 from fusion.sql import load_csv, write_csv
@@ -43,7 +44,7 @@ from fusion.tool_type_sql import generate_tool_type_sql
 
 
 def _maps(map_dir: Path) -> dict[str, dict[str, str]]:
-    return {
+    out = {
         "user": load_map(map_dir / "user-map.csv", "b_user_id", "a_user_id"),
         "tenant": load_map(map_dir / "tenant-map.csv", "b_tenant_id", "a_tenant_id"),
         "dept": load_map(map_dir / "dept-map.csv", "b_dept_pk", "a_dept_pk"),
@@ -77,7 +78,16 @@ def _maps(map_dir: Path) -> dict[str, dict[str, str]]:
         "share_link": load_map(map_dir / "share-link-map.csv", "b_id", "a_id"),
         "tool_type": load_map(map_dir / "tool-type-map.csv", "b_id", "a_id"),
         "role_access": load_map(map_dir / "role-access-map.csv", "b_id", "a_id"),
+        "audit": load_map(map_dir / "audit-map.csv", "b_id", "a_id"),
+        "tool_key": {},
+        "report_version_key": load_map(
+            map_dir / "report-version-key-map.csv", "b_key", "a_key"
+        ),
     }
+    tool_keys = load_tool_key_map(map_dir / "tool-map.csv")
+    tool_keys.update(load_map(map_dir / "tool-key-map.csv", "b_key", "a_key"))
+    out["tool_key"] = tool_keys
+    return out
 
 
 def _flush_minio_jobs(out_dir: Path, extra: dict | None, dump: dict) -> list[dict]:
@@ -127,6 +137,7 @@ def main() -> int:
             user_map=load_csv(map_dir / "user-map.csv"),
             b_users=dump.get("b_users") or [],
             a_user_names=set(dump.get("a_user_names") or []),
+            a_external_ids=set(dump.get("a_external_ids") or []),
             next_user_id=int(dump.get("next_user_id") or 1),
             dept_map=load_csv(map_dir / "dept-map.csv"),
             next_group_id=int(dump.get("next_group_id") or 1),
@@ -197,6 +208,17 @@ def main() -> int:
         )
         extra = {"tag_maps": tmaps, "tag_link_maps": lmaps}
     elif args.kind == "flow":
+        vk = dict(maps.get("report_version_key") or {})
+        if not vk:
+            vk = allocate_report_version_keys(
+                dump.get("reports") or [],
+                set(dump.get("a_report_version_keys") or []),
+            )
+            if vk:
+                upsert_alloc(
+                    map_dir / "report-version-key-map.csv", "b_key", "a_key", vk
+                )
+        maps["report_version_key"] = vk
         sql, flow_maps, version_maps, reports = generate_flow_sql(
             batch=args.batch,
             flows=dump.get("flows") or [],
@@ -214,7 +236,7 @@ def main() -> int:
             "reports": reports,
         }
     elif args.kind == "assistant":
-        sql, amaps = generate_assistant_sql(
+        sql, amaps, link_gaps = generate_assistant_sql(
             batch=args.batch,
             assistants=dump.get("assistants") or [],
             links=dump.get("assistantlinks") or [],
@@ -222,9 +244,16 @@ def main() -> int:
             a_assistant_ids=set(dump.get("a_assistant_ids") or []),
             a_tenant_default=tenant_default,
         )
-        extra = {"assistant_maps": amaps}
+        extra = {"assistant_maps": amaps, "assistant_link_gaps": link_gaps}
+        if link_gaps:
+            write_csv(
+                out.parent / "gaps-assistant-links.tsv",
+                ["kind", "assistant_id", "b_tool_id", "reason"],
+                link_gaps,
+                delimiter="\t",
+            )
     elif args.kind == "session":
-        sql, smaps, mmaps = generate_session_sql(
+        sql, smaps, mmaps, group_ex = generate_session_sql(
             batch=args.batch,
             sessions=dump.get("sessions") or [],
             messages=dump.get("messages") or [],
@@ -233,8 +262,22 @@ def main() -> int:
             a_session_digest=dump.get("a_session_digest") or {},
             next_message_id=int(dump.get("next_message_id") or 1),
             a_tenant_default=tenant_default,
+            a_existing_message_ids={
+                int(x) for x in (dump.get("a_message_ids") or []) if str(x).isdigit()
+            },
         )
-        extra = {"session_maps": smaps, "message_maps": mmaps}
+        extra = {
+            "session_maps": smaps,
+            "message_maps": mmaps,
+            "group_id_exceptions": group_ex,
+        }
+        if group_ex:
+            write_csv(
+                out.parent / "exceptions-session-groups.tsv",
+                ["chat_id", "dropped_group_ids", "reason"],
+                group_ex,
+                delimiter="\t",
+            )
     elif args.kind == "citations":
         sql, cmaps, rmaps = generate_citation_sql(
             batch=args.batch,
@@ -278,6 +321,7 @@ def main() -> int:
             a_version_keys=set(dump.get("a_report_version_keys") or []),
             next_id=int(dump.get("next_report_id") or 1),
             a_tenant_default=tenant_default,
+            version_key_map=maps.get("report_version_key") or {},
         )
         extra = {"report_maps": rmaps}
     elif args.kind == "tool_types":
@@ -329,6 +373,17 @@ def main() -> int:
             a_space_ids=a_space_ids,
         )
         extra = {"role_access_maps": ramaps}
+    elif args.kind == "audit":
+        sql, amaps = generate_audit_sql(
+            batch=args.batch,
+            rows=dump.get("audits") or [],
+            maps=maps,
+            a_existing_ids={str(x) for x in (dump.get("a_audit_ids") or [])},
+            a_tenant_default=tenant_default,
+            a_space_ids=a_space_ids,
+            existing_audit=maps.get("audit") or {},
+        )
+        extra = {"audit_maps": amaps}
     elif args.kind == "openfga":
         owners = generate_owner_tuples(
             knowledges=dump.get("knowledges") or [],

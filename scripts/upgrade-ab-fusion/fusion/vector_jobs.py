@@ -10,6 +10,7 @@ from fusion.vector_gate import (
     COPY,
     NEED_REPARSE,
     PENDING,
+    SKIP,
     gate_knowledge,
     parse_dim,
     refuse_a_space_store,
@@ -115,7 +116,8 @@ def build_vector_jobs(
             b_model=b_model,
             a_model=a_model or None,
             b_schema=_schema_for(b_describe, b_coll, "milvus"),
-            b_es=_schema_for(b_describe, b_idx, "es") or _schema_for(b_describe, b_coll, "es"),
+            b_es=_schema_for(b_describe, b_idx, "es")
+            or _schema_for(b_describe, b_coll, "es"),
             a_collections=a_cols,
             a_indices=a_idxs,
             a_space_collections=a_space_collections,
@@ -138,7 +140,7 @@ def build_vector_jobs(
             "conversions": ",".join(conv),
             "reason": result.get("reason") or "",
         }
-        if result["verdict"] in {COPY, CONVERT}:
+        if result["verdict"] in {COPY, CONVERT, SKIP}:
             refuse_a_space_store(row["a_collection"], a_space_collections)
             refuse_a_space_store(row["a_index"], a_space_indices)
             jobs.append(row)
@@ -160,11 +162,15 @@ def build_vector_jobs(
     return jobs, exceptions
 
 
-def write_vector_outputs(out_dir: Path, batch: str, jobs: list[dict], exceptions: list[dict]) -> None:
+def write_vector_outputs(
+    out_dir: Path, batch: str, jobs: list[dict], exceptions: list[dict]
+) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     write_csv(out_dir / "vector-jobs.tsv", JOB_FIELDS, jobs, delimiter="\t")
     write_csv(out_dir / "vector-exceptions.tsv", EXC_FIELDS, exceptions, delimiter="\t")
-    (out_dir / "vector-exceptions.sql").write_text(generate_exception_sql(batch, exceptions), encoding="utf-8")
+    (out_dir / "vector-exceptions.sql").write_text(
+        generate_exception_sql(batch, exceptions), encoding="utf-8"
+    )
 
 
 def generate_exception_sql(batch: str, rows: list[dict]) -> str:
@@ -187,7 +193,9 @@ def generate_exception_sql(batch: str, rows: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def job_targets_from_maps(knowledges: list[dict], knowledge_map: dict[str, str]) -> list[dict]:
+def job_targets_from_maps(
+    knowledges: list[dict], knowledge_map: dict[str, str]
+) -> list[dict]:
     """无 describe 时仍能算出目标名, 供保护核对."""
     out = []
     for k in knowledges:
@@ -199,7 +207,9 @@ def job_targets_from_maps(knowledges: list[dict], knowledge_map: dict[str, str])
             {
                 "b_id": src,
                 "a_id": dst,
-                "a_collection": target_collection_name(src, k.get("collection_name"), dst),
+                "a_collection": target_collection_name(
+                    src, k.get("collection_name"), dst
+                ),
                 "a_index": target_index_name(src, k.get("index_name"), dst),
             }
         )

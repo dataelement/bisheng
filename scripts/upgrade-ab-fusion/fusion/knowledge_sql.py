@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fusion import NAME_SUFFIX
+from fusion.maps import require_mapped_model
 from fusion.minio_keys import rewrite_object_key, rewrite_stored_value
 from fusion.sql import alloc_int_id, fusion_batch_open_sql, sql_int, sql_json, sql_str
 from fusion.vector_names import target_collection_name, target_index_name
@@ -101,7 +102,11 @@ def generate_knowledge_sql(
         name = unique_name(k.get("name") or f"kb-{src}", names)
         names.add(name)
         b_model = k.get("model") or ""
-        model = model_map[b_model] if b_model and b_model in model_map else b_model
+        model = (
+            require_mapped_model("knowledge", src, str(b_model), model_map)
+            if b_model
+            else ""
+        )
         b_coll = k.get("collection_name") or ""
         b_idx = k.get("index_name") or ""
         # 避免覆盖 A 现有 collection / index 名

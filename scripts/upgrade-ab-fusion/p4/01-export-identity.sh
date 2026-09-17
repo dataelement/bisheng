@@ -10,8 +10,10 @@ source "${PACK_ROOT}/lib/fusion_remote.sh"
 mkdir -p "${LOG_DIR}/p4"
 ledger "${STEP}" "START" ""
 
-mysql_b_tsv "SELECT user_id,user_name,email,phone_number,\`source\`,external_id,external_code,\`delete\` FROM \`user\`" \
+# B 带 password 哈希, 仅供 create 用户写入 A; A 侧不导出密码, bind 也不改 A.password.
+mysql_b_tsv "SELECT user_id,user_name,password,email,phone_number,\`source\`,external_id,external_code,\`delete\` FROM \`user\`" \
   > "${LOG_DIR}/p4/b-users.tsv"
+chmod 600 "${LOG_DIR}/p4/b-users.tsv" || true
 mysql_a_tsv "SELECT user_id,user_name,email,phone_number,\`source\`,external_id,external_code,\`delete\` FROM \`user\`" \
   > "${LOG_DIR}/p4/a-users.tsv"
 

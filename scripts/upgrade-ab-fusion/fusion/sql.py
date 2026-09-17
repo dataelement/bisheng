@@ -7,6 +7,16 @@ import json
 from pathlib import Path
 
 
+def tsv_none(value: str | None) -> str | None:
+    """mysql -B 把 SQL NULL 打成字面量 NULL."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if text.lower() in {"", "null", "none", "nil"}:
+        return None
+    return text
+
+
 def escape(value: str) -> str:
     return str(value).replace("\\", "\\\\").replace("'", "''")
 
@@ -78,6 +88,9 @@ def load_jsonl(path: Path) -> list[dict]:
         for ln in f:
             text = ln.strip()
             if not text:
+                continue
+            # 跳过 mysql 客户端误进 stdout 的 warning
+            if not text.startswith("{") and not text.startswith("["):
                 continue
             rows.append(json.loads(text))
     return rows

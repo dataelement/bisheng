@@ -1,6 +1,5 @@
 """水位差分与冻结漂移."""
 
-
 from test.upgrade_ab_fusion._packutil import ensure_pack_path
 
 ensure_pack_path()
@@ -49,3 +48,6 @@ def test_knowledge_sql_filters_type():
     assert "chat_id" in id_select_sql("message_session")
     summary = summary_select_sql("knowledge", "knowledge")
     assert "type IN (0,1)" in summary
+    audit = id_select_sql("auditlog")
+    assert "`auditlog`" in audit
+    assert "SELECT id AS id" in audit

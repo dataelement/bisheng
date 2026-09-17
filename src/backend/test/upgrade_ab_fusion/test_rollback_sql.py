@@ -27,6 +27,7 @@ def test_rollback_skips_a_spaces_and_deletes_created_only():
             "report": [("6", "80")],
             "tool_type": [("7", "90")],
             "role_access": [("8", "91")],
+            "audit": [("aa", "bb")],
         },
         a_space_ids={3, 4},
     )
@@ -47,6 +48,7 @@ def test_rollback_skips_a_spaces_and_deletes_created_only():
     assert "DELETE FROM t_report WHERE id IN (80)" in sql
     assert "DELETE FROM t_gpts_tools_type WHERE id IN (90)" in sql
     assert "DELETE FROM roleaccess WHERE id IN (91)" in sql
+    assert "DELETE FROM auditlog WHERE id IN ('bb')" in sql
 
 
 def test_rollback_refuses_a_space_id():

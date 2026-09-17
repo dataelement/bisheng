@@ -35,6 +35,7 @@ def _maps(map_dir: Path) -> dict[str, dict[str, str]]:
         "group_resource": load_map(map_dir / "group-resource-map.csv", "b_id", "a_id"),
         "report": load_map(map_dir / "report-map.csv", "b_id", "a_id"),
         "role_access": load_map(map_dir / "role-access-map.csv", "b_id", "a_id"),
+        "audit": load_map(map_dir / "audit-map.csv", "b_id", "a_id"),
     }
 
 

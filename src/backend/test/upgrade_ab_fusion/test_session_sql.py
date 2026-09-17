@@ -19,7 +19,7 @@ def test_new_chat_id_when_conflict_different_content():
 
 
 def test_dedupe_when_digest_matches():
-    sql, smaps, mmaps = generate_session_sql(
+    sql, smaps, mmaps, _ex = generate_session_sql(
         batch="b1",
         sessions=[
             {"chat_id": "c1", "user_id": "7", "digest": "abc", "flow_id": "f1", "flow_type": 10, "group_ids": []}
@@ -37,7 +37,7 @@ def test_dedupe_when_digest_matches():
 
 
 def test_insert_messages_preserve_src_order_with_new_ids():
-    sql, smaps, mmaps = generate_session_sql(
+    sql, smaps, mmaps, _ex = generate_session_sql(
         batch="b1",
         sessions=[{"chat_id": "c9", "user_id": "7", "flow_id": "f1", "flow_type": 10, "group_ids": "[2]"}],
         messages=[
@@ -71,7 +71,7 @@ def test_insert_messages_preserve_src_order_with_new_ids():
 
 
 def test_skip_existing_chat_inserts_new_message():
-    sql, smaps, mmaps = generate_session_sql(
+    sql, smaps, mmaps, _ex = generate_session_sql(
         batch="b1",
         sessions=[{"chat_id": "c9", "user_id": "7", "flow_id": "f1", "flow_type": 10, "group_ids": []}],
         messages=[
@@ -96,3 +96,55 @@ def test_skip_existing_chat_inserts_new_message():
     assert "old" not in sql
     assert smaps[0]["action"] == "keep"
     assert {m["b_id"] for m in mmaps} == {"10", "11"}
+
+
+def test_unmapped_group_ids_dropped_and_listed():
+    sql, smaps, _mmaps, ex = generate_session_sql(
+        batch="b1",
+        sessions=[
+            {
+                "chat_id": "c9",
+                "user_id": "7",
+                "flow_id": "f1",
+                "flow_type": 10,
+                "group_ids": [2, 99],
+            }
+        ],
+        messages=[],
+        maps={
+            "user": {"7": "100"},
+            "flow": {"f1": "aabb"},
+            "tenant": {"1": "1"},
+            "group": {"2": "8"},
+        },
+        a_chat_ids=set(),
+        a_session_digest={},
+        next_message_id=50,
+        a_tenant_default="1",
+    )
+    assert "INSERT INTO message_session" in sql
+    assert smaps[0]["action"] == "keep"
+    assert len(ex) == 1
+    assert ex[0]["dropped_group_ids"] == "99"
+    assert "dropped group_ids 99" in sql
+
+
+def test_skips_existing_a_message_primary_keys():
+    sql, _smaps, mmaps, _ex = generate_session_sql(
+        batch="b1",
+        sessions=[{"chat_id": "c9", "user_id": "7", "flow_id": "f1", "flow_type": 10, "group_ids": []}],
+        messages=[{"id": "10", "chat_id": "c9", "user_id": "7", "type": "t", "category": "q", "message": "hi"}],
+        maps={"user": {"7": "100"}, "flow": {"f1": "aabb"}, "tenant": {"1": "1"}, "group": {}},
+        a_chat_ids=set(),
+        a_session_digest={},
+        next_message_id=50,
+        a_tenant_default="1",
+        a_existing_message_ids={50},
+    )
+    assert mmaps[0]["a_id"] == "51"
+    assert "INSERT INTO chatmessage (id" in sql
+    assert (
+        sql.split("INSERT INTO chatmessage")[1].startswith(" (id, is_bot")
+        or "VALUES (51," in sql.split("INSERT INTO chatmessage", 1)[1]
+    )
+    assert "VALUES (51," in sql

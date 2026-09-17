@@ -14,7 +14,9 @@ KNOWLEDGE_ID_KEYS = frozenset({"knowledge_id"})
 TENANT_ID_KEYS = frozenset({"tenant_id"})
 DROP_KEYS = frozenset({"pk", "_id", "id"})
 TEXT_KEYS = frozenset({"text", "page_content", "content"})
-PATH_TOKEN_RE = re.compile(r"(?:original|preview|bbox|thumbnails|knowledge/images/files)/[0-9A-Za-z._-]+")
+PATH_TOKEN_RE = re.compile(
+    r"(?:original|preview|bbox|thumbnails|knowledge/images/files)/[0-9A-Za-z._-]+"
+)
 
 
 def is_int_dtype(dtype: str | None) -> bool:
@@ -176,8 +178,14 @@ def rewrite_entity(
     knowledge_map: dict[str, str],
     tenant_map: dict[str, str],
     field_types: dict[str, str] | None = None,
+    missing_file: str = "error",
 ) -> dict:
-    """返回可写入 A 的实体. 缺 file 映射则抛错, 由门禁决定整库进例外."""
+    """返回可写入 A 的实体.
+
+    missing_file: error=缺 file 映射抛错; drop_field=QA 占位 file_id 写成 0, 不丢向量.
+    """
+    if missing_file not in {"error", "drop_field"}:
+        raise ValueError(f"unknown missing_file={missing_file}")
     types = field_types or {}
     out = deepcopy(entity)
     for key in list(out):
@@ -186,25 +194,27 @@ def rewrite_entity(
 
     src_fid = identity_file_id(out)
     dst_fid = lookup(file_map, src_fid) if src_fid else None
-    if src_fid and dst_fid is None:
+    if src_fid and dst_fid is None and missing_file == "error":
         raise ValueError(f"file_id {src_fid} 未映射")
+
+    def mapped_or_zero(original: Any, dtype: str | None, label: str) -> Any:
+        hit = lookup(file_map, original)
+        if hit is not None:
+            return coerce_id(hit, dtype, original)
+        if missing_file == "drop_field":
+            return coerce_id("0", dtype, original)
+        raise ValueError(f"{label} {original} 未映射")
 
     def apply_map(obj: dict, nested: bool) -> None:
         prefix = "metadata." if nested else ""
         if "file_id" in obj and obj.get("file_id") not in (None, ""):
             original = obj.get("file_id")
-            hit = lookup(file_map, original)
-            if hit is None:
-                raise ValueError(f"file_id {original} 未映射")
             dtype = types.get(prefix + "file_id") or types.get("file_id")
-            obj["file_id"] = coerce_id(hit, dtype, original)
+            obj["file_id"] = mapped_or_zero(original, dtype, "file_id")
         if "document_id" in obj and obj.get("document_id") not in (None, ""):
             original = obj.get("document_id")
-            hit = lookup(file_map, original)
-            if hit is None:
-                raise ValueError(f"document_id {original} 未映射")
             dtype = types.get(prefix + "document_id") or types.get("document_id")
-            obj["document_id"] = coerce_id(hit, dtype, original)
+            obj["document_id"] = mapped_or_zero(original, dtype, "document_id")
         if "knowledge_id" in obj and obj.get("knowledge_id") not in (None, ""):
             original = obj.get("knowledge_id")
             hit = lookup(knowledge_map, original)
@@ -238,7 +248,9 @@ def rewrite_entity(
         if dst_fid:
             for text_key in TEXT_KEYS:
                 if isinstance(out["metadata"].get(text_key), str):
-                    out["metadata"][text_key] = rewrite_path_text(out["metadata"][text_key], src_fid, dst_fid)
+                    out["metadata"][text_key] = rewrite_path_text(
+                        out["metadata"][text_key], src_fid, dst_fid
+                    )
     return out
 
 
@@ -249,6 +261,7 @@ def rewrite_entities(
     knowledge_map: dict[str, str],
     tenant_map: dict[str, str],
     field_types: dict[str, str] | None = None,
+    missing_file: str = "error",
 ) -> list[dict]:
     return [
         rewrite_entity(
@@ -257,6 +270,7 @@ def rewrite_entities(
             knowledge_map=knowledge_map,
             tenant_map=tenant_map,
             field_types=field_types,
+            missing_file=missing_file,
         )
         for row in rows
     ]

@@ -25,6 +25,29 @@ def load_map(path: Path, src_key: str, dst_key: str) -> dict[str, str]:
     return out
 
 
+def require_mapped_model(
+    kind: str, src: str, model: str | None, model_map: dict[str, str]
+) -> str:
+    """非空模型必须在 map 中. 禁止把 B 的数字 id 原样写入 A."""
+    text = str(model or "").strip()
+    if not text:
+        return ""
+    if text not in model_map:
+        raise ValueError(f"{kind} {src} 模型 {text} 未映射")
+    return model_map[text]
+
+
+def load_tool_key_map(path: Path) -> dict[str, str]:
+    """tool-map.csv 可选列 b_tool_key/a_tool_key; 仅两边不同才需要改 JSON."""
+    out: dict[str, str] = {}
+    for row in load_csv(path):
+        src = (row.get("b_tool_key") or "").strip()
+        dst = (row.get("a_tool_key") or "").strip()
+        if src and dst and src != dst:
+            out[src] = dst
+    return out
+
+
 def load_user_map(path: Path) -> dict[str, str]:
     return load_map(path, "b_user_id", "a_user_id")
 
@@ -308,6 +331,15 @@ def persist_runtime_maps(map_dir: Path, extra: dict | None) -> None:
             "b_id",
             "a_id",
             extra["share_link_maps"],
+            "b_id",
+            "a_id",
+        )
+    if extra.get("audit_maps"):
+        write_pair_csv(
+            map_dir / "audit-map.csv",
+            "b_id",
+            "a_id",
+            extra["audit_maps"],
             "b_id",
             "a_id",
         )

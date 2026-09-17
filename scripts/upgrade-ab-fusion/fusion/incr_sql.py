@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from fusion.json_rewrite import rewrite_flow_data
+from fusion.maps import require_mapped_model
 from fusion.sql import sql_int, sql_json, sql_str
 from fusion.vector_names import target_collection_name, target_index_name
 
@@ -63,6 +64,13 @@ def generate_incr_delete_sql(
     delete_int("group_resource", "groupresource")
     delete_int("role_access", "roleaccess")
     delete_int("report", "t_report")
+    audit_ids = dsts("audit")
+    if audit_ids:
+        lines.append(
+            "DELETE FROM auditlog WHERE id IN ("
+            + ",".join(sql_str(i) for i in audit_ids)
+            + ");"
+        )
     msg = dsts("message")
     if msg:
         lines.append(
@@ -157,9 +165,11 @@ def generate_incr_update_sql(
             continue
         if int(dst) in a_space_ids:
             raise ValueError(f"增量 UPDATE 命中 A 原空间 knowledge id={dst}")
-        model = k.get("model") or ""
-        if model and model in model_map:
-            model = model_map[model]
+        model = ""
+        if k.get("model"):
+            model = require_mapped_model(
+                "incr knowledge", src, str(k.get("model") or ""), model_map
+            )
         lines.append(
             "UPDATE knowledge SET name="
             f"{sql_str(k.get('name') or '')}, description={sql_str(k.get('description') or None)}, "
@@ -211,9 +221,11 @@ def generate_incr_update_sql(
         dst = amap.get(src)
         if not dst:
             continue
-        model = str(a.get("model_name") or "")
-        if model and model in model_map:
-            model = model_map[model]
+        model = ""
+        if a.get("model_name"):
+            model = require_mapped_model(
+                "incr assistant", src, str(a.get("model_name") or ""), model_map
+            )
         owner = user_map.get(str(a.get("user_id") or ""))
         lines.append(
             "UPDATE assistant SET name="

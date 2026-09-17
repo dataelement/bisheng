@@ -1,7 +1,7 @@
 # 毕昇 B→A 升级与融合：运维执行包
 
 **升级 B：** 只看 [`复制即跑.md`](./复制即跑.md) 的 P2 hop.  
-**数据融合：** B 已是 2.5.0-sg 之后, 看 [`复制即跑.md`](./复制即跑.md) 第 12 节起, 或本文件.
+**数据融合：** 只看 [`用户操作全流程手册.md`](./用户操作全流程手册.md). B 已是 2.5.0-sg 之后从手册第 2 节开始.
 
 ## 方向 (已调整)
 
@@ -38,7 +38,7 @@
 
 控制表 (仅 A): `fusion_batch` `fusion_map` `fusion_exception` `fusion_a_baseline`.
 
-读取 B / 写入 A: `user` `user_tenant` `department` `user_department` `group` `usergroup` `role` `userrole` `roleaccess` `tenant` `llm_model` `t_gpts_tools` `t_gpts_tools_type` `system_dictionary` `knowledge` `knowledgefile` `qaknowledge` `review_tag` `review_tag_link` `groupresource` `flow` `flowversion` `t_variable_value` `t_report` `assistant` `assistantlink` `message_session` `chatmessage` `message_citation` `message_citation_relation` `marktask` `markrecord` `markappuser` `user_link` `share_link`.
+读取 B / 写入 A: `user` `user_tenant` `department` `user_department` `group` `usergroup` `role` `userrole` `roleaccess` `tenant` `llm_model` `t_gpts_tools` `t_gpts_tools_type` `system_dictionary` `knowledge` `knowledgefile` `qaknowledge` `review_tag` `review_tag_link` `groupresource` `flow` `flowversion` `t_variable_value` `t_report` `assistant` `assistantlink` `message_session` `chatmessage` `message_citation` `message_citation_relation` `marktask` `markrecord` `markappuser` `user_link` `share_link` `auditlog`.
 
 OpenFGA (A store `bisheng`): 迁入资源 `owner` / 组 `manager` / 角色 viewer|editor / 部门或 as_group 用户组授权. A 原 Tuple 不改. 工具/看板不扩权.
 
@@ -48,7 +48,7 @@ Milvus / ES: `p5/22-copy-vectors.sh` 只迁本批新建 type=0/1. 兼容则保�
 
 A 原 `knowledge.type=3` 及相关文件/索引/OpenFGA: **只读核对, 不写**.
 
-默认不迁: 积分/审计/遥测/Redis/JWT/密钥明文 (方案 D16).
+默认不迁: 积分/遥测/Redis/JWT/密钥明文. 审计 `auditlog` 迁入 (方案 D16).
 
 ## 本包未做 (不要假装已迁完)
 
@@ -58,4 +58,6 @@ A 原 `knowledge.type=3` 及相关文件/索引/OpenFGA: **只读核对, 不写*
 
 ## 运行位置
 
-默认在 **B 演练机** 跑脚本: 本地 mysql 容器是 B, A 通过 `A_SSH_HOST` (默认 `10.171.0.50`).
+在 **B 源机** 跑脚本: 本地 mysql 容器是 B, A 通过必填的 `A_SSH_HOST` / `A_SSH_USER` / `A_SSH_PORT` (无脚本默认 IP; 见 `env.sh.example`).
+本轮演练 A 曾用 `Oper1@10.171.0.50:52012`, 先 `A_SSH_AUTH=password` + 会话 `SSHPASS`. 有密钥后可改 `auto`/`key`.
+密码登录才需要 `sshpass` (缺则脚本尝试安装). 开跑打印 `连接 A: user@host:port`.

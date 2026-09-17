@@ -11,4 +11,4 @@ APPLY=0 bash p4/10-apply-identity.sh
 ```
 
 `bind` 只写 `fusion_map`, 不 UPDATE A 的 `user`/`department`.
-`create` 在 A INSERT, 密码为不可登录占位 `*`.
+`create` 在 A INSERT, 拷贝 B 的 `password` 哈希; 空哈希仍写不可登录占位 `*`.

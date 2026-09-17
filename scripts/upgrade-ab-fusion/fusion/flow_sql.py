@@ -7,6 +7,7 @@ import uuid
 
 from fusion import NAME_SUFFIX
 from fusion.json_rewrite import rewrite_flow_data
+from fusion.maps import require_mapped_model
 from fusion.minio_keys import rewrite_stored_value
 from fusion.sql import fusion_batch_open_sql, sql_int, sql_json, sql_str
 
@@ -90,6 +91,12 @@ def generate_flow_sql(
         rewritten, report = rewrite_flow_data(data or {}, {**maps, "flow": flow_alloc})
         if report.missing:
             raise ValueError(f"flow {src} 嵌套引用未映射: {report.missing[:8]}")
+        if report.dropped:
+            lines.append(
+                "INSERT INTO fusion_exception (batch_no, kind, src_entity, src_id, detail) VALUES ("
+                f"{sql_str(batch)}, 'dangling_knowledge_ref', 'flow', {sql_str(src)}, "
+                f"{sql_str(','.join(report.dropped)[:2000])});"
+            )
         status = fl.get("status") or 1
         # 未完成权限验证前保持下线
         status = 1
@@ -135,6 +142,15 @@ def generate_flow_sql(
             version_alloc[src] = dst
             version_maps.append({"b_id": src, "a_id": dst})
             continue
+        flow_src = str(ver.get("flow_id") or "")
+        if flow_src not in flow_alloc:
+            # 父工作流已删, 版本行仍残留 (常见 is_delete=1)
+            lines.append(
+                "INSERT INTO fusion_exception (batch_no, kind, src_entity, src_id, detail) VALUES ("
+                f"{sql_str(batch)}, 'orphan_flowversion', 'flowversion', {sql_str(src)}, "
+                f"{sql_str(f'flow_id={flow_src} 无对应 flow, 跳过')});"
+            )
+            continue
         dst = str(vid)
         vid += 1
         version_alloc[src] = dst
@@ -143,8 +159,6 @@ def generate_flow_sql(
 
     for src, dst, ver in pending_versions:
         flow_dst = flow_alloc.get(str(ver.get("flow_id") or ""))
-        if not flow_dst:
-            raise ValueError(f"flowversion {src} flow 未映射")
         owner = (maps.get("user") or {}).get(str(ver.get("user_id") or ""), None)
         tenant = (maps.get("tenant") or {}).get(
             str(ver.get("tenant_id") or "1"), a_tenant_default
@@ -155,6 +169,12 @@ def generate_flow_sql(
         rewritten, report = rewrite_flow_data(data or {}, maps)
         if report.missing:
             raise ValueError(f"flowversion {src} 嵌套引用未映射: {report.missing[:8]}")
+        if report.dropped:
+            lines.append(
+                "INSERT INTO fusion_exception (batch_no, kind, src_entity, src_id, detail) VALUES ("
+                f"{sql_str(batch)}, 'dangling_knowledge_ref', 'flowversion', {sql_str(src)}, "
+                f"{sql_str(','.join(report.dropped)[:2000])});"
+            )
         orig = ver.get("original_version_id")
         orig_sql = "NULL"
         if orig not in (None, "", "0", 0):
@@ -185,9 +205,12 @@ def generate_flow_sql(
             str(var.get("tenant_id") or "1"), a_tenant_default
         )
         lines.append(
-            "INSERT INTO t_variable_value (flow_id, version_id, node_id, `value`, tenant_id) VALUES ("
+            "INSERT INTO t_variable_value (flow_id, version_id, node_id, variable_name, value_type, "
+            "is_option, `value`, tenant_id) VALUES ("
             f"{sql_str(flow_dst)}, {sql_int(ver_dst) if ver_dst else 'NULL'}, "
-            f"{sql_str(var.get('node_id') or '')}, {sql_str(var.get('value') or None)}, {sql_int(tenant)});"
+            f"{sql_str(var.get('node_id') or '')}, {sql_str(var.get('variable_name') or None)}, "
+            f"{sql_int(var.get('value_type') or 1, '1')}, {sql_int(var.get('is_option') or 1, '1')}, "
+            f"{sql_str(var.get('value') or None)}, {sql_int(tenant)});"
         )
 
     lines.append("COMMIT;")
@@ -202,7 +225,8 @@ def generate_assistant_sql(
     maps: dict[str, dict[str, str]],
     a_assistant_ids: set[str],
     a_tenant_default: str,
-) -> tuple[str, list[dict]]:
+) -> tuple[str, list[dict], list[dict]]:
+    """返回 (sql, assistant_maps, 跳过的未映射工具 link)."""
     lines = [
         "SET NAMES utf8mb4;",
         f"-- batch {batch} assistant B->A",
@@ -213,6 +237,7 @@ def generate_assistant_sql(
     preexisting = dict(maps.get("assistant") or {})
     alloc: dict[str, str] = dict(preexisting)
     out_maps: list[dict] = []
+    link_gaps: list[dict] = []
     for a in assistants:
         src = str(a.get("id") or "")
         if src in preexisting:
@@ -230,9 +255,9 @@ def generate_assistant_sql(
         tenant = (maps.get("tenant") or {}).get(
             str(a.get("tenant_id") or "1"), a_tenant_default
         )
-        model = str(a.get("model_name") or "")
-        if model and model in (maps.get("model") or {}):
-            model = maps["model"][model]
+        model = require_mapped_model(
+            "assistant", src, str(a.get("model_name") or ""), maps.get("model") or {}
+        )
         name = a.get("name") or f"asst-{src}"
         if NAME_SUFFIX not in name:
             # 助手同名不合并, 但 UUID 已隔离; 名称冲突只加后缀当 A 已有同名时由调用方传入
@@ -282,11 +307,19 @@ def generate_assistant_sql(
         tool = link.get("tool_id")
         kid = link.get("knowledge_id")
         fid = link.get("flow_id")
-        tool_s = (
-            (maps.get("tool") or {}).get(str(tool), None)
-            if tool not in (None, 0, "0", "")
-            else None
-        )
+        tool_s = None
+        if tool not in (None, 0, "0", ""):
+            tool_s = (maps.get("tool") or {}).get(str(tool))
+            if tool_s is None:
+                link_gaps.append(
+                    {
+                        "kind": "assistantlink",
+                        "assistant_id": asst_src,
+                        "b_tool_id": str(tool),
+                        "reason": "工具未映射, 跳过该 link",
+                    }
+                )
+                continue
         kid_s = (
             (maps.get("knowledge") or {}).get(str(kid), None)
             if kid not in (None, 0, "0", "")
@@ -302,4 +335,4 @@ def generate_assistant_sql(
             f"{sql_str(asst)}, {sql_int(tool_s)}, {sql_str(fid_s)}, {sql_int(kid_s)}, {sql_int(tenant)});"
         )
     lines.append("COMMIT;")
-    return "\n".join(lines) + "\n", out_maps
+    return "\n".join(lines) + "\n", out_maps, link_gaps

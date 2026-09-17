@@ -30,6 +30,12 @@ def main() -> int:
     p.add_argument("--dst", required=True)
     p.add_argument("--maps", required=True)
     p.add_argument("--schema", default="")
+    p.add_argument(
+        "--missing-file",
+        default="error",
+        choices=("error", "drop_field"),
+        help="QA 库占位 file_id 用 drop_field, 传统库缺映射仍 error",
+    )
     args = p.parse_args()
     map_dir = Path(args.maps)
     file_map = load_map(map_dir / "file-map.csv", "b_id", "a_id")
@@ -50,6 +56,7 @@ def main() -> int:
                 knowledge_map=knowledge_map,
                 tenant_map=tenant_map,
                 field_types=types,
+                missing_file=args.missing_file,
             )
             f.write(json.dumps(new, ensure_ascii=False) + "\n")
             n += 1

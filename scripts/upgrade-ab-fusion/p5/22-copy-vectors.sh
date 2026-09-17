@@ -85,11 +85,11 @@ stage_a() {
 }
 
 runtime_b() {
-  docker exec -i "${BACKEND_CONTAINER}" python /tmp/ab-fusion/vector_runtime.py "$@"
+  docker exec -i "${BACKEND_CONTAINER}" python /tmp/ab-fusion/vector_runtime.py "$@" </dev/null
 }
 
 runtime_a() {
-  fusion_ssh_a docker exec -i "${A_BACKEND_CONTAINER}" python /tmp/ab-fusion/vector_runtime.py "$@"
+  fusion_ssh_a docker exec -i "${A_BACKEND_CONTAINER}" python /tmp/ab-fusion/vector_runtime.py "$@" </dev/null
 }
 
 if [[ "${ACTION}" == "drop" ]]; then
@@ -105,14 +105,14 @@ if [[ "${ACTION}" == "drop" ]]; then
   stage_a
   fusion_scp_to_a "${forbid}" /tmp/ab-fusion/forbid.txt
   fusion_ssh_a docker cp /tmp/ab-fusion/forbid.txt "${A_BACKEND_CONTAINER}:/tmp/ab-fusion/forbid.txt"
-  while IFS=$'\t' read -r kind name _; do
+  while IFS=$'\t' read -r kind name _ <&3; do
     [[ "${kind}" == "kind" || -z "${kind}" ]] && continue
     if [[ "${kind}" == "milvus" ]]; then
       runtime_a drop-milvus --collection "${name}" --forbid-file /tmp/ab-fusion/forbid.txt
     else
       runtime_a drop-es --index "${name}" --forbid-file /tmp/ab-fusion/forbid.txt
     fi
-  done < "${created}"
+  done 3< "${created}"
   ledger "${STEP}" "OK" "APPLY=1 dropped"
   echo "OK ${STEP} dropped"
   exit 0
@@ -208,19 +208,23 @@ PY
 }
 
 copy_one() {
-  local b_id="$1" a_coll="$2" b_coll="$3" a_idx="$4" b_idx="$5" expr="$6"
+  local b_id="$1" a_coll="$2" b_coll="$3" a_idx="$4" b_idx="$5" expr="$6" ktype="$7"
   local schema="${work}/${b_id}.milvus-schema.json"
   local mapping="${work}/${b_id}.es-mapping.json"
   local raw_m="${work}/${b_id}.milvus.jsonl"
   local rew_m="${work}/${b_id}.milvus.rewritten.jsonl"
   local raw_e="${work}/${b_id}.es.jsonl"
   local rew_e="${work}/${b_id}.es.rewritten.jsonl"
+  local missing_file="error"
+  if [[ "${ktype}" == "1" ]]; then
+    missing_file="drop_field"
+  fi
   extract_json "${b_desc}" collections "${b_coll}" "${schema}"
   extract_json "${b_desc}" indices "${b_idx}" "${mapping}" || extract_json "${b_desc}" indices "${b_coll}" "${mapping}"
 
   runtime_b export-milvus --collection "${b_coll}" --expr "${expr}" --out "/tmp/ab-fusion/${b_id}.m.jsonl"
   docker cp "${BACKEND_CONTAINER}:/tmp/ab-fusion/${b_id}.m.jsonl" "${raw_m}"
-  python3 "${PACK_ROOT}/p5/rewrite_vector_jsonl.py" --src "${raw_m}" --dst "${rew_m}" --maps "${maps}" --schema "${schema}"
+  python3 "${PACK_ROOT}/p5/rewrite_vector_jsonl.py" --src "${raw_m}" --dst "${rew_m}" --maps "${maps}" --schema "${schema}" --missing-file "${missing_file}"
   fusion_scp_to_a "${rew_m}" "/tmp/ab-fusion/${b_id}.m.jsonl"
   fusion_scp_to_a "${schema}" "/tmp/ab-fusion/${b_id}.schema.json"
   fusion_ssh_a docker cp "/tmp/ab-fusion/${b_id}.m.jsonl" "${A_BACKEND_CONTAINER}:/tmp/ab-fusion/${b_id}.m.jsonl"
@@ -251,7 +255,7 @@ PY
     runtime_b export-es --index "${b_idx}" --out "/tmp/ab-fusion/${b_id}.e.jsonl"
   fi
   docker cp "${BACKEND_CONTAINER}:/tmp/ab-fusion/${b_id}.e.jsonl" "${raw_e}"
-  python3 "${PACK_ROOT}/p5/rewrite_vector_jsonl.py" --src "${raw_e}" --dst "${rew_e}" --maps "${maps}" --schema "${schema}"
+  python3 "${PACK_ROOT}/p5/rewrite_vector_jsonl.py" --src "${raw_e}" --dst "${rew_e}" --maps "${maps}" --schema "${schema}" --missing-file "${missing_file}"
   fusion_scp_to_a "${rew_e}" "/tmp/ab-fusion/${b_id}.e.jsonl"
   fusion_scp_to_a "${mapping}" "/tmp/ab-fusion/${b_id}.mapping.json"
   fusion_ssh_a docker cp "/tmp/ab-fusion/${b_id}.e.jsonl" "${A_BACKEND_CONTAINER}:/tmp/ab-fusion/${b_id}.e.jsonl"
@@ -264,18 +268,32 @@ PY
   printf 'es\t%s\t%s\n' "${a_idx}" "${b_id}" >> "${created}"
 }
 
+csv_unescape() {
+  python3 -c 'import csv,io,sys
+s=sys.argv[1] if len(sys.argv)>1 else ""
+print(next(csv.reader(io.StringIO(s), delimiter="\t"), [""])[0] if s else "")
+' "$1"
+}
+
 copied=0
-while IFS=$'\t' read -r b_id a_id type verdict b_collection a_collection b_index a_index expr conversions reason; do
+skipped=0
+while IFS=$'\t' read -r b_id a_id type verdict b_collection a_collection b_index a_index expr conversions reason <&3; do
   [[ "${b_id}" == "b_id" || -z "${b_id}" ]] && continue
+  if [[ "${verdict}" == "skip" ]]; then
+    log "skip knowledge ${b_id} -> ${a_id} already on A ${a_collection}"
+    skipped=$((skipped + 1))
+    continue
+  fi
   [[ "${verdict}" == "copy" || "${verdict}" == "convert" ]] || continue
-  log "copy knowledge ${b_id} -> ${a_id} ${b_collection} => ${a_collection}"
-  copy_one "${b_id}" "${a_collection}" "${b_collection}" "${a_index}" "${b_index}" "${expr}"
+  expr="$(csv_unescape "${expr}")"
+  log "copy knowledge ${b_id} -> ${a_id} ${b_collection} => ${a_collection} expr=${expr}"
+  copy_one "${b_id}" "${a_collection}" "${b_collection}" "${a_index}" "${b_index}" "${expr}" "${type}"
   copied=$((copied + 1))
-done < "${jobs}"
+done 3< "${jobs}"
 
 if [[ -s "${LOG_DIR}/p5/vector-exceptions.sql" ]]; then
   apply_sql_on_a "${LOG_DIR}/p5/vector-exceptions.sql"
 fi
 
-ledger "${STEP}" "OK" "APPLY=1 copied=${copied} exceptions=${exc_n}"
-echo "OK ${STEP} copied=${copied} exceptions=${exc_n}"
+ledger "${STEP}" "OK" "APPLY=1 copied=${copied} skipped=${skipped} exceptions=${exc_n}"
+echo "OK ${STEP} copied=${copied} skipped=${skipped} exceptions=${exc_n}"

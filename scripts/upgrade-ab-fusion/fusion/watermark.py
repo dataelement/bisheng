@@ -21,6 +21,7 @@ WATERMARK_TABLES = (
     ("groupresource", "group_resource"),
     ("t_report", "report"),
     ("roleaccess", "role_access"),
+    ("auditlog", "audit"),
 )
 
 PK_COLUMN = {
@@ -94,9 +95,7 @@ def summary_select_sql(table: str, entity: str) -> str:
     pk = table_pk(table)
     where = WHERE_SQL.get(table)
     clause = f" WHERE {where}" if where else ""
-    max_ts = (
-        "UNIX_TIMESTAMP(MAX(COALESCE(update_time, create_time, FROM_UNIXTIME(0))))"
-    )
+    max_ts = "UNIX_TIMESTAMP(MAX(COALESCE(update_time, create_time, FROM_UNIXTIME(0))))"
     return (
         f"SELECT '{table}' AS `table`, '{entity}' AS entity, COUNT(*) AS count, "
         f"CAST(MAX({pk}) AS CHAR) AS max_id, {max_ts} AS max_update_ts "

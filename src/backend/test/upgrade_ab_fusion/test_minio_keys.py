@@ -8,6 +8,7 @@ ensure_pack_path()
 from fusion.minio_keys import (
     collect_map_jobs,
     extract_object_key,
+    jobs_from_exported_files,
     merge_jobs_tsv,
     rewrite_object_key,
     rewrite_stored_value,
@@ -56,3 +57,12 @@ def test_collect_and_merge_jobs(tmp_path: Path):
     merge_jobs_tsv(path, jobs, set())
     again = merge_jobs_tsv(path, jobs, set())
     assert len(again) == 2
+
+
+def test_jobs_from_exported_files():
+    jobs = jobs_from_exported_files(
+        [{"id": "12", "object_name": "original/12.pdf", "knowledge_id": "5"}],
+        {"12": "20"},
+    )
+    assert jobs[0]["src"] == "original/12.pdf"
+    assert jobs[0]["dst"] == "original/20.pdf"

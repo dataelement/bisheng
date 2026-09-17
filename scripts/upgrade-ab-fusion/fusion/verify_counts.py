@@ -25,6 +25,12 @@ def expected_business_counts(
         f for f in dump.get("files") or [] if str(f.get("knowledge_id") or "") in kset
     ]
     qas = [q for q in dump.get("qas") or [] if str(q.get("knowledge_id") or "") in kset]
+    session_ids = {str(s.get("chat_id") or "") for s in dump.get("sessions") or []}
+    messages = [
+        m
+        for m in dump.get("messages") or []
+        if str(m.get("chat_id") or "") in session_ids
+    ]
     return {
         "knowledge": len(k_ok),
         "file": len(files),
@@ -32,7 +38,7 @@ def expected_business_counts(
         "flow": len(dump.get("flows") or []),
         "assistant": len(dump.get("assistants") or []),
         "session": len(dump.get("sessions") or []),
-        "message": len(dump.get("messages") or []),
+        "message": len(messages),
     }
 
 
@@ -44,6 +50,7 @@ def map_counts(map_dir: Path) -> dict[str, int]:
         ("flow", "flow-map.csv", "b_id", "a_id"),
         ("assistant", "assistant-map.csv", "b_id", "a_id"),
         ("session", "chat-map.csv", "b_id", "a_id"),
+        ("message", "message-map.csv", "b_id", "a_id"),
     )
     out: dict[str, int] = {}
     for name, filename, src, dst in specs:
@@ -72,9 +79,17 @@ def compare_counts(
     a_space_now: int | None,
     a_space_file_base: int | None = None,
     a_space_file_now: int | None = None,
-    hard: tuple[str, ...] = ("knowledge", "file", "qa", "flow", "assistant"),
+    hard: tuple[str, ...] = (
+        "knowledge",
+        "file",
+        "qa",
+        "flow",
+        "assistant",
+        "session",
+        "message",
+    ),
 ) -> dict:
-    """hard 项 mapped 必须等于 expected; 会话只报告. A 空间不得下降."""
+    """hard 项 mapped 必须等于 expected. A 空间不得下降."""
     errors: list[str] = []
     warns: list[str] = []
     if (
@@ -94,13 +109,6 @@ def compare_counts(
         got = mapped.get(key, 0)
         if got != exp:
             errors.append(f"{key} 期望 {exp} 条映射, 实际 {got}")
-    for key in ("session", "message"):
-        exp = expected.get(key, 0)
-        got = mapped.get(key, 0)
-        if got != exp:
-            warns.append(
-                f"{key} 期望 {exp} 条映射, 实际 {got} (会话可能因冲突改写, 仅提示)"
-            )
     return {
         "ok": not errors,
         "errors": errors,

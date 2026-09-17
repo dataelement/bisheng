@@ -19,7 +19,7 @@ def test_score_ok_when_top1_and_overlap():
     assert scored["top1"] is True
 
 
-def test_score_fails_top1_mismatch():
+def test_score_ok_when_overlap_even_if_top1_swapped():
     scored = score_case(
         b_hits=[{"file_id": 12}, {"file_id": 13}],
         a_hits=[{"file_id": 21}, {"file_id": 20}],
@@ -27,8 +27,20 @@ def test_score_fails_top1_mismatch():
         k=5,
         min_overlap=0.5,
     )
-    assert scored["ok"] is False
+    assert scored["ok"] is True
     assert scored["top1"] is False
+
+
+def test_qa_placeholder_file_id_maps_to_zero():
+    scored = score_case(
+        b_hits=[{"file_id": 2}],
+        a_hits=[{"file_id": 0}],
+        file_map={},
+        k=5,
+        min_overlap=0.8,
+    )
+    assert scored["ok"] is True
+    assert scored["expected"] == ["0"]
 
 
 def test_a_hits_are_not_remapped():

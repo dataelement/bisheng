@@ -155,3 +155,30 @@ def test_skip_existing_knowledge_and_insert_new_file():
     assert any(m["b_id"] == "5" and m["a_id"] == "10" for m in kmaps)
     assert {m["b_id"] for m in fmaps} == {"12", "13"}
     assert "UPDATE knowledge" not in sql.upper()
+
+
+def test_unmapped_embedding_model_raises():
+    with pytest.raises(ValueError, match="模型"):
+        generate_knowledge_sql(
+            batch="b1",
+            knowledges=[
+                {
+                    "id": "5",
+                    "name": "库",
+                    "type": 0,
+                    "user_id": "7",
+                    "tenant_id": "1",
+                    "model": "3",
+                }
+            ],
+            files=[],
+            user_map={"7": "100"},
+            tenant_map={"1": "1"},
+            model_map={},
+            a_knowledge_names=set(),
+            a_existing_ids=set(),
+            next_knowledge_id=10,
+            next_file_id=20,
+            a_tenant_default="1",
+            a_space_ids=set(),
+        )

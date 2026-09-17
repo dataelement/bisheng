@@ -83,9 +83,10 @@ def generate_relations_sql(
         )
         lines.append(
             "INSERT INTO share_link (id, share_token, resource_id, resource_type, share_mode, "
-            "status, create_user_id, tenant_id) VALUES ("
+            "status, access_count, expire_time, create_user_id, tenant_id) VALUES ("
             f"{sql_str(new_id)}, {sql_str(new_token)}, {sql_str(mapped_res)}, {sql_str(rtype)}, "
-            f"{sql_str(mode)}, {sql_str(status)}, {sql_str(str(user))}, {sql_int(tenant)});"
+            f"{sql_str(mode)}, {sql_str(status)}, {sql_int(sl.get('access_count') or 0, '0')}, "
+            f"{sql_int(sl.get('expire_time') or 0, '0')}, {sql_str(str(user))}, {sql_int(tenant)});"
         )
         lines.append(
             "INSERT INTO fusion_map (batch_no, entity, src_id, dst_id, action, note) VALUES ("

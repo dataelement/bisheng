@@ -46,3 +46,11 @@ def test_fill_dept_as_group_id(tmp_path: Path):
     )
     persist_runtime_maps(tmp_path, {"dept_as_group": {"3": "88"}})
     assert "88" in p.read_text(encoding="utf-8")
+
+
+def test_persist_audit_map(tmp_path: Path):
+    persist_runtime_maps(
+        tmp_path,
+        {"audit_maps": [{"b_id": "aa", "a_id": "bb"}]},
+    )
+    assert load_map(tmp_path / "audit-map.csv", "b_id", "a_id")["aa"] == "bb"

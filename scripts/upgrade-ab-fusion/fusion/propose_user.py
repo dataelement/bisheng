@@ -6,7 +6,11 @@ from collections import defaultdict
 
 
 def employee_code(row: dict) -> str:
-    return (row.get("external_code") or row.get("external_id") or "").strip()
+    raw = (row.get("external_code") or row.get("external_id") or "").strip()
+    # mysql TSV 把 SQL NULL 打成字面量 NULL, 不能当成员工编码.
+    if raw.lower() in {"", "null", "none", "nil"}:
+        return ""
+    return raw
 
 
 def _index_by_code(rows: list[dict], id_key: str) -> dict[str, list[dict]]:
@@ -65,7 +69,7 @@ def propose(a_users: list[dict], b_users: list[dict]) -> dict:
                     "a_user_id": "",
                     "employee_code": code,
                     "action": "create",
-                    "note": "B 独有, 在 A 新建本地用户; 密码不迁移",
+                    "note": "B 独有, 在 A 新建本地用户; 拷贝 B password 哈希",
                 }
             )
             continue

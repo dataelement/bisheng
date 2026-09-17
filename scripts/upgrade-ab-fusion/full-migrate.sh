@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # B -> A 融合编排. 默认 APPLY=0, 只导出/生成 SQL/dry-run, 不写 A.
 # 不迁: Redis/JWT/密钥明文, A 原 knowledge.type=3 不做 UPDATE/DELETE,
-#       B 的 type=3 默认跳过 (MIGRATE_B_SPACES=0), 审计/积分不迁.
+#       B 的 type=3 默认跳过 (MIGRATE_B_SPACES=0), 积分/遥测不迁, 审计迁.
 # APPLY=1 还要 CONFIRM_FULL_MIGRATE=1.
 set -euo pipefail
 STEP="full-migrate"
@@ -27,7 +27,8 @@ usage() {
   retrieve-gold / incr / publish
   首次 business-export 会 LABEL=start 抓水位
 
-在 B 演练机上跑: 本地 docker mysql 是 B, A 走 SSH (A_SSH_HOST).
+在 B 源机上跑: 本地 docker mysql 是 B, A 走 SSH (A_SSH_HOST/USER/PORT 必填).
+前置: 已填写 env.sh; 密码登录时 sshpass + 会话 SSHPASS.
 EOF
 }
 
@@ -98,7 +99,11 @@ if want openfga; then
   run_stage openfga bash "${PACK_ROOT}/p5/35-apply-openfga.sh"
 fi
 if want verify; then
-  run_stage verify bash "${PACK_ROOT}/p5/40-verify.sh"
+  if [[ "${APPLY}" == "1" ]]; then
+    VERIFY_STORAGE=1 run_stage verify bash "${PACK_ROOT}/p5/40-verify.sh"
+  else
+    run_stage verify bash "${PACK_ROOT}/p5/40-verify.sh"
+  fi
 fi
 if [[ "${STAGE}" == "retrieve-gold" ]]; then
   run_stage retrieve-gold bash "${PACK_ROOT}/p5/50-retrieve-gold.sh"

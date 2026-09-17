@@ -38,13 +38,16 @@ def test_duplicate_b_code_conflicts():
     assert "多个 B" in result["conflict"][0]["reason"]
 
 
-def test_missing_code_goes_manual():
+def test_tsv_null_literal_is_not_employee_code():
     result = propose(
         [{"user_id": "100", "external_code": "E1", "source": "sg"}],
-        [{"user_id": "7", "user_name": "local", "external_code": ""}],
+        [
+            {"user_id": "1", "user_name": "a", "external_id": "NULL", "external_code": "NULL"},
+            {"user_id": "2", "user_name": "b", "external_id": "NULL", "external_code": "NULL"},
+        ],
     )
-    assert result["map"] == []
-    assert result["manual"][0]["b_user_id"] == "7"
+    assert result["conflict"] == []
+    assert {row["b_user_id"] for row in result["manual"]} == {"1", "2"}
 
 
 def test_a_local_and_sg_same_code_prefers_sg():

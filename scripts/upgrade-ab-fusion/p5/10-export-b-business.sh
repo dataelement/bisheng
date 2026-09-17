@@ -19,7 +19,7 @@ mysql_b_jsonl "SELECT JSON_OBJECT('id',id,'name',name,'user_id',user_id,'tenant_
   > "${LOG_DIR}/p5/b-flows.jsonl"
 mysql_b_jsonl "SELECT JSON_OBJECT('id',id,'flow_id',flow_id,'name',name,'data',data,'description',description,'user_id',user_id,'flow_type',flow_type,'is_current',is_current,'is_delete',is_delete,'original_version_id',original_version_id,'tenant_id',tenant_id) FROM flowversion" \
   > "${LOG_DIR}/p5/b-flowversions.jsonl"
-mysql_b_tsv "SELECT id,flow_id,version_id,node_id,value,tenant_id FROM t_variable_value" \
+mysql_b_tsv "SELECT id,flow_id,version_id,node_id,variable_name,value_type,is_option,value,tenant_id FROM t_variable_value" \
   > "${LOG_DIR}/p5/b-variables.tsv" || true
 mysql_b_jsonl "SELECT JSON_OBJECT('id',id,'name',name,'tenant_id',tenant_id,'logo',logo,'desc',\`desc\`,'system_prompt',system_prompt,'prompt',prompt,'guide_word',guide_word,'guide_question',guide_question,'model_name',model_name,'temperature',temperature,'max_token',max_token,'status',status,'user_id',user_id,'is_delete',is_delete) FROM assistant" \
   > "${LOG_DIR}/p5/b-assistants.jsonl"
@@ -59,6 +59,8 @@ mysql_b_tsv "SELECT id,role_id,third_id,type,tenant_id FROM roleaccess" \
   > "${LOG_DIR}/p5/b-roleaccess.tsv" || true
 mysql_b_tsv "SELECT user_id,role_id,tenant_id FROM userrole" \
   > "${LOG_DIR}/p5/b-userroles.tsv" || true
+mysql_b_jsonl "SELECT JSON_OBJECT('id',id,'operator_id',operator_id,'operator_name',operator_name,'group_ids',group_ids,'system_id',system_id,'event_type',event_type,'object_type',object_type,'object_id',object_id,'object_name',object_name,'note',note,'ip_address',ip_address,'tenant_id',tenant_id,'operator_tenant_id',operator_tenant_id,'action',action,'target_type',target_type,'target_id',target_id,'reason',reason,'metadata',\`metadata\`,'create_time',DATE_FORMAT(create_time,'%Y-%m-%d %H:%i:%s'),'update_time',DATE_FORMAT(update_time,'%Y-%m-%d %H:%i:%s')) FROM auditlog" \
+  > "${LOG_DIR}/p5/b-audit.jsonl" || true
 
 {
   echo "metric	value"
@@ -69,6 +71,7 @@ mysql_b_tsv "SELECT user_id,role_id,tenant_id FROM userrole" \
   echo -n "b_assistant	"; mysql_scalar "SELECT COUNT(*) FROM assistant"
   echo -n "b_session	"; mysql_scalar "SELECT COUNT(*) FROM message_session"
   echo -n "b_message	"; mysql_scalar "SELECT COUNT(*) FROM chatmessage"
+  echo -n "b_audit	"; mysql_scalar "SELECT COUNT(*) FROM auditlog" || echo 0
 } | tee "${LOG_DIR}/p5/b-baseline.tsv"
 
 mysql_a_tsv "SELECT id,name FROM knowledge" > "${LOG_DIR}/p5/a-knowledge.tsv"
@@ -76,6 +79,7 @@ mysql_a "SELECT id FROM knowledge WHERE type=3" > "${LOG_DIR}/p5/a-space-ids.txt
 mysql_a_tsv "SELECT id FROM flow" > "${LOG_DIR}/p5/a-flow-ids.tsv"
 mysql_a_tsv "SELECT name FROM flow" > "${LOG_DIR}/p5/a-flow-names.tsv"
 mysql_a_tsv "SELECT chat_id FROM message_session" > "${LOG_DIR}/p5/a-chat-ids.tsv"
+mysql_a_tsv "SELECT id FROM chatmessage" > "${LOG_DIR}/p5/a-message-ids.tsv" || true
 mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM knowledge" > "${LOG_DIR}/p5/next-knowledge-id.txt"
 mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM knowledgefile" > "${LOG_DIR}/p5/next-file-id.txt"
 mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM flowversion" > "${LOG_DIR}/p5/next-version-id.txt"
@@ -110,6 +114,8 @@ mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM markappuser" > "${LOG_DIR}/p5/next-ma
 mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM t_report" > "${LOG_DIR}/p5/next-report-id.txt" || echo 1 > "${LOG_DIR}/p5/next-report-id.txt"
 mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM t_gpts_tools_type" > "${LOG_DIR}/p5/next-tool-type-id.txt" || echo 1 > "${LOG_DIR}/p5/next-tool-type-id.txt"
 mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM roleaccess" > "${LOG_DIR}/p5/next-role-access-id.txt" || echo 1 > "${LOG_DIR}/p5/next-role-access-id.txt"
+# 仅用于 UUID 冲突检测; 行数很大时会慢
+mysql_a_tsv "SELECT id FROM auditlog" > "${LOG_DIR}/p5/a-audit-ids.tsv" || true
 mysql_a_tsv "SELECT id,collection_name,index_name FROM knowledge WHERE type=3" \
   > "${LOG_DIR}/p5/a-space-stores.tsv" || true
 mysql_a_tsv "SELECT id,type,collection_name,index_name FROM knowledge" \

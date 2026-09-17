@@ -51,6 +51,7 @@ dump = {
     "b_roles": load_table(log / "p4" / "b-roles.tsv"),
     "b_userroles": load_table(log / "p4" / "b-userroles.tsv"),
     "a_user_names": [r.get("user_name", "") for r in a_users],
+    "a_external_ids": [r.get("external_id", "") for r in a_users if r.get("external_id")],
     "next_user_id": next_id(a_users, "user_id"),
     "next_group_id": next_id(a_groups, "id"),
     "next_role_id": next_id(a_roles, "id"),
@@ -58,12 +59,14 @@ dump = {
 (log / "p4" / "identity-dump.json").write_text(json.dumps(dump, ensure_ascii=False), encoding="utf-8")
 print(log / "p4" / "identity-dump.json")
 PY
+chmod 600 "${LOG_DIR}/p4/identity-dump.json" || true
 
 python3 "${PACK_ROOT}/p5/build_sql.py" --kind identity \
   --dump "${LOG_DIR}/p4/identity-dump.json" \
   --maps "${LOG_DIR}/p4/maps" \
   --out "${LOG_DIR}/p4/identity.sql" \
   --batch "${BATCH_NO}"
+chmod 600 "${LOG_DIR}/p4/identity.sql" || true
 
 python3 - <<PY
 import json

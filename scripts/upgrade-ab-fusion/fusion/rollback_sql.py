@@ -41,6 +41,14 @@ def generate_rollback_sql(
     delete_int("tool_type", "t_gpts_tools_type")
     delete_int("role_access", "roleaccess")
 
+    audit_ids = dsts("audit")
+    if audit_ids:
+        lines.append(
+            "DELETE FROM auditlog WHERE id IN ("
+            + ",".join(sql_str(i) for i in audit_ids)
+            + ");"
+        )
+
     msg_ids = dsts("message")
     if msg_ids:
         ids = ",".join(sql_int(i) for i in msg_ids)

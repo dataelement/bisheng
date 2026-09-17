@@ -122,7 +122,9 @@ def write_body(tuples: list[dict], model_id: str | None = None) -> dict:
             "tuple_keys": [
                 {"user": t["user"], "relation": t["relation"], "object": t["object"]}
                 for t in tuples
-            ]
+            ],
+            # 续跑幂等: 已写入的 owner 不再 400
+            "on_duplicate": "ignore",
         }
     }
     if model_id:

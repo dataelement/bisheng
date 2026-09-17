@@ -8,6 +8,7 @@ from fusion.vector_names import target_collection_name, target_index_name
 
 COPY = "copy"
 CONVERT = "convert"
+SKIP = "skip"
 EXCEPTION = "exception"
 PENDING = "pending"
 
@@ -163,18 +164,12 @@ def gate_knowledge(
             "disposition": NEED_REPARSE,
         }
 
-    if a_coll in a_collections or a_coll in a_space_collections:
+    if a_coll in a_space_collections or a_idx in a_space_indices:
+        hit = a_coll if a_coll in a_space_collections else a_idx
         return {
             **base,
             "verdict": EXCEPTION,
-            "reason": f"目标 Collection 已存在或与 A 冲突: {a_coll}",
-            "disposition": NEED_REPARSE,
-        }
-    if a_idx in a_indices or a_idx in a_space_indices:
-        return {
-            **base,
-            "verdict": EXCEPTION,
-            "reason": f"目标 Index 已存在或与 A 冲突: {a_idx}",
+            "reason": f"目标与 A 原空间存储冲突: {hit}",
             "disposition": NEED_REPARSE,
         }
 
@@ -297,6 +292,14 @@ def gate_knowledge(
         reason = "可转换: " + ",".join(extra)
     if reasons:
         reason = reason + "; " + "; ".join(reasons)
+    if a_coll in a_collections or a_idx in a_indices:
+        return {
+            **base,
+            "expr": expr,
+            "verdict": SKIP,
+            "reason": f"目标已存在, 视为本批已写入, 续跑跳过: {a_coll}",
+            "conversions": conversions + ["already_on_a"],
+        }
     return {
         **base,
         "expr": expr,

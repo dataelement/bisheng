@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 from fusion import NAME_SUFFIX, UNUSABLE_PASSWORD
-from fusion.sql import escape, fusion_batch_open_sql, sql_int, sql_str
+from fusion.sql import escape, fusion_batch_open_sql, sql_int, sql_str, tsv_none
 
 
-def _map_row(
-    batch: str, entity: str, src: str, dst: str, action: str, note: str = ""
-) -> str:
+def copied_login_password(src_user: dict) -> str:
+    """create 用户带上 B 已存的 password 哈希, 供 A 本地登录校验.
+
+    库里存的是 MD5 哈希, 不是明文. 空/NULL 仍用不可登录占位, 避免写成空串后登录路径崩溃.
+    """
+    pwd = tsv_none(src_user.get("password"))
+    return pwd if pwd else UNUSABLE_PASSWORD
+
+
+def _map_row(batch: str, entity: str, src: str, dst: str, action: str, note: str = "") -> str:
     return (
         "INSERT INTO fusion_map (batch_no, entity, src_id, dst_id, action, note) VALUES ("
         f"{sql_str(batch)}, {sql_str(entity)}, {sql_str(src)}, {sql_str(dst)}, "
@@ -18,11 +25,12 @@ def _map_row(
 
 
 def unique_user_name(desired: str, existing: set[str], src_id: str) -> str:
-    if desired not in existing:
+    """existing 存小写. MySQL 用户名/编码唯一索引大小写不敏感."""
+    if desired.lower() not in existing:
         return desired
     candidate = f"{desired}_{NAME_SUFFIX}_{src_id}"
     n = 1
-    while candidate in existing:
+    while candidate.lower() in existing:
         n += 1
         candidate = f"{desired}_{NAME_SUFFIX}_{src_id}_{n}"
     return candidate
@@ -46,8 +54,9 @@ def generate_identity_sql(
     b_userroles: list[dict],
     next_role_id: int,
     a_tenant_id: str,
+    a_external_ids: set[str] | None = None,
 ) -> tuple[str, dict]:
-    """生成身份 SQL. bind 只写映射表; create 在 A INSERT.
+    """生成身份 SQL. bind 只写映射表; create 在 A INSERT 并拷贝 B password 哈希.
 
     返回 (sql, extra), extra 含 user_alloc/group_alloc/role_alloc 供后序域使用.
     """
@@ -58,11 +67,7 @@ def generate_identity_sql(
         fusion_batch_open_sql(batch, "identity"),
     ]
     for row in tenant_map:
-        if (
-            (row.get("action") or "") == "bind"
-            and row.get("b_tenant_id")
-            and row.get("a_tenant_id")
-        ):
+        if (row.get("action") or "") == "bind" and row.get("b_tenant_id") and row.get("a_tenant_id"):
             lines.append(
                 _map_row(
                     batch,
@@ -76,7 +81,8 @@ def generate_identity_sql(
 
     allocated_users: dict[str, str] = {}
     uid = next_user_id
-    names = set(a_user_names)
+    names = {n.lower() for n in a_user_names}
+    ext_taken = {x.lower() for x in (a_external_ids or []) if x and str(x).lower() not in {"null", "none"}}
     b_by_id = {str(u.get("user_id")): u for u in b_users}
 
     for row in user_map:
@@ -87,35 +93,35 @@ def generate_identity_sql(
             if not dst:
                 continue
             allocated_users[src] = dst
-            lines.append(
-                _map_row(batch, "user", src, dst, "bind", row.get("note") or "")
-            )
+            lines.append(_map_row(batch, "user", src, dst, "bind", row.get("note") or ""))
         elif action == "create":
             src_user = b_by_id.get(src) or {}
             dst = str(uid)
             uid += 1
             allocated_users[src] = dst
-            uname = unique_user_name(
-                src_user.get("user_name") or f"buser_{src}", names, src
-            )
-            names.add(uname)
+            uname = unique_user_name(src_user.get("user_name") or f"buser_{src}", names, src)
+            names.add(uname.lower())
+            ext = tsv_none(src_user.get("external_id"))
+            # A 已有 source=local + 同 external_id 时置空, 避免 uk_user_source_external_id
+            if ext and ext.lower() in ext_taken:
+                ext = None
+            if ext:
+                ext_taken.add(ext.lower())
+            code = tsv_none(src_user.get("external_code"))
             lines.append(
                 "INSERT INTO `user` (user_id, user_name, password, email, phone_number, "
                 "`source`, external_id, external_code, `delete`) VALUES ("
-                f"{sql_int(dst)}, {sql_str(uname)}, {sql_str(UNUSABLE_PASSWORD)}, "
-                f"{sql_str(src_user.get('email') or None)}, "
-                f"{sql_str(src_user.get('phone_number') or None)}, "
-                f"'local', {sql_str(src_user.get('external_id') or None)}, "
-                f"{sql_str(src_user.get('external_code') or None)}, "
+                f"{sql_int(dst)}, {sql_str(uname)}, {sql_str(copied_login_password(src_user))}, "
+                f"{sql_str(tsv_none(src_user.get('email')))}, "
+                f"{sql_str(tsv_none(src_user.get('phone_number')))}, "
+                f"'local', {sql_str(ext)}, {sql_str(code)}, "
                 f"{sql_int(src_user.get('delete') or 0, '0')});"
             )
             lines.append(
                 "INSERT INTO user_tenant (user_id, tenant_id, is_active, is_default, status) VALUES ("
                 f"{sql_int(dst)}, {sql_int(a_tenant_id)}, 1, 1, 'active');"
             )
-            lines.append(
-                _map_row(batch, "user", src, dst, "create", f"user_name={uname}")
-            )
+            lines.append(_map_row(batch, "user", src, dst, "create", f"user_name={uname}"))
 
     gid = next_group_id
     group_alloc: dict[str, str] = {}
@@ -140,11 +146,7 @@ def generate_identity_sql(
         action = row.get("action") or ""
         src = row.get("b_dept_pk") or ""
         if action == "bind" and row.get("a_dept_pk"):
-            lines.append(
-                _map_row(
-                    batch, "dept", src, row["a_dept_pk"], "bind", row.get("note") or ""
-                )
-            )
+            lines.append(_map_row(batch, "dept", src, row["a_dept_pk"], "bind", row.get("note") or ""))
         elif action == "as_group":
             dst = str(gid)
             gid += 1
@@ -155,15 +157,9 @@ def generate_identity_sql(
                 f"'public', {sql_int(a_tenant_id)});"
             )
             lines.append(_map_row(batch, "dept_as_group", src, dst, "as_group", gname))
-            lines.append(
-                _map_row(batch, "group", f"dept:{src}", dst, "as_group", gname)
-            )
+            lines.append(_map_row(batch, "group", f"dept:{src}", dst, "as_group", gname))
 
-    dept_bind = {
-        r["b_dept_pk"]: r["a_dept_pk"]
-        for r in dept_map
-        if r.get("action") == "bind" and r.get("a_dept_pk")
-    }
+    dept_bind = {r["b_dept_pk"]: r["a_dept_pk"] for r in dept_map if r.get("action") == "bind" and r.get("a_dept_pk")}
     dept_as_group = {}
     # as_group dst comes from fusion_map generation order; reconstruct from SQL maps we just allocated
     # 上面循环已写 SQL, 这里用第二次扫描按相同顺序还原 id
@@ -209,11 +205,7 @@ def generate_identity_sql(
         src = row.get("b_role_id") or ""
         if action == "bind" and row.get("a_role_id"):
             role_alloc[src] = row["a_role_id"]
-            lines.append(
-                _map_row(
-                    batch, "role", src, row["a_role_id"], "bind", row.get("note") or ""
-                )
-            )
+            lines.append(_map_row(batch, "role", src, row["a_role_id"], "bind", row.get("note") or ""))
         elif action == "create":
             dst = str(rid)
             rid += 1

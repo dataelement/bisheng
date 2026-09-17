@@ -89,6 +89,19 @@ def test_unmapped_file_raises():
         )
 
 
+def test_qa_placeholder_file_id_zeroed():
+    out = rewrite_entity(
+        {"file_id": 1, "knowledge_id": 21, "text": "q", "vector": [0.1]},
+        file_map={},
+        knowledge_map={"21": "3802"},
+        tenant_map={},
+        field_types={"file_id": "INT64", "knowledge_id": "VARCHAR"},
+        missing_file="drop_field",
+    )
+    assert out["file_id"] == 0
+    assert out["knowledge_id"] == "3802"
+
+
 def test_gate_copy_when_compatible():
     result = gate_knowledge(
         src_id="5",
@@ -219,7 +232,7 @@ def test_build_jobs_skips_b_space_and_writes_exception_sql():
     assert "INSERT INTO fusion_exception" not in sql or exc == []
 
 
-def test_conflict_existing_dest_is_exception():
+def test_conflict_existing_dest_is_skip_not_exception():
     jobs, exc = build_vector_jobs(
         batch="b1",
         knowledges=[
@@ -246,8 +259,9 @@ def test_conflict_existing_dest_is_exception():
         a_model_dims={},
         described=True,
     )
-    assert jobs == []
-    assert exc[0]["disposition"] == "need_reparse"
+    assert exc == []
+    assert jobs[0]["verdict"] == "skip"
+    assert "already_on_a" in jobs[0]["conversions"]
 
 
 def test_parse_dim():

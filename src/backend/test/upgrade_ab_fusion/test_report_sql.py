@@ -48,3 +48,20 @@ def test_skip_when_flow_unmapped():
     )
     assert maps == []
     assert "INSERT INTO t_report" not in sql
+
+
+def test_allocate_version_keys_stable_and_avoids_a():
+    from fusion.report_sql import allocate_report_version_keys
+
+    out = allocate_report_version_keys(
+        [{"version_key": "vk1"}, {"version_key": "vk2"}],
+        {"vk1"},
+    )
+    assert out["vk1"] != "vk1"
+    assert out["vk2"] == "vk2"
+    again = allocate_report_version_keys(
+        [{"version_key": "vk1"}],
+        {"vk1"},
+        existing=out,
+    )
+    assert again["vk1"] == out["vk1"]

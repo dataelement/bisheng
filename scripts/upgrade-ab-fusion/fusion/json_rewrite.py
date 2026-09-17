@@ -7,6 +7,8 @@ from typing import Any
 
 INT_LEAF_KEYS = {
     "model_id": "model",
+    "recommended_llm": "model",
+    "rerank_model": "model",
     "user_id": "user",
     "mark_user": "user",
     "knowledge_id": "knowledge",
@@ -41,6 +43,7 @@ class RewriteReport:
         self.rewritten: list[str] = []
         self.unknown: list[str] = []
         self.missing: list[str] = []
+        self.dropped: list[str] = []
         self.used: list[tuple[str, str]] = []
 
     def as_dict(self) -> dict:
@@ -53,8 +56,19 @@ class RewriteReport:
             "rewritten": self.rewritten,
             "unknown": self.unknown,
             "missing": self.missing,
+            "dropped": self.dropped,
             "used": used,
         }
+
+
+def _is_int_id(value: Any) -> bool:
+    """知识库选择器里会混节点输出引用 (如 input_xxx.file), 那些不是资源 ID."""
+    if isinstance(value, bool) or value in (None, ""):
+        return False
+    if isinstance(value, int):
+        return True
+    text = str(value).strip()
+    return text.isdigit()
 
 
 def _map_int(
@@ -107,8 +121,17 @@ def _rewrite_key_list(
     for i, item in enumerate(items):
         if isinstance(item, dict) and "key" in item:
             copied = dict(item)
+            raw_key = item.get("key")
+            # 知识选择器可指向上游节点输出, 不是 knowledge.id
+            if kind == "knowledge" and not _is_int_id(raw_key):
+                out.append(copied)
+                continue
+            # B 已删的知识库: 从选择器去掉并记 dropped, 不阻断整条工作流 SQL
+            if kind == "knowledge" and str(raw_key) not in table:
+                report.dropped.append(f"{path}[{i}].key={raw_key}")
+                continue
             copied["key"] = _map_int(
-                item.get("key"), table, f"{path}[{i}].key", report, kind=kind
+                raw_key, table, f"{path}[{i}].key", report, kind=kind
             )
             out.append(copied)
         else:
@@ -136,16 +159,20 @@ def rewrite_value(
                 value, maps.get("tool") or {}, path, report, kind="tool"
             )
         if key == "qa_knowledge_id" and value and not isinstance(value[0], dict):
-            return [
-                _map_int(
-                    v,
-                    maps.get("knowledge") or {},
-                    f"{path}[{i}]",
-                    report,
-                    kind="knowledge",
-                )
-                for i, v in enumerate(value)
-            ]
+            table = maps.get("knowledge") or {}
+            kept = []
+            for i, v in enumerate(value):
+                if v in (None, "", 0, "0"):
+                    continue
+                if not _is_int_id(v) or str(v) in table:
+                    kept.append(
+                        _map_int(v, table, f"{path}[{i}]", report, kind="knowledge")
+                        if _is_int_id(v)
+                        else v
+                    )
+                    continue
+                report.dropped.append(f"{path}[{i}]={v}")
+            return kept
         return [
             rewrite_value(v, key, maps, f"{path}[{i}]", report)
             for i, v in enumerate(value)
@@ -179,6 +206,19 @@ def rewrite_value(
             for k, v in value.items()
         }
 
+    # 报表 version_key / 自定义 tool_key: 只在提供了对应 map 且命中时改写, 未命中保持原值 (预置工具 key 两边相同).
+    if key == "version_key":
+        table = maps.get("report_version_key") or {}
+        raw = "" if value in (None, "") else str(value)
+        if raw and raw in table:
+            return _map_str(value, table, path, report, kind="report_version_key")
+        return value
+    if key == "tool_key":
+        table = maps.get("tool_key") or {}
+        raw = "" if value in (None, "") else str(value)
+        if raw and raw in table:
+            return _map_str(value, table, path, report, kind="tool_key")
+        return value
     if key in INT_LEAF_KEYS:
         return _map_int(
             value,

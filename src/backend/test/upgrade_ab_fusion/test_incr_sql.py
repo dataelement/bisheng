@@ -23,6 +23,17 @@ def test_delete_does_not_mark_batch_rolled_back():
     assert "UPDATE fusion_batch" not in sql
 
 
+def test_delete_audit_uses_string_pk():
+    sql = generate_incr_delete_sql(
+        batch="b1",
+        deleted=[{"entity": "audit", "src_id": "aa"}],
+        maps={"audit": {"aa": "bb"}},
+        a_space_ids=set(),
+    )
+    assert "DELETE FROM auditlog WHERE id IN ('bb')" in sql
+    assert "AND entity='audit' AND src_id IN ('aa')" in sql
+
+
 def test_delete_refuses_a_space():
     with pytest.raises(ValueError, match="A 原空间"):
         generate_incr_delete_sql(

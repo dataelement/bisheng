@@ -206,5 +206,31 @@ def merge_jobs_tsv(
     return combined
 
 
+def jobs_from_exported_files(files: list[dict], file_map: dict[str, str]) -> list[dict]:
+    """file-map 只有 id 时, 用 B 导出文件行重建 MinIO 拷贝任务."""
+    jobs: list[dict] = []
+    for row in files:
+        src = str(row.get("id") or "")
+        dst = file_map.get(src)
+        if not dst:
+            continue
+        mapped = {
+            "b_id": src,
+            "src_object_key": row.get("object_name") or "",
+            "dst_object_key": rewrite_object_key(row.get("object_name"), dst) or "",
+            "preview_src": row.get("preview_file_object_name") or "",
+            "preview_dst": rewrite_object_key(row.get("preview_file_object_name"), dst)
+            or "",
+            "bbox_src": row.get("bbox_object_name") or "",
+            "bbox_dst": rewrite_object_key(row.get("bbox_object_name"), dst) or "",
+        }
+        jobs.extend(list_file_jobs([mapped]))
+        _new, extra = rewrite_stored_value(
+            row.get("thumbnails"), dst, ref=src, kind="thumbnails"
+        )
+        jobs.extend(extra)
+    return jobs
+
+
 def write_jobs_tsv(path: Path, jobs: list[dict]) -> None:
     write_csv(path, ["b_file_id", "src", "dst", "kind"], jobs, delimiter="\t")

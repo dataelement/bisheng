@@ -5,10 +5,17 @@ from __future__ import annotations
 from collections import defaultdict
 
 
+def _ext(row: dict) -> str:
+    raw = (row.get("external_id") or "").strip()
+    if raw.lower() in {"", "null", "none", "nil"}:
+        return ""
+    return raw
+
+
 def propose(a_depts: list[dict], b_depts: list[dict]) -> dict:
     a_by_ext: dict[str, list[dict]] = defaultdict(list)
     for row in a_depts:
-        ext = (row.get("external_id") or "").strip()
+        ext = _ext(row)
         if ext:
             a_by_ext[ext].append(row)
 
@@ -18,7 +25,7 @@ def propose(a_depts: list[dict], b_depts: list[dict]) -> dict:
 
     for b in b_depts:
         bid = str(b.get("id") or "")
-        ext = (b.get("external_id") or "").strip()
+        ext = _ext(b)
         name = b.get("name") or b.get("dept_name") or ""
         if not ext:
             mapped.append(

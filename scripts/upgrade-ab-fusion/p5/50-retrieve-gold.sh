@@ -45,10 +45,17 @@ fusion_ssh_a docker exec "${A_BACKEND_CONTAINER}" mkdir -p /tmp/ab-fusion
 fusion_ssh_a docker cp /tmp/ab-fusion/vector_runtime.py "${A_BACKEND_CONTAINER}:/tmp/ab-fusion/vector_runtime.py"
 
 runtime_b() {
-  docker exec -i "${BACKEND_CONTAINER}" python /tmp/ab-fusion/vector_runtime.py "$@"
+  docker exec -i "${BACKEND_CONTAINER}" python /tmp/ab-fusion/vector_runtime.py "$@" </dev/null
 }
 runtime_a() {
-  fusion_ssh_a docker exec -i "${A_BACKEND_CONTAINER}" python /tmp/ab-fusion/vector_runtime.py "$@"
+  fusion_ssh_a docker exec -i "${A_BACKEND_CONTAINER}" python /tmp/ab-fusion/vector_runtime.py "$@" </dev/null
+}
+
+csv_unescape() {
+  python3 -c 'import csv,io,sys
+s=sys.argv[1] if len(sys.argv)>1 else ""
+print(next(csv.reader(io.StringIO(s), delimiter="\t"), [""])[0] if s else "")
+' "$1"
 }
 
 work="${LOG_DIR}/p5/gold-work"
@@ -57,16 +64,25 @@ cases="${work}/cases.json"
 echo '[]' > "${cases}"
 
 copy_n=0
-while IFS=$'\t' read -r b_id a_id type verdict b_collection a_collection b_index a_index expr conversions reason; do
+while IFS=$'\t' read -r b_id a_id type verdict b_collection a_collection b_index a_index expr conversions reason <&3; do
   [[ "${b_id}" == "b_id" || -z "${b_id}" ]] && continue
-  [[ "${verdict}" == "copy" || "${verdict}" == "convert" ]] || continue
+  [[ "${verdict}" == "copy" || "${verdict}" == "convert" || "${verdict}" == "skip" ]] || continue
+  expr="$(csv_unescape "${expr}")"
   copy_n=$((copy_n + 1))
   job_dir="${work}/${b_id}"
   mkdir -p "${job_dir}"
-  runtime_b sample-milvus --collection "${b_collection}" --limit "${GOLD_SAMPLE}" --out "/tmp/ab-fusion/${b_id}.sample.jsonl"
+  sample_args=(sample-milvus --collection "${b_collection}" --limit "${GOLD_SAMPLE}" --out "/tmp/ab-fusion/${b_id}.sample.jsonl")
+  if [[ "${expr}" == *knowledge_id* ]]; then
+    sample_args+=(--expr "${expr}")
+  fi
+  runtime_b "${sample_args[@]}"
   docker cp "${BACKEND_CONTAINER}:/tmp/ab-fusion/${b_id}.sample.jsonl" "${job_dir}/sample.jsonl"
+  if [[ ! -s "${job_dir}/sample.jsonl" ]]; then
+    log "gold skip empty sample knowledge ${b_id}"
+    continue
+  fi
   i=0
-  while IFS= read -r line; do
+  while IFS= read -r line <&4; do
     [[ -z "${line}" ]] && continue
     i=$((i + 1))
     printf '%s\n' "${line}" > "${job_dir}/${i}.vec.json"
@@ -93,8 +109,8 @@ cases.append({
 })
 Path(path).write_text(json.dumps(cases, ensure_ascii=False), encoding="utf-8")
 PY
-  done < "${job_dir}/sample.jsonl"
-done < "${jobs}"
+  done 4< "${job_dir}/sample.jsonl"
+done 3< "${jobs}"
 
 out="${LOG_DIR}/p5/retrieve-gold.tsv"
 set +e

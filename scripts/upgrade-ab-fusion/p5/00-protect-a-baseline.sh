@@ -19,6 +19,13 @@ mkdir -p "${LOG_DIR}/p5"
   echo -n "a_user_cnt	"; mysql_a "SELECT COUNT(*) FROM \`user\`"
 } | tee "${LOG_DIR}/p5/a-baseline.tsv"
 
+mysql_a_tsv "SELECT id,name,description,user_id,tenant_id,DATE_FORMAT(update_time,'%Y-%m-%d %H:%i:%s') AS update_time FROM knowledge WHERE type=3 ORDER BY id" \
+  | tee "${LOG_DIR}/p5/a-space-meta.tsv" >/dev/null
+mysql_a_tsv "SELECT f.id FROM knowledgefile f JOIN knowledge k ON f.knowledge_id=k.id WHERE k.type=3 ORDER BY f.id" \
+  | tee "${LOG_DIR}/p5/a-space-file-ids.tsv" >/dev/null
+mysql_a_tsv "SELECT chat_id FROM message_session" \
+  | tee "${LOG_DIR}/p5/a-pre-chat-ids.tsv" >/dev/null
+
 if [[ "${APPLY}" == "1" ]]; then
   require_a_25_for_apply
   mysql_a "INSERT INTO fusion_a_baseline (metric, value_num) SELECT 'a_space_cnt', COUNT(*) FROM knowledge WHERE type=3"

@@ -100,12 +100,22 @@ chunk_dir="${LOG_DIR}/p5/openfga-chunks"
 shopt -s nullglob
 for f in "${chunk_dir}"/*.json; do
   fusion_scp_to_a "${f}" /tmp/fusion-fga-chunk.json
-  fusion_ssh_a curl -fsS -X POST \
-    -H "Content-Type: application/json" \
-    --data-binary @/tmp/fusion-fga-chunk.json \
-    "${A_OPENFGA_URL}/stores/${store_id}/write" \
-    >/dev/null \
-    || die "OpenFGA ${ACTION} 失败 store=${store_id} file=$(basename "${f}")"
+  # Header 必须进远程脚本, 不能当 ssh argv; 否则 Content-Type: application/json 会被拆成 host=application
+  fusion_ssh_a bash -s <<REMOTE
+set -euo pipefail
+code=\$(curl -sS -o /tmp/fusion-fga-write.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' \\
+  --data-binary @/tmp/fusion-fga-chunk.json \\
+  '${A_OPENFGA_URL}/stores/${store_id}/write')
+if [ "\$code" = 200 ] || [ "\$code" = 204 ]; then
+  exit 0
+fi
+if grep -q 'already existed' /tmp/fusion-fga-write.out; then
+  exit 0
+fi
+echo "OpenFGA HTTP \$code" >&2
+cat /tmp/fusion-fga-write.out >&2
+exit 1
+REMOTE
 done
 
 ledger "${STEP}" "OK" "APPLY=1 action=${ACTION} tuples=${count} store=${store_id}"

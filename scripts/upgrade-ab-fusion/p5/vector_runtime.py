@@ -70,11 +70,34 @@ def milvus_connect():
     return "fusion"
 
 
+def es_kwargs_from_env(raw: str | None) -> dict:
+    """解析 BS_ELASTICSEARCH_SSL_VERIFY. JSON 里 basic_auth 是 list, 客户端要 tuple."""
+    import ast
+
+    text = (raw or "").strip() or "{}"
+    try:
+        kwargs = json.loads(text)
+    except json.JSONDecodeError:
+        try:
+            kwargs = ast.literal_eval(text)
+        except (SyntaxError, ValueError):
+            kwargs = {}
+    if not isinstance(kwargs, dict):
+        return {}
+    auth = kwargs.get("basic_auth")
+    if isinstance(auth, list):
+        kwargs = dict(kwargs)
+        kwargs["basic_auth"] = tuple(auth)
+    return kwargs
+
+
 def es_client():
     from elasticsearch import Elasticsearch
 
     url = os.environ.get("BS_ELASTICSEARCH_URL") or "http://127.0.0.1:9200"
-    return Elasticsearch(url)
+    return Elasticsearch(
+        hosts=url, **es_kwargs_from_env(os.environ.get("BS_ELASTICSEARCH_SSL_VERIFY"))
+    )
 
 
 def dtype_name(field) -> str:
@@ -291,7 +314,8 @@ def cmd_import_milvus(args: argparse.Namespace) -> int:
     from pymilvus import Collection, utility
 
     if utility.has_collection(args.collection, using=alias):
-        raise SystemExit(f"dest collection exists, refuse overwrite {args.collection}")
+        print(f"skipped-exists collection={args.collection}")
+        return 0
     schema_payload = json.loads(Path(args.schema).read_text(encoding="utf-8"))
     schema = schema_from_json(schema_payload)
     col = Collection(name=args.collection, schema=schema, using=alias)
@@ -347,6 +371,25 @@ def cmd_export_es(args: argparse.Namespace) -> int:
     return 0
 
 
+def sanitize_es_mapping(mapping: dict) -> dict:
+    """去掉 A 没有的 similarity 插件名 (如 custom_bm25), 落到默认 BM25. 不改字段名."""
+    drop = {"custom_bm25"}
+
+    def walk(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            out: dict[str, Any] = {}
+            for key, val in obj.items():
+                if key == "similarity" and isinstance(val, str) and val in drop:
+                    continue
+                out[key] = walk(val)
+            return out
+        if isinstance(obj, list):
+            return [walk(item) for item in obj]
+        return obj
+
+    return walk(mapping)
+
+
 def cmd_import_es(args: argparse.Namespace) -> int:
     from elasticsearch.helpers import bulk
 
@@ -354,8 +397,11 @@ def cmd_import_es(args: argparse.Namespace) -> int:
     assert_allowed(args.index, forbid)
     es = es_client()
     if es.indices.exists(index=args.index):
-        raise SystemExit(f"dest index exists, refuse overwrite {args.index}")
-    mapping = json.loads(Path(args.mapping).read_text(encoding="utf-8"))
+        print(f"skipped-exists index={args.index}")
+        return 0
+    mapping = sanitize_es_mapping(
+        json.loads(Path(args.mapping).read_text(encoding="utf-8"))
+    )
     body: dict[str, Any] = {}
     if mapping.get("mappings"):
         body["mappings"] = mapping["mappings"]
@@ -426,11 +472,15 @@ def cmd_sample_milvus(args: argparse.Namespace) -> int:
     fields = [f.name for f in col.schema.fields if not f.is_primary]
     limit = int(args.limit)
     rows: list[dict] = []
-    iterator = col.query_iterator(
-        batch_size=min(64, max(limit, 8)),
-        output_fields=fields,
-        timeout=120,
-    )
+    iter_kw = {
+        "batch_size": min(64, max(limit, 8)),
+        "output_fields": fields,
+        "timeout": 120,
+    }
+    expr = (getattr(args, "expr", None) or "").strip()
+    if expr:
+        iter_kw["expr"] = expr
+    iterator = col.query_iterator(**iter_kw)
     try:
         while len(rows) < limit:
             page = iterator.next()
@@ -560,6 +610,7 @@ def main() -> int:
     sm.add_argument("--collection", required=True)
     sm.add_argument("--out", required=True)
     sm.add_argument("--limit", default="3")
+    sm.add_argument("--expr", default="")
     sm.set_defaults(func=cmd_sample_milvus)
 
     se = sub.add_parser("search-milvus")

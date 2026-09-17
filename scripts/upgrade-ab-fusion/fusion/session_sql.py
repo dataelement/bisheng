@@ -28,7 +28,9 @@ def generate_session_sql(
     a_session_digest: dict[str, str],
     next_message_id: int,
     a_tenant_default: str,
-) -> tuple[str, list[dict], list[dict]]:
+    a_existing_message_ids: set[int] | None = None,
+) -> tuple[str, list[dict], list[dict], list[dict]]:
+    """返回 (sql, session_maps, message_maps, group_id 例外). 未映射组从 group_ids 去掉并记例外."""
     lines = [
         "SET NAMES utf8mb4;",
         f"-- batch {batch} session B->A",
@@ -39,9 +41,10 @@ def generate_session_sql(
     preexisting_chat = dict(maps.get("chat") or {})
     preexisting_msg = dict(maps.get("message") or {})
     session_maps: list[dict] = []
+    group_exceptions: list[dict] = []
     existing = set(a_chat_ids)
     mid = next_message_id
-    taken_msg: set[int] = set()
+    taken_msg: set[int] = set(a_existing_message_ids or [])
     for dst in preexisting_msg.values():
         try:
             taken_msg.add(int(dst))
@@ -95,10 +98,26 @@ def generate_session_sql(
         if isinstance(group_ids, str):
             group_ids = json.loads(group_ids) if group_ids else []
         rewritten_groups = []
+        dropped_groups: list[str] = []
         for g in group_ids:
+            if g in (None, "", 0, "0"):
+                continue
             mapped = (maps.get("group") or {}).get(str(g))
             if mapped:
                 rewritten_groups.append(int(mapped))
+            else:
+                dropped_groups.append(str(g))
+        if dropped_groups:
+            group_exceptions.append(
+                {
+                    "chat_id": src,
+                    "dropped_group_ids": ",".join(dropped_groups),
+                    "reason": "用户组未映射, 已从 group_ids 去掉",
+                }
+            )
+            lines.append(
+                f"-- EXCEPT session {src} dropped group_ids {','.join(dropped_groups)}"
+            )
         logo_new, logo_jobs = rewrite_stored_value(
             s.get("flow_logo"), dst, ref=src, kind="flow_logo"
         )
@@ -239,4 +258,4 @@ def generate_session_sql(
         )
 
     lines.append("COMMIT;")
-    return "\n".join(lines) + "\n", session_maps, msg_maps
+    return "\n".join(lines) + "\n", session_maps, msg_maps, group_exceptions

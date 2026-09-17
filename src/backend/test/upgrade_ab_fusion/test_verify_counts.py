@@ -22,6 +22,11 @@ def test_expected_skips_type3():
             ],
             "qas": [{"id": "3", "knowledge_id": "5"}],
             "flows": [{"id": "f"}],
+            "sessions": [{"chat_id": "c1"}, {"chat_id": "c2"}],
+            "messages": [
+                {"id": "1", "chat_id": "c1"},
+                {"id": "2", "chat_id": "gone"},
+            ],
         },
         migrate_b_spaces=False,
     )
@@ -29,6 +34,8 @@ def test_expected_skips_type3():
     assert counts["file"] == 1
     assert counts["qa"] == 1
     assert counts["flow"] == 1
+    assert counts["session"] == 2
+    assert counts["message"] == 1
 
 
 def test_compare_fails_when_map_short_or_space_drops(tmp_path: Path):
@@ -43,3 +50,31 @@ def test_compare_fails_when_map_short_or_space_drops(tmp_path: Path):
     assert report["ok"] is False
     assert any("空间数" in e for e in report["errors"])
     assert any("knowledge" in e for e in report["errors"])
+
+
+def test_compare_fails_when_session_or_message_short(tmp_path: Path):
+    persist_runtime_maps(
+        tmp_path,
+        {
+            "session_maps": [{"b_id": "c1", "a_id": "c1"}],
+            "message_maps": [{"b_id": "1", "a_id": "10"}],
+        },
+    )
+    mapped = map_counts(tmp_path)
+    report = compare_counts(
+        expected={
+            "knowledge": 0,
+            "file": 0,
+            "qa": 0,
+            "flow": 0,
+            "assistant": 0,
+            "session": 2,
+            "message": 2,
+        },
+        mapped=mapped,
+        a_space_base=1,
+        a_space_now=1,
+    )
+    assert report["ok"] is False
+    assert any("session" in e for e in report["errors"])
+    assert any("message" in e for e in report["errors"])

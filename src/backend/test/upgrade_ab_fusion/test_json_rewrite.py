@@ -53,7 +53,89 @@ def test_tool_list_keys():
     assert report.as_dict()["used"]["tool"] == ["5"]
 
 
-def test_missing_knowledge_is_reported():
-    data = {"knowledge": {"type": "knowledge", "value": [{"key": 11}]}}
-    _, report = rewrite_flow_data(data, {"knowledge": {}})
-    assert report.missing
+def test_missing_knowledge_is_dropped():
+    data = {"knowledge": {"type": "knowledge", "value": [{"key": 11, "label": "gone"}]}}
+    out, report = rewrite_flow_data(data, {"knowledge": {}})
+    assert report.missing == []
+    assert report.dropped
+    assert out["knowledge"]["value"] == []
+
+
+def test_knowledge_selector_keeps_node_output_refs():
+    data = {
+        "nodes": [
+            {
+                "data": {
+                    "group_params": [
+                        {
+                            "params": [
+                                {
+                                    "key": "knowledge",
+                                    "value": {
+                                        "type": "knowledge",
+                                        "value": [
+                                            {"key": 11, "label": "kb"},
+                                            {"key": "input_53ff4.file", "label": "file"},
+                                        ],
+                                    },
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+    out, report = rewrite_flow_data(data, {"knowledge": {"11": "201"}})
+    keys = [item["key"] for item in out["nodes"][0]["data"]["group_params"][0]["params"][0]["value"]["value"]]
+    assert keys == [201, "input_53ff4.file"]
+    assert report.missing == []
+    assert report.as_dict()["used"]["knowledge"] == ["11"]
+
+
+def test_rewrites_recommended_llm_and_rerank_model():
+    data = {
+        "nodes": [
+            {
+                "data": {
+                    "group_params": [
+                        {
+                            "params": [
+                                {"key": "recommended_llm", "value": 3},
+                                {
+                                    "key": "advanced_retrieval_switch",
+                                    "value": {"rerank_flag": True, "rerank_model": 4},
+                                },
+                            ]
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+    out, report = rewrite_flow_data(data, {"model": {"3": "9", "4": "12"}})
+    params = out["nodes"][0]["data"]["group_params"][0]["params"]
+    assert params[0]["value"] == 9
+    assert params[1]["value"]["rerank_model"] == 12
+    assert report.missing == []
+    used = report.as_dict()["used"]["model"]
+    assert "3" in used and "4" in used
+
+
+def test_report_version_key_and_tool_key_optional_maps():
+    data = {
+        "report_info": {"version_key": "vk1", "file_name": "a.docx"},
+        "tool_key": "web_search",
+        "nodes": [{"data": {"tool_key": "tool_type_1_abc"}}],
+    }
+    out, report = rewrite_flow_data(
+        data,
+        {
+            "report_version_key": {"vk1": "vk-new"},
+            "tool_key": {"tool_type_1_abc": "tool_type_9_abc"},
+        },
+    )
+    assert out["report_info"]["version_key"] == "vk-new"
+    assert out["tool_key"] == "web_search"
+    assert out["nodes"][0]["data"]["tool_key"] == "tool_type_9_abc"
+    assert report.missing == []

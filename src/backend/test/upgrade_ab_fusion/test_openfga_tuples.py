@@ -51,3 +51,4 @@ def test_write_body_shape():
     )
     assert body["authorization_model_id"] == "model-1"
     assert body["writes"]["tuple_keys"][0]["relation"] == "owner"
+    assert body["writes"]["on_duplicate"] == "ignore"

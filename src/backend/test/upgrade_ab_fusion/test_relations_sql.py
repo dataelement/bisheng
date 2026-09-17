@@ -25,5 +25,6 @@ def test_share_link_has_token_and_mode():
     assert "share_token" in sql
     assert "share_mode" in sql
     assert "INSERT INTO share_link" in sql
+    assert "access_count" in sql
     assert "old" in sql
     assert "aabb" in sql

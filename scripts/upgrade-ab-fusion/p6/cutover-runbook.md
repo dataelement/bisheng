@@ -9,8 +9,8 @@ B 业务已按批次 INSERT 进 A, 且 `p5/40-verify.sh` 通过之后.
    已映射行 skip INSERT; 新行补插; B 删除走本批 dst DELETE (不把整批标成 rolled_back);
    UPDATE 只打本批 type=0/1, 禁止碰 A 原空间.
 5. `APPLY=1 bash p5/20-copy-minio.sh` 与 `p5/22-copy-vectors.sh` 补新对象/向量.
-6. `bash p5/40-verify.sh`. A 原空间计数不得下降.
-7. `bash p5/50-retrieve-gold.sh` 检索金标 (只读). 不达标不要切流量.
+6. `VERIFY_STORAGE=1 bash p5/40-verify.sh`. A 原空间元数据不得变; 本批悬挂 FK=0; MinIO 抽样 + 金标不达标即停.
+7. 金标已含在上一步. 若单独重跑: `bash p5/50-retrieve-gold.sh`.
 8. `APPLY=0 bash p5/36-publish-flows.sh` 看上线门禁; `CONFIRM_PUBLISH_FLOWS=1 APPLY=1` 才改 status=2.
    端到端运行仍须人在 A UI 做.
 9. 将域名 / Gateway / 回调切到 A.
@@ -19,5 +19,5 @@ B 业务已按批次 INSERT 进 A, 且 `p5/40-verify.sh` 通过之后.
 
 回滚: 切换前可用 `p5/90-rollback.sh` 按批次删 B 来源对象. 切换后 A 已有新写入则不要整站切回 B.
 
-水位表 (只读 B, 无业务 DDL): `knowledge`(type 0/1) `knowledgefile` `qaknowledge` `flow` `flowversion` `assistant` `message_session` `chatmessage` `review_tag` `review_tag_link` `groupresource` `t_report` `roleaccess`.
+水位表 (只读 B, 无业务 DDL): `knowledge`(type 0/1) `knowledgefile` `qaknowledge` `flow` `flowversion` `assistant` `message_session` `chatmessage` `review_tag` `review_tag_link` `groupresource` `t_report` `roleaccess` `auditlog`.
 增量写 A 对应 dest (经 fusion_map), 以及 `fusion_exception`. 不写 A `knowledge.type=3`.

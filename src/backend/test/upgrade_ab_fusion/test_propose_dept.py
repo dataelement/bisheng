@@ -31,3 +31,18 @@ def test_missing_external_id_as_group():
         [{"id": "88", "name": "本地组", "external_id": ""}],
     )
     assert result["map"][0]["action"] == "as_group"
+
+
+def test_tsv_null_literal_as_group_not_conflict():
+    result = propose(
+        [
+            {"id": "118", "name": "A根", "external_id": "NULL"},
+            {"id": "119", "name": "A访客", "external_id": "NULL"},
+        ],
+        [
+            {"id": "1", "name": "默认组织", "external_id": "NULL"},
+            {"id": "2", "name": "临时访客", "external_id": "NULL"},
+        ],
+    )
+    assert result["conflict"] == []
+    assert all(row["action"] == "as_group" for row in result["map"])
