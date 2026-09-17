@@ -24,7 +24,7 @@ from __future__ import annotations
 #: Independent of the platform's version on purpose (design D6 / decision 6):
 #: an application's dependency list pins this, and a platform upgrade must not
 #: invalidate every deployed application.
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from bisheng_sdk import auth, retrieve, storage
 

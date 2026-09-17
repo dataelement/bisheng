@@ -107,7 +107,7 @@ def test_storage_never_exposes_a_url_or_bucket():
 
 
 def test_version_declared_once():
-    assert bisheng_sdk.__version__ == "0.1.0"
+    assert bisheng_sdk.__version__ == "0.1.1"
     hits = [source.name for source in SOURCES if '__version__ = "' in source.read_text(encoding="utf-8")]
     assert hits == ["__init__.py"]
 

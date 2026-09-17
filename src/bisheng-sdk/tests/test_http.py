@@ -102,14 +102,27 @@ def test_timeouts_are_tiered():
     assert _http.timeout_for("retrieve").connect == _http.CONNECT_TIMEOUT
 
 
-def test_trust_env_is_off_unless_explicitly_enabled(monkeypatch: pytest.MonkeyPatch):
+def test_proxy_variables_are_ignored_locally_by_default():
+    """开发机上的公网代理会劫持内网平台地址，本地不读。"""
     assert _env.trust_env() is False
-    client = _http.client("http://platform.test", "retrieve")
-    assert client.trust_env is False
+    assert _http.client("http://platform.test", "retrieve").trust_env is False
 
-    _http.reset_clients()
+
+def test_proxy_variables_can_be_enabled_explicitly(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("BISHENG_SDK_TRUST_ENV", "1")
     assert _http.client("http://platform.test", "retrieve").trust_env is True
+
+
+def test_a_hosted_container_with_an_egress_credential_goes_through_the_proxy(monkeypatch: pytest.MonkeyPatch):
+    """托管容器在 `--internal` 网上，平台 API 只能经注入的出站代理到达。
+
+    曾经默认不读代理变量：出站白名单一开、应用网改成 internal，`retrieve` 直连平台
+    只得到「网络不可达」。
+    """
+    monkeypatch.setenv("BISHENG_APP_EGRESS_TOKEN", "t" * 43)
+    assert _env.trust_env() is True
+    assert _http.client("http://platform.test", "retrieve").trust_env is True
+    assert _http.client("http://runtime-manager:8091", "storage").trust_env is True
 
 
 def test_clients_are_pooled_per_base_url_and_kind():

@@ -5,6 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
+import bisheng_sdk
 from bisheng_sdk import _compat, auth
 from bisheng_sdk.errors import PlatformTooOldError, PlatformUnreachableError, SdkIncompatibleError
 from tests.helpers import platform_mock as pm
@@ -28,7 +29,7 @@ def test_incompatible_names_both_versions_and_the_remedy(mock_transport, platfor
     with pytest.raises(SdkIncompatibleError) as caught:
         _compat.ensure_compatible(platform_env)
     rendered = str(caught.value)
-    assert "0.3.0" in rendered and "0.1.0" in rendered and "3.0.0" in rendered
+    assert "0.3.0" in rendered and bisheng_sdk.__version__ in rendered and "3.0.0" in rendered
     assert "重新获取" in rendered
 
 

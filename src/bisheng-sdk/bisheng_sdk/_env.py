@@ -31,8 +31,12 @@ ENV_STORAGE_MAX_FILE_MB = "BISHENG_APP_STORAGE_MAX_FILE_MB"
 #: 本地期目录句柄（`bisheng dev` 注入；值 = `<项目根>/.bisheng/attachments/`）。
 ENV_STORAGE_DIR = "BISHENG_APP_STORAGE_DIR"
 
-#: 显式打开 httpx 的代理环境变量读取（默认关，design D11）。
+#: 显式打开 httpx 的代理环境变量读取（本地默认关，design D11）。
 ENV_TRUST_ENV = "BISHENG_SDK_TRUST_ENV"
+
+#: 平台出站代理的凭据（runtime-manager `egress.ENV_EGRESS_TOKEN`，开了出站白名单才注入）。
+#: SDK **只看它在不在**，不取值：在 = 身处托管容器，唯一出口是注入的 `HTTP(S)_PROXY`。
+ENV_EGRESS_TOKEN = "BISHENG_APP_EGRESS_TOKEN"
 
 #: 应用标识，只用于错误文案（真正定位应用的是注入的句柄与凭据）。
 ENV_APP_ID = "BISHENG_APP_ID"
@@ -90,7 +94,19 @@ def storage_max_file_bytes() -> int | None:
 
 
 def trust_env() -> bool:
-    return (os.environ.get(ENV_TRUST_ENV) or "").strip() == "1"
+    """httpx 是否读代理环境变量（design D11）。
+
+    托管容器挂在 `--internal` 网上，除了网关没有任何路由：平台 API 只能经平台注入的
+    出站代理到达（平台地址在代理白名单里恒放行）。所以**有出站凭据就必须读**，否则
+    `retrieve` 直连平台只会得到「网络不可达」。附件句柄的地址在注入的 `NO_PROXY` 里，
+    读了代理变量也照旧直连。
+
+    本地没有这个凭据（`bisheng dev` 不注入），仍默认不读——开发机上的公网代理会劫持
+    内网平台地址；确实需要时用 `BISHENG_SDK_TRUST_ENV=1` 显式打开。
+    """
+    if (os.environ.get(ENV_TRUST_ENV) or "").strip() == "1":
+        return True
+    return bool((os.environ.get(ENV_EGRESS_TOKEN) or "").strip())
 
 
 def app_id() -> str:

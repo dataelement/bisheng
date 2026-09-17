@@ -1,6 +1,6 @@
 [project]
 name = "bisheng-sdk"
-version = "0.1.0"
+version = "0.1.1"
 description = "BiSheng application SDK — auth / retrieve / storage for hosted apps, zero coupling to the backend package"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }

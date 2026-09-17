@@ -22,6 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 APP_PROXY_HEADERS = REPO_ROOT / "src" / "app-proxy" / "app_proxy" / "headers.py"
 MANAGER_STORAGE = REPO_ROOT / "src" / "runtime-manager" / "runtime_manager" / "storage.py"
 MANAGER_STORAGE_API = REPO_ROOT / "src" / "runtime-manager" / "runtime_manager" / "api" / "storage.py"
+MANAGER_EGRESS = REPO_ROOT / "src" / "runtime-manager" / "runtime_manager" / "egress.py"
 BACKEND_FILELIB = REPO_ROOT / "src" / "backend" / "bisheng" / "open_endpoints" / "api" / "endpoints" / "filelib.py"
 BACKEND_MODEL_RANGE = (
     REPO_ROOT / "src" / "backend" / "bisheng" / "open_api" / "domain" / "services" / "model_range_policy.py"
@@ -77,6 +78,14 @@ def test_storage_env_names_match_the_manager():
         match = re.search(rf'^{constant} = "([^"]+)"', text, re.MULTILINE)
         assert match, f"manager 里没有 {constant}"
         assert match.group(1) == ours
+
+
+def test_egress_token_env_name_matches_the_manager():
+    """SDK 凭它在不在判断要不要走出站代理；manager 改名而这里不跟，托管期平台调用就全断。"""
+    text = _source(MANAGER_EGRESS)
+    match = re.search(r'^ENV_EGRESS_TOKEN = "([^"]+)"', text, re.MULTILINE)
+    assert match, "runtime-manager egress.py 里没有 ENV_EGRESS_TOKEN"
+    assert match.group(1) == _env.ENV_EGRESS_TOKEN
 
 
 def test_platform_env_names_are_in_the_runtime_contract():

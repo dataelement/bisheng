@@ -496,6 +496,59 @@ async def test_absolute_form_http_is_forwarded_without_the_proxy_credential(egre
         await upstream.wait_closed()
 
 
+async def test_a_real_http_client_posts_a_json_body_through_the_proxy(egress_config: Config, running_proxy):
+    """The SDK's platform calls on a plain ``http://`` base, as httpx really sends them.
+
+    Hosted apps sit on an ``--internal`` network, so ``bisheng_sdk.retrieve`` reaches
+    the platform only through here: absolute-form, a JSON body, credentials in the
+    proxy URL, several calls from one pooled client. The upstream echoes
+    ``Connection: close`` the way uvicorn and nginx do, which is what lets the
+    client's pool discard each connection the proxy is about to close.
+    """
+    import httpx
+
+    _proxy, port = running_proxy
+    seen: list[tuple[bytes, bytes]] = []
+
+    async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        head = await reader.readuntil(b"\r\n\r\n")
+        length = next(
+            int(line.split(b":", 1)[1]) for line in head.split(b"\r\n") if line.lower().startswith(b"content-length:")
+        )
+        body = await reader.readexactly(length)
+        seen.append((head, body))
+        writer.write(
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n"
+            + f"Content-Length: {len(body)}\r\n\r\n".encode()
+            + body
+        )
+        await writer.drain()
+        writer.close()
+
+    upstream = await asyncio.start_server(handle, "127.0.0.1", 0)
+    upstream_port = upstream.sockets[0].getsockname()[1]
+    token = register_principal(
+        egress_config, principal="app-1", destinations=(Destination("127.0.0.1", (upstream_port,), trusted=True),)
+    )
+    try:
+        async with httpx.AsyncClient(proxy=f"http://app-1:{token}@127.0.0.1:{port}", trust_env=False) as client:
+            for query in ("年假怎么休", "报销流程"):
+                response = await client.post(
+                    f"http://127.0.0.1:{upstream_port}/api/v2/filelib/retrieve",
+                    json={"query": query, "top_k": 3},
+                    timeout=5,
+                )
+                assert response.status_code == 200
+                assert response.json() == {"query": query, "top_k": 3}
+        assert len(seen) == 2
+        for head, _body in seen:
+            assert head.startswith(b"POST /api/v2/filelib/retrieve HTTP/1.1")
+            assert b"proxy-authorization" not in head.lower(), "the proxy consumes its own credential"
+    finally:
+        upstream.close()
+        await upstream.wait_closed()
+
+
 async def test_an_origin_form_request_is_not_a_proxy_request(running_proxy):
     _proxy, port = running_proxy
     head = await _talk(port, b"GET /status HTTP/1.1\r\nHost: x\r\n\r\n")

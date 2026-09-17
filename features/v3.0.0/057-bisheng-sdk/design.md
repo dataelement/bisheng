@@ -180,10 +180,10 @@
 - **原因**：httpx 天然双形态，代价只是薄薄一层包装；单测对两条路径跑同一组用例（参数化）。
 - **何时该重新考虑**：无。
 
-### D11：HTTP 客户端策略 = 进程内按 base URL 复用连接池、`trust_env=False`、分档超时、**零重试**
+### D11：HTTP 客户端策略 = 进程内按 base URL 复用连接池、代理变量**仅托管期读**、分档超时、**零重试**
 
-- **落地**：`_http.py` 持 `dict[base_url, httpx.Client]`（线程安全的懒建）；超时 connect 5 s、retrieve 读 30 s、storage 读 / 写 120 s；`trust_env=False`（默认不读 `HTTP_PROXY` 等——托管容器里代理变量会把平台调用送进被封的出站，开发机上公网代理会劫持内网地址，F053 坑 2 的同型；`BISHENG_SDK_TRUST_ENV=1` 可显式打开）；**不重试**：PUT 非幂等，且 AC-16 明令「不本地重试成更小范围」——重试是应用的决定。
-- **何时该重新考虑**：附件上传出现真实丢包 → 由 F054 在附件 API 上做分片 + 幂等键，SDK 再加可控重试。
+- **落地**：`_http.py` 持 `dict[base_url, httpx.Client]`（线程安全的懒建）；超时 connect 5 s、retrieve 读 30 s、storage 读 / 写 120 s；`trust_env` = 注入了 `BISHENG_APP_EGRESS_TOKEN`（托管期）**或** `BISHENG_SDK_TRUST_ENV=1`，否则 `False`——本地不读，开发机上公网代理会劫持内网地址（F053 坑 2 的同型）；托管期必须读：F054 T077 起托管应用挂在 `--internal` 网上，除网关外没有路由，平台 API 唯一的路是注入的出站代理（平台地址在代理白名单里恒为 trusted，contracts-runtime-manager.md §9 第 4、5 条），附件句柄地址在注入的 `NO_PROXY` 里、照旧直连。**2026-09-17 修订**：原定「一律 `trust_env=False`」的理由是「托管容器里代理变量会把平台调用送进被封的出站」，与 T077 落地的白名单不符；114 把应用网改成 internal 后实测直连平台 = `Network is unreachable`，`retrieve` 与版本探测必挂。判据选出站凭据，是因为它只由 runtime-manager 在开层时注入、`bisheng dev` 从不设，本地行为因此不变；SDK 只判存在、不取值；**不重试**：PUT 非幂等，且 AC-16 明令「不本地重试成更小范围」——重试是应用的决定。
+- **何时该重新考虑**：附件上传出现真实丢包 → 由 F054 在附件 API 上做分片 + 幂等键，SDK 再加可控重试；runtime-manager 改了出站凭据的变量名 → 同步 `_env.ENV_EGRESS_TOKEN`（`test_contract_alignment.py::test_egress_token_env_name_matches_the_manager` 钉住）；出站代理不再对平台地址放行、或平台 API 改由应用网内直达 → 判据要跟着改。
 
 ### D12：指南与技能包同源一份 = `bisheng/dev_toolkit/skills/platform-wiring/SKILL.md`（**F053 已建，本 Feature 做增量**）；开发者指南端点直接吐它；README 只做入口
 
@@ -291,7 +291,8 @@ runtime-manager 构建：pip install --index-url $PIP_INDEX_URL --extra-index-ur
 | `BISHENG_APP_STORAGE_ENDPOINT` · `BISHENG_APP_STORAGE_TOKEN` · `BISHENG_APP_STORAGE_MAX_FILE_MB` | **F054 T085 ✅**（`wt/storage-handle`：`lifecycle.py:build_env` → `storage.storage_env`；backend 副本 `app_runtime/domain/constants.py:APP_STORAGE_ENV_NAMES`） | 托管期附件 HTTP 句柄（④）；`_MAX_FILE_MB` 用于发送前预判 |
 | `BISHENG_APP_STORAGE_DIR` | **F053 T043 的增补项**（本文定名；`wt/cli-dev` 的 `dev` **尚未注入**，坑 34 / §6.2 契约 ⑦） | 本地期目录句柄（D8） |
 | `BISHENG_APP_STORAGE_MAX_FILE_MB`（本地） | 可选（F053 `dev` 可注入，与线上同名） | 本地期单文件上限；不注入 = 不限（坑 23） |
-| `BISHENG_SDK_TRUST_ENV` | 开发者 | `=1` 时 httpx 读代理环境变量（D11） |
+| `BISHENG_SDK_TRUST_ENV` | 开发者 | `=1` 时 httpx 读代理环境变量（D11；本地用，托管期不需要） |
+| `BISHENG_APP_EGRESS_TOKEN` | F054 T077（`runtime_manager/egress.py::egress_env`，仅开了出站白名单时注入） | **只判存在**：在 = 托管期，httpx 读注入的 `HTTP(S)_PROXY` / `NO_PROXY`（D11）；值不读、不外传 |
 
 SDK 读 `BISHENG_APP_TOKEN`（**只**作 retrieve 的 `Authorization: Bearer`，即「哪个应用」那一把，F055 契约），**不读** `BISHENG_API_KEY` 或任何其它密钥类变量；访问者凭据永不从环境变量取（CON-3；tests 以源码 grep 断言）。
 
