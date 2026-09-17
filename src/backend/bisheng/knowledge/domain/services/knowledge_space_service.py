@@ -4538,12 +4538,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
                 log_perf_stage("department_binding")
             except Exception as e:
-                if level == KnowledgeSpaceLevelEnum.DEPARTMENT:
-                    raise
-                _logger.warning(
-                    "Failed to write department_knowledge_space binding for clinic space %s: %s",
+                _logger.exception(
+                    "Failed to write department_knowledge_space binding for space %s: %s",
                     knowledge_space.id,
                     e,
+                )
+                raise
+
+            if is_clinic:
+                await self._grant_default_scope_permissions(
+                    level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+                    owner_id=int(department_id),
+                    space_id=int(knowledge_space.id),
                 )
 
         self._enqueue_default_scope_permissions(
@@ -5773,39 +5779,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         discovery_scope: str = "legacy",
     ) -> dict[str, int]:
-        visible_scopes: dict[str, set[int]] = {}
-        if discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}:
-            discovery = await self.resolve_portal_discovery(scope=discovery_scope)
-            if discovery_scope == "portal_enabled":
-                enabled_space_ids = set(discovery.discoverable_space_ids)
-                return await KnowledgeFileDao.async_count_files_by_domain_scopes(
-                    {domain.code: set(enabled_space_ids) for domain in domains}
-                )
-            full_space_ids = set(discovery.discoverable_space_ids) | set(discovery.explicitly_visible_space_ids)
-            grant_only_parent_ids = set(discovery.grant_parent_space_ids) - full_space_ids
-            visible_file_ids: dict[str, set[int]] = {}
-            for domain in domains:
-                requested_ids = {int(space_id) for space_id in domain.space_ids if int(space_id) > 0}
-                visible_scopes.setdefault(domain.code, set()).update(requested_ids & full_space_ids)
-                visible_file_ids.setdefault(domain.code, set()).update(
-                    file_id
-                    for file_id, parent_space_id in discovery.explicit_file_space_by_id.items()
-                    if parent_space_id in requested_ids and parent_space_id in grant_only_parent_ids
-                )
-            return await KnowledgeFileDao.async_count_files_by_domain_scopes(
-                visible_scopes,
-                visible_file_ids,
-            )
+        """首页与业务域列表复用相同的库存、可见性和逻辑文档去重规则。"""
+        counts: dict[str, int] = {}
         for domain in domains:
-            spaces = await self._get_shougang_portal_request_spaces(
-                requested_space_ids=domain.space_ids,
-                space_level=None,
-                discovery_scope=discovery_scope,
+            if discovery_scope != "portal_enabled" and not domain.space_ids:
+                counts[domain.code] = 0
+                continue
+            result = await self.count_shougang_portal_files(
+                ShougangPortalFileCountReq(
+                    query_type="browse",
+                    business_domain_code=domain.code,
+                    space_ids=[] if discovery_scope == "portal_enabled" else domain.space_ids,
+                    discovery_scope=discovery_scope,
+                )
             )
-            visible_scopes.setdefault(domain.code, set()).update(
-                int(space.id) for space in spaces if space.id is not None
-            )
-        return await KnowledgeFileDao.async_count_files_by_domain_scopes(visible_scopes)
+            counts[domain.code] = result["total"]
+        return counts
 
     async def count_shougang_portal_category_files(
         self,
@@ -5925,8 +5914,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "discovery_snapshot": discovery.snapshot if discovery else "",
             }
 
-        if req.query_type == "browse" and self._normalize_shougang_document_type_code(req.document_type):
-            # 分类计数复用数据库浏览的精确分类与可见性过滤。避免 LIKE 候选虚高。
+        if req.query_type == "browse" and (
+            self._normalize_shougang_document_type_code(req.document_type)
+            or self._normalize_shougang_portal_business_domain_code(req.business_domain_code)
+        ):
+            # 导航计数复用数据库浏览的精确编码与可见性过滤，避免 LIKE 候选虚高。
             browse_payload = req.model_dump(
                 exclude={
                     "retrieval_profile",
@@ -9577,9 +9569,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         tag_file_ids: list[int] | None,
         trusted_public_scope: bool = False,
     ) -> dict:
-        # 分类浏览使用业务库存。投影未完成或全文索引缺失不能隐藏已入库文件。
-        # 分类先完成精确分类和可见性筛选，再选代表入口；分页和总数共享同一结果集。
-        category_inventory = bool(self._normalize_shougang_document_type_code(req.document_type))
+        # 分类和业务域浏览使用业务库存。投影未完成或全文索引缺失不能隐藏已入库文件。
+        # 导航先完成精确编码和可见性筛选，再选代表入口；分页和总数共享同一结果集。
+        navigation_inventory = bool(
+            self._normalize_shougang_document_type_code(req.document_type)
+            or self._normalize_shougang_portal_business_domain_code(req.business_domain_code)
+        )
         from bisheng.common.cursor import CursorDecodeError, decode_cursor
 
         space_ids = [int(space.id) for space in spaces]
@@ -9599,10 +9594,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise KnowledgeInvalidCursorError(exception=exc)
 
         page_cursor = batch_cursor
-        if category_inventory:
+        if navigation_inventory:
             batch_cursor = None
         visible_files: list[KnowledgeFile] = []
-        fetch_limit = 500 if category_inventory else max(limit + 1, PORTAL_LIST_CURSOR_SCAN_BATCH_SIZE)
+        fetch_limit = 500 if navigation_inventory else max(limit + 1, PORTAL_LIST_CURSOR_SCAN_BATCH_SIZE)
         discovery = getattr(self, "_portal_discovery_result", None)
         full_space_ids: list[int] | None = None
         explicit_file_ids: list[int] | None = None
@@ -9625,7 +9620,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 order_sort=order_sort,
                 cursor=batch_cursor,
                 limit=fetch_limit,
-                **({"deduplicate_documents": False} if category_inventory else {}),
+                **({"deduplicate_documents": False} if navigation_inventory else {}),
             )
             if not raw_files:
                 break
@@ -9652,10 +9647,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     if int(file.id) not in visible_ids:
                         continue
                     visible_files.append(file)
-                    if not category_inventory and len(visible_files) > limit:
+                    if not navigation_inventory and len(visible_files) > limit:
                         break
 
-            if not category_inventory and len(visible_files) > limit:
+            if not navigation_inventory and len(visible_files) > limit:
                 break
 
             last_db_file = raw_files[-1]
@@ -9664,7 +9659,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 break
 
         total = None
-        if category_inventory:
+        if navigation_inventory:
             space_priority = {space_id: index for index, space_id in enumerate(space_ids)}
             entry_priority = {None: 0, "manager": 0, "publish": 1, "share": 2}
 
@@ -9706,7 +9701,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             item_id = int(item.get("id") or 0)
             item["folder_path"] = folder_path_map.get(item_id, "")
             item["source_path"] = source_path_map.get(item_id, "")
-            if category_inventory or self._is_shougang_portal_file_item(
+            if navigation_inventory or self._is_shougang_portal_file_item(
                 item,
                 req.file_ext,
                 req.document_type,
@@ -12343,6 +12338,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         old_department = None
         clinic_binding = None
         is_clinic_rebind = False
+        # 普通编辑保存也补齐当前科室的默认授权, 不要求调用方重复提交组织字段。
+        if department_id is None and self.department_space_binding_repo is not None:
+            current_bindings = await self.department_space_binding_repo.find_by_space_ids([space_id])
+            current_binding = next(iter(current_bindings), None)
+            if current_binding is not None:
+                current_scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+                if (
+                    current_scope is not None
+                    and current_scope.owner_type == KnowledgeSpaceOwnerTypeEnum.USER
+                    and KnowledgeSpaceLevelEnum.is_team_level(current_scope.level)
+                ):
+                    department_id = int(current_binding.department_id)
         if department_id is not None:
             rebind_scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
             is_department_space = (
@@ -12386,6 +12393,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 # the binding department can be changed by admins or department
                 # admins within their visible scope.
                 is_clinic_rebind = True
+                if self.department_space_binding_repo is None:
+                    raise RuntimeError("DepartmentSpaceBindingRepository is not configured")
                 old_department_id = int(clinic_binding.department_id)
                 if int(department_id) != old_department_id and not await self._can_bind_clinic_department(
                     int(department_id)
@@ -12467,6 +12476,35 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             space.auto_tag_enabled = resolved_enabled
 
+        if is_clinic_rebind:
+            from bisheng.knowledge.domain.services.clinic_space_binding_service import update_clinic_space_binding
+
+            old_discovery = bool(discovery_scope.portal_discovery_enabled) if discovery_scope is not None else False
+            audit_space = space.model_copy()
+            try:
+                await update_clinic_space_binding(
+                    repository=self.department_space_binding_repo,
+                    space=space,
+                    old_department_id=int(clinic_binding.department_id),
+                    department_id=int(department_id),
+                    portal_discovery_enabled=portal_discovery_enabled,
+                )
+            except Exception as exc:
+                if portal_discovery_enabled is not None:
+                    await self._write_portal_discovery_audit(
+                        space=audit_space, old_value=old_discovery, new_value=bool(portal_discovery_enabled),
+                        result="failed", error_type=type(exc).__name__,
+                    )
+                raise
+            if portal_discovery_enabled is not None:
+                await self._write_portal_discovery_audit(
+                    space=space, old_value=old_discovery, new_value=bool(portal_discovery_enabled), result="success",
+                )
+            await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
+            if name_changed:
+                await self._sync_approval_space_names_after_rename(space)
+            return space
+
         prepared_portal_rebind_plan = None
         if portal_discovery_enabled is not None and department_id is not None and not is_clinic_rebind:
             prepared_portal_rebind_plan = await self._prepare_department_rebind_for_update(
@@ -12479,10 +12517,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         if portal_discovery_enabled is not None and discovery_scope is not None:
             old_value = bool(discovery_scope.portal_discovery_enabled)
-            atomic_clinic_binding = None
-            if is_clinic_rebind and int(clinic_binding.department_id) != int(department_id):
-                clinic_binding.department_id = int(department_id)
-                atomic_clinic_binding = clinic_binding
             try:
                 if prepared_portal_rebind_plan is not None:
                     updated_scope = await self.knowledge_space_scope_repo.stage_space_and_portal_discovery(
@@ -12494,7 +12528,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     updated_scope = await self.knowledge_space_scope_repo.update_space_and_portal_discovery(
                         space=space,
                         enabled=portal_discovery_enabled,
-                        department_binding=atomic_clinic_binding,
+                        department_binding=None,
                     )
             except Exception as exc:
                 if prepared_portal_rebind_plan is not None:
@@ -12516,17 +12550,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             space = await KnowledgeDao.async_update_space(space)
         if department_id is not None:
-            if is_clinic_rebind:
-                # Clinic spaces only need the department_knowledge_space binding updated;
-                # the scope remains TEAM_KS/USER (or legacy TEAM/USER).
-                if portal_discovery_enabled is None and int(clinic_binding.department_id) != int(department_id):
-                    clinic_binding.department_id = int(department_id)
-                    await DepartmentKnowledgeSpaceDao.aupdate(clinic_binding)
-                await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
-                if name_changed:
-                    await self._sync_approval_space_names_after_rename(space)
-                return space
-
             if prepared_portal_rebind_plan is None:
                 plan = await self._prepare_department_rebind_for_update(
                     space=space,
@@ -13076,6 +13099,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_id_list,
             file_name=keyword.strip() if keyword else None,
             status=[KnowledgeFileStatus.SUCCESS.value],
+            active_inventory_only=True,
         )
         # Only keep actual files (not folders)
         files = [f for f in files if int(f.file_type) != FileType.DIR.value]

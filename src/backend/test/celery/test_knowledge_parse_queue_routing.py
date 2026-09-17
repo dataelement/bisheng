@@ -52,6 +52,7 @@ def test_production_parse_queue_whitelist_contains_parse_lifecycles_and_fulltext
         "bisheng.worker.knowledge.file_worker.parse_knowledge_file_celery",
         "bisheng.worker.knowledge.file_worker.retry_knowledge_file_celery",
         "bisheng.worker.knowledge.fulltext_index.repair_source",
+        "bisheng.worker.knowledge.fulltext_reconcile.reparse_file",
     }
     assert KNOWLEDGE_PARSE_COMPAT_TASKS == {
         "bisheng.worker.knowledge.file_title_worker.extract_knowledge_file_title_celery",

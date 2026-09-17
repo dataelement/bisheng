@@ -89,8 +89,8 @@ describe("PortalInfoDrawer original origin", () => {
         (entryType) => {
             renderSourceDrawer(entryType);
 
-            expect(screen.getByText("原始上传人")).toBeInTheDocument();
-            expect(screen.getByText("最初上传人张三")).toBeInTheDocument();
+            expect(screen.queryByText("原始上传人")).not.toBeInTheDocument();
+            expect(screen.queryByText("最初上传人张三")).not.toBeInTheDocument();
             expect(screen.getByText("原始上传知识库")).toBeInTheDocument();
             expect(screen.getByText("最初个人知识库")).toBeInTheDocument();
         },

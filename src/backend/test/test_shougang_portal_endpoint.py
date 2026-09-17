@@ -138,7 +138,7 @@ class _FakeKnowledgeSpaceService:
             "expire_seconds": req.expire_seconds,
         }
 
-    async def get_shougang_portal_share_link_meta(self, share_token):
+    async def get_shougang_portal_share_link_meta(self, share_token, *, for_anonymous_portal=False):
         return {
             "share_token": share_token,
             "file_name": "热轧1580产线精轧机振动纹治理实践.pdf",
@@ -255,6 +255,7 @@ def _load_shougang_portal_endpoint(monkeypatch: pytest.MonkeyPatch):
         return None
 
     dependencies_module.get_knowledge_space_service = _get_knowledge_space_service
+    dependencies_module.get_knowledge_space_chat_service = _get_knowledge_space_service
     dependencies_module.get_portal_pdf_download_service = _get_portal_pdf_download_service
     monkeypatch.setitem(sys.modules, 'bisheng.knowledge.api.dependencies', dependencies_module)
     return importlib.import_module('bisheng.knowledge.api.endpoints.shougang_portal')

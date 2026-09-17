@@ -1206,6 +1206,8 @@ class KnowledgeFileDao(KnowledgeFileBase):
         order_field: str = None,
         order_sort: str = "desc",
         match_file_encoding: bool = False,
+        *,
+        active_inventory_only: bool = False,
     ) -> list[KnowledgeFile]:
         unique_knowledge_ids = list(dict.fromkeys(int(knowledge_id) for knowledge_id in knowledge_ids if knowledge_id))
         if not unique_knowledge_ids:
@@ -1215,6 +1217,8 @@ class KnowledgeFileDao(KnowledgeFileBase):
             KnowledgeFile.file_type == FileType.FILE.value,
             col(KnowledgeFile.deleted_at).is_(None),
         )
+        if active_inventory_only:
+            statement = statement.where(cls.active_inventory_predicate())
         statement = cls._build_file_filters_statement(
             statement,
             file_name,

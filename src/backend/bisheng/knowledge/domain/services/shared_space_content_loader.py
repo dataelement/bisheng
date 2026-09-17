@@ -18,6 +18,9 @@ async def load_shared_content_from_original(file: KnowledgeFile):
             invoke_user_id=file.user_id, db_file=file, no_summary=True, vector_store=[],
         )
         documents = pipeline.run(PipelineConfig(stop_at=PipelineStage.TRANSFORMER)).documents
+        # 重建不重新生成摘要，但必须保留数据库中已经保存的摘要。
+        for document in documents:
+            document.metadata["abstract"] = file.abstract
         embeddings = LLMService.get_bisheng_knowledge_embedding_sync(
             invoke_user_id=file.user_id, model_id=route.embedding_model_id,
         )

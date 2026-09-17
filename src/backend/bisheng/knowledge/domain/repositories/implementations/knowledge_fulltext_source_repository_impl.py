@@ -52,6 +52,11 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
             return await self.session.execute(statement)
 
     async def get_current_snapshot(self, file_id: int) -> KnowledgeFulltextFileSnapshot | None:
+        statement = self._snapshot_statement().where(KnowledgeFile.id == file_id)
+        row = (await self._execute(statement)).first()
+        return await self._snapshot_from_row(row) if row is not None else None
+
+    def _snapshot_statement(self):
         original_knowledge = aliased(Knowledge)
         version_document = aliased(KnowledgeDocument)
         statement = (
@@ -91,11 +96,10 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
                 version_document,
                 version_document.id == KnowledgeDocumentVersion.document_id,
             )
-            .where(KnowledgeFile.id == file_id)
         )
-        row = (await self._execute(statement)).first()
-        if row is None:
-            return None
+        return statement
+
+    async def _snapshot_from_row(self, row) -> KnowledgeFulltextFileSnapshot:
         (
             file,
             knowledge,
@@ -106,7 +110,7 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
             original_knowledge_name,
         ) = row
         document = referenced_document if referenced_document is not None else owning_document
-        tags = await self._load_tags(file_id)
+        tags = await self._load_tags(int(file.id))
         original_uploader_name = await self._load_user_name(file.original_uploader_id)
         document_category_code = get_file_category_code_from_file(file)
         business_domain_code = get_business_domain_code_from_file(file)

@@ -10,16 +10,33 @@ import pytest
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalCategoryFileCountItem,
+    ShougangPortalDomainFileCountItem,
     ShougangPortalFileBrowseReq,
     ShougangPortalFileCountReq,
 )
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
 
+@pytest.mark.parametrize("navigation_kind", ["category", "domain"])
 @pytest.mark.parametrize("page_size,sort", [(1, "updated_at_desc"), (2, "updated_at_asc"), (100, "updated_at_desc")])
 async def test_category_inventory_is_independent_of_projection_and_fulltext(
-    async_db_session, monkeypatch, page_size, sort
+    async_db_session, monkeypatch, page_size, sort, navigation_kind
 ):
+    inventory_filter = {"document_type": "NEW"} if navigation_kind == "category" else {"business_domain_code": "PP"}
+
+    async def navigation_counts(service, *, scope="portal_enabled", space_ids=None):
+        if navigation_kind == "category":
+            return (
+                await service.count_shougang_portal_category_files(
+                    [ShougangPortalCategoryFileCountItem(code="NEW", space_ids=space_ids or [])], discovery_scope=scope
+                )
+            )["NEW"]
+        return (
+            await service.count_shougang_portal_domain_files(
+                [ShougangPortalDomainFileCountItem(code="PP", space_ids=space_ids or [])], discovery_scope=scope
+            )
+        )["PP"]
+
     async def insert(file_id, *, space_id=10, document_id=None, **overrides):
         payload = {
             "id": file_id,
@@ -27,7 +44,7 @@ async def test_category_inventory_is_independent_of_projection_and_fulltext(
             "user_id": 1,
             "user_name": "tester",
             "file_name": f"{file_id}.pdf",
-            "file_encoding": f"SGGF-NEW-PP-{file_id:06d}",
+            "file_encoding": f"SGGF-NEW-PP-202609-{file_id:06d}",
             "file_subcategory_code": "NEW-A",
             "file_type": 1,
             "status": 2,
@@ -48,10 +65,14 @@ async def test_category_inventory_is_independent_of_projection_and_fulltext(
     await insert(7, entry_status="invalid")
     await insert(8, status=3)
     await insert(9, file_type=0)
-    await insert(10, file_encoding="SGGF-POL-PP-000010")
+    await insert(10, file_encoding="SGGF-POL-PM-000010")
     await insert(11, space_id=30)
     # 高优先级入口只是 LIKE 命中；精确分类不符时应选择另一个合格入口。
-    await insert(12, document_id=1005, file_encoding="SG-NEW-POL-PP-000012")
+    await insert(
+        12,
+        document_id=1005,
+        file_encoding="SG-NEW-POL-PP-000012" if navigation_kind == "category" else "SG-PP-NEW-PM-000012",
+    )
     await insert(13, space_id=20, document_id=1005, entry_type="share")
     # 可见性过滤也必须先于去重，否则被拒绝的管理入口会遮住可见发布入口。
     await insert(14, document_id=1006)
@@ -101,7 +122,7 @@ async def test_category_inventory_is_independent_of_projection_and_fulltext(
     for _ in range(10):
         page = await service.browse_shougang_portal_files(
             ShougangPortalFileBrowseReq(
-                document_type="NEW", discovery_scope="portal_enabled", limit=page_size, cursor=cursor, sort=sort
+                **inventory_filter, discovery_scope="portal_enabled", limit=page_size, cursor=cursor, sort=sort
             )
         )
         assert len(page["data"]) <= page_size
@@ -121,13 +142,11 @@ async def test_category_inventory_is_independent_of_projection_and_fulltext(
     assert by_id[1]["projection_ready"] is False
     assert by_id[4]["projection_ready"] is True
 
-    navigation = await service.count_shougang_portal_category_files(
-        [ShougangPortalCategoryFileCountItem(code="NEW")], discovery_scope="portal_enabled"
-    )
+    navigation = await navigation_counts(service)
     total = await service.count_shougang_portal_files(
-        ShougangPortalFileCountReq(query_type="browse", document_type="NEW", discovery_scope="portal_enabled")
+        ShougangPortalFileCountReq(query_type="browse", **inventory_filter, discovery_scope="portal_enabled")
     )
-    assert navigation["NEW"] == total["total"] == len(listed) == 7
+    assert navigation == total["total"] == len(listed) == 7
     service.advanced_search_shougang_portal_files.assert_not_awaited()
 
     # 双标签在选代表入口前取交集，列表与专用计数也使用这组条件。
@@ -135,7 +154,7 @@ async def test_category_inventory_is_independent_of_projection_and_fulltext(
         return {"标签一": [1, 12, 13], "标签二": [5, 13]}.get(tag)
 
     service._get_shougang_portal_tag_file_ids = tag_ids
-    filtered_req = dict(document_type="NEW", discovery_scope="portal_enabled", tag="标签一", filter_tag="标签二")
+    filtered_req = dict(**inventory_filter, discovery_scope="portal_enabled", tag="标签一", filter_tag="标签二")
     filtered_page = await service.browse_shougang_portal_files(ShougangPortalFileBrowseReq(**filtered_req))
     filtered_count = await service.count_shougang_portal_files(ShougangPortalFileCountReq(**filtered_req))
     assert [item["id"] for item in filtered_page["data"]] == [13]
@@ -153,11 +172,8 @@ async def test_category_inventory_is_independent_of_projection_and_fulltext(
 
     service._filter_shougang_portal_visible_files = configured_visible
     configured_page = await service.browse_shougang_portal_files(
-        ShougangPortalFileBrowseReq(document_type="NEW", discovery_scope="portal_configured", limit=100)
+        ShougangPortalFileBrowseReq(**inventory_filter, discovery_scope="portal_configured", limit=100)
     )
-    configured_counts = await service.count_shougang_portal_category_files(
-        [ShougangPortalCategoryFileCountItem(code="NEW", space_ids=[10, 20])],
-        discovery_scope="portal_configured",
-    )
+    configured_counts = await navigation_counts(service, scope="portal_configured", space_ids=[10, 20])
     assert {item["id"] for item in configured_page["data"]} == {1, 2, 3, 4, 13, 15}
-    assert configured_page["total"] == configured_counts["NEW"] == 6
+    assert configured_page["total"] == configured_counts == 6

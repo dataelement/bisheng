@@ -273,6 +273,11 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.permission.department_transfer_cleanup.scan_due_events",
                 "schedule": 30.0,
             }
+        if "fanout_shared_storage_reconcile" not in self.beat_schedule:
+            self.beat_schedule["fanout_shared_storage_reconcile"] = {
+                "task": "bisheng.worker.knowledge.shared_storage_reconcile.fanout_shared_storage_reconcile",
+                "schedule": crontab(hour=2, minute=0),
+            }
         if "fanout_document_projection_scan" not in self.beat_schedule:
             self.beat_schedule["fanout_document_projection_scan"] = {
                 "task": (

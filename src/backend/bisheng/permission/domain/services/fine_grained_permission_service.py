@@ -163,6 +163,33 @@ class FineGrainedPermissionService:
         )
 
     @classmethod
+    async def get_explicitly_bound_tuple_users(
+        cls,
+        *,
+        object_type: str,
+        object_id: str | int,
+        relation: str,
+        tuple_users: set[str],
+    ) -> set[str]:
+        """找出受手工授权保护的组织元组, 包含上级组织对子树的授权。"""
+        bindings = [
+            binding for binding in await _get_bindings()
+            if binding.get('resource_type') == object_type
+            and str(binding.get('resource_id')) == str(object_id)
+            and binding.get('relation') == relation
+        ]
+        if not bindings:
+            return set()
+        paths = await cls.get_binding_department_paths(bindings)
+        tuple_paths: dict[int, str] = {}
+        return {
+            user for user in tuple_users
+            if await cls._resolve_binding_for_tuple(
+                object_type, object_id, user, relation, bindings, paths, tuple_paths,
+            ) is not None
+        }
+
+    @classmethod
     async def filter_object_ids_by_explicit_binding_async(
         cls,
         login_user: UserPayload,

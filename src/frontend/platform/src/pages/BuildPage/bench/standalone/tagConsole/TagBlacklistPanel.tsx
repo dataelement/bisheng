@@ -6,6 +6,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast"
 import {
     addTagBlacklistApi,
     deleteTagBlacklistApi,
+    previewTagBlacklistApi,
     searchTagBlacklistApi,
     type TagBlacklistItem,
 } from "@/controllers/API/knowledgeSpaceTagLibrary"
@@ -73,15 +74,42 @@ export function TagBlacklistPanel() {
         setAddOpen(true)
     }
 
-    const handleAdd = async (name: string) => {
+    const handleAdd = async (names: string[]): Promise<string[]> => {
         setSaving(true)
-        const res = await captureAndAlertRequestErrorHoc(addTagBlacklistApi(name))
-        setSaving(false)
-        if (!res) return
-        toast({ variant: "success", description: t("build.saved", "已保存") })
-        setAddOpen(false)
-        setPage(1)
-        void load(1)
+        let savedCount = 0
+        try {
+            const preview = await captureAndAlertRequestErrorHoc(previewTagBlacklistApi(names))
+            if (!preview || preview === "canceled") return names
+            if (preview.would_exceed) {
+                toast({
+                    variant: "error",
+                    description: t("build.tagConsole.blacklistBatchLimitExceeded", "本次添加将超过 {{limit}} 条上限，请减少标签数量。", { limit: preview.limit }),
+                })
+                return names
+            }
+            for (const name of names) {
+                const res = await captureAndAlertRequestErrorHoc(addTagBlacklistApi(name))
+                if (!res || res === "canceled") {
+                    if (savedCount) {
+                        toast({
+                            variant: "error",
+                            description: t("build.tagConsole.blacklistPartialSaved", "已添加 {{count}} 条，未完成的标签已保留，请检查后重试。", { count: savedCount }),
+                        })
+                    }
+                    return names.slice(savedCount)
+                }
+                savedCount += 1
+            }
+            toast({ variant: "success", description: t("build.saved", "已保存") })
+            setAddOpen(false)
+            return []
+        } finally {
+            setSaving(false)
+            if (savedCount) {
+                setPage(1)
+                void load(1)
+            }
+        }
     }
 
     const handleDelete = (row: TagBlacklistItem) => {

@@ -226,12 +226,17 @@ class PermissionService:
         grants: List[AuthorizeGrantItem] = None,
         revokes: List[AuthorizeRevokeItem] = None,
         enforce_fga_success: bool = False,
+        *,
+        record_failures: bool = True,
     ) -> None:
         """Grant or revoke permissions on a resource.
 
         Expands department subjects to include sub-departments when include_children=True.
         Delegates to batch_write_tuples() for FGA writes + FailedTuple compensation.
         """
+        # 仅当调用方负责事务补偿时关闭正向重试, 防止回滚后失败队列重新授予权限。
+        if not record_failures and not enforce_fga_success:
+            raise ValueError("Disabling failure recording requires strict caller-managed compensation")
         direct_user_grants = {}
         if object_type in {"knowledge_space", "folder", "knowledge_file"}:
             from bisheng.permission.domain.services.department_transfer_grant_guard import (
@@ -257,6 +262,7 @@ class PermissionService:
                 grants=grants,
                 revokes=revokes,
                 enforce_fga_success=enforce_fga_success,
+                record_failures=record_failures,
             )
             return
 
@@ -283,6 +289,7 @@ class PermissionService:
                 grants=grants,
                 revokes=revokes,
                 enforce_fga_success=enforce_fga_success,
+                record_failures=record_failures,
             )
 
     @classmethod
@@ -294,6 +301,7 @@ class PermissionService:
         grants: List[AuthorizeGrantItem] = None,
         revokes: List[AuthorizeRevokeItem] = None,
         enforce_fga_success: bool = False,
+        record_failures: bool = True,
     ) -> None:
         operations: List[TupleOperation] = []
         affected_user_ids: set[int] = set()
@@ -334,6 +342,7 @@ class PermissionService:
             operations,
             raise_on_failure=enforce_fga_success,
             stop_on_failure=enforce_fga_success,
+            record_failures=record_failures,
         )
 
         # Invalidate cache for directly affected users
@@ -352,6 +361,7 @@ class PermissionService:
         crash_safe: bool = False,
         raise_on_failure: bool = False,
         stop_on_failure: bool = False,
+        record_failures: bool = True,
     ) -> None:
         """Batch write/delete tuples to OpenFGA.
 
@@ -368,6 +378,8 @@ class PermissionService:
         """
         if not operations:
             return
+        if not record_failures and (crash_safe or not raise_on_failure):
+            raise ValueError("Disabling failure recording requires strict caller-managed compensation")
         operations = cls._dedupe_operations(operations)
 
         # Pre-record for crash safety — delete on success
@@ -379,7 +391,7 @@ class PermissionService:
         try:
             fga = await cls._aget_fga()
             if fga is None:
-                if not crash_safe:
+                if not crash_safe and record_failures:
                     await cls._save_failed_tuples(operations, 'FGAClient not available')
                 if raise_on_failure:
                     raise FGAConnectionError('FGAClient not available')
@@ -424,7 +436,7 @@ class PermissionService:
                     'OpenFGA tuple write left %d unresolved operations (raise_on_failure=%s, crash_safe=%s)',
                     len(failed_ops), raise_on_failure, crash_safe,
                 )
-                if not crash_safe:
+                if not crash_safe and record_failures:
                     await cls._save_failed_tuples(
                         failed_ops,
                         'OpenFGA single-tuple fallback failed',
@@ -442,7 +454,7 @@ class PermissionService:
 
         except Exception as e:
             logger.error('Failed to batch write tuples: %s', e)
-            if not crash_safe and not saved_failure_ops:
+            if not crash_safe and record_failures and not saved_failure_ops:
                 await cls._save_failed_tuples(operations, str(e))
             # If crash_safe, pre-recorded entries remain as 'pending' for retry
             if raise_on_failure:

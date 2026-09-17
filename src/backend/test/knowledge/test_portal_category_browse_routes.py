@@ -17,8 +17,9 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
 
+@pytest.mark.parametrize("scope_filter", [{"document_type": "POL"}, {"business_domain_code": "PP"}])
 @pytest.mark.parametrize("keyword", ["资金管理", "   "])
-async def test_category_search_uses_semantic_retrieval_only_with_keyword(keyword):
+async def test_category_search_uses_semantic_retrieval_only_with_keyword(keyword, scope_filter):
     """搜索保留分类范围。清空关键词后恢复数据库浏览。"""
     service = object.__new__(KnowledgeSpaceService)
     spaces = [SimpleNamespace(id=1)]
@@ -33,7 +34,7 @@ async def test_category_search_uses_semantic_retrieval_only_with_keyword(keyword
     )
     req = ShougangPortalFileSearchReq(
         q=keyword,
-        document_type="POL",
+        **scope_filter,
         discovery_scope="portal_enabled",
         retrieval_profile="portal_global_shared" if keyword.strip() else "legacy",
     )
@@ -50,7 +51,8 @@ async def test_category_search_uses_semantic_retrieval_only_with_keyword(keyword
         assert result == browse_result
         service._semantic_search_shougang_portal_files.assert_not_awaited()
         forwarded = service.browse_shougang_portal_files.await_args.args[0]
-    assert forwarded.document_type == "POL"
+    for key, value in scope_filter.items():
+        assert getattr(forwarded, key) == value
     assert forwarded.discovery_scope == "portal_enabled"
     service.advanced_search_shougang_portal_files.assert_not_awaited()
 

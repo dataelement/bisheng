@@ -138,10 +138,11 @@ async def test_reprojection_loads_original_with_tenant_embedding(monkeypatch):
     embedding_factory = MagicMock(return_value=embeddings)
     monkeypatch.setattr(subject, "KnowledgeFilePipeline", pipeline_factory)
     monkeypatch.setattr(subject.LLMService, "get_bisheng_knowledge_embedding_sync", embedding_factory)
-    chunks = await subject.load_shared_content_from_original(SimpleNamespace(tenant_id=1, user_id=9))
+    chunks = await subject.load_shared_content_from_original(SimpleNamespace(tenant_id=1, user_id=9, abstract="已有摘要"))
     assert chunks[0].text == "原文件正文"
     assert chunks[0].chunk_index == 2
     assert chunks[0].vector == [0.2, 0.4]
+    assert chunks[0].metadata["abstract"] == "已有摘要"
     assert pipeline_factory.call_args.kwargs["vector_store"] == []
     assert embedding_factory.call_args.kwargs["model_id"] == 7
     assert pipeline.run.call_args.args[0].stop_at == subject.PipelineStage.TRANSFORMER

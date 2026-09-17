@@ -105,4 +105,4 @@ def test_document_builder_uses_whitelist_and_title_fallback():
 
 def test_snapshot_rejects_unknown_contract_fields():
     with pytest.raises(ValidationError):
-        KnowledgeFulltextFileSnapshot(**snapshot().model_dump(), tenant_id=1)
+        KnowledgeFulltextFileSnapshot(**snapshot().model_dump(), unknown_contract_field=1)

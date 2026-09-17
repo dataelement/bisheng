@@ -964,6 +964,7 @@ async def test_create_clinic_space_uses_team_level_and_writes_department_binding
     svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
     svc._ensure_space_name_unique_in_scope = AsyncMock(return_value=None)
     svc._is_auto_tag_feature_visible = AsyncMock(return_value=False)
+    svc._grant_default_scope_permissions = AsyncMock()
     created_space = _make_space(
         space_id=11,
         user_id=7,
@@ -1052,6 +1053,11 @@ async def test_create_clinic_space_uses_team_level_and_writes_department_binding
         )
 
     assert result.id == 11
+    svc._grant_default_scope_permissions.assert_awaited_once_with(
+        level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+        owner_id=99,
+        space_id=11,
+    )
     mock_scope_create.assert_awaited_once_with(
         tenant_id=1,
         space_id=11,
@@ -1075,6 +1081,7 @@ async def test_update_clinic_space_rebinds_department():
     KnowledgeSpaceService = _load_service_class()
     login_user = _make_login_user(user_id=7, is_admin=False)
     svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+    svc.department_space_binding_repo = AsyncMock()
     space = _make_space(space_id=11, user_id=7, space_level=KnowledgeSpaceLevelEnum.TEAM)
     scope = SimpleNamespace(
         id=1,
@@ -1142,9 +1149,8 @@ async def test_update_clinic_space_rebinds_department():
             new_callable=AsyncMock,
             return_value=space,
         ),
-        patch.object(
-            DepartmentKnowledgeSpaceDao,
-            "aupdate",
+        patch(
+            "bisheng.knowledge.domain.services.clinic_space_binding_service.update_clinic_space_binding",
             new_callable=AsyncMock,
         ) as mock_binding_update,
     ):
@@ -1155,8 +1161,13 @@ async def test_update_clinic_space_rebinds_department():
         )
 
     assert result.id == 11
-    assert binding.department_id == 100
-    mock_binding_update.assert_awaited_once()
+    mock_binding_update.assert_awaited_once_with(
+        repository=svc.department_space_binding_repo,
+        space=space,
+        old_department_id=99,
+        department_id=100,
+        portal_discovery_enabled=None,
+    )
 
 
 @pytest.mark.asyncio

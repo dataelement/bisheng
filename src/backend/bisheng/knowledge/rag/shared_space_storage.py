@@ -594,7 +594,7 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
     Semantics (contract docstrings are normative):
 
     - ``upsert_content``: writes the new ``content_generation`` first and
-      deletes older generations of the same canonical version afterwards
+      deletes older generations of the canonical document afterwards
       (Milvus ``auto_id=True`` makes ARRAY updates a rewrite). Before the
       insert it also removes leftovers of the *same* generation from a
       crashed earlier attempt, which keeps retries idempotent without ever
@@ -891,7 +891,6 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         older_gen_expr = self._doc_expr(
             tenant_id=identity.tenant_id,
             canonical_document_id=identity.canonical_document_id,
-            canonical_version_id=identity.canonical_version_id,
             content_generation=identity.content_generation,
             generation_cmp="<",
         )
@@ -956,7 +955,7 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             query=stale_same_gen_query,
         )
 
-        # 3) delete the old generation now that the new one is durable
+        # 规范文档仅保留当前主版本，清理范围含其他版本的旧代次。
         await self._run_milvus("delete", expr=older_gen_expr)
         await self._run_es(
             "delete_by_query",
@@ -964,7 +963,6 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             query=self._es_doc_query(
                 tenant_id=identity.tenant_id,
                 canonical_document_id=identity.canonical_document_id,
-                canonical_version_id=identity.canonical_version_id,
                 content_generation=identity.content_generation,
                 generation_lt=True,
             ),

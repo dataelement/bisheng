@@ -626,6 +626,10 @@ class TestContentRewrite:
         assert {
             "range": {"metadata.content_generation": {"lt": 2}}
         } in deletes[1][2]["query"]["bool"]["filter"]
+        # 规范文档只保留当前主版本；修复后不能残留其他版本的旧代次。
+        assert {"term": {"metadata.canonical_version_id": 9}} not in deletes[1][2]["query"]["bool"]["filter"]
+        old_delete = [call for call in calls if call[0] == "delete"][-1]
+        assert "canonical_version_id" not in old_delete[2]["expr"]
 
 
 class TestSharedCollectionBootstrap:
