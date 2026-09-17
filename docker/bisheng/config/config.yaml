@@ -30,6 +30,12 @@ openfga:
   enabled: true
   api_url: "http://openfga:8080"
 
+# Permission bypass for space info, children/search, tags, folder-session lookup,
+# and breadcrumb lookup only. File preview/download, writes and RAG checks remain.
+knowledge_space_read_bypass:
+  enabled: true
+  space_ids: [311]
+
 # 网关 HMAC 推送验签，仅商业版 Java 网关的 SSO 登录/组织同步链路使用。
 # 留空即关闭：/internal/sso/login-sync、/internal/sso/gateway-wecom-org-sync、
 # /departments/sync、/internal/departments/relink* 会拒绝所有请求（fail-closed）。
