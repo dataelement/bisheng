@@ -38,6 +38,7 @@ import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
 import KnowledgeSquare from "./KnowledgeSquare";
 import { useFileManager } from "./hooks/useFileManager";
 import { useFileUpload } from "./hooks/useFileUpload";
+import { FROSTED_GLASS_CLASS, FROSTED_GLASS_ENABLED } from "~/utils/frostedGlass";
 import { useLocalize, useMediaQuery, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 import { useAuthContext } from "~/hooks/AuthContext";
@@ -637,10 +638,12 @@ export default function Knowledge() {
 
     return (
         <div className="relative flex h-full min-h-0">
-            {/* Drag and Drop Overlay */}
+            {/* Drag and Drop Overlay. Frosted glass here is the sanctioned exception
+                (single full-screen overlay, only while dragging) and is gated by the
+                global FROSTED_GLASS_ENABLED switch — see ~/utils/frostedGlass. */}
             {isDragging && (
                 <div
-                    className={`absolute inset-0.5 z-[100] rounded-xl flex flex-col items-center justify-center pointer-events-none transition-all duration-300 ${dragError ? "border border-dashed border-red-500 bg-[rgba(255,236,232,0.7)]" : "border border-dashed bg-[rgba(255,255,255,0.7)]"}`}
+                    className={`absolute inset-0.5 z-[100] rounded-xl flex flex-col items-center justify-center pointer-events-none transition-all duration-300 ${FROSTED_GLASS_ENABLED ? FROSTED_GLASS_CLASS : ""} ${dragError ? "border border-dashed border-red-500 bg-[rgba(255,236,232,0.7)]" : "border border-dashed bg-[rgba(255,255,255,0.7)]"}`}
                 >
                     <div className={`flex flex-col items-center justify-center p-8 rounded-2xl ${dragError ? "bg-transparent" : "bg-white/50"}`}>
                         {dragError ? (
