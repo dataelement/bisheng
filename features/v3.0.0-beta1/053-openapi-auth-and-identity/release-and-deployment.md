@@ -79,6 +79,25 @@ export PYTHONPATH=./
 - 同日将该环境 OpenFGA Store `01KQ3ZRQ9VY0FJJ46V8NW98M7M` 从旧模型切换到 `f048-v4` 模型 `01M21ZT2425HJTQ6MX6W18JGYM`，Catalog release 195；补齐 20,764 条 SA 技术标记，41,187 条期望 tuple 经 higher consistency 验证。二次 dry-run 无 source upsert/retire，API/Celery 心跳均绑定新模型与 Catalog。
 - 执行 `pnpm install --frozen-lockfile` 同步工作区依赖后，全前端 `pnpm typecheck` 通过：platform 385 个 strict 文件、client 1290 个 strict 文件及 file-viewers 均通过。同步修正 dashboard 测试夹具的懒加载权限 hook 契约和 route filter 测试的字符串类型收窄；相关 10 项测试通过。
 
+## 租户边界修复（服务账号）
+
+**问题**：`service_account` 在租户过滤覆盖范围内，但子租户用户的可见集是 F012 的 `tenant_id IN (leaf, 1)`（为共享根租户资源而设），而服务账号是租户私有的。仓储层 `get` / `get_by_ids` / `list_page` 又没有自己的租户等值条件，于是子租户管理员能列出并打开根租户的服务账号，进而对它签发 / 编辑 / 吊销密钥——密钥按 `account.tenant_id` 落库，签出的是根租户的密钥。另有一处：`list_page` 的 `total` 在匿名子查询上计数，租户过滤看不进子查询，`total` 是全租户计数而 `data` 已过滤，分页会翻出空页。
+
+**影响面**：`/api/v1/service-accounts**` 全部按 id 寻址的读写（详情、改名、启停、删除、资源授权、密钥列表 / 签发 / 编辑 / 吊销）与列表页的 `total`。不涉及 `/api/v2` 的凭据校验和执行期读取——前者在租户上下文建立之前运行并自行比对凭据的 `tenant_id`，后者在显式 bypass 下运行，两者维持原样。
+
+**修法**：
+
+- `ServiceAccountRepository` 新增 `current_tenant_scope()`：显式 bypass 或无租户上下文时返回 `None`（不加谓词），否则返回 `get_current_tenant_id()`；`get` / `get_by_ids` / `list_page` 在 IN-list 之上再叠一条 `tenant_id ==` 等值条件。超管口径沿用 PAT 台账的 `personal_token_admin._tenant_id`：`get_current_tenant_id()` 已折叠 F019 admin-scope，未切租户视图的超管只管自己租户，切到子租户后按子租户判定。
+- `ServiceAccountService.get_row` 对租户不匹配的目标复用既有 `ServiceAccountNotFoundError`（26020 / 404），与「不存在」同形，不泄漏「存在但不属于你」。所有按 id 寻址的管理路径都汇到这里。
+- `list_page` 的计数改为 `select(func.count()).select_from(ServiceAccount).where(*filters)`，与 `data` 用同一组过滤条件。
+
+**验收命令**（在 `src/backend/` 下执行）：
+
+- `uv run pytest test/open_api -q`：含新增 `test/open_api/test_service_account_tenant_boundary.py` 8 项（子租户对根租户账号的读 / 改 / 启停 / 删除 / 资源授权 / 密钥六类操作、`get_by_ids`、`total` 与 `data` 同源、超管按 admin-scope）。
+- `uv run pytest test/tenant test/permission -q`：相对改动前无新增失败。
+- `uv run ruff check`、`bash scripts/arch-guard.sh <改动文件>`。
+- 人工：以子租户管理员登录，直接对根租户服务账号 id 请求 `GET` / `PATCH` / `DELETE /api/v1/service-accounts/{id}` 及 `*/keys*`，应一律 404 `26020`；列表页 `total` 与 `data` 条数一致。
+
 ## 发布阻断项
 
 - **商业网关**：源码不在本仓。目标私有仓库为 `dataelement/bisheng-gateway`；依据现有架构文档，待该仓负责人核对的完整候选路径为 `src/main/resources/application.yml`、`src/main/java/com/dataelem/gateway/config/BishengConfig.java`、`src/main/java/com/dataelem/gateway/filter/SelfWebsocketRoutingFilter.java`、`src/main/java/com/dataelem/gateway/filter/PathRateGlobalFilter.java` 和 `src/main/java/com/dataelem/gateway/filter/SensitiveWordsFilter.java`。需使 `/api/v3/**` HTTP 和两个 WebSocket 不进入登录或 API Key 网关。当前工作区没有该仓源码，也没有负责人信息，路径尚不能以源码复核，因此 F07/R03 未完成。

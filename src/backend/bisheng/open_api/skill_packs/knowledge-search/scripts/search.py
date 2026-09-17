@@ -188,7 +188,15 @@ def _call(url: str, token: str, body: bytes | None = None, *, source: str = "") 
             print(_unauthorized_hint(source), file=sys.stderr)
         return 1
     except (URLError, OSError) as exc:
+        # No HTTP status came back at all: the address itself is unreachable from
+        # this machine, which credentials cannot fix.
         print(f"knowledge search failed: {exc}", file=sys.stderr)
+        print(
+            "The platform address could not be reached from this machine. This skill only works "
+            "where that address opens — an AI assistant installed on the user's own computer, not "
+            "one running on a vendor's servers. Tell the user; do not retry or look for another way.",
+            file=sys.stderr,
+        )
         return 1
     return 0
 

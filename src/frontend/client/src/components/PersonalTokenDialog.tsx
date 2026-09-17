@@ -298,9 +298,13 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
                 <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-body text-text-3">
                   {installPrompt}
                 </p>
-                <Button color="default" variant="solid" size="large" className="self-start" onClick={() => handleCopy(installPrompt)}>
-                  {localize("com_ai_access.copy_all")}
-                </Button>
+                {/* Sits right above the copy action: where to paste is decided here. */}
+                <div className="flex flex-col gap-3">
+                  <p className="text-body-sm text-text-2">{localize("com_ai_access.supported_note")}</p>
+                  <Button color="default" variant="solid" size="large" className="self-start" onClick={() => handleCopy(installPrompt)}>
+                    {localize("com_ai_access.copy_all")}
+                  </Button>
+                </div>
               </div>
             </section>
 
@@ -353,10 +357,6 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
                           {token.last_used_at ? formatDate(token.last_used_at) : localize("com_ai_access.never_used")}
                         </dd>
                       </dl>
-                      {/* Only useful until the first call proves the connection. */}
-                      {!token.last_used_at && statusKey === "active" ? (
-                        <p className="text-body-sm">{localize("com_ai_access.verify_hint")}</p>
-                      ) : null}
                     </>
                   ) : (
                     <p className="whitespace-pre-line">{localize("com_ai_access.empty_description")}</p>

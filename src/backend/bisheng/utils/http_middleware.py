@@ -19,7 +19,7 @@ TENANT_CHECK_EXEMPT_PATHS = (
     "/api/v1/user/sso",
     "/api/v1/user/ldap",
     "/api/v1/user/public_key",
-    # 登录页拉验证码；若仍带失效 Bearer，不应走 token_version 否则永远 19103、前端拿不到 user_capthca
+    # A stale login token must not block the captcha request with 19103.
     "/api/v1/user/get_captcha",
     "/api/v1/user/switch-tenant",
     "/api/v1/user/tenants",
@@ -46,6 +46,11 @@ TENANT_CHECK_EXEMPT_PATHS = (
 
 # v2.5.1 F012: Redis TTL for cached is_global_super FGA check.
 _IS_SUPER_CACHE_TTL_SECONDS = 300
+
+
+def _uses_browser_identity(path: str) -> bool:
+    """v2 credentials and v3 default operators resolve identity at their endpoints."""
+    return path not in {"/api/v2", "/api/v3"} and not path.startswith(("/api/v2/", "/api/v3/"))
 
 
 def _decode_jwt_subject(token: str) -> dict | None:
@@ -86,7 +91,7 @@ def _tenant_id_from_subject(subject: dict | None) -> int:
 
 
 def _set_tenant_context(
-    token: str = None,
+    token: str | None = None,
     *,
     decoded_subject: dict | None = None,
 ) -> int:
@@ -304,7 +309,9 @@ class CustomMiddleware(BaseHTTPMiddleware):
         # Tenant context injection from JWT cookie. Decode the JWT once and
         # share it with the F012 token_version + visible_tenant_ids step so
         # the same token isn't decoded twice on the hot path.
-        token = _extract_http_access_token(request)
+        # v2 resolves its API credential and v3 uses its default operator.
+        # Browser credentials must not change either channel's identity or errors.
+        token = _extract_http_access_token(request) if _uses_browser_identity(request.url.path) else None
         decoded_subject = _decode_jwt_subject(token) if token else None
         tenant_id = _set_tenant_context(token, decoded_subject=decoded_subject)
 
@@ -394,8 +401,12 @@ class WebSocketLoggingMiddleware:
             trace_id = trace_id_generator()
             trace_id_var.set(trace_id)
 
-            # Tenant context injection from JWT cookie
-            token = self._get_cookie_from_scope(scope, "access_token_cookie")
+            # Anonymous v3 sockets must not inherit a visitor's login tenant.
+            token = (
+                self._get_cookie_from_scope(scope, "access_token_cookie")
+                if _uses_browser_identity(scope.get("path", ""))
+                else None
+            )
             _set_tenant_context(token)
 
         await self.app(scope, receive, send)

@@ -60,7 +60,7 @@ describe("open API management wrappers", () => {
   it("uses tenant-admin personal-token ledger and settings endpoints", async () => {
     await listPersonalTokensApi({ page: 1, page_size: 20 })
     await updatePersonalTokenSettingApi({ pat_enabled: true, pat_ttl_days: 30, data_scope: "personal_only" })
-    expect(axios.get).toHaveBeenCalledWith("/api/v1/personal-tokens", { params: { page: 1, page_size: 20 } })
+    expect(axios.get).toHaveBeenCalledWith("/api/v1/personal-tokens", { params: { page: 1, page_size: 20 }, silent: true })
     expect(axios.put).toHaveBeenCalledWith("/api/v1/personal-tokens/settings", {
       pat_enabled: true,
       pat_ttl_days: 30,

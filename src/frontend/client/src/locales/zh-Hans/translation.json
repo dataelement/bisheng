@@ -1425,6 +1425,7 @@
     "space_deleted": "空间已删除",
     "space_desc_label": "空间描述：",
     "space_invalid_or_deleted": "该知识空间已失效或被删除",
+    "space_load_failed": "知识空间加载失败，请重试",
     "space_became_public_go_square": "该空间已由审核变更为公开，请前往广场加入",
     "space_name_empty": "知识空间名称不能为空",
     "space_settings": "编辑空间",
@@ -2234,7 +2235,7 @@
     "deleted_toast": "已删除。你的 AI 助手不能再用旧密钥访问平台知识。",
     "disabled_notice": "管理员已关闭「AI 助手接入」。已发放的密钥暂时无法使用，重新开启后自动恢复。如需使用，请联系管理员。",
     "empty_description": "你还没有专属密钥。生成一把，发给你的 AI 助手即可开始检索。",
-    "entry_hint": "让第三方 AI 助手检索知识空间",
+    "entry_hint": "让本地 AI 助手检索知识空间",
     "expires_label": "有效期至",
     "get_key": "生成我的密钥",
     "guide_title": "连接 AI 助手",
@@ -2257,14 +2258,14 @@
     "scope_all": "和你在平台里能看到的一致：部门知识空间、你创建的知识库、别人共享给你的知识空间。",
     "scope_own_only": "管理员已限定范围：只能查你自己创建的知识库，不含部门知识空间和别人共享给你的知识空间。",
     "scope_title": "这把密钥能查到什么",
-    "section_desc": "让 WorkBuddy 等 AI 助手检索你在平台可见的知识。装一个检索技能、配一把专属密钥即可。",
+    "section_desc": "让 WorkBuddy 桌面版等本地 AI 助手检索你在平台可见的知识。装一个检索技能、配一把专属密钥即可。",
     "status_active": "有效",
     "status_disabled": "已停用",
     "status_expired": "已过期",
     "status_label": "状态",
     "status_none": "未连接",
     "status_revoked": "已吊销",
-    "title": "AI 助手接入",
-    "verify_hint": "还没有 AI 助手用过这把密钥。配置好后问它「帮我在知识库里查…」，这里会显示使用时间。没保存密钥的话，重新获取一把。"
+    "supported_note": "发给装在你电脑上的 AI 助手，比如 WorkBuddy 桌面版。",
+    "title": "AI 助手接入"
   }
 }

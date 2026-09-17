@@ -21,6 +21,7 @@ import {
   issueServiceAccountKeyApi,
   updateServiceAccountKeyApi,
 } from "@/controllers/API/serviceAccount"
+import { createDelegateCandidateSource } from "@/controllers/API/serviceAccountCandidates"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type {
   ApiKeyIssued,
@@ -80,6 +81,7 @@ export function KeyIssueDialog({
     DelegateDepartment[]
   >([])
   const [loading, setLoading] = useState(false)
+  const candidates = useMemo(() => createDelegateCandidateSource(serviceAccountId), [serviceAccountId])
 
   const delegateInvalid =
     selectedScopes.includes("delegate") &&
@@ -348,9 +350,15 @@ export function KeyIssueDialog({
                       {t(key)}
                     </p>
                   ))}
-                  <label className="block space-y-2">
+                  <div
+                    role="group"
+                    aria-label={t("openApiManagement.keys.delegateUsers")}
+                    className="block space-y-2"
+                  >
                     <span>{t("openApiManagement.keys.delegateUsers")}</span>
                     <DepartmentUsersSelect
+                      key={`${serviceAccountId}:${editingKey?.id ?? "new"}:${open}`}
+                      filterUserIds={candidates.filterUserIds}
                       value={delegateUsers}
                       onChange={setDelegateUsers}
                       placeholder={t(
@@ -360,12 +368,18 @@ export function KeyIssueDialog({
                         "openApiManagement.serviceAccount.ownerSearch",
                       )}
                     />
-                  </label>
-                  <label className="block space-y-2">
+                  </div>
+                  <div
+                    role="group"
+                    aria-label={t("openApiManagement.keys.delegateDepartment")}
+                    className="block space-y-2"
+                  >
                     <span>
                       {t("openApiManagement.keys.delegateDepartment")}
                     </span>
                     <TreeDepartmentSelect
+                      key={`${serviceAccountId}:${editingKey?.id ?? "new"}:${open}`}
+                      dataSource={candidates.departmentSource}
                       value={null}
                       onChange={(id, node) => {
                         if (
@@ -405,7 +419,7 @@ export function KeyIssueDialog({
                         ))}
                       </div>
                     ) : null}
-                  </label>
+                  </div>
                   {delegateInvalid ? (
                     <span className="text-xs text-destructive">
                       {t("openApiManagement.keys.delegateRequired")}

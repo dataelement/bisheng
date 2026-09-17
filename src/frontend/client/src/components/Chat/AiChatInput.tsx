@@ -410,8 +410,11 @@ const AiChatInput = memo(
             isComposingRef.current = false;
         }, []);
 
-        const hasMountedKbs = !!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi;
-        const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0 || (taskMode && dailySkills.length > 0)) && !isLingsi;
+        // Skills join the knowledge spaces in the strip: both are context you
+        // mount onto the conversation, not something you are about to send.
+        const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
+        const hasMountedKbs = (!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0;
+        const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
         const hasSelectionTags = hasMountedKbs || hasInlineAttachments;
 
         // Tell the landing page whether the attachment bar is present so it can
@@ -441,20 +444,22 @@ const AiChatInput = memo(
                     </div>
                 </div>}
 
-                {/* Mounted knowledge spaces — a gray strip stacked ABOVE the input
-                    box (Figma 12841:47449). Attachments deliberately do not join
-                    it: files stay inline inside the box, where they read as part
-                    of what you are about to send rather than as mounted context. */}
+                {/* Mounted knowledge spaces and task-mode skills — a gray strip
+                    stacked ABOVE the input box (Figma 12841:47449). Attachments
+                    deliberately do not join it: files stay inline inside the box,
+                    where they read as part of what you are about to send rather
+                    than as mounted context. */}
                 {hasMountedKbs && (
                     <AttachmentBar
                         appearance="strip"
                         uploadingFiles={[]}
                         files={[]}
-                        kbs={selectedOrgKbs}
-                        skills={[]}
+                        kbs={selectedOrgKbs || []}
+                        skills={mountedSkills}
                         onRemoveKb={onSelectedOrgKbsChange ? (kb) => {
                             onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id));
                         } : undefined}
+                        onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
                     />
                 )}
 
@@ -476,14 +481,13 @@ const AiChatInput = memo(
                             uploadingFiles={uploadingFiles}
                             files={chatFiles || []}
                             kbs={[]}
-                            skills={taskMode ? dailySkills : []}
+                            skills={[]}
                             onRemoveFile={(file) => {
                                 // clientId, not name: a folder upload can carry the
                                 // same file name in several subdirectories.
                                 inputFilesRef.current?.removeByClientId?.(file.clientId);
                                 setChatFiles((prev) => (prev || []).filter((i) => String(i.clientId) !== String(file.clientId)));
                             }}
-                            onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
                         />
                     )}
 

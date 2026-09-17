@@ -95,7 +95,7 @@ const ModelRow = ({ item, index, llmOptions, updateField, deleteRow }) => {
 const defaultValue = {
     llm_list: [{
         model_id: null,
-        agent_executor_type: "",
+        agent_executor_type: "function call",
         knowledge_max_content: 15000,
         knowledge_sort_index: false,
         default: true,
@@ -103,7 +103,7 @@ const defaultValue = {
     }],
     auto_llm: {
         model_id: null,
-        agent_executor_type: "",
+        agent_executor_type: "function call",
         knowledge_max_content: 0,
         knowledge_sort_index: false,
         default: false,
@@ -149,7 +149,7 @@ export default function AssisModel({ llmOptions, onBack }) {
     const addNewRow = () => {
         const newRow = {
             model_id: Date.now(),
-            agent_executor_type: "",
+            agent_executor_type: "function call",
             knowledge_max_content: 15000,
             knowledge_sort_index: false,
             default: !form.llm_list.length,

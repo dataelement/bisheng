@@ -1,7 +1,6 @@
 import { Badge } from "@/components/bs-ui/badge"
 import { Button } from "@/components/bs-ui/button"
 import { SearchInput } from "@/components/bs-ui/input"
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
 import {
   Table,
   TableBody,
@@ -22,59 +21,33 @@ import {
   listServiceAccountsApi,
 } from "@/controllers/API/serviceAccount"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import type {
-  ServiceAccountDelegateScope,
-  ServiceAccountItem,
-} from "@/types/api/openApi"
+import type { ServiceAccountItem } from "@/types/api/openApi"
 import { formatIsoDateTime } from "@/util/utils"
-import { ChevronLeft, Loader2 } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { ChevronLeft } from "lucide-react"
+import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { OpenApiListFooter } from "../OpenApiList/OpenApiListFooter"
+import { useOpenApiList } from "../OpenApiList/useOpenApiList"
 import { ApiKeysTab } from "./ApiKeysTab"
 import { CreateServiceAccountDialog } from "./CreateServiceAccountDialog"
 import { OverviewTab } from "./OverviewTab"
 import { ResourceGrantsTab } from "./ResourceGrantsTab"
 
-const PAGE_SIZE = 20
-
 export function ServiceAccount() {
   const { t } = useTranslation()
-  const [accounts, setAccounts] = useState<ServiceAccountItem[]>([])
   const [selected, setSelected] = useState<ServiceAccountItem | null>(null)
   const [keyword, setKeyword] = useState("")
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const [idleDays, setIdleDays] = useState(0)
-  const [listLoading, setListLoading] = useState(true)
+  const [searchKeyword, setSearchKeyword] = useState("")
   const [createOpen, setCreateOpen] = useState(false)
   const [initialTab, setInitialTab] = useState<"overview" | "keys">("overview")
   const [autoOpenIssue, setAutoOpenIssue] = useState(false)
 
-  const loadList = useCallback(
-    async (targetPage: number, targetKeyword: string) => {
-      setListLoading(true)
-      try {
-        const result = await captureAndAlertRequestErrorHoc(
-          listServiceAccountsApi({
-            keyword: targetKeyword.trim() || undefined,
-            page: targetPage,
-            page_size: PAGE_SIZE,
-          }),
-        )
-        if (!result) return
-        setAccounts(result.data)
-        setTotal(result.total)
-        setIdleDays(result.idle_days)
-      } finally {
-        setListLoading(false)
-      }
-    },
-    [],
-  )
-
-  useEffect(() => {
-    void loadList(1, "")
-  }, [loadList])
+  const fetchPage = useCallback((page: number, pageSize: number) =>
+    listServiceAccountsApi({ keyword: searchKeyword || undefined, page, page_size: pageSize }),
+  [searchKeyword])
+  const list = useOpenApiList(fetchPage)
+  const accounts = list.items
+  const idleDays = list.response?.idle_days ?? 0
 
   const openDetail = async (
     id: number,
@@ -90,36 +63,10 @@ export function ServiceAccount() {
     }
   }
 
-  const formatDelegateScope = (scope: ServiceAccountDelegateScope) => {
-    const name =
-      scope.subject_name || `${scope.subject_type}:${scope.subject_id}`
-    return scope.subject_type === "department"
-      ? t("openApiManagement.serviceAccount.departmentScope", { name })
-      : name
-  }
-
-  const renderDelegateScopes = (account: ServiceAccountItem) => {
-    if (!account.has_delegate) return "-"
-    const displayed = account.delegate_scopes
-      .slice(0, 2)
-      .map(formatDelegateScope)
-    const remaining = account.delegate_scopes.length - displayed.length
-    return (
-      <span title={account.delegate_scopes.map(formatDelegateScope).join(", ")}>
-        {displayed.join(", ")}
-        {remaining > 0
-          ? t("openApiManagement.serviceAccount.moreScopes", {
-              count: remaining,
-            })
-          : ""}
-      </span>
-    )
-  }
-
   if (selected) {
     const isEnabled = selected.status === "enabled"
     return (
-      <div className="min-h-0 flex-1 overflow-y-auto pb-8">
+      <div className="h-full min-h-0 flex-1 overflow-y-auto pb-8">
         <div className="mb-4 flex items-center gap-2">
           <Button
             variant="ghost"
@@ -155,11 +102,11 @@ export function ServiceAccount() {
               detail={selected}
               onChanged={(updated) => {
                 setSelected(updated)
-                void loadList(page, keyword)
+                void list.reload()
               }}
               onDeleted={() => {
                 setSelected(null)
-                void loadList(page, keyword)
+                void list.reload()
               }}
             />
           </TabsContent>
@@ -174,7 +121,7 @@ export function ServiceAccount() {
                 ).then((updated) => {
                   if (updated) setSelected(updated)
                 })
-                void loadList(page, keyword)
+                void list.reload()
               }}
             />
           </TabsContent>
@@ -190,7 +137,7 @@ export function ServiceAccount() {
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto pb-8">
+    <div className="h-full min-h-0 flex-1 overflow-y-auto pb-8">
       <div className="mb-4 flex items-center justify-end gap-3">
         <SearchInput
           className="w-56"
@@ -199,8 +146,8 @@ export function ServiceAccount() {
           onChange={(event) => setKeyword(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
-              setPage(1)
-              void loadList(1, keyword)
+              if (keyword.trim() === searchKeyword) void list.reload()
+              else setSearchKeyword(keyword.trim())
             }
           }}
         />
@@ -214,7 +161,6 @@ export function ServiceAccount() {
             <TableHead>{t("openApiManagement.fields.name")}</TableHead>
             <TableHead>{t("openApiManagement.fields.status")}</TableHead>
             <TableHead>{t("openApiManagement.fields.activeKeys")}</TableHead>
-            <TableHead>{t("openApiManagement.fields.delegate")}</TableHead>
             <TableHead>{t("openApiManagement.fields.owner")}</TableHead>
             <TableHead>{t("openApiManagement.fields.lastUsed")}</TableHead>
             <TableHead>{t("openApiManagement.fields.creator")}</TableHead>
@@ -260,9 +206,6 @@ export function ServiceAccount() {
                     />
                   ) : null}
                 </TableCell>
-                <TableCell className="max-w-56 truncate">
-                  {renderDelegateScopes(account)}
-                </TableCell>
                 <TableCell>
                   <span
                     className={
@@ -305,20 +248,10 @@ export function ServiceAccount() {
               </TableRow>
             )
           })}
-          {listLoading ? (
-            <TableRow>
-              <TableCell colSpan={7} className="py-8 text-center">
-                <Loader2
-                  aria-label={t("loading")}
-                  className="mx-auto size-5 animate-spin"
-                />
-              </TableCell>
-            </TableRow>
-          ) : null}
-          {!listLoading && !accounts.length ? (
+          {list.isEmpty ? (
             <TableRow>
               <TableCell
-                colSpan={7}
+                colSpan={6}
                 className="text-center text-muted-foreground"
               >
                 {t("openApiManagement.empty")}
@@ -327,23 +260,12 @@ export function ServiceAccount() {
           ) : null}
         </TableBody>
       </Table>
-      <AutoPagination
-        className="mt-4 justify-end"
-        page={page}
-        pageSize={PAGE_SIZE}
-        total={total}
-        showTotal
-        onChange={(nextPage) => {
-          setPage(nextPage)
-          void loadList(nextPage, keyword)
-        }}
-      />
+      <OpenApiListFooter status={list.status} itemCount={accounts.length} onLoadMore={list.loadMore} onRetry={list.retry} />
       <CreateServiceAccountDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={(id) => {
-          setPage(1)
-          void loadList(1, keyword)
+          void list.reload()
           void openDetail(id, "keys")
         }}
       />
