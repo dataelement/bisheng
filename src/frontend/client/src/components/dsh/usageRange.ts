@@ -14,4 +14,3 @@ export function usageCalendarBounds(range: UsageRange) {
     const end = midnight(Date.parse(range.endAt) - 1) + DAY_MS
     return { start, end, days: Math.round((end - start) / DAY_MS) }
 }
-
