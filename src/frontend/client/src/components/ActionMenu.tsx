@@ -1,9 +1,11 @@
 import * as React from "react";
+import { Outlined } from "bisheng-icons";
 import {
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
     DropdownMenuItem,
 } from "~/components/ui/DropdownMenu";
+import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 
 /**
@@ -167,4 +169,21 @@ function renderIcon(icon: React.ReactNode, danger?: boolean): React.ReactNode {
 /** Thin horizontal separator spanning the container's inner width (Figma 13198:78128). */
 export function ActionMenuDivider() {
     return <div className="my-1.5 h-px bg-border-base" role="separator" />;
+}
+
+/** Placeholder row shown while a menu's items are still being resolved (e.g. a
+ *  lazy permission lookup), so the menu doesn't open half-empty and then grow.
+ *  Inline-level loading per the Loading spec §3 (packages/ui/docs): 16px mono
+ *  ring + text, 8px gap, same 32px row geometry as ActionMenuItem. */
+export function ActionMenuLoadingRow({ label }: { label?: string }) {
+    const localize = useLocalize();
+    return (
+        <div
+            role="status"
+            className="flex h-8 items-center gap-2 px-2 text-sm leading-[22px] text-text-3"
+        >
+            <Outlined.Loading className="size-4 shrink-0 animate-spin motion-reduce:animate-pulse" aria-hidden />
+            <span className={labelClassName}>{label ?? localize("com_list_loading")}</span>
+        </div>
+    );
 }

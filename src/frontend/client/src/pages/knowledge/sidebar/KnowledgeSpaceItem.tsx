@@ -9,6 +9,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
+import { ActionMenuLoadingRow } from "~/components/ActionMenu";
 import {
     SidebarListMoreMenuContent,
     sidebarListMoreMenuDangerIconClassName,
@@ -36,6 +37,9 @@ interface KnowledgeSpaceItemProps {
     onSettings?: (space: KnowledgeSpace) => void;
     /** F040: lazily resolve this space's action permissions when its menu opens. */
     onMenuOpen?: () => void;
+    /** True while the lazy permission lookup is in flight — the menu shows a
+     *  loading row instead of the fail-closed item set so items don't pop in. */
+    permissionsLoading?: boolean;
     canEditSpace?: boolean;
     canDeleteSpace?: boolean;
     canManageMembers?: boolean;
@@ -57,6 +61,7 @@ export default function KnowledgeSpaceItem({
     onPin,
     onSettings,
     onMenuOpen,
+    permissionsLoading = false,
     canEditSpace = false,
     canDeleteSpace = false,
     canManageMembers = false,
@@ -99,7 +104,11 @@ export default function KnowledgeSpaceItem({
     };
 
     // Shared action-menu items, reused by the "..." dropdown and the right-click menu.
-    const moreMenuItems = (
+    // While permissions are still resolving, show a single loading row so the menu
+    // doesn't open with one item and then grow to three once the lookup returns.
+    const moreMenuItems = permissionsLoading ? (
+        <ActionMenuLoadingRow />
+    ) : (
         <>
             {(canEditSpace || canManageMembers) && (
                 <DropdownMenuItem
