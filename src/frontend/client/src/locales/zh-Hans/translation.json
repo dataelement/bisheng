@@ -1425,6 +1425,7 @@
     "space_deleted": "空间已删除",
     "space_desc_label": "空间描述：",
     "space_invalid_or_deleted": "该知识空间已失效或被删除",
+    "space_load_failed": "知识空间加载失败，请重试",
     "space_became_public_go_square": "该空间已由审核变更为公开，请前往广场加入",
     "space_name_empty": "知识空间名称不能为空",
     "space_settings": "编辑空间",

@@ -45,6 +45,7 @@ import { cn } from "~/utils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { canOpenSharedSpace, resolveUploadSizeLimits, shouldNavigateOnSpaceSelect } from "./knowledgeUtils";
+import { resolveSpaceInfoFailure } from "./spaceInfoError";
 export default function Knowledge() {
     const localize = useLocalize();
     // 模块标题跟随后台配置的菜单显示名称
@@ -282,13 +283,18 @@ export default function Knowledge() {
                 // preview therefore looped: close the preview -> /knowledge -> auto-select
                 // the same department space -> redirect -> preview again, with no way out.
                 setActiveSpace({ ...detail, id: detailSpaceId });
-            } catch {
+            } catch (error) {
                 if (cancelled) return;
+                // Only a space the server says is absent or closed to this caller
+                // sends the user away; anything else stays put (see spaceInfoError).
+                const failure = resolveSpaceInfoFailure(error);
                 showToastRef.current({
-                    message: localizeRef.current("com_knowledge.space_invalid_or_deleted"),
+                    message: failure.message || localizeRef.current(failure.messageKey),
                     severity: NotificationSeverity.WARNING,
                 });
-                navigateRef.current("/knowledge?square=1", { replace: true });
+                if (failure.leaveSpace) {
+                    navigateRef.current("/knowledge?square=1", { replace: true });
+                }
             }
         })();
         return () => {
@@ -443,14 +449,19 @@ export default function Knowledge() {
                 }
 
                 setPreviewDrawerOpen(true);
-            } catch {
+            } catch (error) {
                 if (cancelled) return;
+                // Same rule as the detail load: a share link only sends the user to
+                // the square when the server says the space is gone or closed.
+                const failure = resolveSpaceInfoFailure(error);
                 showToastRef.current({
-                    message: localizeRef.current("com_knowledge.space_invalid_or_deleted"),
+                    message: failure.message || localizeRef.current(failure.messageKey),
                     severity: NotificationSeverity.WARNING,
                 });
-                setPreviewDrawerOpen(false);
-                navigateRef.current("/knowledge?square=1", { replace: true });
+                if (failure.leaveSpace) {
+                    setPreviewDrawerOpen(false);
+                    navigateRef.current("/knowledge?square=1", { replace: true });
+                }
             }
         })();
         return () => {

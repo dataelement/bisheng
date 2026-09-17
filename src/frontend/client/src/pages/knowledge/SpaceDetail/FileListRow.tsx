@@ -16,6 +16,7 @@ import {
     type KnowledgeStatusTone,
     isKnowledgeApprovalRejected,
     isKnowledgeItemPreviewable,
+    isKnowledgeItemRetryable,
     isKnowledgeItemUploading,
 } from "../knowledgeUtils";
 import FileIconRenderer from "./FileIcon";
@@ -58,9 +59,7 @@ const StatusBadge = ({ file }: { file: KnowledgeFile }) => {
     const approvalStatusLabel = getKnowledgeApprovalStatusLabel(file);
     const statusReason = file.approvalReason?.trim() || file.errorMessage?.trim() || null;
 
-    // Folder rollup: a folder whose subtree holds a failed / timed-out / flagged file reads
-    // 存在异常, and that wins over any in-progress state below it. The backend walks the whole
-    // subtree by path prefix, so every ancestor level lights up, not just the direct parent.
+    // The creator-only folder anomaly signal wins over any in-progress state.
     const isFolderWithAbnormal = file.type === FileType.FOLDER && file.hasAbnormalFiles === true;
 
     if (status === FileStatus.SUCCESS && !approvalStatusLabel && !isFolderWithAbnormal) return null;
@@ -224,6 +223,10 @@ export function FileListRow({
     // punching an opaque white hole in the row.
     const rowActionClass = cn(
         "rounded-lg",
+        // No focus ring on these. A dropdown returns focus to its trigger when it
+        // closes, so clicking "..." and dismissing the menu left a brand-coloured
+        // ring on the button that reads as the row still being selected.
+        "focus-visible:ring-0 focus-visible:ring-offset-0",
         isSelected ? "hover:bg-white/60" : "hover:bg-btn-fill-2",
     );
 
@@ -250,11 +253,7 @@ export function FileListRow({
         onCancelCreate,
     });
 
-    const hasRetryOption = Boolean(
-        file.status === FileStatus.FAILED ||
-        file.status === FileStatus.VIOLATION ||
-        (isFolder && file.hasFailedFiles === true)
-    );
+    const hasRetryOption = isKnowledgeItemRetryable(file);
     const showMoveItem = Boolean(onMove) && !isCreating;
     const showVersionManagement = versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && Boolean(onOpenVersionManagement);
     const showVersionHistory = versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
